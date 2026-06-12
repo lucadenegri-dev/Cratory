@@ -12,6 +12,7 @@ const NAV = [
   { href: "/library", label: "Library" },
   { href: "/set-builder", label: "Set Builder" },
   { href: "/transitions", label: "Transition Finder" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

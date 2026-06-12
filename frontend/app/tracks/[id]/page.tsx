@@ -69,10 +69,18 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
 
   return (
     <div className="max-w-5xl">
-      <h2 className="mb-1 text-2xl font-bold">
-        {track.title ?? <span className="italic text-zinc-500">Senza titolo</span>}
-      </h2>
-      <p className="mb-4 text-zinc-400">{track.artist ?? "Artista sconosciuto"}</p>
+      <div className="mb-4 flex items-center gap-4">
+        {track.album_art_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={track.album_art_url} alt="" className="h-20 w-20 rounded-lg object-cover" />
+        )}
+        <div>
+          <h2 className="mb-1 text-2xl font-bold">
+            {track.title ?? <span className="italic text-zinc-500">Senza titolo</span>}
+          </h2>
+          <p className="text-zinc-400">{track.artist ?? "Artista sconosciuto"}</p>
+        </div>
+      </div>
 
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">

@@ -72,9 +72,17 @@ export default function Library() {
           {items.map((t) => (
             <tr key={t.id} className="border-b border-zinc-800/60 hover:bg-zinc-900">
               <td className="py-1.5 pr-2">
-                <Link href={`/tracks/${t.id}`} className="text-emerald-400 hover:underline">
-                  {t.title ?? <span className="italic text-zinc-500">senza titolo ({t.source_type})</span>}
-                </Link>
+                <span className="flex items-center gap-2">
+                  {t.album_art_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={t.album_art_url} alt="" className="h-7 w-7 shrink-0 rounded object-cover" />
+                  ) : (
+                    <span className="h-7 w-7 shrink-0 rounded bg-zinc-800" />
+                  )}
+                  <Link href={`/tracks/${t.id}`} className="text-emerald-400 hover:underline">
+                    {t.title ?? <span className="italic text-zinc-500">senza titolo ({t.source_type})</span>}
+                  </Link>
+                </span>
               </td>
               <td className="pr-2">{t.artist ?? <span className="text-zinc-600">—</span>}</td>
               <td className="pr-2 text-zinc-400">{t.source_type}</td>

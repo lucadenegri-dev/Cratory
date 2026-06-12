@@ -4,7 +4,7 @@
 
 ## Stato attuale
 
-**Fase:** ✅ MVP 1 COMPLETATO — prossimo: MVP 2 (Spotify OAuth + enrichment)
+**Fase:** ✅ MVP 1 e MVP 2 COMPLETATI — prossimo: MVP 3 (AI Set Agent)
 **Ultimo aggiornamento:** 2026-06-12
 
 ## Checklist MVP 1
@@ -31,12 +31,25 @@
 - `npm run build` frontend: OK, 6 route.
 - Verifica visiva nel browser (preview): Dashboard renderizza, Library carica le 293 tracce dal backend (CORS ok), zero errori console.
 
-## Prossimo passo: MVP 2
+## Checklist MVP 2 — ✅ completata
 
-1. Implementare `SpotifyClient` concreto in `backend/app/integrations/` (OAuth code flow, endpoint login/callback come da `docs/04-api-spec.md`).
-2. Tabella cache enrichment + servizio batch che completa title/artist/album/cover delle 198 tracce Spotify (MAI toccare bpm/tonality).
-3. UI: cover nella Library/Track Detail, bottone "Enrich" in Dashboard, pagina Settings per le credenziali.
-4. Creazione playlist Spotify da un set generato.
+- [x] `SpotifyWebClient` concreto (`integrations/spotify.py`): client_credentials per metadata (nessun login), authorization_code per playlist, refresh token, retry su 429
+- [x] Endpoint: GET /api/spotify/status, /login, /callback; POST /enrich?force=, /create-playlist
+- [x] Enrichment (`services/enrichment.py`): completa title/artist/album/anno SOLO se vuoti, cover+generi+artisti sempre; `enriched_at` = cache; mai BPM/key
+- [x] Tabelle nuove: Artist (generi/popularity), SpotifyToken; colonne Track: album_art_url, spotify_artist_id, enriched_at; migrazione leggera in `db.ensure_schema()`
+- [x] Re-import non cancella i metadata arricchiti (fix `_apply` in import_service)
+- [x] UI: pagina Settings (stato, login, enrich con istruzioni credenziali), cover in Library e Track Detail, bottone "Crea playlist Spotify" nel Set Builder
+- [x] 21 test verdi (4 nuovi con FakeSource: fill-only-empty, DJ-data intoccati, cache, re-import safe)
+- [x] Verificato live: migrazione su DB esistente ok (293 tracce), /settings risponde, enrich senza credenziali → 409 con istruzioni
+
+**Per attivare Spotify**: creare app su developer.spotify.com (redirect URI `http://localhost:8000/api/spotify/callback`), mettere SPOTIFY_CLIENT_ID/SECRET in `backend/.env`, riavviare il backend, poi Settings → "Arricchisci libreria". Il login OAuth serve solo per creare playlist. ⚠️ Il flusso OAuth e l'enrichment reale NON sono ancora stati provati con credenziali vere.
+
+## Prossimo passo: MVP 3 (AI Set Agent)
+
+1. `LLMClient` concreto in `integrations/` (provider astratto; API key in .env, `claude-api` skill per riferimento API Anthropic).
+2. Prompt libero → AI Set Agent: input candidate+scores (F7 in docs/05), output JSON validato con Pydantic.
+3. Validation Engine (F8): esistenza track_id, duplicati, durata, vincoli; retry/correzione/warning.
+4. Alternative per traccia (F9) e spiegazioni narrative al posto di quelle tecniche.
 
 ## Note frontend
 

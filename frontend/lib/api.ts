@@ -18,7 +18,23 @@ export interface Track {
   cue_count: number;
   has_beatgrid: boolean;
   spotify_url: string | null;
+  album_art_url: string | null;
+  enriched: boolean;
 }
+
+export interface SpotifyStatus {
+  configured: boolean;
+  user_connected: boolean;
+}
+
+export interface EnrichReport {
+  enriched: number;
+  not_found: number;
+  artists_updated: number;
+  skipped_already_enriched: boolean;
+}
+
+export const SPOTIFY_LOGIN_URL = `${API}/api/spotify/login`;
 
 export interface TrackDetail extends Track {
   comments: string | null;

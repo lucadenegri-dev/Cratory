@@ -27,6 +27,8 @@ export default function SetBuilder() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exported, setExported] = useState<string | null>(null);
+  const [playlistUrl, setPlaylistUrl] = useState<string | null>(null);
+  const [playlistBusy, setPlaylistBusy] = useState(false);
 
   function toggleSource(s: string) {
     setSources((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
@@ -36,6 +38,7 @@ export default function SetBuilder() {
     setLoading(true);
     setError(null);
     setExported(null);
+    setPlaylistUrl(null);
     try {
       const result = await apiPost<Setlist>("/api/sets/generate", {
         target_duration_minutes: duration,
@@ -60,6 +63,21 @@ export default function SetBuilder() {
   async function doExport(format: "text" | "csv") {
     if (!setlist) return;
     setExported(await exportSet(setlist.id, format));
+  }
+
+  async function createPlaylist() {
+    if (!setlist) return;
+    setPlaylistBusy(true);
+    setError(null);
+    try {
+      const r = await apiPost<{ playlist_url: string; tracks_added: number }>(
+        "/api/spotify/create-playlist", { setlist_id: setlist.id });
+      setPlaylistUrl(r.playlist_url);
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    } finally {
+      setPlaylistBusy(false);
+    }
   }
 
   const input = "rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm";
@@ -128,8 +146,18 @@ export default function SetBuilder() {
             <div className="flex gap-2">
               <button onClick={() => doExport("text")} className="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700">Export testo</button>
               <button onClick={() => doExport("csv")} className="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700">Export CSV</button>
+              <button onClick={createPlaylist} disabled={playlistBusy}
+                className="rounded bg-green-700 px-3 py-1 text-sm hover:bg-green-600 disabled:opacity-50">
+                {playlistBusy ? "Creazione…" : "Crea playlist Spotify"}
+              </button>
             </div>
           </div>
+          {playlistUrl && (
+            <p className="mb-3 rounded bg-emerald-950 p-3 text-sm text-emerald-300">
+              ✓ Playlist creata:{" "}
+              <a href={playlistUrl} target="_blank" rel="noreferrer" className="underline">{playlistUrl}</a>
+            </p>
+          )}
           <p className="mb-4 text-sm text-zinc-400">{setlist.global_explanation}</p>
           <p className="mb-3 text-sm">Durata effettiva: <strong>{fmtDuration(setlist.total_duration_seconds)}</strong></p>
 
