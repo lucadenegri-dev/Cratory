@@ -4,7 +4,7 @@
 
 ## Stato attuale
 
-**Fase:** MVP 1 — in corso
+**Fase:** ✅ MVP 1 COMPLETATO — prossimo: MVP 2 (Spotify OAuth + enrichment)
 **Ultimo aggiornamento:** 2026-06-12
 
 ## Checklist MVP 1
@@ -20,14 +20,29 @@
 - [x] API sets (generate/list/get/export csv+text)
 - [x] Endpoint stats per dashboard (`GET /api/stats`)
 - [x] Stub interfacce integrations (Spotify/Discogs/MusicBrainz/LLM in `app/integrations/`)
-- [ ] Frontend Next.js: scaffold (Node 24 installato in `C:\Program Files\nodejs`, PATH da riaprire)
-- [ ] Frontend: Dashboard, Library, Track Detail, Set Builder, Transition Finder
-- [ ] README setup (`.env.example` fatto)
+- [x] Frontend Next.js 16 scaffold (Node 24 installato in `C:\Program Files\nodejs`)
+- [x] Frontend: Dashboard (stats+upload), Library (filtri+paginazione), Track Detail (cue+prima/dopo), Set Builder (vincoli+export), Transition Finder (ricerca+dopo/prima)
+- [x] README setup + `.env.example`
 
 ## Stato verificato
 
 - `pytest` backend: **17/17 verdi** (parser su XML reale, scoring, import idempotente, generator).
 - Smoke test API completo OK: import 293 tracce → filtri → transizioni → generate set (9 tracce/46min, target 45) → export text/csv → stats.
+- `npm run build` frontend: OK, 6 route.
+- Verifica visiva nel browser (preview): Dashboard renderizza, Library carica le 293 tracce dal backend (CORS ok), zero errori console.
+
+## Prossimo passo: MVP 2
+
+1. Implementare `SpotifyClient` concreto in `backend/app/integrations/` (OAuth code flow, endpoint login/callback come da `docs/04-api-spec.md`).
+2. Tabella cache enrichment + servizio batch che completa title/artist/album/cover delle 198 tracce Spotify (MAI toccare bpm/tonality).
+3. UI: cover nella Library/Track Detail, bottone "Enrich" in Dashboard, pagina Settings per le credenziali.
+4. Creazione playlist Spotify da un set generato.
+
+## Note frontend
+
+- Next.js **16** (App Router): `params` è una `Promise` — nei client component si usa `use(params)`. Docs in `frontend/node_modules/next/dist/docs/`.
+- `frontend/dev.cmd` avvia il dev server garantendo Node nel PATH; usato da `.claude/launch.json` per il preview.
+- API client e tipi TS in `frontend/lib/api.ts` (`NEXT_PUBLIC_API_URL`, default `http://localhost:8000`).
 
 ## Come riprendere
 
