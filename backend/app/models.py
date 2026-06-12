@@ -33,6 +33,10 @@ class Track(Base):
     comments: Mapped[str | None] = mapped_column(Text)
     location: Mapped[str | None] = mapped_column(Text)
     date_added: Mapped[date | None] = mapped_column(Date)
+    # Enrichment Spotify (MVP 2) — mai BPM/key da Spotify
+    album_art_url: Mapped[str | None] = mapped_column(Text)
+    spotify_artist_id: Mapped[str | None] = mapped_column(String, index=True)
+    enriched_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -70,6 +74,32 @@ class CuePoint(Base):
     comment: Mapped[str | None] = mapped_column(Text)
 
     track: Mapped[Track] = relationship(back_populates="cue_points")
+
+
+class Artist(Base):
+    __tablename__ = "artists"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, index=True)
+    spotify_artist_id: Mapped[str | None] = mapped_column(String, unique=True, index=True)
+    genres: Mapped[list] = mapped_column(JSON, default=list)
+    popularity: Mapped[int | None] = mapped_column(Integer)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class SpotifyToken(Base):
+    """Token OAuth Spotify. kind='user' (playlist) o 'client' (solo metadata)."""
+
+    __tablename__ = "spotify_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String, unique=True)  # user | client
+    access_token: Mapped[str] = mapped_column(Text)
+    refresh_token: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    scope: Mapped[str | None] = mapped_column(Text)
 
 
 class ImportReport(Base):

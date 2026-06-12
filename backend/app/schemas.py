@@ -27,6 +27,8 @@ class TrackOut(BaseModel):
     cue_count: int = 0
     has_beatgrid: bool = False
     spotify_url: str | None = None
+    album_art_url: str | None = None
+    enriched: bool = False
 
 
 class TrackListOut(BaseModel):

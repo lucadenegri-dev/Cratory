@@ -36,6 +36,8 @@ def track_out(track: Track) -> TrackOut:
         cue_count=len(track.cue_points),
         has_beatgrid=bool(track.beatgrid_points),
         spotify_url=_spotify_url(track),
+        album_art_url=track.album_art_url,
+        enriched=track.enriched_at is not None,
     )
 
 

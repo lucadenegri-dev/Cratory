@@ -4,14 +4,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings, setup_logging
-from app.db import Base, engine
-from app.routers import imports, sets, tracks, transitions
+from app.db import ensure_schema
+from app.routers import imports, sets, spotify, tracks, transitions
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    Base.metadata.create_all(engine)
+    ensure_schema()
     yield
 
 
@@ -28,6 +28,7 @@ app.include_router(imports.router)
 app.include_router(tracks.router)
 app.include_router(transitions.router)
 app.include_router(sets.router)
+app.include_router(spotify.router)
 
 
 @app.get("/api/health")

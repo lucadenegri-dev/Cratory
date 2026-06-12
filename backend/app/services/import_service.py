@@ -9,16 +9,23 @@ from app.services.rekordbox_parser import ParsedTrack, parse_rekordbox_xml
 
 logger = logging.getLogger(__name__)
 
-_TRACK_FIELDS = (
-    "spotify_id", "soundcloud_id", "source_type", "title", "artist", "album",
-    "genre", "year", "duration_seconds", "bpm", "tonality", "play_count",
-    "rating", "comments", "location", "date_added",
+# Dati DJ: Rekordbox e' la fonte di verita', sovrascrive sempre.
+_DJ_FIELDS = (
+    "spotify_id", "soundcloud_id", "source_type", "duration_seconds", "bpm",
+    "tonality", "play_count", "rating", "comments", "location", "date_added",
 )
+# Metadata descrittivi: il re-import non deve cancellare i valori arricchiti
+# da Spotify quando l'XML li ha vuoti (caso normale per le tracce Spotify).
+_DESCRIPTIVE_FIELDS = ("title", "artist", "album", "genre", "year")
 
 
 def _apply(track: Track, parsed: ParsedTrack) -> None:
-    for f in _TRACK_FIELDS:
+    for f in _DJ_FIELDS:
         setattr(track, f, getattr(parsed, f))
+    for f in _DESCRIPTIVE_FIELDS:
+        value = getattr(parsed, f)
+        if value is not None or getattr(track, f) is None:
+            setattr(track, f, value)
 
 
 def _build_stats(tracks: list[ParsedTrack]) -> dict:
