@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     # Integrazioni future (MVP 2+)
     spotify_client_id: str = ""
     spotify_client_secret: str = ""
-    spotify_redirect_uri: str = ""
+    # Spotify accetta solo HTTPS o loopback 127.0.0.1 (non "localhost") come redirect
+    spotify_redirect_uri: str = "http://127.0.0.1:8000/api/spotify/callback"
     discogs_token: str = ""
     musicbrainz_user_agent: str = ""
     ai_api_key: str = ""

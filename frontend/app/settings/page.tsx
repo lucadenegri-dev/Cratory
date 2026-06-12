@@ -52,7 +52,8 @@ function SettingsInner() {
             <p className="mb-2 rounded bg-amber-950 p-3 text-amber-300">
               Credenziali non configurate. Crea un&apos;app su{" "}
               <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noreferrer" className="underline">developer.spotify.com</a>{" "}
-              con redirect URI <code className="rounded bg-zinc-800 px-1">http://localhost:8000/api/spotify/callback</code>,
+              con redirect URI <code className="rounded bg-zinc-800 px-1">http://127.0.0.1:8000/api/spotify/callback</code>{" "}
+              (Spotify non accetta più <code className="rounded bg-zinc-800 px-1">localhost</code>),
               poi imposta in <code className="rounded bg-zinc-800 px-1">backend/.env</code>:
             </p>
             <pre className="rounded bg-zinc-950 p-3 text-xs">{`SPOTIFY_CLIENT_ID=...\nSPOTIFY_CLIENT_SECRET=...`}</pre>

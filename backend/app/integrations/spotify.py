@@ -160,25 +160,40 @@ class SpotifyWebClient(SpotifyClient):
 
     # ---- interfaccia SpotifyClient ---------------------------------------
 
+    def _get_many(self, resource: str, ids: list[str]) -> list[dict[str, Any] | None]:
+        """Lettura multipla con fallback: le app Spotify in development mode (2025)
+        ricevono 403 sugli endpoint batch, ma le GET singole funzionano."""
+        out: list[dict[str, Any] | None] = []
+        for i in range(0, len(ids), BATCH):
+            chunk = ids[i:i + BATCH]
+            try:
+                out.extend(self._get(f"/{resource}", params={"ids": ",".join(chunk)})[resource])
+                continue
+            except SpotifyError as exc:
+                if "403" not in str(exc):
+                    raise
+                logger.info("Endpoint batch /%s vietato (development mode): fallback a GET singole", resource)
+            for sid in chunk:
+                try:
+                    out.append(self._get(f"/{resource}/{sid}"))
+                except SpotifyError as exc:
+                    if "404" in str(exc) or "400" in str(exc):
+                        out.append(None)  # id rimosso/non valido: stesso contratto del batch
+                    else:
+                        raise
+        return out
+
     def get_track_metadata(self, spotify_track_id: str) -> dict[str, Any]:
         return self._get(f"/tracks/{spotify_track_id}")
 
-    def get_tracks_batch(self, ids: list[str]) -> list[dict[str, Any]]:
-        out: list[dict[str, Any]] = []
-        for i in range(0, len(ids), BATCH):
-            chunk = ids[i:i + BATCH]
-            out.extend(self._get("/tracks", params={"ids": ",".join(chunk)})["tracks"])
-        return out
+    def get_tracks_batch(self, ids: list[str]) -> list[dict[str, Any] | None]:
+        return self._get_many("tracks", ids)
 
     def get_artist(self, spotify_artist_id: str) -> dict[str, Any]:
         return self._get(f"/artists/{spotify_artist_id}")
 
-    def get_artists_batch(self, ids: list[str]) -> list[dict[str, Any]]:
-        out: list[dict[str, Any]] = []
-        for i in range(0, len(ids), BATCH):
-            chunk = ids[i:i + BATCH]
-            out.extend(self._get("/artists", params={"ids": ",".join(chunk)})["artists"])
-        return out
+    def get_artists_batch(self, ids: list[str]) -> list[dict[str, Any] | None]:
+        return self._get_many("artists", ids)
 
     def create_playlist(self, name: str, track_ids: list[str]) -> str:
         me = self._get("/me", user=True)

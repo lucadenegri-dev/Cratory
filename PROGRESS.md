@@ -42,7 +42,12 @@
 - [x] 21 test verdi (4 nuovi con FakeSource: fill-only-empty, DJ-data intoccati, cache, re-import safe)
 - [x] Verificato live: migrazione su DB esistente ok (293 tracce), /settings risponde, enrich senza credenziali → 409 con istruzioni
 
-**Per attivare Spotify**: creare app su developer.spotify.com (redirect URI `http://localhost:8000/api/spotify/callback`), mettere SPOTIFY_CLIENT_ID/SECRET in `backend/.env`, riavviare il backend, poi Settings → "Arricchisci libreria". Il login OAuth serve solo per creare playlist. ⚠️ Il flusso OAuth e l'enrichment reale NON sono ancora stati provati con credenziali vere.
+**Enrichment reale ESEGUITO con successo** (12/06/2026): 198 tracce arricchite, 127 artisti, 0 not found. Restrizioni Spotify 2025 scoperte sul campo e gestite:
+- Redirect URI: `http://localhost` rifiutato → si usa `http://127.0.0.1:8000/api/spotify/callback` (in .env e nel dashboard Spotify).
+- Endpoint batch (`/tracks?ids=`, `/artists?ids=`) → 403 per le app in development mode: il client fa fallback automatico a GET singole.
+- Campo `genres` degli artisti: arriva sempre vuoto per le nuove app → Track.genre resta vuoto; i generi arriveranno da Discogs/MusicBrainz (MVP 4). Il candidate engine già tollera il genere assente.
+
+⚠️ Login OAuth utente (per creare playlist) non ancora provato: richiede il browser dell'utente. Redirect URI nel dashboard Spotify deve essere `http://127.0.0.1:8000/api/spotify/callback`.
 
 ## Prossimo passo: MVP 3 (AI Set Agent)
 
