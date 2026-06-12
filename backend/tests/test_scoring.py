@@ -1,0 +1,75 @@
+"""Test dello scoring tecnico transizioni e della compatibilita' Camelot."""
+
+from app.models import CuePoint, Track
+from app.services.camelot import camelot_compatibility, parse_camelot
+from app.services.scoring import score_transition
+
+
+def make_track(bpm=None, key=None, duration=300, play_count=0, cues=0) -> Track:
+    t = Track(rekordbox_track_id="x", source_type="local", bpm=bpm,
+              tonality=key, duration_seconds=duration, play_count=play_count)
+    t.cue_points = [CuePoint(start_seconds=float(i)) for i in range(cues)]
+    t.beatgrid_points = []
+    return t
+
+
+def test_parse_camelot():
+    assert parse_camelot("7A") == (7, "A")
+    assert parse_camelot("12b") == (12, "B")
+    assert parse_camelot("13A") is None
+    assert parse_camelot("") is None
+    assert parse_camelot(None) is None
+    assert parse_camelot("Cmaj") is None
+
+
+def test_camelot_compatibility_levels():
+    assert camelot_compatibility("7A", "7A")[0] == "same"
+    assert camelot_compatibility("7A", "7B")[0] == "compatible"
+    assert camelot_compatibility("7A", "8A")[0] == "compatible"
+    assert camelot_compatibility("7A", "6A")[0] == "compatible"
+    assert camelot_compatibility("12A", "1A")[0] == "compatible"  # wrap della ruota
+    assert camelot_compatibility("7A", "10B")[0] == "weak"
+    assert camelot_compatibility("7A", None)[0] == "unknown"
+
+
+def test_bpm_tiers_ordering():
+    base = make_track(bpm=130, key="7A")
+    perfect = score_transition(base, make_track(bpm=131, key="7A")).score
+    good = score_transition(base, make_track(bpm=134, key="7A")).score
+    risky = score_transition(base, make_track(bpm=137, key="7A")).score
+    hard = score_transition(base, make_track(bpm=145, key="7A")).score
+    assert perfect > good > risky > hard
+
+
+def test_bpm_jump_warning():
+    ts = score_transition(make_track(bpm=130, key="7A"), make_track(bpm=145, key="7A"))
+    assert any("BPM" in w for w in ts.warnings)
+
+
+def test_key_compatibility_affects_score():
+    base = make_track(bpm=130, key="7A")
+    same = score_transition(base, make_track(bpm=130, key="7A")).score
+    weak = score_transition(base, make_track(bpm=130, key="2B")).score
+    assert same > weak
+
+
+def test_short_track_penalized():
+    base = make_track(bpm=130, key="7A")
+    normal = score_transition(base, make_track(bpm=130, key="7A", duration=300)).score
+    short = score_transition(base, make_track(bpm=130, key="7A", duration=40)).score
+    assert normal > short
+    ts = score_transition(base, make_track(bpm=130, key="7A", duration=40))
+    assert any("corta" in w for w in ts.warnings)
+
+
+def test_cue_bonus():
+    base = make_track(bpm=130, key="7A")
+    with_cues = score_transition(base, make_track(bpm=130, key="7A", cues=3)).score
+    without = score_transition(base, make_track(bpm=130, key="7A", cues=0)).score
+    assert with_cues > without
+
+
+def test_score_in_range():
+    ts = score_transition(make_track(bpm=130, key="7A"), make_track(bpm=131, key="7A", cues=4))
+    assert 0 <= ts.score <= 100
+    assert ts.technical_reasons
