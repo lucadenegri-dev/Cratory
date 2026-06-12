@@ -29,6 +29,24 @@ Struttura backend a layer: `routers/` (solo HTTP) → `services/` (logica) → `
 - Valori anomali: `AverageBpm="0.00"`, `Year="0"`, sample da 5–7 secondi (sampler Rekordbox), `Genre` quasi sempre vuoto.
 - Figli di `TRACK`: `TEMPO` (beatgrid) e `POSITION_MARK` (cue). La sezione `PLAYLISTS` può essere vuota.
 
+## Comandi
+
+```powershell
+# Backend (da backend/)
+.\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload --port 8000   # avvio (docs su /docs)
+.\.venv\Scripts\python.exe -m pytest tests  # test (usano export_rekordbox.xml reale)
+
+# Frontend (da frontend/)
+npm run dev                                  # porta 3000, proxy verso :8000
+```
+
+Node è in `C:\Program Files\nodejs` (installato via winget; nei terminali vecchi serve `$env:Path += ";C:\Program Files\nodejs"`).
+
+## Layout backend
+
+`routers/` (solo HTTP) → `services/` (parser, scoring, candidate_engine, set_generator, import_service) → `repositories.py` (query) → `models.py` + `schemas.py` + `serializers.py` (ORM→Pydantic con campi derivati) + `integrations/` (interfacce astratte MVP 2-4) + `core/config.py`.
+
 ## Stato e prossimo passo
 
-Fase attuale: **specifica completata, sviluppo non iniziato.** Prossimo passo: MVP 1 secondo la checklist in `docs/06-roadmap.md`. Re-import idempotente su `rekordbox_track_id`. Test minimi richiesti: parser XML e scoring transizioni.
+Consultare **`PROGRESS.md`** (checklist aggiornata a ogni milestone, da committare). MVP 1 backend completo e testato; vedere la prima voce non spuntata per riprendere.

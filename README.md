@@ -35,8 +35,48 @@ AI:         LLM API astratta dietro un service layer
 
 ## Setup
 
-> Da completare con l'avvio dello sviluppo (MVP 1): istruzioni backend, frontend, `.env.example`.
+Prerequisiti: Python 3.12+, Node.js 20+.
+
+### Backend (FastAPI, porta 8000)
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env        # opzionale: i default funzionano per MVP 1
+uvicorn app.main:app --reload --port 8000
+```
+
+API docs interattive: http://localhost:8000/docs
+
+### Frontend (Next.js, porta 3000)
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+App: http://localhost:3000
+
+### Test
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m pytest tests
+```
+
+I test usano `export_rekordbox.xml` (libreria reale, 293 tracce) come fixture.
+
+### Primo utilizzo
+
+1. Avvia backend e frontend.
+2. Dalla Dashboard carica il file XML esportato da Rekordbox.
+3. Esplora la libreria, genera un set dal Set Builder, esporta in testo/CSV.
+
+> Nota: fino a MVP 2 (enrichment Spotify) le tracce Spotify appaiono senza titolo/artista — è un limite dell'export Rekordbox, non un bug.
 
 ## Stato del progetto
 
-📋 Fase di specifica — pronto per iniziare MVP 1 (vedi [roadmap](docs/06-roadmap.md)).
+🔨 MVP 1 in corso — backend completo e testato, frontend in sviluppo. Stato dettagliato in [PROGRESS.md](PROGRESS.md), fasi in [roadmap](docs/06-roadmap.md).
