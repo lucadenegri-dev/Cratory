@@ -22,7 +22,12 @@
 - adaptive + effort medium: ~125s, corretto ma lento.
 Ora configurabili via env: `AI_EFFORT` (default low), `AI_THINKING` (default adaptive), `AI_TIMEOUT_SECONDS` (120). Candidate ridotte a 60, prompt reso conciso, timeout esplicito sul client.
 
-⚠️ **Latenza intrinsecamente variabile (66s–180s+) secondo la complessità del prompt.** La richiesta HTTP è sincrona: il backend completa e salva il set anche se il client va in timeout (verificato: set salvato lato server dopo il timeout del client). **Prossimo passo UX consigliato: rendere la generazione AI asincrona con polling di stato + barra di avanzamento, come già fatto per l'enrichment Spotify** (POST avvia un job, GET /status, la UI fa polling). Senza questo, nel browser l'utente vede uno spinner lungo.
+**Generazione asincrona + redesign UI FATTI (13/06/2026):**
+- Backend: `POST /api/sets/generate-async` avvia un job in background, `GET /api/sets/generate-status` riporta status/phase/setlist_id (pattern enrichment). `generate_ai_set` accetta `on_phase`. Risolve lo spinner lungo: la UI fa polling e mostra fase + tempo trascorso. Verificato end-to-end (curl + browser).
+- Frontend: **redesign completo** applicando lo stack della skill web-artifacts-builder alla webapp Next.js (Tailwind + componenti stile shadcn/ui + lucide-react), tema studio scuro/accento lime, anti-slop. Nuovo design system in `frontend/app/globals.css` (token @theme), `frontend/components/ui.tsx` (Card/Button/Input/Badge/Progress/Alert/…), `frontend/components/sidebar.tsx`, `frontend/lib/cn.ts`. Tutte le pagine ridisegnate. Set Builder con barra di avanzamento + risultato curato (cover, badge rischio, motivazione AI, blocchi validazione). Verificato nel browser (Dashboard/Library/Set Builder/Settings).
+- ⚠️ Nota: la skill web-artifacts-builder produce artifact claude.ai sandboxed (no fetch a localhost), quindi NON usabile direttamente; ne ho usato stack+filosofia di design nella vera app Next.js.
+
+⚠️ Latenza generazione AI ancora variabile (~40-90s tipico, fino a 180s); ora però l'UX è asincrona con feedback, quindi accettabile.
 
 F9 (Alternative per traccia) e F10 (Transition Finder arricchito) restano opzionali per completare al 100% l'MVP 3.
 
