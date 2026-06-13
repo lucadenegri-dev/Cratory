@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { apiPost, exportSet, fmtDuration, trackLabel, type Setlist } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { apiGet, apiPost, exportSet, fmtDuration, trackLabel, type AiStatus, type Setlist } from "@/lib/api";
 
 const STRATEGIES = ["smooth", "progressive", "contrast", "experimental", "peak_time", "warm_up", "closing"];
 const RISK_STYLE: Record<string, string> = {
@@ -22,6 +22,14 @@ export default function SetBuilder() {
   const [avoidShort, setAvoidShort] = useState(true);
   const [avoidOverplayed, setAvoidOverplayed] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
+  const [useAi, setUseAi] = useState(false);
+
+  useEffect(() => {
+    apiGet<AiStatus>("/api/ai/status")
+      .then((s) => { setAiStatus(s); setUseAi(s.configured); })
+      .catch(() => setAiStatus({ configured: false, model: null }));
+  }, []);
 
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [loading, setLoading] = useState(false);
@@ -51,6 +59,7 @@ export default function SetBuilder() {
         avoid_short_tracks: avoidShort,
         avoid_overplayed: avoidOverplayed,
         prompt: prompt || null,
+        use_ai: useAi,
       });
       setSetlist(result);
     } catch (e) {
@@ -126,14 +135,31 @@ export default function SetBuilder() {
         </div>
 
         <label className="mt-3 block text-sm">
-          Prompt libero <span className="text-zinc-500">(sarà interpretato dall&apos;AI in MVP 3 — per ora viene salvato col set)</span>
+          Prompt libero {useAi
+            ? <span className="text-emerald-500">(interpretato dall&apos;AI Set Agent)</span>
+            : <span className="text-zinc-500">(salvato col set; attiva l&apos;AI per interpretarlo)</span>}
           <textarea className={`${input} mt-1 w-full`} rows={2}
-            placeholder="Fammi un set da 45 minuti partendo da…" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+            placeholder="Fammi un set da 45 minuti partendo da Arca, poi più club…" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
         </label>
+
+        <div className="mt-3 flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={useAi} disabled={!aiStatus?.configured}
+              onChange={(e) => setUseAi(e.target.checked)} />
+            <span className={aiStatus?.configured ? "" : "text-zinc-500"}>
+              Usa l&apos;AI Set Agent {aiStatus?.model && <span className="text-zinc-500">({aiStatus.model})</span>}
+            </span>
+          </label>
+          {!aiStatus?.configured && (
+            <span className="text-xs text-zinc-500">
+              — imposta <code className="rounded bg-zinc-800 px-1">AI_API_KEY</code> in backend/.env per abilitarla
+            </span>
+          )}
+        </div>
 
         <button onClick={generate} disabled={loading}
           className="mt-4 rounded bg-emerald-600 px-5 py-2 font-semibold hover:bg-emerald-500 disabled:opacity-50">
-          {loading ? "Generazione…" : "Genera set"}
+          {loading ? "Generazione…" : useAi ? "Genera set con AI" : "Genera set"}
         </button>
       </div>
 
@@ -142,7 +168,13 @@ export default function SetBuilder() {
       {setlist && (
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
           <div className="mb-2 flex items-center justify-between gap-4">
-            <h3 className="text-lg font-semibold">{setlist.name}</h3>
+            <h3 className="flex items-center gap-2 text-lg font-semibold">
+              {setlist.name}
+              <span className={`rounded px-2 py-0.5 text-xs font-normal ${
+                setlist.generated_by === "ai" ? "bg-emerald-900 text-emerald-300" : "bg-zinc-800 text-zinc-400"}`}>
+                {setlist.generated_by === "ai" ? "AI" : "algoritmico"}
+              </span>
+            </h3>
             <div className="flex gap-2">
               <button onClick={() => doExport("text")} className="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700">Export testo</button>
               <button onClick={() => doExport("csv")} className="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700">Export CSV</button>
@@ -161,6 +193,31 @@ export default function SetBuilder() {
           <p className="mb-4 text-sm text-zinc-400">{setlist.global_explanation}</p>
           <p className="mb-3 text-sm">Durata effettiva: <strong>{fmtDuration(setlist.total_duration_seconds)}</strong></p>
 
+          {(() => {
+            const v = setlist.validation ?? {};
+            const blocks: [string, string[] | undefined, string][] = [
+              ["⚠ Warning di validazione", v.warnings, "text-amber-400"],
+              ["🔧 Correzioni automatiche", v.auto_fixes, "text-zinc-400"],
+              ["⚡ Punti critici", v.critical_points, "text-amber-300"],
+              ["↔ Direzioni alternative", v.alternative_directions, "text-zinc-300"],
+              ["🧭 Cosa manca in libreria", v.missing_library_suggestions, "text-emerald-300"],
+            ];
+            const shown = blocks.filter(([, items]) => items && items.length > 0);
+            if (shown.length === 0) return null;
+            return (
+              <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                {shown.map(([title, items, color]) => (
+                  <div key={title} className="rounded border border-zinc-800 bg-zinc-950 p-3 text-sm">
+                    <h4 className={`mb-1 font-medium ${color}`}>{title}</h4>
+                    <ul className="list-disc space-y-0.5 pl-4 text-xs text-zinc-400">
+                      {items!.map((it, i) => <li key={i}>{it}</li>)}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
           <ol className="space-y-2">
             {setlist.tracks.map((st) => (
               <li key={st.position} className="rounded border border-zinc-800 bg-zinc-950 p-3">
@@ -178,6 +235,9 @@ export default function SetBuilder() {
                     </span>
                   )}
                 </div>
+                {st.ai_reason && (
+                  <p className="ml-9 mt-1 text-xs text-emerald-300/80">🎧 {st.ai_reason}</p>
+                )}
                 {st.transition_reason && (
                   <p className="ml-9 mt-1 text-xs text-zinc-500">{st.transition_reason}</p>
                 )}

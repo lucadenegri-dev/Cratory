@@ -73,14 +73,30 @@ export interface SetlistTrack {
   risk_level: string | null;
 }
 
+export interface SetlistValidation {
+  warnings?: string[];
+  auto_fixes?: string[];
+  critical_points?: string[];
+  alternative_directions?: string[];
+  missing_library_suggestions?: string[];
+  stats?: Record<string, number>;
+}
+
 export interface Setlist {
   id: number;
   name: string;
   strategy: string | null;
   target_duration_minutes: number | null;
   global_explanation: string | null;
+  generated_by: string;
+  validation: SetlistValidation;
   total_duration_seconds: number;
   tracks: SetlistTrack[];
+}
+
+export interface AiStatus {
+  configured: boolean;
+  model: string | null;
 }
 
 export interface LibraryStats {

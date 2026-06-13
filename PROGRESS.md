@@ -4,8 +4,26 @@
 
 ## Stato attuale
 
-**Fase:** ✅ MVP 1 e MVP 2 COMPLETATI (+ hardening Spotify e logging) — prossimo: MVP 3 (AI Set Agent)
+**Fase:** ✅ MVP 1, 2, 3 COMPLETATI — prossimo: MVP 4 (Library Expansion + Discogs/MusicBrainz)
 **Ultimo aggiornamento:** 2026-06-13
+
+## Checklist MVP 3 (AI Set Agent) — ✅ completata
+
+- [x] `AnthropicLLMClient` (`integrations/llm.py`) dietro l'ABC `LLMClient`: SDK ufficiale `anthropic`, structured outputs (`output_config.format` + JSON schema), adaptive thinking, streaming, modello `claude-opus-4-8` default (override `AI_MODEL`). `LLMNotConfigured` se manca `AI_API_KEY`.
+- [x] AI Set Agent (`services/ai_agent.py`): candidate engine filtra → cap 80 candidate (seed garantiti) → prompt+schema all'LLM → l'AI ordina/narra usando SOLO le candidate.
+- [x] Validation Engine (`services/validation.py`, F8): track_id esistenti, dedup, max per artista, filtro sorgente, durata vs target, salti BPM/Camelot via scoring deterministico; auto-fix + warning raccolti.
+- [x] Endpoint `/api/sets/generate` sceglie AI vs algoritmico (`use_ai`; auto = AI se prompt + chiave). `GET /api/ai/status`. Persistiti `generated_by` + `validation` (colonne via `ensure_schema`).
+- [x] Frontend Set Builder: toggle AI (disabilitato senza chiave), badge AI/algoritmico, motivazione AI per traccia, blocco validazione (warning/auto-fix/punti critici/alternative/cosa manca).
+- [x] 28 test verdi (6 nuovi con `FakeLLM`, nessuna chiave/rete). Build frontend ok. Verifica browser: toggle+badge+generazione algoritmica ok.
+
+⚠️ Il path AI reale NON è stato provato con una chiave Anthropic vera (serve `AI_API_KEY` in backend/.env). La logica è coperta dai test con LLM finto; al primo set AI reale potrebbero emergere dettagli del prompt da rifinire. F9 (Alternative per traccia) e F10 (Transition Finder arricchito) restano da fare se si vuole completare al 100% l'MVP 3.
+
+## Prossimo passo: MVP 4 (Library Expansion)
+
+1. Client Discogs + MusicBrainz in `integrations/` (cache, rate limit), dietro le ABC già presenti.
+2. Modelli Label/Release/LibraryGap/DiscoverySuggestion (già in docs/03); migrazione via `ensure_schema`.
+3. Expansion from track/artist/genre/set (F12–F15), suggerimenti contestualizzati con query di ricerca pratiche.
+4. UI "Expand Library" + stati suggerimenti (new/to_listen/listened/added/ignored).
 
 ## Logging (aggiunto 2026-06-13)
 
