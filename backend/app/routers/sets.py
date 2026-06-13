@@ -1,11 +1,14 @@
 import csv
 import io
+import logging
+import threading
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.integrations.llm import LLMError, LLMNotConfigured, get_llm_client, llm_configured
 from app.repositories import get_setlist, list_setlists
 from app.schemas import SetGenerationRequest, SetlistOut, SetlistSummaryOut
@@ -13,6 +16,7 @@ from app.serializers import setlist_out, setlist_summary_out
 from app.services.ai_agent import AIAgentError, generate_ai_set
 from app.services.set_generator import SetGenerationError, generate_set
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/sets", tags=["sets"])
 
 
@@ -23,6 +27,64 @@ def _should_use_ai(req: SetGenerationRequest) -> bool:
         return False
     # auto: AI solo se configurata e c'e' un prompt libero da interpretare
     return llm_configured() and bool(req.prompt and req.prompt.strip())
+
+
+# --- Generazione asincrona (la generazione AI puo' richiedere ~1-3 min) -------
+# App locale mono-utente: un job alla volta, stato in memoria con lock.
+_gen_lock = threading.Lock()
+_gen_state: dict = {
+    "status": "idle",  # idle | running | done | error
+    "phase": None,
+    "using_ai": False,
+    "setlist_id": None,
+    "error": None,
+    "started_at": None,
+    "finished_at": None,
+}
+
+
+def _run_generation(req: SetGenerationRequest, use_ai: bool) -> None:
+    db = SessionLocal()
+    try:
+        if use_ai:
+            setlist = generate_ai_set(
+                db, req, get_llm_client(),
+                on_phase=lambda p: _gen_state.update(phase=p),
+            )
+        else:
+            _gen_state["phase"] = "Costruisco il set"
+            setlist = generate_set(db, req)
+        _gen_state.update(status="done", setlist_id=setlist.id, phase=None)
+        logger.info("Job generazione completato: set %s (%s)", setlist.id, setlist.generated_by)
+    except (AIAgentError, LLMError, LLMNotConfigured, SetGenerationError) as exc:
+        _gen_state.update(status="error", error=str(exc))
+        logger.error("Job generazione fallito: %s", exc)
+    except Exception as exc:  # noqa: BLE001
+        _gen_state.update(status="error", error=str(exc))
+        logger.exception("Job generazione fallito (inatteso)")
+    finally:
+        _gen_state["finished_at"] = datetime.now(timezone.utc).isoformat()
+        db.close()
+
+
+@router.post("/generate-async")
+def generate_async(req: SetGenerationRequest):
+    """Avvia la generazione in background e ritorna subito. Seguire /generate-status."""
+    use_ai = _should_use_ai(req)
+    if use_ai and not llm_configured():
+        raise HTTPException(status_code=409, detail="AI non configurata (AI_API_KEY mancante).")
+    with _gen_lock:
+        if _gen_state["status"] == "running":
+            return {"status": "running", "phase": _gen_state["phase"], "using_ai": _gen_state["using_ai"]}
+        _gen_state.update(status="running", phase=None, using_ai=use_ai, setlist_id=None,
+                          error=None, started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)
+    threading.Thread(target=_run_generation, args=(req, use_ai), daemon=True).start()
+    return {"status": "running", "phase": None, "using_ai": use_ai}
+
+
+@router.get("/generate-status")
+def generate_status():
+    return dict(_gen_state)
 
 
 @router.post("/generate", response_model=SetlistOut)

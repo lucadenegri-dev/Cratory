@@ -111,7 +111,13 @@ def _candidate_payload(t: Track) -> dict:
     }
 
 
-def generate_ai_set(db: Session, req: SetGenerationRequest, llm: LLMClient) -> Setlist:
+def generate_ai_set(db, req, llm, on_phase=None):
+    """on_phase(str) opzionale per riportare la fase corrente a un job asincrono."""
+    def phase(p: str) -> None:
+        if on_phase:
+            on_phase(p)
+
+    phase("Seleziono le tracce candidate")
     candidates = select_candidates(db, req)
     if len(candidates) < 3:
         raise AIAgentError(
@@ -141,9 +147,11 @@ def generate_ai_set(db: Session, req: SetGenerationRequest, llm: LLMClient) -> S
     }
 
     logger.info("AI Set Agent: %s candidate, prompt=%r", len(chosen_candidates), (req.prompt or "")[:80])
+    phase("L'AI sta costruendo il set (puo' richiedere un minuto)")
     raw = llm.complete_json(SYSTEM_PROMPT, payload, OUTPUT_SCHEMA)
     ai = AISetResponse.model_validate(raw)
 
+    phase("Valido il risultato")
     result = validate_ai_set(ai, candidates_by_id, req)
     if not result.tracks:
         raise AIAgentError("L'AI non ha prodotto tracce valide tra le candidate.")

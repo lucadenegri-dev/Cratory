@@ -96,3 +96,11 @@ def test_ai_agent_errors_without_candidates(db):
     # DB vuoto: nessuna candidata
     with pytest.raises(AIAgentError):
         generate_ai_set(db, _req(), FakeLLM())
+
+
+def test_ai_agent_reports_phases(db, sample_xml_bytes):
+    import_rekordbox_xml(db, sample_xml_bytes)
+    phases = []
+    generate_ai_set(db, _req(), FakeLLM(n=5), on_phase=phases.append)
+    assert phases  # il job asincrono riceve le fasi
+    assert any("AI" in p for p in phases)
