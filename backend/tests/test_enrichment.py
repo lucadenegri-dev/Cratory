@@ -11,8 +11,10 @@ class FakeSource:
     def __init__(self):
         self.track_calls = 0
 
-    def get_tracks_batch(self, ids):
+    def get_tracks_batch(self, ids, on_progress=None):
         self.track_calls += 1
+        if on_progress:
+            on_progress(len(ids), len(ids), "tracce")
         return [
             {
                 "id": sid,
@@ -27,7 +29,9 @@ class FakeSource:
             for sid in ids
         ]
 
-    def get_artists_batch(self, ids):
+    def get_artists_batch(self, ids, on_progress=None):
+        if on_progress:
+            on_progress(len(ids), len(ids), "artisti")
         return [
             {"id": aid, "name": f"Artist {aid[4:]}", "genres": ["deconstructed club", "experimental"], "popularity": 55}
             for aid in ids
@@ -83,6 +87,17 @@ def test_enrich_is_cached(db, sample_xml_bytes):
 
     report = enrich_library(db, fake, force=True)  # force ricarica
     assert report["enriched"] == 198
+
+
+def test_enrich_reports_progress(db, sample_xml_bytes):
+    import_rekordbox_xml(db, sample_xml_bytes)
+    events = []
+    enrich_library(db, FakeSource(), on_progress=lambda p, t, phase: events.append((p, t, phase)))
+    assert events, "il callback di progresso deve essere invocato"
+    assert any(phase == "tracce" for _, _, phase in events)
+    # l'ultimo evento di ciascuna fase deve avere processed == total
+    last_tracce = [e for e in events if e[2] == "tracce"][-1]
+    assert last_tracce[0] == last_tracce[1]
 
 
 def test_reimport_preserves_enriched_metadata(db, sample_xml_bytes):

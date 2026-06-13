@@ -4,8 +4,22 @@
 
 ## Stato attuale
 
-**Fase:** ✅ MVP 1 e MVP 2 COMPLETATI — prossimo: MVP 3 (AI Set Agent)
-**Ultimo aggiornamento:** 2026-06-12
+**Fase:** ✅ MVP 1 e MVP 2 COMPLETATI (+ hardening Spotify e logging) — prossimo: MVP 3 (AI Set Agent)
+**Ultimo aggiornamento:** 2026-06-13
+
+## Logging (aggiunto 2026-06-13)
+
+- `core/config.py::setup_logging()`: console + file rotante in `backend/logs/djassistant.log` (5×2MB). Livello via `LOG_LEVEL` in .env (default INFO). `backend/logs/` in .gitignore.
+- Middleware in `main.py`: ogni richiesta loggata come `METODO PATH -> status (ms)`; eccezioni non gestite con stacktrace.
+- Si è già rivelato utile: ha individuato il rate limit Spotify da 12h (vedi sotto).
+
+## Hardening Spotify (2026-06-13)
+
+- **Enrichment ora asincrono**: `POST /api/spotify/enrich` avvia un thread e ritorna subito; la UI fa polling di `GET /api/spotify/enrich/status` (status/phase/processed/total) e mostra barra di avanzamento. Risolve il "carica all'infinito" (prima era sincrono e bloccava la fetch; per giunta il backend era spento).
+- **Rate limit 429 con Retry-After enorme**: prima `time.sleep(wait)` dormiva per ore. Ora oltre `MAX_RETRY_WAIT=30s` si solleva un errore chiaro ("riprova tra ~N minuti"). Aggiunto throttle `SINGLE_GET_DELAY=0.08s` tra le GET singole del fallback.
+- **redirect_uri esposto** in `/api/spotify/status` e mostrato in Settings con bottone Copia + troubleshooting per l'errore "Not matching configuration". Deve combaciare ESATTO col dashboard: `http://127.0.0.1:8000/api/spotify/callback`.
+- ⚠️ Durante i test ho saturato il rate limit dell'app Spotify (attivo ~12h dal 2026-06-13 mattina). La libreria è comunque già arricchita (198 tracce); l'enrich non-force è no-op da cache. Il `force` fallirà finché il limite non scade.
+- 22 test verdi (nuovo: `test_enrich_reports_progress`).
 
 ## Checklist MVP 1
 

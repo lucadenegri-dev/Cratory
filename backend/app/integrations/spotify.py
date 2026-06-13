@@ -27,6 +27,8 @@ ACCOUNTS = "https://accounts.spotify.com"
 API = "https://api.spotify.com/v1"
 SCOPES = "playlist-modify-private playlist-modify-public"
 BATCH = 50  # max id per chiamata tracks/artists
+MAX_RETRY_WAIT = 30  # oltre questa attesa (s) su 429 si abortisce invece di dormire
+SINGLE_GET_DELAY = 0.08  # pausa tra GET singole (fallback) per non saturare il rate limit
 
 
 class SpotifyError(Exception):
@@ -145,6 +147,14 @@ class SpotifyWebClient(SpotifyClient):
                                   headers={"Authorization": f"Bearer {token}"})
             if r.status_code == 429:
                 wait = int(r.headers.get("Retry-After", "2")) + 1
+                if wait > MAX_RETRY_WAIT:
+                    # Spotify puo' rispondere con Retry-After di ore: non bloccare,
+                    # riporta un errore chiaro con il tempo di attesa.
+                    mins = round(wait / 60)
+                    raise SpotifyError(
+                        f"Spotify ha applicato un rate limit prolungato (riprova tra ~{mins} "
+                        f"minuti). Capita in development mode dopo molte richieste ravvicinate."
+                    )
                 logger.warning("Spotify rate limit, attesa %ss", wait)
                 time.sleep(wait)
                 continue
@@ -160,14 +170,24 @@ class SpotifyWebClient(SpotifyClient):
 
     # ---- interfaccia SpotifyClient ---------------------------------------
 
-    def _get_many(self, resource: str, ids: list[str]) -> list[dict[str, Any] | None]:
+    def _get_many(self, resource: str, ids: list[str], on_progress=None) -> list[dict[str, Any] | None]:
         """Lettura multipla con fallback: le app Spotify in development mode (2025)
-        ricevono 403 sugli endpoint batch, ma le GET singole funzionano."""
+        ricevono 403 sugli endpoint batch, ma le GET singole funzionano.
+        on_progress(processed, total, phase) riporta l'avanzamento alla UI."""
         out: list[dict[str, Any] | None] = []
+        phase = "tracce" if resource == "tracks" else "artisti"
+        total = len(ids)
+
+        def report():
+            if on_progress:
+                on_progress(len(out), total, phase)
+
+        report()
         for i in range(0, len(ids), BATCH):
             chunk = ids[i:i + BATCH]
             try:
                 out.extend(self._get(f"/{resource}", params={"ids": ",".join(chunk)})[resource])
+                report()
                 continue
             except SpotifyError as exc:
                 if "403" not in str(exc):
@@ -176,24 +196,27 @@ class SpotifyWebClient(SpotifyClient):
             for sid in chunk:
                 try:
                     out.append(self._get(f"/{resource}/{sid}"))
+                    time.sleep(SINGLE_GET_DELAY)  # throttle anti rate-limit
                 except SpotifyError as exc:
                     if "404" in str(exc) or "400" in str(exc):
                         out.append(None)  # id rimosso/non valido: stesso contratto del batch
                     else:
                         raise
+                report()
+        logger.info("Recuperati %s/%s %s da Spotify", sum(1 for o in out if o), total, phase)
         return out
 
     def get_track_metadata(self, spotify_track_id: str) -> dict[str, Any]:
         return self._get(f"/tracks/{spotify_track_id}")
 
-    def get_tracks_batch(self, ids: list[str]) -> list[dict[str, Any] | None]:
-        return self._get_many("tracks", ids)
+    def get_tracks_batch(self, ids: list[str], on_progress=None) -> list[dict[str, Any] | None]:
+        return self._get_many("tracks", ids, on_progress)
 
     def get_artist(self, spotify_artist_id: str) -> dict[str, Any]:
         return self._get(f"/artists/{spotify_artist_id}")
 
-    def get_artists_batch(self, ids: list[str]) -> list[dict[str, Any] | None]:
-        return self._get_many("artists", ids)
+    def get_artists_batch(self, ids: list[str], on_progress=None) -> list[dict[str, Any] | None]:
+        return self._get_many("artists", ids, on_progress)
 
     def create_playlist(self, name: str, track_ids: list[str]) -> str:
         me = self._get("/me", user=True)

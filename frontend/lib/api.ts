@@ -25,6 +25,7 @@ export interface Track {
 export interface SpotifyStatus {
   configured: boolean;
   user_connected: boolean;
+  redirect_uri: string;
 }
 
 export interface EnrichReport {
@@ -32,6 +33,15 @@ export interface EnrichReport {
   not_found: number;
   artists_updated: number;
   skipped_already_enriched: boolean;
+}
+
+export interface EnrichJobStatus {
+  status: "idle" | "running" | "done" | "error";
+  phase: string | null;
+  processed: number;
+  total: number;
+  result: EnrichReport | null;
+  error: string | null;
 }
 
 export const SPOTIFY_LOGIN_URL = `${API}/api/spotify/login`;

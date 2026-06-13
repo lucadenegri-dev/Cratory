@@ -9,7 +9,10 @@ Regole (da docs/05-functional-spec.md F2):
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
+
+# callback(processed, total, phase) per riportare l'avanzamento alla UI
+ProgressFn = Callable[[int, int, str], None]
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,8 +25,12 @@ logger = logging.getLogger(__name__)
 class TrackMetadataSource(Protocol):
     """Sottoinsieme del client Spotify usato dall'enrichment (testabile con un fake)."""
 
-    def get_tracks_batch(self, ids: list[str]) -> list[dict[str, Any]]: ...
-    def get_artists_batch(self, ids: list[str]) -> list[dict[str, Any]]: ...
+    def get_tracks_batch(
+        self, ids: list[str], on_progress: ProgressFn | None = None
+    ) -> list[dict[str, Any] | None]: ...
+    def get_artists_batch(
+        self, ids: list[str], on_progress: ProgressFn | None = None
+    ) -> list[dict[str, Any] | None]: ...
 
 
 def _release_year(album: dict[str, Any]) -> int | None:
@@ -67,17 +74,25 @@ def _upsert_artists(db: Session, artist_meta: list[dict[str, Any]]) -> dict[str,
     return by_id
 
 
-def enrich_library(db: Session, source: TrackMetadataSource, *, force: bool = False) -> dict:
+def enrich_library(
+    db: Session,
+    source: TrackMetadataSource,
+    *,
+    force: bool = False,
+    on_progress: ProgressFn | None = None,
+) -> dict:
     """Arricchisce tutte le tracce Spotify non ancora arricchite. Ritorna un report."""
     stmt = select(Track).where(Track.spotify_id.is_not(None))
     if not force:
         stmt = stmt.where(Track.enriched_at.is_(None))
     tracks = list(db.scalars(stmt).all())
     if not tracks:
+        logger.info("Enrichment: nessuna traccia da arricchire (gia' tutto in cache)")
         return {"enriched": 0, "skipped_already_enriched": True, "not_found": 0, "artists_updated": 0}
 
     by_spotify_id = {t.spotify_id: t for t in tracks}
-    metas = source.get_tracks_batch(list(by_spotify_id.keys()))
+    logger.info("Enrichment avviato: %s tracce da arricchire", len(by_spotify_id))
+    metas = source.get_tracks_batch(list(by_spotify_id.keys()), on_progress=on_progress)
 
     not_found = 0
     for meta in metas:
@@ -89,7 +104,10 @@ def enrich_library(db: Session, source: TrackMetadataSource, *, force: bool = Fa
             _apply_track_metadata(track, meta)
 
     artist_ids = sorted({t.spotify_artist_id for t in tracks if t.spotify_artist_id})
-    artists = _upsert_artists(db, source.get_artists_batch(artist_ids)) if artist_ids else {}
+    artists = (
+        _upsert_artists(db, source.get_artists_batch(artist_ids, on_progress=on_progress))
+        if artist_ids else {}
+    )
 
     # genere traccia: se vuoto, usa i generi dell'artista (dato Spotify a livello artista)
     for t in tracks:

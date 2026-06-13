@@ -1,10 +1,10 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   apiGet, apiPost, SPOTIFY_LOGIN_URL,
-  type EnrichReport, type SpotifyStatus,
+  type EnrichJobStatus, type EnrichReport, type SpotifyStatus,
 } from "@/lib/api";
 
 function SettingsInner() {
@@ -12,25 +12,70 @@ function SettingsInner() {
   const oauthResult = params.get("spotify"); // connected | error
   const [status, setStatus] = useState<SpotifyStatus | null>(null);
   const [report, setReport] = useState<EnrichReport | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [job, setJob] = useState<EnrichJobStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(() => {
     apiGet<SpotifyStatus>("/api/spotify/status").then(setStatus).catch((e) => setError(String(e.message ?? e)));
   }, []);
   useEffect(load, [load]);
 
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+
+  // Riaggancia un job già in corso (es. dopo un refresh della pagina) e pulisce al unmount.
+  useEffect(() => {
+    apiGet<EnrichJobStatus>("/api/spotify/enrich/status")
+      .then((s) => { if (s.status === "running") startPolling(); })
+      .catch(() => {});
+    return stopPolling;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function startPolling() {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await apiGet<EnrichJobStatus>("/api/spotify/enrich/status");
+        setJob(s);
+        if (s.status === "done") {
+          stopPolling();
+          setReport(s.result);
+          load();
+        } else if (s.status === "error") {
+          stopPolling();
+          setError(s.error ?? "Enrichment fallito");
+        }
+      } catch (e) {
+        stopPolling();
+        setError(String((e as Error).message ?? e));
+      }
+    }, 800);
+  }
+
   async function enrich(force = false) {
-    setBusy(true);
     setError(null);
     setReport(null);
     try {
-      setReport(await apiPost<EnrichReport>(`/api/spotify/enrich?force=${force}`));
+      const started = await apiPost<EnrichJobStatus>(`/api/spotify/enrich?force=${force}`);
+      setJob(started);
+      startPolling();
     } catch (e) {
       setError(String((e as Error).message ?? e));
-    } finally {
-      setBusy(false);
     }
+  }
+
+  const busy = job?.status === "running";
+  const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : 0;
+
+  async function copyRedirect() {
+    if (!status?.redirect_uri) return;
+    await navigator.clipboard.writeText(status.redirect_uri);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   }
 
   return (
@@ -63,11 +108,32 @@ function SettingsInner() {
 
         {status?.configured && (
           <div className="space-y-4 text-sm">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <span className={`h-2.5 w-2.5 rounded-full ${status.user_connected ? "bg-emerald-500" : "bg-zinc-600"}`} />
               <span>{status.user_connected ? "Account collegato (puoi creare playlist)" : "Account non collegato — serve solo per creare playlist"}</span>
               {!status.user_connected && (
                 <a href={SPOTIFY_LOGIN_URL} className="rounded bg-green-700 px-3 py-1.5 hover:bg-green-600">Collega Spotify</a>
+              )}
+            </div>
+
+            {/* Redirect URI: deve combaciare esattamente col dashboard Spotify */}
+            <div className="rounded border border-zinc-800 bg-zinc-950 p-3">
+              <p className="mb-1 text-zinc-400">
+                Redirect URI da incollare <strong>esatto</strong> nel dashboard Spotify
+                (App → Settings → Redirect URIs → Add → Save):
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 break-all rounded bg-zinc-800 px-2 py-1 text-emerald-300">{status.redirect_uri}</code>
+                <button onClick={copyRedirect} className="shrink-0 rounded bg-zinc-700 px-3 py-1 hover:bg-zinc-600">
+                  {copied ? "Copiato ✓" : "Copia"}
+                </button>
+              </div>
+              {oauthResult === "error" && (
+                <p className="mt-2 text-amber-400">
+                  Errore <code className="rounded bg-zinc-800 px-1">redirect_uri: Not matching configuration</code>:
+                  il valore qui sopra non è ancora registrato (identico, incluso <code className="rounded bg-zinc-800 px-1">http://</code>,
+                  porta e percorso) nel dashboard Spotify. Aggiungilo, premi <em>Save</em>, attendi qualche secondo e riprova.
+                </p>
               )}
             </div>
 
@@ -87,6 +153,19 @@ function SettingsInner() {
                   Forza ri-enrichment
                 </button>
               </div>
+
+              {busy && job && (
+                <div className="mt-3">
+                  <div className="mb-1 flex justify-between text-xs text-zinc-400">
+                    <span>Recupero {job.phase ?? "dati"} da Spotify…</span>
+                    <span>{job.processed}/{job.total || "?"}{job.total ? ` (${pct}%)` : ""}</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded bg-zinc-800">
+                    <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              )}
+
               {report && (
                 <p className="mt-3 rounded bg-emerald-950 p-3 text-emerald-300">
                   {report.skipped_already_enriched
