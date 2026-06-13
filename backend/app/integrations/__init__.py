@@ -24,10 +24,16 @@ class SpotifyClient(ABC):
 
 
 class LLMClient(ABC):
-    """MVP 3. L'output dell'agente e' sempre JSON validato dal Validation Engine."""
+    """MVP 3. L'output dell'agente e' sempre JSON validato dal Validation Engine.
+
+    `schema` e' un JSON Schema che vincola l'output del modello; l'implementazione
+    deve restituire un dict conforme (poi rivalidato con Pydantic a valle).
+    """
 
     @abstractmethod
-    def complete_json(self, system_prompt: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+    def complete_json(
+        self, system_prompt: str, payload: dict[str, Any], schema: dict[str, Any]
+    ) -> dict[str, Any]: ...
 
 
 class DiscogsClient(ABC):

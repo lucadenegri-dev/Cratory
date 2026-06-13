@@ -6,16 +6,35 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.integrations.llm import LLMError, LLMNotConfigured, get_llm_client, llm_configured
 from app.repositories import get_setlist, list_setlists
 from app.schemas import SetGenerationRequest, SetlistOut, SetlistSummaryOut
 from app.serializers import setlist_out, setlist_summary_out
+from app.services.ai_agent import AIAgentError, generate_ai_set
 from app.services.set_generator import SetGenerationError, generate_set
 
 router = APIRouter(prefix="/api/sets", tags=["sets"])
 
 
+def _should_use_ai(req: SetGenerationRequest) -> bool:
+    if req.use_ai is True:
+        return True
+    if req.use_ai is False:
+        return False
+    # auto: AI solo se configurata e c'e' un prompt libero da interpretare
+    return llm_configured() and bool(req.prompt and req.prompt.strip())
+
+
 @router.post("/generate", response_model=SetlistOut)
 def generate(req: SetGenerationRequest, db: Session = Depends(get_db)):
+    if _should_use_ai(req):
+        try:
+            setlist = generate_ai_set(db, req, get_llm_client())
+        except LLMNotConfigured as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (AIAgentError, LLMError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return setlist_out(setlist)
     try:
         setlist = generate_set(db, req)
     except SetGenerationError as exc:

@@ -123,6 +123,8 @@ class Setlist(Base):
     strategy: Mapped[str | None] = mapped_column(String)
     prompt: Mapped[str | None] = mapped_column(Text)
     global_explanation: Mapped[str | None] = mapped_column(Text)
+    generated_by: Mapped[str] = mapped_column(String, default="algorithmic")  # algorithmic | ai
+    validation: Mapped[dict] = mapped_column(JSON, default=dict)  # warnings/auto-fix del Validation Engine
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 

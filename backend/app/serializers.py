@@ -74,6 +74,8 @@ def setlist_out(setlist: Setlist) -> SetlistOut:
         strategy=setlist.strategy,
         prompt=setlist.prompt,
         global_explanation=setlist.global_explanation,
+        generated_by=setlist.generated_by or "algorithmic",
+        validation=setlist.validation or {},
         total_duration_seconds=total,
         created_at=setlist.created_at,
         tracks=items,

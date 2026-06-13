@@ -95,6 +95,28 @@ class SetGenerationRequest(BaseModel):
     avoid_short_tracks: bool = True
     avoid_overplayed: bool = False
     prompt: str | None = None  # prompt libero: usato dall'AI agent in MVP 3
+    use_ai: bool | None = None  # None = auto (AI se configurata e c'e' un prompt)
+
+
+class AITrackChoice(BaseModel):
+    """Una traccia scelta dall'AI Set Agent (output validato con Pydantic)."""
+
+    position: int
+    track_id: int
+    reason: str = ""
+    transition_note: str = ""
+    risk_level: str = "medium"  # low | medium | high
+
+
+class AISetResponse(BaseModel):
+    """Output dell'AI Set Agent prima della validazione deterministica."""
+
+    set_title: str = ""
+    global_explanation: str = ""
+    tracks: list[AITrackChoice] = []
+    critical_points: list[str] = []
+    alternative_directions: list[str] = []
+    missing_library_suggestions: list[str] = []
 
 
 class SetlistTrackOut(BaseModel):
@@ -115,6 +137,8 @@ class SetlistOut(BaseModel):
     strategy: str | None = None
     prompt: str | None = None
     global_explanation: str | None = None
+    generated_by: str = "algorithmic"
+    validation: dict = {}
     total_duration_seconds: int = 0
     created_at: datetime
     tracks: list[SetlistTrackOut] = []

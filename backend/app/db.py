@@ -28,16 +28,24 @@ def ensure_schema(eng=None) -> None:
     eng = eng or engine
     Base.metadata.create_all(eng)
     inspector = inspect(eng)
-    existing = {c["name"] for c in inspector.get_columns("tracks")}
-    wanted = {
-        "album_art_url": "TEXT",
-        "spotify_artist_id": "VARCHAR",
-        "enriched_at": "DATETIME",
+    # tabella -> {colonna: ddl} per colonne aggiunte dopo la creazione iniziale
+    additions = {
+        "tracks": {
+            "album_art_url": "TEXT",
+            "spotify_artist_id": "VARCHAR",
+            "enriched_at": "DATETIME",
+        },
+        "setlists": {
+            "generated_by": "VARCHAR DEFAULT 'algorithmic'",
+            "validation": "JSON",
+        },
     }
     with eng.begin() as conn:
-        for col, ddl in wanted.items():
-            if col not in existing:
-                conn.execute(text(f"ALTER TABLE tracks ADD COLUMN {col} {ddl}"))
+        for table, cols in additions.items():
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            for col, ddl in cols.items():
+                if col not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
 
 
 def get_db():
