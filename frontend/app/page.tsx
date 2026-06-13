@@ -19,7 +19,9 @@ export default function Dashboard() {
   const [importResult, setImportResult] = useState<Record<string, unknown> | null>(null);
 
   const load = useCallback(() => {
-    apiGet<LibraryStats>("/api/stats").then(setStats).catch((e) => setError(String(e.message ?? e)));
+    apiGet<LibraryStats>("/api/stats")
+      .then((s) => { setStats(s); setError(null); })
+      .catch((e) => setError(String(e.message ?? e)));
   }, []);
 
   useEffect(load, [load]);
@@ -65,7 +67,12 @@ export default function Dashboard() {
         )}
       </section>
 
-      {error && <p className="mb-4 rounded bg-red-950 p-3 text-sm text-red-300">⚠ {error} — il backend è avviato su :8000?</p>}
+      {error && (
+        <p className="mb-4 rounded bg-red-950 p-3 text-sm text-red-300">
+          ⚠ {error} — il backend è avviato su :8000?{" "}
+          <button onClick={load} className="underline hover:text-white">Riprova</button>
+        </p>
+      )}
 
       {stats && (
         <>

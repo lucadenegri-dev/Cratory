@@ -18,7 +18,9 @@ function SettingsInner() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(() => {
-    apiGet<SpotifyStatus>("/api/spotify/status").then(setStatus).catch((e) => setError(String(e.message ?? e)));
+    apiGet<SpotifyStatus>("/api/spotify/status")
+      .then((s) => { setStatus(s); setError(null); })
+      .catch((e) => { setStatus(null); setError(String(e.message ?? e)); });
   }, []);
   useEffect(load, [load]);
 
@@ -91,6 +93,14 @@ function SettingsInner() {
 
       <section className="mb-6 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
         <h3 className="mb-2 font-semibold">Spotify</h3>
+
+        {!status && (
+          <div className="rounded bg-red-950 p-3 text-sm text-red-300">
+            ⚠ Backend non raggiungibile su <code className="rounded bg-zinc-800 px-1">:8000</code>.
+            Avvia il backend (<code className="rounded bg-zinc-800 px-1">uvicorn app.main:app --port 8000</code> da <code className="rounded bg-zinc-800 px-1">backend/</code>), poi{" "}
+            <button onClick={load} className="underline hover:text-white">Riprova</button>.
+          </div>
+        )}
 
         {status && !status.configured && (
           <div className="text-sm text-zinc-300">
