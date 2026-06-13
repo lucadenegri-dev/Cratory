@@ -16,7 +16,15 @@
 - [x] Frontend Set Builder: toggle AI (disabilitato senza chiave), badge AI/algoritmico, motivazione AI per traccia, blocco validazione (warning/auto-fix/punti critici/alternative/cosa manca).
 - [x] 28 test verdi (6 nuovi con `FakeLLM`, nessuna chiave/rete). Build frontend ok. Verifica browser: toggle+badge+generazione algoritmica ok.
 
-⚠️ Il path AI reale NON è stato provato con una chiave Anthropic vera (serve `AI_API_KEY` in backend/.env). La logica è coperta dai test con LLM finto; al primo set AI reale potrebbero emergere dettagli del prompt da rifinire. F9 (Alternative per traccia) e F10 (Transition Finder arricchito) restano da fare se si vuole completare al 100% l'MVP 3.
+**Test reale infrastruttura eseguito (13/06/2026, chiave Anthropic vera, modello claude-sonnet-4-6):** 4 set AI reali generati e persistiti, qualità ottima (artisti reali della libreria, ordinamento Camelot-aware, progressione BPM corretta, durata vicina al target). Bug critico trovato e risolto: senza impostare l'effort, Sonnet 4.6 usa il default `high` → thinking massiccio → la generazione si bloccava per minuti. Tuning misurato sul campo:
+- thinking disabled: ~41s ma sbaglia durata (67min vs 40) e direzione BPM.
+- adaptive + effort **low**: ~66s, qualità corretta → **default scelto**.
+- adaptive + effort medium: ~125s, corretto ma lento.
+Ora configurabili via env: `AI_EFFORT` (default low), `AI_THINKING` (default adaptive), `AI_TIMEOUT_SECONDS` (120). Candidate ridotte a 60, prompt reso conciso, timeout esplicito sul client.
+
+⚠️ **Latenza intrinsecamente variabile (66s–180s+) secondo la complessità del prompt.** La richiesta HTTP è sincrona: il backend completa e salva il set anche se il client va in timeout (verificato: set salvato lato server dopo il timeout del client). **Prossimo passo UX consigliato: rendere la generazione AI asincrona con polling di stato + barra di avanzamento, come già fatto per l'enrichment Spotify** (POST avvia un job, GET /status, la UI fa polling). Senza questo, nel browser l'utente vede uno spinner lungo.
+
+F9 (Alternative per traccia) e F10 (Transition Finder arricchito) restano opzionali per completare al 100% l'MVP 3.
 
 ## Prossimo passo: MVP 4 (Library Expansion)
 

@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     musicbrainz_user_agent: str = ""
     ai_api_key: str = ""
     ai_model: str = ""
+    # Effort dell'LLM: su Sonnet 4.6 il default e' "high" -> thinking massiccio e
+    # latenza alta. "medium" e' il compromesso giusto per il set building.
+    # Punto ottimale misurato su set reali: adaptive thinking + effort "low"
+    # ~66s con ordinamento BPM/Camelot corretto. "medium" raddoppia il tempo,
+    # "disabled" e' veloce ma sbaglia durata e progressione. (override via env)
+    ai_effort: str = "low"  # low | medium | high | max
+    ai_thinking: str = "adaptive"  # adaptive | disabled
+    ai_timeout_seconds: float = 120.0
 
 
 settings = Settings()

@@ -39,22 +39,31 @@ class AnthropicLLMClient(LLMClient):
             raise LLMNotConfigured("Pacchetto 'anthropic' non installato (pip install anthropic).") from exc
 
         self._anthropic = anthropic
-        self.client = anthropic.Anthropic(api_key=settings.ai_api_key)
+        # timeout esplicito: meglio un errore chiaro che un handler appeso
+        self.client = anthropic.Anthropic(
+            api_key=settings.ai_api_key, timeout=settings.ai_timeout_seconds
+        )
         self.model = settings.ai_model or DEFAULT_MODEL
+        self.effort = settings.ai_effort
+        self.thinking = settings.ai_thinking
 
     def complete_json(
         self, system_prompt: str, payload: dict[str, Any], schema: dict[str, Any]
     ) -> dict[str, Any]:
         user_content = json.dumps(payload, ensure_ascii=False)
+        thinking = {"type": "adaptive"} if self.thinking == "adaptive" else {"type": "disabled"}
         try:
             # streaming + get_final_message: robusto contro i timeout su output lunghi
             with self.client.messages.stream(
                 model=self.model,
                 max_tokens=MAX_TOKENS,
-                thinking={"type": "adaptive"},
+                thinking=thinking,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_content}],
-                output_config={"format": {"type": "json_schema", "schema": schema}},
+                output_config={
+                    "format": {"type": "json_schema", "schema": schema},
+                    "effort": self.effort,  # senza questo Sonnet 4.6 usa effort high (lento)
+                },
             ) as stream:
                 message = stream.get_final_message()
         except self._anthropic.APIError as exc:

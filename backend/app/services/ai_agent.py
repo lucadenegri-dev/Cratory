@@ -19,7 +19,7 @@ from app.services.validation import validate_ai_set
 
 logger = logging.getLogger(__name__)
 
-MAX_CANDIDATES = 80  # tetto di tracce passate all'AI (token budget)
+MAX_CANDIDATES = 60  # tetto di tracce passate all'AI (token budget / latenza)
 
 SYSTEM_PROMPT = """Sei un DJ esperto che costruisce DJ set coerenti.
 Ricevi una richiesta utente, vincoli strutturati e una lista di tracce CANDIDATE
@@ -35,6 +35,11 @@ Regole inderogabili:
 - Distingui dati di fatto da inferenze musicali e da ipotesi creative.
 - Fornisci una global_explanation narrativa, eventuali critical_points, alternative_directions
   e missing_library_suggestions (cosa manca in libreria, in modo contestualizzato).
+
+Sii CONCISO per restare reattivo:
+- reason e transition_note: una frase breve ciascuno (max ~20 parole).
+- global_explanation: max 3-4 frasi.
+- ogni lista (critical_points, alternative_directions, missing_library_suggestions): max 3 voci brevi.
 Rispondi esclusivamente nel formato JSON richiesto."""
 
 # JSON Schema per structured outputs (additionalProperties:false ovunque).
