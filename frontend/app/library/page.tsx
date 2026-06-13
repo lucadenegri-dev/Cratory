@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { Music4, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
+import { Card, Input, Select, Checkbox, Alert, Badge } from "@/components/ui";
 
-const SOURCES = ["", "spotify", "soundcloud", "local"];
+const SOURCE_TONE: Record<string, "info" | "warning" | "neutral"> = { spotify: "info", soundcloud: "warning", local: "neutral" };
 
 export default function Library() {
   const [items, setItems] = useState<Track[]>([]);
@@ -23,91 +25,96 @@ export default function Library() {
 
   const load = useCallback(() => {
     apiGet<{ total: number; items: Track[] }>("/api/tracks", {
-      artist, title, source,
-      bpm_min: bpmMin, bpm_max: bpmMax, tonality,
-      incomplete_metadata: incomplete ? true : undefined,
-      limit, offset,
+      artist, title, source, bpm_min: bpmMin, bpm_max: bpmMax, tonality,
+      incomplete_metadata: incomplete ? true : undefined, limit, offset,
     })
       .then((r) => { setItems(r.items); setTotal(r.total); setError(null); })
       .catch((e) => setError(String(e.message ?? e)));
   }, [artist, title, source, bpmMin, bpmMax, tonality, incomplete, offset]);
 
-  useEffect(() => {
-    const t = setTimeout(load, 250);
-    return () => clearTimeout(t);
-  }, [load]);
+  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
 
-  const input = "rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm w-28";
+  const cell = "px-3 py-2.5";
 
   return (
     <div>
-      <h2 className="mb-4 text-2xl font-bold">Library <span className="text-base font-normal text-zinc-400">({total} tracce)</span></h2>
+      <header className="mb-6 flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Libreria</h1>
+          <p className="mt-1 text-sm text-muted">{total} tracce · filtra per artista, BPM, tonalità, sorgente.</p>
+        </div>
+      </header>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <input className={input} placeholder="Artista" value={artist} onChange={(e) => { setArtist(e.target.value); setOffset(0); }} />
-        <input className={input} placeholder="Titolo" value={title} onChange={(e) => { setTitle(e.target.value); setOffset(0); }} />
-        <select className={input} value={source} onChange={(e) => { setSource(e.target.value); setOffset(0); }}>
-          {SOURCES.map((s) => <option key={s} value={s}>{s || "Tutte le sorgenti"}</option>)}
-        </select>
-        <input className={input} placeholder="BPM min" type="number" value={bpmMin} onChange={(e) => { setBpmMin(e.target.value); setOffset(0); }} />
-        <input className={input} placeholder="BPM max" type="number" value={bpmMax} onChange={(e) => { setBpmMax(e.target.value); setOffset(0); }} />
-        <input className={input} placeholder="Key (es. 7A)" value={tonality} onChange={(e) => { setTonality(e.target.value); setOffset(0); }} />
-        <label className="flex items-center gap-1 text-sm text-zinc-300">
-          <input type="checkbox" checked={incomplete} onChange={(e) => { setIncomplete(e.target.checked); setOffset(0); }} />
-          metadata incompleti
-        </label>
-      </div>
+      <Card className="mb-4">
+        <div className="p-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Input className="h-9" placeholder="Artista" value={artist} onChange={(e) => { setArtist(e.target.value); setOffset(0); }} />
+            <Input className="h-9" placeholder="Titolo" value={title} onChange={(e) => { setTitle(e.target.value); setOffset(0); }} />
+            <Select className="h-9" value={source} onChange={(e) => { setSource(e.target.value); setOffset(0); }}>
+              <option value="">Tutte le sorgenti</option>
+              <option value="spotify">Spotify</option>
+              <option value="soundcloud">SoundCloud</option>
+              <option value="local">Locali</option>
+            </Select>
+            <Input className="h-9" type="number" placeholder="BPM min" value={bpmMin} onChange={(e) => { setBpmMin(e.target.value); setOffset(0); }} />
+            <Input className="h-9" type="number" placeholder="BPM max" value={bpmMax} onChange={(e) => { setBpmMax(e.target.value); setOffset(0); }} />
+            <Input className="h-9" placeholder="Key (7A)" value={tonality} onChange={(e) => { setTonality(e.target.value); setOffset(0); }} />
+          </div>
+          <div className="mt-2"><Checkbox label="solo metadata incompleti" checked={incomplete} onChange={(v) => { setIncomplete(v); setOffset(0); }} /></div>
+        </div>
+      </Card>
 
-      {error && <p className="mb-4 rounded bg-red-950 p-3 text-sm text-red-300">⚠ {error}</p>}
+      {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-zinc-700 text-left text-xs uppercase text-zinc-400">
-            <th className="py-2 pr-2">Title</th><th className="pr-2">Artist</th><th className="pr-2">Source</th>
-            <th className="pr-2">BPM</th><th className="pr-2">Key</th><th className="pr-2">Dur</th>
-            <th className="pr-2">Year</th><th className="pr-2">Plays</th><th className="pr-2">Cues</th><th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((t) => (
-            <tr key={t.id} className="border-b border-zinc-800/60 hover:bg-zinc-900">
-              <td className="py-1.5 pr-2">
-                <span className="flex items-center gap-2">
-                  {t.album_art_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={t.album_art_url} alt="" className="h-7 w-7 shrink-0 rounded object-cover" />
-                  ) : (
-                    <span className="h-7 w-7 shrink-0 rounded bg-zinc-800" />
-                  )}
-                  <Link href={`/tracks/${t.id}`} className="text-emerald-400 hover:underline">
-                    {t.title ?? <span className="italic text-zinc-500">senza titolo ({t.source_type})</span>}
-                  </Link>
-                </span>
-              </td>
-              <td className="pr-2">{t.artist ?? <span className="text-zinc-600">—</span>}</td>
-              <td className="pr-2 text-zinc-400">{t.source_type}</td>
-              <td className="pr-2">{t.bpm?.toFixed(0) ?? "—"}</td>
-              <td className="pr-2">{t.tonality ?? "—"}</td>
-              <td className="pr-2">{fmtDuration(t.duration_seconds)}</td>
-              <td className="pr-2">{t.year ?? "—"}</td>
-              <td className="pr-2">{t.play_count}</td>
-              <td className="pr-2">{t.cue_count || "—"}</td>
-              <td>
-                {t.spotify_url && (
-                  <a href={t.spotify_url} target="_blank" rel="noreferrer" className="text-xs text-green-500 hover:underline">Spotify ↗</a>
-                )}
-              </td>
+      <Card className="overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-faint">
+              <th className={cell}>Title</th>
+              <th className={cell}>Artist</th>
+              <th className={cell}>Source</th>
+              <th className={`${cell} tnum`}>BPM</th>
+              <th className={cell}>Key</th>
+              <th className={`${cell} tnum`}>Dur</th>
+              <th className={`${cell} tnum`}>Plays</th>
+              <th className={cell}></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {items.map((t) => (
+              <tr key={t.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
+                <td className={cell}>
+                  <Link href={`/tracks/${t.id}`} className="flex items-center gap-2.5">
+                    {t.album_art_url
+                      ? <img src={t.album_art_url} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
+                      : <span className="grid h-8 w-8 shrink-0 place-items-center rounded bg-elevated text-faint"><Music4 size={14} /></span>}
+                    <span className="truncate font-medium hover:text-primary">{t.title ?? <span className="italic text-faint">senza titolo</span>}</span>
+                  </Link>
+                </td>
+                <td className={`${cell} text-muted`}>{t.artist ?? <span className="text-faint">—</span>}</td>
+                <td className={cell}><Badge tone={SOURCE_TONE[t.source_type] ?? "neutral"}>{t.source_type}</Badge></td>
+                <td className={`${cell} tnum`}>{t.bpm?.toFixed(0) ?? "—"}</td>
+                <td className={`${cell} tnum text-muted`}>{t.tonality ?? "—"}</td>
+                <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
+                <td className={`${cell} tnum text-muted`}>{t.play_count}</td>
+                <td className={cell}>{t.spotify_url && <a href={t.spotify_url} target="_blank" rel="noreferrer" className="text-faint hover:text-info"><ExternalLink size={14} /></a>}</td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr><td colSpan={8} className="px-3 py-10 text-center text-sm text-faint">Nessuna traccia con questi filtri.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </Card>
 
-      <div className="mt-4 flex items-center gap-3 text-sm">
-        <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}
-          className="rounded bg-zinc-800 px-3 py-1 disabled:opacity-40">← Prec</button>
-        <span className="text-zinc-400">{offset + 1}–{Math.min(offset + limit, total)} di {total}</span>
-        <button disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)}
-          className="rounded bg-zinc-800 px-3 py-1 disabled:opacity-40">Succ →</button>
+      <div className="mt-4 flex items-center justify-between text-sm">
+        <span className="text-muted">{total === 0 ? "0" : `${offset + 1}–${Math.min(offset + limit, total)}`} di {total}</span>
+        <div className="flex gap-2">
+          <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}
+            className="inline-flex h-8 items-center gap-1 rounded-lg border border-border-strong px-3 disabled:opacity-40 hover:bg-elevated"><ChevronLeft size={15} /> Prec</button>
+          <button disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)}
+            className="inline-flex h-8 items-center gap-1 rounded-lg border border-border-strong px-3 disabled:opacity-40 hover:bg-elevated">Succ <ChevronRight size={15} /></button>
+        </div>
       </div>
     </div>
   );

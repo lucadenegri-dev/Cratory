@@ -1,14 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { Upload, Music, Gauge, KeyRound, Disc3, CloudUpload, CircleAlert, ArrowRight } from "lucide-react";
 import { apiGet, uploadXml, type LibraryStats } from "@/lib/api";
+import { Card, Button, Alert, Spinner } from "@/components/ui";
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+function Stat({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: React.ReactNode; accent?: boolean }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-      <div className="text-2xl font-semibold">{value}</div>
-      <div className="mt-1 text-xs text-zinc-400">{label}</div>
-    </div>
+    <Card className="p-4">
+      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
+        <span className="text-faint">{icon}</span>{label}
+      </div>
+      <div className={`tnum mt-1.5 text-2xl font-semibold ${accent ? "text-primary" : ""}`}>{value}</div>
+    </Card>
   );
 }
 
@@ -16,24 +21,20 @@ export default function Dashboard() {
   const [stats, setStats] = useState<LibraryStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<Record<string, unknown> | null>(null);
+  const [report, setReport] = useState<Record<string, unknown> | null>(null);
 
   const load = useCallback(() => {
-    apiGet<LibraryStats>("/api/stats")
-      .then((s) => { setStats(s); setError(null); })
-      .catch((e) => setError(String(e.message ?? e)));
+    apiGet<LibraryStats>("/api/stats").then((s) => { setStats(s); setError(null); }).catch((e) => setError(String(e.message ?? e)));
   }, []);
-
   useEffect(load, [load]);
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setImporting(true);
-    setError(null);
+    setImporting(true); setError(null);
     try {
-      const report = await uploadXml(file);
-      setImportResult(report.stats);
+      const r = await uploadXml(file);
+      setReport(r.stats);
       load();
     } catch (err) {
       setError(String((err as Error).message ?? err));
@@ -43,67 +44,82 @@ export default function Dashboard() {
     }
   }
 
+  const empty = stats && stats.total_tracks === 0;
+
   return (
-    <div className="max-w-5xl">
-      <h2 className="mb-4 text-2xl font-bold">Dashboard</h2>
+    <div>
+      <header className="mb-6 flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-sm text-muted">Panoramica della libreria e import da Rekordbox.</p>
+        </div>
+        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-fg transition-colors hover:bg-primary-hover">
+          {importing ? <Spinner className="h-4 w-4 border-primary-fg/40 border-t-primary-fg" /> : <Upload size={16} />}
+          {importing ? "Import…" : "Importa XML"}
+          <input type="file" accept=".xml,text/xml" onChange={onUpload} disabled={importing} className="hidden" />
+        </label>
+      </header>
 
-      <section className="mb-6 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-        <h3 className="mb-2 font-semibold">Import libreria Rekordbox</h3>
-        <p className="mb-3 text-sm text-zinc-400">
-          Carica l&apos;export XML di Rekordbox. Il re-import aggiorna le tracce esistenti senza duplicarle.
-        </p>
-        <input
-          type="file"
-          accept=".xml,text/xml"
-          onChange={onUpload}
-          disabled={importing}
-          className="block text-sm file:mr-3 file:rounded file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-white file:cursor-pointer hover:file:bg-emerald-500"
-        />
-        {importing && <p className="mt-2 text-sm text-amber-400">Import in corso…</p>}
-        {importResult && (
-          <pre className="mt-3 max-h-64 overflow-auto rounded bg-zinc-950 p-3 text-xs text-emerald-300">
-            {JSON.stringify(importResult, null, 2)}
-          </pre>
-        )}
-      </section>
+      {error && <div className="mb-6"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
 
-      {error && (
-        <p className="mb-4 rounded bg-red-950 p-3 text-sm text-red-300">
-          ⚠ {error} — il backend è avviato su :8000?{" "}
-          <button onClick={load} className="underline hover:text-white">Riprova</button>
-        </p>
+      {report && (
+        <div className="mb-6"><Alert tone="success">
+          ✓ Import: {String(report.created)} nuove, {String(report.updated)} aggiornate · {String(report.total_tracks)} tracce totali
+        </Alert></div>
       )}
 
-      {stats && (
+      {empty && (
+        <Card className="mb-6">
+          <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+            <CloudUpload size={36} className="text-faint" />
+            <div>
+              <p className="font-medium">Libreria vuota</p>
+              <p className="mt-1 text-sm text-muted">Carica l&apos;export XML di Rekordbox per iniziare. Il re-import aggiorna senza duplicare.</p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {stats && !empty && (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Tracce totali" value={stats.total_tracks} />
-            <StatCard label="Con BPM" value={stats.with_bpm} />
-            <StatCard label="Con tonalità" value={stats.with_tonality} />
-            <StatCard label="Con cue point" value={stats.with_cues} />
-            <StatCard label="Spotify" value={stats.by_source["spotify"] ?? 0} />
-            <StatCard label="SoundCloud" value={stats.by_source["soundcloud"] ?? 0} />
-            <StatCard label="File locali" value={stats.by_source["local"] ?? 0} />
-            <StatCard label="Metadata mancanti" value={stats.missing_metadata} />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Stat icon={<Music size={14} />} label="Tracce" value={stats.total_tracks} accent />
+            <Stat icon={<Gauge size={14} />} label="Con BPM" value={stats.with_bpm} />
+            <Stat icon={<KeyRound size={14} />} label="Con tonalità" value={stats.with_tonality} />
+            <Stat icon={<CircleAlert size={14} />} label="Metadata mancanti" value={stats.missing_metadata} />
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-              <h3 className="mb-2 text-sm font-semibold text-zinc-300">Range BPM</h3>
-              <p className="text-xl">
-                {stats.bpm_min ? `${stats.bpm_min.toFixed(0)} – ${stats.bpm_max?.toFixed(0)}` : "—"}
-              </p>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-              <h3 className="mb-2 text-sm font-semibold text-zinc-300">Distribuzione tonalità</h3>
+          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+            <Card className="p-4">
+              <div className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">Sorgenti</div>
+              <div className="space-y-2">
+                {(["spotify", "soundcloud", "local"] as const).map((s) => {
+                  const n = stats.by_source[s] ?? 0;
+                  const pct = stats.total_tracks ? (n / stats.total_tracks) * 100 : 0;
+                  return (
+                    <div key={s}>
+                      <div className="mb-1 flex justify-between text-xs"><span className="capitalize text-muted">{s}</span><span className="tnum text-faint">{n}</span></div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-elevated"><div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} /></div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Range BPM</div>
+              <div className="tnum text-2xl font-semibold">{stats.bpm_min ? `${stats.bpm_min.toFixed(0)}–${stats.bpm_max?.toFixed(0)}` : "—"}</div>
+              <Link href="/library" className="mt-3 inline-flex items-center gap-1 text-sm text-info hover:underline">Esplora la libreria <ArrowRight size={14} /></Link>
+            </Card>
+
+            <Card className="p-4">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Tonalità (Camelot)</div>
               <div className="flex flex-wrap gap-1">
                 {Object.entries(stats.key_distribution).map(([k, n]) => (
-                  <span key={k} className="rounded bg-zinc-800 px-2 py-0.5 text-xs">
-                    {k}: {n}
-                  </span>
+                  <span key={k} className="tnum rounded-md bg-elevated px-1.5 py-0.5 text-xs text-muted" title={`${n} tracce`}>{k}<span className="text-faint">·{n}</span></span>
                 ))}
               </div>
-            </div>
+            </Card>
           </div>
         </>
       )}

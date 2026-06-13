@@ -2,39 +2,27 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import {
-  apiGet, fmtDuration, trackLabel,
-  type TrackDetail, type TransitionCandidate,
-} from "@/lib/api";
+import { ArrowLeft, ExternalLink, Music4, ArrowRightLeft } from "lucide-react";
+import { apiGet, fmtDuration, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
+import { Card, CardHeader, Badge, Alert, Button } from "@/components/ui";
+
+function scoreTone(s: number) { return s >= 70 ? "success" : s >= 45 ? "warning" : "danger"; }
 
 function TransitionList({ title, items }: { title: string; items: TransitionCandidate[] }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-      <h3 className="mb-2 font-semibold">{title}</h3>
-      <ul className="space-y-2">
+    <Card>
+      <CardHeader title={title} />
+      <ul className="divide-y divide-border">
         {items.map(({ track, score }) => (
-          <li key={track.id} className="text-sm">
-            <div className="flex items-center gap-2">
-              <span className={`w-8 shrink-0 rounded px-1 text-center text-xs font-bold ${
-                score.score >= 70 ? "bg-emerald-900 text-emerald-300"
-                : score.score >= 45 ? "bg-amber-900 text-amber-300"
-                : "bg-red-950 text-red-300"}`}>
-                {score.score}
-              </span>
-              <Link href={`/tracks/${track.id}`} className="truncate text-emerald-400 hover:underline">
-                {trackLabel(track)}
-              </Link>
-              <span className="shrink-0 text-xs text-zinc-500">
-                {track.bpm?.toFixed(0)} BPM · {track.tonality ?? "?"}
-              </span>
-            </div>
-            {score.warnings.length > 0 && (
-              <p className="ml-10 text-xs text-amber-500">{score.warnings.join("; ")}</p>
-            )}
+          <li key={track.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+            <Badge tone={scoreTone(score.score)} className="tnum w-9 justify-center">{score.score}</Badge>
+            <Link href={`/tracks/${track.id}`} className="min-w-0 flex-1 truncate hover:text-primary">{trackLabel(track)}</Link>
+            <span className="tnum shrink-0 text-xs text-faint">{track.bpm?.toFixed(0)} · {track.tonality ?? "?"}</span>
           </li>
         ))}
+        {items.length === 0 && <li className="px-4 py-6 text-center text-sm text-faint">Nessuna traccia.</li>}
       </ul>
-    </div>
+    </Card>
   );
 }
 
@@ -51,77 +39,65 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
     apiGet<TransitionCandidate[]>(`/api/transitions/before/${id}`, { limit: 8 }).then(setBefore).catch(() => {});
   }, [id]);
 
-  if (error) return <p className="rounded bg-red-950 p-3 text-sm text-red-300">⚠ {error}</p>;
-  if (!track) return <p className="text-zinc-400">Caricamento…</p>;
+  if (error) return <Alert tone="danger">⚠ {error}</Alert>;
+  if (!track) return <p className="text-muted">Caricamento…</p>;
 
-  const rows: [string, React.ReactNode][] = [
-    ["Artista", track.artist ?? "—"],
-    ["Album", track.album ?? "—"],
-    ["Genere", track.genre ?? "—"],
-    ["Anno", track.year ?? "—"],
-    ["BPM", track.bpm?.toFixed(2) ?? "—"],
-    ["Tonalità", track.tonality ?? "—"],
-    ["Durata", fmtDuration(track.duration_seconds)],
-    ["Sorgente", track.source_type],
-    ["Play count", track.play_count],
-    ["Beatgrid", track.has_beatgrid ? `sì (${track.beatgrid_bpms.map((b) => b.toFixed(1)).join(", ")} BPM)` : "no"],
+  const rows: Array<[string, React.ReactNode]> = [
+    ["Album", track.album ?? "—"], ["Genere", track.genre ?? "—"], ["Anno", track.year ?? "—"],
+    ["BPM", track.bpm?.toFixed(2) ?? "—"], ["Tonalità", track.tonality ?? "—"], ["Durata", fmtDuration(track.duration_seconds)],
+    ["Sorgente", track.source_type], ["Play count", track.play_count],
+    ["Beatgrid", track.has_beatgrid ? `sì · ${track.beatgrid_bpms.map((b) => b.toFixed(1)).join(", ")} BPM` : "no"],
   ];
 
   return (
-    <div className="max-w-5xl">
-      <div className="mb-4 flex items-center gap-4">
-        {track.album_art_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={track.album_art_url} alt="" className="h-20 w-20 rounded-lg object-cover" />
-        )}
-        <div>
-          <h2 className="mb-1 text-2xl font-bold">
-            {track.title ?? <span className="italic text-zinc-500">Senza titolo</span>}
-          </h2>
-          <p className="text-zinc-400">{track.artist ?? "Artista sconosciuto"}</p>
-        </div>
-      </div>
+    <div>
+      <Link href="/library" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Libreria</Link>
 
-      <div className="mb-6 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <table className="w-full text-sm">
-            <tbody>
-              {rows.map(([k, v]) => (
-                <tr key={k} className="border-b border-zinc-800/50 last:border-0">
-                  <td className="py-1.5 pr-4 text-zinc-400">{k}</td>
-                  <td>{v}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="mb-6 flex items-center gap-4">
+        {track.album_art_url
+          ? <img src={track.album_art_url} alt="" className="h-20 w-20 rounded-xl object-cover" />
+          : <span className="grid h-20 w-20 place-items-center rounded-xl bg-surface-2 text-faint"><Music4 size={28} /></span>}
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-semibold tracking-tight">{track.title ?? <span className="italic text-faint">Senza titolo</span>}</h1>
+          <p className="text-muted">{track.artist ?? "Artista sconosciuto"}</p>
           {track.spotify_url && (
-            <a href={track.spotify_url} target="_blank" rel="noreferrer"
-              className="mt-3 inline-block rounded bg-green-700 px-3 py-1.5 text-sm hover:bg-green-600">
-              Apri su Spotify ↗
-            </a>
+            <a href={track.spotify_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex"><Button size="sm" variant="outline"><ExternalLink size={14} /> Spotify</Button></a>
           )}
-        </div>
-
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <h3 className="mb-2 font-semibold">Cue point ({track.cue_points.length})</h3>
-          {track.cue_points.length === 0 && <p className="text-sm text-zinc-500">Nessun cue point.</p>}
-          <ul className="space-y-1 text-sm">
-            {track.cue_points.map((c, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="w-14 text-zinc-400">{fmtDuration(Math.round(c.start_seconds))}</span>
-                <span>{c.name ?? `Cue ${i + 1}`}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-4 text-xs text-zinc-600">
-            “Expand from this track” arriverà con MVP 4 (Library Expansion).
-          </p>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <TransitionList title="⬅ Cosa mettere prima" items={before} />
-        <TransitionList title="➡ Cosa mettere dopo" items={after} />
+        <Card>
+          <CardHeader title="Metadata" />
+          <table className="w-full text-sm">
+            <tbody>
+              {rows.map(([k, v]) => (
+                <tr key={k} className="border-b border-border/50 last:border-0">
+                  <td className="px-4 py-2 text-muted">{k}</td>
+                  <td className="px-4 py-2 tnum text-right">{v}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+
+        <Card>
+          <CardHeader title={`Cue point (${track.cue_points.length})`} />
+          <div className="p-4">
+            {track.cue_points.length === 0 && <p className="text-sm text-faint">Nessun cue point.</p>}
+            <ul className="space-y-1.5 text-sm">
+              {track.cue_points.map((c, i) => (
+                <li key={i} className="flex gap-3"><span className="tnum w-14 text-faint">{fmtDuration(Math.round(c.start_seconds))}</span><span>{c.name ?? `Cue ${i + 1}`}</span></li>
+              ))}
+            </ul>
+          </div>
+        </Card>
+      </div>
+
+      <h2 className="mb-3 mt-8 flex items-center gap-2 text-lg font-semibold tracking-tight"><ArrowRightLeft size={18} className="text-primary" /> Transizioni</h2>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TransitionList title="Cosa mettere prima" items={before} />
+        <TransitionList title="Cosa mettere dopo" items={after} />
       </div>
     </div>
   );

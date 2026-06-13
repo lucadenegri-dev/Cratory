@@ -1,26 +1,61 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Design system "studio": scuro, neutro caldo, accento lime da gear audio.
+   Niente Inter, niente gradienti viola, niente layout tutto centrato. */
+@theme {
+  --color-bg: #0a0b0d;
+  --color-surface: #131519;
+  --color-surface-2: #1a1d22;
+  --color-elevated: #20242a;
+  --color-border: #2a2f37;
+  --color-border-strong: #3a4049;
+  --color-muted: #8a919c;
+  --color-faint: #5c636d;
+  --color-fg: #eceef1;
+
+  --color-primary: #c2f24a;
+  --color-primary-hover: #d3ff63;
+  --color-primary-fg: #10130a;
+
+  --color-info: #5fd0e6;
+  --color-warning: #f5b13f;
+  --color-danger: #f2585d;
+  --color-success: #56d98a;
+
+  --radius: 0.7rem;
+
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html, body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
+
+/* numeri tabellari per BPM, key, durate */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* scrollbar discreta */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 999px; border: 2px solid var(--color-bg); }
+
+@keyframes shimmer {
+  0% { opacity: 0.55; }
+  50% { opacity: 1; }
+  100% { opacity: 0.55; }
+}
+.animate-shimmer { animation: shimmer 1.6s ease-in-out infinite; }

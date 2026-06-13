@@ -99,6 +99,14 @@ export interface AiStatus {
   model: string | null;
 }
 
+export interface GenStatus {
+  status: "idle" | "running" | "done" | "error";
+  phase: string | null;
+  using_ai: boolean;
+  setlist_id: number | null;
+  error: string | null;
+}
+
 export interface LibraryStats {
   total_tracks: number;
   by_source: Record<string, number>;
