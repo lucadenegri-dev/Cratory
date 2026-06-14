@@ -5,9 +5,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, Wand2, Download, ListMusic, AlertTriangle, Lightbulb, Compass, Music4 } from "lucide-react";
 import {
   apiGet, apiPost, exportSet, fmtDuration, trackLabel,
-  type AiStatus, type GenStatus, type Setlist,
+  type AiStatus, type GenStatus, type Setlist, type Playlist,
 } from "@/lib/api";
 import { Card, CardHeader, Button, Input, Textarea, Select, Field, Checkbox, Badge, Progress, Alert, EmptyState } from "@/components/ui";
+import { cn } from "@/lib/cn";
 
 const STRATEGIES = ["smooth", "progressive", "contrast", "experimental", "peak_time", "warm_up", "closing"];
 const RISK_TONE = { low: "success", medium: "warning", high: "danger" } as const;
@@ -25,6 +26,13 @@ export default function SetBuilder() {
   const [prompt, setPrompt] = useState("");
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [useAi, setUseAi] = useState(false);
+  const [mode, setMode] = useState<"technical" | "creative">("technical");
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [playlistId, setPlaylistId] = useState("");
+  const [startEnergy, setStartEnergy] = useState("");
+  const [endEnergy, setEndEnergy] = useState("");
+  const [startMood, setStartMood] = useState("");
+  const [endMood, setEndMood] = useState("");
 
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [job, setJob] = useState<GenStatus | null>(null);
@@ -37,17 +45,17 @@ export default function SetBuilder() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    apiGet<AiStatus>("/api/ai/status").then((s) => { setAiStatus(s); setUseAi(s.configured); }).catch(() => setAiStatus({ configured: false, model: null }));
-    return stopAll;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const stopAll = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     if (timerRef.current) clearInterval(timerRef.current);
     pollRef.current = timerRef.current = null;
   }, []);
+
+  useEffect(() => {
+    apiGet<AiStatus>("/api/ai/status").then((s) => { setAiStatus(s); setUseAi(s.configured); }).catch(() => setAiStatus({ configured: false, model: null }));
+    apiGet<Playlist[]>("/api/playlists").then(setPlaylists).catch(() => {});
+    return stopAll;
+  }, [stopAll]);
 
   const busy = job?.status === "running";
 
@@ -85,9 +93,14 @@ export default function SetBuilder() {
     setElapsed(0);
     try {
       const started = await apiPost<GenStatus>("/api/sets/generate-async", {
+        playlist_id: playlistId ? Number(playlistId) : null,
         target_duration_minutes: duration,
         start_bpm: startBpm ? Number(startBpm) : null,
         end_bpm: endBpm ? Number(endBpm) : null,
+        start_energy: startEnergy ? Number(startEnergy) : null,
+        end_energy: endEnergy ? Number(endEnergy) : null,
+        start_mood: startMood || null,
+        end_mood: endMood || null,
         seed_artists: seedArtists.split(",").map((s) => s.trim()).filter(Boolean),
         strategy,
         max_tracks_per_artist: maxPerArtist,
@@ -96,6 +109,7 @@ export default function SetBuilder() {
         avoid_overplayed: avoidOverplayed,
         prompt: prompt || null,
         use_ai: useAi,
+        mode,
       });
       setJob(started);
       startPolling();
@@ -104,7 +118,7 @@ export default function SetBuilder() {
     }
   }
 
-  async function doExport(format: "text" | "csv") {
+  async function doExport(format: "text" | "csv" | "markdown") {
     if (!setlist) return;
     setExported(await exportSet(setlist.id, format));
   }
@@ -132,6 +146,14 @@ export default function SetBuilder() {
 
       <Card className="mb-6">
         <div className="p-5">
+          <div className="mb-4">
+            <Field label="Playlist di partenza" hint="il set nasce solo da queste tracce (con BPM/key). Vuoto = tutta la libreria">
+              <Select value={playlistId} onChange={(e) => setPlaylistId(e.target.value)}>
+                <option value="">Tutta la libreria</option>
+                {playlists.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.track_count}</option>)}
+              </Select>
+            </Field>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Durata (min)"><Input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} /></Field>
             <Field label="BPM iniziale"><Input type="number" placeholder="auto" value={startBpm} onChange={(e) => setStartBpm(e.target.value)} /></Field>
@@ -157,12 +179,45 @@ export default function SetBuilder() {
             <Checkbox label="evita troppo suonate" checked={avoidOverplayed} onChange={setAvoidOverplayed} />
           </div>
 
+          <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Energia iniziale" hint="0–100"><Input type="number" min={0} max={100} placeholder="auto" value={startEnergy} onChange={(e) => setStartEnergy(e.target.value)} /></Field>
+            <Field label="Energia finale" hint="0–100"><Input type="number" min={0} max={100} placeholder="auto" value={endEnergy} onChange={(e) => setEndEnergy(e.target.value)} /></Field>
+            <Field label="Mood iniziale"><Input placeholder="es. dark" value={startMood} onChange={(e) => setStartMood(e.target.value)} /></Field>
+            <Field label="Mood finale"><Input placeholder="es. euphoric" value={endMood} onChange={(e) => setEndMood(e.target.value)} /></Field>
+          </div>
+
           <div className="mt-4">
             <Field label="Prompt libero" hint={useAi ? "interpretato dall'AI Set Agent" : "attiva l'AI per interpretarlo, altrimenti viene solo salvato"}>
               <Textarea rows={2} placeholder="Parti morbido e atmosferico, poi vira più club senza diventare techno dritta troppo presto…"
                 value={prompt} onChange={(e) => setPrompt(e.target.value)} />
             </Field>
           </div>
+
+          {useAi && aiStatus?.configured && (
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-4">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted">Stile AI</span>
+              <div className="inline-flex rounded-lg border border-border bg-surface p-1">
+                {(["technical", "creative"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMode(m)}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-sm font-medium transition-colors",
+                      mode === m ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                    )}
+                  >
+                    {m === "technical" ? "Tecnico" : "Creativo"}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-faint">
+                {mode === "creative"
+                  ? "L'AI usa la sua conoscenza musicale: arco emotivo, contrasti voluti, sorprese."
+                  : "Mix prudente: compatibilità tecnica e progressione, senza azzardi."}
+              </span>
+            </div>
+          )}
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <Checkbox
@@ -205,7 +260,7 @@ export default function SetBuilder() {
 }
 
 function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, exported }: {
-  setlist: Setlist; onExport: (f: "text" | "csv") => void; onPlaylist: () => void;
+  setlist: Setlist; onExport: (f: "text" | "csv" | "markdown") => void; onPlaylist: () => void;
   playlistBusy: boolean; playlistUrl: string | null; exported: string | null;
 }) {
   const v = setlist.validation ?? {};
@@ -233,6 +288,7 @@ function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, e
           <div className="flex shrink-0 gap-2">
             <Button variant="outline" size="sm" onClick={() => onExport("text")}><Download size={14} /> Testo</Button>
             <Button variant="outline" size="sm" onClick={() => onExport("csv")}>CSV</Button>
+            <Button variant="outline" size="sm" onClick={() => onExport("markdown")}>MD</Button>
             <Button variant="outline" size="sm" onClick={onPlaylist} disabled={playlistBusy}>{playlistBusy ? "…" : "Playlist Spotify"}</Button>
           </div>
         }
@@ -263,8 +319,9 @@ function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, e
                 : <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-elevated text-faint"><Music4 size={16} /></span>}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {st.role && <Badge tone="neutral">{st.role}</Badge>}
                   <Link href={`/tracks/${st.track.id}`} className="truncate font-medium hover:text-primary">{trackLabel(st.track)}</Link>
-                  <span className="tnum shrink-0 text-xs text-faint">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.tonality ?? "?"} · {fmtDuration(st.track.duration_seconds)}</span>
+                  <span className="tnum shrink-0 text-xs text-faint">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? st.track.tonality ?? "?"} · {fmtDuration(st.track.duration_seconds)}</span>
                   {st.risk_level && (
                     <Badge tone={RISK_TONE[st.risk_level as keyof typeof RISK_TONE] ?? "neutral"} className="ml-auto">
                       {st.risk_level}{st.transition_score != null && ` · ${st.transition_score.toFixed(0)}`}
@@ -272,6 +329,7 @@ function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, e
                   )}
                 </div>
                 {st.ai_reason && <p className="mt-1 text-xs text-primary/85">🎧 {st.ai_reason}</p>}
+                {st.transition_note && <p className="mt-0.5 text-xs text-muted">↪ {st.transition_note}</p>}
                 {st.transition_reason && <p className="mt-0.5 text-xs text-faint">{st.transition_reason}</p>}
               </div>
             </li>

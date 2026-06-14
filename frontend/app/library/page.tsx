@@ -7,6 +7,14 @@ import { apiGet, fmtDuration, type Track } from "@/lib/api";
 import { Card, Input, Select, Checkbox, Alert, Badge } from "@/components/ui";
 
 const SOURCE_TONE: Record<string, "info" | "warning" | "neutral"> = { spotify: "info", soundcloud: "warning", local: "neutral" };
+const STATUS_TONE: Record<string, "success" | "info" | "warning" | "neutral"> = {
+  ready_for_set: "success", enriched: "info", imported: "neutral",
+  missing_features: "warning", low_confidence: "warning",
+};
+const STATUS_LABEL: Record<string, string> = {
+  ready_for_set: "ready", enriched: "enriched", imported: "imported",
+  missing_features: "no feat", low_confidence: "low conf",
+};
 
 export default function Library() {
   const [items, setItems] = useState<Track[]>([]);
@@ -76,6 +84,7 @@ export default function Library() {
               <th className={`${cell} tnum`}>BPM</th>
               <th className={cell}>Key</th>
               <th className={`${cell} tnum`}>Dur</th>
+              <th className={cell}>Stato</th>
               <th className={`${cell} tnum`}>Plays</th>
               <th className={cell}></th>
             </tr>
@@ -94,14 +103,15 @@ export default function Library() {
                 <td className={`${cell} text-muted`}>{t.artist ?? <span className="text-faint">—</span>}</td>
                 <td className={cell}><Badge tone={SOURCE_TONE[t.source_type] ?? "neutral"}>{t.source_type}</Badge></td>
                 <td className={`${cell} tnum`}>{t.bpm?.toFixed(0) ?? "—"}</td>
-                <td className={`${cell} tnum text-muted`}>{t.tonality ?? "—"}</td>
+                <td className={`${cell} tnum text-muted`}>{t.camelot_key ?? t.tonality ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
+                <td className={cell}><Badge tone={STATUS_TONE[t.status] ?? "neutral"}>{STATUS_LABEL[t.status] ?? t.status}</Badge></td>
                 <td className={`${cell} tnum text-muted`}>{t.play_count}</td>
                 <td className={cell}>{t.spotify_url && <a href={t.spotify_url} target="_blank" rel="noreferrer" className="text-faint hover:text-info"><ExternalLink size={14} /></a>}</td>
               </tr>
             ))}
             {items.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-10 text-center text-sm text-faint">Nessuna traccia con questi filtri.</td></tr>
+              <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-faint">Nessuna traccia con questi filtri.</td></tr>
             )}
           </tbody>
         </table>

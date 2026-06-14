@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
@@ -147,6 +148,35 @@ export function EmptyState({ icon, title, children }: { icon?: ReactNode; title:
       {icon && <div className="mb-3 text-faint">{icon}</div>}
       <p className="font-medium text-fg">{title}</p>
       {children && <div className="mt-1 max-w-md text-sm text-muted">{children}</div>}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- Modal */
+
+export function Modal({ open, onClose, title, children, footer, size = "md" }: {
+  open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode; footer?: ReactNode;
+  size?: "md" | "lg";
+}) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-black/60 p-4 pt-[10vh] backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className={cn("w-full rounded-[var(--radius)] border border-border bg-surface shadow-2xl", size === "lg" ? "max-w-lg" : "max-w-md")}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {title && (
+          <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-3.5">
+            <h3 className="font-semibold tracking-tight">{title}</h3>
+            <button onClick={onClose} className="text-faint transition-colors hover:text-fg"><X size={18} /></button>
+          </div>
+        )}
+        <div className="px-5 py-4">{children}</div>
+        {footer && <div className="flex justify-end gap-2 border-t border-border px-5 py-3.5">{footer}</div>}
+      </div>
     </div>
   );
 }

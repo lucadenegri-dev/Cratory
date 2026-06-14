@@ -2,10 +2,11 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Copy, Check, ExternalLink, Sparkles, Music2, Database } from "lucide-react";
+import { Copy, Check, ExternalLink, Sparkles, Music2, Database, Gauge } from "lucide-react";
 import {
   apiGet, apiPost, SPOTIFY_LOGIN_URL,
-  type AiStatus, type EnrichJobStatus, type EnrichReport, type SpotifyStatus,
+  type AiStatus, type SpotifyStatus,
+  type FeatureProviderStatus, type FeatureEnrichJob,
 } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Badge, Progress } from "@/components/ui";
 
@@ -18,11 +19,8 @@ function SettingsInner() {
   const oauth = params.get("spotify");
   const [spotify, setSpotify] = useState<SpotifyStatus | null>(null);
   const [ai, setAi] = useState<AiStatus | null>(null);
-  const [report, setReport] = useState<EnrichReport | null>(null);
-  const [job, setJob] = useState<EnrichJobStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(() => {
     apiGet<SpotifyStatus>("/api/spotify/status").then((s) => { setSpotify(s); setError(null); }).catch((e) => { setSpotify(null); setError(String(e.message ?? e)); });
@@ -30,39 +28,11 @@ function SettingsInner() {
   }, []);
   useEffect(load, [load]);
 
-  const stop = useCallback(() => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }, []);
-  useEffect(() => {
-    apiGet<EnrichJobStatus>("/api/spotify/enrich/status").then((s) => { if (s.status === "running") startPolling(); }).catch(() => {});
-    return stop;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function startPolling() {
-    stop();
-    pollRef.current = setInterval(async () => {
-      try {
-        const s = await apiGet<EnrichJobStatus>("/api/spotify/enrich/status");
-        setJob(s);
-        if (s.status === "done") { stop(); setReport(s.result); load(); }
-        else if (s.status === "error") { stop(); setError(s.error ?? "Enrichment fallito"); }
-      } catch (e) { stop(); setError(String((e as Error).message ?? e)); }
-    }, 800);
-  }
-
-  async function enrich(force = false) {
-    setError(null); setReport(null);
-    try { setJob(await apiPost<EnrichJobStatus>(`/api/spotify/enrich?force=${force}`)); startPolling(); }
-    catch (e) { setError(String((e as Error).message ?? e)); }
-  }
-
   async function copyRedirect() {
     if (!spotify?.redirect_uri) return;
     await navigator.clipboard.writeText(spotify.redirect_uri);
     setCopied(true); setTimeout(() => setCopied(false), 1500);
   }
-
-  const busy = job?.status === "running";
-  const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
 
   return (
     <div>
@@ -110,25 +80,10 @@ function SettingsInner() {
                 </div>
               </div>
 
-              <div className="border-t border-border pt-4">
-                <p className="mb-1 font-medium">Enrichment metadata</p>
-                <p className="mb-3 text-muted">Completa titolo, artista, album, cover e generi delle tracce Spotify. Non tocca mai BPM e tonalità. Non richiede il login.</p>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => enrich(false)} disabled={busy}>{busy ? "In corso…" : "Arricchisci"}</Button>
-                  <Button size="sm" variant="outline" onClick={() => enrich(true)} disabled={busy}>Forza ri-enrichment</Button>
-                </div>
-                {busy && job && (
-                  <div className="mt-3">
-                    <div className="mb-1 flex justify-between text-xs text-muted"><span>Recupero {job.phase ?? "dati"}…</span><span className="tnum">{job.processed}/{job.total || "?"}{pct != null ? ` (${pct}%)` : ""}</span></div>
-                    <Progress value={pct} />
-                  </div>
-                )}
-                {report && (
-                  <p className="mt-3 text-sm text-success">
-                    {report.skipped_already_enriched ? "Tutto già arricchito (cache)." : `✓ ${report.enriched} tracce arricchite, ${report.artists_updated} artisti${report.not_found ? `, ${report.not_found} non trovate` : ""}.`}
-                  </p>
-                )}
-              </div>
+              <p className="text-muted">
+                I metadata (titolo, artista, album, cover, ISRC, durata) arrivano già con l&apos;import della playlist.
+                BPM, tonalità, genere, mood ed energia si ricavano dalla sezione <strong>Feature musicali</strong> qui sotto.
+              </p>
             </>
           )}
         </div>
@@ -147,12 +102,80 @@ function SettingsInner() {
         </div>
       </Card>
 
+      {/* Feature musicali (BPM/key) */}
+      <FeatureEnrichmentCard />
+
       {/* Future */}
       <Card>
         <CardHeader title={<span className="flex items-center gap-2"><Database size={16} className="text-faint" /> Integrazioni future</span>} />
         <div className="p-5 text-sm text-muted">Discogs e MusicBrainz (Library Expansion) arriveranno con l&apos;MVP 4.</div>
       </Card>
     </div>
+  );
+}
+
+function FeatureEnrichmentCard() {
+  const [status, setStatus] = useState<FeatureProviderStatus | null>(null);
+  const [job, setJob] = useState<FeatureEnrichJob | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stop = useCallback(() => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }, []);
+  const startPolling = useCallback(() => {
+    stop();
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await apiGet<FeatureEnrichJob>("/api/enrichment/features/status");
+        setJob(s);
+        if (s.status === "done" || s.status === "idle") stop();
+        else if (s.status === "error") { stop(); setError(s.error ?? "Enrichment fallito"); }
+      } catch (e) { stop(); setError(String((e as Error).message ?? e)); }
+    }, 800);
+  }, [stop]);
+
+  useEffect(() => {
+    apiGet<FeatureProviderStatus>("/api/enrichment/status").then(setStatus).catch(() => setStatus({ configured: false, provider: null }));
+    apiGet<FeatureEnrichJob>("/api/enrichment/features/status").then((s) => { setJob(s); if (s.status === "running") startPolling(); }).catch(() => {});
+    return stop;
+  }, [startPolling, stop]);
+
+  async function run(force: boolean) {
+    setError(null);
+    try { setJob(await apiPost<FeatureEnrichJob>(`/api/enrichment/features?force=${force}`)); startPolling(); }
+    catch (e) { setError(String((e as Error).message ?? e)); }
+  }
+
+  const busy = job?.status === "running";
+  const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
+
+  return (
+    <Card className="mb-4">
+      <CardHeader
+        title={<span className="flex items-center gap-2"><Gauge size={16} className="text-info" /> Feature musicali (BPM, key, genere, mood, energia)</span>}
+        action={status && <Badge tone={status.configured ? "info" : "neutral"}>{status.configured ? status.provider ?? "configurato" : "non configurato"}</Badge>}
+      />
+      <div className="space-y-3 p-5 text-sm">
+        <p className="text-muted">Ricava BPM e tonalità (GetSongBPM), genere/label (MusicBrainz), genere e mood dai tag (Last.fm); l&apos;energia è stimata da BPM e danceability. Non sovrascrive mai i dati già presenti.</p>
+        {error && <Alert tone="danger">⚠ {error}</Alert>}
+        {status && !status.configured ? (
+          <pre className="rounded-lg border border-border bg-bg p-3 text-xs">GETSONGBPM_API_KEY=…  <span className="text-faint"># BPM/key — gratis su getsongbpm.com/api</span>{"\n"}LASTFM_API_KEY=…      <span className="text-faint"># genere/mood — gratis su last.fm/api</span></pre>
+        ) : (
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => run(false)} disabled={busy}>{busy ? "In corso…" : "Arricchisci feature"}</Button>
+            <Button size="sm" variant="outline" onClick={() => run(true)} disabled={busy}>Forza</Button>
+          </div>
+        )}
+        {busy && job && (
+          <div>
+            <div className="mb-1 flex justify-between text-xs text-muted"><span>Analizzo le tracce…</span><span className="tnum">{job.processed}/{job.total || "?"}{pct != null ? ` (${pct}%)` : ""}</span></div>
+            <Progress value={pct} />
+          </div>
+        )}
+        {job?.status === "done" && job.result && (
+          <p className="text-sm text-success">✓ {job.result.enriched} tracce arricchite{job.result.not_found ? `, ${job.result.not_found} non trovate` : ""} su {job.result.total}.</p>
+        )}
+      </div>
+    </Card>
   );
 }
 

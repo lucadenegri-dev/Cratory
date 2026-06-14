@@ -86,20 +86,37 @@ export interface SpotifyStatus {
   redirect_uri: string;
 }
 
-export interface EnrichReport {
-  enriched: number;
-  not_found: number;
-  artists_updated: number;
-  skipped_already_enriched: boolean;
+export interface DiscoveryStatus {
+  configured: boolean;
+  spotify_resolver: boolean;
+  ai_explanations: boolean;
 }
 
-export interface EnrichJobStatus {
-  status: "idle" | "running" | "done" | "error";
-  phase: string | null;
-  processed: number;
-  total: number;
-  result: EnrichReport | null;
-  error: string | null;
+export interface DiscoveryCandidate {
+  artist: string;
+  title: string;
+  match: number;
+  source: "similar_artist" | "similar_track" | "tag";
+  seed: string | null;
+  spotify_id: string | null;
+  spotify_url: string | null;
+  album_art_url: string | null;
+  isrc: string | null;
+  duration_seconds: number | null;
+  compatibility: number;
+  explanation: string | null;
+}
+
+export interface DiscoveryResponse {
+  mode: "expand" | "gap";
+  scope: string;
+  seed_count: number;
+  candidates: DiscoveryCandidate[];
+}
+
+export interface DiscoveryAddResponse {
+  created: boolean;
+  track: Track;
 }
 
 export interface FeatureProviderStatus {
@@ -307,6 +324,47 @@ export function playlistGaps(id: number) {
 
 export function libraryGaps() {
   return apiGet<GapAnalysis>("/api/playlists/library/gaps");
+}
+
+// --- Discovery (Fase F) -----------------------------------------------------
+
+export function discoveryStatus() {
+  return apiGet<DiscoveryStatus>("/api/discovery/status");
+}
+
+export function discoverExpand(playlistId: number, opts?: { limit?: number; use_ai?: boolean }) {
+  return apiPost<DiscoveryResponse>("/api/discovery/expand", {
+    playlist_id: playlistId,
+    limit: opts?.limit,
+    use_ai: opts?.use_ai,
+  });
+}
+
+export function discoverGap(gap: Gap, playlistId: number | null, opts?: { limit?: number; use_ai?: boolean }) {
+  return apiPost<DiscoveryResponse>("/api/discovery/gap", {
+    gap_type: gap.gap_type,
+    description: gap.description,
+    suggestion: gap.suggestion,
+    playlist_id: playlistId,
+    limit: opts?.limit,
+    use_ai: opts?.use_ai,
+  });
+}
+
+export function discoveryAddToLibrary(c: DiscoveryCandidate) {
+  return apiPost<DiscoveryAddResponse>("/api/discovery/add", {
+    artist: c.artist,
+    title: c.title,
+    spotify_id: c.spotify_id,
+    isrc: c.isrc,
+    duration_seconds: c.duration_seconds,
+    album_art_url: c.album_art_url,
+    url: c.spotify_url,
+  });
+}
+
+export function importManualPlaylist(name: string, text: string) {
+  return apiPost<PlaylistImportReport>("/api/playlists/import-manual", { name, text });
 }
 
 export function trackLabel(t: Track): string {

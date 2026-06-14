@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Search, X, Music4 } from "lucide-react";
 import { apiGet, trackLabel, type Track, type TransitionCandidate } from "@/lib/api";
-import { Card, Input, Badge, Alert } from "@/components/ui";
+import { Card, Input, Badge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 function scoreTone(s: number) { return s >= 70 ? "success" : s >= 45 ? "warning" : "danger"; }
@@ -17,7 +17,7 @@ export default function TransitionFinder() {
   const [results, setResults] = useState<TransitionCandidate[]>([]);
 
   useEffect(() => {
-    if (!query) { setMatches([]); return; }
+    if (!query) return;
     const t = setTimeout(() => {
       Promise.all([
         apiGet<{ items: Track[] }>("/api/tracks", { title: query, limit: 8 }),
@@ -45,7 +45,16 @@ export default function TransitionFinder() {
       {!selected && (
         <div className="relative max-w-lg">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
-          <Input className="pl-9" placeholder="Cerca per titolo o artista…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <Input
+            className="pl-9"
+            placeholder="Cerca per titolo o artista…"
+            value={query}
+            onChange={(e) => {
+              const value = e.target.value;
+              setQuery(value);
+              if (!value) setMatches([]);
+            }}
+          />
           {matches.length > 0 && (
             <Card className="absolute z-10 mt-1 w-full overflow-hidden">
               <ul className="divide-y divide-border">
