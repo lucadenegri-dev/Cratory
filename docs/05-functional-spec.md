@@ -30,7 +30,7 @@ Nessuna chiamata AI in import. L'enrichment musicale è un passo separato (F2b).
 
 ### F1b — Import Rekordbox XML — RIMOSSO
 
-L'import XML Rekordbox è stato eliminato dal progetto (router, parser, service, fixture e test). Resta solo la colonna `rekordbox_track_id` (nullable) nel modello, vestigiale. Le feature musicali si ottengono ora esclusivamente dall'enrichment esterno (F2b).
+L'import XML Rekordbox è stato eliminato dal progetto (router, parser, service, fixture e test), insieme a tutte le colonne/tabelle dell'era Rekordbox (`rekordbox_track_id`, `tonality`, `play_count`/`rating`/`comments`/`location`/`date_added`, `BeatgridPoint`/`CuePoint`/`Artist`). Le feature musicali si ottengono ora esclusivamente dall'enrichment esterno (F2b).
 
 ### F2 — Spotify Metadata Enrichment — RIMOSSO
 
@@ -113,9 +113,7 @@ Funzione di scoring tra due tracce.
 | numero ±1, stessa lettera | compatibile |
 | altro | meno compatibile |
 
-**Durata e cue:** tracce molto corte → penalità; cue point presenti → bonus; beatgrid disponibile → bonus.
-
-**Play count:** mai usate → possibile bonus varietà; usate troppo spesso → leggera penalità se richiesto.
+**Durata:** tracce molto corte → penalità. (I bonus cue/beatgrid e play count dell'era Rekordbox sono stati rimossi: lo streaming non fornisce quei dati.)
 
 **Score aggiuntivi sulle feature di enrichment** (0-100, neutro=50 se il dato manca): `energy_progression_score` (premia salita dolce/plateau, penalizza i crolli), `mood_coherence_score`, `genre_similarity_score`. Usati dal motore quando le feature sono disponibili.
 

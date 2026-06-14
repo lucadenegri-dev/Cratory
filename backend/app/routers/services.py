@@ -51,9 +51,10 @@ def services_status(db: Session = Depends(get_db)):
             },
             {
                 "key": "musicbrainz", "name": "MusicBrainz", "category": "Feature musicali",
-                # Funziona senza chiave: e' sempre "disponibile" (un user-agent e' consigliato).
-                "configured": True, "connected": None,
-                "detail": "Label, data di uscita e genere via ISRC. Nessuna chiave richiesta.",
+                # Nessuna API key, ma MusicBrainz richiede uno User-Agent identificativo:
+                # entra nella catena solo se MUSICBRAINZ_USER_AGENT e' valorizzato.
+                "configured": bool(settings.musicbrainz_user_agent), "connected": None,
+                "detail": "Label, data di uscita e genere via ISRC. Richiede un User-Agent identificativo (no API key).",
                 "env": ["MUSICBRAINZ_USER_AGENT"],
                 "docs": "https://musicbrainz.org/doc/MusicBrainz_API",
             },

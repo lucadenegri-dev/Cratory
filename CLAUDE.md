@@ -47,7 +47,7 @@ Node è in `C:\Program Files\nodejs` (nei terminali vecchi aggiungere al PATH: `
 
 ```
 routers/       playlists, tracks, transitions, sets, spotify, enrichment, ai
-routers/       + discovery
+routers/       + discovery, services (stato unificato integrazioni)
 services/      playlist_import, manual_import, feature_enrichment, track_status,
                scoring, candidate_engine, set_generator, ai_agent, validation,
                set_editor, alternatives, gap_analysis, camelot, discovery

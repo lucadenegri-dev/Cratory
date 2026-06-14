@@ -28,8 +28,8 @@ Una traccia raccolta da una o più playlist (ultima import vince per playlist_id
 
 ```text
 id
-# Identità streaming (nuovo flusso)
-platform                 # spotify | soundcloud
+# Identità streaming (flusso playlist->set)
+platform                 # spotify (soundcloud previsto)
 platform_track_id
 spotify_id / soundcloud_id
 isrc
@@ -37,33 +37,30 @@ url
 added_at                 # quando è stata aggiunta alla playlist
 playlist_id              # FK Playlist (provenienza)
 playlist_name
-source_type              # spotify | manual (soundcloud/local previsti)
-# Colonna legacy Rekordbox: nullable, nessun codice la popola più (vestigiale)
-rekordbox_track_id
-location
-play_count / rating / comments / date_added
-# Metadata editoriali
+source_type              # spotify | manual (soundcloud previsto)
+# Metadata editoriali (arrivano già con l'import della playlist)
 title / artist / album / year
 album_art_url            # artwork
 # Feature musicali (da enrichment esterno: GetSongBPM/MusicBrainz/Last.fm)
 bpm
-tonality                 # Camelot legacy
-camelot_key              # Camelot esplicito (es. "8A")
+camelot_key              # tonalità Camelot (es. "8A")
 genre                    # genre_primary
 genre_secondary
 label
 release_date
 mood                     # stringa (es. "dark", "uplifting")
-energy                   # 0-100
+energy                   # 0-100 (proxy stimato, vedi 05-functional-spec)
 danceability             # 0-100
 vocalness                # 0-100
 # Stato e tracciabilità enrichment
 status                   # imported | enriched | ready_for_set | missing_features | low_confidence
-enrichment_source        # spotify | musicbrainz | getsongbpm | cyanite | ...
+enrichment_source        # getsongbpm | musicbrainz | lastfm | chain
 enrichment_confidence    # 0-100
 enriched_at
 created_at / updated_at
 ```
+
+> **Pulizia post-pivot.** Le colonne dell'era Rekordbox sono state rimosse dal modello e dal DB: `rekordbox_track_id`, `tonality` (consolidata in `camelot_key`), `play_count`, `rating`, `comments`, `location`, `date_added`, `spotify_artist_id`.
 
 **Stati traccia** (calcolati in `services/track_status.py`):
 
@@ -77,18 +74,7 @@ created_at / updated_at
 
 **Priorità di matching enrichment**: `ISRC` → `platform_track_id` → `artist + title + duration` → `fuzzy artist + title`.
 
-### Artist
-
-```text
-id / name
-spotify_artist_id / discogs_artist_id / musicbrainz_artist_id
-genres / popularity / metadata_json
-created_at / updated_at
-```
-
-### BeatgridPoint / CuePoint
-
-Tabelle legacy (`start_seconds`, `bpm`, `meter`, `beat`; `name`, `type`, `num`, `color`, `comment`). Erano popolate dall'import Rekordbox, ora rimosso: nessun codice le scrive più. Restano nello schema per retro-compatibilità e per un eventuale reintegro futuro di una fonte beatgrid.
+> **Tabelle rimosse.** `Artist`, `BeatgridPoint` e `CuePoint` erano artefatti dell'import XML Rekordbox: eliminate dal modello e dal DB. La migrazione di `ensure_schema` le elimina dai database storici (insieme alla vecchia `import_reports`).
 
 ### Setlist
 
@@ -137,4 +123,4 @@ cached_at
 
 ## Migrazioni
 
-App locale senza Alembic: `db.ensure_schema()` esegue `create_all` + `ALTER TABLE` idempotenti per le colonne aggiunte dopo MVP 1 (tutti i campi streaming/enrichment/ruoli sono già gestiti lì). La colonna `rekordbox_track_id` è **nullable** e non più scritta: su un DB nuovo è immediato; un DB storico con vincolo `NOT NULL` va ricreato per importare tracce puramente streaming/manuali.
+App locale senza Alembic: `db.ensure_schema()` esegue `create_all` + `ALTER TABLE` idempotenti per le colonne aggiunte dopo MVP 1, **più una migrazione one-shot di pulizia** (`_migrate_drop_legacy`): ricostruisce la tabella `tracks` dal modello corrente (SQLite non supporta `DROP COLUMN` affidabile con indici), copiando le colonne sopravvissute e travasando `tonality → camelot_key`; elimina le tabelle legacy (`beatgrid_points`, `cue_points`, `artists`, `import_reports`) e le righe Rekordbox (`source_type in (local, rekordbox)`), potando i set rimasti senza tracce. È idempotente e resiliente agli interrupt (il DDL in SQLite auto-committa, quindi sa riprendere da un rebuild lasciato a metà).

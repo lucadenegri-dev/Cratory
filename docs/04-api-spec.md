@@ -9,18 +9,22 @@ GET  /api/playlists/spotify/available # playlist Spotify dell'utente (per la sel
 POST /api/playlists/import            # importa una playlist o i liked ({platform, playlist_id|"liked"})
 POST /api/playlists/import-manual     # importa una tracklist incollata ({name, text}) → 422 se nulla riconosciuto
 GET  /api/playlists                   # playlist importate
+GET  /api/playlists/{id}              # dettaglio di una playlist importata
+DELETE /api/playlists/{id}           # rimuove la playlist e le sue tracce (204)
 GET  /api/playlists/{id}/tracks       # tracce di una playlist importata
 GET  /api/playlists/{id}/gaps         # analisi deterministica dei buchi (sez. 6)
 GET  /api/playlists/library/gaps      # analisi buchi sull'intera libreria
 ```
 
-## Tracks — MVP 1
+## Tracks & Libreria
 
 ```text
-GET  /api/tracks                      # lista con filtri (vedi Library Explorer in 05-functional-spec)
-GET  /api/tracks/stats                # statistiche libreria (conteggi, range BPM, distribuzione key)
+GET  /api/tracks                      # lista con filtri: artist,title,album,genre,source,
+                                      #   bpm_min,bpm_max,key,duration_min/max,has_spotify,
+                                      #   has_soundcloud,incomplete_metadata,limit,offset
 GET  /api/tracks/{id}                 # dettaglio traccia
-GET  /api/tracks/{id}/transitions     # tracce compatibili prima/dopo
+GET  /api/stats                       # statistiche libreria: playlists, tracce, with_bpm,
+                                      #   with_key, with_features, ready_for_set, range BPM, key_distribution
 ```
 
 ## Transition Finder — MVP 1
@@ -85,6 +89,16 @@ POST /api/discovery/add               # importa un candidato nella libreria dell
 ```text
 GET  /api/ai/status                   # LLM configurato? modello attivo
 ```
+
+## Servizi — stato unificato (pagina Impostazioni)
+
+```text
+GET  /api/services/status             # stato di TUTTE le integrazioni in un'unica risposta:
+                                      #   spotify, anthropic, getsongbpm, lastfm, musicbrainz, discogs
+                                      #   per ciascuno: configured, connected (null se non ha login), detail, env[]
+```
+
+> Affianca gli `*/status` per-dominio (`/api/spotify/status`, `/api/ai/status`, `/api/enrichment/status`, `/api/discovery/status`), che restano per le pagine specifiche. `musicbrainz` risulta `configured` solo se `MUSICBRAINZ_USER_AGENT` è impostato (nessuna API key, ma serve uno User-Agent identificativo).
 
 ## Library Expansion — non implementato (futuro)
 

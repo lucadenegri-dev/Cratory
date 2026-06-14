@@ -4,9 +4,16 @@
 
 ## Stato attuale
 
-**Fase:** D1-F + Discovery write-back + Import manuale + enrichment mood/energia + rimozione enrich Spotify + toggle Set Builder technical/creative (90 test verdi, 14/06/2026). Discovery è Last.fm-centric. Prossimo: valutazione modello AI economico (Haiku/Ollama); test reale con chiavi.
+**Fase:** D1-F completate + **import Spotify reale funzionante** + **pulizia DB legacy Rekordbox** + **redesign UI (Dashboard/Libreria/Playlist/Impostazioni)** (90 test verdi, 15/06/2026). Discovery è Last.fm-centric. Prossimo: valutazione modello AI economico (Haiku/Ollama); test reale enrichment con chiavi.
 
-**Ultimo aggiornamento:** 2026-06-14
+**Ultimo aggiornamento:** 2026-06-15
+
+### Milestone 15/06/2026 — Import Spotify reale + pulizia DB + redesign UI
+
+- **Fix import Spotify**: in Development Mode `/playlists/{id}/tracks` dà 403; i brani si leggono da `/playlists/{id}/items` (traccia sotto `item`, non `track`). `get_playlist_tracks` + `normalize_spotify_item` gestiscono entrambe le forme. Risolto anche il `403 Insufficient client scope` (riautorizzazione con `show_dialog=true` + bottone "Ricollega") e il vincolo `NOT NULL` su `rekordbox_track_id` dei DB pre-pivot.
+- **Pulizia modello/DB legacy**: rimosse colonne (`rekordbox_track_id`, `tonality→camelot_key`, `play_count`, `rating`, `comments`, `location`, `date_added`, `spotify_artist_id`) e tabelle (`BeatgridPoint`, `CuePoint`, `Artist`, `import_reports`). Migrazione one-shot `_migrate_drop_legacy` in `ensure_schema` (rebuild tabella, idempotente, resiliente). Scoring ricomposto su BPM 50 + Camelot 40 + durata 10 (via cue/beatgrid/play_count).
+- **Nuovi endpoint**: `GET/DELETE /api/playlists/{id}`, `GET /api/services/status` (stato di tutte le integrazioni; `musicbrainz` configured solo con `MUSICBRAINZ_USER_AGENT`).
+- **Redesign frontend**: Dashboard orientata al flusso (azioni + copertura enrichment), pagina dettaglio playlist `/playlists/[id]` (tracce, buchi, azioni, rimozione), Libreria con colonne Energy/Genere e filtro `key`, Impostazioni con elenco di tutti i servizi, rimossa scritta "Locale · mono-utente".
 
 > **Allineamento spec `nuovo_progetto.md` verificato (14/06/2026).** Progetto e documentazione (`docs/01`→`06`, `README`, `CLAUDE.md`) confrontati riga per riga con la nuova specifica: import playlist (Spotify utente/collaborative/liked + manuale, SoundCloud in backlog), rimozione Rekordbox, enrichment con tutti i campi richiesti, Set Builder con input/output e ruoli `intro|warmup|groove|transition|peak|release|closing`, separazione algoritmo/AI, gap analysis, set editor, export (Markdown/CSV/testo + playlist Spotify; link SoundCloud in backlog). **Tutto già implementato.** Unico ritocco di codice: aggiunti a `services/scoring.py` i due score standalone mancanti `bpm_compatibility_score` e `key_compatibility_score` (0-100), così tutti i sei score nominati dalla spec sez. 5 esistono come funzioni pubbliche e l'architettura doc è accurata (+1 test in `test_scoring.py`).
 

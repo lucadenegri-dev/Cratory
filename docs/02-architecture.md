@@ -18,7 +18,7 @@ Opzionale futuro:  Discogs
 
 Webapp modulare, locale/self-hosted, mono-utente.
 
-> **Rekordbox rimosso.** L'import XML Rekordbox non fa più parte del progetto. Resta solo la colonna `rekordbox_track_id` (nullable) nel modello `Track` per retro-compatibilità di DB; nessun codice la popola più.
+> **Rekordbox rimosso.** L'import XML Rekordbox non fa più parte del progetto. Le colonne e le tabelle dell'era Rekordbox (`rekordbox_track_id`, `tonality`, `play_count`/`rating`/`comments`/`location`/`date_added`, `BeatgridPoint`/`CuePoint`/`Artist`) sono state eliminate dal modello e dal DB (vedi [03-data-model.md](03-data-model.md)).
 >
 > **Spotify `/recommendations` non è utilizzabile** (deprecato dal 27/11/2024: 403/404 per app nuove o in development mode). Il Discovery usa Last.fm per la similarità e Spotify solo come resolver (`/search`).
 
@@ -29,9 +29,9 @@ Playlist Spotify  /  Import manuale (testo "Artista - Titolo")
         ↓
 Playlist Importer  (normalizzazione + deduplica)
         ↓
-Database interno (SQLite)
+Database interno (SQLite)   (metadata editoriali già presenti dall'import)
         ↓
-Metadata Enricher (Spotify) + Music Feature Enricher (GetSongBPM/MusicBrainz, con cache DB)
+Music Feature Enricher (GetSongBPM → MusicBrainz → Last.fm, con cache DB)
         ↓
 Candidate Engine (deterministico, cap 60) ──┐
         ↓                                     │
@@ -84,7 +84,7 @@ key_compatibility_score
 energy_progression_score
 mood_coherence_score
 genre_similarity_score
-transition_score   (composito BPM+key+struttura+play count)
+transition_score   (composito BPM 50 + Camelot 40 + durata 10)
 ```
 
 In assenza del dato i singoli score restituiscono un valore neutro, così la generazione resta possibile anche su tracce parzialmente arricchite.
@@ -94,7 +94,7 @@ In assenza del dato i singoli score restituiscono un valore neutro, così la gen
 ```text
 backend/app/
   routers/       # endpoint FastAPI (solo HTTP): playlists, tracks, transitions,
-                 #   sets, spotify, enrichment, ai, discovery
+                 #   sets, spotify, enrichment, ai, discovery, services
   services/      # logica: playlist_import, manual_import, enrichment, feature_enrichment,
                  #   scoring, candidate_engine, set_generator, ai_agent, validation,
                  #   set_editor, alternatives, gap_analysis, discovery, track_status, camelot
