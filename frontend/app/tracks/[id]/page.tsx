@@ -17,7 +17,7 @@ function TransitionList({ title, items }: { title: string; items: TransitionCand
           <li key={track.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
             <Badge tone={scoreTone(score.score)} className="tnum w-9 justify-center">{score.score}</Badge>
             <Link href={`/tracks/${track.id}`} className="min-w-0 flex-1 truncate hover:text-primary">{trackLabel(track)}</Link>
-            <span className="tnum shrink-0 text-xs text-faint">{track.bpm?.toFixed(0)} · {track.tonality ?? "?"}</span>
+            <span className="tnum shrink-0 text-xs text-faint">{track.bpm?.toFixed(0)} · {track.camelot_key ?? "?"}</span>
           </li>
         ))}
         {items.length === 0 && <li className="px-4 py-6 text-center text-sm text-faint">Nessuna traccia.</li>}
@@ -44,9 +44,9 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
 
   const rows: Array<[string, React.ReactNode]> = [
     ["Album", track.album ?? "—"], ["Genere", track.genre ?? "—"], ["Anno", track.year ?? "—"],
-    ["BPM", track.bpm?.toFixed(2) ?? "—"], ["Tonalità", track.tonality ?? "—"], ["Durata", fmtDuration(track.duration_seconds)],
-    ["Sorgente", track.source_type], ["Play count", track.play_count],
-    ["Beatgrid", track.has_beatgrid ? `sì · ${track.beatgrid_bpms.map((b) => b.toFixed(1)).join(", ")} BPM` : "no"],
+    ["BPM", track.bpm?.toFixed(2) ?? "—"], ["Key (Camelot)", track.camelot_key ?? "—"], ["Durata", fmtDuration(track.duration_seconds)],
+    ["Mood", track.mood ?? "—"], ["Energia", track.energy ?? "—"], ["Label", track.label ?? "—"],
+    ["Sorgente", track.source_type], ["ISRC", track.isrc ?? "—"], ["Stato", track.status],
   ];
 
   return (
@@ -66,33 +66,19 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Metadata" />
-          <table className="w-full text-sm">
-            <tbody>
-              {rows.map(([k, v]) => (
-                <tr key={k} className="border-b border-border/50 last:border-0">
-                  <td className="px-4 py-2 text-muted">{k}</td>
-                  <td className="px-4 py-2 tnum text-right">{v}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-
-        <Card>
-          <CardHeader title={`Cue point (${track.cue_points.length})`} />
-          <div className="p-4">
-            {track.cue_points.length === 0 && <p className="text-sm text-faint">Nessun cue point.</p>}
-            <ul className="space-y-1.5 text-sm">
-              {track.cue_points.map((c, i) => (
-                <li key={i} className="flex gap-3"><span className="tnum w-14 text-faint">{fmtDuration(Math.round(c.start_seconds))}</span><span>{c.name ?? `Cue ${i + 1}`}</span></li>
-              ))}
-            </ul>
-          </div>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader title="Metadata" />
+        <table className="w-full text-sm">
+          <tbody>
+            {rows.map(([k, v]) => (
+              <tr key={k} className="border-b border-border/50 last:border-0">
+                <td className="px-4 py-2 text-muted">{k}</td>
+                <td className="px-4 py-2 tnum text-right">{v}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
 
       <h2 className="mb-3 mt-8 flex items-center gap-2 text-lg font-semibold tracking-tight"><ArrowRightLeft size={18} className="text-primary" /> Transizioni</h2>
       <div className="grid gap-4 lg:grid-cols-2">

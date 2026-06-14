@@ -50,10 +50,6 @@ export function Sidebar() {
           );
         })}
       </nav>
-
-      <div className="px-5 py-4 text-xs text-faint">
-        Locale · mono-utente
-      </div>
     </aside>
   );
 }

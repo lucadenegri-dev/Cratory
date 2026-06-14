@@ -191,7 +191,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     {st.role && <Badge tone="neutral">{st.role}</Badge>}
                     <Link href={`/tracks/${st.track.id}`} className="truncate font-medium hover:text-primary">{trackLabel(st.track)}</Link>
-                    <span className="tnum shrink-0 text-xs text-faint">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? st.track.tonality ?? "?"} · {fmtDuration(st.track.duration_seconds)}</span>
+                    <span className="tnum shrink-0 text-xs text-faint">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? "?"} · {fmtDuration(st.track.duration_seconds)}</span>
                     {st.risk_level && (
                       <Badge tone={riskTone(st.risk_level)}>
                         {st.risk_level}{st.transition_score != null && ` · ${st.transition_score.toFixed(0)}`}
@@ -256,7 +256,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2">
                     <span className="truncate text-sm font-medium">{trackLabel(a.track)}</span>
-                    <span className="tnum shrink-0 text-xs text-faint">{a.track.bpm?.toFixed(0) ?? "—"} · {a.track.tonality ?? "?"}</span>
+                    <span className="tnum shrink-0 text-xs text-faint">{a.track.bpm?.toFixed(0) ?? "—"} · {a.track.camelot_key ?? "?"}</span>
                     <Badge tone={riskTone(a.risk_level)}>{a.risk_level}</Badge>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-muted">{a.reason}

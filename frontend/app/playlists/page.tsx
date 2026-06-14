@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Download, ListPlus, RefreshCw, Heart, AlertTriangle, Info, Music2, ClipboardList } from "lucide-react";
+import { Download, ListPlus, RefreshCw, Heart, AlertTriangle, Info, Music2, ClipboardList, Eye, Trash2 } from "lucide-react";
 import {
   apiGet,
   importPlaylist,
@@ -9,6 +10,7 @@ import {
   listImportedPlaylists,
   listSpotifyPlaylists,
   playlistGaps,
+  deletePlaylist,
   SPOTIFY_LOGIN_URL,
   type GapAnalysis,
   type Playlist,
@@ -92,6 +94,22 @@ export default function PlaylistsPage() {
       setGaps((g) => ({ ...g, [id]: result }));
     } catch (e) {
       setError(err(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const doDelete = async (p: Playlist) => {
+    if (!window.confirm(`Rimuovere la playlist "${p.name}" e le sue ${p.track_count} tracce dalla libreria? L'operazione non si può annullare.`)) return;
+    setError(null);
+    setNotice(null);
+    setBusy(`del-${p.id}`);
+    try {
+      await deletePlaylist(p.id);
+      setNotice(`Playlist "${p.name}" rimossa.`);
+      reload();
+    } catch (e) {
+      setError(`Rimozione fallita: ${err(e)}`);
     } finally {
       setBusy(null);
     }
@@ -207,15 +225,23 @@ export default function PlaylistsPage() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <Music2 size={16} className="text-primary" />
-                  <h3 className="truncate font-medium">{p.name}</h3>
+                  <Link href={`/playlists/${p.id}`} className="truncate font-medium hover:text-primary">{p.name}</Link>
                   <Badge tone="neutral">{p.platform}</Badge>
                   {p.kind === "liked" && <Badge tone="info">liked</Badge>}
                 </div>
-                <div className="mt-1 text-xs text-faint">{p.track_count} tracce</div>
+                <div className="mt-1 text-xs text-faint">{p.track_count} tracce · {p.owner ?? "—"}</div>
               </div>
-              <Button size="sm" variant="ghost" onClick={() => loadGaps(p.id)} disabled={busy !== null}>
-                {busy === `gaps-${p.id}` ? <Spinner /> : <AlertTriangle size={15} />} Analizza buchi
-              </Button>
+              <div className="flex shrink-0 gap-1.5">
+                <Link href={`/playlists/${p.id}`}>
+                  <Button size="sm" variant="outline"><Eye size={15} /> Apri</Button>
+                </Link>
+                <Button size="sm" variant="ghost" onClick={() => loadGaps(p.id)} disabled={busy !== null}>
+                  {busy === `gaps-${p.id}` ? <Spinner /> : <AlertTriangle size={15} />} Buchi
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => doDelete(p)} disabled={busy !== null}>
+                  {busy === `del-${p.id}` ? <Spinner /> : <Trash2 size={15} />}
+                </Button>
+              </div>
             </div>
 
             {gaps[p.id] && (

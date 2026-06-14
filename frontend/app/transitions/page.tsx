@@ -62,7 +62,7 @@ export default function TransitionFinder() {
                   <li key={t.id}>
                     <button onClick={() => { setSelected(t); setQuery(""); setMatches([]); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated">
                       <span className="truncate">{trackLabel(t)}</span>
-                      <span className="tnum ml-auto shrink-0 text-xs text-faint">{t.bpm?.toFixed(0)} · {t.tonality ?? "?"}</span>
+                      <span className="tnum ml-auto shrink-0 text-xs text-faint">{t.bpm?.toFixed(0)} · {t.camelot_key ?? "?"}</span>
                     </button>
                   </li>
                 ))}
@@ -80,7 +80,7 @@ export default function TransitionFinder() {
                 ? <img src={selected.album_art_url} alt="" className="h-8 w-8 rounded object-cover" />
                 : <span className="grid h-8 w-8 place-items-center rounded bg-elevated text-faint"><Music4 size={14} /></span>}
               <span className="text-sm font-medium">{trackLabel(selected)}</span>
-              <span className="tnum text-xs text-faint">{selected.bpm?.toFixed(0)} · {selected.tonality ?? "?"}</span>
+              <span className="tnum text-xs text-faint">{selected.bpm?.toFixed(0)} · {selected.camelot_key ?? "?"}</span>
               <button onClick={() => setSelected(null)} className="ml-1 text-faint hover:text-fg"><X size={15} /></button>
             </div>
             <div className="ml-auto inline-flex overflow-hidden rounded-lg border border-border-strong text-sm">
@@ -99,7 +99,7 @@ export default function TransitionFinder() {
                   <div className="flex items-center gap-3">
                     <Badge tone={scoreTone(score.score)} className="tnum w-9 justify-center">{score.score}</Badge>
                     <Link href={`/tracks/${track.id}`} className="min-w-0 flex-1 truncate font-medium hover:text-primary">{trackLabel(track)}</Link>
-                    <span className="tnum shrink-0 text-xs text-faint">{track.bpm?.toFixed(0)} BPM · {track.tonality ?? "?"}</span>
+                    <span className="tnum shrink-0 text-xs text-faint">{track.bpm?.toFixed(0)} BPM · {track.camelot_key ?? "?"}</span>
                   </div>
                   <p className="mt-1 pl-12 text-xs text-faint">{score.technical_reasons.join(" · ")}</p>
                   {score.warnings.length > 0 && <p className="pl-12 text-xs text-warning">{score.warnings.join(" · ")}</p>}

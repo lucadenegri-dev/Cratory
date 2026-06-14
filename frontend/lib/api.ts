@@ -2,7 +2,6 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export interface Track {
   id: number;
-  rekordbox_track_id: string | null;
   spotify_id: string | null;
   soundcloud_id: string | null;
   source_type: string;
@@ -15,20 +14,17 @@ export interface Track {
   year: number | null;
   duration_seconds: number | null;
   bpm: number | null;
-  tonality: string | null;
   camelot_key: string | null;
   mood: string | null;
   energy: number | null;
   danceability: number | null;
   vocalness: number | null;
   label: string | null;
-  play_count: number;
   status: string;
   url: string | null;
   isrc: string | null;
+  playlist_id: number | null;
   playlist_name: string | null;
-  cue_count: number;
-  has_beatgrid: boolean;
   spotify_url: string | null;
   album_art_url: string | null;
   enriched: boolean;
@@ -141,11 +137,17 @@ export interface FeatureEnrichJob {
 
 export const SPOTIFY_LOGIN_URL = `${API}/api/spotify/login`;
 
-export interface TrackDetail extends Track {
-  comments: string | null;
-  location: string | null;
-  cue_points: { name: string | null; type: string | null; start_seconds: number }[];
-  beatgrid_bpms: number[];
+export type TrackDetail = Track;
+
+export interface ServiceStatus {
+  key: string;
+  name: string;
+  category: string;
+  configured: boolean;
+  connected: boolean | null;  // null = il servizio non ha un concetto di "login"
+  detail: string;
+  env: string[];
+  docs: string;
 }
 
 export interface TransitionScore {
@@ -234,10 +236,12 @@ export interface GenStatus {
 
 export interface LibraryStats {
   total_tracks: number;
+  playlists: number;
   by_source: Record<string, number>;
   with_bpm: number;
-  with_tonality: number;
-  with_cues: number;
+  with_key: number;
+  with_features: number;
+  ready_for_set: number;
   missing_metadata: number;
   bpm_min: number | null;
   bpm_max: number | null;
@@ -314,8 +318,20 @@ export function listImportedPlaylists() {
   return apiGet<Playlist[]>("/api/playlists");
 }
 
+export function getPlaylist(id: number) {
+  return apiGet<Playlist>(`/api/playlists/${id}`);
+}
+
+export function deletePlaylist(id: number) {
+  return apiDelete<void>(`/api/playlists/${id}`);
+}
+
 export function playlistTracks(id: number) {
   return apiGet<Track[]>(`/api/playlists/${id}/tracks`);
+}
+
+export function servicesStatus() {
+  return apiGet<{ services: ServiceStatus[] }>("/api/services/status");
 }
 
 export function playlistGaps(id: number) {

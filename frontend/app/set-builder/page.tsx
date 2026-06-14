@@ -22,7 +22,6 @@ export default function SetBuilder() {
   const [maxPerArtist, setMaxPerArtist] = useState(2);
   const [sources, setSources] = useState<string[]>([]);
   const [avoidShort, setAvoidShort] = useState(true);
-  const [avoidOverplayed, setAvoidOverplayed] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [useAi, setUseAi] = useState(false);
@@ -52,6 +51,8 @@ export default function SetBuilder() {
   }, []);
 
   useEffect(() => {
+    const preselect = new URLSearchParams(window.location.search).get("playlist");
+    if (preselect) setPlaylistId(preselect);
     apiGet<AiStatus>("/api/ai/status").then((s) => { setAiStatus(s); setUseAi(s.configured); }).catch(() => setAiStatus({ configured: false, model: null }));
     apiGet<Playlist[]>("/api/playlists").then(setPlaylists).catch(() => {});
     return stopAll;
@@ -106,7 +107,6 @@ export default function SetBuilder() {
         max_tracks_per_artist: maxPerArtist,
         sources,
         avoid_short_tracks: avoidShort,
-        avoid_overplayed: avoidOverplayed,
         prompt: prompt || null,
         use_ai: useAi,
         mode,
@@ -171,12 +171,11 @@ export default function SetBuilder() {
 
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-4">
             <span className="text-xs font-medium uppercase tracking-wide text-muted">Sorgenti</span>
-            {["spotify", "soundcloud", "local"].map((s) => (
+            {["spotify", "soundcloud", "manual"].map((s) => (
               <Checkbox key={s} label={s} checked={sources.includes(s)} onChange={() => toggleSource(s)} />
             ))}
             <span className="mx-1 h-4 w-px bg-border" />
             <Checkbox label="evita tracce corte" checked={avoidShort} onChange={setAvoidShort} />
-            <Checkbox label="evita troppo suonate" checked={avoidOverplayed} onChange={setAvoidOverplayed} />
           </div>
 
           <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -321,7 +320,7 @@ function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, e
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {st.role && <Badge tone="neutral">{st.role}</Badge>}
                   <Link href={`/tracks/${st.track.id}`} className="truncate font-medium hover:text-primary">{trackLabel(st.track)}</Link>
-                  <span className="tnum shrink-0 text-xs text-faint">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? st.track.tonality ?? "?"} · {fmtDuration(st.track.duration_seconds)}</span>
+                  <span className="tnum shrink-0 text-xs text-faint">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? "?"} · {fmtDuration(st.track.duration_seconds)}</span>
                   {st.risk_level && (
                     <Badge tone={RISK_TONE[st.risk_level as keyof typeof RISK_TONE] ?? "neutral"} className="ml-auto">
                       {st.risk_level}{st.transition_score != null && ` · ${st.transition_score.toFixed(0)}`}
