@@ -1,10 +1,10 @@
 """Scoring tecnico deterministico delle transizioni tra due tracce.
 
-Composizione score (0-100):
-- BPM:        max 40  (0-2 ottimo, 2-5 buono, 5-8 rischioso, >8 difficile)
-- Camelot:    max 35  (stessa key / compatibile / debole)
-- Durata+cue: max 15  (penalita' tracce corte, bonus cue e beatgrid)
-- Play count: max 10  (bonus varieta', penalita' overplayed opzionale)
+Composizione score (0-100), tutta basata su dati ottenuti dall'enrichment esterno
+(lo streaming non da' BPM/key): cue/beatgrid/play_count Rekordbox non esistono piu'.
+- BPM:    max 50  (0-2 ottimo, 2-5 buono, 5-8 rischioso, >8 difficile)
+- Camelot: max 40  (stessa key / compatibile / debole)
+- Durata: max 10  (penalita' per tracce molto corte)
 """
 
 from dataclasses import dataclass, field
@@ -13,7 +13,6 @@ from app.models import Track
 from app.services.camelot import camelot_compatibility
 
 SHORT_TRACK_SECONDS = 90
-OVERPLAYED_THRESHOLD = 15
 
 
 @dataclass
@@ -36,34 +35,29 @@ def risk_from_score(score: float | None) -> str:
 
 def _bpm_points(from_bpm: float | None, to_bpm: float | None) -> tuple[float, str, str | None]:
     if not from_bpm or not to_bpm:
-        return 15.0, "BPM mancante su una delle tracce: valutazione neutra", "BPM mancante"
+        return 25.0, "BPM mancante su una delle tracce: valutazione neutra", "BPM mancante"
     diff = abs(from_bpm - to_bpm)
     if diff <= 2:
-        return 40.0, f"differenza BPM ottima ({diff:.1f})", None
+        return 50.0, f"differenza BPM ottima ({diff:.1f})", None
     if diff <= 5:
-        return 30.0, f"differenza BPM buona ({diff:.1f})", None
+        return 38.0, f"differenza BPM buona ({diff:.1f})", None
     if diff <= 8:
-        return 16.0, f"differenza BPM rischiosa ({diff:.1f})", f"salto BPM di {diff:.1f}: transizione rischiosa"
-    return 4.0, f"differenza BPM difficile ({diff:.1f})", f"salto BPM di {diff:.1f}: transizione difficile"
+        return 20.0, f"differenza BPM rischiosa ({diff:.1f})", f"salto BPM di {diff:.1f}: transizione rischiosa"
+    return 5.0, f"differenza BPM difficile ({diff:.1f})", f"salto BPM di {diff:.1f}: transizione difficile"
 
 
 def _key_points(from_key: str | None, to_key: str | None) -> tuple[float, str, str | None]:
     level, desc = camelot_compatibility(from_key, to_key)
     if level == "same":
-        return 35.0, desc, None
+        return 40.0, desc, None
     if level == "compatible":
-        return 28.0, desc, None
+        return 32.0, desc, None
     if level == "unknown":
-        return 15.0, desc, "tonalita' non confrontabile"
-    return 8.0, desc, "key poco compatibili: mix armonico difficile"
+        return 18.0, desc, "tonalita' non confrontabile"
+    return 10.0, desc, "key poco compatibili: mix armonico difficile"
 
 
-def score_transition(
-    from_track: Track,
-    to_track: Track,
-    *,
-    penalize_overplayed: bool = False,
-) -> TransitionScore:
+def score_transition(from_track: Track, to_track: Track) -> TransitionScore:
     reasons: list[str] = []
     warnings: list[str] = []
     total = 0.0
@@ -74,39 +68,19 @@ def score_transition(
     if warn:
         warnings.append(warn)
 
-    pts, reason, warn = _key_points(
-        from_track.camelot_key or from_track.tonality,
-        to_track.camelot_key or to_track.tonality,
-    )
+    pts, reason, warn = _key_points(from_track.camelot_key, to_track.camelot_key)
     total += pts
     reasons.append(reason)
     if warn:
         warnings.append(warn)
 
-    # Durata, cue, beatgrid (max 15)
-    structure = 5.0
+    # Durata (max 10): penalizza solo le tracce molto corte
+    structure = 10.0
     duration = to_track.duration_seconds or 0
     if duration and duration < SHORT_TRACK_SECONDS:
-        structure -= 5.0
+        structure -= 8.0
         warnings.append(f"traccia in entrata molto corta ({duration}s)")
-    if to_track.cue_points:
-        structure += 5.0
-        reasons.append(f"cue point presenti sulla traccia in entrata ({len(to_track.cue_points)})")
-    if to_track.beatgrid_points:
-        structure += 5.0
-        reasons.append("beatgrid disponibile sulla traccia in entrata")
     total += max(structure, 0.0)
-
-    # Play count (max 10)
-    pc = to_track.play_count or 0
-    if pc == 0:
-        total += 8.0
-        reasons.append("traccia mai suonata: bonus varieta'")
-    elif penalize_overplayed and pc > OVERPLAYED_THRESHOLD:
-        total += 2.0
-        warnings.append(f"traccia suonata spesso ({pc} volte)")
-    else:
-        total += 5.0
 
     return TransitionScore(
         score=max(0, min(100, round(total))),

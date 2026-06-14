@@ -31,7 +31,7 @@ def _renumber(tracks: list[SetlistTrack]) -> None:
         st.position = i
 
 
-def recompute_transitions(setlist: Setlist, *, penalize_overplayed: bool = False) -> None:
+def recompute_transitions(setlist: Setlist) -> None:
     """Ricalcola transition_score/reason/risk per ogni traccia nell'ordine corrente."""
     ordered = _ordered(setlist)
     for i, st in enumerate(ordered):
@@ -40,7 +40,7 @@ def recompute_transitions(setlist: Setlist, *, penalize_overplayed: bool = False
             st.transition_reason = "traccia di apertura"
             st.risk_level = "low"
             continue
-        ts = score_transition(ordered[i - 1].track, st.track, penalize_overplayed=penalize_overplayed)
+        ts = score_transition(ordered[i - 1].track, st.track)
         st.transition_score = float(ts.score)
         st.transition_reason = "; ".join(ts.technical_reasons)
         st.risk_level = risk_from_score(ts.score)

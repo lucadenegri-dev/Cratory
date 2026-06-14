@@ -21,11 +21,9 @@ class Track(Base):
     __tablename__ = "tracks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Rekordbox ora OPZIONALE: nullable (SQLite tratta i NULL come distinti, l'unique regge).
-    rekordbox_track_id: Mapped[str | None] = mapped_column(String, unique=True, index=True)
     spotify_id: Mapped[str | None] = mapped_column(String, index=True)
     soundcloud_id: Mapped[str | None] = mapped_column(String, index=True)
-    # Sorgente/piattaforma: spotify | soundcloud | local | rekordbox
+    # Sorgente/piattaforma: spotify | soundcloud | manual
     source_type: Mapped[str] = mapped_column(String, index=True)
     # Identita' streaming generica (import da playlist) + matching enrichment
     platform: Mapped[str | None] = mapped_column(String, index=True)  # spotify | soundcloud
@@ -45,74 +43,19 @@ class Track(Base):
     label: Mapped[str | None] = mapped_column(String)
     duration_seconds: Mapped[int | None] = mapped_column(Integer)
     bpm: Mapped[float | None] = mapped_column(Float, index=True)
-    tonality: Mapped[str | None] = mapped_column(String, index=True)  # Camelot, es. "7A"
-    camelot_key: Mapped[str | None] = mapped_column(String, index=True)  # alias esplicito Camelot
+    camelot_key: Mapped[str | None] = mapped_column(String, index=True)  # tonalita' Camelot, es. "7A"
     # Feature musicali da enrichment esterno (0-100, mai inventate dall'AI)
     mood: Mapped[str | None] = mapped_column(String)
     energy: Mapped[int | None] = mapped_column(Integer)
     danceability: Mapped[int | None] = mapped_column(Integer)
     vocalness: Mapped[int | None] = mapped_column(Integer)
-    play_count: Mapped[int] = mapped_column(Integer, default=0)
-    rating: Mapped[int | None] = mapped_column(Integer)
-    comments: Mapped[str | None] = mapped_column(Text)
-    location: Mapped[str | None] = mapped_column(Text)
-    date_added: Mapped[date | None] = mapped_column(Date)
     # Stato traccia: imported | enriched | ready_for_set | missing_features | low_confidence
     status: Mapped[str] = mapped_column(String, default="imported", index=True)
     # Enrichment — cover, fonte e confidenza del match
     album_art_url: Mapped[str | None] = mapped_column(Text)  # artwork_url
-    spotify_artist_id: Mapped[str | None] = mapped_column(String, index=True)
-    enrichment_source: Mapped[str | None] = mapped_column(String)  # spotify|musicbrainz|getsongbpm|...
+    enrichment_source: Mapped[str | None] = mapped_column(String)  # musicbrainz|getsongbpm|lastfm
     enrichment_confidence: Mapped[int | None] = mapped_column(Integer)  # 0-100
     enriched_at: Mapped[datetime | None] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
-
-    beatgrid_points: Mapped[list["BeatgridPoint"]] = relationship(
-        back_populates="track", cascade="all, delete-orphan"
-    )
-    cue_points: Mapped[list["CuePoint"]] = relationship(
-        back_populates="track", cascade="all, delete-orphan"
-    )
-
-
-class BeatgridPoint(Base):
-    __tablename__ = "beatgrid_points"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    track_id: Mapped[int] = mapped_column(ForeignKey("tracks.id"), index=True)
-    start_seconds: Mapped[float] = mapped_column(Float)
-    bpm: Mapped[float] = mapped_column(Float)
-    meter: Mapped[str | None] = mapped_column(String)
-    beat: Mapped[int | None] = mapped_column(Integer)
-
-    track: Mapped[Track] = relationship(back_populates="beatgrid_points")
-
-
-class CuePoint(Base):
-    __tablename__ = "cue_points"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    track_id: Mapped[int] = mapped_column(ForeignKey("tracks.id"), index=True)
-    name: Mapped[str | None] = mapped_column(String)
-    type: Mapped[str | None] = mapped_column(String)
-    start_seconds: Mapped[float] = mapped_column(Float)
-    num: Mapped[int | None] = mapped_column(Integer)
-    color: Mapped[str | None] = mapped_column(String)
-    comment: Mapped[str | None] = mapped_column(Text)
-
-    track: Mapped[Track] = relationship(back_populates="cue_points")
-
-
-class Artist(Base):
-    __tablename__ = "artists"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String, index=True)
-    spotify_artist_id: Mapped[str | None] = mapped_column(String, unique=True, index=True)
-    genres: Mapped[list] = mapped_column(JSON, default=list)
-    popularity: Mapped[int | None] = mapped_column(Integer)
-    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 

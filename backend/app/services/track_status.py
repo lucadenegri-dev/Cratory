@@ -17,7 +17,7 @@ LOW_CONFIDENCE_THRESHOLD = 50  # sotto questa confidenza l'enrichment e' "low_co
 
 
 def _has_key(track: Track) -> bool:
-    return bool(track.camelot_key or track.tonality)
+    return bool(track.camelot_key)
 
 
 def compute_status(track: Track) -> str:

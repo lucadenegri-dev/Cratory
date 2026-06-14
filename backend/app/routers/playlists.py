@@ -20,6 +20,7 @@ from app.integrations.spotify import (
 )
 from app.repositories import (
     all_playable_tracks,
+    delete_playlist,
     get_playlist,
     list_playlists,
     tracks_for_playlist,
@@ -116,6 +117,21 @@ def import_manual(req: ManualImportRequest, db: Session = Depends(get_db)):
 @router.get("", response_model=list[PlaylistOut])
 def list_imported(db: Session = Depends(get_db)):
     return [PlaylistOut.model_validate(p) for p in list_playlists(db)]
+
+
+@router.get("/{playlist_id}", response_model=PlaylistOut)
+def playlist_detail(playlist_id: int, db: Session = Depends(get_db)):
+    playlist = get_playlist(db, playlist_id)
+    if playlist is None:
+        raise HTTPException(status_code=404, detail="Playlist non trovata")
+    return PlaylistOut.model_validate(playlist)
+
+
+@router.delete("/{playlist_id}", status_code=204)
+def remove_playlist(playlist_id: int, db: Session = Depends(get_db)):
+    """Rimuove una playlist importata e le sue tracce dalla libreria dell'app."""
+    if not delete_playlist(db, playlist_id):
+        raise HTTPException(status_code=404, detail="Playlist non trovata")
 
 
 @router.get("/{playlist_id}/tracks", response_model=list[TrackOut])

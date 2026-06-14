@@ -45,10 +45,8 @@ def seed_tracks(db):
                 year=None,
                 duration_seconds=300 + (i % 60),
                 bpm=128.0 + (i % 8),
-                tonality=f"{(i % 12) + 1}A",
                 camelot_key=CAMELOT_KEYS[i % len(CAMELOT_KEYS)],
                 status="ready_for_set",
-                play_count=i % 10,
             ))
         db.commit()
 

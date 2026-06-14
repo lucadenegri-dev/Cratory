@@ -168,7 +168,7 @@ def export(
         for st in setlist.tracks:
             t = st.track
             writer.writerow([st.position, st.role or "", t.title or "", t.artist or "", t.bpm or "",
-                             t.camelot_key or t.tonality or "", t.duration_seconds or "", t.source_type,
+                             t.camelot_key or "", t.duration_seconds or "", t.source_type,
                              t.spotify_id or "", t.url or "", st.transition_score or "", st.risk_level or ""])
         return PlainTextResponse(buf.getvalue(), media_type="text/csv")
 
@@ -180,14 +180,14 @@ def export(
                "|--:|---|---|--:|---|--:|---|"]
         for st in setlist.tracks:
             t = st.track
-            label = f"{t.artist or '?'} — {t.title or t.spotify_id or t.rekordbox_track_id or '?'}"
+            label = f"{t.artist or '?'} — {t.title or t.spotify_id or '?'}"
             note = (st.transition_note or st.transition_reason or "").replace("|", "/").replace("\n", " ")
             md.append(
                 f"| {st.position} | {st.role or ''} | {label} | "
-                f"{t.bpm:.0f} | {t.camelot_key or t.tonality or '?'} | {_fmt_dur(t.duration_seconds)} | {note} |"
+                f"{t.bpm:.0f} | {t.camelot_key or '?'} | {_fmt_dur(t.duration_seconds)} | {note} |"
                 if t.bpm else
                 f"| {st.position} | {st.role or ''} | {label} | — | "
-                f"{t.camelot_key or t.tonality or '?'} | {_fmt_dur(t.duration_seconds)} | {note} |"
+                f"{t.camelot_key or '?'} | {_fmt_dur(t.duration_seconds)} | {note} |"
             )
         return PlainTextResponse("\n".join(md), media_type="text/markdown")
 
@@ -196,8 +196,8 @@ def export(
         lines += [setlist.global_explanation, ""]
     for st in setlist.tracks:
         t = st.track
-        label = f"{t.artist or '?'} - {t.title or t.spotify_id or t.rekordbox_track_id}"
-        meta = f"[{t.bpm:.0f} BPM, {t.camelot_key or t.tonality or '?'}]" if t.bpm else f"[{t.camelot_key or t.tonality or '?'}]"
+        label = f"{t.artist or '?'} - {t.title or t.spotify_id or '?'}"
+        meta = f"[{t.bpm:.0f} BPM, {t.camelot_key or '?'}]" if t.bpm else f"[{t.camelot_key or '?'}]"
         role = f"({st.role}) " if st.role else ""
         lines.append(f"{st.position:2d}. {role}{label} {meta}")
     return PlainTextResponse("\n".join(lines))

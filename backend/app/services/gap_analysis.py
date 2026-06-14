@@ -100,7 +100,7 @@ def _check_energy_uniform(tracks: list[Track]) -> Gap | None:
 
 
 def _check_harmonic(tracks: list[Track]) -> Gap | None:
-    with_key = [t for t in tracks if (t.camelot_key or t.tonality)]
+    with_key = [t for t in tracks if t.camelot_key]
     if tracks and len(with_key) < max(3, len(tracks) // 2):
         return Gap(
             "missing_harmonic_data", "warning",

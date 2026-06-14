@@ -1,6 +1,6 @@
 """Schemi Pydantic per request/response API."""
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,7 +10,6 @@ class TrackOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    rekordbox_track_id: str | None = None
     spotify_id: str | None = None
     soundcloud_id: str | None = None
     source_type: str
@@ -23,22 +22,17 @@ class TrackOut(BaseModel):
     year: int | None = None
     duration_seconds: int | None = None
     bpm: float | None = None
-    tonality: str | None = None
     camelot_key: str | None = None
     mood: str | None = None
     energy: int | None = None
     danceability: int | None = None
     vocalness: int | None = None
     label: str | None = None
-    play_count: int = 0
-    rating: int | None = None
-    date_added: date | None = None
     status: str = "imported"
     url: str | None = None
     isrc: str | None = None
+    playlist_id: int | None = None
     playlist_name: str | None = None
-    cue_count: int = 0
-    has_beatgrid: bool = False
     spotify_url: str | None = None
     album_art_url: str | None = None
     enriched: bool = False
@@ -51,20 +45,8 @@ class TrackListOut(BaseModel):
     items: list[TrackOut]
 
 
-class CuePointOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    name: str | None = None
-    type: str | None = None
-    start_seconds: float
-    num: int | None = None
-
-
 class TrackDetailOut(TrackOut):
-    comments: str | None = None
-    location: str | None = None
-    cue_points: list[CuePointOut] = []
-    beatgrid_bpms: list[float] = []
+    """Dettaglio traccia: oggi coincide con TrackOut (niente cue/beatgrid Rekordbox)."""
 
 
 class TransitionScoreOut(BaseModel):
@@ -105,7 +87,6 @@ class SetGenerationRequest(BaseModel):
     prefer_progressive_bpm: bool = True
     allow_sharp_changes: bool = False
     avoid_short_tracks: bool = True
-    avoid_overplayed: bool = False
     prompt: str | None = None  # prompt libero: usato dall'AI agent in MVP 3
     use_ai: bool | None = None  # None = auto (AI se configurata e c'e' un prompt)
     # technical = mix prudente sui soli dati; creative = l'AI usa la sua conoscenza
@@ -333,10 +314,12 @@ class DiscoveryGapRequest(BaseModel):
 
 class LibraryStatsOut(BaseModel):
     total_tracks: int
+    playlists: int = 0
     by_source: dict[str, int]
     with_bpm: int
-    with_tonality: int
-    with_cues: int
+    with_key: int
+    with_features: int  # mood o energia presenti
+    ready_for_set: int
     missing_metadata: int
     bpm_min: float | None = None
     bpm_max: float | None = None

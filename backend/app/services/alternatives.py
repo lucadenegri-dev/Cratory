@@ -136,10 +136,10 @@ def _rank(scored: list[ScoredCandidate], mode: str, current: Track) -> list[Scor
         # compatibilita' accettabile ma scelta meno ovvia: scarta gli score pessimi,
         # poi avvicinati a una compatibilita' "media", premiando il cambio di tonalita'.
         band = [c for c in scored if c.combined >= SURPRISING_MIN_SCORE]
-        cur_key = current.tonality
+        cur_key = current.camelot_key
 
         def surprise_key(c: ScoredCandidate):
-            key_change = bool(c.track.tonality and cur_key and c.track.tonality != cur_key)
+            key_change = bool(c.track.camelot_key and cur_key and c.track.camelot_key != cur_key)
             return (abs(c.combined - SURPRISING_TARGET), not key_change)
 
         return sorted(band, key=surprise_key)

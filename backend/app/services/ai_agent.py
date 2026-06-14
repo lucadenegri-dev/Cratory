@@ -120,8 +120,6 @@ def _rank_candidates(candidates: list[Track], req: SetGenerationRequest) -> list
             score += 1000.0
         if anchor_bpm and t.bpm:
             score -= abs(t.bpm - anchor_bpm)
-        if t.cue_points:
-            score += 5.0
         return score
 
     ranked = sorted(candidates, key=relevance, reverse=True)
@@ -134,7 +132,7 @@ def _candidate_payload(t: Track) -> dict:
         "title": t.title or "",
         "artist": t.artist or "",
         "bpm": round(t.bpm, 1) if t.bpm else None,
-        "key": t.camelot_key or t.tonality or "",
+        "key": t.camelot_key or "",
         "duration_seconds": t.duration_seconds or 0,
         "genre": t.genre or "",
         "mood": t.mood or "",
@@ -146,7 +144,7 @@ def _candidate_payload(t: Track) -> dict:
 def _compute_candidate_profile(candidates: list[Track]) -> dict:
     """Profilo sintetico delle candidate: BPM arc, distribuzione chiavi, top generi, lacune."""
     bpms = [t.bpm for t in candidates if t.bpm is not None]
-    keys = [t.camelot_key or t.tonality for t in candidates if (t.camelot_key or t.tonality)]
+    keys = [t.camelot_key for t in candidates if t.camelot_key]
     genres = [t.genre for t in candidates if t.genre]
     energies = [t.energy for t in candidates if t.energy is not None]
     moods = [t.mood for t in candidates if t.mood]

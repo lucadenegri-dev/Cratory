@@ -1,6 +1,6 @@
 """Test dello scoring tecnico transizioni e della compatibilita' Camelot."""
 
-from app.models import CuePoint, Track
+from app.models import Track
 from app.services.camelot import camelot_compatibility, parse_camelot
 from app.services.scoring import (
     bpm_compatibility_score,
@@ -12,12 +12,8 @@ from app.services.scoring import (
 )
 
 
-def make_track(bpm=None, key=None, duration=300, play_count=0, cues=0) -> Track:
-    t = Track(rekordbox_track_id="x", source_type="local", bpm=bpm,
-              tonality=key, duration_seconds=duration, play_count=play_count)
-    t.cue_points = [CuePoint(start_seconds=float(i)) for i in range(cues)]
-    t.beatgrid_points = []
-    return t
+def make_track(bpm=None, key=None, duration=300) -> Track:
+    return Track(source_type="spotify", bpm=bpm, camelot_key=key, duration_seconds=duration)
 
 
 def test_parse_camelot():
@@ -69,13 +65,6 @@ def test_short_track_penalized():
     assert any("corta" in w for w in ts.warnings)
 
 
-def test_cue_bonus():
-    base = make_track(bpm=130, key="7A")
-    with_cues = score_transition(base, make_track(bpm=130, key="7A", cues=3)).score
-    without = score_transition(base, make_track(bpm=130, key="7A", cues=0)).score
-    assert with_cues > without
-
-
 def test_six_named_scores():
     # I sei score deterministici della spec (sez. 5): tutti 0-100, neutri sul dato mancante.
     assert bpm_compatibility_score(128, 128) == 100
@@ -90,6 +79,6 @@ def test_six_named_scores():
 
 
 def test_score_in_range():
-    ts = score_transition(make_track(bpm=130, key="7A"), make_track(bpm=131, key="7A", cues=4))
+    ts = score_transition(make_track(bpm=130, key="7A"), make_track(bpm=131, key="7A"))
     assert 0 <= ts.score <= 100
     assert ts.technical_reasons

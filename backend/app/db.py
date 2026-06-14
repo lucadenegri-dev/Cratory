@@ -33,7 +33,6 @@ def ensure_schema(eng=None) -> None:
         "tracks": {
             # MVP 2 (Spotify)
             "album_art_url": "TEXT",
-            "spotify_artist_id": "VARCHAR",
             "enriched_at": "DATETIME",
             # Pivot playlist->set: identita' streaming, playlist di provenienza, stato
             "platform": "VARCHAR",
@@ -71,39 +70,75 @@ def ensure_schema(eng=None) -> None:
             for col, ddl in cols.items():
                 if col not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
-        _relax_rekordbox_not_null(conn)
+        _migrate_drop_legacy(conn)
 
 
-def _relax_rekordbox_not_null(conn) -> None:
-    """Rende `tracks.rekordbox_track_id` nullable nei DB creati prima del pivot.
+# Tabelle dell'era Rekordbox/MVP1 rimosse dopo il pivot a playlist->set.
+_LEGACY_TABLES = ("beatgrid_points", "cue_points", "artists", "import_reports")
+# source_type delle righe Rekordbox/locali, non piu' previste dal nuovo flusso.
+_LEGACY_SOURCES = ("local", "rekordbox")
 
-    In MVP 1 la colonna era `NOT NULL` (Rekordbox era la fonte primaria); col pivot
-    e' diventata opzionale, ma SQLite non supporta ALTER COLUMN. Ricostruisce quindi
-    la tabella preservando righe, indici e relazioni (setlist). Idempotente: dopo la
-    prima esecuzione `notnull` e' 0 e la funzione esce subito.
+
+def _table_exists(conn, name: str) -> bool:
+    return bool(conn.execute(
+        text("SELECT 1 FROM sqlite_master WHERE type='table' AND name=:n"), {"n": name}
+    ).first())
+
+
+def _migrate_drop_legacy(conn) -> None:
+    """Ripulisce i DB pre-pivot: rimuove colonne/tabelle Rekordbox e le righe legacy.
+
+    SQLite non supporta ALTER/DROP COLUMN affidabile con indici, quindi `tracks` viene
+    ricostruita dal modello corrente copiando le sole colonne sopravvissute (con
+    `camelot_key` = COALESCE(camelot_key, tonality) per non perdere la key). Le tabelle
+    e le righe dell'era Rekordbox vengono eliminate; i set che restano senza tracce
+    vengono potati.
+
+    Robusta agli interrupt: SQLite auto-committa il DDL, quindi la funzione e' scritta
+    per riprendere anche da un rebuild lasciato a meta' (tabella `_tracks_legacy`
+    presente, indici orfani) ed e' idempotente quando non c'e' nulla di legacy.
     """
-    info = conn.execute(text("PRAGMA table_info(tracks)")).fetchall()
-    col = next((r for r in info if r[1] == "rekordbox_track_id"), None)
-    if col is None or col[3] == 0:  # r[3] = flag notnull: gia' nullable o assente
+    from app.models import Track  # import differito: models importa db.Base
+
+    cols = [r[1] for r in conn.execute(text("PRAGMA table_info(tracks)")).fetchall()]
+    tracks_is_legacy = bool(cols) and ("rekordbox_track_id" in cols or "play_count" in cols)
+    legacy_leftover = _table_exists(conn, "_tracks_legacy")
+    if not tracks_is_legacy and not legacy_leftover:
         return
-    create_sql = conn.execute(text(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='tracks'"
-    )).scalar() or ""
-    new_create = create_sql.replace(
-        "rekordbox_track_id VARCHAR NOT NULL", "rekordbox_track_id VARCHAR"
-    ).replace("CREATE TABLE tracks", "CREATE TABLE tracks_new", 1)
-    if "tracks_new" not in new_create or "rekordbox_track_id VARCHAR NOT NULL" in new_create:
-        return  # forma del DDL inattesa: non rischiare la migrazione automatica
-    index_sqls = [r[0] for r in conn.execute(text(
-        "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='tracks' AND sql IS NOT NULL"
-    )).fetchall()]
-    collist = ", ".join(f'"{r[1]}"' for r in info)
-    conn.execute(text(new_create))
-    conn.execute(text(f"INSERT INTO tracks_new ({collist}) SELECT {collist} FROM tracks"))
-    conn.execute(text("DROP TABLE tracks"))
-    conn.execute(text("ALTER TABLE tracks_new RENAME TO tracks"))
-    for isql in index_sqls:
-        conn.execute(text(isql))
+
+    if tracks_is_legacy:
+        conn.execute(text("DROP TABLE IF EXISTS _tracks_legacy"))
+        conn.execute(text("ALTER TABLE tracks RENAME TO _tracks_legacy"))
+
+    # Gli indici seguono la tabella nel RENAME mantenendo il vecchio nome (ix_tracks_*):
+    # vanno eliminati o la ricreazione di `tracks` fallisce con "index ... already exists".
+    for (idx,) in conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='_tracks_legacy' AND sql IS NOT NULL"
+    )).fetchall():
+        conn.execute(text(f'DROP INDEX IF EXISTS "{idx}"'))
+
+    conn.execute(text("DROP TABLE IF EXISTS tracks"))  # eventuale tracks vuota di un run interrotto
+    Track.__table__.create(conn)  # schema + indici dal modello corrente
+
+    legacy_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(_tracks_legacy)")).fetchall()]
+    shared = [c for c in Track.__table__.columns.keys() if c in legacy_cols]
+    exprs = [
+        "COALESCE(camelot_key, tonality)" if c == "camelot_key" and "tonality" in legacy_cols else f'"{c}"'
+        for c in shared
+    ]
+    collist = ", ".join(f'"{c}"' for c in shared)
+    conn.execute(text(f"INSERT INTO tracks ({collist}) SELECT {', '.join(exprs)} FROM _tracks_legacy"))
+    conn.execute(text("DROP TABLE _tracks_legacy"))
+
+    for tbl in _LEGACY_TABLES:
+        conn.execute(text(f"DROP TABLE IF EXISTS {tbl}"))
+
+    # Righe e set dell'era Rekordbox: elimina le tracce local/rekordbox, poi le voci di
+    # set orfane e i set rimasti senza tracce (i set "veri" su tracce streaming restano).
+    legacy_src = ", ".join(f"'{s}'" for s in _LEGACY_SOURCES)
+    conn.execute(text(f"DELETE FROM tracks WHERE source_type IN ({legacy_src})"))
+    conn.execute(text("DELETE FROM setlist_tracks WHERE track_id NOT IN (SELECT id FROM tracks)"))
+    conn.execute(text("DELETE FROM setlists WHERE id NOT IN (SELECT setlist_id FROM setlist_tracks)"))
 
 
 def get_db():

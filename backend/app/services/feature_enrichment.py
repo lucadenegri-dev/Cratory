@@ -101,7 +101,6 @@ def apply_features(track: Track, data: dict[str, Any], *, source: str) -> None:
     camelot = data.get("camelot_key") or data.get("key")
     if camelot and parse_camelot(camelot):
         track.camelot_key = track.camelot_key or camelot
-        track.tonality = track.tonality or camelot
     if not track.genre and data.get("genre_primary"):
         track.genre = data["genre_primary"]
     if not track.genre_secondary and data.get("genre_secondary"):

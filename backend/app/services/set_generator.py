@@ -142,7 +142,7 @@ def _candidate_score(
     prev: Track, cand: Track, desired_bpm: float, req: SetGenerationRequest,
     artist_counts: dict[str, int], desired_energy: float | None = None,
 ) -> tuple[float, TransitionScore]:
-    ts = score_transition(prev, cand, penalize_overplayed=req.avoid_overplayed)
+    ts = score_transition(prev, cand)
     transition_pts = float(ts.score)
     if not req.allow_sharp_changes and ts.score < 30:
         transition_pts -= 40.0  # scoraggia fortemente i salti se non richiesti
@@ -153,7 +153,7 @@ def _candidate_score(
     feature_fit = _feature_fit(prev, cand, req, desired_energy)
     if feature_fit is not None:
         total += feature_fit * _FEATURE_WEIGHT
-    if req.prefer_harmonic and req.preferred_keys and (cand.camelot_key or cand.tonality) in req.preferred_keys:
+    if req.prefer_harmonic and req.preferred_keys and cand.camelot_key in req.preferred_keys:
         total += _KEY_PREF_BONUS
     seeds = [s.lower() for s in req.seed_artists]
     if seeds and cand.artist and any(seed in cand.artist.lower() for seed in seeds):
@@ -169,7 +169,7 @@ def _explanation(setlist_tracks: list[tuple[Track, TransitionScore | None]],
     tracks = [t for t, _ in setlist_tracks]
     scores = [ts for _, ts in setlist_tracks if ts]
     bpms = [t.bpm for t in tracks if t.bpm]
-    keys = {t.tonality for t in tracks if t.tonality}
+    keys = {t.camelot_key for t in tracks if t.camelot_key}
     safe = sum(1 for ts in scores if ts.score >= 70)
     risky = sum(1 for ts in scores if ts.score < 45)
     parts = [

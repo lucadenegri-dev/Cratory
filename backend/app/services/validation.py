@@ -78,7 +78,7 @@ def validate_ai_set(
         transition_reason = "traccia di apertura"
         if result.tracks:
             prev = result.tracks[-1].track
-            ts = score_transition(prev, track, penalize_overplayed=req.avoid_overplayed)
+            ts = score_transition(prev, track)
             transition_score = float(ts.score)
             transition_reason = "; ".join(ts.technical_reasons)
             for w in ts.warnings:

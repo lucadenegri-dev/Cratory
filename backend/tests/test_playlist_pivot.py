@@ -99,7 +99,7 @@ def test_imported_track_status_is_imported(db):
     ], platform_playlist_id="PL1")
     track = db.query(Track).one()
     assert track.status == "imported"
-    assert track.rekordbox_track_id is None  # nessuna dipendenza Rekordbox
+    assert track.source_type == "spotify"
 
 
 # --- stato traccia -----------------------------------------------------------
@@ -130,7 +130,7 @@ class _FakeProvider:
 
 
 def test_feature_enrichment_fills_only_missing(db):
-    keep = Track(source_type="spotify", title="rek", bpm=128.0, tonality="5A")
+    keep = Track(source_type="spotify", title="rek", bpm=128.0, camelot_key="5A")
     fill = Track(source_type="spotify", title="stream")
     db.add_all([keep, fill])
     db.commit()

@@ -3,7 +3,6 @@
 from app.models import Setlist, Track
 from app.schemas import (
     AlternativeOut,
-    CuePointOut,
     SetlistOut,
     SetlistSummaryOut,
     SetlistTrackOut,
@@ -19,7 +18,6 @@ def _spotify_url(track: Track) -> str | None:
 def track_out(track: Track) -> TrackOut:
     return TrackOut(
         id=track.id,
-        rekordbox_track_id=track.rekordbox_track_id,
         spotify_id=track.spotify_id,
         soundcloud_id=track.soundcloud_id,
         source_type=track.source_type,
@@ -32,22 +30,17 @@ def track_out(track: Track) -> TrackOut:
         year=track.year,
         duration_seconds=track.duration_seconds,
         bpm=track.bpm,
-        tonality=track.tonality,
         camelot_key=track.camelot_key,
         mood=track.mood,
         energy=track.energy,
         danceability=track.danceability,
         vocalness=track.vocalness,
         label=track.label,
-        play_count=track.play_count,
-        rating=track.rating,
-        date_added=track.date_added,
         status=track.status or "imported",
         url=track.url,
         isrc=track.isrc,
+        playlist_id=track.playlist_id,
         playlist_name=track.playlist_name,
-        cue_count=len(track.cue_points),
-        has_beatgrid=bool(track.beatgrid_points),
         spotify_url=_spotify_url(track),
         album_art_url=track.album_art_url,
         enriched=track.enriched_at is not None,
@@ -57,14 +50,7 @@ def track_out(track: Track) -> TrackOut:
 
 
 def track_detail_out(track: Track) -> TrackDetailOut:
-    base = track_out(track).model_dump()
-    return TrackDetailOut(
-        **base,
-        comments=track.comments,
-        location=track.location,
-        cue_points=[CuePointOut.model_validate(c) for c in track.cue_points],
-        beatgrid_bpms=sorted({p.bpm for p in track.beatgrid_points}),
-    )
+    return TrackDetailOut(**track_out(track).model_dump())
 
 
 def setlist_out(setlist: Setlist) -> SetlistOut:
