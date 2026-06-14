@@ -23,6 +23,17 @@ class TransitionScore:
     warnings: list[str] = field(default_factory=list)
 
 
+def risk_from_score(score: float | None) -> str:
+    """Classifica il rischio di una transizione dal suo score tecnico (0-100)."""
+    if score is None:
+        return "low"  # traccia di apertura
+    if score >= 70:
+        return "low"
+    if score >= 45:
+        return "medium"
+    return "high"
+
+
 def _bpm_points(from_bpm: float | None, to_bpm: float | None) -> tuple[float, str, str | None]:
     if not from_bpm or not to_bpm:
         return 15.0, "BPM mancante su una delle tracce: valutazione neutra", "BPM mancante"
@@ -63,7 +74,10 @@ def score_transition(
     if warn:
         warnings.append(warn)
 
-    pts, reason, warn = _key_points(from_track.tonality, to_track.tonality)
+    pts, reason, warn = _key_points(
+        from_track.camelot_key or from_track.tonality,
+        to_track.camelot_key or to_track.tonality,
+    )
     total += pts
     reasons.append(reason)
     if warn:
@@ -99,3 +113,59 @@ def score_transition(
         technical_reasons=reasons,
         warnings=warnings,
     )
+
+
+# --- I sei score deterministici (nuovo_progetto.md sez. 5) -------------------
+# Tutti 0-100, standalone. `score_transition` (sopra) resta il composito pesato
+# usato per il ranking; queste funzioni espongono i singoli score per traccia in
+# modo confrontabile. In assenza del dato ritornano un valore neutro (50).
+
+
+def bpm_compatibility_score(from_bpm: float | None, to_bpm: float | None) -> int:
+    """Compatibilita' di tempo (0-100). Stessa scala a gradini di `_bpm_points`."""
+    if not from_bpm or not to_bpm:
+        return 50
+    diff = abs(from_bpm - to_bpm)
+    if diff <= 2:
+        return 100
+    if diff <= 5:
+        return 75
+    if diff <= 8:
+        return 40
+    return max(10, 40 - round((diff - 8) * 4))
+
+
+def key_compatibility_score(from_key: str | None, to_key: str | None) -> int:
+    """Compatibilita' armonica Camelot (0-100)."""
+    level, _ = camelot_compatibility(from_key, to_key)
+    return {"same": 100, "compatible": 80, "weak": 25}.get(level, 50)  # unknown -> neutro
+
+
+def energy_progression_score(from_energy: int | None, to_energy: int | None) -> int:
+    """Premia una progressione di energia dolce e monotona; penalizza i crolli bruschi."""
+    if from_energy is None or to_energy is None:
+        return 50
+    delta = to_energy - from_energy
+    if -5 <= delta <= 12:
+        return 100  # leggera salita o plateau: ideale lungo il set
+    if delta > 12:
+        return max(40, 100 - (delta - 12) * 3)  # salita troppo brusca
+    return max(20, 100 + delta * 2)  # crollo di energia
+
+
+def mood_coherence_score(from_mood: str | None, to_mood: str | None) -> int:
+    if not from_mood or not to_mood:
+        return 50
+    return 100 if from_mood.strip().lower() == to_mood.strip().lower() else 60
+
+
+def genre_similarity_score(from_genre: str | None, to_genre: str | None) -> int:
+    """Similarita' grezza basata sulla sovrapposizione dei token di genere."""
+    if not from_genre or not to_genre:
+        return 50
+    a = {g.strip().lower() for g in from_genre.replace(",", " ").split() if g.strip()}
+    b = {g.strip().lower() for g in to_genre.replace(",", " ").split() if g.strip()}
+    if not a or not b:
+        return 50
+    overlap = len(a & b) / len(a | b)
+    return round(40 + overlap * 60)

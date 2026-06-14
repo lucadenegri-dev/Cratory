@@ -1,14 +1,12 @@
 import logging
-import threading
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db import SessionLocal, get_db
+from app.db import get_db
 from app.integrations.spotify import (
     SpotifyError,
     SpotifyNotConfigured,
@@ -18,26 +16,12 @@ from app.integrations.spotify import (
     make_state,
 )
 from app.repositories import get_setlist
-from app.services.enrichment import enrich_library
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/spotify", tags=["spotify"])
 
 # Stato OAuth in memoria: app locale mono-utente, sufficiente per il flusso.
 _pending_states: set[str] = set()
-
-# Stato del job di enrichment (app locale mono-utente: in memoria con lock).
-_enrich_lock = threading.Lock()
-_enrich_state: dict = {
-    "status": "idle",  # idle | running | done | error
-    "phase": None,
-    "processed": 0,
-    "total": 0,
-    "result": None,
-    "error": None,
-    "started_at": None,
-    "finished_at": None,
-}
 
 
 def _http_error(exc: SpotifyError) -> HTTPException:
@@ -88,57 +72,6 @@ def callback(
         logger.error("OAuth Spotify fallito: %s", exc)
         return RedirectResponse(f"{frontend}?spotify=error&detail=token_exchange")
     return RedirectResponse(f"{frontend}?spotify=connected")
-
-
-def _run_enrich_job(force: bool) -> None:
-    """Eseguito in un thread separato: usa una sessione DB dedicata."""
-    db = SessionLocal()
-
-    def on_progress(processed: int, total: int, phase: str) -> None:
-        _enrich_state["processed"] = processed
-        _enrich_state["total"] = total
-        _enrich_state["phase"] = phase
-
-    try:
-        result = enrich_library(db, SpotifyWebClient(db), force=force, on_progress=on_progress)
-        _enrich_state["result"] = result
-        _enrich_state["status"] = "done"
-        logger.info("Job enrichment completato: %s", result)
-    except SpotifyError as exc:
-        _enrich_state["error"] = str(exc)
-        _enrich_state["status"] = "error"
-        logger.error("Job enrichment fallito (Spotify): %s", exc)
-    except Exception as exc:  # noqa: BLE001
-        _enrich_state["error"] = str(exc)
-        _enrich_state["status"] = "error"
-        logger.exception("Job enrichment fallito (errore inatteso)")
-    finally:
-        _enrich_state["finished_at"] = datetime.now(timezone.utc).isoformat()
-        db.close()
-
-
-@router.post("/enrich")
-def enrich(force: bool = Query(default=False)):
-    """Avvia l'enrichment in background e ritorna subito. Seguire /enrich/status."""
-    if not (settings.spotify_client_id and settings.spotify_client_secret):
-        raise _http_error(SpotifyNotConfigured(
-            "Credenziali Spotify mancanti: impostare SPOTIFY_CLIENT_ID e "
-            "SPOTIFY_CLIENT_SECRET in backend/.env."
-        ))
-    with _enrich_lock:
-        if _enrich_state["status"] == "running":
-            return {"status": "running", "processed": _enrich_state["processed"],
-                    "total": _enrich_state["total"], "phase": _enrich_state["phase"]}
-        _enrich_state.update(status="running", phase=None, processed=0, total=0,
-                             result=None, error=None,
-                             started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)
-    threading.Thread(target=_run_enrich_job, args=(force,), daemon=True).start()
-    return {"status": "running", "processed": 0, "total": 0, "phase": None}
-
-
-@router.get("/enrich/status")
-def enrich_status():
-    return dict(_enrich_state)
 
 
 class CreatePlaylistRequest(BaseModel):

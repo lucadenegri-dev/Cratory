@@ -20,6 +20,7 @@ class ValidatedTrack:
     risk_level: str
     transition_score: float | None
     transition_reason: str
+    transition_note: str = ""  # nota di transizione narrativa dell'AI
 
 
 @dataclass
@@ -93,6 +94,7 @@ def validate_ai_set(
             risk_level=risk,
             transition_score=transition_score,
             transition_reason=transition_reason,
+            transition_note=choice.transition_note,
         ))
 
     # durata totale vs target

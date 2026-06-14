@@ -31,13 +31,38 @@ def ensure_schema(eng=None) -> None:
     # tabella -> {colonna: ddl} per colonne aggiunte dopo la creazione iniziale
     additions = {
         "tracks": {
+            # MVP 2 (Spotify)
             "album_art_url": "TEXT",
             "spotify_artist_id": "VARCHAR",
             "enriched_at": "DATETIME",
+            # Pivot playlist->set: identita' streaming, playlist di provenienza, stato
+            "platform": "VARCHAR",
+            "platform_track_id": "VARCHAR",
+            "isrc": "VARCHAR",
+            "url": "TEXT",
+            "added_at": "DATETIME",
+            "playlist_id": "INTEGER",
+            "playlist_name": "VARCHAR",
+            "status": "VARCHAR DEFAULT 'imported'",
+            # Enrichment esterno (BPM/key/mood/energia/label/...)
+            "genre_secondary": "VARCHAR",
+            "release_date": "DATE",
+            "label": "VARCHAR",
+            "camelot_key": "VARCHAR",
+            "mood": "VARCHAR",
+            "energy": "INTEGER",
+            "danceability": "INTEGER",
+            "vocalness": "INTEGER",
+            "enrichment_source": "VARCHAR",
+            "enrichment_confidence": "INTEGER",
         },
         "setlists": {
             "generated_by": "VARCHAR DEFAULT 'algorithmic'",
             "validation": "JSON",
+        },
+        "setlist_tracks": {
+            "role": "VARCHAR",
+            "transition_note": "TEXT",
         },
     }
     with eng.begin() as conn:

@@ -8,12 +8,31 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db import SessionLocal, get_db
 from app.integrations.llm import LLMError, LLMNotConfigured, get_llm_client, llm_configured
 from app.repositories import get_setlist, list_setlists
-from app.schemas import SetGenerationRequest, SetlistOut, SetlistSummaryOut
-from app.serializers import setlist_out, setlist_summary_out
+from app.schemas import (
+    AlternativesRequest,
+    AlternativesResponse,
+    MoveTrackRequest,
+    ReplaceTrackRequest,
+    SetGenerationRequest,
+    SetlistOut,
+    SetlistSummaryOut,
+    SetRenameRequest,
+)
+from app.serializers import alternative_out, setlist_out, setlist_summary_out
 from app.services.ai_agent import AIAgentError, generate_ai_set
+from app.services.alternatives import AlternativesError, find_alternatives
+from app.services.set_editor import (
+    SetEditError,
+    delete_set,
+    move_track,
+    remove_track,
+    rename_set,
+    replace_track,
+)
 from app.services.set_generator import SetGenerationError, generate_set
 
 logger = logging.getLogger(__name__)
@@ -27,6 +46,13 @@ def _should_use_ai(req: SetGenerationRequest) -> bool:
         return False
     # auto: AI solo se configurata e c'e' un prompt libero da interpretare
     return llm_configured() and bool(req.prompt and req.prompt.strip())
+
+
+def _model_for(req: SetGenerationRequest) -> str | None:
+    """Modello da usare: in creative, se impostato, usa AI_MODEL_CREATIVE (più capace)."""
+    if req.mode == "creative" and settings.ai_model_creative:
+        return settings.ai_model_creative
+    return None  # None = default (AI_MODEL / DEFAULT_MODEL)
 
 
 # --- Generazione asincrona (la generazione AI puo' richiedere ~1-3 min) -------
@@ -48,7 +74,7 @@ def _run_generation(req: SetGenerationRequest, use_ai: bool) -> None:
     try:
         if use_ai:
             setlist = generate_ai_set(
-                db, req, get_llm_client(),
+                db, req, get_llm_client(_model_for(req)),
                 on_phase=lambda p: _gen_state.update(phase=p),
             )
         else:
@@ -91,7 +117,7 @@ def generate_status():
 def generate(req: SetGenerationRequest, db: Session = Depends(get_db)):
     if _should_use_ai(req):
         try:
-            setlist = generate_ai_set(db, req, get_llm_client())
+            setlist = generate_ai_set(db, req, get_llm_client(_model_for(req)))
         except LLMNotConfigured as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (AIAgentError, LLMError) as exc:
@@ -117,13 +143,19 @@ def get_one(setlist_id: int, db: Session = Depends(get_db)):
     return setlist_out(setlist)
 
 
+def _fmt_dur(seconds: int | None) -> str:
+    if not seconds:
+        return "—"
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
 @router.post("/{setlist_id}/export", response_class=PlainTextResponse)
 def export(
     setlist_id: int,
-    format: str = Query(default="text", pattern="^(text|csv)$"),
+    format: str = Query(default="text", pattern="^(text|csv|markdown)$"),
     db: Session = Depends(get_db),
 ):
-    """Export del set in testo o CSV. Export playlist Spotify: MVP 2."""
+    """Export del set: testo, CSV o Markdown. Export playlist Spotify: endpoint dedicato."""
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
         raise HTTPException(status_code=404, detail="Set non trovato")
@@ -131,14 +163,33 @@ def export(
     if format == "csv":
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(["position", "title", "artist", "bpm", "key", "duration_seconds",
-                         "source", "spotify_id", "transition_score", "risk_level"])
+        writer.writerow(["position", "role", "title", "artist", "bpm", "key", "duration_seconds",
+                         "source", "spotify_id", "url", "transition_score", "risk_level"])
         for st in setlist.tracks:
             t = st.track
-            writer.writerow([st.position, t.title or "", t.artist or "", t.bpm or "",
-                             t.tonality or "", t.duration_seconds or "", t.source_type,
-                             t.spotify_id or "", st.transition_score or "", st.risk_level or ""])
+            writer.writerow([st.position, st.role or "", t.title or "", t.artist or "", t.bpm or "",
+                             t.camelot_key or t.tonality or "", t.duration_seconds or "", t.source_type,
+                             t.spotify_id or "", t.url or "", st.transition_score or "", st.risk_level or ""])
         return PlainTextResponse(buf.getvalue(), media_type="text/csv")
+
+    if format == "markdown":
+        md = [f"# {setlist.name}", ""]
+        if setlist.global_explanation:
+            md += [setlist.global_explanation, ""]
+        md += ["| # | Ruolo | Traccia | BPM | Key | Durata | Transizione |",
+               "|--:|---|---|--:|---|--:|---|"]
+        for st in setlist.tracks:
+            t = st.track
+            label = f"{t.artist or '?'} — {t.title or t.spotify_id or t.rekordbox_track_id or '?'}"
+            note = (st.transition_note or st.transition_reason or "").replace("|", "/").replace("\n", " ")
+            md.append(
+                f"| {st.position} | {st.role or ''} | {label} | "
+                f"{t.bpm:.0f} | {t.camelot_key or t.tonality or '?'} | {_fmt_dur(t.duration_seconds)} | {note} |"
+                if t.bpm else
+                f"| {st.position} | {st.role or ''} | {label} | — | "
+                f"{t.camelot_key or t.tonality or '?'} | {_fmt_dur(t.duration_seconds)} | {note} |"
+            )
+        return PlainTextResponse("\n".join(md), media_type="text/markdown")
 
     lines = [f"# {setlist.name}", ""]
     if setlist.global_explanation:
@@ -146,6 +197,71 @@ def export(
     for st in setlist.tracks:
         t = st.track
         label = f"{t.artist or '?'} - {t.title or t.spotify_id or t.rekordbox_track_id}"
-        meta = f"[{t.bpm:.0f} BPM, {t.tonality or '?'}]" if t.bpm else f"[{t.tonality or '?'}]"
-        lines.append(f"{st.position:2d}. {label} {meta}")
+        meta = f"[{t.bpm:.0f} BPM, {t.camelot_key or t.tonality or '?'}]" if t.bpm else f"[{t.camelot_key or t.tonality or '?'}]"
+        role = f"({st.role}) " if st.role else ""
+        lines.append(f"{st.position:2d}. {role}{label} {meta}")
     return PlainTextResponse("\n".join(lines))
+
+
+# --- Editing scaletta ---------------------------------------------------------
+
+
+def _edit_error(exc: SetEditError) -> HTTPException:
+    status = 404 if "non trovato" in str(exc).lower() else 422
+    return HTTPException(status_code=status, detail=str(exc))
+
+
+@router.patch("/{setlist_id}", response_model=SetlistOut)
+def rename(setlist_id: int, req: SetRenameRequest, db: Session = Depends(get_db)):
+    try:
+        return setlist_out(rename_set(db, setlist_id, req.name))
+    except SetEditError as exc:
+        raise _edit_error(exc) from exc
+
+
+@router.delete("/{setlist_id}", status_code=204)
+def delete(setlist_id: int, db: Session = Depends(get_db)):
+    try:
+        delete_set(db, setlist_id)
+    except SetEditError as exc:
+        raise _edit_error(exc) from exc
+
+
+@router.delete("/{setlist_id}/tracks/{position}", response_model=SetlistOut)
+def delete_track(setlist_id: int, position: int, db: Session = Depends(get_db)):
+    try:
+        return setlist_out(remove_track(db, setlist_id, position))
+    except SetEditError as exc:
+        raise _edit_error(exc) from exc
+
+
+@router.post("/{setlist_id}/tracks/{position}/move", response_model=SetlistOut)
+def move(setlist_id: int, position: int, req: MoveTrackRequest, db: Session = Depends(get_db)):
+    try:
+        return setlist_out(move_track(db, setlist_id, position, req.direction))
+    except SetEditError as exc:
+        raise _edit_error(exc) from exc
+
+
+@router.post("/{setlist_id}/tracks/{position}/replace", response_model=SetlistOut)
+def replace(setlist_id: int, position: int, req: ReplaceTrackRequest, db: Session = Depends(get_db)):
+    try:
+        return setlist_out(replace_track(db, setlist_id, position, req.track_id))
+    except SetEditError as exc:
+        raise _edit_error(exc) from exc
+
+
+@router.post("/{setlist_id}/alternatives", response_model=AlternativesResponse)
+def alternatives(setlist_id: int, req: AlternativesRequest, db: Session = Depends(get_db)):
+    setlist = get_setlist(db, setlist_id)
+    if setlist is None:
+        raise HTTPException(status_code=404, detail="Set non trovato")
+    try:
+        alts = find_alternatives(db, setlist, req.position, req.mode, req.limit)
+    except AlternativesError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return AlternativesResponse(
+        position=req.position,
+        mode=req.mode,
+        alternatives=[alternative_out(a) for a in alts],
+    )

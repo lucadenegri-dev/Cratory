@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings, setup_logging
 from app.db import ensure_schema
-from app.routers import ai, enrichment, playlists, sets, spotify, tracks, transitions
+from app.routers import ai, discovery, enrichment, playlists, sets, spotify, tracks, transitions
 
 logger = logging.getLogger("app.request")
 
@@ -51,6 +51,7 @@ app.include_router(playlists.router)
 app.include_router(spotify.router)
 app.include_router(enrichment.router)
 app.include_router(ai.router)
+app.include_router(discovery.router)
 
 
 @app.get("/api/health")

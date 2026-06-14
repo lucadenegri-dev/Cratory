@@ -5,7 +5,7 @@ per la costruzione di un set. In MVP 3 sara' anche il filtro a monte dell'AI Age
 from sqlalchemy.orm import Session
 
 from app.models import Track
-from app.repositories import all_playable_tracks
+from app.repositories import all_playable_tracks, tracks_for_playlist
 from app.schemas import SetGenerationRequest
 
 MIN_TRACK_SECONDS = 120  # esclude sample/oneshot del sampler Rekordbox
@@ -13,7 +13,12 @@ BPM_WINDOW_TOLERANCE = 12.0
 
 
 def select_candidates(db: Session, req: SetGenerationRequest) -> list[Track]:
-    tracks = all_playable_tracks(db)
+    # Nuovo flusso: se e' indicata una playlist, il set nasce SOLO da quelle tracce
+    # (servono comunque BPM/key, quindi solo le tracce arricchite sono candidate).
+    if req.playlist_id:
+        tracks = [t for t in tracks_for_playlist(db, req.playlist_id) if t.bpm is not None]
+    else:
+        tracks = all_playable_tracks(db)
     candidates: list[Track] = []
 
     bpm_lo = bpm_hi = None

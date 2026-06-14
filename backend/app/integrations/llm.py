@@ -27,7 +27,7 @@ class LLMNotConfigured(LLMError):
 
 
 class AnthropicLLMClient(LLMClient):
-    def __init__(self) -> None:
+    def __init__(self, model: str | None = None) -> None:
         if not settings.ai_api_key:
             raise LLMNotConfigured(
                 "AI_API_KEY mancante in backend/.env: impostare la chiave API Anthropic "
@@ -43,7 +43,7 @@ class AnthropicLLMClient(LLMClient):
         self.client = anthropic.Anthropic(
             api_key=settings.ai_api_key, timeout=settings.ai_timeout_seconds
         )
-        self.model = settings.ai_model or DEFAULT_MODEL
+        self.model = model or settings.ai_model or DEFAULT_MODEL
         self.effort = settings.ai_effort
         self.thinking = settings.ai_thinking
 
@@ -62,7 +62,7 @@ class AnthropicLLMClient(LLMClient):
                 messages=[{"role": "user", "content": user_content}],
                 output_config={
                     "format": {"type": "json_schema", "schema": schema},
-                    "effort": self.effort,  # senza questo Sonnet 4.6 usa effort high (lento)
+                    "effort": self.effort,  # senza questo alcuni modelli usano effort alto (lento)
                 },
             ) as stream:
                 message = stream.get_final_message()
@@ -78,9 +78,12 @@ class AnthropicLLMClient(LLMClient):
             raise LLMError(f"Output LLM non e' JSON valido: {exc}") from exc
 
 
-def get_llm_client() -> LLMClient:
-    """Factory del client LLM. Solleva LLMNotConfigured se manca la chiave."""
-    return AnthropicLLMClient()
+def get_llm_client(model: str | None = None) -> LLMClient:
+    """Factory del client LLM. Solleva LLMNotConfigured se manca la chiave.
+
+    `model` opzionale sovrascrive `AI_MODEL` (usato per la modalità creative).
+    """
+    return AnthropicLLMClient(model)
 
 
 def llm_configured() -> bool:

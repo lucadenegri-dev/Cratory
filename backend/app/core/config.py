@@ -23,13 +23,20 @@ class Settings(BaseSettings):
     spotify_redirect_uri: str = "http://127.0.0.1:8000/api/spotify/callback"
     discogs_token: str = ""
     musicbrainz_user_agent: str = ""
+    # Enrichment musicale esterno (BPM/key/mood/energia). Vuoti = provider disattivo.
+    getsongbpm_api_key: str = ""
+    lastfm_api_key: str = ""
     ai_api_key: str = ""
     ai_model: str = ""
-    # Effort dell'LLM: su Sonnet 4.6 il default e' "high" -> thinking massiccio e
-    # latenza alta. "medium" e' il compromesso giusto per il set building.
-    # Punto ottimale misurato su set reali: adaptive thinking + effort "low"
-    # ~66s con ordinamento BPM/Camelot corretto. "medium" raddoppia il tempo,
-    # "disabled" e' veloce ma sbaglia durata e progressione. (override via env)
+    # Modello per la modalità "creative" del Set Builder (vuoto = stesso di ai_model).
+    # Permette: ai_model economico (technical) + un modello più capace solo in creative.
+    ai_model_creative: str = ""
+    # Modello di default: claude-opus-4-8 (vedi integrations/llm.py).
+    # Effort/thinking bassi tengono bassa la latenza: con effort alto + thinking
+    # esteso la generazione diventa molto lenta. Ottimale misurato su set reali
+    # (su Sonnet 4.6): adaptive + effort "low" ~66s con ordinamento BPM/Camelot
+    # corretto; su Opus 4.8 i tempi possono variare. "disabled" e' veloce ma
+    # sbaglia durata e progressione. (override via env)
     ai_effort: str = "low"  # low | medium | high | max
     ai_thinking: str = "adaptive"  # adaptive | disabled
     ai_timeout_seconds: float = 120.0

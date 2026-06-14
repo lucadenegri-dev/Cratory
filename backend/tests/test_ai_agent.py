@@ -15,9 +15,11 @@ class FakeLLM(LLMClient):
         self.extra_ids = extra_ids or []
         self.duplicate_first = duplicate_first
         self.last_payload = None
+        self.last_system = None
 
     def complete_json(self, system_prompt, payload, schema):
         self.last_payload = payload
+        self.last_system = system_prompt
         cands = payload["candidate_tracks"]
         ids = [c["id"] for c in cands[: self.n]]
         if self.duplicate_first and ids:
@@ -103,3 +105,34 @@ def test_ai_agent_reports_phases(db, seed_tracks):
     generate_ai_set(db, _req(), FakeLLM(n=5), on_phase=phases.append)
     assert phases  # il job asincrono riceve le fasi
     assert any("AI" in p for p in phases)
+
+
+def test_creative_mode_uses_creative_prompt(db, seed_tracks):
+    seed_tracks(n=30)
+    llm = FakeLLM(n=6)
+    generate_ai_set(db, _req(mode="creative"), llm)
+    assert "arco emotivo" in llm.last_system.lower()
+    assert "conoscenza musicale" in llm.last_system.lower()
+
+
+def test_technical_mode_is_default(db, seed_tracks):
+    seed_tracks(n=30)
+    llm = FakeLLM(n=6)
+    generate_ai_set(db, _req(), llm)  # default = technical
+    assert "arco emotivo" not in llm.last_system.lower()
+
+
+def test_prompt_contains_candidate_profile(db, seed_tracks):
+    """Il payload verso l'AI include il profilo sintetico delle candidate."""
+    seed_tracks(n=30)
+    llm = FakeLLM(n=8)
+    generate_ai_set(db, _req(), llm)
+    profile = llm.last_payload.get("candidate_profile")
+    assert profile is not None
+    assert "bpm_range" in profile
+    assert profile["bpm_range"]  # non vuoto: le tracce hanno BPM
+    assert "key_distribution" in profile
+    assert profile["key_distribution"]  # non vuoto: le tracce hanno camelot_key
+    assert "top_genres" in profile
+    assert "missing" in profile
+    assert profile["candidate_count"] > 0

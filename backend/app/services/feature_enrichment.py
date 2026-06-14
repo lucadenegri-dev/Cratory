@@ -52,6 +52,37 @@ def _cache_key(track: Track) -> str:
     return f"ta:{t}::{a}"
 
 
+# Generi tipicamente ad alta/bassa energia: piccolo aggiustamento alla stima.
+_HIGH_ENERGY_GENRES = (
+    "techno", "hardcore", "hardstyle", "drum and bass", "dnb", "trance", "rave",
+    "gabber", "acid", "industrial", "schranz", "speed garage", "bass", "hard",
+)
+_LOW_ENERGY_GENRES = (
+    "ambient", "chill", "downtempo", "lo-fi", "lofi", "dub", "deep house",
+    "minimal", "jazz", "soul", "acoustic", "ballad", "lounge",
+)
+
+
+def estimate_energy(bpm: float | None, danceability: int | None, genre: str | None) -> int | None:
+    """Stima deterministica dell'energia (0-100) dai dati che abbiamo gia'.
+
+    NON e' energia percepita "vera" (servirebbe analisi audio, non disponibile gratis):
+    e' un proxy monotono utile all'arco del set. Base sul BPM nel range dance elettronico
+    (~110-140), miscelato con la danceability se presente, con piccolo bias per genere.
+    """
+    if bpm is None:
+        return None
+    energy = max(0.0, min(100.0, (bpm - 110.0) / 30.0 * 100.0))
+    if danceability is not None:
+        energy = 0.6 * energy + 0.4 * danceability
+    g = (genre or "").lower()
+    if any(k in g for k in _HIGH_ENERGY_GENRES):
+        energy += 12
+    elif any(k in g for k in _LOW_ENERGY_GENRES):
+        energy -= 12
+    return int(max(0, min(100, round(energy))))
+
+
 def _parse_release_date(value: Any) -> date | None:
     if isinstance(value, date):
         return value
@@ -158,6 +189,10 @@ def enrich_features(
         else:
             not_found += 1
             refresh_status(track)
+
+        # Energia: stima deterministica se nessun provider l'ha fornita (proxy da BPM/dance/genere).
+        if track.energy is None and track.bpm is not None:
+            track.energy = estimate_energy(track.bpm, track.danceability, track.genre)
 
         if on_progress:
             on_progress(i, total, "feature")

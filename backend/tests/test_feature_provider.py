@@ -119,6 +119,7 @@ def test_lookup_no_results():
 def test_factory_requires_config(monkeypatch):
     monkeypatch.setattr(config.settings, "getsongbpm_api_key", "", raising=False)
     monkeypatch.setattr(config.settings, "musicbrainz_user_agent", "", raising=False)
+    monkeypatch.setattr(config.settings, "lastfm_api_key", "", raising=False)
     assert feature_provider_configured() is False
     with pytest.raises(FeatureProviderNotConfigured):
         get_feature_provider()
@@ -131,6 +132,7 @@ def test_factory_requires_config(monkeypatch):
 def test_router_guard_and_status(monkeypatch):
     monkeypatch.setattr(config.settings, "getsongbpm_api_key", "", raising=False)
     monkeypatch.setattr(config.settings, "musicbrainz_user_agent", "", raising=False)
+    monkeypatch.setattr(config.settings, "lastfm_api_key", "", raising=False)
     with pytest.raises(HTTPException) as ei:
         enrichment.enrich(force=False)
     assert ei.value.status_code == 409
@@ -202,6 +204,7 @@ def test_chain_returns_none_if_all_empty():
 def test_factory_builds_chain_when_both_configured(monkeypatch):
     monkeypatch.setattr(config.settings, "getsongbpm_api_key", "k", raising=False)
     monkeypatch.setattr(config.settings, "musicbrainz_user_agent", "ua", raising=False)
+    monkeypatch.setattr(config.settings, "lastfm_api_key", "", raising=False)
     assert get_feature_provider().name == "chain"
     assert configured_provider_name() == "getsongbpm + musicbrainz"
 
@@ -304,3 +307,53 @@ def test_force_bypasses_cache(db, seed_tracks):
     r2 = enrich_features(db, p2, force=True)
     assert p2.calls == 4
     assert r2["cache_hits"] == 0
+
+
+# --- Last.fm tag provider + energy proxy -------------------------------------
+
+
+def test_lastfm_tag_provider_derives_mood_and_genre():
+    from app.integrations.lastfm import LastFmTagProvider
+
+    class _FakeClient:
+        def top_tags(self, artist, title, *, limit=8):
+            return ["seen live", "techno", "dark", "2010s"]
+
+    out = LastFmTagProvider(_FakeClient()).lookup(title="X", artist="Y")
+    assert out["genre_primary"] == "techno"  # primo tag valido (non junk/mood/decade)
+    assert out["mood"] == "dark"
+    assert out["confidence"] == 45
+
+
+def test_lastfm_tag_provider_none_without_useful_tags():
+    from app.integrations.lastfm import LastFmTagProvider
+
+    class _FakeClient:
+        def top_tags(self, artist, title, *, limit=8):
+            return ["favorites", "seen live"]
+
+    assert LastFmTagProvider(_FakeClient()).lookup(title="X", artist="Y") is None
+
+
+def test_estimate_energy_proxy():
+    from app.services.feature_enrichment import estimate_energy
+
+    assert estimate_energy(None, None, None) is None
+    low, high = estimate_energy(118.0, None, None), estimate_energy(138.0, None, None)
+    assert 0 <= low <= 100 and 0 <= high <= 100
+    assert high > low  # BPM piu' alto -> energia piu' alta
+    # bias di genere: techno > ambient a parita' di BPM/danceability
+    assert estimate_energy(128.0, 50, "techno") > estimate_energy(128.0, 50, "ambient")
+
+
+def test_enrichment_fills_energy_proxy(db, seed_tracks):
+    """Se il provider dà il BPM ma non l'energia, l'energia viene stimata dal proxy."""
+    from app.models import Track
+    from app.services.feature_enrichment import enrich_features
+
+    seed_tracks(n=3)
+    _null_bpm(db)
+    enrich_features(db, _CountingProvider())  # restituisce bpm 128, niente energy
+    tracks = db.query(Track).all()
+    assert all(t.bpm == 128.0 for t in tracks)
+    assert all(t.energy is not None for t in tracks)  # stimata deterministicamente

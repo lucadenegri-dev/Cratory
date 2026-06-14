@@ -2,7 +2,14 @@
 
 from app.models import CuePoint, Track
 from app.services.camelot import camelot_compatibility, parse_camelot
-from app.services.scoring import score_transition
+from app.services.scoring import (
+    bpm_compatibility_score,
+    energy_progression_score,
+    genre_similarity_score,
+    key_compatibility_score,
+    mood_coherence_score,
+    score_transition,
+)
 
 
 def make_track(bpm=None, key=None, duration=300, play_count=0, cues=0) -> Track:
@@ -67,6 +74,19 @@ def test_cue_bonus():
     with_cues = score_transition(base, make_track(bpm=130, key="7A", cues=3)).score
     without = score_transition(base, make_track(bpm=130, key="7A", cues=0)).score
     assert with_cues > without
+
+
+def test_six_named_scores():
+    # I sei score deterministici della spec (sez. 5): tutti 0-100, neutri sul dato mancante.
+    assert bpm_compatibility_score(128, 128) == 100
+    assert bpm_compatibility_score(128, 140) < bpm_compatibility_score(128, 130)
+    assert bpm_compatibility_score(None, 128) == 50
+    assert key_compatibility_score("7A", "7A") == 100
+    assert key_compatibility_score("7A", "8A") > key_compatibility_score("7A", "2B")
+    assert key_compatibility_score("7A", None) == 50
+    assert energy_progression_score(50, 55) > energy_progression_score(50, 20)
+    assert mood_coherence_score("dark", "dark") > mood_coherence_score("dark", "uplifting")
+    assert genre_similarity_score("deep house", "deep house") > genre_similarity_score("house", "techno")
 
 
 def test_score_in_range():

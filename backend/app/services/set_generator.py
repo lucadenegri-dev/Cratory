@@ -13,7 +13,13 @@ from app.models import Setlist, SetlistTrack, Track
 from app.schemas import SetGenerationRequest
 from app.services.camelot import parse_camelot
 from app.services.candidate_engine import select_candidates
-from app.services.scoring import TransitionScore, score_transition
+from app.services.scoring import (
+    TransitionScore,
+    energy_progression_score,
+    genre_similarity_score,
+    mood_coherence_score,
+    score_transition,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +38,7 @@ _STRATEGY_CURVE = {
 # Peso dello score di transizione vs aderenza alla traiettoria BPM.
 _TRANSITION_WEIGHT = 0.55
 _TRAJECTORY_WEIGHT = 0.35
+_FEATURE_WEIGHT = 0.20  # energia/mood/genere quando le feature sono disponibili
 _KEY_PREF_BONUS = 8.0
 _SEED_BONUS = 15.0
 
@@ -48,6 +55,37 @@ def _risk_level(score: int) -> str:
     return "high"
 
 
+def assign_roles(n: int) -> list[str]:
+    """Assegna un ruolo a ciascuna posizione lungo l'arco del set (deterministico).
+
+    Ruoli (vedi nuovo_progetto.md sez. 4): intro, warmup, groove, transition,
+    peak, release, closing. Il peak e' collocato intorno al 70% del set.
+    """
+    if n <= 0:
+        return []
+    if n == 1:
+        return ["intro"]
+    roles: list[str] = []
+    peak_at = max(1, round((n - 1) * 0.7))
+    for i in range(n):
+        frac = i / (n - 1)
+        if i == 0:
+            roles.append("intro")
+        elif i == n - 1:
+            roles.append("closing")
+        elif i == peak_at:
+            roles.append("peak")
+        elif i > peak_at:
+            roles.append("release")
+        elif frac < 0.25:
+            roles.append("warmup")
+        elif frac < 0.55:
+            roles.append("groove")
+        else:
+            roles.append("transition")
+    return roles
+
+
 def _desired_bpm(start: float, end: float, progress: float, strategy: str) -> float:
     exp = _STRATEGY_CURVE.get(strategy, 1.0)
     return start + (end - start) * (progress ** exp)
@@ -57,6 +95,35 @@ def _trajectory_fit(bpm: float | None, desired: float) -> float:
     if not bpm:
         return 40.0
     return max(0.0, 100.0 - abs(bpm - desired) * 8.0)
+
+
+def _desired_energy(req: SetGenerationRequest, progress: float) -> float | None:
+    """Energia target lungo il set (0-100), interpolata start->end. None se non richiesta."""
+    if req.start_energy is None and req.end_energy is None:
+        return None
+    start = req.start_energy if req.start_energy is not None else req.end_energy
+    end = req.end_energy if req.end_energy is not None else req.start_energy
+    return start + (end - start) * progress
+
+
+def _feature_fit(prev: Track, cand: Track, req: SetGenerationRequest,
+                 desired_energy: float | None) -> float | None:
+    """Blend 0-100 di energia/mood/genere, solo sui segnali effettivamente presenti.
+
+    Ritorna None se la traccia non ha alcuna feature (dataset non arricchito):
+    in quel caso il termine feature non incide sul ranking.
+    """
+    feats: list[float] = []
+    if prev.energy is not None and cand.energy is not None:
+        feats.append(float(energy_progression_score(prev.energy, cand.energy)))
+    if desired_energy is not None and cand.energy is not None:
+        feats.append(max(0.0, 100.0 - abs(cand.energy - desired_energy)))
+    ref_mood = req.start_mood or prev.mood
+    if cand.mood and ref_mood:
+        feats.append(float(mood_coherence_score(ref_mood, cand.mood)))
+    if prev.genre and cand.genre:
+        feats.append(float(genre_similarity_score(prev.genre, cand.genre)))
+    return sum(feats) / len(feats) if feats else None
 
 
 def _pick_first(candidates: list[Track], req: SetGenerationRequest, start_bpm: float) -> Track:
@@ -73,7 +140,7 @@ def _pick_first(candidates: list[Track], req: SetGenerationRequest, start_bpm: f
 
 def _candidate_score(
     prev: Track, cand: Track, desired_bpm: float, req: SetGenerationRequest,
-    artist_counts: dict[str, int],
+    artist_counts: dict[str, int], desired_energy: float | None = None,
 ) -> tuple[float, TransitionScore]:
     ts = score_transition(prev, cand, penalize_overplayed=req.avoid_overplayed)
     transition_pts = float(ts.score)
@@ -83,7 +150,10 @@ def _candidate_score(
     total = transition_pts * _TRANSITION_WEIGHT
     if req.prefer_progressive_bpm:
         total += _trajectory_fit(cand.bpm, desired_bpm) * _TRAJECTORY_WEIGHT
-    if req.prefer_harmonic and req.preferred_keys and cand.tonality in req.preferred_keys:
+    feature_fit = _feature_fit(prev, cand, req, desired_energy)
+    if feature_fit is not None:
+        total += feature_fit * _FEATURE_WEIGHT
+    if req.prefer_harmonic and req.preferred_keys and (cand.camelot_key or cand.tonality) in req.preferred_keys:
         total += _KEY_PREF_BONUS
     seeds = [s.lower() for s in req.seed_artists]
     if seeds and cand.artist and any(seed in cand.artist.lower() for seed in seeds):
@@ -145,6 +215,7 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
         prev = chosen[-1][0]
         progress = min(1.0, total_seconds / target_seconds)
         desired = _desired_bpm(start_bpm, end_bpm, progress, req.strategy)
+        desired_energy = _desired_energy(req, progress)
 
         eligible = [
             t for t in remaining
@@ -154,7 +225,7 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
         if not eligible:
             break
 
-        scored = [(_candidate_score(prev, t, desired, req, artist_counts), t) for t in eligible]
+        scored = [(_candidate_score(prev, t, desired, req, artist_counts, desired_energy), t) for t in eligible]
         ((_, ts), best) = max(scored, key=lambda item: item[0][0])
 
         chosen.append((best, ts))
@@ -172,10 +243,12 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
         prompt=req.prompt,
         global_explanation=_explanation(chosen, req, total_seconds),
     )
+    roles = assign_roles(len(chosen))
     for position, (track, ts) in enumerate(chosen, start=1):
         setlist.tracks.append(SetlistTrack(
             track_id=track.id,
             position=position,
+            role=roles[position - 1],
             transition_score=float(ts.score) if ts else None,
             transition_reason="; ".join(ts.technical_reasons) if ts else "traccia di apertura",
             risk_level=_risk_level(ts.score) if ts else "low",

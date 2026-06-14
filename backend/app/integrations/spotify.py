@@ -25,7 +25,10 @@ logger = logging.getLogger(__name__)
 
 ACCOUNTS = "https://accounts.spotify.com"
 API = "https://api.spotify.com/v1"
-SCOPES = "playlist-modify-private playlist-modify-public"
+SCOPES = (
+    "playlist-modify-private playlist-modify-public "
+    "playlist-read-private playlist-read-collaborative user-library-read"
+)
 BATCH = 50  # max id per chiamata tracks/artists
 MAX_RETRY_WAIT = 30  # oltre questa attesa (s) su 429 si abortisce invece di dormire
 SINGLE_GET_DELAY = 0.08  # pausa tra GET singole (fallback) per non saturare il rate limit
@@ -217,6 +220,51 @@ class SpotifyWebClient(SpotifyClient):
 
     def get_artists_batch(self, ids: list[str], on_progress=None) -> list[dict[str, Any] | None]:
         return self._get_many("artists", ids, on_progress)
+
+    # ---- resolver Discovery (Fase F) ------------------------------------
+
+    def search_track(self, artist: str, title: str) -> dict[str, Any] | None:
+        """Risolve 'artista + titolo' (es. da Last.fm) in una traccia Spotify reale.
+
+        L'endpoint /search funziona anche in development mode (a differenza di
+        /recommendations). Ritorna il dict traccia Spotify o None se nessun match.
+        """
+        if not artist or not title:
+            return None
+        query = f'track:{title} artist:{artist}'
+        try:
+            data = self._get("/search", params={"q": query, "type": "track", "limit": 5})
+        except SpotifyError as exc:
+            logger.warning("Spotify search_track(%r/%r) fallito: %s", artist, title, exc)
+            return None
+        items = (data.get("tracks") or {}).get("items") or []
+        return items[0] if items else None
+
+    # ---- import playlist (nuovo flusso) ---------------------------------
+
+    def _paginate(self, path: str, *, params: dict | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        """Scorre un endpoint paginato dell'utente raccogliendo tutti gli `items`."""
+        items: list[dict[str, Any]] = []
+        params = {**(params or {}), "limit": limit, "offset": 0}
+        while True:
+            page = self._get(path, user=True, params=params)
+            items.extend(page.get("items") or [])
+            if not page.get("next"):
+                break
+            params["offset"] += limit
+        return items
+
+    def list_user_playlists(self) -> list[dict[str, Any]]:
+        return self._paginate("/me/playlists")
+
+    def get_playlist_meta(self, playlist_id: str) -> dict[str, Any]:
+        return self._get(f"/playlists/{playlist_id}", user=True)
+
+    def get_playlist_tracks(self, playlist_id: str) -> list[dict[str, Any]]:
+        return self._paginate(f"/playlists/{playlist_id}/tracks")
+
+    def get_liked_tracks(self) -> list[dict[str, Any]]:
+        return self._paginate("/me/tracks")
 
     def create_playlist(self, name: str, track_ids: list[str]) -> str:
         me = self._get("/me", user=True)

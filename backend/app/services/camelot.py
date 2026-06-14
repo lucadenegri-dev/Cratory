@@ -21,6 +21,45 @@ def parse_camelot(value: str | None) -> tuple[int, str] | None:
     return number, m.group(2).upper()
 
 
+# Mappa classe di altezza (0=C ... 11=B) -> Camelot, per maggiore e minore.
+# Maggiore = lettera B della ruota, minore = lettera A (relativa).
+_MAJOR_CAMELOT = {0: "8B", 1: "3B", 2: "10B", 3: "5B", 4: "12B", 5: "7B",
+                  6: "2B", 7: "9B", 8: "4B", 9: "11B", 10: "6B", 11: "1B"}
+_MINOR_CAMELOT = {0: "5A", 1: "12A", 2: "7A", 3: "2A", 4: "9A", 5: "4A",
+                  6: "11A", 7: "6A", 8: "1A", 9: "8A", 10: "3A", 11: "10A"}
+_NOTE_PC = {
+    "C": 0, "B#": 0, "C#": 1, "DB": 1, "D": 2, "D#": 3, "EB": 3, "E": 4, "FB": 4,
+    "E#": 5, "F": 5, "F#": 6, "GB": 6, "G": 7, "G#": 8, "AB": 8, "A": 9, "A#": 10,
+    "BB": 10, "B": 11, "CB": 11,
+}
+
+
+def pitch_to_camelot(value: str | None) -> str | None:
+    """Converte una key musicale (es. 'Am', 'C#m', 'F# minor', 'Db') in Camelot.
+
+    Una key senza modo esplicito viene letta come MAGGIORE (convenzione comune).
+    Ritorna None se non interpretabile (mai inventare la tonalita').
+    """
+    if not value:
+        return None
+    s = value.strip().replace("♯", "#").replace("♭", "b").replace("−", "-")
+    s = s.replace("-sharp", "#").replace("-flat", "b")
+    if not s or s[0] not in "ABCDEFGabcdefg":
+        return None
+    note = s[0].upper()
+    rest = s[1:]
+    if rest[:1] in ("#", "b"):  # accidentale (es. C#, Db); 'm' resta nel modo
+        note += rest[:1]
+        rest = rest[1:]
+    pc = _NOTE_PC.get(note.upper())
+    if pc is None:
+        return None
+    mode = rest.strip().lower()
+    is_minor = mode in ("m", "min", "minor", "-") or mode.startswith("min")
+    table = _MINOR_CAMELOT if is_minor else _MAJOR_CAMELOT
+    return table[pc]
+
+
 def camelot_compatibility(key_a: str | None, key_b: str | None) -> tuple[str, str]:
     """Classifica la compatibilita' armonica tra due key Camelot.
 
