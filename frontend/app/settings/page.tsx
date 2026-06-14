@@ -68,9 +68,12 @@ function SettingsInner() {
           {spotify?.configured && (
             <>
               <div className="flex flex-wrap items-center gap-3">
-                <span className="flex items-center gap-2"><Dot on={spotify.user_connected} /> {spotify.user_connected ? "Account collegato" : "Account non collegato (serve solo per creare playlist)"}</span>
-                {!spotify.user_connected && <a href={SPOTIFY_LOGIN_URL}><Button size="sm" variant="outline"><ExternalLink size={14} /> Collega Spotify</Button></a>}
+                <span className="flex items-center gap-2"><Dot on={spotify.user_connected} /> {spotify.user_connected ? "Account collegato" : "Account non collegato (necessario per importare e creare playlist)"}</span>
+                <a href={SPOTIFY_LOGIN_URL}><Button size="sm" variant="outline"><ExternalLink size={14} /> {spotify.user_connected ? "Ricollega" : "Collega Spotify"}</Button></a>
               </div>
+              {spotify.user_connected && (
+                <p className="text-xs text-muted">Se l&apos;import playlist dà <code className="rounded bg-elevated px-1">403 Insufficient client scope</code>, premi <strong>Ricollega</strong>: il token è stato emesso prima dell&apos;aggiunta dei permessi di lettura playlist e va riautorizzato.</p>
+              )}
 
               <div className="rounded-lg border border-border bg-bg p-3">
                 <p className="mb-1.5 text-muted">Redirect URI da incollare <strong>esatto</strong> nel dashboard Spotify:</p>

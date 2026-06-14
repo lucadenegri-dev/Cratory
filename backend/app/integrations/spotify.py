@@ -63,6 +63,11 @@ def build_authorize_url(state: str) -> str:
         "redirect_uri": settings.spotify_redirect_uri,
         "scope": SCOPES,
         "state": state,
+        # Forza la schermata di consenso: se l'utente ha gia' autorizzato con
+        # scope piu' ristretti (es. prima dell'aggiunta di playlist-read-*),
+        # senza questo Spotify riuserebbe il vecchio grant e il token resterebbe
+        # senza i nuovi scope (-> 403 "Insufficient client scope" su /me/playlists).
+        "show_dialog": "true",
     })
     return f"{ACCOUNTS}/authorize?{params}"
 
