@@ -71,6 +71,39 @@ def ensure_schema(eng=None) -> None:
             for col, ddl in cols.items():
                 if col not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+        _relax_rekordbox_not_null(conn)
+
+
+def _relax_rekordbox_not_null(conn) -> None:
+    """Rende `tracks.rekordbox_track_id` nullable nei DB creati prima del pivot.
+
+    In MVP 1 la colonna era `NOT NULL` (Rekordbox era la fonte primaria); col pivot
+    e' diventata opzionale, ma SQLite non supporta ALTER COLUMN. Ricostruisce quindi
+    la tabella preservando righe, indici e relazioni (setlist). Idempotente: dopo la
+    prima esecuzione `notnull` e' 0 e la funzione esce subito.
+    """
+    info = conn.execute(text("PRAGMA table_info(tracks)")).fetchall()
+    col = next((r for r in info if r[1] == "rekordbox_track_id"), None)
+    if col is None or col[3] == 0:  # r[3] = flag notnull: gia' nullable o assente
+        return
+    create_sql = conn.execute(text(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='tracks'"
+    )).scalar() or ""
+    new_create = create_sql.replace(
+        "rekordbox_track_id VARCHAR NOT NULL", "rekordbox_track_id VARCHAR"
+    ).replace("CREATE TABLE tracks", "CREATE TABLE tracks_new", 1)
+    if "tracks_new" not in new_create or "rekordbox_track_id VARCHAR NOT NULL" in new_create:
+        return  # forma del DDL inattesa: non rischiare la migrazione automatica
+    index_sqls = [r[0] for r in conn.execute(text(
+        "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='tracks' AND sql IS NOT NULL"
+    )).fetchall()]
+    collist = ", ".join(f'"{r[1]}"' for r in info)
+    conn.execute(text(new_create))
+    conn.execute(text(f"INSERT INTO tracks_new ({collist}) SELECT {collist} FROM tracks"))
+    conn.execute(text("DROP TABLE tracks"))
+    conn.execute(text("ALTER TABLE tracks_new RENAME TO tracks"))
+    for isql in index_sqls:
+        conn.execute(text(isql))
 
 
 def get_db():

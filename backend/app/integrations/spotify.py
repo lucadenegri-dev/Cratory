@@ -266,7 +266,11 @@ class SpotifyWebClient(SpotifyClient):
         return self._get(f"/playlists/{playlist_id}", user=True)
 
     def get_playlist_tracks(self, playlist_id: str) -> list[dict[str, Any]]:
-        return self._paginate(f"/playlists/{playlist_id}/tracks")
+        # Endpoint /items (non /tracks): per le app in Development Mode Spotify
+        # risponde 403 Forbidden su /playlists/{id}/tracks, mentre /items (la forma
+        # canonica attuale, che include anche gli episodi) funziona. La normalizzazione
+        # gestisce entrambe le forme item (item["item"] vs item["track"]).
+        return self._paginate(f"/playlists/{playlist_id}/items")
 
     def get_liked_tracks(self) -> list[dict[str, Any]]:
         return self._paginate("/me/tracks")

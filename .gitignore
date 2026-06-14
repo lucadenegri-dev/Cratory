@@ -12,7 +12,9 @@ venv/
 # Database
 *.db
 *.sqlite3
+*.bak
 backend/data/
+data/
 
 # Logs
 backend/logs/

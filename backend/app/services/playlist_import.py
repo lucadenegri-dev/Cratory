@@ -53,9 +53,14 @@ def _parse_added_at(value: str | None) -> datetime | None:
 
 
 def normalize_spotify_item(item: dict) -> NormalizedTrack | None:
-    """Item di /playlists/{id}/tracks o /me/tracks -> NormalizedTrack."""
-    track = item.get("track") or {}
-    if not track or track.get("type") == "episode" or track.get("is_local"):
+    """Item di playlist/liked -> NormalizedTrack.
+
+    L'oggetto traccia sta sotto chiavi diverse a seconda dell'endpoint:
+    - /me/tracks (liked): item["track"]
+    - /playlists/{id}/items: item["item"]  (/tracks ora da' 403 in Development Mode)
+    """
+    track = item.get("track") or item.get("item") or {}
+    if not track or track.get("type") == "episode" or item.get("is_local") or track.get("is_local"):
         return None
     tid = track.get("id")
     if not tid:

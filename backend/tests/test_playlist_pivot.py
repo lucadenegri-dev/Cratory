@@ -45,6 +45,27 @@ def test_normalize_skips_episodes_and_locals():
     assert norm.added_at is not None
 
 
+def _playlist_items_entry(tid: str, *, name: str, artist: str, isrc: str | None = None) -> dict:
+    """Forma dell'endpoint /playlists/{id}/items: la traccia sta sotto 'item'."""
+    base = _spotify_item(tid, name=name, artist=artist, isrc=isrc)
+    return {"added_at": base["added_at"], "is_local": False, "item": base["track"]}
+
+
+def test_normalize_handles_playlist_items_shape():
+    # /playlists/{id}/items annida la traccia sotto 'item' (non 'track'): in
+    # Development Mode l'endpoint /tracks da' 403, /items e' quello usato.
+    norm = normalize_spotify_item(
+        _playlist_items_entry("abc", name="T", artist="A", isrc="IT1234500001")
+    )
+    assert norm is not None
+    assert norm.platform_track_id == "abc"
+    assert norm.isrc == "IT1234500001"
+    assert norm.duration_seconds == 200
+    # episodi e brani locali scartati anche nella forma 'item'
+    assert normalize_spotify_item({"item": {"id": "x", "type": "episode"}}) is None
+    assert normalize_spotify_item({"is_local": True, "item": {"id": "x", "type": "track"}}) is None
+
+
 def test_import_playlist_is_idempotent_and_dedups_by_isrc(db):
     items = [
         _spotify_item("t1", name="One", artist="A", isrc="ISRC0000001"),

@@ -67,7 +67,9 @@ def spotify_available(db: Session = Depends(get_db)):
             platform_playlist_id=p["id"],
             name=p.get("name") or "(senza nome)",
             owner=(p.get("owner") or {}).get("display_name"),
-            track_count=(p.get("tracks") or {}).get("total", 0),
+            # in Development Mode /me/playlists puo' restituire tracks=null e spostare
+            # il conteggio nel paging object 'items': accettiamo entrambe le forme.
+            track_count=((p.get("tracks") or p.get("items") or {}).get("total")) or 0,
             url=(p.get("external_urls") or {}).get("spotify"),
             artwork_url=images[0]["url"] if images else None,
         ))
