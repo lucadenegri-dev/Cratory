@@ -47,11 +47,11 @@ Node è in `C:\Program Files\nodejs` (nei terminali vecchi aggiungere al PATH: `
 
 ```
 routers/       playlists, tracks, transitions, sets, spotify, enrichment, ai
-services/      playlist_import, enrichment, feature_enrichment, track_status,
+routers/       + discovery
+services/      playlist_import, manual_import, feature_enrichment, track_status,
                scoring, candidate_engine, set_generator, ai_agent, validation,
-               set_editor, alternatives, gap_analysis, camelot
-integrations/  spotify.py, llm.py, getsongbpm.py, musicbrainz.py
-               (+ lastfm.py da aggiungere)
+               set_editor, alternatives, gap_analysis, camelot, discovery
+integrations/  spotify.py, llm.py, getsongbpm.py, musicbrainz.py, lastfm.py
 repositories.py, models.py, schemas.py, serializers.py
 core/          config.py (setup_logging, Settings)
 ```
@@ -60,12 +60,19 @@ core/          config.py (setup_logging, Settings)
 
 Consultare **`PROGRESS.md`** (checklist aggiornata a ogni milestone, da committare).
 
+Completati: D1 Rimozione Rekordbox · D2 Cache enrichment · E AI prompt arricchito (`candidate_profile`) · F Discovery mode (read pipeline).
+
+> **Discovery è Last.fm-centric.** Spotify `/recommendations` è deprecato (403/404 per app in development mode dal 27/11/2024). Last.fm fornisce la similarità (`integrations/lastfm.py`), Spotify resta solo resolver (`SpotifyWebClient.search_track`, endpoint `/search`). L'AI spiega ma non sceglie i candidati.
+
+Completati anche: **Discovery write-back** (`POST /api/discovery/add` → libreria dell'app via `import_single_track`), **Import manuale playlist** (`services/manual_import.py`), **enrichment mood/energia** (Last.fm `LastFmTagProvider` per genere+mood dai tag; `estimate_energy` proxy deterministico) e **rimozione enrichment metadata Spotify** (i metadata arrivano dall'import; `year` catturato lì).
+
+> **Enrichment feature** = catena GetSongBPM (BPM/key/dance) → MusicBrainz (label/release/genere) → Last.fm (genere+mood). L'energia è un proxy stimato (`estimate_energy`), non un dato di un provider. Non esiste fonte gratuita per mood/energia reali (Spotify audio-features deprecato).
+
+**Toggle Set Builder technical/creative** fatto: `mode` su `SetGenerationRequest`; `CREATIVE_SYSTEM_PROMPT` (l'AI usa la sua conoscenza musicale, sempre validata); `AI_MODEL_CREATIVE` opzionale + `_model_for(req)` in `sets.py` per usare un modello più capace solo in creative.
+
 Prossimi step nell'ordine:
-1. **Rimozione Rekordbox** — elimina `routers/imports.py`, `services/rekordbox_parser.py`, `services/import_service.py`, voce dashboard XML upload, fixture `export_rekordbox.xml` e relativi test.
-2. **Cache enrichment** — persistere risposte GetSongBPM/MusicBrainz in DB per evitare ricalcoli.
-3. **AI prompt arricchito** — passare al LLM il profilo completo della playlist (BPM arc, keys dominanti, gap identificati, mood target) oltre ai soli candidati.
-4. **Discovery mode** — gap-driven + playlist-seed, combinando Spotify `/recommendations` e Last.fm similar artists; AI spiega perché ogni traccia suggerita risolve il problema.
-5. **Import manuale playlist** (backlog) — CSV o testo libero "Artista - Titolo", parsing + enrichment automatico.
-6. **SoundCloud import** (backlog) — valutare fattibilità API prima di implementare.
+1. **Valutare modello AI economico** (Haiku 4.5 via `AI_MODEL`, o provider locale Ollama dietro l'ABC `LLMClient`). Con il toggle, technical può girare su un modello economico di default.
+2. **Test reale** Discovery + enrichment + creative con chiavi (`LASTFM_API_KEY`/`GETSONGBPM_API_KEY`/`AI_API_KEY`).
+3. **SoundCloud import** / **F10** / **PostgreSQL** (backlog).
 
 Vedere `docs/06-roadmap.md` per checklist dettagliata.

@@ -4,9 +4,11 @@
 
 ## Stato attuale
 
-**Fase:** MVP 1-3 + Pivot Fasi A-C completati e testati (76 backend verdi). **Nuovo scope (14/06/2026):** rimozione Rekordbox, AI prompt arricchito, Discovery mode. Prossimo: pulizia Rekordbox.
+**Fase:** D1-F + Discovery write-back + Import manuale + enrichment mood/energia + rimozione enrich Spotify + toggle Set Builder technical/creative (90 test verdi, 14/06/2026). Discovery è Last.fm-centric. Prossimo: valutazione modello AI economico (Haiku/Ollama); test reale con chiavi.
 
 **Ultimo aggiornamento:** 2026-06-14
+
+> **Allineamento spec `nuovo_progetto.md` verificato (14/06/2026).** Progetto e documentazione (`docs/01`→`06`, `README`, `CLAUDE.md`) confrontati riga per riga con la nuova specifica: import playlist (Spotify utente/collaborative/liked + manuale, SoundCloud in backlog), rimozione Rekordbox, enrichment con tutti i campi richiesti, Set Builder con input/output e ruoli `intro|warmup|groove|transition|peak|release|closing`, separazione algoritmo/AI, gap analysis, set editor, export (Markdown/CSV/testo + playlist Spotify; link SoundCloud in backlog). **Tutto già implementato.** Unico ritocco di codice: aggiunti a `services/scoring.py` i due score standalone mancanti `bpm_compatibility_score` e `key_compatibility_score` (0-100), così tutti i sei score nominati dalla spec sez. 5 esistono come funzioni pubbliche e l'architettura doc è accurata (+1 test in `test_scoring.py`).
 
 ---
 
@@ -24,42 +26,73 @@ Il progetto ha ridefinito il perimetro:
 
 ## Roadmap nuova
 
-### Fase D1 — Rimozione Rekordbox
+### Fase D1 — Rimozione Rekordbox ✅ (14/06/2026)
 
-- [ ] Elimina `routers/imports.py` + endpoint `POST /api/imports`
-- [ ] Elimina `services/rekordbox_parser.py` + `services/import_service.py`
-- [ ] Rimuovi `export_rekordbox.xml` e `tests/conftest.py` fixture che la usa
-- [ ] Aggiorna `tests/` che dipendono da Rekordbox (rimpiazza fixture con dati sintetici Spotify)
-- [ ] Rimuovi voce "Upload XML" dalla dashboard frontend
-- [ ] Rimuovi `lxml` da `requirements.txt`
-- [ ] Verifica: `pytest` verde, `npm run build` OK, `/api/tracks` mostra solo tracce da Spotify
+- [x] Elimina `routers/imports.py` + endpoint `POST /api/imports`
+- [x] Elimina `services/rekordbox_parser.py` + `services/import_service.py`
+- [x] Rimuovi `export_rekordbox.xml` e `tests/conftest.py` fixture che la usa
+- [x] Aggiorna `tests/` che dipendono da Rekordbox (rimpiazza fixture con dati sintetici Spotify)
+- [x] Rimuovi voce "Upload XML" dalla dashboard frontend
+- [x] Rimuovi `lxml` da `requirements.txt`
+- [x] Verifica: `pytest` verde, `npm run build` OK, `/api/tracks` mostra solo tracce da Spotify
 
-### Fase D2 — Cache enrichment
+### Fase D2 — Cache enrichment ✅ (14/06/2026)
 
-- [ ] Aggiunge tabella/colonne cache in DB: `enrichment_cache` (provider, lookup_key, result_json, cached_at)
-- [ ] `feature_enrichment.py`: legge dalla cache prima di chiamare il provider
-- [ ] `GET /api/enrichment/features/status` espone hit/miss ratio
-- [ ] Test: enrichment su traccia già in cache → zero chiamate rete
+- [x] Aggiunge tabella/colonne cache in DB: `enrichment_cache` (provider, lookup_key, result_json, cached_at)
+- [x] `feature_enrichment.py`: bulk pre-load cache, legge dalla cache prima di chiamare il provider
+- [x] Cache upsert: aggiorna riga esistente o inserisce nuova; caches anche not-found (None)
+- [x] Test: enrichment su traccia già in cache → zero chiamate rete; force=True bypassa cache
 
-### Fase E — AI prompt arricchito
+### Fase E — AI prompt arricchito ✅ (14/06/2026)
 
-- [ ] `ai_agent.py`: calcola profilo playlist (BPM arc, Camelot distribution, top generi, mood medio, gap identificati) e lo include nel prompt
-- [ ] Il prompt specifica esplicitamente cosa vuole l'utente (mood target, energia, durata) come vincoli narrativi
-- [ ] Test: `FakeLLM` riceve il profilo completo nel prompt (assertion su contenuto)
+- [x] `ai_agent.py`: calcola profilo candidate (BPM arc, Camelot distribution, top generi, avg energia, lacune) e lo include nel payload come `candidate_profile`
+- [x] System prompt aggiornato: istruisce l'AI a usare `candidate_profile` per la visione d'insieme
+- [x] Test: `FakeLLM` riceve il profilo completo nel payload (assertion su bpm_range, key_distribution)
 
-### Fase F — Discovery mode
+### Fase F — Discovery mode ✅ (14/06/2026, read pipeline)
 
-- [ ] Integrazione `SpotifyRecommendationsClient`: seed tracks + audio features → lista candidati
-- [ ] Integrazione `LastFMProvider` concreto: similar artists → candidati aggiuntivi
-- [ ] `services/discovery.py`: orchestratore che combina le due fonti, dedup, ranking per compatibilità con il set/playlist
-- [ ] Endpoint `POST /api/discovery/gap` (gap-driven: riceve gap identificato, restituisce candidati rankkati)
-- [ ] Endpoint `POST /api/discovery/expand` (playlist-seed: riceve playlist_id, restituisce candidati per espanderla)
-- [ ] AI: per ogni candidato spiega perché risolve il problema specifico (gap BPM, energia, Camelot)
-- [ ] Frontend: pagina Discovery con due tab (Gap-driven / Espandi playlist), card traccia con score di compatibilità e spiegazione AI, azione "Aggiungi a playlist"
+> **Pivot architetturale:** Spotify `/recommendations` (+ related-artists, audio-features) è
+> **deprecato dal 27/11/2024**: restituisce 403/404 alle app nuove o in development mode
+> (esattamente il caso di questa app). Discovery è quindi **Last.fm-centric**: Last.fm fornisce
+> la similarità, Spotify resta solo resolver (endpoint `/search`, funzionante in dev mode).
+
+- [x] Integrazione `LastFMClient` concreto (`integrations/lastfm.py`): `similar_artists`, `similar_tracks`, `artist_top_tracks`, `top_tracks_by_tag`; httpx iniettabile, normalizza il dict-singolo di Last.fm
+- [x] ABC `SimilarityClient` in `integrations/__init__.py`
+- [x] Resolver Spotify: `SpotifyWebClient.search_track(artist, title)` (client_credentials, dev-mode safe)
+- [x] `services/discovery.py`: orchestratore (seed → similarità → dedup vs libreria → resolve → ranking per compatibilità). Dedup per (artista,titolo) e per ISRC post-resolve
+- [x] Endpoint `POST /api/discovery/expand` (playlist-seed) e `POST /api/discovery/gap` (gap-driven, usa tag per i gap di genere) + `GET /api/discovery/status`
+- [x] AI (opzionale, best-effort): spiega in una frase perché ogni candidato è coerente / colma il gap; non sceglie i candidati
+- [x] Frontend: pagina Discovery con due tab (Espandi playlist / Colma un buco), card traccia con compatibilità, sorgente, spiegazione AI e link Spotify
+- [x] Test: `test_discovery.py` (9) — parsing Last.fm senza rete, dedup libreria/ISRC, ranking, resolver, spiegazioni AI, gap per genere, add-to-library
+- [x] **Write-back:** `POST /api/discovery/add` importa il candidato nella **libreria dell'app** (decisione utente: non su Spotify). `playlist_import.import_single_track` (idempotente, dedup ISRC/spotify_id). Bottone "Aggiungi" sulla card
+- [ ] **Da fare:** test reale Discovery con chiave Last.fm
+
+### Backlog → Import manuale playlist ✅ (14/06/2026)
+
+- [x] `services/manual_import.py`: `parse_line` ("Artista - Titolo", en/em dash, TSV, CSV, solo-titolo) + `import_manual_playlist` (playlist `kind=manual`, dedup per nome vs libreria)
+- [x] Endpoint `POST /api/playlists/import-manual` (422 se nessuna traccia riconosciuta)
+- [x] Frontend: card "Import manuale" nella pagina Playlist (nome + textarea tracklist)
+- [x] Test `test_manual_import.py` (4)
+
+### Enrichment mood/energia + rimozione enrich Spotify ✅ (14/06/2026)
+
+- [x] Last.fm `track.getTopTags` → `LastFmTagProvider` (`MusicFeatureProvider`): ricava **mood** (mappa tag→mood) e genere (fallback) dai top tag; in catena dopo GetSongBPM/MusicBrainz
+- [x] **Energy proxy** deterministico (`estimate_energy`): stima energia da BPM + danceability + genere (Spotify audio-features deprecato, Cyanite a pagamento) → gli score d'arco non lavorano più su dati vuoti
+- [x] **Rimosso l'enrichment metadata Spotify** (ridondante: i metadata arrivano dall'import; sorgente = Spotify, non più Rekordbox): cancellati `services/enrichment.py`, endpoint `/api/spotify/enrich*`, `test_enrichment.py`, card UI + tipi TS. `year` ora catturato all'import per non perderlo
+- [x] Test: tag provider, energy proxy, enrichment popola energia (`test_feature_provider.py`); top_tags parsing (`test_discovery.py`). **88 verdi**, frontend build OK
+
+### Toggle Set Builder technical / creative ✅ (14/06/2026)
+
+- [x] Campo `mode: technical|creative` su `SetGenerationRequest` (default technical)
+- [x] `CREATIVE_SYSTEM_PROMPT` in `ai_agent.py`: l'AI usa la sua conoscenza musicale (arco emotivo, contrasti, sorprese) restando vincolata alle candidate + Validation Engine invariato
+- [x] Modello per-modalità: `AI_MODEL_CREATIVE` (opzionale) → `get_llm_client(model)`; `_model_for(req)` in `sets.py`. Permette AI_MODEL economico + modello capace solo in creative
+- [x] Frontend: toggle Tecnico/Creativo nel Set Builder (visibile quando l'AI è attiva)
+- [x] Test: prompt creative vs technical (`test_ai_agent.py`). **90 verdi**, build OK
 
 ### Backlog
 
-- [ ] Import manuale playlist (CSV o testo "Artista - Titolo")
+- [x] Import manuale playlist (CSV o testo "Artista - Titolo") — fatto 14/06/2026
+- [ ] Valutare modello più economico per l'AI (Haiku 4.5 via AI_MODEL / provider locale Ollama dietro l'ABC) — discusso 14/06
 - [ ] SoundCloud import (valutare fattibilità API prima)
 - [ ] F10 Transition Finder classification (technically safe / creative risk / good reset)
 - [ ] Last.fm provider per generi/tag aggiuntivi (blocco enrichment)
@@ -129,4 +162,4 @@ Il progetto ha ridefinito il perimetro:
 - Node in `C:\Program Files\nodejs` (nei terminali vecchi: `$env:Path += ";C:\Program Files\nodejs"`).
 - Next.js 16: `params` è una `Promise` nei client component — usare `use(params)`.
 - OAuth Spotify: redirect URI deve essere esattamente `http://127.0.0.1:8000/api/spotify/callback` nel dashboard Spotify.
-- AI: senza impostare l'effort, Sonnet 4.6 usa default `high` → thinking massiccio → blocco. Usare sempre `AI_EFFORT=low` + `AI_THINKING=adaptive`.
+- AI: modello di default `claude-opus-4-8` (override `AI_MODEL`). Con effort alto + thinking esteso la generazione è molto lenta → usare `AI_EFFORT=low` + `AI_THINKING=adaptive`.

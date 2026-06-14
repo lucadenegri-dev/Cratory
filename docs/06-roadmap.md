@@ -8,49 +8,40 @@
 - **Pivot Fase A** ✅ data model streaming-first, import playlist Spotify, gap analysis, ruoli set.
 - **Pivot Fase B** ✅ GetSongBPMProvider, MusicBrainzProvider, ChainedFeatureProvider, router enrichment async.
 - **Pivot Fase C** ✅ set da playlist (candidate scoped), scoring feature energia/mood/genere, export Markdown.
+- **Fase D1 — Rimozione Rekordbox** ✅ import Rekordbox eliminato, test su dati sintetici Spotify, `lxml` rimosso.
+- **Fase D2 — Cache enrichment** ✅ tabella `enrichment_cache`, bulk pre-load + upsert, caches anche i not-found, `force` bypassa la lettura.
+- **Fase E — AI prompt arricchito** ✅ `ai_agent._compute_candidate_profile` (BPM arc, Camelot, generi, energia, lacune) nel payload come `candidate_profile`; system prompt aggiornato.
+- **Fase F — Discovery mode** ✅ (read pipeline) Last.fm-centric, vedi sotto.
 
 ---
 
-## In lavorazione
+## Fase F — Discovery mode (dettaglio)
 
-### Fase D1 — Rimozione Rekordbox
+Suggerisce musica nuova compatibile con il set/playlist. Due entry point sugli stessi servizi.
 
-Rekordbox XML non è più parte del flusso. Si rimuove l'intero import Rekordbox e si ripulisce il codice dipendente.
+> **Pivot:** Spotify `/recommendations` (+ related-artists, audio-features) è **deprecato dal 27/11/2024** e restituisce 403/404 alle app nuove o in development mode. Discovery è quindi **Last.fm-centric**; Spotify resta solo resolver (`/search`, funzionante in dev mode). Recommendations resta agganciabile come fonte opzionale se in futuro si ottiene extended quota.
 
-- [ ] Elimina `routers/imports.py` + endpoint `POST /api/imports`
-- [ ] Elimina `services/rekordbox_parser.py` + `services/import_service.py`
-- [ ] Rimuovi fixture `export_rekordbox.xml` e aggiorna `tests/conftest.py`
-- [ ] Aggiorna test che usano la fixture Rekordbox (sostituisci con dati sintetici Spotify)
-- [ ] Rimuovi voce "Upload XML" dalla dashboard frontend
-- [ ] Rimuovi `lxml` da `requirements.txt`
-- [ ] Verifica: `pytest` verde, `npm run build` OK
+**Espandi playlist**: artisti/tracce dominanti della playlist → Last.fm `artist.getsimilar` + `track.getsimilar` → top track degli artisti simili → dedup vs libreria → resolve su Spotify → ranking per compatibilità (match Last.fm) → AI spiega l'affinità.
 
-### Fase D2 — Cache enrichment
+**Colma un buco (gap-driven)**: parte da un gap di `gap_analysis`; per i gap di genere usa `tag.gettoptracks` sui generi dominanti; stessa pipeline di dedup/resolve/ranking → AI spiega come ogni traccia colma quel gap.
 
-- [ ] Tabella `enrichment_cache` in DB (provider, lookup_key, result_json, cached_at)
-- [ ] `feature_enrichment.py`: legge dalla cache prima di chiamare il provider
-- [ ] `GET /api/enrichment/features/status` espone hit/miss ratio
-- [ ] Test: enrichment su traccia già in cache → zero chiamate rete
+- [x] `integrations/lastfm.py`: `LastFMClient` (similar_artists/tracks, artist_top_tracks, top_tracks_by_tag), httpx iniettabile
+- [x] `services/discovery.py`: orchestratore (expand + gap), dedup per (artista,titolo) e ISRC, ranking, spiegazioni AI best-effort
+- [x] `SpotifyWebClient.search_track` come resolver dev-mode-safe
+- [x] Endpoint `POST /api/discovery/expand`, `POST /api/discovery/gap`, `GET /api/discovery/status`
+- [x] Frontend: pagina Discovery — due tab (Espandi playlist / Colma un buco), card con compatibilità, sorgente, spiegazione AI, link Spotify
+- [x] Write-back: `POST /api/discovery/add` → importa il candidato nella **libreria dell'app** (`import_single_track`, idempotente), bottone "Aggiungi" sulla card
+- [x] Test `test_discovery.py` (9) senza rete
+- [ ] **Da fare:** test reale con chiave Last.fm
 
-### Fase E — AI prompt arricchito
+## Import manuale playlist ✅ (14/06/2026)
 
-- [ ] `ai_agent.py`: calcola profilo playlist (BPM arc, Camelot distribution, top generi, mood medio, gap identificati) e lo include nel prompt
-- [ ] Il prompt comunica esplicitamente i vincoli dell'utente (mood target, energia, durata) come direzione narrativa
-- [ ] Test: `FakeLLM` verifica che il prompt contenga il profilo completo
+Incolla una tracklist → playlist `kind=manual` nella libreria, pronta per l'enrichment.
 
-### Fase F — Discovery mode
-
-Nuova funzionalità: suggerisce musica nuova compatibile con il set/playlist. Due entry point che usano gli stessi servizi sotto.
-
-**Gap-driven**: Gap Analysis identifica il buco (BPM range, Camelot target, energia mancante) → Spotify `/recommendations` con audio features target + seed = tracce adiacenti al gap → Last.fm similar artists → candidati rankkati per compatibilità → AI spiega perché ogni traccia risolve il buco specifico.
-
-**Playlist-seed**: parti da una playlist importata → Spotify `/recommendations` con seed = tracce rappresentative della playlist → Last.fm similar artists degli artisti dominanti → candidati rankkati → AI spiega compatibilità con il tuo stile.
-
-- [ ] `integrations/lastfm.py` concreto: `similar_artists(artist)` → lista artisti
-- [ ] `services/discovery.py`: orchestratore (gap-driven + playlist-seed), combina fonti, dedup, ranking compatibilità
-- [ ] Endpoint `POST /api/discovery/gap` (input: gap object → output: candidati rankkati + spiegazioni AI)
-- [ ] Endpoint `POST /api/discovery/expand` (input: playlist_id → output: candidati rankkati + spiegazioni AI)
-- [ ] Frontend: pagina Discovery — due tab (Colma un buco / Espandi playlist), card traccia con score compatibilità, spiegazione AI, azione "Aggiungi a playlist"
+- [x] `services/manual_import.py`: `parse_line` (Artista - Titolo / en-em dash / TSV / CSV / solo titolo) + `import_manual_playlist` (dedup per nome vs libreria, idempotente)
+- [x] Endpoint `POST /api/playlists/import-manual`
+- [x] Frontend: card "Import manuale" nella pagina Playlist
+- [x] Test `test_manual_import.py` (4)
 
 ---
 
@@ -58,7 +49,7 @@ Nuova funzionalità: suggerisce musica nuova compatibile con il set/playlist. Du
 
 | Item | Note |
 |---|---|
-| Import manuale playlist | CSV o testo "Artista - Titolo", parsing + enrichment automatico |
+| ~~Import manuale playlist~~ | ✅ fatto 14/06/2026 (`services/manual_import.py`) |
 | SoundCloud import | Valutare fattibilità API prima di implementare |
 | F10 Transition Finder classification | technically safe / creative risk / good reset |
 | PostgreSQL | Low priority, SQLite sufficiente per mono-utente |
@@ -72,5 +63,5 @@ Nuova funzionalità: suggerisce musica nuova compatibile con il set/playlist. Du
 | Tracce senza BPM/key | Stato `missing_features`; il motore tollera feature assenti (score neutri) |
 | Provider BPM/key con copertura variabile | `enrichment_confidence` + stato `low_confidence`; mai sovrascrivere dati esistenti |
 | Rate limit Spotify/provider | Batch, cache persistente, job async con polling |
-| Spotify `/recommendations` deprecato o ristretto | Fase F da verificare con le API restrictions 2025 prima di implementare |
+| Spotify `/recommendations` deprecato (confermato 27/11/2024: 403/404 in dev mode) | Discovery non lo usa: similarità via Last.fm, Spotify solo come resolver `/search` |
 | Output AI con track_id inventati | Validation Engine obbligatorio + schema Pydantic |

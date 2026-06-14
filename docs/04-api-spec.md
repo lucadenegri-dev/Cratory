@@ -2,20 +2,25 @@
 
 Endpoint suggeriti, raggruppati per dominio. Le fasi indicano quando servono (vedi [06-roadmap.md](06-roadmap.md)).
 
-## Import — MVP 1
+## Playlists — flusso principale (nuovo paradigma)
 
 ```text
-POST /api/import/rekordbox-xml        # upload file XML, avvia parsing
-GET  /api/import/reports/{id}         # report di import (statistiche + errori)
+GET  /api/playlists/spotify/available # playlist Spotify dell'utente (per la selezione)
+POST /api/playlists/import            # importa una playlist o i liked ({platform, playlist_id|"liked"})
+POST /api/playlists/import-manual     # importa una tracklist incollata ({name, text}) → 422 se nulla riconosciuto
+GET  /api/playlists                   # playlist importate
+GET  /api/playlists/{id}/tracks       # tracce di una playlist importata
+GET  /api/playlists/{id}/gaps         # analisi deterministica dei buchi (sez. 6)
+GET  /api/playlists/library/gaps      # analisi buchi sull'intera libreria
 ```
 
 ## Tracks — MVP 1
 
 ```text
 GET  /api/tracks                      # lista con filtri (vedi Library Explorer in 05-functional-spec)
+GET  /api/tracks/stats                # statistiche libreria (conteggi, range BPM, distribuzione key)
 GET  /api/tracks/{id}                 # dettaglio traccia
 GET  /api/tracks/{id}/transitions     # tracce compatibili prima/dopo
-GET  /api/tracks/{id}/expansion       # suggerimenti espansione da traccia (MVP 4)
 ```
 
 ## Transition Finder — MVP 1
@@ -30,23 +35,60 @@ POST /api/transitions/score           # score tecnico tra due tracce
 
 ```text
 POST /api/sets/generate               # genera set (vincoli strutturati + prompt libero)
+POST /api/sets/generate-async         # avvia generazione in background
+GET  /api/sets/generate-status        # stato job generazione async
 GET  /api/sets                        # lista set salvati
 GET  /api/sets/{id}                   # dettaglio set
-POST /api/sets/{id}/validate          # validation engine (MVP 3)
-POST /api/sets/{id}/alternatives      # alternative per traccia (MVP 3)
-POST /api/sets/{id}/export            # export CSV / testo / playlist Spotify
+PATCH /api/sets/{id}                  # rinomina set
+DELETE /api/sets/{id}                 # elimina set
+DELETE /api/sets/{id}/tracks/{pos}    # rimuove traccia dalla scaletta
+POST /api/sets/{id}/tracks/{pos}/move # sposta traccia su/giù
+POST /api/sets/{id}/tracks/{pos}/replace # sostituisce traccia e ricalcola transizioni
+POST /api/sets/{id}/alternatives      # alternative deterministiche per traccia (MVP 3/F9)
+POST /api/sets/{id}/export            # export CSV / testo
 ```
 
-## Spotify — MVP 2
+## Spotify — OAuth, enrichment metadata, export
 
 ```text
-GET  /api/spotify/login               # avvio OAuth
+GET  /api/spotify/status              # configurato? account collegato? redirect uri
+GET  /api/spotify/login               # avvio OAuth (scope: playlist read/modify, user-library-read)
 GET  /api/spotify/callback            # callback OAuth
-POST /api/spotify/enrich              # enrichment metadata (batch, con cache)
-POST /api/spotify/create-playlist     # crea playlist da un set generato
+POST /api/spotify/create-playlist     # crea una playlist Spotify da un set generato
 ```
 
-## Library Expansion — MVP 4
+> L'enrichment metadata Spotify è stato **rimosso**: titolo/artista/album/cover/ISRC/durata arrivano già con l'import della playlist (incluso `year`). Genere/mood/BPM/key si ottengono dal Music Feature Enrichment qui sotto.
+
+## Music Feature Enrichment (BPM/key/genere/mood/energia) — implementato
+
+`services/feature_enrichment.py` applica i dati con `enrichment_source`/`enrichment_confidence` senza mai sovrascrivere BPM/key esistenti, con cache DB (`EnrichmentCache`). Provider concreti in catena: GetSongBPM (BPM/key/Camelot/danceability), MusicBrainz (label/release/ISRC/genere), Last.fm (genere + **mood** dai tag). L'**energia** è stimata deterministicamente (`estimate_energy`) da BPM + danceability + genere quando nessun provider la fornisce.
+
+```text
+GET  /api/enrichment/status           # provider configurato? (GETSONGBPM_API_KEY / MUSICBRAINZ_USER_AGENT)
+POST /api/enrichment/features         # arricchisce le tracce prive di BPM/key (async, ?force=true ri-elabora tutto)
+GET  /api/enrichment/features/status  # stato job async
+```
+
+## Discovery — Fase F (Last.fm + resolver Spotify)
+
+Similarità da Last.fm, resolve su Spotify `/search`, ranking per compatibilità, spiegazioni AI opzionali. Non usa Spotify `/recommendations` (deprecato).
+
+```text
+GET  /api/discovery/status            # Last.fm configurato? resolver Spotify? spiegazioni AI?
+POST /api/discovery/expand            # espandi una playlist ({playlist_id, limit?, use_ai?})
+POST /api/discovery/gap               # colma un gap ({gap_type, description, suggestion, playlist_id?, limit?, use_ai?})
+POST /api/discovery/add               # importa un candidato nella libreria dell'app ({artist, title, spotify_id?, isrc?, ...})
+```
+
+## AI
+
+```text
+GET  /api/ai/status                   # LLM configurato? modello attivo
+```
+
+## Library Expansion — non implementato (futuro)
+
+Modulo di crate digging avanzato descritto in 05-functional-spec (F11–F15). Endpoint previsti, non ancora presenti:
 
 ```text
 GET  /api/expansion/track/{track_id}

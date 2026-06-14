@@ -1,61 +1,79 @@
 # 05 — Specifica funzionale
 
-Le 15 funzionalità, raggruppate per area. Ogni titolo indica la fase MVP di riferimento.
+Funzionalità raggruppate per area. Il flusso principale parte da una **playlist Spotify** (o da un import manuale); il Discovery aiuta a scoprire musica nuova compatibile. Rekordbox è stato rimosso.
 
 ---
 
 ## Area: Libreria
 
-### F1 — Import Rekordbox XML (MVP 1)
+### F1 — Import Playlist (flusso principale)
 
-L'utente carica un file XML Rekordbox. Il parser deve:
+L'utente importa una playlist da uno streaming. Supportato:
 
-1. leggere il nodo `COLLECTION`
-2. estrarre tutte le tracce
-3. riconoscere la sorgente dal campo `Location` (vedi pattern in [03-data-model.md](03-data-model.md))
-4. estrarre lo Spotify ID quando presente
-5. estrarre il SoundCloud ID quando presente
-6. distinguere i file locali
-7. salvare BPM, tonalità, durata e play count
-8. salvare i punti `TEMPO` come beatgrid points
-9. salvare i punti `POSITION_MARK` come cue points
-10. generare un report di import
+- playlist Spotify dell'utente autenticato
+- playlist collaborative accessibili all'utente
+- liked tracks Spotify
+- **import manuale**: tracklist incollata come testo, una riga per traccia in formato "Artista - Titolo" (o CSV "artista,titolo") — crea una playlist `kind=manual`, dedup per nome (`services/manual_import.py`)
+- playlist SoundCloud → backlog
 
-Il report deve mostrare: totale tracce importate; numero tracce Spotify / SoundCloud / locali; tracce con BPM; tracce con tonalità; tracce con cue point; tracce con titolo/artista mancanti; range BPM; distribuzione tonalità; eventuali errori di parsing.
+Per ogni traccia importata salvare almeno: `title`, `artist`, `duration`, `platform`, `platform_track_id`, `playlist_id`, `playlist_name`, `url`, `artwork_url`, `isrc` (se disponibile), `added_at`.
 
-Il re-import deve aggiornare la libreria esistente senza creare duplicati (chiave: `rekordbox_track_id`).
+Il modulo deterministico (`services/playlist_import.py`):
 
-### F2 — Spotify Metadata Enrichment (MVP 2)
+1. normalizza gli item della piattaforma nel modello `Track`
+2. deduplica con priorità `ISRC → platform_track_id → artist+title+duration → fuzzy`
+3. collega le tracce alla `Playlist` importata
+4. imposta lo stato iniziale (`imported`)
+5. è idempotente (re-import senza duplicati)
 
-Per ogni traccia con Spotify ID, recuperare via Spotify API: title, artist, album, cover image, release year (se disponibile), Spotify URL, artist ID, artist genres, artist popularity.
+Nessuna chiamata AI in import. L'enrichment musicale è un passo separato (F2b).
+
+### F1b — Import Rekordbox XML — RIMOSSO
+
+L'import XML Rekordbox è stato eliminato dal progetto (router, parser, service, fixture e test). Resta solo la colonna `rekordbox_track_id` (nullable) nel modello, vestigiale. Le feature musicali si ottengono ora esclusivamente dall'enrichment esterno (F2b).
+
+### F2 — Spotify Metadata Enrichment — RIMOSSO
+
+Aveva senso quando la sorgente era Rekordbox e i metadata mancavano. Ora che le tracce arrivano dall'import della **playlist Spotify**, titolo/artista/album/cover/ISRC/durata/`year` sono già presenti dall'import: un passo separato di enrichment metadata è ridondante ed è stato rimosso (servizio, endpoint `/api/spotify/enrich*`, card UI). Il genere — unica cosa che il vecchio passo aggiungeva — ora arriva dal Music Feature Enrichment (Last.fm/MusicBrainz, F2b).
+
+### F2b — Music Feature Enrichment (BPM/key/mood/energia)
+
+Per le tracce prive di feature musicali (tipico delle tracce streaming), un livello di enrichment esterno (`services/feature_enrichment.py`) recupera: `bpm`, `key`/`camelot_key`, `genre_primary`/`genre_secondary`, `mood`, `energy`, `danceability`, `vocalness`, `label`, `release_date`, con `confidence` e `source`.
 
 Regole:
 
-- **Non sovrascrivere mai BPM e tonalità di Rekordbox.**
-- Se `Name` o `Artist` sono vuoti nell'XML (caso frequente per tracce Spotify), completarli con Spotify.
-- Conservare il collegamento traccia Rekordbox ↔ Spotify ID.
-- Gestire rate limit ed errori API.
-- Cache dei risultati per evitare chiamate ripetute.
+- **Non sovrascrive mai BPM/key già presenti** (da un enrichment precedente).
+- Matching con priorità `ISRC → platform_track_id → artist+title+duration → fuzzy`.
+- Aggiorna lo stato della traccia (`ready_for_set` quando ha BPM **e** key; `low_confidence` se il match è debole).
+- Risposte dei provider cachate in DB (`EnrichmentCache`): il secondo enrichment sulla stessa traccia non richiama la rete.
+- Provider dietro l'interfaccia `MusicFeatureProvider`, in catena (first-wins per campo): **GetSongBPM** (BPM/key/Camelot/danceability) → **MusicBrainz** (ISRC/label/release/genere) → **Last.fm** (genere + **mood** dai top tag).
+- **Energia**: non esiste una fonte gratuita affidabile (Spotify audio-features deprecato, Cyanite/Soundcharts a pagamento). Viene quindi **stimata deterministicamente** (`estimate_energy`) da BPM + danceability + genere — un proxy monotono per l'arco del set, non energia percepita "vera". Così gli score d'arco (`energy_progression_score`, `mood_coherence_score`) non lavorano più su dati vuoti.
 
-### F3 — Library Explorer (MVP 1)
+### F3 — Library Explorer
 
 Vista tabellare filtrabile della libreria.
 
-Filtri: artista, titolo, album, genere, sorgente, BPM min/max, tonalità, durata, play count, presenza Spotify ID, presenza SoundCloud ID, presenza cue point, metadata incompleti.
+Filtri: artista, titolo, album, genere, sorgente/piattaforma, playlist di provenienza, stato traccia, BPM min/max, tonalità, durata, energia, presenza Spotify/SoundCloud ID, metadata incompleti.
 
-Colonne minime: Title, Artist, Source, BPM, Key, Duration, Genre, Year, Play Count, Spotify Link, Cue Count.
+Colonne minime: Title, Artist, Platform, Status, BPM, Key (Camelot), Energy, Mood, Duration, Genre, Playlist, Link.
 
 ---
 
 ## Area: Set building
 
-### F4 — Set Generator (MVP 1 algoritmico, MVP 3 con AI)
+### F4 — Set Generator (deterministico + AI)
 
-Generazione set tramite **input strutturato** e tramite **prompt libero**.
+Generazione set tramite **input strutturato** e tramite **prompt libero**, partendo da una playlist (o dall'intera libreria).
 
-Input strutturati: durata target, BPM iniziale/finale, artisti seed, genere o stile, tonalità preferite, tipo di progressione, max tracce per artista, filtro sorgente (Spotify/SoundCloud/locali/tutti), preferisci mix armonico, preferisci BPM progressivo, permetti cambi bruschi, evita tracce troppo corte, evita tracce troppo suonate.
+Input strutturati: playlist di partenza, durata target, BPM iniziale/finale (o range desiderato), mood iniziale/finale, progressione energia, artisti seed, preferenze genere, tonalità preferite, tipo di progressione, max tracce per artista, filtro sorgente, preferisci mix armonico, preferisci BPM progressivo, permetti cambi bruschi, evita tracce troppo corte, evita tracce troppo suonate, vincoli opzionali.
+
+Output per ogni traccia: posizione, **ruolo** (`intro`, `warmup`, `groove`, `transition`, `peak`, `release`, `closing`), motivazione della posizione, nota di transizione, confidence/rischio, alternative suggerite. Il ruolo è assegnato deterministicamente lungo l'arco del set (`services/set_generator.py::assign_roles`, peak ~70%).
 
 Tipi di progressione: `smooth`, `progressive`, `contrast`, `experimental`, `peak_time`, `warm_up`, `closing`.
+
+**Modalità AI (`mode`, solo quando l'AI è attiva):**
+- `technical` (default): mix prudente: l'AI ordina e narra sui soli dati forniti (BPM/Camelot/mood/energia), privilegiando compatibilità e progressione. Adatta a un modello economico.
+- `creative`: l'AI usa anche la **propria conoscenza musicale** di brani/artisti (vibe, peso culturale, come funzionano in pista) per costruire un arco emotivo — tensione/rilascio, contrasti voluti, sorprese — potendo rompere di proposito una regola armonica (segnalando il rischio). Restano i vincoli inderogabili: solo candidate fornite, niente track_id inventati, dati tecnici autorevoli, e il Validation Engine valida comunque tutto. Opzionalmente legata a un modello più capace via `AI_MODEL_CREATIVE`.
 
 Esempi di prompt libero da supportare:
 
@@ -99,6 +117,8 @@ Funzione di scoring tra due tracce.
 
 **Play count:** mai usate → possibile bonus varietà; usate troppo spesso → leggera penalità se richiesto.
 
+**Score aggiuntivi sulle feature di enrichment** (0-100, neutro=50 se il dato manca): `energy_progression_score` (premia salita dolce/plateau, penalizza i crolli), `mood_coherence_score`, `genre_similarity_score`. Usati dal motore quando le feature sono disponibili.
+
 Output:
 
 ```json
@@ -117,11 +137,13 @@ Input dell'agente:
 {
   "user_request": "...",
   "structured_constraints": {},
+  "candidate_profile": { "bpm_range": {}, "key_distribution": {}, "top_genres": [], "avg_energy": null, "missing": {} },
   "candidate_tracks": [],
-  "technical_scores": [],
   "library_context": {}
 }
 ```
+
+`candidate_profile` (Fase E) riassume la palette delle candidate — arco BPM, distribuzione Camelot, generi predominanti, energia media, lacune — così l'AI ha la visione d'insieme senza scorrere tutte le tracce a mano.
 
 Output JSON validabile:
 
@@ -168,15 +190,56 @@ Per ogni traccia del set l'utente può chiedere una sostituzione: più morbida, 
 
 L'app propone 3–5 alternative motivate. Ogni alternativa indica: perché è adatta, differenza BPM, compatibilità key, rischio transizione, effetto narrativo nel set.
 
+Versione MVP 3 implementata: alternative deterministiche basate sulla libreria già importata, escludendo tracce già presenti nel set e valutando compatibilità con brano precedente/successivo. Modalità supportate: `safer`, `softer`, `harder`, `same_artist`, `surprising`. La sostituzione ricalcola posizioni, durata e score transizioni.
+
 ### F10 — Transition Finder (MVP 1 tecnico, arricchito in MVP 3)
 
 L'utente seleziona una traccia e chiede: cosa mettere dopo / prima, transizioni più sicure, più interessanti musicalmente, più rischiose ma creative.
 
 I risultati sono classificati: `technically safe`, `musically interesting`, `creative risk`, `good reset`, `good opening continuation`, `good peak transition`.
 
+### F10b — Gap Analysis della playlist
+
+Funzione **deterministica** (`services/gap_analysis.py`) che analizza una playlist (o l'intera libreria) e segnala problemi utili per il DJ set:
+
+- mancano tracce di apertura (poche sotto ~120 BPM)
+- mancano tracce ponte tra due range BPM
+- pochi brani adatti al peak (sopra ~126 BPM)
+- playlist troppo uniforme come energia
+- dati armonici insufficienti (poche key/Camelot)
+- troppe tracce vocal consecutive
+- playlist poco varia o troppo dispersiva per genere
+
+Ogni finding: `{gap_type, severity (info|warning), description, suggestion}`. Output esempio:
+
+> La playlist ha molte tracce tra 122 e 124 BPM, ma poche tra 126 e 128 BPM. Potrebbe servire una sezione ponte per rendere più naturale la crescita del set.
+
+L'AI può, a valle, trasformare questi findings in linguaggio naturale e suggerimenti di crate digging, ma i fatti vengono dal motore deterministico.
+
+### F10e — Discovery mode (Fase F)
+
+Scopre musica nuova compatibile con le playlist dell'utente. Due entry point sugli stessi servizi (`services/discovery.py`):
+
+- **Espandi playlist**: dagli artisti/tracce dominanti della playlist → Last.fm `artist.getsimilar` + `track.getsimilar` + top tracks degli artisti simili.
+- **Colma un buco**: parte da un finding della Gap Analysis (F10b); per i gap di genere usa `tag.gettoptracks` sui generi dominanti.
+
+Pipeline deterministica: raccolta candidati → dedup vs libreria (per nome **e** per ISRC dopo il resolve) → resolve su Spotify `/search` (solo i migliori per match, budget limitato) → ranking per compatibilità (le tracce risolvibili in testa). L'AI, opzionale e best-effort, spiega in una frase perché ogni candidato è coerente o colma il gap — **non sceglie i candidati**.
+
+> **Spotify `/recommendations` non è usato** (deprecato dal 27/11/2024: 403/404 in development mode). La similarità arriva da Last.fm; Spotify resta solo resolver.
+
+L'utente può **aggiungere un candidato alla libreria dell'app** (`POST /api/discovery/add`): la traccia entra in libreria (idempotente, dedup per ISRC/spotify_id o per nome) pronta per l'enrichment e per i set. Non viene scritta su Spotify.
+
+### F10c — Set Editor
+
+Sulla scaletta generata l'utente può: vedere la scaletta con ruoli e note di transizione, spostare tracce, bloccare una traccia in posizione, escludere una traccia, chiedere alternative per una posizione (F9), rigenerare una sezione, rinominare/eliminare il set. Ogni modifica ricalcola posizioni, durata e score delle transizioni (`services/set_editor.py`).
+
+### F10d — Export
+
+Export del set in: Markdown, CSV, testo; creazione di una nuova playlist Spotify dal set (`POST /api/spotify/create-playlist`). Lista link SoundCloud → backlog.
+
 ---
 
-## Area: Library Expansion (MVP 4)
+## Area: Library Expansion (opzionale)
 
 ### F11 — Library Expansion Advisor
 
@@ -235,10 +298,12 @@ Da un genere/stile inserito dall'utente: trovare le tracce già in libreria, ide
 
 ## UI — Sezioni richieste
 
-1. **Dashboard** — numero tracce, sorgenti, range BPM, distribuzione tonalità, tracce con metadata mancanti, ultime importazioni
-2. **Library** — tabella filtrabile (F3)
-3. **Track Detail** — metadata, BPM/key, cue point, sorgente, link Spotify, possibili tracce prima/dopo, pulsante "Expand from this track"
-4. **Set Builder** — prompt libero, vincoli strutturati, genera set, scaletta risultante, spiegazione globale, motivazione per traccia, warning tecnici, alternative per traccia
-5. **Transition Finder** — tracce prima/dopo una traccia scelta
-6. **Expand Library** — espandi da traccia/artista/genere/set, suggerimenti salvati
-7. **Settings** — credenziali Spotify API, token Discogs, user agent MusicBrainz, AI API key, preferenze set builder e sorgenti
+1. **Dashboard** — numero tracce e playlist, sorgenti, range BPM, distribuzione tonalità, stati traccia (imported/ready_for_set/…), ultime importazioni
+2. **Playlists** — selezione e import da Spotify (e liked), import manuale (tracklist incollata), elenco playlist importate, analisi buchi (F10b)
+3. **Library** — tabella filtrabile (F3) con stato traccia e feature musicali
+4. **Track Detail** — metadata, BPM/key/mood/energia, playlist di provenienza, link streaming, possibili tracce prima/dopo
+5. **Set Builder** — playlist di partenza, prompt libero, vincoli strutturati, genera set, scaletta con ruoli, spiegazione globale, motivazione e nota di transizione per traccia, warning, alternative
+6. **Discovery** — due tab (Espandi playlist / Colma un buco), card con compatibilità, sorgente, spiegazione AI, link Spotify e azione "Aggiungi alla libreria" (F10e)
+7. **Set salvati / Editor** — lista set, dettaglio scaletta, rinomina, elimina, sposta/rimuovi/sostituisci/blocca tracce, rigenera sezione, export (F10c/F10d)
+8. **Transition Finder** — tracce prima/dopo una traccia scelta
+9. **Settings** — credenziali Spotify, provider enrichment (GetSongBPM API key, MusicBrainz user agent), Last.fm API key (enrichment + Discovery), AI API key, preferenze set builder e sorgenti

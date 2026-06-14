@@ -64,13 +64,14 @@ cd backend
 
 1. Avvia backend e frontend.
 2. In Settings configura le credenziali Spotify e connetti l'account.
-3. Dalla pagina Playlists importa una playlist Spotify.
+3. Dalla pagina Playlists importa una playlist Spotify (o incolla una tracklist con l'import manuale).
 4. Avvia l'enrichment feature (BPM/key/genere) dalla pagina Settings.
 5. Dal Set Builder genera un set scegliendo la playlist e i parametri (durata, mood, energia).
 6. Edita la scaletta, esporta in Markdown o crea una playlist Spotify.
+7. Dalla pagina Discovery scopri musica nuova compatibile (espandi una playlist o colma un buco) e aggiungila alla libreria.
 
 ## Stato del progetto
 
-MVP 1-3 completati (core deterministico, Spotify, AI Set Agent) + Pivot Fase A-C (streaming-first, provider BPM/key, Set Builder da playlist). In lavorazione: cleanup Rekordbox, cache enrichment, AI prompt arricchito, Discovery mode.
+MVP 1-3 + Pivot Fase A-C completati. Inoltre: cleanup Rekordbox, cache enrichment, AI prompt arricchito, **Discovery mode** (Last.fm + resolver Spotify) e import manuale playlist. Discovery non usa Spotify `/recommendations` (deprecato): la similarità arriva da Last.fm.
 
 Stato dettagliato in [PROGRESS.md](PROGRESS.md).
