@@ -5,7 +5,6 @@ import pytest
 from app.integrations import LLMClient
 from app.schemas import SetGenerationRequest
 from app.services.ai_agent import AIAgentError, generate_ai_set
-from app.services.import_service import import_rekordbox_xml
 
 
 class FakeLLM(LLMClient):
@@ -43,8 +42,8 @@ def _req(**kw):
     return SetGenerationRequest(**base)
 
 
-def test_ai_set_uses_only_candidates(db, sample_xml_bytes):
-    import_rekordbox_xml(db, sample_xml_bytes)
+def test_ai_set_uses_only_candidates(db, seed_tracks):
+    seed_tracks(n=30)
     llm = FakeLLM(n=8)
     setlist = generate_ai_set(db, _req(), llm)
 
@@ -53,12 +52,12 @@ def test_ai_set_uses_only_candidates(db, sample_xml_bytes):
     assert len(setlist.tracks) == 8
     candidate_ids = {c["id"] for c in llm.last_payload["candidate_tracks"]}
     assert all(st.track_id in candidate_ids for st in setlist.tracks)
-    # l'AI non riceve l'intera libreria
-    assert len(llm.last_payload["candidate_tracks"]) <= 80
+    # l'AI non riceve mai l'intera libreria
+    assert len(llm.last_payload["candidate_tracks"]) <= 60
 
 
-def test_ai_set_persists_narrative_and_validation(db, sample_xml_bytes):
-    import_rekordbox_xml(db, sample_xml_bytes)
+def test_ai_set_persists_narrative_and_validation(db, seed_tracks):
+    seed_tracks(n=30)
     setlist = generate_ai_set(db, _req(), FakeLLM(n=6))
     v = setlist.validation
     assert "warnings" in v and "stats" in v
@@ -69,16 +68,16 @@ def test_ai_set_persists_narrative_and_validation(db, sample_xml_bytes):
     assert all(st.ai_reason for st in setlist.tracks)
 
 
-def test_validation_drops_invalid_track_id(db, sample_xml_bytes):
-    import_rekordbox_xml(db, sample_xml_bytes)
+def test_validation_drops_invalid_track_id(db, seed_tracks):
+    seed_tracks(n=30)
     llm = FakeLLM(n=5, extra_ids=[999999])  # id inesistente
     setlist = generate_ai_set(db, _req(), llm)
     assert len(setlist.tracks) == 5  # bogus scartato
     assert any("999999" in w for w in setlist.validation["warnings"])
 
 
-def test_validation_removes_duplicates(db, sample_xml_bytes):
-    import_rekordbox_xml(db, sample_xml_bytes)
+def test_validation_removes_duplicates(db, seed_tracks):
+    seed_tracks(n=30)
     llm = FakeLLM(n=5, duplicate_first=True)
     setlist = generate_ai_set(db, _req(), llm)
     ids = [st.track_id for st in setlist.tracks]
@@ -86,8 +85,8 @@ def test_validation_removes_duplicates(db, sample_xml_bytes):
     assert any("duplicato" in f for f in setlist.validation["auto_fixes"])
 
 
-def test_validation_enforces_source_filter(db, sample_xml_bytes):
-    import_rekordbox_xml(db, sample_xml_bytes)
+def test_validation_enforces_source_filter(db, seed_tracks):
+    seed_tracks(n=30)
     setlist = generate_ai_set(db, _req(sources=["spotify"]), FakeLLM(n=8))
     assert all(st.track.source_type == "spotify" for st in setlist.tracks)
 
@@ -98,8 +97,8 @@ def test_ai_agent_errors_without_candidates(db):
         generate_ai_set(db, _req(), FakeLLM())
 
 
-def test_ai_agent_reports_phases(db, sample_xml_bytes):
-    import_rekordbox_xml(db, sample_xml_bytes)
+def test_ai_agent_reports_phases(db, seed_tracks):
+    seed_tracks(n=30)
     phases = []
     generate_ai_set(db, _req(), FakeLLM(n=5), on_phase=phases.append)
     assert phases  # il job asincrono riceve le fasi

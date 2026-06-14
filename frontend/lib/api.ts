@@ -2,24 +2,82 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export interface Track {
   id: number;
-  rekordbox_track_id: string;
+  rekordbox_track_id: string | null;
   spotify_id: string | null;
   soundcloud_id: string | null;
   source_type: string;
+  platform: string | null;
   title: string | null;
   artist: string | null;
   album: string | null;
   genre: string | null;
+  genre_secondary: string | null;
   year: number | null;
   duration_seconds: number | null;
   bpm: number | null;
   tonality: string | null;
+  camelot_key: string | null;
+  mood: string | null;
+  energy: number | null;
+  danceability: number | null;
+  vocalness: number | null;
+  label: string | null;
   play_count: number;
+  status: string;
+  url: string | null;
+  isrc: string | null;
+  playlist_name: string | null;
   cue_count: number;
   has_beatgrid: boolean;
   spotify_url: string | null;
   album_art_url: string | null;
   enriched: boolean;
+  enrichment_source: string | null;
+  enrichment_confidence: number | null;
+}
+
+export interface Playlist {
+  id: number;
+  platform: string;
+  platform_playlist_id: string | null;
+  name: string;
+  owner: string | null;
+  url: string | null;
+  artwork_url: string | null;
+  track_count: number;
+  kind: string;
+  imported_at: string;
+}
+
+export interface SpotifyPlaylistRef {
+  platform_playlist_id: string;
+  name: string;
+  owner: string | null;
+  track_count: number;
+  url: string | null;
+  artwork_url: string | null;
+}
+
+export interface PlaylistImportReport {
+  playlist_id: number;
+  name: string;
+  created: number;
+  updated: number;
+  skipped: number;
+  total: number;
+}
+
+export interface Gap {
+  gap_type: string;
+  severity: "info" | "warning";
+  description: string;
+  suggestion: string;
+}
+
+export interface GapAnalysis {
+  scope: string;
+  track_count: number;
+  gaps: Gap[];
 }
 
 export interface SpotifyStatus {
@@ -41,6 +99,26 @@ export interface EnrichJobStatus {
   processed: number;
   total: number;
   result: EnrichReport | null;
+  error: string | null;
+}
+
+export interface FeatureProviderStatus {
+  configured: boolean;
+  provider: string | null;
+}
+
+export interface FeatureEnrichReport {
+  enriched: number;
+  not_found: number;
+  total: number;
+}
+
+export interface FeatureEnrichJob {
+  status: "idle" | "running" | "done" | "error";
+  phase: string | null;
+  processed: number;
+  total: number;
+  result: FeatureEnrichReport | null;
   error: string | null;
 }
 
@@ -66,9 +144,11 @@ export interface TransitionCandidate {
 
 export interface SetlistTrack {
   position: number;
+  role: string | null;
   track: Track;
   transition_score: number | null;
   transition_reason: string | null;
+  transition_note: string | null;
   ai_reason: string | null;
   risk_level: string | null;
 }
@@ -91,7 +171,35 @@ export interface Setlist {
   generated_by: string;
   validation: SetlistValidation;
   total_duration_seconds: number;
+  created_at: string;
   tracks: SetlistTrack[];
+}
+
+export interface SetlistSummary {
+  id: number;
+  name: string;
+  strategy: string | null;
+  target_duration_minutes: number | null;
+  track_count: number;
+  total_duration_seconds: number;
+  generated_by: string;
+  created_at: string;
+}
+
+export type AlternativeMode = "safer" | "softer" | "harder" | "same_artist" | "surprising";
+
+export interface Alternative {
+  track: Track;
+  score_prev: number | null;
+  score_next: number | null;
+  reason: string;
+  risk_level: string;
+}
+
+export interface AlternativesResponse {
+  position: number;
+  mode: AlternativeMode;
+  alternatives: Alternative[];
 }
 
 export interface AiStatus {
@@ -131,6 +239,7 @@ async function handle<T>(res: Response): Promise<T> {
     }
     throw new Error(detail);
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -145,32 +254,65 @@ export async function apiGet<T>(path: string, params?: Record<string, string | n
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  return apiSend<T>("POST", path, body);
+}
+
+export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
+  return apiSend<T>("PATCH", path, body);
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  return apiSend<T>("DELETE", path);
+}
+
+async function apiSend<T>(method: string, path: string, body?: unknown): Promise<T> {
   return handle<T>(
     await fetch(API + path, {
-      method: "POST",
+      method,
       headers: { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
   );
 }
 
-export async function uploadXml(file: File) {
-  const form = new FormData();
-  form.append("file", file);
-  return handle<{ id: number; stats: Record<string, unknown>; errors: string[] }>(
-    await fetch(`${API}/api/import/rekordbox-xml`, { method: "POST", body: form }),
-  );
-}
-
-export async function exportSet(setId: number, format: "text" | "csv"): Promise<string> {
+export async function exportSet(setId: number, format: "text" | "csv" | "markdown"): Promise<string> {
   const res = await fetch(`${API}/api/sets/${setId}/export?format=${format}`, { method: "POST" });
   if (!res.ok) throw new Error(res.statusText);
   return res.text();
 }
 
+// --- Playlist (nuovo flusso) ------------------------------------------------
+
+export function listSpotifyPlaylists() {
+  return apiGet<SpotifyPlaylistRef[]>("/api/playlists/spotify/available");
+}
+
+export function importPlaylist(playlistId: string) {
+  return apiPost<PlaylistImportReport>("/api/playlists/import", {
+    platform: "spotify",
+    playlist_id: playlistId,
+  });
+}
+
+export function listImportedPlaylists() {
+  return apiGet<Playlist[]>("/api/playlists");
+}
+
+export function playlistTracks(id: number) {
+  return apiGet<Track[]>(`/api/playlists/${id}/tracks`);
+}
+
+export function playlistGaps(id: number) {
+  return apiGet<GapAnalysis>(`/api/playlists/${id}/gaps`);
+}
+
+export function libraryGaps() {
+  return apiGet<GapAnalysis>("/api/playlists/library/gaps");
+}
+
 export function trackLabel(t: Track): string {
-  const title = t.title ?? (t.spotify_id ? `[Spotify ${t.spotify_id.slice(0, 8)}…]` : t.rekordbox_track_id);
-  return `${t.artist ?? "?"} — ${title}`;
+  const fallback = t.spotify_id ? `[Spotify ${t.spotify_id.slice(0, 8)}…]` : `#${t.id}`;
+  return `${t.artist ?? "?"} — ${t.title ?? fallback}`;
 }
 
 export function fmtDuration(seconds: number | null | undefined): string {

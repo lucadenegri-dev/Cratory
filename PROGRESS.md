@@ -4,118 +4,129 @@
 
 ## Stato attuale
 
-**Fase:** ✅ MVP 1, 2, 3 COMPLETATI — prossimo: MVP 4 (Library Expansion + Discogs/MusicBrainz)
-**Ultimo aggiornamento:** 2026-06-13
+**Fase:** MVP 1-3 + Pivot Fasi A-C completati e testati (76 backend verdi). **Nuovo scope (14/06/2026):** rimozione Rekordbox, AI prompt arricchito, Discovery mode. Prossimo: pulizia Rekordbox.
 
-## Checklist MVP 3 (AI Set Agent) — ✅ completata
+**Ultimo aggiornamento:** 2026-06-14
 
-- [x] `AnthropicLLMClient` (`integrations/llm.py`) dietro l'ABC `LLMClient`: SDK ufficiale `anthropic`, structured outputs (`output_config.format` + JSON schema), adaptive thinking, streaming, modello `claude-opus-4-8` default (override `AI_MODEL`). `LLMNotConfigured` se manca `AI_API_KEY`.
-- [x] AI Set Agent (`services/ai_agent.py`): candidate engine filtra → cap 80 candidate (seed garantiti) → prompt+schema all'LLM → l'AI ordina/narra usando SOLO le candidate.
-- [x] Validation Engine (`services/validation.py`, F8): track_id esistenti, dedup, max per artista, filtro sorgente, durata vs target, salti BPM/Camelot via scoring deterministico; auto-fix + warning raccolti.
-- [x] Endpoint `/api/sets/generate` sceglie AI vs algoritmico (`use_ai`; auto = AI se prompt + chiave). `GET /api/ai/status`. Persistiti `generated_by` + `validation` (colonne via `ensure_schema`).
-- [x] Frontend Set Builder: toggle AI (disabilitato senza chiave), badge AI/algoritmico, motivazione AI per traccia, blocco validazione (warning/auto-fix/punti critici/alternative/cosa manca).
-- [x] 28 test verdi (6 nuovi con `FakeLLM`, nessuna chiave/rete). Build frontend ok. Verifica browser: toggle+badge+generazione algoritmica ok.
+---
 
-**Test reale infrastruttura eseguito (13/06/2026, chiave Anthropic vera, modello claude-sonnet-4-6):** 4 set AI reali generati e persistiti, qualità ottima (artisti reali della libreria, ordinamento Camelot-aware, progressione BPM corretta, durata vicina al target). Bug critico trovato e risolto: senza impostare l'effort, Sonnet 4.6 usa il default `high` → thinking massiccio → la generazione si bloccava per minuti. Tuning misurato sul campo:
-- thinking disabled: ~41s ma sbaglia durata (67min vs 40) e direzione BPM.
-- adaptive + effort **low**: ~66s, qualità corretta → **default scelto**.
-- adaptive + effort medium: ~125s, corretto ma lento.
-Ora configurabili via env: `AI_EFFORT` (default low), `AI_THINKING` (default adaptive), `AI_TIMEOUT_SECONDS` (120). Candidate ridotte a 60, prompt reso conciso, timeout esplicito sul client.
+## Nuovo scope — decisioni del 14/06/2026
 
-**Generazione asincrona + redesign UI FATTI (13/06/2026):**
-- Backend: `POST /api/sets/generate-async` avvia un job in background, `GET /api/sets/generate-status` riporta status/phase/setlist_id (pattern enrichment). `generate_ai_set` accetta `on_phase`. Risolve lo spinner lungo: la UI fa polling e mostra fase + tempo trascorso. Verificato end-to-end (curl + browser).
-- Frontend: **redesign completo** applicando lo stack della skill web-artifacts-builder alla webapp Next.js (Tailwind + componenti stile shadcn/ui + lucide-react), tema studio scuro/accento lime, anti-slop. Nuovo design system in `frontend/app/globals.css` (token @theme), `frontend/components/ui.tsx` (Card/Button/Input/Badge/Progress/Alert/…), `frontend/components/sidebar.tsx`, `frontend/lib/cn.ts`. Tutte le pagine ridisegnate. Set Builder con barra di avanzamento + risultato curato (cover, badge rischio, motivazione AI, blocchi validazione). Verificato nel browser (Dashboard/Library/Set Builder/Settings).
-- ⚠️ Nota: la skill web-artifacts-builder produce artifact claude.ai sandboxed (no fetch a localhost), quindi NON usabile direttamente; ne ho usato stack+filosofia di design nella vera app Next.js.
+Il progetto ha ridefinito il perimetro:
 
-⚠️ Latenza generazione AI ancora variabile (~40-90s tipico, fino a 180s); ora però l'UX è asincrona con feedback, quindi accettabile.
+- **Rekordbox XML rimosso** — non è più neanche opzionale. Il flusso parte solo da playlist streaming.
+- **SoundCloud** — rimandato a dopo il completamento del flusso Spotify. Valutare fattibilità API prima di implementare.
+- **Import manuale** — CSV/testo libero "Artista - Titolo" da aggiungere, in coda dopo Discovery mode.
+- **AI prompt arricchito** — l'AI riceverà il profilo completo della playlist (BPM arc, keys dominanti, gap, mood target) oltre ai soli candidati.
+- **Discovery mode** — nuova funzionalità principale: suggerisce musica nuova compatibile con il set/playlist dell'utente. Due entry point: gap-driven (colma buchi specifici) e playlist-seed (espandi una playlist). Fonti: Spotify `/recommendations` + Last.fm similar artists. AI spiega perché ogni traccia risolve il problema.
 
-F9 (Alternative per traccia) e F10 (Transition Finder arricchito) restano opzionali per completare al 100% l'MVP 3.
+---
 
-## Prossimo passo: MVP 4 (Library Expansion)
+## Roadmap nuova
 
-1. Client Discogs + MusicBrainz in `integrations/` (cache, rate limit), dietro le ABC già presenti.
-2. Modelli Label/Release/LibraryGap/DiscoverySuggestion (già in docs/03); migrazione via `ensure_schema`.
-3. Expansion from track/artist/genre/set (F12–F15), suggerimenti contestualizzati con query di ricerca pratiche.
-4. UI "Expand Library" + stati suggerimenti (new/to_listen/listened/added/ignored).
+### Fase D1 — Rimozione Rekordbox
 
-## Logging (aggiunto 2026-06-13)
+- [ ] Elimina `routers/imports.py` + endpoint `POST /api/imports`
+- [ ] Elimina `services/rekordbox_parser.py` + `services/import_service.py`
+- [ ] Rimuovi `export_rekordbox.xml` e `tests/conftest.py` fixture che la usa
+- [ ] Aggiorna `tests/` che dipendono da Rekordbox (rimpiazza fixture con dati sintetici Spotify)
+- [ ] Rimuovi voce "Upload XML" dalla dashboard frontend
+- [ ] Rimuovi `lxml` da `requirements.txt`
+- [ ] Verifica: `pytest` verde, `npm run build` OK, `/api/tracks` mostra solo tracce da Spotify
 
-- `core/config.py::setup_logging()`: console + file rotante in `backend/logs/djassistant.log` (5×2MB). Livello via `LOG_LEVEL` in .env (default INFO). `backend/logs/` in .gitignore.
-- Middleware in `main.py`: ogni richiesta loggata come `METODO PATH -> status (ms)`; eccezioni non gestite con stacktrace.
-- Si è già rivelato utile: ha individuato il rate limit Spotify da 12h (vedi sotto).
+### Fase D2 — Cache enrichment
 
-## Hardening Spotify (2026-06-13)
+- [ ] Aggiunge tabella/colonne cache in DB: `enrichment_cache` (provider, lookup_key, result_json, cached_at)
+- [ ] `feature_enrichment.py`: legge dalla cache prima di chiamare il provider
+- [ ] `GET /api/enrichment/features/status` espone hit/miss ratio
+- [ ] Test: enrichment su traccia già in cache → zero chiamate rete
 
-- **Enrichment ora asincrono**: `POST /api/spotify/enrich` avvia un thread e ritorna subito; la UI fa polling di `GET /api/spotify/enrich/status` (status/phase/processed/total) e mostra barra di avanzamento. Risolve il "carica all'infinito" (prima era sincrono e bloccava la fetch; per giunta il backend era spento).
-- **Rate limit 429 con Retry-After enorme**: prima `time.sleep(wait)` dormiva per ore. Ora oltre `MAX_RETRY_WAIT=30s` si solleva un errore chiaro ("riprova tra ~N minuti"). Aggiunto throttle `SINGLE_GET_DELAY=0.08s` tra le GET singole del fallback.
-- **redirect_uri esposto** in `/api/spotify/status` e mostrato in Settings con bottone Copia + troubleshooting per l'errore "Not matching configuration". Deve combaciare ESATTO col dashboard: `http://127.0.0.1:8000/api/spotify/callback`.
-- ⚠️ Durante i test ho saturato il rate limit dell'app Spotify (attivo ~12h dal 2026-06-13 mattina). La libreria è comunque già arricchita (198 tracce); l'enrich non-force è no-op da cache. Il `force` fallirà finché il limite non scade.
-- 22 test verdi (nuovo: `test_enrich_reports_progress`).
+### Fase E — AI prompt arricchito
 
-## Checklist MVP 1
+- [ ] `ai_agent.py`: calcola profilo playlist (BPM arc, Camelot distribution, top generi, mood medio, gap identificati) e lo include nel prompt
+- [ ] Il prompt specifica esplicitamente cosa vuole l'utente (mood target, energia, durata) come vincoli narrativi
+- [ ] Test: `FakeLLM` riceve il profilo completo nel prompt (assertion su contenuto)
 
-- [x] Git init + commit docs
-- [x] Backend skeleton (config, db, modelli SQLAlchemy)
-- [x] Parser Rekordbox XML + import service + report
-- [x] Test parser su `export_rekordbox.xml` (fixture reale, 293 tracce)
-- [x] API import + tracks (filtri)
-- [x] Scoring transizioni + test
-- [x] API transitions (before/after/score)
-- [x] Candidate engine + set generator algoritmico + test
-- [x] API sets (generate/list/get/export csv+text)
-- [x] Endpoint stats per dashboard (`GET /api/stats`)
-- [x] Stub interfacce integrations (Spotify/Discogs/MusicBrainz/LLM in `app/integrations/`)
-- [x] Frontend Next.js 16 scaffold (Node 24 installato in `C:\Program Files\nodejs`)
-- [x] Frontend: Dashboard (stats+upload), Library (filtri+paginazione), Track Detail (cue+prima/dopo), Set Builder (vincoli+export), Transition Finder (ricerca+dopo/prima)
-- [x] README setup + `.env.example`
+### Fase F — Discovery mode
 
-## Stato verificato
+- [ ] Integrazione `SpotifyRecommendationsClient`: seed tracks + audio features → lista candidati
+- [ ] Integrazione `LastFMProvider` concreto: similar artists → candidati aggiuntivi
+- [ ] `services/discovery.py`: orchestratore che combina le due fonti, dedup, ranking per compatibilità con il set/playlist
+- [ ] Endpoint `POST /api/discovery/gap` (gap-driven: riceve gap identificato, restituisce candidati rankkati)
+- [ ] Endpoint `POST /api/discovery/expand` (playlist-seed: riceve playlist_id, restituisce candidati per espanderla)
+- [ ] AI: per ogni candidato spiega perché risolve il problema specifico (gap BPM, energia, Camelot)
+- [ ] Frontend: pagina Discovery con due tab (Gap-driven / Espandi playlist), card traccia con score di compatibilità e spiegazione AI, azione "Aggiungi a playlist"
 
-- `pytest` backend: **17/17 verdi** (parser su XML reale, scoring, import idempotente, generator).
-- Smoke test API completo OK: import 293 tracce → filtri → transizioni → generate set (9 tracce/46min, target 45) → export text/csv → stats.
-- `npm run build` frontend: OK, 6 route.
-- Verifica visiva nel browser (preview): Dashboard renderizza, Library carica le 293 tracce dal backend (CORS ok), zero errori console.
+### Backlog
 
-## Checklist MVP 2 — ✅ completata
+- [ ] Import manuale playlist (CSV o testo "Artista - Titolo")
+- [ ] SoundCloud import (valutare fattibilità API prima)
+- [ ] F10 Transition Finder classification (technically safe / creative risk / good reset)
+- [ ] Last.fm provider per generi/tag aggiuntivi (blocco enrichment)
+- [ ] PostgreSQL migration (low priority, SQLite sufficiente per mono-utente)
 
-- [x] `SpotifyWebClient` concreto (`integrations/spotify.py`): client_credentials per metadata (nessun login), authorization_code per playlist, refresh token, retry su 429
-- [x] Endpoint: GET /api/spotify/status, /login, /callback; POST /enrich?force=, /create-playlist
-- [x] Enrichment (`services/enrichment.py`): completa title/artist/album/anno SOLO se vuoti, cover+generi+artisti sempre; `enriched_at` = cache; mai BPM/key
-- [x] Tabelle nuove: Artist (generi/popularity), SpotifyToken; colonne Track: album_art_url, spotify_artist_id, enriched_at; migrazione leggera in `db.ensure_schema()`
-- [x] Re-import non cancella i metadata arricchiti (fix `_apply` in import_service)
-- [x] UI: pagina Settings (stato, login, enrich con istruzioni credenziali), cover in Library e Track Detail, bottone "Crea playlist Spotify" nel Set Builder
-- [x] 21 test verdi (4 nuovi con FakeSource: fill-only-empty, DJ-data intoccati, cache, re-import safe)
-- [x] Verificato live: migrazione su DB esistente ok (293 tracce), /settings risponde, enrich senza credenziali → 409 con istruzioni
+---
 
-**Enrichment reale ESEGUITO con successo** (12/06/2026): 198 tracce arricchite, 127 artisti, 0 not found. Restrizioni Spotify 2025 scoperte sul campo e gestite:
-- Redirect URI: `http://localhost` rifiutato → si usa `http://127.0.0.1:8000/api/spotify/callback` (in .env e nel dashboard Spotify).
-- Endpoint batch (`/tracks?ids=`, `/artists?ids=`) → 403 per le app in development mode: il client fa fallback automatico a GET singole.
-- Campo `genres` degli artisti: arriva sempre vuoto per le nuove app → Track.genre resta vuoto; i generi arriveranno da Discogs/MusicBrainz (MVP 4). Il candidate engine già tollera il genere assente.
+## Storico completato
 
-⚠️ Login OAuth utente (per creare playlist) non ancora provato: richiede il browser dell'utente. Redirect URI nel dashboard Spotify deve essere `http://127.0.0.1:8000/api/spotify/callback`.
+### MVP 1-3 + Pivot A-C (completo al 13/06/2026, 76 test verdi)
 
-## Prossimo passo: MVP 3 (AI Set Agent)
+**MVP 1 — Core deterministico** ✅
+- Parser Rekordbox XML, import service, scoring transizioni, set generator algoritmico, API rest, 293 tracce fixture
 
-1. `LLMClient` concreto in `integrations/` (provider astratto; API key in .env, `claude-api` skill per riferimento API Anthropic).
-2. Prompt libero → AI Set Agent: input candidate+scores (F7 in docs/05), output JSON validato con Pydantic.
-3. Validation Engine (F8): esistenza track_id, duplicati, durata, vincoli; retry/correzione/warning.
-4. Alternative per traccia (F9) e spiegazioni narrative al posto di quelle tecniche.
+**MVP 2 — Spotify** ✅
+- `SpotifyWebClient` OAuth (client_credentials + authorization_code)
+- Enrichment metadata (title/artist/album/cover/generi), cache via `enriched_at`, asincrono con polling
+- Hardening rate limit 429, redirect URI 127.0.0.1, fallback endpoint batch
+- Test reale (12/06/2026): 198 tracce arricchite, 0 not found
 
-## Note frontend
+**MVP 3 — AI Set Agent** ✅
+- `AnthropicLLMClient` SDK ufficiale, structured outputs, adaptive thinking
+- AI Set Agent: candidate engine (cap 60) → LLM → validation → narrative
+- Validation Engine: track_id verificati, dedup, max artista, durata, BPM/Camelot jump warnings
+- Generazione asincrona (`generate-async` + polling status)
+- Set salvati + editing (sposta/rimuovi/sostituisci), F9 Alternative Generator
+- Redesign UI (Tailwind + design system, tema scuro/lime)
+- Tuning latenza: effort=low + adaptive thinking → ~66s, qualità ottima (default)
+- Test reale (13/06/2026): 4 set generati, qualità ottima
 
-- Next.js **16** (App Router): `params` è una `Promise` — nei client component si usa `use(params)`. Docs in `frontend/node_modules/next/dist/docs/`.
-- `frontend/dev.cmd` avvia il dev server garantendo Node nel PATH; usato da `.claude/launch.json` per il preview.
-- API client e tipi TS in `frontend/lib/api.ts` (`NEXT_PUBLIC_API_URL`, default `http://localhost:8000`).
+**Pivot Fase A — Fondamenta streaming-first** ✅
+- `rekordbox_track_id` nullable, modello `Playlist`, campi feature (camelot_key, mood, energy, danceability, vocalness, label, release_date, enrichment_source/confidence)
+- Stati traccia: imported | enriched | ready_for_set | missing_features | low_confidence
+- Import playlist Spotify deterministico con deduplica ISRC
+- Gap Analysis deterministica (openers, ponti BPM, Camelot, energia, vocal consecutivi, variety)
+- Ruoli set (`assign_roles`, peak ~70%)
+
+**Pivot Fase B — Provider feature musicali** ✅
+- `GetSongBPMProvider`: BPM/key/Camelot, confidenza stimata, httpx iniettabile
+- `MusicBrainzProvider`: ISRC → label/release_date/genere
+- `ChainedFeatureProvider`: GetSongBPM → MusicBrainz, first-wins
+- Router `/api/enrichment/features` asincrono con polling
+- Frontend: card feature musicali in Settings con progress bar
+
+**Pivot Fase C — Set Builder dalla playlist** ✅
+- `SetGenerationRequest.playlist_id` → candidate engine scoped alla playlist
+- Scoring feature: energia/mood/genere in `_candidate_score`
+- Export Markdown con ruolo/BPM/key/durata/transizione
+- Frontend: Set Builder con selettore playlist + energia/mood, badge ruolo, nota transizione
+
+**Logging (13/06/2026)** ✅
+- Console + file rotante `backend/logs/djassistant.log` (5×2MB)
+- Middleware log richieste, livello via `LOG_LEVEL`
+
+---
 
 ## Come riprendere
 
 1. `git log --oneline` per vedere i checkpoint.
 2. Backend: `cd backend; .\.venv\Scripts\Activate.ps1; pytest` — i test devono essere verdi.
 3. Avvio backend: `uvicorn app.main:app --reload --port 8000` (da `backend/`).
-4. Proseguire dalla prima voce non spuntata della checklist.
+4. Proseguire dalla prima voce non spuntata della roadmap nuova (Fase D1 — Rimozione Rekordbox).
 
-## Note tecniche accumulate
+## Note tecniche
 
-- Node NON era installato; avviata installazione `winget install OpenJS.NodeJS.LTS` (background). Se manca ancora, reinstallare o usare la versione portable.
 - Python 3.13.2, git 2.45.1.
-- Vedi `CLAUDE.md` per le insidie del formato XML (tracce Spotify senza Name/Artist, ecc.).
+- Node in `C:\Program Files\nodejs` (nei terminali vecchi: `$env:Path += ";C:\Program Files\nodejs"`).
+- Next.js 16: `params` è una `Promise` nei client component — usare `use(params)`.
+- OAuth Spotify: redirect URI deve essere esattamente `http://127.0.0.1:8000/api/spotify/callback` nel dashboard Spotify.
+- AI: senza impostare l'effort, Sonnet 4.6 usa default `high` → thinking massiccio → blocco. Usare sempre `AI_EFFORT=low` + `AI_THINKING=adaptive`.

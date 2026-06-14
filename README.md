@@ -1,6 +1,6 @@
-# DJ Assistant — AI DJ Set Builder & Library Expansion
+# DJ Assistant — AI DJ Set Builder & Discovery
 
-Webapp personale (locale/self-hosted) per preparare DJ set in modo intelligente: importa la libreria da Rekordbox XML, arricchisce i metadata via Spotify, genera set coerenti con un agente AI, spiega le scelte e suggerisce come ampliare la collezione (crate digging contestualizzato).
+Webapp personale (locale/self-hosted) per preparare DJ set a partire da **playlist Spotify**: importa le tracce, arricchisce BPM/key/mood/energia via provider esterni, genera set coerenti con ruoli e spiegazioni (algoritmo deterministico + agente AI), segnala i buchi della playlist e aiuta a scoprire nuova musica compatibile con il tuo stile.
 
 **Non è** un software per suonare musica: è un assistente di preparazione, analisi e scoperta.
 
@@ -10,28 +10,21 @@ Webapp personale (locale/self-hosted) per preparare DJ set in modo intelligente:
 |---|---|
 | [docs/01-product-vision.md](docs/01-product-vision.md) | Contesto, obiettivi, cosa NON fa, criteri di successo |
 | [docs/02-architecture.md](docs/02-architecture.md) | Stack, moduli, principio deterministico vs AI |
-| [docs/03-data-model.md](docs/03-data-model.md) | Entità, schema dati, note sul formato XML reale |
+| [docs/03-data-model.md](docs/03-data-model.md) | Entità, schema dati |
 | [docs/04-api-spec.md](docs/04-api-spec.md) | Endpoint REST del backend |
 | [docs/05-functional-spec.md](docs/05-functional-spec.md) | Specifica funzionale dettagliata (F1–F15) |
-| [docs/06-roadmap.md](docs/06-roadmap.md) | Fasi MVP 1→4 con checklist |
-
-La bozza originale del progetto è conservata in [prompt_ai_dj_set_builder.md](prompt_ai_dj_set_builder.md).
+| [docs/06-roadmap.md](docs/06-roadmap.md) | Fasi con checklist |
 
 ## Stack
 
 ```text
 Backend:    Python + FastAPI
-Frontend:   React / Next.js
+Frontend:   React / Next.js 16 (App Router, Tailwind)
 Database:   SQLite (MVP) → PostgreSQL (futuro)
 ORM:        SQLAlchemy + Pydantic
-XML:        lxml
-Esterni:    Spotify Web API (OAuth), Discogs API, MusicBrainz API
-AI:         LLM API astratta dietro un service layer
+Esterni:    Spotify Web API (OAuth), GetSongBPM, MusicBrainz, Last.fm
+AI:         Anthropic SDK (claude-opus-4-8 default)
 ```
-
-## Dati di esempio
-
-[export_rekordbox.xml](export_rekordbox.xml) — export reale da Rekordbox 7.2.14 con 293 tracce (Spotify, SoundCloud e file locali). Usato come fixture per sviluppo e test.
 
 ## Setup
 
@@ -44,7 +37,7 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env        # opzionale: i default funzionano per MVP 1
+copy .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -67,16 +60,17 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest tests
 ```
 
-I test usano `export_rekordbox.xml` (libreria reale, 293 tracce) come fixture.
-
 ### Primo utilizzo
 
 1. Avvia backend e frontend.
-2. Dalla Dashboard carica il file XML esportato da Rekordbox.
-3. Esplora la libreria, genera un set dal Set Builder, esporta in testo/CSV.
-
-> Nota: fino a MVP 2 (enrichment Spotify) le tracce Spotify appaiono senza titolo/artista — è un limite dell'export Rekordbox, non un bug.
+2. In Settings configura le credenziali Spotify e connetti l'account.
+3. Dalla pagina Playlists importa una playlist Spotify.
+4. Avvia l'enrichment feature (BPM/key/genere) dalla pagina Settings.
+5. Dal Set Builder genera un set scegliendo la playlist e i parametri (durata, mood, energia).
+6. Edita la scaletta, esporta in Markdown o crea una playlist Spotify.
 
 ## Stato del progetto
 
-🔨 MVP 1 in corso — backend completo e testato, frontend in sviluppo. Stato dettagliato in [PROGRESS.md](PROGRESS.md), fasi in [roadmap](docs/06-roadmap.md).
+MVP 1-3 completati (core deterministico, Spotify, AI Set Agent) + Pivot Fase A-C (streaming-first, provider BPM/key, Set Builder da playlist). In lavorazione: cleanup Rekordbox, cache enrichment, AI prompt arricchito, Discovery mode.
+
+Stato dettagliato in [PROGRESS.md](PROGRESS.md).

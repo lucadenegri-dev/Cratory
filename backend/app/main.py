@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings, setup_logging
 from app.db import ensure_schema
-from app.routers import ai, imports, sets, spotify, tracks, transitions
+from app.routers import ai, enrichment, playlists, sets, spotify, tracks, transitions
 
 logger = logging.getLogger("app.request")
 
@@ -44,11 +44,12 @@ async def log_requests(request: Request, call_next):
                 request.method, request.url.path, response.status_code, elapsed)
     return response
 
-app.include_router(imports.router)
 app.include_router(tracks.router)
 app.include_router(transitions.router)
 app.include_router(sets.router)
+app.include_router(playlists.router)
 app.include_router(spotify.router)
+app.include_router(enrichment.router)
 app.include_router(ai.router)
 
 

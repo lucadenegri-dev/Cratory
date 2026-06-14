@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Upload, Music, Gauge, KeyRound, Disc3, CloudUpload, CircleAlert, ArrowRight } from "lucide-react";
-import { apiGet, uploadXml, type LibraryStats } from "@/lib/api";
-import { Card, Button, Alert, Spinner } from "@/components/ui";
+import { Music, Gauge, KeyRound, CircleAlert, ArrowRight } from "lucide-react";
+import { apiGet, type LibraryStats } from "@/lib/api";
+import { Card, Alert } from "@/components/ui";
 
 function Stat({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: React.ReactNode; accent?: boolean }) {
   return (
@@ -20,62 +20,34 @@ function Stat({ icon, label, value, accent }: { icon: React.ReactNode; label: st
 export default function Dashboard() {
   const [stats, setStats] = useState<LibraryStats | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [report, setReport] = useState<Record<string, unknown> | null>(null);
 
   const load = useCallback(() => {
     apiGet<LibraryStats>("/api/stats").then((s) => { setStats(s); setError(null); }).catch((e) => setError(String(e.message ?? e)));
   }, []);
   useEffect(load, [load]);
 
-  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImporting(true); setError(null);
-    try {
-      const r = await uploadXml(file);
-      setReport(r.stats);
-      load();
-    } catch (err) {
-      setError(String((err as Error).message ?? err));
-    } finally {
-      setImporting(false);
-      e.target.value = "";
-    }
-  }
-
   const empty = stats && stats.total_tracks === 0;
 
   return (
     <div>
-      <header className="mb-6 flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted">Panoramica della libreria e import da Rekordbox.</p>
-        </div>
-        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-fg transition-colors hover:bg-primary-hover">
-          {importing ? <Spinner className="h-4 w-4 border-primary-fg/40 border-t-primary-fg" /> : <Upload size={16} />}
-          {importing ? "Import…" : "Importa XML"}
-          <input type="file" accept=".xml,text/xml" onChange={onUpload} disabled={importing} className="hidden" />
-        </label>
+      <header className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <p className="mt-1 text-sm text-muted">Panoramica della libreria.</p>
       </header>
 
       {error && <div className="mb-6"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
 
-      {report && (
-        <div className="mb-6"><Alert tone="success">
-          ✓ Import: {String(report.created)} nuove, {String(report.updated)} aggiornate · {String(report.total_tracks)} tracce totali
-        </Alert></div>
-      )}
-
       {empty && (
         <Card className="mb-6">
           <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-            <CloudUpload size={36} className="text-faint" />
+            <Music size={36} className="text-faint" />
             <div>
               <p className="font-medium">Libreria vuota</p>
-              <p className="mt-1 text-sm text-muted">Carica l&apos;export XML di Rekordbox per iniziare. Il re-import aggiorna senza duplicare.</p>
+              <p className="mt-1 text-sm text-muted">Importa una playlist Spotify per iniziare.</p>
             </div>
+            <Link href="/playlists" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover">
+              Vai alle Playlists <ArrowRight size={14} />
+            </Link>
           </div>
         </Card>
       )}

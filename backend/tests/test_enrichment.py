@@ -2,7 +2,8 @@
 
 from app.models import Artist, Track
 from app.services.enrichment import enrich_library
-from app.services.import_service import import_rekordbox_xml
+
+N = 20  # tracce sintetiche usate in tutti i test
 
 
 class FakeSource:
@@ -18,10 +19,10 @@ class FakeSource:
         return [
             {
                 "id": sid,
-                "name": f"Title {sid[:4]}",
-                "artists": [{"id": f"art_{sid[:4]}", "name": f"Artist {sid[:4]}"}],
+                "name": f"Title {sid[-4:]}",
+                "artists": [{"id": f"art_{sid[-4:]}", "name": f"Artist {sid[-4:]}"}],
                 "album": {
-                    "name": f"Album {sid[:4]}",
+                    "name": f"Album {sid[-4:]}",
                     "release_date": "2021-05-01",
                     "images": [{"url": f"https://img/{sid}.jpg"}],
                 },
@@ -33,35 +34,32 @@ class FakeSource:
         if on_progress:
             on_progress(len(ids), len(ids), "artisti")
         return [
-            {"id": aid, "name": f"Artist {aid[4:]}", "genres": ["deconstructed club", "experimental"], "popularity": 55}
+            {"id": aid, "name": f"Artist {aid[-4:]}", "genres": ["deconstructed club", "experimental"], "popularity": 55}
             for aid in ids
         ]
 
 
-def test_enrich_fills_empty_metadata_only(db, sample_xml_bytes):
-    import_rekordbox_xml(db, sample_xml_bytes)
+def test_enrich_fills_empty_metadata(db, seed_tracks):
+    seed_tracks(n=N, with_metadata=False)  # tracce senza title/artist
     fake = FakeSource()
 
     report = enrich_library(db, fake)
-    assert report["enriched"] == 198
+    assert report["enriched"] == N
     assert report["artists_updated"] > 0
 
     spotify_tracks = db.query(Track).filter(Track.spotify_id.is_not(None)).all()
-    # tutti arricchiti: titolo, artista, cover, anno, genere da artista
     assert all(t.title for t in spotify_tracks)
     assert all(t.artist for t in spotify_tracks)
     assert all(t.album_art_url for t in spotify_tracks)
-    # l'anno viene completato dove mancava (quello di Rekordbox non si tocca)
     assert all(t.year for t in spotify_tracks)
     assert all(t.genre for t in spotify_tracks)
     assert all(t.enriched_at for t in spotify_tracks)
-    # gli artisti sono stati salvati con generi e popularity
     artist = db.query(Artist).first()
     assert artist.genres and artist.popularity == 55
 
 
-def test_enrich_never_touches_dj_data(db, sample_xml_bytes):
-    import_rekordbox_xml(db, sample_xml_bytes)
+def test_enrich_never_touches_dj_data(db, seed_tracks):
+    seed_tracks(n=N, with_metadata=True)
     before = {
         t.id: (t.bpm, t.tonality, t.duration_seconds, t.play_count)
         for t in db.query(Track).all()
@@ -74,8 +72,8 @@ def test_enrich_never_touches_dj_data(db, sample_xml_bytes):
     assert before == after, "BPM/key/durata/playcount non devono cambiare con l'enrichment"
 
 
-def test_enrich_is_cached(db, sample_xml_bytes):
-    import_rekordbox_xml(db, sample_xml_bytes)
+def test_enrich_is_cached(db, seed_tracks):
+    seed_tracks(n=N, with_metadata=False)
     fake = FakeSource()
     enrich_library(db, fake)
     calls_after_first = fake.track_calls
@@ -86,27 +84,14 @@ def test_enrich_is_cached(db, sample_xml_bytes):
     assert fake.track_calls == calls_after_first
 
     report = enrich_library(db, fake, force=True)  # force ricarica
-    assert report["enriched"] == 198
+    assert report["enriched"] == N
 
 
-def test_enrich_reports_progress(db, sample_xml_bytes):
-    import_rekordbox_xml(db, sample_xml_bytes)
+def test_enrich_reports_progress(db, seed_tracks):
+    seed_tracks(n=N, with_metadata=False)
     events = []
     enrich_library(db, FakeSource(), on_progress=lambda p, t, phase: events.append((p, t, phase)))
     assert events, "il callback di progresso deve essere invocato"
     assert any(phase == "tracce" for _, _, phase in events)
-    # l'ultimo evento di ciascuna fase deve avere processed == total
     last_tracce = [e for e in events if e[2] == "tracce"][-1]
     assert last_tracce[0] == last_tracce[1]
-
-
-def test_reimport_preserves_enriched_metadata(db, sample_xml_bytes):
-    import_rekordbox_xml(db, sample_xml_bytes)
-    enrich_library(db, FakeSource())
-
-    # re-import: l'XML ha title/artist vuoti per le tracce Spotify,
-    # ma i valori arricchiti non devono sparire
-    import_rekordbox_xml(db, sample_xml_bytes)
-    spotify_tracks = db.query(Track).filter(Track.spotify_id.is_not(None)).all()
-    assert all(t.title for t in spotify_tracks)
-    assert all(t.artist for t in spotify_tracks)

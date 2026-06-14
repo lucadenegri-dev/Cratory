@@ -1,63 +1,76 @@
-# 06 — Roadmap (MVP 1 → 4)
+# 06 — Roadmap
 
-Strategia: implementare **MVP 1 in modo completo**, predisponendo architettura e interfacce (service layer per Spotify, Discogs, MusicBrainz, AI) per le fasi successive senza implementarle subito.
+## Fasi completate
 
-> ⚠️ **Nota dal file XML reale**: le tracce Spotify hanno `Name` e `Artist` vuoti nell'export (sono ~198 su 293 tracce nel file di esempio). Fino a MVP 2 la libreria mostrerà molte tracce "senza titolo": il Library Explorer in MVP 1 deve gestire il caso con grazia (mostrare Spotify ID, badge "metadata mancanti", filtro dedicato). Questo rende MVP 2 (enrichment) la priorità immediata dopo MVP 1.
+- **MVP 1 — Core deterministico** ✅ scoring transizioni, set generator algoritmico, API.
+- **MVP 2 — Spotify** ✅ OAuth, enrichment metadata editoriali con cache, async + rate limit.
+- **MVP 3 — AI** ✅ AI Set Agent (structured output), prompt libero, spiegazioni narrative, Validation Engine, alternative F9, generazione asincrona, gestione set salvati + editor.
+- **Pivot Fase A** ✅ data model streaming-first, import playlist Spotify, gap analysis, ruoli set.
+- **Pivot Fase B** ✅ GetSongBPMProvider, MusicBrainzProvider, ChainedFeatureProvider, router enrichment async.
+- **Pivot Fase C** ✅ set da playlist (candidate scoped), scoring feature energia/mood/genere, export Markdown.
 
-## MVP 1 — Core deterministico ✅ obiettivo prima iterazione
+---
 
-- [ ] Struttura progetto (backend FastAPI a layer + frontend Next.js/React)
-- [ ] Database SQLite con SQLAlchemy + modelli principali
-- [ ] Upload XML Rekordbox e parsing collection (lxml)
-- [ ] Estrazione tracce, riconoscimento sorgente, estrazione Spotify/SoundCloud ID da `Location`
-- [ ] Salvataggio beatgrid (`TEMPO`) e cue point (`POSITION_MARK`)
-- [ ] Report di import (statistiche + errori)
-- [ ] Re-import idempotente (nessun duplicato)
-- [ ] Dashboard import
-- [ ] Tabella libreria con filtri: BPM, key, artist, source (+ metadata incompleti)
-- [ ] Scoring tecnico tra tracce (BPM, Camelot, durata, cue, play count)
-- [ ] Transition finder tecnico (prima/dopo)
-- [ ] Set generator algoritmico base con spiegazione tecnica
-- [ ] Interfacce/service layer predisposti per Spotify, Discogs, MusicBrainz, AI Agent
-- [ ] `.env.example`, README setup, logging
-- [ ] Seed/demo con `export_rekordbox.xml`
-- [ ] Test base: parser XML e scoring transizioni
+## In lavorazione
 
-## MVP 2 — Spotify
+### Fase D1 — Rimozione Rekordbox
 
-- [ ] Spotify OAuth (login + callback)
-- [ ] Enrichment metadata (title/artist/album/cover/link/artist genres/popularity) con cache
-- [ ] Completamento `Name`/`Artist` vuoti dalle API (senza mai toccare BPM/key di Rekordbox)
-- [ ] Cover e link Spotify nella UI (Library, Track Detail)
-- [ ] Creazione playlist Spotify da set generato
-- [ ] Gestione rate limit ed errori API
+Rekordbox XML non è più parte del flusso. Si rimuove l'intero import Rekordbox e si ripulisce il codice dipendente.
 
-## MVP 3 — AI
+- [ ] Elimina `routers/imports.py` + endpoint `POST /api/imports`
+- [ ] Elimina `services/rekordbox_parser.py` + `services/import_service.py`
+- [ ] Rimuovi fixture `export_rekordbox.xml` e aggiorna `tests/conftest.py`
+- [ ] Aggiorna test che usano la fixture Rekordbox (sostituisci con dati sintetici Spotify)
+- [ ] Rimuovi voce "Upload XML" dalla dashboard frontend
+- [ ] Rimuovi `lxml` da `requirements.txt`
+- [ ] Verifica: `pytest` verde, `npm run build` OK
 
-- [ ] AI Set Agent (input/output JSON come da F7)
-- [ ] Prompt libero per generazione set
-- [ ] Spiegazioni narrative (globale + per traccia)
-- [ ] Alternative per traccia (F9)
-- [ ] Validation Engine (F8) con auto-correzione / retry / warning
-- [ ] Transition Finder arricchito con classificazione musicale (F10)
+### Fase D2 — Cache enrichment
 
-## MVP 4 — Library Expansion
+- [ ] Tabella `enrichment_cache` in DB (provider, lookup_key, result_json, cached_at)
+- [ ] `feature_enrichment.py`: legge dalla cache prima di chiamare il provider
+- [ ] `GET /api/enrichment/features/status` espone hit/miss ratio
+- [ ] Test: enrichment su traccia già in cache → zero chiamate rete
 
-- [ ] Integrazione Discogs API
-- [ ] Integrazione MusicBrainz API (fallback)
-- [ ] Library Expansion Advisor (F11)
-- [ ] Expansion from Track (F12)
-- [ ] Expansion from Artist (F13)
-- [ ] Expansion from Set (F14)
-- [ ] Expansion from Genre (F15)
-- [ ] Gestione suggerimenti salvati con stati (new / to_listen / listened / added_to_library / ignored)
+### Fase E — AI prompt arricchito
+
+- [ ] `ai_agent.py`: calcola profilo playlist (BPM arc, Camelot distribution, top generi, mood medio, gap identificati) e lo include nel prompt
+- [ ] Il prompt comunica esplicitamente i vincoli dell'utente (mood target, energia, durata) come direzione narrativa
+- [ ] Test: `FakeLLM` verifica che il prompt contenga il profilo completo
+
+### Fase F — Discovery mode
+
+Nuova funzionalità: suggerisce musica nuova compatibile con il set/playlist. Due entry point che usano gli stessi servizi sotto.
+
+**Gap-driven**: Gap Analysis identifica il buco (BPM range, Camelot target, energia mancante) → Spotify `/recommendations` con audio features target + seed = tracce adiacenti al gap → Last.fm similar artists → candidati rankkati per compatibilità → AI spiega perché ogni traccia risolve il buco specifico.
+
+**Playlist-seed**: parti da una playlist importata → Spotify `/recommendations` con seed = tracce rappresentative della playlist → Last.fm similar artists degli artisti dominanti → candidati rankkati → AI spiega compatibilità con il tuo stile.
+
+- [ ] `integrations/lastfm.py` concreto: `similar_artists(artist)` → lista artisti
+- [ ] `services/discovery.py`: orchestratore (gap-driven + playlist-seed), combina fonti, dedup, ranking compatibilità
+- [ ] Endpoint `POST /api/discovery/gap` (input: gap object → output: candidati rankkati + spiegazioni AI)
+- [ ] Endpoint `POST /api/discovery/expand` (input: playlist_id → output: candidati rankkati + spiegazioni AI)
+- [ ] Frontend: pagina Discovery — due tab (Colma un buco / Espandi playlist), card traccia con score compatibilità, spiegazione AI, azione "Aggiungi a playlist"
+
+---
+
+## Backlog
+
+| Item | Note |
+|---|---|
+| Import manuale playlist | CSV o testo "Artista - Titolo", parsing + enrichment automatico |
+| SoundCloud import | Valutare fattibilità API prima di implementare |
+| F10 Transition Finder classification | technically safe / creative risk / good reset |
+| PostgreSQL | Low priority, SQLite sufficiente per mono-utente |
+
+---
 
 ## Rischi e punti di attenzione
 
 | Rischio | Mitigazione |
 |---|---|
-| Tracce Spotify senza titolo/artista fino a MVP 2 | UI MVP 1 tollerante ai metadata mancanti; MVP 2 subito dopo |
-| Sample/oneshot del sampler Rekordbox inquinano la libreria (durata 5–7s, BPM 0) | Filtro "evita tracce troppo corte" + flag nel report import |
-| `Genre` quasi sempre vuoto nell'XML | I generi arrivano dagli artist genres Spotify (MVP 2): il Candidate Engine deve funzionare anche senza genere |
-| Output AI non valido o con track_id inventati | Validation Engine obbligatorio + schema Pydantic sull'output |
-| Rate limit Spotify su enrichment massivo | Batch + cache persistente |
+| Tracce senza BPM/key | Stato `missing_features`; il motore tollera feature assenti (score neutri) |
+| Provider BPM/key con copertura variabile | `enrichment_confidence` + stato `low_confidence`; mai sovrascrivere dati esistenti |
+| Rate limit Spotify/provider | Batch, cache persistente, job async con polling |
+| Spotify `/recommendations` deprecato o ristretto | Fase F da verificare con le API restrictions 2025 prima di implementare |
+| Output AI con track_id inventati | Validation Engine obbligatorio + schema Pydantic |
