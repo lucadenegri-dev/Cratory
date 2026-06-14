@@ -1,4 +1,9 @@
-"""Modelli SQLAlchemy. Rekordbox e' la fonte primaria dei dati DJ (BPM, key, beatgrid, cue)."""
+"""Modelli SQLAlchemy.
+
+Il punto di partenza e' una playlist Spotify. BPM/tonalita'/genere/mood/energia
+vengono ricavati dal livello di enrichment esterno (services/enrichment +
+services/feature_enrichment + integrations/).
+"""
 
 from datetime import date, datetime, timezone
 
@@ -16,26 +21,49 @@ class Track(Base):
     __tablename__ = "tracks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    rekordbox_track_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    # Rekordbox ora OPZIONALE: nullable (SQLite tratta i NULL come distinti, l'unique regge).
+    rekordbox_track_id: Mapped[str | None] = mapped_column(String, unique=True, index=True)
     spotify_id: Mapped[str | None] = mapped_column(String, index=True)
     soundcloud_id: Mapped[str | None] = mapped_column(String, index=True)
-    source_type: Mapped[str] = mapped_column(String, index=True)  # spotify | soundcloud | local
+    # Sorgente/piattaforma: spotify | soundcloud | local | rekordbox
+    source_type: Mapped[str] = mapped_column(String, index=True)
+    # Identita' streaming generica (import da playlist) + matching enrichment
+    platform: Mapped[str | None] = mapped_column(String, index=True)  # spotify | soundcloud
+    platform_track_id: Mapped[str | None] = mapped_column(String, index=True)
+    isrc: Mapped[str | None] = mapped_column(String, index=True)
+    url: Mapped[str | None] = mapped_column(Text)
+    added_at: Mapped[datetime | None] = mapped_column(DateTime)  # added_at nella playlist
+    playlist_id: Mapped[int | None] = mapped_column(ForeignKey("playlists.id"), index=True)
+    playlist_name: Mapped[str | None] = mapped_column(String)
     title: Mapped[str | None] = mapped_column(String)
     artist: Mapped[str | None] = mapped_column(String, index=True)
     album: Mapped[str | None] = mapped_column(String)
-    genre: Mapped[str | None] = mapped_column(String, index=True)
+    genre: Mapped[str | None] = mapped_column(String, index=True)  # genre_primary
+    genre_secondary: Mapped[str | None] = mapped_column(String)
     year: Mapped[int | None] = mapped_column(Integer)
+    release_date: Mapped[date | None] = mapped_column(Date)
+    label: Mapped[str | None] = mapped_column(String)
     duration_seconds: Mapped[int | None] = mapped_column(Integer)
     bpm: Mapped[float | None] = mapped_column(Float, index=True)
     tonality: Mapped[str | None] = mapped_column(String, index=True)  # Camelot, es. "7A"
+    camelot_key: Mapped[str | None] = mapped_column(String, index=True)  # alias esplicito Camelot
+    # Feature musicali da enrichment esterno (0-100, mai inventate dall'AI)
+    mood: Mapped[str | None] = mapped_column(String)
+    energy: Mapped[int | None] = mapped_column(Integer)
+    danceability: Mapped[int | None] = mapped_column(Integer)
+    vocalness: Mapped[int | None] = mapped_column(Integer)
     play_count: Mapped[int] = mapped_column(Integer, default=0)
     rating: Mapped[int | None] = mapped_column(Integer)
     comments: Mapped[str | None] = mapped_column(Text)
     location: Mapped[str | None] = mapped_column(Text)
     date_added: Mapped[date | None] = mapped_column(Date)
-    # Enrichment Spotify (MVP 2) — mai BPM/key da Spotify
-    album_art_url: Mapped[str | None] = mapped_column(Text)
+    # Stato traccia: imported | enriched | ready_for_set | missing_features | low_confidence
+    status: Mapped[str] = mapped_column(String, default="imported", index=True)
+    # Enrichment — cover, fonte e confidenza del match
+    album_art_url: Mapped[str | None] = mapped_column(Text)  # artwork_url
     spotify_artist_id: Mapped[str | None] = mapped_column(String, index=True)
+    enrichment_source: Mapped[str | None] = mapped_column(String)  # spotify|musicbrainz|getsongbpm|...
+    enrichment_confidence: Mapped[int | None] = mapped_column(Integer)  # 0-100
     enriched_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
@@ -102,14 +130,37 @@ class SpotifyToken(Base):
     scope: Mapped[str | None] = mapped_column(Text)
 
 
-class ImportReport(Base):
-    __tablename__ = "import_reports"
+class Playlist(Base):
+    """Playlist importata da uno streaming (Spotify/SoundCloud). Punto di partenza del nuovo flusso."""
+
+    __tablename__ = "playlists"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    filename: Mapped[str | None] = mapped_column(String)
-    stats: Mapped[dict] = mapped_column(JSON)
-    errors: Mapped[list] = mapped_column(JSON, default=list)
+    platform: Mapped[str] = mapped_column(String, index=True)  # spotify | soundcloud
+    platform_playlist_id: Mapped[str | None] = mapped_column(String, index=True)
+    name: Mapped[str] = mapped_column(String)
+    owner: Mapped[str | None] = mapped_column(String)
+    url: Mapped[str | None] = mapped_column(Text)
+    artwork_url: Mapped[str | None] = mapped_column(Text)
+    track_count: Mapped[int] = mapped_column(Integer, default=0)
+    kind: Mapped[str] = mapped_column(String, default="playlist")  # playlist | liked
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class EnrichmentCache(Base):
+    """Cache delle risposte dei provider feature (GetSongBPM, MusicBrainz...).
+    Evita lookup ripetuti per la stessa traccia. result_json=None = not found (anch'esso cachato).
+    """
+
+    __tablename__ = "enrichment_cache"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    provider: Mapped[str] = mapped_column(String, index=True)
+    lookup_key: Mapped[str] = mapped_column(String, index=True)
+    result_json: Mapped[dict | None] = mapped_column(JSON)
+    cached_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Setlist(Base):
@@ -140,8 +191,11 @@ class SetlistTrack(Base):
     setlist_id: Mapped[int] = mapped_column(ForeignKey("setlists.id"), index=True)
     track_id: Mapped[int] = mapped_column(ForeignKey("tracks.id"), index=True)
     position: Mapped[int] = mapped_column(Integer)
+    # Ruolo della traccia nell'arco del set: intro|warmup|groove|transition|peak|release|closing
+    role: Mapped[str | None] = mapped_column(String)
     transition_score: Mapped[float | None] = mapped_column(Float)
     transition_reason: Mapped[str | None] = mapped_column(Text)
+    transition_note: Mapped[str | None] = mapped_column(Text)  # nota di transizione (AI o tecnica)
     ai_reason: Mapped[str | None] = mapped_column(Text)
     risk_level: Mapped[str | None] = mapped_column(String)  # low | medium | high
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

@@ -225,7 +225,6 @@ export interface LibraryStats {
   bpm_min: number | null;
   bpm_max: number | null;
   key_distribution: Record<string, number>;
-  last_import: { id: number; stats: Record<string, unknown>; created_at: string } | null;
 }
 
 async function handle<T>(res: Response): Promise<T> {

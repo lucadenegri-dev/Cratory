@@ -3,7 +3,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import CuePoint, ImportReport, Setlist, Track
+from app.models import CuePoint, Playlist, Setlist, SetlistTrack, Track
 
 
 def _apply_track_filters(  # noqa: PLR0913
@@ -100,7 +100,6 @@ def library_stats(db: Session) -> dict:
         by_source[t.source_type] = by_source.get(t.source_type, 0) + 1
         if t.tonality:
             key_distribution[t.tonality] = key_distribution.get(t.tonality, 0) + 1
-    last_import = db.scalar(select(ImportReport).order_by(ImportReport.created_at.desc()).limit(1))
     return {
         "total_tracks": len(tracks),
         "by_source": by_source,
@@ -111,13 +110,39 @@ def library_stats(db: Session) -> dict:
         "bpm_min": min(bpms) if bpms else None,
         "bpm_max": max(bpms) if bpms else None,
         "key_distribution": dict(sorted(key_distribution.items())),
-        "last_import": last_import,
     }
 
 
+_SETLIST_TRACKS = selectinload(Setlist.tracks).selectinload(SetlistTrack.track)
+
+
 def get_setlist(db: Session, setlist_id: int) -> Setlist | None:
-    return db.scalar(select(Setlist).where(Setlist.id == setlist_id))
+    return db.scalar(
+        select(Setlist).options(_SETLIST_TRACKS).where(Setlist.id == setlist_id)
+    )
 
 
 def list_setlists(db: Session) -> list[Setlist]:
-    return list(db.scalars(select(Setlist).order_by(Setlist.created_at.desc())).all())
+    return list(db.scalars(
+        select(Setlist).options(_SETLIST_TRACKS).order_by(Setlist.created_at.desc())
+    ).all())
+
+
+# --- Playlist importate (nuovo flusso) ---------------------------------------
+
+
+def list_playlists(db: Session) -> list[Playlist]:
+    return list(db.scalars(select(Playlist).order_by(Playlist.imported_at.desc())).all())
+
+
+def get_playlist(db: Session, playlist_id: int) -> Playlist | None:
+    return db.scalar(select(Playlist).where(Playlist.id == playlist_id))
+
+
+def tracks_for_playlist(db: Session, playlist_id: int) -> list[Track]:
+    return list(db.scalars(
+        select(Track)
+        .options(selectinload(Track.cue_points), selectinload(Track.beatgrid_points))
+        .where(Track.playlist_id == playlist_id)
+        .order_by(Track.added_at.is_(None), Track.added_at)
+    ).all())
