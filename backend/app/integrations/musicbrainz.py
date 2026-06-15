@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from app.integrations import MusicFeatureProvider
+from app.integrations._http import get_with_retries
 from app.integrations.getsongbpm import FeatureProviderError
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,11 @@ class MusicBrainzProvider(MusicFeatureProvider):
     # ---- HTTP -----------------------------------------------------------
 
     def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
-        r = self.http.get(f"{BASE}{path}", params={**params, "fmt": "json"})
+        r = get_with_retries(
+            self.http, f"{BASE}{path}",
+            params={**params, "fmt": "json"},
+            error_cls=FeatureProviderError,
+        )
         if r.status_code == 503:
             raise FeatureProviderError("MusicBrainz: rate limit (riprova piu' tardi).")
         if r.status_code >= 400:

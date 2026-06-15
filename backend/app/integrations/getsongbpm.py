@@ -17,11 +17,15 @@ import httpx
 
 from app.core.config import settings
 from app.integrations import MusicFeatureProvider
+from app.integrations._http import get_with_retries
 from app.services.camelot import parse_camelot, pitch_to_camelot
 
 logger = logging.getLogger(__name__)
 
 BASE = "https://api.getsong.co"
+# Alcuni server (incl. getsong.co) rispondono in modo anomalo senza uno User-Agent
+# esplicito: lo impostiamo per ridurre i reset di connessione/TLS.
+_USER_AGENT = "DJAssistant/0.1 (+http://localhost)"
 
 
 class FeatureProviderError(Exception):
@@ -37,12 +41,18 @@ class GetSongBPMProvider(MusicFeatureProvider):
 
     def __init__(self, api_key: str, http: httpx.Client | None = None):
         self.api_key = api_key
-        self.http = http or httpx.Client(timeout=15)
+        self.http = http or httpx.Client(
+            timeout=15, follow_redirects=True, headers={"User-Agent": _USER_AGENT}
+        )
 
     # ---- HTTP -----------------------------------------------------------
 
     def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
-        r = self.http.get(f"{BASE}{path}", params={**params, "api_key": self.api_key})
+        r = get_with_retries(
+            self.http, f"{BASE}{path}",
+            params={**params, "api_key": self.api_key},
+            error_cls=FeatureProviderError,
+        )
         if r.status_code == 429:
             raise FeatureProviderError("GetSongBPM: rate limit (riprova piu' tardi).")
         if r.status_code >= 400:

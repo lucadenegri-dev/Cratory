@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Music4, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { Music4, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ExternalLink } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
 import { Card, Input, Select, Checkbox, Alert, Badge } from "@/components/ui";
 
@@ -15,6 +15,15 @@ const STATUS_LABEL: Record<string, string> = {
   ready_for_set: "ready", enriched: "enriched", imported: "imported",
   missing_features: "no feat", low_confidence: "low conf",
 };
+const STATUS_OPTIONS: [string, string][] = [
+  ["ready_for_set", "Pronte per il set"],
+  ["enriched", "Arricchite"],
+  ["imported", "Importate"],
+  ["missing_features", "Senza feature"],
+  ["low_confidence", "Bassa confidenza"],
+];
+
+type Order = "asc" | "desc";
 
 export default function Library() {
   const [items, setItems] = useState<Track[]>([]);
@@ -25,50 +34,83 @@ export default function Library() {
 
   const [artist, setArtist] = useState("");
   const [title, setTitle] = useState("");
+  const [genre, setGenre] = useState("");
   const [source, setSource] = useState("");
+  const [status, setStatus] = useState("");
   const [bpmMin, setBpmMin] = useState("");
   const [bpmMax, setBpmMax] = useState("");
   const [key, setKey] = useState("");
   const [incomplete, setIncomplete] = useState(false);
+  const [sort, setSort] = useState("");
+  const [order, setOrder] = useState<Order>("asc");
 
   const load = useCallback(() => {
     apiGet<{ total: number; items: Track[] }>("/api/tracks", {
-      artist, title, source, bpm_min: bpmMin, bpm_max: bpmMax, key,
-      incomplete_metadata: incomplete ? true : undefined, limit, offset,
+      artist, title, genre, source, status, bpm_min: bpmMin, bpm_max: bpmMax, key,
+      incomplete_metadata: incomplete ? true : undefined,
+      sort: sort || undefined, order: sort ? order : undefined,
+      limit, offset,
     })
       .then((r) => { setItems(r.items); setTotal(r.total); setError(null); })
       .catch((e) => setError(String(e.message ?? e)));
-  }, [artist, title, source, bpmMin, bpmMax, key, incomplete, offset]);
+  }, [artist, title, genre, source, status, bpmMin, bpmMax, key, incomplete, sort, order, offset]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
 
   const cell = "px-3 py-2.5";
+
+  const toggleSort = (col: string) => {
+    if (sort === col) setOrder(order === "asc" ? "desc" : "asc");
+    else { setSort(col); setOrder("asc"); }
+    setOffset(0);
+  };
+
+  const th = (label: string, col: string, numeric = false) => {
+    const active = sort === col;
+    return (
+      <th
+        onClick={() => toggleSort(col)}
+        title="Ordina per questa colonna"
+        className={`${cell} ${numeric ? "tnum " : ""}cursor-pointer select-none whitespace-nowrap transition-colors hover:text-fg ${active ? "text-fg" : ""}`}
+      >
+        <span className="inline-flex items-center gap-1">
+          {label}
+          {active && (order === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+        </span>
+      </th>
+    );
+  };
 
   return (
     <div>
       <header className="mb-6 flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Libreria</h1>
-          <p className="mt-1 text-sm text-muted">{total} tracce dalle tue playlist importate · filtra per artista, BPM, tonalità, sorgente.</p>
+          <p className="mt-1 text-sm text-muted">{total} tracce dalle tue playlist importate · filtra e ordina per colonna.</p>
         </div>
       </header>
 
       <Card className="mb-4">
         <div className="p-3">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             <Input className="h-9" placeholder="Artista" value={artist} onChange={(e) => { setArtist(e.target.value); setOffset(0); }} />
             <Input className="h-9" placeholder="Titolo" value={title} onChange={(e) => { setTitle(e.target.value); setOffset(0); }} />
+            <Input className="h-9" placeholder="Genere" value={genre} onChange={(e) => { setGenre(e.target.value); setOffset(0); }} />
             <Select className="h-9" value={source} onChange={(e) => { setSource(e.target.value); setOffset(0); }}>
               <option value="">Tutte le sorgenti</option>
               <option value="spotify">Spotify</option>
               <option value="soundcloud">SoundCloud</option>
               <option value="manual">Manuale</option>
             </Select>
+            <Select className="h-9" value={status} onChange={(e) => { setStatus(e.target.value); setOffset(0); }}>
+              <option value="">Tutti gli stati</option>
+              {STATUS_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </Select>
             <Input className="h-9" type="number" placeholder="BPM min" value={bpmMin} onChange={(e) => { setBpmMin(e.target.value); setOffset(0); }} />
             <Input className="h-9" type="number" placeholder="BPM max" value={bpmMax} onChange={(e) => { setBpmMax(e.target.value); setOffset(0); }} />
-            <Input className="h-9" placeholder="Key (7A)" value={key} onChange={(e) => { setKey(e.target.value); setOffset(0); }} />
+            <Input className="h-9" placeholder="Key (es. 7A)" value={key} onChange={(e) => { setKey(e.target.value); setOffset(0); }} />
           </div>
-          <div className="mt-2"><Checkbox label="solo metadata incompleti" checked={incomplete} onChange={(v) => { setIncomplete(v); setOffset(0); }} /></div>
+          <div className="mt-2"><Checkbox label="solo dati incompleti (manca BPM/key o metadati)" checked={incomplete} onChange={(v) => { setIncomplete(v); setOffset(0); }} /></div>
         </div>
       </Card>
 
@@ -78,15 +120,15 @@ export default function Library() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-faint">
-              <th className={cell}>Title</th>
-              <th className={cell}>Artist</th>
-              <th className={cell}>Source</th>
-              <th className={`${cell} tnum`}>BPM</th>
-              <th className={cell}>Key</th>
-              <th className={`${cell} tnum`}>Energy</th>
-              <th className={cell}>Genere</th>
-              <th className={`${cell} tnum`}>Dur</th>
-              <th className={cell}>Stato</th>
+              {th("Title", "title")}
+              {th("Artist", "artist")}
+              {th("Source", "source")}
+              {th("BPM", "bpm", true)}
+              {th("Key", "key")}
+              {th("Energy", "energy", true)}
+              {th("Genere", "genre")}
+              {th("Dur", "duration", true)}
+              {th("Stato", "status")}
               <th className={cell}></th>
             </tr>
           </thead>

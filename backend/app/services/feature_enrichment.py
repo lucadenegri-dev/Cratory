@@ -131,17 +131,23 @@ def enrich_features(
     provider: FeatureProvider,
     *,
     force: bool = False,
+    playlist_id: int | None = None,
     on_progress: ProgressFn | None = None,
 ) -> dict:
     """Arricchisce con feature musicali le tracce che ne sono prive.
 
     force=True: ri-elabora tutte le tracce (anche quelle con BPM) e bypassa la cache
-    in lettura (utile per forzare dati freschi dal provider). In ogni caso aggiorna
-    la cache con i nuovi risultati.
+    in lettura (utile per forzare dati freschi dal provider, es. dopo un errore di
+    rete). In ogni caso aggiorna la cache con i nuovi risultati.
+
+    playlist_id: se valorizzato, limita l'enrichment alle tracce di quella playlist
+    (auto-enrichment post-import e ri-arricchimento di una singola playlist).
 
     Ritorna un report con enriched/not_found/total/cache_hits.
     """
     stmt = select(Track)
+    if playlist_id is not None:
+        stmt = stmt.where(Track.playlist_id == playlist_id)
     if not force:
         stmt = stmt.where(Track.bpm.is_(None))
     tracks = list(db.scalars(stmt).all())

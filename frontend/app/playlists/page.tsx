@@ -1,87 +1,76 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { Download, ListPlus, RefreshCw, Heart, AlertTriangle, Info, Music2, ClipboardList, Eye, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  apiGet,
-  importPlaylist,
-  importManualPlaylist,
+  Download, ClipboardList, Sparkles, AlertTriangle, Info, Music2, Eye, Trash2, Calendar,
+} from "lucide-react";
+import {
   listImportedPlaylists,
-  listSpotifyPlaylists,
   playlistGaps,
   deletePlaylist,
-  SPOTIFY_LOGIN_URL,
+  enrichPlaylist,
+  enrichmentJobStatus,
+  fmtDate,
   type GapAnalysis,
   type Playlist,
-  type SpotifyPlaylistRef,
-  type SpotifyStatus,
+  type FeatureEnrichJob,
 } from "@/lib/api";
-import { Card, CardHeader, Badge, Alert, Button, EmptyState, Spinner, Input, Textarea, Field } from "@/components/ui";
+import { Card, Badge, Alert, Button, EmptyState, Spinner, Progress } from "@/components/ui";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
 
 export default function PlaylistsPage() {
-  const [spotify, setSpotify] = useState<SpotifyStatus | null>(null);
-  const [available, setAvailable] = useState<SpotifyPlaylistRef[] | null>(null);
   const [imported, setImported] = useState<Playlist[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [gaps, setGaps] = useState<Record<number, GapAnalysis>>({});
-  const [manualName, setManualName] = useState("");
-  const [manualText, setManualText] = useState("");
+  const [job, setJob] = useState<FeatureEnrichJob | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const reload = useCallback(() => {
     listImportedPlaylists().then(setImported).catch((e) => setError(err(e)));
   }, []);
 
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+
+  const startPolling = useCallback(() => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await enrichmentJobStatus();
+        setJob(s);
+        if (s.status === "done") { stopPolling(); reload(); }
+        else if (s.status === "idle") stopPolling();
+        else if (s.status === "error") { stopPolling(); setError(s.error ?? "Arricchimento fallito"); }
+      } catch (e) { stopPolling(); setError(err(e)); }
+    }, 1000);
+  }, [reload, stopPolling]);
+
   useEffect(() => {
-    apiGet<SpotifyStatus>("/api/spotify/status").then(setSpotify).catch((e) => setError(err(e)));
     reload();
-  }, [reload]);
+    // Se un arricchimento è già in corso (es. avviato dall'auto-enrichment dopo
+    // l'import), riaggancia il polling per mostrarne l'avanzamento.
+    enrichmentJobStatus()
+      .then((s) => { setJob(s); if (s.status === "running") startPolling(); })
+      .catch(() => {});
+    return stopPolling;
+  }, [reload, startPolling, stopPolling]);
 
-  const loadAvailable = async () => {
-    setError(null);
-    setBusy("available");
-    try {
-      setAvailable(await listSpotifyPlaylists());
-    } catch (e) {
-      setError(err(e));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const doImport = async (playlistId: string, label: string) => {
+  const doReEnrich = async (p: Playlist) => {
     setError(null);
     setNotice(null);
-    setBusy(playlistId);
+    setBusy(`enrich-${p.id}`);
     try {
-      const rep = await importPlaylist(playlistId);
-      setNotice(`Importata "${rep.name}": ${rep.created} nuove, ${rep.updated} aggiornate, ${rep.skipped} saltate.`);
-      reload();
+      setJob(await enrichPlaylist(p.id));
+      startPolling();
     } catch (e) {
-      setError(`Import di ${label} fallito: ${err(e)}`);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const doManualImport = async () => {
-    setError(null);
-    setNotice(null);
-    setBusy("manual");
-    try {
-      const rep = await importManualPlaylist(manualName.trim() || "Playlist manuale", manualText);
-      setNotice(`Importata "${rep.name}": ${rep.created} nuove, ${rep.updated} riusate, ${rep.skipped} saltate.`);
-      setManualName("");
-      setManualText("");
-      reload();
-    } catch (e) {
-      setError(`Import manuale fallito: ${err(e)}`);
+      setError(`Arricchimento di "${p.name}" fallito: ${err(e)}`);
     } finally {
       setBusy(null);
     }
@@ -115,109 +104,47 @@ export default function PlaylistsPage() {
     }
   };
 
-  const connected = spotify?.configured && spotify?.user_connected;
+  const running = job?.status === "running";
+  const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
 
   return (
     <div>
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Playlist</h1>
-        <p className="mt-1 text-sm text-muted">
-          Importa una playlist Spotify come punto di partenza del tuo set.
-        </p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Playlist</h1>
+          <p className="mt-1 text-sm text-muted">Le tue playlist importate. Aggiungine una da Spotify o incollando una tracklist.</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/playlists/import-spotify"><Button size="sm"><Download size={15} /> Importa da Spotify</Button></Link>
+          <Link href="/playlists/import-manual"><Button size="sm" variant="outline"><ClipboardList size={15} /> Inserisci manualmente</Button></Link>
+        </div>
       </header>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
       {notice && <div className="mb-4"><Alert tone="success">{notice}</Alert></div>}
 
-      {!connected && (
-        <div className="mb-6">
-          <Alert tone="info">
-            {spotify && !spotify.configured
-              ? "Spotify non configurato: imposta le credenziali in Impostazioni."
-              : "Collega l'account Spotify per leggere le tue playlist."}
-            {spotify?.configured && (
-              <a href={SPOTIFY_LOGIN_URL} className="ml-2 font-medium underline">Collega Spotify →</a>
-            )}
-          </Alert>
-        </div>
-      )}
-
-      {/* Playlist disponibili su Spotify */}
-      {connected && (
-        <Card className="mb-6">
-          <CardHeader
-            title="Da Spotify"
-            subtitle="Seleziona una playlist da importare"
-            action={
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => doImport("liked", "Brani che ti piacciono")} disabled={busy !== null}>
-                  <Heart size={15} /> Liked
-                </Button>
-                <Button size="sm" onClick={loadAvailable} disabled={busy !== null}>
-                  {busy === "available" ? <Spinner /> : <RefreshCw size={15} />} Carica
-                </Button>
-              </div>
-            }
-          />
+      {/* Avanzamento arricchimento (auto dopo import o ri-arricchimento manuale) */}
+      {running && job && (
+        <Card className="mb-4">
           <div className="p-4">
-            {!available && <p className="text-sm text-muted">Premi “Carica” per elencare le tue playlist.</p>}
-            {available && available.length === 0 && <p className="text-sm text-muted">Nessuna playlist trovata.</p>}
-            <div className="grid gap-2">
-              {available?.map((p) => (
-                <div key={p.platform_playlist_id} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{p.name}</div>
-                    <div className="text-xs text-faint">{p.track_count} tracce{p.owner ? ` · ${p.owner}` : ""}</div>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => doImport(p.platform_playlist_id, p.name)} disabled={busy !== null}>
-                    {busy === p.platform_playlist_id ? <Spinner /> : <Download size={15} />} Importa
-                  </Button>
-                </div>
-              ))}
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span className="flex items-center gap-2 font-medium"><Sparkles size={15} className="text-primary" /> Arricchimento in corso…</span>
+              <span className="tnum text-muted">{job.processed}/{job.total || "?"}{pct != null ? ` (${pct}%)` : ""}</span>
             </div>
+            <Progress value={pct} />
           </div>
         </Card>
       )}
+      {job?.status === "done" && job.result && (
+        <div className="mb-4"><Alert tone="success">✓ Arricchimento completato: {job.result.enriched} tracce arricchite{job.result.not_found ? `, ${job.result.not_found} non trovate` : ""} su {job.result.total}.</Alert></div>
+      )}
 
-      {/* Import manuale (testo / CSV) */}
-      <Card className="mb-6">
-        <CardHeader
-          title="Import manuale"
-          subtitle="Incolla una tracklist: una riga per traccia, formato “Artista - Titolo” (o CSV “artista,titolo”)."
-        />
-        <div className="grid gap-3 p-4">
-          <Field label="Nome playlist">
-            <Input
-              value={manualName}
-              onChange={(e) => setManualName(e.target.value)}
-              placeholder="Es. Crate digging giugno"
-              disabled={busy !== null}
-            />
-          </Field>
-          <Field label="Tracklist" hint="Le tracce entrano senza BPM/key: arricchiscile poi da Impostazioni.">
-            <Textarea
-              value={manualText}
-              onChange={(e) => setManualText(e.target.value)}
-              rows={6}
-              placeholder={"Daft Punk - Da Funk\nBonobo - Kerala\nFour Tet - Baby"}
-              disabled={busy !== null}
-            />
-          </Field>
-          <div className="flex justify-end">
-            <Button onClick={doManualImport} disabled={busy !== null || manualText.trim() === ""}>
-              {busy === "manual" ? <Spinner /> : <ClipboardList size={15} />} Importa tracklist
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {/* Playlist importate */}
-      <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">Importate</h2>
       {imported && imported.length === 0 && (
-        <EmptyState icon={<ListPlus size={28} />} title="Nessuna playlist importata">
-          Importa la prima playlist per iniziare a costruire un set.
+        <EmptyState icon={<Music2 size={28} />} title="Nessuna playlist importata">
+          Usa “Importa da Spotify” o “Inserisci manualmente” per iniziare a costruire un set.
         </EmptyState>
       )}
+
       <div className="grid gap-3">
         {imported?.map((p) => (
           <Card key={p.id} className="p-4">
@@ -229,12 +156,19 @@ export default function PlaylistsPage() {
                   <Badge tone="neutral">{p.platform}</Badge>
                   {p.kind === "liked" && <Badge tone="info">liked</Badge>}
                 </div>
-                <div className="mt-1 text-xs text-faint">{p.track_count} tracce · {p.owner ?? "—"}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-faint">
+                  <span>{p.track_count} tracce</span>
+                  <span>· {p.owner ?? "—"}</span>
+                  <span className="inline-flex items-center gap-1">· <Calendar size={11} /> importata il {fmtDate(p.imported_at)}</span>
+                </div>
               </div>
               <div className="flex shrink-0 gap-1.5">
                 <Link href={`/playlists/${p.id}`}>
                   <Button size="sm" variant="outline"><Eye size={15} /> Apri</Button>
                 </Link>
+                <Button size="sm" variant="ghost" onClick={() => doReEnrich(p)} disabled={busy !== null || running}>
+                  {busy === `enrich-${p.id}` ? <Spinner /> : <Sparkles size={15} />} Arricchisci
+                </Button>
                 <Button size="sm" variant="ghost" onClick={() => loadGaps(p.id)} disabled={busy !== null}>
                   {busy === `gaps-${p.id}` ? <Spinner /> : <AlertTriangle size={15} />} Buchi
                 </Button>

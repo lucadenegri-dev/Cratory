@@ -150,10 +150,15 @@ export interface ServiceStatus {
   docs: string;
 }
 
+export type TransitionClass = "technically_safe" | "creative_risk" | "good_reset";
+
 export interface TransitionScore {
   score: number;
   technical_reasons: string[];
   warnings: string[];
+  classification: TransitionClass | null;
+  classification_label: string | null;
+  classification_reason: string | null;
 }
 
 export interface TransitionCandidate {
@@ -170,6 +175,9 @@ export interface SetlistTrack {
   transition_note: string | null;
   ai_reason: string | null;
   risk_level: string | null;
+  transition_class: TransitionClass | null;
+  transition_class_label: string | null;
+  transition_class_reason: string | null;
 }
 
 export interface SetlistValidation {
@@ -383,6 +391,21 @@ export function importManualPlaylist(name: string, text: string) {
   return apiPost<PlaylistImportReport>("/api/playlists/import-manual", { name, text });
 }
 
+// --- Enrichment feature musicali --------------------------------------------
+
+export function enrichmentJobStatus() {
+  return apiGet<FeatureEnrichJob>("/api/enrichment/features/status");
+}
+
+export function startEnrichment(force = false) {
+  return apiPost<FeatureEnrichJob>(`/api/enrichment/features?force=${force}`);
+}
+
+/** Riesegue l'enrichment sulle sole tracce di una playlist (force: bypassa la cache). */
+export function enrichPlaylist(playlistId: number) {
+  return apiPost<FeatureEnrichJob>(`/api/playlists/${playlistId}/enrich`);
+}
+
 export function trackLabel(t: Track): string {
   const fallback = t.spotify_id ? `[Spotify ${t.spotify_id.slice(0, 8)}…]` : `#${t.id}`;
   return `${t.artist ?? "?"} — ${t.title ?? fallback}`;
@@ -393,4 +416,11 @@ export function fmtDuration(seconds: number | null | undefined): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+export function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
 }

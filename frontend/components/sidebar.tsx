@@ -2,17 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Disc3, LayoutDashboard, Library, ListPlus, Sparkles, ListMusic, Shuffle, Settings, Compass } from "lucide-react";
+import { Disc3, LayoutDashboard, Library, ListPlus, ListMusic, Settings, Compass } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/playlists", label: "Playlist", icon: ListPlus },
   { href: "/library", label: "Libreria", icon: Library },
-  { href: "/set-builder", label: "Set Builder", icon: Sparkles },
   { href: "/discovery", label: "Discovery", icon: Compass },
   { href: "/sets", label: "Set", icon: ListMusic },
-  { href: "/transitions", label: "Transizioni", icon: Shuffle },
   { href: "/settings", label: "Impostazioni", icon: Settings },
 ];
 

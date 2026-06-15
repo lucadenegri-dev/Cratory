@@ -19,6 +19,7 @@ import httpx
 
 from app.core.config import settings
 from app.integrations import MusicFeatureProvider, SimilarityClient
+from app.integrations._http import get_with_retries
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +79,7 @@ class LastFMClient(SimilarityClient):
 
     def _get(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         query = {**params, "method": method, "api_key": self.api_key, "format": "json"}
-        try:
-            r = self.http.get(API, params=query)
-        except httpx.HTTPError as exc:
-            raise LastFMError(f"Last.fm irraggiungibile: {exc}") from exc
+        r = get_with_retries(self.http, API, params=query, error_cls=LastFMError)
         if r.status_code == 429:
             raise LastFMError("Last.fm: rate limit (riprova piu' tardi).")
         if r.status_code >= 400:

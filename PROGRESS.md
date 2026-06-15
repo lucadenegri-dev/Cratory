@@ -4,9 +4,25 @@
 
 ## Stato attuale
 
-**Fase:** D1-F completate + **import Spotify reale funzionante** + **pulizia DB legacy Rekordbox** + **redesign UI (Dashboard/Libreria/Playlist/Impostazioni)** (90 test verdi, 15/06/2026). Discovery è Last.fm-centric. Prossimo: valutazione modello AI economico (Haiku/Ollama); test reale enrichment con chiavi.
+**Fase:** D1-F completate + **import Spotify reale funzionante** + **pulizia DB legacy Rekordbox** + **redesign UI** + **F10 classificazione transizioni** + **modello AI economico Haiku 4.5** + **pulizia UX/enrichment** (auto-enrich post-import, ri-arricchimento per playlist, fix crash SSL) (107 test verdi, 15/06/2026). Discovery è Last.fm-centric. Prossimo: test reale enrichment/discovery con chiavi; provider locale Ollama (opzionale).
 
 **Ultimo aggiornamento:** 2026-06-15
+
+### Milestone 15/06/2026 (3) — Pulizia UX + enrichment resiliente e per-playlist
+
+- **Sidebar**: rimosse le voci *Set Builder* e *Transizioni* (le pagine restano raggiungibili dai link interni). Solo modifica a `components/sidebar.tsx`.
+- **Auto-enrichment post-import**: `/api/playlists/import` e `/import-manual` avviano automaticamente l'enrichment sulle tracce appena importate (best-effort: saltato senza errori se nessun provider è configurato o un job è già in corso).
+- **Ri-arricchimento per playlist**: nuovo `POST /api/playlists/{id}/enrich` (con `force=True` → bypassa la cache e ritenta anche le tracce rimaste senza dati). Bottone "Arricchisci" su ogni card playlist + banner di avanzamento condiviso.
+- **Fix crash SSL** (`[SSL: UNEXPECTED_EOF_WHILE_READING]`): `getsongbpm.py`/`musicbrainz.py` non catturavano gli errori di trasporto httpx → un drop TLS uccideva l'intero job. Nuovo helper `integrations/_http.py` con **retry + backoff** (più User-Agent esplicito su GetSongBPM); l'errore di rete diventa "non trovato" per la singola traccia e il job prosegue. Last.fm rifattorizzato sullo stesso helper.
+- **Job enrichment condiviso**: estratto in `services/enrichment_job.py` (stato unico tra router import ed enrichment); `enrich_features` accetta `playlist_id` per lo scoping.
+- **Pagina Playlist ristrutturata**: elenco playlist importate (con data di import) + due bottoni "Importa da Spotify" / "Inserisci manualmente" verso pagine dedicate (`/playlists/import-spotify`, `/playlists/import-manual`). NB: l'API Spotify non espone una data di creazione delle playlist → si mostra `imported_at`.
+- **Libreria**: aggiunti filtro **genere** e **stato**; "dati incompleti" ora include BPM/key mancanti; match key case-insensitive; **ordinamento per colonna** (header cliccabili, sort lato DB su tutto il dataset via `sort`/`order` in `/api/tracks`).
+- **Test**: `test_enrichment_resilience.py` (resilienza SSL + scoping playlist) e `test_library_query.py` (sort/filtri). **107 verdi**, type-check frontend pulito. Verifica in browser end-to-end (auto-enrich 3/3 con BPM/key reali).
+
+### Milestone 15/06/2026 (2) — F10 classificazione transizioni + Haiku 4.5
+
+- **F10 — Transition classification** (deterministico, in `services/scoring.py`): `classify_transition(from, to)` → `technically_safe | creative_risk | good_reset` con etichetta IT e motivazione. Sopra lo score tecnico (BPM+Camelot) distingue il mix sicuro dallo stacco voluto (forte calo di energia o cambio di genere → reset) dall'azzardo creativo. Esposto in `TransitionScoreOut` (endpoint `/api/transitions/*`) e, ricalcolato in lettura dal brano precedente, in `SetlistTrackOut` (serializer) + colonna `transition_class` nell'export CSV. Frontend: badge nella pagina Set e nel Transition Finder. +4 test.
+- **Modello AI economico Haiku 4.5**: `claude-haiku-4-5` impostabile via `AI_MODEL` (input $1 / output $5 per 1M). Fix necessario in `integrations/llm.py`: Haiku 4.5 **rifiuta `output_config.effort` e l'adaptive thinking con un 400** → `_supports_effort(model)` omette effort e disabilita il thinking per i modelli economici/legacy (Haiku, Sonnet/Opus pre-4.6), mantenendoli per Opus 4.6+/Sonnet 4.6/Fable. Combinabile col toggle: `AI_MODEL=claude-haiku-4-5` (technical economico) + `AI_MODEL_CREATIVE=claude-opus-4-8` (co-DJ capace). `.env.example` aggiornato. +2 test.
 
 ### Milestone 15/06/2026 — Import Spotify reale + pulizia DB + redesign UI
 
@@ -99,9 +115,9 @@ Il progetto ha ridefinito il perimetro:
 ### Backlog
 
 - [x] Import manuale playlist (CSV o testo "Artista - Titolo") — fatto 14/06/2026
-- [ ] Valutare modello più economico per l'AI (Haiku 4.5 via AI_MODEL / provider locale Ollama dietro l'ABC) — discusso 14/06
+- [x] Modello AI economico Haiku 4.5 via `AI_MODEL=claude-haiku-4-5` — fatto 15/06/2026 (fix effort/thinking in llm.py). Resta opzionale il provider locale Ollama dietro l'ABC.
+- [x] F10 Transition Finder classification (technically_safe / creative_risk / good_reset) — fatto 15/06/2026
 - [ ] SoundCloud import (valutare fattibilità API prima)
-- [ ] F10 Transition Finder classification (technically safe / creative risk / good reset)
 - [ ] Last.fm provider per generi/tag aggiuntivi (blocco enrichment)
 - [ ] PostgreSQL migration (low priority, SQLite sufficiente per mono-utente)
 

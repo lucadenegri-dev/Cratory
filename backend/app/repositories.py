@@ -5,6 +5,20 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import Playlist, Setlist, SetlistTrack, Track
 
+# Colonne ordinabili dalla libreria (header cliccabili nel frontend).
+_SORT_COLUMNS = {
+    "title": Track.title,
+    "artist": Track.artist,
+    "source": Track.source_type,
+    "bpm": Track.bpm,
+    "key": Track.camelot_key,
+    "energy": Track.energy,
+    "genre": Track.genre,
+    "duration": Track.duration_seconds,
+    "year": Track.year,
+    "status": Track.status,
+}
+
 
 def _apply_track_filters(  # noqa: PLR0913
     stmt,
@@ -14,6 +28,7 @@ def _apply_track_filters(  # noqa: PLR0913
     album: str | None = None,
     genre: str | None = None,
     source: str | None = None,
+    status: str | None = None,
     bpm_min: float | None = None,
     bpm_max: float | None = None,
     key: str | None = None,
@@ -33,12 +48,14 @@ def _apply_track_filters(  # noqa: PLR0913
         stmt = stmt.where(Track.genre.ilike(f"%{genre}%"))
     if source:
         stmt = stmt.where(Track.source_type == source)
+    if status:
+        stmt = stmt.where(Track.status == status)
     if bpm_min is not None:
         stmt = stmt.where(Track.bpm >= bpm_min)
     if bpm_max is not None:
         stmt = stmt.where(Track.bpm <= bpm_max)
     if key:
-        stmt = stmt.where(Track.camelot_key == key)
+        stmt = stmt.where(Track.camelot_key.ilike(key))  # case-insensitive: "7a" -> "7A"
     if duration_min is not None:
         stmt = stmt.where(Track.duration_seconds >= duration_min)
     if duration_max is not None:
@@ -48,16 +65,30 @@ def _apply_track_filters(  # noqa: PLR0913
     if has_soundcloud is not None:
         stmt = stmt.where(Track.soundcloud_id.is_not(None) if has_soundcloud else Track.soundcloud_id.is_(None))
     if incomplete_metadata:
-        stmt = stmt.where((Track.title.is_(None)) | (Track.artist.is_(None)))
+        # "dati incompleti" utile al DJ: manca un metadato chiave o una feature di mixing.
+        stmt = stmt.where(
+            Track.title.is_(None) | Track.artist.is_(None)
+            | Track.bpm.is_(None) | Track.camelot_key.is_(None)
+        )
     return stmt
 
 
-def list_tracks(db: Session, *, limit: int = 100, offset: int = 0, **filters):
+def list_tracks(
+    db: Session, *, limit: int = 100, offset: int = 0,
+    sort: str | None = None, order: str = "asc", **filters,
+):
     stmt = _apply_track_filters(select(Track), **filters)
     total = db.scalar(select(func.count()).select_from(_apply_track_filters(select(Track.id), **filters).subquery()))
-    rows = db.scalars(
-        stmt.order_by(Track.artist.is_(None), Track.artist, Track.title).limit(limit).offset(offset)
-    ).all()
+
+    column = _SORT_COLUMNS.get(sort or "")
+    if column is not None:
+        direction = column.desc() if order == "desc" else column.asc()
+        # NULL sempre in fondo, poi id come tie-breaker (paginazione deterministica).
+        order_by = (column.is_(None), direction, Track.id.asc())
+    else:
+        order_by = (Track.artist.is_(None), Track.artist, Track.title)
+
+    rows = db.scalars(stmt.order_by(*order_by).limit(limit).offset(offset)).all()
     return total or 0, rows
 
 

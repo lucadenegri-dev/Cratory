@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.integrations.getsongbpm import FeatureProviderNotConfigured
 from app.integrations.spotify import (
     SpotifyError,
     SpotifyNotConfigured,
@@ -36,6 +37,7 @@ from app.schemas import (
     TrackOut,
 )
 from app.serializers import track_out
+from app.services import enrichment_job
 from app.services.gap_analysis import analyze_gaps
 from app.services.manual_import import import_manual_playlist
 from app.services.playlist_import import import_playlist
@@ -50,6 +52,23 @@ def _http_error(exc: SpotifyError) -> HTTPException:
     if isinstance(exc, SpotifyNotConnected):
         return HTTPException(status_code=401, detail=str(exc))
     return HTTPException(status_code=502, detail=str(exc))
+
+
+def _autoenrich(playlist_id: int | None) -> None:
+    """Avvia (best-effort) l'enrichment delle tracce appena importate.
+
+    Non deve mai far fallire l'import: se nessun provider e' configurato o il job
+    e' gia' in corso, viene semplicemente ignorato. La UI mostra l'avanzamento via
+    /api/enrichment/features/status.
+    """
+    if playlist_id is None:
+        return
+    try:
+        enrichment_job.start_job(playlist_id=playlist_id)
+    except FeatureProviderNotConfigured:
+        logger.info("Auto-enrichment saltato: nessun provider di feature configurato.")
+    except Exception:  # noqa: BLE001 — l'import non deve fallire per colpa dell'enrichment
+        logger.exception("Auto-enrichment non avviato per la playlist %s", playlist_id)
 
 
 @router.get("/spotify/available", response_model=list[SpotifyPlaylistRef])
@@ -102,6 +121,7 @@ def import_from_spotify(req: PlaylistImportRequest, db: Session = Depends(get_db
             )
     except SpotifyError as exc:
         raise _http_error(exc) from exc
+    _autoenrich(report.get("playlist_id"))
     return PlaylistImportReport(**report)
 
 
@@ -111,6 +131,7 @@ def import_manual(req: ManualImportRequest, db: Session = Depends(get_db)):
     report = import_manual_playlist(db, name=req.name, text=req.text)
     if report["total"] == 0:
         raise HTTPException(status_code=422, detail="Nessuna traccia riconosciuta nel testo fornito.")
+    _autoenrich(report.get("playlist_id"))
     return PlaylistImportReport(**report)
 
 
@@ -132,6 +153,21 @@ def remove_playlist(playlist_id: int, db: Session = Depends(get_db)):
     """Rimuove una playlist importata e le sue tracce dalla libreria dell'app."""
     if not delete_playlist(db, playlist_id):
         raise HTTPException(status_code=404, detail="Playlist non trovata")
+
+
+@router.post("/{playlist_id}/enrich")
+def enrich_playlist(playlist_id: int, db: Session = Depends(get_db)):
+    """Riesegue l'enrichment feature sulle tracce di questa playlist.
+
+    force=True: ignora la cache e ri-interroga i provider, cosi' un nuovo tentativo
+    recupera anche le tracce rimaste senza dati per un errore di rete precedente.
+    """
+    if get_playlist(db, playlist_id) is None:
+        raise HTTPException(status_code=404, detail="Playlist non trovata")
+    try:
+        return enrichment_job.start_job(force=True, playlist_id=playlist_id)
+    except FeatureProviderNotConfigured as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/{playlist_id}/tracks", response_model=list[TrackOut])

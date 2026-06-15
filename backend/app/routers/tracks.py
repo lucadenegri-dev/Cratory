@@ -17,6 +17,10 @@ def get_tracks(  # noqa: PLR0913
     album: str | None = None,
     genre: str | None = None,
     source: str | None = Query(default=None, pattern="^(spotify|soundcloud|manual)$"),
+    status: str | None = Query(
+        default=None,
+        pattern="^(imported|enriched|ready_for_set|missing_features|low_confidence)$",
+    ),
     bpm_min: float | None = None,
     bpm_max: float | None = None,
     key: str | None = None,
@@ -25,13 +29,18 @@ def get_tracks(  # noqa: PLR0913
     has_spotify: bool | None = None,
     has_soundcloud: bool | None = None,
     incomplete_metadata: bool | None = None,
+    sort: str | None = Query(
+        default=None,
+        pattern="^(title|artist|source|bpm|key|energy|genre|duration|year|status)$",
+    ),
+    order: str = Query(default="asc", pattern="^(asc|desc)$"),
     limit: int = Query(default=100, le=500),
     offset: int = Query(default=0, ge=0),
 ):
     total, rows = list_tracks(
         db,
-        limit=limit, offset=offset,
-        artist=artist, title=title, album=album, genre=genre, source=source,
+        limit=limit, offset=offset, sort=sort, order=order,
+        artist=artist, title=title, album=album, genre=genre, source=source, status=status,
         bpm_min=bpm_min, bpm_max=bpm_max, key=key,
         duration_min=duration_min, duration_max=duration_max,
         has_spotify=has_spotify, has_soundcloud=has_soundcloud,
