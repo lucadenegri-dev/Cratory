@@ -1,0 +1,132 @@
+<svg viewBox="0 0 960 770" width="960" height="770" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" role="img">
+  <title>Servizi DJ Assistant e loro sinergie</title>
+  <desc>Le sorgenti streaming danno identità e metadata; la catena di enrichment aggiunge BPM, key, genere, mood ed energia; il motore deterministico e l'AI generano il set; il Discovery rialimenta la libreria.</desc>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7c8694"/>
+    </marker>
+    <marker id="arrI" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5bb0f1"/>
+    </marker>
+    <style>
+      .box{fill:#181b21;stroke:#2d333d;stroke-width:1.5;}
+      .box2{fill:#20242c;stroke:#2d333d;stroke-width:1.5;}
+      .dash{stroke-dasharray:5 4;}
+      .t{fill:#e7e9ee;font-weight:600;font-size:13px;}
+      .r{fill:#98a1ad;font-size:11px;}
+      .sec{fill:#98a1ad;font-size:11px;font-weight:700;letter-spacing:.05em;}
+      .cap{fill:#98a1ad;font-size:10.5px;}
+      .flow{stroke:#7c8694;stroke-width:1.5;fill:none;}
+      .syn{stroke:#5bb0f1;stroke-width:1.7;fill:none;}
+      .ok{fill:#5ec98a;font-size:10px;font-weight:700;}
+      .cfg{fill:#98a1ad;font-size:10px;font-weight:700;}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="770" fill="#0e0f13"/>
+
+  <text x="30" y="26" fill="#e7e9ee" font-size="17" font-weight="700">Servizi DJ Assistant — chi fornisce cosa, e dove nascono le sinergie</text>
+  <text x="30" y="46" class="cap" font-size="11.5">Lo streaming dà identità + metadata · l'enrichment dà le feature di mixaggio · l'AI interpreta e spiega (mai inventa). L'app non riproduce audio.</text>
+
+  <!-- 1 SORGENTI -->
+  <text x="30" y="84" class="sec">1 · SORGENTI</text>
+  <rect class="box" x="30" y="92" width="216" height="60" rx="10"/>
+  <text x="44" y="115" class="t">Spotify</text>
+  <text x="44" y="134" class="r">import playlist / liked · export</text>
+  <text x="232" y="115" text-anchor="end" class="ok">attivo</text>
+  <rect class="box" x="262" y="92" width="190" height="60" rx="10"/>
+  <text x="276" y="115" class="t">Import manuale</text>
+  <text x="276" y="134" class="r">tracklist incollata</text>
+  <text x="438" y="115" text-anchor="end" class="ok">attivo</text>
+  <rect class="box dash" x="468" y="92" width="190" height="60" rx="10"/>
+  <text x="482" y="115" class="t">SoundCloud</text>
+  <text x="482" y="134" class="r">import playlist</text>
+  <text x="644" y="115" text-anchor="end" class="cfg">backlog</text>
+  <text x="30" y="172" class="cap">Danno: <tspan fill="#e7e9ee">ISRC, id, url</tspan> + metadata editoriali (titolo, artista, album, cover, durata). Non danno BPM / key / mood.</text>
+
+  <path class="flow" d="M138,152 L430,196" marker-end="url(#arr)"/>
+  <path class="flow" d="M357,152 L470,196" marker-end="url(#arr)"/>
+
+  <rect class="box2" x="360" y="198" width="244" height="48" rx="10"/>
+  <text x="482" y="221" text-anchor="middle" class="t">Libreria interna · SQLite</text>
+  <text x="482" y="238" text-anchor="middle" class="r">normalizza + deduplica per ISRC</text>
+
+  <path class="flow" d="M430,246 L150,286" marker-end="url(#arr)"/>
+
+  <!-- 2 ENRICHMENT -->
+  <text x="30" y="280" class="sec">2 · ENRICHMENT — catena (first-wins: il primo che ha il dato vince)</text>
+  <rect class="box" x="30" y="290" width="206" height="70" rx="10"/>
+  <text x="44" y="313" class="t">GetSongBPM</text>
+  <text x="44" y="332" class="r">BPM · key (Camelot)</text>
+  <text x="44" y="349" class="r">danceability</text>
+  <text x="222" y="313" text-anchor="end" class="cfg">chiave API</text>
+  <rect class="box" x="252" y="290" width="206" height="70" rx="10"/>
+  <text x="266" y="313" class="t">MusicBrainz</text>
+  <text x="266" y="332" class="r">label · release · genere</text>
+  <text x="266" y="349" class="r">via ISRC (no API key)</text>
+  <text x="444" y="313" text-anchor="end" class="cfg">User-Agent</text>
+  <rect class="box" x="474" y="290" width="206" height="70" rx="10"/>
+  <text x="488" y="313" class="t">Last.fm</text>
+  <text x="488" y="332" class="r">genere + mood</text>
+  <text x="488" y="349" class="r">dai tag</text>
+  <text x="666" y="313" text-anchor="end" class="cfg">chiave API</text>
+  <rect class="box dash" x="696" y="290" width="216" height="70" rx="10"/>
+  <text x="710" y="313" class="t">Energia (stimata)</text>
+  <text x="710" y="332" class="r">proxy BPM+dance+genere</text>
+  <text x="710" y="349" class="r">deterministico, non un provider</text>
+  <path class="flow" d="M236,325 L252,325" marker-end="url(#arr)"/>
+  <path class="flow" d="M458,325 L474,325" marker-end="url(#arr)"/>
+  <path class="flow" d="M680,325 L696,325" marker-end="url(#arr)"/>
+  <path class="syn" d="M430,246 C390,262 360,272 355,288" marker-end="url(#arrI)"/>
+  <text x="335" y="270" fill="#5bb0f1" font-size="10" font-weight="700">ISRC</text>
+  <text x="30" y="380" class="cap"><tspan fill="#5bb0f1" font-weight="700">Sinergia:</tspan> Spotify fornisce l'ISRC, MusicBrainz lo usa per un match certo (label, release). Ognuno colma cio' che gli altri non danno.</text>
+
+  <path class="flow" d="M470,360 L200,402" marker-end="url(#arr)"/>
+
+  <!-- 3 GENERAZIONE -->
+  <text x="30" y="400" class="sec">3 · GENERAZIONE DEL SET</text>
+  <rect class="box" x="30" y="410" width="300" height="66" rx="10"/>
+  <text x="44" y="433" class="t">Motore deterministico</text>
+  <text x="44" y="452" class="r">scoring BPM/Camelot/energia · ruoli</text>
+  <text x="44" y="468" class="r">candidate engine (cap 60) · gap analysis</text>
+  <rect class="box" x="346" y="410" width="300" height="66" rx="10"/>
+  <text x="360" y="433" class="t">AI Set Agent · Anthropic</text>
+  <text x="360" y="452" class="r">interpreta prompt · spiega · alternative</text>
+  <text x="360" y="468" class="r">solo candidate filtrate, non tutta la libreria</text>
+  <text x="632" y="433" text-anchor="end" class="cfg">chiave API</text>
+  <rect class="box" x="662" y="410" width="250" height="66" rx="10"/>
+  <text x="676" y="433" class="t">Validation Engine</text>
+  <text x="676" y="452" class="r">verifica + corregge</text>
+  <text x="676" y="468" class="r">l'output dell'AI</text>
+  <path class="flow" d="M330,443 L346,443" marker-end="url(#arr)"/>
+  <path class="flow" d="M646,443 L662,443" marker-end="url(#arr)"/>
+  <path class="flow" d="M620,476 C560,498 520,500 500,512" marker-end="url(#arr)"/>
+
+  <rect class="box2" x="346" y="514" width="300" height="44" rx="10"/>
+  <text x="496" y="541" text-anchor="middle" class="t">Editor · Export (MD/CSV) · Playlist Spotify</text>
+
+  <!-- 4 DISCOVERY -->
+  <text x="30" y="592" class="sec">4 · DISCOVERY — scopre musica nuova e rialimenta la libreria</text>
+  <rect class="box" x="30" y="602" width="206" height="58" rx="10"/>
+  <text x="44" y="625" class="t">Last.fm</text>
+  <text x="44" y="644" class="r">artisti / tracce simili</text>
+  <rect class="box" x="252" y="602" width="206" height="58" rx="10"/>
+  <text x="266" y="625" class="t">Spotify /search</text>
+  <text x="266" y="644" class="r">risolve nome - traccia reale</text>
+  <rect class="box" x="474" y="602" width="206" height="58" rx="10"/>
+  <text x="488" y="625" class="t">Anthropic</text>
+  <text x="488" y="644" class="r">spiega perche' e' coerente</text>
+  <rect class="box" x="696" y="602" width="216" height="58" rx="10"/>
+  <text x="710" y="625" class="t">Aggiungi - libreria</text>
+  <text x="710" y="644" class="r">import singola traccia</text>
+  <path class="flow" d="M236,631 L252,631" marker-end="url(#arr)"/>
+  <path class="flow" d="M458,631 L474,631" marker-end="url(#arr)"/>
+  <path class="flow" d="M680,631 L696,631" marker-end="url(#arr)"/>
+  <path class="syn dash" d="M804,602 L804,560 L938,560 L938,222 L604,222" marker-end="url(#arrI)"/>
+  <text x="946" y="392" fill="#5bb0f1" font-size="10" font-weight="700" transform="rotate(90,946,392)" text-anchor="middle">rialimenta la libreria</text>
+  <text x="30" y="680" class="cap"><tspan fill="#5bb0f1" font-weight="700">Sinergia:</tspan> Last.fm trova i simili, Spotify li risolve in tracce reali, l'AI spiega — l'AI non sceglie i candidati, li commenta soltanto.</text>
+
+  <line x1="30" y1="700" x2="930" y2="700" stroke="#2d333d" stroke-width="1"/>
+  <text x="30" y="722" class="cap"><tspan class="ok">attivo</tspan>   ·   <tspan class="cfg">chiave/User-Agent = serve in backend/.env</tspan>   ·   <tspan class="cfg">tratteggiato = backlog/futuro</tspan>   ·   <tspan fill="#5bb0f1" font-weight="700">frecce blu = sinergie tra servizi</tspan></text>
+  <text x="30" y="742" class="cap"><tspan font-weight="700" fill="#e7e9ee">Da integrare (futuro):</tspan> Discogs (catalogo/label/release per crate digging) · SoundCloud (seconda sorgente di import).</text>
+</svg>
