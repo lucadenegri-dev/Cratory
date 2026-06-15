@@ -249,7 +249,7 @@ Modulo per suggerire come ampliare la libreria, su base: artista, label, genere,
 2. quale relazione ha con artista, label, genere o set
 3. come potrebbe essere usato in un DJ set
 4. se è utile come opening, bridge, peak, reset o closing
-5. quali query pratiche cercare su Spotify, Discogs, Bandcamp o SoundCloud
+5. quali query pratiche cercare su Spotify, Bandcamp o SoundCloud
 6. quale priorità ha
 
 ### F12 — Expansion from Track
@@ -268,7 +268,7 @@ Output esempio:
       "set_usage": "bridge",
       "priority": "high",
       "search_queries": ["...", "..."],
-      "sources": ["Discogs", "Spotify"]
+      "sources": ["Spotify", "Bandcamp"]
     }
   ]
 }

@@ -105,7 +105,7 @@ created_at
 
 ### Label / Release / DiscoverySuggestion (espansione libreria, opzionale)
 
-Invariati rispetto alla versione precedente: usati dal modulo di espansione/crate digging (Discogs/MusicBrainz). `DiscoverySuggestion` ha stati `new | to_listen | listened | added_to_library | ignored`.
+Invariati rispetto alla versione precedente: usati dal modulo di espansione/crate digging (basato su MusicBrainz). `DiscoverySuggestion` ha stati `new | to_listen | listened | added_to_library | ignored`.
 
 ### EnrichmentCache
 

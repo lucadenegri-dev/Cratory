@@ -128,5 +128,5 @@
 
   <line x1="30" y1="700" x2="930" y2="700" stroke="#2d333d" stroke-width="1"/>
   <text x="30" y="722" class="cap"><tspan class="ok">attivo</tspan>   ·   <tspan class="cfg">chiave/User-Agent = serve in backend/.env</tspan>   ·   <tspan class="cfg">tratteggiato = backlog/futuro</tspan>   ·   <tspan fill="#5bb0f1" font-weight="700">frecce blu = sinergie tra servizi</tspan></text>
-  <text x="30" y="742" class="cap"><tspan font-weight="700" fill="#e7e9ee">Da integrare (futuro):</tspan> Discogs (catalogo/label/release per crate digging) · SoundCloud (seconda sorgente di import).</text>
+  <text x="30" y="742" class="cap"><tspan font-weight="700" fill="#e7e9ee">Da integrare (futuro):</tspan> SoundCloud — seconda sorgente di import (in backlog).</text>
 </svg>

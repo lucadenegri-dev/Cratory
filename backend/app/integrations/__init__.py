@@ -113,16 +113,6 @@ class SimilarityClient(ABC):
         """[{artist, title}] tracce top per un tag/genere (discovery gap-driven per genere)."""
 
 
-class DiscogsClient(ABC):
-    """Storico opzionale: release, label, cataloghi etichette (espansione libreria)."""
-
-    @abstractmethod
-    def search_release(self, query: str) -> list[dict[str, Any]]: ...
-
-    @abstractmethod
-    def get_label_releases(self, label_id: str) -> list[dict[str, Any]]: ...
-
-
 class MusicBrainzClient(ABC):
     """Identificazione aperta: artisti, release, ISRC, label."""
 

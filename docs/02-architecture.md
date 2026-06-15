@@ -13,7 +13,6 @@ Streaming:         Spotify Web API (OAuth); SoundCloud in backlog
 Enrichment:        GetSongBPM (BPM/key), MusicBrainz (label/release/ISRC), Last.fm (tag)
 Discovery:         Last.fm (similarità) + Spotify /search (resolver)
 AI:                LLM API (Anthropic) astratta tramite service layer
-Opzionale futuro:  Discogs
 ```
 
 Webapp modulare, locale/self-hosted, mono-utente.
@@ -110,7 +109,7 @@ Requisiti di qualità: type hints ovunque, errori chiari + logging, config via `
 
 ## Service layer per integrazioni esterne
 
-Le integrazioni stanno dietro interfacce astratte (`integrations/__init__.py`): `SpotifyClient`, `MusicFeatureProvider`, `SimilarityClient` (Discovery), `LLMClient`, più gli ABC ancora non implementati (`SoundCloudClient`, `DiscogsClient`, `MusicBrainzClient`). Questo permette di: testare il core senza credenziali (fake injection ovunque), cambiare provider senza toccare il resto, cachare le risposte (`EnrichmentCache`), gestire rate limit/errori in un punto solo. Le risposte dei provider feature sono cachate in DB: un secondo enrichment sulla stessa traccia non richiama la rete.
+Le integrazioni stanno dietro interfacce astratte (`integrations/__init__.py`): `SpotifyClient`, `MusicFeatureProvider`, `SimilarityClient` (Discovery), `LLMClient`, più gli ABC ancora non implementati (`SoundCloudClient`, `MusicBrainzClient`). Questo permette di: testare il core senza credenziali (fake injection ovunque), cambiare provider senza toccare il resto, cachare le risposte (`EnrichmentCache`), gestire rate limit/errori in un punto solo. Le risposte dei provider feature sono cachate in DB: un secondo enrichment sulla stessa traccia non richiama la rete.
 
 ## Fonti esterne: ruoli
 
@@ -122,6 +121,5 @@ Le integrazioni stanno dietro interfacce astratte (`integrations/__init__.py`): 
 | **Last.fm** | Tag/generi (enrichment) **e similarità per il Discovery** (artist/track getsimilar, tag toptracks) | attivo |
 | **Anthropic LLM** | AI Set Agent + spiegazioni Discovery | attivo |
 | **SoundCloud** | Import playlist/liked | backlog |
-| **Discogs** | Release, label, cataloghi (espansione libreria) | opzionale futuro |
 | ~~Spotify `/recommendations`~~ | ~~raccomandazioni~~ | non disponibile (deprecato 2024) |
 | ~~Rekordbox XML~~ | ~~BPM/key/beatgrid/cue~~ | rimosso |

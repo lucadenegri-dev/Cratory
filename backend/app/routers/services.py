@@ -58,12 +58,5 @@ def services_status(db: Session = Depends(get_db)):
                 "env": ["MUSICBRAINZ_USER_AGENT"],
                 "docs": "https://musicbrainz.org/doc/MusicBrainz_API",
             },
-            {
-                "key": "discogs", "name": "Discogs", "category": "Feature musicali",
-                "configured": bool(settings.discogs_token), "connected": None,
-                "detail": "Non ancora integrato (previsto per la Library Expansion).",
-                "env": ["DISCOGS_TOKEN"],
-                "docs": "https://www.discogs.com/settings/developers",
-            },
         ]
     }

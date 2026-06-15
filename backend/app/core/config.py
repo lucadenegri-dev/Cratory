@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     spotify_client_secret: str = ""
     # Spotify accetta solo HTTPS o loopback 127.0.0.1 (non "localhost") come redirect
     spotify_redirect_uri: str = "http://127.0.0.1:8000/api/spotify/callback"
-    discogs_token: str = ""
     musicbrainz_user_agent: str = ""
     # Enrichment musicale esterno (BPM/key/mood/energia). Vuoti = provider disattivo.
     getsongbpm_api_key: str = ""

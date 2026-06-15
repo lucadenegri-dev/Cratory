@@ -94,7 +94,7 @@ GET  /api/ai/status                   # LLM configurato? modello attivo
 
 ```text
 GET  /api/services/status             # stato di TUTTE le integrazioni in un'unica risposta:
-                                      #   spotify, anthropic, getsongbpm, lastfm, musicbrainz, discogs
+                                      #   spotify, anthropic, getsongbpm, lastfm, musicbrainz
                                       #   per ciascuno: configured, connected (null se non ha login), detail, env[]
 ```
 
