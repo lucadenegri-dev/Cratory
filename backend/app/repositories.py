@@ -96,6 +96,38 @@ def get_track(db: Session, track_id: int) -> Track | None:
     return db.scalar(select(Track).where(Track.id == track_id))
 
 
+# Campi feature musicali: se l'utente ne modifica uno a mano, la fonte diventa "manual".
+_MANUAL_FEATURE_FIELDS = {"bpm", "camelot_key", "mood", "energy", "danceability", "vocalness", "label"}
+
+
+def update_track(db: Session, track: Track, data: dict) -> Track:
+    """Applica una modifica manuale parziale a una traccia.
+
+    `data` contiene solo i campi forniti (PATCH): le stringhe vuote diventano None
+    (azzeramento), gli altri valori sovrascrivono anche dati gia' presenti — la
+    modifica manuale ha sempre la precedenza sull'enrichment. Aggiorna lo stato.
+    """
+    from datetime import datetime, timezone
+
+    from app.services.track_status import refresh_status
+
+    touched_feature = False
+    for field, value in data.items():
+        if isinstance(value, str):
+            value = value.strip() or None
+        setattr(track, field, value)
+        if field in _MANUAL_FEATURE_FIELDS:
+            touched_feature = True
+    if touched_feature:
+        track.enrichment_source = "manual"
+        track.enrichment_confidence = 100  # inserito dall'utente: massima fiducia
+        track.enriched_at = datetime.now(timezone.utc)
+    refresh_status(track)
+    db.commit()
+    db.refresh(track)
+    return track
+
+
 def all_playable_tracks(db: Session) -> list[Track]:
     """Tracce utilizzabili in un set: con BPM e durata sensata."""
     return list(db.scalars(select(Track).where(Track.bpm.is_not(None))).all())

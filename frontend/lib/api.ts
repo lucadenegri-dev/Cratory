@@ -148,6 +148,29 @@ export const SPOTIFY_LOGIN_URL = `${API}/api/spotify/login`;
 
 export type TrackDetail = Track;
 
+/** Campi modificabili a mano da libreria / gestione playlist. */
+export interface TrackUpdate {
+  title?: string | null;
+  artist?: string | null;
+  album?: string | null;
+  genre?: string | null;
+  genre_secondary?: string | null;
+  year?: number | null;
+  duration_seconds?: number | null;
+  bpm?: number | null;
+  camelot_key?: string | null;
+  mood?: string | null;
+  energy?: number | null;
+  danceability?: number | null;
+  vocalness?: number | null;
+  label?: string | null;
+}
+
+/** Modifica manuale di una traccia: i valori inseriti hanno la precedenza sull'enrichment. */
+export function updateTrack(id: number, patch: TrackUpdate) {
+  return apiPatch<TrackDetail>(`/api/tracks/${id}`, patch);
+}
+
 export interface ServiceStatus {
   key: string;
   name: string;

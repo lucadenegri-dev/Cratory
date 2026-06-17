@@ -12,6 +12,7 @@
 - **Fase D2 — Cache enrichment** ✅ tabella `enrichment_cache`, bulk pre-load + upsert, caches anche i not-found, `force` bypassa la lettura.
 - **Fase E — AI prompt arricchito** ✅ `ai_agent._compute_candidate_profile` (BPM arc, Camelot, generi, energia, lacune) nel payload come `candidate_profile`; system prompt aggiornato.
 - **Fase F — Discovery mode** ✅ (read pipeline) Last.fm-centric, vedi sotto.
+- **Copertura enrichment** ✅ (17/06/2026) **Deezer** (BPM via ISRC, senza chiave) + **AcousticBrainz** (BPM/key/mood/danceability/vocalness via MBID, senza chiave) aggiunti alla catena; MBID di MusicBrainz catturato e propagato via `context`. Nuovo ordine identità-first: Deezer → MusicBrainz → AcousticBrainz → GetSongBPM → Last.fm. Risolve il "nessun dato" tipico del solo match fuzzy.
 
 ---
 

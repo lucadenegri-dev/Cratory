@@ -4,13 +4,14 @@ import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Music4, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass,
+  ArrowLeft, Music4, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, fmtDuration,
   type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Spinner } from "@/components/ui";
+import { TrackEditModal } from "@/components/track-edit-modal";
 
 const SOURCE_TONE: Record<string, "info" | "warning" | "neutral"> = { spotify: "info", soundcloud: "warning", manual: "neutral" };
 const STATUS_TONE: Record<string, "success" | "info" | "warning" | "neutral"> = {
@@ -26,6 +27,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const [gaps, setGaps] = useState<GapAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState<Track | null>(null);
 
   useEffect(() => {
     getPlaylist(pid).then(setPlaylist).catch((e) => setError(String(e.message ?? e)));
@@ -126,13 +128,25 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
                 <td className={`${cell} tnum text-muted`}>{t.camelot_key ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
                 <td className={cell}><Badge tone={STATUS_TONE[t.status] ?? "neutral"}>{t.status}</Badge></td>
-                <td className={cell}>{t.spotify_url && <a href={t.spotify_url} target="_blank" rel="noreferrer" className="text-faint hover:text-info"><ExternalLink size={14} /></a>}</td>
+                <td className={cell}>
+                  <div className="flex items-center justify-end gap-2">
+                    <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-primary"><Pencil size={14} /></button>
+                    {t.spotify_url && <a href={t.spotify_url} target="_blank" rel="noreferrer" title="Apri su Spotify" className="text-faint hover:text-info"><ExternalLink size={14} /></a>}
+                  </div>
+                </td>
               </tr>
             ))}
             {tracks.length === 0 && <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-faint">Nessuna traccia.</td></tr>}
           </tbody>
         </table>
       </Card>
+
+      <TrackEditModal
+        track={editing}
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        onSaved={(t) => setTracks((cur) => cur.map((x) => (x.id === t.id ? t : x)))}
+      />
     </div>
   );
 }

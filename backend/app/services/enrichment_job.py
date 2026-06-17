@@ -76,8 +76,9 @@ def start_job(*, force: bool = False, playlist_id: int | None = None) -> dict:
     """
     if not feature_provider_configured():
         raise FeatureProviderNotConfigured(
-            "Nessun provider di feature musicali configurato: imposta GETSONGBPM_API_KEY "
-            "(BPM/key) e/o LASTFM_API_KEY (genere/mood) in backend/.env."
+            "Nessun provider di feature musicali configurato: abilita DEEZER_ENABLED "
+            "(BPM via ISRC, gratis e senza chiave) e/o imposta GETSONGBPM_API_KEY (BPM/key) "
+            "o LASTFM_API_KEY (genere/mood) in backend/.env."
         )
     with _lock:
         if _state["status"] == "running":

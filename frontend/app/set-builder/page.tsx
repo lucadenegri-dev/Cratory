@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, Wand2, Download, ListMusic, AlertTriangle, Lightbulb, Compass, Music4 } from "lucide-react";
+import {
+  Sparkles, Wand2, Download, ListMusic, AlertTriangle, Lightbulb, Compass, Music4,
+  TrendingUp, SlidersHorizontal, ArrowRight, Sunrise, Flame, Sunset,
+} from "lucide-react";
 import {
   apiGet, apiPost, exportSet, fmtDuration, trackLabel,
   type AiStatus, type GenStatus, type Setlist, type Playlist,
@@ -10,8 +13,49 @@ import {
 import { Card, CardHeader, Button, Input, Textarea, Select, Field, Checkbox, Badge, Progress, Alert, EmptyState } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
-const STRATEGIES = ["smooth", "progressive", "contrast", "experimental", "peak_time", "warm_up", "closing"];
+const STRATEGIES: { value: string; label: string; desc: string }[] = [
+  { value: "smooth", label: "Fluido", desc: "transizioni morbide, rischio minimo" },
+  { value: "progressive", label: "Progressivo", desc: "energia in crescita graduale" },
+  { value: "contrast", label: "Contrasti", desc: "stacchi voluti tra le tracce" },
+  { value: "experimental", label: "Sperimentale", desc: "accostamenti audaci" },
+  { value: "peak_time", label: "Peak time", desc: "alta energia, dritto al clou" },
+  { value: "warm_up", label: "Warm-up", desc: "apertura calda, bassa intensità" },
+  { value: "closing", label: "Chiusura", desc: "discesa finale, più ariosa" },
+];
+const SOURCES: { value: string; label: string }[] = [
+  { value: "spotify", label: "Spotify" },
+  { value: "manual", label: "Manuale" },
+];
+const PRESETS = [
+  { label: "Warm-up", icon: Sunrise, strategy: "warm_up", duration: 45, startBpm: "118", endBpm: "124", startEnergy: "30", endEnergy: "55" },
+  { label: "Peak time", icon: Flame, strategy: "peak_time", duration: 60, startBpm: "126", endBpm: "132", startEnergy: "70", endEnergy: "92" },
+  { label: "Progressivo", icon: TrendingUp, strategy: "progressive", duration: 90, startBpm: "120", endBpm: "130", startEnergy: "40", endEnergy: "85" },
+  { label: "Closing", icon: Sunset, strategy: "closing", duration: 45, startBpm: "128", endBpm: "120", startEnergy: "78", endEnergy: "40" },
+] as const;
 const RISK_TONE = { low: "success", medium: "warning", high: "danger" } as const;
+
+function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-5 border-t border-border pt-5 first:mt-0 first:border-0 first:pt-0">
+      <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">{icon}{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function ArcField({ label, hint, from, to }: { label: string; hint?: string; from: React.ReactNode; to: React.ReactNode }) {
+  return (
+    <div>
+      <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted">{label}</span>
+      <div className="flex items-center gap-2">
+        <div className="flex-1">{from}</div>
+        <ArrowRight size={14} className="shrink-0 text-faint" />
+        <div className="flex-1">{to}</div>
+      </div>
+      {hint && <span className="mt-1 block text-xs text-faint">{hint}</span>}
+    </div>
+  );
+}
 
 export default function SetBuilder() {
   const [duration, setDuration] = useState(45);
@@ -62,6 +106,15 @@ export default function SetBuilder() {
 
   function toggleSource(s: string) {
     setSources((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
+  }
+
+  function applyPreset(p: (typeof PRESETS)[number]) {
+    setStrategy(p.strategy);
+    setDuration(p.duration);
+    setStartBpm(p.startBpm);
+    setEndBpm(p.endBpm);
+    setStartEnergy(p.startEnergy);
+    setEndEnergy(p.endEnergy);
   }
 
   function startPolling() {
@@ -146,77 +199,97 @@ export default function SetBuilder() {
 
       <Card className="mb-6">
         <div className="p-5">
-          <div className="mb-4">
-            <Field label="Playlist di partenza" hint="il set nasce solo da queste tracce (con BPM/key). Vuoto = tutta la libreria">
-              <Select value={playlistId} onChange={(e) => setPlaylistId(e.target.value)}>
-                <option value="">Tutta la libreria</option>
-                {playlists.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.track_count}</option>)}
-              </Select>
-            </Field>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Durata (min)"><Input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} /></Field>
-            <Field label="BPM iniziale"><Input type="number" placeholder="auto" value={startBpm} onChange={(e) => setStartBpm(e.target.value)} /></Field>
-            <Field label="BPM finale"><Input type="number" placeholder="auto" value={endBpm} onChange={(e) => setEndBpm(e.target.value)} /></Field>
-            <Field label="Strategia">
-              <Select value={strategy} onChange={(e) => setStrategy(e.target.value)}>
-                {STRATEGIES.map((s) => <option key={s}>{s}</option>)}
-              </Select>
-            </Field>
-            <Field label="Artisti seed" hint="separati da virgola">
-              <Input placeholder="es. Arca, Sega Bodega" value={seedArtists} onChange={(e) => setSeedArtists(e.target.value)} />
-            </Field>
-            <Field label="Max per artista"><Input type="number" min={1} value={maxPerArtist} onChange={(e) => setMaxPerArtist(Number(e.target.value))} /></Field>
-          </div>
+          <Section icon={<Music4 size={13} className="text-faint" />} title="Base">
+            <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
+              <Field label="Playlist di partenza" hint="il set nasce solo da queste tracce (con BPM/key). Vuoto = tutta la libreria">
+                <Select value={playlistId} onChange={(e) => setPlaylistId(e.target.value)}>
+                  <option value="">Tutta la libreria</option>
+                  {playlists.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.track_count}</option>)}
+                </Select>
+              </Field>
+              <Field label="Durata (min)"><Input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} /></Field>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-faint">Preset rapidi:</span>
+              {PRESETS.map((p) => {
+                const Icon = p.icon;
+                return (
+                  <button key={p.label} type="button" onClick={() => applyPreset(p)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-border-strong hover:text-fg">
+                    <Icon size={13} /> {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Section>
 
-          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-4">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted">Sorgenti</span>
-            {["spotify", "soundcloud", "manual"].map((s) => (
-              <Checkbox key={s} label={s} checked={sources.includes(s)} onChange={() => toggleSource(s)} />
-            ))}
-            <span className="mx-1 h-4 w-px bg-border" />
-            <Checkbox label="evita tracce corte" checked={avoidShort} onChange={setAvoidShort} />
-          </div>
+          <Section icon={<TrendingUp size={13} className="text-faint" />} title="Arco del set">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <ArcField label="BPM" hint="vuoto = automatico"
+                from={<Input type="number" placeholder="da" value={startBpm} onChange={(e) => setStartBpm(e.target.value)} />}
+                to={<Input type="number" placeholder="a" value={endBpm} onChange={(e) => setEndBpm(e.target.value)} />} />
+              <ArcField label="Energia" hint="0–100"
+                from={<Input type="number" min={0} max={100} placeholder="da" value={startEnergy} onChange={(e) => setStartEnergy(e.target.value)} />}
+                to={<Input type="number" min={0} max={100} placeholder="a" value={endEnergy} onChange={(e) => setEndEnergy(e.target.value)} />} />
+              <ArcField label="Mood"
+                from={<Input placeholder="es. dark" value={startMood} onChange={(e) => setStartMood(e.target.value)} />}
+                to={<Input placeholder="es. euphoric" value={endMood} onChange={(e) => setEndMood(e.target.value)} />} />
+            </div>
+          </Section>
 
-          <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Energia iniziale" hint="0–100"><Input type="number" min={0} max={100} placeholder="auto" value={startEnergy} onChange={(e) => setStartEnergy(e.target.value)} /></Field>
-            <Field label="Energia finale" hint="0–100"><Input type="number" min={0} max={100} placeholder="auto" value={endEnergy} onChange={(e) => setEndEnergy(e.target.value)} /></Field>
-            <Field label="Mood iniziale"><Input placeholder="es. dark" value={startMood} onChange={(e) => setStartMood(e.target.value)} /></Field>
-            <Field label="Mood finale"><Input placeholder="es. euphoric" value={endMood} onChange={(e) => setEndMood(e.target.value)} /></Field>
-          </div>
+          <Section icon={<SlidersHorizontal size={13} className="text-faint" />} title="Vincoli">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Strategia" hint={STRATEGIES.find((s) => s.value === strategy)?.desc}>
+                <Select value={strategy} onChange={(e) => setStrategy(e.target.value)}>
+                  {STRATEGIES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </Select>
+              </Field>
+              <Field label="Max per artista"><Input type="number" min={1} value={maxPerArtist} onChange={(e) => setMaxPerArtist(Number(e.target.value))} /></Field>
+              <Field label="Artisti seed" hint="separati da virgola">
+                <Input placeholder="es. Arca, Sega Bodega" value={seedArtists} onChange={(e) => setSeedArtists(e.target.value)} />
+              </Field>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted">Sorgenti</span>
+              {SOURCES.map((s) => (
+                <Checkbox key={s.value} label={s.label} checked={sources.includes(s.value)} onChange={() => toggleSource(s.value)} />
+              ))}
+              <span className="mx-1 h-4 w-px bg-border" />
+              <Checkbox label="evita tracce corte" checked={avoidShort} onChange={setAvoidShort} />
+            </div>
+          </Section>
 
-          <div className="mt-4">
+          <Section icon={<Sparkles size={13} className="text-faint" />} title="Indicazioni & AI">
             <Field label="Prompt libero" hint={useAi ? "interpretato dall'AI Set Agent" : "attiva l'AI per interpretarlo, altrimenti viene solo salvato"}>
               <Textarea rows={2} placeholder="Parti morbido e atmosferico, poi vira più club senza diventare techno dritta troppo presto…"
                 value={prompt} onChange={(e) => setPrompt(e.target.value)} />
             </Field>
-          </div>
-
-          {useAi && aiStatus?.configured && (
-            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-4">
-              <span className="text-xs font-medium uppercase tracking-wide text-muted">Stile AI</span>
-              <div className="inline-flex rounded-lg border border-border bg-surface p-1">
-                {(["technical", "creative"] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMode(m)}
-                    className={cn(
-                      "rounded-md px-3 py-1 text-sm font-medium transition-colors",
-                      mode === m ? "bg-elevated text-fg" : "text-muted hover:text-fg",
-                    )}
-                  >
-                    {m === "technical" ? "Tecnico" : "Creativo"}
-                  </button>
-                ))}
+            {useAi && aiStatus?.configured && (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted">Stile AI</span>
+                <div className="inline-flex rounded-lg border border-border bg-surface p-1">
+                  {(["technical", "creative"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMode(m)}
+                      className={cn(
+                        "rounded-md px-3 py-1 text-sm font-medium transition-colors",
+                        mode === m ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                      )}
+                    >
+                      {m === "technical" ? "Tecnico" : "Creativo"}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-faint">
+                  {mode === "creative"
+                    ? "L'AI usa la sua conoscenza musicale: arco emotivo, contrasti voluti, sorprese."
+                    : "Mix prudente: compatibilità tecnica e progressione, senza azzardi."}
+                </span>
               </div>
-              <span className="text-xs text-faint">
-                {mode === "creative"
-                  ? "L'AI usa la sua conoscenza musicale: arco emotivo, contrasti voluti, sorprese."
-                  : "Mix prudente: compatibilità tecnica e progressione, senza azzardi."}
-              </span>
-            </div>
-          )}
+            )}
+          </Section>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <Checkbox

@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, Music4, ArrowRightLeft } from "lucide-react";
+import { ArrowLeft, ExternalLink, Music4, ArrowRightLeft, Pencil } from "lucide-react";
 import { apiGet, fmtDuration, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button } from "@/components/ui";
+import { TrackEditModal } from "@/components/track-edit-modal";
 
 function scoreTone(s: number) { return s >= 70 ? "success" : s >= 45 ? "warning" : "danger"; }
 
@@ -32,6 +33,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
   const [after, setAfter] = useState<TransitionCandidate[]>([]);
   const [before, setBefore] = useState<TransitionCandidate[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     apiGet<TrackDetail>(`/api/tracks/${id}`).then(setTrack).catch((e) => setError(String(e.message ?? e)));
@@ -67,7 +69,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
       </div>
 
       <Card>
-        <CardHeader title="Metadata" />
+        <CardHeader title="Metadata" action={<Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> Modifica valori</Button>} />
         <table className="w-full text-sm">
           <tbody>
             {rows.map(([k, v]) => (
@@ -85,6 +87,13 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
         <TransitionList title="Cosa mettere prima" items={before} />
         <TransitionList title="Cosa mettere dopo" items={after} />
       </div>
+
+      <TrackEditModal
+        track={track}
+        open={editing}
+        onClose={() => setEditing(false)}
+        onSaved={(t) => setTrack(t)}
+      />
     </div>
   );
 }

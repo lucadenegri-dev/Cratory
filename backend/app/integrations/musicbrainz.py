@@ -62,7 +62,7 @@ class MusicBrainzProvider(MusicFeatureProvider):
 
     # ---- MusicFeatureProvider -------------------------------------------
 
-    def lookup(self, *, title, artist, isrc=None, duration_seconds=None):
+    def lookup(self, *, title, artist, isrc=None, duration_seconds=None, context=None):
         rec: dict | None = None
         exact = False
         if isrc:
@@ -136,6 +136,10 @@ class MusicBrainzProvider(MusicFeatureProvider):
 
     def _parse_recording(self, rec: dict, *, isrc: str | None, exact: bool) -> dict[str, Any] | None:
         out: dict[str, Any] = {}
+        # L'MBID (Recording) e' la chiave che apre l'analisi audio di AcousticBrainz:
+        # lo pubblichiamo nel `context` della catena anche se non e' un campo del modello.
+        if rec.get("id"):
+            out["mbid"] = rec["id"]
         if rec.get("title"):
             out["canonical_title"] = rec["title"]
         if artist := self._artist_credit(rec):

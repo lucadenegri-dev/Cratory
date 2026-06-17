@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Music4, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ExternalLink } from "lucide-react";
+import { Music4, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ExternalLink, Pencil } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
 import { Card, Input, Select, Checkbox, Alert, Badge } from "@/components/ui";
+import { TrackEditModal } from "@/components/track-edit-modal";
 
 const SOURCE_TONE: Record<string, "info" | "warning" | "neutral"> = { spotify: "info", soundcloud: "warning", manual: "neutral" };
 const STATUS_TONE: Record<string, "success" | "info" | "warning" | "neutral"> = {
@@ -43,6 +44,7 @@ export default function Library() {
   const [incomplete, setIncomplete] = useState(false);
   const [sort, setSort] = useState("");
   const [order, setOrder] = useState<Order>("asc");
+  const [editing, setEditing] = useState<Track | null>(null);
 
   const load = useCallback(() => {
     apiGet<{ total: number; items: Track[] }>("/api/tracks", {
@@ -99,7 +101,6 @@ export default function Library() {
             <Select className="h-9" value={source} onChange={(e) => { setSource(e.target.value); setOffset(0); }}>
               <option value="">Tutte le sorgenti</option>
               <option value="spotify">Spotify</option>
-              <option value="soundcloud">SoundCloud</option>
               <option value="manual">Manuale</option>
             </Select>
             <Select className="h-9" value={status} onChange={(e) => { setStatus(e.target.value); setOffset(0); }}>
@@ -151,7 +152,12 @@ export default function Library() {
                 <td className={`${cell} max-w-[10rem] truncate text-muted`}>{t.genre ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
                 <td className={cell}><Badge tone={STATUS_TONE[t.status] ?? "neutral"}>{STATUS_LABEL[t.status] ?? t.status}</Badge></td>
-                <td className={cell}>{t.spotify_url && <a href={t.spotify_url} target="_blank" rel="noreferrer" className="text-faint hover:text-info"><ExternalLink size={14} /></a>}</td>
+                <td className={cell}>
+                  <div className="flex items-center justify-end gap-2">
+                    <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-primary"><Pencil size={14} /></button>
+                    {t.spotify_url && <a href={t.spotify_url} target="_blank" rel="noreferrer" title="Apri su Spotify" className="text-faint hover:text-info"><ExternalLink size={14} /></a>}
+                  </div>
+                </td>
               </tr>
             ))}
             {items.length === 0 && (
@@ -170,6 +176,13 @@ export default function Library() {
             className="inline-flex h-8 items-center gap-1 rounded-lg border border-border-strong px-3 disabled:opacity-40 hover:bg-elevated">Succ <ChevronRight size={15} /></button>
         </div>
       </div>
+
+      <TrackEditModal
+        track={editing}
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        onSaved={(t) => setItems((cur) => cur.map((x) => (x.id === t.id ? t : x)))}
+      />
     </div>
   );
 }

@@ -19,7 +19,7 @@ La specifica completa è in `docs/` (leggere nell'ordine 01→06).
 
 ## Stack
 
-Backend Python + FastAPI, SQLAlchemy su SQLite (PostgreSQL in futuro), Pydantic. Frontend React/Next.js 16 (App Router, Tailwind + design system). Integrazioni (Spotify OAuth, provider feature musicali GetSongBPM/MusicBrainz/Last.fm, LLM Anthropic) dietro interfacce in `integrations/`, sempre con cache e gestione rate limit.
+Backend Python + FastAPI, SQLAlchemy su SQLite (PostgreSQL in futuro), Pydantic. Frontend React/Next.js 16 (App Router, Tailwind + design system). Integrazioni (Spotify OAuth, provider feature musicali Deezer/MusicBrainz/AcousticBrainz/GetSongBPM/Last.fm, LLM Anthropic) dietro interfacce in `integrations/`, sempre con cache e gestione rate limit.
 
 Struttura backend a layer: `routers/` (solo HTTP) → `services/` (logica) → `repositories.py` (query) → `models.py` + `schemas.py` + `serializers.py` + `integrations/` + `core/` (config, logging, errori). Type hints ovunque. Config via variabili ambiente (`.env.example` aggiornato).
 
@@ -51,7 +51,7 @@ routers/       + discovery, services (stato unificato integrazioni)
 services/      playlist_import, manual_import, feature_enrichment, track_status,
                scoring, candidate_engine, set_generator, ai_agent, validation,
                set_editor, alternatives, gap_analysis, camelot, discovery
-integrations/  spotify.py, llm.py, getsongbpm.py, musicbrainz.py, lastfm.py
+integrations/  spotify.py, llm.py, deezer.py, getsongbpm.py, musicbrainz.py, acousticbrainz.py, lastfm.py
 repositories.py, models.py, schemas.py, serializers.py
 core/          config.py (setup_logging, Settings)
 ```
@@ -66,7 +66,7 @@ Completati: D1 Rimozione Rekordbox · D2 Cache enrichment · E AI prompt arricch
 
 Completati anche: **Discovery write-back** (`POST /api/discovery/add` → libreria dell'app via `import_single_track`), **Import manuale playlist** (`services/manual_import.py`), **enrichment mood/energia** (Last.fm `LastFmTagProvider` per genere+mood dai tag; `estimate_energy` proxy deterministico) e **rimozione enrichment metadata Spotify** (i metadata arrivano dall'import; `year` catturato lì).
 
-> **Enrichment feature** = catena GetSongBPM (BPM/key/dance) → MusicBrainz (label/release/genere) → Last.fm (genere+mood). L'energia è un proxy stimato (`estimate_energy`), non un dato di un provider. Non esiste fonte gratuita per mood/energia reali (Spotify audio-features deprecato).
+> **Enrichment feature** = catena gratuita ordinata per identità prima del fuzzy: **Deezer** (BPM via ISRC, no key) → **MusicBrainz** (ISRC/**MBID**/label/release/genere/canonical) → **AcousticBrainz** (analisi audio reale via MBID: BPM/key/mood/danceability/vocalness, no key) → **GetSongBPM** (BPM/key/dance, fuzzy fallback) → **Last.fm** (genere+mood). La catena passa il `context` accumulato ai provider successivi (AcousticBrainz usa l'MBID di MusicBrainz). Deezer è attivo di default (`DEEZER_ENABLED`); AcousticBrainz richiede `MUSICBRAINZ_USER_AGENT` (`ACOUSTICBRAINZ_ENABLED`). L'energia resta un proxy stimato (`estimate_energy`) quando nessun provider la fornisce; AcousticBrainz però dà mood/danceability/vocalness reali dove ha la traccia (dataset storico, congelato al 2022 → non copre le uscite recentissime).
 
 **Toggle Set Builder technical/creative** fatto: `mode` su `SetGenerationRequest`; `CREATIVE_SYSTEM_PROMPT` (l'AI usa la sua conoscenza musicale, sempre validata); `AI_MODEL_CREATIVE` opzionale + `_model_for(req)` in `sets.py` per usare un modello più capace solo in creative.
 

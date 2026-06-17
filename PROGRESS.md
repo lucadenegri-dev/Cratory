@@ -4,9 +4,29 @@
 
 ## Stato attuale
 
-**Fase:** D1-F completate + **import Spotify reale funzionante** + **pulizia DB legacy Rekordbox** + **redesign UI** + **F10 classificazione transizioni** + **modello AI economico Haiku 4.5** + **pulizia UX/enrichment** (auto-enrich post-import, ri-arricchimento per playlist, fix crash SSL) (107 test verdi, 15/06/2026). Discovery è Last.fm-centric. Prossimo: test reale enrichment/discovery con chiavi; provider locale Ollama (opzionale).
+**Fase:** D1-F completate + **import Spotify reale funzionante** + **pulizia DB legacy Rekordbox** + **redesign UI** + **F10 classificazione transizioni** + **modello AI economico Haiku 4.5** + **pulizia UX/enrichment** (auto-enrich post-import, ri-arricchimento per playlist, fix crash SSL) + **copertura enrichment ampliata** (Deezer + AcousticBrainz, gratuiti e senza chiave) + **inserimento manuale valori** (PATCH tracce) + **UI Dashboard/Set Builder ridisegnate** (140 test verdi, 17/06/2026). Discovery è Last.fm-centric. Prossimo: test reale enrichment/discovery con chiavi; provider locale Ollama (opzionale).
 
-**Ultimo aggiornamento:** 2026-06-15
+**Ultimo aggiornamento:** 2026-06-17
+
+### Milestone 17/06/2026 (2) — UI redesign + inserimento manuale valori
+
+- **Modifica manuale tracce**: nuovo `PATCH /api/tracks/{id}` (`TrackUpdateIn`, `repositories.update_track`): l'utente inserisce/corregge a mano BPM, key (Camelot validata), mood, energia, danceability, vocalness, genere, label, anno. I valori manuali **hanno la precedenza** sull'enrichment (`enrichment_source="manual"`, confidenza 100) e aggiornano lo stato. PATCH parziale (`null` azzera, assente resta). +8 test (`test_track_update.py`, **140 verdi**).
+- **Frontend — modulo di modifica**: `components/track-edit-modal.tsx` (Modal riusabile) + `updateTrack` in `lib/api`. Bottone "matita" per riga in **Libreria** e **dettaglio playlist**, e bottone "Modifica valori" nel **dettaglio traccia**; lo stato locale si aggiorna al salvataggio.
+- **Dashboard ridisegnata**: card **"Prossimo passo"** che consiglia l'azione giusta in base allo stato (completa BPM/key → genera set → espandi libreria), copertura enrichment con scorciatoie ("Arricchisci" / "Inserisci a mano"), distribuzione tonalità ordinata.
+- **Set Builder ridisegnato**: sezioni chiare (Base, **Arco del set** con coppie da→a per BPM/energia/mood, Vincoli, Indicazioni & AI), **preset rapidi** (Warm-up, Peak time, Progressivo, Closing) ed etichette leggibili per le strategie (Fluido, Progressivo, Contrasti…) con descrizione.
+- **Pulizia UI**: rimosso **SoundCloud** (non implementato) dalle sorgenti selezionabili in Libreria e Set Builder; descrizione enrichment in Impostazioni allineata alle nuove fonti.
+- Verifica: `tsc` pulito, ESLint pulito sui file toccati, pagine 200 senza errori in preview, PATCH provato end-to-end sul backend reale.
+
+### Milestone 17/06/2026 — Copertura enrichment: Deezer + AcousticBrainz
+
+**Problema:** l'enrichment trovava spesso "nessun dato" perché BPM/key dipendevano da **un solo** provider (GetSongBPM) con match **fuzzy** artista+titolo; l'ISRC (identità affidabile, già presente dall'import Spotify) non era usato per il BPM, e l'MBID di MusicBrainz veniva scartato.
+
+- **Deezer** (`integrations/deezer.py`): nuovo `DeezerProvider`, **BPM via ISRC** (match esatto), endpoint pubblico **senza API key**. In testa alla catena. Attivo di default (`DEEZER_ENABLED=true`).
+- **AcousticBrainz** (`integrations/acousticbrainz.py`): nuovo `AcousticBrainzProvider`, analisi audio **reale** via **MBID** → BPM, key/Camelot (low-level), danceability/mood/vocalness (high-level). Senza API key. Richiede MusicBrainz (`ACOUSTICBRAINZ_ENABLED=true`). Dataset storico congelato al 2022 (no uscite recentissime).
+- **MBID catturato** in `MusicBrainzProvider._parse_recording` (`out["mbid"]`): è la chiave che apre AcousticBrainz.
+- **Catena con `context`**: `ChainedFeatureProvider` passa il dict accumulato (incl. `mbid`) ai provider successivi → AcousticBrainz usa l'MBID di MusicBrainz. Aggiunto `context` agli ABC/Protocol e a tutti i provider. Nuovo ordine (identità prima del fuzzy): **Deezer → MusicBrainz → AcousticBrainz → GetSongBPM → Last.fm**.
+- **Stato servizi/.env**: `routers/services.py` espone Deezer e AcousticBrainz; `.env.example` documenta i due toggle; messaggio "non configurato" aggiornato.
+- **Test**: nuovo `test_deezer_acousticbrainz.py` (parsing Deezer/AcousticBrainz, cattura MBID, passaggio context in catena) + adeguati i test factory/router per Deezer attivo di default. **132 verdi.** Verifica live: Deezer ISRC → BPM 114.8; AcousticBrainz MBID → BPM/8A/dance/vocal/mood.
 
 ### Milestone 15/06/2026 (3) — Pulizia UX + enrichment resiliente e per-playlist
 
@@ -155,8 +175,10 @@ Il progetto ha ridefinito il perimetro:
 
 **Pivot Fase B — Provider feature musicali** ✅
 - `GetSongBPMProvider`: BPM/key/Camelot, confidenza stimata, httpx iniettabile
-- `MusicBrainzProvider`: ISRC → label/release_date/genere
-- `ChainedFeatureProvider`: GetSongBPM → MusicBrainz, first-wins
+- `MusicBrainzProvider`: ISRC → MBID/label/release_date/genere/canonical
+- `DeezerProvider`: ISRC → BPM (match esatto, senza API key)
+- `AcousticBrainzProvider`: MBID → BPM/key/mood/danceability/vocalness (analisi audio reale, senza API key)
+- `ChainedFeatureProvider`: Deezer → MusicBrainz → AcousticBrainz → GetSongBPM → Last.fm, first-wins, con `context` (MBID) propagato lungo la catena
 - Router `/api/enrichment/features` asincrono con polling
 - Frontend: card feature musicali in Settings con progress bar
 

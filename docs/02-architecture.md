@@ -10,7 +10,7 @@ Database futuro:   PostgreSQL
 ORM:               SQLAlchemy
 Validation:        Pydantic
 Streaming:         Spotify Web API (OAuth); SoundCloud in backlog
-Enrichment:        GetSongBPM (BPM/key), MusicBrainz (label/release/ISRC), Last.fm (tag)
+Enrichment:        Deezer (BPM via ISRC), MusicBrainz (label/release/ISRC/MBID), AcousticBrainz (BPM/key/mood/dance via MBID), GetSongBPM (BPM/key), Last.fm (tag)
 Discovery:         Last.fm (similarità) + Spotify /search (resolver)
 AI:                LLM API (Anthropic) astratta tramite service layer
 ```
@@ -30,7 +30,7 @@ Playlist Importer  (normalizzazione + deduplica)
         ↓
 Database interno (SQLite)   (metadata editoriali già presenti dall'import)
         ↓
-Music Feature Enricher (GetSongBPM → MusicBrainz → Last.fm, con cache DB)
+Music Feature Enricher (Deezer → MusicBrainz → AcousticBrainz → GetSongBPM → Last.fm, con cache DB)
         ↓
 Candidate Engine (deterministico, cap 60) ──┐
         ↓                                     │
@@ -101,7 +101,7 @@ backend/app/
   models.py      # modelli SQLAlchemy (incl. EnrichmentCache per la cache provider)
   schemas.py     # schemi Pydantic (request/response, output AI)
   serializers.py # ORM -> Pydantic con campi derivati
-  integrations/  # client dietro ABC: spotify, llm, getsongbpm, musicbrainz, lastfm
+  integrations/  # client dietro ABC: spotify, llm, deezer, getsongbpm, musicbrainz, acousticbrainz, lastfm
   core/          # config, logging
 ```
 
@@ -116,9 +116,11 @@ Le integrazioni stanno dietro interfacce astratte (`integrations/__init__.py`): 
 | Fonte | Ruolo | Stato |
 |---|---|---|
 | **Spotify** | Identità traccia (ISRC, id, url), metadata editoriali, cover, durata, import playlist/liked, **resolver Discovery** (`/search`), creazione playlist | attivo |
-| **GetSongBPM** | BPM e tonalità/Camelot | attivo |
-| **MusicBrainz** | Identificazione, ISRC, release, label (fallback aperto) | attivo |
-| **Last.fm** | Tag/generi (enrichment) **e similarità per il Discovery** (artist/track getsimilar, tag toptracks) | attivo |
+| **Deezer** | **BPM via ISRC** (match esatto), senza API key | attivo |
+| **MusicBrainz** | Identificazione, ISRC, **MBID** (chiave per AcousticBrainz), release, label, genere (fallback aperto) | attivo |
+| **AcousticBrainz** | Analisi audio reale via MBID: **BPM, key/Camelot, mood, danceability, voce/vocalness**. Senza API key; dataset storico congelato (2022) | attivo |
+| **GetSongBPM** | BPM e tonalità/Camelot (match fuzzy artista/titolo, fallback) | attivo |
+| **Last.fm** | Tag/generi + **mood** (enrichment) **e similarità per il Discovery** (artist/track getsimilar, tag toptracks) | attivo |
 | **Anthropic LLM** | AI Set Agent + spiegazioni Discovery | attivo |
 | **SoundCloud** | Import playlist/liked | backlog |
 | ~~Spotify `/recommendations`~~ | ~~raccomandazioni~~ | non disponibile (deprecato 2024) |

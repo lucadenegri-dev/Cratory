@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     # Enrichment musicale esterno (BPM/key/mood/energia). Vuoti = provider disattivo.
     getsongbpm_api_key: str = ""
     lastfm_api_key: str = ""
+    # Deezer: BPM via ISRC, gratis e SENZA API key (endpoint pubblico). Attivo di default
+    # perche' a costo zero e copre il BPM con l'identita' piu' affidabile (ISRC).
+    deezer_enabled: bool = True
+    # AcousticBrainz: analisi audio reale (BPM/key/mood/danceability/voce) via MBID, gratis e
+    # senza API key. Indicizzato per MBID: entra in catena solo se MusicBrainz e' configurato.
+    acousticbrainz_enabled: bool = True
     ai_api_key: str = ""
     ai_model: str = ""
     # Modello per la modalità "creative" del Set Builder (vuoto = stesso di ai_model).

@@ -164,7 +164,15 @@ def test_lookup_no_results():
 # --- factory + guardia router ------------------------------------------------
 
 
+def _only_keyed_providers(monkeypatch):
+    """Disattiva i provider zero-config (Deezer/AcousticBrainz) per isolare i test
+    sui provider con chiave/credenziale."""
+    monkeypatch.setattr(config.settings, "deezer_enabled", False, raising=False)
+    monkeypatch.setattr(config.settings, "acousticbrainz_enabled", False, raising=False)
+
+
 def test_factory_requires_config(monkeypatch):
+    _only_keyed_providers(monkeypatch)
     monkeypatch.setattr(config.settings, "getsongbpm_api_key", "", raising=False)
     monkeypatch.setattr(config.settings, "musicbrainz_user_agent", "", raising=False)
     monkeypatch.setattr(config.settings, "lastfm_api_key", "", raising=False)
@@ -178,6 +186,7 @@ def test_factory_requires_config(monkeypatch):
 
 
 def test_router_guard_and_status(monkeypatch):
+    _only_keyed_providers(monkeypatch)
     monkeypatch.setattr(config.settings, "getsongbpm_api_key", "", raising=False)
     monkeypatch.setattr(config.settings, "musicbrainz_user_agent", "", raising=False)
     monkeypatch.setattr(config.settings, "lastfm_api_key", "", raising=False)
@@ -188,6 +197,18 @@ def test_router_guard_and_status(monkeypatch):
 
     monkeypatch.setattr(config.settings, "getsongbpm_api_key", "abc", raising=False)
     assert enrichment.status() == {"configured": True, "provider": "getsongbpm"}
+
+
+def test_deezer_enabled_alone_makes_enrichment_configured(monkeypatch):
+    """Deezer e' zero-config (BPM via ISRC): da solo rende l'enrichment disponibile."""
+    monkeypatch.setattr(config.settings, "deezer_enabled", True, raising=False)
+    monkeypatch.setattr(config.settings, "acousticbrainz_enabled", False, raising=False)
+    monkeypatch.setattr(config.settings, "getsongbpm_api_key", "", raising=False)
+    monkeypatch.setattr(config.settings, "musicbrainz_user_agent", "", raising=False)
+    monkeypatch.setattr(config.settings, "lastfm_api_key", "", raising=False)
+    assert feature_provider_configured() is True
+    assert get_feature_provider().name == "deezer"
+    assert configured_provider_name() == "deezer"
 
 
 # --- MusicBrainz (parsing senza rete) ----------------------------------------
@@ -276,14 +297,40 @@ def test_chain_returns_none_if_all_empty():
 
 
 def test_factory_builds_chain_when_both_configured(monkeypatch):
+    _only_keyed_providers(monkeypatch)
     monkeypatch.setattr(config.settings, "getsongbpm_api_key", "k", raising=False)
     monkeypatch.setattr(config.settings, "musicbrainz_user_agent", "ua", raising=False)
     monkeypatch.setattr(config.settings, "lastfm_api_key", "", raising=False)
     assert get_feature_provider().name == "chain"
-    assert configured_provider_name() == "getsongbpm + musicbrainz"
+    assert configured_provider_name() == "musicbrainz + getsongbpm"
 
     monkeypatch.setattr(config.settings, "getsongbpm_api_key", "", raising=False)
     assert get_feature_provider().name == "musicbrainz"
+
+
+def test_factory_chain_order_with_all_free_providers(monkeypatch):
+    """Catena completa: Deezer -> MusicBrainz -> AcousticBrainz -> GetSongBPM -> Last.fm."""
+    monkeypatch.setattr(config.settings, "deezer_enabled", True, raising=False)
+    monkeypatch.setattr(config.settings, "acousticbrainz_enabled", True, raising=False)
+    monkeypatch.setattr(config.settings, "getsongbpm_api_key", "k", raising=False)
+    monkeypatch.setattr(config.settings, "musicbrainz_user_agent", "ua", raising=False)
+    monkeypatch.setattr(config.settings, "lastfm_api_key", "lf", raising=False)
+    provider = get_feature_provider()
+    assert provider.name == "chain"
+    assert [p.name for p in provider.providers] == [
+        "deezer", "musicbrainz", "acousticbrainz", "getsongbpm", "lastfm",
+    ]
+    assert configured_provider_name() == "deezer + musicbrainz + acousticbrainz + getsongbpm + lastfm"
+
+
+def test_factory_skips_acousticbrainz_without_musicbrainz(monkeypatch):
+    """AcousticBrainz e' indicizzato per MBID: senza MusicBrainz non entra in catena."""
+    monkeypatch.setattr(config.settings, "deezer_enabled", True, raising=False)
+    monkeypatch.setattr(config.settings, "acousticbrainz_enabled", True, raising=False)
+    monkeypatch.setattr(config.settings, "getsongbpm_api_key", "", raising=False)
+    monkeypatch.setattr(config.settings, "musicbrainz_user_agent", "", raising=False)
+    monkeypatch.setattr(config.settings, "lastfm_api_key", "", raising=False)
+    assert get_feature_provider().name == "deezer"  # solo Deezer, niente AcousticBrainz
 
 
 # --- cache enrichment --------------------------------------------------------

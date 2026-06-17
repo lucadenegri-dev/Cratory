@@ -143,7 +143,7 @@ function FeatureEnrichmentCard() {
         action={status && <Badge tone={status.configured ? "info" : "neutral"}>{status.configured ? status.provider ?? "attivo" : "nessun provider"}</Badge>}
       />
       <div className="space-y-3 p-5 text-sm">
-        <p className="text-muted">Ricava BPM/key (GetSongBPM), label/genere (MusicBrainz) e genere/mood dai tag (Last.fm); l&apos;energia è stimata da BPM e danceability. Non sovrascrive mai i dati già presenti.</p>
+        <p className="text-muted">Ricava BPM via ISRC (Deezer), analisi audio reale via MusicBrainz + AcousticBrainz (BPM, tonalità, mood, danceability) e genere/mood dai tag (Last.fm); l&apos;energia è stimata da BPM e danceability quando manca. Non sovrascrive i valori che inserisci a mano.</p>
         {error && <Alert tone="danger">⚠ {error}</Alert>}
         {status && !status.configured ? (
           <p className="text-faint">Configura almeno <code className="rounded bg-elevated px-1">GETSONGBPM_API_KEY</code> o <code className="rounded bg-elevated px-1">LASTFM_API_KEY</code> qui sopra per abilitare l&apos;arricchimento.</p>

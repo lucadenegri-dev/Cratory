@@ -23,6 +23,10 @@ GET  /api/tracks                      # lista con filtri: artist,title,album,gen
                                       #   bpm_min,bpm_max,key,duration_min/max,has_spotify,
                                       #   has_soundcloud,incomplete_metadata,limit,offset
 GET  /api/tracks/{id}                 # dettaglio traccia
+PATCH /api/tracks/{id}                # modifica manuale dei valori (bpm, camelot_key, mood,
+                                      #   energy, danceability, vocalness, genre, label, year...).
+                                      #   PATCH parziale; i valori inseriti a mano hanno la
+                                      #   precedenza sull'enrichment (enrichment_source="manual").
 GET  /api/stats                       # statistiche libreria: playlists, tracce, with_bpm,
                                       #   with_key, with_features, ready_for_set, range BPM, key_distribution
 ```
@@ -65,7 +69,7 @@ POST /api/spotify/create-playlist     # crea una playlist Spotify da un set gene
 
 ## Music Feature Enrichment (BPM/key/genere/mood/energia) — implementato
 
-`services/feature_enrichment.py` applica i dati con `enrichment_source`/`enrichment_confidence` senza mai sovrascrivere BPM/key esistenti, con cache DB (`EnrichmentCache`). Provider concreti in catena: GetSongBPM (BPM/key/Camelot/danceability), MusicBrainz (label/release/ISRC/genere), Last.fm (genere + **mood** dai tag). L'**energia** è stimata deterministicamente (`estimate_energy`) da BPM + danceability + genere quando nessun provider la fornisce.
+`services/feature_enrichment.py` applica i dati con `enrichment_source`/`enrichment_confidence` senza mai sovrascrivere BPM/key esistenti, con cache DB (`EnrichmentCache`). Provider concreti in catena (first-wins, identità prima del fuzzy): **Deezer** (BPM via ISRC, senza chiave) → **MusicBrainz** (ISRC/MBID/label/release/genere/canonical) → **AcousticBrainz** (BPM/key/Camelot/mood/danceability/vocalness via MBID, senza chiave) → **GetSongBPM** (BPM/key/Camelot/danceability, fuzzy) → **Last.fm** (genere + **mood** dai tag). La catena passa il `context` accumulato (incl. l'**MBID** di MusicBrainz) ai provider successivi. L'**energia** è stimata deterministicamente (`estimate_energy`) da BPM + danceability + genere quando nessun provider la fornisce.
 
 ```text
 GET  /api/enrichment/status           # provider configurato? (GETSONGBPM_API_KEY / MUSICBRAINZ_USER_AGENT)
@@ -94,7 +98,7 @@ GET  /api/ai/status                   # LLM configurato? modello attivo
 
 ```text
 GET  /api/services/status             # stato di TUTTE le integrazioni in un'unica risposta:
-                                      #   spotify, anthropic, getsongbpm, lastfm, musicbrainz
+                                      #   spotify, anthropic, deezer, getsongbpm, acousticbrainz, lastfm, musicbrainz
                                       #   per ciascuno: configured, connected (null se non ha login), detail, env[]
 ```
 

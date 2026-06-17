@@ -90,6 +90,7 @@ class GetSongBPMProvider(MusicFeatureProvider):
     def lookup(
         self, *, title: str | None, artist: str | None,
         isrc: str | None = None, duration_seconds: int | None = None,
+        context: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         if not title:
             return None
@@ -297,8 +298,8 @@ class ChainedFeatureProvider(MusicFeatureProvider):
     def __init__(self, providers: list[MusicFeatureProvider]):
         self.providers = providers
 
-    def lookup(self, *, title, artist, isrc=None, duration_seconds=None):
-        merged: dict[str, Any] = {}
+    def lookup(self, *, title, artist, isrc=None, duration_seconds=None, context=None):
+        merged: dict[str, Any] = dict(context) if context else {}
         confidences: list[int] = []
         getsongbpm: list[MusicFeatureProvider] = []
 
@@ -312,11 +313,16 @@ class ChainedFeatureProvider(MusicFeatureProvider):
                 elif v is not None and k not in merged:
                     merged[k] = v
 
+        # `merged` viene passato come context: un provider vede i campi gia' raccolti
+        # dai precedenti (es. AcousticBrainz legge l'`mbid` di MusicBrainz).
         for p in self.providers:
             if getattr(p, "name", "") == "getsongbpm":
                 getsongbpm.append(p)
             try:
-                data = p.lookup(title=title, artist=artist, isrc=isrc, duration_seconds=duration_seconds)
+                data = p.lookup(
+                    title=title, artist=artist, isrc=isrc,
+                    duration_seconds=duration_seconds, context=merged,
+                )
             except FeatureProviderError as exc:
                 logger.warning("Provider %s fallito nella catena: %s", getattr(p, "name", "?"), exc)
                 continue
@@ -334,6 +340,7 @@ class ChainedFeatureProvider(MusicFeatureProvider):
                         artist=canonical_artist or artist,
                         isrc=isrc,
                         duration_seconds=duration_seconds,
+                        context=merged,
                     )
                 except FeatureProviderError as exc:
                     logger.warning("Retry canonicale %s fallito: %s", getattr(p, "name", "?"), exc)
@@ -353,11 +360,17 @@ class ChainedFeatureProvider(MusicFeatureProvider):
 
 
 def _configured_names() -> list[str]:
+    # Ordine = ordine nella catena (vedi get_feature_provider).
     names: list[str] = []
-    if settings.getsongbpm_api_key:
-        names.append("getsongbpm")
+    if settings.deezer_enabled:
+        names.append("deezer")
     if settings.musicbrainz_user_agent:
         names.append("musicbrainz")
+        # AcousticBrainz e' indicizzato per MBID: ha senso solo con MusicBrainz attivo.
+        if settings.acousticbrainz_enabled:
+            names.append("acousticbrainz")
+    if settings.getsongbpm_api_key:
+        names.append("getsongbpm")
     if settings.lastfm_api_key:
         names.append("lastfm")
     return names
@@ -373,20 +386,35 @@ def configured_provider_name() -> str | None:
 
 
 def get_feature_provider() -> MusicFeatureProvider:
+    # Ordine della catena = priorita' (il primo che riempie un campo vince), pensato
+    # per privilegiare le fonti basate su IDENTITA' (ISRC/MBID) rispetto al fuzzy:
+    #   Deezer (ISRC->bpm) -> MusicBrainz (ISRC->mbid/label/genere/canonical)
+    #   -> AcousticBrainz (mbid->bpm/key/mood/dance/voce) -> GetSongBPM (fuzzy, fallback)
+    #   -> Last.fm (mood/genere, fallback).
     providers: list[MusicFeatureProvider] = []
-    if settings.getsongbpm_api_key:
-        providers.append(GetSongBPMProvider(settings.getsongbpm_api_key))
+    if settings.deezer_enabled:
+        # Deezer: BPM via ISRC, senza API key. Match esatto = identita' certa.
+        from app.integrations.deezer import DeezerProvider
+        providers.append(DeezerProvider())
     if settings.musicbrainz_user_agent:
         # import locale: evita di legare questo modulo a musicbrainz se non configurato
         from app.integrations.musicbrainz import MusicBrainzProvider
         providers.append(MusicBrainzProvider(settings.musicbrainz_user_agent))
+        if settings.acousticbrainz_enabled:
+            # AcousticBrainz: analisi audio reale via MBID (lo prende dal context della
+            # catena, quindi DEVE stare dopo MusicBrainz). Senza API key.
+            from app.integrations.acousticbrainz import AcousticBrainzProvider
+            providers.append(AcousticBrainzProvider())
+    if settings.getsongbpm_api_key:
+        providers.append(GetSongBPMProvider(settings.getsongbpm_api_key))
     if settings.lastfm_api_key:
-        # Last.fm: mood + genere (fallback) dai tag. BPM/key restano da GetSongBPM.
+        # Last.fm: mood + genere (fallback) dai tag.
         from app.integrations.lastfm import LastFMClient, LastFmTagProvider
         providers.append(LastFmTagProvider(LastFMClient(settings.lastfm_api_key)))
     if not providers:
         raise FeatureProviderNotConfigured(
-            "Nessun provider di feature musicali configurato: imposta GETSONGBPM_API_KEY "
-            "(BPM/key) e/o MUSICBRAINZ_USER_AGENT (label/release/genere) in backend/.env."
+            "Nessun provider di feature musicali configurato: abilita DEEZER_ENABLED "
+            "(BPM via ISRC, gratis e senza chiave) e/o imposta GETSONGBPM_API_KEY (BPM/key) "
+            "o MUSICBRAINZ_USER_AGENT (label/release/genere + AcousticBrainz) in backend/.env."
         )
     return providers[0] if len(providers) == 1 else ChainedFeatureProvider(providers)

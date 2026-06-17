@@ -70,7 +70,11 @@ class MusicFeatureProvider(ABC):
         artist: str | None,
         isrc: str | None = None,
         duration_seconds: int | None = None,
-    ) -> dict[str, Any] | None: ...
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """`context` = dati gia' raccolti dai provider precedenti nella catena
+        (es. `mbid` di MusicBrainz per AcousticBrainz). I provider che non ne hanno
+        bisogno lo ignorano."""
 
 
 class LLMClient(ABC):

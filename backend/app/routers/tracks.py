@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.repositories import get_track, library_stats, list_tracks
-from app.schemas import LibraryStatsOut, TrackDetailOut, TrackListOut
+from app.repositories import get_track, library_stats, list_tracks, update_track
+from app.schemas import LibraryStatsOut, TrackDetailOut, TrackListOut, TrackUpdateIn
 from app.serializers import track_detail_out, track_out
+from app.services.camelot import parse_camelot
 
 router = APIRouter(prefix="/api", tags=["tracks"])
 
@@ -54,6 +55,27 @@ def get_track_detail(track_id: int, db: Session = Depends(get_db)):
     track = get_track(db, track_id)
     if track is None:
         raise HTTPException(status_code=404, detail="Traccia non trovata")
+    return track_detail_out(track)
+
+
+@router.patch("/tracks/{track_id}", response_model=TrackDetailOut)
+def patch_track(track_id: int, payload: TrackUpdateIn, db: Session = Depends(get_db)):
+    """Modifica manuale dei valori di una traccia (BPM, key, mood, energia...).
+
+    Inserimento a mano: i valori forniti hanno la precedenza sull'enrichment. Solo
+    i campi presenti nel body vengono toccati; `null` azzera, assente resta com'e'.
+    """
+    track = get_track(db, track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Traccia non trovata")
+    data = payload.model_dump(exclude_unset=True)
+    # La tonalita' non si inventa: se fornita, deve essere un valore Camelot valido.
+    if data.get("camelot_key"):
+        camelot = str(data["camelot_key"]).strip().upper()
+        if not parse_camelot(camelot):
+            raise HTTPException(status_code=422, detail="Tonalità non valida: usa la notazione Camelot (es. 8A, 12B).")
+        data["camelot_key"] = camelot
+    track = update_track(db, track, data)
     return track_detail_out(track)
 
 

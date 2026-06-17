@@ -224,7 +224,7 @@ class LastFmTagProvider(MusicFeatureProvider):
     def __init__(self, client: "LastFMClient"):
         self.client = client
 
-    def lookup(self, *, title, artist, isrc=None, duration_seconds=None):
+    def lookup(self, *, title, artist, isrc=None, duration_seconds=None, context=None):
         if not title or not artist:
             return None
         canonical = self.client.canonical_track(artist, title)

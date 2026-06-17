@@ -49,6 +49,33 @@ class TrackDetailOut(TrackOut):
     """Dettaglio traccia: oggi coincide con TrackOut (niente cue/beatgrid Rekordbox)."""
 
 
+class TrackUpdateIn(BaseModel):
+    """Modifica manuale di una traccia.
+
+    Solo i campi presenti nel payload vengono toccati (PATCH parziale): un valore
+    `null` azzera il campo, un campo assente resta invariato. I valori inseriti a
+    mano hanno la precedenza sull'enrichment automatico (l'utente sa cosa scrive):
+    se si tocca una feature musicale la fonte diventa `manual` con confidenza piena.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    genre: str | None = None
+    genre_secondary: str | None = None
+    year: int | None = Field(default=None, ge=0, le=3000)
+    duration_seconds: int | None = Field(default=None, ge=0)
+    bpm: float | None = Field(default=None, gt=0, le=400)
+    camelot_key: str | None = None
+    mood: str | None = None
+    energy: int | None = Field(default=None, ge=0, le=100)
+    danceability: int | None = Field(default=None, ge=0, le=100)
+    vocalness: int | None = Field(default=None, ge=0, le=100)
+    label: str | None = None
+
+
 class TransitionScoreOut(BaseModel):
     score: int = Field(ge=0, le=100)
     technical_reasons: list[str] = []

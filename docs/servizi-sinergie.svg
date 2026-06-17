@@ -54,32 +54,36 @@
   <path class="flow" d="M430,246 L150,286" marker-end="url(#arr)"/>
 
   <!-- 2 ENRICHMENT -->
-  <text x="30" y="280" class="sec">2 · ENRICHMENT — catena (first-wins: il primo che ha il dato vince)</text>
-  <rect class="box" x="30" y="290" width="206" height="70" rx="10"/>
-  <text x="44" y="313" class="t">GetSongBPM</text>
-  <text x="44" y="332" class="r">BPM · key (Camelot)</text>
-  <text x="44" y="349" class="r">danceability</text>
-  <text x="222" y="313" text-anchor="end" class="cfg">chiave API</text>
-  <rect class="box" x="252" y="290" width="206" height="70" rx="10"/>
-  <text x="266" y="313" class="t">MusicBrainz</text>
-  <text x="266" y="332" class="r">label · release · genere</text>
-  <text x="266" y="349" class="r">via ISRC (no API key)</text>
-  <text x="444" y="313" text-anchor="end" class="cfg">User-Agent</text>
-  <rect class="box" x="474" y="290" width="206" height="70" rx="10"/>
-  <text x="488" y="313" class="t">Last.fm</text>
-  <text x="488" y="332" class="r">genere + mood</text>
-  <text x="488" y="349" class="r">dai tag</text>
-  <text x="666" y="313" text-anchor="end" class="cfg">chiave API</text>
-  <rect class="box dash" x="696" y="290" width="216" height="70" rx="10"/>
-  <text x="710" y="313" class="t">Energia (stimata)</text>
-  <text x="710" y="332" class="r">proxy BPM+dance+genere</text>
-  <text x="710" y="349" class="r">deterministico, non un provider</text>
-  <path class="flow" d="M236,325 L252,325" marker-end="url(#arr)"/>
-  <path class="flow" d="M458,325 L474,325" marker-end="url(#arr)"/>
-  <path class="flow" d="M680,325 L696,325" marker-end="url(#arr)"/>
-  <path class="syn" d="M430,246 C390,262 360,272 355,288" marker-end="url(#arrI)"/>
-  <text x="335" y="270" fill="#5bb0f1" font-size="10" font-weight="700">ISRC</text>
-  <text x="30" y="380" class="cap"><tspan fill="#5bb0f1" font-weight="700">Sinergia:</tspan> Spotify fornisce l'ISRC, MusicBrainz lo usa per un match certo (label, release). Ognuno colma cio' che gli altri non danno.</text>
+  <text x="30" y="280" class="sec">2 · ENRICHMENT — catena (first-wins; identità prima del fuzzy)</text>
+  <rect class="box" x="30" y="290" width="162" height="70" rx="10"/>
+  <text x="42" y="313" class="t">Deezer</text>
+  <text x="42" y="332" class="r">BPM via ISRC</text>
+  <text x="42" y="349" class="r"><tspan fill="#5ec98a" font-weight="700">gratis · no key</tspan></text>
+  <rect class="box" x="210" y="290" width="162" height="70" rx="10"/>
+  <text x="222" y="313" class="t">MusicBrainz</text>
+  <text x="222" y="332" class="r">ISRC · MBID · label</text>
+  <text x="222" y="349" class="r">release · genere · UA</text>
+  <rect class="box" x="390" y="290" width="162" height="70" rx="10"/>
+  <text x="402" y="313" class="t">AcousticBrainz</text>
+  <text x="402" y="332" class="r">BPM·key·mood·dance</text>
+  <text x="402" y="349" class="r"><tspan fill="#5ec98a" font-weight="700">gratis</tspan> · via MBID</text>
+  <rect class="box" x="570" y="290" width="162" height="70" rx="10"/>
+  <text x="582" y="313" class="t">GetSongBPM</text>
+  <text x="582" y="332" class="r">BPM · key (fuzzy)</text>
+  <text x="582" y="349" class="r">danceability · chiave API</text>
+  <rect class="box" x="750" y="290" width="162" height="70" rx="10"/>
+  <text x="762" y="313" class="t">Last.fm</text>
+  <text x="762" y="332" class="r">genere + mood (tag)</text>
+  <text x="762" y="349" class="r">chiave API</text>
+  <path class="flow" d="M192,325 L210,325" marker-end="url(#arr)"/>
+  <path class="flow" d="M372,325 L390,325" marker-end="url(#arr)"/>
+  <path class="flow" d="M552,325 L570,325" marker-end="url(#arr)"/>
+  <path class="flow" d="M732,325 L750,325" marker-end="url(#arr)"/>
+  <path class="syn" d="M430,246 C400,256 330,262 300,288" marker-end="url(#arrI)"/>
+  <text x="392" y="258" fill="#5bb0f1" font-size="10" font-weight="700">ISRC</text>
+  <path class="syn dash" d="M291,360 C300,374 372,374 411,362" marker-end="url(#arrI)"/>
+  <text x="318" y="378" fill="#5bb0f1" font-size="10" font-weight="700">MBID</text>
+  <text x="30" y="398" class="cap"><tspan fill="#5bb0f1" font-weight="700">Sinergia:</tspan> l'ISRC di Spotify dà a Deezer il BPM e a MusicBrainz l'MBID; l'MBID apre AcousticBrainz (analisi audio reale). Energia = proxy deterministico (BPM+dance+genere), non un provider.</text>
 
   <path class="flow" d="M470,360 L200,402" marker-end="url(#arr)"/>
 

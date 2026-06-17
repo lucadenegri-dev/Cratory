@@ -46,8 +46,8 @@ Regole:
 - Matching con priorità `ISRC → platform_track_id → artist+title+duration → fuzzy`.
 - Aggiorna lo stato della traccia (`ready_for_set` quando ha BPM **e** key; `low_confidence` se il match è debole).
 - Risposte dei provider cachate in DB (`EnrichmentCache`): il secondo enrichment sulla stessa traccia non richiama la rete.
-- Provider dietro l'interfaccia `MusicFeatureProvider`, in catena (first-wins per campo): **GetSongBPM** (BPM/key/Camelot/danceability) → **MusicBrainz** (ISRC/label/release/genere) → **Last.fm** (genere + **mood** dai top tag).
-- **Energia**: non esiste una fonte gratuita affidabile (Spotify audio-features deprecato, Cyanite/Soundcharts a pagamento). Viene quindi **stimata deterministicamente** (`estimate_energy`) da BPM + danceability + genere — un proxy monotono per l'arco del set, non energia percepita "vera". Così gli score d'arco (`energy_progression_score`, `mood_coherence_score`) non lavorano più su dati vuoti.
+- Provider dietro l'interfaccia `MusicFeatureProvider`, in catena (first-wins per campo), ordinata per privilegiare l'**identità** (ISRC/MBID) sul fuzzy: **Deezer** (BPM via ISRC, match esatto) → **MusicBrainz** (ISRC/MBID/label/release/genere/canonical) → **AcousticBrainz** (analisi audio reale via MBID: BPM/key/Camelot/mood/danceability/vocalness) → **GetSongBPM** (BPM/key/Camelot/danceability, fuzzy fallback) → **Last.fm** (genere + **mood** dai top tag). La catena passa il `context` accumulato ai provider successivi, così AcousticBrainz usa l'**MBID** trovato da MusicBrainz. Deezer e AcousticBrainz sono **gratuiti e senza API key** (Deezer attivo di default; AcousticBrainz richiede `MUSICBRAINZ_USER_AGENT`).
+- **Energia**: nessuna fonte gratuita la fornisce direttamente. Viene **stimata deterministicamente** (`estimate_energy`) da BPM + danceability + genere — un proxy monotono per l'arco del set, non energia percepita "vera". L'aggiunta di Deezer/AcousticBrainz aumenta la copertura di BPM/danceability su cui poggia il proxy, oltre a fornire **mood/danceability/vocalness reali** dove AcousticBrainz ha la traccia. Così gli score d'arco (`energy_progression_score`, `mood_coherence_score`) non lavorano più su dati vuoti.
 
 ### F3 — Library Explorer
 
@@ -304,4 +304,4 @@ Da un genere/stile inserito dall'utente: trovare le tracce già in libreria, ide
 6. **Discovery** — due tab (Espandi playlist / Colma un buco), card con compatibilità, sorgente, spiegazione AI, link Spotify e azione "Aggiungi alla libreria" (F10e)
 7. **Set salvati / Editor** — lista set, dettaglio scaletta, rinomina, elimina, sposta/rimuovi/sostituisci/blocca tracce, rigenera sezione, export (F10c/F10d)
 8. **Transition Finder** — tracce prima/dopo una traccia scelta
-9. **Settings** — credenziali Spotify, provider enrichment (GetSongBPM API key, MusicBrainz user agent), Last.fm API key (enrichment + Discovery), AI API key, preferenze set builder e sorgenti
+9. **Settings** — credenziali Spotify, provider enrichment (GetSongBPM API key, MusicBrainz user agent, toggle Deezer e AcousticBrainz — gratuiti, senza chiave), Last.fm API key (enrichment + Discovery), AI API key, preferenze set builder e sorgenti

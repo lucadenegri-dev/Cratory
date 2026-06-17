@@ -36,11 +36,29 @@ def services_status(db: Session = Depends(get_db)):
                 "docs": "https://console.anthropic.com",
             },
             {
+                "key": "deezer", "name": "Deezer", "category": "Feature musicali",
+                # Endpoint pubblico read-only: nessuna API key, attivabile/disattivabile via env.
+                "configured": settings.deezer_enabled, "connected": None,
+                "detail": "BPM via ISRC (match esatto). Gratis, senza API key.",
+                "env": ["DEEZER_ENABLED"],
+                "docs": "https://developers.deezer.com/api/track",
+            },
+            {
                 "key": "getsongbpm", "name": "GetSongBPM", "category": "Feature musicali",
                 "configured": bool(settings.getsongbpm_api_key), "connected": None,
-                "detail": "BPM, tonalita' (Camelot) e danceability.",
+                "detail": "BPM, tonalita' (Camelot) e danceability (match per artista/titolo).",
                 "env": ["GETSONGBPM_API_KEY"],
                 "docs": "https://getsongbpm.com/api",
+            },
+            {
+                "key": "acousticbrainz", "name": "AcousticBrainz", "category": "Feature musicali",
+                # Indicizzato per MBID: utile solo se MusicBrainz e' configurato.
+                "configured": settings.acousticbrainz_enabled and bool(settings.musicbrainz_user_agent),
+                "connected": None,
+                "detail": "Analisi audio reale (BPM, key, mood, danceability, voce) via MBID di "
+                          "MusicBrainz. Gratis, senza API key. Dataset storico (no uscite recenti).",
+                "env": ["ACOUSTICBRAINZ_ENABLED", "MUSICBRAINZ_USER_AGENT"],
+                "docs": "https://acousticbrainz.org/data",
             },
             {
                 "key": "lastfm", "name": "Last.fm", "category": "Feature musicali",

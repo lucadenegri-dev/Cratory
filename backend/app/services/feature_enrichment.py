@@ -40,6 +40,7 @@ class FeatureProvider(Protocol):
         artist: str | None,
         isrc: str | None = None,
         duration_seconds: int | None = None,
+        context: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None: ...
 
 
