@@ -33,6 +33,66 @@ def risk_from_score(score: float | None) -> str:
     return "high"
 
 
+# --- F10: classificazione semantica della transizione ------------------------
+# Etichetta leggibile per il DJ, costruita sopra gli score deterministici. Distingue
+# un mix tecnicamente sicuro da uno stacco voluto (cambio di energia/genere per
+# "resettare" la pista) o da un azzardo creativo (salto BPM/key deliberato).
+
+SAFE_CLASSIFICATION_SCORE = 70  # sopra questo: transizione tecnicamente sicura
+RESET_ENERGY_DROP = 15          # calo di energia (0-100) che segnala un reset voluto
+RESET_GENRE_SIMILARITY = 45     # sotto questa similarità i generi sono "diversi"
+#                                 (generi senza token in comune valgono 40)
+
+
+@dataclass
+class TransitionClassification:
+    label: str       # technically_safe | creative_risk | good_reset
+    label_it: str    # etichetta leggibile in italiano
+    reason: str
+
+
+def classify_transition(from_track: Track, to_track: Track) -> TransitionClassification:
+    """Classifica una transizione in technically_safe | creative_risk | good_reset.
+
+    - technically_safe: BPM/key compatibili (score tecnico alto), rischio basso.
+    - good_reset: stacco netto voluto (forte calo di energia o cambio di genere),
+      utile per "resettare" la pista.
+    - creative_risk: salto di BPM/tonalità deliberato ma azzardato.
+    """
+    score = score_transition(from_track, to_track).score
+    if score >= SAFE_CLASSIFICATION_SCORE:
+        return TransitionClassification(
+            "technically_safe", "tecnicamente sicura",
+            "BPM e tonalità compatibili: mix sicuro",
+        )
+
+    energy_delta = None
+    if from_track.energy is not None and to_track.energy is not None:
+        energy_delta = to_track.energy - from_track.energy
+    big_energy_drop = energy_delta is not None and energy_delta <= -RESET_ENERGY_DROP
+
+    genre_change = bool(
+        from_track.genre and to_track.genre
+        and genre_similarity_score(from_track.genre, to_track.genre) < RESET_GENRE_SIMILARITY
+    )
+
+    if big_energy_drop or genre_change:
+        bits = []
+        if big_energy_drop:
+            bits.append(f"calo di energia ({energy_delta:+d})")
+        if genre_change:
+            bits.append("cambio di genere")
+        return TransitionClassification(
+            "good_reset", "reset voluto",
+            f"Stacco netto ({', '.join(bits)}): utile per resettare la pista",
+        )
+
+    return TransitionClassification(
+        "creative_risk", "azzardo creativo",
+        "Salto di BPM/tonalità voluto ma azzardato: gestire con cura",
+    )
+
+
 def _bpm_points(from_bpm: float | None, to_bpm: float | None) -> tuple[float, str, str | None]:
     if not from_bpm or not to_bpm:
         return 25.0, "BPM mancante su una delle tracce: valutazione neutra", "BPM mancante"

@@ -26,6 +26,22 @@ Esterni:    Spotify Web API (OAuth), GetSongBPM, MusicBrainz, Last.fm
 AI:         Anthropic SDK (claude-opus-4-8 default)
 ```
 
+## Database locale
+
+Il database SQLite canonico e' uno solo: `backend/data/djassistant.db`.
+Se `DATABASE_URL` in `backend/.env` usa un path relativo SQLite, l'app lo risolve
+sempre rispetto alla cartella `backend/`, non rispetto alla current working directory.
+
+Per pulire i dati utente in modo ripetibile:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m app.tools.clean_user_data library --include-backups
+```
+
+La modalita' `library` svuota playlist, tracce, set e cache enrichment, preservando i
+token Spotify. La modalita' `all` elimina anche i token, salvo `--preserve-tokens`.
+
 ## Setup
 
 Prerequisiti: Python 3.12+, Node.js 20+.

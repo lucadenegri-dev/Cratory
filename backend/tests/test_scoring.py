@@ -4,6 +4,7 @@ from app.models import Track
 from app.services.camelot import camelot_compatibility, parse_camelot
 from app.services.scoring import (
     bpm_compatibility_score,
+    classify_transition,
     energy_progression_score,
     genre_similarity_score,
     key_compatibility_score,
@@ -12,8 +13,9 @@ from app.services.scoring import (
 )
 
 
-def make_track(bpm=None, key=None, duration=300) -> Track:
-    return Track(source_type="spotify", bpm=bpm, camelot_key=key, duration_seconds=duration)
+def make_track(bpm=None, key=None, duration=300, energy=None, genre=None) -> Track:
+    return Track(source_type="spotify", bpm=bpm, camelot_key=key, duration_seconds=duration,
+                 energy=energy, genre=genre)
 
 
 def test_parse_camelot():
@@ -82,3 +84,36 @@ def test_score_in_range():
     ts = score_transition(make_track(bpm=130, key="7A"), make_track(bpm=131, key="7A"))
     assert 0 <= ts.score <= 100
     assert ts.technical_reasons
+
+
+# --- F10: classificazione semantica della transizione ------------------------
+
+def test_classify_technically_safe():
+    # BPM e key compatibili -> score alto -> mix sicuro
+    c = classify_transition(make_track(bpm=130, key="7A"), make_track(bpm=130, key="7A"))
+    assert c.label == "technically_safe"
+
+
+def test_classify_good_reset_on_energy_drop():
+    # BPM/key incompatibili + forte calo di energia -> reset voluto
+    a = make_track(bpm=130, key="7A", energy=80)
+    b = make_track(bpm=145, key="2B", energy=40)  # salto BPM grosso + key debole + -40 energia
+    c = classify_transition(a, b)
+    assert c.label == "good_reset"
+    assert "energia" in c.reason
+
+
+def test_classify_good_reset_on_genre_change():
+    a = make_track(bpm=130, key="7A", energy=70, genre="deep house")
+    b = make_track(bpm=145, key="2B", energy=70, genre="drum and bass")  # generi diversi, energia stabile
+    c = classify_transition(a, b)
+    assert c.label == "good_reset"
+    assert "genere" in c.reason
+
+
+def test_classify_creative_risk():
+    # Salto tecnico azzardato ma senza calo di energia né cambio di genere
+    a = make_track(bpm=130, key="7A", energy=70, genre="techno")
+    b = make_track(bpm=145, key="2B", energy=72, genre="techno")
+    c = classify_transition(a, b)
+    assert c.label == "creative_risk"

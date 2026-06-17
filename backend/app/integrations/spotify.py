@@ -99,8 +99,11 @@ class SpotifyWebClient(SpotifyClient):
     def _token_request(self, data: dict[str, str]) -> dict[str, Any]:
         client_id, client_secret = _require_credentials()
         basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-        r = self.http.post(f"{ACCOUNTS}/api/token", data=data,
-                           headers={"Authorization": f"Basic {basic}"})
+        try:
+            r = self.http.post(f"{ACCOUNTS}/api/token", data=data,
+                               headers={"Authorization": f"Basic {basic}"})
+        except httpx.HTTPError as exc:
+            raise SpotifyError(f"Spotify non raggiungibile durante il token exchange: {exc}") from exc
         if r.status_code != 200:
             raise SpotifyError(f"Token Spotify rifiutato ({r.status_code}): {r.text[:200]}")
         return r.json()
@@ -151,8 +154,11 @@ class SpotifyWebClient(SpotifyClient):
               params: dict | None = None, json: dict | None = None) -> dict[str, Any]:
         for attempt in range(4):
             token = self._access_token(user=user)
-            r = self.http.request(method, f"{API}{path}", params=params, json=json,
-                                  headers={"Authorization": f"Bearer {token}"})
+            try:
+                r = self.http.request(method, f"{API}{path}", params=params, json=json,
+                                      headers={"Authorization": f"Bearer {token}"})
+            except httpx.HTTPError as exc:
+                raise SpotifyError(f"Spotify non raggiungibile ({method} {path}): {exc}") from exc
             if r.status_code == 429:
                 wait = int(r.headers.get("Retry-After", "2")) + 1
                 if wait > MAX_RETRY_WAIT:

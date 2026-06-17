@@ -70,9 +70,12 @@ Completati anche: **Discovery write-back** (`POST /api/discovery/add` → librer
 
 **Toggle Set Builder technical/creative** fatto: `mode` su `SetGenerationRequest`; `CREATIVE_SYSTEM_PROMPT` (l'AI usa la sua conoscenza musicale, sempre validata); `AI_MODEL_CREATIVE` opzionale + `_model_for(req)` in `sets.py` per usare un modello più capace solo in creative.
 
+**Modello AI economico Haiku 4.5** fatto: `AI_MODEL=claude-haiku-4-5` (input $1 / output $5 per 1M). Haiku 4.5 rifiuta `output_config.effort` e l'adaptive thinking (400) → `integrations/llm.py` ha `_supports_effort(model)` che li omette per i modelli economici/legacy (Haiku, Sonnet/Opus pre-4.6) e li mantiene per Opus 4.6+/Sonnet 4.6/Fable. Combinabile col toggle: technical su Haiku + `AI_MODEL_CREATIVE=claude-opus-4-8` per il creative.
+
+**F10 — classificazione transizioni** fatto: `classify_transition` (deterministico, `services/scoring.py`) → `technically_safe | creative_risk | good_reset`. Esposto negli endpoint `/api/transitions/*` (`TransitionScoreOut`) e nel set (`SetlistTrackOut`, ricalcolato in lettura) + CSV; badge nel frontend.
+
 Prossimi step nell'ordine:
-1. **Valutare modello AI economico** (Haiku 4.5 via `AI_MODEL`, o provider locale Ollama dietro l'ABC `LLMClient`). Con il toggle, technical può girare su un modello economico di default.
-2. **Test reale** Discovery + enrichment + creative con chiavi (`LASTFM_API_KEY`/`GETSONGBPM_API_KEY`/`AI_API_KEY`).
-3. **SoundCloud import** / **F10** / **PostgreSQL** (backlog).
+1. **Test reale** Discovery + enrichment + creative con chiavi (`LASTFM_API_KEY`/`GETSONGBPM_API_KEY`/`AI_API_KEY`), incluso un giro su Haiku 4.5 per confronto qualità/costo.
+2. **SoundCloud import** / **PostgreSQL** (backlog).
 
 Vedere `docs/06-roadmap.md` per checklist dettagliata.

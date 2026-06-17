@@ -11,6 +11,7 @@ import {
   deletePlaylist,
   enrichPlaylist,
   enrichmentJobStatus,
+  featureEnrichSummary,
   fmtDate,
   type GapAnalysis,
   type Playlist,
@@ -136,7 +137,7 @@ export default function PlaylistsPage() {
         </Card>
       )}
       {job?.status === "done" && job.result && (
-        <div className="mb-4"><Alert tone="success">✓ Arricchimento completato: {job.result.enriched} tracce arricchite{job.result.not_found ? `, ${job.result.not_found} non trovate` : ""} su {job.result.total}.</Alert></div>
+        <div className="mb-4"><Alert tone="success">✓ Arricchimento completato: {featureEnrichSummary(job.result)}.</Alert></div>
       )}
 
       {imported && imported.length === 0 && (

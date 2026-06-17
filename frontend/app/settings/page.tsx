@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Copy, Check, ExternalLink, Gauge, Plug, Music2, Sparkles, Database } from "lucide-react";
 import {
   apiGet, apiPost, servicesStatus, SPOTIFY_LOGIN_URL,
+  featureEnrichSummary,
   type ServiceStatus, type SpotifyStatus,
   type FeatureProviderStatus, type FeatureEnrichJob,
 } from "@/lib/api";
@@ -159,7 +160,7 @@ function FeatureEnrichmentCard() {
           </div>
         )}
         {job?.status === "done" && job.result && (
-          <p className="text-sm text-success">✓ {job.result.enriched} tracce arricchite{job.result.not_found ? `, ${job.result.not_found} non trovate` : ""} su {job.result.total}.</p>
+          <p className="text-sm text-success">✓ {featureEnrichSummary(job.result)}.</p>
         )}
       </div>
     </Card>

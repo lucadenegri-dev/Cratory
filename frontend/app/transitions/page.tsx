@@ -8,6 +8,7 @@ import { Card, Input, Badge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 function scoreTone(s: number) { return s >= 70 ? "success" : s >= 45 ? "warning" : "danger"; }
+const CLASS_TONE = { technically_safe: "success", good_reset: "info", creative_risk: "warning" } as const;
 
 export default function TransitionFinder() {
   const [query, setQuery] = useState("");
@@ -99,6 +100,11 @@ export default function TransitionFinder() {
                   <div className="flex items-center gap-3">
                     <Badge tone={scoreTone(score.score)} className="tnum w-9 justify-center">{score.score}</Badge>
                     <Link href={`/tracks/${track.id}`} className="min-w-0 flex-1 truncate font-medium hover:text-primary">{trackLabel(track)}</Link>
+                    {score.classification && (
+                      <Badge tone={CLASS_TONE[score.classification] ?? "neutral"} className="shrink-0">
+                        <span title={score.classification_reason ?? undefined}>{score.classification_label ?? score.classification}</span>
+                      </Badge>
+                    )}
                     <span className="tnum shrink-0 text-xs text-faint">{track.bpm?.toFixed(0)} BPM · {track.camelot_key ?? "?"}</span>
                   </div>
                   <p className="mt-1 pl-12 text-xs text-faint">{score.technical_reasons.join(" · ")}</p>

@@ -15,6 +15,7 @@ import { Card, CardHeader, Button, Input, Badge, Alert, Modal, Spinner } from "@
 import { cn } from "@/lib/cn";
 
 const RISK_TONE = { low: "success", medium: "warning", high: "danger" } as const;
+const CLASS_TONE = { technically_safe: "success", good_reset: "info", creative_risk: "warning" } as const;
 const MODES: { key: AlternativeMode; label: string }[] = [
   { key: "safer", label: "Più sicura" },
   { key: "softer", label: "Più morbida" },
@@ -195,6 +196,11 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                     {st.risk_level && (
                       <Badge tone={riskTone(st.risk_level)}>
                         {st.risk_level}{st.transition_score != null && ` · ${st.transition_score.toFixed(0)}`}
+                      </Badge>
+                    )}
+                    {st.transition_class && (
+                      <Badge tone={CLASS_TONE[st.transition_class] ?? "neutral"}>
+                        <span title={st.transition_class_reason ?? undefined}>{st.transition_class_label ?? st.transition_class}</span>
                       </Badge>
                     )}
                   </div>

@@ -6,9 +6,19 @@ from app.models import Track
 from app.repositories import all_playable_tracks, get_track
 from app.schemas import TransitionCandidateOut, TransitionScoreOut, TransitionScoreRequest
 from app.serializers import track_out
-from app.services.scoring import score_transition
+from app.services.scoring import classify_transition, score_transition
 
 router = APIRouter(prefix="/api/transitions", tags=["transitions"])
+
+
+def _score_out(from_track: Track, to_track: Track) -> TransitionScoreOut:
+    ts = score_transition(from_track, to_track)
+    cls = classify_transition(from_track, to_track)
+    return TransitionScoreOut(
+        score=ts.score, technical_reasons=ts.technical_reasons, warnings=ts.warnings,
+        classification=cls.label, classification_label=cls.label_it,
+        classification_reason=cls.reason,
+    )
 
 
 def _ranked(db: Session, track_id: int, *, incoming: bool, limit: int) -> list[TransitionCandidateOut]:
@@ -19,14 +29,8 @@ def _ranked(db: Session, track_id: int, *, incoming: bool, limit: int) -> list[T
     for other in all_playable_tracks(db):
         if other.id == anchor.id:
             continue
-        ts = (
-            score_transition(other, anchor) if incoming
-            else score_transition(anchor, other)
-        )
-        results.append((
-            ts.score, other,
-            TransitionScoreOut(score=ts.score, technical_reasons=ts.technical_reasons, warnings=ts.warnings),
-        ))
+        out = _score_out(other, anchor) if incoming else _score_out(anchor, other)
+        results.append((out.score, other, out))
     results.sort(key=lambda item: item[0], reverse=True)
     return [TransitionCandidateOut(track=track_out(t), score=s) for _, t, s in results[:limit]]
 
@@ -49,5 +53,4 @@ def score(req: TransitionScoreRequest, db: Session = Depends(get_db)):
     to_track = get_track(db, req.to_track_id)
     if from_track is None or to_track is None:
         raise HTTPException(status_code=404, detail="Traccia non trovata")
-    ts = score_transition(from_track, to_track)
-    return TransitionScoreOut(score=ts.score, technical_reasons=ts.technical_reasons, warnings=ts.warnings)
+    return _score_out(from_track, to_track)

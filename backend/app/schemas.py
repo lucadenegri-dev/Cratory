@@ -53,6 +53,10 @@ class TransitionScoreOut(BaseModel):
     score: int = Field(ge=0, le=100)
     technical_reasons: list[str] = []
     warnings: list[str] = []
+    # F10: classificazione semantica (technically_safe | creative_risk | good_reset)
+    classification: str | None = None
+    classification_label: str | None = None
+    classification_reason: str | None = None
 
 
 class TransitionScoreRequest(BaseModel):
@@ -124,6 +128,10 @@ class SetlistTrackOut(BaseModel):
     transition_note: str | None = None
     ai_reason: str | None = None
     risk_level: str | None = None
+    # F10: classificazione semantica della transizione dal brano precedente
+    transition_class: str | None = None
+    transition_class_label: str | None = None
+    transition_class_reason: str | None = None
 
 
 class SetlistOut(BaseModel):

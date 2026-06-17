@@ -121,6 +121,20 @@ cached_at
 
 `services/feature_enrichment.py` pre-carica in blocco le righe rilevanti (niente N+1), fa upsert dei risultati e cacha anche i not-found. `force=True` bypassa la cache in lettura ma ne aggiorna comunque le righe. (Sostituisce il vecchio `ImportReport`, rimosso con l'import Rekordbox.)
 
+## Database locale
+
+Il database SQLite canonico e' `backend/data/djassistant.db`.
+`DATABASE_URL` puo' restare `sqlite:///data/djassistant.db`: i path relativi SQLite
+vengono normalizzati rispetto a `backend/`, quindi l'app non crea piu' database diversi
+in base alla current working directory.
+
+Pulizia dati supportata:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m app.tools.clean_user_data library --include-backups
+```
+
 ## Migrazioni
 
 App locale senza Alembic: `db.ensure_schema()` esegue `create_all` + `ALTER TABLE` idempotenti per le colonne aggiunte dopo MVP 1, **più una migrazione one-shot di pulizia** (`_migrate_drop_legacy`): ricostruisce la tabella `tracks` dal modello corrente (SQLite non supporta `DROP COLUMN` affidabile con indici), copiando le colonne sopravvissute e travasando `tonality → camelot_key`; elimina le tabelle legacy (`beatgrid_points`, `cue_points`, `artists`, `import_reports`) e le righe Rekordbox (`source_type in (local, rekordbox)`), potando i set rimasti senza tracce. È idempotente e resiliente agli interrupt (il DDL in SQLite auto-committa, quindi sa riprendere da un rebuild lasciato a metà).

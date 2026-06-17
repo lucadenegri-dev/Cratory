@@ -15,7 +15,21 @@ from app.integrations import LLMClient
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-opus-4-8"
+# Modello economico (input $1 / output $5 per 1M token): ottimo per la modalità
+# technical, dove l'AI ordina/narra ma non calcola compatibilità. Vedi AI_MODEL.
+ECONOMY_MODEL = "claude-haiku-4-5"
 MAX_TOKENS = 16000
+
+# Modelli che NON supportano `output_config.effort` né l'adaptive thinking: lo
+# rifiutano con un 400. Haiku 4.5 (e i Sonnet/Opus pre-4.6) rientrano qui. Per
+# questi modelli passiamo solo il formato JSON, niente effort, thinking disabilitato.
+_NO_EFFORT_TAGS = ("haiku", "sonnet-4-5", "sonnet-4-0", "opus-4-5", "opus-4-1", "opus-4-0")
+
+
+def _supports_effort(model: str) -> bool:
+    """True se il modello accetta output_config.effort + adaptive thinking (Opus 4.6+, Sonnet 4.6, Fable)."""
+    m = model.lower()
+    return not any(tag in m for tag in _NO_EFFORT_TAGS)
 
 
 class LLMError(Exception):
@@ -51,7 +65,14 @@ class AnthropicLLMClient(LLMClient):
         self, system_prompt: str, payload: dict[str, Any], schema: dict[str, Any]
     ) -> dict[str, Any]:
         user_content = json.dumps(payload, ensure_ascii=False)
-        thinking = {"type": "adaptive"} if self.thinking == "adaptive" else {"type": "disabled"}
+        # output_config/thinking dipendono dalle capacità del modello: i modelli
+        # economici (Haiku 4.5) rifiutano `effort` e l'adaptive thinking con un 400.
+        output_config: dict[str, Any] = {"format": {"type": "json_schema", "schema": schema}}
+        if _supports_effort(self.model):
+            output_config["effort"] = self.effort  # senza questo alcuni modelli usano effort alto (lento)
+            thinking = {"type": "adaptive"} if self.thinking == "adaptive" else {"type": "disabled"}
+        else:
+            thinking = {"type": "disabled"}
         try:
             # streaming + get_final_message: robusto contro i timeout su output lunghi
             with self.client.messages.stream(
@@ -60,10 +81,7 @@ class AnthropicLLMClient(LLMClient):
                 thinking=thinking,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_content}],
-                output_config={
-                    "format": {"type": "json_schema", "schema": schema},
-                    "effort": self.effort,  # senza questo alcuni modelli usano effort alto (lento)
-                },
+                output_config=output_config,
             ) as stream:
                 message = stream.get_final_message()
         except self._anthropic.APIError as exc:

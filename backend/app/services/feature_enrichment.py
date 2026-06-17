@@ -94,36 +94,52 @@ def _parse_release_date(value: Any) -> date | None:
     return None
 
 
-def apply_features(track: Track, data: dict[str, Any], *, source: str) -> None:
+def apply_features(track: Track, data: dict[str, Any], *, source: str) -> set[str]:
     """Completa i campi vuoti con i dati del provider (mai sovrascrive BPM/key esistenti)."""
+    applied: set[str] = set()
     if track.bpm is None and data.get("bpm"):
         track.bpm = float(data["bpm"])
+        applied.add("bpm")
     camelot = data.get("camelot_key") or data.get("key")
     if camelot and parse_camelot(camelot):
-        track.camelot_key = track.camelot_key or camelot
+        if not track.camelot_key:
+            track.camelot_key = camelot
+            applied.add("camelot_key")
     if not track.genre and data.get("genre_primary"):
         track.genre = data["genre_primary"]
+        applied.add("genre")
     if not track.genre_secondary and data.get("genre_secondary"):
         track.genre_secondary = data["genre_secondary"]
+        applied.add("genre_secondary")
     if not track.mood and data.get("mood"):
         track.mood = data["mood"]
+        applied.add("mood")
     if track.energy is None and data.get("energy") is not None:
         track.energy = int(data["energy"])
+        applied.add("energy")
     if track.danceability is None and data.get("danceability") is not None:
         track.danceability = int(data["danceability"])
+        applied.add("danceability")
     if track.vocalness is None and data.get("vocalness") is not None:
         track.vocalness = int(data["vocalness"])
+        applied.add("vocalness")
     if not track.label and data.get("label"):
         track.label = data["label"]
+        applied.add("label")
     if not track.release_date and data.get("release_date"):
         track.release_date = _parse_release_date(data["release_date"])
+        if track.release_date:
+            applied.add("release_date")
     if not track.isrc and data.get("isrc"):
         track.isrc = data["isrc"]
+        applied.add("isrc")
 
-    track.enrichment_source = source
-    track.enrichment_confidence = int(data.get("confidence", 0))
-    track.enriched_at = datetime.now(timezone.utc)
+    if applied:
+        track.enrichment_source = source
+        track.enrichment_confidence = int(data.get("confidence", 0))
+        track.enriched_at = datetime.now(timezone.utc)
     refresh_status(track)
+    return applied
 
 
 def enrich_features(
@@ -143,7 +159,11 @@ def enrich_features(
     playlist_id: se valorizzato, limita l'enrichment alle tracce di quella playlist
     (auto-enrichment post-import e ri-arricchimento di una singola playlist).
 
-    Ritorna un report con enriched/not_found/total/cache_hits.
+    Ritorna un report con:
+    enriched: tracce con almeno un campo utile applicato;
+    provider_matches: risposte non vuote dal provider, anche se non hanno completato
+    campi nuovi;
+    with_bpm/with_key/ready_for_set/missing_core_features: stato finale del batch.
     """
     stmt = select(Track)
     if playlist_id is not None:
@@ -152,7 +172,10 @@ def enrich_features(
         stmt = stmt.where(Track.bpm.is_(None))
     tracks = list(db.scalars(stmt).all())
     total = len(tracks)
-    matched = not_found = cache_hits = 0
+    enriched = provider_matches = not_found = cache_hits = metadata_enriched = 0
+    field_counts: dict[str, int] = {}
+    lookup_sources: dict[str, int] = {}
+    metadata_fields = {"genre", "genre_secondary", "mood", "label", "release_date", "isrc"}
 
     provider_name = getattr(provider, "name", "external")
 
@@ -189,8 +212,17 @@ def enrich_features(
                 cache_row_map[key] = new_row
 
         if data:
-            apply_features(track, data, source=provider_name)
-            matched += 1
+            provider_matches += 1
+            if data.get("lookup_source"):
+                source = str(data["lookup_source"])
+                lookup_sources[source] = lookup_sources.get(source, 0) + 1
+            applied = apply_features(track, data, source=provider_name)
+            if applied:
+                enriched += 1
+            if applied & metadata_fields:
+                metadata_enriched += 1
+            for field in applied:
+                field_counts[field] = field_counts.get(field, 0) + 1
         else:
             not_found += 1
             refresh_status(track)
@@ -198,13 +230,32 @@ def enrich_features(
         # Energia: stima deterministica se nessun provider l'ha fornita (proxy da BPM/dance/genere).
         if track.energy is None and track.bpm is not None:
             track.energy = estimate_energy(track.bpm, track.danceability, track.genre)
+            if track.energy is not None:
+                field_counts["energy"] = field_counts.get("energy", 0) + 1
 
         if on_progress:
             on_progress(i, total, "feature")
 
     db.commit()
+    with_bpm = sum(1 for track in tracks if track.bpm is not None)
+    with_key = sum(1 for track in tracks if track.camelot_key)
+    ready_for_set = sum(1 for track in tracks if track.status == "ready_for_set")
+    missing_core_features = sum(1 for track in tracks if track.bpm is None or not track.camelot_key)
     logger.info(
-        "Feature enrichment: %s/%s arricchite, %s cache hits, %s non trovate",
-        matched, total, cache_hits, not_found,
+        "Feature enrichment: %s/%s campi applicati, %s match provider, %s ready, %s cache hits, %s non trovate",
+        enriched, total, provider_matches, ready_for_set, cache_hits, not_found,
     )
-    return {"enriched": matched, "not_found": not_found, "total": total, "cache_hits": cache_hits}
+    return {
+        "enriched": enriched,
+        "provider_matches": provider_matches,
+        "metadata_enriched": metadata_enriched,
+        "not_found": not_found,
+        "total": total,
+        "cache_hits": cache_hits,
+        "with_bpm": with_bpm,
+        "with_key": with_key,
+        "ready_for_set": ready_for_set,
+        "missing_core_features": missing_core_features,
+        "field_counts": dict(sorted(field_counts.items())),
+        "lookup_sources": dict(sorted(lookup_sources.items())),
+    }

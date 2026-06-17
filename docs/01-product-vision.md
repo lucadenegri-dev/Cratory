@@ -25,35 +25,33 @@ La webapp deve:
 
 ## Cosa NON deve fare
 
-- suonare o scaricare audio
-- fare scraping non autorizzato
-- sostituire l'ascolto umano (riduce il tempo per arrivare a una bozza, non lo elimina)
-- richiedere tagging manuale dei brani
-- basarsi su mood inseriti manualmente
-- implementare machine learning complesso
-- essere multiutente o avere app mobile nativa
+* suonare o scaricare audio
+* richiedere tagging manuale dei brani
+* basarsi su mood inseriti manualmente
+* implementare machine learning complesso
+* essere multiutente o avere app mobile nativa
 
 Il focus è: **playlist → bozza di set spiegata e modificabile → scoperta di musica nuova compatibile, in poco tempo**.
 
 ## Vincoli importanti
 
-- Non implementare download audio.
-- BPM, tonalità e feature musicali arrivano dall'enrichment esterno (GetSongBPM, MusicBrainz, Last.fm): **mai inventati**.
-- Spotify serve per identità traccia e metadata editoriali (titolo, artista, album, cover, durata, ISRC, url): non fornisce BPM/key affidabili per il mixing.
-- Non obbligare l'utente a taggare manualmente.
-- Tenere separato il motore tecnico deterministico dall'agente AI (vedi [02-architecture.md](02-architecture.md)).
-- Ogni set generato deve avere spiegazioni; ogni output AI deve essere validato prima di essere mostrato come definitivo.
-- I suggerimenti Discovery devono essere contestuali al set/playlist specifico, non generici: un DJ pro cerca musica che risolve un problema preciso (BPM mancante, gap armonico, sezione energetica debole).
+* Non implementare download audio.
+* BPM, tonalità e feature musicali arrivano dall'enrichment esterno (GetSongBPM, MusicBrainz, Last.fm): **mai inventati**.
+* Spotify serve per identità traccia e metadata editoriali (titolo, artista, album, cover, durata, ISRC, url): non fornisce BPM/key affidabili per il mixing.
+* Non obbligare l'utente a taggare manualmente.
+* Tenere separato il motore tecnico deterministico dall'agente AI (vedi [02-architecture.md](02-architecture.md)).
+* Ogni set generato deve avere spiegazioni; ogni output AI deve essere validato prima di essere mostrato come definitivo.
+* I suggerimenti Discovery devono essere contestuali al set/playlist specifico, non generici: un DJ pro cerca musica che risolve un problema preciso (BPM mancante, gap armonico, sezione energetica debole).
 
 ## Regole per AI e fonti esterne
 
 L'AI deve:
 
-- evitare di inventare dati fattuali
-- distinguere tra dato verificato (da fonte esterna), inferenza musicale e ipotesi creativa
-- non presentare ipotesi come certezze
-- produrre query di ricerca pratiche quando suggerisce artisti/label/generi da esplorare
-- dare priorità a suggerimenti utili per set reali
+* evitare di inventare dati fattuali
+* distinguere tra dato verificato (da fonte esterna), inferenza musicale e ipotesi creativa
+* non presentare ipotesi come certezze
+* produrre query di ricerca pratiche quando suggerisce artisti/label/generi da esplorare
+* dare priorità a suggerimenti utili per set reali
 
 ## Criterio di successo
 
@@ -66,3 +64,4 @@ La modifica è riuscita se l'utente può:
 5. esportare il risultato finale
 
 L'app non promette di sostituire l'ascolto umano, ma deve **ridurre drasticamente il tempo** necessario per trasformare una playlist grezza in una bozza di set utilizzabile.
+

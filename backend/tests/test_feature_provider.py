@@ -73,6 +73,27 @@ def test_best_match_prefers_artist():
     assert p._best_match(results, "X", "Daft Punk")["tempo"] == "123"
 
 
+def test_lookup_candidates_clean_versions_and_primary_artist():
+    p = GetSongBPMProvider("KEY")
+    candidates = p._lookup_candidates(
+        title="Starlight - Extended Mix",
+        artist="Danny L Harle, PinkPantheress",
+    )
+    assert candidates[0].source == "original"
+    assert any(c.title == "Starlight" for c in candidates)
+    assert any(c.artist == "Danny L Harle" for c in candidates)
+
+
+def test_best_match_uses_fuzzy_artist_and_duration():
+    p = GetSongBPMProvider("KEY")
+    results = [
+        {"title": "Starlight", "artist": {"name": "Other"}, "tempo": "124", "duration": 180},
+        {"title": "Starlight - Extended Mix", "artist": {"name": "Danny L Harle"}, "tempo": "128", "duration": 240},
+    ]
+    best = p._best_match(results, "Starlight", "Danny L Harle", duration_seconds=240)
+    assert best["tempo"] == "128"
+
+
 # --- lookup end-to-end con http finto ----------------------------------------
 
 
@@ -93,6 +114,16 @@ class _FakeHttp:
         return _FakeResp(self.payload)
 
 
+class _QueuedHttp:
+    def __init__(self, payloads):
+        self.payloads, self.calls = list(payloads), []
+
+    def get(self, url, params=None):
+        self.calls.append((url, params))
+        payload = self.payloads.pop(0) if self.payloads else {"search": []}
+        return _FakeResp(payload)
+
+
 def test_lookup_end_to_end_no_network():
     payload = {"search": [
         {"title": "Da Funk", "artist": {"name": "Daft Punk"},
@@ -103,8 +134,25 @@ def test_lookup_end_to_end_no_network():
     out = p.lookup(title="Da Funk", artist="Daft Punk")
     assert out["bpm"] == 112.0
     assert out["camelot_key"] == "6A"  # Gm
-    assert out["confidence"] == 80
+    assert out["confidence"] == 85
     assert http.calls and http.calls[0][1]["api_key"] == "KEY"
+
+
+def test_lookup_retries_clean_candidate_no_network():
+    http = _QueuedHttp([
+        {"search": []},
+        {"search": [
+            {"title": "Track", "artist": {"name": "DJ, Singer"}, "tempo": "126", "key_of": "Am"},
+        ]},
+    ])
+    p = GetSongBPMProvider("KEY", http=http)
+    out = p.lookup(title="Track - Extended Mix", artist="DJ, Singer")
+    assert out["bpm"] == 126.0
+    assert out["camelot_key"] == "8A"
+    assert out["lookup_source"] == "clean_title"
+    assert out["lookup_attempts"] == 2
+    assert len(http.calls) == 2
+    assert http.calls[1][1]["lookup"] == "song:Track artist:DJ, Singer"
 
 
 def test_lookup_no_results():
@@ -196,6 +244,32 @@ def test_chain_first_wins_and_max_confidence():
     assert out["confidence"] == 95          # massima
 
 
+def test_chain_retries_getsongbpm_with_canonical_metadata():
+    class _GetSong:
+        name = "getsongbpm"
+
+        def __init__(self):
+            self.calls = []
+
+        def lookup(self, *, title, artist, **_):
+            self.calls.append((title, artist))
+            if title == "Canonical Title" and artist == "Canonical Artist":
+                return {"bpm": 130.0, "camelot_key": "9A", "confidence": 85}
+            return None
+
+    normalizer = _Stub("musicbrainz", {
+        "canonical_title": "Canonical Title",
+        "canonical_artist": "Canonical Artist",
+        "confidence": 90,
+    })
+    getsong = _GetSong()
+    out = ChainedFeatureProvider([getsong, normalizer]).lookup(title="Messy", artist="Feat Artist")
+    assert out["bpm"] == 130.0
+    assert out["camelot_key"] == "9A"
+    assert out["canonical_retry"] is True
+    assert getsong.calls == [("Messy", "Feat Artist"), ("Canonical Title", "Canonical Artist")]
+
+
 def test_chain_returns_none_if_all_empty():
     chain = ChainedFeatureProvider([_Stub("a", None), _Stub("b", None)])
     assert chain.lookup(title="t", artist=None) is None
@@ -248,7 +322,37 @@ def test_cache_populated_after_enrichment(db, seed_tracks):
     assert p.calls == 5
     assert r["cache_hits"] == 0
     assert r["enriched"] == 5
+    assert r["with_bpm"] == 5
+    assert r["with_key"] == 5
+    assert r["ready_for_set"] == 5
     assert db.query(EnrichmentCache).count() == 5
+
+
+def test_enrichment_report_distinguishes_metadata_from_core_features(db):
+    from app.models import Track
+    from app.services.feature_enrichment import enrich_features
+
+    db.add(Track(source_type="spotify", title="Metadata Only", artist="Artist"))
+    db.commit()
+
+    class _MetadataOnlyProvider:
+        name = "metadata"
+
+        def lookup(self, **_):
+            return {"genre_primary": "techno", "confidence": 90}
+
+    r = enrich_features(db, _MetadataOnlyProvider())
+    track = db.query(Track).one()
+
+    assert r["provider_matches"] == 1
+    assert r["enriched"] == 1
+    assert r["metadata_enriched"] == 1
+    assert r["with_bpm"] == 0
+    assert r["with_key"] == 0
+    assert r["ready_for_set"] == 0
+    assert r["missing_core_features"] == 1
+    assert r["field_counts"] == {"genre": 1}
+    assert track.status == "missing_features"
 
 
 def test_cache_serves_subsequent_run(db, seed_tracks):
@@ -316,12 +420,16 @@ def test_lastfm_tag_provider_derives_mood_and_genre():
     from app.integrations.lastfm import LastFmTagProvider
 
     class _FakeClient:
+        def canonical_track(self, artist, title):
+            return {"canonical_title": title, "canonical_artist": artist}
+
         def top_tags(self, artist, title, *, limit=8):
             return ["seen live", "techno", "dark", "2010s"]
 
     out = LastFmTagProvider(_FakeClient()).lookup(title="X", artist="Y")
     assert out["genre_primary"] == "techno"  # primo tag valido (non junk/mood/decade)
     assert out["mood"] == "dark"
+    assert out["canonical_title"] == "X"
     assert out["confidence"] == 45
 
 
@@ -329,10 +437,29 @@ def test_lastfm_tag_provider_none_without_useful_tags():
     from app.integrations.lastfm import LastFmTagProvider
 
     class _FakeClient:
+        def canonical_track(self, artist, title):
+            return None
+
         def top_tags(self, artist, title, *, limit=8):
             return ["favorites", "seen live"]
 
     assert LastFmTagProvider(_FakeClient()).lookup(title="X", artist="Y") is None
+
+
+def test_lastfm_tag_provider_can_return_only_canonical_metadata():
+    from app.integrations.lastfm import LastFmTagProvider
+
+    class _FakeClient:
+        def canonical_track(self, artist, title):
+            return {"canonical_title": "Canonical", "canonical_artist": "Artist"}
+
+        def top_tags(self, artist, title, *, limit=8):
+            return []
+
+    out = LastFmTagProvider(_FakeClient()).lookup(title="Typo", artist="Artist")
+    assert out["canonical_title"] == "Canonical"
+    assert out["canonical_artist"] == "Artist"
+    assert out["confidence"] == 35
 
 
 def test_estimate_energy_proxy():

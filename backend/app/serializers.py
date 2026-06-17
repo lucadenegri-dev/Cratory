@@ -9,6 +9,7 @@ from app.schemas import (
     TrackDetailOut,
     TrackOut,
 )
+from app.services.scoring import classify_transition
 
 
 def _spotify_url(track: Track) -> str | None:
@@ -54,8 +55,13 @@ def track_detail_out(track: Track) -> TrackDetailOut:
 
 
 def setlist_out(setlist: Setlist) -> SetlistOut:
-    items = [
-        SetlistTrackOut(
+    # F10: classifichiamo ogni transizione dal brano precedente (deterministico,
+    # ricalcolato in lettura dai dati delle due tracce: nessuna colonna in DB).
+    items = []
+    prev = None
+    for st in setlist.tracks:
+        cls = classify_transition(prev, st.track) if prev is not None else None
+        items.append(SetlistTrackOut(
             position=st.position,
             role=st.role,
             track=track_out(st.track),
@@ -64,9 +70,11 @@ def setlist_out(setlist: Setlist) -> SetlistOut:
             transition_note=st.transition_note,
             ai_reason=st.ai_reason,
             risk_level=st.risk_level,
-        )
-        for st in setlist.tracks
-    ]
+            transition_class=cls.label if cls else None,
+            transition_class_label=cls.label_it if cls else None,
+            transition_class_reason=cls.reason if cls else None,
+        ))
+        prev = st.track
     total = sum(st.track.duration_seconds or 0 for st in setlist.tracks)
     return SetlistOut(
         id=setlist.id,

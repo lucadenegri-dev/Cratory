@@ -33,6 +33,7 @@ from app.services.set_editor import (
     rename_set,
     replace_track,
 )
+from app.services.scoring import classify_transition
 from app.services.set_generator import SetGenerationError, generate_set
 
 logger = logging.getLogger(__name__)
@@ -164,12 +165,17 @@ def export(
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(["position", "role", "title", "artist", "bpm", "key", "duration_seconds",
-                         "source", "spotify_id", "url", "transition_score", "risk_level"])
+                         "source", "spotify_id", "url", "transition_score", "risk_level",
+                         "transition_class"])
+        prev = None
         for st in setlist.tracks:
             t = st.track
+            cls = classify_transition(prev, t).label if prev is not None else ""
             writer.writerow([st.position, st.role or "", t.title or "", t.artist or "", t.bpm or "",
                              t.camelot_key or "", t.duration_seconds or "", t.source_type,
-                             t.spotify_id or "", t.url or "", st.transition_score or "", st.risk_level or ""])
+                             t.spotify_id or "", t.url or "", st.transition_score or "", st.risk_level or "",
+                             cls])
+            prev = t
         return PlainTextResponse(buf.getvalue(), media_type="text/csv")
 
     if format == "markdown":

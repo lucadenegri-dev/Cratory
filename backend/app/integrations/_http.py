@@ -11,6 +11,7 @@ ovvero il server che chiude la connessione TLS a meta' handshake/lettura.
 """
 
 import logging
+import ssl
 import time
 
 import httpx
@@ -19,6 +20,20 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_RETRIES = 2      # tentativi aggiuntivi oltre al primo (3 in totale)
 DEFAULT_BACKOFF = 0.6    # secondi, crescente: 0.6s, 1.2s, ...
+
+
+def tls12_context() -> ssl.SSLContext:
+    """SSL context limitato a TLS 1.2.
+
+    Workaround per host la cui handshake TLS 1.3 viene interrotta da middlebox
+    di rete (DPI / antivirus con scansione HTTPS / firewall) con
+    'UNEXPECTED_EOF_WHILE_READING': su TLS 1.2 la connessione si negozia.
+    Osservato su musicbrainz.org da rete con ispezione TLS attiva, mentre
+    getsong.co e ws.audioscrobbler.com funzionano regolarmente su TLS 1.3.
+    """
+    ctx = ssl.create_default_context()
+    ctx.maximum_version = ssl.TLSVersion.TLSv1_2
+    return ctx
 
 
 def get_with_retries(

@@ -170,6 +170,27 @@ class LastFMClient(SimilarityClient):
         tags = _as_list((data.get("toptags") or {}).get("tag"))
         return [t["name"].strip() for t in tags if t.get("name")][:limit]
 
+    def canonical_track(self, artist: str, title: str) -> dict[str, str] | None:
+        """Title/artist canonici secondo Last.fm autocorrect."""
+        if not artist or not title:
+            return None
+        try:
+            data = self._get("track.getInfo", {"artist": artist, "track": title, "autocorrect": 1})
+        except LastFMError as exc:
+            logger.warning("Last.fm canonical_track(%r/%r) fallito: %s", artist, title, exc)
+            return None
+        track = data.get("track") or {}
+        canonical_title = track.get("name")
+        canonical_artist = (track.get("artist") or {}).get("name")
+        if not canonical_title and not canonical_artist:
+            return None
+        out: dict[str, str] = {}
+        if canonical_title:
+            out["canonical_title"] = canonical_title
+        if canonical_artist:
+            out["canonical_artist"] = canonical_artist
+        return out
+
 
 # ---- provider feature (mood/genere da tag) ------------------------------
 
@@ -206,19 +227,21 @@ class LastFmTagProvider(MusicFeatureProvider):
     def lookup(self, *, title, artist, isrc=None, duration_seconds=None):
         if not title or not artist:
             return None
+        canonical = self.client.canonical_track(artist, title)
         tags = self.client.top_tags(artist, title)
-        if not tags:
-            return None
         out: dict[str, Any] = {}
-        genre = _derive_genre(tags)
-        mood = _derive_mood(tags)
-        if genre:
-            out["genre_primary"] = genre
-        if mood:
-            out["mood"] = mood
+        if canonical:
+            out.update(canonical)
+        if tags:
+            genre = _derive_genre(tags)
+            mood = _derive_mood(tags)
+            if genre:
+                out["genre_primary"] = genre
+            if mood:
+                out["mood"] = mood
         if not out:
             return None
-        out["confidence"] = 45  # tag crowd-sourced: affidabilita' moderata
+        out["confidence"] = 45 if tags else 35  # tag crowd-sourced: affidabilita' moderata
         return out
 
 

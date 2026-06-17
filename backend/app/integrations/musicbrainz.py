@@ -10,13 +10,14 @@ MusicBrainz richiede uno User-Agent identificativo e applica un rate limit di
 """
 
 import logging
+import time
 from difflib import SequenceMatcher
 from typing import Any
 
 import httpx
 
 from app.integrations import MusicFeatureProvider
-from app.integrations._http import get_with_retries
+from app.integrations._http import get_with_retries, tls12_context
 from app.integrations.getsongbpm import FeatureProviderError
 
 logger = logging.getLogger(__name__)
@@ -26,14 +27,25 @@ BASE = "https://musicbrainz.org/ws/2"
 
 class MusicBrainzProvider(MusicFeatureProvider):
     name = "musicbrainz"
+    _MIN_INTERVAL = 1.1  # MusicBrainz: max ~1 richiesta/secondo, altrimenti 503/ban
 
     def __init__(self, user_agent: str, http: httpx.Client | None = None):
         self.user_agent = user_agent
-        self.http = http or httpx.Client(timeout=15, headers={"User-Agent": user_agent})
+        # verify=tls12_context(): la handshake TLS 1.3 verso musicbrainz.org viene
+        # interrotta da middlebox di rete (UNEXPECTED_EOF). Su TLS 1.2 funziona.
+        self.http = http or httpx.Client(
+            timeout=15, headers={"User-Agent": user_agent}, verify=tls12_context(),
+        )
+        self._last_request = 0.0
 
     # ---- HTTP -----------------------------------------------------------
 
     def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+        # Throttle: rispetta il rate limit di MusicBrainz (~1 req/s).
+        wait = self._MIN_INTERVAL - (time.monotonic() - self._last_request)
+        if wait > 0:
+            time.sleep(wait)
+        self._last_request = time.monotonic()
         r = get_with_retries(
             self.http, f"{BASE}{path}",
             params={**params, "fmt": "json"},
@@ -114,8 +126,20 @@ class MusicBrainzProvider(MusicFeatureProvider):
             return None
         return max(tags, key=lambda t: t.get("count", 0))["name"]
 
+    @staticmethod
+    def _artist_credit(rec: dict) -> str | None:
+        for credit in rec.get("artist-credit") or []:
+            name = credit.get("name") or (credit.get("artist") or {}).get("name")
+            if name:
+                return name
+        return None
+
     def _parse_recording(self, rec: dict, *, isrc: str | None, exact: bool) -> dict[str, Any] | None:
         out: dict[str, Any] = {}
+        if rec.get("title"):
+            out["canonical_title"] = rec["title"]
+        if artist := self._artist_credit(rec):
+            out["canonical_artist"] = artist
         if (label := self._label(rec)):
             out["label"] = label
         if (rd := self._release_date(rec)):

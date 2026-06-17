@@ -2,17 +2,20 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 LOG_DIR = BACKEND_DIR / "logs"
 LOG_FILE = LOG_DIR / "djassistant.log"
+DEFAULT_DATABASE_PATH = BACKEND_DIR / "data" / "djassistant.db"
+DEFAULT_DATABASE_URL = f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore")
 
-    database_url: str = f"sqlite:///{BACKEND_DIR / 'data' / 'djassistant.db'}"
+    database_url: str = DEFAULT_DATABASE_URL
     frontend_origin: str = "http://localhost:3000"
     log_level: str = "INFO"
 
@@ -39,6 +42,18 @@ class Settings(BaseSettings):
     ai_effort: str = "low"  # low | medium | high | max
     ai_thinking: str = "adaptive"  # adaptive | disabled
     ai_timeout_seconds: float = 120.0
+
+    @field_validator("database_url")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        """SQLite locale sempre relativo a backend/, mai alla cwd del processo."""
+        if not value.startswith("sqlite:///") or value == "sqlite:///:memory:":
+            return value
+        raw_path = value.removeprefix("sqlite:///")
+        db_path = Path(raw_path)
+        if not db_path.is_absolute():
+            db_path = BACKEND_DIR / db_path
+        return f"sqlite:///{db_path.resolve().as_posix()}"
 
 
 settings = Settings()
@@ -70,5 +85,7 @@ def setup_logging() -> None:
 
     # gli access log di uvicorn passano dal nostro middleware: riduciamo il rumore
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # httpx a INFO stampa URL complete, incluse query string con API key dei provider.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("app").info("Logging inizializzato (livello %s, file %s)",
                                   settings.log_level.upper(), LOG_FILE)

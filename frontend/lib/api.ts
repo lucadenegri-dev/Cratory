@@ -122,8 +122,17 @@ export interface FeatureProviderStatus {
 
 export interface FeatureEnrichReport {
   enriched: number;
+  provider_matches: number;
+  metadata_enriched: number;
   not_found: number;
   total: number;
+  cache_hits: number;
+  with_bpm: number;
+  with_key: number;
+  ready_for_set: number;
+  missing_core_features: number;
+  field_counts: Record<string, number>;
+  lookup_sources: Record<string, number>;
 }
 
 export interface FeatureEnrichJob {
@@ -409,6 +418,19 @@ export function enrichPlaylist(playlistId: number) {
 export function trackLabel(t: Track): string {
   const fallback = t.spotify_id ? `[Spotify ${t.spotify_id.slice(0, 8)}…]` : `#${t.id}`;
   return `${t.artist ?? "?"} — ${t.title ?? fallback}`;
+}
+
+export function featureEnrichSummary(r: FeatureEnrichReport): string {
+  const parts = [
+    `${r.ready_for_set}/${r.total} pronte per il set`,
+    `${r.with_bpm} con BPM`,
+    `${r.with_key} con key`,
+  ];
+  if (r.enriched) parts.push(`${r.enriched} aggiornate`);
+  if (r.metadata_enriched) parts.push(`${r.metadata_enriched} con metadati`);
+  if (r.missing_core_features) parts.push(`${r.missing_core_features} senza BPM/key`);
+  if (r.not_found) parts.push(`${r.not_found} non trovate`);
+  return parts.join(" - ");
 }
 
 export function fmtDuration(seconds: number | null | undefined): string {
