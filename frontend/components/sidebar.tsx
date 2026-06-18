@@ -23,7 +23,7 @@ export function Sidebar() {
     <aside className="flex w-16 shrink-0 flex-col border-r border-border bg-surface lg:w-60">
       {/* Header logo */}
       <div className="flex items-center justify-center px-3 py-4 lg:justify-start lg:px-5">
-        <img src="/logo.png" alt="SetArc" className="h-10 w-10 shrink-0 rounded-xl object-cover lg:h-16 lg:w-16" />
+        <img src="/logo.png" alt="SetArc" className="h-10 w-10 shrink-0 rounded-xl object-cover lg:h-32 lg:w-32" />
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 px-2 py-2 lg:px-3">
