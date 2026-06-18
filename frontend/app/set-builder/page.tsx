@@ -37,7 +37,7 @@ const CLASS_TONE = { technically_safe: "success", good_reset: "info", creative_r
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
     <div className="mt-5 border-t border-border pt-5 first:mt-0 first:border-0 first:pt-0">
-      <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">{icon}{title}</div>
+      <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-info">{icon}{title}</div>
       {children}
     </div>
   );
@@ -206,7 +206,7 @@ export default function SetBuilder() {
         <div className="p-5">
           <Section icon={<Music4 size={13} className="text-faint" />} title="Base">
             <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
-              <Field label="Playlist di partenza" hint="il set nasce solo da queste tracce (con BPM/key). Vuoto = tutta la libreria">
+              <Field label="Playlist di partenza">
                 <Select value={playlistId} onChange={(e) => setPlaylistId(e.target.value)}>
                   <option value="">Tutta la libreria</option>
                   {playlists.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.track_count}</option>)}
@@ -232,11 +232,10 @@ export default function SetBuilder() {
                 );
               })}
             </div>
-            <p className="mt-2 text-xs text-muted">Un preset imposta arco, strategia e durata in un colpo. Affina il resto in <span className="font-medium text-fg">Opzioni avanzate</span>.</p>
           </Section>
 
           <Section icon={<Sparkles size={13} className="text-faint" />} title="Indicazioni & AI">
-            <Field label="Prompt libero" hint={useAi ? "interpretato dall'AI Set Agent" : "attiva l'AI per interpretarlo, altrimenti viene solo salvato"}>
+            <Field label="Prompt libero">
               <Textarea rows={2} placeholder="Parti morbido e atmosferico, poi vira più club senza diventare techno dritta troppo presto…"
                 value={prompt} onChange={(e) => setPrompt(e.target.value)} />
             </Field>
@@ -268,7 +267,7 @@ export default function SetBuilder() {
           </Section>
 
           <details className="group mt-5 border-t border-border pt-5">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-info transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
               <span className="flex items-center gap-1.5"><SlidersHorizontal size={13} className="text-faint" /> Opzioni avanzate</span>
               <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
             </summary>
@@ -295,16 +294,11 @@ export default function SetBuilder() {
                     </Select>
                   </Field>
                   <Field label="Max per artista"><Input type="number" min={1} value={maxPerArtist} onChange={(e) => setMaxPerArtist(Number(e.target.value))} /></Field>
-                  <Field label="Artisti seed" hint="separati da virgola">
+                  <Field label="Artisti seed">
                     <Input placeholder="es. Arca, Sega Bodega" value={seedArtists} onChange={(e) => setSeedArtists(e.target.value)} />
                   </Field>
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
-                  <span className="text-xs font-medium uppercase tracking-wide text-muted">Sorgenti</span>
-                  {SOURCES.map((s) => (
-                    <Checkbox key={s.value} label={s.label} checked={sources.includes(s.value)} onChange={() => toggleSource(s.value)} />
-                  ))}
-                  <span className="mx-1 h-4 w-px bg-border" />
+                <div className="mt-3 flex items-center gap-x-5 gap-y-2">
                   <Checkbox label="evita tracce corte" checked={avoidShort} onChange={setAvoidShort} />
                 </div>
               </Section>
