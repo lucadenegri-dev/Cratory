@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import {
-  ArrowLeft, Sparkles, Download, Music4, AlertTriangle, Lightbulb, Compass,
+  ArrowLeft, Sparkles, Download, Music4, Lightbulb, SlidersHorizontal,
   ArrowUp, ArrowDown, Trash2, Replace, Pencil, Check,
 } from "lucide-react";
 import {
@@ -123,13 +123,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
 
   const v = setlist.validation ?? {};
   const n = setlist.tracks.length;
-  const lists: Array<[string, string[] | undefined, "warning" | "info" | "primary", React.ReactNode]> = [
-    ["Warning di validazione", v.warnings, "warning", <AlertTriangle key="w" size={14} />],
-    ["Punti critici", v.critical_points, "warning", <AlertTriangle key="c" size={14} />],
-    ["Direzioni alternative", v.alternative_directions, "info", <Compass key="a" size={14} />],
-    ["Cosa manca in libreria", v.missing_library_suggestions, "primary", <Lightbulb key="m" size={14} />],
-  ];
-  const shown = lists.filter(([, items]) => items && items.length > 0);
+  const improvements = v.missing_library_suggestions ?? [];
   const altTrack = altPos != null ? setlist.tracks.find((st) => st.position === altPos) : null;
 
   return (
@@ -166,18 +160,12 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
         <div className="space-y-4 p-5">
           {error && <Alert tone="danger">⚠ {error}</Alert>}
           {playlistUrl && <Alert tone="success">✓ Playlist creata: <a href={playlistUrl} target="_blank" rel="noreferrer" className="underline">{playlistUrl}</a></Alert>}
-          {setlist.global_explanation && <p className="text-sm leading-relaxed text-muted">{setlist.global_explanation}</p>}
-
-          {shown.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {shown.map(([title, items, tone, icon]) => (
-                <div key={title} className="rounded-lg border border-border bg-bg p-3">
-                  <div className={`mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-${tone}`}>{icon} {title}</div>
-                  <ul className="space-y-1 text-sm text-muted">
-                    {items!.map((it, i) => <li key={i} className="flex gap-1.5"><span className="text-faint">·</span>{it}</li>)}
-                  </ul>
-                </div>
-              ))}
+          {setlist.mixing_overview.length > 0 && (
+            <div className="rounded-lg border border-border bg-bg p-3">
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-info"><SlidersHorizontal size={14} /> Come mixare il set</div>
+              <ul className="space-y-1 text-sm text-muted">
+                {setlist.mixing_overview.map((it, i) => <li key={i} className="flex gap-1.5"><span className="text-faint">·</span>{it}</li>)}
+              </ul>
             </div>
           )}
 
@@ -193,20 +181,15 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                     {st.role && <Badge tone="neutral">{st.role}</Badge>}
                     <Link href={`/tracks/${st.track.id}`} className="truncate font-medium hover:text-primary">{trackLabel(st.track)}</Link>
                     <span className="tnum shrink-0 text-xs text-faint">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? "?"} · {fmtDuration(st.track.duration_seconds)}</span>
-                    {st.risk_level && (
-                      <Badge tone={riskTone(st.risk_level)}>
-                        {st.risk_level}{st.transition_score != null && ` · ${st.transition_score.toFixed(0)}`}
-                      </Badge>
-                    )}
                     {st.transition_class && (
                       <Badge tone={CLASS_TONE[st.transition_class] ?? "neutral"}>
                         <span title={st.transition_class_reason ?? undefined}>{st.transition_class_label ?? st.transition_class}</span>
                       </Badge>
                     )}
                   </div>
-                  {st.ai_reason && <p className="mt-1 text-xs text-primary/85">🎧 {st.ai_reason}</p>}
-                  {st.transition_note && <p className="mt-0.5 text-xs text-muted">↪ {st.transition_note}</p>}
-                  {st.transition_reason && <p className="mt-0.5 text-xs text-faint">{st.transition_reason}</p>}
+                  {st.mix_tip
+                    ? <p className="mt-1 flex gap-1.5 text-xs text-muted"><span className="shrink-0 text-faint">↪</span>{st.mix_tip}</p>
+                    : <p className="mt-1 text-xs text-faint">apertura del set</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5">
                   <IconBtn title="Su" disabled={busy || st.position === 1} onClick={() => move(st.position, "up")}><ArrowUp size={15} /></IconBtn>
@@ -217,6 +200,15 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
               </li>
             ))}
           </ol>
+
+          {improvements.length > 0 && (
+            <div className="rounded-lg border border-border bg-bg p-3">
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary"><Lightbulb size={14} /> Come migliorare il tuo set</div>
+              <ul className="space-y-1 text-sm text-muted">
+                {improvements.map((it, i) => <li key={i} className="flex gap-1.5"><span className="text-faint">·</span>{it}</li>)}
+              </ul>
+            </div>
+          )}
 
           {exported && <pre className="max-h-72 overflow-auto rounded-lg border border-border bg-bg p-3 text-xs text-muted">{exported}</pre>}
         </div>

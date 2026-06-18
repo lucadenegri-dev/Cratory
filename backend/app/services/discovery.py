@@ -119,13 +119,6 @@ perche' si integra con la playlist: affinita' con gli artisti seed, coerenza di 
 ruolo che potrebbe avere nel set. Non inventare BPM o tonalita' (non li hai).
 Rispondi solo nel formato JSON richiesto, una voce per ogni `index` ricevuto."""
 
-GAP_SYSTEM = """Sei un DJ esperto che aiuta a colmare i buchi di una playlist.
-Ricevi il profilo di una playlist, la descrizione di un GAP (cosa manca) e una lista di
-tracce CANDIDATE. Per ogni candidato spiega in UNA frase breve (max ~20 parole) come
-contribuisce a risolvere quel gap specifico. Non inventare BPM o tonalita' (non li hai).
-Rispondi solo nel formato JSON richiesto, una voce per ogni `index` ricevuto."""
-
-
 def _library_tracks(db: Session) -> list[Track]:
     return list(db.scalars(select(Track)).all())
 
@@ -258,7 +251,6 @@ def _explain(
     system: str,
     profile: dict,
     candidates: list[DiscoveryCandidate],
-    gap: dict | None = None,
 ) -> None:
     payload: dict[str, Any] = {
         "playlist_profile": profile,
@@ -267,8 +259,6 @@ def _explain(
             for i, c in enumerate(candidates)
         ],
     }
-    if gap is not None:
-        payload["gap"] = gap
     try:
         raw = llm.complete_json(system, payload, EXPLAIN_SCHEMA)
     except Exception as exc:  # noqa: BLE001 - la spiegazione AI e' best-effort, non deve far fallire il discovery
@@ -311,51 +301,5 @@ def discover_for_playlist(
                 playlist_id, len(ranked), len(seed_artists))
     return DiscoveryResult(
         mode="expand", scope=playlist.name,
-        seed_count=len(seed_artists) + len(seed_tracks), candidates=ranked,
-    )
-
-
-def discover_for_gap(
-    db: Session,
-    gap: dict,
-    *,
-    similarity: SimilaritySource,
-    resolve: Resolver | None = None,
-    llm: LLMExplainer | None = None,
-    playlist_id: int | None = None,
-    limit: int = DEFAULT_LIMIT,
-) -> DiscoveryResult:
-    """Cerca tracce che colmino un gap identificato (gap_analysis)."""
-    from app.repositories import get_playlist, tracks_for_playlist
-
-    scope = "libreria"
-    if playlist_id is not None:
-        playlist = get_playlist(db, playlist_id)
-        if playlist is None:
-            raise ValueError("Playlist non trovata")
-        tracks = tracks_for_playlist(db, playlist_id)
-        scope = playlist.name
-    else:
-        tracks = _library_tracks(db)
-
-    seed_artists, seed_tracks = _seeds(tracks)
-    # I gap di genere si affrontano per tag: estrai i generi dominanti come tag.
-    tags: list[str] = []
-    if gap.get("gap_type") in ("low_genre_variety", "scattered_genres"):
-        tags = [g.split(",")[0].strip() for g in (t.genre for t in tracks if t.genre)]
-        tags = [g for g, _ in Counter(tags).most_common(3)]
-
-    found = _collect(similarity, seed_artists, seed_tracks, tags=tags)
-    library = _library_tracks(db)
-    fresh = _drop_in_library(found, library)
-    library_isrcs = {t.isrc for t in library if t.isrc}
-    ranked = _finalize(fresh, resolve, library_isrcs, limit)
-
-    if llm and ranked:
-        _explain(llm, GAP_SYSTEM, _playlist_profile(tracks), ranked, gap=gap)
-
-    logger.info("Discovery gap '%s' (scope %s): %s candidati", gap.get("gap_type"), scope, len(ranked))
-    return DiscoveryResult(
-        mode="gap", scope=scope,
         seed_count=len(seed_artists) + len(seed_tracks), candidates=ranked,
     )

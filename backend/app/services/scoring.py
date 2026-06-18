@@ -93,6 +93,109 @@ def classify_transition(from_track: Track, to_track: Track) -> TransitionClassif
     )
 
 
+def mixing_tip(from_track: Track, to_track: Track) -> str:
+    """Istruzione concisa e DETERMINISTICA su come mixare due brani consecutivi.
+
+    Tutto dai dati di enrichment (BPM, Camelot, energia): niente AI, niente id.
+    Pensata per il DJ: cosa fare in pratica per passare dal brano precedente a questo.
+    """
+    parts: list[str] = []
+
+    fb, tb = from_track.bpm, to_track.bpm
+    if fb and tb:
+        delta = tb - fb
+        ad = abs(delta)
+        if ad <= 0.5:
+            parts.append("stesso BPM: beatmatch diretto")
+        elif ad <= 2:
+            parts.append(f"{delta:+.0f} BPM: ritocca il pitch, blend lungo")
+        elif ad <= 5:
+            parts.append(f"{delta:+.0f} BPM: pitch bend o blend graduale sull'intro")
+        elif ad <= 8:
+            parts.append(f"{delta:+.0f} BPM: salto deciso, usa un break o un EQ blend")
+        else:
+            parts.append(f"{delta:+.0f} BPM: stacco netto, meglio un cut o una traccia ponte")
+    else:
+        parts.append("BPM mancante: sincronizza a orecchio")
+
+    level, _ = camelot_compatibility(from_track.camelot_key, to_track.camelot_key)
+    fk, tk = from_track.camelot_key, to_track.camelot_key
+    if level == "same":
+        parts.append(f"{fk} stessa key: mix armonico totale")
+    elif level == "compatible":
+        parts.append(f"{fk}→{tk} compatibile: mix armonico")
+    elif level == "weak":
+        parts.append(f"{fk}→{tk} fuori chiave: mix breve o maschera con l'EQ")
+    # level == "unknown": tonalità mancante, nessun consiglio armonico
+
+    fe, te = from_track.energy, to_track.energy
+    if fe is not None and te is not None:
+        ed = te - fe
+        if ed >= 12:
+            parts.append("porta su l'energia")
+        elif ed <= -12:
+            parts.append("scarica l'energia (reset)")
+
+    return " · ".join(parts)
+
+
+def mixing_overview(tracks: list[Track]) -> list[str]:
+    """Piano di mixaggio del set, DETERMINISTICO: una sintesi tecnica di come legare
+    i brani (armonia, salti di BPM, arco di energia). Complementa i `mixing_tip` per
+    traccia con la visione d'insieme. I numeri di brano sono le posizioni 1-based.
+    """
+    pairs = list(zip(tracks, tracks[1:]))
+    if not pairs:
+        return []
+    bullets: list[str] = []
+
+    def at_tracks(positions: list[int]) -> str:
+        nums = ", ".join(str(p) for p in positions)
+        return f"al brano {nums}" if len(positions) == 1 else f"ai brani {nums}"
+
+    # Armonia (Camelot)
+    harmonic = weak = known = 0
+    for a, b in pairs:
+        level, _ = camelot_compatibility(a.camelot_key, b.camelot_key)
+        if level in ("same", "compatible"):
+            harmonic += 1
+            known += 1
+        elif level == "weak":
+            weak += 1
+            known += 1
+    if known:
+        s = f"Armonia: {harmonic}/{known} cambi in chiave (mix armonico Camelot)."
+        if weak:
+            s += f" {weak} fuori chiave: tienili brevi o maschera con l'EQ."
+        bullets.append(s)
+
+    # BPM: arco e salti che richiedono un cut/ponte
+    bpms = [t.bpm for t in tracks if t.bpm]
+    jumps = [i + 2 for i, (a, b) in enumerate(pairs) if a.bpm and b.bpm and abs(b.bpm - a.bpm) > 8]
+    if bpms:
+        arc = f"BPM da {min(bpms):.0f} a {max(bpms):.0f}"
+        if jumps:
+            noun = "salto marcato" if len(jumps) == 1 else "salti marcati"
+            bullets.append(f"{arc}: {noun} {at_tracks(jumps)} — meglio un cut su un break o una traccia ponte; altrove beatmatch e blend lungo.")
+        else:
+            bullets.append(f"{arc}: differenze contenute, lega in beatmatch con blend graduale sull'intro.")
+
+    # Energia: andamento e reset
+    energies = [t.energy for t in tracks if t.energy is not None]
+    resets = [i + 2 for i, (a, b) in enumerate(pairs)
+              if a.energy is not None and b.energy is not None and b.energy - a.energy <= -15]
+    if len(energies) >= 2:
+        delta = energies[-1] - energies[0]
+        trend = "in salita" if delta >= 8 else "in discesa" if delta <= -8 else "stabile"
+        s = f"Energia {trend} ({energies[0]} → {energies[-1]})."
+        if resets:
+            noun = "Stacco di reset" if len(resets) == 1 else "Stacchi di reset"
+            s += f" {noun} {at_tracks(resets)}: sfrutta il calo per cambiare zona."
+        bullets.append(s)
+
+    return bullets
+
+
 def _bpm_points(from_bpm: float | None, to_bpm: float | None) -> tuple[float, str, str | None]:
     if not from_bpm or not to_bpm:
         return 25.0, "BPM mancante su una delle tracce: valutazione neutra", "BPM mancante"

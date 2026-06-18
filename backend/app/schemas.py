@@ -141,8 +141,6 @@ class AISetResponse(BaseModel):
     set_title: str = ""
     global_explanation: str = ""
     tracks: list[AITrackChoice] = []
-    critical_points: list[str] = []
-    alternative_directions: list[str] = []
     missing_library_suggestions: list[str] = []
 
 
@@ -159,6 +157,8 @@ class SetlistTrackOut(BaseModel):
     transition_class: str | None = None
     transition_class_label: str | None = None
     transition_class_reason: str | None = None
+    # Consiglio tecnico deterministico su come mixare dal brano precedente (no AI, no id)
+    mix_tip: str | None = None
 
 
 class SetlistOut(BaseModel):
@@ -172,6 +172,8 @@ class SetlistOut(BaseModel):
     global_explanation: str | None = None
     generated_by: str = "algorithmic"
     validation: dict = {}
+    # Piano di mixaggio deterministico del set (come legare i brani, dove i salti).
+    mixing_overview: list[str] = []
     total_duration_seconds: int = 0
     created_at: datetime
     tracks: list[SetlistTrackOut] = []
@@ -336,15 +338,6 @@ class DiscoveryExpandRequest(BaseModel):
     playlist_id: int
     limit: int = Field(default=20, ge=1, le=50)
     use_ai: bool | None = None  # None = auto (AI se configurata)
-
-
-class DiscoveryGapRequest(BaseModel):
-    gap_type: str
-    description: str = ""
-    suggestion: str = ""
-    playlist_id: int | None = None
-    limit: int = Field(default=20, ge=1, le=50)
-    use_ai: bool | None = None
 
 
 class LibraryStatsOut(BaseModel):

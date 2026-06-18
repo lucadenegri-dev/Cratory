@@ -1,7 +1,7 @@
 """Test Discovery mode (Fase F) — nessuna rete: similarity, resolver e LLM finti."""
 
 from app.integrations.lastfm import LastFMClient
-from app.services.discovery import discover_for_gap, discover_for_playlist
+from app.services.discovery import discover_for_playlist
 
 
 # --- parsing Last.fm (senza rete) --------------------------------------------
@@ -249,17 +249,3 @@ def test_add_unresolved_track_dedup_by_name(db):
     assert c1 is True and c2 is False
     assert t1.id == t2.id
     assert db.query(Track).count() == 1
-
-
-def test_gap_genre_uses_tags(db):
-    pid = _make_playlist(db, [
-        {"artist": "Artist 0", "title": "Song A", "genre": "house"},
-        {"artist": "Artist 1", "title": "Song B", "genre": "house"},
-    ])
-    gap = {"gap_type": "low_genre_variety", "description": "un genere domina", "suggestion": ""}
-    llm = FakeLLM()
-    result = discover_for_gap(db, gap, similarity=FakeSimilarity(), llm=llm, playlist_id=pid, limit=10)
-    assert result.mode == "gap"
-    # il candidato da tag e' presente (discovery per genere)
-    assert any(c.title == "Genre Anthem" for c in result.candidates)
-    assert llm.last_payload["gap"]["gap_type"] == "low_genre_variety"

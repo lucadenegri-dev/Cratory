@@ -34,21 +34,22 @@ un arco coerente senza scorrere tutti i candidati a mano. Le lacune segnalate (m
 indicano dove non hai dati affidabili.
 
 Regole inderogabili:
-- Usa SOLO le tracce candidate fornite. Non inventare track_id ne' tracce.
-- Riferisciti a ogni traccia tramite il suo "id" numerico.
+- Usa SOLO le tracce candidate fornite. Seleziona ogni brano col suo "track_id".
+- NON citare MAI l'id numerico nei testi: nei campi reason/transition_note e nei
+  suggerimenti riferisciti ai brani per «artista – titolo».
 - Costruisci una scaletta coerente che rispetti durata target, arco BPM e vincoli.
 - Ordina le tracce in modo musicalmente sensato (mixaggio armonico Camelot, progressione BPM).
-- Per ogni traccia spiega brevemente la scelta (reason) e la transizione (transition_note),
-  e indica il rischio della transizione (low|medium|high).
-- Distingui dati di fatto da inferenze musicali e da ipotesi creative.
-- Fornisci una global_explanation narrativa, eventuali critical_points, alternative_directions
-  e missing_library_suggestions (cosa manca in libreria, in modo contestualizzato).
+- reason: in una frase, perché quel brano in quel punto. transition_note: come mixare dal
+  precedente (BPM, key, energia). risk_level: low|medium|high.
+- missing_library_suggestions: 0-3 consigli CONCRETI per migliorare il set, cioè che TIPO di
+  traccia aggiungere alla libreria (BPM, tonalità, energia, mood, ruolo) per colmare un punto
+  debole. Niente id, niente nomi di brani non presenti.
 
 Sii CONCISO per restare reattivo:
-- reason e transition_note: una frase breve ciascuno (max ~20 parole).
-- global_explanation: max 3-4 frasi.
-- ogni lista (critical_points, alternative_directions, missing_library_suggestions): max 3 voci brevi.
-Rispondi esclusivamente nel formato JSON richiesto."""
+- reason e transition_note: una frase breve ciascuno (max ~18 parole).
+- global_explanation: max 2 frasi.
+- missing_library_suggestions: max 3 voci brevi.
+Scrivi SEMPRE in italiano. Rispondi esclusivamente nel formato JSON richiesto."""
 
 # Modalità "creative": l'AI porta giudizio musicale, non solo matching tecnico.
 CREATIVE_SYSTEM_PROMPT = """Sei un DJ di esperienza che costruisce un set con gusto e racconto, non solo con la teoria.
@@ -62,15 +63,15 @@ Puoi rompere di proposito una regola armonica o di BPM se serve all'effetto: in 
 e spiega la scelta.
 
 Regole inderogabili (NON negoziabili):
-- Usa SOLO le tracce candidate fornite. Non inventare track_id né tracce.
-- Riferisciti a ogni traccia tramite il suo "id" numerico.
+- Usa SOLO le tracce candidate fornite. Seleziona ogni brano col suo "track_id".
+- NON citare MAI l'id numerico nei testi: riferisciti ai brani per «artista – titolo».
 - I dati tecnici forniti (BPM, Camelot) sono autorevoli: ragiona su quelli, non inventarli.
 - Rispetta la durata target e i vincoli espliciti dell'utente (mood/energia/durata).
-- Per ogni traccia: reason (perché lì, anche per ragioni musicali/emotive), transition_note, risk_level (low|medium|high).
-- global_explanation che racconti l'arco del set; più critical_points, alternative_directions, missing_library_suggestions.
+- Per ogni traccia: reason (perché lì, anche per ragioni musicali/emotive), transition_note (come mixare), risk_level (low|medium|high).
+- missing_library_suggestions: max 3 consigli concreti su che TIPO di traccia aggiungere (BPM/tonalità/energia/mood/ruolo) per rendere il set migliore. Niente id.
 
-Sii CONCISO: reason e transition_note una frase breve; global_explanation max 3-4 frasi; ogni lista max 3 voci.
-Rispondi esclusivamente nel formato JSON richiesto."""
+Sii CONCISO: reason e transition_note una frase breve; global_explanation max 2 frasi; missing_library_suggestions max 3 voci.
+Scrivi SEMPRE in italiano. Rispondi esclusivamente nel formato JSON richiesto."""
 
 # JSON Schema per structured outputs (additionalProperties:false ovunque).
 OUTPUT_SCHEMA = {
@@ -94,14 +95,9 @@ OUTPUT_SCHEMA = {
                 "required": ["position", "track_id", "reason", "transition_note", "risk_level"],
             },
         },
-        "critical_points": {"type": "array", "items": {"type": "string"}},
-        "alternative_directions": {"type": "array", "items": {"type": "string"}},
         "missing_library_suggestions": {"type": "array", "items": {"type": "string"}},
     },
-    "required": [
-        "set_title", "global_explanation", "tracks",
-        "critical_points", "alternative_directions", "missing_library_suggestions",
-    ],
+    "required": ["set_title", "global_explanation", "tracks", "missing_library_suggestions"],
 }
 
 
@@ -231,8 +227,6 @@ def generate_ai_set(db, req, llm, on_phase=None):
         generated_by="ai",
         validation={
             **result.as_dict(),
-            "critical_points": ai.critical_points,
-            "alternative_directions": ai.alternative_directions,
             "missing_library_suggestions": ai.missing_library_suggestions,
         },
     )

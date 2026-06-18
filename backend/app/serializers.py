@@ -9,7 +9,7 @@ from app.schemas import (
     TrackDetailOut,
     TrackOut,
 )
-from app.services.scoring import classify_transition
+from app.services.scoring import classify_transition, mixing_overview, mixing_tip
 
 
 def _spotify_url(track: Track) -> str | None:
@@ -73,6 +73,7 @@ def setlist_out(setlist: Setlist) -> SetlistOut:
             transition_class=cls.label if cls else None,
             transition_class_label=cls.label_it if cls else None,
             transition_class_reason=cls.reason if cls else None,
+            mix_tip=mixing_tip(prev, st.track) if prev is not None else None,
         ))
         prev = st.track
     total = sum(st.track.duration_seconds or 0 for st in setlist.tracks)
@@ -87,6 +88,7 @@ def setlist_out(setlist: Setlist) -> SetlistOut:
         global_explanation=setlist.global_explanation,
         generated_by=setlist.generated_by or "algorithmic",
         validation=setlist.validation or {},
+        mixing_overview=mixing_overview([st.track for st in setlist.tracks]),
         total_duration_seconds=total,
         created_at=setlist.created_at,
         tracks=items,

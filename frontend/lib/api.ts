@@ -210,6 +210,7 @@ export interface SetlistTrack {
   transition_class: TransitionClass | null;
   transition_class_label: string | null;
   transition_class_reason: string | null;
+  mix_tip: string | null;
 }
 
 export interface SetlistValidation {
@@ -229,6 +230,7 @@ export interface Setlist {
   global_explanation: string | null;
   generated_by: string;
   validation: SetlistValidation;
+  mixing_overview: string[];
   total_duration_seconds: number;
   created_at: string;
   tracks: SetlistTrack[];
@@ -396,17 +398,6 @@ export function discoverExpand(playlistId: number, opts?: { limit?: number; use_
   });
 }
 
-export function discoverGap(gap: Gap, playlistId: number | null, opts?: { limit?: number; use_ai?: boolean }) {
-  return apiPost<DiscoveryResponse>("/api/discovery/gap", {
-    gap_type: gap.gap_type,
-    description: gap.description,
-    suggestion: gap.suggestion,
-    playlist_id: playlistId,
-    limit: opts?.limit,
-    use_ai: opts?.use_ai,
-  });
-}
-
 export function discoveryAddToLibrary(c: DiscoveryCandidate) {
   return apiPost<DiscoveryAddResponse>("/api/discovery/add", {
     artist: c.artist,
@@ -439,8 +430,9 @@ export function enrichPlaylist(playlistId: number) {
 }
 
 export function trackLabel(t: Track): string {
-  const fallback = t.spotify_id ? `[Spotify ${t.spotify_id.slice(0, 8)}…]` : `#${t.id}`;
-  return `${t.artist ?? "?"} — ${t.title ?? fallback}`;
+  const artist = t.artist?.trim() || "Artista sconosciuto";
+  const title = t.title?.trim() || "Senza titolo";
+  return `${artist} — ${title}`;
 }
 
 export function featureEnrichSummary(r: FeatureEnrichReport): string {

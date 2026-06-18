@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Sparkles, Wand2, Download, ListMusic, AlertTriangle, Lightbulb, Compass, Music4,
+  Sparkles, Wand2, Download, ListMusic, Lightbulb, Music4,
   TrendingUp, SlidersHorizontal, ArrowRight, Sunrise, Flame, Sunset,
 } from "lucide-react";
 import {
   apiGet, apiPost, exportSet, fmtDuration, trackLabel,
-  type AiStatus, type GenStatus, type Setlist, type Playlist,
+  type AiStatus, type GenStatus, type Setlist, type SetlistTrack, type Playlist,
 } from "@/lib/api";
 import { Card, CardHeader, Button, Input, Textarea, Select, Field, Checkbox, Badge, Progress, Alert, EmptyState } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -32,7 +32,7 @@ const PRESETS = [
   { label: "Progressivo", icon: TrendingUp, strategy: "progressive", duration: 90, startBpm: "120", endBpm: "130", startEnergy: "40", endEnergy: "85" },
   { label: "Closing", icon: Sunset, strategy: "closing", duration: 45, startBpm: "128", endBpm: "120", startEnergy: "78", endEnergy: "40" },
 ] as const;
-const RISK_TONE = { low: "success", medium: "warning", high: "danger" } as const;
+const CLASS_TONE = { technically_safe: "success", good_reset: "info", creative_risk: "warning" } as const;
 
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
@@ -71,7 +71,10 @@ export default function SetBuilder() {
   const [useAi, setUseAi] = useState(false);
   const [mode, setMode] = useState<"technical" | "creative">("technical");
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [playlistId, setPlaylistId] = useState("");
+  // Pre-selezione da ?playlist=… letta una sola volta all'inizializzazione (no setState in effect).
+  const [playlistId, setPlaylistId] = useState(() =>
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("playlist") ?? "" : "",
+  );
   const [startEnergy, setStartEnergy] = useState("");
   const [endEnergy, setEndEnergy] = useState("");
   const [startMood, setStartMood] = useState("");
@@ -95,8 +98,6 @@ export default function SetBuilder() {
   }, []);
 
   useEffect(() => {
-    const preselect = new URLSearchParams(window.location.search).get("playlist");
-    if (preselect) setPlaylistId(preselect);
     apiGet<AiStatus>("/api/ai/status").then((s) => { setAiStatus(s); setUseAi(s.configured); }).catch(() => setAiStatus({ configured: false, model: null }));
     apiGet<Playlist[]>("/api/playlists").then(setPlaylists).catch(() => {});
     return stopAll;
@@ -324,7 +325,7 @@ export default function SetBuilder() {
 
       {!setlist && !busy && !error && (
         <EmptyState icon={<ListMusic size={28} />} title="Nessun set ancora">
-          Imposta i vincoli o scrivi un prompt, poi premi <strong>Genera</strong>. Il set apparirà qui con spiegazioni e warning tecnici.
+          Imposta i vincoli o scrivi un prompt, poi premi <strong>Genera</strong>. Il set apparirà qui con i consigli tecnici di mix.
         </EmptyState>
       )}
     </div>
@@ -335,14 +336,9 @@ function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, e
   setlist: Setlist; onExport: (f: "text" | "csv" | "markdown") => void; onPlaylist: () => void;
   playlistBusy: boolean; playlistUrl: string | null; exported: string | null;
 }) {
-  const v = setlist.validation ?? {};
-  const lists: Array<[string, string[] | undefined, "warning" | "info" | "primary", React.ReactNode]> = [
-    ["Warning di validazione", v.warnings, "warning", <AlertTriangle key="w" size={14} />],
-    ["Punti critici", v.critical_points, "warning", <AlertTriangle key="c" size={14} />],
-    ["Direzioni alternative", v.alternative_directions, "info", <Compass key="a" size={14} />],
-    ["Cosa manca in libreria", v.missing_library_suggestions, "primary", <Lightbulb key="m" size={14} />],
-  ];
-  const shown = lists.filter(([, items]) => items && items.length > 0);
+  const improvements = setlist.validation?.missing_library_suggestions ?? [];
+  const transitions = Math.max(0, setlist.tracks.length - 1);
+  const safe = setlist.tracks.filter((st) => (st.transition_score ?? 0) >= 70).length;
 
   return (
     <Card>
@@ -355,7 +351,7 @@ function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, e
             </Badge>
           </span>
         }
-        subtitle={`${setlist.tracks.length} tracce · ${fmtDuration(setlist.total_duration_seconds)}`}
+        subtitle={`${setlist.tracks.length} tracce · ${fmtDuration(setlist.total_duration_seconds)}${transitions ? ` · ${safe}/${transitions} mix sicuri` : ""}`}
         action={
           <div className="flex shrink-0 gap-2">
             <Button variant="outline" size="sm" onClick={() => onExport("text")}><Download size={14} /> Testo</Button>
@@ -367,49 +363,58 @@ function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, e
       />
       <div className="space-y-4 p-5">
         {playlistUrl && <Alert tone="success">✓ Playlist creata: <a href={playlistUrl} target="_blank" rel="noreferrer" className="underline">{playlistUrl}</a></Alert>}
-        {setlist.global_explanation && <p className="text-sm leading-relaxed text-muted">{setlist.global_explanation}</p>}
 
-        {shown.length > 0 && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {shown.map(([title, items, tone, icon]) => (
-              <div key={title} className="rounded-lg border border-border bg-bg p-3">
-                <div className={`mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-${tone}`}>{icon} {title}</div>
-                <ul className="space-y-1 text-sm text-muted">
-                  {items!.map((it, i) => <li key={i} className="flex gap-1.5"><span className="text-faint">·</span>{it}</li>)}
-                </ul>
-              </div>
-            ))}
+        {setlist.mixing_overview.length > 0 && (
+          <div className="rounded-lg border border-border bg-bg p-3">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-info"><SlidersHorizontal size={14} /> Come mixare il set</div>
+            <ul className="space-y-1 text-sm text-muted">
+              {setlist.mixing_overview.map((it, i) => <li key={i} className="flex gap-1.5"><span className="text-faint">·</span>{it}</li>)}
+            </ul>
           </div>
         )}
 
         <ol className="space-y-1.5">
-          {setlist.tracks.map((st) => (
-            <li key={st.position} className="flex gap-3 rounded-lg border border-border bg-bg p-3">
-              <span className="tnum w-5 pt-0.5 text-right text-sm text-faint">{st.position}</span>
-              {st.track.album_art_url
-                ? <img src={st.track.album_art_url} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
-                : <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-elevated text-faint"><Music4 size={16} /></span>}
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  {st.role && <Badge tone="neutral">{st.role}</Badge>}
-                  <Link href={`/tracks/${st.track.id}`} className="truncate font-medium hover:text-primary">{trackLabel(st.track)}</Link>
-                  <span className="tnum shrink-0 text-xs text-faint">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? "?"} · {fmtDuration(st.track.duration_seconds)}</span>
-                  {st.risk_level && (
-                    <Badge tone={RISK_TONE[st.risk_level as keyof typeof RISK_TONE] ?? "neutral"} className="ml-auto">
-                      {st.risk_level}{st.transition_score != null && ` · ${st.transition_score.toFixed(0)}`}
-                    </Badge>
-                  )}
-                </div>
-                {st.ai_reason && <p className="mt-1 text-xs text-primary/85">🎧 {st.ai_reason}</p>}
-                {st.transition_note && <p className="mt-0.5 text-xs text-muted">↪ {st.transition_note}</p>}
-                {st.transition_reason && <p className="mt-0.5 text-xs text-faint">{st.transition_reason}</p>}
-              </div>
-            </li>
-          ))}
+          {setlist.tracks.map((st) => <SetTrackRow key={st.position} st={st} />)}
         </ol>
+
+        {improvements.length > 0 && (
+          <div className="rounded-lg border border-border bg-bg p-3">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary"><Lightbulb size={14} /> Come migliorare il tuo set</div>
+            <ul className="space-y-1 text-sm text-muted">
+              {improvements.map((it, i) => <li key={i} className="flex gap-1.5"><span className="text-faint">·</span>{it}</li>)}
+            </ul>
+          </div>
+        )}
 
         {exported && <pre className="max-h-72 overflow-auto rounded-lg border border-border bg-bg p-3 text-xs text-muted">{exported}</pre>}
       </div>
     </Card>
+  );
+}
+
+/** Riga di una traccia del set: ruolo, brano, dati tecnici e consiglio di mix deterministico. */
+function SetTrackRow({ st }: { st: SetlistTrack }) {
+  return (
+    <li className="flex gap-3 rounded-lg border border-border bg-bg p-3">
+      <span className="tnum w-5 pt-0.5 text-right text-sm text-faint">{st.position}</span>
+      {st.track.album_art_url
+        ? <img src={st.track.album_art_url} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+        : <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-elevated text-faint"><Music4 size={16} /></span>}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          {st.role && <Badge tone="neutral">{st.role}</Badge>}
+          <Link href={`/tracks/${st.track.id}`} className="truncate font-medium hover:text-primary">{trackLabel(st.track)}</Link>
+          <span className="tnum shrink-0 text-xs text-faint">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? "?"} · {fmtDuration(st.track.duration_seconds)}</span>
+          {st.transition_class && (
+            <Badge tone={CLASS_TONE[st.transition_class] ?? "neutral"} className="ml-auto">
+              {st.transition_class_label ?? st.transition_class}
+            </Badge>
+          )}
+        </div>
+        {st.mix_tip
+          ? <p className="mt-1 flex gap-1.5 text-xs text-muted"><span className="shrink-0 text-faint">↪</span>{st.mix_tip}</p>
+          : <p className="mt-1 text-xs text-faint">apertura del set</p>}
+      </div>
+    </li>
   );
 }

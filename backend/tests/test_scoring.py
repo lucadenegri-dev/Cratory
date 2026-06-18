@@ -8,6 +8,7 @@ from app.services.scoring import (
     energy_progression_score,
     genre_similarity_score,
     key_compatibility_score,
+    mixing_tip,
     mood_coherence_score,
     score_transition,
 )
@@ -117,3 +118,59 @@ def test_classify_creative_risk():
     b = make_track(bpm=145, key="2B", energy=72, genre="techno")
     c = classify_transition(a, b)
     assert c.label == "creative_risk"
+
+
+# --- consiglio di mix deterministico (mixing_tip) ----------------------------
+
+
+def test_mixing_tip_smooth_harmonic():
+    a = make_track(bpm=128, key="8A", energy=60)
+    b = make_track(bpm=129, key="9A", energy=66)  # +1 BPM, key adiacente
+    tip = mixing_tip(a, b)
+    assert "BPM" in tip
+    assert "8A→9A compatibile" in tip
+    assert "id" not in tip.lower().split()  # mai id numerici
+
+
+def test_mixing_tip_same_key_and_bpm():
+    a = make_track(bpm=130, key="5A")
+    b = make_track(bpm=130, key="5A")
+    tip = mixing_tip(a, b)
+    assert "beatmatch diretto" in tip
+    assert "stessa key" in tip
+
+
+def test_mixing_tip_big_jump_and_energy_drop():
+    a = make_track(bpm=130, key="7A", energy=80)
+    b = make_track(bpm=145, key="2B", energy=50)  # +15 BPM, key debole, -30 energia
+    tip = mixing_tip(a, b)
+    assert "stacco netto" in tip or "cut" in tip
+    assert "fuori chiave" in tip
+    assert "reset" in tip
+
+
+def test_mixing_tip_handles_missing_bpm():
+    a = make_track(bpm=None, key=None)
+    b = make_track(bpm=128, key="8A")
+    tip = mixing_tip(a, b)
+    assert "sincronizza a orecchio" in tip
+
+
+def test_mixing_overview_summarizes_plan():
+    from app.services.scoring import mixing_overview
+    tracks = [
+        make_track(bpm=120, key="8A", energy=40),
+        make_track(bpm=121, key="9A", energy=50),   # +1 BPM, armonico
+        make_track(bpm=138, key="2B", energy=80),   # +17 BPM (salto), fuori chiave
+    ]
+    out = mixing_overview(tracks)
+    text = " ".join(out)
+    assert any("Armonia" in b for b in out)
+    assert "fuori chiave" in text          # 9A->2B debole
+    assert "salto marcato al brano 3" in text  # il salto BPM è all'ingresso del brano 3
+    assert "Energia in salita" in text
+
+
+def test_mixing_overview_empty_for_single_track():
+    from app.services.scoring import mixing_overview
+    assert mixing_overview([make_track(bpm=120, key="8A")]) == []

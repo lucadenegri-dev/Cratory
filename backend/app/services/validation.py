@@ -39,6 +39,15 @@ SHORT_TRACK_SECONDS = 90
 DURATION_TOLERANCE = 0.25  # +/- 25% del target
 
 
+def _label(track: Track) -> str:
+    """Etichetta leggibile di una traccia per i messaggi: mai l'id numerico."""
+    artist = (track.artist or "").strip()
+    title = (track.title or "").strip()
+    if artist and title:
+        return f"{artist} – {title}"
+    return title or artist or "traccia senza titolo"
+
+
 def validate_ai_set(
     ai: AISetResponse,
     candidates_by_id: dict[int, Track],
@@ -54,13 +63,13 @@ def validate_ai_set(
     for choice in ordered:
         track = candidates_by_id.get(choice.track_id)
         if track is None:
-            result.warnings.append(f"track_id {choice.track_id} inesistente tra le candidate: scartata")
+            result.warnings.append("una traccia suggerita dall'AI non è tra le candidate: scartata")
             continue
         if track.id in seen:
-            result.auto_fixes.append(f"duplicato rimosso: {track.artist or '?'} - {track.title or track.id}")
+            result.auto_fixes.append(f"duplicato rimosso: {_label(track)}")
             continue
         if req.sources and track.source_type not in req.sources:
-            result.warnings.append(f"sorgente non ammessa ({track.source_type}) scartata: {track.title or track.id}")
+            result.warnings.append(f"sorgente non ammessa ({track.source_type}) scartata: {_label(track)}")
             continue
         artist_key = (track.artist or "").lower()
         if artist_key and artist_counts.get(artist_key, 0) >= req.max_tracks_per_artist:
@@ -82,10 +91,10 @@ def validate_ai_set(
             transition_score = float(ts.score)
             transition_reason = "; ".join(ts.technical_reasons)
             for w in ts.warnings:
-                result.warnings.append(f"{prev.title or prev.id} -> {track.title or track.id}: {w}")
+                result.warnings.append(f"{_label(prev)} → {_label(track)}: {w}")
 
         if (track.duration_seconds or 0) and track.duration_seconds < SHORT_TRACK_SECONDS:
-            result.warnings.append(f"traccia molto corta ({track.duration_seconds}s): {track.title or track.id}")
+            result.warnings.append(f"traccia molto corta ({track.duration_seconds}s): {_label(track)}")
 
         risk = choice.risk_level if choice.risk_level in risk_by_level else "medium"
         result.tracks.append(ValidatedTrack(

@@ -32,8 +32,6 @@ class FakeLLM(LLMClient):
                 {"position": i + 1, "track_id": tid, "reason": "scelta", "transition_note": "mix", "risk_level": "low"}
                 for i, tid in enumerate(ids)
             ],
-            "critical_points": ["punto critico"],
-            "alternative_directions": ["piu' morbido"],
             "missing_library_suggestions": ["esplora label X"],
         }
 
@@ -64,7 +62,6 @@ def test_ai_set_persists_narrative_and_validation(db, seed_tracks):
     v = setlist.validation
     assert "warnings" in v and "stats" in v
     assert v["missing_library_suggestions"] == ["esplora label X"]
-    assert v["critical_points"] == ["punto critico"]
     # gli score di transizione sono calcolati dal motore deterministico, non dall'AI
     assert setlist.tracks[0].transition_score is None  # apertura
     assert all(st.ai_reason for st in setlist.tracks)
@@ -75,7 +72,9 @@ def test_validation_drops_invalid_track_id(db, seed_tracks):
     llm = FakeLLM(n=5, extra_ids=[999999])  # id inesistente
     setlist = generate_ai_set(db, _req(), llm)
     assert len(setlist.tracks) == 5  # bogus scartato
-    assert any("999999" in w for w in setlist.validation["warnings"])
+    warnings = setlist.validation["warnings"]
+    assert any("non è tra le candidate" in w for w in warnings)
+    assert all("999999" not in w for w in warnings)  # nessun id numerico nei messaggi
 
 
 def test_validation_removes_duplicates(db, seed_tracks):

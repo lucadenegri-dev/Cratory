@@ -1,30 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Compass, Sparkles, ExternalLink, AlertTriangle, Info, Music2, Wand2, Plus, Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Compass, ExternalLink, Music2, Wand2, Plus, Check } from "lucide-react";
 import {
   discoveryStatus,
   discoverExpand,
-  discoverGap,
   discoveryAddToLibrary,
   listImportedPlaylists,
-  playlistGaps,
   fmtDuration,
   type DiscoveryStatus,
   type DiscoveryResponse,
   type DiscoveryCandidate,
   type Playlist,
-  type Gap,
-  type GapAnalysis,
 } from "@/lib/api";
-import { Card, CardHeader, Badge, Alert, Button, EmptyState, Spinner, Select, Field, Checkbox } from "@/components/ui";
-import { cn } from "@/lib/cn";
+import { Card, Badge, Alert, Button, EmptyState, Spinner, Select, Field, Checkbox } from "@/components/ui";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
-
-type Tab = "expand" | "gap";
 
 const SOURCE_LABEL: Record<DiscoveryCandidate["source"], string> = {
   similar_artist: "artista affine",
@@ -35,11 +28,8 @@ const SOURCE_LABEL: Record<DiscoveryCandidate["source"], string> = {
 export default function DiscoveryPage() {
   const [status, setStatus] = useState<DiscoveryStatus | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
-  const [tab, setTab] = useState<Tab>("expand");
   const [playlistId, setPlaylistId] = useState<number | null>(null);
   const [useAi, setUseAi] = useState(true);
-  const [gaps, setGaps] = useState<GapAnalysis | null>(null);
-  const [activeGap, setActiveGap] = useState<string | null>(null);
   const [result, setResult] = useState<DiscoveryResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,21 +46,6 @@ export default function DiscoveryPage() {
 
   const aiEnabled = useAi && !!status?.ai_explanations;
 
-  const loadGaps = useCallback(async (pid: number) => {
-    setGaps(null);
-    setActiveGap(null);
-    try {
-      setGaps(await playlistGaps(pid));
-    } catch (e) {
-      setError(err(e));
-    }
-  }, []);
-
-  // In modalità gap, carica i buchi della playlist selezionata.
-  useEffect(() => {
-    if (tab === "gap" && playlistId != null) loadGaps(playlistId);
-  }, [tab, playlistId, loadGaps]);
-
   const runExpand = async () => {
     if (playlistId == null) return;
     setBusy(true);
@@ -85,21 +60,6 @@ export default function DiscoveryPage() {
     }
   };
 
-  const runGap = async (gap: Gap) => {
-    if (playlistId == null) return;
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    setActiveGap(gap.gap_type);
-    try {
-      setResult(await discoverGap(gap, playlistId, { use_ai: aiEnabled }));
-    } catch (e) {
-      setError(err(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const noPlaylists = playlists != null && playlists.length === 0;
 
   return (
@@ -107,7 +67,7 @@ export default function DiscoveryPage() {
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Discovery</h1>
         <p className="mt-1 text-sm text-muted">
-          Scopri musica nuova compatibile con le tue playlist. Tracce affini da Last.fm,
+          Espandi una tua playlist con musica nuova e compatibile: tracce affini da Last.fm,
           risolte su Spotify e ordinate per compatibilità.
         </p>
       </header>
@@ -131,19 +91,9 @@ export default function DiscoveryPage() {
 
       {status?.configured && !noPlaylists && (
         <>
-          {/* Tabs */}
-          <div className="mb-4 inline-flex rounded-lg border border-border bg-surface p-1">
-            <TabButton active={tab === "expand"} onClick={() => { setTab("expand"); setResult(null); }} icon={<Sparkles size={15} />}>
-              Espandi playlist
-            </TabButton>
-            <TabButton active={tab === "gap"} onClick={() => { setTab("gap"); setResult(null); }} icon={<Compass size={15} />}>
-              Colma un buco
-            </TabButton>
-          </div>
-
           <Card className="mb-6">
             <div className="grid gap-4 p-4 sm:grid-cols-[1fr_auto] sm:items-end">
-              <Field label="Playlist">
+              <Field label="Playlist da espandere">
                 <Select
                   value={playlistId ?? ""}
                   onChange={(e) => setPlaylistId(Number(e.target.value))}
@@ -154,11 +104,9 @@ export default function DiscoveryPage() {
                   ))}
                 </Select>
               </Field>
-              {tab === "expand" && (
-                <Button onClick={runExpand} disabled={busy || playlistId == null}>
-                  {busy ? <Spinner /> : <Wand2 size={15} />} Scopri tracce affini
-                </Button>
-              )}
+              <Button onClick={runExpand} disabled={busy || playlistId == null}>
+                {busy ? <Spinner /> : <Wand2 size={15} />} Scopri tracce affini
+              </Button>
             </div>
             <div className="border-t border-border px-4 py-3">
               <Checkbox
@@ -174,39 +122,6 @@ export default function DiscoveryPage() {
             </div>
           </Card>
 
-          {/* Gap picker */}
-          {tab === "gap" && (
-            <Card className="mb-6">
-              <CardHeader title="Buchi della playlist" subtitle="Scegli quale problema vuoi colmare" />
-              <div className="grid gap-2 p-4">
-                {!gaps && <p className="text-sm text-muted"><Spinner /> Analizzo…</p>}
-                {gaps && gaps.gaps.length === 0 && (
-                  <p className="text-sm text-success">Nessun buco rilevante: la playlist è bilanciata.</p>
-                )}
-                {gaps?.gaps.map((g) => (
-                  <button
-                    key={g.gap_type}
-                    onClick={() => runGap(g)}
-                    disabled={busy}
-                    className={cn(
-                      "flex items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50",
-                      activeGap === g.gap_type ? "border-primary bg-primary/10" : "border-border hover:bg-elevated",
-                    )}
-                  >
-                    {g.severity === "warning"
-                      ? <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" />
-                      : <Info size={15} className="mt-0.5 shrink-0 text-info" />}
-                    <span>
-                      <span className="text-fg">{g.description}</span>{" "}
-                      <span className="text-muted">{g.suggestion}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Results */}
           {busy && !result && (
             <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Cerco tracce…</div>
           )}
@@ -217,27 +132,11 @@ export default function DiscoveryPage() {
   );
 }
 
-function TabButton({ active, onClick, icon, children }: {
-  active: boolean; onClick: () => void; icon: React.ReactNode; children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-        active ? "bg-elevated text-fg" : "text-muted hover:text-fg",
-      )}
-    >
-      {icon}{children}
-    </button>
-  );
-}
-
 function Results({ result }: { result: DiscoveryResponse }) {
   if (result.candidates.length === 0) {
     return (
       <EmptyState icon={<Compass size={28} />} title="Nessun suggerimento">
-        La fonte di similarità non ha restituito tracce nuove per questo input.
+        La fonte di similarità non ha restituito tracce nuove per questa playlist.
       </EmptyState>
     );
   }

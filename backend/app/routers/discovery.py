@@ -1,8 +1,7 @@
 """Discovery mode (Fase F): scoperta di musica nuova compatibile.
 
-Due endpoint:
+Endpoint principale:
 - POST /api/discovery/expand : espande una playlist importata con tracce affini.
-- POST /api/discovery/gap    : cerca tracce che colmino un gap (da gap_analysis).
 
 Sincrono (numero di lookup limitato dai cap in services/discovery). La fonte di
 similarita' e' Last.fm; Spotify risolve i nomi in tracce reali; l'AI (se configurata)
@@ -29,14 +28,12 @@ from app.schemas import (
     DiscoveryAddResponse,
     DiscoveryCandidateOut,
     DiscoveryExpandRequest,
-    DiscoveryGapRequest,
     DiscoveryResponse,
 )
 from app.serializers import track_out
 from app.services.discovery import (
     DiscoveryCandidate,
     DiscoveryResult,
-    discover_for_gap,
     discover_for_playlist,
 )
 from app.services.playlist_import import import_single_track
@@ -111,27 +108,6 @@ def expand(req: DiscoveryExpandRequest, db: Session = Depends(get_db)):
             db, req.playlist_id,
             similarity=get_lastfm_client(), resolve=_resolver(db),
             llm=_maybe_llm(req.use_ai), limit=req.limit,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except LastFMError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return _response(result)
-
-
-@router.post("/gap", response_model=DiscoveryResponse)
-def gap(req: DiscoveryGapRequest, db: Session = Depends(get_db)):
-    _require_lastfm()
-    gap_dict = {
-        "gap_type": req.gap_type,
-        "description": req.description,
-        "suggestion": req.suggestion,
-    }
-    try:
-        result = discover_for_gap(
-            db, gap_dict,
-            similarity=get_lastfm_client(), resolve=_resolver(db),
-            llm=_maybe_llm(req.use_ai), playlist_id=req.playlist_id, limit=req.limit,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
