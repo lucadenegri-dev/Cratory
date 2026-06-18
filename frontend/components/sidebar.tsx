@@ -21,11 +21,9 @@ export function Sidebar() {
 
   return (
     <aside className="flex w-16 shrink-0 flex-col border-r border-border bg-surface lg:w-60">
-      {/* Header: same horizontal nesting as nav links → icons align perfectly */}
-      <div className="px-2 pb-1 pt-3 lg:px-3">
-        <div className="flex items-center justify-center gap-3 px-3 py-2 lg:justify-start">
-          <img src="/logo.png" alt="SetArc" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
-        </div>
+      {/* Header logo */}
+      <div className="flex items-center justify-center px-3 py-4 lg:justify-start lg:px-5">
+        <img src="/logo.png" alt="SetArc" className="h-10 w-10 shrink-0 rounded-xl object-cover lg:h-16 lg:w-16" />
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 px-2 py-2 lg:px-3">
