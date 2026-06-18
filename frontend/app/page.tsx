@@ -6,7 +6,7 @@ import {
   Music, Gauge, KeyRound, Sparkles, ListPlus, Compass, ArrowRight, ListMusic, CheckCircle2, Pencil,
 } from "lucide-react";
 import { apiGet, type LibraryStats } from "@/lib/api";
-import { Card, Alert, Progress, Button } from "@/components/ui";
+import { Card, Alert, Progress, Button, Badge } from "@/components/ui";
 
 function Stat({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: React.ReactNode; accent?: boolean }) {
   return (
@@ -35,7 +35,7 @@ function Coverage({ label, n, total }: { label: string; n: number; total: number
   const pct = total ? Math.round((n / total) * 100) : 0;
   return (
     <div>
-      <div className="mb-1 flex justify-between text-xs"><span className="text-muted">{label}</span><span className="tnum text-faint">{n}/{total} · {pct}%</span></div>
+      <div className="mb-1 flex justify-between text-xs"><span className="text-muted">{label}</span><span className="tnum text-muted">{n}/{total} · {pct}%</span></div>
       <Progress value={pct} />
     </div>
   );
@@ -54,11 +54,11 @@ function KeyDistribution({ dist }: { dist: Record<string, number> }) {
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-elevated">
             <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(6, Math.round((n / max) * 100))}%` }} />
           </div>
-          <span className="tnum w-4 shrink-0 text-right text-xs text-faint">{n}</span>
+          <span className="tnum w-4 shrink-0 text-right text-xs text-muted">{n}</span>
         </div>
       ))}
       {entries.length > top.length && (
-        <p className="pt-0.5 text-xs text-faint">+{entries.length - top.length} altre tonalità</p>
+        <p className="pt-0.5 text-xs text-muted">+{entries.length - top.length} altre tonalità</p>
       )}
     </div>
   );
@@ -129,12 +129,12 @@ export default function Dashboard() {
 
       {/* Prossimo passo consigliato */}
       {reco && (
-        <Card className="mb-6 overflow-hidden">
-          <div className="flex flex-wrap items-center gap-4 border-l-2 border-primary p-5">
+        <Card className="mb-6 border-primary/30 bg-primary/[0.04]">
+          <div className="flex flex-wrap items-center gap-4 p-5">
             <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">{reco.icon}</span>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium uppercase tracking-wide text-faint">{reco.tag}</div>
-              <div className="mt-0.5 font-semibold">{reco.title}</div>
+              <Badge tone="primary" className="mb-1.5">{reco.tag}</Badge>
+              <div className="font-semibold">{reco.title}</div>
               <p className="text-sm text-muted">{reco.desc}</p>
             </div>
             <Link href={reco.href}><Button>{reco.cta} <ArrowRight size={15} /></Button></Link>
