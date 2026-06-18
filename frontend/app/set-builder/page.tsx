@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Sparkles, Wand2, Download, ListMusic, Lightbulb, Music4,
-  TrendingUp, SlidersHorizontal, ArrowRight, Sunrise, Flame, Sunset,
+  TrendingUp, SlidersHorizontal, ArrowRight, Sunrise, Flame, Sunset, ChevronDown,
 } from "lucide-react";
 import {
   apiGet, apiPost, exportSet, fmtDuration, trackLabel,
@@ -79,6 +79,7 @@ export default function SetBuilder() {
   const [endEnergy, setEndEnergy] = useState("");
   const [startMood, setStartMood] = useState("");
   const [endMood, setEndMood] = useState("");
+  const [activePreset, setActivePreset] = useState<string | null>(null);
 
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [job, setJob] = useState<GenStatus | null>(null);
@@ -116,7 +117,10 @@ export default function SetBuilder() {
     setEndBpm(p.endBpm);
     setStartEnergy(p.startEnergy);
     setEndEnergy(p.endEnergy);
+    setActivePreset(p.label);
   }
+  // Un preset imposta arco + strategia + durata: appena uno di quei campi cambia a mano, il preset non è più "attivo".
+  const clearPreset = () => setActivePreset(null);
 
   function startPolling() {
     stopAll();
@@ -208,56 +212,27 @@ export default function SetBuilder() {
                   {playlists.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.track_count}</option>)}
                 </Select>
               </Field>
-              <Field label="Durata (min)"><Input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} /></Field>
+              <Field label="Durata (min)"><Input type="number" min={1} value={duration} onChange={(e) => { setDuration(Number(e.target.value)); clearPreset(); }} /></Field>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-faint">Preset rapidi:</span>
+              <span className="text-xs text-muted">Preset rapidi</span>
               {PRESETS.map((p) => {
                 const Icon = p.icon;
+                const on = activePreset === p.label;
                 return (
-                  <button key={p.label} type="button" onClick={() => applyPreset(p)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-border-strong hover:text-fg">
+                  <button key={p.label} type="button" onClick={() => applyPreset(p)} aria-pressed={on}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                      on
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
+                    )}>
                     <Icon size={13} /> {p.label}
                   </button>
                 );
               })}
             </div>
-          </Section>
-
-          <Section icon={<TrendingUp size={13} className="text-faint" />} title="Arco del set">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <ArcField label="BPM" hint="vuoto = automatico"
-                from={<Input type="number" placeholder="da" value={startBpm} onChange={(e) => setStartBpm(e.target.value)} />}
-                to={<Input type="number" placeholder="a" value={endBpm} onChange={(e) => setEndBpm(e.target.value)} />} />
-              <ArcField label="Energia" hint="0–100"
-                from={<Input type="number" min={0} max={100} placeholder="da" value={startEnergy} onChange={(e) => setStartEnergy(e.target.value)} />}
-                to={<Input type="number" min={0} max={100} placeholder="a" value={endEnergy} onChange={(e) => setEndEnergy(e.target.value)} />} />
-              <ArcField label="Mood"
-                from={<Input placeholder="es. dark" value={startMood} onChange={(e) => setStartMood(e.target.value)} />}
-                to={<Input placeholder="es. euphoric" value={endMood} onChange={(e) => setEndMood(e.target.value)} />} />
-            </div>
-          </Section>
-
-          <Section icon={<SlidersHorizontal size={13} className="text-faint" />} title="Vincoli">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label="Strategia" hint={STRATEGIES.find((s) => s.value === strategy)?.desc}>
-                <Select value={strategy} onChange={(e) => setStrategy(e.target.value)}>
-                  {STRATEGIES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </Select>
-              </Field>
-              <Field label="Max per artista"><Input type="number" min={1} value={maxPerArtist} onChange={(e) => setMaxPerArtist(Number(e.target.value))} /></Field>
-              <Field label="Artisti seed" hint="separati da virgola">
-                <Input placeholder="es. Arca, Sega Bodega" value={seedArtists} onChange={(e) => setSeedArtists(e.target.value)} />
-              </Field>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
-              <span className="text-xs font-medium uppercase tracking-wide text-muted">Sorgenti</span>
-              {SOURCES.map((s) => (
-                <Checkbox key={s.value} label={s.label} checked={sources.includes(s.value)} onChange={() => toggleSource(s.value)} />
-              ))}
-              <span className="mx-1 h-4 w-px bg-border" />
-              <Checkbox label="evita tracce corte" checked={avoidShort} onChange={setAvoidShort} />
-            </div>
+            <p className="mt-2 text-xs text-muted">Un preset imposta arco, strategia e durata in un colpo. Affina il resto in <span className="font-medium text-fg">Opzioni avanzate</span>.</p>
           </Section>
 
           <Section icon={<Sparkles size={13} className="text-faint" />} title="Indicazioni & AI">
@@ -292,7 +267,51 @@ export default function SetBuilder() {
             )}
           </Section>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <details className="group mt-5 border-t border-border pt-5">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-1.5"><SlidersHorizontal size={13} className="text-faint" /> Opzioni avanzate</span>
+              <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
+            </summary>
+            <div className="mt-4">
+              <Section icon={<TrendingUp size={13} className="text-faint" />} title="Arco del set">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <ArcField label="BPM" hint="vuoto = automatico"
+                    from={<Input type="number" placeholder="da" value={startBpm} onChange={(e) => { setStartBpm(e.target.value); clearPreset(); }} />}
+                    to={<Input type="number" placeholder="a" value={endBpm} onChange={(e) => { setEndBpm(e.target.value); clearPreset(); }} />} />
+                  <ArcField label="Energia" hint="0–100"
+                    from={<Input type="number" min={0} max={100} placeholder="da" value={startEnergy} onChange={(e) => { setStartEnergy(e.target.value); clearPreset(); }} />}
+                    to={<Input type="number" min={0} max={100} placeholder="a" value={endEnergy} onChange={(e) => { setEndEnergy(e.target.value); clearPreset(); }} />} />
+                  <ArcField label="Mood"
+                    from={<Input placeholder="es. dark" value={startMood} onChange={(e) => setStartMood(e.target.value)} />}
+                    to={<Input placeholder="es. euphoric" value={endMood} onChange={(e) => setEndMood(e.target.value)} />} />
+                </div>
+              </Section>
+
+              <Section icon={<SlidersHorizontal size={13} className="text-faint" />} title="Vincoli">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <Field label="Strategia" hint={STRATEGIES.find((s) => s.value === strategy)?.desc}>
+                    <Select value={strategy} onChange={(e) => { setStrategy(e.target.value); clearPreset(); }}>
+                      {STRATEGIES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label="Max per artista"><Input type="number" min={1} value={maxPerArtist} onChange={(e) => setMaxPerArtist(Number(e.target.value))} /></Field>
+                  <Field label="Artisti seed" hint="separati da virgola">
+                    <Input placeholder="es. Arca, Sega Bodega" value={seedArtists} onChange={(e) => setSeedArtists(e.target.value)} />
+                  </Field>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted">Sorgenti</span>
+                  {SOURCES.map((s) => (
+                    <Checkbox key={s.value} label={s.label} checked={sources.includes(s.value)} onChange={() => toggleSource(s.value)} />
+                  ))}
+                  <span className="mx-1 h-4 w-px bg-border" />
+                  <Checkbox label="evita tracce corte" checked={avoidShort} onChange={setAvoidShort} />
+                </div>
+              </Section>
+            </div>
+          </details>
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
             <Checkbox
               label={<span className="flex items-center gap-1.5"><Sparkles size={14} className={aiStatus?.configured ? "text-primary" : ""} /> Usa l&apos;AI Set Agent {aiStatus?.model && <span className="text-faint">· {aiStatus.model}</span>}</span>}
               checked={useAi} disabled={!aiStatus?.configured} onChange={setUseAi}
