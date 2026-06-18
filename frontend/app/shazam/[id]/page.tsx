@@ -49,7 +49,7 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
       <Card>
         <CardHeader title="Tracce identificate" subtitle="Riconosciute via Shazam — non entrano in libreria" />
         {set.tracks.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-faint">
+          <p className="px-5 py-8 text-center text-sm text-muted">
             Nessuna traccia riconosciuta {set.status === "error" ? "(identificazione fallita)" : "in questo set"}.
           </p>
         ) : (

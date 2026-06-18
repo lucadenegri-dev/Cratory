@@ -87,7 +87,7 @@ function SettingsInner() {
                     <code className="flex-1 break-all rounded bg-elevated px-2 py-1 text-xs text-primary">{spotify.redirect_uri}</code>
                     <Button size="sm" variant="outline" onClick={copyRedirect}>{copied ? <><Check size={14} /> Copiato</> : <><Copy size={14} /> Copia</>}</Button>
                   </div>
-                  {s.connected && <p className="mt-2 text-xs text-faint">Se l&apos;import playlist dà <code className="rounded bg-elevated px-1">403</code>, usa <strong>Ricollega</strong> per riautorizzare i permessi.</p>}
+                  {s.connected && <p className="mt-2 text-xs text-muted">Se l&apos;import playlist dà <code className="rounded bg-elevated px-1">403</code>, usa <strong>Ricollega</strong> per riautorizzare i permessi.</p>}
                 </div>
               )}
             </div>
@@ -146,7 +146,7 @@ function FeatureEnrichmentCard() {
         <p className="text-muted">Ricava BPM via ISRC (Deezer), analisi audio reale via MusicBrainz + AcousticBrainz (BPM, tonalità, mood, danceability) e genere/mood dai tag (Last.fm); l&apos;energia è stimata da BPM e danceability quando manca. Non sovrascrive i valori che inserisci a mano.</p>
         {error && <Alert tone="danger">⚠ {error}</Alert>}
         {status && !status.configured ? (
-          <p className="text-faint">Configura almeno <code className="rounded bg-elevated px-1">GETSONGBPM_API_KEY</code> o <code className="rounded bg-elevated px-1">LASTFM_API_KEY</code> qui sopra per abilitare l&apos;arricchimento.</p>
+          <p className="text-muted">Configura almeno <code className="rounded bg-elevated px-1">GETSONGBPM_API_KEY</code> o <code className="rounded bg-elevated px-1">LASTFM_API_KEY</code> qui sopra per abilitare l&apos;arricchimento.</p>
         ) : (
           <div className="flex gap-2">
             <Button size="sm" onClick={() => run(false)} disabled={busy}>{busy ? "In corso…" : "Arricchisci feature"}</Button>

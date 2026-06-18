@@ -283,7 +283,7 @@ export default function SetBuilder() {
                     </button>
                   ))}
                 </div>
-                <span className="text-xs text-faint">
+                <span className="text-xs text-muted">
                   {mode === "creative"
                     ? "L'AI usa la sua conoscenza musicale: arco emotivo, contrasti voluti, sorprese."
                     : "Mix prudente: compatibilità tecnica e progressione, senza azzardi."}
@@ -302,7 +302,7 @@ export default function SetBuilder() {
             </Button>
           </div>
           {!aiStatus?.configured && (
-            <p className="mt-2 text-xs text-faint">AI non configurata — imposta <code className="rounded bg-elevated px-1">AI_API_KEY</code> in backend/.env (vedi <Link href="/settings" className="text-info hover:underline">Impostazioni</Link>).</p>
+            <p className="mt-2 text-xs text-muted">AI non configurata — imposta <code className="rounded bg-elevated px-1">AI_API_KEY</code> in backend/.env (vedi <Link href="/settings" className="text-info hover:underline">Impostazioni</Link>).</p>
           )}
         </div>
       </Card>

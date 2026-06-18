@@ -21,7 +21,7 @@ function TransitionList({ title, items }: { title: string; items: TransitionCand
             <span className="tnum shrink-0 text-xs text-faint">{track.bpm?.toFixed(0)} · {track.camelot_key ?? "?"}</span>
           </li>
         ))}
-        {items.length === 0 && <li className="px-4 py-6 text-center text-sm text-faint">Nessuna traccia.</li>}
+        {items.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted">Nessuna traccia.</li>}
       </ul>
     </Card>
   );

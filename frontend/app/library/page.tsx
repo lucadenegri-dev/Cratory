@@ -161,7 +161,7 @@ export default function Library() {
               </tr>
             ))}
             {items.length === 0 && (
-              <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-faint">Nessuna traccia con questi filtri. <Link href="/playlists" className="text-info hover:underline">Importa una playlist</Link> per iniziare.</td></tr>
+              <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia con questi filtri. <Link href="/playlists" className="text-info hover:underline">Importa una playlist</Link> per iniziare.</td></tr>
             )}
           </tbody>
         </table>

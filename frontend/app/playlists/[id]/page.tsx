@@ -136,7 +136,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
                 </td>
               </tr>
             ))}
-            {tracks.length === 0 && <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-faint">Nessuna traccia.</td></tr>}
+            {tracks.length === 0 && <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia.</td></tr>}
           </tbody>
         </table>
       </Card>

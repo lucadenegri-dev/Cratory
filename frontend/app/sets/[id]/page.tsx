@@ -242,7 +242,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
 
         {altLoading && <div className="flex items-center gap-2 py-6 text-sm text-muted"><Spinner /> Cerco alternative…</div>}
         {!altLoading && altItems && altItems.length === 0 && (
-          <p className="py-6 text-center text-sm text-faint">Nessuna alternativa per questa modalità.</p>
+          <p className="py-6 text-center text-sm text-muted">Nessuna alternativa per questa modalità.</p>
         )}
         {!altLoading && altItems && altItems.length > 0 && (
           <ul className="space-y-1.5">

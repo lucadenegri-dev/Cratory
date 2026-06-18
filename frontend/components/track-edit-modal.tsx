@@ -108,7 +108,7 @@ function EditForm({ track, onClose, onSaved }: { track: Track; onClose: () => vo
         </div>
       </div>
 
-      <p className="mb-4 text-xs text-faint">
+      <p className="mb-4 text-xs text-muted">
         I valori inseriti a mano hanno la precedenza sull&apos;arricchimento automatico. Lascia un campo vuoto per azzerarlo.
       </p>
 
