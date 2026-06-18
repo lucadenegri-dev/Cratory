@@ -145,3 +145,56 @@ class SetlistTrack(Base):
 
     setlist: Mapped[Setlist] = relationship(back_populates="tracks")
     track: Mapped[Track] = relationship()
+
+
+class DjSet(Base):
+    """Un set/mix di un DJ identificato via Shazam (fingerprinting audio).
+
+    Tenuto SEPARATO dalla libreria: le tracce identificate (DjSetTrack) NON sono
+    `Track` e non entrano in libreria. Servono come corpus per i suggerimenti per
+    co-occorrenza. `source_url` e' la chiave naturale per il caching (no re-analisi).
+    """
+
+    __tablename__ = "dj_sets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_url: Mapped[str] = mapped_column(Text, index=True)
+    platform: Mapped[str | None] = mapped_column(String)  # soundcloud | mixcloud | youtube | ...
+    title: Mapped[str | None] = mapped_column(String)
+    dj_name: Mapped[str | None] = mapped_column(String, index=True)
+    artwork_url: Mapped[str | None] = mapped_column(Text)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer)
+    # pending | identifying | done | error
+    status: Mapped[str] = mapped_column(String, default="pending", index=True)
+    error: Mapped[str | None] = mapped_column(Text)
+    identified_count: Mapped[int] = mapped_column(Integer, default=0)
+    segments_total: Mapped[int | None] = mapped_column(Integer)  # quanti segmenti analizzati
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    tracks: Mapped[list["DjSetTrack"]] = relationship(
+        back_populates="dj_set", cascade="all, delete-orphan", order_by="DjSetTrack.position"
+    )
+
+
+class DjSetTrack(Base):
+    """Traccia identificata dentro un DjSet. NON e' una traccia di libreria.
+
+    Identita' debole (Shazam): artista+titolo, ISRC quando disponibile. Match verso
+    la libreria/altri set per ISRC -> artist+title normalizzati.
+    """
+
+    __tablename__ = "dj_set_tracks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dj_set_id: Mapped[int] = mapped_column(ForeignKey("dj_sets.id"), index=True)
+    position: Mapped[int] = mapped_column(Integer)
+    start_offset_seconds: Mapped[int | None] = mapped_column(Integer)
+    artist: Mapped[str | None] = mapped_column(String, index=True)
+    title: Mapped[str | None] = mapped_column(String)
+    isrc: Mapped[str | None] = mapped_column(String, index=True)
+    apple_id: Mapped[str | None] = mapped_column(String)
+    confidence: Mapped[int | None] = mapped_column(Integer)  # 0-100 (euristica)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    dj_set: Mapped[DjSet] = relationship(back_populates="tracks")

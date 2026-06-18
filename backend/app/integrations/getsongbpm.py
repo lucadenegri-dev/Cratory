@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 BASE = "https://api.getsong.co"
 # Alcuni server (incl. getsong.co) rispondono in modo anomalo senza uno User-Agent
 # esplicito: lo impostiamo per ridurre i reset di connessione/TLS.
-_USER_AGENT = "DJAssistant/0.1 (+http://localhost)"
+_USER_AGENT = "SetArc/0.1 (+http://localhost)"
 _MAX_LOOKUP_CANDIDATES = 6
 _VERSION_TERMS = (
     "radio edit", "extended mix", "original mix", "club mix", "edit", "mix",

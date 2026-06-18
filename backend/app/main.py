@@ -10,6 +10,7 @@ from app.db import ensure_schema
 from app.routers import (
     ai,
     discovery,
+    dj_sets,
     enrichment,
     playlists,
     services,
@@ -29,7 +30,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="DJ Assistant", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="SetArc", version="0.9.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -62,6 +63,7 @@ app.include_router(spotify.router)
 app.include_router(enrichment.router)
 app.include_router(ai.router)
 app.include_router(discovery.router)
+app.include_router(dj_sets.router)
 app.include_router(services.router)
 
 

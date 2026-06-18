@@ -1,7 +1,4 @@
-# CLAUDE.md - Guida per AI collaborator
-
-Questo file e' intenzionalmente mantenuto: serve come entrypoint per l'AI usata
-insieme a Codex. Non eliminarlo durante cleanup documentali.
+# AGENTS.md - Guida allo sviluppo
 
 ## Progetto
 
@@ -14,7 +11,7 @@ Il progetto non riproduce audio e non conserva file audio. Il modulo Shazam scar
 audio solo in modo temporaneo per fingerprinting e salva un corpus separato di
 tracklist identificate.
 
-## Fonte di verita'
+## Fonte di verita' documentativa
 
 Leggere in quest'ordine:
 
@@ -23,7 +20,9 @@ Leggere in quest'ordine:
 3. `docs/API.md` - endpoint correnti.
 4. `docs/ROADMAP.md` - stato, naming, backlog e prossimi passi.
 5. `PROGRESS.md` - diario operativo per riprendere il lavoro.
-6. `AGENTS.md` - regole operative equivalenti per Codex/altri agenti.
+
+`CLAUDE.md` e' mantenuto come entrypoint per l'AI usata insieme a Codex. Le vecchie
+spec numerate sono state rimosse per evitare documentazione duplicata.
 
 ## Regole non negoziabili
 
@@ -44,6 +43,42 @@ Leggere in quest'ordine:
    musicale e ipotesi creativa.
 8. **Rekordbox resta fuori progetto.** Import XML, beatgrid/cue e colonne legacy sono
    state rimosse.
+
+## Stack e layout
+
+Backend Python + FastAPI, SQLAlchemy su SQLite, Pydantic. Frontend Next.js 16 con App
+Router, React e Tailwind/design system. Integrazioni esterne dietro interfacce in
+`backend/app/integrations/`, con cache e gestione errori/rate limit dove serve.
+
+Layer backend:
+
+```text
+backend/app/
+  routers/       HTTP only: playlists, tracks, transitions, sets, spotify,
+                 enrichment, ai, discovery, services, dj_sets
+  services/      logica deterministica e orchestrazione
+  repositories.py
+  models.py
+  schemas.py
+  serializers.py
+  integrations/
+  core/
+```
+
+Provider feature in catena:
+
+```text
+Deezer -> MusicBrainz -> AcousticBrainz -> GetSongBPM -> Last.fm
+```
+
+Discovery e' Last.fm-centric. Spotify `/recommendations` non va usato: per app nuove
+o in development mode restituisce 403/404; Spotify resta resolver via `/search`.
+
+## Identita' tracce
+
+- Identita' streaming: `platform`, `platform_track_id`, `isrc`, `url`.
+- Deduplica/enrichment: `ISRC -> platform_track_id -> artist+title+duration -> fuzzy artist+title`.
+- Stati traccia: `imported | enriched | ready_for_set | missing_features | low_confidence`.
 
 ## Comandi
 
@@ -73,3 +108,6 @@ npm run dev
 npm run lint
 npm run build
 ```
+
+Next.js 16 ha breaking changes rispetto alle versioni note: nel frontend leggere
+sempre `frontend/AGENTS.md` prima di modificare pagine o routing.

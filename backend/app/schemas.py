@@ -352,3 +352,41 @@ class LibraryStatsOut(BaseModel):
     bpm_min: float | None = None
     bpm_max: float | None = None
     key_distribution: dict[str, int]
+
+
+# --- Shazam: DJ set identificati (Fase 1) ------------------------------------
+
+
+class DjSetTrackOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    position: int
+    start_offset_seconds: int | None = None
+    artist: str | None = None
+    title: str | None = None
+    isrc: str | None = None
+    confidence: int | None = None
+
+
+class DjSetSummaryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    source_url: str
+    platform: str | None = None
+    title: str | None = None
+    dj_name: str | None = None
+    artwork_url: str | None = None
+    duration_seconds: int | None = None
+    status: str
+    error: str | None = None
+    identified_count: int = 0
+    created_at: datetime
+
+
+class DjSetOut(DjSetSummaryOut):
+    tracks: list[DjSetTrackOut] = []
+
+
+class DjSetCreateIn(BaseModel):
+    url: str = Field(min_length=4)

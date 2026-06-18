@@ -1,93 +1,161 @@
-# DJ Assistant — AI DJ Set Builder & Discovery
+# SetArc
 
-Webapp personale (locale/self-hosted) per preparare DJ set a partire da **playlist Spotify**: importa le tracce, arricchisce BPM/key/mood/energia via provider esterni, genera set coerenti con ruoli e spiegazioni (algoritmo deterministico + agente AI), segnala i buchi della playlist e aiuta a scoprire nuova musica compatibile con il tuo stile.
+> Nuovo nome dell'app finora chiamata DJ Assistant. I nomi tecnici legacy come
+> `djassistant.db` restano invariati per compatibilita' locale.
 
-**Non è** un software per suonare musica: è un assistente di preparazione, analisi e scoperta.
+SetArc e' una webapp personale, locale/self-hosted e mono-utente per preparare DJ
+set a partire da playlist streaming. Importa playlist Spotify o tracklist manuali,
+normalizza le tracce, arricchisce BPM/key/mood/energia tramite provider esterni,
+analizza i buchi della libreria, genera bozze di set spiegate e aiuta a scoprire
+nuova musica compatibile.
+
+Non e' un player e non conserva audio. Il modulo Shazam, quando disponibile, usa
+download temporanei solo per fingerprinting di mix esterni e salva esclusivamente la
+tracklist identificata.
+
+## Cosa fa
+
+- Importa playlist Spotify, liked tracks e tracklist manuali.
+- Deduplica le tracce con priorita' ISRC, id piattaforma, artista/titolo/durata e fuzzy match.
+- Arricchisce feature musicali con Deezer, MusicBrainz, AcousticBrainz, GetSongBPM e Last.fm.
+- Mantiene fonte e confidenza dei dati; BPM/key esistenti non vengono sovrascritti.
+- Permette correzioni manuali di BPM, Camelot, mood, energia, genere e label.
+- Genera set con motore deterministico e, se configurata, AI validata.
+- Classifica transizioni come sicure, rischiose o buoni reset.
+- Espande una playlist con Discovery Last.fm-centric e resolver Spotify.
+- Identifica tracklist di mix via Shazam/yt-dlp/ffmpeg in un corpus separato dalla libreria.
 
 ## Documentazione
 
-| Documento | Contenuto |
+| Documento | Uso |
 |---|---|
-| [docs/01-product-vision.md](docs/01-product-vision.md) | Contesto, obiettivi, cosa NON fa, criteri di successo |
-| [docs/02-architecture.md](docs/02-architecture.md) | Stack, moduli, principio deterministico vs AI |
-| [docs/03-data-model.md](docs/03-data-model.md) | Entità, schema dati |
-| [docs/04-api-spec.md](docs/04-api-spec.md) | Endpoint REST del backend |
-| [docs/05-functional-spec.md](docs/05-functional-spec.md) | Specifica funzionale dettagliata (F1–F15) |
-| [docs/06-roadmap.md](docs/06-roadmap.md) | Fasi con checklist |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Principi, pipeline, layer backend, modello dati e integrazioni |
+| [docs/API.md](docs/API.md) | Contratti REST correnti del backend FastAPI |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Stato, naming, backlog e prossimi passi |
+| [PROGRESS.md](PROGRESS.md) | Diario operativo compatto per riprendere il lavoro |
+| [AGENTS.md](AGENTS.md) | Regole per agenti/collaboratori automatici |
+| [CLAUDE.md](CLAUDE.md) | Entry point mantenuto per l'AI usata insieme a Codex |
 
 ## Stack
 
 ```text
-Backend:    Python + FastAPI
-Frontend:   React / Next.js 16 (App Router, Tailwind)
-Database:   SQLite (MVP) → PostgreSQL (futuro)
-ORM:        SQLAlchemy + Pydantic
-Esterni:    Spotify Web API (OAuth), GetSongBPM, MusicBrainz, Last.fm
-AI:         Anthropic SDK (claude-opus-4-8 default)
+Backend:   Python, FastAPI, SQLAlchemy, Pydantic
+Frontend:  Next.js 16, React, Tailwind/design system
+Database:  SQLite locale, PostgreSQL in backlog
+AI:        LLM dietro interfaccia, output validati con Pydantic
+External:  Spotify, Deezer, MusicBrainz, AcousticBrainz, GetSongBPM, Last.fm, Shazam
 ```
 
-## Database locale
+## Setup locale
 
-Il database SQLite canonico e' uno solo: `backend/data/djassistant.db`.
-Se `DATABASE_URL` in `backend/.env` usa un path relativo SQLite, l'app lo risolve
-sempre rispetto alla cartella `backend/`, non rispetto alla current working directory.
+Prerequisiti: Python 3.12+, Node.js 20+. Per il modulo Shazam servono anche `ffmpeg`
+di sistema e le dipendenze Python `yt-dlp` e `shazamio` incluse in `backend/requirements.txt`.
 
-Per pulire i dati utente in modo ripetibile:
+Backend:
 
-```powershell
-cd backend
-.\.venv\Scripts\python.exe -m app.tools.clean_user_data library --include-backups
-```
-
-La modalita' `library` svuota playlist, tracce, set e cache enrichment, preservando i
-token Spotify. La modalita' `all` elimina anche i token, salvo `--preserve-tokens`.
-
-## Setup
-
-Prerequisiti: Python 3.12+, Node.js 20+.
-
-### Backend (FastAPI, porta 8000)
-
-```powershell
+```bash
 cd backend
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate
 pip install -r requirements.txt
-copy .env.example .env
+cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-API docs interattive: http://localhost:8000/docs
-
-### Frontend (Next.js, porta 3000)
+Su Windows PowerShell, l'attivazione dell'ambiente e':
 
 ```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Frontend:
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-App: http://localhost:3000
+URL locali:
 
-### Test
+- App: http://localhost:3000
+- API docs: http://localhost:8000/docs
+- Healthcheck: http://localhost:8000/api/health
 
-```powershell
-cd backend
-.\.venv\Scripts\python.exe -m pytest tests
+## Configurazione
+
+Le variabili stanno in `backend/.env`, partendo da `backend/.env.example`.
+
+Minimo per import Spotify:
+
+```text
+SPOTIFY_CLIENT_ID=
+SPOTIFY_CLIENT_SECRET=
+SPOTIFY_REDIRECT_URI=http://127.0.0.1:8000/api/spotify/callback
 ```
 
-### Primo utilizzo
+Provider consigliati:
+
+```text
+MUSICBRAINZ_USER_AGENT=
+GETSONGBPM_API_KEY=
+LASTFM_API_KEY=
+DEEZER_ENABLED=true
+ACOUSTICBRAINZ_ENABLED=true
+AI_API_KEY=
+AI_MODEL=
+AI_MODEL_CREATIVE=
+```
+
+Spotify non fornisce BPM/key affidabili per il mixing. Serve per identita' traccia,
+metadata editoriali, import playlist e creazione playlist in export.
+
+## Database locale
+
+Il database canonico resta:
+
+```text
+backend/data/djassistant.db
+```
+
+I path SQLite relativi in `DATABASE_URL` vengono risolti rispetto a `backend/`, cosi'
+l'app non crea database diversi in base alla current working directory.
+
+Pulizia dati utente:
+
+```bash
+cd backend
+python -m app.tools.clean_user_data library --include-backups
+```
+
+La modalita' `library` svuota playlist, tracce, set e cache enrichment, preservando i
+token Spotify. La modalita' `all` elimina anche i token, salvo `--preserve-tokens`.
+
+## Workflow consigliato
 
 1. Avvia backend e frontend.
-2. In Settings configura le credenziali Spotify e connetti l'account.
-3. Dalla pagina Playlists importa una playlist Spotify (o incolla una tracklist con l'import manuale).
-4. Avvia l'enrichment feature (BPM/key/genere) dalla pagina Settings.
-5. Dal Set Builder genera un set scegliendo la playlist e i parametri (durata, mood, energia).
-6. Edita la scaletta, esporta in Markdown o crea una playlist Spotify.
-7. Dalla pagina Discovery scopri musica nuova compatibile (espandi una playlist o colma un buco) e aggiungila alla libreria.
+2. In Impostazioni configura Spotify e collega l'account.
+3. Importa una playlist Spotify o incolla una tracklist manuale.
+4. Lascia partire l'enrichment automatico o rilancialo dalla playlist.
+5. Correggi manualmente eventuali BPM/key mancanti importanti.
+6. Genera un set in modalita' tecnica o creativa.
+7. Controlla transizioni, warning e alternative.
+8. Esporta il set o crea una playlist Spotify.
+9. Usa Discovery per trovare tracce compatibili e aggiungerle alla libreria.
 
-## Stato del progetto
+## Test
 
-MVP 1-3 + Pivot Fase A-C completati. Inoltre: cleanup Rekordbox, cache enrichment, AI prompt arricchito, **Discovery mode** (Last.fm + resolver Spotify) e import manuale playlist. Discovery non usa Spotify `/recommendations` (deprecato): la similarità arriva da Last.fm.
+Backend:
 
-Stato dettagliato in [PROGRESS.md](PROGRESS.md).
+```bash
+cd backend
+python -m pytest tests
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm run lint
+npm run build
+```

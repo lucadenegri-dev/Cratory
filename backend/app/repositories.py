@@ -3,7 +3,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Playlist, Setlist, SetlistTrack, Track
+from app.models import DjSet, DjSetTrack, Playlist, Setlist, SetlistTrack, Track
 
 # Colonne ordinabili dalla libreria (header cliccabili nel frontend).
 _SORT_COLUMNS = {
@@ -206,3 +206,36 @@ def delete_playlist(db: Session, playlist_id: int) -> bool:
     db.delete(playlist)
     db.commit()
     return True
+
+
+# --- DJ set identificati via Shazam (corpus per i suggerimenti) ---------------
+
+_DJSET_TRACKS = selectinload(DjSet.tracks)
+
+
+def list_dj_sets(db: Session) -> list[DjSet]:
+    return list(db.scalars(
+        select(DjSet).options(_DJSET_TRACKS).order_by(DjSet.created_at.desc())
+    ).all())
+
+
+def get_dj_set(db: Session, dj_set_id: int) -> DjSet | None:
+    return db.scalar(select(DjSet).options(_DJSET_TRACKS).where(DjSet.id == dj_set_id))
+
+
+def get_dj_set_by_url(db: Session, url: str) -> DjSet | None:
+    return db.scalar(select(DjSet).options(_DJSET_TRACKS).where(DjSet.source_url == url))
+
+
+def delete_dj_set(db: Session, dj_set_id: int) -> bool:
+    dj_set = db.scalar(select(DjSet).where(DjSet.id == dj_set_id))
+    if dj_set is None:
+        return False
+    db.delete(dj_set)  # cascade elimina le DjSetTrack
+    db.commit()
+    return True
+
+
+def all_dj_set_tracks(db: Session) -> list[DjSetTrack]:
+    """Tutte le tracce identificate (corpus per la co-occorrenza, Fase 2)."""
+    return list(db.scalars(select(DjSetTrack)).all())

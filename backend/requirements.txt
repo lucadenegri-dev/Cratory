@@ -7,3 +7,6 @@ python-multipart>=0.0.17
 pytest>=8.3
 httpx>=0.27
 anthropic>=0.69
+# Shazam — identificazione tracce dei set DJ (richiede anche ffmpeg di sistema)
+yt-dlp>=2024.0
+shazamio>=0.5

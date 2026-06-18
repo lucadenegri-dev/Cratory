@@ -1,8 +1,11 @@
-"""Discovery mode (Fase F): scoperta di musica nuova compatibile.
+"""Discovery mode: scoperta di musica nuova compatibile.
 
-Due entry point, come deciso il 14/06/2026:
+Entry point attivo:
 - EXPAND playlist: espande una playlist importata con tracce affini.
-- GAP-driven: parte da un buco identificato (gap_analysis) e cerca tracce che lo colmino.
+
+La vecchia modalita' gap-driven e' stata rimossa da API/UI/prodotto: la Gap Analysis
+resta una lettura separata delle mancanze della playlist, non una sorgente di
+suggerimenti Discovery.
 
 Pipeline DETERMINISTICA (nessuna AI nei fatti):
 1. Seed: artisti/tracce rappresentativi della playlist (o dell'intera libreria).
@@ -11,8 +14,8 @@ Pipeline DETERMINISTICA (nessuna AI nei fatti):
 4. Resolve: Spotify /search trasforma "artista + titolo" in traccia reale (id, cover, ISRC).
 5. Rank: compatibilita' deterministica (match Last.fm), tracce risolvibili in testa.
 
-L'AI (opzionale, a valle) si limita a SPIEGARE perche' ogni traccia e' coerente o
-risolve il gap: non sceglie i candidati e non inventa dati fattuali.
+L'AI (opzionale, a valle) si limita a SPIEGARE perche' ogni traccia e' coerente:
+non sceglie i candidati e non inventa dati fattuali.
 
 Tutte le dipendenze esterne sono iniettate (similarity client, resolver, llm) -> testabile senza rete.
 """
@@ -180,7 +183,7 @@ def _collect(
             for tt in similarity.artist_top_tracks(name, limit=TOP_TRACKS_PER_ARTIST):
                 add(tt["artist"], tt["title"], match, "similar_artist", seed)
 
-    # Tag/genere (gap-driven per genere): nessun match -> base 0.5.
+    # Helper tag/genere mantenuto nel protocollo per eventuali usi futuri.
     for tag in tags:
         for tt in similarity.top_tracks_by_tag(tag):
             add(tt["artist"], tt["title"], 0.5, "tag", tag)

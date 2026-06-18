@@ -414,6 +414,69 @@ export function importManualPlaylist(name: string, text: string) {
   return apiPost<PlaylistImportReport>("/api/playlists/import-manual", { name, text });
 }
 
+// --- Shazam: identificazione set DJ (Fase 1) --------------------------------
+
+export interface DjSetTrack {
+  position: number;
+  start_offset_seconds: number | null;
+  artist: string | null;
+  title: string | null;
+  isrc: string | null;
+  confidence: number | null;
+}
+
+export interface DjSet {
+  id: number;
+  source_url: string;
+  platform: string | null;
+  title: string | null;
+  dj_name: string | null;
+  artwork_url: string | null;
+  duration_seconds: number | null;
+  status: "pending" | "identifying" | "done" | "error";
+  error: string | null;
+  identified_count: number;
+  created_at: string;
+}
+
+export interface DjSetDetail extends DjSet {
+  tracks: DjSetTrack[];
+}
+
+export interface ShazamIdentifyState {
+  status: "idle" | "running" | "done" | "error";
+  phase: string | null;
+  processed: number;
+  total: number;
+  dj_set_id: number | null;
+  error: string | null;
+  cached?: boolean;
+}
+
+export function shazamStatus() {
+  return apiGet<{ available: boolean }>("/api/shazam/status");
+}
+
+export function identifyMix(url: string) {
+  return apiPost<ShazamIdentifyState>("/api/shazam/identify", { url });
+}
+
+export function shazamIdentifyStatus() {
+  return apiGet<ShazamIdentifyState>("/api/shazam/identify-status");
+}
+
+export function listDjSets() {
+  return apiGet<DjSet[]>("/api/shazam/sets");
+}
+
+export function getDjSet(id: number) {
+  return apiGet<DjSetDetail>(`/api/shazam/sets/${id}`);
+}
+
+export function deleteDjSet(id: number) {
+  return apiDelete<void>(`/api/shazam/sets/${id}`);
+}
+
 // --- Enrichment feature musicali --------------------------------------------
 
 export function enrichmentJobStatus() {

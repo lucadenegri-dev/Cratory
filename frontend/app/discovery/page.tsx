@@ -67,8 +67,7 @@ export default function DiscoveryPage() {
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Discovery</h1>
         <p className="mt-1 text-sm text-muted">
-          Espandi una tua playlist con musica nuova e compatibile: tracce affini da Last.fm,
-          risolte su Spotify e ordinate per compatibilità.
+          Espandi le tue playlist con musica nuova e compatibile
         </p>
       </header>
 

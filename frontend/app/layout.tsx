@@ -3,8 +3,8 @@ import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 
 export const metadata: Metadata = {
-  title: "DJ Assistant",
-  description: "AI DJ Set Builder & Library Expansion Assistant",
+  title: "SetArc",
+  description: "AI DJ set builder, discovery and library analysis",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

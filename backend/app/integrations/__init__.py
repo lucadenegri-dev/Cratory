@@ -114,7 +114,7 @@ class SimilarityClient(ABC):
 
     @abstractmethod
     def top_tracks_by_tag(self, tag: str, *, limit: int = 20) -> list[dict[str, Any]]:
-        """[{artist, title}] tracce top per un tag/genere (discovery gap-driven per genere)."""
+        """[{artist, title}] tracce top per un tag/genere."""
 
 
 class MusicBrainzClient(ABC):

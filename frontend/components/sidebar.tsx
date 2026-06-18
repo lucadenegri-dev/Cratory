@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Disc3, LayoutDashboard, Library, ListPlus, ListMusic, Settings, Compass } from "lucide-react";
+import { Disc3, LayoutDashboard, Library, ListPlus, ListMusic, Settings, Compass, Radar } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const NAV = [
@@ -10,6 +10,7 @@ const NAV = [
   { href: "/playlists", label: "Playlist", icon: ListPlus },
   { href: "/library", label: "Libreria", icon: Library },
   { href: "/discovery", label: "Discovery", icon: Compass },
+  { href: "/shazam", label: "Shazam", icon: Radar },
   { href: "/sets", label: "Set", icon: ListMusic },
   { href: "/settings", label: "Impostazioni", icon: Settings },
 ];
@@ -25,7 +26,7 @@ export function Sidebar() {
           <Disc3 size={20} />
         </span>
         <div className="leading-tight">
-          <div className="font-semibold tracking-tight">DJ Assistant</div>
+          <div className="font-semibold tracking-tight">SetArc</div>
           <div className="text-xs text-faint">set builder &amp; crate digging</div>
         </div>
       </div>

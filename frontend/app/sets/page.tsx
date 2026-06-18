@@ -23,7 +23,7 @@ export default function SetsPage() {
       <header className="mb-6 flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Set</h1>
-          <p className="mt-1 text-sm text-muted">{sets?.length ?? 0} salvati · clic per aprire e modificare.</p>
+          <p className="mt-1 text-sm text-muted">{sets?.length ?? 0} salvati</p>
         </div>
         <Link href="/set-builder"><Button size="sm"><Sparkles size={15} /> Nuovo set</Button></Link>
       </header>

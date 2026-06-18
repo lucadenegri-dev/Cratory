@@ -80,7 +80,7 @@ function recommend(s: LibraryStats): Reco | null {
   if (s.ready_for_set > 0) {
     return {
       icon: <Sparkles size={22} />, tag: "Prossimo passo", title: "Sei pronto per un set",
-      desc: `${s.ready_for_set} tracce pronte per il mixaggio. Genera una scaletta con ruoli e spiegazioni.`,
+      desc: `${s.ready_for_set} tracce pronte per il mix: genera una scaletta`,
       href: "/set-builder", cta: "Costruisci un set",
     };
   }
@@ -107,7 +107,7 @@ export default function Dashboard() {
     <div>
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-muted">Da una playlist streaming a una bozza di DJ set: importa, arricchisci, genera.</p>
+        <p className="mt-1 text-sm text-muted">Importa, arricchisci, genera.</p>
       </header>
 
       {error && <div className="mb-6"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
@@ -145,7 +145,7 @@ export default function Dashboard() {
       {/* Azioni rapide — il flusso dell'app */}
       <div className="mb-6 grid gap-3 sm:grid-cols-2">
         <Action href="/playlists" icon={<ListPlus size={18} />} title="Importa playlist" desc="Spotify, brani salvati o tracklist manuale" />
-        <Action href="/discovery" icon={<Compass size={18} />} title="Scopri musica" desc="Tracce compatibili per colmare i buchi" />
+        <Action href="/discovery" icon={<Compass size={18} />} title="Scopri musica" desc="Tracce che potrebbero interessarti" />
       </div>
 
       {stats && !empty && (
