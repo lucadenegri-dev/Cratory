@@ -42,7 +42,7 @@ export function Sidebar() {
               )}
             >
               <Icon size={18} className={cn("shrink-0", active && "text-primary")} />
-              <span className="hidden lg:inline">{label}</span>
+              <span className="hidden w-28 lg:inline">{label}</span>
             </Link>
           );
         })}
