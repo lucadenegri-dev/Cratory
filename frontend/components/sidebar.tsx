@@ -22,7 +22,7 @@ export function Sidebar() {
   return (
     <aside className="flex w-16 shrink-0 flex-col border-r border-border bg-surface lg:w-60">
       {/* Header logo */}
-      <div className="flex items-center justify-center px-3 py-4 lg:justify-start lg:px-5">
+      <div className="flex items-center justify-center px-3 py-4">
         <img src="/logo.png" alt="SetArc" className="h-10 w-10 shrink-0 rounded-xl object-cover lg:h-32 lg:w-32" />
       </div>
 
@@ -37,7 +37,7 @@ export function Sidebar() {
               aria-label={label}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex items-center justify-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors lg:justify-start",
+                "flex items-center justify-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                 active ? "bg-elevated font-medium text-fg" : "text-muted hover:bg-elevated/60 hover:text-fg",
               )}
             >
