@@ -51,9 +51,9 @@ opzionali, in linea con la libreria.)
 
 ## 2. Colonna `#` = ordine di inserimento
 
-- Backend: aggiungere `added_at: datetime | None` a `TrackOut` (`schemas.py`).
-  `serializers.track_out` usa `model_validate`/attributi, quindi va verificato che il
-  campo venga popolato (probabile aggiunta esplicita nel serializer se non automatico).
+- Backend: aggiungere `added_at: datetime | None` a `TrackOut` (`schemas.py`) e
+  passarlo esplicitamente in `serializers.track_out` (che costruisce `TrackOut` con
+  kwargs espliciti): `added_at=track.added_at`.
 - Frontend: calcolare una mappa **rank di inserimento stabile** una volta sola dai dati
   originali — ordinando per `added_at` crescente (nulls last, fallback su `id` per
   stabilità), assegnare `1..N`. Mostrare questo rank nella colonna `#`.
