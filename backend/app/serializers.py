@@ -42,6 +42,7 @@ def track_out(track: Track) -> TrackOut:
         isrc=track.isrc,
         playlist_id=track.playlist_id,
         playlist_name=track.playlist_name,
+        added_at=track.added_at,
         spotify_url=_spotify_url(track),
         album_art_url=track.album_art_url,
         enriched=track.enriched_at is not None,

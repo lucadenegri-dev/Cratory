@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Library, ListPlus, ListMusic, Settings, Compass, Radar } from "lucide-react";
+import { LayoutDashboard, Library, ListPlus, ListMusic, Settings, Compass, Radar, Tags } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/playlists", label: "Playlist", icon: ListPlus },
   { href: "/library", label: "Libreria", icon: Library },
+  { href: "/labels", label: "Etichette", icon: Tags },
   { href: "/discovery", label: "Discovery", icon: Compass },
   { href: "/shazam", label: "Shazam", icon: Radar },
   { href: "/sets", label: "Set", icon: ListMusic },

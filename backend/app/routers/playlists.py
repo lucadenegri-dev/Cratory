@@ -125,6 +125,38 @@ def import_from_spotify(req: PlaylistImportRequest, db: Session = Depends(get_db
     return PlaylistImportReport(**report)
 
 
+@router.post("/{playlist_id}/sync", response_model=PlaylistImportReport)
+def sync_playlist(playlist_id: int, db: Session = Depends(get_db)):
+    """Riallinea la playlist con Spotify: importa le nuove tracce e scollega quelle
+    rimosse (che restano comunque in libreria). Applica e ritorna un report.
+    """
+    playlist = get_playlist(db, playlist_id)
+    if playlist is None:
+        raise HTTPException(status_code=404, detail="Playlist non trovata")
+    if playlist.platform != "spotify":
+        raise HTTPException(status_code=409, detail="Solo le playlist Spotify sono sincronizzabili.")
+    if playlist.kind != "liked" and not playlist.platform_playlist_id:
+        raise HTTPException(status_code=409, detail="Playlist non sincronizzabile da Spotify.")
+
+    client = SpotifyWebClient(db)
+    try:
+        if playlist.kind == "liked":
+            items = client.get_liked_tracks()
+        else:
+            items = client.get_playlist_tracks(playlist.platform_playlist_id)
+    except SpotifyError as exc:
+        raise _http_error(exc) from exc
+
+    report = import_playlist(
+        db, platform="spotify", name=playlist.name, items=items,
+        platform_playlist_id=playlist.platform_playlist_id,
+        owner=playlist.owner, url=playlist.url, artwork_url=playlist.artwork_url,
+        kind=playlist.kind, prune=True,
+    )
+    _autoenrich(report.get("playlist_id"))
+    return PlaylistImportReport(**report)
+
+
 @router.post("/import-manual", response_model=PlaylistImportReport)
 def import_manual(req: ManualImportRequest, db: Session = Depends(get_db)):
     """Crea una playlist dalla tracklist incollata ('Artista - Titolo' o CSV)."""

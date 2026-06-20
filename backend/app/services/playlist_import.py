@@ -36,6 +36,7 @@ class NormalizedTrack:
     isrc: str | None
     added_at: datetime | None
     year: int | None = None
+    album_id: str | None = None
 
 
 def _release_year(album: dict) -> int | None:
@@ -81,6 +82,7 @@ def normalize_spotify_item(item: dict) -> NormalizedTrack | None:
         isrc=external.get("isrc"),
         added_at=_parse_added_at(item.get("added_at")),
         year=_release_year(album),
+        album_id=album.get("id"),
     )
 
 
@@ -114,6 +116,7 @@ def _apply_fields(track: Track, norm: NormalizedTrack) -> None:
     track.title = track.title or norm.title
     track.artist = track.artist or norm.artist
     track.album = track.album or norm.album
+    track.album_id = track.album_id or norm.album_id
     track.year = track.year or norm.year
     track.duration_seconds = track.duration_seconds or norm.duration_seconds
     track.url = track.url or norm.url
@@ -179,8 +182,14 @@ def import_playlist(
     url: str | None = None,
     artwork_url: str | None = None,
     kind: str = "playlist",
+    prune: bool = False,
 ) -> dict:
-    """Importa/aggiorna una playlist e le sue tracce. Idempotente. Ritorna un report."""
+    """Importa/aggiorna una playlist e le sue tracce. Idempotente. Ritorna un report.
+
+    Con ``prune=True`` (sync da Spotify) le tracce ancora collegate a questa playlist
+    ma non piu' presenti nel set importato vengono SCOLLEGATE (playlist_id/name=None):
+    restano in libreria, escono solo dalla playlist.
+    """
     if platform != "spotify":
         raise ValueError(f"Piattaforma non supportata per l'import: {platform}")
 
@@ -204,11 +213,17 @@ def import_playlist(
     db.flush()  # serve playlist.id per collegare le tracce
 
     created = updated = skipped = 0
+    present_isrcs: set[str] = set()
+    present_platform_ids: set[str] = set()
     for item in items:
         norm = normalize_spotify_item(item) if platform == "spotify" else None
         if norm is None:
             skipped += 1
             continue
+        if norm.isrc:
+            present_isrcs.add(norm.isrc)
+        if norm.platform_track_id:
+            present_platform_ids.add(norm.platform_track_id)
         existing = _find_existing(db, norm)
         if existing is None:
             track = Track(source_type=platform)
@@ -219,6 +234,22 @@ def import_playlist(
             _apply(existing, norm, playlist)
             updated += 1
 
+    db.flush()  # le tracce appena collegate devono essere visibili al prune
+
+    removed = 0
+    if prune:
+        linked = db.scalars(select(Track).where(Track.playlist_id == playlist.id)).all()
+        for track in linked:
+            still_present = (
+                (track.isrc is not None and track.isrc in present_isrcs)
+                or (track.platform_track_id is not None
+                    and track.platform_track_id in present_platform_ids)
+            )
+            if not still_present:
+                track.playlist_id = None
+                track.playlist_name = None
+                removed += 1
+
     playlist.track_count = created + updated
     db.commit()
     db.refresh(playlist)
@@ -227,6 +258,7 @@ def import_playlist(
         "name": playlist.name,
         "created": created,
         "updated": updated,
+        "removed": removed,
         "skipped": skipped,
         "total": created + updated,
     }

@@ -37,6 +37,7 @@ def ensure_schema(eng=None) -> None:
             # Pivot playlist->set: identita' streaming, playlist di provenienza, stato
             "platform": "VARCHAR",
             "platform_track_id": "VARCHAR",
+            "album_id": "VARCHAR",
             "isrc": "VARCHAR",
             "url": "TEXT",
             "added_at": "DATETIME",

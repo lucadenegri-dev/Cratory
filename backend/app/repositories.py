@@ -27,6 +27,7 @@ def _apply_track_filters(  # noqa: PLR0913
     title: str | None = None,
     album: str | None = None,
     genre: str | None = None,
+    label: str | None = None,
     source: str | None = None,
     status: str | None = None,
     bpm_min: float | None = None,
@@ -46,6 +47,8 @@ def _apply_track_filters(  # noqa: PLR0913
         stmt = stmt.where(Track.album.ilike(f"%{album}%"))
     if genre:
         stmt = stmt.where(Track.genre.ilike(f"%{genre}%"))
+    if label:
+        stmt = stmt.where(Track.label == label)  # match esatto: drill-down dall'etichetta
     if source:
         stmt = stmt.where(Track.source_type == source)
     if status:

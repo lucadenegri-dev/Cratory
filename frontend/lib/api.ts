@@ -25,6 +25,7 @@ export interface Track {
   isrc: string | null;
   playlist_id: number | null;
   playlist_name: string | null;
+  added_at: string | null;
   spotify_url: string | null;
   album_art_url: string | null;
   enriched: boolean;
@@ -59,6 +60,7 @@ export interface PlaylistImportReport {
   name: string;
   created: number;
   updated: number;
+  removed: number;
   skipped: number;
   total: number;
 }
@@ -370,6 +372,34 @@ export function deletePlaylist(id: number) {
 
 export function playlistTracks(id: number) {
   return apiGet<Track[]>(`/api/playlists/${id}/tracks`);
+}
+
+export function syncPlaylist(id: number) {
+  return apiPost<PlaylistImportReport>(`/api/playlists/${id}/sync`);
+}
+
+export interface LabelStats {
+  label: string;
+  track_count: number;
+  artist_count: number;
+  genres: string[];
+  year_min: number | null;
+  year_max: number | null;
+}
+
+export interface LabelBackfillReport {
+  updated: number;
+  candidates: number;
+  remaining: number;
+  rate_limited: boolean;
+}
+
+export function getLabels() {
+  return apiGet<LabelStats[]>("/api/labels");
+}
+
+export function backfillLabels() {
+  return apiPost<LabelBackfillReport>("/api/labels/backfill");
 }
 
 export function servicesStatus() {

@@ -33,6 +33,7 @@ class TrackOut(BaseModel):
     isrc: str | None = None
     playlist_id: int | None = None
     playlist_name: str | None = None
+    added_at: datetime | None = None
     spotify_url: str | None = None
     album_art_url: str | None = None
     enriched: bool = False
@@ -267,6 +268,7 @@ class PlaylistImportReport(BaseModel):
     name: str
     created: int = 0
     updated: int = 0
+    removed: int = 0
     skipped: int = 0
     total: int = 0
 
@@ -274,6 +276,25 @@ class PlaylistImportReport(BaseModel):
 class ManualImportRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     text: str = Field(min_length=1)  # righe "Artista - Titolo" o CSV "artista,titolo"
+
+
+# --- Etichette discografiche -------------------------------------------------
+
+
+class LabelStatsOut(BaseModel):
+    label: str
+    track_count: int
+    artist_count: int
+    genres: list[str] = []
+    year_min: int | None = None
+    year_max: int | None = None
+
+
+class LabelBackfillReport(BaseModel):
+    updated: int = 0
+    candidates: int = 0
+    remaining: int = 0
+    rate_limited: bool = False
 
 
 # --- Analisi buchi playlist (nuovo_progetto.md sez. 6) -----------------------

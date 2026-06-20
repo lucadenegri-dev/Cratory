@@ -1,22 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Music4, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
+  RefreshCw, ChevronUp, ChevronDown,
 } from "lucide-react";
 import {
-  getPlaylist, playlistTracks, playlistGaps, deletePlaylist, fmtDuration,
+  getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, fmtDuration,
   type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
-import { Card, CardHeader, Badge, Alert, Button, Spinner } from "@/components/ui";
+import { Card, CardHeader, Badge, Alert, Button, Spinner, Input, Select, Checkbox } from "@/components/ui";
 import { TrackEditModal } from "@/components/track-edit-modal";
+import { KeyBadge } from "@/components/key-badge";
 
 const SOURCE_TONE: Record<string, "info" | "warning" | "neutral"> = { spotify: "info", soundcloud: "warning", manual: "neutral" };
 const STATUS_TONE: Record<string, "success" | "info" | "warning" | "neutral"> = {
   ready_for_set: "success", enriched: "info", imported: "neutral", missing_features: "warning", low_confidence: "warning",
 };
+const STATUS_OPTIONS: [string, string][] = [
+  ["ready_for_set", "Pronte per il set"],
+  ["enriched", "Arricchite"],
+  ["imported", "Importate"],
+  ["missing_features", "Senza feature"],
+  ["low_confidence", "Bassa confidenza"],
+];
+
+type Order = "asc" | "desc";
+
+// Ordinamento Camelot: prima il numero (1..12), poi la lettera (A prima di B).
+function camelotRank(key: string | null): number {
+  const m = key ? /^\s*(\d{1,2})\s*([ABab])\s*$/.exec(key) : null;
+  if (!m) return Number.POSITIVE_INFINITY;
+  return Number(m[1]) * 2 + (m[2].toUpperCase() === "B" ? 1 : 0);
+}
 
 export default function PlaylistDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -28,12 +46,86 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState<Track | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  // Filtri (come in libreria) — applicati lato client sulla playlist (insieme limitato).
+  const [artist, setArtist] = useState("");
+  const [title, setTitle] = useState("");
+  const [genre, setGenre] = useState("");
+  const [source, setSource] = useState("");
+  const [status, setStatus] = useState("");
+  const [bpmMin, setBpmMin] = useState("");
+  const [bpmMax, setBpmMax] = useState("");
+  const [key, setKey] = useState("");
+  const [incomplete, setIncomplete] = useState(false);
+  const [sort, setSort] = useState("");
+  const [order, setOrder] = useState<Order>("asc");
+
+  const reload = () => {
+    playlistTracks(pid).then(setTracks).catch(() => {});
+    playlistGaps(pid).then(setGaps).catch(() => {});
+  };
 
   useEffect(() => {
     getPlaylist(pid).then(setPlaylist).catch((e) => setError(String(e.message ?? e)));
-    playlistTracks(pid).then(setTracks).catch(() => {});
-    playlistGaps(pid).then(setGaps).catch(() => {});
+    reload();
   }, [pid]);
+
+  // Rank di inserimento STABILE: posizione cronologica per added_at crescente
+  // (la traccia aggiunta per prima nella playlist Spotify = #1). Resta legato alla
+  // traccia anche quando si ordina/filtra per un'altra colonna.
+  const insertionRank = useMemo(() => {
+    const ranked = [...tracks].sort((a, b) => {
+      const aa = a.added_at, bb = b.added_at;
+      if (aa && bb) return aa < bb ? -1 : aa > bb ? 1 : a.id - b.id;
+      if (aa) return -1;
+      if (bb) return 1;
+      return a.id - b.id;
+    });
+    const map = new Map<number, number>();
+    ranked.forEach((t, i) => map.set(t.id, i + 1));
+    return map;
+  }, [tracks]);
+
+  const visible = useMemo(() => {
+    const inc = (v: string | null, q: string) => (v ?? "").toLowerCase().includes(q.toLowerCase());
+    let rows = tracks.filter((t) => {
+      if (artist && !inc(t.artist, artist)) return false;
+      if (title && !inc(t.title, title)) return false;
+      if (genre && !inc(t.genre, genre)) return false;
+      if (source && t.source_type !== source) return false;
+      if (status && t.status !== status) return false;
+      if (key && !inc(t.camelot_key, key)) return false;
+      if (bpmMin && (t.bpm ?? -Infinity) < Number(bpmMin)) return false;
+      if (bpmMax && (t.bpm ?? Infinity) > Number(bpmMax)) return false;
+      if (incomplete && t.bpm != null && t.camelot_key != null && t.title != null && t.artist != null) return false;
+      return true;
+    });
+
+    const dir = order === "asc" ? 1 : -1;
+    const num = (v: number | null) => (v == null ? (order === "asc" ? Infinity : -Infinity) : v);
+    const str = (v: string | null) => (v ?? "").toLowerCase();
+    const getters: Record<string, (t: Track) => number | string> = {
+      rank: (t) => insertionRank.get(t.id) ?? 0,
+      title: (t) => str(t.title), artist: (t) => str(t.artist), source: (t) => t.source_type,
+      bpm: (t) => num(t.bpm), key: (t) => camelotRank(t.camelot_key), energy: (t) => num(t.energy),
+      genre: (t) => str(t.genre), duration: (t) => num(t.duration_seconds), status: (t) => t.status,
+    };
+    if (sort && getters[sort]) {
+      const g = getters[sort];
+      rows = [...rows].sort((a, b) => { const x = g(a), y = g(b); return x < y ? -dir : x > y ? dir : 0; });
+    } else {
+      // ordine di default = ordine di inserimento
+      rows = [...rows].sort((a, b) => (insertionRank.get(a.id) ?? 0) - (insertionRank.get(b.id) ?? 0));
+    }
+    return rows;
+  }, [tracks, artist, title, genre, source, status, key, bpmMin, bpmMax, incomplete, sort, order, insertionRank]);
+
+  const toggleSort = (col: string) => {
+    if (sort === col) setOrder(order === "asc" ? "desc" : "asc");
+    else { setSort(col); setOrder("asc"); }
+  };
 
   const doDelete = async () => {
     if (!playlist) return;
@@ -48,12 +140,45 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     }
   };
 
+  const doSync = async () => {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const r = await syncPlaylist(pid);
+      const parts = [`${r.created} nuove`, `${r.removed} rimosse (restano in libreria)`, `${r.total} totali`];
+      setSyncMsg(parts.join(" · "));
+      getPlaylist(pid).then(setPlaylist).catch(() => {});
+      reload();
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   if (error) return <div><Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Playlist</Link><Alert tone="danger">⚠ {error}</Alert></div>;
   if (!playlist) return <p className="text-muted">Caricamento…</p>;
 
   const ready = tracks.filter((t) => t.status === "ready_for_set").length;
   const totalDur = tracks.reduce((s, t) => s + (t.duration_seconds ?? 0), 0);
   const cell = "px-3 py-2.5";
+  const canSync = playlist.platform === "spotify" && (playlist.kind === "liked" || !!playlist.platform_playlist_id);
+
+  const th = (label: string, col: string, numeric = false) => {
+    const active = sort === col;
+    return (
+      <th
+        onClick={() => toggleSort(col)}
+        title="Ordina per questa colonna"
+        className={`${cell} ${numeric ? "tnum " : ""}cursor-pointer select-none whitespace-nowrap transition-colors hover:text-fg ${active ? "text-fg" : ""}`}
+      >
+        <span className="inline-flex items-center gap-1">
+          {label}
+          {active && (order === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+        </span>
+      </th>
+    );
+  };
 
   return (
     <div>
@@ -73,11 +198,14 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
           <div className="mt-3 flex flex-wrap gap-2">
             <Link href={`/set-builder?playlist=${pid}`}><Button size="sm"><Sparkles size={15} /> Costruisci un set</Button></Link>
             <Link href="/discovery"><Button size="sm" variant="outline"><Compass size={15} /> Scopri musica simile</Button></Link>
+            {canSync && <Button size="sm" variant="outline" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da Spotify</Button>}
             {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><ExternalLink size={14} /> Spotify</Button></a>}
             <Button size="sm" variant="danger" onClick={doDelete} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} Rimuovi</Button>
           </div>
         </div>
       </div>
+
+      {syncMsg && <div className="mb-4"><Alert tone="success">Sincronizzato: {syncMsg}</Alert></div>}
 
       {gaps && gaps.gaps.length > 0 && (
         <Card className="mb-4">
@@ -95,25 +223,48 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
         </Card>
       )}
 
+      <Card className="mb-4">
+        <div className="p-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            <Input className="h-9" placeholder="Artista" value={artist} onChange={(e) => setArtist(e.target.value)} />
+            <Input className="h-9" placeholder="Titolo" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <Input className="h-9" placeholder="Genere" value={genre} onChange={(e) => setGenre(e.target.value)} />
+            <Select className="h-9" value={source} onChange={(e) => setSource(e.target.value)}>
+              <option value="">Tutte le sorgenti</option>
+              <option value="spotify">Spotify</option>
+              <option value="manual">Manuale</option>
+            </Select>
+            <Select className="h-9" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="">Tutti gli stati</option>
+              {STATUS_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </Select>
+            <Input className="h-9" type="number" placeholder="BPM min" value={bpmMin} onChange={(e) => setBpmMin(e.target.value)} />
+            <Input className="h-9" type="number" placeholder="BPM max" value={bpmMax} onChange={(e) => setBpmMax(e.target.value)} />
+            <Input className="h-9" placeholder="Key (es. 7A)" value={key} onChange={(e) => setKey(e.target.value)} />
+          </div>
+          <div className="mt-2"><Checkbox label="solo dati incompleti (manca BPM/key o metadati)" checked={incomplete} onChange={setIncomplete} /></div>
+        </div>
+      </Card>
+
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-faint">
-              <th className={`${cell} tnum`}>#</th>
-              <th className={cell}>Title</th>
-              <th className={cell}>Artist</th>
-              <th className={cell}>Source</th>
-              <th className={`${cell} tnum`}>BPM</th>
-              <th className={cell}>Key</th>
-              <th className={`${cell} tnum`}>Dur</th>
-              <th className={cell}>Stato</th>
+              {th("#", "rank", true)}
+              {th("Title", "title")}
+              {th("Artist", "artist")}
+              {th("Source", "source")}
+              {th("BPM", "bpm", true)}
+              {th("Key", "key")}
+              {th("Dur", "duration", true)}
+              {th("Stato", "status")}
               <th className={cell}></th>
             </tr>
           </thead>
           <tbody>
-            {tracks.map((t, i) => (
+            {visible.map((t) => (
               <tr key={t.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
-                <td className={`${cell} tnum text-faint`}>{i + 1}</td>
+                <td className={`${cell} tnum text-faint`}>{insertionRank.get(t.id) ?? "—"}</td>
                 <td className={cell}>
                   <Link href={`/tracks/${t.id}`} className="flex items-center gap-2.5">
                     {t.album_art_url
@@ -125,7 +276,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
                 <td className={`${cell} text-muted`}>{t.artist ?? "—"}</td>
                 <td className={cell}><Badge tone={SOURCE_TONE[t.source_type] ?? "neutral"}>{t.source_type}</Badge></td>
                 <td className={`${cell} tnum`}>{t.bpm?.toFixed(0) ?? "—"}</td>
-                <td className={`${cell} tnum text-muted`}>{t.camelot_key ?? "—"}</td>
+                <td className={`${cell} tnum`}><KeyBadge camelot={t.camelot_key} /></td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
                 <td className={cell}><Badge tone={STATUS_TONE[t.status] ?? "neutral"}>{t.status}</Badge></td>
                 <td className={cell}>
@@ -136,7 +287,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
                 </td>
               </tr>
             ))}
-            {tracks.length === 0 && <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia.</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia con questi filtri.</td></tr>}
           </tbody>
         </table>
       </Card>

@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Music, Gauge, KeyRound, Sparkles, ListPlus, Compass, ArrowRight, ListMusic, CheckCircle2, Pencil,
+  Radar, Tags,
 } from "lucide-react";
-import { apiGet, type LibraryStats } from "@/lib/api";
+import { apiGet, getLabels, type LibraryStats, type LabelStats } from "@/lib/api";
 import { Card, Alert, Progress, Button, Badge } from "@/components/ui";
 
 function Stat({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: React.ReactNode; accent?: boolean }) {
@@ -64,6 +65,24 @@ function KeyDistribution({ dist }: { dist: Record<string, number> }) {
   );
 }
 
+function LabelBars({ labels }: { labels: LabelStats[] }) {
+  const top = labels.slice(0, 8);
+  const max = Math.max(...top.map((l) => l.track_count), 1);
+  return (
+    <div className="space-y-1.5">
+      {top.map((l) => (
+        <Link key={l.label} href={`/labels/${encodeURIComponent(l.label)}`} className="group flex items-center gap-2">
+          <span className="w-28 shrink-0 truncate text-xs font-medium text-muted group-hover:text-fg" title={l.label}>{l.label}</span>
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-elevated">
+            <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(6, Math.round((l.track_count / max) * 100))}%` }} />
+          </div>
+          <span className="tnum w-5 shrink-0 text-right text-xs text-muted">{l.track_count}</span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 type Reco = { icon: React.ReactNode; tag: string; title: string; desc: string; href: string; cta: string };
 
 /** "Prossimo passo" suggerito: guida l'utente nel flusso in base allo stato della libreria. */
@@ -93,10 +112,12 @@ function recommend(s: LibraryStats): Reco | null {
 
 export default function Dashboard() {
   const [stats, setStats] = useState<LibraryStats | null>(null);
+  const [labels, setLabels] = useState<LabelStats[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     apiGet<LibraryStats>("/api/stats").then((s) => { setStats(s); setError(null); }).catch((e) => setError(String(e.message ?? e)));
+    getLabels().then(setLabels).catch(() => {});
   }, []);
   useEffect(load, [load]);
 
@@ -143,9 +164,10 @@ export default function Dashboard() {
       )}
 
       {/* Azioni rapide — il flusso dell'app */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-2">
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Action href="/playlists" icon={<ListPlus size={18} />} title="Importa playlist" desc="Spotify, brani salvati o tracklist manuale" />
         <Action href="/discovery" icon={<Compass size={18} />} title="Scopri musica" desc="Tracce che potrebbero interessarti" />
+        <Action href="/shazam" icon={<Radar size={18} />} title="Identifica un mix" desc="Riconosci le tracce di un DJ set" />
       </div>
 
       {stats && !empty && (
@@ -178,6 +200,16 @@ export default function Dashboard() {
               <KeyDistribution dist={stats.key_distribution} />
             </Card>
           </div>
+
+          <Card className="mt-3 p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted"><Tags size={13} className="text-faint" /> Top etichette</div>
+              <Link href="/labels" className="inline-flex items-center gap-1 text-sm text-info hover:underline">Tutte le etichette <ArrowRight size={14} /></Link>
+            </div>
+            {labels.length > 0
+              ? <LabelBars labels={labels} />
+              : <p className="text-sm text-muted">Nessuna etichetta ancora. <Link href="/labels" className="text-info hover:underline">Recuperale da Spotify</Link> per esplorare la libreria per etichetta.</p>}
+          </Card>
         </>
       )}
     </div>

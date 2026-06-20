@@ -17,6 +17,7 @@ def get_tracks(  # noqa: PLR0913
     title: str | None = None,
     album: str | None = None,
     genre: str | None = None,
+    label: str | None = None,
     source: str | None = Query(default=None, pattern="^(spotify|soundcloud|manual)$"),
     status: str | None = Query(
         default=None,
@@ -41,7 +42,7 @@ def get_tracks(  # noqa: PLR0913
     total, rows = list_tracks(
         db,
         limit=limit, offset=offset, sort=sort, order=order,
-        artist=artist, title=title, album=album, genre=genre, source=source, status=status,
+        artist=artist, title=title, album=album, genre=genre, label=label, source=source, status=status,
         bpm_min=bpm_min, bpm_max=bpm_max, key=key,
         duration_min=duration_min, duration_max=duration_max,
         has_spotify=has_spotify, has_soundcloud=has_soundcloud,

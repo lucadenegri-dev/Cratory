@@ -189,7 +189,7 @@ class SpotifyWebClient(SpotifyClient):
         ricevono 403 sugli endpoint batch, ma le GET singole funzionano.
         on_progress(processed, total, phase) riporta l'avanzamento alla UI."""
         out: list[dict[str, Any] | None] = []
-        phase = "tracce" if resource == "tracks" else "artisti"
+        phase = {"tracks": "tracce", "artists": "artisti", "albums": "album"}.get(resource, resource)
         total = len(ids)
 
         def report():
@@ -231,6 +231,12 @@ class SpotifyWebClient(SpotifyClient):
 
     def get_artists_batch(self, ids: list[str], on_progress=None) -> list[dict[str, Any] | None]:
         return self._get_many("artists", ids, on_progress)
+
+    def get_album(self, spotify_album_id: str) -> dict[str, Any]:
+        """Album COMPLETO (GET /albums/{id}): include `label`, assente nell'album
+        semplificato annidato nelle tracce di playlist/liked. GET singola: in
+        development mode evita il 403 del batch e tiene il conteggio richieste basso."""
+        return self._get(f"/albums/{spotify_album_id}")
 
     # ---- resolver Discovery (Fase F) ------------------------------------
 
