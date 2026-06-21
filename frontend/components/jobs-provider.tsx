@@ -1,25 +1,39 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { enrichmentJobStatus, shazamIdentifyStatus } from "@/lib/api";
 import { Progress, Spinner } from "./ui";
 
-type Job = { key: string; label: string; processed: number; total: number };
+type Job = { key: string; label: string; processed: number; total: number; indeterminate?: boolean };
 
-const JobsCtx = createContext<{ refresh: () => void }>({ refresh: () => {} });
+type JobsApi = {
+  /** Forza un poll immediato dei job lato backend (dopo aver avviato un job). */
+  refresh: () => void;
+  /** Registra un job sincrono lato client (es. backfill etichette) nella barra. */
+  startClientJob: (key: string, label: string) => void;
+  /** Rimuove un job client dalla barra. */
+  endClientJob: (key: string) => void;
+};
 
-/** Permette a una pagina di forzare un poll immediato dopo aver avviato un job. */
+const JobsCtx = createContext<JobsApi>({ refresh: () => {}, startClientJob: () => {}, endClientJob: () => {} });
+
 export function useJobs() {
   return useContext(JobsCtx);
 }
 
 /**
- * Poller globale dei job in background (arricchimento feature, identificazione
- * Shazam). Vive nello shell, quindi continua a girare anche cambiando pagina:
- * il progresso viene mostrato in una barra fissa in basso finché un job è attivo.
+ * Poller globale dei job in background. Vive nello shell, quindi continua a
+ * girare anche cambiando pagina: il progresso è mostrato in una barra fissa in
+ * basso finché un job è attivo.
+ *
+ * - Job con status endpoint (arricchimento feature, identificazione Shazam):
+ *   rilevati via polling.
+ * - Job sincroni senza status endpoint (backfill etichette): registrati dalla
+ *   pagina con startClientJob/endClientJob e mostrati come indeterminati.
  */
 export function JobsProvider({ children }: { children: ReactNode }) {
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [polled, setPolled] = useState<Job[]>([]);
+  const [clientJobs, setClientJobs] = useState<Record<string, string>>({});
   const alive = useRef(true);
 
   const pollOnce = useCallback(async () => {
@@ -32,10 +46,20 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       const s = await shazamIdentifyStatus();
       if (s.status === "running") next.push({ key: "shazam", label: s.phase ?? "Identificazione mix", processed: s.processed, total: s.total });
     } catch { /* backend offline: ignora */ }
-    if (alive.current) setJobs(next);
+    if (alive.current) setPolled(next);
   }, []);
 
   const refresh = useCallback(() => { pollOnce(); }, [pollOnce]);
+
+  const startClientJob = useCallback((key: string, label: string) => {
+    setClientJobs((c) => ({ ...c, [key]: label }));
+  }, []);
+  const endClientJob = useCallback((key: string) => {
+    setClientJobs((c) => {
+      if (!(key in c)) return c;
+      const n = { ...c }; delete n[key]; return n;
+    });
+  }, []);
 
   useEffect(() => {
     alive.current = true;
@@ -44,8 +68,15 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     return () => { alive.current = false; clearInterval(id); };
   }, [pollOnce]);
 
+  const api = useMemo<JobsApi>(() => ({ refresh, startClientJob, endClientJob }), [refresh, startClientJob, endClientJob]);
+
+  const jobs: Job[] = [
+    ...polled,
+    ...Object.entries(clientJobs).map(([key, label]) => ({ key, label, processed: 0, total: 0, indeterminate: true })),
+  ];
+
   return (
-    <JobsCtx.Provider value={{ refresh }}>
+    <JobsCtx.Provider value={api}>
       {children}
       {jobs.length > 0 && <GlobalProgress jobs={jobs} />}
     </JobsCtx.Provider>
@@ -54,7 +85,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
 
 function GlobalProgress({ jobs }: { jobs: Job[] }) {
   const j = jobs[0];
-  const pct = j.total > 0 ? Math.round((j.processed / j.total) * 100) : null;
+  const pct = j.indeterminate ? null : (j.total > 0 ? Math.round((j.processed / j.total) * 100) : null);
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border-strong bg-surface px-4 py-2.5">
       <div className="mx-auto flex max-w-5xl items-center gap-4">
@@ -62,7 +93,9 @@ function GlobalProgress({ jobs }: { jobs: Job[] }) {
           <Spinner className="h-3 w-3" /> {j.label}{jobs.length > 1 ? ` · +${jobs.length - 1}` : ""}
         </span>
         <div className="flex-1"><Progress value={pct} /></div>
-        <span className="tnum whitespace-nowrap text-[10px] text-muted">{j.processed}/{j.total || "?"}{pct != null ? ` · ${pct}%` : ""}</span>
+        {!j.indeterminate && (
+          <span className="tnum whitespace-nowrap text-[10px] text-muted">{j.processed}/{j.total || "?"}{pct != null ? ` · ${pct}%` : ""}</span>
+        )}
       </div>
     </div>
   );

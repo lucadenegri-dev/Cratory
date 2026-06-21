@@ -6,6 +6,7 @@ import { RefreshCw, Users, Disc3 } from "lucide-react";
 import { getLabels, backfillLabels, type LabelStats } from "@/lib/api";
 import { Button, Spinner, Alert, EmptyState, Badge, Card } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useJobs } from "@/components/jobs-provider";
 
 export default function Labels() {
   const [labels, setLabels] = useState<LabelStats[] | null>(null);
@@ -14,6 +15,7 @@ export default function Labels() {
   const [msg, setMsg] = useState<string | null>(null);
   const [msgTone, setMsgTone] = useState<"success" | "warning">("success");
   const [remaining, setRemaining] = useState(0);
+  const { startClientJob, endClientJob } = useJobs();
 
   const load = useCallback(() => {
     getLabels().then(setLabels).catch((e) => setError(String(e.message ?? e)));
@@ -25,6 +27,7 @@ export default function Labels() {
     setBusy(true);
     setMsg(null);
     setError(null);
+    startClientJob("labels", "Scaricamento etichette");
     try {
       const r = await backfillLabels();
       setRemaining(r.remaining);
@@ -45,6 +48,7 @@ export default function Labels() {
       setError(String((e as Error).message ?? e));
     } finally {
       setBusy(false);
+      endClientJob("labels");
     }
   };
 
