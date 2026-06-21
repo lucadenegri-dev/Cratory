@@ -19,7 +19,7 @@ const NO_FOUC = `(function(){try{var t=localStorage.getItem('setarc-theme');if(t
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="it" className={`h-full ${ibmPlexMono.variable}`}>
+    <html lang="it" className={`h-full ${ibmPlexMono.variable}`} suppressHydrationWarning>
       <body className="h-full">
         <script dangerouslySetInnerHTML={{ __html: NO_FOUC }} />
         <EditorialShell>{children}</EditorialShell>
