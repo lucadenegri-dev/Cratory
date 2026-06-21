@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Sparkles, ListMusic, Clock, ChevronRight } from "lucide-react";
 import { apiGet, fmtDuration, type SetlistSummary } from "@/lib/api";
 import { Card, Badge, Alert, EmptyState, Button } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
@@ -18,21 +19,22 @@ export default function SetsPage() {
     apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch((e) => setError(String(e.message ?? e)));
   }, []);
 
-  return (
-    <div>
-      <header className="mb-6 flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Set</h1>
-          <p className="mt-1 text-sm text-muted">{sets?.length ?? 0} salvati</p>
-        </div>
-        <Link href="/set-builder"><Button size="sm"><Sparkles size={15} /> Nuovo set</Button></Link>
-      </header>
+  const marginalia = (
+    <div className="space-y-3">
+      <Link href="/set-builder" className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> Nuovo set</Button></Link>
+      <div className="border-t border-border pt-4 text-xs">
+        <div className="flex justify-between gap-2"><span className="text-muted">Set salvati</span><span className="tnum text-fg">{sets?.length ?? 0}</span></div>
+      </div>
+    </div>
+  );
 
+  return (
+    <PageLayout title="Set" meta={sets ? String(sets.length) : undefined} marginaliaTitle="Azioni" marginalia={marginalia}>
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
       {sets && sets.length === 0 && (
         <EmptyState icon={<ListMusic size={28} />} title="Nessun set salvato">
-          Genera la tua prima scaletta nel <Link href="/set-builder" className="text-info hover:underline">Set Builder</Link>.
+          Genera la tua prima scaletta nel <Link href="/set-builder" className="text-fg underline-offset-4 hover:underline">Set Builder</Link>.
         </EmptyState>
       )}
 
@@ -41,7 +43,7 @@ export default function SetsPage() {
           <Link key={s.id} href={`/sets/${s.id}`} className="group">
             <Card className="h-full p-4 transition-colors hover:border-border-strong">
               <div className="mb-3 flex items-start justify-between gap-2">
-                <h3 className="truncate font-medium leading-snug group-hover:text-primary">{s.name}</h3>
+                <h3 className="truncate font-medium leading-snug group-hover:text-fg-strong">{s.name}</h3>
                 <Badge tone={s.generated_by === "ai" ? "primary" : "neutral"}>
                   {s.generated_by === "ai" ? <><Sparkles size={11} /> AI</> : "algo"}
                 </Badge>
@@ -61,6 +63,6 @@ export default function SetsPage() {
           </Link>
         ))}
       </div>
-    </div>
+    </PageLayout>
   );
 }

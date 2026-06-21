@@ -11,6 +11,7 @@ import {
   type AiStatus, type GenStatus, type Setlist, type SetlistTrack, type Playlist,
 } from "@/lib/api";
 import { Card, CardHeader, Button, Input, Textarea, Select, Field, Checkbox, Badge, Progress, Alert, EmptyState } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 import { cn } from "@/lib/cn";
 
 const STRATEGIES: { value: string; label: string; desc: string }[] = [
@@ -32,12 +33,11 @@ const PRESETS = [
   { label: "Progressivo", icon: TrendingUp, strategy: "progressive", duration: 90, startBpm: "120", endBpm: "130", startEnergy: "40", endEnergy: "85" },
   { label: "Closing", icon: Sunset, strategy: "closing", duration: 45, startBpm: "128", endBpm: "120", startEnergy: "78", endEnergy: "40" },
 ] as const;
-const CLASS_TONE = { technically_safe: "success", good_reset: "info", creative_risk: "warning" } as const;
 
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
     <div className="mt-5 border-t border-border pt-5 first:mt-0 first:border-0 first:pt-0">
-      <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-info">{icon}{title}</div>
+      <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">{icon}{title}</div>
       {children}
     </div>
   );
@@ -196,11 +196,8 @@ export default function SetBuilder() {
   }
 
   return (
-    <div>
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Set Builder</h1>
-        <p className="mt-1 text-sm text-muted">Genera una scaletta dai vincoli, o descrivi a parole il set che vuoi e lascia ragionare l&apos;AI.</p>
-      </header>
+    <PageLayout title="Set Builder">
+      <p className="mb-6 text-sm text-muted">Genera una scaletta dai vincoli, o descrivi a parole il set che vuoi e lascia ragionare l&apos;AI.</p>
 
       <Card className="mb-6">
         <div className="p-5">
@@ -222,9 +219,9 @@ export default function SetBuilder() {
                 return (
                   <button key={p.label} type="button" onClick={() => applyPreset(p)} aria-pressed={on}
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                      "inline-flex items-center gap-1.5 rounded-none border px-3 py-1 text-xs font-medium transition-colors",
                       on
-                        ? "border-primary/40 bg-primary/10 text-primary"
+                        ? "border-border-strong bg-elevated text-fg"
                         : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
                     )}>
                     <Icon size={13} /> {p.label}
@@ -242,14 +239,14 @@ export default function SetBuilder() {
             {useAi && aiStatus?.configured && (
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <span className="text-xs font-medium uppercase tracking-wide text-muted">Stile AI</span>
-                <div className="inline-flex rounded-lg border border-border bg-surface p-1">
+                <div className="inline-flex rounded-none border border-border bg-surface p-1">
                   {(["technical", "creative"] as const).map((m) => (
                     <button
                       key={m}
                       type="button"
                       onClick={() => setMode(m)}
                       className={cn(
-                        "rounded-md px-3 py-1 text-sm font-medium transition-colors",
+                        "rounded-none px-3 py-1 text-sm font-medium transition-colors",
                         mode === m ? "bg-elevated text-fg" : "text-muted hover:text-fg",
                       )}
                     >
@@ -267,7 +264,7 @@ export default function SetBuilder() {
           </Section>
 
           <details className="group mt-5 border-t border-border pt-5">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-info transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
               <span className="flex items-center gap-1.5"><SlidersHorizontal size={13} className="text-faint" /> Opzioni avanzate</span>
               <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
             </summary>
@@ -298,8 +295,11 @@ export default function SetBuilder() {
                     <Input placeholder="es. Arca, Sega Bodega" value={seedArtists} onChange={(e) => setSeedArtists(e.target.value)} />
                   </Field>
                 </div>
-                <div className="mt-3 flex items-center gap-x-5 gap-y-2">
+                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
                   <Checkbox label="evita tracce corte" checked={avoidShort} onChange={setAvoidShort} />
+                  {SOURCES.map((s) => (
+                    <Checkbox key={s.value} label={`solo ${s.label}`} checked={sources.includes(s.value)} onChange={() => toggleSource(s.value)} />
+                  ))}
                 </div>
               </Section>
             </div>
@@ -307,7 +307,7 @@ export default function SetBuilder() {
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
             <Checkbox
-              label={<span className="flex items-center gap-1.5"><Sparkles size={14} className={aiStatus?.configured ? "text-primary" : ""} /> Usa l&apos;AI Set Agent {aiStatus?.model && <span className="text-faint">· {aiStatus.model}</span>}</span>}
+              label={<span className="flex items-center gap-1.5"><Sparkles size={14} className={aiStatus?.configured ? "text-fg-strong" : ""} /> Usa l&apos;AI Set Agent {aiStatus?.model && <span className="text-faint">· {aiStatus.model}</span>}</span>}
               checked={useAi} disabled={!aiStatus?.configured} onChange={setUseAi}
             />
             <Button onClick={generate} disabled={busy}>
@@ -315,7 +315,7 @@ export default function SetBuilder() {
             </Button>
           </div>
           {!aiStatus?.configured && (
-            <p className="mt-2 text-xs text-muted">AI non configurata — imposta <code className="rounded bg-elevated px-1">AI_API_KEY</code> in backend/.env (vedi <Link href="/settings" className="text-info hover:underline">Impostazioni</Link>).</p>
+            <p className="mt-2 text-xs text-muted">AI non configurata — imposta <code className="rounded-none bg-elevated px-1">AI_API_KEY</code> in backend/.env (vedi <Link href="/settings" className="text-fg underline-offset-4 hover:underline">Impostazioni</Link>).</p>
           )}
         </div>
       </Card>
@@ -324,7 +324,7 @@ export default function SetBuilder() {
         <Card className="mb-6">
           <div className="p-5">
             <div className="mb-2 flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 font-medium"><Sparkles size={15} className="text-primary" /> {job?.phase ?? "Avvio…"}</span>
+              <span className="flex items-center gap-2 font-medium"><Sparkles size={15} className="text-muted" /> {job?.phase ?? "Avvio…"}</span>
               <span className="tnum text-muted">{elapsed}s{job?.using_ai && elapsed > 8 ? " · di solito 1–2 min" : ""}</span>
             </div>
             <Progress value={null} />
@@ -341,7 +341,7 @@ export default function SetBuilder() {
           Imposta i vincoli o scrivi un prompt, poi premi <strong>Genera</strong>. Il set apparirà qui con i consigli tecnici di mix.
         </EmptyState>
       )}
-    </div>
+    </PageLayout>
   );
 }
 
@@ -375,11 +375,11 @@ function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, e
         }
       />
       <div className="space-y-4 p-5">
-        {playlistUrl && <Alert tone="success">✓ Playlist creata: <a href={playlistUrl} target="_blank" rel="noreferrer" className="underline">{playlistUrl}</a></Alert>}
+        {playlistUrl && <Alert tone="info">✓ Playlist creata: <a href={playlistUrl} target="_blank" rel="noreferrer" className="underline">{playlistUrl}</a></Alert>}
 
         {setlist.mixing_overview.length > 0 && (
-          <div className="rounded-lg border border-border bg-bg p-3">
-            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-info"><SlidersHorizontal size={14} /> Come mixare il set</div>
+          <div className="rounded-none border border-border bg-bg p-3">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted"><SlidersHorizontal size={14} /> Come mixare il set</div>
             <ul className="space-y-1 text-sm text-muted">
               {setlist.mixing_overview.map((it, i) => <li key={i} className="flex gap-1.5"><span className="text-faint">·</span>{it}</li>)}
             </ul>
@@ -391,15 +391,15 @@ function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, e
         </ol>
 
         {improvements.length > 0 && (
-          <div className="rounded-lg border border-border bg-bg p-3">
-            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary"><Lightbulb size={14} /> Come migliorare il tuo set</div>
+          <div className="rounded-none border border-border bg-bg p-3">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted"><Lightbulb size={14} /> Come migliorare il tuo set</div>
             <ul className="space-y-1 text-sm text-muted">
               {improvements.map((it, i) => <li key={i} className="flex gap-1.5"><span className="text-faint">·</span>{it}</li>)}
             </ul>
           </div>
         )}
 
-        {exported && <pre className="max-h-72 overflow-auto rounded-lg border border-border bg-bg p-3 text-xs text-muted">{exported}</pre>}
+        {exported && <pre className="max-h-72 overflow-auto rounded-none border border-border bg-bg p-3 text-xs text-muted">{exported}</pre>}
       </div>
     </Card>
   );
@@ -408,18 +408,18 @@ function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, e
 /** Riga di una traccia del set: ruolo, brano, dati tecnici e consiglio di mix deterministico. */
 function SetTrackRow({ st }: { st: SetlistTrack }) {
   return (
-    <li className="flex gap-3 rounded-lg border border-border bg-bg p-3">
+    <li className="flex gap-3 rounded-none border border-border bg-bg p-3">
       <span className="tnum w-5 pt-0.5 text-right text-sm text-faint">{st.position}</span>
       {st.track.album_art_url
-        ? <img src={st.track.album_art_url} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
-        : <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-elevated text-faint"><Music4 size={16} /></span>}
+        ? <img src={st.track.album_art_url} alt="" className="h-10 w-10 shrink-0 rounded-none object-cover" />
+        : <span className="grid h-10 w-10 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={16} /></span>}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {st.role && <Badge tone="neutral">{st.role}</Badge>}
-          <Link href={`/tracks/${st.track.id}`} className="truncate font-medium hover:text-primary">{trackLabel(st.track)}</Link>
+          <Link href={`/tracks/${st.track.id}`} className="truncate font-medium hover:text-fg-strong">{trackLabel(st.track)}</Link>
           <span className="tnum shrink-0 text-xs text-faint">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? "?"} · {fmtDuration(st.track.duration_seconds)}</span>
           {st.transition_class && (
-            <Badge tone={CLASS_TONE[st.transition_class] ?? "neutral"} className="ml-auto">
+            <Badge tone="neutral" className="ml-auto">
               {st.transition_class_label ?? st.transition_class}
             </Badge>
           )}

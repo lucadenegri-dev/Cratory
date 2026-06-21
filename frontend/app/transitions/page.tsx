@@ -5,10 +5,8 @@ import { useEffect, useState } from "react";
 import { Search, X, Music4 } from "lucide-react";
 import { apiGet, trackLabel, type Track, type TransitionCandidate } from "@/lib/api";
 import { Card, Input, Badge } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 import { cn } from "@/lib/cn";
-
-function scoreTone(s: number) { return s >= 70 ? "success" : s >= 45 ? "warning" : "danger"; }
-const CLASS_TONE = { technically_safe: "success", good_reset: "info", creative_risk: "warning" } as const;
 
 export default function TransitionFinder() {
   const [query, setQuery] = useState("");
@@ -36,12 +34,17 @@ export default function TransitionFinder() {
     apiGet<TransitionCandidate[]>(`/api/transitions/${direction}/${selected.id}`, { limit: 25 }).then(setResults).catch(() => setResults([]));
   }, [selected, direction]);
 
+  const marginalia = (
+    <div className="space-y-2 text-xs leading-relaxed text-muted">
+      <p><span className="text-fg">Score</span> 0–100: compatibilità tecnica (BPM, key, energia).</p>
+      <p>70+ mix sicuro · 45–69 buon reset · &lt;45 rischio creativo.</p>
+      <p>Classi e score sono deterministici, mai inventati.</p>
+    </div>
+  );
+
   return (
-    <div>
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Transition Finder</h1>
-        <p className="mt-1 text-sm text-muted">Scegli una traccia e scopri cosa ci sta bene prima o dopo, con uno score tecnico.</p>
-      </header>
+    <PageLayout title="Transizioni" marginaliaTitle="Legenda" marginalia={marginalia}>
+      <p className="mb-6 text-sm text-muted">Scegli una traccia e scopri cosa ci sta bene prima o dopo, con uno score tecnico.</p>
 
       {!selected && (
         <div className="relative max-w-lg">
@@ -76,45 +79,45 @@ export default function TransitionFinder() {
       {selected && (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2">
+            <div className="flex items-center gap-2.5 rounded-none border border-border bg-surface px-3 py-2">
               {selected.album_art_url
-                ? <img src={selected.album_art_url} alt="" className="h-8 w-8 rounded object-cover" />
-                : <span className="grid h-8 w-8 place-items-center rounded bg-elevated text-faint"><Music4 size={14} /></span>}
+                ? <img src={selected.album_art_url} alt="" className="h-8 w-8 rounded-none object-cover" />
+                : <span className="grid h-8 w-8 place-items-center rounded-none bg-elevated text-faint"><Music4 size={14} /></span>}
               <span className="text-sm font-medium">{trackLabel(selected)}</span>
               <span className="tnum text-xs text-faint">{selected.bpm?.toFixed(0)} · {selected.camelot_key ?? "?"}</span>
               <button onClick={() => setSelected(null)} className="ml-1 text-faint hover:text-fg"><X size={15} /></button>
             </div>
-            <div className="ml-auto inline-flex overflow-hidden rounded-lg border border-border-strong text-sm">
+            <div className="ml-auto inline-flex overflow-hidden rounded-none border border-border-strong text-sm">
               {(["after", "before"] as const).map((d) => (
-                <button key={d} onClick={() => setDirection(d)} className={cn("px-3 py-1.5", direction === d ? "bg-primary text-primary-fg font-medium" : "text-muted hover:bg-elevated")}>
+                <button key={d} onClick={() => setDirection(d)} className={cn("px-3 py-1.5", direction === d ? "bg-fg-strong text-bg font-medium" : "text-muted hover:bg-elevated")}>
                   {d === "after" ? "Dopo" : "Prima"}
                 </button>
               ))}
             </div>
           </div>
 
-          <Card className="overflow-hidden">
+          <div className="overflow-hidden border border-border">
             <ul className="divide-y divide-border">
               {results.map(({ track, score }) => (
                 <li key={track.id} className="px-4 py-3 text-sm">
                   <div className="flex items-center gap-3">
-                    <Badge tone={scoreTone(score.score)} className="tnum w-9 justify-center">{score.score}</Badge>
-                    <Link href={`/tracks/${track.id}`} className="min-w-0 flex-1 truncate font-medium hover:text-primary">{trackLabel(track)}</Link>
+                    <Badge tone="neutral" className="tnum w-9 justify-center">{score.score}</Badge>
+                    <Link href={`/tracks/${track.id}`} className="min-w-0 flex-1 truncate font-medium hover:text-fg-strong">{trackLabel(track)}</Link>
                     {score.classification && (
-                      <Badge tone={CLASS_TONE[score.classification] ?? "neutral"} className="shrink-0">
+                      <Badge tone="neutral" className="shrink-0">
                         <span title={score.classification_reason ?? undefined}>{score.classification_label ?? score.classification}</span>
                       </Badge>
                     )}
                     <span className="tnum shrink-0 text-xs text-faint">{track.bpm?.toFixed(0)} BPM · {track.camelot_key ?? "?"}</span>
                   </div>
                   <p className="mt-1 pl-12 text-xs text-faint">{score.technical_reasons.join(" · ")}</p>
-                  {score.warnings.length > 0 && <p className="pl-12 text-xs text-warning">{score.warnings.join(" · ")}</p>}
+                  {score.warnings.length > 0 && <p className="pl-12 text-xs text-muted">{score.warnings.join(" · ")}</p>}
                 </li>
               ))}
             </ul>
-          </Card>
+          </div>
         </>
       )}
-    </div>
+    </PageLayout>
   );
 }
