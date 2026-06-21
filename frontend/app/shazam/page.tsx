@@ -7,8 +7,9 @@ import {
   shazamStatus, identifyMix, shazamIdentifyStatus, listDjSets, deleteDjSet, fmtDate,
   type DjSet, type ShazamIdentifyState,
 } from "@/lib/api";
-import { Card, Badge, Alert, Button, EmptyState, Spinner, Progress, Input } from "@/components/ui";
+import { Card, Badge, Alert, Button, EmptyState, Spinner, Input } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useJobs } from "@/components/jobs-provider";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -28,6 +29,7 @@ export default function ShazamPage() {
   const [job, setJob] = useState<ShazamIdentifyState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const jobs = useJobs();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const reload = useCallback(() => {
@@ -70,7 +72,7 @@ export default function ShazamPage() {
       setJob(s);
       setUrl("");
       if (s.cached || s.status === "done") reload();
-      else startPolling();
+      else { startPolling(); jobs.refresh(); }
     } catch (e) {
       setError(err(e));
     } finally {
@@ -84,7 +86,6 @@ export default function ShazamPage() {
   };
 
   const running = job?.status === "running";
-  const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
 
   const marginalia = (
     <p className="text-xs leading-relaxed text-muted">
@@ -116,15 +117,6 @@ export default function ShazamPage() {
             {busy || running ? <Spinner /> : <AudioLines size={16} />} Identifica
           </Button>
         </div>
-        {running && (
-          <div className="border-t border-border px-4 py-3">
-            <div className="mb-1 flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 font-medium"><Radar size={15} className="text-muted" /> {job?.phase ?? "Avvio…"}</span>
-              {pct != null && <span className="tnum text-muted">{job?.processed}/{job?.total} ({pct}%)</span>}
-            </div>
-            <Progress value={pct} />
-          </div>
-        )}
       </Card>
 
       {sets && sets.length === 0 && (

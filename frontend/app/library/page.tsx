@@ -8,7 +8,6 @@ import { Input, Select, Checkbox, Alert, Badge } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 
-const SOURCE_TONE: Record<string, "info" | "warning" | "neutral"> = { spotify: "info", soundcloud: "warning", manual: "neutral" };
 const STATUS_TONE: Record<string, "success" | "info" | "warning" | "neutral"> = {
   ready_for_set: "success", enriched: "info", imported: "neutral",
   missing_features: "warning", low_confidence: "warning",
@@ -111,14 +110,13 @@ export default function Library() {
     <PageLayout title="Libreria" meta={`${total} TRACCE`} marginaliaTitle="Filtri" marginalia={filters}>
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
-      <div className="overflow-x-auto border border-border">
+      <div className="border border-border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-faint">
               <th className={cell}>#</th>
               {th("Title", "title")}
               {th("Artist", "artist")}
-              {th("Source", "source")}
               {th("BPM", "bpm", true)}
               {th("Key", "key")}
               {th("Energy", "energy", true)}
@@ -141,7 +139,6 @@ export default function Library() {
                   </Link>
                 </td>
                 <td className={`${cell} text-muted`}>{t.artist ?? <span className="text-faint">—</span>}</td>
-                <td className={cell}><Badge tone={SOURCE_TONE[t.source_type] ?? "neutral"}>{t.source_type}</Badge></td>
                 <td className={`${cell} tnum`}>{t.bpm?.toFixed(0) ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{t.camelot_key ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{t.energy ?? "—"}</td>
@@ -157,7 +154,7 @@ export default function Library() {
               </tr>
             ))}
             {items.length === 0 && (
-              <tr><td colSpan={11} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia con questi filtri. <Link href="/playlists" className="text-fg underline-offset-4 hover:underline">Importa una playlist</Link> per iniziare.</td></tr>
+              <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia con questi filtri. <Link href="/playlists" className="text-fg underline-offset-4 hover:underline">Importa una playlist</Link> per iniziare.</td></tr>
             )}
           </tbody>
         </table>

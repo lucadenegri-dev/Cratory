@@ -2,27 +2,22 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Copy, Check, ExternalLink, Gauge, Plug, Music2, Sparkles, Database } from "lucide-react";
+import { Copy, Check, ExternalLink } from "lucide-react";
 import {
   apiGet, apiPost, servicesStatus, SPOTIFY_LOGIN_URL,
   featureEnrichSummary,
   type ServiceStatus, type SpotifyStatus,
   type FeatureProviderStatus, type FeatureEnrichJob,
 } from "@/lib/api";
-import { Card, CardHeader, Button, Alert, Badge, Progress } from "@/components/ui";
+import { Button, Alert } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useJobs } from "@/components/jobs-provider";
 
-const CATEGORY_ICON: Record<string, React.ReactNode> = {
-  Streaming: <Music2 size={15} className="text-muted" />,
-  AI: <Sparkles size={15} className="text-muted" />,
-  "Feature musicali": <Gauge size={15} className="text-muted" />,
-};
-
-function statusPill(s: ServiceStatus) {
-  if (s.connected === true) return <Badge tone="success">Collegato</Badge>;
-  if (s.connected === false) return <Badge tone="warning">Da collegare</Badge>;
-  if (s.configured) return <Badge tone="info">Configurato</Badge>;
-  return <Badge tone="neutral">Non configurato</Badge>;
+function statusLabel(s: ServiceStatus): { text: string; strong: boolean } {
+  if (s.connected === true) return { text: "Collegato", strong: true };
+  if (s.connected === false) return { text: "Da collegare", strong: false };
+  if (s.configured) return { text: "Configurato", strong: true };
+  return { text: "Non configurato", strong: false };
 }
 
 function SettingsInner() {
@@ -58,53 +53,61 @@ function SettingsInner() {
       {oauth === "error" && <div className="mb-4"><Alert tone="danger">Login Spotify fallito ({params.get("detail")}).</Alert></div>}
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
 
-      <Card className="mb-4">
-        <CardHeader title={<span className="flex items-center gap-2"><Plug size={16} className="text-muted" /> Servizi &amp; API</span>} subtitle="Tutte le integrazioni e il loro stato di connessione" />
-        <div className="divide-y divide-border">
-          {services?.map((s) => (
-            <div key={s.key} className="p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    {CATEGORY_ICON[s.category] ?? <Plug size={15} className="text-faint" />}
-                    <span className="font-medium">{s.name}</span>
-                    {statusPill(s)}
+      <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">Servizi &amp; API</div>
+      <div className="border border-border">
+        {services?.map((s, i) => {
+          const st = statusLabel(s);
+          return (
+            <div key={s.key} className="border-b border-border p-5 last:border-0">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 gap-3">
+                  <span className="tnum mt-0.5 text-xs text-faint">{String(i + 1).padStart(2, "0")}</span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="text-sm font-semibold uppercase tracking-wide text-fg-strong">{s.name}</span>
+                      <span className="text-[10px] uppercase tracking-wider text-faint">{s.category}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-muted">{s.detail}</p>
+                    <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-faint">
+                      {s.env.map((e) => <code key={e} className="rounded-none bg-elevated px-1">{e}</code>)}
+                      <a href={s.docs} target="_blank" rel="noreferrer" className="text-fg underline-offset-4 hover:underline">docs ↗</a>
+                    </p>
                   </div>
-                  <p className="mt-1 text-sm text-muted">{s.detail}</p>
-                  <p className="mt-1.5 text-xs text-faint">
-                    {s.category} · {s.env.map((e) => <code key={e} className="mr-1 rounded-none bg-elevated px-1">{e}</code>)}
-                    <a href={s.docs} target="_blank" rel="noreferrer" className="text-fg underline-offset-4 hover:underline">docs ↗</a>
-                  </p>
                 </div>
-                {s.key === "spotify" && (
-                  <a href={SPOTIFY_LOGIN_URL}>
-                    <Button size="sm" variant="outline"><ExternalLink size={14} /> {s.connected ? "Ricollega" : "Collega"}</Button>
-                  </a>
-                )}
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <span className={`text-[10px] uppercase tracking-wider ${st.strong ? "text-fg-strong" : "text-muted"}`}>{st.text}</span>
+                  {s.key === "spotify" && (
+                    <a href={SPOTIFY_LOGIN_URL}>
+                      <Button size="sm" variant="outline"><ExternalLink size={14} /> {s.connected ? "Ricollega" : "Collega"}</Button>
+                    </a>
+                  )}
+                </div>
               </div>
 
               {s.key === "spotify" && spotify?.configured && (
-                <div className="mt-3 rounded-none border border-border bg-bg p-3">
+                <div className="mt-3 border border-border bg-bg p-3">
                   <p className="mb-1.5 text-xs text-muted">Redirect URI da incollare <strong>esatto</strong> nel dashboard Spotify:</p>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 break-all rounded-none bg-elevated px-2 py-1 text-xs text-fg">{spotify.redirect_uri}</code>
+                    <code className="flex-1 break-all bg-elevated px-2 py-1 text-xs text-fg">{spotify.redirect_uri}</code>
                     <Button size="sm" variant="outline" onClick={copyRedirect}>{copied ? <><Check size={14} /> Copiato</> : <><Copy size={14} /> Copia</>}</Button>
                   </div>
                   {s.connected && <p className="mt-2 text-xs text-muted">Se l&apos;import playlist dà <code className="rounded-none bg-elevated px-1">403</code>, usa <strong>Ricollega</strong> per riautorizzare i permessi.</p>}
                 </div>
               )}
             </div>
-          ))}
-          {!services && !error && <div className="p-5 text-sm text-muted">Caricamento…</div>}
-        </div>
-      </Card>
+          );
+        })}
+        {!services && !error && <div className="p-5 text-sm text-muted">Caricamento…</div>}
+      </div>
 
+      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Arricchimento</div>
       <FeatureEnrichmentCard />
     </PageLayout>
   );
 }
 
 function FeatureEnrichmentCard() {
+  const jobs = useJobs();
   const [status, setStatus] = useState<FeatureProviderStatus | null>(null);
   const [job, setJob] = useState<FeatureEnrichJob | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -131,20 +134,21 @@ function FeatureEnrichmentCard() {
 
   async function run(force: boolean) {
     setError(null);
-    try { setJob(await apiPost<FeatureEnrichJob>(`/api/enrichment/features?force=${force}`)); startPolling(); }
+    try { setJob(await apiPost<FeatureEnrichJob>(`/api/enrichment/features?force=${force}`)); startPolling(); jobs.refresh(); }
     catch (e) { setError(String((e as Error).message ?? e)); }
   }
 
   const busy = job?.status === "running";
-  const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
 
   return (
-    <Card className="mb-4">
-      <CardHeader
-        title={<span className="flex items-center gap-2"><Database size={16} className="text-muted" /> Arricchimento feature musicali</span>}
-        subtitle="BPM, tonalità, genere, mood, energia per le tracce importate"
-        action={status && <Badge tone={status.configured ? "info" : "neutral"}>{status.configured ? status.provider ?? "attivo" : "nessun provider"}</Badge>}
-      />
+    <div className="border border-border">
+      <div className="flex items-start justify-between gap-4 border-b border-border p-5">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold uppercase tracking-wide text-fg-strong">Feature musicali</div>
+          <p className="mt-1 text-sm text-muted">BPM, tonalità, genere, mood, energia per le tracce importate.</p>
+        </div>
+        {status && <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted">{status.configured ? status.provider ?? "attivo" : "nessun provider"}</span>}
+      </div>
       <div className="space-y-3 p-5 text-sm">
         <p className="text-muted">Ricava BPM via ISRC (Deezer), analisi audio reale via MusicBrainz + AcousticBrainz (BPM, tonalità, mood, danceability) e genere/mood dai tag (Last.fm); l&apos;energia è stimata da BPM e danceability quando manca. Non sovrascrive i valori che inserisci a mano.</p>
         {error && <Alert tone="danger">⚠ {error}</Alert>}
@@ -156,17 +160,11 @@ function FeatureEnrichmentCard() {
             <Button size="sm" variant="outline" onClick={() => run(true)} disabled={busy}>Forza</Button>
           </div>
         )}
-        {busy && job && (
-          <div>
-            <div className="mb-1 flex justify-between text-xs text-muted"><span>Analizzo le tracce…</span><span className="tnum">{job.processed}/{job.total || "?"}{pct != null ? ` (${pct}%)` : ""}</span></div>
-            <Progress value={pct} />
-          </div>
-        )}
         {job?.status === "done" && job.result && (
           <p className="text-sm text-fg">✓ {featureEnrichSummary(job.result)}.</p>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 

@@ -370,7 +370,7 @@ function SetResult({ setlist, onExport, onPlaylist, playlistBusy, playlistUrl, e
             <Button variant="outline" size="sm" onClick={() => onExport("text")}><Download size={14} /> Testo</Button>
             <Button variant="outline" size="sm" onClick={() => onExport("csv")}>CSV</Button>
             <Button variant="outline" size="sm" onClick={() => onExport("markdown")}>MD</Button>
-            <Button variant="outline" size="sm" onClick={onPlaylist} disabled={playlistBusy}>{playlistBusy ? "…" : "Playlist Spotify"}</Button>
+            <Button variant="outline" size="sm" onClick={onPlaylist} disabled={playlistBusy}>{playlistBusy ? "…" : "Crea playlist Spotify"}</Button>
           </div>
         }
       />

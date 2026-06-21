@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import {
   ArrowLeft, Sparkles, Download, Music4, Lightbulb, SlidersHorizontal,
-  ArrowUp, ArrowDown, Trash2, Replace, Pencil, Check,
+  ArrowUp, ArrowDown, Trash2, Replace, Pencil, Check, ChevronDown,
 } from "lucide-react";
 import {
   apiGet, apiPost, apiPatch, apiDelete, exportSet, fmtDuration, trackLabel,
@@ -128,7 +128,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
         <Button variant="outline" size="sm" onClick={() => doExport("csv")}>CSV</Button>
         <Button variant="outline" size="sm" onClick={() => doExport("markdown")}>MD</Button>
       </div>
-      <Button variant="outline" size="sm" className="w-full" onClick={createPlaylist} disabled={playlistBusy}>{playlistBusy ? "…" : "Playlist Spotify"}</Button>
+      <Button variant="outline" size="sm" className="w-full" onClick={createPlaylist} disabled={playlistBusy}>{playlistBusy ? "…" : "Crea playlist Spotify"}</Button>
       <Button variant="danger" size="sm" className="w-full" onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Elimina set</Button>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
         <div className="flex justify-between gap-2"><span className="text-muted">Tracce</span><span className="tnum text-fg">{n}</span></div>
@@ -162,13 +162,29 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
         <div className="space-y-4 p-5">
           {error && <Alert tone="danger">⚠ {error}</Alert>}
           {playlistUrl && <Alert tone="info">✓ Playlist creata: <a href={playlistUrl} target="_blank" rel="noreferrer" className="underline">{playlistUrl}</a></Alert>}
+
           {setlist.mixing_overview.length > 0 && (
-            <div className="rounded-none border border-border bg-bg p-3">
-              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted"><SlidersHorizontal size={14} /> Come mixare il set</div>
-              <ul className="space-y-1 text-sm text-muted">
+            <details className="group border border-border">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-1.5"><SlidersHorizontal size={14} /> Come mixare il set</span>
+                <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
+              </summary>
+              <ul className="space-y-1 border-t border-border p-3 text-sm text-muted">
                 {setlist.mixing_overview.map((it, i) => <li key={i} className="flex gap-1.5"><span className="text-faint">·</span>{it}</li>)}
               </ul>
-            </div>
+            </details>
+          )}
+
+          {improvements.length > 0 && (
+            <details className="group border border-border">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-1.5"><Lightbulb size={14} /> Come migliorare il tuo set</span>
+                <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
+              </summary>
+              <ul className="space-y-1 border-t border-border p-3 text-sm text-muted">
+                {improvements.map((it, i) => <li key={i} className="flex gap-1.5"><span className="text-faint">·</span>{it}</li>)}
+              </ul>
+            </details>
           )}
 
           <ol className="space-y-1.5">
@@ -202,15 +218,6 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
               </li>
             ))}
           </ol>
-
-          {improvements.length > 0 && (
-            <div className="rounded-none border border-border bg-bg p-3">
-              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted"><Lightbulb size={14} /> Come migliorare il tuo set</div>
-              <ul className="space-y-1 text-sm text-muted">
-                {improvements.map((it, i) => <li key={i} className="flex gap-1.5"><span className="text-faint">·</span>{it}</li>)}
-              </ul>
-            </div>
-          )}
 
           {exported && <pre className="max-h-72 overflow-auto rounded-none border border-border bg-bg p-3 text-xs text-muted">{exported}</pre>}
         </div>

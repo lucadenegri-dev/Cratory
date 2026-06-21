@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, ClipboardList, Sparkles, Music2, Eye, Trash2, Calendar, Music4 } from "lucide-react";
+import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, Music4 } from "lucide-react";
 import {
   listImportedPlaylists,
   deletePlaylist,
@@ -12,7 +12,7 @@ import {
   type Playlist,
   type FeatureEnrichJob,
 } from "@/lib/api";
-import { Card, Badge, Alert, Button, EmptyState, Spinner, Progress } from "@/components/ui";
+import { Card, Badge, Alert, Button, EmptyState, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 
 function err(e: unknown): string {
@@ -74,8 +74,6 @@ export default function PlaylistsPage() {
     }
   };
 
-  const running = job?.status === "running";
-  const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
   const totalTracks = imported?.reduce((sum, p) => sum + p.track_count, 0) ?? 0;
 
   const marginalia = (
@@ -96,18 +94,6 @@ export default function PlaylistsPage() {
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
       {notice && <div className="mb-4"><Alert tone="info">{notice}</Alert></div>}
 
-      {/* Avanzamento arricchimento (auto dopo import) */}
-      {running && job && (
-        <Card className="mb-4">
-          <div className="p-4">
-            <div className="mb-1 flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 font-medium"><Sparkles size={15} className="text-muted" /> Arricchimento in corso…</span>
-              <span className="tnum text-muted">{job.processed}/{job.total || "?"}{pct != null ? ` (${pct}%)` : ""}</span>
-            </div>
-            <Progress value={pct} />
-          </div>
-        </Card>
-      )}
       {job?.status === "done" && job.result && (
         <div className="mb-4"><Alert tone="info">✓ Arricchimento completato: {featureEnrichSummary(job.result)}.</Alert></div>
       )}

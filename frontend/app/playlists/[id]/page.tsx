@@ -9,11 +9,12 @@ import {
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, fmtDuration,
-  enrichPlaylist, enrichmentJobStatus, featureEnrichSummary,
+  enrichPlaylist, enrichmentJobStatus,
   type Playlist, type Track, type GapAnalysis, type FeatureEnrichJob,
 } from "@/lib/api";
-import { Card, Badge, Alert, Button, Spinner, Progress, Input, Select, Checkbox } from "@/components/ui";
+import { Card, Badge, Alert, Button, Spinner, Input, Select, Checkbox } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useJobs } from "@/components/jobs-provider";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { KeyBadge } from "@/components/key-badge";
 
@@ -42,6 +43,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const pid = Number(id);
   const router = useRouter();
+  const jobs = useJobs();
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [gaps, setGaps] = useState<GapAnalysis | null>(null);
@@ -102,6 +104,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     try {
       setJob(await enrichPlaylist(pid));
       startPolling();
+      jobs.refresh();
     } catch (e) {
       setError(`Arricchimento fallito: ${String((e as Error).message ?? e)}`);
     } finally {
@@ -206,7 +209,6 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const cell = "px-3 py-2.5";
   const canSync = playlist.platform === "spotify" && (playlist.kind === "liked" || !!playlist.platform_playlist_id);
   const running = job?.status === "running";
-  const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
 
   const th = (label: string, col: string, numeric = false) => {
     const active = sort === col;
@@ -228,13 +230,6 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     <div className="space-y-3">
       <Link href={`/set-builder?playlist=${pid}`} className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> Costruisci un set</Button></Link>
       <Button size="sm" variant="outline" className="w-full" onClick={doEnrich} disabled={enriching || running}>{enriching || running ? <Spinner /> : <Sparkles size={15} />} Arricchisci</Button>
-      {running && job && (
-        <div className="space-y-1">
-          <div className="flex justify-between text-[10px] text-muted"><span>Arricchimento…</span><span className="tnum">{job.processed}/{job.total || "?"}{pct != null ? ` (${pct}%)` : ""}</span></div>
-          <Progress value={pct} />
-        </div>
-      )}
-      {job?.status === "done" && job.result && <p className="text-[10px] text-muted">✓ {featureEnrichSummary(job.result)}.</p>}
       <Link href="/discovery" className="block"><Button size="sm" variant="outline" className="w-full"><Compass size={15} /> Scopri musica simile</Button></Link>
       {canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da Spotify</Button>}
       {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> Spotify</Button></a>}
