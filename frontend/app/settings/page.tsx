@@ -10,11 +10,12 @@ import {
   type FeatureProviderStatus, type FeatureEnrichJob,
 } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Badge, Progress } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 
 const CATEGORY_ICON: Record<string, React.ReactNode> = {
-  Streaming: <Music2 size={15} className="text-success" />,
-  AI: <Sparkles size={15} className="text-primary" />,
-  "Feature musicali": <Gauge size={15} className="text-info" />,
+  Streaming: <Music2 size={15} className="text-muted" />,
+  AI: <Sparkles size={15} className="text-muted" />,
+  "Feature musicali": <Gauge size={15} className="text-muted" />,
 };
 
 function statusPill(s: ServiceStatus) {
@@ -44,19 +45,21 @@ function SettingsInner() {
     setCopied(true); setTimeout(() => setCopied(false), 1500);
   }
 
-  return (
-    <div>
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Impostazioni</h1>
-        <p className="mt-1 text-sm text-muted">Stato delle integrazioni esterne. Le chiavi si configurano in <code className="rounded bg-elevated px-1">backend/.env</code> e richiedono il riavvio del backend.</p>
-      </header>
+  const marginalia = (
+    <div className="space-y-2 text-xs leading-relaxed text-muted">
+      <p>Le chiavi si configurano in <code className="rounded-none bg-elevated px-1">backend/.env</code> e richiedono il riavvio del backend.</p>
+      <p>L&apos;arricchimento non sovrascrive mai i valori di BPM/key che inserisci a mano.</p>
+    </div>
+  );
 
-      {oauth === "connected" && <div className="mb-4"><Alert tone="success">✓ Account Spotify collegato.</Alert></div>}
+  return (
+    <PageLayout title="Impostazioni" marginaliaTitle="Aiuto" marginalia={marginalia}>
+      {oauth === "connected" && <div className="mb-4"><Alert tone="info">✓ Account Spotify collegato.</Alert></div>}
       {oauth === "error" && <div className="mb-4"><Alert tone="danger">Login Spotify fallito ({params.get("detail")}).</Alert></div>}
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
 
       <Card className="mb-4">
-        <CardHeader title={<span className="flex items-center gap-2"><Plug size={16} className="text-primary" /> Servizi &amp; API</span>} subtitle="Tutte le integrazioni e il loro stato di connessione" />
+        <CardHeader title={<span className="flex items-center gap-2"><Plug size={16} className="text-muted" /> Servizi &amp; API</span>} subtitle="Tutte le integrazioni e il loro stato di connessione" />
         <div className="divide-y divide-border">
           {services?.map((s) => (
             <div key={s.key} className="p-5">
@@ -69,8 +72,8 @@ function SettingsInner() {
                   </div>
                   <p className="mt-1 text-sm text-muted">{s.detail}</p>
                   <p className="mt-1.5 text-xs text-faint">
-                    {s.category} · {s.env.map((e) => <code key={e} className="mr-1 rounded bg-elevated px-1">{e}</code>)}
-                    <a href={s.docs} target="_blank" rel="noreferrer" className="text-info hover:underline">docs ↗</a>
+                    {s.category} · {s.env.map((e) => <code key={e} className="mr-1 rounded-none bg-elevated px-1">{e}</code>)}
+                    <a href={s.docs} target="_blank" rel="noreferrer" className="text-fg underline-offset-4 hover:underline">docs ↗</a>
                   </p>
                 </div>
                 {s.key === "spotify" && (
@@ -81,13 +84,13 @@ function SettingsInner() {
               </div>
 
               {s.key === "spotify" && spotify?.configured && (
-                <div className="mt-3 rounded-lg border border-border bg-bg p-3">
+                <div className="mt-3 rounded-none border border-border bg-bg p-3">
                   <p className="mb-1.5 text-xs text-muted">Redirect URI da incollare <strong>esatto</strong> nel dashboard Spotify:</p>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 break-all rounded bg-elevated px-2 py-1 text-xs text-primary">{spotify.redirect_uri}</code>
+                    <code className="flex-1 break-all rounded-none bg-elevated px-2 py-1 text-xs text-fg">{spotify.redirect_uri}</code>
                     <Button size="sm" variant="outline" onClick={copyRedirect}>{copied ? <><Check size={14} /> Copiato</> : <><Copy size={14} /> Copia</>}</Button>
                   </div>
-                  {s.connected && <p className="mt-2 text-xs text-muted">Se l&apos;import playlist dà <code className="rounded bg-elevated px-1">403</code>, usa <strong>Ricollega</strong> per riautorizzare i permessi.</p>}
+                  {s.connected && <p className="mt-2 text-xs text-muted">Se l&apos;import playlist dà <code className="rounded-none bg-elevated px-1">403</code>, usa <strong>Ricollega</strong> per riautorizzare i permessi.</p>}
                 </div>
               )}
             </div>
@@ -97,7 +100,7 @@ function SettingsInner() {
       </Card>
 
       <FeatureEnrichmentCard />
-    </div>
+    </PageLayout>
   );
 }
 
@@ -138,7 +141,7 @@ function FeatureEnrichmentCard() {
   return (
     <Card className="mb-4">
       <CardHeader
-        title={<span className="flex items-center gap-2"><Database size={16} className="text-info" /> Arricchimento feature musicali</span>}
+        title={<span className="flex items-center gap-2"><Database size={16} className="text-muted" /> Arricchimento feature musicali</span>}
         subtitle="BPM, tonalità, genere, mood, energia per le tracce importate"
         action={status && <Badge tone={status.configured ? "info" : "neutral"}>{status.configured ? status.provider ?? "attivo" : "nessun provider"}</Badge>}
       />
@@ -146,7 +149,7 @@ function FeatureEnrichmentCard() {
         <p className="text-muted">Ricava BPM via ISRC (Deezer), analisi audio reale via MusicBrainz + AcousticBrainz (BPM, tonalità, mood, danceability) e genere/mood dai tag (Last.fm); l&apos;energia è stimata da BPM e danceability quando manca. Non sovrascrive i valori che inserisci a mano.</p>
         {error && <Alert tone="danger">⚠ {error}</Alert>}
         {status && !status.configured ? (
-          <p className="text-muted">Configura almeno <code className="rounded bg-elevated px-1">GETSONGBPM_API_KEY</code> o <code className="rounded bg-elevated px-1">LASTFM_API_KEY</code> qui sopra per abilitare l&apos;arricchimento.</p>
+          <p className="text-muted">Configura almeno <code className="rounded-none bg-elevated px-1">GETSONGBPM_API_KEY</code> o <code className="rounded-none bg-elevated px-1">LASTFM_API_KEY</code> qui sopra per abilitare l&apos;arricchimento.</p>
         ) : (
           <div className="flex gap-2">
             <Button size="sm" onClick={() => run(false)} disabled={busy}>{busy ? "In corso…" : "Arricchisci feature"}</Button>
@@ -160,7 +163,7 @@ function FeatureEnrichmentCard() {
           </div>
         )}
         {job?.status === "done" && job.result && (
-          <p className="text-sm text-success">✓ {featureEnrichSummary(job.result)}.</p>
+          <p className="text-sm text-fg">✓ {featureEnrichSummary(job.result)}.</p>
         )}
       </div>
     </Card>

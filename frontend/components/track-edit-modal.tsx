@@ -100,8 +100,8 @@ function EditForm({ track, onClose, onSaved }: { track: Track; onClose: () => vo
     >
       <div className="mb-4 flex items-center gap-3">
         {track.album_art_url
-          ? <img src={track.album_art_url} alt="" className="h-11 w-11 shrink-0 rounded object-cover" />
-          : <span className="grid h-11 w-11 shrink-0 place-items-center rounded bg-elevated text-faint"><Music4 size={18} /></span>}
+          ? <img src={track.album_art_url} alt="" className="h-11 w-11 shrink-0 rounded-none object-cover" />
+          : <span className="grid h-11 w-11 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={18} /></span>}
         <div className="min-w-0">
           <div className="truncate font-medium">{track.title ?? <span className="italic text-faint">senza titolo</span>}</div>
           <div className="truncate text-sm text-muted">{track.artist ?? "—"}</div>
