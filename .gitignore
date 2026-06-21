@@ -30,3 +30,6 @@ out/
 .idea/
 Thumbs.db
 .DS_Store
+
+# brainstorming visual companion
+.superpowers/
