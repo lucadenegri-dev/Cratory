@@ -2,7 +2,51 @@
 
 from app.integrations.spotify import SpotifyError
 from app.models import EnrichmentCache, Track
-from app.services.labels import backfill_labels, labels_overview
+from app.services.labels import _label_from_copyrights, backfill_labels, labels_overview
+
+
+class _FakeSpotifyCopyrights:
+    """Riproduce l'API Spotify 2024+ in development mode: GET /albums/{id} NON
+    restituisce piu' il campo ``label``, solo ``copyrights``."""
+
+    def __init__(self, track_albums=None, album_copyrights=None):
+        self._track_albums = track_albums or {}
+        self._album_copyrights = album_copyrights or {}
+        self.track_calls = 0
+        self.album_calls = 0
+
+    def get_track_metadata(self, sid):
+        self.track_calls += 1
+        return {"id": sid, "album": {"id": self._track_albums.get(sid)}}
+
+    def get_album(self, album_id):
+        self.album_calls += 1
+        return {"id": album_id, "copyrights": self._album_copyrights.get(album_id, [])}
+
+
+def test_label_from_copyrights_strips_year_and_symbols():
+    assert _label_from_copyrights([{"text": "2013 Warp Records", "type": "P"}]) == "Warp Records"
+    assert _label_from_copyrights([{"text": "© 2020 XL Recordings Ltd", "type": "C"}]) == "XL Recordings Ltd"
+    assert _label_from_copyrights([{"text": "(P) 2021 Hyperdub", "type": "P"}]) == "Hyperdub"
+    assert _label_from_copyrights([]) is None
+    assert _label_from_copyrights(None) is None
+    # preferisce il copyright fonografico (P), che nomina l'etichetta del master
+    assert _label_from_copyrights([
+        {"text": "2019 Distributor Inc", "type": "C"},
+        {"text": "2019 Real Label", "type": "P"},
+    ]) == "Real Label"
+
+
+def test_backfill_derives_label_from_copyrights(db):
+    t = _track(db, spotify_id="s1", title="A", album_id="alb1")
+    client = _FakeSpotifyCopyrights(album_copyrights={"alb1": [
+        {"text": "2013 Warp Records", "type": "C"},
+        {"text": "2013 Warp Records", "type": "P"},
+    ]})
+    report = backfill_labels(db, client)
+    assert report["updated"] == 1
+    db.refresh(t)
+    assert t.label == "Warp Records"
 
 
 class _FakeSpotify:
@@ -80,7 +124,7 @@ def test_backfill_caches_album_label_across_runs(db):
     client = _FakeSpotify(album_labels={"alb1": "PAN"})
     backfill_labels(db, client)
     assert client.album_calls == 1
-    assert db.query(EnrichmentCache).filter_by(provider="spotify_album_label").count() == 1
+    assert db.query(EnrichmentCache).filter_by(provider="spotify_album_label_v2").count() == 1
 
     # nuova traccia stesso album: il secondo run NON richiama l'album (cache hit)
     t2 = _track(db, spotify_id="s2", title="B", album_id="alb1")

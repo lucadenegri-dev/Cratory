@@ -16,6 +16,7 @@ Due responsabilita':
 """
 
 import logging
+import re
 import time
 
 from sqlalchemy import select
@@ -27,11 +28,45 @@ from app.models import EnrichmentCache, Track
 logger = logging.getLogger(__name__)
 
 _MAX_GENRES_PER_LABEL = 6
-_ALBUM_LABEL_PROVIDER = "spotify_album_label"
+# v2: da nov. 2024 Spotify non espone piu' `label` su GET /albums/{id} in
+# development mode; l'etichetta si ricava da `copyrights`. Il bump invalida le
+# voci di cache "label None" salvate dalla versione precedente (bug).
+_ALBUM_LABEL_PROVIDER = "spotify_album_label_v2"
 
 
 def _spotify_track_id(track: Track) -> str | None:
     return track.spotify_id or track.platform_track_id
+
+
+def _label_from_copyrights(copyrights) -> str | None:
+    """Ricava il nome dell'etichetta dai ``copyrights`` dell'album.
+
+    Da novembre 2024 Spotify non espone piu' il campo ``label`` su
+    GET /albums/{id} per le app in development mode, ma resta ``copyrights``.
+    Si preferisce il copyright fonografico (tipo ``"P"``), che nomina l'owner del
+    master / l'etichetta; si rimuovono simboli (©/℗/(C)/(P)) e l'anno iniziale.
+    """
+    if not copyrights:
+        return None
+    phono = corp = other = None
+    for entry in copyrights:
+        text = (entry or {}).get("text")
+        if not text:
+            continue
+        typ = (entry or {}).get("type")
+        if typ == "P" and phono is None:
+            phono = text
+        elif typ == "C" and corp is None:
+            corp = text
+        elif other is None:
+            other = text
+    text = phono or corp or other
+    if not text:
+        return None
+    s = re.sub(r"^[\s©℗]+", "", text.strip())
+    s = re.sub(r"^\(\s*[cp]\s*\)\s*", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"^\s*\d{4}\s+", "", s).strip()
+    return s or None
 
 
 def _is_rate_limit(exc: SpotifyError) -> bool:
@@ -122,7 +157,9 @@ def backfill_labels(
                         break
                     logger.warning("Backfill label: lookup album %s fallita: %s", album_id, exc)
                     continue
-                label = (obj.get("label") or None) if obj else None
+                label = None
+                if obj:
+                    label = obj.get("label") or _label_from_copyrights(obj.get("copyrights"))
                 _cache_album_label(db, album_id, label)
             run_cache[album_id] = label
 
