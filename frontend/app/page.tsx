@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { apiGet, getLabels, type LibraryStats, type LabelStats } from "@/lib/api";
 import { Card, Alert, Progress, Button, Badge } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 
 function Stat({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: React.ReactNode; accent?: boolean }) {
   return (
@@ -15,15 +16,15 @@ function Stat({ icon, label, value, accent }: { icon: React.ReactNode; label: st
       <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
         <span className="text-faint">{icon}</span>{label}
       </div>
-      <div className={`tnum mt-1.5 text-2xl font-semibold ${accent ? "text-primary" : ""}`}>{value}</div>
+      <div className={`tnum mt-1.5 text-2xl font-semibold ${accent ? "text-fg-strong" : ""}`}>{value}</div>
     </Card>
   );
 }
 
 function Action({ href, icon, title, desc }: { href: string; icon: React.ReactNode; title: string; desc: string }) {
   return (
-    <Link href={href} className="group flex items-center gap-3 rounded-[var(--radius)] border border-border bg-surface p-4 transition-colors hover:border-border-strong hover:bg-elevated/40">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">{icon}</span>
+    <Link href={href} className="group flex items-center gap-3 rounded-none border border-border bg-surface p-4 transition-colors hover:border-border-strong hover:bg-elevated/40">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-none bg-elevated text-muted">{icon}</span>
       <div className="min-w-0">
         <div className="flex items-center gap-1 font-medium">{title}<ArrowRight size={14} className="text-faint transition-transform group-hover:translate-x-0.5" /></div>
         <div className="truncate text-sm text-muted">{desc}</div>
@@ -52,8 +53,8 @@ function KeyDistribution({ dist }: { dist: Record<string, number> }) {
       {top.map(([k, n]) => (
         <div key={k} className="flex items-center gap-2">
           <span className="tnum w-9 shrink-0 text-xs font-medium text-muted">{k}</span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-elevated">
-            <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(6, Math.round((n / max) * 100))}%` }} />
+          <div className="h-2 flex-1 overflow-hidden bg-elevated">
+            <div className="h-full bg-fg" style={{ width: `${Math.max(6, Math.round((n / max) * 100))}%` }} />
           </div>
           <span className="tnum w-4 shrink-0 text-right text-xs text-muted">{n}</span>
         </div>
@@ -72,9 +73,9 @@ function LabelBars({ labels }: { labels: LabelStats[] }) {
     <div className="space-y-1.5">
       {top.map((l) => (
         <Link key={l.label} href={`/labels/${encodeURIComponent(l.label)}`} className="group flex items-center gap-2">
-          <span className="w-28 shrink-0 truncate text-xs font-medium text-muted group-hover:text-fg" title={l.label}>{l.label}</span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-elevated">
-            <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(6, Math.round((l.track_count / max) * 100))}%` }} />
+          <span className="w-16 shrink-0 truncate text-xs font-medium text-muted group-hover:text-fg" title={l.label}>{l.label}</span>
+          <div className="h-2 flex-1 overflow-hidden bg-elevated">
+            <div className="h-full bg-fg" style={{ width: `${Math.max(6, Math.round((l.track_count / max) * 100))}%` }} />
           </div>
           <span className="tnum w-5 shrink-0 text-right text-xs text-muted">{l.track_count}</span>
         </Link>
@@ -124,13 +125,33 @@ export default function Dashboard() {
   const empty = stats && stats.total_tracks === 0;
   const reco = stats ? recommend(stats) : null;
 
-  return (
-    <div>
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-muted">Importa, arricchisci, genera.</p>
-      </header>
+  const marginalia = stats && !empty ? (
+    <div className="space-y-6">
+      <div>
+        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">Range BPM</div>
+        <div className="tnum text-2xl font-semibold text-fg-strong">{stats.bpm_min ? `${stats.bpm_min.toFixed(0)}–${stats.bpm_max?.toFixed(0)}` : "—"}</div>
+        <div className="mb-2 mt-4 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted"><KeyRound size={12} className="text-faint" /> Tonalità più frequenti</div>
+        <KeyDistribution dist={stats.key_distribution} />
+      </div>
+      <div className="border-t border-border pt-5">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted"><Tags size={12} className="text-faint" /> Top etichette</div>
+          <Link href="/labels" className="text-xs text-fg underline-offset-4 hover:underline">Tutte →</Link>
+        </div>
+        {labels.length > 0
+          ? <LabelBars labels={labels} />
+          : <p className="text-xs text-muted">Nessuna etichetta ancora. <Link href="/labels" className="text-fg underline">Recuperale da Spotify</Link> per esplorare la libreria per etichetta.</p>}
+      </div>
+    </div>
+  ) : undefined;
 
+  return (
+    <PageLayout
+      title="Dashboard"
+      meta={stats ? `${stats.total_tracks} TRACCE` : undefined}
+      marginaliaTitle="Libreria"
+      marginalia={marginalia}
+    >
       {error && <div className="mb-6"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
 
       {empty && (
@@ -141,7 +162,7 @@ export default function Dashboard() {
               <p className="font-medium">Nessuna playlist ancora</p>
               <p className="mt-1 text-sm text-muted">Importa una playlist Spotify per iniziare a costruire un set.</p>
             </div>
-            <Link href="/playlists" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover">
+            <Link href="/playlists" className="inline-flex items-center gap-1.5 bg-fg-strong px-4 py-2 text-xs font-medium uppercase tracking-wider text-bg transition-colors hover:bg-fg">
               Importa una playlist <ArrowRight size={14} />
             </Link>
           </div>
@@ -150,9 +171,9 @@ export default function Dashboard() {
 
       {/* Prossimo passo consigliato */}
       {reco && (
-        <Card className="mb-6 border-primary/30 bg-primary/[0.04]">
+        <Card className="mb-6">
           <div className="flex flex-wrap items-center gap-4 p-5">
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">{reco.icon}</span>
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-none bg-elevated text-muted">{reco.icon}</span>
             <div className="min-w-0 flex-1">
               <Badge tone="primary" className="mb-1.5">{reco.tag}</Badge>
               <div className="font-semibold">{reco.title}</div>
@@ -179,39 +200,20 @@ export default function Dashboard() {
             <Stat icon={<Gauge size={14} />} label="Con BPM" value={stats.with_bpm} />
           </div>
 
-          <div className="mt-3 grid gap-3 lg:grid-cols-3">
-            <Card className="p-4 lg:col-span-2">
-              <div className="mb-3 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted"><Gauge size={13} className="text-faint" /> Copertura enrichment</div>
-              <div className="space-y-2.5">
-                <Coverage label="BPM e tonalità (Camelot)" n={stats.with_key} total={stats.total_tracks} />
-                <Coverage label="Mood / energia" n={stats.with_features} total={stats.total_tracks} />
-                <Coverage label="Pronte per il set" n={stats.ready_for_set} total={stats.total_tracks} />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-4">
-                <Link href="/settings" className="inline-flex items-center gap-1 text-sm text-info hover:underline">Arricchisci le feature <ArrowRight size={14} /></Link>
-                <Link href="/library" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg"><Pencil size={13} /> Inserisci i valori a mano</Link>
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Range BPM</div>
-              <div className="tnum text-2xl font-semibold">{stats.bpm_min ? `${stats.bpm_min.toFixed(0)}–${stats.bpm_max?.toFixed(0)}` : "—"}</div>
-              <div className="mb-2 mt-4 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted"><KeyRound size={13} className="text-faint" /> Tonalità più frequenti</div>
-              <KeyDistribution dist={stats.key_distribution} />
-            </Card>
-          </div>
-
           <Card className="mt-3 p-4">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted"><Tags size={13} className="text-faint" /> Top etichette</div>
-              <Link href="/labels" className="inline-flex items-center gap-1 text-sm text-info hover:underline">Tutte le etichette <ArrowRight size={14} /></Link>
+            <div className="mb-3 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted"><Gauge size={13} className="text-faint" /> Copertura enrichment</div>
+            <div className="space-y-2.5">
+              <Coverage label="BPM e tonalità (Camelot)" n={stats.with_key} total={stats.total_tracks} />
+              <Coverage label="Mood / energia" n={stats.with_features} total={stats.total_tracks} />
+              <Coverage label="Pronte per il set" n={stats.ready_for_set} total={stats.total_tracks} />
             </div>
-            {labels.length > 0
-              ? <LabelBars labels={labels} />
-              : <p className="text-sm text-muted">Nessuna etichetta ancora. <Link href="/labels" className="text-info hover:underline">Recuperale da Spotify</Link> per esplorare la libreria per etichetta.</p>}
+            <div className="mt-3 flex flex-wrap gap-4">
+              <Link href="/settings" className="inline-flex items-center gap-1 text-sm text-fg underline-offset-4 hover:underline">Arricchisci le feature <ArrowRight size={14} /></Link>
+              <Link href="/library" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg"><Pencil size={13} /> Inserisci i valori a mano</Link>
+            </div>
           </Card>
         </>
       )}
-    </div>
+    </PageLayout>
   );
 }
