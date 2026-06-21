@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Music4, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
@@ -9,9 +9,10 @@ import {
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, fmtDuration,
-  type Playlist, type Track, type GapAnalysis,
+  enrichPlaylist, enrichmentJobStatus, featureEnrichSummary,
+  type Playlist, type Track, type GapAnalysis, type FeatureEnrichJob,
 } from "@/lib/api";
-import { Card, CardHeader, Badge, Alert, Button, Spinner, Input, Select, Checkbox } from "@/components/ui";
+import { Card, Badge, Alert, Button, Spinner, Progress, Input, Select, Checkbox } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { KeyBadge } from "@/components/key-badge";
@@ -49,6 +50,9 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const [editing, setEditing] = useState<Track | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [job, setJob] = useState<FeatureEnrichJob | null>(null);
+  const [enriching, setEnriching] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Filtri (come in libreria) — applicati lato client sulla playlist (insieme limitato).
   const [artist, setArtist] = useState("");
@@ -63,15 +67,47 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const [sort, setSort] = useState("");
   const [order, setOrder] = useState<Order>("asc");
 
-  const reload = () => {
+  const reload = useCallback(() => {
     playlistTracks(pid).then(setTracks).catch(() => {});
     playlistGaps(pid).then(setGaps).catch(() => {});
-  };
+  }, [pid]);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+
+  const startPolling = useCallback(() => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await enrichmentJobStatus();
+        setJob(s);
+        if (s.status === "done") { stopPolling(); reload(); }
+        else if (s.status === "idle") stopPolling();
+        else if (s.status === "error") { stopPolling(); setError(s.error ?? "Arricchimento fallito"); }
+      } catch (e) { stopPolling(); setError(String((e as Error).message ?? e)); }
+    }, 1000);
+  }, [reload, stopPolling]);
 
   useEffect(() => {
     getPlaylist(pid).then(setPlaylist).catch((e) => setError(String(e.message ?? e)));
     reload();
-  }, [pid]);
+    enrichmentJobStatus().then((s) => { setJob(s); if (s.status === "running") startPolling(); }).catch(() => {});
+    return stopPolling;
+  }, [pid, reload, startPolling, stopPolling]);
+
+  const doEnrich = async () => {
+    setError(null);
+    setEnriching(true);
+    try {
+      setJob(await enrichPlaylist(pid));
+      startPolling();
+    } catch (e) {
+      setError(`Arricchimento fallito: ${String((e as Error).message ?? e)}`);
+    } finally {
+      setEnriching(false);
+    }
+  };
 
   // Rank di inserimento STABILE: posizione cronologica per added_at crescente
   // (la traccia aggiunta per prima nella playlist Spotify = #1). Resta legato alla
@@ -169,6 +205,8 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const totalDur = tracks.reduce((s, t) => s + (t.duration_seconds ?? 0), 0);
   const cell = "px-3 py-2.5";
   const canSync = playlist.platform === "spotify" && (playlist.kind === "liked" || !!playlist.platform_playlist_id);
+  const running = job?.status === "running";
+  const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
 
   const th = (label: string, col: string, numeric = false) => {
     const active = sort === col;
@@ -189,6 +227,14 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const marginalia = (
     <div className="space-y-3">
       <Link href={`/set-builder?playlist=${pid}`} className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> Costruisci un set</Button></Link>
+      <Button size="sm" variant="outline" className="w-full" onClick={doEnrich} disabled={enriching || running}>{enriching || running ? <Spinner /> : <Sparkles size={15} />} Arricchisci</Button>
+      {running && job && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-[10px] text-muted"><span>Arricchimento…</span><span className="tnum">{job.processed}/{job.total || "?"}{pct != null ? ` (${pct}%)` : ""}</span></div>
+          <Progress value={pct} />
+        </div>
+      )}
+      {job?.status === "done" && job.result && <p className="text-[10px] text-muted">✓ {featureEnrichSummary(job.result)}.</p>}
       <Link href="/discovery" className="block"><Button size="sm" variant="outline" className="w-full"><Compass size={15} /> Scopri musica simile</Button></Link>
       {canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da Spotify</Button>}
       {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> Spotify</Button></a>}
@@ -223,9 +269,12 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
       {syncMsg && <div className="mb-4"><Alert tone="info">Sincronizzato: {syncMsg}</Alert></div>}
 
       {gaps && gaps.gaps.length > 0 && (
-        <Card className="mb-4">
-          <CardHeader title="Buchi della playlist" subtitle="analisi deterministica per il DJ set" />
-          <div className="grid gap-2 p-4">
+        <details className="group mb-4 border border-border">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
+            <span>Tips · {gaps.gaps.length}</span>
+            <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
+          </summary>
+          <div className="grid gap-2 border-t border-border p-4">
             {gaps.gaps.map((g) => (
               <div key={g.gap_type} className="flex gap-2 text-sm">
                 {g.severity === "warning"
@@ -235,7 +284,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
               </div>
             ))}
           </div>
-        </Card>
+        </details>
       )}
 
       <Card className="mb-4">
