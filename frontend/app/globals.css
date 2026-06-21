@@ -1,41 +1,64 @@
 @import "tailwindcss";
 
-/* Design system "studio": scuro, neutro caldo, accento lime da gear audio.
-   Niente Inter, niente gradienti viola, niente layout tutto centrato. */
-@theme {
-  --color-bg: #0a0b0d;
-  --color-surface: #131519;
-  --color-surface-2: #1a1d22;
-  --color-elevated: #20242a;
-  --color-border: #2a2f37;
-  --color-border-strong: #3a4049;
-  --color-muted: #8a919c;
-  --color-faint: #5c636d;
-  --color-fg: #eceef1;
+/* Design system "editorial archive": monospace, monocromo, filetti, squadrato.
+   I valori vivono nelle variabili runtime --c-* (commutate da data-theme);
+   @theme inline mappa le utility Tailwind a quelle variabili. */
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-elevated: var(--c-elevated);
+  --color-border: var(--c-border);
+  --color-border-strong: var(--c-border-strong);
+  --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
+  --color-fg: var(--c-fg);
+  --color-fg-strong: var(--c-fg-strong);
+  --color-danger: var(--c-danger);
 
-  --color-primary: #c2f24a;
-  --color-primary-hover: #d3ff63;
-  --color-primary-fg: #10130a;
+  --radius: 0px;
 
-  --color-info: #5fd0e6;
-  --color-warning: #f5b13f;
-  --color-danger: #f2585d;
-  --color-success: #56d98a;
-
-  --radius: 0.7rem;
-
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  --font-ui: var(--font-ibm-plex-mono), ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-ui);
 }
 
-html, body {
-  height: 100%;
+/* Dark = default (nessun attributo) */
+:root {
+  --c-bg: #0d0d0d;
+  --c-surface: #161616;
+  --c-surface-2: #1c1c1c;
+  --c-elevated: #222222;
+  --c-border: #2b2b2b;
+  --c-border-strong: #3d3d3d;
+  --c-muted: #787878;
+  --c-faint: #555555;
+  --c-fg: #c4c4c4;
+  --c-fg-strong: #ededed;
+  --c-danger: #d8593f;
 }
+
+/* Paper = toggle */
+html[data-theme="paper"] {
+  --c-bg: #e9e5db;
+  --c-surface: #f1eee6;
+  --c-surface-2: #eae6dc;
+  --c-elevated: #e2ddd0;
+  --c-border: #cdc7b8;
+  --c-border-strong: #b2ab99;
+  --c-muted: #86806f;
+  --c-faint: #a79f8d;
+  --c-fg: #2a2823;
+  --c-fg-strong: #15140f;
+  --c-danger: #a83a22;
+}
+
+html, body { height: 100%; }
 
 body {
   background-color: var(--color-bg);
   color: var(--color-fg);
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -51,7 +74,7 @@ body {
   scrollbar-color: var(--color-border-strong) transparent;
 }
 *::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 999px; border: 2px solid var(--color-bg); }
+*::-webkit-scrollbar-thumb { background: var(--color-border-strong); border: 2px solid var(--color-bg); }
 
 @keyframes shimmer {
   0% { opacity: 0.55; }
