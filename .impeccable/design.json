@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-21T00:00:00Z",
+  "title": "Design System: SetArc — Editorial Archive",
+  "extensions": {
+    "colorMeta": {
+      "ink": { "role": "neutral", "displayName": "Ink / Foreground stack (dark theme)", "canonical": "#c4c4c4", "tonalRamp": ["#0d0d0d", "#161616", "#1c1c1c", "#222222", "#2b2b2b", "#3d3d3d", "#555555", "#787878", "#c4c4c4", "#ededed"] },
+      "paper": { "role": "neutral", "displayName": "Paper stack (light theme)", "canonical": "#2a2823", "tonalRamp": ["#e9e5db", "#f1eee6", "#eae6dc", "#e2ddd0", "#cdc7b8", "#b2ab99", "#a79f8d", "#86806f", "#2a2823", "#15140f"] },
+      "danger": { "role": "secondary", "displayName": "Danger Red (the only hue)", "canonical": "#d8593f", "tonalRamp": ["#d8593f", "#a83a22"] }
+    },
+    "typographyMeta": {
+      "brand": { "displayName": "Brand", "purpose": "The SETARC wordmark — uppercase, 0.16em tracking." },
+      "title": { "displayName": "Title", "purpose": "Uppercase page titles (PageLayout) and card/section/modal headers, 0.12em tracking." },
+      "body": { "displayName": "Body", "purpose": "Descriptions and prose; cap at 46-60ch." },
+      "label": { "displayName": "Label", "purpose": "Uppercase tracked column/section headers and form-field labels." },
+      "data": { "displayName": "Data", "purpose": "All numeric readouts (BPM, Camelot, energy, duration) in tabular figures." }
+    },
+    "fonts": [
+      { "name": "ui", "value": "var(--font-ibm-plex-mono), ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace", "purpose": "The single monospace family for the entire UI. Exposed as --font-ui and swappable for a licensed face (e.g. Monument Grotesk Mono)." }
+    ],
+    "shadows": [
+      { "name": "none", "value": "none", "purpose": "The system has no shadows. Structure is drawn with 1px hairline borders and the neutral stack; the modal uses a hairline border over a dimmed (not blurred) backdrop." }
+    ],
+    "motion": [
+      { "name": "transition-colors", "value": "150ms ease", "purpose": "Default for hover/focus/active state changes on interactive elements." },
+      { "name": "shimmer", "value": "1.6s ease-in-out infinite", "purpose": "Indeterminate progress bar pulse (opacity 0.55 -> 1 -> 0.55)." },
+      { "name": "spin", "value": "1s linear infinite", "purpose": "Spinner rotation for inline loading (the only circular element)." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "lg", "value": "1024px" }
+    ],
+    "zIndex": [
+      { "name": "sticky", "value": "10" },
+      { "name": "modal", "value": "50" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single loudest action on a screen — solid foreground fill, background-colored ink, square, uppercase.",
+      "html": "<button class=\"ds-btn-primary\">Costruisci un set →</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: #0d0d0d; background: #ededed; border: none; border-radius: 0; cursor: pointer; transition: background 150ms ease; } .ds-btn-primary:hover { background: #c4c4c4; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 1px #c4c4c4; } .ds-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Low-emphasis action — transparent with a strong hairline edge, square.",
+      "html": "<button class=\"ds-btn-outline\">Annulla</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: #c4c4c4; background: transparent; border: 1px solid #3d3d3d; border-radius: 0; cursor: pointer; transition: background 150ms ease; } .ds-btn-outline:hover { background: #222222; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive action — the only colored control. Transparent with a danger border, inverts to a danger fill on hover.",
+      "html": "<button class=\"ds-btn-danger\">Elimina set</button>",
+      "css": ".ds-btn-danger { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 32px; padding: 0 12px; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: #d8593f; background: transparent; border: 1px solid #d8593f; border-radius: 0; cursor: pointer; transition: background 150ms ease, color 150ms ease; } .ds-btn-danger:hover { background: #d8593f; color: #0d0d0d; }"
+    },
+    {
+      "name": "Badge (neutral & danger)",
+      "kind": "chip",
+      "refersTo": "badge-neutral",
+      "description": "Monochrome by default — platform tags, statuses, transition classes and risk levels all use neutral. Danger is the only colored badge.",
+      "html": "<span class=\"ds-badge ds-badge-neutral\">Mix sicuro</span> <span class=\"ds-badge ds-badge-neutral\">Buon reset</span> <span class=\"ds-badge ds-badge-danger\">Errore</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; font-size: 0.625rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; border-radius: 0; } .ds-badge-neutral { color: #787878; background: #222222; } .ds-badge-danger { color: #d8593f; background: transparent; border: 1px solid #d8593f; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Surface layer off the floor — hairline border, no shadow, no radius.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-label\">Tracce</div><div class=\"ds-card-value\">428</div></div>",
+      "css": ".ds-card { background: #161616; border: 1px solid #2b2b2b; border-radius: 0; padding: 16px; } .ds-card-label { font-size: 0.625rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em; color: #787878; } .ds-card-value { margin-top: 6px; font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; color: #ededed; }"
+    },
+    {
+      "name": "Search / Filter Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Inset field — darker than its surface, square, foreground focus ring, no layout shift.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Key (es. 7A)\" />",
+      "css": ".ds-input { width: 100%; height: 40px; padding: 0 12px; font-family: var(--font-ui); font-size: 0.875rem; color: #c4c4c4; background: #0d0d0d; border: 1px solid #2b2b2b; border-radius: 0; transition: border-color 150ms ease; } .ds-input::placeholder { color: #555555; } .ds-input:focus { outline: none; border-color: #3d3d3d; box-shadow: 0 0 0 1px #c4c4c4; }"
+    },
+    {
+      "name": "INDEX Nav Item",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Editorial nav — uppercase mono links; active = underlined foreground text. No icons, no fill.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-nav-active\" href=\"#\">Dashboard</a><a class=\"ds-nav-item\" href=\"#\">Libreria</a><a class=\"ds-nav-item\" href=\"#\">Playlist</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; width: 180px; padding: 16px; background: #0d0d0d; } .ds-nav-item { padding: 4px 0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: #787878; text-decoration: none; transition: color 150ms ease; } .ds-nav-item:hover { color: #c4c4c4; } .ds-nav-active { color: #ededed; text-decoration: underline; text-underline-offset: 4px; }"
+    },
+    {
+      "name": "Coverage Bar",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Library completeness readout — square track on elevated, foreground fill, tabular n/total counts.",
+      "html": "<div class=\"ds-coverage\"><div class=\"ds-coverage-head\"><span>BPM e tonalità</span><span class=\"ds-coverage-count\">312/428 · 73%</span></div><div class=\"ds-coverage-track\"><div class=\"ds-coverage-fill\" style=\"width:73%\"></div></div></div>",
+      "css": ".ds-coverage-head { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.75rem; } .ds-coverage-head > span:first-child { color: #787878; } .ds-coverage-count { color: #555555; font-variant-numeric: tabular-nums; } .ds-coverage-track { height: 8px; width: 100%; background: #222222; border-radius: 0; overflow: hidden; } .ds-coverage-fill { height: 100%; background: #c4c4c4; border-radius: 0; transition: width 300ms ease; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Printed Archive",
+    "overview": "SetArc reads like a printed catalogue of a record library. The interface is monospace throughout, laid out on a hairline grid, square, and almost monochrome — ink on a near-black field by default, or on warm paper when toggled. Density is editorial, not dashboard-like: dense columns of type, numbered lists, uppercase section labels, tabular figures aligned like a typeset index. Structure is drawn with 1px hairlines and the neutral stack, never with shadows or rounded cards. The only hue is a single restrained red for errors and destructive actions; everything else, including Camelot keys and mix-status, is monochrome.",
+    "keyCharacteristics": [
+      "Monospace (IBM Plex Mono) for the entire interface — chrome, labels, body, and data",
+      "Hairline three-zone editorial shell: INDEX / CONTENT / MARGINALIA",
+      "Square geometry everywhere (radius 0), no shadows except a dimmed modal backdrop",
+      "Near-monochrome: one red (danger) only, for errors and destructive actions",
+      "Two runtime themes — dark (default) and warm paper — persisted, no FOUC",
+      "Tabular figures (tnum) on every metric"
+    ],
+    "rules": [
+      { "name": "The Monochrome Rule", "body": "Nothing carries hue except danger. Camelot keys, mix-status, transition quality and risk levels are rendered in neutrals — distinguished by weight, uppercase labels, and position, never by color.", "section": "colors" },
+      { "name": "The One-Red Rule", "body": "Red means error or destruction, full stop. A low score or a risky transition is not an error and must stay monochrome.", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "Every number a DJ scans is set in tabular figures (.tnum) so columns align like a typeset index.", "section": "typography" },
+      { "name": "The Mono Rule", "body": "One monospace family for the entire UI. No serif headlines, no second sans for contrast. Hierarchy is weight, size, case, and tracking.", "section": "typography" },
+      { "name": "The Hairline Rule", "body": "Structure is drawn with 1px borders and the neutral stack. If a region needs separating, add a filet or step the stack — never a shadow, never a radius.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the entire UI monospace; hierarchy is weight, case, and tracking.",
+      "Do draw structure with 1px hairlines and the neutral stack — flat, square, no shadows.",
+      "Do set every metric in tabular figures via .tnum.",
+      "Do render Camelot keys, mix-status, and quality/risk in monochrome.",
+      "Do keep both themes in sync — every surface must read in dark and paper.",
+      "Do use uppercase tracked labels for column/section headers and field labels."
+    ],
+    "donts": [
+      "Don't introduce any color other than danger, and only for errors/destruction.",
+      "Don't add rounded corners or shadows — radius 0, hairlines only (The Hairline Rule).",
+      "Don't color-code keys or mix quality (The Monochrome Rule).",
+      "Don't introduce a second type family or a non-mono face in UI chrome (The Mono Rule).",
+      "Don't treat a low score or risky transition as an error — keep it monochrome (The One-Red Rule).",
+      "Don't put faint on anything that must be read at body size; use muted for readable secondary text."
+    ]
+  }
+}
