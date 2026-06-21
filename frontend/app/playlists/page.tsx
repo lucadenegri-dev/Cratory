@@ -18,6 +18,7 @@ import {
   type FeatureEnrichJob,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Progress } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -107,29 +108,32 @@ export default function PlaylistsPage() {
 
   const running = job?.status === "running";
   const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
+  const totalTracks = imported?.reduce((sum, p) => sum + p.track_count, 0) ?? 0;
+
+  const marginalia = (
+    <div className="space-y-3">
+      <Link href="/playlists/import-spotify" className="block"><Button size="sm" className="w-full"><Download size={15} /> Importa da Spotify</Button></Link>
+      <Link href="/playlists/import-manual" className="block"><Button size="sm" variant="outline" className="w-full"><ClipboardList size={15} /> Inserisci manualmente</Button></Link>
+      {imported && imported.length > 0 && (
+        <div className="space-y-2 border-t border-border pt-4 text-xs">
+          <div className="flex justify-between gap-2"><span className="text-muted">Playlist</span><span className="tnum text-fg">{imported.length}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">Tracce totali</span><span className="tnum text-fg">{totalTracks}</span></div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
-    <div>
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Playlist</h1>
-          <p className="mt-1 text-sm text-muted">Le tue playlist importate. Aggiungine una da Spotify o incollando una tracklist.</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/playlists/import-spotify"><Button size="sm"><Download size={15} /> Importa da Spotify</Button></Link>
-          <Link href="/playlists/import-manual"><Button size="sm" variant="outline"><ClipboardList size={15} /> Inserisci manualmente</Button></Link>
-        </div>
-      </header>
-
+    <PageLayout title="Playlist" meta={imported ? String(imported.length) : undefined} marginaliaTitle="Sorgente" marginalia={marginalia}>
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
-      {notice && <div className="mb-4"><Alert tone="success">{notice}</Alert></div>}
+      {notice && <div className="mb-4"><Alert tone="info">{notice}</Alert></div>}
 
       {/* Avanzamento arricchimento (auto dopo import o ri-arricchimento manuale) */}
       {running && job && (
         <Card className="mb-4">
           <div className="p-4">
             <div className="mb-1 flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 font-medium"><Sparkles size={15} className="text-primary" /> Arricchimento in corso…</span>
+              <span className="flex items-center gap-2 font-medium"><Sparkles size={15} className="text-muted" /> Arricchimento in corso…</span>
               <span className="tnum text-muted">{job.processed}/{job.total || "?"}{pct != null ? ` (${pct}%)` : ""}</span>
             </div>
             <Progress value={pct} />
@@ -137,7 +141,7 @@ export default function PlaylistsPage() {
         </Card>
       )}
       {job?.status === "done" && job.result && (
-        <div className="mb-4"><Alert tone="success">✓ Arricchimento completato: {featureEnrichSummary(job.result)}.</Alert></div>
+        <div className="mb-4"><Alert tone="info">✓ Arricchimento completato: {featureEnrichSummary(job.result)}.</Alert></div>
       )}
 
       {imported && imported.length === 0 && (
@@ -147,15 +151,15 @@ export default function PlaylistsPage() {
       )}
 
       <div className="grid gap-3">
-        {imported?.map((p) => (
+        {imported?.map((p, i) => (
           <Card key={p.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <Music2 size={16} className="text-primary" />
-                  <Link href={`/playlists/${p.id}`} className="truncate font-medium hover:text-primary">{p.name}</Link>
+                  <span className="tnum text-xs text-faint">{String(i + 1).padStart(2, "0")}</span>
+                  <Link href={`/playlists/${p.id}`} className="truncate font-medium hover:text-fg-strong">{p.name}</Link>
                   <Badge tone="neutral">{p.platform}</Badge>
-                  {p.kind === "liked" && <Badge tone="info">liked</Badge>}
+                  {p.kind === "liked" && <Badge tone="neutral">liked</Badge>}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-faint">
                   <span>{p.track_count} tracce</span>
@@ -182,13 +186,13 @@ export default function PlaylistsPage() {
             {gaps[p.id] && (
               <div className="mt-3 grid gap-2 border-t border-border pt-3">
                 {gaps[p.id].gaps.length === 0 && (
-                  <p className="text-sm text-success">Nessun problema rilevante: la playlist è abbastanza bilanciata.</p>
+                  <p className="text-sm text-fg">Nessun problema rilevante: la playlist è abbastanza bilanciata.</p>
                 )}
                 {gaps[p.id].gaps.map((g) => (
                   <div key={g.gap_type} className="flex gap-2 text-sm">
                     {g.severity === "warning"
-                      ? <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" />
-                      : <Info size={15} className="mt-0.5 shrink-0 text-info" />}
+                      ? <AlertTriangle size={15} className="mt-0.5 shrink-0 text-muted" />
+                      : <Info size={15} className="mt-0.5 shrink-0 text-muted" />}
                     <div>
                       <span className="text-fg">{g.description}</span>{" "}
                       <span className="text-muted">{g.suggestion}</span>
@@ -200,6 +204,6 @@ export default function PlaylistsPage() {
           </Card>
         ))}
       </div>
-    </div>
+    </PageLayout>
   );
 }

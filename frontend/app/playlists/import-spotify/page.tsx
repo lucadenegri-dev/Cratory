@@ -13,6 +13,7 @@ import {
   type SpotifyStatus,
 } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Spinner } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -57,15 +58,19 @@ export default function ImportSpotifyPage() {
 
   const connected = spotify?.configured && spotify?.user_connected;
 
+  const marginalia = (
+    <div className="space-y-2 text-xs leading-relaxed text-muted">
+      <p>Spotify fornisce identità traccia, metadata editoriali, cover, durata, ISRC e URL.</p>
+      <p>BPM, key e feature di mixing <span className="text-fg">non</span> arrivano da Spotify: vengono aggiunti dall&apos;arricchimento dopo l&apos;import.</p>
+    </div>
+  );
+
   return (
-    <div>
+    <PageLayout title="Import — Spotify" marginaliaTitle="Note" marginalia={marginalia}>
       <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
         <ArrowLeft size={15} /> Playlist
       </Link>
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Importa da Spotify</h1>
-        <p className="mt-1 text-sm text-muted">Scegli una delle tue playlist Spotify: verrà importata e arricchita automaticamente.</p>
-      </header>
+      <p className="mb-6 text-sm text-muted">Scegli una delle tue playlist Spotify: verrà importata e arricchita automaticamente.</p>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
@@ -103,7 +108,7 @@ export default function ImportSpotifyPage() {
             {available && available.length === 0 && <p className="text-sm text-muted">Nessuna playlist trovata.</p>}
             <div className="grid gap-2">
               {available?.map((p) => (
-                <div key={p.platform_playlist_id} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+                <div key={p.platform_playlist_id} className="flex items-center justify-between gap-3 rounded-none border border-border px-3 py-2">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">{p.name}</div>
                     <div className="text-xs text-faint">{p.track_count} tracce{p.owner ? ` · ${p.owner}` : ""}</div>
@@ -117,6 +122,6 @@ export default function ImportSpotifyPage() {
           </div>
         </Card>
       )}
-    </div>
+    </PageLayout>
   );
 }

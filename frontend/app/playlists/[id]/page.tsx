@@ -12,6 +12,7 @@ import {
   type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Spinner, Input, Select, Checkbox } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { KeyBadge } from "@/components/key-badge";
 
@@ -156,8 +157,13 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     }
   };
 
-  if (error) return <div><Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Playlist</Link><Alert tone="danger">⚠ {error}</Alert></div>;
-  if (!playlist) return <p className="text-muted">Caricamento…</p>;
+  if (error) return (
+    <PageLayout title="Playlist">
+      <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Playlist</Link>
+      <Alert tone="danger">⚠ {error}</Alert>
+    </PageLayout>
+  );
+  if (!playlist) return <PageLayout title="Playlist"><p className="text-muted">Caricamento…</p></PageLayout>;
 
   const ready = tracks.filter((t) => t.status === "ready_for_set").length;
   const totalDur = tracks.reduce((s, t) => s + (t.duration_seconds ?? 0), 0);
@@ -180,32 +186,41 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     );
   };
 
+  const marginalia = (
+    <div className="space-y-3">
+      <Link href={`/set-builder?playlist=${pid}`} className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> Costruisci un set</Button></Link>
+      <Link href="/discovery" className="block"><Button size="sm" variant="outline" className="w-full"><Compass size={15} /> Scopri musica simile</Button></Link>
+      {canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da Spotify</Button>}
+      {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> Spotify</Button></a>}
+      <Button size="sm" variant="danger" className="w-full" onClick={doDelete} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} Rimuovi</Button>
+      <div className="space-y-2 border-t border-border pt-4 text-xs">
+        <div className="flex justify-between gap-2"><span className="text-muted">Tracce</span><span className="tnum text-fg">{playlist.track_count}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">Pronte</span><span className="tnum text-fg">{ready}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">Durata</span><span className="tnum text-fg">{fmtDuration(totalDur)}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">Owner</span><span className="truncate text-fg">{playlist.owner ?? "—"}</span></div>
+      </div>
+    </div>
+  );
+
   return (
-    <div>
+    <PageLayout title="Playlist" meta={playlist.name} marginaliaTitle="Dettagli" marginalia={marginalia}>
       <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Playlist</Link>
 
       <div className="mb-6 flex flex-wrap items-start gap-4">
         {playlist.artwork_url
-          ? <img src={playlist.artwork_url} alt="" className="h-24 w-24 rounded-xl object-cover" />
-          : <span className="grid h-24 w-24 place-items-center rounded-xl bg-surface-2 text-faint"><Music4 size={30} /></span>}
+          ? <img src={playlist.artwork_url} alt="" className="h-24 w-24 rounded-none object-cover" />
+          : <span className="grid h-24 w-24 place-items-center rounded-none bg-surface-2 text-faint"><Music4 size={30} /></span>}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{playlist.name}</h1>
             <Badge tone="neutral">{playlist.platform}</Badge>
-            {playlist.kind === "liked" && <Badge tone="info">liked</Badge>}
+            {playlist.kind === "liked" && <Badge tone="neutral">liked</Badge>}
           </div>
           <p className="mt-1 text-sm text-muted">{playlist.track_count} tracce · {ready} pronte per il set · {fmtDuration(totalDur)}{playlist.owner ? ` · ${playlist.owner}` : ""}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Link href={`/set-builder?playlist=${pid}`}><Button size="sm"><Sparkles size={15} /> Costruisci un set</Button></Link>
-            <Link href="/discovery"><Button size="sm" variant="outline"><Compass size={15} /> Scopri musica simile</Button></Link>
-            {canSync && <Button size="sm" variant="outline" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da Spotify</Button>}
-            {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><ExternalLink size={14} /> Spotify</Button></a>}
-            <Button size="sm" variant="danger" onClick={doDelete} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} Rimuovi</Button>
-          </div>
         </div>
       </div>
 
-      {syncMsg && <div className="mb-4"><Alert tone="success">Sincronizzato: {syncMsg}</Alert></div>}
+      {syncMsg && <div className="mb-4"><Alert tone="info">Sincronizzato: {syncMsg}</Alert></div>}
 
       {gaps && gaps.gaps.length > 0 && (
         <Card className="mb-4">
@@ -214,8 +229,8 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
             {gaps.gaps.map((g) => (
               <div key={g.gap_type} className="flex gap-2 text-sm">
                 {g.severity === "warning"
-                  ? <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" />
-                  : <Info size={15} className="mt-0.5 shrink-0 text-info" />}
+                  ? <AlertTriangle size={15} className="mt-0.5 shrink-0 text-muted" />
+                  : <Info size={15} className="mt-0.5 shrink-0 text-muted" />}
                 <div><span className="text-fg">{g.description}</span> <span className="text-muted">{g.suggestion}</span></div>
               </div>
             ))}
@@ -246,7 +261,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
         </div>
       </Card>
 
-      <Card className="overflow-x-auto">
+      <div className="overflow-x-auto border border-border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-faint">
@@ -268,9 +283,9 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
                 <td className={cell}>
                   <Link href={`/tracks/${t.id}`} className="flex items-center gap-2.5">
                     {t.album_art_url
-                      ? <img src={t.album_art_url} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
-                      : <span className="grid h-8 w-8 shrink-0 place-items-center rounded bg-elevated text-faint"><Music4 size={14} /></span>}
-                    <span className="max-w-[16rem] truncate font-medium hover:text-primary">{t.title ?? <span className="italic text-faint">senza titolo</span>}</span>
+                      ? <img src={t.album_art_url} alt="" className="h-8 w-8 shrink-0 rounded-none object-cover" />
+                      : <span className="grid h-8 w-8 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={14} /></span>}
+                    <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{t.title ?? <span className="italic text-faint">senza titolo</span>}</span>
                   </Link>
                 </td>
                 <td className={`${cell} text-muted`}>{t.artist ?? "—"}</td>
@@ -281,8 +296,8 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
                 <td className={cell}><Badge tone={STATUS_TONE[t.status] ?? "neutral"}>{t.status}</Badge></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-primary"><Pencil size={14} /></button>
-                    {t.spotify_url && <a href={t.spotify_url} target="_blank" rel="noreferrer" title="Apri su Spotify" className="text-faint hover:text-info"><ExternalLink size={14} /></a>}
+                    <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
+                    {t.spotify_url && <a href={t.spotify_url} target="_blank" rel="noreferrer" title="Apri su Spotify" className="text-faint hover:text-fg"><ExternalLink size={14} /></a>}
                   </div>
                 </td>
               </tr>
@@ -290,7 +305,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
             {visible.length === 0 && <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia con questi filtri.</td></tr>}
           </tbody>
         </table>
-      </Card>
+      </div>
 
       <TrackEditModal
         track={editing}
@@ -298,6 +313,6 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
         onClose={() => setEditing(null)}
         onSaved={(t) => setTracks((cur) => cur.map((x) => (x.id === t.id ? t : x)))}
       />
-    </div>
+    </PageLayout>
   );
 }
