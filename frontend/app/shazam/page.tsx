@@ -8,6 +8,7 @@ import {
   type DjSet, type ShazamIdentifyState,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Progress, Input } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -85,18 +86,19 @@ export default function ShazamPage() {
   const running = job?.status === "running";
   const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
 
+  const marginalia = (
+    <p className="text-xs leading-relaxed text-muted">
+      Sorgenti: SoundCloud, Mixcloud, YouTube. L&apos;audio viene scaricato solo temporaneamente per il fingerprinting, mai conservato.
+    </p>
+  );
+
   return (
-    <div>
-      <header className="mb-6">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight"><Radar size={22} className="text-primary" /> Shazam</h1>
-        <p className="mt-1 text-sm text-muted">
-          Identifica le tracce di un set DJ da un URL (SoundCloud, Mixcloud, YouTube).
-        </p>
-      </header>
+    <PageLayout title="Shazam" meta={sets ? String(sets.length) : undefined} marginaliaTitle="Note" marginalia={marginalia}>
+      <p className="mb-6 text-sm text-muted">Identifica le tracce di un set DJ da un URL (SoundCloud, Mixcloud, YouTube).</p>
 
       {available === false && (
         <div className="mb-4"><Alert tone="warning">
-          Identificazione non disponibile: il backend richiede <code className="rounded bg-elevated px-1">ffmpeg</code>, <code className="rounded bg-elevated px-1">yt-dlp</code> e <code className="rounded bg-elevated px-1">shazamio</code>.
+          Identificazione non disponibile: il backend richiede <code className="rounded-none bg-elevated px-1">ffmpeg</code>, <code className="rounded-none bg-elevated px-1">yt-dlp</code> e <code className="rounded-none bg-elevated px-1">shazamio</code>.
         </Alert></div>
       )}
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
@@ -117,7 +119,7 @@ export default function ShazamPage() {
         {running && (
           <div className="border-t border-border px-4 py-3">
             <div className="mb-1 flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 font-medium"><Radar size={15} className="text-primary" /> {job?.phase ?? "Avvio…"}</span>
+              <span className="flex items-center gap-2 font-medium"><Radar size={15} className="text-muted" /> {job?.phase ?? "Avvio…"}</span>
               {pct != null && <span className="tnum text-muted">{job?.processed}/{job?.total} ({pct}%)</span>}
             </div>
             <Progress value={pct} />
@@ -139,11 +141,11 @@ export default function ShazamPage() {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
                   {s.artwork_url
-                    ? <img src={s.artwork_url} alt="" className="h-12 w-12 shrink-0 rounded-md object-cover" />
-                    : <span className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-elevated text-faint"><Music4 size={18} /></span>}
+                    ? <img src={s.artwork_url} alt="" className="h-12 w-12 shrink-0 rounded-none object-cover" />
+                    : <span className="grid h-12 w-12 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={18} /></span>}
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Link href={`/shazam/${s.id}`} className="truncate font-medium hover:text-primary">{s.title ?? s.source_url}</Link>
+                      <Link href={`/shazam/${s.id}`} className="truncate font-medium hover:text-fg-strong">{s.title ?? s.source_url}</Link>
                       <Badge tone={st.tone}>{st.label}</Badge>
                       {s.platform && <Badge tone="neutral">{s.platform}</Badge>}
                     </div>
@@ -162,6 +164,6 @@ export default function ShazamPage() {
           );
         })}
       </div>
-    </div>
+    </PageLayout>
   );
 }

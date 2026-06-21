@@ -14,6 +14,7 @@ import {
   type Playlist,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Select, Field, Checkbox } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -62,14 +63,33 @@ export default function DiscoveryPage() {
 
   const noPlaylists = playlists != null && playlists.length === 0;
 
+  const marginalia = status?.configured && !noPlaylists ? (
+    <div className="space-y-3">
+      <Field label="Playlist da espandere">
+        <Select value={playlistId ?? ""} onChange={(e) => setPlaylistId(Number(e.target.value))} disabled={busy}>
+          {playlists?.map((p) => (
+            <option key={p.id} value={p.id}>{p.name} · {p.track_count} tracce</option>
+          ))}
+        </Select>
+      </Field>
+      <Button className="w-full" onClick={runExpand} disabled={busy || playlistId == null}>
+        {busy ? <Spinner /> : <Wand2 size={15} />} Scopri tracce affini
+      </Button>
+      <Checkbox
+        label={status.ai_explanations ? "Spiega con l'AI" : "Spiegazioni AI (configura AI_API_KEY)"}
+        checked={aiEnabled}
+        onChange={setUseAi}
+        disabled={busy || !status.ai_explanations}
+      />
+      <p className="border-t border-border pt-4 text-xs leading-relaxed text-muted">
+        Le tracce affini arrivano da fonti di similarità e sono ordinate per compatibilità tecnica con la playlist.
+      </p>
+    </div>
+  ) : undefined;
+
   return (
-    <div>
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Discovery</h1>
-        <p className="mt-1 text-sm text-muted">
-          Espandi le tue playlist con musica nuova e compatibile
-        </p>
-      </header>
+    <PageLayout title="Discovery" marginaliaTitle="Parametri" marginalia={marginalia}>
+      <p className="mb-6 text-sm text-muted">Espandi le tue playlist con musica nuova e compatibile.</p>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
@@ -90,44 +110,18 @@ export default function DiscoveryPage() {
 
       {status?.configured && !noPlaylists && (
         <>
-          <Card className="mb-6">
-            <div className="grid gap-4 p-4 sm:grid-cols-[1fr_auto] sm:items-end">
-              <Field label="Playlist da espandere">
-                <Select
-                  value={playlistId ?? ""}
-                  onChange={(e) => setPlaylistId(Number(e.target.value))}
-                  disabled={busy}
-                >
-                  {playlists?.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} · {p.track_count} tracce</option>
-                  ))}
-                </Select>
-              </Field>
-              <Button onClick={runExpand} disabled={busy || playlistId == null}>
-                {busy ? <Spinner /> : <Wand2 size={15} />} Scopri tracce affini
-              </Button>
-            </div>
-            <div className="border-t border-border px-4 py-3">
-              <Checkbox
-                label={
-                  status.ai_explanations
-                    ? "Spiega ogni suggerimento con l'AI"
-                    : "Spiegazioni AI (configura AI_API_KEY per abilitarle)"
-                }
-                checked={aiEnabled}
-                onChange={setUseAi}
-                disabled={busy || !status.ai_explanations}
-              />
-            </div>
-          </Card>
-
           {busy && !result && (
             <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Cerco tracce…</div>
           )}
           {result && <Results result={result} />}
+          {!busy && !result && (
+            <EmptyState icon={<Compass size={28} />} title="Pronto per il discovery">
+              Scegli una playlist nel pannello a destra e premi “Scopri tracce affini”.
+            </EmptyState>
+          )}
         </>
       )}
-    </div>
+    </PageLayout>
   );
 }
 
@@ -153,12 +147,6 @@ function Results({ result }: { result: DiscoveryResponse }) {
   );
 }
 
-function compatTone(score: number): "success" | "primary" | "neutral" {
-  if (score >= 70) return "success";
-  if (score >= 45) return "primary";
-  return "neutral";
-}
-
 function CandidateRow({ c }: { c: DiscoveryCandidate }) {
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
@@ -181,16 +169,16 @@ function CandidateRow({ c }: { c: DiscoveryCandidate }) {
     <Card className="flex items-center gap-3 p-3">
       {c.album_art_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={c.album_art_url} alt="" className="h-12 w-12 shrink-0 rounded-md object-cover" />
+        <img src={c.album_art_url} alt="" className="h-12 w-12 shrink-0 rounded-none object-cover" />
       ) : (
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-elevated text-faint">
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-none bg-elevated text-faint">
           <Music2 size={18} />
         </div>
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium">{c.artist} — {c.title}</span>
-          <Badge tone={compatTone(c.compatibility)}>{c.compatibility}% compat</Badge>
+          <Badge tone="neutral">{c.compatibility}% compat</Badge>
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-xs text-faint">
           <span>{SOURCE_LABEL[c.source]}</span>
@@ -206,7 +194,7 @@ function CandidateRow({ c }: { c: DiscoveryCandidate }) {
             href={c.spotify_url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-lg border border-border-strong px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:bg-elevated"
+            className="inline-flex items-center gap-1 rounded-none border border-border-strong px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:bg-elevated"
           >
             <ExternalLink size={13} /> Spotify
           </a>

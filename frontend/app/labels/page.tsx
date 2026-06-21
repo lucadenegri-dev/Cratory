@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Tags, RefreshCw, Users, Disc3 } from "lucide-react";
+import { RefreshCw, Users, Disc3 } from "lucide-react";
 import { getLabels, backfillLabels, type LabelStats } from "@/lib/api";
-import { Card, Button, Spinner, Alert, EmptyState, Badge } from "@/components/ui";
+import { Button, Spinner, Alert, EmptyState, Badge, Card } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 
 export default function Labels() {
   const [labels, setLabels] = useState<LabelStats[] | null>(null);
@@ -49,29 +50,31 @@ export default function Labels() {
 
   const total = labels?.reduce((s, l) => s + l.track_count, 0) ?? 0;
 
-  return (
-    <div>
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight"><Tags size={22} /> Etichette</h1>
-          <p className="mt-1 text-sm text-muted">
-            {labels ? `${labels.length} etichette · ${total} tracce` : "Le etichette discografiche della tua libreria."}
-          </p>
+  const marginalia = (
+    <div className="space-y-3">
+      <Button size="sm" variant="outline" className="w-full" onClick={doBackfill} disabled={busy}>
+        {busy ? <Spinner /> : <RefreshCw size={14} />} {remaining > 0 ? "Continua il recupero" : "Recupera da Spotify"}
+      </Button>
+      {labels && (
+        <div className="space-y-2 border-t border-border pt-4 text-xs">
+          <div className="flex justify-between gap-2"><span className="text-muted">Etichette</span><span className="tnum text-fg">{labels.length}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">Tracce</span><span className="tnum text-fg">{total}</span></div>
         </div>
-        <Button size="sm" variant="outline" onClick={doBackfill} disabled={busy}>
-          {busy ? <Spinner /> : <RefreshCw size={14} />} {remaining > 0 ? "Continua il recupero" : "Recupera etichette da Spotify"}
-        </Button>
-      </header>
+      )}
+    </div>
+  );
 
-      {msg && <div className="mb-4"><Alert tone={msgTone}>{msg}</Alert></div>}
+  return (
+    <PageLayout title="Etichette" meta={labels ? `${labels.length}` : undefined} marginaliaTitle="Totali" marginalia={marginalia}>
+      {msg && <div className="mb-4"><Alert tone={msgTone === "warning" ? "warning" : "info"}>{msg}</Alert></div>}
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
       {labels === null && !error && <p className="text-muted">Caricamento…</p>}
 
       {labels && labels.length === 0 && (
-        <EmptyState icon={<Tags size={28} />} title="Nessuna etichetta">
+        <EmptyState icon={<Disc3 size={28} />} title="Nessuna etichetta">
           Le tracce non hanno ancora l&apos;informazione sull&apos;etichetta. Premi
-          <span className="font-medium text-fg"> “Recupera etichette da Spotify” </span>
+          <span className="font-medium text-fg"> “Recupera da Spotify” </span>
           per leggerla dagli album.
         </EmptyState>
       )}
@@ -84,8 +87,8 @@ export default function Labels() {
               <Link key={l.label} href={`/labels/${encodeURIComponent(l.label)}`}>
                 <Card className="h-full p-4 transition-colors hover:bg-elevated/40">
                   <div className="flex items-start justify-between gap-2">
-                    <h2 className="min-w-0 truncate font-semibold text-fg" title={l.label}>{l.label}</h2>
-                    <Badge tone="info">{l.track_count}</Badge>
+                    <h2 className="min-w-0 truncate font-semibold text-fg-strong" title={l.label}>{l.label}</h2>
+                    <Badge tone="neutral">{l.track_count}</Badge>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                     <span className="inline-flex items-center gap-1"><Disc3 size={13} /> {l.track_count} tracce</span>
@@ -103,6 +106,6 @@ export default function Labels() {
           })}
         </div>
       )}
-    </div>
+    </PageLayout>
   );
 }

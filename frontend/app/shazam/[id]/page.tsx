@@ -5,6 +5,7 @@ import { use, useEffect, useState } from "react";
 import { ArrowLeft, Radar, Music4, ExternalLink, Clock } from "lucide-react";
 import { getDjSet, fmtDuration, fmtDate, type DjSetDetail } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert } from "@/components/ui";
+import { PageLayout } from "@/components/page-layout";
 
 export default function DjSetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -16,21 +17,32 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
   }, [id]);
 
   if (error) return (
-    <div>
+    <PageLayout title="Identificazione">
       <Link href="/shazam" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Shazam</Link>
       <Alert tone="danger">⚠ {error}</Alert>
+    </PageLayout>
+  );
+  if (!set) return <PageLayout title="Identificazione"><p className="text-muted">Caricamento…</p></PageLayout>;
+
+  const marginalia = (
+    <div className="space-y-2 text-xs">
+      <div className="flex justify-between gap-2"><span className="text-muted">DJ</span><span className="truncate text-fg">{set.dj_name ?? "—"}</span></div>
+      <div className="flex justify-between gap-2"><span className="text-muted">Tracce</span><span className="tnum text-fg">{set.identified_count}</span></div>
+      {set.duration_seconds ? <div className="flex justify-between gap-2"><span className="text-muted">Durata</span><span className="tnum text-fg">{fmtDuration(set.duration_seconds)}</span></div> : null}
+      <a href={set.source_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 border-t border-border pt-3 text-fg underline-offset-4 hover:underline">
+        <ExternalLink size={13} /> Sorgente
+      </a>
     </div>
   );
-  if (!set) return <p className="text-muted">Caricamento…</p>;
 
   return (
-    <div>
+    <PageLayout title="Identificazione" meta={set.title ?? undefined} marginaliaTitle="Meta" marginalia={marginalia}>
       <Link href="/shazam" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Shazam</Link>
 
       <div className="mb-6 flex flex-wrap items-start gap-4">
         {set.artwork_url
-          ? <img src={set.artwork_url} alt="" className="h-24 w-24 rounded-xl object-cover" />
-          : <span className="grid h-24 w-24 place-items-center rounded-xl bg-surface-2 text-faint"><Radar size={30} /></span>}
+          ? <img src={set.artwork_url} alt="" className="h-24 w-24 rounded-none object-cover" />
+          : <span className="grid h-24 w-24 place-items-center rounded-none bg-surface-2 text-faint"><Radar size={30} /></span>}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{set.title ?? "Set senza titolo"}</h1>
@@ -40,9 +52,6 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
             {set.dj_name ?? "—"} · {set.identified_count} tracce identificate
             {set.duration_seconds ? ` · ${fmtDuration(set.duration_seconds)}` : ""} · {fmtDate(set.created_at)}
           </p>
-          <a href={set.source_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm text-info hover:underline">
-            <ExternalLink size={14} /> Sorgente
-          </a>
         </div>
       </div>
 
@@ -60,7 +69,7 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
                 <span className="tnum inline-flex w-14 shrink-0 items-center gap-1 text-xs text-faint">
                   <Clock size={12} /> {fmtDuration(t.start_offset_seconds)}
                 </span>
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded bg-elevated text-faint"><Music4 size={14} /></span>
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={14} /></span>
                 <span className="min-w-0 flex-1 truncate">
                   <span className="font-medium">{t.artist ?? "?"}</span>
                   <span className="text-muted"> — {t.title ?? "?"}</span>
@@ -71,6 +80,6 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
           </ol>
         )}
       </Card>
-    </div>
+    </PageLayout>
   );
 }
