@@ -278,6 +278,18 @@ export interface GenStatus {
   error: string | null;
 }
 
+export interface BpmBin {
+  from: number;
+  to: number;
+  count: number;
+}
+
+export interface EnergyBucket {
+  from: number;
+  to: number;
+  count: number;
+}
+
 export interface LibraryStats {
   total_tracks: number;
   playlists: number;
@@ -290,6 +302,8 @@ export interface LibraryStats {
   bpm_min: number | null;
   bpm_max: number | null;
   key_distribution: Record<string, number>;
+  bpm_histogram: BpmBin[];
+  energy_distribution: EnergyBucket[];
 }
 
 async function handle<T>(res: Response): Promise<T> {

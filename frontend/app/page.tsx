@@ -3,33 +3,30 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Music, Gauge, KeyRound, Sparkles, ListPlus, Compass, ArrowRight, ListMusic, CheckCircle2, Pencil,
-  Radar, Tags,
+  Music, Gauge, Sparkles, Compass, ArrowRight, Pencil, Tags, KeyRound,
 } from "lucide-react";
-import { apiGet, getLabels, type LibraryStats, type LabelStats } from "@/lib/api";
+import {
+  apiGet, getLabels, listImportedPlaylists, fmtDate,
+  type LibraryStats, type LabelStats, type SetlistSummary, type Playlist,
+} from "@/lib/api";
 import { Card, Alert, Progress, Button, Badge } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { Figure } from "@/components/dashboard/figure";
+import { Histogram } from "@/components/dashboard/histogram";
+import { MiniBars, type MiniBarRow } from "@/components/dashboard/mini-bars";
+import { RecentList, type RecentItem } from "@/components/dashboard/recent-list";
 
-function Stat({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: React.ReactNode; accent?: boolean }) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
-        <span className="text-faint">{icon}</span>{label}
-      </div>
-      <div className={`tnum mt-1.5 text-2xl font-semibold ${accent ? "text-fg-strong" : ""}`}>{value}</div>
-    </Card>
-  );
+/* ----------------------------------------------------- helper di sezione */
+
+function ColHead({ children }: { children: React.ReactNode }) {
+  return <div className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-fg-strong">{children}</div>;
 }
 
-function Action({ href, icon, title, desc }: { href: string; icon: React.ReactNode; title: string; desc: string }) {
+function SubLabel({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <Link href={href} className="group flex items-center gap-3 rounded-none border border-border bg-surface p-4 transition-colors hover:border-border-strong hover:bg-elevated/40">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-none bg-elevated text-muted">{icon}</span>
-      <div className="min-w-0">
-        <div className="flex items-center gap-1 font-medium">{title}<ArrowRight size={14} className="text-faint transition-transform group-hover:translate-x-0.5" /></div>
-        <div className="truncate text-sm text-muted">{desc}</div>
-      </div>
-    </Link>
+    <div className="mb-2 mt-4 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted first:mt-0">
+      {icon && <span className="text-faint">{icon}</span>}{children}
+    </div>
   );
 }
 
@@ -43,46 +40,16 @@ function Coverage({ label, n, total }: { label: string; n: number; total: number
   );
 }
 
-function KeyDistribution({ dist }: { dist: Record<string, number> }) {
-  const entries = Object.entries(dist).sort((a, b) => b[1] - a[1]);
-  if (entries.length === 0) return <span className="text-sm text-faint">—</span>;
-  const max = Math.max(...entries.map(([, n]) => n));
-  const top = entries.slice(0, 8);
+function QuickAction({ href, title, desc }: { href: string; title: string; desc: string }) {
   return (
-    <div className="space-y-1.5">
-      {top.map(([k, n]) => (
-        <div key={k} className="flex items-center gap-2">
-          <span className="tnum w-9 shrink-0 text-xs font-medium text-muted">{k}</span>
-          <div className="h-2 flex-1 overflow-hidden bg-elevated">
-            <div className="h-full bg-fg" style={{ width: `${Math.max(6, Math.round((n / max) * 100))}%` }} />
-          </div>
-          <span className="tnum w-4 shrink-0 text-right text-xs text-muted">{n}</span>
-        </div>
-      ))}
-      {entries.length > top.length && (
-        <p className="pt-0.5 text-xs text-muted">+{entries.length - top.length} altre tonalità</p>
-      )}
-    </div>
+    <Link href={href} className="group flex-1 px-4 py-3 transition-colors hover:bg-elevated/40">
+      <div className="flex items-center gap-1 font-medium text-fg group-hover:text-fg-strong">{title} <ArrowRight size={13} className="text-faint transition-transform group-hover:translate-x-0.5" /></div>
+      <div className="mt-0.5 text-xs text-muted">{desc}</div>
+    </Link>
   );
 }
 
-function LabelBars({ labels }: { labels: LabelStats[] }) {
-  const top = labels.slice(0, 8);
-  const max = Math.max(...top.map((l) => l.track_count), 1);
-  return (
-    <div className="space-y-1.5">
-      {top.map((l) => (
-        <Link key={l.label} href={`/labels/${encodeURIComponent(l.label)}`} className="group flex items-center gap-2">
-          <span className="w-16 shrink-0 truncate text-xs font-medium text-muted group-hover:text-fg" title={l.label}>{l.label}</span>
-          <div className="h-2 flex-1 overflow-hidden bg-elevated">
-            <div className="h-full bg-fg" style={{ width: `${Math.max(6, Math.round((l.track_count / max) * 100))}%` }} />
-          </div>
-          <span className="tnum w-5 shrink-0 text-right text-xs text-muted">{l.track_count}</span>
-        </Link>
-      ))}
-    </div>
-  );
-}
+/* --------------------------------------------------------- raccomandazione */
 
 type Reco = { icon: React.ReactNode; tag: string; title: string; desc: string; href: string; cta: string };
 
@@ -100,7 +67,7 @@ function recommend(s: LibraryStats): Reco | null {
   if (s.ready_for_set > 0) {
     return {
       icon: <Sparkles size={22} />, tag: "Prossimo passo", title: "Sei pronto per un set",
-      desc: `${s.ready_for_set} tracce pronte per il mix: genera una scaletta`,
+      desc: `${s.ready_for_set} tracce pronte per il mix: genera una scaletta.`,
       href: "/set-builder", cta: "Costruisci un set",
     };
   }
@@ -111,55 +78,59 @@ function recommend(s: LibraryStats): Reco | null {
   };
 }
 
+/* ------------------------------------------------------------------ page */
+
 export default function Dashboard() {
   const [stats, setStats] = useState<LibraryStats | null>(null);
   const [labels, setLabels] = useState<LabelStats[]>([]);
+  const [sets, setSets] = useState<SetlistSummary[] | null>(null);
+  const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     apiGet<LibraryStats>("/api/stats").then((s) => { setStats(s); setError(null); }).catch((e) => setError(String(e.message ?? e)));
     getLabels().then(setLabels).catch(() => {});
+    apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch(() => setSets([]));
+    listImportedPlaylists().then(setPlaylists).catch(() => setPlaylists([]));
   }, []);
   useEffect(load, [load]);
 
-  const empty = stats && stats.total_tracks === 0;
+  const empty = stats != null && stats.total_tracks === 0;
   const reco = stats ? recommend(stats) : null;
 
-  const marginalia = stats && !empty ? (
-    <div className="space-y-6">
-      <div>
-        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">Range BPM</div>
-        <div className="tnum text-2xl font-semibold text-fg-strong">{stats.bpm_min ? `${stats.bpm_min.toFixed(0)}–${stats.bpm_max?.toFixed(0)}` : "—"}</div>
-        <div className="mb-2 mt-4 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted"><KeyRound size={12} className="text-faint" /> Tonalità più frequenti</div>
-        <KeyDistribution dist={stats.key_distribution} />
-      </div>
-      <div className="border-t border-border pt-5">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted"><Tags size={12} className="text-faint" /> Top etichette</div>
-          <Link href="/labels" className="text-xs text-fg underline-offset-4 hover:underline">Tutte →</Link>
-        </div>
-        {labels.length > 0
-          ? <LabelBars labels={labels} />
-          : <p className="text-xs text-muted">Nessuna etichetta ancora. <Link href="/labels" className="text-fg underline">Recuperale da Spotify</Link> per esplorare la libreria per etichetta.</p>}
-      </div>
-    </div>
-  ) : undefined;
+  const keyRows: MiniBarRow[] = stats
+    ? Object.entries(stats.key_distribution)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([k, n]) => ({ label: k, value: n }))
+    : [];
+
+  const labelRows: MiniBarRow[] = labels.slice(0, 5).map((l) => ({
+    label: l.label, value: l.track_count, href: `/labels/${encodeURIComponent(l.label)}`,
+  }));
+
+  const recentSets: RecentItem[] = (sets ?? [])
+    .slice()
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    .slice(0, 4)
+    .map((s, i) => ({ n: String(i + 1).padStart(2, "0"), title: s.name, meta: fmtDate(s.created_at), href: `/sets/${s.id}` }));
+
+  const recentPlaylists: RecentItem[] = (playlists ?? [])
+    .slice()
+    .sort((a, b) => (a.imported_at < b.imported_at ? 1 : -1))
+    .slice(0, 3)
+    .map((p, i) => ({ n: String(i + 1).padStart(2, "0"), title: p.name, meta: `${p.track_count} tr.`, href: `/playlists/${p.id}` }));
 
   return (
-    <PageLayout
-      title="Dashboard"
-      meta={stats ? `${stats.total_tracks} TRACCE` : undefined}
-      marginaliaTitle="Libreria"
-      marginalia={marginalia}
-    >
+    <PageLayout title="Dashboard" meta={stats ? `${stats.total_tracks} TRACCE` : undefined}>
       {error && <div className="mb-6"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
 
       {empty && (
-        <Card className="mb-6">
+        <Card>
           <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
             <Music size={36} className="text-faint" />
             <div>
-              <p className="font-medium">Nessuna playlist ancora</p>
+              <p className="font-medium text-fg-strong">Nessuna playlist ancora</p>
               <p className="mt-1 text-sm text-muted">Importa una playlist Spotify per iniziare a costruire un set.</p>
             </div>
             <Link href="/playlists" className="inline-flex items-center gap-1.5 bg-fg-strong px-4 py-2 text-xs font-medium uppercase tracking-wider text-bg transition-colors hover:bg-fg">
@@ -169,49 +140,81 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Prossimo passo consigliato */}
-      {reco && (
-        <Card className="mb-6">
-          <div className="flex flex-wrap items-center gap-4 p-5">
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-none bg-elevated text-muted">{reco.icon}</span>
-            <div className="min-w-0 flex-1">
-              <Badge tone="primary" className="mb-1.5">{reco.tag}</Badge>
-              <div className="font-semibold">{reco.title}</div>
-              <p className="text-sm text-muted">{reco.desc}</p>
-            </div>
-            <Link href={reco.href}><Button>{reco.cta} <ArrowRight size={15} /></Button></Link>
-          </div>
-        </Card>
-      )}
-
-      {/* Azioni rapide — il flusso dell'app */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Action href="/playlists" icon={<ListPlus size={18} />} title="Importa playlist" desc="Spotify, brani salvati o tracklist manuale" />
-        <Action href="/discovery" icon={<Compass size={18} />} title="Scopri musica" desc="Tracce che potrebbero interessarti" />
-        <Action href="/shazam" icon={<Radar size={18} />} title="Identifica un mix" desc="Riconosci le tracce di un DJ set" />
-      </div>
-
       {stats && !empty && (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Stat icon={<ListMusic size={14} />} label="Playlist" value={stats.playlists} />
-            <Stat icon={<Music size={14} />} label="Tracce" value={stats.total_tracks} accent />
-            <Stat icon={<CheckCircle2 size={14} />} label="Pronte per il set" value={stats.ready_for_set} />
-            <Stat icon={<Gauge size={14} />} label="Con BPM" value={stats.with_bpm} />
+          {/* Figure hero */}
+          <div className="grid grid-cols-2 border-l border-t border-border lg:grid-cols-4">
+            <Figure label="Tracce" value={stats.total_tracks} />
+            <Figure label="Pronte per il set" value={stats.ready_for_set} />
+            <Figure label="Playlist" value={stats.playlists} />
+            <Figure label="Set salvati" value={sets ? sets.length : "—"} />
           </div>
 
-          <Card className="mt-3 p-4">
-            <div className="mb-3 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted"><Gauge size={13} className="text-faint" /> Copertura enrichment</div>
-            <div className="space-y-2.5">
-              <Coverage label="BPM e tonalità (Camelot)" n={stats.with_key} total={stats.total_tracks} />
-              <Coverage label="Mood / energia" n={stats.with_features} total={stats.total_tracks} />
-              <Coverage label="Pronte per il set" n={stats.ready_for_set} total={stats.total_tracks} />
-            </div>
-            <div className="mt-3 flex flex-wrap gap-4">
-              <Link href="/settings" className="inline-flex items-center gap-1 text-sm text-fg underline-offset-4 hover:underline">Arricchisci le feature <ArrowRight size={14} /></Link>
-              <Link href="/library" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg"><Pencil size={13} /> Inserisci i valori a mano</Link>
-            </div>
-          </Card>
+          {/* Prossimo passo */}
+          {reco && (
+            <Card className="mt-3">
+              <div className="flex flex-wrap items-center gap-4 p-5">
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-none bg-elevated text-muted">{reco.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <Badge tone="primary" className="mb-1.5">{reco.tag}</Badge>
+                  <div className="font-semibold text-fg-strong">{reco.title}</div>
+                  <p className="text-sm text-muted">{reco.desc}</p>
+                </div>
+                <Link href={reco.href}><Button>{reco.cta} <ArrowRight size={15} /></Button></Link>
+              </div>
+            </Card>
+          )}
+
+          {/* Tre colonne */}
+          <div className="mt-3 grid border border-border lg:grid-cols-3">
+            <section className="border-b border-border p-5 lg:border-b-0 lg:border-r">
+              <ColHead>Forma della libreria</ColHead>
+              <SubLabel icon={<Gauge size={12} />}>Istogramma BPM{stats.bpm_min ? ` · ${stats.bpm_min.toFixed(0)}–${stats.bpm_max?.toFixed(0)}` : ""}</SubLabel>
+              <Histogram bins={stats.bpm_histogram} />
+              <SubLabel icon={<KeyRound size={12} />}>Tonalità più frequenti</SubLabel>
+              <MiniBars rows={keyRows} />
+            </section>
+
+            <section className="border-b border-border p-5 lg:border-b-0 lg:border-r">
+              <ColHead>Attività recente</ColHead>
+              <div className="mb-2 flex items-center justify-between">
+                <SubLabel>Ultimi set</SubLabel>
+                <Link href="/sets" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">Tutti →</Link>
+              </div>
+              <RecentList items={recentSets} empty="Nessun set ancora." />
+              <div className="mb-2 mt-5 flex items-center justify-between">
+                <SubLabel>Ultime playlist</SubLabel>
+                <Link href="/playlists" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">Tutte →</Link>
+              </div>
+              <RecentList items={recentPlaylists} empty="Nessuna playlist ancora." />
+            </section>
+
+            <section className="p-5">
+              <ColHead>Salute & catalogo</ColHead>
+              <SubLabel icon={<Gauge size={12} />}>Copertura enrichment</SubLabel>
+              <div className="space-y-2.5">
+                <Coverage label="BPM e tonalità" n={stats.with_key} total={stats.total_tracks} />
+                <Coverage label="Mood / energia" n={stats.with_features} total={stats.total_tracks} />
+                <Coverage label="Pronte per il set" n={stats.ready_for_set} total={stats.total_tracks} />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+                <Link href="/settings" className="inline-flex items-center gap-1 text-xs text-fg underline-offset-4 hover:underline">Arricchisci <ArrowRight size={13} /></Link>
+                <Link href="/library" className="inline-flex items-center gap-1 text-xs text-muted hover:text-fg"><Pencil size={12} /> Valori a mano</Link>
+              </div>
+              <div className="mb-2 mt-5 flex items-center justify-between">
+                <SubLabel icon={<Tags size={12} />}>Top etichette</SubLabel>
+                <Link href="/labels" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">Tutte →</Link>
+              </div>
+              <MiniBars rows={labelRows} />
+            </section>
+          </div>
+
+          {/* Azioni rapide */}
+          <div className="mt-3 flex flex-col border border-border sm:flex-row sm:divide-x sm:divide-border">
+            <QuickAction href="/playlists" title="Importa playlist" desc="Spotify, brani salvati o tracklist manuale" />
+            <QuickAction href="/discovery" title="Scopri musica" desc="Tracce che potrebbero interessarti" />
+            <QuickAction href="/shazam" title="Identifica un mix" desc="Riconosci le tracce di un DJ set" />
+          </div>
         </>
       )}
     </PageLayout>
