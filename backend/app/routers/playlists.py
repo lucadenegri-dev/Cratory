@@ -73,15 +73,23 @@ def _autoenrich(playlist_id: int | None) -> None:
 
 @router.get("/spotify/available", response_model=list[SpotifyPlaylistRef])
 def spotify_available(db: Session = Depends(get_db)):
-    """Playlist Spotify dell'utente autenticato, selezionabili per l'import."""
+    """Playlist Spotify possedute dall'utente, selezionabili per l'import.
+
+    Solo le proprie: le playlist altrui che l'utente segue non sono importabili
+    (in Development Mode Spotify nega l'accesso ai loro item) e vengono escluse.
+    """
+    client = SpotifyWebClient(db)
     try:
-        raw = SpotifyWebClient(db).list_user_playlists()
+        raw = client.list_user_playlists()
+        me_id = client.current_user_id()
     except SpotifyError as exc:
         raise _http_error(exc) from exc
     out: list[SpotifyPlaylistRef] = []
     for p in raw:
         if not p:
             continue
+        if (p.get("owner") or {}).get("id") != me_id:
+            continue  # playlist seguita ma non posseduta: non importabile
         images = p.get("images") or []
         out.append(SpotifyPlaylistRef(
             platform_playlist_id=p["id"],

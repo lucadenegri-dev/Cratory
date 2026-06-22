@@ -197,8 +197,7 @@ export default function DiscoveryPage() {
                   </Button>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-muted">
-                  Tracce di gusto affine da aggiungere alla playlist. La parte tecnica
-                  (BPM, tonalità, transizioni) la cura il Set Builder.
+                  Tracce di gusto affine da aggiungere alla playlist.
                 </p>
               </div>
 
@@ -278,8 +277,7 @@ export default function DiscoveryPage() {
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                   <p className="max-w-md text-xs leading-relaxed text-muted">
-                    Tracce delle tue etichette che non hai ancora, ordinate per affinità
-                    di gusto. Nessuna percentuale tecnica: quella è del Set Builder.
+                    Tracce delle tue etichette che non hai ancora, ordinate per affinità di gusto.
                   </p>
                   <Button onClick={runRadar} disabled={busy || selected.size === 0}>
                     {busy ? <Spinner /> : <Radar size={15} />} Scopri dalle etichette

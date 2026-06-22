@@ -8,6 +8,7 @@ import {
   apiGet,
   importPlaylist,
   listSpotifyPlaylists,
+  listImportedPlaylists,
   SPOTIFY_LOGIN_URL,
   type SpotifyPlaylistRef,
   type SpotifyStatus,
@@ -23,11 +24,17 @@ export default function ImportSpotifyPage() {
   const router = useRouter();
   const [spotify, setSpotify] = useState<SpotifyStatus | null>(null);
   const [available, setAvailable] = useState<SpotifyPlaylistRef[] | null>(null);
+  const [imported, setImported] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     apiGet<SpotifyStatus>("/api/spotify/status").then(setSpotify).catch((e) => setError(err(e)));
+    listImportedPlaylists()
+      .then((pls) =>
+        setImported(new Set(pls.filter((p) => p.platform_playlist_id).map((p) => p.platform_playlist_id!))),
+      )
+      .catch(() => {});
   }, []);
 
   const loadAvailable = async () => {
@@ -103,21 +110,38 @@ export default function ImportSpotifyPage() {
               </div>
             }
           />
-          <div className="p-4">
+          <div className="px-5 py-4">
             {!available && <p className="text-sm text-muted">Premi “Carica” per elencare le tue playlist.</p>}
             {available && available.length === 0 && <p className="text-sm text-muted">Nessuna playlist trovata.</p>}
             <div className="grid gap-2">
-              {available?.map((p) => (
-                <div key={p.platform_playlist_id} className="flex items-center justify-between gap-3 rounded-none border border-border px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{p.name}</div>
-                    <div className="text-xs text-faint">{p.track_count} tracce{p.owner ? ` · ${p.owner}` : ""}</div>
+              {available?.map((p) => {
+                const alreadyImported = imported.has(p.platform_playlist_id);
+                return (
+                  <div key={p.platform_playlist_id} className="flex items-center justify-between gap-3 rounded-none border border-border px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">{p.name}</div>
+                      <div className="text-xs text-faint">
+                        {p.track_count} tracce{p.owner ? ` · ${p.owner}` : ""}{alreadyImported ? " · importata" : ""}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-28 justify-center"
+                      onClick={() => doImport(p.platform_playlist_id, p.name)}
+                      disabled={busy !== null}
+                    >
+                      {busy === p.platform_playlist_id ? (
+                        <Spinner />
+                      ) : alreadyImported ? (
+                        <><RefreshCw size={15} /> Aggiorna</>
+                      ) : (
+                        <><Download size={15} /> Importa</>
+                      )}
+                    </Button>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => doImport(p.platform_playlist_id, p.name)} disabled={busy !== null}>
-                    {busy === p.platform_playlist_id ? <Spinner /> : <Download size={15} />} Importa
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </Card>

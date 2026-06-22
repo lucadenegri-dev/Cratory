@@ -196,7 +196,6 @@ export default function Dashboard() {
               <div className="space-y-2.5">
                 <Coverage label="BPM e tonalità" n={stats.with_key} total={stats.total_tracks} />
                 <Coverage label="Mood / energia" n={stats.with_features} total={stats.total_tracks} />
-                <Coverage label="Pronte per il set" n={stats.ready_for_set} total={stats.total_tracks} />
               </div>
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
                 <Link href="/settings" className="inline-flex items-center gap-1 text-xs text-fg underline-offset-4 hover:underline">Arricchisci <ArrowRight size={13} /></Link>

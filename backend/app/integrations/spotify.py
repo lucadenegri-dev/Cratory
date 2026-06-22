@@ -291,6 +291,9 @@ class SpotifyWebClient(SpotifyClient):
             params["offset"] += limit
         return items
 
+    def current_user_id(self) -> str:
+        return self._get("/me", user=True)["id"]
+
     def list_user_playlists(self) -> list[dict[str, Any]]:
         return self._paginate("/me/playlists")
 
