@@ -42,16 +42,19 @@ function Coverage({ label, n, total }: { label: string; n: number; total: number
 
 function QuickAction({ href, title, desc }: { href: string; title: string; desc: string }) {
   return (
-    <Link href={href} className="group flex-1 px-4 py-3 transition-colors hover:bg-elevated/40">
-      <div className="flex items-center gap-1 font-medium text-fg group-hover:text-fg-strong">{title} <ArrowRight size={13} className="text-faint transition-transform group-hover:translate-x-0.5" /></div>
-      <div className="mt-0.5 text-xs text-muted">{desc}</div>
+    <Link href={href} className="group flex-1 px-5 py-5 transition-colors hover:bg-elevated">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-base font-semibold uppercase tracking-wide text-fg-strong">{title}</span>
+        <ArrowRight size={17} className="shrink-0 text-muted transition-transform group-hover:translate-x-1 group-hover:text-fg-strong" />
+      </div>
+      <div className="mt-1 text-xs text-muted">{desc}</div>
     </Link>
   );
 }
 
 /* --------------------------------------------------------- raccomandazione */
 
-type Reco = { icon: React.ReactNode; tag: string; title: string; desc: string; href: string; cta: string };
+type Reco = { icon: React.ReactNode; tag: string; title: string; desc?: string; href: string; cta: string };
 
 /** "Prossimo passo" suggerito: guida l'utente nel flusso in base allo stato della libreria. */
 function recommend(s: LibraryStats): Reco | null {
@@ -67,7 +70,6 @@ function recommend(s: LibraryStats): Reco | null {
   if (s.ready_for_set > 0) {
     return {
       icon: <Sparkles size={22} />, tag: "Prossimo passo", title: "Sei pronto per un set",
-      desc: `${s.ready_for_set} tracce pronte per il mix: genera una scaletta.`,
       href: "/set-builder", cta: "Costruisci un set",
     };
   }
@@ -143,9 +145,8 @@ export default function Dashboard() {
       {stats && !empty && (
         <>
           {/* Figure hero */}
-          <div className="grid grid-cols-2 border-l border-t border-border lg:grid-cols-4">
+          <div className="grid grid-cols-3 border-l border-t border-border">
             <Figure label="Tracce" value={stats.total_tracks} />
-            <Figure label="Pronte per il set" value={stats.ready_for_set} />
             <Figure label="Playlist" value={stats.playlists} />
             <Figure label="Set salvati" value={sets ? sets.length : "—"} />
           </div>
@@ -158,7 +159,7 @@ export default function Dashboard() {
                 <div className="min-w-0 flex-1">
                   <Badge tone="primary" className="mb-1.5">{reco.tag}</Badge>
                   <div className="font-semibold text-fg-strong">{reco.title}</div>
-                  <p className="text-sm text-muted">{reco.desc}</p>
+                  {reco.desc && <p className="text-sm text-muted">{reco.desc}</p>}
                 </div>
                 <Link href={reco.href}><Button>{reco.cta} <ArrowRight size={15} /></Button></Link>
               </div>
@@ -190,7 +191,7 @@ export default function Dashboard() {
             </section>
 
             <section className="p-5">
-              <ColHead>Salute & catalogo</ColHead>
+              <ColHead>Catalogo</ColHead>
               <SubLabel icon={<Gauge size={12} />}>Copertura enrichment</SubLabel>
               <div className="space-y-2.5">
                 <Coverage label="BPM e tonalità" n={stats.with_key} total={stats.total_tracks} />
