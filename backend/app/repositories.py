@@ -136,9 +136,54 @@ def all_playable_tracks(db: Session) -> list[Track]:
     return list(db.scalars(select(Track).where(Track.bpm.is_not(None))).all())
 
 
+_BPM_HISTOGRAM_BINS = 8
+
+
+def _bpm_histogram(bpms: list[float], bins: int = _BPM_HISTOGRAM_BINS) -> list[dict]:
+    """Istogramma dei BPM su ``bins`` intervalli a larghezza uguale tra min e max.
+
+    Ogni voce: ``{"from": float, "to": float, "count": int}``. Lista vuota se non
+    ci sono BPM; un solo bin se i BPM hanno un unico valore distinto. Il valore
+    massimo cade nell'ultimo bin (chiuso a destra).
+    """
+    if not bpms:
+        return []
+    lo, hi = min(bpms), max(bpms)
+    if lo == hi:
+        return [{"from": lo, "to": hi, "count": len(bpms)}]
+    width = (hi - lo) / bins
+    counts = [0] * bins
+    for v in bpms:
+        idx = int((v - lo) / width)
+        if idx >= bins:  # il massimo cade nell'ultimo bin
+            idx = bins - 1
+        counts[idx] += 1
+    return [
+        {"from": lo + i * width, "to": lo + (i + 1) * width, "count": counts[i]}
+        for i in range(bins)
+    ]
+
+
+def _energy_distribution(energies: list[int]) -> list[dict]:
+    """Distribuzione dell'energia su 5 bucket fissi di ampiezza 20 (0-100).
+
+    Sempre 5 voci ``{"from": int, "to": int, "count": int}`` (anche con count 0).
+    Il valore 100 cade nell'ultimo bucket ``[80, 100]``.
+    """
+    counts = [0] * 5
+    for e in energies:
+        idx = min(int(e // 20), 4)
+        counts[idx] += 1
+    return [
+        {"from": i * 20, "to": (i + 1) * 20, "count": counts[i]}
+        for i in range(5)
+    ]
+
+
 def library_stats(db: Session) -> dict:
     tracks = db.scalars(select(Track)).all()
     bpms = [t.bpm for t in tracks if t.bpm]
+    energies = [t.energy for t in tracks if t.energy is not None]
     by_source: dict[str, int] = {}
     key_distribution: dict[str, int] = {}
     for t in tracks:
@@ -157,6 +202,8 @@ def library_stats(db: Session) -> dict:
         "bpm_min": min(bpms) if bpms else None,
         "bpm_max": max(bpms) if bpms else None,
         "key_distribution": dict(sorted(key_distribution.items())),
+        "bpm_histogram": _bpm_histogram(bpms),
+        "energy_distribution": _energy_distribution(energies),
     }
 
 

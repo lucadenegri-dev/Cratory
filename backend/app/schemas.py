@@ -361,6 +361,21 @@ class DiscoveryExpandRequest(BaseModel):
     use_ai: bool | None = None  # None = auto (AI se configurata)
 
 
+class BpmBin(BaseModel):
+    # 'from' e' parola chiave Python: campo from_ con alias "from" sul JSON.
+    model_config = ConfigDict(populate_by_name=True)
+    from_: float = Field(alias="from")
+    to: float
+    count: int
+
+
+class EnergyBucket(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    from_: int = Field(alias="from")
+    to: int
+    count: int
+
+
 class LibraryStatsOut(BaseModel):
     total_tracks: int
     playlists: int = 0
@@ -373,6 +388,8 @@ class LibraryStatsOut(BaseModel):
     bpm_min: float | None = None
     bpm_max: float | None = None
     key_distribution: dict[str, int]
+    bpm_histogram: list[BpmBin] = []
+    energy_distribution: list[EnergyBucket] = []
 
 
 # --- Shazam: DJ set identificati (Fase 1) ------------------------------------
