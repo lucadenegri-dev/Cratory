@@ -26,6 +26,7 @@ function err(e: unknown): string {
 }
 
 type Mode = "expand" | "labels";
+const CHIP_CAP = 12; // etichette mostrate prima dell'espansione
 
 const SOURCE_LABEL: Record<DiscoveryCandidate["source"], string> = {
   similar_artist: "artista affine",
@@ -47,6 +48,7 @@ export default function DiscoveryPage() {
   // radar etichette
   const [labels, setLabels] = useState<LabelStats[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showAllLabels, setShowAllLabels] = useState(false);
 
   // condivisi
   const [result, setResult] = useState<DiscoveryResponse | null>(null);
@@ -120,77 +122,19 @@ export default function DiscoveryPage() {
   const expandReady = !!status?.configured && !noPlaylists;
   const radarReady = !!status?.spotify_resolver && !noLabels;
 
-  const marginalia =
-    mode === "expand"
-      ? expandReady
-        ? (
-          <div className="space-y-3">
-            <Field label="Playlist da espandere">
-              <Select value={playlistId ?? ""} onChange={(e) => setPlaylistId(Number(e.target.value))} disabled={busy}>
-                {playlists?.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} · {p.track_count} tracce</option>
-                ))}
-              </Select>
-            </Field>
-            <Button className="w-full" onClick={runExpand} disabled={busy || playlistId == null}>
-              {busy ? <Spinner /> : <Wand2 size={15} />} Scopri tracce affini
-            </Button>
-            <Checkbox
-              label={status?.ai_explanations ? "Spiega con l'AI" : "Spiegazioni AI (configura AI_API_KEY)"}
-              checked={aiEnabled}
-              onChange={setUseAi}
-              disabled={busy || !status?.ai_explanations}
-            />
-            <p className="border-t border-border pt-4 text-xs leading-relaxed text-muted">
-              Tracce di gusto affine da aggiungere alla playlist. La parte tecnica
-              (BPM, tonalità, transizioni) la cura il Set Builder.
-            </p>
-          </div>
-        )
-        : undefined
-      : radarReady
-        ? (
-          <div className="space-y-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted">Etichette nel radar</div>
-            <div className="flex flex-wrap gap-1.5">
-              {labels?.map((l) => {
-                const on = selected.has(l.label);
-                return (
-                  <button
-                    key={l.label}
-                    type="button"
-                    onClick={() => toggleLabel(l.label)}
-                    aria-pressed={on}
-                    disabled={busy}
-                    className={cn(
-                      "rounded-none border px-2.5 py-1 text-xs transition-colors",
-                      on
-                        ? "border-border-strong bg-elevated text-fg"
-                        : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
-                    )}
-                  >
-                    {l.label}
-                  </button>
-                );
-              })}
-            </div>
-            <Button className="w-full" onClick={runRadar} disabled={busy || selected.size === 0}>
-              {busy ? <Spinner /> : <Radar size={15} />} Scopri dalle etichette
-            </Button>
-            <p className="border-t border-border pt-4 text-xs leading-relaxed text-muted">
-              Tracce delle tue etichette che non hai ancora, ordinate per affinità
-              di gusto. Nessuna percentuale tecnica: quella è del Set Builder.
-            </p>
-          </div>
-        )
-        : undefined;
+  // chip sempre visibili: i primi CHIP_CAP + tutti quelli selezionati (così resta deselezionabile)
+  const visibleLabels =
+    labels && !showAllLabels
+      ? labels.filter((l, i) => i < CHIP_CAP || selected.has(l.label))
+      : labels ?? [];
+  const hiddenCount = (labels?.length ?? 0) - visibleLabels.length;
 
   return (
-    <PageLayout title="Discovery" marginaliaTitle="Parametri" marginalia={marginalia}>
+    <PageLayout title="Discovery">
       <p className="mb-4 text-sm text-muted">Espandi le tue playlist con musica nuova e affine al tuo gusto.</p>
 
       {/* Mode toggle */}
-      <div className="mb-6 inline-flex rounded-none border border-border bg-surface p-1">
+      <div className="mb-4 inline-flex rounded-none border border-border bg-surface p-1">
         {([
           ["expand", "Espandi playlist"],
           ["labels", "Radar etichette"],
@@ -230,13 +174,41 @@ export default function DiscoveryPage() {
           )}
           {expandReady && (
             <>
+              {/* Control bar */}
+              <div className="mb-6 border border-border p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="min-w-0 flex-1">
+                    <Field label="Playlist da espandere">
+                      <Select value={playlistId ?? ""} onChange={(e) => setPlaylistId(Number(e.target.value))} disabled={busy}>
+                        {playlists?.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name} · {p.track_count} tracce</option>
+                        ))}
+                      </Select>
+                    </Field>
+                  </div>
+                  <Checkbox
+                    label={status?.ai_explanations ? "Spiega con l'AI" : "Spiegazioni AI (configura AI_API_KEY)"}
+                    checked={aiEnabled}
+                    onChange={setUseAi}
+                    disabled={busy || !status?.ai_explanations}
+                  />
+                  <Button onClick={runExpand} disabled={busy || playlistId == null}>
+                    {busy ? <Spinner /> : <Wand2 size={15} />} Scopri tracce affini
+                  </Button>
+                </div>
+                <p className="mt-3 text-xs leading-relaxed text-muted">
+                  Tracce di gusto affine da aggiungere alla playlist. La parte tecnica
+                  (BPM, tonalità, transizioni) la cura il Set Builder.
+                </p>
+              </div>
+
               {busy && !result && (
                 <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Cerco tracce…</div>
               )}
               {result && <Results result={result} />}
               {!busy && !result && (
                 <EmptyState icon={<Compass size={28} />} title="Pronto per il discovery">
-                  Scegli una playlist nel pannello a destra e premi “Scopri tracce affini”.
+                  Scegli una playlist qui sopra e premi “Scopri tracce affini”.
                 </EmptyState>
               )}
             </>
@@ -262,13 +234,66 @@ export default function DiscoveryPage() {
           )}
           {radarReady && (
             <>
+              {/* Control bar */}
+              <div className="mb-6 border border-border p-4">
+                <div className="mb-2.5 flex items-center justify-between gap-3">
+                  <span className="text-[10px] uppercase tracking-wider text-muted">
+                    Etichette nel radar · <span className="tnum text-fg">{selected.size}</span> selezionate
+                  </span>
+                  <div className="flex items-center gap-3 text-[10px] uppercase tracking-wider">
+                    <button type="button" onClick={() => setSelected(new Set(labels?.map((l) => l.label)))} className="text-muted transition-colors hover:text-fg">Tutte</button>
+                    <button type="button" onClick={() => setSelected(new Set())} className="text-muted transition-colors hover:text-fg">Nessuna</button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {visibleLabels.map((l) => {
+                    const on = selected.has(l.label);
+                    return (
+                      <button
+                        key={l.label}
+                        type="button"
+                        onClick={() => toggleLabel(l.label)}
+                        aria-pressed={on}
+                        disabled={busy}
+                        className={cn(
+                          "rounded-none border px-2.5 py-1 text-xs transition-colors",
+                          on
+                            ? "border-border-strong bg-elevated text-fg"
+                            : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
+                        )}
+                      >
+                        {l.label}
+                      </button>
+                    );
+                  })}
+                  {(hiddenCount > 0 || showAllLabels) && (labels?.length ?? 0) > CHIP_CAP && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllLabels((v) => !v)}
+                      className="rounded-none px-2.5 py-1 text-xs text-muted underline underline-offset-4 transition-colors hover:text-fg"
+                    >
+                      {showAllLabels ? "− meno" : `+${hiddenCount} altre`}
+                    </button>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <p className="max-w-md text-xs leading-relaxed text-muted">
+                    Tracce delle tue etichette che non hai ancora, ordinate per affinità
+                    di gusto. Nessuna percentuale tecnica: quella è del Set Builder.
+                  </p>
+                  <Button onClick={runRadar} disabled={busy || selected.size === 0}>
+                    {busy ? <Spinner /> : <Radar size={15} />} Scopri dalle etichette
+                  </Button>
+                </div>
+              </div>
+
               {busy && !result && (
                 <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Scandaglio le etichette…</div>
               )}
               {result && <Results result={result} />}
               {!busy && !result && (
                 <EmptyState icon={<Radar size={28} />} title="Pronto per il radar">
-                  Scegli le etichette nel pannello a destra e premi “Scopri dalle etichette”.
+                  Scegli le etichette qui sopra e premi “Scopri dalle etichette”.
                 </EmptyState>
               )}
             </>
