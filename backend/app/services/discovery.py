@@ -21,14 +21,17 @@ Tutte le dipendenze esterne sono iniettate (similarity client, resolver, llm) ->
 """
 
 import logging
+import re
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Track
+from app.services.labels import _clean_label
 
 logger = logging.getLogger(__name__)
 
@@ -63,15 +66,18 @@ class LLMExplainer(Protocol):
 class DiscoveryCandidate:
     artist: str
     title: str
-    match: float                       # similarita' Last.fm 0-1
-    source: str                        # similar_artist | similar_track | tag
-    seed: str | None = None            # cosa nella playlist l'ha generata
+    match: float                       # similarita' Last.fm 0-1 (0 per il radar etichette)
+    source: str                        # similar_artist | similar_track | tag | label
+    seed: str | None = None            # cosa nella playlist (o quale etichetta) l'ha generata
     spotify_id: str | None = None
     spotify_url: str | None = None
     album_art_url: str | None = None
+    album_id: str | None = None        # per annotare l'etichetta dell'album
     isrc: str | None = None
     duration_seconds: int | None = None
-    compatibility: int = 0             # 0-100 deterministico
+    label: str | None = None           # etichetta (pulita), se nota
+    label_owned: bool = False          # e' un'etichetta che gia' collezioni?
+    score: float = 0.0                 # ordinamento interno di gusto (NON una compatibilita' tecnica)
     explanation: str | None = None     # narrativa AI (opzionale)
 
     @property
@@ -81,8 +87,8 @@ class DiscoveryCandidate:
 
 @dataclass
 class DiscoveryResult:
-    mode: str                          # expand | gap
-    scope: str                         # nome playlist o "libreria"
+    mode: str                          # expand | labels
+    scope: str                         # nome playlist o etichette
     seed_count: int
     candidates: list[DiscoveryCandidate] = field(default_factory=list)
 
@@ -211,10 +217,12 @@ def _resolve_all(
             isrc = (item.get("external_ids") or {}).get("isrc")
             if isrc and isrc in library_isrcs:
                 continue  # gia' in libreria con altro nome: scarta
-            images = (item.get("album") or {}).get("images") or []
+            album = item.get("album") or {}
+            images = album.get("images") or []
             c.spotify_id = item.get("id")
             c.spotify_url = (item.get("external_urls") or {}).get("spotify")
             c.album_art_url = images[0]["url"] if images else None
+            c.album_id = album.get("id")
             c.isrc = isrc
             c.duration_seconds = round(item["duration_ms"] / 1000) if item.get("duration_ms") else None
         out.append(c)
@@ -223,9 +231,9 @@ def _resolve_all(
 
 def _rank(candidates: list[DiscoveryCandidate], limit: int) -> list[DiscoveryCandidate]:
     for c in candidates:
-        c.compatibility = int(round(max(0.0, min(1.0, c.match)) * 100))
-    # Prima le tracce risolvibili (azionabili), poi per compatibilita'.
-    candidates.sort(key=lambda c: (c.resolved, c.compatibility, c.match), reverse=True)
+        c.score = max(0.0, min(1.0, c.match))
+    # Prima le tracce risolvibili (azionabili), poi per affinita' di gusto (match Last.fm).
+    candidates.sort(key=lambda c: (c.resolved, c.score, c.match), reverse=True)
     return candidates[:limit]
 
 
@@ -273,6 +281,131 @@ def _explain(
             candidates[idx].explanation = entry.get("text") or None
 
 
+# --- segnale-etichetta sulla similarita' (Part 3.3) --------------------------
+
+AlbumLabelFn = Callable[[str], str | None]
+
+
+def _annotate_labels(
+    candidates: list[DiscoveryCandidate],
+    album_label_fn: AlbumLabelFn,
+    owned_labels: set[str],
+) -> None:
+    """Annota i candidati risolti con l'etichetta del loro album (e se la collezioni gia')."""
+    cache: dict[str, str | None] = {}
+    for c in candidates:
+        if not c.album_id:
+            continue
+        if c.album_id not in cache:
+            cache[c.album_id] = album_label_fn(c.album_id)  # gia' pulito
+        lbl = cache[c.album_id]
+        if lbl:
+            c.label = lbl
+            c.label_owned = lbl.lower() in owned_labels
+
+
+# --- Radar Etichette (nuova sorgente) ----------------------------------------
+
+
+def _release_year(item: dict[str, Any]) -> int | None:
+    rd = (item.get("album") or {}).get("release_date")
+    m = re.match(r"\s*(\d{4})", str(rd or ""))
+    return int(m.group(1)) if m else None
+
+
+def _recency_bonus(year: int | None) -> float:
+    """Bonus 0..0.2: piu' recente -> piu' alto (lineare sugli ultimi 10 anni)."""
+    if year is None:
+        return 0.0
+    span = 10
+    current = datetime.now(timezone.utc).year
+    frac = (year - (current - span)) / span
+    return max(0.0, min(0.2, frac * 0.2))
+
+
+def _label_candidate(item: dict[str, Any], label: str) -> DiscoveryCandidate | None:
+    artists = item.get("artists") or []
+    artist = artists[0].get("name") if artists else None
+    title = item.get("name")
+    if not artist or not title:
+        return None
+    album = item.get("album") or {}
+    images = album.get("images") or []
+    return DiscoveryCandidate(
+        artist=artist, title=title, match=0.0, source="label", seed=label,
+        spotify_id=item.get("id"),
+        spotify_url=(item.get("external_urls") or {}).get("spotify"),
+        album_art_url=images[0]["url"] if images else None,
+        album_id=album.get("id"),
+        isrc=(item.get("external_ids") or {}).get("isrc"),
+        duration_seconds=round(item["duration_ms"] / 1000) if item.get("duration_ms") else None,
+        label=label, label_owned=True,
+    )
+
+
+SearchByLabel = Callable[..., list[dict[str, Any]]]
+
+
+def discover_by_labels(
+    db: Session,
+    *,
+    labels: list[str],
+    search_by_label: SearchByLabel,
+    album_label_fn: AlbumLabelFn | None = None,  # non serve nel radar (la label e' il seed)
+    library: list[Track] | None = None,
+    limit: int = DEFAULT_LIMIT,
+) -> DiscoveryResult:
+    """Tracce non possedute dalle etichette date, ordinate per affinita' di gusto.
+
+    NON una compatibilita' tecnica: punteggio = quanto segui l'etichetta +
+    sovrapposizione artisti gia' in libreria + recency. Interleave round-robin tra
+    le etichette cosi' nessuna domina la lista.
+    """
+    if library is None:
+        library = _library_tracks(db)
+    owned_keys = {_key(t.artist or "", t.title or "") for t in library if t.artist and t.title}
+    owned_isrcs = {t.isrc for t in library if t.isrc}
+    owned_artists = {_norm(t.artist) for t in library if t.artist}
+    label_counts: Counter[str] = Counter(
+        (_clean_label(t.label) or t.label) for t in library if t.label
+    )
+
+    seen: set[tuple[str, str]] = set()
+    per_label: list[list[DiscoveryCandidate]] = []
+    for label in labels:
+        affinity = min(label_counts.get(_clean_label(label) or label, 0), 10) / 10
+        bucket: list[DiscoveryCandidate] = []
+        for item in search_by_label(label, limit=limit) or []:
+            cand = _label_candidate(item, label)
+            if cand is None:
+                continue
+            k = _key(cand.artist, cand.title)
+            if k in owned_keys or k in seen:
+                continue
+            if cand.isrc and cand.isrc in owned_isrcs:
+                continue
+            seen.add(k)
+            overlap = 0.3 if _norm(cand.artist) in owned_artists else 0.0
+            cand.score = affinity + overlap + _recency_bonus(_release_year(item))
+            bucket.append(cand)
+        bucket.sort(key=lambda c: c.score, reverse=True)
+        per_label.append(bucket)
+
+    # interleave round-robin tra le etichette, poi troncamento a limit
+    interleaved: list[DiscoveryCandidate] = []
+    for col in range(max((len(b) for b in per_label), default=0)):
+        for bucket in per_label:
+            if col < len(bucket):
+                interleaved.append(bucket[col])
+    candidates = interleaved[:limit]
+
+    logger.info("Discovery radar etichette %s: %s candidati", labels, len(candidates))
+    return DiscoveryResult(
+        mode="labels", scope="; ".join(labels)[:60],
+        seed_count=len(labels), candidates=candidates,
+    )
+
+
 def discover_for_playlist(
     db: Session,
     playlist_id: int,
@@ -280,6 +413,8 @@ def discover_for_playlist(
     similarity: SimilaritySource,
     resolve: Resolver | None = None,
     llm: LLMExplainer | None = None,
+    album_label_fn: AlbumLabelFn | None = None,
+    owned_labels: set[str] | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> DiscoveryResult:
     """Espande una playlist con tracce affini scoperte via similarita'."""
@@ -296,6 +431,12 @@ def discover_for_playlist(
     fresh = _drop_in_library(found, library)
     library_isrcs = {t.isrc for t in library if t.isrc}
     ranked = _finalize(fresh, resolve, library_isrcs, limit)
+
+    # Segnale-etichetta: annota e fa salire leggermente cio' che e' su un'etichetta
+    # che gia' collezioni (boost di gusto, non tecnico).
+    if album_label_fn is not None and owned_labels is not None:
+        _annotate_labels(ranked, album_label_fn, owned_labels)
+        ranked.sort(key=lambda c: (c.resolved, c.label_owned, c.score), reverse=True)
 
     if llm and ranked:
         _explain(llm, EXPAND_SYSTEM, _playlist_profile(tracks), ranked)

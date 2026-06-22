@@ -30,6 +30,7 @@ SCOPES = (
     "playlist-read-private playlist-read-collaborative user-library-read"
 )
 BATCH = 50  # max id per chiamata tracks/artists
+SEARCH_LABEL_MAX = 10  # dev mode: /search col filtro label: rifiuta limit>10 ("Invalid limit")
 MAX_RETRY_WAIT = 30  # oltre questa attesa (s) su 429 si abortisce invece di dormire
 SINGLE_GET_DELAY = 0.08  # pausa tra GET singole (fallback) per non saturare il rate limit
 
@@ -256,6 +257,25 @@ class SpotifyWebClient(SpotifyClient):
             return None
         items = (data.get("tracks") or {}).get("items") or []
         return items[0] if items else None
+
+    def search_by_label(self, label: str, *, limit: int = 10) -> list[dict[str, Any]]:
+        """Tracce di un'etichetta via filtro `label:` (funziona in development mode).
+
+        Sorgente del Radar Etichette: a differenza di /recommendations, /search col
+        filtro `label:"..."` resta accessibile col token client_credentials.
+
+        In development mode Spotify rifiuta `limit > 10` su /search col filtro
+        `label:` ("400 Invalid limit"), quindi qui il limite e' clampato a 10.
+        """
+        if not label:
+            return []
+        limit = max(1, min(limit, SEARCH_LABEL_MAX))
+        try:
+            data = self._get("/search", params={"q": f'label:"{label}"', "type": "track", "limit": limit})
+        except SpotifyError as exc:
+            logger.warning("Spotify search_by_label(%r) fallito: %s", label, exc)
+            return []
+        return (data.get("tracks") or {}).get("items") or []
 
     # ---- import playlist (nuovo flusso) ---------------------------------
 

@@ -1,7 +1,7 @@
 """Test Discovery mode (Fase F) — nessuna rete: similarity, resolver e LLM finti."""
 
 from app.integrations.lastfm import LastFMClient
-from app.services.discovery import discover_for_playlist
+from app.services.discovery import discover_by_labels, discover_for_playlist
 
 
 # --- parsing Last.fm (senza rete) --------------------------------------------
@@ -99,11 +99,34 @@ def _spotify_item(track_id="sp1", isrc="USNEW0000001"):
         "id": track_id,
         "name": "Fresh Cut",
         "external_urls": {"spotify": f"https://open.spotify.com/track/{track_id}"},
-        "album": {"images": [{"url": "http://img/cover.jpg"}]},
+        "album": {"id": "alb1", "images": [{"url": "http://img/cover.jpg"}]},
         "external_ids": {"isrc": isrc},
         "duration_ms": 240000,
         "artists": [{"name": "NewBand"}],
     }
+
+
+def _label_item(track_id, artist, title, *, isrc=None, release_date="2024-01-01"):
+    """Item Spotify (forma /search) per il Radar Etichette: gia' 'risolto'."""
+    return {
+        "id": track_id,
+        "name": title,
+        "artists": [{"name": artist}],
+        "external_urls": {"spotify": f"https://open.spotify.com/track/{track_id}"},
+        "album": {"id": f"alb-{track_id}", "images": [{"url": "http://img"}], "release_date": release_date},
+        "external_ids": {"isrc": isrc} if isrc else {},
+        "duration_ms": 200000,
+    }
+
+
+def _lib_track(db, **kw):
+    from app.models import Track
+
+    kw.setdefault("source_type", "spotify")
+    t = Track(**kw)
+    db.add(t)
+    db.commit()
+    return t
 
 
 def _make_playlist(db, rows):
@@ -136,10 +159,10 @@ def test_expand_collects_and_ranks(db):
     assert "Deep Groove" in titles    # via similar_track
     assert result.mode == "expand"
     assert result.scope == "Test Playlist"
-    # ranking: il segnale piu' forte (match 0.9) in cima, compatibilita' coerente
+    # ranking: il segnale piu' forte (match 0.9) in cima
     top = result.candidates[0]
     assert top.title == "Fresh Cut"
-    assert top.compatibility == 90
+    assert top.match == 0.9
 
 
 def test_expand_drops_tracks_already_in_library(db):
@@ -249,3 +272,82 @@ def test_add_unresolved_track_dedup_by_name(db):
     assert c1 is True and c2 is False
     assert t1.id == t2.id
     assert db.query(Track).count() == 1
+
+
+# --- Radar Etichette (discover_by_labels) ------------------------------------
+
+
+def test_discover_by_labels_dedup_owned_and_interleaves(db):
+    # libreria: 3 tracce su "Big Label" (molto seguita), 1 su "Small Label"
+    for i in range(3):
+        _lib_track(db, spotify_id=f"b{i}", title=f"B{i}", artist=f"Big Artist {i}", label="Big Label")
+    _lib_track(db, spotify_id="s0", title="S0", artist="Small Artist", label="Small Label")
+    _lib_track(db, spotify_id="own", title="Owned", artist="Big Artist 0", label="Big Label")
+
+    def search(label, *, limit=20):
+        if label == "Big Label":
+            return [
+                _label_item("x1", "Big Artist 0", "Owned"),    # gia' in libreria -> scartata
+                _label_item("x2", "Fresh Big", "New Big Hit"),
+            ]
+        if label == "Small Label":
+            return [_label_item("y1", "Fresh Small", "New Small Hit")]
+        return []
+
+    result = discover_by_labels(db, labels=["Big Label", "Small Label"], search_by_label=search, limit=10)
+
+    titles = [c.title for c in result.candidates]
+    assert "Owned" not in titles                     # dedup vs libreria (per chiave artista/titolo)
+    assert "New Big Hit" in titles and "New Small Hit" in titles
+    assert result.mode == "labels"
+    assert all(c.label_owned for c in result.candidates)
+    # interleave round-robin: prima l'etichetta passata per prima, poi la seconda
+    assert result.candidates[0].label == "Big Label"
+    assert result.candidates[1].label == "Small Label"
+    # i campi Spotify sono gia' risolti (nessun /search ulteriore necessario)
+    big = next(c for c in result.candidates if c.title == "New Big Hit")
+    assert big.spotify_id == "x2" and big.album_art_url == "http://img" and big.resolved
+
+
+def test_discover_by_labels_prefers_known_artist_and_recent(db):
+    _lib_track(db, spotify_id="k", title="Known", artist="Known Artist", label="Label A")
+
+    def search(label, *, limit=20):
+        return [
+            _label_item("old", "Stranger", "Old Track", release_date="2005-01-01"),
+            _label_item("new", "Stranger", "New Track", release_date="2024-01-01"),
+            _label_item("known", "Known Artist", "By Known", release_date="2010-01-01"),
+        ]
+
+    result = discover_by_labels(db, labels=["Label A"], search_by_label=search, limit=10)
+    order = [c.title for c in result.candidates]
+    assert order[0] == "By Known"                       # artista gia' in libreria (overlap) in cima
+    assert order.index("New Track") < order.index("Old Track")  # piu' recente prima
+
+
+def test_discover_by_labels_dedup_by_isrc(db):
+    _lib_track(db, spotify_id="o", title="Owned", artist="Owner", label="Label A", isrc="USAAA0000001")
+
+    def search(label, *, limit=20):
+        return [_label_item("z", "Different Name", "Different Title", isrc="USAAA0000001")]
+
+    result = discover_by_labels(db, labels=["Label A"], search_by_label=search, limit=10)
+    assert result.candidates == []                      # scartata per ISRC (gia' in libreria)
+
+
+def test_expand_annotates_owned_label(db):
+    pid = _make_playlist(db, [{"artist": "Artist 0", "title": "Song A"}])
+
+    def resolve(artist, title):
+        return _spotify_item() if title == "Fresh Cut" else None
+
+    def album_label_fn(album_id):
+        return "Warp Records" if album_id == "alb1" else None
+
+    result = discover_for_playlist(
+        db, pid, similarity=FakeSimilarity(), resolve=resolve,
+        album_label_fn=album_label_fn, owned_labels={"warp records"}, limit=10,
+    )
+    fresh = next(c for c in result.candidates if c.title == "Fresh Cut")
+    assert fresh.label == "Warp Records"
+    assert fresh.label_owned is True

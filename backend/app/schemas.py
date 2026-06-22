@@ -320,20 +320,21 @@ class DiscoveryCandidateOut(BaseModel):
     artist: str
     title: str
     match: float
-    source: str  # similar_artist | similar_track | tag
+    source: str  # similar_artist | similar_track | tag | label
     seed: str | None = None
     spotify_id: str | None = None
     spotify_url: str | None = None
     album_art_url: str | None = None
     isrc: str | None = None
     duration_seconds: int | None = None
-    compatibility: int = 0
+    label: str | None = None
+    label_owned: bool = False
     explanation: str | None = None
 
 
 class DiscoveryResponse(BaseModel):
-    mode: str   # expand | gap
-    scope: str  # nome playlist o "libreria"
+    mode: str   # expand | labels
+    scope: str  # nome playlist o etichette
     seed_count: int = 0
     candidates: list[DiscoveryCandidateOut] = []
 
@@ -359,6 +360,11 @@ class DiscoveryExpandRequest(BaseModel):
     playlist_id: int
     limit: int = Field(default=20, ge=1, le=50)
     use_ai: bool | None = None  # None = auto (AI se configurata)
+
+
+class DiscoveryLabelsRequest(BaseModel):
+    labels: list[str] | None = None   # None -> top etichette della libreria
+    limit: int = Field(default=20, ge=1, le=50)
 
 
 class BpmBin(BaseModel):

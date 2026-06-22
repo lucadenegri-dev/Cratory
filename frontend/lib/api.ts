@@ -94,19 +94,20 @@ export interface DiscoveryCandidate {
   artist: string;
   title: string;
   match: number;
-  source: "similar_artist" | "similar_track" | "tag";
+  source: "similar_artist" | "similar_track" | "tag" | "label";
   seed: string | null;
   spotify_id: string | null;
   spotify_url: string | null;
   album_art_url: string | null;
   isrc: string | null;
   duration_seconds: number | null;
-  compatibility: number;
+  label?: string | null;
+  label_owned?: boolean;
   explanation: string | null;
 }
 
 export interface DiscoveryResponse {
-  mode: "expand" | "gap";
+  mode: "expand" | "labels";
   scope: string;
   seed_count: number;
   candidates: DiscoveryCandidate[];
@@ -440,6 +441,10 @@ export function discoverExpand(playlistId: number, opts?: { limit?: number; use_
     limit: opts?.limit,
     use_ai: opts?.use_ai,
   });
+}
+
+export function discoverByLabels(labels?: string[], limit = 20) {
+  return apiPost<DiscoveryResponse>("/api/discovery/labels", { labels, limit });
 }
 
 export function discoveryAddToLibrary(c: DiscoveryCandidate) {

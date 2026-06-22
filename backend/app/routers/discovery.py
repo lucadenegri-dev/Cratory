@@ -28,14 +28,17 @@ from app.schemas import (
     DiscoveryAddResponse,
     DiscoveryCandidateOut,
     DiscoveryExpandRequest,
+    DiscoveryLabelsRequest,
     DiscoveryResponse,
 )
 from app.serializers import track_out
 from app.services.discovery import (
     DiscoveryCandidate,
     DiscoveryResult,
+    discover_by_labels,
     discover_for_playlist,
 )
+from app.services.labels import _clean_label, album_label, labels_overview
 from app.services.playlist_import import import_single_track
 
 logger = logging.getLogger(__name__)
@@ -69,8 +72,13 @@ def _candidate_out(c: DiscoveryCandidate) -> DiscoveryCandidateOut:
         artist=c.artist, title=c.title, match=c.match, source=c.source, seed=c.seed,
         spotify_id=c.spotify_id, spotify_url=c.spotify_url, album_art_url=c.album_art_url,
         isrc=c.isrc, duration_seconds=c.duration_seconds,
-        compatibility=c.compatibility, explanation=c.explanation,
+        label=c.label, label_owned=c.label_owned, explanation=c.explanation,
     )
+
+
+def _owned_labels(db: Session) -> set[str]:
+    """Etichette (pulite, lowercase) gia' in libreria — per il segnale-etichetta su /expand."""
+    return {o["label"].lower() for o in labels_overview(db)}
 
 
 def _response(result: DiscoveryResult) -> DiscoveryResponse:
@@ -103,16 +111,45 @@ def status():
 @router.post("/expand", response_model=DiscoveryResponse)
 def expand(req: DiscoveryExpandRequest, db: Session = Depends(get_db)):
     _require_lastfm()
+    # Segnale-etichetta: se Spotify e' configurato, annota i candidati con la loro
+    # etichetta e fa salire chi e' su un'etichetta che gia' collezioni.
+    album_label_fn = owned = None
+    if _spotify_configured():
+        client = SpotifyWebClient(db)
+        album_label_fn = lambda aid: album_label(db, client, aid)  # noqa: E731
+        owned = _owned_labels(db)
     try:
         result = discover_for_playlist(
             db, req.playlist_id,
             similarity=get_lastfm_client(), resolve=_resolver(db),
-            llm=_maybe_llm(req.use_ai), limit=req.limit,
+            llm=_maybe_llm(req.use_ai),
+            album_label_fn=album_label_fn, owned_labels=owned, limit=req.limit,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except LastFMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return _response(result)
+
+
+@router.post("/labels", response_model=DiscoveryResponse)
+def labels_radar(req: DiscoveryLabelsRequest, db: Session = Depends(get_db)):
+    """Radar Etichette: tracce non possedute dalle etichette date (default: top libreria)."""
+    if not _spotify_configured():
+        raise HTTPException(status_code=409, detail="Spotify non configurato: serve per il Radar etichette.")
+    labels = [(_clean_label(name) or name) for name in (req.labels or [])]
+    labels = [name for name in labels if name] or [o["label"] for o in labels_overview(db)[:6]]
+    if not labels:
+        raise HTTPException(
+            status_code=409,
+            detail="Nessuna etichetta in libreria: recuperale prima da Spotify (sezione Etichette).",
+        )
+    client = SpotifyWebClient(db)
+    result = discover_by_labels(
+        db, labels=labels,
+        search_by_label=lambda l, **k: client.search_by_label(l, **k),
+        limit=req.limit,
+    )
     return _response(result)
 
 

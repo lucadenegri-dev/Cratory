@@ -33,6 +33,32 @@ _MAX_GENRES_PER_LABEL = 6
 # voci di cache "label None" salvate dalla versione precedente (bug).
 _ALBUM_LABEL_PROVIDER = "spotify_album_label_v2"
 
+# "X under exclusive licence to Y" -> tiene solo Y (l'etichetta del master).
+_LICENCE_RE = re.compile(r".*\bunder exclusive licen[cs]e to\s+", re.IGNORECASE)
+# Suffissi societari finali da rimuovere ("Warp Records Limited" -> "Warp Records").
+_LEGAL_SUFFIX_RE = re.compile(
+    r"[\s,]+(?:Limited|Ltd\.?|LLC|Inc\.?|GmbH|B\.?V\.?|S\.?r\.?l\.?|S\.?A\.?|Pty\.?\s*Ltd\.?|Co\.?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _clean_label(raw: str | None) -> str | None:
+    """Normalizza il nome etichetta da un copyright verboso.
+
+    - "X under exclusive licence to Y" -> Y (l'etichetta del master).
+    - rimuove i suffissi societari finali (Limited/Ltd/LLC/Inc/GmbH/...).
+    Idempotente: un nome gia' pulito resta invariato.
+    """
+    if not raw:
+        return None
+    s = raw.strip()
+    s = _LICENCE_RE.sub("", s)          # tieni solo cio' dopo "under ... licence to"
+    prev = None
+    while prev != s:                    # strip ripetuto (es. "Records Limited Ltd")
+        prev = s
+        s = _LEGAL_SUFFIX_RE.sub("", s).strip()
+    return s or None
+
 
 def _spotify_track_id(track: Track) -> str | None:
     return track.spotify_id or track.platform_track_id
@@ -66,7 +92,7 @@ def _label_from_copyrights(copyrights) -> str | None:
     s = re.sub(r"^[\s©℗]+", "", text.strip())
     s = re.sub(r"^\(\s*[cp]\s*\)\s*", "", s, flags=re.IGNORECASE)
     s = re.sub(r"^\s*\d{4}\s+", "", s).strip()
-    return s or None
+    return _clean_label(s)
 
 
 def _is_rate_limit(exc: SpotifyError) -> bool:
@@ -87,6 +113,29 @@ def _cache_album_label(db: Session, album_id: str, label: str | None) -> None:
         provider=_ALBUM_LABEL_PROVIDER, lookup_key=album_id,
         result_json={"label": label} if label else None,
     ))
+
+
+def album_label(db: Session, client, album_id: str) -> str | None:
+    """Etichetta (pulita) di un album Spotify, con cache ``EnrichmentCache``.
+
+    Riusabile dal Discovery per annotare i candidati: stessa cache del backfill,
+    quindi non rilegge album gia' visti. Ritorna None se l'album non e' risolvibile.
+    """
+    if not album_id:
+        return None
+    cached = _cached_album(db, album_id)
+    if cached is not None:
+        return _clean_label((cached.result_json or {}).get("label"))
+    try:
+        obj = client.get_album(album_id)
+    except SpotifyError:
+        return None
+    label = None
+    if obj:
+        label = obj.get("label") or _label_from_copyrights(obj.get("copyrights"))
+    _cache_album_label(db, album_id, label)
+    db.commit()
+    return _clean_label(label)
 
 
 def backfill_labels(
@@ -188,9 +237,12 @@ def labels_overview(db: Session) -> list[dict]:
         select(Track).where(Track.label.is_not(None), Track.label != "")
     ).all()
 
+    # Merge a read-time delle varianti dello stesso label (es. "Warp Records
+    # Limited" e "Warp Records Ltd" -> "Warp Records"): nessuna migrazione dati.
     buckets: dict[str, list[Track]] = {}
     for t in tracks:
-        buckets.setdefault(t.label, []).append(t)
+        key = _clean_label(t.label) or t.label
+        buckets.setdefault(key, []).append(t)
 
     out: list[dict] = []
     for label, items in buckets.items():
