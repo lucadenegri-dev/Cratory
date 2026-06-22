@@ -7,7 +7,7 @@ export function PageLayout({
   marginaliaTitle,
   children,
 }: {
-  title: string;
+  title?: string;
   meta?: ReactNode;
   marginalia?: ReactNode;
   marginaliaTitle?: string;
@@ -16,10 +16,12 @@ export function PageLayout({
   return (
     <div className={marginalia ? "lg:grid lg:grid-cols-[1fr_240px]" : ""}>
       <section className="min-w-0 px-5 py-5 lg:px-6 lg:py-6">
-        <header className="mb-5 flex items-baseline gap-3 border-b border-border pb-3">
-          <h1 className="text-sm font-semibold uppercase tracking-[0.12em] text-fg-strong">{title}</h1>
-          {meta != null && <span className="tnum text-xs text-muted">{meta}</span>}
-        </header>
+        {title && (
+          <header className="mb-5 flex items-baseline gap-3 border-b border-border pb-3">
+            <h1 className="text-sm font-semibold uppercase tracking-[0.12em] text-fg-strong">{title}</h1>
+            {meta != null && <span className="tnum text-xs text-muted">{meta}</span>}
+          </header>
+        )}
         {children}
       </section>
       {marginalia && (

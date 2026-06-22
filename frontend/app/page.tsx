@@ -124,7 +124,7 @@ export default function Dashboard() {
     .map((p, i) => ({ n: String(i + 1).padStart(2, "0"), title: p.name, meta: `${p.track_count} tr.`, href: `/playlists/${p.id}` }));
 
   return (
-    <PageLayout title="Dashboard" meta={stats ? `${stats.total_tracks} TRACCE` : undefined}>
+    <PageLayout>
       {error && <div className="mb-6"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
 
       {empty && (
