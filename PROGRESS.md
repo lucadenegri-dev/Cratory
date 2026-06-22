@@ -5,7 +5,7 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-06-18
+**Ultimo aggiornamento:** 2026-06-23
 
 **Nome prodotto:** SetArc. DJ Assistant resta solo come nome storico; i path tecnici
 legacy (`djassistant.db`, log path) restano invariati finche' non viene pianificata
@@ -30,6 +30,45 @@ via Shazam in corso di integrazione, documentazione riscritta.
   senza rinominare path tecnici legacy.
 - Roadmap riallineata: test reale con chiavi gia' fatto, confronto modelli AI gia'
   implementato, sezione Discovery basata sui gap rimossa.
+
+## Milestone 2026-06-23 - Rebranding editoriale + Discovery etichette
+
+- Rebranding completo: design system "editorial archive" monocromo (IBM Plex Mono,
+  filetti, squadrato), tema dark di default + paper via toggle (runtime `--c-*` +
+  `@theme inline`), shell editoriale `EditorialShell`/`PageLayout`, no-FOUC.
+- Dashboard "command center": hero figures, istogramma BPM interattivo, attivita'
+  recente, copertura enrichment, azioni rapide.
+- Barra di avanzamento job globale (enrichment/shazam/backfill etichette) persistente
+  al cambio pagina.
+- Etichette: backfill da `copyrights` Spotify (dev mode), normalizzazione nomi
+  (`_clean_label`), merge varianti a read-time.
+- Discovery direzione C: **Radar Etichette** (`POST /api/discovery/labels`, filtro
+  Spotify `label:`), **segnale-etichetta** su `/expand`, rimozione della
+  "compatibilita' tecnica" (resta al Set Builder). Controlli in barra orizzontale.
+- Import Spotify: solo playlist possedute; "Aggiorna" per le gia' importate.
+- Merge su `master` e push. 186 test backend verdi, lint/build frontend puliti.
+
+## Prossimi step (da vedere insieme)
+
+Roadmap concordata, in ordine di discussione. Da dettagliare uno a uno prima di
+implementare (brainstorming + spec dove serve).
+
+1. **Multi-account (admin + users).** Introdurre autenticazione e separazione dati:
+   ruolo admin + utenti. Impatta modello dati (oggi mono-utente), sessioni, scoping
+   di libreria/playlist/set, e i token Spotify (oggi globali) -> per-utente.
+2. **Miglioramento Discovery.** Affinare radar/expand: qualita' candidati, piu'
+   segnali di gusto, dedup, spiegazioni, eventuale ranking configurabile.
+3. **Sistemazione testi intera app (pagina per pagina).** Revisione copy/microcopy
+   coerente, tono, errori, empty state — una pagina alla volta.
+4. **Multi-lingua (inglese).** i18n: estrazione stringhe, struttura locale, switch
+   lingua. Prerequisito utile per il punto 3 (testi gia' centralizzati).
+5. **Rifacimento totale della documentazione.** README, ARCHITECTURE, API, ROADMAP,
+   AGENTS, CLAUDE allineati allo stato reale post-rebranding e multi-account.
+6. **Audit codice + sicurezza.** Revisione complessiva: dipendenze, gestione segreti,
+   authz (legato al punto 1), input validation, superfici API, lint/typing.
+7. **Cambio nome app.** "SetArc" risulta gia' esistente: scegliere nuovo nome e fare
+   la rename (UI, docs, eventualmente path tecnici legacy `djassistant.*`).
+8. **Preparazione pitch.** Materiale di presentazione del prodotto.
 
 ## Funzionalita' completate
 
