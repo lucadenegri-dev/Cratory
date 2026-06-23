@@ -1,4 +1,5 @@
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
@@ -21,7 +22,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/spotify", tags=["spotify"])
 
 # Stato OAuth in memoria: app locale mono-utente, sufficiente per il flusso.
-_pending_states: set[str] = set()
+# Dict state->istante per scadere i login abbandonati (niente crescita illimitata).
+_STATE_TTL_SECONDS = 600  # 10 min: oltre, lo state CSRF e' considerato scaduto
+_pending_states: dict[str, float] = {}
+
+
+def _remember_state(state: str) -> None:
+    now = time.monotonic()
+    for s, ts in list(_pending_states.items()):  # prune dei login mai completati
+        if now - ts > _STATE_TTL_SECONDS:
+            del _pending_states[s]
+    _pending_states[state] = now
+
+
+def _consume_state(state: str | None) -> bool:
+    """True se lo state e' valido e non scaduto. In ogni caso lo rimuove (one-shot)."""
+    if not state:
+        return False
+    issued = _pending_states.pop(state, None)
+    return issued is not None and (time.monotonic() - issued) <= _STATE_TTL_SECONDS
 
 
 def _http_error(exc: SpotifyError) -> HTTPException:
@@ -46,7 +65,7 @@ def status(db: Session = Depends(get_db)):
 @router.get("/login")
 def login():
     state = make_state()
-    _pending_states.add(state)
+    _remember_state(state)
     try:
         return RedirectResponse(build_authorize_url(state))
     except SpotifyNotConfigured as exc:
@@ -63,9 +82,8 @@ def callback(
     frontend = f"{settings.frontend_origin}/settings"
     if error or not code:
         return RedirectResponse(f"{frontend}?spotify=error&detail={error or 'no_code'}")
-    if state not in _pending_states:
+    if not _consume_state(state):
         return RedirectResponse(f"{frontend}?spotify=error&detail=invalid_state")
-    _pending_states.discard(state)
     try:
         SpotifyWebClient(db).exchange_code(code)
     except SpotifyError as exc:

@@ -75,7 +75,7 @@ function recommend(s: LibraryStats): Reco | null {
   }
   return {
     icon: <Compass size={22} />, tag: "Prossimo passo", title: "Espandi la libreria",
-    desc: "Scopri tracce compatibili per colmare i buchi delle tue playlist.",
+    desc: "Scopri tracce affini al gusto delle tue playlist e aggiungile alla libreria.",
     href: "/discovery", cta: "Scopri musica",
   };
 }
