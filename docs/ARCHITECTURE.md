@@ -32,7 +32,8 @@ Spotify / import manuale
   -> Set Editor / Export / Discovery write-back
 ```
 
-Discovery segue un ramo parallelo dedicato all'espansione di playlist:
+Discovery ha due rami paralleli, entrambi orientati al **gusto** (non alla
+compatibilita' tecnica, che resta del Set Builder). Espansione playlist:
 
 ```text
 playlist importata
@@ -40,8 +41,19 @@ playlist importata
   -> Last.fm similarity
   -> dedup vs libreria
   -> resolver Spotify /search
-  -> ranking deterministico
+  -> ranking per gusto + annotazione etichetta (boost se gia' collezionata)
   -> spiegazione AI opzionale
+  -> add to library
+```
+
+Radar Etichette (sorgente alternativa, niente Last.fm):
+
+```text
+etichette (default: top della libreria)
+  -> Spotify /search con filtro label:"..."
+  -> dedup vs libreria
+  -> ranking per affinita' (quanto segui la label + overlap artisti + recency)
+  -> interleave round-robin tra le etichette
   -> add to library
 ```
 

@@ -7,7 +7,7 @@ SetArc e' una webapp personale, locale/self-hosted e mono-utente per preparare D
 set a partire da playlist streaming. Importa playlist Spotify o tracklist manuali,
 normalizza le tracce, arricchisce BPM/key/mood/energia tramite provider esterni,
 analizza i buchi della libreria, genera bozze di set spiegate e aiuta a scoprire
-nuova musica compatibile.
+nuova musica affine al proprio gusto.
 
 Non e' un player e non conserva audio. Il modulo Shazam, quando disponibile, usa
 download temporanei solo per fingerprinting di mix esterni e salva esclusivamente la
@@ -22,7 +22,8 @@ tracklist identificata.
 - Permette correzioni manuali di BPM, Camelot, mood, energia, genere e label.
 - Genera set con motore deterministico e, se configurata, AI validata.
 - Classifica transizioni come sicure, rischiose o buoni reset.
-- Espande una playlist con Discovery Last.fm-centric e resolver Spotify.
+- Espande una playlist con Discovery per gusto (Last.fm + resolver Spotify) e
+  Radar Etichette (tracce nuove dalle etichette che gia' collezioni).
 - Identifica tracklist di mix via Shazam/yt-dlp/ffmpeg in un corpus separato dalla libreria.
 
 ## Documentazione
@@ -141,7 +142,8 @@ token Spotify. La modalita' `all` elimina anche i token, salvo `--preserve-token
 6. Genera un set in modalita' tecnica o creativa.
 7. Controlla transizioni, warning e alternative.
 8. Esporta il set o crea una playlist Spotify.
-9. Usa Discovery per trovare tracce compatibili e aggiungerle alla libreria.
+9. Usa Discovery (espandi playlist o Radar Etichette) per trovare tracce affini al
+   tuo gusto e aggiungerle alla libreria.
 
 ## Test
 

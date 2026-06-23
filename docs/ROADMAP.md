@@ -39,15 +39,33 @@ locale, salvo futura migrazione esplicita.
 - Rimossa la sezione Discovery che suggeriva tracce sulla base dei gap della playlist.
 - Rename prodotto a SetArc in documentazione e stringhe user-facing principali.
 - Reset documentazione 2026-06-18.
+- Rebranding UI "editorial archive" (monocromo, IBM Plex Mono, tema dark/paper).
+- Dashboard command center (figure, istogramma BPM, attivita', copertura, azioni).
+- Sezione Etichette: backfill da copyright Spotify + normalizzazione nomi.
+- Discovery con etichette: Radar Etichette (`label:`) + segnale-etichetta su expand;
+  rimossa la "compatibilita' tecnica" dal Discovery (resta del Set Builder).
+- Import Spotify: solo playlist possedute; sync/aggiorna delle gia' importate.
 
 ## Prossimi passi
 
-1. **Shazam fase 2.** Usare `DjSetTrack` come corpus per suggerimenti di co-occorrenza
-   e confronto con la libreria.
-2. **SoundCloud import.** Prima valutare API, auth e limiti reali; poi implementare.
-3. **PostgreSQL.** Low priority finche' l'app resta mono-utente locale.
-4. **Rename tecnico opzionale.** Decidere se migrare anche database/log path legacy o
-   lasciarli stabili.
+Direzione concordata (dettaglio operativo e ordine in `PROGRESS.md`):
+
+1. **Multi-account (admin + users).** Autenticazione e separazione dati: oggi l'app
+   e' mono-utente con stato globale (token Spotify, job, sessioni) -> da portare
+   per-utente. E' il cambio architetturale piu' grande e abilita PostgreSQL.
+2. **Miglioramento Discovery.** Qualita' candidati, segnali di gusto, spiegazioni.
+3. **Sistemazione testi (pagina per pagina).** Copy/microcopy coerente.
+4. **Multi-lingua (inglese).** i18n: estrazione stringhe + switch lingua.
+5. **Rifacimento documentazione.** Dopo che multi-account stabilizza l'architettura.
+6. **Audit codice + sicurezza.** Legato al punto 1 (authz). Vedi note sotto.
+7. **Cambio nome app** (SetArc gia' esistente) + eventuale rename path legacy.
+8. **Preparazione pitch.**
+
+Backlog tecnico (non bloccante):
+
+- **Shazam fase 2.** `DjSetTrack` come corpus per suggerimenti di co-occorrenza.
+- **SoundCloud import.** Valutare prima API, auth e limiti reali.
+- **PostgreSQL.** Diventa prioritario col multi-account (oggi SQLite basta).
 
 ## Rischi
 
@@ -66,5 +84,7 @@ locale, salvo futura migrazione esplicita.
 - Spotify e' fonte di identita'/metadata, non di feature musicali.
 - Discovery non usa Spotify `/recommendations`.
 - Discovery non suggerisce piu' tracce dai gap della playlist; quei gap restano analisi separata.
+- Discovery lavora per gusto, non per compatibilita' tecnica: BPM/key/transizioni
+  sono competenza del Set Builder.
 - Il modulo Shazam non popola direttamente la libreria: produce un corpus separato.
 - SQLite resta sufficiente per uso locale mono-utente.

@@ -20,6 +20,7 @@ GET /api/health
 ```text
 GET    /api/playlists/spotify/available
 POST   /api/playlists/import
+POST   /api/playlists/{playlist_id}/sync
 POST   /api/playlists/import-manual
 GET    /api/playlists
 GET    /api/playlists/{playlist_id}
@@ -30,8 +31,12 @@ GET    /api/playlists/{playlist_id}/gaps
 GET    /api/playlists/library/gaps
 ```
 
+`GET /api/playlists/spotify/available` elenca solo le playlist **possedute**
+dall'utente collegato (quelle altrui che segue non sono importabili in dev mode).
 `POST /api/playlists/import` importa una playlist Spotify o i liked tracks.
-`POST /api/playlists/import-manual` crea una playlist da testo incollato. Entrambi
+`POST /api/playlists/{playlist_id}/sync` riallinea una playlist gia' importata con
+Spotify: importa le nuove tracce e scollega quelle rimosse (che restano in libreria).
+`POST /api/playlists/import-manual` crea una playlist da testo incollato. Tutti
 avviano l'enrichment automatico best-effort sulle tracce importate.
 
 ## Tracks e libreria
@@ -117,14 +122,23 @@ Spotify gestisce OAuth, import e export playlist. Non e' una fonte di BPM/key.
 ```text
 GET  /api/discovery/status
 POST /api/discovery/expand
+POST /api/discovery/labels
 POST /api/discovery/add
 ```
 
-`expand` espande una playlist importata:
+`expand` espande una playlist importata, suggerendo brani di **gusto affine** da
+aggiungere (non una compatibilita' tecnica: BPM/key/transizioni restano del Set Builder):
 
 ```text
-playlist -> seed artisti/tracce -> Last.fm similarity -> resolver Spotify -> ranking
+playlist -> seed artisti/tracce -> Last.fm similarity -> resolver Spotify -> ranking per gusto
 ```
+
+I candidati di `expand` sono annotati con la loro **etichetta**: chi e' su
+un'etichetta che gia' collezioni riceve un piccolo boost ed e' marcato `label_owned`.
+
+`labels` (Radar Etichette) trova su Spotify, via filtro `label:"..."`, tracce non
+ancora possedute delle etichette date (default: le top della libreria), ordinate per
+affinita' di gusto (quanto segui l'etichetta + overlap artisti + recency).
 
 `add` importa un candidato nella libreria dell'app in modo idempotente. Non scrive su
 Spotify. L'AI, se configurata e richiesta, aggiunge spiegazioni ma non sceglie i
