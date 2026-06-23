@@ -66,8 +66,13 @@ implementare (brainstorming + spec dove serve).
    AGENTS, CLAUDE allineati allo stato reale post-rebranding e multi-account.
 6. **Audit codice + sicurezza.** Revisione complessiva: dipendenze, gestione segreti,
    authz (legato al punto 1), input validation, superfici API, lint/typing.
-7. **Cambio nome app.** "SetArc" risulta gia' esistente: scegliere nuovo nome e fare
-   la rename (UI, docs, eventualmente path tecnici legacy `djassistant.*`).
+7. **Cambio nome app.** "SetArc" risulta gia' esistente. **Nome scelto: Cratory**
+   (`crate` + `-ory`, vibe "repository/archivio di crate", coerente col brand
+   editoriale). _Da confermare la disponibilita' di `cratory.com` su un registrar._
+   Il rollout (UI, docs, repo, chiave localStorage `setarc-theme`, ed eventuali path
+   tecnici legacy `djassistant.*`) NON va fatto a se': si esegue insieme ai punti 3
+   (testi) e 4 (i18n), dove tutte le stringhe sono gia' toccate -> swap a costo minimo.
+   Nel frattempo: non incastonare "setarc" in nuove superfici persistenti/pubbliche.
 8. **Preparazione pitch.** Materiale di presentazione del prodotto.
 
 ## Funzionalita' completate
