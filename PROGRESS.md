@@ -48,32 +48,40 @@ via Shazam in corso di integrazione, documentazione riscritta.
 - Import Spotify: solo playlist possedute; "Aggiorna" per le gia' importate.
 - Merge su `master` e push. 186 test backend verdi, lint/build frontend puliti.
 
-## Prossimi step (da vedere insieme)
+## Decisione 2026-06-23 - Direzione prodotto + vincolo Spotify
 
-Roadmap concordata, in ordine di discussione. Da dettagliare uno a uno prima di
-implementare (brainstorming + spec dove serve).
+**Vincolo bloccante (verificato):** Spotify Web API non consente un SaaS pubblico
+in cui ogni utente collega il proprio account. Dev mode = max 5 utenti, Premium
+richiesto, un solo Client ID, endpoint ridotti (feb 2026). Extended quota mode (dal
+15 mag 2025) solo per organizzazioni con servizio lanciato e >= 250k utenti/mese.
+Tutta la codebase e' gia' piena di workaround dev-mode: confermato.
 
-1. **Multi-account (admin + users).** Introdurre autenticazione e separazione dati:
-   ruolo admin + utenti. Impatta modello dati (oggi mono-utente), sessioni, scoping
-   di libreria/playlist/set, e i token Spotify (oggi globali) -> per-utente.
-2. **Miglioramento Discovery.** Affinare radar/expand: qualita' candidati, piu'
+**Direzione scelta:** Cratory e' uno **strumento personale/self-hosted eccellente**
+per DJ. Niente SaaS pubblico: il valore e' la qualita' del prodotto, non la scala.
+
+**Conseguenze sulla roadmap:**
+- Punto 1 (multi-account pubblico): **non si fa.** Eventuale reshape futuro = piccola
+  crew self-hosted con credenziali Spotify proprie, solo se serve.
+- Punto 6 (audit sicurezza): **alleggerito** (threat model piccolo senza utenti
+  pubblici); restano i quick win gia' individuati.
+- Punto 8 (pitch): da **riformulare** (non "SaaS Spotify"); eventualmente
+  open-source/portfolio.
+
+## Prossimi step (ri-prioritizzati)
+
+Ordine: **2 -> (3+4+7 insieme) -> audit leggero -> 5**, con 1/8 rivisti.
+
+1. **Miglioramento Discovery.** Affinare radar/expand: qualita' candidati, piu'
    segnali di gusto, dedup, spiegazioni, eventuale ranking configurabile.
-3. **Sistemazione testi intera app (pagina per pagina).** Revisione copy/microcopy
-   coerente, tono, errori, empty state — una pagina alla volta.
-4. **Multi-lingua (inglese).** i18n: estrazione stringhe, struttura locale, switch
-   lingua. Prerequisito utile per il punto 3 (testi gia' centralizzati).
-5. **Rifacimento totale della documentazione.** README, ARCHITECTURE, API, ROADMAP,
-   AGENTS, CLAUDE allineati allo stato reale post-rebranding e multi-account.
-6. **Audit codice + sicurezza.** Revisione complessiva: dipendenze, gestione segreti,
-   authz (legato al punto 1), input validation, superfici API, lint/typing.
-7. **Cambio nome app.** "SetArc" risulta gia' esistente. **Nome scelto: Cratory**
-   (`crate` + `-ory`, vibe "repository/archivio di crate", coerente col brand
-   editoriale). _Da confermare la disponibilita' di `cratory.com` su un registrar._
-   Il rollout (UI, docs, repo, chiave localStorage `setarc-theme`, ed eventuali path
-   tecnici legacy `djassistant.*`) NON va fatto a se': si esegue insieme ai punti 3
-   (testi) e 4 (i18n), dove tutte le stringhe sono gia' toccate -> swap a costo minimo.
-   Nel frattempo: non incastonare "setarc" in nuove superfici persistenti/pubbliche.
-8. **Preparazione pitch.** Materiale di presentazione del prodotto.
+2. **Testi + i18n + rollout nome (in un passaggio unico).** Estrazione stringhe
+   (i18n EN), copy/microcopy coerente pagina per pagina, e contestuale swap del nome
+   a **Cratory** (UI, chiave localStorage `setarc-theme`, repo) — tutte le stringhe
+   si toccano una volta sola. _Nome `cratory.com` da confermare su registrar._
+3. **Audit leggero + quick win** rimasti (efficienza `library_stats`, robustezza).
+4. **Rifacimento documentazione** una volta assestato il resto.
+
+Rivisti/sospesi: **multi-account pubblico** (bloccato da Spotify), **pitch** (da
+riformulare attorno alla natura reale del prodotto).
 
 ## Funzionalita' completate
 
