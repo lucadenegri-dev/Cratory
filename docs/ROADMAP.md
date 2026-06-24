@@ -45,6 +45,9 @@ locale, salvo futura migrazione esplicita.
 - Discovery con etichette: Radar Etichette (`label:`) + segnale-etichetta su expand;
   rimossa la "compatibilita' tecnica" dal Discovery (resta del Set Builder).
 - Import Spotify: solo playlist possedute; sync/aggiorna delle gia' importate.
+- Discovery v2 "Scava generi": dig a volume via Discogs (genere/stile), lead non
+  risolti, ranking profondita'+novita', salva-al-volo. Fix: cancellare una playlist
+  non elimina piu' i brani condivisi (scollega invece di hard-delete).
 
 ## Prossimi passi
 
@@ -66,6 +69,11 @@ Backlog tecnico (non bloccante):
 - **Shazam fase 2.** `DjSetTrack` come corpus per suggerimenti di co-occorrenza.
 - **SoundCloud import.** Valutare prima API, auth e limiti reali.
 - **PostgreSQL.** Diventa prioritario col multi-account (oggi SQLite basta).
+- **Playlist many-to-many.** Modello `playlist_tracks` (un brano in piu' playlist):
+  l'import aggiunge membership invece di sovrascrivere `Track.playlist_id`. Oggi
+  mitigato dal fix "scollega invece di cancellare", ma il modello resta 1:1.
+- **Discovery: unificare expand/dig.** Portare anche il seme Playlist alla lista-dig
+  a volume e arricchire il dig (tracklist per-release, Last.fm tag come 2a sorgente).
 
 ## Rischi
 
