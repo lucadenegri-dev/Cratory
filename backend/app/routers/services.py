@@ -68,6 +68,16 @@ def services_status(db: Session = Depends(get_db)):
                 "docs": "https://www.last.fm/api",
             },
             {
+                "key": "discogs", "name": "Discogs", "category": "Discovery",
+                # Usabile anche senza token (rate ridotto); il token alza il rate limit.
+                "configured": True,
+                "connected": bool(settings.discogs_token),
+                "detail": "Profondita' per il Discovery (crate digging per genere/stile ed "
+                          "etichetta). Funziona senza token; DISCOGS_TOKEN alza il rate limit.",
+                "env": ["DISCOGS_TOKEN"],
+                "docs": "https://www.discogs.com/settings/developers",
+            },
+            {
                 "key": "musicbrainz", "name": "MusicBrainz", "category": "Feature musicali",
                 # Nessuna API key, ma MusicBrainz richiede uno User-Agent identificativo:
                 # entra nella catena solo se MUSICBRAINZ_USER_AGENT e' valorizzato.

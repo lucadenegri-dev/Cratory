@@ -118,6 +118,32 @@ export interface DiscoveryAddResponse {
   track: Track;
 }
 
+// Discovery v2: dig (crate digging via Discogs) — lead leggeri non risolti.
+export interface DiscoveryLead {
+  artist: string;
+  title: string;
+  year: number | null;
+  label: string | null;
+  style: string | null;
+  source: string;
+  seed: string | null;
+  discogs_url: string | null;
+  thumb_url: string | null;
+  have: number;
+  want: number;
+}
+
+export interface DiscoveryDigResponse {
+  seed_type: string;
+  value: string;
+  leads: DiscoveryLead[];
+}
+
+export interface DiscoveryGenres {
+  library: string[];
+  styles: string[];
+}
+
 export interface FeatureProviderStatus {
   configured: boolean;
   provider: string | null;
@@ -445,6 +471,30 @@ export function discoverExpand(playlistId: number, opts?: { limit?: number; use_
 
 export function discoverByLabels(labels?: string[], limit = 20) {
   return apiPost<DiscoveryResponse>("/api/discovery/labels", { labels, limit });
+}
+
+export function getDiscoveryGenres() {
+  return apiGet<DiscoveryGenres>("/api/discovery/genres");
+}
+
+export function discoveryDig(
+  seedType: "genre" | "label",
+  value: string,
+  opts?: { adventurousness?: number; limit?: number },
+) {
+  return apiPost<DiscoveryDigResponse>("/api/discovery/dig", {
+    seed_type: seedType,
+    value,
+    adventurousness: opts?.adventurousness,
+    limit: opts?.limit,
+  });
+}
+
+export function discoveryAddLead(lead: DiscoveryLead) {
+  return apiPost<DiscoveryAddResponse>("/api/discovery/add", {
+    artist: lead.artist,
+    title: lead.title,
+  });
 }
 
 export function discoveryAddToLibrary(c: DiscoveryCandidate) {

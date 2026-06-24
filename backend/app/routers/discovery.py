@@ -11,10 +11,12 @@ aggiunge la spiegazione di ogni suggerimento.
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db import get_db
+from app.integrations.discogs import DiscogsClient
 from app.integrations.lastfm import (
     LastFMError,
     LastFMNotConfigured,
@@ -23,12 +25,17 @@ from app.integrations.lastfm import (
 )
 from app.integrations.llm import get_llm_client, llm_configured
 from app.integrations.spotify import SpotifyWebClient
+from app.models import Track
 from app.schemas import (
     DiscoveryAddRequest,
     DiscoveryAddResponse,
     DiscoveryCandidateOut,
+    DiscoveryDigRequest,
+    DiscoveryDigResponse,
     DiscoveryExpandRequest,
+    DiscoveryGenresOut,
     DiscoveryLabelsRequest,
+    DiscoveryLeadOut,
     DiscoveryResponse,
 )
 from app.serializers import track_out
@@ -38,8 +45,18 @@ from app.services.discovery import (
     discover_by_labels,
     discover_for_playlist,
 )
+from app.services.discovery_dig import DiscoveryLead, dig
 from app.services.labels import _clean_label, album_label, labels_overview
 from app.services.playlist_import import import_single_track
+
+# Stili Discogs curati per il drill-down "Generi" (oltre ai generi gia' in libreria).
+_CURATED_STYLES = [
+    "House", "Deep House", "Tech House", "Acid House", "Techno", "Minimal Techno",
+    "Detroit Techno", "Dub Techno", "Electro", "Trance", "Progressive House",
+    "Drum n Bass", "Jungle", "Breakbeat", "UK Garage", "Disco", "Italo-Disco",
+    "Nu-Disco", "Ambient", "Downtempo", "Trip Hop", "IDM", "Dubstep", "Hip Hop",
+    "Funk / Soul", "Afrobeat",
+]
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/discovery", tags=["discovery"])
@@ -151,6 +168,43 @@ def labels_radar(req: DiscoveryLabelsRequest, db: Session = Depends(get_db)):
         limit=req.limit,
     )
     return _response(result)
+
+
+# --- Discovery v2: dig (crate digging via Discogs) ---------------------------
+
+
+def _lead_out(lead: DiscoveryLead) -> DiscoveryLeadOut:
+    return DiscoveryLeadOut(
+        artist=lead.artist, title=lead.title, year=lead.year, label=lead.label,
+        style=lead.style, source=lead.source, seed=lead.seed,
+        discogs_url=lead.discogs_url, thumb_url=lead.thumb_url,
+        have=lead.have, want=lead.want,
+    )
+
+
+@router.get("/genres", response_model=DiscoveryGenresOut)
+def discovery_genres(db: Session = Depends(get_db)):
+    """Generi gia' in libreria + stili curati, per il seme 'Generi' del dig."""
+    rows = db.execute(
+        select(Track.genre).where(Track.genre.is_not(None), Track.genre != "").distinct()
+    ).all()
+    library = sorted({g for (g,) in rows if g})
+    return DiscoveryGenresOut(library=library, styles=_CURATED_STYLES)
+
+
+@router.post("/dig", response_model=DiscoveryDigResponse)
+def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
+    """Lista-dig a volume da Discogs per genere/stile o etichetta (lead non risolti)."""
+    client = DiscogsClient()
+    result = dig(
+        db, seed_type=req.seed_type, value=req.value,
+        search_releases=lambda **kw: client.search_releases(**kw),
+        adventurousness=req.adventurousness, limit=req.limit,
+    )
+    return DiscoveryDigResponse(
+        seed_type=result.seed_type, value=result.value,
+        leads=[_lead_out(lead) for lead in result.leads],
+    )
 
 
 @router.post("/add", response_model=DiscoveryAddResponse)

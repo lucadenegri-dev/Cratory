@@ -367,6 +367,43 @@ class DiscoveryLabelsRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=50)
 
 
+# --- Discovery v2: dig (crate digging via Discogs) ---------------------------
+
+
+class DiscoveryLeadOut(BaseModel):
+    """Lead leggero NON risolto: l'identita' Spotify si ricava al salvataggio."""
+
+    artist: str
+    title: str
+    year: int | None = None
+    label: str | None = None
+    style: str | None = None
+    source: str = "discogs"
+    seed: str | None = None
+    discogs_url: str | None = None
+    thumb_url: str | None = None
+    have: int = 0
+    want: int = 0
+
+
+class DiscoveryDigRequest(BaseModel):
+    seed_type: Literal["genre", "label"]
+    value: str = Field(min_length=1)
+    adventurousness: float = Field(default=0.4, ge=0.0, le=1.0)
+    limit: int = Field(default=80, ge=1, le=200)
+
+
+class DiscoveryDigResponse(BaseModel):
+    seed_type: str
+    value: str
+    leads: list[DiscoveryLeadOut] = []
+
+
+class DiscoveryGenresOut(BaseModel):
+    library: list[str] = []   # generi gia' presenti in libreria
+    styles: list[str] = []    # stili curati (sottoinsieme Discogs) per il drill-down
+
+
 class BpmBin(BaseModel):
     # 'from' e' parola chiave Python: campo from_ con alias "from" sul JSON.
     model_config = ConfigDict(populate_by_name=True)

@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # Enrichment musicale esterno (BPM/key/mood/energia). Vuoti = provider disattivo.
     getsongbpm_api_key: str = ""
     lastfm_api_key: str = ""
+    # Discogs: sorgente di profondita' per Discovery (generi/stili, etichette, artisti).
+    # Funziona anche senza token (rate ridotto a ~25/min); col token sale a ~60/min.
+    discogs_token: str = ""
     # Deezer: BPM via ISRC, gratis e SENZA API key (endpoint pubblico). Attivo di default
     # perche' a costo zero e copre il BPM con l'identita' piu' affidabile (ISRC).
     deezer_enabled: bool = True

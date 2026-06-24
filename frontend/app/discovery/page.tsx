@@ -1,22 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Compass, ExternalLink, Music2, Wand2, Plus, Check, Radar, Tags } from "lucide-react";
+import { Compass, ExternalLink, Music2, Wand2, Plus, Check, Radar, Tags, Disc3, Search } from "lucide-react";
 import {
   discoveryStatus,
   discoverExpand,
   discoverByLabels,
   discoveryAddToLibrary,
+  discoveryDig,
+  discoveryAddLead,
+  getDiscoveryGenres,
   listImportedPlaylists,
   getLabels,
   fmtDuration,
   type DiscoveryStatus,
   type DiscoveryResponse,
   type DiscoveryCandidate,
+  type DiscoveryDigResponse,
+  type DiscoveryLead,
+  type DiscoveryGenres,
   type Playlist,
   type LabelStats,
 } from "@/lib/api";
-import { Card, Badge, Alert, Button, EmptyState, Spinner, Select, Field, Checkbox } from "@/components/ui";
+import { Card, Badge, Alert, Button, EmptyState, Spinner, Select, Field, Checkbox, Input } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { cn } from "@/lib/cn";
@@ -25,7 +31,7 @@ function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
 
-type Mode = "expand" | "labels";
+type Mode = "expand" | "labels" | "genres";
 const CHIP_CAP = 12; // etichette mostrate prima dell'espansione
 
 const SOURCE_LABEL: Record<DiscoveryCandidate["source"], string> = {
@@ -50,6 +56,12 @@ export default function DiscoveryPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showAllLabels, setShowAllLabels] = useState(false);
 
+  // generi (dig Discogs)
+  const [genres, setGenres] = useState<DiscoveryGenres | null>(null);
+  const [genre, setGenre] = useState<string>("");
+  const [adventurousness, setAdventurousness] = useState(0.4);
+  const [dig, setDig] = useState<DiscoveryDigResponse | null>(null);
+
   // condivisi
   const [result, setResult] = useState<DiscoveryResponse | null>(null);
   const [busy, setBusy] = useState(false);
@@ -69,6 +81,12 @@ export default function DiscoveryPage() {
         setSelected(new Set(ls.slice(0, 6).map((l) => l.label)));
       })
       .catch(() => setLabels([]));
+    getDiscoveryGenres()
+      .then((g) => {
+        setGenres(g);
+        setGenre(g.library[0] ?? g.styles[0] ?? "");
+      })
+      .catch(() => setGenres({ library: [], styles: [] }));
   }, []);
 
   const aiEnabled = useAi && !!status?.ai_explanations;
@@ -76,6 +94,7 @@ export default function DiscoveryPage() {
   const switchMode = (m: Mode) => {
     setMode(m);
     setResult(null);
+    setDig(null);
     setError(null);
   };
 
@@ -109,6 +128,22 @@ export default function DiscoveryPage() {
     }
   };
 
+  const runDig = async () => {
+    if (!genre) return;
+    setBusy(true);
+    setError(null);
+    setDig(null);
+    jobs.startClientJob("dig", "Crate digging");
+    try {
+      setDig(await discoveryDig("genre", genre, { adventurousness }));
+    } catch (e) {
+      setError(err(e));
+    } finally {
+      setBusy(false);
+      jobs.endClientJob("dig");
+    }
+  };
+
   const toggleLabel = (label: string) =>
     setSelected((s) => {
       const n = new Set(s);
@@ -119,6 +154,7 @@ export default function DiscoveryPage() {
 
   const noPlaylists = playlists != null && playlists.length === 0;
   const noLabels = labels != null && labels.length === 0;
+  const quickGenres = (genres?.library.length ? genres.library : genres?.styles ?? []).slice(0, 10);
   const expandReady = !!status?.configured && !noPlaylists;
   const radarReady = !!status?.spotify_resolver && !noLabels;
 
@@ -136,9 +172,10 @@ export default function DiscoveryPage() {
       {/* Mode toggle */}
       <div className="mb-4 inline-flex rounded-none border border-border bg-surface p-1">
         {([
-          ["expand", "Espandi playlist"],
-          ["labels", "Radar etichette"],
-        ] as const).map(([m, label]) => (
+          ["expand", "Espandi playlist", <Wand2 key="i" size={14} />],
+          ["labels", "Radar etichette", <Tags key="i" size={14} />],
+          ["genres", "Scava generi", <Disc3 key="i" size={14} />],
+        ] as const).map(([m, label, icon]) => (
           <button
             key={m}
             type="button"
@@ -149,7 +186,7 @@ export default function DiscoveryPage() {
               mode === m ? "bg-elevated text-fg" : "text-muted hover:text-fg",
             )}
           >
-            {m === "expand" ? <Wand2 size={14} /> : <Tags size={14} />} {label}
+            {icon} {label}
           </button>
         ))}
       </div>
@@ -298,7 +335,168 @@ export default function DiscoveryPage() {
           )}
         </>
       )}
+
+      {/* SCAVA GENERI (dig Discogs) */}
+      {mode === "genres" && (
+        <>
+          <div className="mb-6 border border-border p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1">
+                <Field label="Genere o stile">
+                  <Input
+                    list="genre-suggestions"
+                    value={genre}
+                    onChange={(e) => setGenre(e.target.value)}
+                    disabled={busy}
+                    placeholder="es. Acid House, Dub Techno, Italo-Disco…"
+                  />
+                  <datalist id="genre-suggestions">
+                    {genres?.library.map((g) => <option key={`l-${g}`} value={g} />)}
+                    {genres?.styles.map((g) => <option key={`s-${g}`} value={g} />)}
+                  </datalist>
+                </Field>
+              </div>
+              <Button onClick={runDig} disabled={busy || !genre.trim()}>
+                {busy ? <Spinner /> : <Disc3 size={15} />} Scava
+              </Button>
+            </div>
+
+            {quickGenres.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {quickGenres.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGenre(g)}
+                    aria-pressed={genre === g}
+                    disabled={busy}
+                    className={cn(
+                      "rounded-none border px-2.5 py-1 text-xs transition-colors",
+                      genre === g
+                        ? "border-border-strong bg-elevated text-fg"
+                        : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
+                    )}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <span className="text-[10px] uppercase tracking-wider text-muted">Profondità</span>
+              <input
+                type="range" min={0} max={1} step={0.1}
+                value={adventurousness}
+                onChange={(e) => setAdventurousness(Number(e.target.value))}
+                disabled={busy}
+                aria-label="Da familiare ad avventuroso"
+                className="h-1 min-w-[160px] flex-1 cursor-pointer accent-[var(--color-fg)]"
+              />
+              <span className="w-20 text-right text-[10px] uppercase tracking-wider text-fg">
+                {adventurousness <= 0.34 ? "familiare" : adventurousness >= 0.67 ? "avventuroso" : "bilanciato"}
+              </span>
+            </div>
+
+            <p className="mt-3 text-xs leading-relaxed text-muted">
+              Tanti brani dello stesso suono da scavare (via Discogs). Salva quelli che ti
+              piacciono: l’identità Spotify si risolve dopo.
+            </p>
+          </div>
+
+          {busy && !dig && (
+            <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Scavo nelle crate…</div>
+          )}
+          {dig && <LeadResults dig={dig} />}
+          {!busy && !dig && (
+            <EmptyState icon={<Disc3 size={28} />} title="Pronto per scavare">
+              Scegli un genere o stile qui sopra e premi “Scava”.
+            </EmptyState>
+          )}
+        </>
+      )}
     </PageLayout>
+  );
+}
+
+function LeadResults({ dig }: { dig: DiscoveryDigResponse }) {
+  if (dig.leads.length === 0) {
+    return (
+      <EmptyState icon={<Disc3 size={28} />} title="Niente da scavare">
+        Nessun brano nuovo per “{dig.value}”. Prova un altro stile o alza la profondità.
+      </EmptyState>
+    );
+  }
+  return (
+    <div>
+      <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
+        {dig.leads.length} da esplorare · {dig.value}
+      </h2>
+      <div className="grid gap-2">
+        {dig.leads.map((l, i) => (
+          <LeadRow key={`${l.artist}-${l.title}-${i}`} l={l} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LeadRow({ l }: { l: DiscoveryLead }) {
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  const spotifySearch = `https://open.spotify.com/search/${encodeURIComponent(`${l.artist} ${l.title}`)}`;
+  const linkCls =
+    "inline-flex items-center gap-1 rounded-none border border-border-strong px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:bg-elevated";
+
+  const add = async () => {
+    setAdding(true);
+    setAddError(null);
+    try {
+      await discoveryAddLead(l);
+      setAdded(true);
+    } catch (e) {
+      setAddError(err(e));
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <Card className="flex items-center gap-3 p-3">
+      {l.thumb_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={l.thumb_url} alt="" className="h-12 w-12 shrink-0 rounded-none object-cover" />
+      ) : (
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-none bg-elevated text-faint">
+          <Disc3 size={18} />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{l.artist} — {l.title}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-faint">
+          {l.style && <span>{l.style}</span>}
+          {l.label && <span>· {l.label}</span>}
+          {l.year != null && <span>· {l.year}</span>}
+          <span>· {l.have} in collezione</span>
+        </div>
+        {addError && <p className="mt-1 text-xs text-danger">⚠ {addError}</p>}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {l.discogs_url && (
+          <a href={l.discogs_url} target="_blank" rel="noreferrer" className={linkCls}>
+            <ExternalLink size={13} /> Discogs
+          </a>
+        )}
+        <a href={spotifySearch} target="_blank" rel="noreferrer" className={linkCls}>
+          <Search size={13} /> Spotify
+        </a>
+        <Button size="sm" variant={added ? "ghost" : "outline"} onClick={add} disabled={adding || added}>
+          {added ? <><Check size={14} /> Salvato</> : adding ? <Spinner /> : <><Plus size={14} /> Salva</>}
+        </Button>
+      </div>
+    </Card>
   );
 }
 
