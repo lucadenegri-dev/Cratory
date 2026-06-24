@@ -197,3 +197,24 @@ def test_feature_scores_values():
     assert energy_progression_score(80, 40) < 60     # crollo
     assert mood_coherence_score("Dark", "dark") == 100
     assert genre_similarity_score("deep house", "tech house") > 50
+
+
+def test_delete_playlist_keeps_shared_tracks(db):
+    """Cancellare una playlist (es. i Liked importati per sbaglio) NON deve
+    eliminare dalla libreria i brani condivisi con altre playlist."""
+    from app.repositories import delete_playlist
+
+    import_playlist(
+        db, platform="spotify", name="A", platform_playlist_id="pa",
+        items=[_spotify_item("t1", name="Song", artist="Artist", isrc="IT1234500001")],
+    )
+    rep_liked = import_playlist(
+        db, platform="spotify", name="Brani che ti piacciono", kind="liked",
+        items=[_spotify_item("t1", name="Song", artist="Artist", isrc="IT1234500001")],
+    )
+    assert db.query(Track).count() == 1  # dedup per ISRC: una sola riga
+
+    assert delete_playlist(db, rep_liked["playlist_id"]) is True
+    # il brano resta in libreria, solo scollegato dalla playlist cancellata
+    assert db.query(Track).count() == 1
+    assert db.query(Track).one().playlist_id is None

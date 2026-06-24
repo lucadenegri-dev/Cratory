@@ -242,17 +242,19 @@ def tracks_for_playlist(db: Session, playlist_id: int) -> list[Track]:
 
 
 def delete_playlist(db: Session, playlist_id: int) -> bool:
-    """Rimuove una playlist importata e le sue tracce (+ eventuali voci nei set).
+    """Rimuove una playlist importata SCOLLEGANDO le sue tracce, senza cancellarle.
 
+    Le tracce restano in libreria (e nei set): un brano condiviso con altre playlist
+    o con i Liked non deve sparire quando si cancella una sola playlist. Le tracce
+    scollegate (``playlist_id=None``) restano consultabili nella libreria.
     Ritorna False se la playlist non esiste.
     """
     playlist = get_playlist(db, playlist_id)
     if playlist is None:
         return False
-    track_ids = list(db.scalars(select(Track.id).where(Track.playlist_id == playlist_id)).all())
-    if track_ids:
-        db.query(SetlistTrack).filter(SetlistTrack.track_id.in_(track_ids)).delete(synchronize_session=False)
-        db.query(Track).filter(Track.id.in_(track_ids)).delete(synchronize_session=False)
+    db.query(Track).filter(Track.playlist_id == playlist_id).update(
+        {Track.playlist_id: None, Track.playlist_name: None}, synchronize_session=False
+    )
     db.delete(playlist)
     db.commit()
     return True
