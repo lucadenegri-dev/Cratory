@@ -215,7 +215,7 @@ def test_deezer_enabled_alone_makes_enrichment_configured(monkeypatch):
 
 
 def test_musicbrainz_parse_recording():
-    p = MusicBrainzProvider("SetArc/1.0 (test)")
+    p = MusicBrainzProvider("Cratory/1.0 (test)")
     rec = {
         "title": "Track", "score": 90,
         "releases": [{"date": "2009-05-01", "label-info": [{"label": {"name": "Kompakt"}}]}],

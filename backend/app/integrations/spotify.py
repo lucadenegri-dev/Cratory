@@ -315,7 +315,7 @@ class SpotifyWebClient(SpotifyClient):
         playlist = self._call("POST", f"/users/{me['id']}/playlists", user=True, json={
             "name": name,
             "public": False,
-            "description": "Creata da SetArc",
+            "description": "Creata da Cratory",
         })
         uris = [f"spotify:track:{tid}" for tid in track_ids]
         for i in range(0, len(uris), 100):

@@ -2,17 +2,19 @@
 
 ## Naming
 
-Nome scelto: **SetArc**.
+Nome scelto: **Cratory** (`crate` + `-ory`, "repository/archivio di crate").
 
 Perche':
 
-- mette al centro l'arco narrativo/energetico del set;
-- e' piu' specifico di "DJ Assistant";
-- funziona sia per la generazione tecnica sia per la modalita' creativa;
-- resta breve e facile da usare nell'interfaccia.
+- evoca il crate digging: l'archivio di tracce del DJ;
+- coerente col brand editoriale (archivio, monospace, squadrato);
+- coniato e brandabile, breve e facile nell'interfaccia;
+- piu' specifico e distintivo di "DJ Assistant" (ed evita la collisione del vecchio
+  nome provvisorio "SetArc", gia' esistente).
 
-I path tecnici legacy (`djassistant.db`, log file) restano invariati per compatibilita'
-locale, salvo futura migrazione esplicita.
+Disponibilita' `cratory.com` da confermare su un registrar. I path tecnici legacy
+(`djassistant.db`, log file) restano invariati per compatibilita' locale, salvo futura
+migrazione esplicita.
 
 ## Stato completato
 
@@ -37,7 +39,7 @@ locale, salvo futura migrazione esplicita.
 - Test reale con chiavi completato.
 - Confronto modelli AI completato e implementato.
 - Rimossa la sezione Discovery che suggeriva tracce sulla base dei gap della playlist.
-- Rename prodotto a SetArc in documentazione e stringhe user-facing principali.
+- Rename prodotto a Cratory in documentazione e stringhe user-facing principali.
 - Reset documentazione 2026-06-18.
 - Rebranding UI "editorial archive" (monocromo, IBM Plex Mono, tema dark/paper).
 - Dashboard command center (figure, istogramma BPM, attivita', copertura, azioni).
@@ -61,7 +63,8 @@ Direzione concordata (dettaglio operativo e ordine in `PROGRESS.md`):
 4. **Multi-lingua (inglese).** i18n: estrazione stringhe + switch lingua.
 5. **Rifacimento documentazione.** Dopo che multi-account stabilizza l'architettura.
 6. **Audit codice + sicurezza.** Legato al punto 1 (authz). Vedi note sotto.
-7. **Cambio nome app** (SetArc gia' esistente) + eventuale rename path legacy.
+7. **Cambio nome app** — FATTO: rinominato a **Cratory** (UI, codice, docs, icona).
+   Resta da confermare `cratory.com` ed eventuale rename dei path legacy `djassistant.*`.
 8. **Preparazione pitch.**
 
 Backlog tecnico (non bloccante):

@@ -12,7 +12,7 @@ Il job to be done: passare da "ho queste playlist Spotify" a "ho una scaletta pr
 
 ## Product Purpose
 
-SetArc è un banco di lavoro personale per la preparazione di set DJ. Non è un player, non è un social. È lo spazio dove la libreria prende forma: importazione, normalizzazione, enrichment deterministico, costruzione set, gap analysis, discovery, identificazione tracklist da mix.
+Cratory è un banco di lavoro personale per la preparazione di set DJ. Non è un player, non è un social. È lo spazio dove la libreria prende forma: importazione, normalizzazione, enrichment deterministico, costruzione set, gap analysis, discovery, identificazione tracklist da mix.
 
 Successo = l'utente entra con playlist grezze ed esce con un set strutturato, annotato, e una lista di tracce da aggiungere.
 
@@ -26,7 +26,7 @@ Tono: sicuro di sé senza essere arrogante. Preciso senza essere freddo. Non si 
 
 ## Anti-references
 
-- **Consumer music app** (Spotify, Apple Music): troppo morbido, arrotondato, pensato per l'ascolto passivo. SetArc è uno strumento da lavoro, non un jukebox.
+- **Consumer music app** (Spotify, Apple Music): troppo morbido, arrotondato, pensato per l'ascolto passivo. Cratory è uno strumento da lavoro, non un jukebox.
 - **Generic SaaS dashboard**: card identiche, gradients viola o teal, hero-metric template, layout tutto centrato. Scaffolding AI riconoscibile da lontano.
 - **Legacy DJ software** (Traktor, Rekordbox): overloaded di informazioni, griglie dense, UX degli anni 2000. Pesante, non fluidamente navigabile.
 - **AI tool hype** (Notion-like, cream backgrounds, pastel gradients): stile "startup AI 2024" con rounded cards enormi e palette pastello. Tutto quello che il commento in globals.css già rifiuta.

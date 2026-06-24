@@ -52,4 +52,4 @@ def test_search_releases_error_returns_empty():
 def test_token_sets_auth_header():
     c = DiscogsClient(token="abc")
     assert c.http.headers.get("Authorization") == "Discogs token=abc"
-    assert "SetArc" in c.http.headers.get("User-Agent", "")
+    assert "Cratory" in c.http.headers.get("User-Agent", "")

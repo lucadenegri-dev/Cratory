@@ -1,6 +1,6 @@
 # Architettura
 
-SetArc e' una webapp locale/self-hosted, mono-utente, per trasformare playlist
+Cratory e' una webapp locale/self-hosted, mono-utente, per trasformare playlist
 streaming in materiale operativo da DJ: libreria arricchita, bozze di set, gap
 analysis, discovery e corpus di mix identificati.
 

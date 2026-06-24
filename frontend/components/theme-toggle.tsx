@@ -8,7 +8,7 @@ export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
-    const stored = (localStorage.getItem("setarc-theme") as Theme | null) ?? "dark";
+    const stored = (localStorage.getItem("cratory-theme") as Theme | null) ?? "dark";
     const raf = requestAnimationFrame(() => setTheme(stored));
     return () => cancelAnimationFrame(raf);
   }, []);
@@ -16,7 +16,7 @@ export function ThemeToggle() {
   const toggle = () => {
     const next: Theme = theme === "dark" ? "paper" : "dark";
     setTheme(next);
-    localStorage.setItem("setarc-theme", next);
+    localStorage.setItem("cratory-theme", next);
     if (next === "paper") {
       document.documentElement.setAttribute("data-theme", "paper");
     } else {

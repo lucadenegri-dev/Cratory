@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 BASE = "https://api.discogs.com"
 # Discogs richiede uno User-Agent identificativo (come MusicBrainz), altrimenti 403.
-_USER_AGENT = "SetArc/0.1 (+http://localhost)"
+_USER_AGENT = "Cratory/0.1 (+http://localhost)"
 SEARCH_PER_PAGE = 100  # max consentito da Discogs: massimizza il volume per chiamata
 
 

@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="SetArc", version="0.9.0", lifespan=lifespan)
+app = FastAPI(title="Cratory", version="0.9.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

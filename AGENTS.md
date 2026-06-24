@@ -2,7 +2,7 @@
 
 ## Progetto
 
-**SetArc** e' il nuovo nome dell'app precedentemente chiamata DJ Assistant. E' una
+**Cratory** e' il nuovo nome dell'app precedentemente chiamata DJ Assistant. E' una
 webapp personale, locale/self-hosted e mono-utente per importare
 playlist streaming, arricchire le tracce con feature musicali, costruire bozze di DJ
 set, analizzare buchi della libreria, fare discovery e identificare tracklist di mix.

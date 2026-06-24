@@ -11,11 +11,11 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SetArc",
+  title: "Cratory",
   description: "AI DJ set builder, discovery and library analysis",
 };
 
-const NO_FOUC = `(function(){try{var t=localStorage.getItem('setarc-theme');if(t==='paper'){document.documentElement.setAttribute('data-theme','paper');}}catch(e){}})();`;
+const NO_FOUC = `(function(){try{var t=localStorage.getItem('cratory-theme');if(t==='paper'){document.documentElement.setAttribute('data-theme','paper');}}catch(e){}})();`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

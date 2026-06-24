@@ -31,7 +31,7 @@ from app.services.camelot import pitch_to_camelot
 logger = logging.getLogger(__name__)
 
 BASE = "https://acousticbrainz.org/api/v1"
-_USER_AGENT = "SetArc/0.1 (+http://localhost)"
+_USER_AGENT = "Cratory/0.1 (+http://localhost)"
 
 # Classificatori mood_* di AcousticBrainz -> mood normalizzato del modello
 # (coerente col vocabolario di integrations/lastfm.py). La tupla e' (classe "attiva"

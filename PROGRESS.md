@@ -5,11 +5,12 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-06-23
+**Ultimo aggiornamento:** 2026-06-25
 
-**Nome prodotto:** SetArc. DJ Assistant resta solo come nome storico; i path tecnici
-legacy (`djassistant.db`, log path) restano invariati finche' non viene pianificata
-una rename migration.
+**Nome prodotto:** **Cratory** (rename eseguito il 2026-06-25 su UI, codice, docs e
+icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici legacy
+(`djassistant.db`, log path) restano invariati finche' non viene pianificata una rename
+migration. Disponibilita' `cratory.com` da confermare su registrar.
 
 **Fase:** core streaming-first completo, Discovery playlist-seed operativo,
 enrichment ampliato, Set Builder tecnico/creativo, test reale con chiavi completato,

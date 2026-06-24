@@ -26,7 +26,7 @@ from app.integrations.getsongbpm import FeatureProviderError
 logger = logging.getLogger(__name__)
 
 BASE = "https://api.deezer.com"
-_USER_AGENT = "SetArc/0.1 (+http://localhost)"
+_USER_AGENT = "Cratory/0.1 (+http://localhost)"
 
 
 class DeezerProvider(MusicFeatureProvider):

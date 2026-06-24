@@ -75,7 +75,7 @@ def clean(mode: str, *, preserve_tokens: bool, include_backups: bool, dry_run: b
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Pulisce dati utente dal DB locale SetArc.")
+    parser = argparse.ArgumentParser(description="Pulisce dati utente dal DB locale Cratory.")
     parser.add_argument("mode", choices=("library", "all"), nargs="?", default="library")
     parser.add_argument(
         "--preserve-tokens",

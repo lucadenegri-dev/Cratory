@@ -1,5 +1,5 @@
 ---
-name: SetArc
+name: Cratory
 description: Editorial-archive workbench for DJ sets — monospace, hairline grid, square geometry, near-monochrome with a dark default and a warm paper theme.
 themes:
   dark:
@@ -105,13 +105,13 @@ components:
     rounded: "0px"
 ---
 
-# Design System: SetArc — Editorial Archive
+# Design System: Cratory — Editorial Archive
 
 ## 1. Overview
 
 **Creative North Star: "The Printed Archive."**
 
-SetArc reads like a printed catalogue of a record library. The interface is monospace throughout, laid out on a hairline grid, with square geometry and almost no color — ink on a near-black field by default, or on warm paper when toggled. Density is editorial, not dashboard-like: dense columns of type, numbered lists, uppercase section labels, and tabular figures that align like a typeset index.
+Cratory reads like a printed catalogue of a record library. The interface is monospace throughout, laid out on a hairline grid, with square geometry and almost no color — ink on a near-black field by default, or on warm paper when toggled. Density is editorial, not dashboard-like: dense columns of type, numbered lists, uppercase section labels, and tabular figures that align like a typeset index.
 
 The system is built from **filets and type**, not fills and shadows. Depth comes from 1px hairline borders and a tight neutral stack, never from drop shadows or rounded cards. The only color in the entire system is a single restrained red, reserved for errors and destructive actions; everything else — including Camelot keys and mix-status, which carried color in the previous system — is rendered in monochrome, distinguished by weight, position, and uppercase labels.
 
@@ -150,7 +150,7 @@ A warm cream field with near-black ink. `bg #e9e5db`, `surface #f1eee6`, `elevat
 **Character:** One monospace for everything — brand, headings, labels, body, and data. Personality comes from uppercase tracking on labels and the tabular-figure treatment on metrics, not from a second family.
 
 ### Hierarchy
-- **Brand** (600, uppercase, `0.16em` tracking): the `SETARC` wordmark.
+- **Brand** (600, uppercase, `0.16em` tracking): the `CRATORY` wordmark.
 - **Title** (600, uppercase, `0.12em` tracking, `text-sm`): page titles (rendered by `PageLayout`) and card/section/modal headers.
 - **Body** (400, `text-sm`, 1.5 line-height): descriptions and prose; cap at ~46–60ch.
 - **Label** (500, uppercase, `0.12em` tracking, `~10px`): every column/section header and form-field label.
@@ -192,7 +192,7 @@ Flat by definition. Depth is conveyed entirely by **hairline borders and the neu
 - **Field label:** uppercase, tracked, `~10px`, muted, above the control.
 
 ### Shell & Navigation — the editorial grammar
-- **EditorialShell:** a three-zone, hairline-divided layout. **INDEX** (left, ~180px) holds the `SETARC` wordmark, tagline, uppercase nav (active = underlined), and a footer with a live `HH:MM:SS` clock and the theme toggle. **CONTENT** (center) carries the page's primary object. **MARGINALIA** (right, ~240px, optional per page) carries contextual stats, actions, and notes.
+- **EditorialShell:** a three-zone, hairline-divided layout. **INDEX** (left, ~180px) holds the `CRATORY` wordmark, tagline, uppercase nav (active = underlined), and a footer with a live `HH:MM:SS` clock and the theme toggle. **CONTENT** (center) carries the page's primary object. **MARGINALIA** (right, ~240px, optional per page) carries contextual stats, actions, and notes.
 - **PageLayout:** renders the uppercase page title + optional meta over the content, plus the optional marginalia column with its hairline. Below the `lg` breakpoint, INDEX collapses to a top bar and marginalia drops below the content.
 
 ### Progress & Coverage Bars

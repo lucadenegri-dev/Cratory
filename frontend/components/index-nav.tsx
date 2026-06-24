@@ -24,7 +24,7 @@ export function IndexNav() {
   return (
     <nav className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-3 px-4 py-4 lg:block">
-        <Link href="/" className="block text-sm font-semibold tracking-[0.16em] text-fg-strong">SETARC</Link>
+        <Link href="/" className="block text-sm font-semibold tracking-[0.16em] text-fg-strong">CRATORY</Link>
         <p className="hidden text-[10px] uppercase tracking-wider text-muted lg:mt-1 lg:block">Workbench per DJ set</p>
         <div className="flex items-center gap-3 text-[10px] lg:hidden">
           <Link href="/settings" aria-label="Impostazioni" aria-current={isActive("/settings") ? "page" : undefined} className={cn("transition-colors hover:text-fg", isActive("/settings") ? "text-fg-strong" : "text-muted")}><Settings size={14} /></Link>

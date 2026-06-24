@@ -1,9 +1,9 @@
-# SetArc
+# Cratory
 
 > Nuovo nome dell'app finora chiamata DJ Assistant. I nomi tecnici legacy come
 > `djassistant.db` restano invariati per compatibilita' locale.
 
-SetArc e' una webapp personale, locale/self-hosted e mono-utente per preparare DJ
+Cratory e' una webapp personale, locale/self-hosted e mono-utente per preparare DJ
 set a partire da playlist streaming. Importa playlist Spotify o tracklist manuali,
 normalizza le tracce, arricchisce BPM/key/mood/energia tramite provider esterni,
 analizza i buchi della libreria, genera bozze di set spiegate e aiuta a scoprire
