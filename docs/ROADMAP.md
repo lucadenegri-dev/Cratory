@@ -39,7 +39,6 @@ migrazione esplicita.
 - Test reale con chiavi completato.
 - Confronto modelli AI completato e implementato.
 - Rimossa la sezione Discovery che suggeriva tracce sulla base dei gap della playlist.
-- Rename prodotto a Cratory in documentazione e stringhe user-facing principali.
 - Reset documentazione 2026-06-18.
 - Rebranding UI "editorial archive" (monocromo, IBM Plex Mono, tema dark/paper).
 - Dashboard command center (figure, istogramma BPM, attivita', copertura, azioni).
@@ -50,33 +49,46 @@ migrazione esplicita.
 - Discovery v2 "Scava generi": dig a volume via Discogs (genere/stile), lead non
   risolti, ranking profondita'+novita', salva-al-volo. Fix: cancellare una playlist
   non elimina piu' i brani condivisi (scollega invece di hard-delete).
+- Rename prodotto a **Cratory** (UI, codice, docs, icona); legacy `djassistant.*` invariati.
+
+## Direzione prodotto
+
+Cratory e' uno **strumento personale/self-hosted eccellente** per DJ, NON un SaaS
+multi-tenant pubblico. Vincolo bloccante (verificato): Spotify Web API non consente un
+SaaS pubblico Spotify-based (dev mode max 5 utenti / Premium / endpoint ridotti;
+extended quota mode solo per organizzazioni con servizio lanciato e >= 250k utenti/mese).
+Il valore e' la qualita' del prodotto, non la scala.
 
 ## Prossimi passi
 
-Direzione concordata (dettaglio operativo e ordine in `PROGRESS.md`):
+In ordine concordato (dettaglio operativo in `PROGRESS.md`):
 
-1. **Multi-account (admin + users).** Autenticazione e separazione dati: oggi l'app
-   e' mono-utente con stato globale (token Spotify, job, sessioni) -> da portare
-   per-utente. E' il cambio architetturale piu' grande e abilita PostgreSQL.
-2. **Miglioramento Discovery.** Qualita' candidati, segnali di gusto, spiegazioni.
-3. **Sistemazione testi (pagina per pagina).** Copy/microcopy coerente.
-4. **Multi-lingua (inglese).** i18n: estrazione stringhe + switch lingua.
-5. **Rifacimento documentazione.** Dopo che multi-account stabilizza l'architettura.
-6. **Audit codice + sicurezza.** Legato al punto 1 (authz). Vedi note sotto.
-7. **Cambio nome app** — FATTO: rinominato a **Cratory** (UI, codice, docs, icona).
-   Resta da confermare `cratory.com` ed eventuale rename dei path legacy `djassistant.*`.
-8. **Preparazione pitch.**
+1. **Miglioramento Discovery (continua).** Dopo "Scava generi" (Discogs): qualita' dei
+   lead, piu' segnali di gusto, spiegazioni, e unificazione expand/dig (vedi backlog).
+2. **Testi + multi-lingua (inglese).** Estrazione stringhe per l'i18n e revisione
+   copy/microcopy pagina per pagina, in un passaggio unico (rollout nome gia' fatto).
+3. **Audit leggero + quick win.** Threat model piccolo (nessun utente pubblico):
+   efficienza `library_stats`, robustezza, dipendenze. Niente authz da SaaS.
+4. **Rifacimento documentazione** quando il resto si assesta.
+
+Sospesi / rivisti:
+
+- **Multi-account pubblico** — sospeso (muro Spotify + direzione personale). Eventuale
+  reshape futuro = piccola crew self-hosted con credenziali Spotify proprie, solo se serve.
+- **Pitch** — da riformulare attorno alla natura reale del prodotto (non "SaaS Spotify").
+- **Cambio nome** — FATTO (Cratory). Resta solo `cratory.com` da confermare su registrar.
 
 Backlog tecnico (non bloccante):
 
-- **Shazam fase 2.** `DjSetTrack` come corpus per suggerimenti di co-occorrenza.
-- **SoundCloud import.** Valutare prima API, auth e limiti reali.
-- **PostgreSQL.** Diventa prioritario col multi-account (oggi SQLite basta).
+- **Discovery: unificare expand/dig.** Portare anche il seme Playlist alla lista-dig a
+  volume e arricchire il dig (tracklist per-release, Last.fm tag come 2a sorgente).
 - **Playlist many-to-many.** Modello `playlist_tracks` (un brano in piu' playlist):
   l'import aggiunge membership invece di sovrascrivere `Track.playlist_id`. Oggi
   mitigato dal fix "scollega invece di cancellare", ma il modello resta 1:1.
-- **Discovery: unificare expand/dig.** Portare anche il seme Playlist alla lista-dig
-  a volume e arricchire il dig (tracklist per-release, Last.fm tag come 2a sorgente).
+- **Shazam fase 2.** `DjSetTrack` come corpus per suggerimenti di co-occorrenza.
+- **SoundCloud import.** API chiusa a nuove app: rivalutare solo se riapre.
+- **PostgreSQL.** Bassa priorita': SQLite basta per uso personale (servirebbe solo con
+  un eventuale multi-utente).
 
 ## Rischi
 
@@ -87,12 +99,16 @@ Backlog tecnico (non bloccante):
 | Rate limit o errori rete | retry/backoff, job async, cache not-found |
 | Output AI inventato | candidate cap, schema Pydantic, Validation Engine |
 | Spotify recommendation non disponibile | Discovery basato su Last.fm e resolver Spotify `/search` |
+| Spotify dev-mode limita la profondita' (5 utenti, search `label:` cap 10) | profondita' di genere/etichetta da Discogs (aperto); Spotify solo come resolver |
 | Rename prodotto rompe path dati | path legacy mantenuti, migrazione solo se esplicita |
 
 ## Decisioni consolidate
 
+- Cratory e' uno strumento personale/self-hosted, non un SaaS pubblico (muro policy Spotify).
 - Rekordbox non torna nel progetto.
 - Spotify e' fonte di identita'/metadata, non di feature musicali.
+- Discovery: profondita' di genere/etichetta da Discogs (aperto); Spotify resta solo
+  resolver di identita' (al salvataggio).
 - Discovery non usa Spotify `/recommendations`.
 - Discovery non suggerisce piu' tracce dai gap della playlist; quei gap restano analisi separata.
 - Discovery lavora per gusto, non per compatibilita' tecnica: BPM/key/transizioni
