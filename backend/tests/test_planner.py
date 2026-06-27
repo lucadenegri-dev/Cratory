@@ -68,6 +68,13 @@ def test_missing_field_no_op():
     assert ops == []  # genre mancante per {genre}/... → nessuna rinomina
 
 
+def test_removed_file_with_fix_only_delete():
+    f = make_audio_file(1, root_id=1, artist="PINCO", title="T", genre="House",
+                        path="/lib/x.mp3", ext="mp3")
+    ops = build_plan([f], [_accepted(1, "artist", "Pinco")], {1}, SNAP, TARGETS)
+    assert [o.kind for o in ops] == ["DELETE"]
+
+
 def test_order_and_determinism():
     keep = make_audio_file(1, root_id=1, artist="A", title="T", genre="House",
                            path="/lib/varie/a.mp3", ext="mp3")

@@ -76,6 +76,9 @@ def build_plan(files, accepted_issues, removals, settings_snapshot,
     del_ops: list[PlanOpComputed] = []
 
     for f in sorted(files, key=lambda x: (x.path, x.id)):
+        if f.id in removals:
+            del_ops.append(PlanOpComputed("DELETE", f.id, {"path": f.path}, {}))
+            continue
         fixes = by_file.get(f.id, [])
         if fixes:
             before, after = {}, {}
@@ -85,13 +88,9 @@ def build_plan(files, accepted_issues, removals, settings_snapshot,
                     continue
                 new_val = None if fix.get("action") == "clear" else fix.get("to")
                 before.setdefault(field, getattr(f, field))
-                after[field] = new_val
+                after.setdefault(field, new_val)
             if before:
                 retag_ops.append(PlanOpComputed("RETAG", f.id, before, after))
-
-        if f.id in removals:
-            del_ops.append(PlanOpComputed("DELETE", f.id, {"path": f.path}, {}))
-            continue
 
         dest, _miss = render_destination(f, effective_tags(f, fixes),
                                          settings_snapshot, root_targets)
