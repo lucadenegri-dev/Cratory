@@ -1,0 +1,47 @@
+from sqlalchemy import select
+
+from app.models import AudioFile, Issue
+from app.services.analysis import recompute
+
+
+def _add_file(db, **kw):
+    defaults = dict(root_id=1, path="/m/x.mp3", ext="mp3", size_bytes=1, hash_method="file",
+                    status="present", has_cover=False)
+    defaults.update(kw)
+    f = AudioFile(**defaults)
+    db.add(f)
+    db.commit()
+    return f
+
+
+def test_recompute_creates_issues(db):
+    _add_file(db, path="/m/a.mp3", artist="", title="", content_hash="a")
+    summary = recompute(db)
+    issues = db.scalars(select(Issue)).all()
+    assert any(i.type == "missing_required_tag" for i in issues)
+    assert summary.issues_total == len(issues)
+
+
+def test_dismissed_survives_recompute(db):
+    _add_file(db, path="/m/a.mp3", artist="A", title="T", genre=None, year=2020, label="X",
+              duration_s=200.0, bitrate=320000, content_hash="a")
+    recompute(db)
+    genre_issue = db.scalar(select(Issue).where(Issue.type == "missing_metadata",
+                                                Issue.field == "genre"))
+    genre_issue.status = "dismissed"
+    db.commit()
+    recompute(db)
+    again = db.scalar(select(Issue).where(Issue.type == "missing_metadata",
+                                          Issue.field == "genre"))
+    assert again.status == "dismissed"
+
+
+def test_stale_issue_deleted(db):
+    f = _add_file(db, path="/m/a.mp3", artist="A", title="T", genre=None, year=2020,
+                  label="X", duration_s=200.0, bitrate=320000, content_hash="a")
+    recompute(db)
+    assert db.scalar(select(Issue).where(Issue.field == "genre")) is not None
+    f.genre = "House"  # buco riempito
+    db.commit()
+    recompute(db)
+    assert db.scalar(select(Issue).where(Issue.field == "genre")) is None

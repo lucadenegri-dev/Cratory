@@ -32,3 +32,12 @@ class ScanRootRead(BaseModel):
     label: str | None
     last_scanned_at: datetime | None
     file_count: int
+
+
+class AnalyzeSummary(BaseModel):
+    issues_total: int = 0
+    issues_by_severity: dict[str, int] = {}
+    dup_groups: int = 0
+    dup_files: int = 0
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
