@@ -181,24 +181,42 @@ def _energy_distribution(energies: list[int]) -> list[dict]:
 
 
 def library_stats(db: Session) -> dict:
-    tracks = db.scalars(select(Track)).all()
-    bpms = [t.bpm for t in tracks if t.bpm]
-    energies = [t.energy for t in tracks if t.energy is not None]
-    by_source: dict[str, int] = {}
-    key_distribution: dict[str, int] = {}
-    for t in tracks:
-        by_source[t.source_type] = by_source.get(t.source_type, 0) + 1
-        if t.camelot_key:
-            key_distribution[t.camelot_key] = key_distribution.get(t.camelot_key, 0) + 1
+    # Aggregati in SQL (colonne/indici esistenti) invece di caricare l'intera
+    # tabella in oggetti ORM: bpm/energy come sole colonne per i bin in Python.
+    bpms = [b for b in db.scalars(select(Track.bpm).where(Track.bpm.is_not(None))) if b]
+    energies = list(db.scalars(select(Track.energy).where(Track.energy.is_not(None))))
+
+    by_source = dict(
+        db.execute(select(Track.source_type, func.count()).group_by(Track.source_type)).all()
+    )
+    key_distribution = dict(
+        db.execute(
+            select(Track.camelot_key, func.count())
+            .where(Track.camelot_key.is_not(None), Track.camelot_key != "")
+            .group_by(Track.camelot_key)
+        ).all()
+    )
+
+    def count_where(*conds) -> int:
+        return db.scalar(select(func.count()).select_from(Track).where(*conds)) or 0
+
+    with_features = count_where(
+        ((Track.mood.is_not(None)) & (Track.mood != "")) | (Track.energy.is_not(None))
+    )
+    ready_for_set = count_where(Track.status == "ready_for_set")
+    missing_metadata = count_where(
+        (Track.title.is_(None)) | (Track.title == "") | (Track.artist.is_(None)) | (Track.artist == "")
+    )
+
     return {
-        "total_tracks": len(tracks),
+        "total_tracks": db.scalar(select(func.count()).select_from(Track)) or 0,
         "playlists": db.scalar(select(func.count()).select_from(Playlist)) or 0,
         "by_source": by_source,
         "with_bpm": len(bpms),
-        "with_key": sum(1 for t in tracks if t.camelot_key),
-        "with_features": sum(1 for t in tracks if t.mood or t.energy is not None),
-        "ready_for_set": sum(1 for t in tracks if t.status == "ready_for_set"),
-        "missing_metadata": sum(1 for t in tracks if not t.title or not t.artist),
+        "with_key": sum(key_distribution.values()),
+        "with_features": with_features,
+        "ready_for_set": ready_for_set,
+        "missing_metadata": missing_metadata,
         "bpm_min": min(bpms) if bpms else None,
         "bpm_max": max(bpms) if bpms else None,
         "key_distribution": dict(sorted(key_distribution.items())),

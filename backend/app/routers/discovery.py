@@ -34,7 +34,6 @@ from app.schemas import (
     DiscoveryDigResponse,
     DiscoveryExpandRequest,
     DiscoveryGenresOut,
-    DiscoveryLabelsRequest,
     DiscoveryLeadOut,
     DiscoveryResponse,
 )
@@ -42,7 +41,6 @@ from app.serializers import track_out
 from app.services.discovery import (
     DiscoveryCandidate,
     DiscoveryResult,
-    discover_by_labels,
     discover_for_playlist,
 )
 from app.services.discovery_dig import DiscoveryLead, dig
@@ -146,27 +144,6 @@ def expand(req: DiscoveryExpandRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except LastFMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return _response(result)
-
-
-@router.post("/labels", response_model=DiscoveryResponse)
-def labels_radar(req: DiscoveryLabelsRequest, db: Session = Depends(get_db)):
-    """Radar Etichette: tracce non possedute dalle etichette date (default: top libreria)."""
-    if not _spotify_configured():
-        raise HTTPException(status_code=409, detail="Spotify non configurato: serve per il Radar etichette.")
-    labels = [(_clean_label(name) or name) for name in (req.labels or [])]
-    labels = [name for name in labels if name] or [o["label"] for o in labels_overview(db)[:6]]
-    if not labels:
-        raise HTTPException(
-            status_code=409,
-            detail="Nessuna etichetta in libreria: recuperale prima da Spotify (sezione Etichette).",
-        )
-    client = SpotifyWebClient(db)
-    result = discover_by_labels(
-        db, labels=labels,
-        search_by_label=lambda l, **k: client.search_by_label(l, **k),
-        limit=req.limit,
-    )
     return _response(result)
 
 

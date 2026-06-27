@@ -474,10 +474,6 @@ export function discoverExpand(playlistId: number, opts?: { limit?: number; use_
   });
 }
 
-export function discoverByLabels(labels?: string[], limit = 20) {
-  return apiPost<DiscoveryResponse>("/api/discovery/labels", { labels, limit });
-}
-
 export function getDiscoveryGenres() {
   return apiGet<DiscoveryGenres>("/api/discovery/genres");
 }

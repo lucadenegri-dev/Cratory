@@ -134,6 +134,13 @@ def identify_from_recognizer(
 
 def download_audio(url: str, workdir: str) -> tuple[str, SetMeta]:
     """Scarica l'audio del mix e ne estrae i metadati. Solleva RuntimeError se fallisce."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        # Evita che yt-dlp riceva file://, schemi locali o host vuoti (SSRF / lettura file).
+        raise RuntimeError("URL non valido: ammessi solo link http(s).")
+
     import yt_dlp
 
     opts = {

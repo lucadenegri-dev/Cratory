@@ -362,11 +362,6 @@ class DiscoveryExpandRequest(BaseModel):
     use_ai: bool | None = None  # None = auto (AI se configurata)
 
 
-class DiscoveryLabelsRequest(BaseModel):
-    labels: list[str] | None = None   # None -> top etichette della libreria
-    limit: int = Field(default=20, ge=1, le=50)
-
-
 # --- Discovery v2: dig (crate digging via Discogs) ---------------------------
 
 

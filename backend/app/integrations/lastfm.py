@@ -83,7 +83,7 @@ class LastFMClient(SimilarityClient):
         if r.status_code == 429:
             raise LastFMError("Last.fm: rate limit (riprova piu' tardi).")
         if r.status_code >= 400:
-            raise LastFMError(f"Last.fm {r.status_code} su {method}: {r.text[:160]}")
+            raise LastFMError(f"Last.fm {r.status_code} su {method}: {r.text[:80]}")
         try:
             data = r.json()
         except ValueError as exc:

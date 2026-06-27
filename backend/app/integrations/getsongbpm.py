@@ -79,7 +79,7 @@ class GetSongBPMProvider(MusicFeatureProvider):
         if r.status_code == 429:
             raise FeatureProviderError("GetSongBPM: rate limit (riprova piu' tardi).")
         if r.status_code >= 400:
-            raise FeatureProviderError(f"GetSongBPM {r.status_code}: {r.text[:160]}")
+            raise FeatureProviderError(f"GetSongBPM {r.status_code}: {r.text[:80]}")
         try:
             return r.json()
         except ValueError as exc:

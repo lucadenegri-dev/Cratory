@@ -179,7 +179,7 @@ class SpotifyWebClient(SpotifyClient):
                 self.db.commit()
                 continue
             if r.status_code >= 400:
-                raise SpotifyError(f"Spotify API {r.status_code} su {path}: {r.text[:200]}")
+                raise SpotifyError(f"Spotify API {r.status_code} su {path}: {r.text[:80]}")
             return r.json()
         raise SpotifyError(f"Spotify API: troppi tentativi su {path}")
 
@@ -257,25 +257,6 @@ class SpotifyWebClient(SpotifyClient):
             return None
         items = (data.get("tracks") or {}).get("items") or []
         return items[0] if items else None
-
-    def search_by_label(self, label: str, *, limit: int = 10) -> list[dict[str, Any]]:
-        """Tracce di un'etichetta via filtro `label:` (funziona in development mode).
-
-        Sorgente del Radar Etichette: a differenza di /recommendations, /search col
-        filtro `label:"..."` resta accessibile col token client_credentials.
-
-        In development mode Spotify rifiuta `limit > 10` su /search col filtro
-        `label:` ("400 Invalid limit"), quindi qui il limite e' clampato a 10.
-        """
-        if not label:
-            return []
-        limit = max(1, min(limit, SEARCH_LABEL_MAX))
-        try:
-            data = self._get("/search", params={"q": f'label:"{label}"', "type": "track", "limit": limit})
-        except SpotifyError as exc:
-            logger.warning("Spotify search_by_label(%r) fallito: %s", label, exc)
-            return []
-        return (data.get("tracks") or {}).get("items") or []
 
     # ---- import playlist (nuovo flusso) ---------------------------------
 
