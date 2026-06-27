@@ -9,7 +9,7 @@ import {
   type ServiceStatus, type SpotifyStatus,
   type FeatureProviderStatus, type FeatureEnrichJob,
 } from "@/lib/api";
-import { Button, Alert } from "@/components/ui";
+import { Button, Alert, Equalizer } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 
@@ -97,7 +97,7 @@ function SettingsInner() {
             </div>
           );
         })}
-        {!services && !error && <div className="p-5 text-sm text-muted">Caricamento…</div>}
+        {!services && !error && <div className="flex items-center gap-2 p-5 text-sm text-muted"><Equalizer className="h-3.5 w-3.5" /> Caricamento…</div>}
       </div>
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Arricchimento</div>
