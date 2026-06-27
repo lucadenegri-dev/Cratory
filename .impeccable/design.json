@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-06-21T00:00:00Z",
-  "title": "Design System: SetArc — Editorial Archive",
+  "title": "Design System: Cratory — Editorial Archive",
   "extensions": {
     "colorMeta": {
       "ink": { "role": "neutral", "displayName": "Ink / Foreground stack (dark theme)", "canonical": "#c4c4c4", "tonalRamp": ["#0d0d0d", "#161616", "#1c1c1c", "#222222", "#2b2b2b", "#3d3d3d", "#555555", "#787878", "#c4c4c4", "#ededed"] },
@@ -9,7 +9,7 @@
       "danger": { "role": "secondary", "displayName": "Danger Red (the only hue)", "canonical": "#d8593f", "tonalRamp": ["#d8593f", "#a83a22"] }
     },
     "typographyMeta": {
-      "brand": { "displayName": "Brand", "purpose": "The SETARC wordmark — uppercase, 0.16em tracking." },
+      "brand": { "displayName": "Brand", "purpose": "The CRATORY wordmark — uppercase, 0.16em tracking." },
       "title": { "displayName": "Title", "purpose": "Uppercase page titles (PageLayout) and card/section/modal headers, 0.12em tracking." },
       "body": { "displayName": "Body", "purpose": "Descriptions and prose; cap at 46-60ch." },
       "label": { "displayName": "Label", "purpose": "Uppercase tracked column/section headers and form-field labels." },
@@ -103,7 +103,7 @@
   ],
   "narrative": {
     "northStar": "The Printed Archive",
-    "overview": "SetArc reads like a printed catalogue of a record library. The interface is monospace throughout, laid out on a hairline grid, square, and almost monochrome — ink on a near-black field by default, or on warm paper when toggled. Density is editorial, not dashboard-like: dense columns of type, numbered lists, uppercase section labels, tabular figures aligned like a typeset index. Structure is drawn with 1px hairlines and the neutral stack, never with shadows or rounded cards. The only hue is a single restrained red for errors and destructive actions; everything else, including Camelot keys and mix-status, is monochrome.",
+    "overview": "Cratory reads like a printed catalogue of a record library. The interface is monospace throughout, laid out on a hairline grid, square, and almost monochrome — ink on a near-black field by default, or on warm paper when toggled. Density is editorial, not dashboard-like: dense columns of type, numbered lists, uppercase section labels, tabular figures aligned like a typeset index. Structure is drawn with 1px hairlines and the neutral stack, never with shadows or rounded cards. The only hue is a single restrained red for errors and destructive actions; everything else, including Camelot keys and mix-status, is monochrome.",
     "keyCharacteristics": [
       "Monospace (IBM Plex Mono) for the entire interface — chrome, labels, body, and data",
       "Hairline three-zone editorial shell: INDEX / CONTENT / MARGINALIA",
