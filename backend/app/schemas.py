@@ -1,7 +1,7 @@
 """Schemi Pydantic per request/response API."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -365,6 +365,13 @@ class DiscoveryExpandRequest(BaseModel):
 # --- Discovery v2: dig (crate digging via Discogs) ---------------------------
 
 
+class ReasonOut(BaseModel):
+    """Spiegazione strutturata di un lead: codice + payload. Il testo lo rende la UI."""
+
+    code: str
+    data: dict[str, Any] = {}
+
+
 class DiscoveryLeadOut(BaseModel):
     """Lead leggero NON risolto: l'identita' Spotify si ricava al salvataggio."""
 
@@ -379,6 +386,7 @@ class DiscoveryLeadOut(BaseModel):
     thumb_url: str | None = None
     have: int = 0
     want: int = 0
+    reasons: list[ReasonOut] = []
 
 
 class DiscoveryDigRequest(BaseModel):
@@ -386,6 +394,7 @@ class DiscoveryDigRequest(BaseModel):
     value: str = Field(min_length=1)
     adventurousness: float = Field(default=0.4, ge=0.0, le=1.0)
     limit: int = Field(default=80, ge=1, le=200)
+    taste_playlist_id: int | None = None  # riferimento di gusto; None = tutta la libreria
 
 
 class DiscoveryDigResponse(BaseModel):

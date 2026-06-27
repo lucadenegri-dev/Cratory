@@ -290,3 +290,51 @@ def test_expand_annotates_owned_label(db):
     fresh = next(c for c in result.candidates if c.title == "Fresh Cut")
     assert fresh.label == "Warp Records"
     assert fresh.label_owned is True
+
+
+# --- Task 4: router dig — reasons in output, taste_playlist_id in input -------
+
+from app.integrations.discogs import DiscogsClient
+from app.models import Playlist, Track
+from app.routers.discovery import dig_endpoint
+from app.schemas import DiscoveryDigRequest
+
+
+def _fake_release(title, *, label="Lbl", style="Acid House", have=3, want=120):
+    return {
+        "id": 1, "title": title, "year": 2024,
+        "label": [label], "style": [style],
+        "community": {"have": have, "want": want}, "format": ["Vinyl"],
+        "uri": "/release/1", "cover_image": "http://img",
+    }
+
+
+def test_dig_endpoint_returns_reasons(db, monkeypatch):
+    monkeypatch.setattr(
+        DiscogsClient, "search_releases",
+        lambda self, **kw: [_fake_release("Cult - Grail")],
+    )
+    resp = dig_endpoint(DiscoveryDigRequest(seed_type="genre", value="Acid House"), db)
+    assert resp.leads, "atteso almeno un lead"
+    codes = {r.code for r in resp.leads[0].reasons}
+    assert "rare_wanted" in codes and "deep_cut" in codes
+
+
+def test_dig_endpoint_honors_taste_playlist_id(db, monkeypatch):
+    pl = Playlist(platform="spotify", name="Peak Time")
+    db.add(pl)
+    db.commit()
+    db.add(Track(source_type="spotify", artist="Followed", title="Older",
+                 label="Warp", genre="Acid House", playlist_id=pl.id))
+    db.commit()
+
+    monkeypatch.setattr(
+        DiscogsClient, "search_releases",
+        lambda self, **kw: [_fake_release("Followed - New", label="Warp", style="Acid House")],
+    )
+    resp = dig_endpoint(
+        DiscoveryDigRequest(seed_type="genre", value="Acid House", taste_playlist_id=pl.id),
+        db,
+    )
+    codes = {r.code for r in resp.leads[0].reasons}
+    assert {"label_followed", "artist_collected", "style_match"} <= codes

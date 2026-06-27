@@ -36,6 +36,7 @@ from app.schemas import (
     DiscoveryGenresOut,
     DiscoveryLeadOut,
     DiscoveryResponse,
+    ReasonOut,
 )
 from app.serializers import track_out
 from app.services.discovery import (
@@ -156,6 +157,7 @@ def _lead_out(lead: DiscoveryLead) -> DiscoveryLeadOut:
         style=lead.style, source=lead.source, seed=lead.seed,
         discogs_url=lead.discogs_url, thumb_url=lead.thumb_url,
         have=lead.have, want=lead.want,
+        reasons=[ReasonOut(code=r.code, data=r.data) for r in lead.reasons],
     )
 
 
@@ -172,10 +174,16 @@ def discovery_genres(db: Session = Depends(get_db)):
 @router.post("/dig", response_model=DiscoveryDigResponse)
 def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
     """Lista-dig a volume da Discogs per genere/stile o etichetta (lead non risolti)."""
+    from app.repositories import tracks_for_playlist
+
+    taste_tracks = None
+    if req.taste_playlist_id is not None:
+        taste_tracks = tracks_for_playlist(db, req.taste_playlist_id)
     client = DiscogsClient()
     result = dig(
         db, seed_type=req.seed_type, value=req.value,
         search_releases=lambda **kw: client.search_releases(**kw),
+        taste_tracks=taste_tracks,
         adventurousness=req.adventurousness, limit=req.limit,
     )
     return DiscoveryDigResponse(
