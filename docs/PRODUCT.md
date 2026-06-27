@@ -18,20 +18,22 @@ Successo = l'utente entra con playlist grezze ed esce con un set strutturato, an
 
 ## Brand Personality
 
-Fluida, creativa, sperimentale.
+Sobria, tipografica, archivistica.
 
-Lo strumento non deve scomparire dietro ai dati né sovrastarli con estetica. Deve trasmettere che il crate digging è un atto creativo — c'è energia nel processo. L'interfaccia va con il flusso del DJ: navigare la libreria, scoprire connessioni, costruire una storia musicale.
+Cratory si legge come un catalogo a stampa di una collezione di dischi: monospace ovunque, griglia a filetti, geometria squadrata, quasi nessun colore. Il crate digging resta un atto creativo — c'è energia nel processo — ma l'energia è resa con densità, peso e gerarchia tipografica, non con il colore. Lo strumento non scompare dietro ai dati né li sovrasta con l'estetica: li compone come un indice tipografico.
 
-Tono: sicuro di sé senza essere arrogante. Preciso senza essere freddo. Non si scusa per essere opinionated.
+Tono: sicuro di sé senza essere arrogante. Preciso senza essere freddo. Non si scusa per essere opinionated. Quieto, non timido.
 
 ## Anti-references
 
 - **Consumer music app** (Spotify, Apple Music): troppo morbido, arrotondato, pensato per l'ascolto passivo. Cratory è uno strumento da lavoro, non un jukebox.
 - **Generic SaaS dashboard**: card identiche, gradients viola o teal, hero-metric template, layout tutto centrato. Scaffolding AI riconoscibile da lontano.
 - **Legacy DJ software** (Traktor, Rekordbox): overloaded di informazioni, griglie dense, UX degli anni 2000. Pesante, non fluidamente navigabile.
-- **AI tool hype** (Notion-like, cream backgrounds, pastel gradients): stile "startup AI 2024" con rounded cards enormi e palette pastello. Tutto quello che il commento in globals.css già rifiuta.
+- **AI tool hype** (stile "startup AI 2024"): gradients pastello, rounded card enormi, glassmorphism. Da **non** confondere col tema **paper** di Cratory, che è cream deliberato — carta calda con inchiostro quasi nero, filetti a 1px e geometria squadrata, non pastelli né gradient.
 
 ## Design Principles
+
+Il sistema visivo completo (token, temi dark/paper, componenti) vive in [DESIGN.md](DESIGN.md).
 
 1. **Dati prima, narrativa dopo.** I numeri (BPM, Camelot, energia) sono il linguaggio. Mostrarli con precisione e densità calibrata. Il layer creativo (AI, narrativa set) avvolge i dati senza sostituirli.
 
@@ -39,7 +41,7 @@ Tono: sicuro di sé senza essere arrogante. Preciso senza essere freddo. Non si 
 
 3. **Denso ma respirabile.** Una libreria DJ è dati densi. L'interfaccia li gestisce senza collassare in un foglio di calcolo. Spaziatura deliberata, gerarchia visiva chiara, raggruppamento semantico.
 
-4. **Opinionated, non decorativo.** Ogni scelta visiva deve sembrare fatta per questo strumento — non presa in prestito da un design system generico. L'accento lime è la luce dello studio.
+4. **Opinionated, non decorativo.** Ogni scelta visiva deve sembrare fatta per questo strumento — non presa in prestito da un design system generico. Il linguaggio è monocromo: un solo rosso per errori e azioni distruttive, gerarchia data da peso, maiuscolo, tracking e cifre tabulari (`tnum`), non dal colore.
 
 5. **Energia sperimentale.** La discovery deve sentirsi come scavare in casse di dischi. Il set builder come composizione, non come compilare un form. La texture dell'interfaccia riflette l'atto creativo che supporta.
 
