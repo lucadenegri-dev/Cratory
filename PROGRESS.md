@@ -15,8 +15,7 @@ migration. Disponibilita' `cratory.com` da confermare su registrar.
 
 **Fase:** core streaming-first completo; Discovery operativo (expand Last.fm + dig
 Discogs); enrichment multi-provider; Set Builder tecnico/creativo; audit leggero (quick
-win) fatto; identificazione mix via Shazam in integrazione. In corso: rifacimento
-documentazione (ridisegno dell'architettura doc).
+win) e rifacimento documentazione fatti; identificazione mix via Shazam in integrazione.
 
 ## Milestone 2026-06-18 - Reset documentazione
 
@@ -65,6 +64,21 @@ documentazione (ridisegno dell'architettura doc).
 - Audit confermato: CORS, secrets, retry/timeout, SQL injection e cleanup temp gia'
   a posto; niente altro di urgente per uso self-hosted.
 - (UI fuori roadmap: loader EQ/waveform stile DJ con respiro e barre strette.)
+
+## Milestone 2026-06-27 - Rifacimento documentazione
+
+- Ridisegno dell'architettura doc: ogni informazione ha un solo proprietario canonico
+  (`docs/ROADMAP.md` = stato; `PROGRESS.md` = diario), niente piu' doppia-verita'.
+- `README.md` riscritto come vetrina in inglese (pitch, feature, architettura, quickstart);
+  nuovo diagramma `docs/architettura.svg` monocromo, ritirati gli asset orfani.
+- `AGENTS.md` (root e frontend) unificato in `CLAUDE.md` / `frontend/CLAUDE.md`
+  (toolchain solo-Claude, niente Codex).
+- `PRODUCT.md` e `DESIGN.md` spostati in `docs/`; PRODUCT riconciliato con
+  l'editorial-archive (via lime, tema paper deliberato); branding `SetArc -> Cratory`
+  corretto in `.impeccable/design.json`.
+- Audit di accuratezza: `docs/API.md` (sezione Labels, enrich traccia) e
+  `docs/ARCHITECTURE.md` (Discogs, SpotifyToken, `db.py`) allineati al codice.
+- Spec e piano in `docs/superpowers/specs|plans/2026-06-27-rifacimento-documentazione*`.
 
 ## Punto di ripresa
 

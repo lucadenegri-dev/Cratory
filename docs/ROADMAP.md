@@ -56,6 +56,9 @@ migrazione esplicita.
 - Audit leggero (quick win): SSRF guard sull'URL del mix Shazam, `library_stats` con
   query SQL aggregate, rimozione endpoint morto `/api/discovery/labels`, tetti di versione
   alle dipendenze critiche.
+- Rifacimento documentazione: ridisegno architettura doc (fonte di verita' unica),
+  README vetrina in inglese + diagramma nuovo, audit accuratezza API/ARCHITECTURE,
+  AGENTS unificato in CLAUDE, PRODUCT/DESIGN spostati in `docs/`.
 
 ## Direzione prodotto
 
@@ -74,7 +77,9 @@ In ordine concordato (dettaglio operativo in `PROGRESS.md`):
 2. **Audit leggero + quick win** — quick win principali FATTI (SSRF, `library_stats`,
    endpoint morto, dipendenze); robustezza confermata solida. Threat model piccolo
    (nessun utente pubblico), niente authz da SaaS.
-3. **Rifacimento documentazione** quando il resto si assesta.
+
+(Il rifacimento documentazione, terzo passo concordato, e' stato completato — vedi
+"Stato completato".)
 
 Sospesi / rivisti:
 
