@@ -247,6 +247,19 @@ Router sottili; la logica sta in `analysis.py` e nei service puri.
 
 Output pristine (policy `filterwarnings = error` ereditata dal chunk 1).
 
+## Contratto per il chunk 3
+
+`issue.status == "accepted"` e i campi `action`/`keeper_file_id` dei dup costituiscono
+una **coda di lavoro pendente**: vengono consumati dal Plan (chunk 3) per costruire il
+piano di modifica e applicati dall'Apply (chunk 4) per eseguire le operazioni sui file.
+
+Conseguenza: l'analisi va **ri-eseguita dopo l'Apply** (chunk 4). Se si ri-esegue prima,
+una decisione `accepted` o `dismissed` su un file non ancora modificato **resta tale** per
+design — è un file in attesa di applicazione, non un errore del sistema.
+
+Su un gruppo `dismissed` il `keeper_file_id` non è significativo: tutti i membri hanno
+`action == "keep"` e nessuno sarà rimosso.
+
 ## 12. Convenzioni (dal chunk 1)
 
 SQLAlchemy 2.0 (`Mapped`/`mapped_column`), no Alembic (`create_all`/`ensure_schema`),

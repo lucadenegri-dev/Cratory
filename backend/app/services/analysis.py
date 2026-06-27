@@ -73,6 +73,14 @@ def _summary(db: Session) -> AnalyzeSummary:
 
 
 def recompute(db: Session, on_progress=None) -> AnalyzeSummary:
+    """Ricalcola Inspector+Dedup e fa il merge preservando le decisioni utente.
+
+    Nota sul sequencing: `accepted`/`dismissed` su issue e `keeper_overridden`/`dismissed`
+    sui gruppi sono una coda di lavoro pendente — consumata dal Plan (chunk 3) e applicata
+    dall'Apply (chunk 4). Ri-eseguire `recompute` prima dell'Apply è sicuro: le decisioni
+    vengono preservate per design. L'analisi va ri-eseguita *dopo* l'Apply perché solo
+    allora i file saranno cambiati e le issue/gruppi aggiornati rifletteranno la realtà.
+    """
     started = utcnow()
     files = db.scalars(select(AudioFile).where(AudioFile.status == "present")).all()
     if on_progress is not None:
