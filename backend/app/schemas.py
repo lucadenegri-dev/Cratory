@@ -110,3 +110,40 @@ class SettingsUpdate(BaseModel):
 
 class RootTargetUpdate(BaseModel):
     target_root: str | None = None
+
+
+class PlanOpRead(BaseModel):
+    id: int
+    seq: int
+    kind: str
+    file_id: int
+    file_path: str
+    before: dict
+    after: dict
+    status: str
+
+
+class ConflictRead(BaseModel):
+    kind: str
+    file_id: int
+    detail: str
+
+
+class PlanStats(BaseModel):
+    n_retag: int = 0
+    n_rename: int = 0
+    n_move: int = 0
+    n_delete: int = 0
+    space_freed_bytes: int = 0
+    n_conflicts: int = 0
+    blocking: bool = False
+
+
+class PlanRead(BaseModel):
+    id: int
+    status: str
+    created_at: datetime
+    rules: dict
+    ops: list[PlanOpRead]
+    conflicts: list[ConflictRead]
+    stats: PlanStats
