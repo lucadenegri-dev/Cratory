@@ -50,7 +50,7 @@ def _run(root_ids: list[int] | None) -> None:
                 result=summary.model_dump(mode="json"),
                 finished_at=utcnow().isoformat(),
             )
-        logger.info("Scan completato: %s", summary.model_dump())
+        logger.info("Scan completato: %s", summary.model_dump(mode="json"))
     except Exception as exc:  # noqa: BLE001 — il job non deve propagare
         logger.exception("Scan fallito")
         with _lock:
@@ -67,5 +67,6 @@ def start_job(root_ids: list[int] | None = None) -> dict:
             status="running", phase="scanning", processed=0, total=0,
             result=None, error=None, started_at=utcnow().isoformat(), finished_at=None,
         )
+        snapshot = dict(_state)
     threading.Thread(target=_run, args=(root_ids,), daemon=True).start()
-    return job_state()
+    return snapshot
