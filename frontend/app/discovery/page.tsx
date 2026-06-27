@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Compass, ExternalLink, Music2, Wand2, Plus, Check, Radar, Tags, Disc3, Search } from "lucide-react";
+import { Compass, ExternalLink, Music2, Wand2, Plus, Check, Disc3, Search, Tags } from "lucide-react";
 import {
   discoveryStatus,
   discoverExpand,
-  discoverByLabels,
   discoveryAddToLibrary,
   discoveryDig,
   discoveryAddLead,
@@ -31,8 +30,9 @@ function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
 
-type Mode = "expand" | "labels" | "genres";
-const CHIP_CAP = 12; // etichette mostrate prima dell'espansione
+type Mode = "expand" | "dig";
+type DigSeed = "genre" | "label";
+const CHIP_CAP = 12;
 
 const SOURCE_LABEL: Record<DiscoveryCandidate["source"], string> = {
   similar_artist: "artista affine",
@@ -41,25 +41,30 @@ const SOURCE_LABEL: Record<DiscoveryCandidate["source"], string> = {
   label: "etichetta",
 };
 
+const PRESETS: { key: string; label: string; value: number; desc: string }[] = [
+  { key: "familiare", label: "Familiare", value: 0.15, desc: "Artisti e nomi che probabilmente conosci già." },
+  { key: "bilanciato", label: "Bilanciato", value: 0.45, desc: "Un mix tra noto e nuovo." },
+  { key: "avventuroso", label: "Avventuroso", value: 0.85, desc: "Rarità e deep cut richiesti che non conosci." },
+];
+
 export default function DiscoveryPage() {
   const jobs = useJobs();
-  const [mode, setMode] = useState<Mode>("expand");
+  const [mode, setMode] = useState<Mode>("dig");
   const [status, setStatus] = useState<DiscoveryStatus | null>(null);
 
-  // expand
+  // espandi playlist
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
   const [playlistId, setPlaylistId] = useState<number | null>(null);
   const [useAi, setUseAi] = useState(true);
 
-  // radar etichette
-  const [labels, setLabels] = useState<LabelStats[] | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [showAllLabels, setShowAllLabels] = useState(false);
-
-  // generi (dig Discogs)
+  // scava (dig Discogs)
+  const [digSeed, setDigSeed] = useState<DigSeed>("genre");
   const [genres, setGenres] = useState<DiscoveryGenres | null>(null);
   const [genre, setGenre] = useState<string>("");
-  const [adventurousness, setAdventurousness] = useState(0.4);
+  const [labels, setLabels] = useState<LabelStats[] | null>(null);
+  const [selectedLabel, setSelectedLabel] = useState<string>("");
+  const [showAllLabels, setShowAllLabels] = useState(false);
+  const [adventurousness, setAdventurousness] = useState(0.45);
   const [dig, setDig] = useState<DiscoveryDigResponse | null>(null);
 
   // condivisi
@@ -75,18 +80,18 @@ export default function DiscoveryPage() {
         if (pls.length) setPlaylistId(pls[0].id);
       })
       .catch((e) => setError(err(e)));
-    getLabels()
-      .then((ls) => {
-        setLabels(ls);
-        setSelected(new Set(ls.slice(0, 6).map((l) => l.label)));
-      })
-      .catch(() => setLabels([]));
     getDiscoveryGenres()
       .then((g) => {
         setGenres(g);
         setGenre(g.library[0] ?? g.styles[0] ?? "");
       })
       .catch(() => setGenres({ library: [], styles: [] }));
+    getLabels()
+      .then((ls) => {
+        setLabels(ls);
+        if (ls.length) setSelectedLabel(ls[0].label);
+      })
+      .catch(() => setLabels([]));
   }, []);
 
   const aiEnabled = useAi && !!status?.ai_explanations;
@@ -94,6 +99,12 @@ export default function DiscoveryPage() {
   const switchMode = (m: Mode) => {
     setMode(m);
     setResult(null);
+    setDig(null);
+    setError(null);
+  };
+
+  const switchSeed = (s: DigSeed) => {
+    setDigSeed(s);
     setDig(null);
     setError(null);
   };
@@ -112,30 +123,15 @@ export default function DiscoveryPage() {
     }
   };
 
-  const runRadar = async () => {
-    const sel = [...selected];
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    jobs.startClientJob("radar", "Radar etichette");
-    try {
-      setResult(await discoverByLabels(sel.length ? sel : undefined));
-    } catch (e) {
-      setError(err(e));
-    } finally {
-      setBusy(false);
-      jobs.endClientJob("radar");
-    }
-  };
-
   const runDig = async () => {
-    if (!genre) return;
+    const value = digSeed === "genre" ? genre.trim() : selectedLabel;
+    if (!value) return;
     setBusy(true);
     setError(null);
     setDig(null);
     jobs.startClientJob("dig", "Crate digging");
     try {
-      setDig(await discoveryDig("genre", genre, { adventurousness }));
+      setDig(await discoveryDig(digSeed, value, { adventurousness }));
     } catch (e) {
       setError(err(e));
     } finally {
@@ -144,37 +140,27 @@ export default function DiscoveryPage() {
     }
   };
 
-  const toggleLabel = (label: string) =>
-    setSelected((s) => {
-      const n = new Set(s);
-      if (n.has(label)) n.delete(label);
-      else n.add(label);
-      return n;
-    });
-
   const noPlaylists = playlists != null && playlists.length === 0;
-  const noLabels = labels != null && labels.length === 0;
-  const quickGenres = (genres?.library.length ? genres.library : genres?.styles ?? []).slice(0, 10);
   const expandReady = !!status?.configured && !noPlaylists;
-  const radarReady = !!status?.spotify_resolver && !noLabels;
-
-  // chip sempre visibili: i primi CHIP_CAP + tutti quelli selezionati (così resta deselezionabile)
+  const quickGenres = (genres?.library.length ? genres.library : genres?.styles ?? []).slice(0, 10);
   const visibleLabels =
     labels && !showAllLabels
-      ? labels.filter((l, i) => i < CHIP_CAP || selected.has(l.label))
+      ? labels.filter((l, i) => i < CHIP_CAP || l.label === selectedLabel)
       : labels ?? [];
-  const hiddenCount = (labels?.length ?? 0) - visibleLabels.length;
+  const hiddenLabelCount = (labels?.length ?? 0) - visibleLabels.length;
+  const activePreset = PRESETS.find((p) => p.value === adventurousness) ?? PRESETS[1];
+  const noLabels = labels != null && labels.length === 0;
+  const digReady = digSeed === "genre" ? !!genre.trim() : !!selectedLabel;
 
   return (
     <PageLayout title="Discovery">
-      <p className="mb-4 text-sm text-muted">Espandi le tue playlist con musica nuova e affine al tuo gusto.</p>
+      <p className="mb-4 text-sm text-muted">Scava nuova musica per genere o etichetta, o espandi una playlist.</p>
 
       {/* Mode toggle */}
       <div className="mb-4 inline-flex rounded-none border border-border bg-surface p-1">
         {([
+          ["dig", "Scava", <Disc3 key="i" size={14} />],
           ["expand", "Espandi playlist", <Wand2 key="i" size={14} />],
-          ["labels", "Radar etichette", <Tags key="i" size={14} />],
-          ["genres", "Scava generi", <Disc3 key="i" size={14} />],
         ] as const).map(([m, label, icon]) => (
           <button
             key={m}
@@ -193,7 +179,147 @@ export default function DiscoveryPage() {
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
-      {/* EXPAND */}
+      {/* SCAVA (dig Discogs: genere o etichetta) */}
+      {mode === "dig" && (
+        <>
+          <div className="mb-6 border border-border p-4">
+            {/* da cosa parti */}
+            <div className="mb-3 flex items-center gap-3">
+              <span className="text-[10px] uppercase tracking-wider text-muted">Parti da</span>
+              <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
+                {([
+                  ["genre", "Genere", <Disc3 key="i" size={13} />],
+                  ["label", "Etichetta", <Tags key="i" size={13} />],
+                ] as const).map(([s, label, icon]) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => switchSeed(s)}
+                    aria-pressed={digSeed === s}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-none px-2.5 py-1 text-xs font-medium transition-colors",
+                      digSeed === s ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                    )}
+                  >
+                    {icon} {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* picker: genere */}
+            {digSeed === "genre" && (
+              <>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="min-w-0 flex-1">
+                    <Field label="Genere o stile">
+                      <Input
+                        list="genre-suggestions"
+                        value={genre}
+                        onChange={(e) => setGenre(e.target.value)}
+                        disabled={busy}
+                        placeholder="es. Acid House, Dub Techno, Italo-Disco…"
+                      />
+                      <datalist id="genre-suggestions">
+                        {genres?.library.map((g) => <option key={`l-${g}`} value={g} />)}
+                        {genres?.styles.map((g) => <option key={`s-${g}`} value={g} />)}
+                      </datalist>
+                    </Field>
+                  </div>
+                  <Button onClick={runDig} disabled={busy || !genre.trim()}>
+                    {busy ? <Spinner /> : <Disc3 size={15} />} Scava
+                  </Button>
+                </div>
+                {quickGenres.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {quickGenres.map((g) => (
+                      <Chip key={g} on={genre === g} onClick={() => setGenre(g)} disabled={busy}>{g}</Chip>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* picker: etichetta */}
+            {digSeed === "label" && (
+              <>
+                {noLabels ? (
+                  <p className="text-sm text-muted">
+                    Nessuna etichetta in libreria: recuperale dalla sezione Etichette, oppure scava per genere.
+                  </p>
+                ) : (
+                  <>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] uppercase tracking-wider text-muted">Scegli un’etichetta</span>
+                      <Button onClick={runDig} disabled={busy || !selectedLabel}>
+                        {busy ? <Spinner /> : <Disc3 size={15} />} Scava
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {visibleLabels.map((l) => (
+                        <Chip key={l.label} on={selectedLabel === l.label} onClick={() => setSelectedLabel(l.label)} disabled={busy}>
+                          {l.label}
+                        </Chip>
+                      ))}
+                      {(hiddenLabelCount > 0 || showAllLabels) && (labels?.length ?? 0) > CHIP_CAP && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllLabels((v) => !v)}
+                          className="rounded-none px-2.5 py-1 text-xs text-muted underline underline-offset-4 transition-colors hover:text-fg"
+                        >
+                          {showAllLabels ? "− meno" : `+${hiddenLabelCount} altre`}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* preset profondità */}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <span className="text-[10px] uppercase tracking-wider text-muted">Quanto osare</span>
+              <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => setAdventurousness(p.value)}
+                    aria-pressed={activePreset.key === p.key}
+                    disabled={busy}
+                    className={cn(
+                      "rounded-none px-2.5 py-1 text-xs font-medium transition-colors",
+                      activePreset.key === p.key ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-muted">{activePreset.desc}</span>
+            </div>
+
+            <p className="mt-3 text-xs leading-relaxed text-muted">
+              Tanti brani dello stesso suono da scavare (via Discogs), già ripuliti dal rumore.
+              Salva quelli che ti piacciono: l’identità Spotify si risolve dopo.
+            </p>
+          </div>
+
+          {busy && !dig && (
+            <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Scavo nelle crate…</div>
+          )}
+          {dig && <LeadResults dig={dig} />}
+          {!busy && !dig && (
+            <EmptyState icon={<Disc3 size={28} />} title="Pronto per scavare">
+              {digReady
+                ? "Premi “Scava” per esplorare a fondo."
+                : "Scegli un genere o un’etichetta qui sopra, poi premi “Scava”."}
+            </EmptyState>
+          )}
+        </>
+      )}
+
+      {/* ESPANDI PLAYLIST */}
       {mode === "expand" && (
         <>
           {status && !status.configured && (
@@ -206,12 +332,11 @@ export default function DiscoveryPage() {
           )}
           {noPlaylists && (
             <EmptyState icon={<Music2 size={28} />} title="Nessuna playlist importata">
-              Importa una playlist dalla sezione Playlist per poterla espandere con il Discovery.
+              Importa una playlist dalla sezione Playlist per poterla espandere.
             </EmptyState>
           )}
           {expandReady && (
             <>
-              {/* Control bar */}
               <div className="mb-6 border border-border p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                   <div className="min-w-0 flex-1">
@@ -234,7 +359,7 @@ export default function DiscoveryPage() {
                   </Button>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-muted">
-                  Tracce di gusto affine da aggiungere alla playlist.
+                  Tracce di gusto affine, già risolte su Spotify per aggiungerle subito alla playlist.
                 </p>
               </div>
 
@@ -251,171 +376,26 @@ export default function DiscoveryPage() {
           )}
         </>
       )}
-
-      {/* RADAR ETICHETTE */}
-      {mode === "labels" && (
-        <>
-          {status && !status.spotify_resolver && (
-            <div className="mb-6">
-              <Alert tone="info">
-                Il Radar etichette usa Spotify: imposta <code className="font-mono">SPOTIFY_CLIENT_ID</code> e
-                <code className="font-mono"> SPOTIFY_CLIENT_SECRET</code> in <span className="font-medium">backend/.env</span>.
-              </Alert>
-            </div>
-          )}
-          {status?.spotify_resolver && noLabels && (
-            <EmptyState icon={<Tags size={28} />} title="Nessuna etichetta in libreria">
-              Recupera prima le etichette dalla sezione Etichette, poi torna qui per il radar.
-            </EmptyState>
-          )}
-          {radarReady && (
-            <>
-              {/* Control bar */}
-              <div className="mb-6 border border-border p-4">
-                <div className="mb-2.5 flex items-center justify-between gap-3">
-                  <span className="text-[10px] uppercase tracking-wider text-muted">
-                    Etichette nel radar · <span className="tnum text-fg">{selected.size}</span> selezionate
-                  </span>
-                  <div className="flex items-center gap-3 text-[10px] uppercase tracking-wider">
-                    <button type="button" onClick={() => setSelected(new Set(labels?.map((l) => l.label)))} className="text-muted transition-colors hover:text-fg">Tutte</button>
-                    <button type="button" onClick={() => setSelected(new Set())} className="text-muted transition-colors hover:text-fg">Nessuna</button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {visibleLabels.map((l) => {
-                    const on = selected.has(l.label);
-                    return (
-                      <button
-                        key={l.label}
-                        type="button"
-                        onClick={() => toggleLabel(l.label)}
-                        aria-pressed={on}
-                        disabled={busy}
-                        className={cn(
-                          "rounded-none border px-2.5 py-1 text-xs transition-colors",
-                          on
-                            ? "border-border-strong bg-elevated text-fg"
-                            : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
-                        )}
-                      >
-                        {l.label}
-                      </button>
-                    );
-                  })}
-                  {(hiddenCount > 0 || showAllLabels) && (labels?.length ?? 0) > CHIP_CAP && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllLabels((v) => !v)}
-                      className="rounded-none px-2.5 py-1 text-xs text-muted underline underline-offset-4 transition-colors hover:text-fg"
-                    >
-                      {showAllLabels ? "− meno" : `+${hiddenCount} altre`}
-                    </button>
-                  )}
-                </div>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                  <p className="max-w-md text-xs leading-relaxed text-muted">
-                    Tracce delle tue etichette che non hai ancora, ordinate per affinità di gusto.
-                  </p>
-                  <Button onClick={runRadar} disabled={busy || selected.size === 0}>
-                    {busy ? <Spinner /> : <Radar size={15} />} Scopri dalle etichette
-                  </Button>
-                </div>
-              </div>
-
-              {busy && !result && (
-                <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Scandaglio le etichette…</div>
-              )}
-              {result && <Results result={result} />}
-              {!busy && !result && (
-                <EmptyState icon={<Radar size={28} />} title="Pronto per il radar">
-                  Scegli le etichette qui sopra e premi “Scopri dalle etichette”.
-                </EmptyState>
-              )}
-            </>
-          )}
-        </>
-      )}
-
-      {/* SCAVA GENERI (dig Discogs) */}
-      {mode === "genres" && (
-        <>
-          <div className="mb-6 border border-border p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="min-w-0 flex-1">
-                <Field label="Genere o stile">
-                  <Input
-                    list="genre-suggestions"
-                    value={genre}
-                    onChange={(e) => setGenre(e.target.value)}
-                    disabled={busy}
-                    placeholder="es. Acid House, Dub Techno, Italo-Disco…"
-                  />
-                  <datalist id="genre-suggestions">
-                    {genres?.library.map((g) => <option key={`l-${g}`} value={g} />)}
-                    {genres?.styles.map((g) => <option key={`s-${g}`} value={g} />)}
-                  </datalist>
-                </Field>
-              </div>
-              <Button onClick={runDig} disabled={busy || !genre.trim()}>
-                {busy ? <Spinner /> : <Disc3 size={15} />} Scava
-              </Button>
-            </div>
-
-            {quickGenres.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {quickGenres.map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => setGenre(g)}
-                    aria-pressed={genre === g}
-                    disabled={busy}
-                    className={cn(
-                      "rounded-none border px-2.5 py-1 text-xs transition-colors",
-                      genre === g
-                        ? "border-border-strong bg-elevated text-fg"
-                        : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
-                    )}
-                  >
-                    {g}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <span className="text-[10px] uppercase tracking-wider text-muted">Profondità</span>
-              <input
-                type="range" min={0} max={1} step={0.1}
-                value={adventurousness}
-                onChange={(e) => setAdventurousness(Number(e.target.value))}
-                disabled={busy}
-                aria-label="Da familiare ad avventuroso"
-                className="h-1 min-w-[160px] flex-1 cursor-pointer accent-[var(--color-fg)]"
-              />
-              <span className="w-20 text-right text-[10px] uppercase tracking-wider text-fg">
-                {adventurousness <= 0.34 ? "familiare" : adventurousness >= 0.67 ? "avventuroso" : "bilanciato"}
-              </span>
-            </div>
-
-            <p className="mt-3 text-xs leading-relaxed text-muted">
-              Tanti brani dello stesso suono da scavare (via Discogs). Salva quelli che ti
-              piacciono: l’identità Spotify si risolve dopo.
-            </p>
-          </div>
-
-          {busy && !dig && (
-            <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Scavo nelle crate…</div>
-          )}
-          {dig && <LeadResults dig={dig} />}
-          {!busy && !dig && (
-            <EmptyState icon={<Disc3 size={28} />} title="Pronto per scavare">
-              Scegli un genere o stile qui sopra e premi “Scava”.
-            </EmptyState>
-          )}
-        </>
-      )}
     </PageLayout>
+  );
+}
+
+function Chip({ on, onClick, disabled, children }: { on: boolean; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      disabled={disabled}
+      className={cn(
+        "rounded-none border px-2.5 py-1 text-xs transition-colors",
+        on
+          ? "border-border-strong bg-elevated text-fg"
+          : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -423,7 +403,7 @@ function LeadResults({ dig }: { dig: DiscoveryDigResponse }) {
   if (dig.leads.length === 0) {
     return (
       <EmptyState icon={<Disc3 size={28} />} title="Niente da scavare">
-        Nessun brano nuovo per “{dig.value}”. Prova un altro stile o alza la profondità.
+        Nessun brano nuovo per “{dig.value}”. Prova un altro {dig.seed_type === "label" ? "valore" : "stile"} o alza l’audacia.
       </EmptyState>
     );
   }
@@ -480,6 +460,7 @@ function LeadRow({ l }: { l: DiscoveryLead }) {
           {l.label && <span>· {l.label}</span>}
           {l.year != null && <span>· {l.year}</span>}
           <span>· {l.have} in collezione</span>
+          {l.want > 0 && <span>· {l.want} cercano</span>}
         </div>
         {addError && <p className="mt-1 text-xs text-danger">⚠ {addError}</p>}
       </div>
@@ -504,9 +485,7 @@ function Results({ result }: { result: DiscoveryResponse }) {
   if (result.candidates.length === 0) {
     return (
       <EmptyState icon={<Compass size={28} />} title="Nessun suggerimento">
-        {result.mode === "labels"
-          ? "Le etichette selezionate non hanno restituito tracce nuove."
-          : "La fonte di similarità non ha restituito tracce nuove per questa playlist."}
+        La fonte di similarità non ha restituito tracce nuove per questa playlist.
       </EmptyState>
     );
   }

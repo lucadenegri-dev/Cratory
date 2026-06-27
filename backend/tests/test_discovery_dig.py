@@ -6,10 +6,10 @@ from app.services.discovery_dig import _lead_from_release, dig
 
 
 def _release(title, *, year=2020, label="Lbl", style="Acid House", have=100, want=10,
-             rid=1, uri=None):
+             rid=1, uri=None, fmt=None):
     return {
         "id": rid, "title": title, "year": year, "label": [label], "style": [style],
-        "community": {"have": have, "want": want},
+        "community": {"have": have, "want": want}, "format": fmt or [],
         "uri": uri or f"/release/{rid}", "cover_image": "http://img",
     }
 
@@ -84,3 +84,66 @@ def test_dig_truncates_to_limit():
 
     res = dig(None, seed_type="genre", value="x", search_releases=search, library=[], limit=10)
     assert len(res.leads) == 10
+
+
+# --- de-noise: filtri, dedup varianti, cap artista, domanda ------------------
+
+
+def test_dig_filters_offtarget_formats():
+    def search(**kw):
+        return [
+            _release("Comp Maker - Big Box", rid=1, fmt=["CD", "Compilation"]),
+            _release("Mix DJ - Continuous", rid=2, fmt=["DJ Mix"]),
+            _release("Real Artist - Real Track", rid=3, fmt=["Vinyl", '12"']),
+        ]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[], limit=50)
+    pairs = [(l.artist, l.title) for l in res.leads]
+    assert pairs == [("Real Artist", "Real Track")]  # comp e DJ mix scartati
+
+
+def test_dig_filters_dead_self_released_but_keeps_wanted():
+    def search(**kw):
+        return [
+            _release("Nobody - Bedroom Demo", rid=1, have=0, want=0,
+                     label="Not On Label (Nobody Self-released)"),
+            _release("Cult Hero - Sought Gem", rid=2, have=2, want=40,
+                     label="Not On Label (Cult Hero Self-released)"),
+        ]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[], limit=50)
+    pairs = [(l.artist, l.title) for l in res.leads]
+    assert ("Nobody", "Bedroom Demo") not in pairs        # self-released morto: scartato
+    assert ("Cult Hero", "Sought Gem") in pairs           # self-released ma RICHIESTO: tenuto
+
+
+def test_dig_dedup_variant_titles():
+    def search(**kw):
+        return [
+            _release("A - Track", rid=1),
+            _release("A - Track (Original Mix)", rid=2),
+            _release("A - Track [Radio Edit]", rid=3),
+        ]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[], limit=50)
+    assert len(res.leads) == 1  # varianti collassate
+
+
+def test_dig_caps_per_artist():
+    def search(**kw):
+        return [_release(f"Prolific - Track {i}", rid=i) for i in range(6)]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[], limit=50)
+    assert len(res.leads) == 2  # max 2 per artista
+
+
+def test_dig_demand_beats_anonymous_rarity():
+    def search(**kw):
+        return [
+            _release("Anon - Untraded", rid=1, have=1, want=0),    # raro ma nessuno lo cerca
+            _release("Wanted - Grail", rid=2, have=1, want=80),    # raro E molto cercato
+        ]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search,
+              library=[], adventurousness=0.9)
+    assert res.leads[0].artist == "Wanted"  # la gemma richiesta in cima
