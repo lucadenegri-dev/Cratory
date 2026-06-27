@@ -172,13 +172,16 @@ export function EqMeter({ value, className }: { value: number | null; className?
       aria-valuemax={indeterminate ? undefined : 100}
     >
       <div className="eqm-wave">
-        {WAVE.map((a, i) => (
-          <span
-            key={i}
-            className={cn("eqm-bar", !indeterminate && i < lit ? "eqm-on" : "eqm-off")}
-            style={{ height: `${(a * 100).toFixed(1)}%` }}
-          />
-        ))}
+        {WAVE.map((a, i) => {
+          const on = !indeterminate && i < lit;
+          return (
+            <span
+              key={i}
+              className={cn("eqm-bar", on ? "eqm-on" : "eqm-off")}
+              style={{ height: `${(a * 100).toFixed(1)}%`, animationDelay: on ? `${(-((i * 0.09) % 1.7)).toFixed(2)}s` : undefined }}
+            />
+          );
+        })}
       </div>
       {indeterminate ? (
         <span className="eqm-scan" />
