@@ -53,6 +53,9 @@ migrazione esplicita.
 - Discovery de-noise + unificazione: ranking per domanda (want/have), filtri formato/
   self-released, dedup varianti, cap per artista; UI da 3 a 2 modi con "Scava"
   (Genere|Etichetta) e preset Familiare/Bilanciato/Avventuroso. Etichette ora via Discogs.
+- Audit leggero (quick win): SSRF guard sull'URL del mix Shazam, `library_stats` con
+  query SQL aggregate, rimozione endpoint morto `/api/discovery/labels`, tetti di versione
+  alle dipendenze critiche.
 
 ## Direzione prodotto
 
@@ -68,8 +71,9 @@ In ordine concordato (dettaglio operativo in `PROGRESS.md`):
 
 1. **Miglioramento Discovery (continua).** Dopo "Scava generi" (Discogs): qualita' dei
    lead, piu' segnali di gusto, spiegazioni, e unificazione expand/dig (vedi backlog).
-2. **Audit leggero + quick win.** Threat model piccolo (nessun utente pubblico):
-   efficienza `library_stats`, robustezza, dipendenze. Niente authz da SaaS.
+2. **Audit leggero + quick win** — quick win principali FATTI (SSRF, `library_stats`,
+   endpoint morto, dipendenze); robustezza confermata solida. Threat model piccolo
+   (nessun utente pubblico), niente authz da SaaS.
 3. **Rifacimento documentazione** quando il resto si assesta.
 
 Sospesi / rivisti:

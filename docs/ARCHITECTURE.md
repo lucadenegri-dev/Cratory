@@ -179,7 +179,7 @@ nessun provider la fornisce.
 | Spotify | attiva | OAuth, import, resolver Discovery, export playlist |
 | Deezer | attiva | gratuita, BPM via ISRC |
 | MusicBrainz | attiva | richiede User-Agent configurato |
-| AcousticBrainz | attiva | dataset storico, nessuna API key |
+| AcousticBrainz | attiva | dataset storico congelato al 2022 (bassa copertura sulle uscite recenti), nessuna API key |
 | GetSongBPM | attiva | API key opzionale/consigliata |
 | Last.fm | attiva | API key per enrichment tag e Discovery |
 | Discogs | attiva | crate digging Discovery "Scava" per genere/etichetta; funziona senza token, `DISCOGS_TOKEN` alza il rate limit |
