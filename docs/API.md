@@ -45,6 +45,7 @@ avviano l'enrichment automatico best-effort sulle tracce importate.
 GET   /api/tracks
 GET   /api/tracks/{track_id}
 PATCH /api/tracks/{track_id}
+POST  /api/tracks/{track_id}/enrich
 GET   /api/stats
 ```
 
@@ -56,6 +57,10 @@ metadata incompleti, sort/order, limit/offset.
 energia, danceability, vocalness, genere, label, anno e campi affini. I valori manuali
 hanno precedenza sull'enrichment.
 
+`POST /api/tracks/{track_id}/enrich` arricchisce le feature di una singola traccia in
+modo sincrono e completa i campi mancanti senza sovrascrivere BPM/key esistenti.
+Risponde `409` se nessun provider di feature e' configurato.
+
 ## Enrichment
 
 ```text
@@ -66,6 +71,21 @@ GET  /api/enrichment/features/status
 
 `POST /api/enrichment/features` avvia un job asincrono. `force=true` forza un nuovo
 tentativo ignorando la cache in lettura.
+
+## Labels
+
+```text
+GET  /api/labels
+POST /api/labels/backfill
+```
+
+`GET /api/labels` restituisce la panoramica deterministica delle etichette presenti in
+libreria (aggregati con nomi normalizzati e merge delle varianti).
+
+`POST /api/labels/backfill` recupera l'etichetta dall'album Spotify completo per le
+tracce che ne sono prive (la label non e' nell'album semplificato annidato nelle
+tracce di playlist/liked). E' bounded e ripetibile: elabora un lotto per chiamata; se
+`remaining > 0`, va rilanciato per continuare.
 
 ## Set Builder e set salvati
 
