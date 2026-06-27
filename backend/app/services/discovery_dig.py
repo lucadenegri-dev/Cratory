@@ -39,6 +39,13 @@ _VARIANT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Pesi del termine "gusto" nello score (somma 1.0). Tarabili.
+W_ARTIST = 0.5
+W_LABEL = 0.3
+W_STYLE = 0.2
+# Quante release di un artista nel riferimento bastano per familiarita' piena.
+FAMILIARITY_FULL_AT = 3
+
 SearchReleases = Callable[..., list[dict[str, Any]]]
 
 
@@ -92,6 +99,50 @@ def _dedup_title(title: str) -> str:
 
 def _dedup_key(artist: str, title: str) -> tuple[str, str]:
     return _norm(artist), _norm(_dedup_title(title))
+
+
+def _style_tokens(value: Any) -> set[str]:
+    """Token normalizzati di uno style/genere ('Deep House' -> {'deep','house'})."""
+    return {tok for tok in re.split(r"[^a-z0-9]+", _norm(value)) if tok}
+
+
+@dataclass
+class TasteProfile:
+    """Riassunto deterministico del gusto di un riferimento (libreria o playlist).
+
+    Costruito da una lista di Track-like (servono artist, label, genre).
+    Indipendente dalla dedup: misura affinita', non possesso.
+    """
+    artist_counts: dict[str, int] = field(default_factory=dict)
+    owned_labels: set[str] = field(default_factory=set)
+    genre_tokens: set[str] = field(default_factory=set)
+
+    @classmethod
+    def from_tracks(cls, tracks: list) -> "TasteProfile":
+        artist_counts: dict[str, int] = {}
+        owned_labels: set[str] = set()
+        genre_tokens: set[str] = set()
+        for t in tracks or []:
+            a = _norm(getattr(t, "artist", None))
+            if a:
+                artist_counts[a] = artist_counts.get(a, 0) + 1
+            lbl = _norm(getattr(t, "label", None))
+            if lbl:
+                owned_labels.add(lbl)
+            genre_tokens |= _style_tokens(getattr(t, "genre", None))
+        return cls(artist_counts, owned_labels, genre_tokens)
+
+    def artist_count(self, artist: str) -> int:
+        return self.artist_counts.get(_norm(artist), 0)
+
+    def familiarity(self, artist: str) -> float:
+        return min(self.artist_count(artist) / FAMILIARITY_FULL_AT, 1.0)
+
+    def label_affinity(self, label: str | None) -> float:
+        return 1.0 if label and _norm(label) in self.owned_labels else 0.0
+
+    def style_affinity(self, style: str | None) -> float:
+        return 1.0 if _style_tokens(style) & self.genre_tokens else 0.0
 
 
 def _lead_from_release(item: dict[str, Any], seed: str) -> DiscoveryLead | None:

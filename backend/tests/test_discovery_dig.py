@@ -14,8 +14,16 @@ def _release(title, *, year=2020, label="Lbl", style="Acid House", have=100, wan
     }
 
 
-def _lib(*pairs):
-    return [SimpleNamespace(artist=a, title=t) for a, t in pairs]
+def _lib(*items):
+    """Track finte. Ogni item: (artist, title) o (artist, title, {"label":..., "genre":...})."""
+    out = []
+    for it in items:
+        extra = it[2] if len(it) > 2 else {}
+        out.append(SimpleNamespace(
+            artist=it[0], title=it[1],
+            label=extra.get("label"), genre=extra.get("genre"),
+        ))
+    return out
 
 
 def test_lead_parsing_and_various_skipped():
@@ -147,3 +155,47 @@ def test_dig_demand_beats_anonymous_rarity():
     res = dig(None, seed_type="genre", value="x", search_releases=search,
               library=[], adventurousness=0.9)
     assert res.leads[0].artist == "Wanted"  # la gemma richiesta in cima
+
+
+# --- Task 1: TasteProfile + tokenizzazione stile -----------------------------
+
+from app.services.discovery_dig import TasteProfile, _style_tokens, FAMILIARITY_FULL_AT
+
+
+def test_style_tokens_normalizes_and_splits():
+    assert _style_tokens("Deep House") == {"deep", "house"}
+    assert _style_tokens("Tech-House / Minimal") == {"tech", "house", "minimal"}
+    assert _style_tokens(None) == set()
+    assert _style_tokens("") == set()
+
+
+def test_taste_profile_from_tracks_aggregates():
+    p = TasteProfile.from_tracks(_lib(
+        ("Aphex Twin", "Xtal", {"label": "Warp", "genre": "IDM"}),
+        ("Aphex Twin", "Ageispolis", {"label": "Warp", "genre": "IDM"}),
+        ("Boards Of Canada", "Roygbiv", {"label": "Warp", "genre": "Downtempo"}),
+    ))
+    assert p.artist_count("aphex twin") == 2
+    assert p.owned_labels == {"warp"}
+    assert {"idm", "downtempo"} <= p.genre_tokens
+
+
+def test_taste_profile_familiarity_is_graduated():
+    p = TasteProfile.from_tracks(_lib(
+        ("Solo", "A"),
+        ("Trio", "A"), ("Trio", "B"), ("Trio", "C"),
+    ))
+    assert p.familiarity("Solo") == 1 / FAMILIARITY_FULL_AT
+    assert p.familiarity("Trio") == 1.0          # 3 release: piena
+    assert p.familiarity("Unknown") == 0.0
+
+
+def test_taste_profile_affinities():
+    p = TasteProfile.from_tracks(_lib(("A", "B", {"label": "Warp", "genre": "Acid House"})))
+    assert p.label_affinity("Warp") == 1.0
+    assert p.label_affinity("warp") == 1.0
+    assert p.label_affinity("Other") == 0.0
+    assert p.label_affinity(None) == 0.0
+    assert p.style_affinity("Acid House") == 1.0     # token in comune
+    assert p.style_affinity("Techno") == 0.0
+    assert p.style_affinity(None) == 0.0
