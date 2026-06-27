@@ -49,6 +49,19 @@ via Shazam in corso di integrazione, documentazione riscritta.
 - Import Spotify: solo playlist possedute; "Aggiorna" per le gia' importate.
 - Merge su `master` e push. 186 test backend verdi, lint/build frontend puliti.
 
+## Milestone 2026-06-27 - Audit leggero (quick win)
+
+- SSRF guard: l'URL del mix Shazam e' validato (solo http/https) prima di yt-dlp.
+- Performance: `library_stats` riscritta con query SQL aggregate (niente full-load
+  ORM), output identico; alleggerisce dashboard e contesto AI dei set.
+- Rimosso l'endpoint morto `/api/discovery/labels` (+ `discover_by_labels`, helper,
+  schema, `search_by_label`, test e funzione frontend): il Radar Etichette usa Discogs.
+- Dipendenze: rimosso `requirements copia.txt`, tetti versione alle deps critiche,
+  error body upstream accorciati. 197 test backend verdi.
+- Audit confermato: CORS, secrets, retry/timeout, SQL injection e cleanup temp gia'
+  a posto; niente altro di urgente per uso self-hosted.
+- (UI fuori roadmap: loader EQ/waveform stile DJ con respiro e barre strette.)
+
 ## Decisione 2026-06-23 - Direzione prodotto + vincolo Spotify
 
 **Vincolo bloccante (verificato):** Spotify Web API non consente un SaaS pubblico
@@ -75,8 +88,8 @@ e multi-account sospesi.
 
 1. **Miglioramento Discovery.** Affinare radar/expand: qualita' candidati, piu'
    segnali di gusto, dedup, spiegazioni, eventuale ranking configurabile.
-2. **Audit leggero + quick win** rimasti (efficienza `library_stats`, robustezza,
-   rimozione endpoint morti, dipendenze).
+2. **Audit leggero + quick win** — quick win principali FATTI (SSRF, `library_stats`,
+   endpoint morto, dipendenze); audit di robustezza confermato solido (milestone 27/06).
 3. **Rifacimento documentazione** una volta assestato il resto.
 
 Rivisti/sospesi: **Testi + multi-lingua (i18n EN)** (rimandato; rollout nome Cratory
