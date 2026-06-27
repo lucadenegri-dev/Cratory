@@ -83,3 +83,14 @@ def test_order_and_determinism():
     ops = build_plan([keep, rem], [_accepted(1, "artist", "A")], {2}, SNAP, TARGETS)
     assert [o.kind for o in ops] == ["RETAG", "MOVE", "DELETE"]
     assert build_plan([rem, keep], [_accepted(1, "artist", "A")], {2}, SNAP, TARGETS) == ops
+
+
+def test_retag_after_matches_effective_when_two_fixes_same_field():
+    f = make_audio_file(1, root_id=1, artist="X", title="T", genre="House",
+                        path="/lib/x.mp3", ext="mp3")
+    fixes = [_accepted(1, "artist", "First"), _accepted(1, "artist", "Second")]
+    ops = build_plan([f], fixes, set(), SNAP, TARGETS)
+    retag = [o for o in ops if o.kind == "RETAG"][0]
+    move = [o for o in ops if o.kind in ("RENAME", "MOVE")][0]
+    # after must equal the value the rename actually used
+    assert retag.after["artist"] in move.after["path"]

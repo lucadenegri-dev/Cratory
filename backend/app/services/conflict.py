@@ -32,7 +32,8 @@ def check(plan_ops, files_by_id, accepted_issues, removals, settings_snapshot,
         dest = op.after["path"]
         dest_count[dest] = dest_count.get(dest, 0) + 1
     moved_ids = {op.file_id for op in move_ops}
-    occupied = {f.path for fid, f in files_by_id.items() if fid not in moved_ids}
+    occupied = {f.path for fid, f in files_by_id.items()
+                if fid not in moved_ids and fid not in removals}
 
     for op in move_ops:
         dest = op.after["path"]

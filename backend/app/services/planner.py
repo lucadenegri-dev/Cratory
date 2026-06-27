@@ -81,15 +81,12 @@ def build_plan(files, accepted_issues, removals, settings_snapshot,
             continue
         fixes = by_file.get(f.id, [])
         if fixes:
-            before, after = {}, {}
-            for fix in fixes:
-                field = fix.get("field")
-                if field not in _EFFECTIVE_FIELDS:
-                    continue
-                new_val = None if fix.get("action") == "clear" else fix.get("to")
-                before.setdefault(field, getattr(f, field))
-                after.setdefault(field, new_val)
-            if before:
+            eff = effective_tags(f, fixes)
+            touched = sorted({fix["field"] for fix in fixes
+                              if fix.get("field") in _EFFECTIVE_FIELDS})
+            if touched:
+                before = {field: getattr(f, field) for field in touched}
+                after = {field: eff[field] for field in touched}
                 retag_ops.append(PlanOpComputed("RETAG", f.id, before, after))
 
         dest, _miss = render_destination(f, effective_tags(f, fixes),
