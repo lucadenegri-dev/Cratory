@@ -21,6 +21,7 @@ class ScanRoot(Base):
     path: Mapped[str] = mapped_column(String, unique=True, index=True)
     label: Mapped[str | None] = mapped_column(String)
     last_scanned_at: Mapped[datetime | None] = mapped_column(DateTime)
+    target_root: Mapped[str | None] = mapped_column(String)
 
     files: Mapped[list["AudioFile"]] = relationship(
         back_populates="root", cascade="all, delete-orphan"
@@ -102,3 +103,43 @@ class DupMember(Base):
     action: Mapped[str] = mapped_column(String)
 
     group: Mapped["DupGroup"] = relationship(back_populates="members")
+
+
+class Settings(Base):
+    __tablename__ = "settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)  # riga singola, id=1
+    naming_template: Mapped[str] = mapped_column(String, default="{artist} - {title}")
+    folder_template: Mapped[str] = mapped_column(String, default="{genre}/{artist}")
+    dedup_keep_rules_json: Mapped[dict | None] = mapped_column(JSON)
+    cratory_base_url: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Plan(Base):
+    __tablename__ = "plan"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    status: Mapped[str] = mapped_column(String, default="draft", index=True)
+    rules_json: Mapped[dict] = mapped_column(JSON)
+
+    ops: Mapped[list["PlanOp"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan"
+    )
+
+
+class PlanOp(Base):
+    __tablename__ = "plan_op"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plan.id"), index=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String)
+    file_id: Mapped[int] = mapped_column(ForeignKey("audio_file.id"), index=True)
+    before_json: Mapped[dict] = mapped_column(JSON)
+    after_json: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String, default="pending")
+
+    plan: Mapped["Plan"] = relationship(back_populates="ops")

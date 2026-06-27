@@ -25,10 +25,19 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 
 def ensure_schema(eng=None) -> None:
-    """create_all sui modelli. L'import registra le tabelle su Base.metadata."""
+    """create_all + ALTER per colonne aggiunte dopo (niente Alembic: app locale)."""
     import app.models  # noqa: F401
 
-    Base.metadata.create_all(eng or engine)
+    eng = eng or engine
+    Base.metadata.create_all(eng)
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(eng)
+    if "scan_root" in inspector.get_table_names():
+        cols = {c["name"] for c in inspector.get_columns("scan_root")}
+        if "target_root" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text("ALTER TABLE scan_root ADD COLUMN target_root VARCHAR"))
 
 
 def get_db():
