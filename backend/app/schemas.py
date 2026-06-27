@@ -88,3 +88,25 @@ class DupGroupRead(BaseModel):
 
 class KeeperBody(BaseModel):
     file_id: int
+
+
+class RootTargetRead(BaseModel):
+    id: int
+    path: str
+    label: str | None
+    target_root: str | None
+
+
+class SettingsRead(BaseModel):
+    naming_template: str
+    folder_template: str
+    roots: list[RootTargetRead]
+
+
+class SettingsUpdate(BaseModel):
+    naming_template: str | None = None
+    folder_template: str | None = None
+
+
+class RootTargetUpdate(BaseModel):
+    target_root: str | None = None
