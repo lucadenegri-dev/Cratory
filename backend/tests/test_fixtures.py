@@ -3,7 +3,7 @@ import pytest
 from mutagen import File as MutagenFile
 
 
-@pytest.mark.parametrize("fmt", ["mp3", "flac", "wav", "aiff", "m4a"])
+@pytest.mark.parametrize("fmt", ["mp3", "flac", "wav", "aiff", "aif", "m4a", "aac"])
 def test_fixture_is_readable_audio(fixture_path, fmt):
     mf = MutagenFile(fixture_path(fmt))
     assert mf is not None

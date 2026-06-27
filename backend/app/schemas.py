@@ -9,6 +9,8 @@ class ScanSummary(BaseModel):
     roots: list[int]
     found: int = 0
     inserted: int = 0
+    # Righe ri-toccate (last_scanned_at aggiornato), NON righe con contenuto cambiato.
+    # Una re-scansione su disco immutato produce updated == N (file già noti).
     updated: int = 0
     moved: int = 0
     missing: int = 0

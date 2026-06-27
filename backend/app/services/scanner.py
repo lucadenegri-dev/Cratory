@@ -61,6 +61,16 @@ def _scan_file_fields(path: str, ext: str) -> dict:
 
 
 def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
+    """Scansiona le root date e aggiorna il DB.
+
+    Semantica di idempotenza:
+    - Nessuna riga duplicata: ogni file sul disco corrisponde a esattamente una riga.
+    - Nessun falso missing/moved: i file invariati restano "present".
+    - ``summary.updated`` conta le righe *ri-toccate* (``last_scanned_at`` aggiornato),
+      NON le righe il cui contenuto è cambiato.  Anche una re-scansione su disco
+      immutato produce ``updated == N`` (dove N è il numero di file già noti).
+      Chunk 2 non deve interpretare ``updated`` come "contenuto modificato".
+    """
     summary = ScanSummary(roots=[r.id for r in roots], started_at=utcnow())
     work = [(root, p, e) for root in roots for p, e in _iter_audio_files(root.path)]
     summary.found = len(work)
