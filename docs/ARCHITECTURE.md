@@ -82,6 +82,7 @@ backend/app/
   services/       logica applicativa deterministica e orchestrazione
   repositories.py query SQLAlchemy e mutazioni DB
   models.py       modelli SQLAlchemy
+  db.py           sessione/engine, ensure_schema e migrazioni idempotenti
   schemas.py      request/response Pydantic
   serializers.py  ORM -> Pydantic, campi derivati
   integrations/   client esterni dietro interfacce
@@ -142,6 +143,7 @@ Entita' principali:
 - `Setlist`: set generato, prompt, strategia, spiegazione globale e validazione.
 - `SetlistTrack`: posizione, ruolo, score, note di transizione, motivo AI e rischio.
 - `EnrichmentCache`: cache provider, incluso not-found.
+- `SpotifyToken`: token OAuth Spotify persistiti per l'utente locale.
 - `DjSet`: mix esterno identificato via Shazam, separato dalla libreria.
 - `DjSetTrack`: traccia identificata dentro un `DjSet`.
 
@@ -180,6 +182,7 @@ nessun provider la fornisce.
 | AcousticBrainz | attiva | dataset storico, nessuna API key |
 | GetSongBPM | attiva | API key opzionale/consigliata |
 | Last.fm | attiva | API key per enrichment tag e Discovery |
+| Discogs | attiva | crate digging Discovery "Scava" per genere/etichetta; funziona senza token, `DISCOGS_TOKEN` alza il rate limit |
 | LLM | attiva se configurata | output strutturati e validati |
 | Shazam | attiva se dipendenze presenti | ffmpeg, yt-dlp, shazamio |
 | SoundCloud import | backlog | da valutare fattibilita' API |
