@@ -146,8 +146,8 @@ export function Equalizer({ className }: { className?: string }) {
 export const Spinner = Equalizer;
 
 /* Pseudo-waveform deterministica (no Math.random: stessa forma su server e client). */
-const WAVE: number[] = Array.from({ length: 56 }, (_, i) => {
-  const x = i / 56;
+const WAVE: number[] = Array.from({ length: 112 }, (_, i) => {
+  const x = i / 112;
   const a =
     0.30 +
     0.32 * Math.abs(Math.sin(x * Math.PI * 7)) +
