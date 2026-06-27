@@ -39,7 +39,27 @@ _VARIANT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Pesi del termine "gusto" nello score (somma 1.0). Tarabili.
+W_ARTIST = 0.5
+W_LABEL = 0.3
+W_STYLE = 0.2
+# Quante release di un artista nel riferimento bastano per familiarita' piena.
+FAMILIARITY_FULL_AT = 3
+
+# Soglie per i reason code (spiegazioni). Costanti, deterministiche.
+REASON_RARE_MIN_WANT = 10       # almeno 10 persone lo cercano
+REASON_RARE_MIN_DEMAND = 0.5    # want/(have+want) >= 0.5
+REASON_DEEP_CUT_MAX_HAVE = 50   # pochissimi lo possiedono
+REASON_RECENT_MIN = 0.8         # recency alta (ultimi ~3 anni su span 15)
+
 SearchReleases = Callable[..., list[dict[str, Any]]]
+
+
+@dataclass
+class Reason:
+    """Spiegazione strutturata: codice + payload dati. Il testo lo compone la UI."""
+    code: str
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -58,6 +78,7 @@ class DiscoveryLead:
     want: int = 0
     isrc: str | None = None
     score: float = 0.0
+    reasons: list[Reason] = field(default_factory=list)
 
 
 @dataclass
@@ -92,6 +113,50 @@ def _dedup_title(title: str) -> str:
 
 def _dedup_key(artist: str, title: str) -> tuple[str, str]:
     return _norm(artist), _norm(_dedup_title(title))
+
+
+def _style_tokens(value: Any) -> set[str]:
+    """Token normalizzati di uno style/genere ('Deep House' -> {'deep','house'})."""
+    return {tok for tok in re.split(r"[^a-z0-9]+", _norm(value)) if tok}
+
+
+@dataclass
+class TasteProfile:
+    """Riassunto deterministico del gusto di un riferimento (libreria o playlist).
+
+    Costruito da una lista di Track-like (servono artist, label, genre).
+    Indipendente dalla dedup: misura affinita', non possesso.
+    """
+    artist_counts: dict[str, int] = field(default_factory=dict)
+    owned_labels: set[str] = field(default_factory=set)
+    genre_tokens: set[str] = field(default_factory=set)
+
+    @classmethod
+    def from_tracks(cls, tracks: list) -> "TasteProfile":
+        artist_counts: dict[str, int] = {}
+        owned_labels: set[str] = set()
+        genre_tokens: set[str] = set()
+        for t in tracks or []:
+            a = _norm(getattr(t, "artist", None))
+            if a:
+                artist_counts[a] = artist_counts.get(a, 0) + 1
+            lbl = _norm(getattr(t, "label", None))
+            if lbl:
+                owned_labels.add(lbl)
+            genre_tokens |= _style_tokens(getattr(t, "genre", None))
+        return cls(artist_counts, owned_labels, genre_tokens)
+
+    def artist_count(self, artist: str) -> int:
+        return self.artist_counts.get(_norm(artist), 0)
+
+    def familiarity(self, artist: str) -> float:
+        return min(self.artist_count(artist) / FAMILIARITY_FULL_AT, 1.0)
+
+    def label_affinity(self, label: str | None) -> float:
+        return 1.0 if label and _norm(label) in self.owned_labels else 0.0
+
+    def style_affinity(self, style: str | None) -> float:
+        return 1.0 if _style_tokens(style) & self.genre_tokens else 0.0
 
 
 def _lead_from_release(item: dict[str, Any], seed: str) -> DiscoveryLead | None:
@@ -150,18 +215,41 @@ def _demand(have: int, want: int) -> float:
     return want / (have + want)
 
 
-def _score(lead: DiscoveryLead, owned_artists: set[str], adventurousness: float, current_year: int) -> float:
-    """Familiarita' (gusto noto) vs scoperta (novita' + domanda), pesate da adventurousness.
+def _score(lead: DiscoveryLead, profile: TasteProfile, adventurousness: float, current_year: int) -> float:
+    """Scoperta (novita'+domanda) vs gusto (familiarita'+etichetta+stile), pesate da adventurousness.
 
-    A `adventurousness` alto contano novita' E domanda insieme: cosi' le rarita'
-    *richieste* salgono e il self-released anonimo (want=0) resta in basso.
+    Il termine 'gusto' combina tre segnali deterministici dal riferimento scelto:
+    quanto collezioni l'artista (graduato), se segui l'etichetta, se lo stile e' nei tuoi generi.
     """
     novelty = 1.0 - min(lead.have, _HAVE_CAP) / _HAVE_CAP
     demand = _demand(lead.have, lead.want)
     discovery = 0.5 * novelty + 0.5 * demand
-    familiarity = 1.0 if _norm(lead.artist) in owned_artists else 0.0
+    taste = (
+        W_ARTIST * profile.familiarity(lead.artist)
+        + W_LABEL * profile.label_affinity(lead.label)
+        + W_STYLE * profile.style_affinity(lead.style)
+    )
     recency = _recency(lead.year, current_year)
-    return adventurousness * discovery + (1.0 - adventurousness) * familiarity + 0.2 * recency
+    return adventurousness * discovery + (1.0 - adventurousness) * taste + 0.2 * recency
+
+
+def _reasons(lead: DiscoveryLead, profile: TasteProfile, current_year: int) -> list[Reason]:
+    """Emette i reason code attivi per un lead, secondo soglie deterministiche."""
+    out: list[Reason] = []
+    if lead.want >= REASON_RARE_MIN_WANT and _demand(lead.have, lead.want) >= REASON_RARE_MIN_DEMAND:
+        out.append(Reason("rare_wanted", {"have": lead.have, "want": lead.want}))
+    if lead.have <= REASON_DEEP_CUT_MAX_HAVE:
+        out.append(Reason("deep_cut", {"have": lead.have}))
+    if profile.label_affinity(lead.label) > 0:
+        out.append(Reason("label_followed", {"label": lead.label}))
+    count = profile.artist_count(lead.artist)
+    if count > 0:
+        out.append(Reason("artist_collected", {"artist": lead.artist, "count": count}))
+    if profile.style_affinity(lead.style) > 0:
+        out.append(Reason("style_match", {"style": lead.style}))
+    if _recency(lead.year, current_year) >= REASON_RECENT_MIN:
+        out.append(Reason("recent", {"year": lead.year}))
+    return out
 
 
 def _select(leads: list[DiscoveryLead], limit: int) -> list[DiscoveryLead]:
@@ -186,14 +274,19 @@ def dig(
     value: str,
     search_releases: SearchReleases,
     library: list | None = None,
+    taste_tracks: list | None = None,
     adventurousness: float = 0.4,
     limit: int = DEFAULT_DIG_LIMIT,
 ) -> DigResult:
-    """Lead non posseduti dal seme dato (genere|etichetta), de-noised e ordinati per gusto."""
+    """Lead non posseduti dal seme dato (genere|etichetta), de-noised e ordinati per gusto.
+
+    Dedup sempre su tutta la `library`; l'affinita' di gusto usa `taste_tracks`
+    (default: la libreria stessa), che puo' essere una playlist specifica.
+    """
     if library is None:
         library = _library_tracks(db)
     owned_keys = {_dedup_key(t.artist or "", t.title or "") for t in library if t.artist and t.title}
-    owned_artists = {_norm(t.artist) for t in library if t.artist}
+    profile = TasteProfile.from_tracks(library if taste_tracks is None else taste_tracks)
 
     if seed_type == "genre":
         items = search_releases(style=value) or search_releases(genre=value)
@@ -217,7 +310,8 @@ def dig(
     adv = max(0.0, min(1.0, adventurousness))
     current_year = datetime.now(timezone.utc).year
     for lead in leads:
-        lead.score = _score(lead, owned_artists, adv, current_year)
+        lead.score = _score(lead, profile, adv, current_year)
+        lead.reasons = _reasons(lead, profile, current_year)
     selected = _select(leads, limit)
 
     logger.info("Discovery dig %s=%r: %s lead (adv=%.2f)", seed_type, value, len(selected), adv)

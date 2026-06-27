@@ -17,6 +17,7 @@ import {
   type DiscoveryCandidate,
   type DiscoveryDigResponse,
   type DiscoveryLead,
+  type Reason,
   type DiscoveryGenres,
   type Playlist,
   type LabelStats,
@@ -28,6 +29,25 @@ import { cn } from "@/lib/cn";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
+}
+
+function reasonLabel(r: Reason): string {
+  switch (r.code) {
+    case "rare_wanted":
+      return `raro & richiesto ${r.data.have}/${r.data.want}`;
+    case "deep_cut":
+      return "deep cut";
+    case "label_followed":
+      return `etichetta che segui${r.data.label ? ` · ${r.data.label}` : ""}`;
+    case "artist_collected":
+      return "artista che collezioni";
+    case "style_match":
+      return "stile che ascolti";
+    case "recent":
+      return `recente${r.data.year ? ` · ${r.data.year}` : ""}`;
+    default:
+      return r.code;
+  }
 }
 
 type Mode = "expand" | "dig";
@@ -65,6 +85,7 @@ export default function DiscoveryPage() {
   const [selectedLabel, setSelectedLabel] = useState<string>("");
   const [showAllLabels, setShowAllLabels] = useState(false);
   const [adventurousness, setAdventurousness] = useState(0.45);
+  const [tasteRef, setTasteRef] = useState<number | null>(null); // null = tutta la libreria
   const [dig, setDig] = useState<DiscoveryDigResponse | null>(null);
 
   // condivisi
@@ -131,7 +152,7 @@ export default function DiscoveryPage() {
     setDig(null);
     jobs.startClientJob("dig", "Crate digging");
     try {
-      setDig(await discoveryDig(digSeed, value, { adventurousness }));
+      setDig(await discoveryDig(digSeed, value, { adventurousness, tastePlaylistId: tasteRef }));
     } catch (e) {
       setError(err(e));
     } finally {
@@ -232,6 +253,23 @@ export default function DiscoveryPage() {
                 </Button>
               </div>
             </div>
+
+            {/* riferimento di gusto: rispetto a cosa misurare l'affinità */}
+            {(playlists?.length ?? 0) > 0 && (
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-muted">Affinità rispetto a</span>
+                <Select
+                  value={tasteRef ?? ""}
+                  onChange={(e) => setTasteRef(e.target.value ? Number(e.target.value) : null)}
+                  disabled={busy}
+                >
+                  <option value="">Tutta la libreria</option>
+                  {playlists?.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </Select>
+              </div>
+            )}
 
             {/* picker: genere */}
             {digSeed === "genre" && (
@@ -443,6 +481,18 @@ function LeadRow({ l }: { l: DiscoveryLead }) {
           <span>· {l.have} in collezione</span>
           {l.want > 0 && <span>· {l.want} cercano</span>}
         </div>
+        {l.reasons.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {l.reasons.map((r, i) => (
+              <span
+                key={`${r.code}-${i}`}
+                className="inline-flex items-center rounded-none border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted"
+              >
+                {reasonLabel(r)}
+              </span>
+            ))}
+          </div>
+        )}
         {addError && <p className="mt-1 text-xs text-danger">⚠ {addError}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">

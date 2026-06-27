@@ -14,8 +14,16 @@ def _release(title, *, year=2020, label="Lbl", style="Acid House", have=100, wan
     }
 
 
-def _lib(*pairs):
-    return [SimpleNamespace(artist=a, title=t) for a, t in pairs]
+def _lib(*items):
+    """Track finte. Ogni item: (artist, title) o (artist, title, {"label":..., "genre":...})."""
+    out = []
+    for it in items:
+        extra = it[2] if len(it) > 2 else {}
+        out.append(SimpleNamespace(
+            artist=it[0], title=it[1],
+            label=extra.get("label"), genre=extra.get("genre"),
+        ))
+    return out
 
 
 def test_lead_parsing_and_various_skipped():
@@ -147,3 +155,161 @@ def test_dig_demand_beats_anonymous_rarity():
     res = dig(None, seed_type="genre", value="x", search_releases=search,
               library=[], adventurousness=0.9)
     assert res.leads[0].artist == "Wanted"  # la gemma richiesta in cima
+
+
+# --- Task 1: TasteProfile + tokenizzazione stile -----------------------------
+
+from app.services.discovery_dig import TasteProfile, _style_tokens, FAMILIARITY_FULL_AT
+
+
+def test_style_tokens_normalizes_and_splits():
+    assert _style_tokens("Deep House") == {"deep", "house"}
+    assert _style_tokens("Tech-House / Minimal") == {"tech", "house", "minimal"}
+    assert _style_tokens(None) == set()
+    assert _style_tokens("") == set()
+
+
+def test_taste_profile_from_tracks_aggregates():
+    p = TasteProfile.from_tracks(_lib(
+        ("Aphex Twin", "Xtal", {"label": "Warp", "genre": "IDM"}),
+        ("Aphex Twin", "Ageispolis", {"label": "Warp", "genre": "IDM"}),
+        ("Boards Of Canada", "Roygbiv", {"label": "Warp", "genre": "Downtempo"}),
+    ))
+    assert p.artist_count("aphex twin") == 2
+    assert p.owned_labels == {"warp"}
+    assert {"idm", "downtempo"} <= p.genre_tokens
+
+
+def test_taste_profile_familiarity_is_graduated():
+    p = TasteProfile.from_tracks(_lib(
+        ("Solo", "A"),
+        ("Trio", "A"), ("Trio", "B"), ("Trio", "C"),
+    ))
+    assert p.familiarity("Solo") == 1 / FAMILIARITY_FULL_AT
+    assert p.familiarity("Trio") == 1.0          # 3 release: piena
+    assert p.familiarity("Unknown") == 0.0
+
+
+def test_taste_profile_affinities():
+    p = TasteProfile.from_tracks(_lib(("A", "B", {"label": "Warp", "genre": "Acid House"})))
+    assert p.label_affinity("Warp") == 1.0
+    assert p.label_affinity("warp") == 1.0
+    assert p.label_affinity("Other") == 0.0
+    assert p.label_affinity(None) == 0.0
+    assert p.style_affinity("Acid House") == 1.0     # token in comune
+    assert p.style_affinity("Techno") == 0.0
+    assert p.style_affinity(None) == 0.0
+
+
+# --- Task 2: scoring esteso con i segnali di gusto ---------------------------
+
+
+def test_dig_label_boost_changes_order():
+    def search(**kw):
+        return [
+            _release("No Label Match - Track", rid=1, label="Unknown Lbl", have=20),
+            _release("Followed - Track", rid=2, label="Warp", have=20),
+        ]
+
+    # Riferimento di gusto: possiedo qualcosa su Warp. adv basso => conta il gusto.
+    res = dig(None, seed_type="genre", value="x", search_releases=search,
+              library=[], taste_tracks=_lib(("Whoever", "Whatever", {"label": "Warp"})),
+              adventurousness=0.1)
+    assert res.leads[0].label == "Warp"
+
+
+def test_dig_style_affinity_changes_order():
+    def search(**kw):
+        return [
+            _release("Off Style - Track", rid=1, style="Trance", have=20),
+            _release("On Style - Track", rid=2, style="Acid House", have=20),
+        ]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search,
+              library=[], taste_tracks=_lib(("Whoever", "Whatever", {"genre": "Acid House"})),
+              adventurousness=0.1)
+    assert res.leads[0].style == "Acid House"
+
+
+def test_dig_graduated_familiarity_prefers_more_collected():
+    def search(**kw):
+        return [
+            _release("Once - Track", rid=1, have=20),
+            _release("Thrice - Track", rid=2, have=20),
+        ]
+
+    # 'Thrice' lo possiedo 3 volte (familiarita' piena), 'Once' una volta sola.
+    res = dig(None, seed_type="genre", value="x", search_releases=search,
+              library=[],
+              taste_tracks=_lib(
+                  ("Once", "a"),
+                  ("Thrice", "a"), ("Thrice", "b"), ("Thrice", "c"),
+              ),
+              adventurousness=0.1)
+    assert res.leads[0].artist == "Thrice"
+
+
+def test_dig_dedup_is_library_wide_even_with_playlist_taste():
+    def search(**kw):
+        return [_release("Owned Elsewhere - Track", rid=1)]
+
+    # Il riferimento di gusto e' una playlist che NON contiene il brano,
+    # ma il brano e' gia' in libreria: deve restare scartato (dedup library-wide).
+    res = dig(None, seed_type="genre", value="x", search_releases=search,
+              library=_lib(("Owned Elsewhere", "Track")),
+              taste_tracks=_lib(("Other", "Thing")), limit=50)
+    assert res.leads == []
+
+
+# --- Task 3: reason codes (spiegazioni deterministiche) ----------------------
+
+from datetime import datetime, timezone
+
+
+def _codes(lead):
+    return {r.code for r in lead.reasons}
+
+
+def test_dig_emits_rare_wanted_and_deep_cut():
+    def search(**kw):
+        return [_release("Cult - Grail", rid=1, have=3, want=120)]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[])
+    lead = res.leads[0]
+    assert "rare_wanted" in _codes(lead)
+    assert "deep_cut" in _codes(lead)
+    rare = next(r for r in lead.reasons if r.code == "rare_wanted")
+    assert rare.data == {"have": 3, "want": 120}
+
+
+def test_dig_no_rare_wanted_when_not_demanded():
+    def search(**kw):
+        return [_release("Common - Tune", rid=1, have=4000, want=2)]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[])
+    codes = _codes(res.leads[0])
+    assert "rare_wanted" not in codes
+    assert "deep_cut" not in codes        # have=4000 > soglia
+
+
+def test_dig_emits_taste_reason_codes():
+    def search(**kw):
+        return [_release("Followed - Track", rid=1, label="Warp", style="Acid House", have=20)]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[],
+              taste_tracks=_lib(("Followed", "Older", {"label": "Warp", "genre": "Acid House"})))
+    lead = res.leads[0]
+    codes = _codes(lead)
+    assert {"label_followed", "artist_collected", "style_match"} <= codes
+    art = next(r for r in lead.reasons if r.code == "artist_collected")
+    assert art.data == {"artist": "Followed", "count": 1}
+
+
+def test_dig_emits_recent_reason():
+    cur = datetime.now(timezone.utc).year
+
+    def search(**kw):
+        return [_release("New - Drop", rid=1, year=cur, have=20)]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[])
+    assert "recent" in _codes(res.leads[0])

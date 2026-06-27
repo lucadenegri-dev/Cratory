@@ -162,6 +162,14 @@ release/tracce non ancora possedute, con ranking per profondita'/novita' (domand
 want/have) e preset Familiare/Bilanciato/Avventuroso. `genres` elenca generi e stili
 disponibili come seme del dig.
 
+Il ranking del dig combina la scoperta (novita'+domanda) con il **gusto**: familiarita'
+graduata sull'artista, etichetta posseduta e affinita' di stile coi tuoi generi.
+L'affinita' e' misurata rispetto a un riferimento selezionabile via il campo opzionale
+`taste_playlist_id` (default: tutta la libreria); la **dedup resta sempre library-wide**.
+Ogni lead porta `reasons[]` deterministici (`{code, data}`) per spiegare il perche'
+(es. `rare_wanted`, `deep_cut`, `label_followed`, `artist_collected`, `style_match`,
+`recent`); il testo dei chip lo compone la UI.
+
 `add` importa un candidato nella libreria dell'app in modo idempotente. Non scrive su
 Spotify. L'AI, se configurata e richiesta, aggiunge spiegazioni ma non sceglie i
 candidati.
