@@ -6,6 +6,7 @@ import threading
 
 from app.db import SessionLocal
 from app.models import ScanRoot, utcnow
+from app.services import analysis
 from app.services.scanner import scan
 
 logger = logging.getLogger(__name__)
@@ -44,13 +45,15 @@ def _run(root_ids: list[int] | None) -> None:
         query = db.query(ScanRoot)
         roots = query.filter(ScanRoot.id.in_(root_ids)).all() if root_ids else query.all()
         summary = scan(db, roots, on_progress=on_progress)
+        analysis_summary = analysis.recompute(db, on_progress=on_progress)
+        result = summary.model_dump(mode="json")
+        result["analysis"] = analysis_summary.model_dump(mode="json")
         with _lock:
             _state.update(
-                status="done", phase=None,
-                result=summary.model_dump(mode="json"),
+                status="done", phase=None, result=result,
                 finished_at=utcnow().isoformat(),
             )
-        logger.info("Scan completato: %s", summary.model_dump(mode="json"))
+        logger.info("Scan+analisi completati: %s", result)
     except Exception as exc:  # noqa: BLE001 — il job non deve propagare
         logger.exception("Scan fallito")
         with _lock:
