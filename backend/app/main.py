@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.db import ensure_schema
-from app.routers import analyze, scan, sources
+from app.routers import analyze, issues, scan, sources
 
 
 @asynccontextmanager
@@ -18,6 +18,7 @@ app = FastAPI(title="DjOrganizer", lifespan=lifespan)
 app.include_router(sources.router)
 app.include_router(scan.router)
 app.include_router(analyze.router)
+app.include_router(issues.router)
 
 
 @app.get("/api/health")

@@ -41,3 +41,27 @@ class AnalyzeSummary(BaseModel):
     dup_files: int = 0
     started_at: datetime | None = None
     finished_at: datetime | None = None
+
+
+class IssueRead(BaseModel):
+    id: int
+    file_id: int
+    type: str
+    field: str | None
+    severity: str
+    detail: str
+    suggested_fix_json: dict | None
+    status: str
+    file_path: str
+    artist: str | None
+    title: str | None
+
+
+class IssueStatusBody(BaseModel):
+    status: str
+
+
+class IssueBulkBody(BaseModel):
+    type: str | None = None
+    severity: str | None = None
+    status: str
