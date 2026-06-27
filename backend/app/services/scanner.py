@@ -64,16 +64,21 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     summary = ScanSummary(roots=[r.id for r in roots], started_at=utcnow())
     work = [(root, p, e) for root in roots for p, e in _iter_audio_files(root.path)]
     summary.found = len(work)
+    seen_by_root: dict[int, set[str]] = {r.id: set() for r in roots}
+    new_inserts: list[AudioFile] = []
     for index, (root, path, ext) in enumerate(work):
+        seen_by_root[root.id].add(path)
         fields = _scan_file_fields(path, ext)
         existing = db.scalar(
             select(AudioFile).where(AudioFile.root_id == root.id, AudioFile.path == path)
         )
         if existing is None:
-            db.add(AudioFile(
+            row = AudioFile(
                 root_id=root.id, path=path, status="present",
                 first_seen_at=utcnow(), last_scanned_at=utcnow(), **fields,
-            ))
+            )
+            db.add(row)
+            new_inserts.append(row)
             summary.inserted += 1
         else:
             for key, value in fields.items():
@@ -85,8 +90,39 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
             summary.errors += 1
         if on_progress is not None:
             on_progress(index + 1, summary.found, "scanning")
+    db.flush()  # assegna gli id ai nuovi insert
+    _reconcile(db, roots, seen_by_root, new_inserts, summary)
     for root in roots:
         root.last_scanned_at = utcnow()
     db.commit()
     summary.finished_at = utcnow()
     return summary
+
+
+def _reconcile(db, roots, seen_by_root, new_inserts, summary) -> None:
+    """Marca i file spariti come missing; se l'hash combacia con un nuovo insert,
+    li tratta come spostamento (aggiorna il path della riga esistente)."""
+    inserts_by_key: dict[tuple[int, str], AudioFile] = {}
+    for row in new_inserts:
+        if row.content_hash:
+            inserts_by_key.setdefault((row.root_id, row.content_hash), row)
+    for root in roots:
+        seen = seen_by_root[root.id]
+        all_rows = db.scalars(select(AudioFile).where(AudioFile.root_id == root.id)).all()
+        gone = [r for r in all_rows if r.path not in seen and r.status != "missing"]
+        for row in gone:
+            key = (root.id, row.content_hash) if row.content_hash else None
+            cand = inserts_by_key.get(key) if key else None
+            if cand is not None and cand.id != row.id:
+                moved_path = cand.path
+                db.delete(cand)
+                db.flush()
+                row.path = moved_path
+                row.status = "present"
+                row.last_scanned_at = utcnow()
+                summary.moved += 1
+                summary.inserted -= 1
+                del inserts_by_key[key]
+            else:
+                row.status = "missing"
+                summary.missing += 1

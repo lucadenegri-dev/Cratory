@@ -90,3 +90,30 @@ def test_stat_failure_recorded_not_crash(db, copy_fixture, tmp_path):
     broken = db.scalar(select(AudioFile).where(AudioFile.path.like("%ghost%")))
     assert broken is not None, "La riga per ghost.mp3 deve essere inserita anche se rotta"
     assert broken.scan_error is not None, "scan_error deve descrivere il fallimento del stat"
+
+
+def test_rescan_marks_missing(db, copy_fixture, tmp_path):
+    root = _make_root(db, copy_fixture, tmp_path, [("a.flac", "flac")])
+    scan(db, [root])
+    (tmp_path / "lib" / "a.flac").unlink()
+    summary = scan(db, [root])
+    assert summary.missing == 1 and summary.inserted == 0
+    row = db.scalar(select(AudioFile))
+    assert row.status == "missing"
+
+
+def test_rescan_reconciles_move(db, copy_fixture, tmp_path):
+    root = _make_root(db, copy_fixture, tmp_path, [("a.flac", "flac")])
+    scan(db, [root])
+    original = db.scalar(select(AudioFile))
+    original_id, first_seen = original.id, original.first_seen_at
+    (tmp_path / "lib" / "a.flac").rename(tmp_path / "lib" / "b.flac")
+    summary = scan(db, [root])
+    assert summary.moved == 1 and summary.missing == 0 and summary.inserted == 0
+    db.expire_all()
+    rows = db.scalars(select(AudioFile)).all()
+    assert len(rows) == 1
+    assert rows[0].id == original_id
+    assert rows[0].path.endswith("b.flac")
+    assert rows[0].first_seen_at == first_seen
+    assert rows[0].status == "present"
