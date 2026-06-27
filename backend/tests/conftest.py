@@ -29,3 +29,28 @@ def db():
         yield session
     finally:
         session.close()
+
+
+import shutil  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture
+def fixture_path():
+    def _path(fmt: str) -> str:
+        return str(_FIXTURES / f"silence.{fmt}")
+
+    return _path
+
+
+@pytest.fixture
+def copy_fixture():
+    def _copy(fmt: str, dest) -> str:
+        dest = Path(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(_FIXTURES / f"silence.{fmt}", dest)
+        return str(dest)
+
+    return _copy
