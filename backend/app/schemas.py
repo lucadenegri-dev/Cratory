@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ScanSummary(BaseModel):
@@ -15,3 +15,18 @@ class ScanSummary(BaseModel):
     errors: int = 0
     started_at: datetime | None = None
     finished_at: datetime | None = None
+
+
+class ScanRootCreate(BaseModel):
+    path: str
+    label: str | None = None
+
+
+class ScanRootRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    path: str
+    label: str | None
+    last_scanned_at: datetime | None
+    file_count: int
