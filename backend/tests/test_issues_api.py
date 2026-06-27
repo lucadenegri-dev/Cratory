@@ -53,3 +53,18 @@ def test_bulk_dismiss(db):
                                                      "status": "dismissed"})
         assert resp.json()["updated"] == 2
         assert all(i["status"] == "dismissed" for i in client.get("/api/issues").json())
+
+
+def test_bulk_accept_skips_non_fixable(db):
+    """bulk accept: solo le issue con suggested_fix_json vengono accettate."""
+    _seed(db)  # 1 fixable (inconsistent_casing), 1 non-fixable (missing_metadata)
+    with TestClient(app) as client:
+        resp = client.post("/api/issues/bulk", json={"status": "accepted"})
+        assert resp.status_code == 200
+        assert resp.json() == {"updated": 1}
+
+        all_issues = client.get("/api/issues").json()
+        fixable = next(i for i in all_issues if i["type"] == "inconsistent_casing")
+        non_fixable = next(i for i in all_issues if i["type"] == "missing_metadata")
+        assert fixable["status"] == "accepted"
+        assert non_fixable["status"] == "open"

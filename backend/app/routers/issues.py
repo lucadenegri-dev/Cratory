@@ -32,7 +32,7 @@ def list_issues(severity: str | None = None, type: str | None = None,
         stmt = stmt.where(Issue.type == type)
     if status:
         stmt = stmt.where(Issue.status == status)
-    if root_id:
+    if root_id is not None:
         stmt = stmt.where(AudioFile.root_id == root_id)
     return [_to_read(i, f) for i, f in db.execute(stmt).all()]
 
