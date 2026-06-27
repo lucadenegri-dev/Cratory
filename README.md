@@ -1,71 +1,71 @@
 # Cratory
 
-> Nuovo nome dell'app finora chiamata DJ Assistant. I nomi tecnici legacy come
-> `djassistant.db` restano invariati per compatibilita' locale.
+> A personal, self-hosted workbench that turns streaming playlists into thought-out DJ sets.
+> (Formerly "DJ Assistant"; legacy technical names like `djassistant.db` are kept for local compatibility.)
 
-Cratory e' una webapp personale, locale/self-hosted e mono-utente per preparare DJ
-set a partire da playlist streaming. Importa playlist Spotify o tracklist manuali,
-normalizza le tracce, arricchisce BPM/key/mood/energia tramite provider esterni,
-analizza i buchi della libreria, genera bozze di set spiegate e aiuta a scoprire
-nuova musica affine al proprio gusto.
+Cratory is a personal, local/self-hosted, single-user web app for DJ set preparation. It
+imports Spotify playlists (or pasted tracklists), normalizes and de-duplicates tracks,
+enriches them with mixing features (BPM, Camelot key, mood, energy) from external
+providers, analyzes library gaps, generates explained set drafts, and helps you discover
+music that fits your taste.
 
-Non e' un player e non conserva audio. Il modulo Shazam, quando disponibile, usa
-download temporanei solo per fingerprinting di mix esterni e salva esclusivamente la
-tracklist identificata.
+It is **not a SaaS** — and that is a design choice, not a limitation. Spotify's Web API
+forbids a public multi-tenant Spotify app (development mode caps at 5 users; extended
+quota needs a launched organization with 250k+ monthly users), so Cratory leans the other
+way on purpose: a single-user tool where the value is product quality, not scale. It never
+plays or stores audio — the Shazam module downloads audio only temporarily to fingerprint
+external mixes, and persists only the identified tracklist.
 
-## Cosa fa
+## Features
 
-- Importa playlist Spotify, liked tracks e tracklist manuali.
-- Deduplica le tracce con priorita' ISRC, id piattaforma, artista/titolo/durata e fuzzy match.
-- Arricchisce feature musicali con Deezer, MusicBrainz, AcousticBrainz, GetSongBPM e Last.fm.
-- Mantiene fonte e confidenza dei dati; BPM/key esistenti non vengono sovrascritti.
-- Permette correzioni manuali di BPM, Camelot, mood, energia, genere e label.
-- Genera set con motore deterministico e, se configurata, AI validata.
-- Classifica transizioni come sicure, rischiose o buoni reset.
-- Espande una playlist con Discovery per gusto (Last.fm + resolver Spotify) e fa
-  crate digging per genere o etichetta via Discogs ("Scava").
-- Identifica tracklist di mix via Shazam/yt-dlp/ffmpeg in un corpus separato dalla libreria.
+- Import Spotify playlists, liked tracks, and pasted tracklists.
+- De-duplicate by `ISRC → platform id → artist/title/duration → fuzzy match`.
+- Enrich features via Deezer, MusicBrainz, AcousticBrainz, GetSongBPM and Last.fm —
+  keeping source and confidence, and never overwriting existing BPM/key.
+- Manual corrections for BPM, Camelot, mood, energy, genre and label (manual wins).
+- Generate sets with a deterministic engine plus optional, validated AI.
+- Classify transitions as technically safe, creative risk, or good reset.
+- Discovery by taste: expand a playlist (Last.fm + Spotify resolver) or crate-dig by
+  genre/label via Discogs ("Scava").
+- Identify mix tracklists via Shazam/yt-dlp/ffmpeg into a corpus kept separate from the library.
 
-## Documentazione
+## Architecture at a glance
 
-| Documento | Uso |
-|---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Principi, pipeline, layer backend, modello dati e integrazioni |
-| [docs/API.md](docs/API.md) | Contratti REST correnti del backend FastAPI |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Stato, naming, backlog e prossimi passi |
-| [PROGRESS.md](PROGRESS.md) | Diario operativo compatto per riprendere il lavoro |
-| [CLAUDE.md](CLAUDE.md) | Guida per l'AI collaboratrice del progetto |
+![Cratory architecture](docs/architettura.svg)
 
-## Stack
+A **deterministic engine** owns the facts: import, de-duplication, enrichment, scoring,
+roles, gap analysis, discovery ranking and validation. The **AI layer** owns language:
+prompt interpretation, narrative direction and explanations. The AI never sees the whole
+library — the Candidate Engine passes it at most 60 candidates — and every AI output is
+validated against Pydantic schemas before it is shown or saved. BPM, key and musical
+features are never invented: they come from providers or explicit manual correction.
+
+Full picture in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Tech stack
 
 ```text
 Backend:   Python, FastAPI, SQLAlchemy, Pydantic
-Frontend:  Next.js 16, React, Tailwind/design system
-Database:  SQLite locale, PostgreSQL in backlog
-AI:        LLM dietro interfaccia, output validati con Pydantic
-External:  Spotify, Deezer, MusicBrainz, AcousticBrainz, GetSongBPM, Last.fm, Shazam
+Frontend:  Next.js 16, React, Tailwind / design system
+Database:  SQLite (local); PostgreSQL in backlog
+AI:        LLM behind an interface, outputs validated with Pydantic
+External:  Spotify, Deezer, MusicBrainz, AcousticBrainz, GetSongBPM, Last.fm, Discogs, Shazam
 ```
 
-## Setup locale
+## Quickstart
 
-Prerequisiti: Python 3.12+, Node.js 20+. Per il modulo Shazam servono anche `ffmpeg`
-di sistema e le dipendenze Python `yt-dlp` e `shazamio` incluse in `backend/requirements.txt`.
+Prerequisites: Python 3.12+, Node.js 20+. The Shazam module also needs system `ffmpeg`
+plus the `yt-dlp` and `shazamio` Python dependencies (in `backend/requirements.txt`).
 
 Backend:
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate      # Windows: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 cp .env.example .env
 uvicorn app.main:app --reload --port 8000
-```
-
-Su Windows PowerShell, l'attivazione dell'ambiente e':
-
-```powershell
-.\.venv\Scripts\Activate.ps1
 ```
 
 Frontend:
@@ -76,17 +76,14 @@ npm install
 npm run dev
 ```
 
-URL locali:
+Local URLs: app at `http://localhost:3000`, API docs at `http://localhost:8000/docs`,
+health at `http://localhost:8000/api/health`.
 
-- App: http://localhost:3000
-- API docs: http://localhost:8000/docs
-- Healthcheck: http://localhost:8000/api/health
+## Configuration
 
-## Configurazione
+Variables live in `backend/.env` (start from `backend/.env.example`).
 
-Le variabili stanno in `backend/.env`, partendo da `backend/.env.example`.
-
-Minimo per import Spotify:
+Minimum for Spotify import:
 
 ```text
 SPOTIFY_CLIENT_ID=
@@ -94,12 +91,13 @@ SPOTIFY_CLIENT_SECRET=
 SPOTIFY_REDIRECT_URI=http://127.0.0.1:8000/api/spotify/callback
 ```
 
-Provider consigliati:
+Recommended providers:
 
 ```text
 MUSICBRAINZ_USER_AGENT=
 GETSONGBPM_API_KEY=
 LASTFM_API_KEY=
+DISCOGS_TOKEN=
 DEEZER_ENABLED=true
 ACOUSTICBRAINZ_ENABLED=true
 AI_API_KEY=
@@ -107,56 +105,55 @@ AI_MODEL=
 AI_MODEL_CREATIVE=
 ```
 
-Spotify non fornisce BPM/key affidabili per il mixing. Serve per identita' traccia,
-metadata editoriali, import playlist e creazione playlist in export.
+Spotify provides track identity, editorial metadata, covers, duration, ISRC, URLs and
+playlists — not reliable mixing BPM/key. `DISCOGS_TOKEN` is optional: Discovery "Scava"
+works without it; the token only raises the rate limit.
 
-## Database locale
+## Database
 
-Il database canonico resta:
-
-```text
-backend/data/djassistant.db
-```
-
-I path SQLite relativi in `DATABASE_URL` vengono risolti rispetto a `backend/`, cosi'
-l'app non crea database diversi in base alla current working directory.
-
-Pulizia dati utente:
+The canonical local database is `backend/data/djassistant.db` (the legacy name is kept on
+purpose). Relative SQLite paths in `DATABASE_URL` resolve against `backend/`, so the app
+doesn't create stray databases per working directory. To wipe user data:
 
 ```bash
 cd backend
 python -m app.tools.clean_user_data library --include-backups
 ```
 
-La modalita' `library` svuota playlist, tracce, set e cache enrichment, preservando i
-token Spotify. La modalita' `all` elimina anche i token, salvo `--preserve-tokens`.
+The `library` mode clears playlists, tracks, sets and the enrichment cache while preserving
+Spotify tokens; `all` also removes tokens unless `--preserve-tokens` is passed.
 
-## Workflow consigliato
+## Workflow
 
-1. Avvia backend e frontend.
-2. In Impostazioni configura Spotify e collega l'account.
-3. Importa una playlist Spotify o incolla una tracklist manuale.
-4. Lascia partire l'enrichment automatico o rilancialo dalla playlist.
-5. Correggi manualmente eventuali BPM/key mancanti importanti.
-6. Genera un set in modalita' tecnica o creativa.
-7. Controlla transizioni, warning e alternative.
-8. Esporta il set o crea una playlist Spotify.
-9. Usa Discovery (espandi playlist o Scava per genere/etichetta via Discogs) per
-   trovare tracce affini al tuo gusto e aggiungerle alla libreria.
+Start backend + frontend → in Settings, connect Spotify → import a playlist or paste a
+tracklist → let enrichment run → fix any important missing BPM/key → generate a set
+(technical or creative) → review transitions, warnings and alternatives → export or create
+a Spotify playlist → use Discovery (expand, or "Scava" by genre/label via Discogs) to find
+tracks that fit your taste.
 
-## Test
-
-Backend:
+## Tests
 
 ```bash
-cd backend
-python -m pytest tests
+cd backend && python -m pytest tests
+cd frontend && npm run lint && npm run build
 ```
 
-Frontend:
+## Documentation
 
-```bash
-cd frontend
-npm run lint
-npm run build
-```
+| Document | Purpose |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Principles, pipeline, backend layers, data model, integrations |
+| [docs/API.md](docs/API.md) | Current FastAPI REST contracts |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Status, naming, backlog, next steps — the source of truth for project state |
+| [docs/PRODUCT.md](docs/PRODUCT.md) | Product brief: users, job-to-be-done, principles |
+| [docs/DESIGN.md](docs/DESIGN.md) | Design system ("editorial archive") |
+| [PROGRESS.md](PROGRESS.md) | Chronological work diary |
+| [CLAUDE.md](CLAUDE.md) | Guide for the AI collaborator |
+
+> Note: the README is in English as the project's showcase; the reference docs above are in
+> Italian (except the design system).
+
+## Status
+
+Core is settled; documentation has been reworked; the next open front is Discovery quality.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the current state and backlog.
