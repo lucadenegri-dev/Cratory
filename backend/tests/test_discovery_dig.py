@@ -199,3 +199,63 @@ def test_taste_profile_affinities():
     assert p.style_affinity("Acid House") == 1.0     # token in comune
     assert p.style_affinity("Techno") == 0.0
     assert p.style_affinity(None) == 0.0
+
+
+# --- Task 2: scoring esteso con i segnali di gusto ---------------------------
+
+
+def test_dig_label_boost_changes_order():
+    def search(**kw):
+        return [
+            _release("No Label Match - Track", rid=1, label="Unknown Lbl", have=20),
+            _release("Followed - Track", rid=2, label="Warp", have=20),
+        ]
+
+    # Riferimento di gusto: possiedo qualcosa su Warp. adv basso => conta il gusto.
+    res = dig(None, seed_type="genre", value="x", search_releases=search,
+              library=[], taste_tracks=_lib(("Whoever", "Whatever", {"label": "Warp"})),
+              adventurousness=0.1)
+    assert res.leads[0].label == "Warp"
+
+
+def test_dig_style_affinity_changes_order():
+    def search(**kw):
+        return [
+            _release("Off Style - Track", rid=1, style="Trance", have=20),
+            _release("On Style - Track", rid=2, style="Acid House", have=20),
+        ]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search,
+              library=[], taste_tracks=_lib(("Whoever", "Whatever", {"genre": "Acid House"})),
+              adventurousness=0.1)
+    assert res.leads[0].style == "Acid House"
+
+
+def test_dig_graduated_familiarity_prefers_more_collected():
+    def search(**kw):
+        return [
+            _release("Once - Track", rid=1, have=20),
+            _release("Thrice - Track", rid=2, have=20),
+        ]
+
+    # 'Thrice' lo possiedo 3 volte (familiarita' piena), 'Once' una volta sola.
+    res = dig(None, seed_type="genre", value="x", search_releases=search,
+              library=[],
+              taste_tracks=_lib(
+                  ("Once", "a"),
+                  ("Thrice", "a"), ("Thrice", "b"), ("Thrice", "c"),
+              ),
+              adventurousness=0.1)
+    assert res.leads[0].artist == "Thrice"
+
+
+def test_dig_dedup_is_library_wide_even_with_playlist_taste():
+    def search(**kw):
+        return [_release("Owned Elsewhere - Track", rid=1)]
+
+    # Il riferimento di gusto e' una playlist che NON contiene il brano,
+    # ma il brano e' gia' in libreria: deve restare scartato (dedup library-wide).
+    res = dig(None, seed_type="genre", value="x", search_releases=search,
+              library=_lib(("Owned Elsewhere", "Track")),
+              taste_tracks=_lib(("Other", "Thing")), limit=50)
+    assert res.leads == []

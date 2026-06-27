@@ -201,18 +201,22 @@ def _demand(have: int, want: int) -> float:
     return want / (have + want)
 
 
-def _score(lead: DiscoveryLead, owned_artists: set[str], adventurousness: float, current_year: int) -> float:
-    """Familiarita' (gusto noto) vs scoperta (novita' + domanda), pesate da adventurousness.
+def _score(lead: DiscoveryLead, profile: TasteProfile, adventurousness: float, current_year: int) -> float:
+    """Scoperta (novita'+domanda) vs gusto (familiarita'+etichetta+stile), pesate da adventurousness.
 
-    A `adventurousness` alto contano novita' E domanda insieme: cosi' le rarita'
-    *richieste* salgono e il self-released anonimo (want=0) resta in basso.
+    Il termine 'gusto' combina tre segnali deterministici dal riferimento scelto:
+    quanto collezioni l'artista (graduato), se segui l'etichetta, se lo stile e' nei tuoi generi.
     """
     novelty = 1.0 - min(lead.have, _HAVE_CAP) / _HAVE_CAP
     demand = _demand(lead.have, lead.want)
     discovery = 0.5 * novelty + 0.5 * demand
-    familiarity = 1.0 if _norm(lead.artist) in owned_artists else 0.0
+    taste = (
+        W_ARTIST * profile.familiarity(lead.artist)
+        + W_LABEL * profile.label_affinity(lead.label)
+        + W_STYLE * profile.style_affinity(lead.style)
+    )
     recency = _recency(lead.year, current_year)
-    return adventurousness * discovery + (1.0 - adventurousness) * familiarity + 0.2 * recency
+    return adventurousness * discovery + (1.0 - adventurousness) * taste + 0.2 * recency
 
 
 def _select(leads: list[DiscoveryLead], limit: int) -> list[DiscoveryLead]:
@@ -237,14 +241,19 @@ def dig(
     value: str,
     search_releases: SearchReleases,
     library: list | None = None,
+    taste_tracks: list | None = None,
     adventurousness: float = 0.4,
     limit: int = DEFAULT_DIG_LIMIT,
 ) -> DigResult:
-    """Lead non posseduti dal seme dato (genere|etichetta), de-noised e ordinati per gusto."""
+    """Lead non posseduti dal seme dato (genere|etichetta), de-noised e ordinati per gusto.
+
+    Dedup sempre su tutta la `library`; l'affinita' di gusto usa `taste_tracks`
+    (default: la libreria stessa), che puo' essere una playlist specifica.
+    """
     if library is None:
         library = _library_tracks(db)
     owned_keys = {_dedup_key(t.artist or "", t.title or "") for t in library if t.artist and t.title}
-    owned_artists = {_norm(t.artist) for t in library if t.artist}
+    profile = TasteProfile.from_tracks(library if taste_tracks is None else taste_tracks)
 
     if seed_type == "genre":
         items = search_releases(style=value) or search_releases(genre=value)
@@ -268,7 +277,7 @@ def dig(
     adv = max(0.0, min(1.0, adventurousness))
     current_year = datetime.now(timezone.utc).year
     for lead in leads:
-        lead.score = _score(lead, owned_artists, adv, current_year)
+        lead.score = _score(lead, profile, adv, current_year)
     selected = _select(leads, limit)
 
     logger.info("Discovery dig %s=%r: %s lead (adv=%.2f)", seed_type, value, len(selected), adv)
