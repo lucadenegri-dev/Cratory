@@ -30,7 +30,7 @@ def _scan_file_fields(path: str, ext: str) -> dict:
     h, method = content_hash.compute(path, ext)
     fields = {
         "ext": ext.lstrip("."),
-        "size_bytes": os.path.getsize(path),
+        "size_bytes": 0,
         "content_hash": h,
         "hash_method": method,
         "scan_error": None,
@@ -38,6 +38,11 @@ def _scan_file_fields(path: str, ext: str) -> dict:
     }
     for key in _TAG_FIELDS:
         fields.setdefault(key, None)
+    try:
+        fields["size_bytes"] = os.path.getsize(path)
+    except OSError as exc:
+        fields["scan_error"] = f"errore lettura file: {exc}"
+        return fields
     try:
         info = tagio.read_info(path)
         tags = tagio.read_tags(path)
