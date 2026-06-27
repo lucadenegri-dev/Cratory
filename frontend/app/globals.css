@@ -76,13 +76,6 @@ body {
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-thumb { background: var(--color-border-strong); border: 2px solid var(--color-bg); }
 
-@keyframes shimmer {
-  0% { opacity: 0.55; }
-  50% { opacity: 1; }
-  100% { opacity: 0.55; }
-}
-.animate-shimmer { animation: shimmer 1.6s ease-in-out infinite; }
-
 /* ---- DJ loaders: EQ inline (.eq*) + waveform (.eqm*) ---------------------- */
 
 /* EQ inline: 4 colonne segmentate con tacca di picco calda */

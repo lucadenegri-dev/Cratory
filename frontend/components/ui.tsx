@@ -122,14 +122,10 @@ export function Badge({ tone = "neutral", className, children }: { tone?: Tone; 
 
 /* ---------------------------------------------------------- Progress bar */
 
-export function Progress({ value }: { value: number | null }) {
-  const indeterminate = value == null;
+export function Progress({ value }: { value: number }) {
   return (
     <div className="h-2 w-full overflow-hidden bg-elevated">
-      <div
-        className={cn("h-full bg-fg transition-all", indeterminate && "w-1/3 animate-shimmer")}
-        style={indeterminate ? undefined : { width: `${Math.min(100, Math.max(0, value))}%` }}
-      />
+      <div className="h-full bg-fg transition-all" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
     </div>
   );
 }
