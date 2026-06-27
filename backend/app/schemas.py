@@ -65,3 +65,26 @@ class IssueBulkBody(BaseModel):
     type: str | None = None
     severity: str | None = None
     status: str
+
+
+class DupMemberRead(BaseModel):
+    file_id: int
+    action: str
+    path: str
+    ext: str
+    bitrate: int | None
+    duration_s: float | None
+    content_hash: str | None
+
+
+class DupGroupRead(BaseModel):
+    id: int
+    match_kind: str
+    keeper_file_id: int
+    keeper_overridden: bool
+    dismissed: bool
+    members: list[DupMemberRead]
+
+
+class KeeperBody(BaseModel):
+    file_id: int
