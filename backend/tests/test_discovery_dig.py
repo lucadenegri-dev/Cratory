@@ -259,3 +259,57 @@ def test_dig_dedup_is_library_wide_even_with_playlist_taste():
               library=_lib(("Owned Elsewhere", "Track")),
               taste_tracks=_lib(("Other", "Thing")), limit=50)
     assert res.leads == []
+
+
+# --- Task 3: reason codes (spiegazioni deterministiche) ----------------------
+
+from datetime import datetime, timezone
+
+
+def _codes(lead):
+    return {r.code for r in lead.reasons}
+
+
+def test_dig_emits_rare_wanted_and_deep_cut():
+    def search(**kw):
+        return [_release("Cult - Grail", rid=1, have=3, want=120)]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[])
+    lead = res.leads[0]
+    assert "rare_wanted" in _codes(lead)
+    assert "deep_cut" in _codes(lead)
+    rare = next(r for r in lead.reasons if r.code == "rare_wanted")
+    assert rare.data == {"have": 3, "want": 120}
+
+
+def test_dig_no_rare_wanted_when_not_demanded():
+    def search(**kw):
+        return [_release("Common - Tune", rid=1, have=4000, want=2)]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[])
+    codes = _codes(res.leads[0])
+    assert "rare_wanted" not in codes
+    assert "deep_cut" not in codes        # have=4000 > soglia
+
+
+def test_dig_emits_taste_reason_codes():
+    def search(**kw):
+        return [_release("Followed - Track", rid=1, label="Warp", style="Acid House", have=20)]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[],
+              taste_tracks=_lib(("Followed", "Older", {"label": "Warp", "genre": "Acid House"})))
+    lead = res.leads[0]
+    codes = _codes(lead)
+    assert {"label_followed", "artist_collected", "style_match"} <= codes
+    art = next(r for r in lead.reasons if r.code == "artist_collected")
+    assert art.data == {"artist": "Followed", "count": 1}
+
+
+def test_dig_emits_recent_reason():
+    cur = datetime.now(timezone.utc).year
+
+    def search(**kw):
+        return [_release("New - Drop", rid=1, year=cur, have=20)]
+
+    res = dig(None, seed_type="genre", value="x", search_releases=search, library=[])
+    assert "recent" in _codes(res.leads[0])

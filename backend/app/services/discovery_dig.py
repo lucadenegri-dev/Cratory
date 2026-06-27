@@ -46,7 +46,20 @@ W_STYLE = 0.2
 # Quante release di un artista nel riferimento bastano per familiarita' piena.
 FAMILIARITY_FULL_AT = 3
 
+# Soglie per i reason code (spiegazioni). Costanti, deterministiche.
+REASON_RARE_MIN_WANT = 10       # almeno 10 persone lo cercano
+REASON_RARE_MIN_DEMAND = 0.5    # want/(have+want) >= 0.5
+REASON_DEEP_CUT_MAX_HAVE = 50   # pochissimi lo possiedono
+REASON_RECENT_MIN = 0.8         # recency alta (ultimi ~3 anni su span 15)
+
 SearchReleases = Callable[..., list[dict[str, Any]]]
+
+
+@dataclass
+class Reason:
+    """Spiegazione strutturata: codice + payload dati. Il testo lo compone la UI."""
+    code: str
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -65,6 +78,7 @@ class DiscoveryLead:
     want: int = 0
     isrc: str | None = None
     score: float = 0.0
+    reasons: list[Reason] = field(default_factory=list)
 
 
 @dataclass
@@ -219,6 +233,25 @@ def _score(lead: DiscoveryLead, profile: TasteProfile, adventurousness: float, c
     return adventurousness * discovery + (1.0 - adventurousness) * taste + 0.2 * recency
 
 
+def _reasons(lead: DiscoveryLead, profile: TasteProfile, current_year: int) -> list[Reason]:
+    """Emette i reason code attivi per un lead, secondo soglie deterministiche."""
+    out: list[Reason] = []
+    if lead.want >= REASON_RARE_MIN_WANT and _demand(lead.have, lead.want) >= REASON_RARE_MIN_DEMAND:
+        out.append(Reason("rare_wanted", {"have": lead.have, "want": lead.want}))
+    if lead.have <= REASON_DEEP_CUT_MAX_HAVE:
+        out.append(Reason("deep_cut", {"have": lead.have}))
+    if profile.label_affinity(lead.label) > 0:
+        out.append(Reason("label_followed", {"label": lead.label}))
+    count = profile.artist_count(lead.artist)
+    if count > 0:
+        out.append(Reason("artist_collected", {"artist": lead.artist, "count": count}))
+    if profile.style_affinity(lead.style) > 0:
+        out.append(Reason("style_match", {"style": lead.style}))
+    if _recency(lead.year, current_year) >= REASON_RECENT_MIN:
+        out.append(Reason("recent", {"year": lead.year}))
+    return out
+
+
 def _select(leads: list[DiscoveryLead], limit: int) -> list[DiscoveryLead]:
     """Ordina per score e applica il cap per artista (no monopolio), poi tronca a limit."""
     out: list[DiscoveryLead] = []
@@ -278,6 +311,7 @@ def dig(
     current_year = datetime.now(timezone.utc).year
     for lead in leads:
         lead.score = _score(lead, profile, adv, current_year)
+        lead.reasons = _reasons(lead, profile, current_year)
     selected = _select(leads, limit)
 
     logger.info("Discovery dig %s=%r: %s lead (adv=%.2f)", seed_type, value, len(selected), adv)
