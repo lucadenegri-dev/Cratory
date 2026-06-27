@@ -1,7 +1,6 @@
-# CLAUDE.md - Guida per AI collaborator
+# CLAUDE.md - Guida per l'AI collaboratrice
 
-Questo file e' intenzionalmente mantenuto: serve come entrypoint per l'AI usata
-insieme a Codex. Non eliminarlo durante cleanup documentali.
+Guida operativa unica per l'AI che lavora su Cratory.
 
 ## Progetto
 
@@ -18,12 +17,13 @@ tracklist identificate.
 
 Leggere in quest'ordine:
 
-1. `README.md` - setup, workflow e panoramica.
+1. `README.md` - panoramica, setup e workflow (vetrina, in inglese).
 2. `docs/ARCHITECTURE.md` - principi, pipeline, dati e integrazioni.
 3. `docs/API.md` - endpoint correnti.
-4. `docs/ROADMAP.md` - stato, naming, backlog e prossimi passi.
-5. `PROGRESS.md` - diario operativo per riprendere il lavoro.
-6. `AGENTS.md` - regole operative equivalenti per Codex/altri agenti.
+4. `docs/ROADMAP.md` - stato, naming, backlog e prossimi passi (fonte di verita' di stato).
+5. `PROGRESS.md` - diario cronologico per riprendere il lavoro.
+6. `docs/PRODUCT.md` - prodotto, utenti, job-to-be-done e principi.
+7. `docs/DESIGN.md` - design system "editorial archive".
 
 ## Regole non negoziabili
 
@@ -44,6 +44,45 @@ Leggere in quest'ordine:
    musicale e ipotesi creativa.
 8. **Rekordbox resta fuori progetto.** Import XML, beatgrid/cue e colonne legacy sono
    state rimosse.
+
+## Stack e layout
+
+Backend Python + FastAPI, SQLAlchemy su SQLite, Pydantic. Frontend Next.js 16 con App
+Router, React e Tailwind/design system. Integrazioni esterne dietro interfacce in
+`backend/app/integrations/`, con cache e gestione errori/rate limit dove serve.
+
+Layer backend:
+
+```text
+backend/app/
+  routers/       HTTP only: playlists, tracks, transitions, sets, spotify,
+                 enrichment, ai, discovery, services, labels, dj_sets
+  services/      logica deterministica e orchestrazione
+  repositories.py
+  models.py
+  db.py          sessione/engine, ensure_schema e migrazioni idempotenti
+  schemas.py
+  serializers.py
+  integrations/
+  core/
+```
+
+Provider feature in catena:
+
+```text
+Deezer -> MusicBrainz -> AcousticBrainz -> GetSongBPM -> Last.fm
+```
+
+Discovery lavora per gusto, non per compatibilita' tecnica (quella resta al Set Builder):
+l'espansione playlist e' Last.fm-centric (similarita') con Spotify resolver via `/search`;
+il dig "Scava" usa Discogs per genere/etichetta. Spotify `/recommendations` non va usato:
+per app nuove o in development mode restituisce 403/404.
+
+## Identita' tracce
+
+- Identita' streaming: `platform`, `platform_track_id`, `isrc`, `url`.
+- Deduplica/enrichment: `ISRC -> platform_track_id -> artist+title+duration -> fuzzy artist+title`.
+- Stati traccia: `imported | enriched | ready_for_set | missing_features | low_confidence`.
 
 ## Comandi
 
@@ -73,3 +112,8 @@ npm run dev
 npm run lint
 npm run build
 ```
+
+## Frontend
+
+Next.js 16 ha breaking changes rispetto alle versioni note: nel frontend leggere
+sempre `frontend/CLAUDE.md` prima di modificare pagine o routing.

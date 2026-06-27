@@ -34,8 +34,7 @@ tracklist identificata.
 | [docs/API.md](docs/API.md) | Contratti REST correnti del backend FastAPI |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Stato, naming, backlog e prossimi passi |
 | [PROGRESS.md](PROGRESS.md) | Diario operativo compatto per riprendere il lavoro |
-| [AGENTS.md](AGENTS.md) | Regole per agenti/collaboratori automatici |
-| [CLAUDE.md](CLAUDE.md) | Entry point mantenuto per l'AI usata insieme a Codex |
+| [CLAUDE.md](CLAUDE.md) | Guida per l'AI collaboratrice del progetto |
 
 ## Stack
 
