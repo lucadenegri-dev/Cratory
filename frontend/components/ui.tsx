@@ -134,9 +134,62 @@ export function Progress({ value }: { value: number | null }) {
   );
 }
 
-export function Spinner({ className }: { className?: string }) {
+/* Loader inline: equalizzatore a colonne con tacca di picco calda. */
+export function Equalizer({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-block animate-spin rounded-full border-2 border-border-strong border-t-fg", className ?? "h-4 w-4")} />
+    <span role="status" aria-label="Caricamento" className={cn("eq", className ?? "h-4 w-4")}>
+      <span className="eq-bar"><span className="eq-track" /><span className="eq-fill eq-l1" /></span>
+      <span className="eq-bar"><span className="eq-track" /><span className="eq-fill eq-l2" /></span>
+      <span className="eq-bar"><span className="eq-track" /><span className="eq-fill eq-l3" /></span>
+      <span className="eq-bar"><span className="eq-track" /><span className="eq-fill eq-l5" /></span>
+    </span>
+  );
+}
+
+/* Alias di compatibilita': i consumer che importano Spinner restano invariati. */
+export const Spinner = Equalizer;
+
+/* Pseudo-waveform deterministica (no Math.random: stessa forma su server e client). */
+const WAVE: number[] = Array.from({ length: 56 }, (_, i) => {
+  const x = i / 56;
+  const a =
+    0.30 +
+    0.32 * Math.abs(Math.sin(x * Math.PI * 7)) +
+    0.22 * Math.abs(Math.sin(x * Math.PI * 23 + 1)) +
+    0.16 * Math.abs(Math.sin(x * Math.PI * 3 + 0.5));
+  return Math.max(0.16, Math.min(1, a));
+});
+
+/* Meter a waveform "rekordbox": value numerico -> riempimento sx->dx con testina;
+   value null -> indeterminato con scan che spazza. */
+export function EqMeter({ value, className }: { value: number | null; className?: string }) {
+  const indeterminate = value == null;
+  const v = indeterminate ? 0 : Math.min(100, Math.max(0, value));
+  const lit = indeterminate ? 0 : Math.round((WAVE.length * v) / 100);
+  return (
+    <div
+      className={cn("eqm", className ?? "h-6 w-full")}
+      role={indeterminate ? "status" : "progressbar"}
+      aria-label={indeterminate ? "In corso" : undefined}
+      aria-valuenow={indeterminate ? undefined : Math.round(v)}
+      aria-valuemin={indeterminate ? undefined : 0}
+      aria-valuemax={indeterminate ? undefined : 100}
+    >
+      <div className="eqm-wave">
+        {WAVE.map((a, i) => (
+          <span
+            key={i}
+            className={cn("eqm-bar", !indeterminate && i < lit ? "eqm-on" : "eqm-off")}
+            style={{ height: `${(a * 100).toFixed(1)}%` }}
+          />
+        ))}
+      </div>
+      {indeterminate ? (
+        <span className="eqm-scan" />
+      ) : (
+        <span className="eqm-ph" style={{ left: `${v}%` }} />
+      )}
+    </div>
   );
 }
 
