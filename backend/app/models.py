@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint,
+    JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,3 +58,47 @@ class AudioFile(Base):
     last_scanned_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     root: Mapped["ScanRoot"] = relationship(back_populates="files")
+
+
+class Issue(Base):
+    __tablename__ = "issue"
+    __table_args__ = (UniqueConstraint("file_id", "type", "field", name="uq_issue_file_type_field"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    file_id: Mapped[int] = mapped_column(ForeignKey("audio_file.id"), index=True)
+    type: Mapped[str] = mapped_column(String, index=True)
+    field: Mapped[str | None] = mapped_column(String)
+    severity: Mapped[str] = mapped_column(String, index=True)
+    detail: Mapped[str] = mapped_column(Text)
+    suggested_fix_json: Mapped[dict | None] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String, default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class DupGroup(Base):
+    __tablename__ = "dup_group"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    match_kind: Mapped[str] = mapped_column(String)
+    keeper_file_id: Mapped[int] = mapped_column(ForeignKey("audio_file.id"))
+    keeper_overridden: Mapped[bool] = mapped_column(Boolean, default=False)
+    dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
+    signature: Mapped[str] = mapped_column(String, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    members: Mapped[list["DupMember"]] = relationship(
+        back_populates="group", cascade="all, delete-orphan"
+    )
+
+
+class DupMember(Base):
+    __tablename__ = "dup_member"
+    __table_args__ = (UniqueConstraint("group_id", "file_id", name="uq_dupmember_group_file"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("dup_group.id"), index=True)
+    file_id: Mapped[int] = mapped_column(ForeignKey("audio_file.id"), index=True)
+    action: Mapped[str] = mapped_column(String)
+
+    group: Mapped["DupGroup"] = relationship(back_populates="members")

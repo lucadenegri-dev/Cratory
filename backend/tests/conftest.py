@@ -54,3 +54,20 @@ def copy_fixture():
         return str(dest)
 
     return _copy
+
+
+from app.models import AudioFile  # noqa: E402
+
+
+def make_audio_file(id: int, **overrides) -> AudioFile:
+    """AudioFile NON persistito con default sensati, per i test puri.
+    I service puri leggono solo gli attributi; l'id va passato esplicito."""
+    defaults = dict(
+        root_id=1, path=f"/music/{id}.mp3", ext="mp3", size_bytes=1000,
+        content_hash=f"hash{id}", hash_method="file", status="present",
+        artist=None, title=None, album=None, album_artist=None, genre=None,
+        year=None, label=None, track_no=None, comment=None, has_cover=False,
+        bitrate=None, sample_rate=None, channels=None, duration_s=None, scan_error=None,
+    )
+    defaults.update(overrides)
+    return AudioFile(id=id, **defaults)
