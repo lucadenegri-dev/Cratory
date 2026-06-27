@@ -46,14 +46,14 @@ playlist importata
   -> add to library
 ```
 
-Radar Etichette (sorgente alternativa, niente Last.fm):
+Crate digging (Scava), sorgente alternativa via Discogs (niente Last.fm/Spotify):
 
 ```text
-etichette (default: top della libreria)
-  -> Spotify /search con filtro label:"..."
-  -> dedup vs libreria
-  -> ranking per affinita' (quanto segui la label + overlap artisti + recency)
-  -> interleave round-robin tra le etichette
+seme: genere o etichetta
+  -> Discogs search (release per genere/stile o per label)
+  -> lead non posseduti, dedup vs libreria + dedup varianti
+  -> ranking per domanda (want/have), profondita' e novita'
+  -> preset Familiare/Bilanciato/Avventuroso, cap per artista
   -> add to library
 ```
 

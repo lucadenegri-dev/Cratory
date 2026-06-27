@@ -86,8 +86,6 @@ Backlog tecnico (non bloccante):
 - **Discovery: arricchire il dig.** Tracklist per-release (espandere un release nelle
   sue tracce) e Last.fm tag come 2a sorgente. (Genere+Etichetta gia' unificati; Playlist
   resta Spotify-resolved di proposito, goal diverso.)
-- **Rimuovere l'endpoint Spotify `/api/discovery/labels`** (e `discover_by_labels`): non
-  piu' usato dalla UI dopo il passaggio del Radar Etichette a Discogs.
 - **Playlist many-to-many.** Modello `playlist_tracks` (un brano in piu' playlist):
   l'import aggiunge membership invece di sovrascrivere `Track.playlist_id`. Oggi
   mitigato dal fix "scollega invece di cancellare", ma il modello resta 1:1.

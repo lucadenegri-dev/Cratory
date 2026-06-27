@@ -122,7 +122,8 @@ Spotify gestisce OAuth, import e export playlist. Non e' una fonte di BPM/key.
 ```text
 GET  /api/discovery/status
 POST /api/discovery/expand
-POST /api/discovery/labels
+GET  /api/discovery/genres
+POST /api/discovery/dig
 POST /api/discovery/add
 ```
 
@@ -136,9 +137,10 @@ playlist -> seed artisti/tracce -> Last.fm similarity -> resolver Spotify -> ran
 I candidati di `expand` sono annotati con la loro **etichetta**: chi e' su
 un'etichetta che gia' collezioni riceve un piccolo boost ed e' marcato `label_owned`.
 
-`labels` (Radar Etichette) trova su Spotify, via filtro `label:"..."`, tracce non
-ancora possedute delle etichette date (default: le top della libreria), ordinate per
-affinita' di gusto (quanto segui l'etichetta + overlap artisti + recency).
+`dig` ("Scava") fa crate digging via **Discogs** per genere o etichetta: trova
+release/tracce non ancora possedute, con ranking per profondita'/novita' (domanda
+want/have) e preset Familiare/Bilanciato/Avventuroso. `genres` elenca generi e stili
+disponibili come seme del dig.
 
 `add` importa un candidato nella libreria dell'app in modo idempotente. Non scrive su
 Spotify. L'AI, se configurata e richiesta, aggiunge spiegazioni ma non sceglie i

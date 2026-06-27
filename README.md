@@ -22,8 +22,8 @@ tracklist identificata.
 - Permette correzioni manuali di BPM, Camelot, mood, energia, genere e label.
 - Genera set con motore deterministico e, se configurata, AI validata.
 - Classifica transizioni come sicure, rischiose o buoni reset.
-- Espande una playlist con Discovery per gusto (Last.fm + resolver Spotify) e
-  Radar Etichette (tracce nuove dalle etichette che gia' collezioni).
+- Espande una playlist con Discovery per gusto (Last.fm + resolver Spotify) e fa
+  crate digging per genere o etichetta via Discogs ("Scava").
 - Identifica tracklist di mix via Shazam/yt-dlp/ffmpeg in un corpus separato dalla libreria.
 
 ## Documentazione
@@ -142,8 +142,8 @@ token Spotify. La modalita' `all` elimina anche i token, salvo `--preserve-token
 6. Genera un set in modalita' tecnica o creativa.
 7. Controlla transizioni, warning e alternative.
 8. Esporta il set o crea una playlist Spotify.
-9. Usa Discovery (espandi playlist o Radar Etichette) per trovare tracce affini al
-   tuo gusto e aggiungerle alla libreria.
+9. Usa Discovery (espandi playlist o Scava per genere/etichetta via Discogs) per
+   trovare tracce affini al tuo gusto e aggiungerle alla libreria.
 
 ## Test
 
