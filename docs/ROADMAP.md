@@ -59,6 +59,9 @@ migrazione esplicita.
 - Rifacimento documentazione: ridisegno architettura doc (fonte di verita' unica),
   README vetrina in inglese + diagramma nuovo, audit accuratezza API/ARCHITECTURE,
   AGENTS unificato in CLAUDE, PRODUCT/DESIGN spostati in `docs/`.
+- Discovery dig — gusto + spiegazioni: segnali di gusto (etichetta posseduta, affinita'
+  stile, familiarita' graduata) su riferimento selezionabile (libreria|playlist), dedup
+  sempre library-wide, e spiegazioni a chip (reason code deterministici, testo in UI).
 
 ## Direzione prodotto
 
@@ -72,8 +75,9 @@ Il valore e' la qualita' del prodotto, non la scala.
 
 In ordine concordato (dettaglio operativo in `PROGRESS.md`):
 
-1. **Miglioramento Discovery (continua).** Dopo "Scava generi" (Discogs): qualita' dei
-   lead, piu' segnali di gusto, spiegazioni, e unificazione expand/dig (vedi backlog).
+1. **Miglioramento Discovery.** Slice gusto + spiegazioni del dig **FATTO** (segnali di
+   gusto su riferimento selezionabile + reason code a chip). Restano nel backlog tecnico:
+   unificazione expand/dig e sorgenti extra (Last.fm tag, tracklist per-release).
 2. **Audit leggero + quick win** — quick win principali FATTI (SSRF, `library_stats`,
    endpoint morto, dipendenze); robustezza confermata solida. Threat model piccolo
    (nessun utente pubblico), niente authz da SaaS.

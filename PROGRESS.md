@@ -6,7 +6,7 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-06-27
+**Ultimo aggiornamento:** 2026-06-28
 
 **Nome prodotto:** **Cratory** (rename eseguito il 2026-06-25 su UI, codice, docs e
 icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici legacy
@@ -16,6 +16,28 @@ migration. Disponibilita' `cratory.com` da confermare su registrar.
 **Fase:** core streaming-first completo; Discovery operativo (expand Last.fm + dig
 Discogs); enrichment multi-provider; Set Builder tecnico/creativo; audit leggero (quick
 win) e rifacimento documentazione fatti; identificazione mix via Shazam in integrazione.
+
+## Milestone 2026-06-28 - Discovery dig: gusto + spiegazioni
+
+Chiuso lo slice "gusto + spiegazioni" del punto 1 (Miglioramento Discovery). Solo il
+flusso dig, deterministico, niente AI ne' nuove dipendenze/rete.
+
+- `backend/app/services/discovery_dig.py`: nuovo `TasteProfile` (artist_counts,
+  owned_labels, genre_tokens) costruito da un riferimento (libreria o playlist);
+  `_score` esteso con familiarita' graduata + affinita' etichetta + affinita' stile
+  (pesi W_ARTIST 0.5 / W_LABEL 0.3 / W_STYLE 0.2); `Reason` + `_reasons` con soglie
+  costanti. Dedup sempre library-wide, affinita' sul riferimento.
+- `backend/app/schemas.py`: `ReasonOut`, `reasons` su `DiscoveryLeadOut`,
+  `taste_playlist_id` su `DiscoveryDigRequest`.
+- `backend/app/routers/discovery.py`: `_lead_out` mappa i reason; `dig_endpoint`
+  costruisce `taste_tracks` da `tracks_for_playlist` quando e' dato `taste_playlist_id`.
+- Frontend `lib/api.ts` (`Reason`, `reasons`, `tastePlaylistId`) e `discovery/page.tsx`
+  (selettore "Affinita' rispetto a" + chip spiegazione).
+- Test: suite dig estesa (TasteProfile, scoring, reason code, dedup library-wide) +
+  test router; 211 test backend verdi, frontend lint/build puliti.
+
+**Punto di ripresa:** branch `feat/discovery-dig-gusto-spiegazioni`. Backlog Discovery
+residuo: unificazione expand/dig, Last.fm tag come 2a sorgente, tracklist per-release.
 
 ## Milestone 2026-06-18 - Reset documentazione
 
