@@ -68,14 +68,14 @@ In ordine concordato (dettaglio operativo in `PROGRESS.md`):
 
 1. **Miglioramento Discovery (continua).** Dopo "Scava generi" (Discogs): qualita' dei
    lead, piu' segnali di gusto, spiegazioni, e unificazione expand/dig (vedi backlog).
-2. **Testi + multi-lingua (inglese).** Estrazione stringhe per l'i18n e revisione
-   copy/microcopy pagina per pagina, in un passaggio unico (rollout nome gia' fatto).
-3. **Audit leggero + quick win.** Threat model piccolo (nessun utente pubblico):
+2. **Audit leggero + quick win.** Threat model piccolo (nessun utente pubblico):
    efficienza `library_stats`, robustezza, dipendenze. Niente authz da SaaS.
-4. **Rifacimento documentazione** quando il resto si assesta.
+3. **Rifacimento documentazione** quando il resto si assesta.
 
 Sospesi / rivisti:
 
+- **Testi + multi-lingua (inglese)** — sospeso (rimandato). Estrazione stringhe per
+  l'i18n e revisione copy/microcopy pagina per pagina; il rollout nome Cratory e' gia' fatto.
 - **Multi-account pubblico** — sospeso (muro Spotify + direzione personale). Eventuale
   reshape futuro = piccola crew self-hosted con credenziali Spotify proprie, solo se serve.
 - **Pitch** — da riformulare attorno alla natura reale del prodotto (non "SaaS Spotify").

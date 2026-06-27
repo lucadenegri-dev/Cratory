@@ -70,18 +70,17 @@ per DJ. Niente SaaS pubblico: il valore e' la qualita' del prodotto, non la scal
 
 ## Prossimi step (ri-prioritizzati)
 
-Ordine: **2 -> (3+4+7 insieme) -> audit leggero -> 5**, con 1/8 rivisti.
+Ordine: **Discovery -> audit leggero + quick win -> documentazione**; i18n/testi
+e multi-account sospesi.
 
 1. **Miglioramento Discovery.** Affinare radar/expand: qualita' candidati, piu'
    segnali di gusto, dedup, spiegazioni, eventuale ranking configurabile.
-2. **Testi + i18n + rollout nome (in un passaggio unico).** Estrazione stringhe
-   (i18n EN), copy/microcopy coerente pagina per pagina, e contestuale swap del nome
-   a **Cratory** (UI, chiave localStorage `setarc-theme`, repo) — tutte le stringhe
-   si toccano una volta sola. _Nome `cratory.com` da confermare su registrar._
-3. **Audit leggero + quick win** rimasti (efficienza `library_stats`, robustezza).
-4. **Rifacimento documentazione** una volta assestato il resto.
+2. **Audit leggero + quick win** rimasti (efficienza `library_stats`, robustezza,
+   rimozione endpoint morti, dipendenze).
+3. **Rifacimento documentazione** una volta assestato il resto.
 
-Rivisti/sospesi: **multi-account pubblico** (bloccato da Spotify), **pitch** (da
+Rivisti/sospesi: **Testi + multi-lingua (i18n EN)** (rimandato; rollout nome Cratory
+gia' fatto), **multi-account pubblico** (bloccato da Spotify), **pitch** (da
 riformulare attorno alla natura reale del prodotto).
 
 ## Funzionalita' completate
