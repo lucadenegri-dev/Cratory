@@ -50,6 +50,9 @@ migrazione esplicita.
   risolti, ranking profondita'+novita', salva-al-volo. Fix: cancellare una playlist
   non elimina piu' i brani condivisi (scollega invece di hard-delete).
 - Rename prodotto a **Cratory** (UI, codice, docs, icona); legacy `djassistant.*` invariati.
+- Discovery de-noise + unificazione: ranking per domanda (want/have), filtri formato/
+  self-released, dedup varianti, cap per artista; UI da 3 a 2 modi con "Scava"
+  (Genere|Etichetta) e preset Familiare/Bilanciato/Avventuroso. Etichette ora via Discogs.
 
 ## Direzione prodotto
 
@@ -80,8 +83,11 @@ Sospesi / rivisti:
 
 Backlog tecnico (non bloccante):
 
-- **Discovery: unificare expand/dig.** Portare anche il seme Playlist alla lista-dig a
-  volume e arricchire il dig (tracklist per-release, Last.fm tag come 2a sorgente).
+- **Discovery: arricchire il dig.** Tracklist per-release (espandere un release nelle
+  sue tracce) e Last.fm tag come 2a sorgente. (Genere+Etichetta gia' unificati; Playlist
+  resta Spotify-resolved di proposito, goal diverso.)
+- **Rimuovere l'endpoint Spotify `/api/discovery/labels`** (e `discover_by_labels`): non
+  piu' usato dalla UI dopo il passaggio del Radar Etichette a Discogs.
 - **Playlist many-to-many.** Modello `playlist_tracks` (un brano in piu' playlist):
   l'import aggiunge membership invece di sovrascrivere `Track.playlist_id`. Oggi
   mitigato dal fix "scollega invece di cancellare", ma il modello resta 1:1.

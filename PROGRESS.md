@@ -5,7 +5,7 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-06-25
+**Ultimo aggiornamento:** 2026-06-27
 
 **Nome prodotto:** **Cratory** (rename eseguito il 2026-06-25 su UI, codice, docs e
 icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici legacy
