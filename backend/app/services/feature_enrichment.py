@@ -149,6 +149,7 @@ def enrich_features(
     *,
     force: bool = False,
     playlist_id: int | None = None,
+    track_ids: list[int] | None = None,
     on_progress: ProgressFn | None = None,
 ) -> dict:
     """Arricchisce con feature musicali le tracce che ne sono prive.
@@ -167,7 +168,9 @@ def enrich_features(
     with_bpm/with_key/ready_for_set/missing_core_features: stato finale del batch.
     """
     stmt = select(Track)
-    if playlist_id is not None:
+    if track_ids is not None:
+        stmt = stmt.where(Track.id.in_(track_ids))  # arricchimento di tracce specifiche
+    elif playlist_id is not None:
         stmt = stmt.where(Track.playlist_id == playlist_id)
     if not force:
         stmt = stmt.where(Track.bpm.is_(None))

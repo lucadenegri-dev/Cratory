@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, Music4, ArrowRightLeft, Pencil } from "lucide-react";
-import { apiGet, fmtDuration, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
-import { Card, CardHeader, Badge, Alert, Button } from "@/components/ui";
+import { ArrowLeft, ExternalLink, Music4, ArrowRightLeft, Pencil, Sparkles } from "lucide-react";
+import { apiGet, enrichTrack, fmtDuration, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
+import { Card, CardHeader, Badge, Alert, Button, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 
@@ -33,6 +33,20 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
   const [before, setBefore] = useState<TransitionCandidate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichErr, setEnrichErr] = useState<string | null>(null);
+
+  const enrich = async () => {
+    setEnriching(true);
+    setEnrichErr(null);
+    try {
+      setTrack(await enrichTrack(Number(id)));
+    } catch (e) {
+      setEnrichErr(String((e as { message?: string })?.message ?? e));
+    } finally {
+      setEnriching(false);
+    }
+  };
 
   useEffect(() => {
     apiGet<TrackDetail>(`/api/tracks/${id}`).then(setTrack).catch((e) => setError(String(e.message ?? e)));
@@ -52,7 +66,13 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
 
   const marginalia = (
     <div className="space-y-4">
-      <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> Modifica valori</Button>
+      <div className="flex flex-col gap-2">
+        <Button size="sm" variant="outline" onClick={enrich} disabled={enriching}>
+          {enriching ? <Spinner /> : <Sparkles size={14} />} {enriching ? "Arricchimento…" : "Arricchisci"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> Modifica valori</Button>
+        {enrichErr && <p className="text-xs text-danger">⚠ {enrichErr}</p>}
+      </div>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
         <div className="flex justify-between gap-2"><span className="text-muted">Sorgente</span><span className="text-fg">{track.source_type}</span></div>
         <div className="flex justify-between gap-2"><span className="text-muted">Stato</span><span className="text-fg">{track.status}</span></div>

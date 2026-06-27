@@ -154,12 +154,12 @@ export default function DiscoveryPage() {
 
   return (
     <PageLayout title="Discovery">
-      <p className="mb-4 text-sm text-muted">Scava nuova musica per genere o etichetta, o espandi una playlist.</p>
+      <p className="mb-4 text-sm text-muted">Scopri nuova musica per genere o etichetta, o espandi una playlist.</p>
 
       {/* Mode toggle */}
       <div className="mb-4 inline-flex rounded-none border border-border bg-surface p-1">
         {([
-          ["dig", "Scava", <Disc3 key="i" size={14} />],
+          ["dig", "DIG", <Disc3 key="i" size={14} />],
           ["expand", "Espandi playlist", <Wand2 key="i" size={14} />],
         ] as const).map(([m, label, icon]) => (
           <button
@@ -179,57 +179,74 @@ export default function DiscoveryPage() {
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
-      {/* SCAVA (dig Discogs: genere o etichetta) */}
+      {/* DIG (Discogs: genere o etichetta) */}
       {mode === "dig" && (
         <>
           <div className="mb-6 border border-border p-4">
-            {/* da cosa parti */}
-            <div className="mb-3 flex items-center gap-3">
-              <span className="text-[10px] uppercase tracking-wider text-muted">Parti da</span>
-              <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
-                {([
-                  ["genre", "Genere", <Disc3 key="i" size={13} />],
-                  ["label", "Etichetta", <Tags key="i" size={13} />],
-                ] as const).map(([s, label, icon]) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => switchSeed(s)}
-                    aria-pressed={digSeed === s}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-none px-2.5 py-1 text-xs font-medium transition-colors",
-                      digSeed === s ? "bg-elevated text-fg" : "text-muted hover:text-fg",
-                    )}
-                  >
-                    {icon} {label}
-                  </button>
-                ))}
+            {/* riga alta: Parti da (sx) + preset profondità e DIG (dx) */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-muted">Parti da</span>
+                <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
+                  {([
+                    ["genre", "Genere", <Disc3 key="i" size={13} />],
+                    ["label", "Etichetta", <Tags key="i" size={13} />],
+                  ] as const).map(([s, label, icon]) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => switchSeed(s)}
+                      aria-pressed={digSeed === s}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-none px-2.5 py-1 text-xs font-medium transition-colors",
+                        digSeed === s ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                      )}
+                    >
+                      {icon} {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
+                  {PRESETS.map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => setAdventurousness(p.value)}
+                      aria-pressed={activePreset.key === p.key}
+                      disabled={busy}
+                      title={p.desc}
+                      className={cn(
+                        "rounded-none px-2.5 py-1 text-xs font-medium transition-colors",
+                        activePreset.key === p.key ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <Button onClick={runDig} disabled={busy || !digReady}>
+                  {busy ? <Spinner /> : <Disc3 size={15} />} DIG
+                </Button>
               </div>
             </div>
 
             {/* picker: genere */}
             {digSeed === "genre" && (
-              <>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                  <div className="min-w-0 flex-1">
-                    <Field label="Genere o stile">
-                      <Input
-                        list="genre-suggestions"
-                        value={genre}
-                        onChange={(e) => setGenre(e.target.value)}
-                        disabled={busy}
-                        placeholder="es. Acid House, Dub Techno, Italo-Disco…"
-                      />
-                      <datalist id="genre-suggestions">
-                        {genres?.library.map((g) => <option key={`l-${g}`} value={g} />)}
-                        {genres?.styles.map((g) => <option key={`s-${g}`} value={g} />)}
-                      </datalist>
-                    </Field>
-                  </div>
-                  <Button onClick={runDig} disabled={busy || !genre.trim()}>
-                    {busy ? <Spinner /> : <Disc3 size={15} />} Scava
-                  </Button>
-                </div>
+              <div className="mt-3">
+                <Input
+                  list="genre-suggestions"
+                  value={genre}
+                  onChange={(e) => setGenre(e.target.value)}
+                  disabled={busy}
+                  placeholder="es. Acid House, Dub Techno, Italo-Disco…"
+                />
+                <datalist id="genre-suggestions">
+                  {genres?.library.map((g) => <option key={`l-${g}`} value={g} />)}
+                  {genres?.styles.map((g) => <option key={`s-${g}`} value={g} />)}
+                </datalist>
                 {quickGenres.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {quickGenres.map((g) => (
@@ -237,83 +254,47 @@ export default function DiscoveryPage() {
                     ))}
                   </div>
                 )}
-              </>
+              </div>
             )}
 
             {/* picker: etichetta */}
             {digSeed === "label" && (
-              <>
+              <div className="mt-3">
                 {noLabels ? (
                   <p className="text-sm text-muted">
                     Nessuna etichetta in libreria: recuperale dalla sezione Etichette, oppure scava per genere.
                   </p>
                 ) : (
-                  <>
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[10px] uppercase tracking-wider text-muted">Scegli un’etichetta</span>
-                      <Button onClick={runDig} disabled={busy || !selectedLabel}>
-                        {busy ? <Spinner /> : <Disc3 size={15} />} Scava
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {visibleLabels.map((l) => (
-                        <Chip key={l.label} on={selectedLabel === l.label} onClick={() => setSelectedLabel(l.label)} disabled={busy}>
-                          {l.label}
-                        </Chip>
-                      ))}
-                      {(hiddenLabelCount > 0 || showAllLabels) && (labels?.length ?? 0) > CHIP_CAP && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllLabels((v) => !v)}
-                          className="rounded-none px-2.5 py-1 text-xs text-muted underline underline-offset-4 transition-colors hover:text-fg"
-                        >
-                          {showAllLabels ? "− meno" : `+${hiddenLabelCount} altre`}
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-
-            {/* preset profondità */}
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <span className="text-[10px] uppercase tracking-wider text-muted">Quanto osare</span>
-              <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.key}
-                    type="button"
-                    onClick={() => setAdventurousness(p.value)}
-                    aria-pressed={activePreset.key === p.key}
-                    disabled={busy}
-                    className={cn(
-                      "rounded-none px-2.5 py-1 text-xs font-medium transition-colors",
-                      activePreset.key === p.key ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                  <div className="flex flex-wrap gap-1.5">
+                    {visibleLabels.map((l) => (
+                      <Chip key={l.label} on={selectedLabel === l.label} onClick={() => setSelectedLabel(l.label)} disabled={busy}>
+                        {l.label}
+                      </Chip>
+                    ))}
+                    {(hiddenLabelCount > 0 || showAllLabels) && (labels?.length ?? 0) > CHIP_CAP && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllLabels((v) => !v)}
+                        className="rounded-none px-2.5 py-1 text-xs text-muted underline underline-offset-4 transition-colors hover:text-fg"
+                      >
+                        {showAllLabels ? "− meno" : `+${hiddenLabelCount} altre`}
+                      </button>
                     )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+                  </div>
+                )}
               </div>
-              <span className="text-xs text-muted">{activePreset.desc}</span>
-            </div>
-
-            <p className="mt-3 text-xs leading-relaxed text-muted">
-              Tanti brani dello stesso suono da scavare (via Discogs), già ripuliti dal rumore.
-              Salva quelli che ti piacciono: l’identità Spotify si risolve dopo.
-            </p>
+            )}
           </div>
 
           {busy && !dig && (
-            <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Scavo nelle crate…</div>
+            <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> DIG in corso…</div>
           )}
           {dig && <LeadResults dig={dig} />}
           {!busy && !dig && (
             <EmptyState icon={<Disc3 size={28} />} title="Pronto per scavare">
               {digReady
-                ? "Premi “Scava” per esplorare a fondo."
-                : "Scegli un genere o un’etichetta qui sopra, poi premi “Scava”."}
+                ? "Premi “DIG” per esplorare a fondo."
+                : "Scegli un genere o un’etichetta qui sopra, poi premi “DIG”."}
             </EmptyState>
           )}
         </>

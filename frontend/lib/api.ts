@@ -200,6 +200,11 @@ export function updateTrack(id: number, patch: TrackUpdate) {
   return apiPatch<TrackDetail>(`/api/tracks/${id}`, patch);
 }
 
+/** Arricchisce le feature musicali di UNA traccia (sincrono). Ritorna la traccia aggiornata. */
+export function enrichTrack(id: number) {
+  return apiPost<TrackDetail>(`/api/tracks/${id}/enrich`);
+}
+
 export interface ServiceStatus {
   key: string;
   name: string;
@@ -494,6 +499,7 @@ export function discoveryAddLead(lead: DiscoveryLead) {
   return apiPost<DiscoveryAddResponse>("/api/discovery/add", {
     artist: lead.artist,
     title: lead.title,
+    album_art_url: lead.thumb_url,
   });
 }
 

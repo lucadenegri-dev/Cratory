@@ -2,10 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.integrations.getsongbpm import (
+    FeatureProviderNotConfigured,
+    feature_provider_configured,
+    get_feature_provider,
+)
 from app.repositories import get_track, library_stats, list_tracks, update_track
 from app.schemas import LibraryStatsOut, TrackDetailOut, TrackListOut, TrackUpdateIn
 from app.serializers import track_detail_out, track_out
 from app.services.camelot import parse_camelot
+from app.services.feature_enrichment import enrich_features
 
 router = APIRouter(prefix="/api", tags=["tracks"])
 
@@ -77,6 +83,26 @@ def patch_track(track_id: int, payload: TrackUpdateIn, db: Session = Depends(get
             raise HTTPException(status_code=422, detail="Tonalità non valida: usa la notazione Camelot (es. 8A, 12B).")
         data["camelot_key"] = camelot
     track = update_track(db, track, data)
+    return track_detail_out(track)
+
+
+@router.post("/tracks/{track_id}/enrich", response_model=TrackDetailOut)
+def enrich_one(track_id: int, db: Session = Depends(get_db)):
+    """Arricchisce le feature musicali di UNA traccia (sincrono). Non sovrascrive BPM/key esistenti."""
+    track = get_track(db, track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Traccia non trovata")
+    if not feature_provider_configured():
+        raise HTTPException(
+            status_code=409,
+            detail=str(FeatureProviderNotConfigured(
+                "Nessun provider di feature configurato: abilita Deezer e/o imposta "
+                "GETSONGBPM_API_KEY / LASTFM_API_KEY (vedi Impostazioni)."
+            )),
+        )
+    # force=True: elabora la traccia anche se ha gia' BPM (completa i campi mancanti).
+    enrich_features(db, get_feature_provider(), force=True, track_ids=[track_id])
+    db.refresh(track)
     return track_detail_out(track)
 
 
