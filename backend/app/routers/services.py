@@ -73,7 +73,8 @@ def services_status(db: Session = Depends(get_db)):
                 "configured": True,
                 "connected": bool(settings.discogs_token),
                 "detail": "Profondita' per il Discovery (crate digging per genere/stile ed "
-                          "etichetta). Funziona senza token; DISCOGS_TOKEN alza il rate limit.",
+                          "etichetta). Funziona senza token; DISCOGS_TOKEN alza il rate limit "
+                          "e mostra le copertine dei dischi.",
                 "env": ["DISCOGS_TOKEN"],
                 "docs": "https://www.discogs.com/settings/developers",
             },
