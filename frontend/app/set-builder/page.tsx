@@ -10,7 +10,7 @@ import {
   apiGet, apiPost, exportSet, fmtDuration, trackLabel,
   type AiStatus, type GenStatus, type Setlist, type SetlistTrack, type Playlist,
 } from "@/lib/api";
-import { Card, CardHeader, Button, Input, Textarea, Select, Field, Checkbox, Badge, Progress, Alert, EmptyState } from "@/components/ui";
+import { Card, CardHeader, Button, Input, Textarea, Select, Field, Checkbox, Badge, EqMeter, Alert, EmptyState } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { cn } from "@/lib/cn";
 
@@ -327,7 +327,7 @@ export default function SetBuilder() {
               <span className="flex items-center gap-2 font-medium"><Sparkles size={15} className="text-muted" /> {job?.phase ?? "Avvio…"}</span>
               <span className="tnum text-muted">{elapsed}s{job?.using_ai && elapsed > 8 ? " · di solito 1–2 min" : ""}</span>
             </div>
-            <Progress value={null} />
+            <EqMeter value={null} className="h-6 w-full" />
           </div>
         </Card>
       )}

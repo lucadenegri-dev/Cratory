@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { enrichmentJobStatus, shazamIdentifyStatus } from "@/lib/api";
-import { Progress, Spinner } from "./ui";
+import { EqMeter } from "./ui";
 
 type Job = { key: string; label: string; processed: number; total: number; indeterminate?: boolean };
 
@@ -89,10 +89,10 @@ function GlobalProgress({ jobs }: { jobs: Job[] }) {
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border-strong bg-surface px-4 py-2.5">
       <div className="mx-auto flex max-w-5xl items-center gap-4">
-        <span className="flex items-center gap-2 whitespace-nowrap text-[10px] font-medium uppercase tracking-wider text-muted">
-          <Spinner className="h-3 w-3" /> {j.label}{jobs.length > 1 ? ` · +${jobs.length - 1}` : ""}
+        <span className="whitespace-nowrap text-[10px] font-medium uppercase tracking-wider text-muted">
+          {j.label}{jobs.length > 1 ? ` · +${jobs.length - 1}` : ""}
         </span>
-        <div className="flex-1"><Progress value={pct} /></div>
+        <div className="flex-1"><EqMeter value={pct} className="h-6 w-full" /></div>
         {!j.indeterminate && (
           <span className="tnum whitespace-nowrap text-[10px] text-muted">{j.processed}/{j.total || "?"}{pct != null ? ` · ${pct}%` : ""}</span>
         )}
