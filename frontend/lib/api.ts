@@ -119,6 +119,11 @@ export interface DiscoveryAddResponse {
 }
 
 // Discovery v2: dig (crate digging via Discogs) — lead leggeri non risolti.
+export interface Reason {
+  code: string;
+  data: Record<string, string | number>;
+}
+
 export interface DiscoveryLead {
   artist: string;
   title: string;
@@ -131,6 +136,7 @@ export interface DiscoveryLead {
   thumb_url: string | null;
   have: number;
   want: number;
+  reasons: Reason[];
 }
 
 export interface DiscoveryDigResponse {
@@ -481,13 +487,14 @@ export function getDiscoveryGenres() {
 export function discoveryDig(
   seedType: "genre" | "label",
   value: string,
-  opts?: { adventurousness?: number; limit?: number },
+  opts?: { adventurousness?: number; limit?: number; tastePlaylistId?: number | null },
 ) {
   return apiPost<DiscoveryDigResponse>("/api/discovery/dig", {
     seed_type: seedType,
     value,
     adventurousness: opts?.adventurousness,
     limit: opts?.limit,
+    taste_playlist_id: opts?.tastePlaylistId ?? null,
   });
 }
 
