@@ -41,7 +41,7 @@ class Track(Base):
     platform_track_id: Mapped[str | None] = mapped_column(String, index=True)
     isrc: Mapped[str | None] = mapped_column(String, index=True)
     url: Mapped[str | None] = mapped_column(Text)
-    added_at: Mapped[datetime | None] = mapped_column(DateTime)  # added_at nella playlist
+    added_at: Mapped[datetime | None] = mapped_column(DateTime)  # primo import in libreria; l'added_at per-playlist sta su playlist_tracks
     playlist_id: Mapped[int | None] = mapped_column(ForeignKey("playlists.id"), index=True)
     playlist_name: Mapped[str | None] = mapped_column(String)
     title: Mapped[str | None] = mapped_column(String)
@@ -72,7 +72,7 @@ class Track(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
     playlists: Mapped[list["Playlist"]] = relationship(
-        secondary="playlist_tracks", back_populates="tracks", viewonly=False,
+        secondary="playlist_tracks", back_populates="tracks", viewonly=True,
     )
 
 
@@ -108,7 +108,7 @@ class Playlist(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
     tracks: Mapped[list["Track"]] = relationship(
-        secondary="playlist_tracks", back_populates="playlists", viewonly=False,
+        secondary="playlist_tracks", back_populates="playlists", viewonly=True,
     )
 
 

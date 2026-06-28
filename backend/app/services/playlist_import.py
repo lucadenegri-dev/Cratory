@@ -188,8 +188,8 @@ def import_playlist(
     """Importa/aggiorna una playlist e le sue tracce. Idempotente. Ritorna un report.
 
     Con ``prune=True`` (sync da Spotify) le tracce ancora collegate a questa playlist
-    ma non piu' presenti nel set importato vengono SCOLLEGATE (playlist_id/name=None):
-    restano in libreria, escono solo dalla playlist.
+    ma non piu' presenti nel set importato vengono SCOLLEGATE: la membership su
+    playlist_tracks viene rimossa; la traccia resta in libreria e in ogni altra playlist.
     """
     if platform != "spotify":
         raise ValueError(f"Piattaforma non supportata per l'import: {platform}")
