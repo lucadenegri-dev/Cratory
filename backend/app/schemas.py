@@ -173,3 +173,11 @@ class HistoryItem(BaseModel):
     status: str
     created_at: datetime
     n_ops: int
+
+
+class LibraryStatsRead(BaseModel):
+    files_total: int
+    by_ext: dict[str, int]
+    issues_by_severity: dict[str, int]
+    dup_groups: int
+    sources: int
