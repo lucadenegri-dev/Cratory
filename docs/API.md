@@ -27,6 +27,7 @@ GET    /api/playlists/{playlist_id}
 DELETE /api/playlists/{playlist_id}
 POST   /api/playlists/{playlist_id}/enrich
 GET    /api/playlists/{playlist_id}/tracks
+POST   /api/playlists/{playlist_id}/discovered-tracks
 GET    /api/playlists/{playlist_id}/gaps
 GET    /api/playlists/library/gaps
 ```
@@ -38,6 +39,14 @@ dall'utente collegato (quelle altrui che segue non sono importabili in dev mode)
 Spotify: importa le nuove tracce e scollega quelle rimosse (che restano in libreria).
 `POST /api/playlists/import-manual` crea una playlist da testo incollato. Tutti
 avviano l'enrichment automatico best-effort sulle tracce importate.
+`POST /api/playlists/{playlist_id}/discovered-tracks` aggiunge a quella playlist una
+traccia scoperta dall'espansione (request: artist/title/spotify_id/isrc/
+duration_seconds/url/album_art_url). Importa il brano (idempotente), lo attacca alla
+playlist (modello 1:1: non sposta una traccia gia' appartenente ad altra playlist) e,
+se la playlist e' una Spotify posseduta e il brano e' risolto, lo aggiunge anche su
+Spotify (write-back best-effort). Response: `created`, `track`, `spotify_added`,
+`spotify_error`. L'espansione si lancia dal dettaglio playlist
+(`/playlists/[id]/expand`); l'endpoint `POST /api/discovery/expand` resta invariato.
 
 ## Tracks e libreria
 

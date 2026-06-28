@@ -62,6 +62,10 @@ migrazione esplicita.
 - Discovery dig — gusto + spiegazioni: segnali di gusto (etichetta posseduta, affinita'
   stile, familiarita' graduata) su riferimento selezionabile (libreria|playlist), dedup
   sempre library-wide, e spiegazioni a chip (reason code deterministici, testo in UI).
+- Discovery solo DIG: l'espansione playlist e' stata spostata nel contesto Playlist
+  (pagina dedicata `/playlists/[id]/expand`, autorun senza AI). "Aggiungi" attacca il
+  brano a quella playlist e, dove possibile, lo propaga sulla playlist Spotify
+  (write-back best-effort via `POST /api/playlists/{id}/discovered-tracks`).
 
 ## Direzione prodotto
 

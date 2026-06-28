@@ -17,6 +17,26 @@ migration. Disponibilita' `cratory.com` da confermare su registrar.
 Discogs); enrichment multi-provider; Set Builder tecnico/creativo; audit leggero (quick
 win) e rifacimento documentazione fatti; identificazione mix via Shazam in integrazione.
 
+## Milestone 2026-06-28 - Espansione nel contesto Playlist + write-back Spotify
+
+Discovery ridotto a **solo DIG**; l'espansione playlist vive ora nel contesto Playlist.
+
+- Backend: `SpotifyWebClient.add_tracks(playlist_id, ids)` (POST `/playlists/{id}/tracks`);
+  nuovo endpoint `POST /api/playlists/{id}/discovered-tracks` che importa il candidato,
+  lo attacca alla playlist (modello 1:1: non sposta una traccia gia' altrove) e fa
+  write-back Spotify best-effort (mai bloccante). Schemi `PlaylistAddTrackRequest/Response`.
+- Frontend: nuova pagina `app/playlists/[id]/expand/page.tsx` (autorun senza AI, toggle
+  AI + Ricalcola); componente condiviso `components/expand-results.tsx`; Discovery
+  ridotto a DIG (rimosso mode switcher e ramo expand); bottone "Scopri musica simile"
+  del dettaglio playlist -> `/playlists/[id]/expand`. API client
+  `addDiscoveredTrackToPlaylist`.
+- Test: `tests/test_playlist_add_track.py` (add_tracks + 5 casi endpoint: spotify/manuale/
+  non risolto/errore non bloccante/no-move 1:1). 217 test backend verdi; frontend lint
+  0 errori, build ok; verifica browser (Discovery solo DIG, pagina expand autorun senza AI).
+
+**Punto di ripresa:** branch `feat/espansione-in-playlist`. Backlog Discovery residuo:
+Last.fm tag come 2a sorgente del dig, tracklist per-release; playlist many-to-many.
+
 ## Milestone 2026-06-28 - Discovery dig: gusto + spiegazioni
 
 Chiuso lo slice "gusto + spiegazioni" del punto 1 (Miglioramento Discovery). Solo il
