@@ -36,6 +36,39 @@ def test_dismissed_survives_recompute(db):
     assert again.status == "dismissed"
 
 
+def test_accepted_suggested_fix_survives_recompute(db):
+    # Issue ancora valida (genere mancante) ma con una decisione utente:
+    # l'AI/utente ha impostato un valore e l'ha accettata → non deve essere azzerata.
+    _add_file(db, path="/m/a.mp3", artist="A", title="T", genre=None, year=2020, label="X",
+              duration_s=200.0, bitrate=320000, content_hash="a")
+    recompute(db)
+    issue = db.scalar(select(Issue).where(Issue.type == "missing_metadata",
+                                          Issue.field == "genre"))
+    issue.status = "accepted"
+    issue.suggested_fix_json = {"field": "genre", "action": "retag", "to": "Techno"}
+    db.commit()
+    recompute(db)
+    again = db.scalar(select(Issue).where(Issue.type == "missing_metadata",
+                                          Issue.field == "genre"))
+    assert again.status == "accepted"
+    assert again.suggested_fix_json == {"field": "genre", "action": "retag", "to": "Techno"}
+
+
+def test_open_ai_suggestion_not_wiped_to_none(db):
+    # Anche su issue 'open': un suggerimento già presente (es. AI) non va azzerato
+    # quando l'Inspector non ne calcola uno (missing_* → None).
+    _add_file(db, path="/m/b.mp3", artist="", title="", content_hash="b")
+    recompute(db)
+    issue = db.scalar(select(Issue).where(Issue.type == "missing_required_tag",
+                                          Issue.field == "artist"))
+    issue.suggested_fix_json = {"field": "artist", "action": "retag", "to": "Kai Tracid"}
+    db.commit()
+    recompute(db)
+    again = db.scalar(select(Issue).where(Issue.type == "missing_required_tag",
+                                          Issue.field == "artist"))
+    assert again.suggested_fix_json == {"field": "artist", "action": "retag", "to": "Kai Tracid"}
+
+
 def test_stale_issue_deleted(db):
     f = _add_file(db, path="/m/a.mp3", artist="A", title="T", genre=None, year=2020,
                   label="X", duration_s=200.0, bitrate=320000, content_hash="a")

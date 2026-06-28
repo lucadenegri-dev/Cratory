@@ -25,7 +25,12 @@ def _merge_issues(db: Session, computed) -> None:
         else:
             row.severity = c.severity
             row.detail = c.detail
-            row.suggested_fix_json = c.suggested_fix
+            # Le decisioni utente sono intoccabili: aggiorna il suggested_fix solo
+            # per le issue ancora 'open' e solo se l'Inspector ne ha uno. Non
+            # azzerare con None un valore scelto dall'utente (es. suggerimenti AI
+            # accettati), né riscrivere una decisione già presa.
+            if row.status == "open" and c.suggested_fix is not None:
+                row.suggested_fix_json = c.suggested_fix
             row.updated_at = utcnow()
     for key, row in existing.items():
         if key not in seen:
