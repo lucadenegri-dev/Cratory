@@ -1,4 +1,6 @@
-"""Router ISSUES: lista filtrabile + cambio status (singolo e in blocco). Sottile."""
+"""Router ISSUES: lista filtrabile + cambio status (singolo e in blocco) + AI. Sottile."""
+
+import os
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -7,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import AudioFile, Issue, utcnow
 from app.schemas import IssueBulkBody, IssueFixBody, IssueRead, IssueStatusBody
+from app.services import ai_tags
 
 router = APIRouter(prefix="/api/issues", tags=["issues"])
 _VALID = {"open", "accepted", "dismissed"}
@@ -92,3 +95,44 @@ def fix_issue(issue_id: int, body: IssueFixBody, db: Session = Depends(get_db)):
     db.commit()
     file = db.get(AudioFile, issue.file_id)
     return _to_read(issue, file)
+
+
+@router.post("/ai-suggest", response_model=dict)
+def ai_suggest(db: Session = Depends(get_db)):
+    if not ai_tags.is_configured():
+        return {"configured": False, "files": 0, "suggested": 0, "unresolved": 0}
+    rows = db.execute(
+        select(Issue, AudioFile)
+        .join(AudioFile, Issue.file_id == AudioFile.id)
+        .where(Issue.status == "open", Issue.type == "missing_required_tag",
+               Issue.field.in_(("artist", "title")))
+    ).all()
+    # JSON null si filtra in Python: la colonna JSON serializza None come 'null'
+    # (convenzione del codebase, vedi bulk()/set_status()).
+    todo = [(issue, f) for issue, f in rows if issue.suggested_fix_json is None]
+    if not todo:
+        return {"configured": True, "files": 0, "suggested": 0, "unresolved": 0}
+
+    by_file: dict[int, str] = {}
+    for issue, f in todo:
+        by_file.setdefault(issue.file_id,
+                           os.path.splitext(os.path.basename(f.path))[0])
+    file_ids = list(by_file.keys())
+    guesses = ai_tags.suggest([by_file[fid] for fid in file_ids])
+    guess_by_file = {fid: guesses[k] for k, fid in enumerate(file_ids)
+                     if k < len(guesses)}
+
+    suggested = 0
+    unresolved = 0
+    for issue, f in todo:
+        g = guess_by_file.get(issue.file_id) or {}
+        value = (g.get(issue.field) or "").strip()
+        if value:
+            issue.suggested_fix_json = {"field": issue.field, "action": "retag", "to": value}
+            issue.updated_at = utcnow()
+            suggested += 1
+        else:
+            unresolved += 1
+    db.commit()
+    return {"configured": True, "files": len(file_ids),
+            "suggested": suggested, "unresolved": unresolved}

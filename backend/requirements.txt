@@ -4,5 +4,6 @@ sqlalchemy>=2.0
 pydantic>=2
 pydantic-settings
 mutagen
+anthropic
 pytest
 httpx
