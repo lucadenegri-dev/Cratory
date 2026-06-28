@@ -6,7 +6,7 @@ import wave
 
 import pytest
 
-from app.models import Track
+from app.models import Playlist, Track
 from app.services.local_import import import_local_folder, scan_folder
 
 
@@ -68,6 +68,31 @@ def test_riscansione_idempotente(db, tmp_path):
     assert r2["created"] == 0
     assert r2["updated"] == 1
     assert db.query(Track).count() == 1
+
+
+def test_riscansione_riusa_stessa_playlist(db, tmp_path):
+    _write_wav(tmp_path / "a.wav", freq=440)
+    _tag_wav(tmp_path / "a.wav", title="A", artist="X")
+    r1 = import_local_folder(db, path=tmp_path, name="Crate")
+    r2 = import_local_folder(db, path=tmp_path, name="Crate")
+    assert r1["playlist_id"] == r2["playlist_id"]  # stessa cartella -> stessa playlist
+    assert db.query(Playlist).count() == 1  # nessun doppione di playlist
+
+
+def test_file_rimosso_viene_scollegato_dalla_playlist(db, tmp_path):
+    _write_wav(tmp_path / "a.wav", freq=440)
+    _tag_wav(tmp_path / "a.wav", title="A", artist="X")
+    _write_wav(tmp_path / "b.wav", freq=880)
+    _tag_wav(tmp_path / "b.wav", title="B", artist="Y")
+    r1 = import_local_folder(db, path=tmp_path, name="Crate")
+    pid = r1["playlist_id"]
+    assert db.query(Track).count() == 2
+    (tmp_path / "b.wav").unlink()  # il file sparisce dalla cartella
+    r2 = import_local_folder(db, path=tmp_path, name="Crate")
+    assert r2["removed"] == 1
+    pl = db.get(Playlist, pid)
+    assert pl.track_count == 1  # la playlist riflette la cartella
+    assert db.query(Track).count() == 2  # la traccia resta comunque in libreria
 
 
 def test_file_rinominato_aggiorna_path_senza_duplicare(db, tmp_path):

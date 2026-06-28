@@ -111,9 +111,14 @@ def import_local_folder(
             "removed": 0, "skipped": 0, "failed": failed, "total": 0, "errors": errors,
         }
 
+    # Identita' della playlist = path radice risolto: ri-scansionare la stessa cartella
+    # aggiorna la stessa playlist invece di crearne una nuova. prune=True scollega le
+    # tracce dei file non piu' presenti (restano comunque in libreria). Una cartella
+    # vuota/illeggibile finisce nel ramo precedente e non altera nulla (anti-unmount).
     report = import_playlist(
         db, platform=PLATFORM, name=playlist_name, items=items,
         normalize=identity_normalize, kind="local",
+        platform_playlist_id=str(root.resolve()), prune=True,
     )
     report["failed"] = failed
     report["errors"] = errors
