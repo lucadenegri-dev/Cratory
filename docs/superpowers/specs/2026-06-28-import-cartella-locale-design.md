@@ -33,7 +33,7 @@ quanto già importato da Spotify.
 | Tema | Decisione |
 |------|-----------|
 | Scopo | Specchio della collezione locale (sorgente primaria, sovrapposizione con Spotify ammessa) |
-| Dedup cross-sorgente | **Tieni separate**: il file locale crea sempre una traccia distinta `source_type="local"`; nessuna fusione fuzzy con tracce Spotify |
+| Dedup cross-sorgente | **Tieni separate**: il file locale crea sempre una traccia distinta `source_type="local_files"`; nessuna fusione fuzzy con tracce Spotify |
 | Identità traccia locale | **Hash dello stream audio** (robusto a spostamenti/rinomine e a modifiche dei tag) |
 | Estensione hash | **Segmento iniziale ~60s** di audio decodificato (veloce su grandi collezioni) |
 | Mapping cartelle | **Una cartella ricorsiva = una playlist** col nome della cartella |
@@ -57,7 +57,7 @@ quanto già importato da Spotify.
   - `build_normalized(path) -> NormalizedTrack | None` — tag + fallback nome file + hash.
   - `import_local_folder(db, *, path, name, on_progress=None) -> dict` — fa il lavoro
     pesante (tag + hash) **file per file con `on_progress`**, accumula la lista di
-    `NormalizedTrack`, poi chiama `import_playlist(platform="local", items=<normalizzati>,
+    `NormalizedTrack`, poi chiama `import_playlist(platform="local_files", items=<normalizzati>,
     normalize=<identità>)`; ritorna il report (arricchito coi contatori `failed`/`errors`).
 - **`services/local_import_job.py`** — job in background, stato in memoria con lock,
   un job alla volta. Ricalcato su `enrichment_job.py`: `job_state()`, `is_running()`,
@@ -95,9 +95,13 @@ quanto già importato da Spotify.
 
 Mapping di una traccia locale sui campi `Track`:
 
-- `source_type = "local"`
-- `platform = "local"`
+- `source_type = "local_files"`
+- `platform = "local_files"`
 - `platform_track_id = <audio_hash>`
+
+> **Nota:** il valore è `local_files`, **non** `local`: `db.py` riserva `source_type="local"`
+> come sorgente legacy Rekordbox (`_LEGACY_SOURCES`) e la cancella durante il rebuild di un
+> DB legacy. `local_files` evita la collisione.
 - `local_path = <percorso assoluto>` (**nuova colonna nullable**)
 - `title`, `artist`, `album`, `year`, `duration_seconds` dai tag (o dal nome file)
 - `isrc` solo se presente nel tag
@@ -109,7 +113,7 @@ file viene spostato/rinominato, alla ri-scansione l'hash combacia ma il path cam
 solo i campi vuoti; una colonna propria, aggiornata esplicitamente, tiene pulita la logica.
 
 **Dedup — riuso totale, zero modifiche a `_find_existing`:** la funzione attuale
-(`playlist_import.py`) matcha già su `platform + platform_track_id`. Con `platform="local"`
+(`playlist_import.py`) matcha già su `platform + platform_track_id`. Con `platform="local_files"`
 e `platform_track_id=hash`, la ri-scansione è idempotente senza nuovo codice di dedup.
 Niente ISRC affidabile sui locali → nessuna fusione cross-sorgente (coerente con
 "tieni separate"). Due file diversi con lo stesso brano restano due tracce.
@@ -136,9 +140,9 @@ BPM/key/enrichment restano intoccati.
    - `audio_hash` sui primi ~60s.
    - Se ffmpeg fallisce / file illeggibile → conta come `failed`, registra il path in
      `errors[]`, **prosegue** (un file rotto non aborta il job).
-   - Costruisce `NormalizedTrack` (`platform="local"`, `platform_track_id=hash`,
+   - Costruisce `NormalizedTrack` (`platform="local_files"`, `platform_track_id=hash`,
      `local_path=path`) e lo accumula nella lista.
-4. **Import:** passa la lista già normalizzata a `import_playlist(db, platform="local",
+4. **Import:** passa la lista già normalizzata a `import_playlist(db, platform="local_files",
    name=..., items=<normalizzati>, normalize=<identità>, prune=False)`. Riuso totale:
    create/update, membership M2M, dedup per hash, update `local_path`. Singola
    transazione/commit a fine import (le scritture DB sono leggere; il costo è nella fase
