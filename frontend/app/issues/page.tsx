@@ -78,7 +78,7 @@ export default function IssuesPage() {
       } else {
         load();
         setAiNote(
-          `${r.suggested} generi suggeriti (bassa confidenza, rivedi)${r.unresolved > 0 ? `, ${r.unresolved} non ricavabili` : ""} — accetta col ✓.`,
+          `${r.suggested} generi suggeriti — mancanti + sporchi (bassa confidenza, rivedi)${r.unresolved > 0 ? `, ${r.unresolved} non ricavabili` : ""} — accetta col ✓.`,
         );
       }
     } catch (e) {
