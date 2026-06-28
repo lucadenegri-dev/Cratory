@@ -147,3 +147,16 @@ class PlanRead(BaseModel):
     ops: list[PlanOpRead]
     conflicts: list[ConflictRead]
     stats: PlanStats
+
+
+class ApplyResult(BaseModel):
+    run_id: int | None = None
+    applied_ops: int = 0
+    refused: bool = False
+    stale: bool = False
+    partial: bool = False
+    failed_op_seq: int | None = None
+    error: str | None = None
+    reason: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
