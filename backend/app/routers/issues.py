@@ -136,3 +136,55 @@ def ai_suggest(db: Session = Depends(get_db)):
     db.commit()
     return {"configured": True, "files": len(file_ids),
             "suggested": suggested, "unresolved": unresolved}
+
+
+@router.post("/ai-suggest-genre", response_model=dict)
+def ai_suggest_genre(db: Session = Depends(get_db)):
+    if not ai_tags.is_configured():
+        return {"configured": False, "files": 0, "suggested": 0, "unresolved": 0}
+    rows = db.execute(
+        select(Issue, AudioFile)
+        .join(AudioFile, Issue.file_id == AudioFile.id)
+        .where(Issue.status == "open", Issue.type == "missing_metadata",
+               Issue.field == "genre")
+    ).all()
+    todo = [(issue, f) for issue, f in rows if issue.suggested_fix_json is None]
+    if not todo:
+        return {"configured": True, "files": 0, "suggested": 0, "unresolved": 0}
+
+    file_ids = [f.id for _, f in todo]
+    # artista/titolo "effettivi" dai suggested_fix delle issue artist/title
+    at_issues = db.scalars(
+        select(Issue).where(Issue.file_id.in_(file_ids),
+                            Issue.field.in_(("artist", "title")))
+    ).all()
+    sugg: dict[int, dict[str, str]] = {}
+    for iss in at_issues:
+        fix = iss.suggested_fix_json
+        if fix and fix.get("to"):
+            sugg.setdefault(iss.file_id, {})[iss.field] = fix["to"]
+
+    def _describe(f) -> str:
+        artist = f.artist or sugg.get(f.id, {}).get("artist")
+        title = f.title or sugg.get(f.id, {}).get("title")
+        if artist and title:
+            return f"{artist} - {title}"
+        if artist or title:
+            return artist or title
+        return os.path.splitext(os.path.basename(f.path))[0]
+
+    genres = ai_tags.suggest_genres([_describe(f) for _, f in todo])
+
+    suggested = 0
+    unresolved = 0
+    for (issue, _f), genre in zip(todo, genres):
+        value = (genre or "").strip()
+        if value:
+            issue.suggested_fix_json = {"field": "genre", "action": "retag", "to": value}
+            issue.updated_at = utcnow()
+            suggested += 1
+        else:
+            unresolved += 1
+    db.commit()
+    return {"configured": True, "files": len(todo),
+            "suggested": suggested, "unresolved": unresolved}
