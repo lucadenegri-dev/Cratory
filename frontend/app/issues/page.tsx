@@ -206,10 +206,10 @@ function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismiss
       </div>
       <div className="flex flex-col gap-2">
         <Button variant="primary" size="sm" onClick={onAiSuggest} disabled={aiBusy}>
-          {aiBusy ? "AI in corso…" : "✨ Risolvi con AI"}
+          {aiBusy ? "AI in corso…" : "✨ Suggerisci artista/titolo"}
         </Button>
         <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
-          {genreBusy ? "AI in corso…" : "✨ Suggerisci generi"}
+          {genreBusy ? "AI in corso…" : "✨ Suggerisci genere"}
         </Button>
         <Button variant="outline" size="sm" onClick={onAcceptFixable}>✓ accetta tutti i fixabili</Button>
         <Button variant="outline" size="sm" onClick={onDismissInfo}>✕ ignora tutti gli info</Button>
