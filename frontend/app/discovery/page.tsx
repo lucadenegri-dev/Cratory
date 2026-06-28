@@ -1,20 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Compass, ExternalLink, Music2, Wand2, Plus, Check, Disc3, Search, Tags } from "lucide-react";
+import { ExternalLink, Plus, Check, Disc3, Search, Tags } from "lucide-react";
 import {
-  discoveryStatus,
-  discoverExpand,
-  discoveryAddToLibrary,
   discoveryDig,
   discoveryAddLead,
   getDiscoveryGenres,
   listImportedPlaylists,
   getLabels,
-  fmtDuration,
-  type DiscoveryStatus,
-  type DiscoveryResponse,
-  type DiscoveryCandidate,
   type DiscoveryDigResponse,
   type DiscoveryLead,
   type Reason,
@@ -22,7 +15,7 @@ import {
   type Playlist,
   type LabelStats,
 } from "@/lib/api";
-import { Card, Badge, Alert, Button, EmptyState, Spinner, Select, Field, Checkbox, Input } from "@/components/ui";
+import { Card, Alert, Button, EmptyState, Spinner, Select, Input } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { cn } from "@/lib/cn";
@@ -50,16 +43,8 @@ function reasonLabel(r: Reason): string {
   }
 }
 
-type Mode = "expand" | "dig";
 type DigSeed = "genre" | "label";
 const CHIP_CAP = 12;
-
-const SOURCE_LABEL: Record<DiscoveryCandidate["source"], string> = {
-  similar_artist: "artista affine",
-  similar_track: "traccia affine",
-  tag: "genere",
-  label: "etichetta",
-};
 
 const PRESETS: { key: string; label: string; value: number; desc: string }[] = [
   { key: "familiare", label: "Familiare", value: 0.15, desc: "Artisti e nomi che probabilmente conosci già." },
@@ -69,13 +54,9 @@ const PRESETS: { key: string; label: string; value: number; desc: string }[] = [
 
 export default function DiscoveryPage() {
   const jobs = useJobs();
-  const [mode, setMode] = useState<Mode>("dig");
-  const [status, setStatus] = useState<DiscoveryStatus | null>(null);
 
-  // espandi playlist
+  // riferimento di gusto (playlist) per il dig
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
-  const [playlistId, setPlaylistId] = useState<number | null>(null);
-  const [useAi, setUseAi] = useState(true);
 
   // scava (dig Discogs)
   const [digSeed, setDigSeed] = useState<DigSeed>("genre");
@@ -88,18 +69,12 @@ export default function DiscoveryPage() {
   const [tasteRef, setTasteRef] = useState<number | null>(null); // null = tutta la libreria
   const [dig, setDig] = useState<DiscoveryDigResponse | null>(null);
 
-  // condivisi
-  const [result, setResult] = useState<DiscoveryResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    discoveryStatus().then(setStatus).catch((e) => setError(err(e)));
     listImportedPlaylists()
-      .then((pls) => {
-        setPlaylists(pls);
-        if (pls.length) setPlaylistId(pls[0].id);
-      })
+      .then(setPlaylists)
       .catch((e) => setError(err(e)));
     getDiscoveryGenres()
       .then((g) => {
@@ -115,33 +90,10 @@ export default function DiscoveryPage() {
       .catch(() => setLabels([]));
   }, []);
 
-  const aiEnabled = useAi && !!status?.ai_explanations;
-
-  const switchMode = (m: Mode) => {
-    setMode(m);
-    setResult(null);
-    setDig(null);
-    setError(null);
-  };
-
   const switchSeed = (s: DigSeed) => {
     setDigSeed(s);
     setDig(null);
     setError(null);
-  };
-
-  const runExpand = async () => {
-    if (playlistId == null) return;
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    try {
-      setResult(await discoverExpand(playlistId, { use_ai: aiEnabled }));
-    } catch (e) {
-      setError(err(e));
-    } finally {
-      setBusy(false);
-    }
   };
 
   const runDig = async () => {
@@ -161,8 +113,6 @@ export default function DiscoveryPage() {
     }
   };
 
-  const noPlaylists = playlists != null && playlists.length === 0;
-  const expandReady = !!status?.configured && !noPlaylists;
   const quickGenres = (genres?.library.length ? genres.library : genres?.styles ?? []).slice(0, 10);
   const visibleLabels =
     labels && !showAllLabels
@@ -175,35 +125,12 @@ export default function DiscoveryPage() {
 
   return (
     <PageLayout title="Discovery">
-      <p className="mb-4 text-sm text-muted">Scopri nuova musica per genere o etichetta, o espandi una playlist.</p>
-
-      {/* Mode toggle */}
-      <div className="mb-4 inline-flex rounded-none border border-border bg-surface p-1">
-        {([
-          ["dig", "DIG", <Disc3 key="i" size={14} />],
-          ["expand", "Espandi playlist", <Wand2 key="i" size={14} />],
-        ] as const).map(([m, label, icon]) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => switchMode(m)}
-            aria-pressed={mode === m}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-none px-3 py-1.5 text-sm font-medium transition-colors",
-              mode === m ? "bg-elevated text-fg" : "text-muted hover:text-fg",
-            )}
-          >
-            {icon} {label}
-          </button>
-        ))}
-      </div>
+      <p className="mb-4 text-sm text-muted">Scava nuova musica per genere o etichetta.</p>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
       {/* DIG (Discogs: genere o etichetta) */}
-      {mode === "dig" && (
-        <>
-          <div className="mb-6 border border-border p-4">
+      <div className="mb-6 border border-border p-4">
             {/* riga alta: Parti da (sx) + preset profondità e DIG (dx) */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -335,66 +262,6 @@ export default function DiscoveryPage() {
                 : "Scegli un genere o un’etichetta qui sopra, poi premi “DIG”."}
             </EmptyState>
           )}
-        </>
-      )}
-
-      {/* ESPANDI PLAYLIST */}
-      {mode === "expand" && (
-        <>
-          {status && !status.configured && (
-            <div className="mb-6">
-              <Alert tone="info">
-                Discovery non configurato: imposta <code className="font-mono">LASTFM_API_KEY</code> in
-                <span className="font-medium"> backend/.env</span> (chiave gratuita su last.fm/api).
-              </Alert>
-            </div>
-          )}
-          {noPlaylists && (
-            <EmptyState icon={<Music2 size={28} />} title="Nessuna playlist importata">
-              Importa una playlist dalla sezione Playlist per poterla espandere.
-            </EmptyState>
-          )}
-          {expandReady && (
-            <>
-              <div className="mb-6 border border-border p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                  <div className="min-w-0 flex-1">
-                    <Field label="Playlist da espandere">
-                      <Select value={playlistId ?? ""} onChange={(e) => setPlaylistId(Number(e.target.value))} disabled={busy}>
-                        {playlists?.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name} · {p.track_count} tracce</option>
-                        ))}
-                      </Select>
-                    </Field>
-                  </div>
-                  <Checkbox
-                    label={status?.ai_explanations ? "Spiega con l'AI" : "Spiegazioni AI (configura AI_API_KEY)"}
-                    checked={aiEnabled}
-                    onChange={setUseAi}
-                    disabled={busy || !status?.ai_explanations}
-                  />
-                  <Button onClick={runExpand} disabled={busy || playlistId == null}>
-                    {busy ? <Spinner /> : <Wand2 size={15} />} Scopri tracce affini
-                  </Button>
-                </div>
-                <p className="mt-3 text-xs leading-relaxed text-muted">
-                  Tracce di gusto affine, già risolte su Spotify per aggiungerle subito alla playlist.
-                </p>
-              </div>
-
-              {busy && !result && (
-                <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Cerco tracce…</div>
-              )}
-              {result && <Results result={result} />}
-              {!busy && !result && (
-                <EmptyState icon={<Compass size={28} />} title="Pronto per il discovery">
-                  Scegli una playlist qui sopra e premi “Scopri tracce affini”.
-                </EmptyState>
-              )}
-            </>
-          )}
-        </>
-      )}
     </PageLayout>
   );
 }
@@ -506,88 +373,6 @@ function LeadRow({ l }: { l: DiscoveryLead }) {
         </a>
         <Button size="sm" variant={added ? "ghost" : "outline"} onClick={add} disabled={adding || added}>
           {added ? <><Check size={14} /> Salvato</> : adding ? <Spinner /> : <><Plus size={14} /> Salva</>}
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
-function Results({ result }: { result: DiscoveryResponse }) {
-  if (result.candidates.length === 0) {
-    return (
-      <EmptyState icon={<Compass size={28} />} title="Nessun suggerimento">
-        La fonte di similarità non ha restituito tracce nuove per questa playlist.
-      </EmptyState>
-    );
-  }
-  return (
-    <div>
-      <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
-        {result.candidates.length} suggerimenti · {result.scope}
-      </h2>
-      <div className="grid gap-2">
-        {result.candidates.map((c, i) => (
-          <CandidateRow key={`${c.artist}-${c.title}-${i}`} c={c} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function CandidateRow({ c }: { c: DiscoveryCandidate }) {
-  const [adding, setAdding] = useState(false);
-  const [added, setAdded] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
-
-  const add = async () => {
-    setAdding(true);
-    setAddError(null);
-    try {
-      await discoveryAddToLibrary(c);
-      setAdded(true);
-    } catch (e) {
-      setAddError(err(e));
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  return (
-    <Card className="flex items-center gap-3 p-3">
-      {c.album_art_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={c.album_art_url} alt="" className="h-12 w-12 shrink-0 rounded-none object-cover" />
-      ) : (
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-none bg-elevated text-faint">
-          <Music2 size={18} />
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{c.artist} — {c.title}</span>
-          {c.label_owned && c.label && <Badge tone="neutral">↳ {c.label}</Badge>}
-        </div>
-        <div className="mt-0.5 flex items-center gap-2 text-xs text-faint">
-          <span>{SOURCE_LABEL[c.source]}</span>
-          {c.seed && c.source !== "label" && <span className="truncate">· da {c.seed}</span>}
-          {c.duration_seconds != null && <span>· {fmtDuration(c.duration_seconds)}</span>}
-        </div>
-        {c.explanation && <p className="mt-1 text-xs text-muted">{c.explanation}</p>}
-        {addError && <p className="mt-1 text-xs text-danger">⚠ {addError}</p>}
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        {c.spotify_url && (
-          <a
-            href={c.spotify_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-none border border-border-strong px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:bg-elevated"
-          >
-            <ExternalLink size={13} /> Spotify
-          </a>
-        )}
-        <Button size="sm" variant={added ? "ghost" : "outline"} onClick={add} disabled={adding || added}>
-          {added ? <><Check size={14} /> In libreria</> : adding ? <Spinner /> : <><Plus size={14} /> Aggiungi</>}
         </Button>
       </div>
     </Card>

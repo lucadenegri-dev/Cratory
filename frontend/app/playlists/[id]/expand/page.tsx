@@ -43,7 +43,8 @@ export default function ExpandPlaylistPage({ params }: { params: Promise<{ id: s
   useEffect(() => {
     getPlaylist(pid).then(setPlaylist).catch((e) => setError(err(e)));
     discoveryStatus().then(setStatus).catch(() => setStatus(null));
-    run(false); // autorun senza AI
+    const t = setTimeout(() => run(false), 0); // autorun senza AI (deferred: niente setState sincrono nell'effect)
+    return () => clearTimeout(t);
   }, [pid, run]);
 
   const marginalia = (
