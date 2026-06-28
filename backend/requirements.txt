@@ -10,3 +10,4 @@ anthropic>=0.69,<1.0
 # Shazam — identificazione tracce dei set DJ (richiede anche ffmpeg di sistema)
 yt-dlp>=2024.0
 shazamio>=0.5
+mutagen>=1.47

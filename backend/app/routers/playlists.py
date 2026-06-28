@@ -31,6 +31,9 @@ from app.repositories import (
 from app.schemas import (
     GapAnalysisResponse,
     GapOut,
+    LocalBrowseResponse,
+    LocalFolderImportRequest,
+    LocalImportJobStatus,
     ManualImportRequest,
     PlaylistAddTrackRequest,
     PlaylistAddTrackResponse,
@@ -41,7 +44,8 @@ from app.schemas import (
     TrackOut,
 )
 from app.serializers import track_out
-from app.services import enrichment_job
+from app.services import enrichment_job, local_import_job
+from app.services.fs_browse import FsBrowseError, browse, resolve_import_root
 from app.services.gap_analysis import analyze_gaps
 from app.services.manual_import import import_manual_playlist
 from app.services.playlist_import import import_playlist, import_single_track
@@ -177,6 +181,35 @@ def import_manual(req: ManualImportRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail="Nessuna traccia riconosciuta nel testo fornito.")
     _autoenrich(report.get("playlist_id"))
     return PlaylistImportReport(**report)
+
+
+@router.get("/local/browse", response_model=LocalBrowseResponse)
+def browse_local_folder(path: str | None = None):
+    """Naviga le sottocartelle sotto la root consentita, per scegliere cosa importare."""
+    try:
+        result = browse(path, root=resolve_import_root())
+    except FsBrowseError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return LocalBrowseResponse(**result)
+
+
+@router.post("/import-local", response_model=LocalImportJobStatus, status_code=202)
+def import_local_folder_endpoint(req: LocalFolderImportRequest):
+    """Avvia l'import di una cartella locale come job in background. 409 se già in corso."""
+    if local_import_job.is_running():
+        raise HTTPException(status_code=409, detail="Un import locale è già in corso.")
+    try:
+        target = browse(req.path, root=resolve_import_root())  # valida confinamento + esistenza
+    except FsBrowseError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    state = local_import_job.start_job(path=target["current_path"], name=req.name)
+    return LocalImportJobStatus(**state)
+
+
+@router.get("/import-local/status", response_model=LocalImportJobStatus)
+def local_import_status():
+    """Stato corrente del job di import locale (per il polling della UI)."""
+    return LocalImportJobStatus(**local_import_job.job_state())
 
 
 @router.get("", response_model=list[PlaylistOut])

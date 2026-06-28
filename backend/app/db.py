@@ -40,6 +40,7 @@ def ensure_schema(eng=None) -> None:
             "album_id": "VARCHAR",
             "isrc": "VARCHAR",
             "url": "TEXT",
+            "local_path": "TEXT",
             "added_at": "DATETIME",
             "playlist_id": "INTEGER",
             "playlist_name": "VARCHAR",

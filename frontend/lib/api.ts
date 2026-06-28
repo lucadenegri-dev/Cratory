@@ -429,6 +429,42 @@ export function syncPlaylist(id: number) {
   return apiPost<PlaylistImportReport>(`/api/playlists/${id}/sync`);
 }
 
+export interface LocalDirEntry {
+  name: string;
+  path: string;
+  audio_file_count: number;
+}
+
+export interface LocalBrowseResponse {
+  current_path: string;
+  parent_path: string | null;
+  dirs: LocalDirEntry[];
+}
+
+export interface LocalImportJobStatus {
+  status: "idle" | "running" | "done" | "error";
+  processed: number;
+  total: number;
+  created: number;
+  updated: number;
+  failed: number;
+  playlist_id: number | null;
+  errors: { path: string; error: string }[];
+  error: string | null;
+}
+
+export function browseLocalFolder(path?: string) {
+  return apiGet<LocalBrowseResponse>("/api/playlists/local/browse", { path });
+}
+
+export function startLocalImport(path: string, name?: string) {
+  return apiPost<LocalImportJobStatus>("/api/playlists/import-local", { path, name });
+}
+
+export function localImportStatus() {
+  return apiGet<LocalImportJobStatus>("/api/playlists/import-local/status");
+}
+
 export interface LabelStats {
   label: string;
   track_count: number;
