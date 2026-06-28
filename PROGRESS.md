@@ -17,6 +17,29 @@ migration. Disponibilita' `cratory.com` da confermare su registrar.
 Discogs); enrichment multi-provider; Set Builder tecnico/creativo; audit leggero (quick
 win) e rifacimento documentazione fatti; identificazione mix via Shazam in integrazione.
 
+## Milestone 2026-06-28 - Playlist many-to-many
+
+Modello relazionale brano-playlist portato da 1:1 a M2M.
+
+- `backend/app/models.py`: tabella associativa `playlist_tracks` (`playlist_id`,
+  `track_id`, `added_at`); relazioni SQLAlchemy `Playlist.tracks` / `Track.playlists`;
+  colonne legacy `Track.playlist_id` / `playlist_name` mantenute fisicamente ma svuotate.
+- `backend/app/db.py`: migrazione idempotente `_migrate_playlist_many_to_many` con
+  backfill `playlist_tracks` dalle colonne legacy.
+- `backend/app/repositories.py`: helper `add_track_to_playlist`,
+  `remove_track_from_playlist`, `tracks_for_playlist`, `recount_playlist`.
+- `backend/app/services/`: import Spotify e manuale, prune, delete-playlist e scoping
+  enrichment portati su membership; `discovered-tracks` endpoint via membership.
+- `backend/app/schemas.py` / `backend/app/serializers.py`: `TrackPlaylistRef`,
+  `TrackOut.playlists[]`, eager-load.
+- `frontend/`: badge "in N playlist" in libreria (`/library`) e lista playlist nel
+  dettaglio traccia; tipo `Track.playlists` in `lib/api.ts`.
+- `backend/tests/`: test migrazione, due playlist, no-steal, prune, delete, endpoint,
+  enrichment-scoping, serializer.
+
+**Punto di ripresa:** branch `feat/playlist-many-to-many`. Prossimo fronte aperto:
+Discovery (unificazione expand/dig, Last.fm tag come 2a sorgente, tracklist per-release).
+
 ## Milestone 2026-06-28 - Espansione nel contesto Playlist + write-back Spotify
 
 Discovery ridotto a **solo DIG**; l'espansione playlist vive ora nel contesto Playlist.
@@ -125,9 +148,10 @@ residuo: unificazione expand/dig, Last.fm tag come 2a sorgente, tracklist per-re
 ## Punto di ripresa
 
 Priorità e backlog completi in `docs/ROADMAP.md` (fonte di verità di stato). In sintesi:
-core assestato e audit quick-win fatto; in corso il rifacimento documentazione. Il
-prossimo fronte aperto dopo i doc è il **miglioramento Discovery** (qualità dei lead,
-più segnali di gusto, spiegazioni). i18n EN e multi-account pubblico restano sospesi.
+core assestato, audit quick-win e rifacimento documentazione fatti; playlist many-to-many
+completato. Il prossimo fronte aperto è il **miglioramento Discovery** (unificazione
+expand/dig, Last.fm tag come 2a sorgente, tracklist per-release). i18n EN e multi-account
+pubblico restano sospesi.
 
 ## Storico essenziale
 

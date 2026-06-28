@@ -66,6 +66,9 @@ migrazione esplicita.
   (pagina dedicata `/playlists/[id]/expand`, autorun senza AI). "Aggiungi" attacca il
   brano a quella playlist e, dove possibile, lo propaga sulla playlist Spotify
   (write-back best-effort via `POST /api/playlists/{id}/discovered-tracks`).
+- Playlist many-to-many: tabella associativa `playlist_tracks` (membership), import che
+  aggiunge appartenenze invece di sovrascrivere, delete/prune per-playlist, libreria che
+  mostra "in N playlist". Colonne legacy `Track.playlist_id`/`playlist_name` svuotate.
 
 ## Direzione prodotto
 
@@ -103,9 +106,6 @@ Backlog tecnico (non bloccante):
 - **Discovery: arricchire il dig.** Tracklist per-release (espandere un release nelle
   sue tracce) e Last.fm tag come 2a sorgente. (Genere+Etichetta gia' unificati; Playlist
   resta Spotify-resolved di proposito, goal diverso.)
-- **Playlist many-to-many.** Modello `playlist_tracks` (un brano in piu' playlist):
-  l'import aggiunge membership invece di sovrascrivere `Track.playlist_id`. Oggi
-  mitigato dal fix "scollega invece di cancellare", ma il modello resta 1:1.
 - **Shazam fase 2.** `DjSetTrack` come corpus per suggerimenti di co-occorrenza.
 - **SoundCloud import.** API chiusa a nuove app: rivalutare solo se riapre.
 - **PostgreSQL.** Bassa priorita': SQLite basta per uso personale (servirebbe solo con
