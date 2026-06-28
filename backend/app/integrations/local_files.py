@@ -68,9 +68,14 @@ def read_tags(path: str | Path) -> dict:
         date = _id3_text(tags, "TDRC")
     else:
         # Vorbis comment (flac/ogg/opus): chiavi minuscole; MP4 (m4a): atom "©nam" ecc.
+        # `tags.get` puo' sollevare (es. mutagen Vorbis rifiuta gli atom MP4 come "\xa9day"
+        # perche' non sono chiavi Vorbis valide): si tratta come "chiave assente".
         def first(*keys: str):
             for k in keys:
-                v = tags.get(k) or tags.get(k.upper())
+                try:
+                    v = tags.get(k)
+                except (ValueError, KeyError):
+                    v = None
                 if v:
                     return str(v[0])
             return None

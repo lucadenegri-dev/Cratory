@@ -7,6 +7,7 @@ l'hash resta stabile anche dopo aver modificato i tag.
 
 import math
 import struct
+import subprocess
 import wave
 
 import pytest
@@ -17,6 +18,18 @@ from app.integrations.local_files import (
     audio_hash,
     read_tags,
 )
+
+
+def _ffmpeg_encode(path, *, title=None, artist=None, freq=440, secs=1.0):
+    """Genera un file audio reale con ffmpeg (per testare formati non-WAV con tag)."""
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+           "-i", f"sine=frequency={freq}:duration={secs}"]
+    if title:
+        cmd += ["-metadata", f"title={title}"]
+    if artist:
+        cmd += ["-metadata", f"artist={artist}"]
+    cmd += [str(path), "-y"]
+    subprocess.run(cmd, check=True)
 
 
 def _write_wav(path, *, freq: int = 440, secs: float = 1.0, rate: int = 22050) -> None:
@@ -93,6 +106,23 @@ def test_read_tags_file_senza_tag(tmp_path):
     assert tags["title"] is None
     assert tags["artist"] is None
     assert tags["duration_seconds"] == 1
+
+
+def test_read_tags_flac_vorbis(tmp_path):
+    # Regressione: i tag Vorbis (FLAC) non devono far sollevare le sonde di chiavi MP4.
+    p = tmp_path / "x.flac"
+    _ffmpeg_encode(p, title="Spastik", artist="Plastikman")
+    tags = read_tags(p)
+    assert tags["title"] == "Spastik"
+    assert tags["artist"] == "Plastikman"
+
+
+def test_read_tags_ogg_vorbis(tmp_path):
+    p = tmp_path / "x.ogg"
+    _ffmpeg_encode(p, title="Kerala", artist="Bonobo")
+    tags = read_tags(p)
+    assert tags["title"] == "Kerala"
+    assert tags["artist"] == "Bonobo"
 
 
 def test_audio_extensions_minuscole_con_punto():
