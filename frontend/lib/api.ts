@@ -210,6 +210,117 @@ export function dismissDuplicate(groupId: number) {
   return apiSend<DupGroup>("POST", `/api/duplicates/${groupId}/dismiss`);
 }
 
+// --- PLAN + APPLY -----------------------------------------------------------
+export interface PlanOp {
+  id: number;
+  seq: number;
+  kind: string; // RETAG | RENAME | MOVE | DELETE
+  file_id: number;
+  file_path: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  status: string;
+}
+export interface Conflict {
+  kind: string;
+  file_id: number;
+  detail: string;
+}
+export interface PlanStats {
+  n_retag: number;
+  n_rename: number;
+  n_move: number;
+  n_delete: number;
+  space_freed_bytes: number;
+  n_conflicts: number;
+  blocking: boolean;
+}
+export interface Plan {
+  id: number;
+  status: string;
+  created_at: string;
+  rules: Record<string, unknown>;
+  ops: PlanOp[];
+  conflicts: Conflict[];
+  stats: PlanStats;
+}
+export interface ApplyResult {
+  run_id: number | null;
+  applied_ops: number;
+  refused: boolean;
+  stale: boolean;
+  partial: boolean;
+  failed_op_seq: number | null;
+  error: string | null;
+  reason: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+export interface ApplyJobState {
+  status: "idle" | "running" | "done" | "error";
+  phase: string | null;
+  processed: number;
+  total: number;
+  result: ApplyResult | null;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export function buildPlan() {
+  return apiSend<Plan>("POST", "/api/plan");
+}
+export function getPlan() {
+  return apiGet<Plan>("/api/plan");
+}
+export function startApply() {
+  return apiSend<ApplyJobState>("POST", "/api/apply");
+}
+export function applyStatus() {
+  return apiGet<ApplyJobState>("/api/apply/status");
+}
+
+// --- HISTORY ----------------------------------------------------------------
+export interface HistoryItem {
+  id: number;
+  status: string; // applied | undone
+  created_at: string;
+  n_ops: number;
+}
+export interface UndoResult {
+  run_id: number;
+  reversed_ops: number;
+  error: string | null;
+}
+export function listHistory() {
+  return apiGet<HistoryItem[]>("/api/history");
+}
+export function undoRun(id: number) {
+  return apiSend<UndoResult>("POST", `/api/history/${id}/undo`);
+}
+
+// --- SETTINGS ---------------------------------------------------------------
+export interface RootTarget {
+  id: number;
+  path: string;
+  label: string | null;
+  target_root: string | null;
+}
+export interface Settings {
+  naming_template: string;
+  folder_template: string;
+  roots: RootTarget[];
+}
+export function getSettings() {
+  return apiGet<Settings>("/api/settings");
+}
+export function updateSettings(body: { naming_template?: string; folder_template?: string }) {
+  return apiSend<Settings>("PUT", "/api/settings", body);
+}
+export function setRootTarget(rootId: number, target: string | null) {
+  return apiSend<Settings>("PUT", `/api/settings/roots/${rootId}/target`, { target_root: target });
+}
+
 // --- helpers ----------------------------------------------------------------
 export function fmtDuration(seconds: number | null | undefined): string {
   if (!seconds) return "—";
