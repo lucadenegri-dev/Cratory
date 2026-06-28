@@ -5,11 +5,12 @@ import { useJobs } from "./jobs-provider";
 import { Button, EqMeter } from "./ui";
 
 export function SourcesTable({
-  roots, onScan, onDelete,
+  roots, onScan, onDelete, deletingId,
 }: {
   roots: ScanRoot[];
   onScan: () => void;
   onDelete: (id: number) => void;
+  deletingId: number | null;
 }) {
   const { scan } = useJobs();
   const running = scan.status === "running";
@@ -39,7 +40,8 @@ export function SourcesTable({
                   <button
                     onClick={() => onDelete(r.id)}
                     aria-label="Rimuovi radice"
-                    className="text-faint transition-colors hover:text-danger"
+                    disabled={deletingId === r.id}
+                    className="text-faint transition-colors hover:text-danger disabled:opacity-40 disabled:cursor-not-allowed"
                   >×</button>
                 </td>
               </tr>

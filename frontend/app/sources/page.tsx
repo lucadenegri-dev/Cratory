@@ -13,6 +13,7 @@ export default function SourcesPage() {
   const [roots, setRoots] = useState<ScanRoot[]>([]);
   const [offline, setOffline] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const load = useCallback(() => {
     listSources()
@@ -34,12 +35,15 @@ export default function SourcesPage() {
     }
   };
   const onDelete = async (id: number) => {
+    if (deletingId !== null) return;
     setActionError(null);
+    setDeletingId(id);
     try {
       await deleteSource(id);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Impossibile rimuovere la radice");
     } finally {
+      setDeletingId(null);
       load();
     }
   };
@@ -73,7 +77,7 @@ export default function SourcesPage() {
         {roots.length === 0 && !offline ? (
           <EmptyState title="Nessuna radice">Aggiungi una cartella di musica per iniziare.</EmptyState>
         ) : (
-          <SourcesTable roots={roots} onScan={onScan} onDelete={onDelete} />
+          <SourcesTable roots={roots} onScan={onScan} onDelete={onDelete} deletingId={deletingId} />
         )}
       </div>
     </PageLayout>
