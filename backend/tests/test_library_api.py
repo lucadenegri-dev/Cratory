@@ -33,3 +33,37 @@ def test_library_stats(db):
         assert s["issues_by_severity"] == {"error": 1, "warning": 1}  # la dismissed esclusa
         assert s["dup_groups"] == 1
         assert s["sources"] == 1
+
+
+def test_list_files_basic_and_indicators(db):
+    _seed_stats(db)
+    with TestClient(app) as client:
+        rows = client.get("/api/files").json()
+        assert [r["path"] for r in rows] == ["/m/a.flac", "/m/b.mp3"]  # ordinati per path, no missing
+        a = next(r for r in rows if r["id"] == 1)
+        b = next(r for r in rows if r["id"] == 2)
+        assert a["issue_count"] == 1 and a["worst_severity"] == "error"
+        assert a["in_dup_group"] is True and b["in_dup_group"] is True
+        assert b["worst_severity"] == "warning"  # la dismissed non conta
+
+
+def test_list_files_filters(db):
+    _seed_stats(db)
+    with TestClient(app) as client:
+        only_issues = client.get("/api/files", params={"has_issues": True}).json()
+        assert {r["id"] for r in only_issues} == {1, 2}
+        by_root = client.get("/api/files", params={"root_id": 1}).json()
+        assert len(by_root) == 2
+        searched = client.get("/api/files", params={"q": "a.flac"}).json()
+        assert [r["id"] for r in searched] == [1]
+        missing = client.get("/api/files", params={"status": "missing"}).json()
+        assert [r["id"] for r in missing] == [3]
+
+
+def test_list_files_sort_and_paging(db):
+    _seed_stats(db)
+    with TestClient(app) as client:
+        ext_first = client.get("/api/files", params={"sort": "title"}).json()
+        assert len(ext_first) == 2
+        page = client.get("/api/files", params={"limit": 1, "offset": 1}).json()
+        assert [r["id"] for r in page] == [2]

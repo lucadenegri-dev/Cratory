@@ -181,3 +181,18 @@ class LibraryStatsRead(BaseModel):
     issues_by_severity: dict[str, int]
     dup_groups: int
     sources: int
+
+
+class FileRow(BaseModel):
+    id: int
+    root_id: int
+    path: str
+    ext: str
+    artist: str | None
+    title: str | None
+    bitrate: int | None
+    duration_s: float | None
+    status: str
+    issue_count: int
+    worst_severity: str | None
+    in_dup_group: bool
