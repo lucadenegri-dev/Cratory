@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     database_url: str = DEFAULT_DATABASE_URL
     frontend_origin: str = "http://localhost:3000"
     log_level: str = "INFO"
+    # Import da cartella locale: radice consentita per il file-browser (vuoto = home utente).
+    local_import_root: str = ""
 
     # Integrazioni future (MVP 2+)
     spotify_client_id: str = ""
