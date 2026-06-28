@@ -41,6 +41,9 @@ class Track(Base):
     platform_track_id: Mapped[str | None] = mapped_column(String, index=True)
     isrc: Mapped[str | None] = mapped_column(String, index=True)
     url: Mapped[str | None] = mapped_column(Text)
+    # Path assoluto del file per le tracce locali (source_type="local_files"). Riferimento
+    # volatile (non si conserva l'audio): aggiornato a ogni ri-scansione se il file si sposta.
+    local_path: Mapped[str | None] = mapped_column(Text)
     added_at: Mapped[datetime | None] = mapped_column(DateTime)  # primo import in libreria; l'added_at per-playlist sta su playlist_tracks
     playlist_id: Mapped[int | None] = mapped_column(ForeignKey("playlists.id"), index=True)
     playlist_name: Mapped[str | None] = mapped_column(String)

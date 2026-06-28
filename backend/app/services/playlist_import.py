@@ -38,6 +38,7 @@ class NormalizedTrack:
     added_at: datetime | None
     year: int | None = None
     album_id: str | None = None
+    local_path: str | None = None
 
 
 def _release_year(album: dict) -> int | None:
@@ -124,6 +125,10 @@ def _apply_fields(track: Track, norm: NormalizedTrack) -> None:
     track.album_art_url = track.album_art_url or norm.artwork_url
     track.isrc = track.isrc or norm.isrc
     track.added_at = track.added_at or norm.added_at
+    # local_path: overwrite-quando-presente (solo i NormalizedTrack locali lo valorizzano),
+    # così un file spostato/rinominato aggiorna il path pur mantenendo l'identità via hash.
+    if norm.local_path:
+        track.local_path = norm.local_path
 
 
 def _apply(db: Session, track: Track, norm: NormalizedTrack, playlist: Playlist) -> None:
