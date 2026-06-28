@@ -76,6 +76,7 @@ def list_files(
     )
     worst_rank = (
         select(func.max(case(_SEV_RANK, value=Issue.severity, else_=0)))
+        .select_from(Issue)
         .where(Issue.file_id == AudioFile.id, Issue.status == "open")
         .scalar_subquery()
     )
