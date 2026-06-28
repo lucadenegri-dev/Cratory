@@ -22,6 +22,7 @@ export default function IssuesPage() {
 
   const [sev, setSev] = useState("");
   const [type, setType] = useState("");
+  const [field, setField] = useState("");
   const [status, setStatus] = useState("open");
   const [rootId, setRootId] = useState("");
 
@@ -88,10 +89,15 @@ export default function IssuesPage() {
   };
 
   const types = useMemo(() => [...new Set(issues.map((i) => i.type))].sort(), [issues]);
+  const fields = useMemo(
+    () => [...new Set(issues.map((i) => i.field).filter((f): f is string => !!f))].sort(),
+    [issues],
+  );
 
   const filtered = issues.filter((i) =>
     (!sev || i.severity === sev) &&
     (!type || i.type === type) &&
+    (!field || i.field === field) &&
     (!status || i.status === status) &&
     (!rootId || i.root_id === Number(rootId)),
   );
@@ -134,6 +140,10 @@ export default function IssuesPage() {
           <Select value={type} onChange={(e) => setType(e.target.value)} className="w-auto">
             <option value="">tipo: tutti</option>
             {types.map((t) => <option key={t} value={t}>{t}</option>)}
+          </Select>
+          <Select value={field} onChange={(e) => setField(e.target.value)} className="w-auto">
+            <option value="">campo: tutti</option>
+            {fields.map((f) => <option key={f} value={f}>{f}</option>)}
           </Select>
           <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-auto">
             <option value="open">aperte</option>
