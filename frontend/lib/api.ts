@@ -181,6 +181,16 @@ export function bulkIssues(body: IssueBulk) {
   return apiSend<{ updated: number }>("POST", "/api/issues/bulk", body);
 }
 
+export interface AiSuggestResult {
+  configured: boolean;
+  files: number;
+  suggested: number;
+  unresolved: number;
+}
+export function aiSuggestTags() {
+  return apiSend<AiSuggestResult>("POST", "/api/issues/ai-suggest");
+}
+
 // --- DUPLICATES -------------------------------------------------------------
 export interface DupMember {
   file_id: number;
