@@ -190,6 +190,9 @@ export interface AiSuggestResult {
 export function aiSuggestTags() {
   return apiSend<AiSuggestResult>("POST", "/api/issues/ai-suggest");
 }
+export function aiSuggestGenres() {
+  return apiSend<AiSuggestResult>("POST", "/api/issues/ai-suggest-genre");
+}
 
 // --- DUPLICATES -------------------------------------------------------------
 export interface DupMember {

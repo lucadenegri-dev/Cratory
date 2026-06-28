@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags,
+  listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, aiSuggestGenres,
   type Issue, type ScanRoot,
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
@@ -17,6 +17,7 @@ export default function IssuesPage() {
   const [offline, setOffline] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  const [genreBusy, setGenreBusy] = useState(false);
   const [aiNote, setAiNote] = useState<string | null>(null);
 
   const [sev, setSev] = useState("");
@@ -65,6 +66,27 @@ export default function IssuesPage() {
     }
   };
 
+  const onAiGenres = async () => {
+    setActionError(null);
+    setAiNote(null);
+    setGenreBusy(true);
+    try {
+      const r = await aiSuggestGenres();
+      if (!r.configured) {
+        setActionError("Imposta ANTHROPIC_API_KEY nel backend per usare l'AI.");
+      } else {
+        load();
+        setAiNote(
+          `${r.suggested} generi suggeriti (bassa confidenza, rivedi)${r.unresolved > 0 ? `, ${r.unresolved} non ricavabili` : ""} — accetta col ✓.`,
+        );
+      }
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Errore");
+    } finally {
+      setGenreBusy(false);
+    }
+  };
+
   const types = useMemo(() => [...new Set(issues.map((i) => i.type))].sort(), [issues]);
 
   const filtered = issues.filter((i) =>
@@ -93,6 +115,7 @@ export default function IssuesPage() {
           total={issues.length} bySev={bySev} byType={byType} accepted={accepted}
           onAcceptFixable={acceptAllFixable} onDismissInfo={dismissAllInfo}
           onAiSuggest={onAiSuggest} aiBusy={aiBusy}
+          onAiGenres={onAiGenres} genreBusy={genreBusy}
         />
       }
     >
@@ -136,7 +159,7 @@ export default function IssuesPage() {
   );
 }
 
-function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismissInfo, onAiSuggest, aiBusy }: {
+function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismissInfo, onAiSuggest, aiBusy, onAiGenres, genreBusy }: {
   total: number;
   bySev: Record<string, number>;
   byType: Record<string, number>;
@@ -145,6 +168,8 @@ function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismiss
   onDismissInfo: () => void;
   onAiSuggest: () => void;
   aiBusy: boolean;
+  onAiGenres: () => void;
+  genreBusy: boolean;
 }) {
   return (
     <div className="flex flex-col gap-4 text-xs">
@@ -172,6 +197,9 @@ function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismiss
       <div className="flex flex-col gap-2">
         <Button variant="primary" size="sm" onClick={onAiSuggest} disabled={aiBusy}>
           {aiBusy ? "AI in corso…" : "✨ Risolvi con AI"}
+        </Button>
+        <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
+          {genreBusy ? "AI in corso…" : "✨ Suggerisci generi"}
         </Button>
         <Button variant="outline" size="sm" onClick={onAcceptFixable}>✓ accetta tutti i fixabili</Button>
         <Button variant="outline" size="sm" onClick={onDismissInfo}>✕ ignora tutti gli info</Button>
