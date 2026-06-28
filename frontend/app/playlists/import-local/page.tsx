@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUp, Folder, HardDriveDownload } from "lucide-react";
 import {
@@ -24,14 +24,17 @@ export default function ImportLocalPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<LocalImportJobStatus | null>(null);
+  const nameEdited = useRef(false);
 
   const load = useCallback((path?: string) => {
     browseLocalFolder(path)
       .then((res) => {
         setError(null);
         setView(res);
-        const segs = res.current_path.split(/[\\/]/).filter(Boolean);
-        setName(segs[segs.length - 1] ?? "");
+        if (!nameEdited.current) {
+          const segs = res.current_path.split(/[\\/]/).filter(Boolean);
+          setName(segs[segs.length - 1] ?? "");
+        }
       })
       .catch((e) => setError(`Navigazione fallita: ${err(e)}`));
   }, []);
@@ -50,6 +53,9 @@ export default function ImportLocalPage() {
           if (st.status === "done" && st.playlist_id) {
             clearInterval(id);
             router.push(`/playlists/${st.playlist_id}`);
+          } else if (st.status === "done" && !st.playlist_id) {
+            clearInterval(id);
+            setError("Import completato ma nessuna playlist creata.");
           }
         })
         .catch(() => {
@@ -86,8 +92,8 @@ export default function ImportLocalPage() {
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
       {job && (
-        <div className="mb-4">
-          <Alert tone={job.status === "error" ? "danger" : "info"}>
+        <div className="mb-4" role="status" aria-live="polite">
+          <Alert tone={job.status === "error" ? "danger" : job.status === "done" ? "success" : "info"}>
             {job.status === "running" && <>Import in corso… {job.processed}/{job.total} file</>}
             {job.status === "done" && <>Completato: {job.created} nuove, {job.updated} aggiornate{job.failed ? `, ${job.failed} saltate` : ""}.</>}
             {job.status === "error" && <>Errore: {job.error}</>}
@@ -117,7 +123,7 @@ export default function ImportLocalPage() {
           </div>
 
           <Field label="Nome playlist">
-            <Input value={name} onChange={(e) => setName(e.target.value)} disabled={running} placeholder="Nome della playlist" />
+            <Input value={name} onChange={(e) => { nameEdited.current = true; setName(e.target.value); }} disabled={running} placeholder="Nome della playlist" />
           </Field>
 
           <div className="flex justify-end">
