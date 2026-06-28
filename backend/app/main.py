@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import ensure_schema
 from app.routers import analyze, apply, duplicates, history, issues, library, plan, scan, settings, sources
@@ -15,6 +16,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="DjOrganizer", lifespan=lifespan)
+
+# Tool locale: il frontend Next gira su un'altra porta (es. localhost:3000) e
+# chiama l'API cross-origin. Consenti qualunque porta su localhost/127.0.0.1.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(sources.router)
 app.include_router(scan.router)
 app.include_router(analyze.router)
