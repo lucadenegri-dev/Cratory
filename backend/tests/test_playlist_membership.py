@@ -110,3 +110,14 @@ def test_recount_playlist(db):
     db.commit()
     recount_playlist(db, pl)
     assert pl.track_count == 2
+
+
+def test_track_out_exposes_playlists(db):
+    from app.serializers import track_out
+    a, b, t = _pl(db, "A"), _pl(db, "B"), _tr(db, "T")
+    add_track_to_playlist(db, t, a)
+    add_track_to_playlist(db, t, b)
+    db.commit()
+    out = track_out(t)
+    assert {p.name for p in out.playlists} == {"A", "B"}
+    assert not hasattr(out, "playlist_id")

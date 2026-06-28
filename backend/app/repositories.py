@@ -91,12 +91,16 @@ def list_tracks(
     else:
         order_by = (Track.artist.is_(None), Track.artist, Track.title)
 
-    rows = db.scalars(stmt.order_by(*order_by).limit(limit).offset(offset)).all()
+    rows = db.scalars(
+        stmt.options(selectinload(Track.playlists)).order_by(*order_by).limit(limit).offset(offset)
+    ).all()
     return total or 0, rows
 
 
 def get_track(db: Session, track_id: int) -> Track | None:
-    return db.scalar(select(Track).where(Track.id == track_id))
+    return db.scalar(
+        select(Track).options(selectinload(Track.playlists)).where(Track.id == track_id)
+    )
 
 
 # Campi feature musicali: se l'utente ne modifica uno a mano, la fonte diventa "manual".
@@ -284,6 +288,7 @@ def recount_playlist(db: Session, playlist: Playlist) -> None:
 def tracks_for_playlist(db: Session, playlist_id: int) -> list[Track]:
     return list(db.scalars(
         select(Track)
+        .options(selectinload(Track.playlists))
         .join(playlist_tracks, playlist_tracks.c.track_id == Track.id)
         .where(playlist_tracks.c.playlist_id == playlist_id)
         .order_by(playlist_tracks.c.added_at.is_(None), playlist_tracks.c.added_at)

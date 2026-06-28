@@ -6,6 +6,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class TrackPlaylistRef(BaseModel):
+    id: int
+    name: str
+
+
 class TrackOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -31,8 +36,7 @@ class TrackOut(BaseModel):
     status: str = "imported"
     url: str | None = None
     isrc: str | None = None
-    playlist_id: int | None = None
-    playlist_name: str | None = None
+    playlists: list[TrackPlaylistRef] = []
     added_at: datetime | None = None
     spotify_url: str | None = None
     album_art_url: str | None = None
