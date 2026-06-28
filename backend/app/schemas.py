@@ -282,6 +282,39 @@ class ManualImportRequest(BaseModel):
     text: str = Field(min_length=1)  # righe "Artista - Titolo" o CSV "artista,titolo"
 
 
+# --- Import locale -----------------------------------------------------------
+
+
+class LocalDirEntry(BaseModel):
+    name: str
+    path: str
+    audio_file_count: int = 0
+
+
+class LocalBrowseResponse(BaseModel):
+    current_path: str
+    parent_path: str | None = None
+    dirs: list[LocalDirEntry] = []
+
+
+class LocalFolderImportRequest(BaseModel):
+    path: str = Field(min_length=1)
+    name: str | None = Field(default=None, max_length=200)
+    recurse: bool = True
+
+
+class LocalImportJobStatus(BaseModel):
+    status: str
+    processed: int = 0
+    total: int = 0
+    created: int = 0
+    updated: int = 0
+    failed: int = 0
+    playlist_id: int | None = None
+    errors: list[dict] = []
+    error: str | None = None
+
+
 # --- Etichette discografiche -------------------------------------------------
 
 
