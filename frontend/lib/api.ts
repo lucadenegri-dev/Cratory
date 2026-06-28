@@ -70,6 +70,7 @@ export interface FileQuery {
   sort?: "path" | "artist" | "title" | "bitrate" | "duration";
   limit?: number;
   offset?: number;
+  [key: string]: string | number | boolean | undefined;
 }
 
 async function handle<T>(res: Response): Promise<T> {
@@ -87,7 +88,10 @@ async function handle<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function apiGet<T>(path: string, params?: FileQuery): Promise<T> {
+async function apiGet<T>(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined>,
+): Promise<T> {
   const url = new URL(API + path);
   if (params) {
     for (const [k, v] of Object.entries(params)) {
@@ -132,6 +136,78 @@ export function listFiles(query?: FileQuery) {
 }
 export function libraryStats() {
   return apiGet<LibraryStats>("/api/library/stats");
+}
+
+// --- ISSUES -----------------------------------------------------------------
+export interface Issue {
+  id: number;
+  file_id: number;
+  root_id: number;
+  type: string;
+  field: string | null;
+  severity: Severity;
+  detail: string;
+  suggested_fix_json: Record<string, unknown> | null;
+  status: "open" | "accepted" | "dismissed";
+  file_path: string;
+  artist: string | null;
+  title: string | null;
+}
+
+export interface IssueFilters {
+  severity?: string;
+  type?: string;
+  status?: string;
+  root_id?: number;
+  [key: string]: string | number | boolean | undefined;
+}
+
+export interface IssueBulk {
+  type?: string;
+  severity?: string;
+  status: "open" | "accepted" | "dismissed";
+}
+
+export function listIssues(filters?: IssueFilters) {
+  return apiGet<Issue[]>("/api/issues", filters);
+}
+export function setIssueStatus(id: number, status: "open" | "accepted" | "dismissed") {
+  return apiSend<{ id: number; status: string }>("POST", `/api/issues/${id}/status`, { status });
+}
+export function fixIssue(id: number, value: string) {
+  return apiSend<Issue>("POST", `/api/issues/${id}/fix`, { value });
+}
+export function bulkIssues(body: IssueBulk) {
+  return apiSend<{ updated: number }>("POST", "/api/issues/bulk", body);
+}
+
+// --- DUPLICATES -------------------------------------------------------------
+export interface DupMember {
+  file_id: number;
+  action: "keep" | "remove";
+  path: string;
+  ext: string;
+  bitrate: number | null;
+  duration_s: number | null;
+  content_hash: string | null;
+}
+export interface DupGroup {
+  id: number;
+  match_kind: string;
+  keeper_file_id: number;
+  keeper_overridden: boolean;
+  dismissed: boolean;
+  members: DupMember[];
+}
+
+export function listDuplicates() {
+  return apiGet<DupGroup[]>("/api/duplicates");
+}
+export function setKeeper(groupId: number, fileId: number) {
+  return apiSend<DupGroup>("POST", `/api/duplicates/${groupId}/keeper`, { file_id: fileId });
+}
+export function dismissDuplicate(groupId: number) {
+  return apiSend<DupGroup>("POST", `/api/duplicates/${groupId}/dismiss`);
 }
 
 // --- helpers ----------------------------------------------------------------

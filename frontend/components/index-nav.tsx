@@ -33,8 +33,8 @@ export function IndexNav() {
     libraryStats().then(setStats).catch(() => setStats(null));
   }, []);
 
-  // ricarica i conteggi all'avvio e quando uno scan finisce
-  useEffect(() => { load(); }, [load]);
+  // ricarica i conteggi all'avvio, al cambio pagina, e quando uno scan finisce
+  useEffect(() => { load(); }, [pathname, load]);
   useEffect(() => {
     if (scan.status === "done") load();
   }, [scan.status, load]);

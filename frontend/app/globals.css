@@ -16,6 +16,7 @@
   --color-fg-strong: var(--c-fg-strong);
   --color-danger: var(--c-danger);
   --color-warning: var(--c-warning);
+  --color-ok: var(--c-ok);
 
   --radius: 0px;
 
@@ -38,6 +39,7 @@
   --c-fg-strong: #ededed;
   --c-danger: #d8593f;
   --c-warning: #c9a23a;
+  --c-ok: #5a8f6b;
 }
 
 /* Paper = toggle */
@@ -54,6 +56,7 @@ html[data-theme="paper"] {
   --c-fg-strong: #15140f;
   --c-danger: #a83a22;
   --c-warning: #8a6d18;
+  --c-ok: #3f6b4f;
 }
 
 html, body { height: 100%; }
