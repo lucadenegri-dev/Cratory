@@ -7,3 +7,4 @@ mutagen
 anthropic
 pytest
 httpx
+python-dotenv

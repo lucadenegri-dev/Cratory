@@ -1,12 +1,21 @@
 """Entrypoint FastAPI di DjOrganizer."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.db import ensure_schema
-from app.routers import analyze, apply, duplicates, history, issues, library, plan, scan, settings, sources
+# Carica backend/.env in os.environ: serve all'SDK Anthropic, che legge
+# ANTHROPIC_API_KEY da os.environ. La key non ha il prefisso DJORG_, quindi
+# pydantic-settings non la carica. override=False: non sovrascrive l'ambiente.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+from app.db import ensure_schema  # noqa: E402
+from app.routers import (  # noqa: E402
+    analyze, apply, duplicates, history, issues, library, plan, scan, settings, sources,
+)
 
 
 @asynccontextmanager
