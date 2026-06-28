@@ -53,7 +53,8 @@ def _build(db, tmp_path, copy_fixture):
     db.add(PlanOp(plan_id=1, seq=3, kind="DELETE", file_id=2,
                   before_json={"path": rem}, after_json={}, status="pending"))
     db.commit()
-    return plan, [keep, rem, plain]
+    quarantine_rem = str(root / ".quarantine" / os.path.relpath(rem, str(root)))
+    return plan, [keep, rem, plain, keep_dest, plain_dest, quarantine_rem]
 
 
 def test_apply_then_undo_equals_initial(db, tmp_path, copy_fixture):
