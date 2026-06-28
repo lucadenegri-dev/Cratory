@@ -145,8 +145,8 @@ def ai_suggest_genre(db: Session = Depends(get_db)):
     rows = db.execute(
         select(Issue, AudioFile)
         .join(AudioFile, Issue.file_id == AudioFile.id)
-        .where(Issue.status == "open", Issue.type == "missing_metadata",
-               Issue.field == "genre")
+        .where(Issue.status == "open", Issue.field == "genre",
+               Issue.type.in_(("missing_metadata", "dirty_genre")))
     ).all()
     todo = [(issue, f) for issue, f in rows if issue.suggested_fix_json is None]
     if not todo:
@@ -168,10 +168,16 @@ def ai_suggest_genre(db: Session = Depends(get_db)):
         artist = f.artist or sugg.get(f.id, {}).get("artist")
         title = f.title or sugg.get(f.id, {}).get("title")
         if artist and title:
-            return f"{artist} - {title}"
-        if artist or title:
-            return artist or title
-        return os.path.splitext(os.path.basename(f.path))[0]
+            base = f"{artist} - {title}"
+        elif artist or title:
+            base = artist or title
+        else:
+            base = os.path.splitext(os.path.basename(f.path))[0]
+        # Per i 'dirty_genre' il file ha già un genere (sporco): passalo come
+        # contesto perché l'AI ne estragga il primario pulito.
+        if f.genre and f.genre.strip():
+            base = f"{base} [genere attuale: {f.genre.strip()}]"
+        return base
 
     genres = ai_tags.suggest_genres([_describe(f) for _, f in todo])
 

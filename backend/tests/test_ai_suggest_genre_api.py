@@ -75,6 +75,31 @@ def test_genre_unresolved(db, monkeypatch):
         assert r["suggested"] == 0 and r["unresolved"] == 1
 
 
+def test_genre_normalizes_dirty(db, monkeypatch):
+    db.add(AudioFile(id=9, root_id=1, path="/m/x.mp3", ext="mp3", size_bytes=1,
+                     hash_method="file", status="present", has_cover=False,
+                     artist="Plastikman", title="Spastik", genre="Techno, House, Acid"))
+    db.add(Issue(file_id=9, type="dirty_genre", field="genre", severity="warning",
+                 detail="genere da normalizzare", suggested_fix_json=None, status="open"))
+    db.commit()
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    captured = {}
+
+    def fake(descriptions):
+        captured["descs"] = descriptions
+        return ["Techno"]
+
+    monkeypatch.setattr(ai_tags, "suggest_genres", fake)
+    with TestClient(app) as client:
+        r = client.post("/api/issues/ai-suggest-genre").json()
+        assert r == {"configured": True, "files": 1, "suggested": 1, "unresolved": 0}
+        assert captured["descs"] == ["Plastikman - Spastik [genere attuale: Techno, House, Acid]"]
+        rows = client.get("/api/issues", params={"type": "dirty_genre"}).json()
+        assert rows[0]["suggested_fix_json"] == {"field": "genre", "action": "retag",
+                                                 "to": "Techno"}
+        assert rows[0]["status"] == "open"
+
+
 def test_genre_skips_already_suggested(db, monkeypatch):
     db.add(AudioFile(id=4, root_id=1, path="/m/z.mp3", ext="mp3", size_bytes=1,
                      hash_method="file", status="present", has_cover=False))

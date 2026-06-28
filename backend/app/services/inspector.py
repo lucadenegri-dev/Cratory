@@ -10,6 +10,22 @@ from app.models import AudioFile
 _LOSSLESS = {"flac", "wav", "aiff", "aif"}
 _JUNK_TITLE_RE = re.compile(r"^(track\s*\d+|\d+)$", re.IGNORECASE)
 _SPAM_RE = re.compile(r"https?://|www\.|ripped by|encoded by|\.com\b", re.IGNORECASE)
+_GENRE_SEP_RE = re.compile(r"[,/;]")
+_GENRE_JUNK = {"unbekannt", "unknown", "sconosciuto", "music", "other",
+               "various", "n/a", "none"}
+
+
+def _is_dirty_genre(value: str) -> bool:
+    """Genere presente ma da normalizzare: blob multi-genere, URL o parola-spazzatura."""
+    s = (value or "").strip()
+    if not s:
+        return False
+    low = s.lower()
+    if _GENRE_SEP_RE.search(s):
+        return True
+    if "http" in low or "://" in s or "www." in low:
+        return True
+    return low in _GENRE_JUNK
 
 
 @dataclass(frozen=True)
@@ -68,6 +84,10 @@ def _inspect_one(f: AudioFile) -> list[IssueComputed]:
         if not _present(getattr(f, field)):
             out.append(IssueComputed(f.id, "missing_metadata", field, "warning",
                                      f"{field} mancante", None))
+
+    if _present(f.genre) and _is_dirty_genre(f.genre):
+        out.append(IssueComputed(f.id, "dirty_genre", "genre", "warning",
+                                 "genere da normalizzare", None))
 
     for field in ("artist", "title", "album"):
         value = getattr(f, field)

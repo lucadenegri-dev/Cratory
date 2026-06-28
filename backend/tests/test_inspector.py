@@ -76,3 +76,30 @@ def test_filename_mismatch():
     f = make_audio_file(1, artist="Pinco", title="Titolo", genre="House", year=2020,
                         label="X", duration_s=200.0, bitrate=320000, path="/music/track03.mp3")
     assert ("filename_tag_mismatch", None) in _types(inspect([f]))
+
+
+def test_dirty_genre_flagged():
+    base = dict(artist="A", title="T", year=2020, label="X",
+                duration_s=200.0, bitrate=320000, ext="mp3")
+    for bad in ["Techno, House, Acid", "Acid/Techno", "http://vk.com/x",
+                "https://djsoundtop.com", "Unbekannt", "Music", "Other"]:
+        issues = inspect([make_audio_file(1, genre=bad, **base)])
+        assert ("dirty_genre", "genre") in _types(issues), bad
+        assert ("missing_metadata", "genre") not in _types(issues), bad
+
+
+def test_clean_genre_not_flagged():
+    base = dict(artist="A", title="T", year=2020, label="X",
+                duration_s=200.0, bitrate=320000, ext="mp3")
+    for ok in ["Techno", "Tech House", "Drum & Bass", "Acid Techno", "Electro - Dance"]:
+        issues = inspect([make_audio_file(1, genre=ok, **base)])
+        assert ("dirty_genre", "genre") not in _types(issues), ok
+        assert ("missing_metadata", "genre") not in _types(issues), ok
+
+
+def test_missing_genre_still_missing_not_dirty():
+    f = make_audio_file(1, artist="A", title="T", genre=None, year=2020, label="X",
+                        duration_s=200.0, bitrate=320000, ext="mp3")
+    issues = inspect([f])
+    assert ("missing_metadata", "genre") in _types(issues)
+    assert ("dirty_genre", "genre") not in _types(issues)
