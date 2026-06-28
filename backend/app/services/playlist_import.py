@@ -11,8 +11,10 @@ successivo e separato (services/enrichment + integrations/).
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -86,6 +88,11 @@ def normalize_spotify_item(item: dict) -> NormalizedTrack | None:
         year=_release_year(album),
         album_id=album.get("id"),
     )
+
+
+def identity_normalize(item: NormalizedTrack) -> NormalizedTrack:
+    """Passthrough per chi fornisce già NormalizedTrack (es. import locale)."""
+    return item
 
 
 def _find_existing(db: Session, norm: NormalizedTrack) -> Track | None:
@@ -182,7 +189,8 @@ def import_playlist(
     *,
     platform: str,
     name: str,
-    items: list[dict],
+    items: list,
+    normalize: Callable[[Any], "NormalizedTrack | None"] = normalize_spotify_item,
     platform_playlist_id: str | None = None,
     owner: str | None = None,
     url: str | None = None,
@@ -196,9 +204,6 @@ def import_playlist(
     ma non piu' presenti nel set importato vengono SCOLLEGATE: la membership su
     playlist_tracks viene rimossa; la traccia resta in libreria e in ogni altra playlist.
     """
-    if platform != "spotify":
-        raise ValueError(f"Piattaforma non supportata per l'import: {platform}")
-
     playlist = None
     if platform_playlist_id:
         playlist = db.scalar(
@@ -222,7 +227,7 @@ def import_playlist(
     present_isrcs: set[str] = set()
     present_platform_ids: set[str] = set()
     for item in items:
-        norm = normalize_spotify_item(item) if platform == "spotify" else None
+        norm = normalize(item)
         if norm is None:
             skipped += 1
             continue
