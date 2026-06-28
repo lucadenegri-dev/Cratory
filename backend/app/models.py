@@ -7,7 +7,7 @@ services/feature_enrichment + integrations/).
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -15,6 +15,17 @@ from app.db import Base
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# Associazione M2M brano<->playlist. `added_at` e' per-playlist (quando il brano e'
+# stato aggiunto a QUELLA playlist). PK composta: una membership per coppia.
+playlist_tracks = Table(
+    "playlist_tracks",
+    Base.metadata,
+    Column("playlist_id", ForeignKey("playlists.id"), primary_key=True, index=True),
+    Column("track_id", ForeignKey("tracks.id"), primary_key=True, index=True),
+    Column("added_at", DateTime, nullable=True),
+)
 
 
 class Track(Base):
@@ -60,6 +71,10 @@ class Track(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
+    playlists: Mapped[list["Playlist"]] = relationship(
+        secondary="playlist_tracks", back_populates="tracks", viewonly=False,
+    )
+
 
 class SpotifyToken(Base):
     """Token OAuth Spotify. kind='user' (playlist) o 'client' (solo metadata)."""
@@ -91,6 +106,10 @@ class Playlist(Base):
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    tracks: Mapped[list["Track"]] = relationship(
+        secondary="playlist_tracks", back_populates="playlists", viewonly=False,
+    )
 
 
 class EnrichmentCache(Base):
