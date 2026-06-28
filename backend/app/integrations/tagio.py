@@ -11,6 +11,39 @@ class TagReadError(Exception):
     """Il file non è leggibile/riconoscibile da mutagen."""
 
 
+class TagWriteError(Exception):
+    """Scrittura tag fallita."""
+
+
+_EASY_WRITE_KEY = {
+    "artist": "artist", "title": "title", "album": "album",
+    "album_artist": "albumartist", "genre": "genre", "year": "date",
+    "label": "organization", "track_no": "tracknumber", "comment": "comment",
+}
+
+
+def write_tags(path: str, changes: dict) -> None:
+    try:
+        audio = MutagenFile(path, easy=True)
+        if audio is None:
+            raise TagWriteError(f"formato non scrivibile: {path}")
+        if audio.tags is None:
+            audio.add_tags()
+        for field, value in changes.items():
+            key = _EASY_WRITE_KEY.get(field, field)
+            try:
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    if key in audio:
+                        del audio[key]
+                else:
+                    audio[key] = str(value)
+            except (KeyError, ValueError):
+                continue  # campo non supportato dal formato easy → best-effort, salta
+        audio.save()
+    except MutagenError as exc:
+        raise TagWriteError(str(exc)) from exc
+
+
 @dataclass
 class TechInfo:
     bitrate: int | None
