@@ -24,7 +24,8 @@ def test_import_manual_playlist(db):
     assert pl.platform == "manual"
     assert pl.kind == "manual"
     assert pl.track_count == 3
-    tracks = db.query(Track).filter_by(playlist_id=pl.id).all()
+    from app.repositories import tracks_for_playlist
+    tracks = tracks_for_playlist(db, pl.id)
     assert {t.title for t in tracks} == {"Da Funk", "Kerala", "Only Title"}
     assert all(t.source_type == "manual" for t in tracks)
 

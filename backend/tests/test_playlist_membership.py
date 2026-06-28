@@ -1,9 +1,19 @@
 """Test playlist many-to-many: migrazione backfill + helper membership."""
 
+import pytest
+
 from sqlalchemy import create_engine, text
 
 import app.models  # noqa: F401 — registra tutti i modelli in Base.metadata
 from app.db import Base, ensure_schema
+from app.models import Playlist, Track
+from app.repositories import (
+    add_track_to_playlist,
+    delete_playlist,
+    recount_playlist,
+    remove_track_from_playlist,
+    tracks_for_playlist,
+)
 
 
 def _legacy_engine():
@@ -39,3 +49,64 @@ def test_backfill_is_idempotent():
     with eng.connect() as c:
         n = c.execute(text("SELECT COUNT(*) FROM playlist_tracks")).scalar()
         assert n == 1
+
+
+def _pl(db, name):
+    pl = Playlist(platform="spotify", name=name, kind="playlist")
+    db.add(pl); db.flush()
+    return pl
+
+
+def _tr(db, title):
+    t = Track(source_type="spotify", title=title, artist="A")
+    db.add(t); db.flush()
+    return t
+
+
+def test_add_membership_is_idempotent(db):
+    pl, t = _pl(db, "P"), _tr(db, "T")
+    add_track_to_playlist(db, t, pl)
+    add_track_to_playlist(db, t, pl)  # secondo add: no-op
+    db.commit()
+    assert [x.title for x in tracks_for_playlist(db, pl.id)] == ["T"]
+
+
+def test_track_in_two_playlists(db):
+    a, b, t = _pl(db, "A"), _pl(db, "B"), _tr(db, "T")
+    add_track_to_playlist(db, t, a)
+    add_track_to_playlist(db, t, b)
+    db.commit()
+    assert {p.name for p in t.playlists} == {"A", "B"}
+    assert t in tracks_for_playlist(db, a.id)
+    assert t in tracks_for_playlist(db, b.id)
+
+
+def test_remove_membership_keeps_track(db):
+    a, b, t = _pl(db, "A"), _pl(db, "B"), _tr(db, "T")
+    add_track_to_playlist(db, t, a)
+    add_track_to_playlist(db, t, b)
+    db.commit()
+    remove_track_from_playlist(db, a.id, t.id)
+    db.commit()
+    assert t not in tracks_for_playlist(db, a.id)
+    assert t in tracks_for_playlist(db, b.id)
+    assert db.query(Track).count() == 1
+
+
+def test_delete_playlist_keeps_shared_track(db):
+    a, b, t = _pl(db, "A"), _pl(db, "B"), _tr(db, "T")
+    add_track_to_playlist(db, t, a)
+    add_track_to_playlist(db, t, b)
+    db.commit()
+    assert delete_playlist(db, a.id) is True
+    assert db.query(Track).count() == 1          # brano resta in libreria
+    assert t in tracks_for_playlist(db, b.id)     # e nell'altra playlist
+
+
+def test_recount_playlist(db):
+    pl, t1, t2 = _pl(db, "P"), _tr(db, "T1"), _tr(db, "T2")
+    add_track_to_playlist(db, t1, pl)
+    add_track_to_playlist(db, t2, pl)
+    db.commit()
+    recount_playlist(db, pl)
+    assert pl.track_count == 2

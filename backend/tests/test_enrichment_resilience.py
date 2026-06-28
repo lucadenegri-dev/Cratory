@@ -96,6 +96,7 @@ class _ConstProvider:
 
 def test_enrich_features_scoped_to_single_playlist(db):
     from app.models import Playlist, Track
+    from app.repositories import add_track_to_playlist, tracks_for_playlist
     from app.services.feature_enrichment import enrich_features
 
     pa = Playlist(platform="spotify", name="A")
@@ -103,15 +104,16 @@ def test_enrich_features_scoped_to_single_playlist(db):
     db.add_all([pa, pb])
     db.flush()
     for i in range(3):
-        db.add(Track(source_type="spotify", playlist_id=pa.id, title=f"A{i}", artist="X"))
-    for i in range(2):
-        db.add(Track(source_type="spotify", playlist_id=pb.id, title=f"B{i}", artist="Y"))
+        ta = Track(source_type="spotify", title=f"A{i}", artist="X"); db.add(ta); db.flush()
+        add_track_to_playlist(db, ta, pa)
+        tb = Track(source_type="spotify", title=f"B{i}", artist="Y"); db.add(tb); db.flush()
+        add_track_to_playlist(db, tb, pb)
     db.commit()
 
     report = enrich_features(db, _ConstProvider(), playlist_id=pa.id)
 
     assert report["total"] == 3  # solo le tracce della playlist A
-    a_tracks = db.query(Track).filter(Track.playlist_id == pa.id).all()
-    b_tracks = db.query(Track).filter(Track.playlist_id == pb.id).all()
+    a_tracks = tracks_for_playlist(db, pa.id)
+    b_tracks = tracks_for_playlist(db, pb.id)
     assert all(t.bpm == 128.0 for t in a_tracks)
     assert all(t.bpm is None for t in b_tracks)  # playlist B intatta

@@ -3,7 +3,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import DjSet, DjSetTrack, Playlist, Setlist, SetlistTrack, Track
+from app.models import DjSet, DjSetTrack, Playlist, Setlist, SetlistTrack, Track, playlist_tracks
 
 # Colonne ordinabili dalla libreria (header cliccabili nel frontend).
 _SORT_COLUMNS = {
@@ -251,28 +251,52 @@ def get_playlist(db: Session, playlist_id: int) -> Playlist | None:
     return db.scalar(select(Playlist).where(Playlist.id == playlist_id))
 
 
+def add_track_to_playlist(db: Session, track: Track, playlist: Playlist, *, added_at=None) -> None:
+    """Crea la membership brano<->playlist se non esiste (idempotente). Non committa."""
+    exists = db.execute(
+        select(playlist_tracks.c.track_id).where(
+            playlist_tracks.c.playlist_id == playlist.id,
+            playlist_tracks.c.track_id == track.id,
+        )
+    ).first()
+    if exists:
+        return
+    db.execute(playlist_tracks.insert().values(
+        playlist_id=playlist.id, track_id=track.id, added_at=added_at,
+    ))
+
+
+def remove_track_from_playlist(db: Session, playlist_id: int, track_id: int) -> None:
+    db.execute(playlist_tracks.delete().where(
+        playlist_tracks.c.playlist_id == playlist_id,
+        playlist_tracks.c.track_id == track_id,
+    ))
+
+
+def recount_playlist(db: Session, playlist: Playlist) -> None:
+    n = db.scalar(
+        select(func.count()).select_from(playlist_tracks)
+        .where(playlist_tracks.c.playlist_id == playlist.id)
+    )
+    playlist.track_count = n or 0
+
+
 def tracks_for_playlist(db: Session, playlist_id: int) -> list[Track]:
     return list(db.scalars(
         select(Track)
-        .where(Track.playlist_id == playlist_id)
-        .order_by(Track.added_at.is_(None), Track.added_at)
+        .join(playlist_tracks, playlist_tracks.c.track_id == Track.id)
+        .where(playlist_tracks.c.playlist_id == playlist_id)
+        .order_by(playlist_tracks.c.added_at.is_(None), playlist_tracks.c.added_at)
     ).all())
 
 
 def delete_playlist(db: Session, playlist_id: int) -> bool:
-    """Rimuove una playlist importata SCOLLEGANDO le sue tracce, senza cancellarle.
-
-    Le tracce restano in libreria (e nei set): un brano condiviso con altre playlist
-    o con i Liked non deve sparire quando si cancella una sola playlist. Le tracce
-    scollegate (``playlist_id=None``) restano consultabili nella libreria.
-    Ritorna False se la playlist non esiste.
-    """
+    """Rimuove una playlist: cancella le sue membership; le tracce restano in libreria
+    (e nelle altre playlist). Ritorna False se la playlist non esiste."""
     playlist = get_playlist(db, playlist_id)
     if playlist is None:
         return False
-    db.query(Track).filter(Track.playlist_id == playlist_id).update(
-        {Track.playlist_id: None, Track.playlist_name: None}, synchronize_session=False
-    )
+    db.execute(playlist_tracks.delete().where(playlist_tracks.c.playlist_id == playlist_id))
     db.delete(playlist)
     db.commit()
     return True

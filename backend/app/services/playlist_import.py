@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Playlist, Track
+from app.repositories import add_track_to_playlist, recount_playlist, remove_track_from_playlist, tracks_for_playlist
 from app.services.track_status import refresh_status
 
 logger = logging.getLogger(__name__)
@@ -125,11 +126,11 @@ def _apply_fields(track: Track, norm: NormalizedTrack) -> None:
     track.added_at = track.added_at or norm.added_at
 
 
-def _apply(track: Track, norm: NormalizedTrack, playlist: Playlist) -> None:
+def _apply(db: Session, track: Track, norm: NormalizedTrack, playlist: Playlist) -> None:
     _apply_fields(track, norm)
-    track.playlist_id = playlist.id
-    track.playlist_name = playlist.name
     refresh_status(track)
+    db.flush()  # garantisce track.id per la membership
+    add_track_to_playlist(db, track, playlist, added_at=norm.added_at)
 
 
 def import_single_track(
@@ -228,29 +229,25 @@ def import_playlist(
         if existing is None:
             track = Track(source_type=platform)
             db.add(track)
-            _apply(track, norm, playlist)
+            _apply(db, track, norm, playlist)
             created += 1
         else:
-            _apply(existing, norm, playlist)
+            _apply(db, existing, norm, playlist)
             updated += 1
-
-    db.flush()  # le tracce appena collegate devono essere visibili al prune
 
     removed = 0
     if prune:
-        linked = db.scalars(select(Track).where(Track.playlist_id == playlist.id)).all()
-        for track in linked:
+        for track in tracks_for_playlist(db, playlist.id):
             still_present = (
                 (track.isrc is not None and track.isrc in present_isrcs)
                 or (track.platform_track_id is not None
                     and track.platform_track_id in present_platform_ids)
             )
             if not still_present:
-                track.playlist_id = None
-                track.playlist_name = None
+                remove_track_from_playlist(db, playlist.id, track.id)
                 removed += 1
 
-    playlist.track_count = created + updated
+    recount_playlist(db, playlist)
     db.commit()
     db.refresh(playlist)
     report = {

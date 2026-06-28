@@ -215,6 +215,5 @@ def test_delete_playlist_keeps_shared_tracks(db):
     assert db.query(Track).count() == 1  # dedup per ISRC: una sola riga
 
     assert delete_playlist(db, rep_liked["playlist_id"]) is True
-    # il brano resta in libreria, solo scollegato dalla playlist cancellata
-    assert db.query(Track).count() == 1
-    assert db.query(Track).one().playlist_id is None
+    # il brano resta in libreria dopo la delete
+    assert db.query(Track).count() == 1  # il brano resta in libreria dopo la delete
