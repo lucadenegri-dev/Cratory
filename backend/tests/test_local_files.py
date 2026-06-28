@@ -99,6 +99,8 @@ def test_audio_extensions_minuscole_con_punto():
     assert ".mp3" in AUDIO_EXTENSIONS
     assert ".flac" in AUDIO_EXTENSIONS
     assert all(e.startswith(".") and e == e.lower() for e in AUDIO_EXTENSIONS)
+    # Verifica che tutte le estensioni fondamentali siano presenti
+    assert {".mp3", ".flac", ".m4a", ".aac", ".aiff", ".aif", ".wav", ".ogg", ".opus", ".wma"} <= AUDIO_EXTENSIONS
 
 
 def test_audio_hash_su_file_non_audio_solleva(tmp_path):

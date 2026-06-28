@@ -35,6 +35,13 @@ def _id3_text(tags, frame: str) -> str | None:
     return None
 
 
+def _id3_text_safe(tags, frame: str) -> str | None:
+    try:
+        return _id3_text(tags, frame)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def read_tags(path: str | Path) -> dict:
     """Legge i tag principali. Valori assenti -> None. Non solleva su file taggati male."""
     out = {"title": None, "artist": None, "album": None, "year": None,
@@ -52,7 +59,7 @@ def read_tags(path: str | Path) -> dict:
     if tags is None:
         return out
     date = None
-    if hasattr(tags, "getall") and "TIT2" in tags or _id3_text_safe(tags, "TIT2") is not None:
+    if hasattr(tags, "getall") and ("TIT2" in tags or _id3_text_safe(tags, "TIT2") is not None):
         # ID3 (mp3 / wav con ID3)
         out["title"] = _id3_text(tags, "TIT2")
         out["artist"] = _id3_text(tags, "TPE1")
@@ -76,13 +83,6 @@ def read_tags(path: str | Path) -> dict:
     if date and str(date)[:4].isdigit():
         out["year"] = int(str(date)[:4])
     return out
-
-
-def _id3_text_safe(tags, frame: str) -> str | None:
-    try:
-        return _id3_text(tags, frame)
-    except Exception:  # noqa: BLE001
-        return None
 
 
 def audio_hash(path: str | Path, *, seconds: int = HASH_SECONDS) -> str:
