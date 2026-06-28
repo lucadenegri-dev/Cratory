@@ -143,3 +143,19 @@ class PlanOp(Base):
     status: Mapped[str] = mapped_column(String, default="pending")
 
     plan: Mapped["Plan"] = relationship(back_populates="ops")
+
+
+class UndoJournal(Base):
+    __tablename__ = "undo_journal"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("plan.id"), index=True)
+    op_seq: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String)
+    file_id: Mapped[int] = mapped_column(ForeignKey("audio_file.id"), index=True)
+    from_path: Mapped[str | None] = mapped_column(String)
+    to_path: Mapped[str | None] = mapped_column(String)
+    prior_tags_json: Mapped[dict | None] = mapped_column(JSON)
+    quarantine_path: Mapped[str | None] = mapped_column(String)
+    applied_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    reversed: Mapped[bool] = mapped_column(Boolean, default=False)
