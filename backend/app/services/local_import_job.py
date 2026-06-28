@@ -68,6 +68,9 @@ def _run_job(path: str, name: str | None) -> None:
             failed=report.get("failed", 0),
             playlist_id=report.get("playlist_id"),
             errors=report.get("errors", []),
+            # A fine import `total` = tracce importate (created+updated), che puo' essere
+            # < dei file scansionati se alcuni sono falliti (vedi `failed`/`errors`). Durante
+            # la scansione `total` era il conteggio file (impostato da on_progress).
             total=report.get("total", _state["total"]),
         )
         logger.info("Import locale completato: %s", {k: report.get(k) for k in

@@ -1,6 +1,6 @@
 """Colonna local_path: persistenza + overwrite-quando-presente in _apply_fields."""
 
-from app.models import Playlist, Track
+from app.models import Track
 from app.services.playlist_import import NormalizedTrack, _apply_fields
 
 
