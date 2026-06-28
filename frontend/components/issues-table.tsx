@@ -107,9 +107,15 @@ export function IssuesTable({ issues, onFix, onDismiss, onReopen }: {
           </tr>
         </thead>
         <tbody>
-          {issues.map((i) => (
-            <IssueRow key={i.id} issue={i} onFix={onFix} onDismiss={onDismiss} onReopen={onReopen} />
-          ))}
+          {issues.map((i) => {
+            // La key include il suggerimento: quando l'AI lo imposta dopo il mount,
+            // la riga si rimonta e l'input mostra il valore (useState si re-inizializza).
+            const sug = typeof i.suggested_fix_json?.to === "string" ? i.suggested_fix_json.to : "";
+            return (
+              <IssueRow key={`${i.id}:${sug}`} issue={i}
+                onFix={onFix} onDismiss={onDismiss} onReopen={onReopen} />
+            );
+          })}
         </tbody>
       </table>
     </div>
