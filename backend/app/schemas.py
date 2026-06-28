@@ -160,3 +160,9 @@ class ApplyResult(BaseModel):
     reason: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
+
+
+class UndoResult(BaseModel):
+    run_id: int
+    reversed_ops: int = 0
+    error: str | None = None
