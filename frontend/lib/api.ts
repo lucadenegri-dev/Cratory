@@ -518,6 +518,25 @@ export function discoveryAddToLibrary(c: DiscoveryCandidate) {
   });
 }
 
+export interface PlaylistAddTrackResult {
+  created: boolean;
+  track: Track;
+  spotify_added: boolean;
+  spotify_error: string | null;
+}
+
+export function addDiscoveredTrackToPlaylist(playlistId: number, c: DiscoveryCandidate) {
+  return apiPost<PlaylistAddTrackResult>(`/api/playlists/${playlistId}/discovered-tracks`, {
+    artist: c.artist,
+    title: c.title,
+    spotify_id: c.spotify_id,
+    isrc: c.isrc,
+    duration_seconds: c.duration_seconds,
+    album_art_url: c.album_art_url,
+    url: c.spotify_url,
+  });
+}
+
 export function importManualPlaylist(name: string, text: string) {
   return apiPost<PlaylistImportReport>("/api/playlists/import-manual", { name, text });
 }

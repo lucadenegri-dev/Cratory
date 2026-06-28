@@ -230,7 +230,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     <div className="space-y-3">
       <Link href={`/set-builder?playlist=${pid}`} className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> Costruisci un set</Button></Link>
       <Button size="sm" variant="outline" className="w-full" onClick={doEnrich} disabled={enriching || running}>{enriching || running ? <Spinner /> : <Sparkles size={15} />} Arricchisci</Button>
-      <Link href="/discovery" className="block"><Button size="sm" variant="outline" className="w-full"><Compass size={15} /> Scopri musica simile</Button></Link>
+      <Link href={`/playlists/${pid}/expand`} className="block"><Button size="sm" variant="outline" className="w-full"><Compass size={15} /> Scopri musica simile</Button></Link>
       {canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da Spotify</Button>}
       {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> Spotify</Button></a>}
       <Button size="sm" variant="danger" className="w-full" onClick={doDelete} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} Rimuovi</Button>

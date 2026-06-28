@@ -30,6 +30,8 @@ from app.schemas import (
     GapAnalysisResponse,
     GapOut,
     ManualImportRequest,
+    PlaylistAddTrackRequest,
+    PlaylistAddTrackResponse,
     PlaylistImportReport,
     PlaylistImportRequest,
     PlaylistOut,
@@ -40,7 +42,7 @@ from app.serializers import track_out
 from app.services import enrichment_job
 from app.services.gap_analysis import analyze_gaps
 from app.services.manual_import import import_manual_playlist
-from app.services.playlist_import import import_playlist
+from app.services.playlist_import import import_playlist, import_single_track
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/playlists", tags=["playlists"])
@@ -215,6 +217,43 @@ def playlist_tracks(playlist_id: int, db: Session = Depends(get_db)):
     if get_playlist(db, playlist_id) is None:
         raise HTTPException(status_code=404, detail="Playlist non trovata")
     return [track_out(t) for t in tracks_for_playlist(db, playlist_id)]
+
+
+@router.post("/{playlist_id}/discovered-tracks", response_model=PlaylistAddTrackResponse)
+def add_discovered_track(playlist_id: int, req: PlaylistAddTrackRequest, db: Session = Depends(get_db)):
+    """Aggiunge una traccia scoperta a questa playlist; write-back Spotify best-effort."""
+    playlist = get_playlist(db, playlist_id)
+    if playlist is None:
+        raise HTTPException(status_code=404, detail="Playlist non trovata")
+
+    platform = "spotify" if req.spotify_id else "manual"
+    track, created = import_single_track(
+        db, platform=platform, platform_track_id=req.spotify_id,
+        title=req.title, artist=req.artist, isrc=req.isrc,
+        duration_seconds=req.duration_seconds, url=req.url, artwork_url=req.album_art_url,
+    )
+
+    # Attacca alla playlist locale solo se la traccia non appartiene gia' ad un'altra
+    # playlist (modello 1:1: non "rubarla" alla sua playlist attuale).
+    if track.playlist_id is None:
+        track.playlist_id = playlist_id
+        playlist.track_count = (playlist.track_count or 0) + 1
+        db.commit()
+
+    spotify_added = False
+    spotify_error: str | None = None
+    if req.spotify_id and playlist.platform == "spotify" and playlist.platform_playlist_id:
+        try:
+            SpotifyWebClient(db).add_tracks(playlist.platform_playlist_id, [req.spotify_id])
+            spotify_added = True
+        except SpotifyError as exc:
+            spotify_error = str(exc)
+            logger.warning("Write-back Spotify fallito per playlist %s: %s", playlist_id, exc)
+
+    return PlaylistAddTrackResponse(
+        created=created, track=track_out(track),
+        spotify_added=spotify_added, spotify_error=spotify_error,
+    )
 
 
 @router.get("/{playlist_id}/gaps", response_model=GapAnalysisResponse)
