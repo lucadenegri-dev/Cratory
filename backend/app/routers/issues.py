@@ -6,16 +6,20 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import AudioFile, Issue, utcnow
-from app.schemas import IssueBulkBody, IssueRead, IssueStatusBody
+from app.schemas import IssueBulkBody, IssueFixBody, IssueRead, IssueStatusBody
 
 router = APIRouter(prefix="/api/issues", tags=["issues"])
 _VALID = {"open", "accepted", "dismissed"}
 
+# Campi tag effettivi (= planner._EFFECTIVE_FIELDS): gli unici correggibili a mano.
+_RETAGGABLE = {"artist", "title", "album", "album_artist", "genre", "year",
+               "label", "track_no", "comment"}
+
 
 def _to_read(issue: Issue, file: AudioFile) -> IssueRead:
     return IssueRead(
-        id=issue.id, file_id=issue.file_id, type=issue.type, field=issue.field,
-        severity=issue.severity, detail=issue.detail,
+        id=issue.id, file_id=issue.file_id, root_id=file.root_id, type=issue.type,
+        field=issue.field, severity=issue.severity, detail=issue.detail,
         suggested_fix_json=issue.suggested_fix_json, status=issue.status,
         file_path=file.path, artist=file.artist, title=file.title,
     )
@@ -70,3 +74,21 @@ def bulk(body: IssueBulkBody, db: Session = Depends(get_db)):
         updated += 1
     db.commit()
     return {"updated": updated}
+
+
+@router.post("/{issue_id}/fix", response_model=IssueRead)
+def fix_issue(issue_id: int, body: IssueFixBody, db: Session = Depends(get_db)):
+    issue = db.get(Issue, issue_id)
+    if issue is None:
+        raise HTTPException(status_code=404, detail="issue non trovato")
+    if issue.field not in _RETAGGABLE:
+        raise HTTPException(status_code=400, detail="campo non correggibile a mano")
+    value = body.value.strip()
+    if not value:
+        raise HTTPException(status_code=400, detail="valore vuoto")
+    issue.suggested_fix_json = {"field": issue.field, "action": "retag", "to": value}
+    issue.status = "accepted"
+    issue.updated_at = utcnow()
+    db.commit()
+    file = db.get(AudioFile, issue.file_id)
+    return _to_read(issue, file)

@@ -68,3 +68,51 @@ def test_bulk_accept_skips_non_fixable(db):
         non_fixable = next(i for i in all_issues if i["type"] == "missing_metadata")
         assert fixable["status"] == "accepted"
         assert non_fixable["status"] == "open"
+
+
+def test_issue_read_has_root_id(db):
+    _seed(db)
+    with TestClient(app) as client:
+        rows = client.get("/api/issues").json()
+        assert all("root_id" in r for r in rows)
+        assert rows[0]["root_id"] == 1
+
+
+def test_fix_sets_retag_and_accepts(db):
+    _seed(db)
+    with TestClient(app) as client:
+        genre_id = client.get("/api/issues",
+                              params={"type": "missing_metadata"}).json()[0]["id"]
+        resp = client.post(f"/api/issues/{genre_id}/fix", json={"value": "House"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "accepted"
+        assert body["suggested_fix_json"] == {"field": "genre",
+                                              "action": "retag", "to": "House"}
+
+
+def test_fix_rejects_non_retaggable_field(db):
+    f = AudioFile(id=2, root_id=1, path="/m/b.mp3", ext="mp3", size_bytes=1,
+                  hash_method="file", status="present", has_cover=False)
+    db.add(f)
+    db.add(Issue(file_id=2, type="bad_bitrate", field="file", severity="error",
+                 detail="128<256", suggested_fix_json=None, status="open"))
+    db.commit()
+    with TestClient(app) as client:
+        iid = client.get("/api/issues", params={"type": "bad_bitrate"}).json()[0]["id"]
+        resp = client.post(f"/api/issues/{iid}/fix", json={"value": "x"})
+        assert resp.status_code == 400
+
+
+def test_fix_rejects_empty_value(db):
+    _seed(db)
+    with TestClient(app) as client:
+        genre_id = client.get("/api/issues",
+                              params={"type": "missing_metadata"}).json()[0]["id"]
+        resp = client.post(f"/api/issues/{genre_id}/fix", json={"value": "   "})
+        assert resp.status_code == 400
+
+
+def test_fix_404(db):
+    with TestClient(app) as client:
+        assert client.post("/api/issues/999/fix", json={"value": "x"}).status_code == 404

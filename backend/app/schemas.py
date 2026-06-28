@@ -46,6 +46,7 @@ class AnalyzeSummary(BaseModel):
 class IssueRead(BaseModel):
     id: int
     file_id: int
+    root_id: int
     type: str
     field: str | None
     severity: str
@@ -65,6 +66,10 @@ class IssueBulkBody(BaseModel):
     type: str | None = None
     severity: str | None = None
     status: str
+
+
+class IssueFixBody(BaseModel):
+    value: str
 
 
 class DupMemberRead(BaseModel):
