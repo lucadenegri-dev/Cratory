@@ -80,8 +80,13 @@ export default function SettingsPage() {
 }
 
 function RootRow({ root, onSave }: { root: RootTarget; onSave: (rootId: number, target: string) => Promise<void> }) {
+  const [savedTargetRoot, setSavedTargetRoot] = useState(root.target_root);
   const [target, setTarget] = useState(root.target_root ?? "");
   const [busy, setBusy] = useState(false);
+  if (savedTargetRoot !== root.target_root) {
+    setSavedTargetRoot(root.target_root);
+    setTarget(root.target_root ?? "");
+  }
   const save = async () => { setBusy(true); try { await onSave(root.id, target); } finally { setBusy(false); } };
   return (
     <div className="flex items-center gap-2">
