@@ -1,5 +1,7 @@
 """Motore Undo: inverte l'undo_journal di una run in ordine inverso."""
 
+import os
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,11 +20,18 @@ def undo_run(db: Session, plan: Plan) -> UndoResult:
     try:
         for r in rows:
             if r.kind == "RETAG":
-                tagio.write_tags(r.from_path, r.prior_tags_json or {})
+                if os.path.exists(r.from_path):
+                    tagio.write_tags(r.from_path, r.prior_tags_json or {})
+                # else: la mutazione non era atterrata → niente da invertire
             elif r.kind in ("RENAME", "MOVE"):
-                fsops.safe_move(r.to_path, r.from_path)
+                if os.path.exists(r.to_path):
+                    fsops.safe_move(r.to_path, r.from_path)
+                # else: la mutazione non era atterrata → niente da invertire
             elif r.kind == "DELETE":
-                fsops.safe_move(r.quarantine_path, r.from_path)
+                if os.path.exists(r.quarantine_path):
+                    fsops.safe_move(r.quarantine_path, r.from_path)
+            else:
+                raise ValueError(f"kind sconosciuto nell'undo: {r.kind}")  # Fix 3
             r.reversed = True
             db.commit()
             reversed_ops += 1

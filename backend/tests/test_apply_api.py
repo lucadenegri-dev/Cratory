@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models import AudioFile, Plan, PlanOp, ScanRoot
+from app.services import apply_job, scan_job
 from app.services.undo import undo_run  # noqa: E402 (top del file)
 
 
@@ -61,3 +62,23 @@ def test_undo_non_applied_400(db, tmp_path, copy_fixture):
     _seed_plan(db, tmp_path, copy_fixture)  # piano draft, non applied
     with TestClient(app) as client:
         assert client.post("/api/history/1/undo").status_code == 400
+
+
+def test_scan_blocked_while_apply_running(db):
+    """POST /api/scan deve restituire 409 se apply_job è in esecuzione."""
+    with TestClient(app) as client:
+        apply_job._state.update(status="running")
+        try:
+            assert client.post("/api/scan").status_code == 409
+        finally:
+            apply_job._state.update(status="idle")
+
+
+def test_apply_blocked_while_scan_running(db):
+    """POST /api/apply deve restituire 409 se scan_job è in esecuzione."""
+    with TestClient(app) as client:
+        scan_job._state.update(status="running")
+        try:
+            assert client.post("/api/apply").status_code == 409
+        finally:
+            scan_job._state.update(status="idle")

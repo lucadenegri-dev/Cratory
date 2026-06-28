@@ -69,6 +69,7 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
     del_by_path = {o.before_json["path"]: o for o in del_ops}
     done: set = set()
     state = {"seq": 0, "applied": 0}
+    current = {"seq": None}   # Fix 4: traccia il seq del PlanOp corrente
     total = len(ops)
 
     def _journal(kind, file_id, from_path=None, to_path=None, prior_tags=None, quarantine_path=None):
@@ -86,8 +87,8 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
     def _do_delete(o):
         f = files[o.file_id]
         q = fsops.quarantine_path_for(f.path, _root_path(db, f.root_id))
-        fsops.safe_move(f.path, q)                              # muta
-        _journal("DELETE", o.file_id, from_path=f.path, quarantine_path=q)  # journal dopo
+        _journal("DELETE", o.file_id, from_path=f.path, quarantine_path=q)  # journal PRIMA
+        fsops.safe_move(f.path, q)                              # poi muta
         o.status = "applied"
         db.commit()
         done.add(o.file_id)
@@ -95,32 +96,35 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
 
     try:
         for o in retag_ops:
+            current["seq"] = o.seq   # Fix 4
             f = files[o.file_id]
             prior = {field: _tag_value(tagio.read_tags(f.path), field) for field in o.after_json}
-            tagio.write_tags(f.path, o.after_json)              # muta
-            _journal("RETAG", o.file_id, from_path=f.path, prior_tags=prior)
+            _journal("RETAG", o.file_id, from_path=f.path, prior_tags=prior)  # journal PRIMA
+            tagio.write_tags(f.path, o.after_json)              # poi muta
             o.status = "applied"
             db.commit()
             _progress()
         for o in move_ops:
+            current["seq"] = o.seq   # Fix 4
             f = files[o.file_id]
             dest = o.after_json["path"]
             blocker = del_by_path.get(dest)
             if blocker is not None and blocker.file_id not in done:
                 _do_delete(blocker)                            # delete-prima-di-move
-            fsops.safe_move(f.path, dest)                      # muta
-            _journal(o.kind, o.file_id, from_path=f.path, to_path=dest)
+            _journal(o.kind, o.file_id, from_path=f.path, to_path=dest)  # journal PRIMA
+            fsops.safe_move(f.path, dest)                      # poi muta
             o.status = "applied"
             db.commit()
             _progress()
         for o in del_ops:
+            current["seq"] = o.seq   # Fix 4
             if o.file_id not in done:
                 _do_delete(o)
     except Exception as exc:  # noqa: BLE001 — stop pulito, journal intatto
         plan.status = "applied"
         db.commit()
         return ApplyResult(run_id=plan.id, applied_ops=state["applied"], partial=True,
-                           failed_op_seq=state["seq"], error=str(exc),
+                           failed_op_seq=current["seq"], error=str(exc),  # Fix 4: seq del PlanOp
                            started_at=started, finished_at=utcnow())
 
     plan.status = "applied"
