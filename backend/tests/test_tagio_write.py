@@ -21,3 +21,31 @@ def test_clear_field(copy_fixture, tmp_path):
     tagio.write_tags(f, {"artist": "X"})
     tagio.write_tags(f, {"artist": None})
     assert tagio.read_tags(f).artist is None
+
+
+# --- formati ID3-based senza modalità easy (WAV/AIFF) -----------------------
+# Regressione: write_tags assumeva l'assegnazione di stringhe (easy), che su
+# WAV/AIFF colpisce un ID3 grezzo → "X not a Frame instance".
+
+def test_write_then_read_wav(copy_fixture, tmp_path):
+    f = copy_fixture("wav", tmp_path / "a.wav")
+    tagio.write_tags(f, {"artist": "Kai Tracid", "title": "Tracid Theme",
+                         "genre": "Acid Techno"})
+    tags = tagio.read_tags(f)
+    assert tags.artist == "Kai Tracid"
+    assert tags.title == "Tracid Theme"
+    assert tags.genre == "Acid Techno"
+
+
+def test_write_then_read_aiff(copy_fixture, tmp_path):
+    f = copy_fixture("aiff", tmp_path / "a.aiff")
+    tagio.write_tags(f, {"artist": "Plastikman", "title": "Spastik"})
+    tags = tagio.read_tags(f)
+    assert tags.artist == "Plastikman" and tags.title == "Spastik"
+
+
+def test_clear_field_wav(copy_fixture, tmp_path):
+    f = copy_fixture("wav", tmp_path / "a.wav")
+    tagio.write_tags(f, {"artist": "X"})
+    tagio.write_tags(f, {"artist": None})
+    assert tagio.read_tags(f).artist is None
