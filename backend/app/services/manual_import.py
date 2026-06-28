@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Playlist, Track
+from app.repositories import add_track_to_playlist, recount_playlist
 from app.services.track_status import refresh_status
 
 logger = logging.getLogger(__name__)
@@ -79,21 +80,19 @@ def import_manual_playlist(db: Session, *, name: str, text: str) -> dict:
 
         existing = _find_by_name(db, artist, title)
         if existing is not None:
-            existing.playlist_id = playlist.id
-            existing.playlist_name = playlist.name
             refresh_status(existing)
+            db.flush()
+            add_track_to_playlist(db, existing, playlist)
             updated += 1
         else:
-            track = Track(
-                source_type="manual", platform="manual",
-                playlist_id=playlist.id, playlist_name=playlist.name,
-                artist=artist, title=title,
-            )
+            track = Track(source_type="manual", platform="manual", artist=artist, title=title)
             db.add(track)
             refresh_status(track)
+            db.flush()
+            add_track_to_playlist(db, track, playlist)
             created += 1
 
-    playlist.track_count = created + updated
+    recount_playlist(db, playlist)
     db.commit()
     db.refresh(playlist)
     report = {

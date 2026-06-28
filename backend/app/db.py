@@ -72,6 +72,7 @@ def ensure_schema(eng=None) -> None:
                 if col not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
         _migrate_drop_legacy(conn)
+        _migrate_playlist_memberships(conn)
 
 
 # Tabelle dell'era Rekordbox/MVP1 rimosse dopo il pivot a playlist->set.
@@ -140,6 +141,26 @@ def _migrate_drop_legacy(conn) -> None:
     conn.execute(text(f"DELETE FROM tracks WHERE source_type IN ({legacy_src})"))
     conn.execute(text("DELETE FROM setlist_tracks WHERE track_id NOT IN (SELECT id FROM tracks)"))
     conn.execute(text("DELETE FROM setlists WHERE id NOT IN (SELECT setlist_id FROM setlist_tracks)"))
+
+
+def _migrate_playlist_memberships(conn) -> None:
+    """Backfill M2M: copia Track.playlist_id nelle membership, poi svuota le colonne legacy.
+
+    Idempotente: INSERT OR IGNORE non duplica; dopo lo svuotamento non ci sono piu'
+    righe con playlist_id valorizzato, quindi le esecuzioni successive sono no-op.
+    """
+    if not _table_exists(conn, "playlist_tracks"):
+        return
+    cols = [r[1] for r in conn.execute(text("PRAGMA table_info(tracks)")).fetchall()]
+    if "playlist_id" not in cols:
+        return
+    conn.execute(text(
+        "INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id, added_at) "
+        "SELECT playlist_id, id, added_at FROM tracks WHERE playlist_id IS NOT NULL"
+    ))
+    conn.execute(text(
+        "UPDATE tracks SET playlist_id = NULL, playlist_name = NULL WHERE playlist_id IS NOT NULL"
+    ))
 
 
 def get_db():

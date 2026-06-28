@@ -1,6 +1,7 @@
 """Test Fase C: generazione set da playlist, scoring feature, ruoli, export Markdown."""
 
 from app.models import Playlist, Track
+from app.repositories import add_track_to_playlist, tracks_for_playlist
 from app.routers.sets import export
 from app.schemas import SetGenerationRequest
 from app.services.set_generator import _desired_energy, _feature_fit, generate_set
@@ -13,10 +14,11 @@ def _playlist(db, name: str) -> Playlist:
     return pl
 
 
-def _add_track(db, pl_id: int, i: int, **kw) -> Track:
-    t = Track(source_type="spotify", playlist_id=pl_id, title=f"T{i}", artist=f"Art{i}",
+def _add_track(db, pl: Playlist, i: int, **kw) -> Track:
+    t = Track(source_type="spotify", title=f"T{i}", artist=f"Art{i}",
               duration_seconds=200, **kw)
-    db.add(t)
+    db.add(t); db.flush()
+    add_track_to_playlist(db, t, pl)
     return t
 
 
@@ -24,13 +26,13 @@ def test_generate_set_scoped_to_playlist(db):
     pl = _playlist(db, "PL")
     other = _playlist(db, "Other")
     for i in range(8):
-        _add_track(db, pl.id, i, bpm=124 + i * 0.5, camelot_key="8A")
+        _add_track(db, pl, i, bpm=124 + i * 0.5, camelot_key="8A")
     for i in range(8):
-        _add_track(db, other.id, 100 + i, bpm=125 + i * 0.5, camelot_key="8A")
+        _add_track(db, other, 100 + i, bpm=125 + i * 0.5, camelot_key="8A")
     db.commit()
 
     setlist = generate_set(db, SetGenerationRequest(playlist_id=pl.id, target_duration_minutes=20))
-    in_pl = {t.id for t in db.query(Track).filter(Track.playlist_id == pl.id).all()}
+    in_pl = {t.id for t in tracks_for_playlist(db, pl.id)}
     assert setlist.tracks
     assert all(st.track_id in in_pl for st in setlist.tracks)  # nessuna traccia di altre playlist
 
@@ -38,7 +40,7 @@ def test_generate_set_scoped_to_playlist(db):
 def test_generated_set_has_roles(db):
     pl = _playlist(db, "PL")
     for i in range(8):
-        _add_track(db, pl.id, i, bpm=124 + i * 0.4, camelot_key="8A")
+        _add_track(db, pl, i, bpm=124 + i * 0.4, camelot_key="8A")
     db.commit()
 
     setlist = generate_set(db, SetGenerationRequest(playlist_id=pl.id, target_duration_minutes=20))
@@ -70,9 +72,9 @@ def test_feature_fit_uses_only_available_signals():
 def test_feature_scoring_prefers_coherent_energy(db):
     # due candidate identiche per BPM/key, ma una ha energia coerente con la precedente
     pl = _playlist(db, "PL")
-    opener = _add_track(db, pl.id, 0, bpm=124.0, camelot_key="8A", energy=50)
-    _add_track(db, pl.id, 1, bpm=124.0, camelot_key="8A", energy=92)   # salto di energia
-    good = _add_track(db, pl.id, 2, bpm=124.0, camelot_key="8A", energy=55)  # progressione dolce
+    opener = _add_track(db, pl, 0, bpm=124.0, camelot_key="8A", energy=50)
+    _add_track(db, pl, 1, bpm=124.0, camelot_key="8A", energy=92)   # salto di energia
+    good = _add_track(db, pl, 2, bpm=124.0, camelot_key="8A", energy=55)  # progressione dolce
     db.commit()
 
     setlist = generate_set(db, SetGenerationRequest(
@@ -88,7 +90,7 @@ def test_feature_scoring_prefers_coherent_energy(db):
 def test_export_markdown(db):
     pl = _playlist(db, "PL")
     for i in range(6):
-        _add_track(db, pl.id, i, bpm=124 + i * 0.5, camelot_key="8A")
+        _add_track(db, pl, i, bpm=124 + i * 0.5, camelot_key="8A")
     db.commit()
     setlist = generate_set(db, SetGenerationRequest(playlist_id=pl.id, target_duration_minutes=15))
 

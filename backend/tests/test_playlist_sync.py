@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.models import Playlist, Track
+from app.repositories import tracks_for_playlist
 from app.routers import playlists as playlists_router
 from app.services.playlist_import import import_playlist
 
@@ -41,15 +42,14 @@ def test_prune_unlinks_removed_tracks_but_keeps_them_in_library(db):
 
     assert report["removed"] == 1
     assert report["total"] == 2  # tracce ancora collegate
+    playlist = db.query(Playlist).filter(Playlist.platform_playlist_id == "PL1").one()
     # t3 scollegata dalla playlist ma ancora in libreria
     t3 = db.query(Track).filter(Track.isrc == "ISRC0000003").one()
-    assert t3.playlist_id is None
-    assert t3.playlist_name is None
+    assert t3 not in tracks_for_playlist(db, playlist.id)
     assert db.query(Track).count() == 3  # nessuna traccia cancellata
-    playlist = db.query(Playlist).filter(Playlist.platform_playlist_id == "PL1").one()
     assert playlist.track_count == 2
     # t1/t2 restano collegate
-    assert db.query(Track).filter(Track.playlist_id == playlist.id).count() == 2
+    assert len(tracks_for_playlist(db, playlist.id)) == 2
 
 
 def test_prune_imports_new_and_unlinks_removed(db):
@@ -83,7 +83,7 @@ def test_prune_does_not_touch_other_playlists(db):
                     platform_playlist_id="PLA", prune=True)
 
     pl_b = db.query(Playlist).filter(Playlist.platform_playlist_id == "PLB").one()
-    assert db.query(Track).filter(Track.playlist_id == pl_b.id).count() == 1
+    assert len(tracks_for_playlist(db, pl_b.id)) == 1
 
 
 def test_default_import_does_not_prune(db):
@@ -99,7 +99,7 @@ def test_default_import_does_not_prune(db):
 
     assert report["removed"] == 0
     playlist = db.query(Playlist).filter(Playlist.platform_playlist_id == "PL1").one()
-    assert db.query(Track).filter(Track.playlist_id == playlist.id).count() == 2
+    assert len(tracks_for_playlist(db, playlist.id)) == 2
 
 
 # --- endpoint POST /api/playlists/{id}/sync ----------------------------------
@@ -134,8 +134,8 @@ def test_sync_endpoint_reports_added_and_removed(db, monkeypatch):
     assert report.created == 1
     assert report.removed == 1
     assert report.total == 2
-    t2 = db.query(Track).filter(Track.isrc == "ISRC0000002").one()
-    assert t2.playlist_id is None
+    pl = db.query(Playlist).filter(Playlist.platform_playlist_id == "PL1").one()
+    assert db.query(Track).filter(Track.isrc == "ISRC0000002").one() not in tracks_for_playlist(db, pl.id)
 
 
 def test_sync_endpoint_rejects_manual_playlist(db):

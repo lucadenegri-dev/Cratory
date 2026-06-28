@@ -1,6 +1,7 @@
 """Test add-to-playlist + write-back Spotify (nessuna rete: client finto)."""
 
 from app.integrations.spotify import SpotifyWebClient
+from app.repositories import tracks_for_playlist
 
 
 def test_add_tracks_posts_uris_in_chunks(monkeypatch):
@@ -42,8 +43,7 @@ def test_add_to_spotify_playlist_attaches_and_writes_back(db, monkeypatch):
     assert resp.created is True
     assert resp.spotify_added is True and resp.spotify_error is None
     assert called == {"pid": "PLspot", "ids": ["sp1"]}
-    t = db.query(Track).filter_by(spotify_id="sp1").one()
-    assert t.playlist_id == pl.id
+    assert track_in_playlist(db, pl.id, "sp1")
 
 
 def test_add_to_manual_playlist_local_only(db, monkeypatch):
@@ -54,7 +54,7 @@ def test_add_to_manual_playlist_local_only(db, monkeypatch):
 
     resp = add_discovered_track(pl.id, _req(), db)
     assert resp.created is True and resp.spotify_added is False and resp.spotify_error is None
-    assert db.query(Track).filter_by(spotify_id="sp1").one().playlist_id == pl.id
+    assert track_in_playlist(db, pl.id, "sp1")
 
 
 def test_add_unresolved_candidate_local_only(db, monkeypatch):
@@ -76,20 +76,27 @@ def test_write_back_failure_is_non_blocking(db, monkeypatch):
     resp = add_discovered_track(pl.id, _req(), db)
     assert resp.created is True and resp.spotify_added is False
     assert "Spotify" in resp.spotify_error
-    assert db.query(Track).filter_by(spotify_id="sp1").one().playlist_id == pl.id
+    assert track_in_playlist(db, pl.id, "sp1")
 
 
-def test_add_does_not_move_track_from_other_playlist(db, monkeypatch):
+def test_add_links_existing_track_to_target_playlist(db, monkeypatch):
+    from app.repositories import add_track_to_playlist
     other = Playlist(platform="spotify", platform_playlist_id="PLother", name="Other")
     target = Playlist(platform="spotify", platform_playlist_id="PLtarget", name="Target")
-    db.add_all([other, target]); db.commit()
-    db.add(Track(source_type="spotify", platform="spotify", platform_track_id="sp1",
-                 spotify_id="sp1", artist="A", title="B", playlist_id=other.id))
+    db.add_all([other, target]); db.flush()
+    t = Track(source_type="spotify", platform="spotify", platform_track_id="sp1",
+              spotify_id="sp1", artist="A", title="B")
+    db.add(t); db.flush()
+    add_track_to_playlist(db, t, other)
     db.commit()
     monkeypatch.setattr(SpotifyWebClient, "add_tracks", lambda self, pid, ids: None)
 
     resp = add_discovered_track(target.id, _req(), db)
-    assert resp.created is False
-    # membership locale NON spostata (modello 1:1), ma write-back tentato
-    assert db.query(Track).filter_by(spotify_id="sp1").one().playlist_id == other.id
+    assert resp.created is False                      # gia' in libreria
+    assert track_in_playlist(db, other.id, "sp1")    # resta nella prima
+    assert track_in_playlist(db, target.id, "sp1")   # e viene aggiunta alla target
     assert resp.spotify_added is True
+
+
+def track_in_playlist(db, playlist_id, spotify_id):
+    return any(t.spotify_id == spotify_id for t in tracks_for_playlist(db, playlist_id))

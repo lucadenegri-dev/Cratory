@@ -8,6 +8,7 @@ from app.schemas import (
     SetlistTrackOut,
     TrackDetailOut,
     TrackOut,
+    TrackPlaylistRef,
 )
 from app.services.scoring import classify_transition, mixing_overview, mixing_tip
 
@@ -40,8 +41,7 @@ def track_out(track: Track) -> TrackOut:
         status=track.status or "imported",
         url=track.url,
         isrc=track.isrc,
-        playlist_id=track.playlist_id,
-        playlist_name=track.playlist_name,
+        playlists=[TrackPlaylistRef(id=p.id, name=p.name) for p in track.playlists],
         added_at=track.added_at,
         spotify_url=_spotify_url(track),
         album_art_url=track.album_art_url,

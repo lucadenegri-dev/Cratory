@@ -20,10 +20,12 @@ from app.integrations.spotify import (
     SpotifyWebClient,
 )
 from app.repositories import (
+    add_track_to_playlist,
     all_playable_tracks,
     delete_playlist,
     get_playlist,
     list_playlists,
+    recount_playlist,
     tracks_for_playlist,
 )
 from app.schemas import (
@@ -232,13 +234,9 @@ def add_discovered_track(playlist_id: int, req: PlaylistAddTrackRequest, db: Ses
         title=req.title, artist=req.artist, isrc=req.isrc,
         duration_seconds=req.duration_seconds, url=req.url, artwork_url=req.album_art_url,
     )
-
-    # Attacca alla playlist locale solo se la traccia non appartiene gia' ad un'altra
-    # playlist (modello 1:1: non "rubarla" alla sua playlist attuale).
-    if track.playlist_id is None:
-        track.playlist_id = playlist_id
-        playlist.track_count = (playlist.track_count or 0) + 1
-        db.commit()
+    add_track_to_playlist(db, track, playlist)
+    recount_playlist(db, playlist)
+    db.commit()
 
     spotify_added = False
     spotify_error: str | None = None

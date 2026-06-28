@@ -132,16 +132,16 @@ def _lib_track(db, **kw):
 def _make_playlist(db, rows):
     """rows: lista di dict con almeno artist/title; ritorna il playlist_id."""
     from app.models import Playlist, Track
+    from app.repositories import add_track_to_playlist
 
     pl = Playlist(platform="spotify", name="Test Playlist", kind="playlist")
     db.add(pl)
     db.flush()
     for r in rows:
-        db.add(Track(
-            source_type="spotify", platform="spotify",
-            playlist_id=pl.id, playlist_name=pl.name,
-            status="ready_for_set", **r,
-        ))
+        t = Track(source_type="spotify", platform="spotify", status="ready_for_set", **r)
+        db.add(t)
+        db.flush()
+        add_track_to_playlist(db, t, pl)
     db.commit()
     return pl.id
 
@@ -321,11 +321,15 @@ def test_dig_endpoint_returns_reasons(db, monkeypatch):
 
 
 def test_dig_endpoint_honors_taste_playlist_id(db, monkeypatch):
+    from app.repositories import add_track_to_playlist
     pl = Playlist(platform="spotify", name="Peak Time")
     db.add(pl)
-    db.commit()
-    db.add(Track(source_type="spotify", artist="Followed", title="Older",
-                 label="Warp", genre="Acid House", playlist_id=pl.id))
+    db.flush()
+    t = Track(source_type="spotify", artist="Followed", title="Older",
+              label="Warp", genre="Acid House")
+    db.add(t)
+    db.flush()
+    add_track_to_playlist(db, t, pl)
     db.commit()
 
     monkeypatch.setattr(

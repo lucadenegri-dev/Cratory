@@ -7,7 +7,7 @@ services/feature_enrichment + integrations/).
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -15,6 +15,17 @@ from app.db import Base
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# Associazione M2M brano<->playlist. `added_at` e' per-playlist (quando il brano e'
+# stato aggiunto a QUELLA playlist). PK composta: una membership per coppia.
+playlist_tracks = Table(
+    "playlist_tracks",
+    Base.metadata,
+    Column("playlist_id", ForeignKey("playlists.id"), primary_key=True, index=True),
+    Column("track_id", ForeignKey("tracks.id"), primary_key=True, index=True),
+    Column("added_at", DateTime, nullable=True),
+)
 
 
 class Track(Base):
@@ -30,7 +41,7 @@ class Track(Base):
     platform_track_id: Mapped[str | None] = mapped_column(String, index=True)
     isrc: Mapped[str | None] = mapped_column(String, index=True)
     url: Mapped[str | None] = mapped_column(Text)
-    added_at: Mapped[datetime | None] = mapped_column(DateTime)  # added_at nella playlist
+    added_at: Mapped[datetime | None] = mapped_column(DateTime)  # primo import in libreria; l'added_at per-playlist sta su playlist_tracks
     playlist_id: Mapped[int | None] = mapped_column(ForeignKey("playlists.id"), index=True)
     playlist_name: Mapped[str | None] = mapped_column(String)
     title: Mapped[str | None] = mapped_column(String)
@@ -59,6 +70,10 @@ class Track(Base):
     enriched_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    playlists: Mapped[list["Playlist"]] = relationship(
+        secondary="playlist_tracks", back_populates="tracks", viewonly=True,
+    )
 
 
 class SpotifyToken(Base):
@@ -91,6 +106,10 @@ class Playlist(Base):
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    tracks: Mapped[list["Track"]] = relationship(
+        secondary="playlist_tracks", back_populates="playlists", viewonly=True,
+    )
 
 
 class EnrichmentCache(Base):

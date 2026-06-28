@@ -140,6 +140,9 @@ Entita' principali:
 - `Playlist`: playlist importata da Spotify o import manuale.
 - `Track`: traccia della libreria, con identita' streaming, metadata editoriali,
   feature musicali, stato e tracciabilita' enrichment.
+- `playlist_tracks`: tabella associativa M2M (Playlist <-> Track) con `added_at`
+  per-playlist. Un brano puo' appartenere a piu' playlist; l'import aggiunge
+  membership senza sovrascrivere.
 - `Setlist`: set generato, prompt, strategia, spiegazione globale e validazione.
 - `SetlistTrack`: posizione, ruolo, score, note di transizione, motivo AI e rischio.
 - `EnrichmentCache`: cache provider, incluso not-found.
