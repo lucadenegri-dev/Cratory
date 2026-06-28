@@ -166,3 +166,10 @@ class UndoResult(BaseModel):
     run_id: int
     reversed_ops: int = 0
     error: str | None = None
+
+
+class HistoryItem(BaseModel):
+    id: int
+    status: str
+    created_at: datetime
+    n_ops: int

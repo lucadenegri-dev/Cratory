@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.db import ensure_schema
-from app.routers import analyze, apply, duplicates, issues, plan, scan, settings, sources
+from app.routers import analyze, apply, duplicates, history, issues, plan, scan, settings, sources
 
 
 @asynccontextmanager
@@ -23,6 +23,7 @@ app.include_router(duplicates.router)
 app.include_router(settings.router)
 app.include_router(plan.router)
 app.include_router(apply.router)
+app.include_router(history.router)
 
 
 @app.get("/api/health")
