@@ -356,6 +356,25 @@ class DiscoveryAddResponse(BaseModel):
     track: TrackOut
 
 
+class PlaylistAddTrackRequest(BaseModel):
+    """Aggiunge una traccia scoperta (expand) a una playlist specifica."""
+
+    artist: str
+    title: str
+    spotify_id: str | None = None
+    isrc: str | None = None
+    duration_seconds: int | None = None
+    album_art_url: str | None = None
+    url: str | None = None
+
+
+class PlaylistAddTrackResponse(BaseModel):
+    created: bool
+    track: TrackOut
+    spotify_added: bool = False
+    spotify_error: str | None = None
+
+
 class DiscoveryExpandRequest(BaseModel):
     playlist_id: int
     limit: int = Field(default=20, ge=1, le=50)
