@@ -123,6 +123,7 @@ export default function Library() {
               {th("Genere", "genre")}
               {th("Dur", "duration", true)}
               {th("Stato", "status")}
+              <th className={cell}>Playlist</th>
               <th className={cell}></th>
             </tr>
           </thead>
@@ -145,6 +146,9 @@ export default function Library() {
                 <td className={`${cell} max-w-[10rem] truncate text-muted`}>{t.genre ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
                 <td className={cell}><Badge tone={STATUS_TONE[t.status] ?? "neutral"}>{STATUS_LABEL[t.status] ?? t.status}</Badge></td>
+                <td className={`${cell} tnum text-muted`} title={t.playlists.map((p) => p.name).join(", ")}>
+                  {t.playlists.length || "—"}
+                </td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
@@ -154,7 +158,7 @@ export default function Library() {
               </tr>
             ))}
             {items.length === 0 && (
-              <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia con questi filtri. <Link href="/playlists" className="text-fg underline-offset-4 hover:underline">Importa una playlist</Link> per iniziare.</td></tr>
+              <tr><td colSpan={11} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia con questi filtri. <Link href="/playlists" className="text-fg underline-offset-4 hover:underline">Importa una playlist</Link> per iniziare.</td></tr>
             )}
           </tbody>
         </table>

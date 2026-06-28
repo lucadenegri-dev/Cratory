@@ -62,6 +62,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
     ["BPM", track.bpm?.toFixed(2) ?? "—"], ["Key (Camelot)", track.camelot_key ?? "—"], ["Durata", fmtDuration(track.duration_seconds)],
     ["Mood", track.mood ?? "—"], ["Energia", track.energy ?? "—"], ["Label", track.label ?? "—"],
     ["Sorgente", track.source_type], ["ISRC", track.isrc ?? "—"], ["Stato", track.status],
+    ["Playlist", track.playlists.length ? track.playlists.map((p) => p.name).join(", ") : "—"],
   ];
 
   const marginalia = (

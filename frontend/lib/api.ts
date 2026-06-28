@@ -23,8 +23,7 @@ export interface Track {
   status: string;
   url: string | null;
   isrc: string | null;
-  playlist_id: number | null;
-  playlist_name: string | null;
+  playlists: { id: number; name: string }[];
   added_at: string | null;
   spotify_url: string | null;
   album_art_url: string | null;
