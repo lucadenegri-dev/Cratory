@@ -31,3 +31,6 @@ next-env.d.ts
 
 # Brainstorming visual companion (mockup)
 .superpowers/
+
+# Claude Code — settings locali (non la launch.json condivisa)
+.claude/settings.local.json
