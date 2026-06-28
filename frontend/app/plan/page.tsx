@@ -67,6 +67,7 @@ export default function PlanPage() {
       <div className="flex flex-col gap-4">
         {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
         {error && <Alert>{error}</Alert>}
+        {apply.status === "error" && <Alert>Apply fallito: {apply.error ?? "errore sconosciuto"}</Alert>}
 
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={rebuild} disabled={building || applying}>
@@ -136,11 +137,13 @@ function Row({ k, v, ok, danger }: { k: string; v: string | number; ok?: boolean
 }
 
 function ApplyResultBanner({ result }: { result: ApplyResult }) {
-  const ok = !result.refused && !result.partial && !result.error;
+  const ok = !result.refused && !result.partial && !result.error && !result.stale;
   return (
     <div className={`border px-4 py-3 text-xs ${ok ? "border-border" : "border-danger"}`}>
       {result.refused ? (
         <span className="text-danger">Apply rifiutato{result.reason ? `: ${result.reason}` : ""}.</span>
+      ) : result.stale ? (
+        <span className="text-danger">Piano non più valido (op #{result.failed_op_seq}). Ricostruisci il piano.</span>
       ) : result.partial ? (
         <span className="text-danger">Applicate {result.applied_ops} operazioni, fermato all&apos;op #{result.failed_op_seq}{result.error ? `: ${result.error}` : ""}.</span>
       ) : result.error ? (

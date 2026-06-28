@@ -26,7 +26,10 @@ export default function HistoryPage() {
   const onUndo = async (id: number) => {
     if (busyId !== null) return;
     setError(null); setBusyId(id);
-    try { await undoRun(id); }
+    try {
+      const res = await undoRun(id);
+      if (res.error) setError(res.error);
+    }
     catch (e) { setError(e instanceof Error ? e.message : "Errore"); }
     finally { setBusyId(null); load(); }
   };
