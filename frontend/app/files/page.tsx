@@ -40,8 +40,7 @@ export default function FilesPage() {
 
   useEffect(() => { listSources().then(setRoots).catch(() => {}); }, []);
   useEffect(() => { load(); }, [load]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (scan.status === "done") load(); }, [scan.status]);
+  useEffect(() => { if (scan.status === "done") load(); }, [scan.status, load]);
 
   return (
     <PageLayout
