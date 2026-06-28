@@ -35,7 +35,8 @@ app = FastAPI(title="Cratory", version="0.9.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin],
+    # frontend_origin puo' elencare piu' origini separate da virgola (dev 3000, preview 3001).
+    allow_origins=[o.strip() for o in settings.frontend_origin.split(",") if o.strip()],
     allow_methods=["*"],
     allow_headers=["*"],
 )

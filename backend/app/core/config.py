@@ -16,7 +16,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore")
 
     database_url: str = DEFAULT_DATABASE_URL
-    frontend_origin: str = "http://localhost:3000"
+    # Origini CORS ammesse (lista separata da virgola). 3000 = dev normale, 3001 = preview.
+    frontend_origin: str = "http://localhost:3000,http://localhost:3001"
     log_level: str = "INFO"
     # Import da cartella locale: radice consentita per il file-browser (vuoto = home utente).
     local_import_root: str = ""

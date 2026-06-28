@@ -7,15 +7,7 @@
       "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "-p", "3000"],
       "cwd": "frontend",
       "port": 3000,
-      "autoPort": false
-    },
-    {
-      "name": "frontend",
-      "runtimeExecutable": "C:\\Develop\\DJAssistant\\frontend\\dev.cmd",
-      "runtimeArgs": [],
-      "cwd": "frontend",
-      "port": 3000,
-      "autoPort": false
+      "autoPort": true
     },
     {
       "name": "preview",
@@ -27,6 +19,21 @@
     },
     {
       "name": "backend",
+      "runtimeExecutable": "backend/.venv/bin/python",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--app-dir", "backend"],
+      "port": 8000,
+      "autoPort": false
+    },
+    {
+      "name": "frontend-win",
+      "runtimeExecutable": "C:\\Develop\\DJAssistant\\frontend\\dev.cmd",
+      "runtimeArgs": [],
+      "cwd": "frontend",
+      "port": 3000,
+      "autoPort": false
+    },
+    {
+      "name": "backend-win",
       "runtimeExecutable": "backend/.venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--app-dir", "backend"],
       "port": 8000,
