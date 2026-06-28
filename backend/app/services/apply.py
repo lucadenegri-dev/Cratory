@@ -5,8 +5,8 @@ import os
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.integrations import tagio
-from app.models import AudioFile, DupMember, Issue, Plan, PlanOp, ScanRoot, utcnow
+from app.integrations import fsops, tagio
+from app.models import AudioFile, DupMember, Issue, Plan, PlanOp, ScanRoot, UndoJournal, utcnow
 from app.schemas import ApplyResult
 from app.services import conflict
 from app.services.planner import PlanOpComputed
@@ -63,6 +63,67 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
     if stale is not None:
         return ApplyResult(stale=True, failed_op_seq=stale, reason="piano stale",
                            started_at=started, finished_at=utcnow())
-    # Task 5 inserisce qui l'esecuzione; per ora ritorna un risultato "nessuna op".
-    return ApplyResult(run_id=plan.id, applied_ops=0,
+    retag_ops = [o for o in ops if o.kind == "RETAG"]
+    move_ops = [o for o in ops if o.kind in ("RENAME", "MOVE")]
+    del_ops = [o for o in ops if o.kind == "DELETE"]
+    del_by_path = {o.before_json["path"]: o for o in del_ops}
+    done: set = set()
+    state = {"seq": 0, "applied": 0}
+    total = len(ops)
+
+    def _journal(kind, file_id, from_path=None, to_path=None, prior_tags=None, quarantine_path=None):
+        db.add(UndoJournal(run_id=plan.id, op_seq=state["seq"], kind=kind, file_id=file_id,
+                           from_path=from_path, to_path=to_path, prior_tags_json=prior_tags,
+                           quarantine_path=quarantine_path))
+        db.commit()
+        state["seq"] += 1
+
+    def _progress():
+        state["applied"] += 1
+        if on_progress is not None:
+            on_progress(state["applied"], total, "applying")
+
+    def _do_delete(o):
+        f = files[o.file_id]
+        q = fsops.quarantine_path_for(f.path, _root_path(db, f.root_id))
+        fsops.safe_move(f.path, q)                              # muta
+        _journal("DELETE", o.file_id, from_path=f.path, quarantine_path=q)  # journal dopo
+        o.status = "applied"
+        db.commit()
+        done.add(o.file_id)
+        _progress()
+
+    try:
+        for o in retag_ops:
+            f = files[o.file_id]
+            prior = {field: _tag_value(tagio.read_tags(f.path), field) for field in o.after_json}
+            tagio.write_tags(f.path, o.after_json)              # muta
+            _journal("RETAG", o.file_id, from_path=f.path, prior_tags=prior)
+            o.status = "applied"
+            db.commit()
+            _progress()
+        for o in move_ops:
+            f = files[o.file_id]
+            dest = o.after_json["path"]
+            blocker = del_by_path.get(dest)
+            if blocker is not None and blocker.file_id not in done:
+                _do_delete(blocker)                            # delete-prima-di-move
+            fsops.safe_move(f.path, dest)                      # muta
+            _journal(o.kind, o.file_id, from_path=f.path, to_path=dest)
+            o.status = "applied"
+            db.commit()
+            _progress()
+        for o in del_ops:
+            if o.file_id not in done:
+                _do_delete(o)
+    except Exception as exc:  # noqa: BLE001 — stop pulito, journal intatto
+        plan.status = "applied"
+        db.commit()
+        return ApplyResult(run_id=plan.id, applied_ops=state["applied"], partial=True,
+                           failed_op_seq=state["seq"], error=str(exc),
+                           started_at=started, finished_at=utcnow())
+
+    plan.status = "applied"
+    db.commit()
+    return ApplyResult(run_id=plan.id, applied_ops=state["applied"],
                        started_at=started, finished_at=utcnow())
