@@ -1,0 +1,120 @@
+"""Client per il daemon Soulseek headless slskd (REST API v0).
+
+slskd fa la rete P2P (login, peer, code); Cratory orchestra. Usato SOLO come
+downloader: non si sfrutta la condivisione. Confermare gli endpoint contro
+lo Swagger del proprio slskd (<SLSKD_URL>/swagger).
+"""
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+import httpx
+
+from app.core.config import settings
+from app.integrations._http import get_with_retries
+
+BASE = "/api/v0"
+
+
+class SlskdError(Exception):
+    """Errore di comunicazione con slskd."""
+
+
+class SlskdNotConfigured(SlskdError):
+    """SLSKD_URL non impostato."""
+
+
+@dataclass
+class SlskdFile:
+    """Un file candidato restituito da una ricerca slskd."""
+
+    username: str
+    filename: str
+    size: int | None
+    bitrate: int | None
+    length: int | None
+    has_free_slot: bool
+    queue_length: int | None
+
+    @property
+    def extension(self) -> str:
+        return Path(self.filename.replace("\\", "/")).suffix.lower().lstrip(".")
+
+
+class SlskdClient:
+    def __init__(self, url: str | None = None, api_key: str | None = None,
+                 http: httpx.Client | None = None):
+        self.url = (url if url is not None else settings.slskd_url).rstrip("/")
+        self.api_key = api_key if api_key is not None else settings.slskd_api_key
+        if not self.url:
+            raise SlskdNotConfigured("SLSKD_URL mancante in backend/.env.")
+        headers = {"Accept": "application/json"}
+        if self.api_key:
+            headers["X-API-Key"] = self.api_key
+        self.http = http or httpx.Client(timeout=30, headers=headers)
+
+    def _get(self, path: str, params: dict | None = None):
+        r = get_with_retries(self.http, f"{self.url}{BASE}{path}",
+                             error_cls=SlskdError, params=params)
+        if r.status_code >= 400:
+            raise SlskdError(f"slskd {r.status_code}: {r.text[:160]}")
+        return r.json()
+
+    def _post(self, path: str, json=None):
+        try:
+            r = self.http.post(f"{self.url}{BASE}{path}", json=json)
+        except httpx.HTTPError as exc:
+            raise SlskdError(f"slskd POST {path} fallita: {exc}") from exc
+        if r.status_code >= 400:
+            raise SlskdError(f"slskd {r.status_code}: {r.text[:160]}")
+        return r.json() if r.content else {}
+
+    def search(self, artist: str, title: str, *, wait_seconds: float = 8.0,
+               poll_interval: float = 1.0) -> list[SlskdFile]:
+        text = f"{artist} {title}".strip()
+        if not text:
+            return []
+        created = self._post("/searches", json={"searchText": text})
+        search_id = created.get("id")
+        if not search_id:
+            raise SlskdError("slskd: ricerca senza id.")
+        waited = 0.0
+        while waited < wait_seconds:
+            state = self._get(f"/searches/{search_id}")
+            if state.get("isComplete") or "completed" in str(state.get("state", "")).lower():
+                break
+            time.sleep(poll_interval)
+            waited += poll_interval
+        responses = self._get(f"/searches/{search_id}/responses")
+        return self._flatten_responses(responses)
+
+    @staticmethod
+    def _flatten_responses(responses) -> list[SlskdFile]:
+        out: list[SlskdFile] = []
+        for resp in responses or []:
+            username = resp.get("username") or ""
+            has_slot = bool(resp.get("hasFreeUploadSlot"))
+            queue = resp.get("queueLength")
+            for f in resp.get("files") or []:
+                out.append(SlskdFile(
+                    username=username,
+                    filename=f.get("filename") or "",
+                    size=f.get("size"),
+                    bitrate=f.get("bitRate"),
+                    length=f.get("length"),
+                    has_free_slot=has_slot,
+                    queue_length=queue,
+                ))
+        return out
+
+
+def slskd_configured() -> bool:
+    return bool(settings.slskd_url and settings.slskd_download_dir)
+
+
+def get_slskd_client() -> SlskdClient:
+    if not settings.slskd_url:
+        raise SlskdNotConfigured("SLSKD_URL mancante in backend/.env.")
+    return SlskdClient()
