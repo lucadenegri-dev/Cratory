@@ -34,8 +34,11 @@ class Settings(BaseSettings):
     # Discogs: sorgente di profondita' per Discovery (generi/stili, etichette, artisti).
     # Funziona anche senza token (rate ridotto a ~25/min); col token sale a ~60/min.
     discogs_token: str = ""
+    # slskd: URL del demone Soulseek locale (es. http://localhost:5030). Vuoto = acquisizione disattiva.
     slskd_url: str = ""
+    # slskd: API key del demone (se richiesta dalla sua config).
     slskd_api_key: str = ""
+    # slskd: cartella dove slskd scrive i download completati (usata per collegare il file alla Track).
     slskd_download_dir: str = ""
     # Deezer: BPM via ISRC, gratis e SENZA API key (endpoint pubblico). Attivo di default
     # perche' a costo zero e copre il BPM con l'identita' piu' affidabile (ISRC).

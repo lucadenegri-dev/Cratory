@@ -7,6 +7,7 @@ il job.
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from datetime import datetime, timezone
@@ -21,6 +22,8 @@ from app.integrations.slskd import (
 from app.repositories import get_track, tracks_without_local_file
 from app.services.acquisition import attach_local_file
 from app.services.soulseek_select import best_for_auto
+
+logger = logging.getLogger(__name__)
 
 POLL_INTERVAL = 2.0
 DOWNLOAD_TIMEOUT = 180.0
@@ -55,10 +58,12 @@ def _resolve_local_path(download_dir: str, filename: str) -> str | None:
     root = Path(download_dir)
     if not root.exists():
         return None
-    for p in root.rglob(base):
-        if p.is_file():
-            return str(p.resolve())
-    return None
+    matches = [p for p in root.rglob(base) if p.is_file()]
+    if not matches:
+        return None
+    if len(matches) > 1:
+        logger.warning("Più file con basename %r in %s: scelgo il più recente", base, download_dir)
+    return str(max(matches, key=lambda p: p.stat().st_mtime).resolve())
 
 
 def _wait_for_download(client, file: SlskdFile) -> str:
@@ -106,6 +111,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                 try:
                     outcome = _process_item(db, client, download_dir, track, chosen)
                 except Exception:  # noqa: BLE001 — un fallimento non ferma il job
+                    logger.exception("Download Soulseek fallito per track_id=%s", track_id)
                     outcome = "failed"
             _state[outcome] = _state.get(outcome, 0) + 1
             _state["processed"] = i
@@ -118,6 +124,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
         _state.update(status="done")
     except Exception as exc:  # noqa: BLE001
         _state.update(status="error", error=str(exc))
+        logger.exception("Job di download Soulseek interrotto: %s", exc)
     finally:
         _state["finished_at"] = datetime.now(timezone.utc).isoformat()
         db.close()

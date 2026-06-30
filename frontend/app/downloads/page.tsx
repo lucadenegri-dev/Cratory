@@ -50,6 +50,7 @@ export default function DownloadsPage() {
     listImportedPlaylists()
       .then((p) => alive.current && setPlaylists(p))
       .catch(() => undefined);
+    poll();
     const id = setInterval(poll, 2000);
     return () => {
       alive.current = false;

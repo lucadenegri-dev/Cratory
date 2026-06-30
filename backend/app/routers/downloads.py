@@ -53,11 +53,11 @@ def status():
 @router.post("/candidates", response_model=list[CandidateOut])
 def candidates(req: CandidatesIn):
     if not slskd_configured():
-        raise HTTPException(409, "slskd non configurato (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
+        raise HTTPException(status_code=409, detail="slskd non configurato (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     try:
         files = get_slskd_client().search(req.artist, req.title)
     except SlskdError as exc:
-        raise HTTPException(502, str(exc)) from exc
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     ranked = rank_candidates(files, artist=req.artist, title=req.title)
     return [_candidate_out(c) for c in ranked]
 
@@ -65,26 +65,26 @@ def candidates(req: CandidatesIn):
 @router.post("/playlist/{playlist_id}", status_code=202)
 def download_playlist(playlist_id: int):
     if not slskd_configured():
-        raise HTTPException(409, "slskd non configurato.")
+        raise HTTPException(status_code=409, detail="slskd non configurato.")
     if job.is_running():
-        raise HTTPException(409, "Un download e' gia' in corso.")
-    return job.start_playlist_job(playlist_id)
+        raise HTTPException(status_code=409, detail="Un download e' gia' in corso.")
+    return {"available": True, **job.start_playlist_job(playlist_id)}
 
 
 @router.post("/track", status_code=202)
 def download_track(req: TrackDownloadIn):
     if not slskd_configured():
-        raise HTTPException(409, "slskd non configurato.")
+        raise HTTPException(status_code=409, detail="slskd non configurato.")
     if job.is_running():
-        raise HTTPException(409, "Un download e' gia' in corso.")
+        raise HTTPException(status_code=409, detail="Un download e' gia' in corso.")
     db = SessionLocal()
     try:
         if get_track(db, req.track_id) is None:
-            raise HTTPException(404, "Traccia non trovata.")
+            raise HTTPException(status_code=404, detail="Traccia non trovata.")
     finally:
         db.close()
     c = req.candidate
     file = SlskdFile(username=c.username, filename=c.filename, size=c.size,
                      bitrate=c.bitrate, length=c.length, has_free_slot=True,
                      queue_length=None)
-    return job.start_track_job(req.track_id, file)
+    return {"available": True, **job.start_track_job(req.track_id, file)}
