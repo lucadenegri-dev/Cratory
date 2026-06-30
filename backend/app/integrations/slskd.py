@@ -90,6 +90,18 @@ class SlskdClient:
         responses = self._get(f"/searches/{search_id}/responses")
         return self._flatten_responses(responses)
 
+    def enqueue_download(self, file: "SlskdFile") -> None:
+        self._post(f"/transfers/downloads/{file.username}",
+                   json=[{"filename": file.filename, "size": file.size or 0}])
+
+    def transfer_state(self, username: str, filename: str) -> dict | None:
+        data = self._get(f"/transfers/downloads/{username}")
+        for directory in data.get("directories") or []:
+            for f in directory.get("files") or []:
+                if f.get("filename") == filename:
+                    return f
+        return None
+
     @staticmethod
     def _flatten_responses(responses) -> list[SlskdFile]:
         out: list[SlskdFile] = []
@@ -118,3 +130,13 @@ def get_slskd_client() -> SlskdClient:
     if not settings.slskd_url:
         raise SlskdNotConfigured("SLSKD_URL mancante in backend/.env.")
     return SlskdClient()
+
+
+def classify_transfer_state(state: str) -> str:
+    s = (state or "").lower()
+    if any(x in s for x in ("errored", "failed", "cancelled", "canceled",
+                            "rejected", "timedout")):
+        return "failed"
+    if "completed" in s or "succeeded" in s:
+        return "completed"
+    return "in_progress"
