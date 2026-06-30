@@ -201,6 +201,44 @@ Richiede `ffmpeg`, `yt-dlp` e `shazamio`. Il job scarica temporaneamente l'audio
 campiona segmenti, riconosce le tracce e persiste `DjSet`/`DjSetTrack`. Le tracce non
 entrano nella libreria principale.
 
+## Downloads (Soulseek / slskd)
+
+```text
+GET  /api/downloads/status
+POST /api/downloads/candidates
+POST /api/downloads/playlist/{playlist_id}
+POST /api/downloads/track
+```
+
+Acquisizione file via il daemon Soulseek headless slskd, deterministica (zero AI):
+collega un file alla `Track` esistente (`has_local_file`/`local_path`/`local_format`/
+`local_bitrate`). Richiede `SLSKD_URL` e `SLSKD_DOWNLOAD_DIR` configurati; senza,
+`candidates`, `playlist/{id}` e `track` rispondono `409`.
+
+`GET /api/downloads/status` restituisce `available` (slskd configurato) piu' lo stato
+del job in background: `status` (`idle|running|done|error`), `processed`, `total`,
+`downloaded`, `needs_review`, `not_found`, `failed`, `playlist_id`, `items[]`,
+`error`, `started_at`, `finished_at`.
+
+`POST /api/downloads/candidates` cerca su slskd e restituisce i candidati ordinati
+deterministicamente (qualita' + aderenza nome + disponibilita'). Request: `artist`,
+`title`. Response: lista di candidati con `username`, `filename`, `size`, `bitrate`,
+`length`, `format`, `name_score`, `quality_tier`, `confidence`.
+
+`POST /api/downloads/playlist/{playlist_id}` (`202`) avvia il job per tutte le tracce
+della playlist senza file locale: per ciascuna cerca, sceglie in automatico il miglior
+candidato (auto-pick sopra soglia di confidenza) ed esegue il download. `409` se slskd
+non e' configurato o un job e' gia' in corso.
+
+`POST /api/downloads/track` (`202`) avvia il job per una singola traccia con un
+candidato scelto esplicitamente (mini-selettore, es. da Discovery). Request: `track_id`,
+`candidate` (stessa forma di `CandidateOut`). `404` se la traccia non esiste, `409` se
+slskd non e' configurato o un job e' gia' in corso.
+
+Il job e' mono-istanza (un download alla volta, come l'import locale): un errore su una
+traccia non ferma le altre. La UI fa polling di `GET /api/downloads/status` durante
+l'esecuzione.
+
 ## AI e servizi
 
 ```text

@@ -13,8 +13,11 @@ analysis, discovery e corpus di mix identificati.
 - Spotify non fornisce feature di mixing: serve per identita', metadata, import/export.
 - L'AI non riceve mai tutta la libreria: il Candidate Engine le passa al massimo 60 candidate.
 - Ogni output AI passa da schema Pydantic e Validation Engine.
-- L'app non riproduce audio e non conserva file audio. Il modulo Shazam usa file
-  temporanei solo per fingerprinting.
+- L'app non riproduce audio. Non conserva file audio, con un'eccezione dichiarata:
+  l'acquisizione persistente via Soulseek/slskd, collegata a una `Track` esistente
+  (`has_local_file`/`local_path`/`local_format`/`local_bitrate`). Resta distinta dal
+  modulo Shazam, che scarica audio solo in modo temporaneo per il fingerprinting e
+  non lo conserva.
 
 ## Flusso principale
 
@@ -73,6 +76,22 @@ URL SoundCloud/Mixcloud/YouTube
 
 Le tracce identificate nei mix non entrano nella libreria principale: restano un corpus
 separato per analisi e suggerimenti futuri.
+
+Acquisizione file via Soulseek (slskd), distinta dal download temporaneo Shazam:
+
+```text
+Track in libreria (identita' streaming)
+  -> SlskdClient.search (slskd REST)
+  -> selezione deterministica (qualita' + match nome + disponibilita')
+  -> auto-pick (blocco playlist) | mini-selettore (Discovery)
+  -> slskd enqueue + polling transfer
+  -> attach_local_file: has_local_file + local_path/format/bitrate
+```
+
+E' deterministica (zero AI), mono-job (un download alla volta) e best-effort: un
+errore su una traccia non ferma il job. Richiede slskd configurato; senza, gli
+endpoint rispondono `409`. Il file resta collegato alla `Track` come riferimento
+locale, non viene ricaricato ne' ridistribuito dall'app.
 
 ## Layer backend
 
@@ -139,7 +158,9 @@ Entita' principali:
 
 - `Playlist`: playlist importata da Spotify o import manuale.
 - `Track`: traccia della libreria, con identita' streaming, metadata editoriali,
-  feature musicali, stato e tracciabilita' enrichment.
+  feature musicali, stato e tracciabilita' enrichment. Ownership file locale (import
+  da cartella o acquisizione Soulseek): `has_local_file`, `local_path`, `local_format`,
+  `local_bitrate`.
 - `playlist_tracks`: tabella associativa M2M (Playlist <-> Track) con `added_at`
   per-playlist. Un brano puo' appartenere a piu' playlist; l'import aggiunge
   membership senza sovrascrivere.
@@ -188,6 +209,7 @@ nessun provider la fornisce.
 | Discogs | attiva | crate digging Discovery "Scava" per genere/etichetta; funziona senza token, `DISCOGS_TOKEN` alza il rate limit |
 | LLM | attiva se configurata | output strutturati e validati |
 | Shazam | attiva se dipendenze presenti | ffmpeg, yt-dlp, shazamio |
+| slskd (Soulseek) | attiva se configurato | download via REST API; `SLSKD_URL`/`SLSKD_API_KEY`/`SLSKD_DOWNLOAD_DIR` |
 | SoundCloud import | backlog | da valutare fattibilita' API |
 | PostgreSQL | backlog | SQLite basta per mono-utente |
 

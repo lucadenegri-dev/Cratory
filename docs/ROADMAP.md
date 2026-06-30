@@ -69,6 +69,11 @@ migrazione esplicita.
 - Playlist many-to-many: tabella associativa `playlist_tracks` (membership), import che
   aggiunge appartenenze invece di sovrascrivere, delete/prune per-playlist, libreria che
   mostra "in N playlist". Colonne legacy `Track.playlist_id`/`playlist_name` svuotate.
+- Acquisizione file via Soulseek (slskd): selezione deterministica per qualita'/match
+  nome/disponibilita', job async con polling, download per-playlist (blocco con
+  auto-pick) e per-traccia (mini-selettore da Discovery), link al `Track` esistente
+  (`has_local_file`/`local_path`/`local_format`/`local_bitrate`). Eccezione dichiarata
+  al principio "non conserva file audio" (resta il "non riproduce audio").
 
 ## Direzione prodotto
 
@@ -110,6 +115,9 @@ Backlog tecnico (non bloccante):
 - **SoundCloud import.** API chiusa a nuove app: rivalutare solo se riapre.
 - **PostgreSQL.** Bassa priorita': SQLite basta per uso personale (servirebbe solo con
   un eventuale multi-utente).
+- **Vista "Tracce senza file".** Fast-follow opzionale dell'acquisizione Soulseek: una
+  vista del gap di possesso (tracce senza `has_local_file`) per dare in pasto alla coda
+  di download, oltre al blocco per-playlist gia' disponibile.
 
 ## Rischi
 

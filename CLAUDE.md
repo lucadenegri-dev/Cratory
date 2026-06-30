@@ -9,9 +9,11 @@ webapp personale, locale/self-hosted e mono-utente per importare
 playlist streaming, arricchire le tracce con feature musicali, costruire bozze di DJ
 set, analizzare buchi della libreria, fare discovery e identificare tracklist di mix.
 
-Il progetto non riproduce audio e non conserva file audio. Il modulo Shazam scarica
-audio solo in modo temporaneo per fingerprinting e salva un corpus separato di
-tracklist identificate.
+Il progetto non riproduce audio. Il modulo Shazam scarica audio solo in modo temporaneo
+per fingerprinting e salva un corpus separato di tracklist identificate. Eccezione
+esplicita al "non conserva file audio" (il "non riproduce" resta valido): l'acquisizione
+persistente via Soulseek/slskd, che collega un file alla `Track` esistente in libreria
+(`has_local_file`/`local_path`/`local_format`/`local_bitrate`).
 
 ## Fonte di verita'
 

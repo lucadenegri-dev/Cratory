@@ -13,8 +13,11 @@ It is **not a SaaS** — and that is a design choice, not a limitation. Spotify'
 forbids a public multi-tenant Spotify app (development mode caps at 5 users; extended
 quota needs a launched organization with 250k+ monthly users), so Cratory leans the other
 way on purpose: a single-user tool where the value is product quality, not scale. It never
-plays or stores audio — the Shazam module downloads audio only temporarily to fingerprint
-external mixes, and persists only the identified tracklist.
+plays audio. It never stores audio either, with one declared exception: optional, explicit
+file acquisition via Soulseek (through a local [slskd](https://github.com/slskd/slskd)
+daemon), linked to an existing library track. The Shazam module remains separate — it
+downloads audio only temporarily to fingerprint external mixes, and persists only the
+identified tracklist.
 
 ## Features
 
@@ -28,6 +31,8 @@ external mixes, and persists only the identified tracklist.
 - Discovery by taste: expand a playlist (Last.fm + Spotify resolver) or crate-dig by
   genre/label via Discogs ("Scava").
 - Identify mix tracklists via Shazam/yt-dlp/ffmpeg into a corpus kept separate from the library.
+- Acquire files for tracks you already own the rights to via Soulseek (slskd), with
+  deterministic candidate ranking and per-playlist or per-track download.
 
 ## Architecture at a glance
 
@@ -49,13 +54,15 @@ Backend:   Python, FastAPI, SQLAlchemy, Pydantic
 Frontend:  Next.js 16, React, Tailwind / design system
 Database:  SQLite (local); PostgreSQL in backlog
 AI:        LLM behind an interface, outputs validated with Pydantic
-External:  Spotify, Deezer, MusicBrainz, AcousticBrainz, GetSongBPM, Last.fm, Discogs, Shazam
+External:  Spotify, Deezer, MusicBrainz, AcousticBrainz, GetSongBPM, Last.fm, Discogs, Shazam, slskd
 ```
 
 ## Quickstart
 
 Prerequisites: Python 3.12+, Node.js 20+. The Shazam module also needs system `ffmpeg`
-plus the `yt-dlp` and `shazamio` Python dependencies (in `backend/requirements.txt`).
+plus the `yt-dlp` and `shazamio` Python dependencies (in `backend/requirements.txt`). File
+acquisition needs a separately running [slskd](https://github.com/slskd/slskd) instance
+(not bundled).
 
 Backend:
 
@@ -105,9 +112,19 @@ AI_MODEL=
 AI_MODEL_CREATIVE=
 ```
 
+File acquisition (optional):
+
+```text
+SLSKD_URL=
+SLSKD_API_KEY=
+SLSKD_DOWNLOAD_DIR=
+```
+
 Spotify provides track identity, editorial metadata, covers, duration, ISRC, URLs and
 playlists — not reliable mixing BPM/key. `DISCOGS_TOKEN` is optional: Discovery "Scava"
-works without it; the token only raises the rate limit.
+works without it; the token only raises the rate limit. `SLSKD_URL`/`SLSKD_DOWNLOAD_DIR`
+point to your own running slskd instance; without them, file acquisition stays disabled
+and the rest of the app is unaffected.
 
 ## Database
 
@@ -129,7 +146,14 @@ Start backend + frontend → in Settings, connect Spotify → import a playlist 
 tracklist → let enrichment run → fix any important missing BPM/key → generate a set
 (technical or creative) → review transitions, warnings and alternatives → export or create
 a Spotify playlist → use Discovery (expand, or "Scava" by genre/label via Discogs) to find
-tracks that fit your taste.
+tracks that fit your taste → optionally acquire files for tracks you own via Soulseek
+(Downloads page, per-playlist or per-track from Discovery), once slskd is running and
+configured.
+
+**A note on responsible use.** Cratory is a personal, self-hosted tool, not a public
+service. The optional Soulseek acquisition feature is a thin client over your own slskd
+instance — it does not host, share, or redistribute anything. What you search for and
+download, and whether you have the right to acquire it, is entirely your responsibility.
 
 ## Tests
 
