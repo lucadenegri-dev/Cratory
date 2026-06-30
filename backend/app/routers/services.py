@@ -87,5 +87,16 @@ def services_status(db: Session = Depends(get_db)):
                 "env": ["MUSICBRAINZ_USER_AGENT"],
                 "docs": "https://musicbrainz.org/doc/MusicBrainz_API",
             },
+            {
+                "key": "slskd", "name": "slskd (Soulseek)", "category": "Download",
+                # Configurato = URL + cartella download presenti; l'API key e' opzionale
+                # (slskd puo' girare senza auth). Stessa condizione di slskd_configured().
+                "configured": bool(settings.slskd_url and settings.slskd_download_dir),
+                "connected": None,
+                "detail": "Acquisizione file via Soulseek: scarica le tracce di una playlist e "
+                          "collega il file alla libreria. SLSKD_API_KEY opzionale.",
+                "env": ["SLSKD_URL", "SLSKD_API_KEY", "SLSKD_DOWNLOAD_DIR"],
+                "docs": "https://github.com/slskd/slskd",
+            },
         ]
     }
