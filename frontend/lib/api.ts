@@ -686,3 +686,54 @@ export function fmtDate(iso: string | null | undefined): string {
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
 }
+
+// --- Download (Soulseek/slskd) ----------------------------------------------
+
+export type DownloadCandidate = {
+  username: string;
+  filename: string;
+  size: number | null;
+  bitrate: number | null;
+  length: number | null;
+  format: string | null;
+  name_score: number;
+  quality_tier: number;
+  confidence: number;
+};
+
+export type DownloadItem = {
+  track_id: number;
+  artist: string | null;
+  title: string | null;
+  outcome: "downloaded" | "needs_review" | "not_found" | "failed";
+};
+
+export type DownloadStatus = {
+  available: boolean;
+  status: "idle" | "running" | "done" | "error";
+  processed: number;
+  total: number;
+  downloaded: number;
+  needs_review: number;
+  not_found: number;
+  failed: number;
+  playlist_id: number | null;
+  items: DownloadItem[];
+  error: string | null;
+};
+
+export function downloadStatus() {
+  return apiGet<DownloadStatus>("/api/downloads/status");
+}
+
+export function downloadCandidates(artist: string, title: string) {
+  return apiPost<DownloadCandidate[]>("/api/downloads/candidates", { artist, title });
+}
+
+export function startPlaylistDownload(playlistId: number) {
+  return apiPost<DownloadStatus>(`/api/downloads/playlist/${playlistId}`);
+}
+
+export function downloadTrack(trackId: number, candidate: DownloadCandidate) {
+  return apiPost<DownloadStatus>("/api/downloads/track", { track_id: trackId, candidate });
+}

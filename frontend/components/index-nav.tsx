@@ -15,6 +15,7 @@ const NAV = [
   { href: "/discovery", label: "Discovery" },
   { href: "/shazam", label: "Shazam" },
   { href: "/sets", label: "Set" },
+  { href: "/downloads", label: "Download" },
 ];
 
 export function IndexNav() {
