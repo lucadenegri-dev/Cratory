@@ -43,3 +43,23 @@ def test_best_for_auto_picks_strong_lossless():
     best = best_for_auto(files, artist="Daft Punk", title="Da Funk")
     assert best is not None
     assert best.confidence >= 0.7
+
+
+def test_unknown_bitrate_lossy_not_excluded():
+    # Soulseek spesso non riporta il bitrate in ricerca: un mp3 con bitrate ignoto
+    # e nome coerente NON deve essere scartato (prima finiva tier 0 -> escluso).
+    files = [_f("Daft Punk - Da Funk.mp3", bitrate=None)]
+    ranked = rank_candidates(files, artist="Daft Punk", title="Da Funk")
+    assert len(ranked) == 1
+    assert ranked[0].quality_tier == 1
+
+
+def test_name_match_uses_basename_not_full_path():
+    # Path Soulseek reale e rumoroso: il titolo combacia col nome file anche se il
+    # path e' lungo (cartelle/anno/formato). Prima veniva escluso (name_score basso).
+    files = [_f("Music\\Arca\\Arca - KiCk i (2020) [FLAC]\\02  Time.flac")]
+    ranked = rank_candidates(files, artist="Arca", title="Time")
+    assert len(ranked) == 1
+    best = best_for_auto(files, artist="Arca", title="Time")
+    assert best is not None
+    assert best.confidence >= 0.7

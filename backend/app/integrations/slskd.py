@@ -71,17 +71,32 @@ class SlskdClient:
             raise SlskdError(f"slskd {r.status_code}: {r.text[:160]}")
         return r.json() if r.content else {}
 
-    def search(self, artist: str, title: str, *, wait_seconds: float = 8.0,
-               poll_interval: float = 1.0) -> list[SlskdFile]:
+    def search(self, artist: str, title: str, *, response_limit: int = 30,
+               search_timeout_ms: int = 6000, max_wait: float = 15.0,
+               poll_interval: float = 0.5) -> list[SlskdFile]:
+        """Avvia una ricerca slskd e attende il COMPLETAMENTO, poi legge le risposte.
+
+        slskd popola `GET /searches/{id}/responses` solo a ricerca completa: mentre e'
+        in corso ritorna lista vuota anche se `responseCount` cresce. Per chiudere in
+        fretta e in modo affidabile si passano parametri per-ricerca: `responseLimit`
+        (le ricerche popolari completano appena raggiunto, in 1-2s) e `searchTimeout`
+        (backstop per quelle rare/assenti). Si attende `isComplete` con tetto `max_wait`
+        (> search_timeout, margine di rete). Un tetto troppo basso o l'attesa del solo
+        numero di risposte restituiscono liste vuote anche quando i file esistono.
+        """
         text = f"{artist} {title}".strip()
         if not text:
             return []
-        created = self._post("/searches", json={"searchText": text})
+        created = self._post("/searches", json={
+            "searchText": text,
+            "searchTimeout": search_timeout_ms,
+            "responseLimit": response_limit,
+        })
         search_id = created.get("id")
         if not search_id:
             raise SlskdError("slskd: ricerca senza id.")
         waited = 0.0
-        while waited < wait_seconds:
+        while waited < max_wait:
             state = self._get(f"/searches/{search_id}")
             if state.get("isComplete") or "completed" in str(state.get("state", "")).lower():
                 break

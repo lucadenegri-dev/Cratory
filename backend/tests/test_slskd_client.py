@@ -49,13 +49,18 @@ def test_search_aggregates_files_from_responses():
     }
     http = _FakeHttp(routes)
     c = SlskdClient(url="http://slskd.local:5030", api_key="k", http=http)
-    files = c.search("Daft Punk", "Da Funk", wait_seconds=0.0, poll_interval=0.0)
+    # La ricerca e' gia' completa (isComplete True): legge le risposte e aggrega.
+    files = c.search("Daft Punk", "Da Funk", max_wait=5.0, poll_interval=0.0)
     assert len(files) == 1
     f = files[0]
     assert isinstance(f, SlskdFile)
     assert f.username == "bob"
     assert f.extension == "flac"
     assert f.has_free_slot is True
-    # la POST di creazione ricerca include il searchText
+    # ha interrogato lo stato della ricerca prima di leggere le risposte
+    assert any(call[0] == "GET" and call[1].endswith("/searches/abc") for call in http.calls)
+    # la POST di creazione ricerca include il searchText e i parametri per-ricerca
     post = next(call for call in http.calls if call[0] == "POST")
-    assert post[2] == {"searchText": "Daft Punk Da Funk"}
+    assert post[2]["searchText"] == "Daft Punk Da Funk"
+    assert post[2]["responseLimit"] > 0
+    assert post[2]["searchTimeout"] > 0

@@ -47,19 +47,35 @@ def _strip_extension(filename: str) -> str:
     return filename
 
 
+def _basename_stem(filename: str) -> str:
+    """Solo il nome file (senza cartelle ne' estensione).
+
+    I path Soulseek sono lunghi e rumorosi (`Music\\Arca\\KiCk i (2020) [FLAC]\\02 Time.flac`):
+    il titolo va confrontato col nome file, non con l'intero path, altrimenti il
+    rumore di cartelle/anno/formato abbatte la similarita'.
+    """
+    name = filename.replace("\\", "/").rsplit("/", 1)[-1]
+    return _strip_extension(name)
+
+
 def _name_score(file: SlskdFile, artist: str, title: str) -> float:
-    stem = _strip_extension(file.filename)
-    hay = _norm(stem.replace("\\", "/").replace("/", " "))
+    full = _norm(file.filename.replace("\\", "/").replace("/", " "))
+    base = _norm(_basename_stem(file.filename))
     a, t = _norm(artist), _norm(title)
     s = 0.0
     if t:
-        s += SequenceMatcher(None, t, hay).ratio() * 0.6
-        if t in hay:
+        # Titolo: confronto col nome file (alto segnale) + bonus se contenuto.
+        s += SequenceMatcher(None, t, base).ratio() * 0.55
+        if t in base:
+            s += 0.30
+        elif t in full:
             s += 0.15
     if a:
-        s += SequenceMatcher(None, a, hay).ratio() * 0.2
-        if a in hay:
-            s += 0.05
+        # Artista: di solito e' una cartella del path → cerca nell'intero path.
+        if a in full:
+            s += 0.15
+        else:
+            s += SequenceMatcher(None, a, full).ratio() * 0.10
     return min(s, 1.0)
 
 
@@ -68,7 +84,10 @@ def _quality_tier(file: SlskdFile, pref: QualityPreference) -> int:
     if ext in LOSSLESS_EXTS:
         return 3
     if ext in LOSSY_EXTS:
-        br = file.bitrate or 0
+        br = file.bitrate
+        if br is None:
+            # Soulseek spesso non riporta il bitrate in ricerca: ignoto != sotto-soglia.
+            return 1
         if br >= pref.preferred_bitrate:
             return 2
         if br >= pref.min_bitrate:
