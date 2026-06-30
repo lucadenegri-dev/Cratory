@@ -43,6 +43,10 @@ class TrackOut(BaseModel):
     enriched: bool = False
     enrichment_source: str | None = None
     enrichment_confidence: int | None = None
+    has_local_file: bool = False
+    local_path: str | None = None
+    local_format: str | None = None
+    local_bitrate: int | None = None
 
 
 class TrackListOut(BaseModel):

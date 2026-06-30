@@ -7,7 +7,7 @@ services/feature_enrichment + integrations/).
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String, Table, Text
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -44,6 +44,9 @@ class Track(Base):
     # Path assoluto del file per le tracce locali (source_type="local_files"). Riferimento
     # volatile (non si conserva l'audio): aggiornato a ogni ri-scansione se il file si sposta.
     local_path: Mapped[str | None] = mapped_column(Text)
+    has_local_file: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
+    local_format: Mapped[str | None] = mapped_column(String)
+    local_bitrate: Mapped[int | None] = mapped_column(Integer)
     added_at: Mapped[datetime | None] = mapped_column(DateTime)  # primo import in libreria; l'added_at per-playlist sta su playlist_tracks
     playlist_id: Mapped[int | None] = mapped_column(ForeignKey("playlists.id"), index=True)
     playlist_name: Mapped[str | None] = mapped_column(String)

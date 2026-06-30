@@ -56,6 +56,10 @@ def ensure_schema(eng=None) -> None:
             "vocalness": "INTEGER",
             "enrichment_source": "VARCHAR",
             "enrichment_confidence": "INTEGER",
+            # Ownership file locale (Soulseek download / import locale)
+            "has_local_file": "BOOLEAN DEFAULT 0",
+            "local_format": "VARCHAR",
+            "local_bitrate": "INTEGER",
         },
         "setlists": {
             "generated_by": "VARCHAR DEFAULT 'algorithmic'",

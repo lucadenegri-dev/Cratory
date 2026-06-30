@@ -48,6 +48,10 @@ def track_out(track: Track) -> TrackOut:
         enriched=track.enriched_at is not None,
         enrichment_source=track.enrichment_source,
         enrichment_confidence=track.enrichment_confidence,
+        has_local_file=bool(track.has_local_file),
+        local_path=track.local_path,
+        local_format=track.local_format,
+        local_bitrate=track.local_bitrate,
     )
 
 

@@ -295,6 +295,17 @@ def tracks_for_playlist(db: Session, playlist_id: int) -> list[Track]:
     ).all())
 
 
+def tracks_without_local_file(db: Session, playlist_id: int) -> list[Track]:
+    """Tracce della playlist senza file locale (coda della sezione Download)."""
+    return list(db.scalars(
+        select(Track)
+        .join(playlist_tracks, playlist_tracks.c.track_id == Track.id)
+        .where(playlist_tracks.c.playlist_id == playlist_id)
+        .where((Track.has_local_file.is_(False)) | (Track.has_local_file.is_(None)))
+        .order_by(Track.artist, Track.title)
+    ))
+
+
 def delete_playlist(db: Session, playlist_id: int) -> bool:
     """Rimuove una playlist: cancella le sue membership; le tracce restano in libreria
     (e nelle altre playlist). Ritorna False se la playlist non esiste."""
