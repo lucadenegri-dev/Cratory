@@ -90,6 +90,21 @@ def read_tags(path: str | Path) -> dict:
     return out
 
 
+def read_audio_quality(path: str | Path) -> dict:
+    """Formato (estensione) e bitrate (kbps) del file. Valori assenti -> None."""
+    p = Path(path)
+    out = {"format": p.suffix.lower().lstrip(".") or None, "bitrate": None}
+    try:
+        audio = mutagen.File(str(p))
+    except Exception:
+        return out
+    info = getattr(audio, "info", None) if audio else None
+    bitrate = getattr(info, "bitrate", None) if info else None
+    if bitrate:
+        out["bitrate"] = int(bitrate) // 1000
+    return out
+
+
 def audio_hash(path: str | Path, *, seconds: int = HASH_SECONDS) -> str:
     """SHA-256 dei primi `seconds` di audio decodificato (mono 22050 Hz s16le).
 

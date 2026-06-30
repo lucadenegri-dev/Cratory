@@ -138,3 +138,13 @@ def test_audio_hash_su_file_non_audio_solleva(tmp_path):
     p.write_bytes(b"non audio")
     with pytest.raises(LocalFilesError):
         audio_hash(p)
+
+
+def test_read_audio_quality_returns_format(tmp_path):
+    from app.integrations.local_files import read_audio_quality
+    p = tmp_path / "a.wav"
+    _write_wav(p, secs=1.0)
+    q = read_audio_quality(p)
+    assert q["format"] == "wav"
+    # il bitrate puo' essere None o un intero, ma la chiave esiste
+    assert "bitrate" in q
