@@ -11,6 +11,7 @@ from app.routers import (
     ai,
     discovery,
     dj_sets,
+    downloads,
     enrichment,
     labels,
     playlists,
@@ -68,6 +69,7 @@ app.include_router(ai.router)
 app.include_router(discovery.router)
 app.include_router(dj_sets.router)
 app.include_router(services.router)
+app.include_router(downloads.router)
 
 
 @app.get("/api/health")
