@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Discogs: sorgente di profondita' per Discovery (generi/stili, etichette, artisti).
     # Funziona anche senza token (rate ridotto a ~25/min); col token sale a ~60/min.
     discogs_token: str = ""
+    slskd_url: str = ""
+    slskd_api_key: str = ""
+    slskd_download_dir: str = ""
     # Deezer: BPM via ISRC, gratis e SENZA API key (endpoint pubblico). Attivo di default
     # perche' a costo zero e copre il BPM con l'identita' piu' affidabile (ISRC).
     deezer_enabled: bool = True
