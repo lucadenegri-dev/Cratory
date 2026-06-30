@@ -1,21 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExternalLink, Plus, Check, Disc3, Search, Tags } from "lucide-react";
+import { ExternalLink, Plus, Check, Disc3, Search, Tags, Download } from "lucide-react";
 import {
   discoveryDig,
   discoveryAddLead,
   getDiscoveryGenres,
   listImportedPlaylists,
   getLabels,
+  downloadCandidates,
+  downloadTrack,
   type DiscoveryDigResponse,
   type DiscoveryLead,
   type Reason,
   type DiscoveryGenres,
   type Playlist,
   type LabelStats,
+  type DownloadCandidate,
 } from "@/lib/api";
-import { Card, Alert, Button, EmptyState, Spinner, Select, Input } from "@/components/ui";
+import { Card, Alert, Button, EmptyState, Spinner, Select, Input, Modal } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { cn } from "@/lib/cn";
@@ -312,6 +315,12 @@ function LeadRow({ l }: { l: DiscoveryLead }) {
   const [added, setAdded] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
+  const [dlOpen, setDlOpen] = useState(false);
+  const [dlLoading, setDlLoading] = useState(false);
+  const [dlCands, setDlCands] = useState<DownloadCandidate[]>([]);
+  const [dlError, setDlError] = useState<string | null>(null);
+  const [dlDone, setDlDone] = useState(false);
+
   const spotifySearch = `https://open.spotify.com/search/${encodeURIComponent(`${l.artist} ${l.title}`)}`;
   const linkCls =
     "inline-flex items-center gap-1 rounded-none border border-border-strong px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:bg-elevated";
@@ -326,6 +335,34 @@ function LeadRow({ l }: { l: DiscoveryLead }) {
       setAddError(err(e));
     } finally {
       setAdding(false);
+    }
+  };
+
+  const openDownload = async () => {
+    setDlOpen(true);
+    setDlLoading(true);
+    setDlError(null);
+    try {
+      setDlCands(await downloadCandidates(l.artist, l.title));
+    } catch (e) {
+      setDlError(err(e));
+    } finally {
+      setDlLoading(false);
+    }
+  };
+
+  const pick = async (cand: DownloadCandidate) => {
+    setDlLoading(true);
+    setDlError(null);
+    try {
+      const { track } = await discoveryAddLead(l);
+      await downloadTrack(track.id, cand);
+      setDlDone(true);
+      setDlOpen(false);
+    } catch (e) {
+      setDlError(err(e));
+    } finally {
+      setDlLoading(false);
     }
   };
 
@@ -374,7 +411,32 @@ function LeadRow({ l }: { l: DiscoveryLead }) {
         <Button size="sm" variant={added ? "ghost" : "outline"} onClick={add} disabled={adding || added}>
           {added ? <><Check size={14} /> Salvato</> : adding ? <Spinner /> : <><Plus size={14} /> Salva</>}
         </Button>
+        <Button size="sm" variant={dlDone ? "ghost" : "outline"} onClick={openDownload} disabled={dlDone}>
+          {dlDone ? <><Check size={14} /> Scaricato</> : <><Download size={14} /> Download</>}
+        </Button>
       </div>
+      <Modal open={dlOpen} onClose={() => setDlOpen(false)} title={`Download — ${l.artist} ${l.title}`}>
+        {dlError && <Alert tone="danger">⚠ {dlError}</Alert>}
+        {dlLoading && <p className="text-sm text-faint">Ricerca su Soulseek…</p>}
+        {!dlLoading && !dlError && dlCands.length === 0 && (
+          <p className="text-sm text-faint">Nessun candidato trovato su Soulseek.</p>
+        )}
+        <ul className="divide-y divide-border">
+          {dlCands.map((c, i) => (
+            <li key={`${c.username}-${i}`} className="flex items-center justify-between gap-2 py-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm">{c.filename.split(/[\\/]/).pop()}</div>
+                <div className="text-xs text-faint">
+                  {c.format?.toUpperCase()} {c.bitrate ? `· ${c.bitrate}kbps` : ""} · conf {Math.round(c.confidence * 100)}%
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => pick(c)} disabled={dlLoading}>
+                <Download size={13} /> Scarica
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </Modal>
     </Card>
   );
 }
