@@ -9,6 +9,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.db import Base  # noqa: E402
+import app.models  # noqa: E402,F401 — registra tutte le tabelle su Base.metadata prima di create_all
 
 CAMELOT_KEYS = [
     "1A", "2A", "3A", "4A", "5A", "6A", "7A", "8A", "9A", "10A", "11A", "12A",
