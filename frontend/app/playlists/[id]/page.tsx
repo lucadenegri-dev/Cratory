@@ -258,7 +258,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
             <Badge tone="neutral">{playlist.platform}</Badge>
             {playlist.kind === "liked" && <Badge tone="neutral">liked</Badge>}
           </div>
-          <p className="mt-1 text-sm text-muted">{playlist.track_count} tracce · {ready} pronte per il set · POSSIEDI {ownedCount} DI {tracks.length} · {fmtDuration(totalDur)}{playlist.owner ? ` · ${playlist.owner}` : ""}</p>
+          <p className="mt-1 text-sm text-muted">{playlist.track_count} tracce · {ready} pronte per il set · possiedi {ownedCount} di {tracks.length} · {fmtDuration(totalDur)}{playlist.owner ? ` · ${playlist.owner}` : ""}</p>
         </div>
       </div>
 
