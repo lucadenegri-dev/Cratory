@@ -100,3 +100,47 @@ def test_playlist_auto_pick_uses_search(patch_job):
     st = job.job_state()
     assert st["downloaded"] == 1
     assert len(fake.enqueued) == 1
+
+
+class _FallbackClient:
+    """Due candidati: il primo utente fallisce il transfer, il secondo riesce."""
+
+    def __init__(self):
+        self.enqueued = []
+
+    def search(self, artist, title, **kw):
+        return [
+            SlskdFile(username="baduser", filename="baduser\\Da Funk.flac", size=10,
+                      bitrate=None, length=None, has_free_slot=True, queue_length=0),
+            SlskdFile(username="gooduser", filename="gooduser\\Da Funk.flac", size=10,
+                      bitrate=None, length=None, has_free_slot=True, queue_length=0),
+        ]
+
+    def enqueue_download(self, file):
+        self.enqueued.append(file.username)
+
+    def transfer_state(self, username, filename):
+        state = "Completed, Errored" if username == "baduser" else "Completed, Succeeded"
+        return {"state": state}
+
+
+def test_fallback_tries_next_user_when_first_fails(patch_job, monkeypatch):
+    TestSession, _ = patch_job
+    client = _FallbackClient()
+    monkeypatch.setattr(job, "get_slskd_client", lambda: client)
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="s3", source_type="spotify",
+              title="Da Funk", artist="Daft Punk")
+    db.add(t)
+    db.commit()
+    track_id = t.id
+    db.close()
+
+    job._run([(track_id, None)], None)
+    st = job.job_state()
+    assert st["downloaded"] == 1
+    # prima ha provato baduser (fallito), poi e' passato a gooduser (riuscito)
+    assert client.enqueued == ["baduser", "gooduser"]
+    db = TestSession()
+    assert db.get(Track, track_id).has_local_file is True
+    db.close()

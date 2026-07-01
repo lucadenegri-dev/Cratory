@@ -21,12 +21,14 @@ from app.integrations.slskd import (
 )
 from app.repositories import get_track, tracks_without_local_file
 from app.services.acquisition import attach_local_file
-from app.services.soulseek_select import best_for_auto
+from app.services.soulseek_select import AUTO_PICK_MIN_CONFIDENCE, rank_candidates
 
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL = 2.0
-DOWNLOAD_TIMEOUT = 180.0
+DOWNLOAD_TIMEOUT = 180.0       # tetto per un transfer che sta effettivamente scaricando
+QUEUE_PATIENCE = 45.0          # oltre questo, se resta solo in coda, si prova un altro utente
+MAX_ATTEMPTS = 4               # quanti candidati (utenti diversi) provare per traccia
 
 _lock = threading.Lock()
 _state: dict = {
@@ -67,34 +69,71 @@ def _resolve_local_path(download_dir: str, filename: str) -> str | None:
 
 
 def _wait_for_download(client, file: SlskdFile) -> str:
+    """Attende l'esito di un transfer.
+
+    Se il transfer sta scaricando ("InProgress") si concede fino a DOWNLOAD_TIMEOUT;
+    se invece resta solo in coda (Queued/Requested) oltre QUEUE_PATIENCE ci si arrende,
+    cosi' il chiamante puo' provare un altro utente col fallback.
+    """
     waited = 0.0
+    queued = 0.0
     while waited < DOWNLOAD_TIMEOUT:
-        state = client.transfer_state(file.username, file.filename)
-        cls = classify_transfer_state((state or {}).get("state", ""))
+        state = (client.transfer_state(file.username, file.filename) or {}).get("state", "")
+        cls = classify_transfer_state(state)
         if cls in ("completed", "failed"):
             return cls
+        if "inprogress" in state.lower():
+            queued = 0.0
+        else:
+            queued += POLL_INTERVAL
+            if queued >= QUEUE_PATIENCE:
+                return "failed"
         time.sleep(POLL_INTERVAL)
         waited += POLL_INTERVAL
     return "failed"
 
 
-def _process_item(db, client, download_dir, track, chosen: SlskdFile | None) -> str:
-    if chosen is None:
-        files = client.search(track.artist or "", track.title or "")
-        best = best_for_auto(files, artist=track.artist or "", title=track.title or "")
-        if best is None:
-            return "needs_review" if files else "not_found"
-        chosen = best.file
-    client.enqueue_download(chosen)
-    if _wait_for_download(client, chosen) != "completed":
-        return "failed"
-    path = _resolve_local_path(download_dir, chosen.filename)
+def _attempt_download(db, client, download_dir, track, file: SlskdFile) -> bool:
+    """Prova a scaricare un singolo candidato e a collegarlo. True se riuscito."""
+    try:
+        client.enqueue_download(file)
+    except Exception:  # noqa: BLE001 — un candidato che non parte non ferma il fallback
+        logger.exception("enqueue fallito track_id=%s user=%s",
+                         getattr(track, "id", None), file.username)
+        return False
+    if _wait_for_download(client, file) != "completed":
+        return False
+    path = _resolve_local_path(download_dir, file.filename)
     if not path:
-        return "failed"
+        return False
     quality = read_audio_quality(path)
     attach_local_file(db, track, path=path, fmt=quality["format"],
                       bitrate=quality["bitrate"])
-    return "downloaded"
+    return True
+
+
+def _process_item(db, client, download_dir, track, chosen: SlskdFile | None) -> str:
+    # Discovery/singola: candidato gia' scelto dall'utente, un solo tentativo.
+    if chosen is not None:
+        return "downloaded" if _attempt_download(db, client, download_dir, track, chosen) else "failed"
+
+    files = client.search(track.artist or "", track.title or "")
+    if not files:
+        return "not_found"
+    ranked = rank_candidates(files, artist=track.artist or "", title=track.title or "")
+    if not ranked or ranked[0].confidence < AUTO_PICK_MIN_CONFIDENCE:
+        return "needs_review"
+    # Fallback: prova i migliori candidati, un utente diverso alla volta, finche' uno riesce.
+    tried: set[str] = set()
+    for cand in ranked:
+        if len(tried) >= MAX_ATTEMPTS:
+            break
+        if cand.file.username in tried:
+            continue
+        tried.add(cand.file.username)
+        if _attempt_download(db, client, download_dir, track, cand.file):
+            return "downloaded"
+    return "failed"
 
 
 def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> None:

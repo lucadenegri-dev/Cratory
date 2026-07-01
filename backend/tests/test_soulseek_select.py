@@ -54,6 +54,17 @@ def test_unknown_bitrate_lossy_not_excluded():
     assert ranked[0].quality_tier == 1
 
 
+def test_available_uploader_outranks_queued_same_track():
+    # Stessa traccia/qualita': chi ha lo slot libero deve battere chi non ce l'ha
+    # (altrimenti si finisce "Queued, Remotely" e il download non parte mai).
+    files = [
+        _f("Daft Punk - Da Funk.flac", slot=False),
+        _f("Daft Punk - Da Funk.flac", slot=True),
+    ]
+    ranked = rank_candidates(files, artist="Daft Punk", title="Da Funk")
+    assert ranked[0].file.has_free_slot is True
+
+
 def test_name_match_uses_basename_not_full_path():
     # Path Soulseek reale e rumoroso: il titolo combacia col nome file anche se il
     # path e' lungo (cartelle/anno/formato). Prima veniva escluso (name_score basso).

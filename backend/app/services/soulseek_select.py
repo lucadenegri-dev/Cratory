@@ -79,6 +79,21 @@ def _name_score(file: SlskdFile, artist: str, title: str) -> float:
     return min(s, 1.0)
 
 
+def _availability(file: SlskdFile) -> float:
+    """Quanto e' probabile che l'utente ci serva il file: 1.0 = slot libero e coda
+    vuota; scende con la coda; bassa senza slot libero.
+
+    Un file da un utente senza slot o con coda lunga spesso resta "Queued, Remotely"
+    e non viene mai servito: a parita' di traccia va preferito chi ci serve davvero.
+    """
+    if not file.has_free_slot:
+        return 0.3
+    q = file.queue_length or 0
+    if q <= 0:
+        return 1.0
+    return max(0.5, 1.0 - min(q, 25) / 50.0)
+
+
 def _quality_tier(file: SlskdFile, pref: QualityPreference) -> int:
     ext = file.extension
     if ext in LOSSLESS_EXTS:
@@ -106,8 +121,8 @@ def rank_candidates(files, *, artist: str, title: str,
         name = _name_score(f, artist, title)
         if name < _MIN_NAME_SCORE:
             continue
-        avail = 1.0 if f.has_free_slot else 0.6
-        score = name * 100 + tier * 12 + avail * 5
+        avail = _availability(f)
+        score = name * 100 + tier * 12 + avail * 30
         confidence = round(min(1.0, name * 0.8 + (tier / 3) * 0.2), 3)
         scored.append(ScoredCandidate(file=f, name_score=round(name, 3),
                                       quality_tier=tier, score=round(score, 2),
