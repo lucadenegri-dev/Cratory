@@ -20,7 +20,12 @@ def lookup(base_url: str, isrc: str | None = None, artist: str | None = None,
      "artist": ..., "title": ..., "genre": ..., "genre_secondary": ...,
      "label": ..., "year": ..., "confidence": 100|70|0}
     Solleva CratoryUnreachable su timeout, errore di rete o status != 2xx.
+    Solleva ValueError se mancano sia isrc che artist+title.
     """
+    # Guardia lato client: contratto Cratory richiede isrc oppure artist+title.
+    if not isrc and not (artist and title):
+        raise ValueError("lookup richiede isrc oppure artist+title")
+
     params: dict[str, str] = {}
     if isrc:
         params["isrc"] = isrc
@@ -33,5 +38,6 @@ def lookup(base_url: str, isrc: str | None = None, artist: str | None = None,
                          params=params, timeout=_TIMEOUT_S)
         resp.raise_for_status()
         return resp.json()
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ValueError) as exc:
+        # Cattura sia errori di rete/status che ValueError da json() malformato.
         raise CratoryUnreachable(str(exc)) from exc

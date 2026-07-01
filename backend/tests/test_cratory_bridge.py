@@ -58,3 +58,31 @@ def test_lookup_http_error_raises(monkeypatch):
     monkeypatch.setattr(cratory_bridge.httpx, "get", fake_get)
     with pytest.raises(cratory_bridge.CratoryUnreachable):
         cratory_bridge.lookup("http://localhost:8000", isrc="X")
+
+
+def test_lookup_json_malformato_solleva_unreachable(monkeypatch):
+    """Body con status 200 ma json() malformato solleva CratoryUnreachable."""
+    def fake_get(url, params=None, timeout=None):
+        # Fake response con status 200 che solleva ValueError al .json()
+        resp = httpx.Response(200, content=b"invalid json",
+                              request=httpx.Request("GET", url))
+        return resp
+
+    monkeypatch.setattr(cratory_bridge.httpx, "get", fake_get)
+    with pytest.raises(cratory_bridge.CratoryUnreachable):
+        cratory_bridge.lookup("http://localhost:8000", isrc="X")
+
+
+def test_lookup_senza_identita_solleva_valueerror(monkeypatch):
+    """lookup senza isrc né artist+title solleva ValueError; httpx.get non chiamato."""
+    fake_get_called = []
+
+    def fake_get(url, params=None, timeout=None):
+        fake_get_called.append(True)
+        # Non dovrebbe mai arrivare qui
+        return _resp(BODY)
+
+    monkeypatch.setattr(cratory_bridge.httpx, "get", fake_get)
+    with pytest.raises(ValueError):
+        cratory_bridge.lookup("http://localhost:8000")
+    assert not fake_get_called, "httpx.get non dovrebbe essere chiamato"
