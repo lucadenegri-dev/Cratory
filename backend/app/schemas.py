@@ -105,12 +105,14 @@ class RootTargetRead(BaseModel):
 class SettingsRead(BaseModel):
     naming_template: str
     folder_template: str
+    cratory_base_url: str | None
     roots: list[RootTargetRead]
 
 
 class SettingsUpdate(BaseModel):
     naming_template: str | None = None
     folder_template: str | None = None
+    cratory_base_url: str | None = None
 
 
 class RootTargetUpdate(BaseModel):

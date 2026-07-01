@@ -19,7 +19,8 @@ def _read(db: Session) -> SettingsRead:
     roots = [RootTargetRead(id=r.id, path=r.path, label=r.label, target_root=r.target_root)
              for r in db.scalars(select(ScanRoot)).all()]
     return SettingsRead(naming_template=s.naming_template,
-                        folder_template=s.folder_template, roots=roots)
+                        folder_template=s.folder_template,
+                        cratory_base_url=s.cratory_base_url, roots=roots)
 
 
 @router.get("", response_model=SettingsRead)
@@ -30,7 +31,8 @@ def get_settings(db: Session = Depends(get_db)):
 @router.put("", response_model=SettingsRead)
 def put_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
     planning.update_settings(db, naming_template=body.naming_template,
-                             folder_template=body.folder_template)
+                             folder_template=body.folder_template,
+                             cratory_base_url=body.cratory_base_url)
     return _read(db)
 
 

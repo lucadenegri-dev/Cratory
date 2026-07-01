@@ -34,3 +34,20 @@ def test_set_target_non_absolute_rejected(db):
     with TestClient(app) as client:
         assert client.put("/api/settings/roots/1/target",
                           json={"target_root": "relativo"}).status_code == 400
+
+
+def test_settings_cratory_base_url_roundtrip(db):
+    with TestClient(app) as client:
+        assert client.get("/api/settings").json()["cratory_base_url"] is None
+        r = client.put("/api/settings", json={"cratory_base_url": "http://localhost:8000"})
+        assert r.status_code == 200
+        assert r.json()["cratory_base_url"] == "http://localhost:8000"
+        # gli altri campi non vengono toccati
+        assert r.json()["naming_template"] == "{artist} - {title}"
+        # stringa vuota = bridge disattivato (torna NULL)
+        r2 = client.put("/api/settings", json={"cratory_base_url": "  "})
+        assert r2.json()["cratory_base_url"] is None
+        # PUT senza il campo = non toccare
+        client.put("/api/settings", json={"cratory_base_url": "http://localhost:8000"})
+        r3 = client.put("/api/settings", json={"folder_template": "{genre}"})
+        assert r3.json()["cratory_base_url"] == "http://localhost:8000"
