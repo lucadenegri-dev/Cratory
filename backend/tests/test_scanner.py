@@ -117,3 +117,19 @@ def test_rescan_reconciles_move(db, copy_fixture, tmp_path):
     assert rows[0].path.endswith("b.flac")
     assert rows[0].first_seen_at == first_seen
     assert rows[0].status == "present"
+
+
+def test_scan_skips_quarantine_and_hidden_dirs(db, copy_fixture, tmp_path):
+    """La .quarantine (creata dall'Apply per i DELETE) e le dir nascoste
+    non devono rientrare nello scan: niente falsi 'nuovi file'."""
+    root_dir = tmp_path / "lib"
+    copy_fixture("mp3", root_dir / "a.mp3")
+    copy_fixture("mp3", root_dir / ".quarantine" / "b.mp3")
+    copy_fixture("mp3", root_dir / ".hidden" / "sub" / "c.mp3")
+    root = ScanRoot(path=str(root_dir))
+    db.add(root)
+    db.commit()
+    summary = scan(db, [root])
+    assert summary.found == 1
+    rows = db.scalars(select(AudioFile)).all()
+    assert len(rows) == 1 and rows[0].path.endswith("a.mp3")

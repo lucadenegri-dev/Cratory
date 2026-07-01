@@ -18,7 +18,10 @@ _TAG_FIELDS = (
 
 
 def _iter_audio_files(root_path: str) -> Iterator[tuple[str, str]]:
-    for dirpath, _dirs, names in os.walk(root_path):
+    for dirpath, dirs, names in os.walk(root_path):
+        # Pota le directory nascoste (es. .quarantine dell'Apply): modificare
+        # `dirs` in-place impedisce a os.walk di scenderci.
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
         for name in names:
             ext = os.path.splitext(name)[1].lower()
             if ext in settings.audio_exts:
