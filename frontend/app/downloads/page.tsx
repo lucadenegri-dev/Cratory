@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download as DownloadIcon } from "lucide-react";
+import { Download as DownloadIcon, Search } from "lucide-react";
 import { PageLayout } from "@/components/page-layout";
-import { Alert, Badge, Button, Card, EmptyState, Progress, Select } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Input, Progress, Select } from "@/components/ui";
 import {
+  downloadManual,
   downloadStatus,
   listImportedPlaylists,
+  searchDownloads,
   startPlaylistDownload,
+  type DownloadCandidate,
   type DownloadStatus,
   type Playlist,
 } from "@/lib/api";
@@ -35,6 +38,9 @@ export default function DownloadsPage() {
   const [selected, setSelected] = useState<string>("");
   const [status, setStatus] = useState<DownloadStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<DownloadCandidate[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const alive = useRef(true);
 
   const poll = useCallback(() => {
@@ -63,6 +69,30 @@ export default function DownloadsPage() {
     setError(null);
     try {
       setStatus(await startPlaylistDownload(Number(selected)));
+    } catch (e) {
+      setError(err(e));
+    }
+  };
+
+  const runSearch = async () => {
+    const q = query.trim();
+    if (!q) return;
+    setSearching(true);
+    setError(null);
+    setResults(null);
+    try {
+      setResults(await searchDownloads(q));
+    } catch (e) {
+      setError(err(e));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const grab = async (c: DownloadCandidate) => {
+    setError(null);
+    try {
+      setStatus(await downloadManual(c));
     } catch (e) {
       setError(err(e));
     }
@@ -98,6 +128,50 @@ export default function DownloadsPage() {
           <Button onClick={start} disabled={!available || running || !selected}>
             <DownloadIcon size={14} /> Scarica playlist
           </Button>
+        </Card>
+
+        <Card className="p-3">
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">Ricerca manuale</div>
+          <div className="flex items-center gap-2">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") runSearch();
+              }}
+              placeholder="Cerca su Soulseek (artista, titolo…)"
+              disabled={!available}
+            />
+            <Button
+              variant="outline"
+              onClick={runSearch}
+              disabled={!available || searching || !query.trim()}
+            >
+              <Search size={14} /> Cerca
+            </Button>
+          </div>
+          {searching && <p className="mt-2 text-sm text-faint">Ricerca su Soulseek…</p>}
+          {results && results.length === 0 && !searching && (
+            <p className="mt-2 text-sm text-faint">Nessun risultato per «{query}».</p>
+          )}
+          {results && results.length > 0 && (
+            <ul className="mt-3 divide-y divide-border">
+              {results.slice(0, 40).map((c, i) => (
+                <li key={`${c.username}-${i}`} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm">{c.filename.split(/[\\/]/).pop()}</div>
+                    <div className="text-xs text-faint">
+                      {c.format?.toUpperCase()}
+                      {c.bitrate ? ` · ${c.bitrate}kbps` : ""} · {c.username}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => grab(c)} disabled={running}>
+                    <DownloadIcon size={13} /> Scarica
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         {error && <Alert tone="danger">⚠ {error}</Alert>}

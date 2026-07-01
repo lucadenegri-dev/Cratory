@@ -737,3 +737,11 @@ export function startPlaylistDownload(playlistId: number) {
 export function downloadTrack(trackId: number, candidate: DownloadCandidate) {
   return apiPost<DownloadStatus>("/api/downloads/track", { track_id: trackId, candidate });
 }
+
+export function searchDownloads(query: string) {
+  return apiPost<DownloadCandidate[]>("/api/downloads/search", { query });
+}
+
+export function downloadManual(candidate: DownloadCandidate) {
+  return apiPost<DownloadStatus>("/api/downloads/manual", { candidate });
+}
