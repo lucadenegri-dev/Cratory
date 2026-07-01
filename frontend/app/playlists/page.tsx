@@ -92,6 +92,11 @@ export default function PlaylistsPage() {
 
   return (
     <PageLayout title="Playlist" meta={imported ? String(imported.length) : undefined} marginaliaTitle="Sorgente" marginalia={marginalia}>
+      <p className="mb-6 text-sm text-muted">
+        Le playlist importate sono liste di lead: candidati da procurare e pianificare.
+        La libreria — ciò che possiedi — è il disco.
+      </p>
+
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
       {notice && <div className="mb-4"><Alert tone="info">{notice}</Alert></div>}
 

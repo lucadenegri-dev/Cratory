@@ -77,7 +77,10 @@ export default function ImportSpotifyPage() {
       <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
         <ArrowLeft size={15} /> Playlist
       </Link>
-      <p className="mb-6 text-sm text-muted">Scegli una delle tue playlist Spotify: verrà importata e arricchita automaticamente.</p>
+      <p className="mb-6 text-sm text-muted">
+        L&apos;import non aggiunge file alla libreria: porta dentro i lead della playlist,
+        da arricchire, scaricare e organizzare.
+      </p>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
