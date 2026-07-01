@@ -46,6 +46,9 @@ Leggere in quest'ordine:
    musicale e ipotesi creativa.
 8. **Rekordbox resta fuori progetto.** Import XML, beatgrid/cue e colonne legacy sono
    state rimosse.
+9. **La libreria è il disco.** Il possesso (`has_local_file`) viene dall'indicizzazione
+   di `LIBRARY_ROOT` (riaggancio per `audio_hash`); le playlist streaming sono lead.
+   Cratory legge i file ma non li muta mai: i tag li scrive solo DjOrganizer.
 
 ## Stack e layout
 

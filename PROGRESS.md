@@ -6,16 +6,61 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-06-28
+**Ultimo aggiornamento:** 2026-07-02
 
 **Nome prodotto:** **Cratory** (rename eseguito il 2026-06-25 su UI, codice, docs e
 icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici legacy
 (`djassistant.db`, log path) restano invariati finche' non viene pianificata una rename
 migration. Disponibilita' `cratory.com` da confermare su registrar.
 
-**Fase:** core streaming-first completo; Discovery operativo (expand Last.fm + dig
-Discogs); enrichment multi-provider; Set Builder tecnico/creativo; audit leggero (quick
-win) e rifacimento documentazione fatti; identificazione mix via Shazam in integrazione.
+**Fase:** core streaming-first completo; **disk-first completo** (la libreria e' il
+disco, playlist streaming = lead); Discovery operativo (expand Last.fm + dig Discogs);
+enrichment multi-provider; Set Builder tecnico/creativo con garanzia "solo posseduti";
+audit leggero (quick win) e rifacimento documentazione fatti; identificazione mix via
+Shazam in integrazione.
+
+## Milestone 2026-07-01/02 - Disk-first (fette 1-4)
+
+Riorientamento disco-centrico: il possesso di una traccia non e' piu' un side-effect
+del solo download Soulseek, ma lo stato di una cartella canonica indicizzata
+attivamente. Quattro fette, sviluppate su branch dedicati e poi rifinite:
+
+- **Fetta 1 — identita' e indicizzazione** (branch `feat/disk-first-core`).
+  `Track.audio_hash` (SHA-256 dei primi secondi di stream decodificato via ffmpeg,
+  stabile a rinomina/retag), calcolato sia da `attach_local_file` (Soulseek) sia dal
+  nuovo servizio `library_index`. Config `LIBRARY_ROOT`; `library_index` fa scan +
+  match (`audio_hash -> digest legacy -> ISRC -> fuzzy artist+title`) + riconciliazione
+  (file spariti -> tornano wishlist, hash mantenuto per riaggancio) + guard
+  anti-unmount + contatore `duplicates` (stesso hash nello stesso run, primo vince).
+  Esposto via `POST /api/library/index` (202, job async) + `GET /status`.
+- **Fetta 2 — possesso in superficie** (fine `feat/disk-first-core`, poi
+  `feat/disk-first-rifiniture`). Filtro `has_local_file` + sorgente `local_files` su
+  `GET /api/tracks`; stat `with_local_file`; libreria con filtro "Wishlist (senza
+  file)" e badge FILE (chiude il vecchio backlog "Vista tracce senza file"); card
+  Impostazioni per lanciare l'indicizzazione; figura "Possedute" in dashboard.
+- **Fetta 3 — Set Builder "solo posseduti"** (branch `feat/set-builder-owned` e
+  `feat/set-editor-owned`). `SetGenerationRequest.owned_only=True` di default nel
+  Candidate Engine, persistito su `Setlist.owned_only`; editor (alternative,
+  sostituzione traccia) rispetta la garanzia con 422 se la sostituta non e' posseduta;
+  toggle "solo brani posseduti" + badge in UI, indicatore "possiedi N di M" nel
+  dettaglio playlist.
+- **Fetta 4 — bridge DjOrganizer e copy** (branch `feat/lookup-endpoint`, poi
+  `feat/disk-first-rifiniture`). `GET /api/tracks/lookup` read-only per DjOrganizer:
+  ISRC -> fuzzy artist+title, confidence 100/70/0, sempre `limit(1)` (mai
+  `MultipleResultsFound` su duplicati), mai 404 (`found: false`). Copy UI: le
+  playlist streaming sono presentate come "lead", non come la libreria.
+
+Test: 333 test backend verdi (`cd backend && .venv/bin/python -m pytest tests -q`).
+Documentazione allineata in questo stesso giro: `README.md` (paragrafo disk-first +
+`LIBRARY_ROOT` in setup), `CLAUDE.md` (regola 9), `docs/ARCHITECTURE.md` (sottosezione
+"Disk-first"), `docs/ROADMAP.md` (fette 1-4 in "Stato completato", "Vista tracce senza
+file" spostata da backlog a fatto).
+
+**Punto di ripresa:** branch `feat/disk-first-rifiniture` (rifinitura finale, sopra
+`feat/disk-first-core` + `feat/lookup-endpoint` + `feat/set-builder-owned` +
+`feat/set-editor-owned`). Il disk-first e' chiuso end-to-end: indicizzazione, superficie
+UI, Set Builder e bridge DjOrganizer. Prossimo fronte aperto: **miglioramento Discovery**
+(unificazione expand/dig, Last.fm tag come 2a sorgente, tracklist per-release) — invariato.
 
 ## Milestone 2026-06-28 - Playlist many-to-many
 
@@ -149,9 +194,12 @@ residuo: unificazione expand/dig, Last.fm tag come 2a sorgente, tracklist per-re
 
 Priorità e backlog completi in `docs/ROADMAP.md` (fonte di verità di stato). In sintesi:
 core assestato, audit quick-win e rifacimento documentazione fatti; playlist many-to-many
-completato. Il prossimo fronte aperto è il **miglioramento Discovery** (unificazione
-expand/dig, Last.fm tag come 2a sorgente, tracklist per-release). i18n EN e multi-account
-pubblico restano sospesi.
+completato; **disk-first completato** (fette 1-4: indicizzazione `LIBRARY_ROOT` per
+`audio_hash`, possesso in superficie, Set Builder "solo posseduti", bridge
+`GET /api/tracks/lookup` per DjOrganizer — branch `feat/disk-first-rifiniture`). Il
+prossimo fronte aperto è il **miglioramento Discovery** (unificazione expand/dig,
+Last.fm tag come 2a sorgente, tracklist per-release). i18n EN e multi-account pubblico
+restano sospesi.
 
 ## Storico essenziale
 

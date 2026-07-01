@@ -19,6 +19,11 @@ daemon), linked to an existing library track. The Shazam module remains separate
 downloads audio only temporarily to fingerprint external mixes, and persists only the
 identified tracklist.
 
+**Disk-first:** the library is the disk. Cratory indexes your canonical music
+folder (`LIBRARY_ROOT`), re-links files by audio hash after DjOrganizer
+renames/moves them, and builds sets from tracks you actually own. Streaming
+playlists are *leads* — candidates to acquire — not the library.
+
 ## Features
 
 - Import Spotify playlists, liked tracks, and pasted tracklists.
@@ -120,11 +125,21 @@ SLSKD_API_KEY=
 SLSKD_DOWNLOAD_DIR=
 ```
 
+Disk-first library indexing (optional):
+
+```text
+LIBRARY_ROOT=
+```
+
 Spotify provides track identity, editorial metadata, covers, duration, ISRC, URLs and
 playlists — not reliable mixing BPM/key. `DISCOGS_TOKEN` is optional: Discovery "Scava"
 works without it; the token only raises the rate limit. `SLSKD_URL`/`SLSKD_DOWNLOAD_DIR`
 point to your own running slskd instance; without them, file acquisition stays disabled
-and the rest of the app is unaffected.
+and the rest of the app is unaffected. `LIBRARY_ROOT` points to your canonical, organized
+music folder (the one DjOrganizer manages); leave it empty to keep library indexing
+disabled — Settings → "Libreria (disco)" triggers `POST /api/library/index` once it is
+set, matching files to tracks by audio hash (falling back to legacy digest, ISRC, then
+fuzzy artist+title) and marking them as owned (`has_local_file`).
 
 ## Database
 

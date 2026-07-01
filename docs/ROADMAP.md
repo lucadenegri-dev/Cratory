@@ -74,6 +74,22 @@ migrazione esplicita.
   auto-pick) e per-traccia (mini-selettore da Discovery), link al `Track` esistente
   (`has_local_file`/`local_path`/`local_format`/`local_bitrate`). Eccezione dichiarata
   al principio "non conserva file audio" (resta il "non riproduce audio").
+- **Disk-first (2026-07), fette 1-4: la libreria e' il disco.** `Track.audio_hash`
+  (SHA-256 dello stream decodificato via ffmpeg, stabile a rinomina/retag) calcolato
+  sia dall'acquisizione Soulseek sia dall'indicizzazione di libreria. `LIBRARY_ROOT` +
+  `POST /api/library/index` (async, `GET /status`): scan della cartella canonica,
+  match `audio_hash -> digest legacy -> ISRC -> fuzzy artist+title`, riconciliazione
+  dei possessi persi (file spostato/cancellato -> torna wishlist, `audio_hash`
+  mantenuto per riaggancio immediato), guard anti-unmount, contatore `duplicates`.
+  Possesso in superficie: filtro `has_local_file` + sorgente `local_files` su
+  `GET /api/tracks`, stat `with_local_file`, filtro/badge FILE in libreria — chiude
+  la "Vista tracce senza file" (fast-follow Soulseek, era in backlog tecnico) con un
+  filtro "Wishlist (senza file)" — card Impostazioni per indicizzare, figura
+  "Possedute" in dashboard. Set Builder: `SetGenerationRequest.owned_only=True` di
+  default, persistito su `Setlist.owned_only`, rispettato da editor/alternative (422
+  se la sostituta non e' posseduta), toggle+badge in UI. Bridge DjOrganizer:
+  `GET /api/tracks/lookup` read-only (isrc/artist+title, confidence 100/70/0,
+  `limit(1)`). Le playlist streaming sono "lead" in UI, non la libreria.
 
 ## Direzione prodotto
 
@@ -115,9 +131,6 @@ Backlog tecnico (non bloccante):
 - **SoundCloud import.** API chiusa a nuove app: rivalutare solo se riapre.
 - **PostgreSQL.** Bassa priorita': SQLite basta per uso personale (servirebbe solo con
   un eventuale multi-utente).
-- **Vista "Tracce senza file".** Fast-follow opzionale dell'acquisizione Soulseek: una
-  vista del gap di possesso (tracce senza `has_local_file`) per dare in pasto alla coda
-  di download, oltre al blocco per-playlist gia' disponibile.
 
 ## Rischi
 
@@ -144,3 +157,6 @@ Backlog tecnico (non bloccante):
   sono competenza del Set Builder.
 - Il modulo Shazam non popola direttamente la libreria: produce un corpus separato.
 - SQLite resta sufficiente per uso locale mono-utente.
+- Disk-first: la libreria e' il disco (`LIBRARY_ROOT`), non le playlist streaming
+  (che restano lead). Cratory legge i file per indicizzarli ma non li scrive mai:
+  tag e organizzazione restano competenza di DjOrganizer.

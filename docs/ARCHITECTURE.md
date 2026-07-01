@@ -93,6 +93,42 @@ errore su una traccia non ferma il job. Richiede slskd configurato; senza, gli
 endpoint rispondono `409`. Il file resta collegato alla `Track` come riferimento
 locale, non viene ricaricato ne' ridistribuito dall'app.
 
+## Disk-first
+
+La libreria e' il disco: il possesso di una traccia (`has_local_file`) non e' un
+side-effect dell'acquisizione Soulseek soltanto, ma lo stato di una cartella
+canonica che Cratory indicizza attivamente. Cratory legge i file audio ma non li
+muta mai — tag e organizzazione restano competenza di DjOrganizer.
+
+- **`LIBRARY_ROOT`**: cartella organizzata (gestita da DjOrganizer) che Cratory
+  indicizza da Impostazioni -> "Libreria (disco)". Vuota = indicizzazione disattiva.
+- **`audio_hash`**: SHA-256 dei primi secondi di audio decodificato via ffmpeg (mono,
+  22050 Hz, s16le) — stabile a rinomina e retag, a differenza di path o tag ID3/MP4.
+  Calcolato sia dall'indicizzazione di libreria sia dall'acquisizione Soulseek
+  (`attach_local_file`), cosi' i due percorsi convergono sullo stesso identificativo.
+- **`library_index`** (`backend/app/services/library_index.py`, deterministico):
+  per ogni file sotto `LIBRARY_ROOT` calcola l'hash e cerca un match nell'ordine
+  `audio_hash -> digest legacy (import locali storici, in platform_track_id) ->
+  ISRC -> fuzzy artist+title`; se non trova nulla crea una nuova `Track`. I tag del
+  file riempiono solo i campi identita' vuoti (mai sovrascrivere enrichment o
+  correzioni manuali). Riconciliazione: un possesso il cui file non e' piu' presente
+  nello scan (spostato, cancellato) perde `has_local_file`/`local_path` ma mantiene
+  `audio_hash`, cosi' il riaggancio e' immediato se il file ricompare altrove. Guard
+  anti-unmount: uno scan a zero file (radice vuota, path sbagliato, disco smontato)
+  non tocca i possessi esistenti. `duplicates` conta i file con lo stesso hash visti
+  nello stesso run (il primo vince; la dedup su disco resta compito di DjOrganizer).
+  Esposto via `POST /api/library/index` (202, job async) e
+  `GET /api/library/index/status`; risponde `409` se `LIBRARY_ROOT` non e' configurata.
+- **`GET /api/tracks/lookup`**: bridge read-only per DjOrganizer, nessuna scrittura
+  ne' side-effect. Query `isrc` oppure `artist`+`title` (altrimenti 422); match
+  `isrc` (confidence 100) poi fuzzy artist+title (confidence 70), sempre `limit(1)`
+  per non far fallire il lookup su duplicati; mai 404, risponde `found: false`.
+- Il possesso alimenta anche il Set Builder: `SetGenerationRequest.owned_only` (default
+  `True`) filtra le candidate del Candidate Engine alle sole tracce con file locale;
+  la scelta e' persistita su `Setlist.owned_only` e rispettata anche da editor
+  (alternative, sostituzione traccia — 422 se la sostituta non e' posseduta e il set
+  e' nato "solo posseduti").
+
 ## Layer backend
 
 ```text
@@ -159,12 +195,13 @@ Entita' principali:
 - `Playlist`: playlist importata da Spotify o import manuale.
 - `Track`: traccia della libreria, con identita' streaming, metadata editoriali,
   feature musicali, stato e tracciabilita' enrichment. Ownership file locale (import
-  da cartella o acquisizione Soulseek): `has_local_file`, `local_path`, `local_format`,
-  `local_bitrate`.
+  da cartella, indicizzazione `LIBRARY_ROOT` o acquisizione Soulseek): `has_local_file`,
+  `local_path`, `local_format`, `local_bitrate`, `audio_hash` (vedi "Disk-first").
 - `playlist_tracks`: tabella associativa M2M (Playlist <-> Track) con `added_at`
   per-playlist. Un brano puo' appartenere a piu' playlist; l'import aggiunge
   membership senza sovrascrivere.
-- `Setlist`: set generato, prompt, strategia, spiegazione globale e validazione.
+- `Setlist`: set generato, prompt, strategia, spiegazione globale, validazione e
+  `owned_only` (garanzia "solo posseduti", vedi "Disk-first").
 - `SetlistTrack`: posizione, ruolo, score, note di transizione, motivo AI e rischio.
 - `EnrichmentCache`: cache provider, incluso not-found.
 - `SpotifyToken`: token OAuth Spotify persistiti per l'utente locale.
