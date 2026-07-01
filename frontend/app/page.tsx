@@ -145,10 +145,24 @@ export default function Dashboard() {
       {stats && !empty && (
         <>
           {/* Figure hero */}
-          <div className="grid grid-cols-3 border-l border-t border-border">
+          <div className="grid grid-cols-4 border-l border-t border-border">
             <Figure label="Tracce" value={stats.total_tracks} />
             <Figure label="Playlist" value={stats.playlists} />
             <Figure label="Set salvati" value={sets ? sets.length : "—"} />
+            {/* Possesso disk-first: quante tracce hanno il file in libreria */}
+            <Figure
+              label="Possedute"
+              value={(
+                <>
+                  {stats.with_local_file}
+                  {stats.total_tracks > 0 && (
+                    <span className="ml-1.5 text-xs font-normal text-muted">
+                      {Math.round((stats.with_local_file / stats.total_tracks) * 100)}%
+                    </span>
+                  )}
+                </>
+              )}
+            />
           </div>
 
           {/* Prossimo passo */}

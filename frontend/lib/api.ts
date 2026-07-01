@@ -364,6 +364,7 @@ export interface LibraryStats {
   with_bpm: number;
   with_key: number;
   with_features: number;
+  with_local_file: number;
   ready_for_set: number;
   missing_metadata: number;
   bpm_min: number | null;
