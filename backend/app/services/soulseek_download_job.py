@@ -93,23 +93,67 @@ def _wait_for_download(client, file: SlskdFile) -> str:
     return "failed"
 
 
-def _attempt_download(db, client, download_dir, track, file: SlskdFile) -> bool:
-    """Prova a scaricare un singolo candidato e a collegarlo. True se riuscito."""
+def _download_candidate(client, download_dir, file: SlskdFile) -> str | None:
+    """Accoda un candidato, attende l'esito e risolve il path locale. None se fallisce."""
     try:
         client.enqueue_download(file)
     except Exception:  # noqa: BLE001 — un candidato che non parte non ferma il fallback
-        logger.exception("enqueue fallito track_id=%s user=%s",
-                         getattr(track, "id", None), file.username)
-        return False
+        logger.exception("enqueue fallito user=%s", file.username)
+        return None
     if _wait_for_download(client, file) != "completed":
-        return False
-    path = _resolve_local_path(download_dir, file.filename)
+        return None
+    return _resolve_local_path(download_dir, file.filename)
+
+
+def _attempt_download(db, client, download_dir, track, file: SlskdFile) -> bool:
+    """Scarica un candidato e lo collega a una Track esistente. True se riuscito."""
+    path = _download_candidate(client, download_dir, file)
     if not path:
         return False
     quality = read_audio_quality(path)
     attach_local_file(db, track, path=path, fmt=quality["format"],
                       bitrate=quality["bitrate"])
     return True
+
+
+def _import_to_library(db, path: str) -> None:
+    """Cataloga un file scaricato manualmente in libreria (playlist virtuale 'Soulseek').
+
+    Riusa la pipeline dei file locali: legge i tag, identita' via hash audio, dedup.
+    La pipeline locale imposta solo local_path, quindi marca esplicitamente il possesso
+    (has_local_file/local_format/local_bitrate) via attach_local_file.
+    """
+    from sqlalchemy import select
+
+    from app.models import Track
+    from app.services.local_import import build_normalized
+    from app.services.playlist_import import identity_normalize, import_playlist
+
+    nt = build_normalized(path)  # LocalFilesError se ffmpeg/hash fallisce
+    import_playlist(db, platform="local_files", name="Soulseek", items=[nt],
+                    normalize=identity_normalize, kind="local",
+                    platform_playlist_id="soulseek-manual", prune=False)
+    track = db.scalar(select(Track).where(
+        Track.platform == "local_files",
+        Track.platform_track_id == nt.platform_track_id,
+    ))
+    if track is not None:
+        quality = read_audio_quality(path)
+        attach_local_file(db, track, path=path, fmt=quality["format"],
+                          bitrate=quality["bitrate"])
+
+
+def _process_manual(db, client, download_dir, file: SlskdFile) -> str:
+    """Ricerca manuale: scarica il candidato scelto e lo cataloga in libreria."""
+    path = _download_candidate(client, download_dir, file)
+    if not path:
+        return "failed"
+    try:
+        _import_to_library(db, path)
+    except Exception:  # noqa: BLE001
+        logger.exception("Catalogazione in libreria fallita per %s", path)
+        return "failed"
+    return "downloaded"
 
 
 def _process_item(db, client, download_dir, track, chosen: SlskdFile | None) -> str:
@@ -143,21 +187,31 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
         download_dir = settings.slskd_download_dir
         _state.update(total=len(items), playlist_id=playlist_id)
         for i, (track_id, chosen) in enumerate(items, start=1):
-            track = get_track(db, track_id)
-            if track is None:
-                outcome = "failed"
-            else:
+            track = None
+            if track_id is None:  # ricerca manuale: scarica + cataloga in libreria
                 try:
-                    outcome = _process_item(db, client, download_dir, track, chosen)
+                    outcome = _process_manual(db, client, download_dir, chosen) if chosen else "failed"
                 except Exception:  # noqa: BLE001 — un fallimento non ferma il job
-                    logger.exception("Download Soulseek fallito per track_id=%s", track_id)
+                    logger.exception("Download Soulseek manuale fallito")
                     outcome = "failed"
+                title = chosen.filename if chosen else None
+            else:
+                track = get_track(db, track_id)
+                if track is None:
+                    outcome = "failed"
+                else:
+                    try:
+                        outcome = _process_item(db, client, download_dir, track, chosen)
+                    except Exception:  # noqa: BLE001 — un fallimento non ferma il job
+                        logger.exception("Download Soulseek fallito per track_id=%s", track_id)
+                        outcome = "failed"
+                title = getattr(track, "title", None)
             _state[outcome] = _state.get(outcome, 0) + 1
             _state["processed"] = i
             _state["items"].append({
                 "track_id": track_id,
                 "artist": getattr(track, "artist", None),
-                "title": getattr(track, "title", None),
+                "title": title,
                 "outcome": outcome,
             })
         _state.update(status="done")
@@ -193,3 +247,8 @@ def start_playlist_job(playlist_id: int) -> dict:
 
 def start_track_job(track_id: int, chosen: SlskdFile) -> dict:
     return _start([(track_id, chosen)], None)
+
+
+def start_manual_job(chosen: SlskdFile) -> dict:
+    """Ricerca manuale: scarica il candidato scelto e lo cataloga in libreria."""
+    return _start([(None, chosen)], None)

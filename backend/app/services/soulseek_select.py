@@ -112,14 +112,18 @@ def _quality_tier(file: SlskdFile, pref: QualityPreference) -> int:
 
 
 def rank_candidates(files, *, artist: str, title: str,
-                    pref: QualityPreference = QualityPreference()) -> list[ScoredCandidate]:
+                    pref: QualityPreference = QualityPreference(),
+                    min_name_score: float = _MIN_NAME_SCORE) -> list[ScoredCandidate]:
+    """Ordina i candidati. `min_name_score` filtra i match troppo deboli: per una
+    ricerca manuale/libera si abbassa (0.0) perche' e' slskd ad aver gia' filtrato
+    per query e l'utente sceglie a vista."""
     scored: list[ScoredCandidate] = []
     for f in files:
         tier = _quality_tier(f, pref)
         if tier == 0:
             continue
         name = _name_score(f, artist, title)
-        if name < _MIN_NAME_SCORE:
+        if name < min_name_score:
             continue
         avail = _availability(f)
         score = name * 100 + tier * 12 + avail * 30

@@ -35,3 +35,49 @@ def test_candidates_returns_ranked(monkeypatch):
     body = r.json()
     assert body and body[0]["format"] == "flac"
     assert "confidence" in body[0]
+
+
+def test_search_409_when_not_configured(monkeypatch):
+    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: False)
+    r = client.post("/api/downloads/search", json={"query": "aphex twin"})
+    assert r.status_code == 409
+
+
+def test_search_returns_candidates(monkeypatch):
+    from app.integrations.slskd import SlskdFile
+
+    class _C:
+        def search(self, a, t, **k):
+            return [SlskdFile(username="u", filename="Aphex Twin - Xtal.flac", size=1,
+                              bitrate=None, length=None, has_free_slot=True, queue_length=0)]
+
+    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
+    monkeypatch.setattr(downloads_router, "get_slskd_client", lambda: _C())
+    r = client.post("/api/downloads/search", json={"query": "Aphex Twin Xtal"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body and body[0]["format"] == "flac"
+
+
+def test_manual_409_when_not_configured(monkeypatch):
+    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: False)
+    r = client.post("/api/downloads/manual",
+                    json={"candidate": {"username": "u", "filename": "x.flac"}})
+    assert r.status_code == 409
+
+
+def test_manual_starts_job(monkeypatch):
+    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
+    monkeypatch.setattr(downloads_router.job, "is_running", lambda: False)
+    started = {}
+
+    def _fake_start(file):
+        started["user"] = file.username
+        return {"status": "running", "downloaded": 0}
+
+    monkeypatch.setattr(downloads_router.job, "start_manual_job", _fake_start)
+    r = client.post("/api/downloads/manual",
+                    json={"candidate": {"username": "bob", "filename": "bob/x.flac"}})
+    assert r.status_code == 202
+    assert started["user"] == "bob"
+    assert r.json()["available"] is True

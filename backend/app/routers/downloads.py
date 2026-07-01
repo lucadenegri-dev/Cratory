@@ -37,12 +37,26 @@ class TrackDownloadIn(BaseModel):
     candidate: CandidateOut
 
 
+class SearchIn(BaseModel):
+    query: str
+
+
+class ManualDownloadIn(BaseModel):
+    candidate: CandidateOut
+
+
 def _candidate_out(c) -> CandidateOut:
     return CandidateOut(
         username=c.file.username, filename=c.file.filename, size=c.file.size,
         bitrate=c.file.bitrate, length=c.file.length, format=c.file.extension or None,
         name_score=c.name_score, quality_tier=c.quality_tier, confidence=c.confidence,
     )
+
+
+def _slskd_file(c: CandidateOut) -> SlskdFile:
+    return SlskdFile(username=c.username, filename=c.filename, size=c.size,
+                     bitrate=c.bitrate, length=c.length, has_free_slot=True,
+                     queue_length=None)
 
 
 @router.get("/status")
@@ -83,8 +97,29 @@ def download_track(req: TrackDownloadIn):
             raise HTTPException(status_code=404, detail="Traccia non trovata.")
     finally:
         db.close()
-    c = req.candidate
-    file = SlskdFile(username=c.username, filename=c.filename, size=c.size,
-                     bitrate=c.bitrate, length=c.length, has_free_slot=True,
-                     queue_length=None)
-    return {"available": True, **job.start_track_job(req.track_id, file)}
+    return {"available": True, **job.start_track_job(req.track_id, _slskd_file(req.candidate))}
+
+
+@router.post("/search", response_model=list[CandidateOut])
+def search(req: SearchIn):
+    if not slskd_configured():
+        raise HTTPException(status_code=409, detail="slskd non configurato (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
+    query = req.query.strip()
+    if not query:
+        return []
+    try:
+        files = get_slskd_client().search(query, "")
+    except SlskdError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    # Ricerca libera: slskd ha gia' filtrato per query, l'utente sceglie a vista.
+    ranked = rank_candidates(files, artist="", title=query, min_name_score=0.0)
+    return [_candidate_out(c) for c in ranked]
+
+
+@router.post("/manual", status_code=202)
+def download_manual(req: ManualDownloadIn):
+    if not slskd_configured():
+        raise HTTPException(status_code=409, detail="slskd non configurato.")
+    if job.is_running():
+        raise HTTPException(status_code=409, detail="Un download e' gia' in corso.")
+    return {"available": True, **job.start_manual_job(_slskd_file(req.candidate))}
