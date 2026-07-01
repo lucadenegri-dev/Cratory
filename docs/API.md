@@ -52,15 +52,29 @@ Spotify (write-back best-effort). Response: `created`, `track`, `spotify_added`,
 
 ```text
 GET   /api/tracks
+GET   /api/tracks/lookup
 GET   /api/tracks/{track_id}
 PATCH /api/tracks/{track_id}
 POST  /api/tracks/{track_id}/enrich
+POST  /api/library/index
+GET   /api/library/index/status
 GET   /api/stats
 ```
 
-Filtri supportati da `GET /api/tracks`: artista, titolo, album, genere, sorgente,
-playlist, stato, BPM min/max, key, durata, presenza Spotify/SoundCloud,
-metadata incompleti, sort/order, limit/offset.
+Filtri supportati da `GET /api/tracks`: artista, titolo, album, genere, sorgente
+(incl. `local_files`), playlist, stato, BPM min/max, key, durata, presenza
+Spotify/SoundCloud, possesso (`has_local_file`), metadata incompleti, sort/order,
+limit/offset.
+
+`GET /api/tracks/lookup` — lookup read-only per il bridge DjOrganizer (sola lettura,
+mai 404). Query: `isrc` oppure `artist`+`title` (altrimenti 422). Risposta:
+`{found, match: "isrc"|"fuzzy"|null, track_id, artist, title, genre, genre_secondary,
+label, year, confidence}` — confidence: 100 ISRC, 70 fuzzy, 0 non trovata.
+
+`POST /api/library/index` (202) indicizza la libreria canonica `LIBRARY_ROOT`
+(disk-first: il disco È la libreria) — scan + riaggancio per audio-hash +
+riconciliazione dei possessi; `409` se `LIBRARY_ROOT` non è configurata. Stato del
+job su `GET /api/library/index/status`.
 
 `PATCH /api/tracks/{track_id}` accetta aggiornamenti parziali su BPM, Camelot, mood,
 energia, danceability, vocalness, genere, label, anno e campi affini. I valori manuali
