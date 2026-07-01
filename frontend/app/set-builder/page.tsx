@@ -66,6 +66,7 @@ export default function SetBuilder() {
   const [maxPerArtist, setMaxPerArtist] = useState(2);
   const [sources, setSources] = useState<string[]>([]);
   const [avoidShort, setAvoidShort] = useState(true);
+  const [ownedOnly, setOwnedOnly] = useState(true);
   const [prompt, setPrompt] = useState("");
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [useAi, setUseAi] = useState(false);
@@ -165,6 +166,7 @@ export default function SetBuilder() {
         max_tracks_per_artist: maxPerArtist,
         sources,
         avoid_short_tracks: avoidShort,
+        owned_only: ownedOnly,
         prompt: prompt || null,
         use_ai: useAi,
         mode,
@@ -297,6 +299,7 @@ export default function SetBuilder() {
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
                   <Checkbox label="evita tracce corte" checked={avoidShort} onChange={setAvoidShort} />
+                  <Checkbox label="solo brani posseduti" checked={ownedOnly} onChange={setOwnedOnly} />
                   {SOURCES.map((s) => (
                     <Checkbox key={s.value} label={`solo ${s.label}`} checked={sources.includes(s.value)} onChange={() => toggleSource(s.value)} />
                   ))}
