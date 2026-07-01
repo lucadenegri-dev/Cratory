@@ -192,6 +192,12 @@ def _explanation(setlist_tracks: list[tuple[Track, TransitionScore | None]],
 def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
     candidates = select_candidates(db, req)
     if len(candidates) < 3:
+        if req.owned_only:
+            raise SetGenerationError(
+                "Tracce candidate insufficienti tra quelle possedute: indicizza la "
+                "libreria (Impostazioni → Libreria) o disattiva \"solo brani posseduti\" "
+                "per includere i lead."
+            )
         raise SetGenerationError(
             "Tracce candidate insufficienti: allargare i vincoli (BPM, sorgenti, durata) "
             "o importare piu' tracce."

@@ -28,3 +28,17 @@ def test_opt_out_include_lead(db):
 
     out = select_candidates(db, SetGenerationRequest(owned_only=False))
     assert {t.title for t in out} == {"T1", "T2"}
+
+
+def test_errore_contestuale_owned_only(db):
+    """Con owned_only e zero possedute, l'errore spiega il rimedio."""
+    import pytest
+    from app.services.set_generator import SetGenerationError, generate_set
+
+    db.add(_track(1, owned=False))
+    db.add(_track(2, owned=False))
+    db.add(_track(3, owned=False))
+    db.commit()
+
+    with pytest.raises(SetGenerationError, match="posseduti"):
+        generate_set(db, SetGenerationRequest())
