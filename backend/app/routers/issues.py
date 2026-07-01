@@ -302,12 +302,12 @@ def bridge_suggest(db: Session = Depends(get_db)):
                                  status="open"))
                     mismatches += 1
                 else:
-                    row.detail = detail
                     if row.status == "open":  # le decisioni utente sono intoccabili
+                        row.detail = detail
                         row.suggested_fix_json = {"field": field,
                                                   "action": "retag", "to": c_val}
+                        row.updated_at = utcnow()
                         mismatches += 1
-                    row.updated_at = utcnow()
             for field, row in existing.items():
                 if field not in expected:
                     db.delete(row)  # discrepanza risolta (o non più confermata)

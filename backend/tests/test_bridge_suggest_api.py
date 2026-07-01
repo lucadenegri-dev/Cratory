@@ -226,6 +226,83 @@ def test_bridge_mismatch_resolved_is_removed(db, monkeypatch):
         assert client.get("/api/issues", params={"type": "bridge_mismatch"}).json() == []
 
 
+def test_bridge_mismatch_orphan_removed_when_isrc_lost(db, monkeypatch):
+    # File con bridge_mismatch esistente che perde l'ISRC: la riga orfana
+    # (step 2) va ripulita anche se il conflitto non e' piu' verificabile.
+    _file(db, 12, artist="Sconosciuto", title="Acid Face", isrc=None)
+    db.add(Issue(file_id=12, type="bridge_mismatch", field="artist",
+                 severity="warning", detail="vecchia discrepanza",
+                 suggested_fix_json={"field": "artist", "action": "retag",
+                                     "to": "Rataxes"},
+                 status="open"))
+    db.commit()
+    _configure(db)
+    monkeypatch.setattr(cratory_bridge, "lookup", lambda base_url, **kw: dict(FOUND))
+    with TestClient(app) as client:
+        client.post("/api/issues/bridge-suggest")
+        rows = db.execute(
+            select(Issue).where(Issue.file_id == 12, Issue.type == "bridge_mismatch")
+        ).scalars().all()
+        assert rows == []
+
+
+def test_bridge_mismatch_dismissed_untouched_when_conflict_persists(db, monkeypatch):
+    # Riga bridge_mismatch dismissed: le decisioni utente sono intoccabili.
+    # Anche se il conflitto persiste (stesso file/ISRC/risposta), detail,
+    # updated_at, status e suggested_fix_json NON devono cambiare.
+    _configure(db)
+    _file(db, 13, artist="Sconosciuto", title="Acid Face", genre="Acid Techno",
+          year=2024, label="Bunker", isrc="DEAB12300123")
+    original_detail = "vecchia discrepanza (dismissed dall'utente)"
+    original_fix = {"field": "artist", "action": "retag", "to": "Valore Manuale"}
+    issue = Issue(file_id=13, type="bridge_mismatch", field="artist",
+                  severity="warning", detail=original_detail,
+                  suggested_fix_json=original_fix, status="dismissed")
+    db.add(issue)
+    db.commit()
+    db.refresh(issue)
+    original_updated_at = issue.updated_at
+    monkeypatch.setattr(cratory_bridge, "lookup", lambda base_url, **kw: dict(FOUND))
+    with TestClient(app) as client:
+        client.post("/api/issues/bridge-suggest")
+    db.expire_all()
+    refreshed = db.get(Issue, issue.id)
+    assert refreshed is not None
+    assert refreshed.detail == original_detail
+    assert refreshed.updated_at == original_updated_at
+    assert refreshed.status == "dismissed"
+    assert refreshed.suggested_fix_json == original_fix
+
+
+def test_bridge_mismatch_open_row_updated_when_conflict_changes(db, monkeypatch):
+    # Contro-prova: una riga OPEN esistente deve continuare ad aggiornare
+    # detail/updated_at/suggested_fix_json quando il conflitto persiste
+    # (dimostra che il fix del guard non rompe il percorso open).
+    _configure(db)
+    _file(db, 14, artist="Sconosciuto", title="Acid Face", genre="Acid Techno",
+          year=2024, label="Bunker", isrc="DEAB12300123")
+    issue = Issue(file_id=14, type="bridge_mismatch", field="artist",
+                  severity="warning", detail="vecchia discrepanza",
+                  suggested_fix_json={"field": "artist", "action": "retag",
+                                      "to": "Valore Vecchio"},
+                  status="open")
+    db.add(issue)
+    db.commit()
+    db.refresh(issue)
+    original_updated_at = issue.updated_at
+    monkeypatch.setattr(cratory_bridge, "lookup", lambda base_url, **kw: dict(FOUND))
+    with TestClient(app) as client:
+        client.post("/api/issues/bridge-suggest")
+    db.expire_all()
+    refreshed = db.get(Issue, issue.id)
+    assert refreshed is not None
+    assert refreshed.status == "open"
+    assert refreshed.suggested_fix_json == {"field": "artist", "action": "retag",
+                                             "to": "Rataxes"}
+    assert "Rataxes" in refreshed.detail
+    assert refreshed.updated_at != original_updated_at
+
+
 def test_bridge_unreachable_degrades_cleanly(db, monkeypatch):
     _configure(db)
     _file(db, 11, artist="Rataxes", title="Acid Face", genre=None, isrc="DEAB12300123")
