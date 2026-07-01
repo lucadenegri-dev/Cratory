@@ -15,9 +15,19 @@ def test_409_senza_library_root(monkeypatch):
 
 
 def test_avvio_e_status(monkeypatch, tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
     from app.core.config import settings
+    from app.db import Base
     from app.services import library_index_job
 
+    # Isola il job dal DB reale di sviluppo: engine SQLite in memoria dedicato,
+    # stesso pattern della fixture `db` in conftest.py.
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(library_index_job, "SessionLocal",
+                        sessionmaker(bind=engine, expire_on_commit=False))
     monkeypatch.setattr(settings, "library_root", str(tmp_path))
     # niente thread reale nel test: il job gira sincrono
     monkeypatch.setattr(library_index_job, "_spawn", lambda fn: fn())

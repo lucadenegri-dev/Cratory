@@ -164,3 +164,23 @@ def test_riconciliazione_non_tocca_i_visti(db, fake_audio):
 
     db.refresh(t)
     assert report["lost"] == 0 and t.has_local_file is True
+
+
+def test_radice_vuota_non_azzera_i_possessi(db, fake_audio, tmp_path):
+    """Anti-unmount: scan a zero file (root sbagliata/smontata) salta la riconciliazione."""
+    from app.models import Track
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    t = Track(source_type="spotify", title="Keep", artist="A",
+              has_local_file=True, local_path=str(tmp_path / "sparito.mp3"),
+              audio_hash="HK")
+    db.add(t); db.commit()
+
+    vuota = tmp_path / "radice-vuota"
+    vuota.mkdir()
+    report = index_library(db, root=vuota)
+
+    db.refresh(t)
+    assert report["lost"] == 0
+    assert t.has_local_file is True  # nessuna riconciliazione su scan vuoto

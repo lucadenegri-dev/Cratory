@@ -121,6 +121,12 @@ def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:
         if on_progress is not None:
             on_progress(i, len(files))
 
+    # Anti-unmount (stesso principio dell'import locale): una radice vuota o
+    # illeggibile (path sbagliato, disco smontato) non deve azzerare i possessi.
+    if not files:
+        db.commit()
+        return report
+
     # Riconciliazione: possessi il cui file non esiste piu' (spostato in archive/,
     # cancellato a mano, inbox ripulita). L'audio_hash resta: se il file ricompare
     # altrove, il riaggancio e' immediato.
