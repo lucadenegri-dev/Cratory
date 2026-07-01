@@ -127,6 +127,9 @@ class SetGenerationRequest(BaseModel):
     prefer_progressive_bpm: bool = True
     allow_sharp_changes: bool = False
     avoid_short_tracks: bool = True
+    # Disk-first: di default il set nasce SOLO da tracce possedute (file su disco),
+    # cosi' e' garantito suonabile. False = includi anche i lead (senza file).
+    owned_only: bool = True
     prompt: str | None = None  # prompt libero: usato dall'AI agent in MVP 3
     use_ai: bool | None = None  # None = auto (AI se configurata e c'e' un prompt)
     # technical = mix prudente sui soli dati; creative = l'AI usa la sua conoscenza

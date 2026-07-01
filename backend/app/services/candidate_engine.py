@@ -32,6 +32,8 @@ def select_candidates(db: Session, req: SetGenerationRequest) -> list[Track]:
     genre = req.genre.lower() if req.genre else None
 
     for t in tracks:
+        if req.owned_only and not t.has_local_file:
+            continue
         if req.sources and t.source_type not in req.sources:
             continue
         if (t.duration_seconds or 0) < min_duration:

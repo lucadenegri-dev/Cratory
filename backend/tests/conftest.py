@@ -48,6 +48,7 @@ def seed_tracks(db):
                 bpm=128.0 + (i % 8),
                 camelot_key=CAMELOT_KEYS[i % len(CAMELOT_KEYS)],
                 status="ready_for_set",
+                has_local_file=True,
             ))
         db.commit()
 

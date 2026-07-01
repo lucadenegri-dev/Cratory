@@ -15,6 +15,7 @@ def _playlist(db, name: str) -> Playlist:
 
 
 def _add_track(db, pl: Playlist, i: int, **kw) -> Track:
+    kw.setdefault("has_local_file", True)
     t = Track(source_type="spotify", title=f"T{i}", artist=f"Art{i}",
               duration_seconds=200, **kw)
     db.add(t); db.flush()
