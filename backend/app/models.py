@@ -147,6 +147,9 @@ class Setlist(Base):
     prompt: Mapped[str | None] = mapped_column(Text)
     global_explanation: Mapped[str | None] = mapped_column(Text)
     generated_by: Mapped[str] = mapped_column(String, default="algorithmic")  # algorithmic | ai
+    # Disk-first: True se il set e' nato con la garanzia "solo brani posseduti".
+    # L'editor (replace/alternative) la fa rispettare leggendo questo flag.
+    owned_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     validation: Mapped[dict] = mapped_column(JSON, default=dict)  # warnings/auto-fix del Validation Engine
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

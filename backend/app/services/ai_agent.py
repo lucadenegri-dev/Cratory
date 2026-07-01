@@ -225,6 +225,7 @@ def generate_ai_set(db, req, llm, on_phase=None):
         prompt=req.prompt,
         global_explanation=ai.global_explanation,
         generated_by="ai",
+        owned_only=req.owned_only,
         validation={
             **result.as_dict(),
             "missing_library_suggestions": ai.missing_library_suggestions,

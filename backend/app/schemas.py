@@ -198,6 +198,8 @@ class SetlistOut(BaseModel):
     prompt: str | None = None
     global_explanation: str | None = None
     generated_by: str = "algorithmic"
+    # Disk-first: il set e' nato "solo brani posseduti" (l'editor lo fa rispettare)
+    owned_only: bool = False
     validation: dict = {}
     # Piano di mixaggio deterministico del set (come legare i brani, dove i salti).
     mixing_overview: list[str] = []

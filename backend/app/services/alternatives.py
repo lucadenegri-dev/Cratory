@@ -92,7 +92,11 @@ def find_alternatives(
     nxt = ordered[idx + 1].track if idx < len(ordered) - 1 else None
     present_ids = {st.track_id for st in ordered}
 
-    pool = [t for t in all_playable_tracks(db) if t.id not in present_ids]
+    # Il pool rispetta la garanzia del set: niente lead se e' nato "solo posseduti".
+    pool = [
+        t for t in all_playable_tracks(db, owned_only=bool(setlist.owned_only))
+        if t.id not in present_ids
+    ]
 
     if mode == "same_artist":
         artist = (current.artist or "").strip().lower()

@@ -248,6 +248,7 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
         strategy=req.strategy,
         prompt=req.prompt,
         global_explanation=_explanation(chosen, req, total_seconds),
+        owned_only=req.owned_only,
     )
     roles = assign_roles(len(chosen))
     for position, (track, ts) in enumerate(chosen, start=1):

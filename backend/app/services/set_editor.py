@@ -107,6 +107,11 @@ def replace_track(db: Session, setlist_id: int, position: int, new_track_id: int
     new_track = get_track(db, new_track_id)
     if new_track is None:
         raise SetEditError("Traccia sostitutiva inesistente")
+    if setlist.owned_only and not new_track.has_local_file:
+        raise SetEditError(
+            "Il set e' nato \"solo brani posseduti\": la traccia sostitutiva "
+            "non ha un file locale. Scarica il brano o scegline uno posseduto."
+        )
     if any(st.track_id == new_track_id for k, st in enumerate(ordered) if k != position - 1):
         raise SetEditError("La traccia e' gia' presente nel set")
     slot = ordered[position - 1]

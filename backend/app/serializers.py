@@ -92,6 +92,7 @@ def setlist_out(setlist: Setlist) -> SetlistOut:
         prompt=setlist.prompt,
         global_explanation=setlist.global_explanation,
         generated_by=setlist.generated_by or "algorithmic",
+        owned_only=bool(setlist.owned_only),
         validation=setlist.validation or {},
         mixing_overview=mixing_overview([st.track for st in setlist.tracks]),
         total_duration_seconds=total,

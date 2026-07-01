@@ -65,6 +65,8 @@ def ensure_schema(eng=None) -> None:
         "setlists": {
             "generated_by": "VARCHAR DEFAULT 'algorithmic'",
             "validation": "JSON",
+            # Disk-first: i set pre-migrazione non hanno la garanzia "solo posseduti"
+            "owned_only": "BOOLEAN DEFAULT 0",
         },
         "setlist_tracks": {
             "role": "VARCHAR",

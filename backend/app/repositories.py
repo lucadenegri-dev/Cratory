@@ -143,9 +143,16 @@ def update_track(db: Session, track: Track, data: dict) -> Track:
     return track
 
 
-def all_playable_tracks(db: Session) -> list[Track]:
-    """Tracce utilizzabili in un set: con BPM e durata sensata."""
-    return list(db.scalars(select(Track).where(Track.bpm.is_not(None))).all())
+def all_playable_tracks(db: Session, *, owned_only: bool = False) -> list[Track]:
+    """Tracce utilizzabili in un set: con BPM e durata sensata.
+
+    Con ``owned_only`` restringe alle tracce possedute (file su disco): e' il
+    pool dell'editor quando il set e' nato "solo brani posseduti".
+    """
+    stmt = select(Track).where(Track.bpm.is_not(None))
+    if owned_only:
+        stmt = stmt.where(Track.has_local_file.is_(True))
+    return list(db.scalars(stmt).all())
 
 
 _BPM_HISTOGRAM_BINS = 8

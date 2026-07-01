@@ -132,6 +132,10 @@ Generazione:
 - `generate` restituisce subito il set.
 - `generate-async` avvia un job e la UI legge `generate-status`.
 - `mode=technical|creative` seleziona il comportamento AI quando disponibile.
+- Disk-first: `owned_only` (default `true`) genera il set dai soli brani posseduti.
+  Il flag resta sul set salvato (esposto in `SetlistOut.owned_only`) e l'editing lo
+  rispetta: `alternatives` esclude i lead dal pool e `replace` con una traccia senza
+  file locale risponde 422.
 
 Export: CSV, Markdown/testo o creazione playlist Spotify tramite endpoint Spotify.
 
