@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db import get_db
 from app.integrations.getsongbpm import (
     FeatureProviderNotConfigured,
@@ -8,10 +9,11 @@ from app.integrations.getsongbpm import (
     get_feature_provider,
 )
 from app.repositories import get_track, library_stats, list_tracks, update_track
-from app.schemas import LibraryStatsOut, TrackDetailOut, TrackListOut, TrackUpdateIn
+from app.schemas import LibraryIndexJobStatus, LibraryStatsOut, TrackDetailOut, TrackListOut, TrackUpdateIn
 from app.serializers import track_detail_out, track_out
 from app.services.camelot import parse_camelot
 from app.services.feature_enrichment import enrich_features
+from app.services import library_index_job
 
 router = APIRouter(prefix="/api", tags=["tracks"])
 
@@ -104,6 +106,22 @@ def enrich_one(track_id: int, db: Session = Depends(get_db)):
     enrich_features(db, get_feature_provider(), force=True, track_ids=[track_id])
     db.refresh(track)
     return track_detail_out(track)
+
+
+@router.post("/library/index", response_model=LibraryIndexJobStatus, status_code=202)
+def start_library_index():
+    """Indicizza la libreria canonica (LIBRARY_ROOT): il disco È la libreria."""
+    if not settings.library_root:
+        raise HTTPException(
+            status_code=409,
+            detail="LIBRARY_ROOT non configurata: imposta nel .env la cartella della libreria canonica.",
+        )
+    return library_index_job.start_job()
+
+
+@router.get("/library/index/status", response_model=LibraryIndexJobStatus)
+def library_index_status():
+    return library_index_job.job_state()
 
 
 @router.get("/stats", response_model=LibraryStatsOut)

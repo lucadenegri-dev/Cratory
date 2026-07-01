@@ -483,6 +483,26 @@ class EnergyBucket(BaseModel):
     count: int
 
 
+class LibraryIndexJobStatus(BaseModel):
+    """Stato del job di indicizzazione della libreria canonica (disk-first)."""
+
+    status: str
+    processed: int = 0
+    total: int = 0
+    scanned: int = 0
+    matched: int = 0
+    created: int = 0
+    relinked: int = 0
+    duplicates: int = 0
+    lost: int = 0
+    failed: int = 0
+    errors: list[dict] = []
+    error: str | None = None
+    root: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
 class LibraryStatsOut(BaseModel):
     total_tracks: int
     playlists: int = 0
