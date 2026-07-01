@@ -10,7 +10,7 @@ from app.integrations.slskd import (
 )
 from app.repositories import get_track
 from app.services import soulseek_download_job as job
-from app.services.soulseek_select import rank_candidates
+from app.services.soulseek_select import rank_candidates, search_candidates
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
 
@@ -30,6 +30,8 @@ class CandidateOut(BaseModel):
 class CandidatesIn(BaseModel):
     artist: str
     title: str
+    # Durata attesa (dalla Track): premia la versione giusta nel ranking.
+    duration_seconds: int | None = None
 
 
 class TrackDownloadIn(BaseModel):
@@ -69,10 +71,12 @@ def candidates(req: CandidatesIn):
     if not slskd_configured():
         raise HTTPException(status_code=409, detail="slskd non configurato (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     try:
-        files = get_slskd_client().search(req.artist, req.title)
+        # Cascata di varianti di query: la letterale spesso esclude file validi.
+        ranked = search_candidates(get_slskd_client(), artist=req.artist,
+                                   title=req.title,
+                                   expected_duration=req.duration_seconds)
     except SlskdError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    ranked = rank_candidates(files, artist=req.artist, title=req.title)
     return [_candidate_out(c) for c in ranked]
 
 

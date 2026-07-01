@@ -15,13 +15,13 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.db import SessionLocal
-from app.integrations.local_files import read_audio_quality
+from app.integrations.local_files import read_audio_quality, read_tags
 from app.integrations.slskd import (
     SlskdFile, classify_transfer_state, get_slskd_client,
 )
 from app.repositories import get_track, tracks_without_local_file
 from app.services.acquisition import attach_local_file
-from app.services.soulseek_select import AUTO_PICK_MIN_CONFIDENCE, rank_candidates
+from app.services.soulseek_select import AUTO_PICK_MIN_CONFIDENCE, search_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -105,15 +105,26 @@ def _download_candidate(client, download_dir, file: SlskdFile) -> str | None:
     return _resolve_local_path(download_dir, file.filename)
 
 
-def _attempt_download(db, client, download_dir, track, file: SlskdFile) -> bool:
-    """Scarica un candidato e lo collega a una Track esistente. True se riuscito."""
+def _attempt_download(db, client, download_dir, track, file: SlskdFile,
+                      expected_duration: int | None = None) -> tuple[str, str | None]:
+    """Scarica un candidato e lo collega a una Track. Ritorna (esito, motivo).
+
+    Verifica post-download: se la durata reale del file non e' coerente con quella
+    attesa (>20s di scarto) e' quasi certamente la versione sbagliata → il file
+    resta in inbox per revisione e la Track NON viene marcata posseduta.
+    """
     path = _download_candidate(client, download_dir, file)
     if not path:
-        return False
+        return "failed", None
+    real = read_tags(path).get("duration_seconds")
+    if expected_duration and real and abs(real - expected_duration) > 20:
+        return "needs_review", (
+            f"durata non corrisponde (attesa {expected_duration}s, file {real}s)"
+        )
     quality = read_audio_quality(path)
     attach_local_file(db, track, path=path, fmt=quality["format"],
                       bitrate=quality["bitrate"])
-    return True
+    return "downloaded", None
 
 
 def _import_to_library(db, path: str) -> None:
@@ -156,17 +167,20 @@ def _process_manual(db, client, download_dir, file: SlskdFile) -> str:
     return "downloaded"
 
 
-def _process_item(db, client, download_dir, track, chosen: SlskdFile | None) -> str:
+def _process_item(db, client, download_dir, track,
+                  chosen: SlskdFile | None) -> tuple[str, str | None]:
+    expected = track.duration_seconds
     # Discovery/singola: candidato gia' scelto dall'utente, un solo tentativo.
     if chosen is not None:
-        return "downloaded" if _attempt_download(db, client, download_dir, track, chosen) else "failed"
+        return _attempt_download(db, client, download_dir, track, chosen, expected)
 
-    files = client.search(track.artist or "", track.title or "")
-    if not files:
-        return "not_found"
-    ranked = rank_candidates(files, artist=track.artist or "", title=track.title or "")
-    if not ranked or ranked[0].confidence < AUTO_PICK_MIN_CONFIDENCE:
-        return "needs_review"
+    # Cascata di varianti di query (la letterale spesso esclude file validi).
+    ranked = search_candidates(client, artist=track.artist or "",
+                               title=track.title or "", expected_duration=expected)
+    if not ranked:
+        return "not_found", None
+    if ranked[0].confidence < AUTO_PICK_MIN_CONFIDENCE:
+        return "needs_review", "confidenza sotto soglia per l'auto-pick"
     # Fallback: prova i migliori candidati, un utente diverso alla volta, finche' uno riesce.
     tried: set[str] = set()
     for cand in ranked:
@@ -175,9 +189,11 @@ def _process_item(db, client, download_dir, track, chosen: SlskdFile | None) -> 
         if cand.file.username in tried:
             continue
         tried.add(cand.file.username)
-        if _attempt_download(db, client, download_dir, track, cand.file):
-            return "downloaded"
-    return "failed"
+        outcome, reason = _attempt_download(db, client, download_dir, track,
+                                            cand.file, expected)
+        if outcome != "failed":
+            return outcome, reason
+    return "failed", None
 
 
 def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> None:
@@ -188,6 +204,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
         _state.update(total=len(items), playlist_id=playlist_id)
         for i, (track_id, chosen) in enumerate(items, start=1):
             track = None
+            reason = None
             if track_id is None:  # ricerca manuale: scarica + cataloga in libreria
                 try:
                     outcome = _process_manual(db, client, download_dir, chosen) if chosen else "failed"
@@ -201,7 +218,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                     outcome = "failed"
                 else:
                     try:
-                        outcome = _process_item(db, client, download_dir, track, chosen)
+                        outcome, reason = _process_item(db, client, download_dir, track, chosen)
                     except Exception:  # noqa: BLE001 — un fallimento non ferma il job
                         logger.exception("Download Soulseek fallito per track_id=%s", track_id)
                         outcome = "failed"
@@ -213,6 +230,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                 "artist": getattr(track, "artist", None),
                 "title": title,
                 "outcome": outcome,
+                "reason": reason,
             })
         _state.update(status="done")
     except Exception as exc:  # noqa: BLE001

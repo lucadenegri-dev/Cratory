@@ -81,3 +81,26 @@ def test_manual_starts_job(monkeypatch):
     assert r.status_code == 202
     assert started["user"] == "bob"
     assert r.json()["available"] is True
+
+
+def test_candidates_usa_durata_attesa(monkeypatch):
+    # Con la durata attesa nel body, la versione con la durata giusta vince
+    # anche contro un formato migliore con durata sbagliata.
+    from app.integrations.slskd import SlskdFile
+
+    class _C:
+        def search(self, a, t, **k):
+            return [
+                SlskdFile(username="u1", filename="A - B.flac", size=1, bitrate=None,
+                          length=500, has_free_slot=True, queue_length=0),
+                SlskdFile(username="u2", filename="A - B.mp3", size=1, bitrate=320,
+                          length=300, has_free_slot=True, queue_length=0),
+            ]
+
+    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
+    monkeypatch.setattr(downloads_router, "get_slskd_client", lambda: _C())
+    r = client.post("/api/downloads/candidates",
+                    json={"artist": "A", "title": "B", "duration_seconds": 300})
+    assert r.status_code == 200
+    body = r.json()
+    assert body[0]["format"] == "mp3"

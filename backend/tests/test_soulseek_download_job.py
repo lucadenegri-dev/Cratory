@@ -163,3 +163,51 @@ def test_manual_download_imports_to_library(patch_job):
     assert tracks[0].has_local_file is True
     assert tracks[0].local_path is not None
     db.close()
+
+
+def test_durata_incoerente_va_in_needs_review(patch_job):
+    # Il file scaricato ha durata ~2s ma la traccia ne attende 300: quasi
+    # certamente la versione sbagliata → resta in inbox, la Track NON e' posseduta.
+    from pathlib import Path
+
+    TestSession, fake = patch_job
+    fake._filename = "bob\\Da Funk.wav"  # wav vero: mutagen sceglie il parser dall'estensione
+    _write_wav(Path(job.settings.slskd_download_dir) / "Da Funk.wav", secs=2)
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="s9", source_type="spotify",
+              title="Da Funk", artist="Daft Punk", duration_seconds=300)
+    db.add(t)
+    db.commit()
+    track_id = t.id
+    db.close()
+
+    job._run([(track_id, None)], None)
+    st = job.job_state()
+    assert st["needs_review"] == 1
+    assert st["downloaded"] == 0
+    assert "durata" in (st["items"][0]["reason"] or "")
+    db = TestSession()
+    assert db.get(Track, track_id).has_local_file is False
+    db.close()
+
+
+def test_durata_coerente_viene_collegata(patch_job):
+    from pathlib import Path
+
+    TestSession, fake = patch_job
+    fake._filename = "bob\\Da Funk.wav"
+    _write_wav(Path(job.settings.slskd_download_dir) / "Da Funk.wav", secs=2)
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="s10", source_type="spotify",
+              title="Da Funk", artist="Daft Punk", duration_seconds=2)
+    db.add(t)
+    db.commit()
+    track_id = t.id
+    db.close()
+
+    job._run([(track_id, None)], None)
+    st = job.job_state()
+    assert st["downloaded"] == 1
+    db = TestSession()
+    assert db.get(Track, track_id).has_local_file is True
+    db.close()
