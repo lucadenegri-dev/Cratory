@@ -60,6 +60,7 @@ def ensure_schema(eng=None) -> None:
             "has_local_file": "BOOLEAN DEFAULT 0",
             "local_format": "VARCHAR",
             "local_bitrate": "INTEGER",
+            "audio_hash": "VARCHAR",
         },
         "setlists": {
             "generated_by": "VARCHAR DEFAULT 'algorithmic'",
