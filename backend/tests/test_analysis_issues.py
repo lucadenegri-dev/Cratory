@@ -78,3 +78,23 @@ def test_stale_issue_deleted(db):
     db.commit()
     recompute(db)
     assert db.scalar(select(Issue).where(Issue.field == "genre")) is None
+
+
+def test_recompute_preserves_bridge_mismatch(db):
+    # bridge_mismatch non è calcolata dall'Inspector (viene da Cratory):
+    # il merge non deve cancellarla, la riconcilia /api/issues/bridge-suggest.
+    _add_file(db, path="/m/a.mp3", artist="Sconosciuto", title="Acid Face",
+              genre="Techno", year=2020, label="X",
+              duration_s=200.0, bitrate=320000, content_hash="a", isrc="DEAB12300123")
+    f = db.scalar(select(AudioFile))
+    db.add(Issue(file_id=f.id, type="bridge_mismatch", field="artist",
+                 severity="warning", detail="Cratory (ISRC): artist diverso",
+                 suggested_fix_json={"field": "artist", "action": "retag", "to": "Rataxes"},
+                 status="open"))
+    db.commit()
+    recompute(db)
+    kept = db.scalars(select(Issue).where(Issue.type == "bridge_mismatch")).all()
+    assert len(kept) == 1
+    assert kept[0].suggested_fix_json == {"field": "artist", "action": "retag",
+                                          "to": "Rataxes"}
+    assert kept[0].status == "open"

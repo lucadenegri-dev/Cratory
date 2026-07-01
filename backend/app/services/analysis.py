@@ -12,6 +12,11 @@ from app.services.dedup import find_duplicates
 from app.services.inspector import inspect
 
 
+# Issue di provenienza esterna (bridge Cratory): l'Inspector non le calcola,
+# quindi il merge non deve cancellarle. Le riconcilia /api/issues/bridge-suggest.
+_EXTERNAL_TYPES = {"bridge_mismatch"}
+
+
 def _merge_issues(db: Session, computed) -> None:
     existing = {(i.file_id, i.type, i.field): i for i in db.scalars(select(Issue)).all()}
     seen: set = set()
@@ -33,7 +38,7 @@ def _merge_issues(db: Session, computed) -> None:
                 row.suggested_fix_json = c.suggested_fix
             row.updated_at = utcnow()
     for key, row in existing.items():
-        if key not in seen:
+        if key not in seen and row.type not in _EXTERNAL_TYPES:
             db.delete(row)
 
 
