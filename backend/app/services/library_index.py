@@ -83,8 +83,9 @@ def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:
     """Indicizza la libreria canonica. Vedi docstring del modulo per la semantica."""
     files = scan_folder(root)
     report = {"scanned": len(files), "matched": 0, "created": 0,
-              "relinked": 0, "lost": 0, "failed": 0, "errors": []}
+              "relinked": 0, "duplicates": 0, "lost": 0, "failed": 0, "errors": []}
     seen_paths: set[str] = set()
+    seen_digests: set[str] = set()
 
     for i, path in enumerate(files, start=1):
         try:
@@ -94,6 +95,15 @@ def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:
             report["errors"].append({"path": str(path), "error": str(exc)})
             logger.warning("File saltato %s: %s", path, exc)
             continue
+        if digest in seen_digests:
+            # Due file con lo stesso audio nello stesso run: il primo vince, gli altri
+            # si contano soltanto (la dedup su disco e' compito di DjOrganizer).
+            report["duplicates"] += 1
+            logger.warning("Audio duplicato nello stesso run: %s (digest gia' visto)", path)
+            if on_progress is not None:
+                on_progress(i, len(files))
+            continue
+        seen_digests.add(digest)
         tags = read_tags(path)
         track, how = _find_track(db, digest=digest, tags=tags)
         if track is None:

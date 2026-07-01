@@ -113,3 +113,20 @@ def test_non_sovrascrive_identita_esistente(db, fake_audio):
 
     db.refresh(t)
     assert t.title == "Titolo Corretto" and t.genre == "Techno"
+
+
+def test_duplicati_stesso_run_primo_vince(db, fake_audio):
+    """Stesso audio in due file: il primo vince, il secondo si conta come duplicato."""
+    from sqlalchemy import select
+    from app.models import Track
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    make("a.mp3", digest="HD", artist="A", title="Dup")
+    make("b.mp3", digest="HD", artist="A", title="Dup")
+    report = index_library(db, root=root)
+
+    assert report["created"] == 1 and report["duplicates"] == 1
+    assert report["relinked"] == 0
+    t = db.scalar(select(Track).where(Track.audio_hash == "HD"))
+    assert t.local_path.endswith("a.mp3")  # scan_folder ordina: il primo file vince
