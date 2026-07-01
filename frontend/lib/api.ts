@@ -297,6 +297,7 @@ export interface Setlist {
   target_duration_minutes: number | null;
   global_explanation: string | null;
   generated_by: string;
+  owned_only: boolean;
   validation: SetlistValidation;
   mixing_overview: string[];
   total_duration_seconds: number;

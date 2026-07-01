@@ -150,6 +150,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
               <Badge tone={setlist.generated_by === "ai" ? "primary" : "neutral"}>
                 {setlist.generated_by === "ai" ? <><Sparkles size={11} /> AI</> : "algoritmico"}
               </Badge>
+              {setlist.owned_only && <Badge tone="success">solo posseduti</Badge>}
               <button
                 onClick={() => { setRenameValue(setlist.name); setRenameOpen(true); }}
                 title="Rinomina" className="text-faint transition-colors hover:text-fg"
