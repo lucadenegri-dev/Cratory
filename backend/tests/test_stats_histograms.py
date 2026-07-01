@@ -43,3 +43,13 @@ def test_energy_distribution_boundaries():
     buckets = _energy_distribution([0, 20, 40, 60, 80, 100, 100])
     counts = [b["count"] for b in buckets]
     assert counts == [1, 1, 1, 1, 3]
+
+
+def test_stats_with_local_file(db):
+    from app.models import Track
+    from app.repositories import library_stats
+
+    db.add(Track(source_type="spotify", title="O", artist="A", has_local_file=True))
+    db.add(Track(source_type="spotify", title="W", artist="B"))
+    db.commit()
+    assert library_stats(db)["with_local_file"] == 1

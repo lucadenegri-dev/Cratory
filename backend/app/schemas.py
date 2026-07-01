@@ -511,6 +511,7 @@ class LibraryStatsOut(BaseModel):
     with_key: int
     with_features: int  # mood o energia presenti
     ready_for_set: int
+    with_local_file: int = 0
     missing_metadata: int
     bpm_min: float | None = None
     bpm_max: float | None = None

@@ -216,6 +216,7 @@ def library_stats(db: Session) -> dict:
         ((Track.mood.is_not(None)) & (Track.mood != "")) | (Track.energy.is_not(None))
     )
     ready_for_set = count_where(Track.status == "ready_for_set")
+    with_local_file = count_where(Track.has_local_file.is_(True))
     missing_metadata = count_where(
         (Track.title.is_(None)) | (Track.title == "") | (Track.artist.is_(None)) | (Track.artist == "")
     )
@@ -228,6 +229,7 @@ def library_stats(db: Session) -> dict:
         "with_key": sum(key_distribution.values()),
         "with_features": with_features,
         "ready_for_set": ready_for_set,
+        "with_local_file": with_local_file,
         "missing_metadata": missing_metadata,
         "bpm_min": min(bpms) if bpms else None,
         "bpm_max": max(bpms) if bpms else None,
