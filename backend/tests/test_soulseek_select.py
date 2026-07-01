@@ -193,3 +193,11 @@ def test_search_candidates_cascata_si_ferma_alla_prima_utile():
     assert len(client.queries) == 2  # si ferma alla seconda variante
     # il ranking confronta col titolo ORIGINALE, non con la query pulita
     assert ranked[0].name_score > 0.4
+
+
+def test_search_candidates_esaurisce_le_varianti_a_vuoto():
+    class EmptyClient:
+        def search(self, artist, title, **kw):
+            return []
+
+    assert search_candidates(EmptyClient(), artist="A", title="B (feat. C) - Dub") == []

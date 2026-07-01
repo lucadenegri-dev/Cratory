@@ -91,8 +91,9 @@ alla Track senza controlli) e la velocità di upload dell'utente non è consider
 
 - Durata: match esatto batte lossless-con-durata-sbagliata a parità di nome;
   ignota resta neutra (non scende sotto auto-pick un candidato altrimenti forte).
-- Varianti: titolo con `(feat. X) - Extended Mix` produce 3 varianti corrette e
-  ordinate; la cascata si ferma alla prima variante con candidati.
+- Varianti: titolo con `(feat. X) - Extended Mix` produce fino a 3 varianti
+  (deduplicate: pulita ed essenziale possono coincidere); la cascata si ferma alla
+  prima variante con candidati; esaurite tutte, lista vuota.
 - Versioni: cercato "Song Extended Mix" → file "Song (Radio Edit)" penalizzato e
   file "Song (Extended Mix)" premiato; cercato "Song" → file "Song (Live)" penalizzato.
 - Post-download: file con durata fuori soglia → `needs_review` con reason, Track
