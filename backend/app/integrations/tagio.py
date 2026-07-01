@@ -97,6 +97,7 @@ class TagData:
     label: str | None
     track_no: int | None
     comment: str | None
+    isrc: str | None
     has_cover: bool
 
 
@@ -115,6 +116,7 @@ _ID3_READ = {
     "artist": "TPE1", "title": "TIT2", "album": "TALB", "albumartist": "TPE2",
     "genre": "TCON", "date": "TDRC", "organization": "TPUB", "tracknumber": "TRCK",
     "comment": "COMM",
+    "isrc": "TSRC",
 }
 
 
@@ -198,5 +200,6 @@ def read_tags(path: str) -> TagData:
         label=_first(tags, "organization") or _first(tags, "label"),
         track_no=_parse_track(_first(tags, "tracknumber")),
         comment=_first(tags, "comment"),
+        isrc=_first(tags, "isrc"),
         has_cover=_detect_cover(raw),
     )

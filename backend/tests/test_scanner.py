@@ -133,3 +133,19 @@ def test_scan_skips_quarantine_and_hidden_dirs(db, copy_fixture, tmp_path):
     assert summary.found == 1
     rows = db.scalars(select(AudioFile)).all()
     assert len(rows) == 1 and rows[0].path.endswith("a.mp3")
+
+
+def test_scan_reads_isrc(db, copy_fixture, tmp_path):
+    from mutagen.flac import FLAC
+
+    root_dir = tmp_path / "lib"
+    path = copy_fixture("flac", root_dir / "a.flac")
+    audio = FLAC(path)
+    audio["isrc"] = "DEAB12300123"
+    audio.save()
+    root = ScanRoot(path=str(root_dir))
+    db.add(root)
+    db.commit()
+    scan(db, [root])
+    row = db.scalar(select(AudioFile))
+    assert row.isrc == "DEAB12300123"

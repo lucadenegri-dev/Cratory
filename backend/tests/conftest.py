@@ -66,7 +66,7 @@ def make_audio_file(id: int, **overrides) -> AudioFile:
         root_id=1, path=f"/music/{id}.mp3", ext="mp3", size_bytes=1000,
         content_hash=f"hash{id}", hash_method="file", status="present",
         artist=None, title=None, album=None, album_artist=None, genre=None,
-        year=None, label=None, track_no=None, comment=None, has_cover=False,
+        year=None, label=None, track_no=None, comment=None, isrc=None, has_cover=False,
         bitrate=None, sample_rate=None, channels=None, duration_s=None, scan_error=None,
     )
     defaults.update(overrides)

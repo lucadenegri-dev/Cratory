@@ -18,3 +18,14 @@ def test_ensure_schema_adds_target_root_to_old_db(tmp_path):
         ))
     ensure_schema(eng)
     assert "target_root" in {c["name"] for c in inspect(eng).get_columns("scan_root")}
+
+
+def test_ensure_schema_adds_isrc_to_old_db(tmp_path):
+    eng = create_engine(f"sqlite:///{tmp_path}/old.db")
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE audio_file (id INTEGER PRIMARY KEY, root_id INTEGER, "
+            "path VARCHAR, ext VARCHAR)"
+        ))
+    ensure_schema(eng)
+    assert "isrc" in {c["name"] for c in inspect(eng).get_columns("audio_file")}

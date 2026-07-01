@@ -13,7 +13,7 @@ from app.schemas import ScanSummary
 
 _TAG_FIELDS = (
     "bitrate", "sample_rate", "channels", "duration_s", "artist", "title", "album",
-    "album_artist", "genre", "year", "label", "track_no", "comment", "has_cover",
+    "album_artist", "genre", "year", "label", "track_no", "comment", "isrc", "has_cover",
 )
 
 
@@ -58,7 +58,7 @@ def _scan_file_fields(path: str, ext: str) -> dict:
         artist=tags.artist, title=tags.title, album=tags.album,
         album_artist=tags.album_artist, genre=tags.genre, year=tags.year,
         label=tags.label, track_no=tags.track_no, comment=tags.comment,
-        has_cover=tags.has_cover,
+        isrc=tags.isrc, has_cover=tags.has_cover,
     )
     return fields
 
