@@ -86,14 +86,16 @@ def lookup_track(
             status_code=422,
             detail="Servono isrc oppure artist+title.",
         )
+    # limit(1): eventuali duplicati (stesso ISRC / stesso artist+title) non devono
+    # far fallire il lookup con MultipleResultsFound — si risponde col primo match.
     hit, how, conf = None, None, 0
     if isrc:
-        hit = db.scalar(select(Track).where(Track.isrc == isrc))
+        hit = db.scalars(select(Track).where(Track.isrc == isrc).limit(1)).first()
         if hit:
             how, conf = "isrc", 100
     if hit is None and artist and title:
-        hit = db.scalar(select(Track).where(
-            Track.artist.ilike(artist), Track.title.ilike(title)))
+        hit = db.scalars(select(Track).where(
+            Track.artist.ilike(artist), Track.title.ilike(title)).limit(1)).first()
         if hit:
             how, conf = "fuzzy", 70
     if hit is None:
