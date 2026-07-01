@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.db import SessionLocal
 from app.integrations.local_files import read_audio_quality, read_tags
 from app.integrations.slskd import (
-    SlskdFile, classify_transfer_state, get_slskd_client,
+    SlskdError, SlskdFile, classify_transfer_state, get_slskd_client,
 )
 from app.repositories import get_track, tracks_without_local_file
 from app.services.acquisition import attach_local_file
@@ -208,6 +208,8 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
             if track_id is None:  # ricerca manuale: scarica + cataloga in libreria
                 try:
                     outcome = _process_manual(db, client, download_dir, chosen) if chosen else "failed"
+                except SlskdError:
+                    raise  # daemon giu'/disconnesso: le restanti fallirebbero tutte uguali
                 except Exception:  # noqa: BLE001 — un fallimento non ferma il job
                     logger.exception("Download Soulseek manuale fallito")
                     outcome = "failed"
@@ -219,6 +221,8 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                 else:
                     try:
                         outcome, reason = _process_item(db, client, download_dir, track, chosen)
+                    except SlskdError:
+                        raise  # daemon giu'/disconnesso: fail-fast col messaggio in _state.error
                     except Exception:  # noqa: BLE001 — un fallimento non ferma il job
                         logger.exception("Download Soulseek fallito per track_id=%s", track_id)
                         outcome = "failed"

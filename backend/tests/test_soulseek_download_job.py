@@ -211,3 +211,31 @@ def test_durata_coerente_viene_collegata(patch_job):
     db = TestSession()
     assert db.get(Track, track_id).has_local_file is True
     db.close()
+
+
+def test_slskd_giu_ferma_il_job_con_errore_chiaro(patch_job, monkeypatch):
+    # Daemon disconnesso dalla rete Soulseek: inutile macinare N tracce che
+    # fallirebbero tutte uguali → il job si ferma con un errore leggibile.
+    from app.integrations.slskd import SlskdError
+
+    class DownClient:
+        def search(self, artist, title, **kw):
+            raise SlskdError('slskd 409: "must be connected (currently: Disconnected)"')
+
+    TestSession, _ = patch_job
+    monkeypatch.setattr(job, "get_slskd_client", lambda: DownClient())
+    db = TestSession()
+    ids = []
+    for i in range(2):
+        t = Track(platform="spotify", spotify_id=f"down{i}", source_type="spotify",
+                  title=f"T{i}", artist="A")
+        db.add(t)
+        db.commit()
+        ids.append(t.id)
+    db.close()
+
+    job._run([(ids[0], None), (ids[1], None)], None)
+    st = job.job_state()
+    assert st["status"] == "error"
+    assert "Disconnected" in (st["error"] or "")
+    assert st["processed"] < 2  # si e' fermato alla prima, niente accanimento
