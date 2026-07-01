@@ -205,6 +205,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   if (!playlist) return <PageLayout title="Playlist"><p className="flex items-center gap-2 text-muted"><Equalizer className="h-3.5 w-3.5" /> Caricamento…</p></PageLayout>;
 
   const ready = tracks.filter((t) => t.status === "ready_for_set").length;
+  const ownedCount = tracks.filter((t) => t.has_local_file).length;
   const totalDur = tracks.reduce((s, t) => s + (t.duration_seconds ?? 0), 0);
   const cell = "px-3 py-2.5";
   const canSync = playlist.platform === "spotify" && (playlist.kind === "liked" || !!playlist.platform_playlist_id);
@@ -257,7 +258,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
             <Badge tone="neutral">{playlist.platform}</Badge>
             {playlist.kind === "liked" && <Badge tone="neutral">liked</Badge>}
           </div>
-          <p className="mt-1 text-sm text-muted">{playlist.track_count} tracce · {ready} pronte per il set · {fmtDuration(totalDur)}{playlist.owner ? ` · ${playlist.owner}` : ""}</p>
+          <p className="mt-1 text-sm text-muted">{playlist.track_count} tracce · {ready} pronte per il set · POSSIEDI {ownedCount} DI {tracks.length} · {fmtDuration(totalDur)}{playlist.owner ? ` · ${playlist.owner}` : ""}</p>
         </div>
       </div>
 
