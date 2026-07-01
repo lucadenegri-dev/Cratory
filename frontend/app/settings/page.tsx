@@ -142,6 +142,7 @@ function LibraryIndexCard() {
       </div>
       <div className="space-y-3 p-5 text-sm">
         {libError && <Alert tone="danger">⚠ {libError}</Alert>}
+        {libJob?.status === "error" && <Alert tone="danger">⚠ {libJob.error ?? "Indicizzazione fallita"}</Alert>}
         <Button size="sm" onClick={runIndex} disabled={busy}>{busy ? "In corso…" : "Indicizza ora"}</Button>
         {busy && (
           <p className="tnum text-sm text-muted">{libJob.processed}/{libJob.total} file processati…</p>
