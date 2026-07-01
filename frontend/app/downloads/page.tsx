@@ -189,7 +189,10 @@ export default function DownloadsPage() {
             <ul className="mt-3 divide-y divide-border text-sm">
               {status.items.map((it) => (
                 <li key={it.track_id} className="flex items-center justify-between gap-3 py-1.5">
-                  <span className="truncate">{it.artist ?? "Artista sconosciuto"} — {it.title ?? "Senza titolo"}</span>
+                  <span className="truncate">
+                    {it.artist ?? "Artista sconosciuto"} — {it.title ?? "Senza titolo"}
+                    {it.reason && <span className="ml-2 text-xs text-muted">({it.reason})</span>}
+                  </span>
                   <Badge tone={OUTCOME_TONE[it.outcome] ?? "neutral"}>{OUTCOME_LABEL[it.outcome] ?? it.outcome}</Badge>
                 </li>
               ))}

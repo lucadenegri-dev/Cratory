@@ -737,6 +737,8 @@ export type DownloadItem = {
   artist: string | null;
   title: string | null;
   outcome: "downloaded" | "needs_review" | "not_found" | "failed";
+  // Motivo dell'esito (es. durata incoerente per needs_review).
+  reason: string | null;
 };
 
 export type DownloadStatus = {
@@ -757,8 +759,10 @@ export function downloadStatus() {
   return apiGet<DownloadStatus>("/api/downloads/status");
 }
 
-export function downloadCandidates(artist: string, title: string) {
-  return apiPost<DownloadCandidate[]>("/api/downloads/candidates", { artist, title });
+export function downloadCandidates(artist: string, title: string, durationSeconds?: number | null) {
+  // La durata attesa (se nota) premia nel ranking la versione giusta.
+  return apiPost<DownloadCandidate[]>("/api/downloads/candidates",
+    { artist, title, duration_seconds: durationSeconds ?? undefined });
 }
 
 export function startPlaylistDownload(playlistId: number) {
