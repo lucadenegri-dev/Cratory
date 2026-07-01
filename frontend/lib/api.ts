@@ -214,6 +214,31 @@ export function enrichTrack(id: number) {
   return apiPost<TrackDetail>(`/api/tracks/${id}/enrich`);
 }
 
+export interface LibraryIndexJob {
+  status: "idle" | "running" | "done" | "error";
+  processed: number;
+  total: number;
+  scanned: number;
+  matched: number;
+  created: number;
+  relinked: number;
+  duplicates: number;
+  lost: number;
+  failed: number;
+  errors: { path: string; error: string }[];
+  error: string | null;
+  root: string | null;
+}
+
+/** Indicizza la libreria canonica (LIBRARY_ROOT): il disco è la libreria. */
+export function startLibraryIndex() {
+  return apiPost<LibraryIndexJob>("/api/library/index");
+}
+
+export function libraryIndexStatus() {
+  return apiGet<LibraryIndexJob>("/api/library/index/status");
+}
+
 export interface ServiceStatus {
   key: string;
   name: string;

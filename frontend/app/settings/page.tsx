@@ -5,9 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import {
   apiGet, apiPost, servicesStatus, SPOTIFY_LOGIN_URL,
-  featureEnrichSummary,
+  featureEnrichSummary, startLibraryIndex, libraryIndexStatus,
   type ServiceStatus, type SpotifyStatus,
-  type FeatureProviderStatus, type FeatureEnrichJob,
+  type FeatureProviderStatus, type FeatureEnrichJob, type LibraryIndexJob,
 } from "@/lib/api";
 import { Button, Alert, Equalizer } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -102,7 +102,59 @@ function SettingsInner() {
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Arricchimento</div>
       <FeatureEnrichmentCard />
+
+      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Libreria (disco)</div>
+      <LibraryIndexCard />
     </PageLayout>
+  );
+}
+
+function LibraryIndexCard() {
+  const [libJob, setLibJob] = useState<LibraryIndexJob | null>(null);
+  const [libError, setLibError] = useState<string | null>(null);
+
+  useEffect(() => {
+    libraryIndexStatus().then(setLibJob).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (libJob?.status !== "running") return;
+    const t = setInterval(() => libraryIndexStatus().then(setLibJob).catch(() => {}), 2000);
+    return () => clearInterval(t);
+  }, [libJob?.status]);
+
+  const runIndex = () => {
+    setLibError(null);
+    startLibraryIndex().then(setLibJob).catch((e) => setLibError(String(e.message ?? e)));
+  };
+
+  const busy = libJob?.status === "running";
+
+  return (
+    <div className="border border-border">
+      <div className="flex items-start justify-between gap-4 border-b border-border p-5">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold uppercase tracking-wide text-fg-strong">Libreria canonica</div>
+          <p className="mt-1 text-sm text-muted">
+            La libreria canonica è la cartella LIBRARY_ROOT sul disco: indicizzala dopo ogni riorganizzazione.
+          </p>
+        </div>
+      </div>
+      <div className="space-y-3 p-5 text-sm">
+        {libError && <Alert tone="danger">⚠ {libError}</Alert>}
+        <Button size="sm" onClick={runIndex} disabled={busy}>{busy ? "In corso…" : "Indicizza ora"}</Button>
+        {busy && (
+          <p className="tnum text-sm text-muted">{libJob.processed}/{libJob.total} file processati…</p>
+        )}
+        {libJob?.status === "done" && (
+          <p className="text-sm text-fg">
+            ✓ {libJob.scanned} file · {libJob.matched} riagganciate · {libJob.created} nuove ·{" "}
+            {libJob.duplicates} duplicati · {libJob.relinked} path aggiornati · {libJob.lost} perse ·{" "}
+            {libJob.failed} errori
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
