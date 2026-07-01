@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, aiSuggestGenres,
-  type Issue, type ScanRoot,
+  bridgeSuggest, type Issue, type ScanRoot,
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
@@ -18,6 +18,7 @@ export default function IssuesPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [genreBusy, setGenreBusy] = useState(false);
+  const [bridgeBusy, setBridgeBusy] = useState(false);
   const [aiNote, setAiNote] = useState<string | null>(null);
 
   const [sev, setSev] = useState("");
@@ -88,6 +89,27 @@ export default function IssuesPage() {
     }
   };
 
+  const onBridge = async () => {
+    setActionError(null);
+    setAiNote(null);
+    setBridgeBusy(true);
+    try {
+      const r = await bridgeSuggest();
+      if (!r.configured) {
+        setActionError("Configura l'URL di Cratory in Settings (e verifica che Cratory sia in esecuzione).");
+      } else {
+        load();
+        setAiNote(
+          `${r.suggested} suggerimenti da Cratory${r.mismatches > 0 ? `, ${r.mismatches} discrepanze ISRC segnalate` : ""}${r.unresolved > 0 ? `, ${r.unresolved} non trovati` : ""} — rivedi e accetta col ✓.`,
+        );
+      }
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Errore");
+    } finally {
+      setBridgeBusy(false);
+    }
+  };
+
   const types = useMemo(() => [...new Set(issues.map((i) => i.type))].sort(), [issues]);
   const fields = useMemo(
     () => [...new Set(issues.map((i) => i.field).filter((f): f is string => !!f))].sort(),
@@ -122,6 +144,7 @@ export default function IssuesPage() {
           onAcceptFixable={acceptAllFixable} onDismissInfo={dismissAllInfo}
           onAiSuggest={onAiSuggest} aiBusy={aiBusy}
           onAiGenres={onAiGenres} genreBusy={genreBusy}
+          onBridge={onBridge} bridgeBusy={bridgeBusy}
         />
       }
     >
@@ -169,7 +192,7 @@ export default function IssuesPage() {
   );
 }
 
-function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismissInfo, onAiSuggest, aiBusy, onAiGenres, genreBusy }: {
+function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismissInfo, onAiSuggest, aiBusy, onAiGenres, genreBusy, onBridge, bridgeBusy }: {
   total: number;
   bySev: Record<string, number>;
   byType: Record<string, number>;
@@ -180,6 +203,8 @@ function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismiss
   aiBusy: boolean;
   onAiGenres: () => void;
   genreBusy: boolean;
+  onBridge: () => void;
+  bridgeBusy: boolean;
 }) {
   return (
     <div className="flex flex-col gap-4 text-xs">
@@ -210,6 +235,9 @@ function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismiss
         </Button>
         <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
           {genreBusy ? "AI in corso…" : "✨ Suggerisci genere"}
+        </Button>
+        <Button variant="primary" size="sm" onClick={onBridge} disabled={bridgeBusy}>
+          {bridgeBusy ? "Cratory in corso…" : "⇄ Suggerisci da Cratory"}
         </Button>
         <Button variant="outline" size="sm" onClick={onAcceptFixable}>✓ accetta tutti i fixabili</Button>
         <Button variant="outline" size="sm" onClick={onDismissInfo}>✕ ignora tutti gli info</Button>

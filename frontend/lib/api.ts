@@ -194,6 +194,17 @@ export function aiSuggestGenres() {
   return apiSend<AiSuggestResult>("POST", "/api/issues/ai-suggest-genre");
 }
 
+export interface BridgeSuggestResult {
+  configured: boolean;
+  files: number;
+  suggested: number;
+  unresolved: number;
+  mismatches: number;
+}
+export function bridgeSuggest() {
+  return apiSend<BridgeSuggestResult>("POST", "/api/issues/bridge-suggest");
+}
+
 // --- DUPLICATES -------------------------------------------------------------
 export interface DupMember {
   file_id: number;
@@ -322,12 +333,17 @@ export interface RootTarget {
 export interface Settings {
   naming_template: string;
   folder_template: string;
+  cratory_base_url: string | null;
   roots: RootTarget[];
 }
 export function getSettings() {
   return apiGet<Settings>("/api/settings");
 }
-export function updateSettings(body: { naming_template?: string; folder_template?: string }) {
+export function updateSettings(body: {
+  naming_template?: string;
+  folder_template?: string;
+  cratory_base_url?: string;
+}) {
   return apiSend<Settings>("PUT", "/api/settings", body);
 }
 export function setRootTarget(rootId: number, target: string | null) {

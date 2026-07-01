@@ -22,10 +22,14 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [naming, setNaming] = useState("");
   const [folder, setFolder] = useState("");
+  const [cratory, setCratory] = useState("");
 
   const load = useCallback(() => {
     getSettings()
-      .then((s) => { setSettings(s); setNaming(s.naming_template); setFolder(s.folder_template); setOffline(false); })
+      .then((s) => {
+        setSettings(s); setNaming(s.naming_template); setFolder(s.folder_template);
+        setCratory(s.cratory_base_url ?? ""); setOffline(false);
+      })
       .catch(() => setOffline(true));
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -38,6 +42,11 @@ export default function SettingsPage() {
   const saveTarget = async (rootId: number, target: string) => {
     setError(null);
     try { setSettings(await setRootTarget(rootId, target.trim() || null)); }
+    catch (e) { setError(e instanceof Error ? e.message : "Errore"); }
+  };
+  const saveCratory = async () => {
+    setError(null);
+    try { setSettings(await updateSettings({ cratory_base_url: cratory.trim() })); }
     catch (e) { setError(e instanceof Error ? e.message : "Errore"); }
   };
 
@@ -64,6 +73,15 @@ export default function SettingsPage() {
             </label>
 
             <Button variant="outline" size="sm" className="self-start" onClick={saveTemplates}>salva template</Button>
+
+            <label className="block">
+              <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">cratory (bridge sola-lettura)</span>
+              <input className="w-full border border-border bg-surface px-3 py-2 text-sm text-fg-strong focus:border-border-strong focus:outline-none"
+                value={cratory} onChange={(e) => setCratory(e.target.value)} placeholder="http://localhost:8000" />
+              <span className="mt-1.5 block text-xs text-faint">vuoto = bridge disattivato. Suggerisce genere/label/anno/artista/titolo dalla libreria di Cratory (deve essere in esecuzione).</span>
+            </label>
+
+            <Button variant="outline" size="sm" className="self-start" onClick={saveCratory}>salva cratory</Button>
 
             <div>
               <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">dove organizzare (target per radice)</div>
