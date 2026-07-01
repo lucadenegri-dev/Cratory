@@ -42,6 +42,7 @@ export default function Library() {
   const [bpmMax, setBpmMax] = useState("");
   const [key, setKey] = useState("");
   const [incomplete, setIncomplete] = useState(false);
+  const [owned, setOwned] = useState(""); // "" = tutte | "true" = possedute | "false" = wishlist
   const [sort, setSort] = useState("");
   const [order, setOrder] = useState<Order>("asc");
   const [editing, setEditing] = useState<Track | null>(null);
@@ -50,12 +51,13 @@ export default function Library() {
     apiGet<{ total: number; items: Track[] }>("/api/tracks", {
       artist, title, genre, source, status, bpm_min: bpmMin, bpm_max: bpmMax, key,
       incomplete_metadata: incomplete ? true : undefined,
+      has_local_file: owned || undefined,
       sort: sort || undefined, order: sort ? order : undefined,
       limit, offset,
     })
       .then((r) => { setItems(r.items); setTotal(r.total); setError(null); })
       .catch((e) => setError(String(e.message ?? e)));
-  }, [artist, title, genre, source, status, bpmMin, bpmMax, key, incomplete, sort, order, offset]);
+  }, [artist, title, genre, source, status, bpmMin, bpmMax, key, incomplete, owned, sort, order, offset]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
 
@@ -92,10 +94,16 @@ export default function Library() {
         <option value="">Tutte le sorgenti</option>
         <option value="spotify">Spotify</option>
         <option value="manual">Manuale</option>
+        <option value="local_files">File locali</option>
       </Select>
       <Select className="h-9" value={status} onChange={(e) => { setStatus(e.target.value); setOffset(0); }}>
         <option value="">Tutti gli stati</option>
         {STATUS_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </Select>
+      <Select className="h-9" value={owned} onChange={(e) => { setOwned(e.target.value); setOffset(0); }}>
+        <option value="">Possesso: tutte</option>
+        <option value="true">Solo posseduti</option>
+        <option value="false">Wishlist (senza file)</option>
       </Select>
       <div className="grid grid-cols-2 gap-2">
         <Input className="h-9" type="number" placeholder="BPM min" value={bpmMin} onChange={(e) => { setBpmMin(e.target.value); setOffset(0); }} />
@@ -144,7 +152,10 @@ export default function Library() {
                 <td className={`${cell} tnum text-muted`}>{t.energy ?? "—"}</td>
                 <td className={`${cell} max-w-[10rem] truncate text-muted`}>{t.genre ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
-                <td className={cell}><Badge tone={STATUS_TONE[t.status] ?? "neutral"}>{STATUS_LABEL[t.status] ?? t.status}</Badge></td>
+                <td className={cell}>
+                  <Badge tone={STATUS_TONE[t.status] ?? "neutral"}>{STATUS_LABEL[t.status] ?? t.status}</Badge>
+                  {t.has_local_file && <Badge tone="success" className="ml-1">FILE</Badge>}
+                </td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>

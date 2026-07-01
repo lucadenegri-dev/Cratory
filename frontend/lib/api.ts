@@ -30,6 +30,10 @@ export interface Track {
   enriched: boolean;
   enrichment_source: string | null;
   enrichment_confidence: number | null;
+  has_local_file: boolean;
+  local_path: string | null;
+  local_format: string | null;
+  local_bitrate: number | null;
 }
 
 export interface Playlist {
