@@ -37,3 +37,31 @@ def test_tracks_without_local_file_filters(db):
     result = tracks_without_local_file(db, pl.id)
     ids = {t.spotify_id for t in result}
     assert ids == {"m"}
+
+
+def test_attach_salva_audio_hash(db, monkeypatch):
+    from app.models import Track
+    from app.services import acquisition
+
+    monkeypatch.setattr(acquisition, "audio_hash", lambda p: "abc123")
+    t = Track(source_type="spotify")
+    db.add(t); db.commit()
+    out = acquisition.attach_local_file(db, t, path="/x/y.mp3", fmt="mp3", bitrate=320)
+    assert out.audio_hash == "abc123"
+    assert out.has_local_file is True
+
+
+def test_attach_hash_fallito_non_blocca(db, monkeypatch):
+    from app.integrations.local_files import LocalFilesError
+    from app.models import Track
+    from app.services import acquisition
+
+    def boom(p):
+        raise LocalFilesError("ffmpeg assente")
+
+    monkeypatch.setattr(acquisition, "audio_hash", boom)
+    t = Track(source_type="spotify")
+    db.add(t); db.commit()
+    out = acquisition.attach_local_file(db, t, path="/x/y.mp3")
+    assert out.has_local_file is True
+    assert out.audio_hash is None
