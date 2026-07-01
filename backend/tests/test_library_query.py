@@ -62,3 +62,23 @@ def test_genre_filter_partial_match(db):
     _seed_varied(db)
     total, rows = list_tracks(db, genre="house")
     assert total == 1 and rows[0].genre == "house"
+
+
+def test_filtro_has_local_file(db):
+    db.add(Track(source_type="spotify", title="Owned", artist="A", has_local_file=True))
+    db.add(Track(source_type="spotify", title="Wish", artist="B", has_local_file=False))
+    db.commit()
+
+    total_owned, owned = list_tracks(db, has_local_file=True)
+    total_wish, wish = list_tracks(db, has_local_file=False)
+    assert total_owned == 1 and owned[0].title == "Owned"
+    assert total_wish == 1 and wish[0].title == "Wish"
+
+
+def test_filtro_source_local_files(db):
+    db.add(Track(source_type="local_files", title="Loc", artist="A"))
+    db.add(Track(source_type="spotify", title="Sp", artist="B"))
+    db.commit()
+
+    total, rows = list_tracks(db, source="local_files")
+    assert total == 1 and rows[0].title == "Loc"

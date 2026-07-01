@@ -37,6 +37,7 @@ def _apply_track_filters(  # noqa: PLR0913
     duration_max: int | None = None,
     has_spotify: bool | None = None,
     has_soundcloud: bool | None = None,
+    has_local_file: bool | None = None,
     incomplete_metadata: bool | None = None,
 ):
     if artist:
@@ -67,6 +68,13 @@ def _apply_track_filters(  # noqa: PLR0913
         stmt = stmt.where(Track.spotify_id.is_not(None) if has_spotify else Track.spotify_id.is_(None))
     if has_soundcloud is not None:
         stmt = stmt.where(Track.soundcloud_id.is_not(None) if has_soundcloud else Track.soundcloud_id.is_(None))
+    if has_local_file is not None:
+        # Possesso disk-first: True = in libreria (file su disco), False = wishlist.
+        stmt = (
+            stmt.where(Track.has_local_file.is_(True))
+            if has_local_file
+            else stmt.where((Track.has_local_file.is_(False)) | (Track.has_local_file.is_(None)))
+        )
     if incomplete_metadata:
         # "dati incompleti" utile al DJ: manca un metadato chiave o una feature di mixing.
         stmt = stmt.where(

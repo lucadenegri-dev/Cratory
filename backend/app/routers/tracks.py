@@ -26,7 +26,7 @@ def get_tracks(  # noqa: PLR0913
     album: str | None = None,
     genre: str | None = None,
     label: str | None = None,
-    source: str | None = Query(default=None, pattern="^(spotify|soundcloud|manual)$"),
+    source: str | None = Query(default=None, pattern="^(spotify|soundcloud|manual|local_files)$"),
     status: str | None = Query(
         default=None,
         pattern="^(imported|enriched|ready_for_set|missing_features|low_confidence)$",
@@ -38,6 +38,7 @@ def get_tracks(  # noqa: PLR0913
     duration_max: int | None = None,
     has_spotify: bool | None = None,
     has_soundcloud: bool | None = None,
+    has_local_file: bool | None = None,
     incomplete_metadata: bool | None = None,
     sort: str | None = Query(
         default=None,
@@ -54,6 +55,7 @@ def get_tracks(  # noqa: PLR0913
         bpm_min=bpm_min, bpm_max=bpm_max, key=key,
         duration_min=duration_min, duration_max=duration_max,
         has_spotify=has_spotify, has_soundcloud=has_soundcloud,
+        has_local_file=has_local_file,
         incomplete_metadata=incomplete_metadata,
     )
     return TrackListOut(total=total, items=[track_out(t) for t in rows])
