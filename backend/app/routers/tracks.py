@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -8,8 +9,16 @@ from app.integrations.getsongbpm import (
     feature_provider_configured,
     get_feature_provider,
 )
+from app.models import Track
 from app.repositories import get_track, library_stats, list_tracks, update_track
-from app.schemas import LibraryIndexJobStatus, LibraryStatsOut, TrackDetailOut, TrackListOut, TrackUpdateIn
+from app.schemas import (
+    LibraryIndexJobStatus,
+    LibraryStatsOut,
+    TrackDetailOut,
+    TrackListOut,
+    TrackLookupOut,
+    TrackUpdateIn,
+)
 from app.serializers import track_detail_out, track_out
 from app.services.camelot import parse_camelot
 from app.services.feature_enrichment import enrich_features
@@ -59,6 +68,42 @@ def get_tracks(  # noqa: PLR0913
         incomplete_metadata=incomplete_metadata,
     )
     return TrackListOut(total=total, items=[track_out(t) for t in rows])
+
+
+@router.get("/tracks/lookup", response_model=TrackLookupOut)
+def lookup_track(
+    db: Session = Depends(get_db),
+    isrc: str | None = None,
+    artist: str | None = None,
+    title: str | None = None,
+):
+    """Lookup read-only per il bridge DjOrganizer: ISRC → fuzzy artist+title.
+
+    Sola lettura: nessuna scrittura, nessun side-effect. Mai 404: `found=false`.
+    """
+    if not isrc and not (artist and title):
+        raise HTTPException(
+            status_code=422,
+            detail="Servono isrc oppure artist+title.",
+        )
+    hit, how, conf = None, None, 0
+    if isrc:
+        hit = db.scalar(select(Track).where(Track.isrc == isrc))
+        if hit:
+            how, conf = "isrc", 100
+    if hit is None and artist and title:
+        hit = db.scalar(select(Track).where(
+            Track.artist.ilike(artist), Track.title.ilike(title)))
+        if hit:
+            how, conf = "fuzzy", 70
+    if hit is None:
+        return TrackLookupOut(found=False)
+    return TrackLookupOut(
+        found=True, match=how, track_id=hit.id,
+        artist=hit.artist, title=hit.title,
+        genre=hit.genre, genre_secondary=hit.genre_secondary,
+        label=hit.label, year=hit.year, confidence=conf,
+    )
 
 
 @router.get("/tracks/{track_id}", response_model=TrackDetailOut)
