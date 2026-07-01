@@ -53,6 +53,22 @@ def _cache_key(track: Track) -> str:
     return f"ta:{t}::{a}"
 
 
+def _lookup_title(track: Track) -> str | None:
+    """Titolo per le query ai provider, NON quello salvato.
+
+    I tag sporchi dei download portano spesso l'artista incorporato nel titolo
+    ("SLV - Dreamscapes" con artist="SLV"): con quella query GetSongBPM risponde
+    400 e Last.fm non trova. Si pulisce solo la chiave di ricerca; il titolo in
+    libreria lo corregge DjOrganizer (unico scrittore dei tag).
+    """
+    title, artist = track.title, track.artist
+    if title and artist:
+        prefix = f"{artist} - ".lower()
+        if title.lower().startswith(prefix) and len(title) > len(prefix):
+            return title[len(prefix):].strip() or title
+    return title
+
+
 # Generi tipicamente ad alta/bassa energia: piccolo aggiustamento alla stima.
 _HIGH_ENERGY_GENRES = (
     "techno", "hardcore", "hardstyle", "drum and bass", "dnb", "trance", "rave",
@@ -204,7 +220,7 @@ def enrich_features(
             cache_hits += 1
         else:
             data = provider.lookup(
-                title=track.title,
+                title=_lookup_title(track),
                 artist=track.artist,
                 isrc=track.isrc,
                 duration_seconds=track.duration_seconds,

@@ -531,3 +531,62 @@ def test_enrichment_fills_energy_proxy(db, seed_tracks):
     tracks = db.query(Track).all()
     assert all(t.bpm == 128.0 for t in tracks)
     assert all(t.energy is not None for t in tracks)  # stimata deterministicamente
+
+
+def test_musicbrainz_si_sospende_dopo_connessioni_troncate(monkeypatch):
+    # MusicBrainz (o un middlebox) tronca le connessioni a meta' run: dopo 2
+    # fallimenti consecutivi il provider si sospende per il resto del run invece
+    # di macinare warning e rallentare la catena (che prosegue con gli altri).
+    import httpx
+
+    from app.integrations import _http
+    from app.integrations.musicbrainz import MusicBrainzProvider
+
+    monkeypatch.setattr(_http.time, "sleep", lambda s: None)  # niente backoff reale
+
+    class DeadHttp:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, *a, **k):
+            self.calls += 1
+            raise httpx.ConnectError("UNEXPECTED_EOF_WHILE_READING")
+
+    http = DeadHttp()
+    p = MusicBrainzProvider("Test/1.0 (x@y.z)", http=http)
+    p._MIN_INTERVAL = 0  # niente throttle nel test
+
+    assert p.lookup(title="A", artist="B") is None
+    calls_before = http.calls
+    assert calls_before > 0
+    assert p.lookup(title="C", artist="D") is None  # se non gia' sospeso, riprova
+    frozen = http.calls
+    assert p.lookup(title="E", artist="F") is None  # sospeso: zero chiamate HTTP
+    assert http.calls == frozen
+
+
+def test_lookup_title_senza_artista_incorporato(db):
+    # Tag sporchi dai download: titolo "Artist - Title". La query ai provider va
+    # fatta col titolo nudo (GetSongBPM risponde 400, Last.fm non trova), senza
+    # toccare il titolo salvato.
+    from app.models import Track
+    from app.services.feature_enrichment import enrich_features
+
+    class Capture:
+        name = "cap"
+
+        def __init__(self):
+            self.titles = []
+
+        def lookup(self, *, title, artist, isrc=None, duration_seconds=None, context=None):
+            self.titles.append(title)
+            return None
+
+    t = Track(source_type="local_files", title="SLV - Dreamscapes", artist="SLV")
+    db.add(t)
+    db.commit()
+    prov = Capture()
+    enrich_features(db, prov, force=True, track_ids=[t.id])
+    assert prov.titles == ["Dreamscapes"]
+    db.refresh(t)
+    assert t.title == "SLV - Dreamscapes"  # il titolo salvato resta intatto

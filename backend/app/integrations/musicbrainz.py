@@ -28,6 +28,10 @@ BASE = "https://musicbrainz.org/ws/2"
 class MusicBrainzProvider(MusicFeatureProvider):
     name = "musicbrainz"
     _MIN_INTERVAL = 1.1  # MusicBrainz: max ~1 richiesta/secondo, altrimenti 503/ban
+    # Connessioni troncate consecutive prima di sospendere il provider per il run:
+    # il gateway MusicBrainz (o un middlebox) droppa a raffica una volta partito —
+    # insistere traccia per traccia produce solo warning e allunga il ban.
+    _BREAKER_AFTER = 2
 
     def __init__(self, user_agent: str, http: httpx.Client | None = None):
         self.user_agent = user_agent
@@ -37,6 +41,8 @@ class MusicBrainzProvider(MusicFeatureProvider):
             timeout=15, headers={"User-Agent": user_agent}, verify=tls12_context(),
         )
         self._last_request = 0.0
+        self._conn_failures = 0
+        self._suspended = False  # per-run: get_feature_provider ricrea il provider
 
     # ---- HTTP -----------------------------------------------------------
 
@@ -46,11 +52,24 @@ class MusicBrainzProvider(MusicFeatureProvider):
         if wait > 0:
             time.sleep(wait)
         self._last_request = time.monotonic()
-        r = get_with_retries(
-            self.http, f"{BASE}{path}",
-            params={**params, "fmt": "json"},
-            error_cls=FeatureProviderError,
-        )
+        try:
+            r = get_with_retries(
+                self.http, f"{BASE}{path}",
+                params={**params, "fmt": "json"},
+                error_cls=FeatureProviderError,
+            )
+        except FeatureProviderError:
+            # get_with_retries alza SOLO per errori di trasporto (SSL/connessione).
+            self._conn_failures += 1
+            if self._conn_failures >= self._BREAKER_AFTER and not self._suspended:
+                self._suspended = True
+                logger.warning(
+                    "MusicBrainz: %d connessioni troncate consecutive — provider "
+                    "sospeso per il resto del run (la catena continua con gli altri).",
+                    self._conn_failures,
+                )
+            raise
+        self._conn_failures = 0
         if r.status_code == 503:
             raise FeatureProviderError("MusicBrainz: rate limit (riprova piu' tardi).")
         if r.status_code >= 400:
@@ -63,6 +82,8 @@ class MusicBrainzProvider(MusicFeatureProvider):
     # ---- MusicFeatureProvider -------------------------------------------
 
     def lookup(self, *, title, artist, isrc=None, duration_seconds=None, context=None):
+        if self._suspended:
+            return None  # breaker scattato: niente altri tentativi (ne' warning) nel run
         rec: dict | None = None
         exact = False
         if isrc:
