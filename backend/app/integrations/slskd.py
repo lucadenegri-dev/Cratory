@@ -37,6 +37,8 @@ class SlskdFile:
     length: int | None
     has_free_slot: bool
     queue_length: int | None
+    # Velocita' di upload dichiarata dall'utente (byte/s): chi serve veloce e' preferibile.
+    upload_speed: int | None = None
 
     @property
     def extension(self) -> str:
@@ -124,6 +126,7 @@ class SlskdClient:
             username = resp.get("username") or ""
             has_slot = bool(resp.get("hasFreeUploadSlot"))
             queue = resp.get("queueLength")
+            speed = resp.get("uploadSpeed")
             for f in resp.get("files") or []:
                 out.append(SlskdFile(
                     username=username,
@@ -133,6 +136,7 @@ class SlskdClient:
                     length=f.get("length"),
                     has_free_slot=has_slot,
                     queue_length=queue,
+                    upload_speed=speed,
                 ))
         return out
 

@@ -38,6 +38,7 @@ def test_search_aggregates_files_from_responses():
                 "username": "bob",
                 "hasFreeUploadSlot": True,
                 "queueLength": 0,
+                "uploadSpeed": 1_500_000,
                 "files": [
                     {"filename": "Bob\\Daft Punk - Da Funk.flac", "size": 40000000,
                      "bitRate": None, "length": 220},
@@ -57,6 +58,7 @@ def test_search_aggregates_files_from_responses():
     assert f.username == "bob"
     assert f.extension == "flac"
     assert f.has_free_slot is True
+    assert f.upload_speed == 1_500_000
     # ha interrogato lo stato della ricerca prima di leggere le risposte
     assert any(call[0] == "GET" and call[1].endswith("/searches/abc") for call in http.calls)
     # la POST di creazione ricerca include il searchText e i parametri per-ricerca

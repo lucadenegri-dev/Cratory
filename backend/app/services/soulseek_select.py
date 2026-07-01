@@ -18,6 +18,24 @@ LOSSY_EXTS = {"mp3", "m4a", "aac", "ogg", "opus", "wma"}
 AUTO_PICK_MIN_CONFIDENCE = 0.7
 _MIN_NAME_SCORE = 0.45
 
+# Token di versione: per un DJ il radio edit al posto dell'extended e' un fallimento
+# silenzioso, quindi si confrontano esplicitamente. "original" e "mix" sono esclusi
+# di proposito: "Original Mix" e' la versione di default (= nessun token).
+_VERSION_TOKENS = {
+    "remix", "extended", "edit", "radio", "live", "instrumental", "acoustic",
+    "dub", "vip", "rework", "bootleg", "mashup", "acapella", "club",
+}
+
+# Pulizia progressiva della query (Soulseek fa match AND sui token: quelli
+# accessori del titolo Spotify escludono file validi nominati diversamente).
+_PARENS_RE = re.compile(r"\s*[\(\[][^\)\]]*[\)\]]")
+_FEAT_RE = re.compile(r"\s+(?:feat\.?|ft\.?|featuring)\s+.*$", re.IGNORECASE)
+_VERSION_SUFFIX_RE = re.compile(
+    r"\s+-\s+[^-]*\b(?:extended|remix|edit|mix|version|radio|live|dub|"
+    r"instrumental|rework|remaster(?:ed)?)\b[^-]*$",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class QualityPreference:
@@ -58,10 +76,18 @@ def _basename_stem(filename: str) -> str:
     return _strip_extension(name)
 
 
+def _version_tokens(text_norm: str) -> set[str]:
+    return set(text_norm.split()) & _VERSION_TOKENS
+
+
 def _name_score(file: SlskdFile, artist: str, title: str) -> float:
     full = _norm(file.filename.replace("\\", "/").replace("/", " "))
     base = _norm(_basename_stem(file.filename))
-    a, t = _norm(artist), _norm(title)
+    a, t_full = _norm(artist), _norm(title)
+    # Similarita' sul NUCLEO del titolo: parentesi/feat/suffissi sono rumore che nei
+    # nomi file non compare quasi mai. Le versioni si confrontano a parte, dal
+    # titolo completo (vivono proprio nelle parentesi).
+    t = _norm(_clean_title(title)) or t_full
     s = 0.0
     if t:
         # Titolo: confronto col nome file (alto segnale) + bonus se contenuto.
@@ -76,7 +102,33 @@ def _name_score(file: SlskdFile, artist: str, title: str) -> float:
             s += 0.15
         else:
             s += SequenceMatcher(None, a, full).ratio() * 0.10
-    return min(s, 1.0)
+    # Versioni esplicite: la versione richiesta va premiata, quella non richiesta
+    # (o mancante quando richiesta) penalizzata — la similarita' generica da sola
+    # non distingue "Song (Radio Edit)" da "Song (Extended Mix)".
+    wanted, got = _version_tokens(t_full), _version_tokens(base)
+    if wanted & got:
+        s += 0.15
+    elif wanted or got:
+        s -= 0.20
+    return max(0.0, min(s, 1.0))
+
+
+def _duration_score(file_length: int | None, expected: int | None) -> float:
+    """Aderenza alla durata attesa: il discriminatore piu' forte tra versioni.
+
+    Ignota (uno dei due None) → 0: Soulseek spesso non riporta la durata e
+    l'ignoto non va mai penalizzato.
+    """
+    if not file_length or not expected:
+        return 0.0
+    delta = abs(file_length - expected)
+    if delta <= 3:
+        return 1.0
+    if delta <= 10:
+        return 0.5
+    if delta <= 20:
+        return 0.0
+    return -1.0
 
 
 def _availability(file: SlskdFile) -> float:
@@ -113,10 +165,12 @@ def _quality_tier(file: SlskdFile, pref: QualityPreference) -> int:
 
 def rank_candidates(files, *, artist: str, title: str,
                     pref: QualityPreference = QualityPreference(),
-                    min_name_score: float = _MIN_NAME_SCORE) -> list[ScoredCandidate]:
+                    min_name_score: float = _MIN_NAME_SCORE,
+                    expected_duration: int | None = None) -> list[ScoredCandidate]:
     """Ordina i candidati. `min_name_score` filtra i match troppo deboli: per una
     ricerca manuale/libera si abbassa (0.0) perche' e' slskd ad aver gia' filtrato
-    per query e l'utente sceglie a vista."""
+    per query e l'utente sceglie a vista. `expected_duration` (secondi, dalla
+    Track) premia la versione con la durata giusta e affossa quella sbagliata."""
     scored: list[ScoredCandidate] = []
     for f in files:
         tier = _quality_tier(f, pref)
@@ -126,8 +180,16 @@ def rank_candidates(files, *, artist: str, title: str,
         if name < min_name_score:
             continue
         avail = _availability(f)
-        score = name * 100 + tier * 12 + avail * 30
-        confidence = round(min(1.0, name * 0.8 + (tier / 3) * 0.2), 3)
+        dur = _duration_score(f.length, expected_duration)
+        # 1 MB/s = contributo pieno; ignota = neutra.
+        spd = min((f.upload_speed or 0) / 1_000_000, 1.0)
+        score = name * 100 + tier * 12 + avail * 30 + dur * 35 + spd * 10
+        confidence = name * 0.8 + (tier / 3) * 0.2
+        if dur >= 1.0:
+            confidence += 0.10  # durata esatta: quasi certamente la versione giusta
+        elif dur < 0:
+            confidence -= 0.25  # durata sbagliata: quasi certamente la versione sbagliata
+        confidence = round(max(0.0, min(1.0, confidence)), 3)
         scored.append(ScoredCandidate(file=f, name_score=round(name, 3),
                                       quality_tier=tier, score=round(score, 2),
                                       confidence=confidence))
@@ -136,8 +198,55 @@ def rank_candidates(files, *, artist: str, title: str,
 
 
 def best_for_auto(files, *, artist: str, title: str,
-                  pref: QualityPreference = QualityPreference()) -> ScoredCandidate | None:
-    ranked = rank_candidates(files, artist=artist, title=title, pref=pref)
+                  pref: QualityPreference = QualityPreference(),
+                  expected_duration: int | None = None) -> ScoredCandidate | None:
+    ranked = rank_candidates(files, artist=artist, title=title, pref=pref,
+                             expected_duration=expected_duration)
     if ranked and ranked[0].confidence >= AUTO_PICK_MIN_CONFIDENCE:
         return ranked[0]
     return None
+
+
+def _clean_title(title: str) -> str:
+    t = _PARENS_RE.sub(" ", title or "")
+    t = _FEAT_RE.sub(" ", t)
+    t = _VERSION_SUFFIX_RE.sub(" ", t)
+    return _SPACE_RE.sub(" ", t).strip()
+
+
+def query_variants(artist: str, title: str) -> list[str]:
+    """Varianti di query in ordine di fedelta': completa → pulita → essenziale.
+
+    La pulizia riguarda SOLO la query (Soulseek fa match AND sui token): il
+    ranking confronta sempre con artista/titolo originali.
+    """
+    variants: list[str] = []
+
+    def add(text: str) -> None:
+        text = _SPACE_RE.sub(" ", text).strip()
+        if text and text not in variants:
+            variants.append(text)
+
+    add(f"{artist} {title}")
+    cleaned = _clean_title(title)
+    add(f"{artist} {cleaned}")
+    stop = _VERSION_TOKENS | {"original", "mix"}
+    core = " ".join(w for w in cleaned.split() if w.lower() not in stop)
+    add(f"{artist} {core}")
+    return variants
+
+
+def search_candidates(client, *, artist: str, title: str,
+                      expected_duration: int | None = None,
+                      pref: QualityPreference = QualityPreference(),
+                      min_name_score: float = _MIN_NAME_SCORE) -> list[ScoredCandidate]:
+    """Cerca su slskd provando le varianti di query in cascata: si ferma alla
+    prima che produce almeno un candidato valido (post-filtro)."""
+    for query in query_variants(artist, title):
+        files = client.search(query, "")
+        ranked = rank_candidates(files, artist=artist, title=title, pref=pref,
+                                 min_name_score=min_name_score,
+                                 expected_duration=expected_duration)
+        if ranked:
+            return ranked
+    return []
