@@ -121,5 +121,21 @@ def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:
         if on_progress is not None:
             on_progress(i, len(files))
 
+    # Riconciliazione: possessi il cui file non esiste piu' (spostato in archive/,
+    # cancellato a mano, inbox ripulita). L'audio_hash resta: se il file ricompare
+    # altrove, il riaggancio e' immediato.
+    owned = db.scalars(select(Track).where(Track.has_local_file.is_(True))).all()
+    for track in owned:
+        if not track.local_path or track.local_path in seen_paths:
+            continue
+        if Path(track.local_path).exists():
+            continue
+        track.has_local_file = False
+        track.local_path = None
+        track.local_format = None
+        track.local_bitrate = None
+        refresh_status(track)
+        report["lost"] += 1
+
     db.commit()
     return report

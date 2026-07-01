@@ -130,3 +130,37 @@ def test_duplicati_stesso_run_primo_vince(db, fake_audio):
     assert report["relinked"] == 0
     t = db.scalar(select(Track).where(Track.audio_hash == "HD"))
     assert t.local_path.endswith("a.mp3")  # scan_folder ordina: il primo file vince
+
+
+def test_riconciliazione_file_sparito(db, fake_audio, tmp_path):
+    """Possesso orfano (file cancellato/spostato fuori) ⇒ torna wishlist, hash conservato."""
+    from app.models import Track
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    sparito = Track(source_type="spotify", title="Gone", artist="A",
+                    has_local_file=True, local_path=str(tmp_path / "non-esiste.mp3"),
+                    local_format="mp3", audio_hash="HGONE")
+    db.add(sparito); db.commit()
+
+    make("resta.mp3", digest="HSTAY", artist="B", title="Stay")
+    report = index_library(db, root=root)
+
+    db.refresh(sparito)
+    assert report["lost"] == 1
+    assert sparito.has_local_file is False and sparito.local_path is None
+    assert sparito.audio_hash == "HGONE"
+
+
+def test_riconciliazione_non_tocca_i_visti(db, fake_audio):
+    from app.models import Track
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    t = Track(source_type="spotify", title="Here", artist="A", audio_hash="H1")
+    db.add(t); db.commit()
+    make("here.mp3", digest="H1")
+    report = index_library(db, root=root)
+
+    db.refresh(t)
+    assert report["lost"] == 0 and t.has_local_file is True
