@@ -61,6 +61,9 @@ def ensure_schema(eng=None) -> None:
             "local_format": "VARCHAR",
             "local_bitrate": "INTEGER",
             "audio_hash": "VARCHAR",
+            # Scansione incrementale (Lotto A)
+            "local_mtime": "FLOAT",
+            "local_size": "INTEGER",
         },
         "setlists": {
             "generated_by": "VARCHAR DEFAULT 'algorithmic'",

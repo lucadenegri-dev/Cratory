@@ -72,11 +72,14 @@ def _fill_identity(track: Track, tags: dict, path: Path) -> None:
 
 def _own(track: Track, *, path: Path, digest: str) -> None:
     quality = read_audio_quality(path)
+    stat = path.stat()
     track.local_path = str(path.resolve())
     track.has_local_file = True
     track.local_format = quality["format"]
     track.local_bitrate = quality["bitrate"]
     track.audio_hash = digest
+    track.local_mtime = stat.st_mtime
+    track.local_size = stat.st_size
 
 
 def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:

@@ -47,6 +47,10 @@ class Track(Base):
     has_local_file: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
     local_format: Mapped[str | None] = mapped_column(String)
     local_bitrate: Mapped[int | None] = mapped_column(Integer)
+    # Stato del file all'ultimo aggancio (per la scansione incrementale:
+    # path+mtime+size invariati => niente ri-hash).
+    local_mtime: Mapped[float | None] = mapped_column(Float)
+    local_size: Mapped[int | None] = mapped_column(Integer)
     # Identità audio (SHA-256 dello stream decodificato, vedi integrations/local_files.audio_hash):
     # stabile a rinomina/retag. Calcolata al download (acquisition) e all'indicizzazione libreria.
     audio_hash: Mapped[str | None] = mapped_column(String, index=True)
