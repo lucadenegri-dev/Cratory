@@ -17,14 +17,17 @@ def test_409_senza_library_root(monkeypatch):
 def test_avvio_e_status(monkeypatch, tmp_path):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
 
     from app.core.config import settings
     from app.db import Base
     from app.services import library_index_job
 
-    # Isola il job dal DB reale di sviluppo: engine SQLite in memoria dedicato,
-    # stesso pattern della fixture `db` in conftest.py.
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
+    # Isola il job dal DB reale di sviluppo: engine SQLite in memoria dedicato.
+    # StaticPool: il job gira nel thread della route (TestClient), serve la
+    # connessione unica condivisa (vedi test_track_lookup.py).
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
+                           poolclass=StaticPool)
     Base.metadata.create_all(engine)
     monkeypatch.setattr(library_index_job, "SessionLocal",
                         sessionmaker(bind=engine, expire_on_commit=False))
