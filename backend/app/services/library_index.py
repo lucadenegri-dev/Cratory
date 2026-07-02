@@ -86,11 +86,25 @@ def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:
     """Indicizza la libreria canonica. Vedi docstring del modulo per la semantica."""
     files = scan_folder(root)
     report = {"scanned": len(files), "matched": 0, "created": 0,
-              "relinked": 0, "duplicates": 0, "lost": 0, "failed": 0, "errors": []}
+              "relinked": 0, "duplicates": 0, "lost": 0, "failed": 0,
+              "unchanged": 0, "errors": []}
     seen_paths: set[str] = set()
     seen_digests: set[str] = set()
 
     for i, path in enumerate(files, start=1):
+        # Incrementale: path noto con mtime+size invariati => niente ri-hash.
+        resolved = str(path.resolve())
+        stat = path.stat()
+        known = db.scalar(select(Track).where(Track.local_path == resolved))
+        if (known is not None and known.local_mtime == stat.st_mtime
+                and known.local_size == stat.st_size):
+            report["unchanged"] += 1
+            seen_paths.add(resolved)
+            if known.audio_hash:
+                seen_digests.add(known.audio_hash)
+            if on_progress is not None:
+                on_progress(i, len(files))
+            continue
         try:
             digest = audio_hash(path)
         except LocalFilesError as exc:
