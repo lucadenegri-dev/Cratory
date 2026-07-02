@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from app.core.config import settings
 from app.db import SessionLocal
+from app.services.app_state import set_state
 from app.services.library_index import index_library
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ def _run_job(root: str) -> None:
 
     try:
         report = index_library(db, root=root, on_progress=on_progress)
+        set_state(db, "last_index_at", datetime.now(timezone.utc).isoformat())
         _state.update(status="done", **{k: report[k] for k in
                       ("scanned", "matched", "created", "relinked", "duplicates", "lost", "failed", "errors")})
         logger.info("Indicizzazione libreria completata: %s", {
