@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Music, Gauge, Sparkles, Compass, ArrowRight, Pencil, Tags, KeyRound,
+  Music, Gauge, Sparkles, Compass, ArrowRight, Pencil, Tags, KeyRound, FolderOpen, RefreshCw,
 } from "lucide-react";
 import {
-  apiGet, getLabels, listImportedPlaylists, fmtDate,
-  type LibraryStats, type LabelStats, type SetlistSummary, type Playlist,
+  apiGet, getLabels, getPipeline, listImportedPlaylists, fmtDate,
+  type LibraryStats, type LabelStats, type SetlistSummary, type Playlist, type PipelineStatus,
 } from "@/lib/api";
+import { PipelineStrip } from "@/components/dashboard/pipeline";
 import { Card, Alert, Progress, Button, Badge } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { Figure } from "@/components/dashboard/figure";
@@ -56,9 +57,23 @@ function QuickAction({ href, title, desc }: { href: string; title: string; desc:
 
 type Reco = { icon: React.ReactNode; tag: string; title: string; desc?: string; href: string; cta: string };
 
-/** "Prossimo passo" suggerito: guida l'utente nel flusso in base allo stato della libreria. */
-function recommend(s: LibraryStats): Reco | null {
+/** "Prossimo passo" suggerito: guida l'utente nel ciclo (anche cross-app) in base allo stato. */
+function recommend(s: LibraryStats, p: PipelineStatus | null): Reco | null {
   if (s.total_tracks === 0) return null; // gestito dall'empty state
+  if (p && (p.inbox_files ?? 0) > 0) {
+    return {
+      icon: <FolderOpen size={22} />, tag: "Prossimo passo", title: "Organizza i download",
+      desc: `${p.inbox_files} file in inbox aspettano il triage e l'organizzazione (DJPlayer → DjOrganizer).`,
+      href: p.organizer_url ?? "/downloads", cta: p.organizer_url ? "Apri DjOrganizer" : "Vedi download",
+    };
+  }
+  if (p?.index_mismatch) {
+    return {
+      icon: <RefreshCw size={22} />, tag: "Prossimo passo", title: "La Libreria è cambiata",
+      desc: "I file su disco non coincidono con le tracce possedute: lancia una scansione dalla striscia qui sopra o dalla Libreria.",
+      href: "/library", cta: "Vai alla Libreria",
+    };
+  }
   const keyPct = s.total_tracks ? s.with_key / s.total_tracks : 0;
   if (keyPct < 0.6) {
     return {
@@ -87,10 +102,12 @@ export default function Dashboard() {
   const [labels, setLabels] = useState<LabelStats[]>([]);
   const [sets, setSets] = useState<SetlistSummary[] | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
+  const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     apiGet<LibraryStats>("/api/stats").then((s) => { setStats(s); setError(null); }).catch((e) => setError(String(e.message ?? e)));
+    getPipeline().then(setPipeline).catch(() => setPipeline(null));
     getLabels().then(setLabels).catch(() => {});
     apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch(() => setSets([]));
     listImportedPlaylists().then(setPlaylists).catch(() => setPlaylists([]));
@@ -98,7 +115,7 @@ export default function Dashboard() {
   useEffect(load, [load]);
 
   const empty = stats != null && stats.total_tracks === 0;
-  const reco = stats ? recommend(stats) : null;
+  const reco = stats ? recommend(stats, pipeline) : null;
 
   const keyRows: MiniBarRow[] = stats
     ? Object.entries(stats.key_distribution)
@@ -140,6 +157,13 @@ export default function Dashboard() {
             </Link>
           </div>
         </Card>
+      )}
+
+      {/* Striscia di orientamento: le sei fasi del ciclo con contatori vivi */}
+      {!empty && pipeline && (
+        <div className="mb-6">
+          <PipelineStrip p={pipeline} onRefresh={load} />
+        </div>
       )}
 
       {stats && !empty && (
