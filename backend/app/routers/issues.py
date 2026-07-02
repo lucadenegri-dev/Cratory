@@ -206,7 +206,7 @@ def ai_suggest_genre(db: Session = Depends(get_db)):
 # suggerite, non sovrascrivono mai il bridge.
 
 _BRIDGE_TYPES = ("missing_required_tag", "missing_metadata", "dirty_genre")
-_BRIDGE_FIELDS = ("artist", "title", "genre", "year", "label")
+_BRIDGE_FIELDS = ("artist", "title", "genre", "year", "label", "album")
 _NOT_CONFIGURED = {"configured": False, "files": 0, "suggested": 0,
                    "unresolved": 0, "mismatches": 0}
 

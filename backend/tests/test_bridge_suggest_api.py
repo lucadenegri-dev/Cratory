@@ -321,3 +321,20 @@ def test_bridge_unreachable_degrades_cleanly(db, monkeypatch):
         # nessuna modifica parziale: il suggerimento resta vuoto
         rows = client.get("/api/issues", params={"type": "missing_metadata"}).json()
         assert rows[0]["suggested_fix_json"] is None
+
+
+def test_bridge_riempie_album_mancante(db, monkeypatch):
+    _configure(db)
+    _file(db, 1, artist="Rataxes", title="Acid Face", genre="Acid Techno",
+          year=2024, label="Bunker", isrc="DEAB12300123")
+    db.add(Issue(file_id=1, type="missing_metadata", field="album",
+                 severity="info", detail="album mancante",
+                 suggested_fix_json=None, status="open"))
+    db.commit()
+    monkeypatch.setattr(cratory_bridge, "lookup", lambda *a, **k: dict(FOUND))
+    with TestClient(app) as client:
+        r = client.post("/api/issues/bridge-suggest").json()
+        assert r["suggested"] == 1
+        rows = client.get("/api/issues", params={"type": "missing_metadata"}).json()
+        assert rows[0]["suggested_fix_json"] == {
+            "field": "album", "action": "retag", "to": "Bunker EP"}
