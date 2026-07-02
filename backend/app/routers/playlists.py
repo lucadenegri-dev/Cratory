@@ -9,9 +9,11 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.models import Playlist, Track
 from app.integrations.getsongbpm import FeatureProviderNotConfigured
 from app.integrations.spotify import (
     SpotifyError,
@@ -34,6 +36,7 @@ from app.schemas import (
     ManualImportRequest,
     PlaylistAddTrackRequest,
     PlaylistAddTrackResponse,
+    PlaylistFromTracksRequest,
     PlaylistImportReport,
     PlaylistImportRequest,
     PlaylistOut,
@@ -177,6 +180,28 @@ def import_manual(req: ManualImportRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail="Nessuna traccia riconosciuta nel testo fornito.")
     _autoenrich(report.get("playlist_id"))
     return PlaylistImportReport(**report)
+
+
+@router.post("/create-from-tracks", response_model=PlaylistOut, status_code=201)
+def create_from_tracks(req: PlaylistFromTracksRequest, db: Session = Depends(get_db)):
+    """Crea una playlist componendo tracce gia' in libreria (disk-first)."""
+    tracks = db.scalars(select(Track).where(Track.id.in_(req.track_ids))).all()
+    by_id = {t.id: t for t in tracks}
+    missing = [i for i in req.track_ids if i not in by_id]
+    if missing:
+        raise HTTPException(status_code=422, detail=f"Tracce inesistenti: {missing}")
+    if not req.name.strip():
+        raise HTTPException(status_code=422, detail="Nome playlist vuoto.")
+    # Stessa costruzione delle playlist manuali (services/manual_import.py).
+    playlist = Playlist(platform="manual", name=req.name.strip(), kind="manual")
+    db.add(playlist)
+    db.flush()  # serve playlist.id
+    for track_id in req.track_ids:  # nell'ordine scelto dall'utente
+        add_track_to_playlist(db, by_id[track_id], playlist)
+    recount_playlist(db, playlist)
+    db.commit()
+    db.refresh(playlist)
+    return playlist
 
 
 @router.get("", response_model=list[PlaylistOut])

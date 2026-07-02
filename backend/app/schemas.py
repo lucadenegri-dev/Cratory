@@ -264,6 +264,12 @@ class AlternativesResponse(BaseModel):
 # --- Playlist import (nuovo flusso) ------------------------------------------
 
 
+class PlaylistFromTracksRequest(BaseModel):
+    """Creazione playlist componendo tracce gia' in libreria (disk-first)."""
+    name: str = Field(min_length=1)
+    track_ids: list[int] = Field(min_length=1)
+
+
 class PlaylistOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
