@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import EnrichmentCache, Track
+from app.services import genre_ai
 from app.services.camelot import parse_camelot
 from app.services.genre_norm import normalize_genre
 from app.services.track_status import refresh_status
@@ -161,6 +162,16 @@ def apply_features(track: Track, data: dict[str, Any], *, source: str) -> set[st
     return applied
 
 
+def maybe_ai_genre(track: Track) -> None:
+    """Anello AI della catena del genere: solo su genere vuoto, mai sovrascrive."""
+    if track.genre:
+        return
+    genre = genre_ai.suggest_genre(track)
+    if genre:
+        track.genre = genre
+        track.genre_source = "ai"
+
+
 def enrich_features(
     db: Session,
     provider: FeatureProvider,
@@ -251,6 +262,9 @@ def enrich_features(
         else:
             not_found += 1
             refresh_status(track)
+
+        # Genere: se i provider non l'hanno dato, prova l'anello AI della catena.
+        maybe_ai_genre(track)
 
         # Energia: stima deterministica se nessun provider l'ha fornita (proxy da BPM/dance/genere).
         if track.energy is None and track.bpm is not None:
