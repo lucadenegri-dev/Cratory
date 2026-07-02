@@ -5,11 +5,11 @@ import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Music4, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
-  RefreshCw, ChevronUp, ChevronDown,
+  RefreshCw, ChevronUp, ChevronDown, Download,
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, fmtDuration,
-  enrichPlaylist, enrichmentJobStatus,
+  enrichPlaylist, enrichmentJobStatus, startPlaylistDownload,
   type Playlist, type Track, type GapAnalysis, type FeatureEnrichJob,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, Spinner, Input, Select, Checkbox, Equalizer } from "@/components/ui";
@@ -43,6 +43,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const pid = Number(id);
   const router = useRouter();
+  const [downloading, setDownloading] = useState(false);
   const jobs = useJobs();
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -206,6 +207,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
 
   const ready = tracks.filter((t) => t.status === "ready_for_set").length;
   const ownedCount = tracks.filter((t) => t.has_local_file).length;
+  const missing = tracks.filter((t) => !t.has_local_file && !t.archived).length;
   const totalDur = tracks.reduce((s, t) => s + (t.duration_seconds ?? 0), 0);
   const cell = "px-3 py-2.5";
   const canSync = playlist.platform === "spotify" && (playlist.kind === "liked" || !!playlist.platform_playlist_id);
@@ -227,11 +229,27 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     );
   };
 
+  const doDownloadMissing = async () => {
+    setDownloading(true);
+    try {
+      await startPlaylistDownload(pid);
+      router.push("/downloads"); // il monitor dei trasferimenti resta là
+    } catch (e) {
+      setError(`Download non avviato: ${String((e as Error).message ?? e)}`);
+      setDownloading(false);
+    }
+  };
+
   const marginalia = (
     <div className="space-y-3">
       <Link href={`/set-builder?playlist=${pid}`} className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> Costruisci un set</Button></Link>
       <Button size="sm" variant="outline" className="w-full" onClick={doEnrich} disabled={enriching || running}>{enriching || running ? <Spinner /> : <Sparkles size={15} />} Arricchisci</Button>
       <Link href={`/playlists/${pid}/expand`} className="block"><Button size="sm" variant="outline" className="w-full"><Compass size={15} /> Scopri musica simile</Button></Link>
+      {missing > 0 && (
+        <Button size="sm" variant="outline" className="w-full" onClick={doDownloadMissing} disabled={downloading}>
+          {downloading ? <Spinner /> : <Download size={15} />} Scarica mancanti ({missing})
+        </Button>
+      )}
       {canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da Spotify</Button>}
       {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> Spotify</Button></a>}
       <Button size="sm" variant="danger" className="w-full" onClick={doDelete} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} Rimuovi</Button>
