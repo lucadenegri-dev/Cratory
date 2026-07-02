@@ -7,15 +7,26 @@ import { cn } from "@/lib/cn";
 import { Clock } from "./clock";
 import { ThemeToggle } from "./theme-toggle";
 
-const NAV = [
-  { href: "/", label: "Dashboard" },
-  { href: "/playlists", label: "Playlist" },
-  { href: "/library", label: "Libreria" },
-  { href: "/labels", label: "Etichette" },
-  { href: "/discovery", label: "Discovery" },
-  { href: "/shazam", label: "Shazam" },
-  { href: "/sets", label: "Set" },
-  { href: "/downloads", label: "Download" },
+/* Il menu racconta la sequenza del flusso: Scopri → Colleziona → Suona. */
+const NAV_GROUPS: { title: string | null; items: { href: string; label: string }[] }[] = [
+  { title: null, items: [{ href: "/", label: "Dashboard" }] },
+  {
+    title: "Scopri",
+    items: [
+      { href: "/playlists", label: "Playlist" },
+      { href: "/discovery", label: "Discovery" },
+      { href: "/shazam", label: "Shazam" },
+      { href: "/labels", label: "Etichette" },
+    ],
+  },
+  {
+    title: "Colleziona",
+    items: [
+      { href: "/library", label: "Libreria" },
+      { href: "/downloads", label: "Download" },
+    ],
+  },
+  { title: "Suona", items: [{ href: "/sets", label: "Set" }] },
 ];
 
 export function IndexNav() {
@@ -33,22 +44,36 @@ export function IndexNav() {
         </div>
       </div>
 
-      <ul className="flex gap-4 overflow-x-auto px-4 pb-3 lg:flex-1 lg:flex-col lg:gap-0 lg:overflow-visible lg:pb-0">
-        {NAV.map(({ href, label }) => (
-          <li key={href} className="shrink-0">
-            <Link
-              href={href}
-              aria-current={isActive(href) ? "page" : undefined}
-              className={cn(
-                "block whitespace-nowrap py-1 text-xs uppercase tracking-wider transition-colors",
-                isActive(href) ? "text-fg-strong underline underline-offset-4" : "text-muted hover:text-fg",
-              )}
-            >
-              {label}
-            </Link>
-          </li>
+      <div className="flex gap-4 overflow-x-auto px-4 pb-3 lg:flex-1 lg:flex-col lg:gap-0 lg:overflow-visible lg:pb-0">
+        {NAV_GROUPS.map((g, gi) => (
+          <div
+            key={g.title ?? "root"}
+            className={cn("flex shrink-0 gap-4 lg:block", gi > 0 && "border-l border-border pl-4 lg:border-l-0 lg:pl-0")}
+          >
+            {g.title && (
+              <div className="hidden lg:mb-1 lg:mt-4 lg:block text-[9px] font-semibold uppercase tracking-[0.14em] text-faint">
+                {g.title}
+              </div>
+            )}
+            <ul className="flex gap-4 lg:flex-col lg:gap-0">
+              {g.items.map(({ href, label }) => (
+                <li key={href} className="shrink-0">
+                  <Link
+                    href={href}
+                    aria-current={isActive(href) ? "page" : undefined}
+                    className={cn(
+                      "block whitespace-nowrap py-1 text-xs uppercase tracking-wider transition-colors",
+                      isActive(href) ? "text-fg-strong underline underline-offset-4" : "text-muted hover:text-fg",
+                    )}
+                  >
+                    {label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
-      </ul>
+      </div>
 
       <div className="hidden lg:block">
         <Link
