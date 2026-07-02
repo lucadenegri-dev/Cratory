@@ -52,6 +52,7 @@ def track_out(track: Track) -> TrackOut:
         local_path=track.local_path,
         local_format=track.local_format,
         local_bitrate=track.local_bitrate,
+        archived=bool(track.archived),
     )
 
 

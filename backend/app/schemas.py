@@ -47,6 +47,7 @@ class TrackOut(BaseModel):
     local_path: str | None = None
     local_format: str | None = None
     local_bitrate: int | None = None
+    archived: bool = False
 
 
 class TrackListOut(BaseModel):
@@ -548,6 +549,7 @@ class PipelineOut(BaseModel):
     total_tracks: int
     missing_key: int
     wishlist: int
+    archived_count: int = 0
     with_local_file: int
     ready_for_set: int
     download_active: bool

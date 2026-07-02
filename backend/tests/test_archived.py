@@ -116,3 +116,53 @@ def test_archivio_incrementale_niente_rehash(db, fake_audio, monkeypatch):
     monkeypatch.setattr(li, "audio_hash", lambda p: calls.append(p) or original(p))
     report = index_library(db, root=lib, archive_root=arc)
     assert calls == [] and report["unchanged"] >= 1
+
+
+def _mk(db, i, **kw):
+    t = Track(source_type="spotify", spotify_id=f"x{i}", platform_track_id=f"x{i}",
+              title=f"T{i}", artist=f"A{i}", **kw)
+    db.add(t); db.commit()
+    return t
+
+
+def test_lista_esclude_scartate_di_default(db):
+    from app.repositories import list_tracks
+    _mk(db, 1)
+    _mk(db, 2, archived=True)
+    total, rows = list_tracks(db)
+    assert total == 1 and rows[0].title == "T1"
+    total, rows = list_tracks(db, archived=True)
+    assert total == 1 and rows[0].title == "T2"
+
+
+def test_coda_download_esclude_scartate(db):
+    from app.models import Playlist, playlist_tracks
+    from app.repositories import tracks_without_local_file
+    p = Playlist(platform="manual", name="P"); db.add(p); db.commit()
+    t1 = _mk(db, 1)
+    t2 = _mk(db, 2, archived=True)
+    db.execute(playlist_tracks.insert().values([
+        {"playlist_id": p.id, "track_id": t1.id},
+        {"playlist_id": p.id, "track_id": t2.id}]))
+    db.commit()
+    assert [t.id for t in tracks_without_local_file(db, p.id)] == [t1.id]
+
+
+def test_pipeline_wishlist_esclude_scartate(db, monkeypatch):
+    from app.core.config import settings
+    from app.services.pipeline import pipeline_snapshot
+    monkeypatch.setattr(settings, "slskd_download_dir", "")
+    monkeypatch.setattr(settings, "library_root", "")
+    monkeypatch.setattr(settings, "organizer_url", "")
+    _mk(db, 1)
+    _mk(db, 2, archived=True)
+    snap = pipeline_snapshot(db)
+    assert snap["wishlist"] == 1
+    assert snap["archived_count"] == 1
+
+
+def test_discovery_non_ripropone_scartate(db):
+    from app.services.discovery import _drop_in_library, _key
+    t = _mk(db, 1, archived=True)
+    candidates = {_key(t.artist, t.title): object()}
+    assert _drop_in_library(candidates, [t]) == []

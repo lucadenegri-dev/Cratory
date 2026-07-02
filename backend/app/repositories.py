@@ -39,6 +39,7 @@ def _apply_track_filters(  # noqa: PLR0913
     has_soundcloud: bool | None = None,
     has_local_file: bool | None = None,
     incomplete_metadata: bool | None = None,
+    archived: bool = False,
 ):
     if artist:
         stmt = stmt.where(Track.artist.ilike(f"%{artist}%"))
@@ -81,6 +82,9 @@ def _apply_track_filters(  # noqa: PLR0913
             Track.title.is_(None) | Track.artist.is_(None)
             | Track.bpm.is_(None) | Track.camelot_key.is_(None)
         )
+    # Scartate: fuori da ogni vista di default; archived=True le mostra da sole.
+    stmt = (stmt.where(Track.archived.is_(True)) if archived
+            else stmt.where(Track.archived.is_not(True)))
     return stmt
 
 
@@ -319,6 +323,7 @@ def tracks_without_local_file(db: Session, playlist_id: int) -> list[Track]:
         .join(playlist_tracks, playlist_tracks.c.track_id == Track.id)
         .where(playlist_tracks.c.playlist_id == playlist_id)
         .where((Track.has_local_file.is_(False)) | (Track.has_local_file.is_(None)))
+        .where(Track.archived.is_not(True))  # le scartate non si riscaricano
         .order_by(Track.artist, Track.title)
     ))
 
