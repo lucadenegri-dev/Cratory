@@ -107,6 +107,7 @@ def lookup_track(
         found=True, match=how, track_id=hit.id,
         artist=hit.artist, title=hit.title,
         genre=hit.genre, genre_secondary=hit.genre_secondary,
+        genre_source=hit.genre_source, album=hit.album,
         label=hit.label, year=hit.year, confidence=conf,
     )
 

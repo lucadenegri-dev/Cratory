@@ -97,6 +97,8 @@ class TrackLookupOut(BaseModel):
     title: str | None = None
     genre: str | None = None
     genre_secondary: str | None = None
+    genre_source: str | None = None  # manual | provider | ai | file_tag
+    album: str | None = None
     label: str | None = None
     year: int | None = None
     confidence: int = 0  # 100 = ISRC, 70 = fuzzy, 0 = non trovata

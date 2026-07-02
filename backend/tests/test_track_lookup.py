@@ -87,3 +87,14 @@ def test_route_ordering_track_detail_intatto(lookup_db, client):
     _seed(lookup_db)
     tid = client.get("/api/tracks").json()["items"][0]["id"]
     assert client.get(f"/api/tracks/{tid}").status_code == 200
+
+
+def test_lookup_espone_genre_source_e_album(lookup_db, client):
+    lookup_db.add(Track(source_type="spotify", spotify_id="g1", platform_track_id="g1",
+                        artist="Rataxes", title="Acid Face", isrc="DEAB12300123",
+                        genre="Acid Techno", genre_source="provider", album="Bunker EP"))
+    lookup_db.commit()
+    r = client.get("/api/tracks/lookup", params={"isrc": "DEAB12300123"}).json()
+    assert r["found"] is True
+    assert r["genre_source"] == "provider"
+    assert r["album"] == "Bunker EP"
