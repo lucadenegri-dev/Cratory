@@ -34,6 +34,7 @@ export interface Track {
   local_path: string | null;
   local_format: string | null;
   local_bitrate: number | null;
+  archived: boolean;
 }
 
 export interface Playlist {
@@ -245,6 +246,7 @@ export interface PipelineStatus {
   total_tracks: number;
   missing_key: number;
   wishlist: number;
+  archived_count: number;
   with_local_file: number;
   ready_for_set: number;
   download_active: boolean;

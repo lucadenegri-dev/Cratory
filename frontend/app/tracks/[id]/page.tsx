@@ -113,6 +113,38 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
         </table>
       </Card>
 
+      <div className="mt-6">
+        <Card>
+          <CardHeader title="Disco" />
+          <table className="w-full text-sm">
+            <tbody>
+              <tr className="border-b border-border/50 last:border-0">
+                <td className="px-4 py-2 text-muted">Stato</td>
+                <td className="px-4 py-2 text-right">
+                  {track.has_local_file ? <Badge tone="success">Posseduta</Badge>
+                    : track.archived ? <Badge tone="warning">Scartata</Badge>
+                    : <Badge tone="neutral">Senza file</Badge>}
+                </td>
+              </tr>
+              {track.local_path && (
+                <tr className="border-b border-border/50 last:border-0">
+                  <td className="px-4 py-2 text-muted">File</td>
+                  <td className="break-all px-4 py-2 text-right font-mono text-xs">{track.local_path}</td>
+                </tr>
+              )}
+              {track.local_format && (
+                <tr className="border-b border-border/50 last:border-0">
+                  <td className="px-4 py-2 text-muted">Formato</td>
+                  <td className="px-4 py-2 tnum text-right">
+                    {track.local_format.toUpperCase()}{track.local_bitrate ? ` · ${track.local_bitrate} kbps` : ""}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </Card>
+      </div>
+
       <h2 className="mb-3 mt-8 flex items-center gap-2 text-lg font-semibold tracking-tight"><ArrowRightLeft size={18} className="text-muted" /> Transizioni</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         <TransitionList title="Cosa mettere prima" items={before} />
