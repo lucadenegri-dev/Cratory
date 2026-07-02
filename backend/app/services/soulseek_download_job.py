@@ -240,6 +240,12 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                         outcome = "failed"
                 title = getattr(track, "title", None)
             _state[outcome] = _state.get(outcome, 0) + 1
+            if track is not None:
+                # Persisti l'esito sulla traccia: la sezione "da sistemare"
+                # deve sopravvivere a job e riavvii.
+                track.last_download_outcome = outcome
+                track.last_download_reason = reason
+                db.commit()
             if outcome == "downloaded" and track_id is not None:
                 downloaded_ids.append(track_id)
             _state["processed"] = i
@@ -280,6 +286,17 @@ def start_playlist_job(playlist_id: int) -> dict:
     finally:
         db.close()
     return _start(items, playlist_id)
+
+
+def start_retry_job() -> dict:
+    """Ritenta l'auto-pick su tutte le tracce con esito da sistemare."""
+    from app.repositories import tracks_download_pending
+    db = SessionLocal()
+    try:
+        items = [(t.id, None) for t in tracks_download_pending(db)]
+    finally:
+        db.close()
+    return _start(items, None)
 
 
 def start_track_job(track_id: int, chosen: SlskdFile) -> dict:

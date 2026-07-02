@@ -1,16 +1,19 @@
 """HTTP per l'acquisizione file via slskd. Nessuna logica di business qui."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.db import SessionLocal
+from app.db import SessionLocal, get_db
 from app.integrations.slskd import (
     SlskdError, SlskdFile, get_slskd_client, slskd_configured,
 )
-from app.repositories import get_track
+from app.repositories import get_track, tracks_download_pending
 from app.services import soulseek_download_job as job
+from app.schemas import TrackOut
+from app.serializers import track_out
 from app.services.soulseek_select import rank_candidates, search_candidates
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
 
@@ -59,6 +62,25 @@ def _slskd_file(c: CandidateOut) -> SlskdFile:
     return SlskdFile(username=c.username, filename=c.filename, size=c.size,
                      bitrate=c.bitrate, length=c.length, has_free_slot=True,
                      queue_length=None)
+
+
+@router.get("/pending", response_model=list[TrackOut])
+def download_pending(db: Session = Depends(get_db)):
+    """Le "da sistemare": wishlist con esito download da rivedere/non trovata/fallita.
+
+    Persistite sulla Track: sopravvivono a job, sessioni e riavvii.
+    """
+    return [track_out(t) for t in tracks_download_pending(db)]
+
+
+@router.post("/retry-pending", status_code=202)
+def retry_pending():
+    """Ritenta l'auto-pick su tutte le "da sistemare". 409 se un job e' in corso."""
+    if not slskd_configured():
+        raise HTTPException(status_code=409, detail="slskd non configurato.")
+    if job.is_running():
+        raise HTTPException(status_code=409, detail="Un download e' gia' in corso.")
+    return job.start_retry_job()
 
 
 @router.get("/status")

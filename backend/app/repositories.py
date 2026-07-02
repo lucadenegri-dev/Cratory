@@ -316,6 +316,17 @@ def tracks_for_playlist(db: Session, playlist_id: int) -> list[Track]:
     ).all())
 
 
+def tracks_download_pending(db: Session) -> list[Track]:
+    """Wishlist con esito download da sistemare (da rivedere/non trovata/fallita)."""
+    return list(db.scalars(
+        select(Track)
+        .where((Track.has_local_file.is_(False)) | (Track.has_local_file.is_(None)))
+        .where(Track.archived.is_not(True))
+        .where(Track.last_download_outcome.in_(["needs_review", "not_found", "failed"]))
+        .order_by(Track.artist, Track.title)
+    ))
+
+
 def tracks_without_local_file(db: Session, playlist_id: int) -> list[Track]:
     """Tracce della playlist senza file locale (coda della sezione Download)."""
     return list(db.scalars(

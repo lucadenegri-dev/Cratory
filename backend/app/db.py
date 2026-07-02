@@ -68,6 +68,9 @@ def ensure_schema(eng=None) -> None:
             "archived": "BOOLEAN DEFAULT 0",
             # Catena del genere (Lotto C)
             "genre_source": "VARCHAR",
+            # Esiti download persistiti (sezione "da sistemare")
+            "last_download_outcome": "VARCHAR",
+            "last_download_reason": "VARCHAR",
         },
         "setlists": {
             "generated_by": "VARCHAR DEFAULT 'algorithmic'",
