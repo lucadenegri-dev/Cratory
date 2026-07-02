@@ -596,6 +596,10 @@ export function addDiscoveredTrackToPlaylist(playlistId: number, c: DiscoveryCan
   });
 }
 
+export function createPlaylistFromTracks(name: string, trackIds: number[]) {
+  return apiPost<Playlist>("/api/playlists/create-from-tracks", { name, track_ids: trackIds });
+}
+
 export function importManualPlaylist(name: string, text: string) {
   return apiPost<PlaylistImportReport>("/api/playlists/import-manual", { name, text });
 }
