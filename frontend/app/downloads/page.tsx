@@ -5,15 +5,22 @@ import { Download as DownloadIcon, Search } from "lucide-react";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, Badge, Button, Card, EmptyState, Input, Progress, Select, Loading } from "@/components/ui";
 import {
+  apiGet,
+  downloadCandidates,
   downloadManual,
   downloadStatus,
+  downloadTrack,
+  fmtDuration,
   listImportedPlaylists,
   searchDownloads,
   startPlaylistDownload,
   type DownloadCandidate,
+  type DownloadItem,
   type DownloadStatus,
   type Playlist,
+  type TrackDetail,
 } from "@/lib/api";
+import { Modal, Spinner } from "@/components/ui";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -41,6 +48,11 @@ export default function DownloadsPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<DownloadCandidate[] | null>(null);
   const [searching, setSearching] = useState(false);
+  // Revisione: candidati per una traccia "da rivedere"/"non trovata"
+  const [review, setReview] = useState<DownloadItem | null>(null);
+  const [candidates, setCandidates] = useState<DownloadCandidate[] | null>(null);
+  const [reviewDuration, setReviewDuration] = useState<number | null>(null);
+  const [picking, setPicking] = useState(false);
   const alive = useRef(true);
 
   const poll = useCallback(() => {
@@ -63,6 +75,38 @@ export default function DownloadsPage() {
       clearInterval(id);
     };
   }, [poll]);
+
+  const openReview = async (it: DownloadItem) => {
+    setReview(it);
+    setCandidates(null);
+    setReviewDuration(null);
+    setError(null);
+    try {
+      // La durata attesa aiuta il ranking dei candidati (bonus/penalita' via backend).
+      const track = await apiGet<TrackDetail>(`/api/tracks/${it.track_id}`);
+      setReviewDuration(track.duration_seconds);
+      setCandidates(await downloadCandidates(
+        track.artist ?? it.artist ?? "", track.title ?? it.title ?? "", track.duration_seconds));
+    } catch (e) {
+      setError(err(e));
+      setCandidates([]);
+    }
+  };
+
+  const pickCandidate = async (c: DownloadCandidate) => {
+    if (!review) return;
+    setPicking(true);
+    setError(null);
+    try {
+      setStatus(await downloadTrack(review.track_id, c));
+      setReview(null);
+    } catch (e) {
+      // 409 tipico: "Un download e' gia' in corso" — riprova a job finito.
+      setError(err(e));
+    } finally {
+      setPicking(false);
+    }
+  };
 
   const start = async () => {
     if (!selected) return;
@@ -193,7 +237,14 @@ export default function DownloadsPage() {
                     {it.artist ?? "Artista sconosciuto"} — {it.title ?? "Senza titolo"}
                     {it.reason && <span className="ml-2 text-xs text-muted">({it.reason})</span>}
                   </span>
-                  <Badge tone={OUTCOME_TONE[it.outcome] ?? "neutral"}>{OUTCOME_LABEL[it.outcome] ?? it.outcome}</Badge>
+                  <span className="flex shrink-0 items-center gap-2">
+                    {it.outcome !== "downloaded" && it.track_id != null && (
+                      <Button size="sm" variant="outline" onClick={() => openReview(it)}>
+                        <Search size={13} /> Scegli file
+                      </Button>
+                    )}
+                    <Badge tone={OUTCOME_TONE[it.outcome] ?? "neutral"}>{OUTCOME_LABEL[it.outcome] ?? it.outcome}</Badge>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -206,6 +257,51 @@ export default function DownloadsPage() {
           </EmptyState>
         )}
       </div>
+
+      <Modal
+        open={review !== null}
+        onClose={() => setReview(null)}
+        title="Scegli il file"
+        size="lg"
+      >
+        {review && (
+          <div className="p-4">
+            <p className="mb-3 text-sm text-muted">
+              {review.artist ?? "?"} — {review.title ?? "?"}
+              {reviewDuration != null && (
+                <span className="ml-2 text-xs text-faint">durata attesa {fmtDuration(reviewDuration)}</span>
+              )}
+            </p>
+            {candidates === null && <Loading label="Cerco i candidati su Soulseek…" />}
+            {candidates?.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted">
+                Nessun candidato in questo momento: riprova più tardi (dipende da chi è online).
+              </p>
+            )}
+            {candidates && candidates.length > 0 && (
+              <ul className="max-h-80 divide-y divide-border overflow-y-auto border border-border">
+                {candidates.map((c, i) => (
+                  <li key={`${c.username}-${i}`} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-mono text-xs">{c.filename.split("\\").pop()}</div>
+                      <div className="mt-0.5 text-xs text-muted">
+                        {(c.format ?? "?").toUpperCase()}
+                        {c.bitrate ? ` · ${c.bitrate} kbps` : ""}
+                        {c.length ? ` · ${fmtDuration(c.length)}` : ""}
+                        {" · "}{c.username}
+                        {" · "}<span className="tnum">{c.confidence}</span>/100
+                      </div>
+                    </div>
+                    <Button size="sm" onClick={() => pickCandidate(c)} disabled={picking}>
+                      {picking ? <Spinner /> : <DownloadIcon size={13} />} Scarica
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </Modal>
     </PageLayout>
   );
 }
