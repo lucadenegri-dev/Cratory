@@ -91,8 +91,13 @@ def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:
     seen_paths: set[str] = set()
     seen_digests: set[str] = set()
 
-    for i, path in enumerate(files, start=1):
-        # Incrementale: path noto con mtime+size invariati => niente ri-hash.
+    # Passata 1 — incrementale: i file invariati (path noto, mtime+size uguali)
+    # reclamano subito path e hash SENZA ri-hash. Va fatta PRIMA della passata
+    # completa: altrimenti una copia nuova dello stesso audio, se scansionata
+    # prima dell'originale invariato, gli ruberebbe la traccia via riaggancio.
+    done = 0
+    pending: list[Path] = []
+    for path in files:
         resolved = str(path.resolve())
         stat = path.stat()
         known = db.scalar(select(Track).where(Track.local_path == resolved))
@@ -102,9 +107,16 @@ def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:
             seen_paths.add(resolved)
             if known.audio_hash:
                 seen_digests.add(known.audio_hash)
+            done += 1
             if on_progress is not None:
-                on_progress(i, len(files))
-            continue
+                on_progress(done, len(files))
+        else:
+            pending.append(path)
+
+    # Passata 2 — flusso completo per i soli file nuovi o modificati.
+    for path in pending:
+        done += 1
+        i = done
         try:
             digest = audio_hash(path)
         except LocalFilesError as exc:
