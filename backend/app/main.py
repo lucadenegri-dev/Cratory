@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings, setup_logging
 from app.db import ensure_schema
+from app.services import library_index_job
 from app.routers import (
     ai,
     discovery,
@@ -30,6 +31,11 @@ logger = logging.getLogger("app.request")
 async def lifespan(app: FastAPI):
     setup_logging()
     ensure_schema()
+    # Disk-first: il disco È la libreria — riallineala a ogni avvio.
+    # Il job è un thread daemon in background: non blocca l'avvio; con la
+    # scansione incrementale il costo dei run ripetuti è minimo.
+    if settings.library_root:
+        library_index_job.start_job()
     yield
 
 
