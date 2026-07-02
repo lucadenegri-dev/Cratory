@@ -44,7 +44,7 @@ def is_running() -> bool:
     return _state["status"] == "running"
 
 
-def _run_job(force: bool, playlist_id: int | None) -> None:
+def _run_job(force: bool, playlist_id: int | None, track_ids: list[int] | None) -> None:
     db = SessionLocal()
 
     def on_progress(processed: int, total: int, phase: str) -> None:
@@ -53,7 +53,8 @@ def _run_job(force: bool, playlist_id: int | None) -> None:
     try:
         provider = get_feature_provider()
         result = enrich_features(
-            db, provider, force=force, playlist_id=playlist_id, on_progress=on_progress
+            db, provider, force=force, playlist_id=playlist_id, track_ids=track_ids,
+            on_progress=on_progress,
         )
         _state.update(status="done", result=result, phase=None)
         logger.info("Job feature enrichment completato: %s", result)
@@ -68,7 +69,8 @@ def _run_job(force: bool, playlist_id: int | None) -> None:
         db.close()
 
 
-def start_job(*, force: bool = False, playlist_id: int | None = None) -> dict:
+def start_job(*, force: bool = False, playlist_id: int | None = None,
+              track_ids: list[int] | None = None) -> dict:
     """Avvia il job in background e ritorna subito lo stato.
 
     Se un job e' gia' in esecuzione, ritorna lo stato corrente senza avviarne un altro.
@@ -88,5 +90,5 @@ def start_job(*, force: bool = False, playlist_id: int | None = None) -> dict:
             error=None, playlist_id=playlist_id,
             started_at=datetime.now(timezone.utc).isoformat(), finished_at=None,
         )
-    threading.Thread(target=_run_job, args=(force, playlist_id), daemon=True).start()
+    threading.Thread(target=_run_job, args=(force, playlist_id, track_ids), daemon=True).start()
     return job_state()

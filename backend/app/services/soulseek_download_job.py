@@ -196,8 +196,20 @@ def _process_item(db, client, download_dir, track,
     return "failed", None
 
 
+def _autoenrich_downloaded(track_ids: list[int]) -> None:
+    """Best-effort: le tracce appena scaricate partono subito in enrichment."""
+    if not track_ids:
+        return
+    try:
+        from app.services import enrichment_job
+        enrichment_job.start_job(track_ids=track_ids)
+    except Exception:  # noqa: BLE001 — il download non deve fallire per l'enrichment
+        logger.exception("Auto-enrichment non avviato per %d tracce scaricate", len(track_ids))
+
+
 def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> None:
     db = SessionLocal()
+    downloaded_ids: list[int] = []
     try:
         client = get_slskd_client()
         download_dir = settings.slskd_download_dir
@@ -228,6 +240,8 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                         outcome = "failed"
                 title = getattr(track, "title", None)
             _state[outcome] = _state.get(outcome, 0) + 1
+            if outcome == "downloaded" and track_id is not None:
+                downloaded_ids.append(track_id)
             _state["processed"] = i
             _state["items"].append({
                 "track_id": track_id,
@@ -237,6 +251,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                 "reason": reason,
             })
         _state.update(status="done")
+        _autoenrich_downloaded(downloaded_ids)
     except Exception as exc:  # noqa: BLE001
         _state.update(status="error", error=str(exc))
         logger.exception("Job di download Soulseek interrotto: %s", exc)

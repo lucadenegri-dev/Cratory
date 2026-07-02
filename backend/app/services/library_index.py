@@ -117,7 +117,7 @@ def index_library(db: Session, *, root: str | Path,
     total = len(files) + len(archive_files)
     report = {"scanned": len(files), "matched": 0, "created": 0,
               "relinked": 0, "duplicates": 0, "lost": 0, "failed": 0,
-              "unchanged": 0, "archived": 0, "errors": []}
+              "unchanged": 0, "archived": 0, "errors": [], "created_ids": []}
     seen_paths: set[str] = set()
     seen_digests: set[str] = set()
 
@@ -182,7 +182,9 @@ def index_library(db: Session, *, root: str | Path,
         if track is None:
             track = Track(source_type=PLATFORM, platform=PLATFORM, platform_track_id=digest)
             db.add(track)
+            db.flush()  # serve l'id per l'auto-enrichment a fine job
             report["created"] += 1
+            report["created_ids"].append(track.id)
         else:
             report["matched"] += 1
             if track.local_path != str(path.resolve()):

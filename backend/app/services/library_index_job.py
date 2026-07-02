@@ -36,6 +36,17 @@ def _spawn(fn) -> None:
     threading.Thread(target=fn, daemon=True).start()
 
 
+def _autoenrich_created(track_ids: list[int]) -> None:
+    """Best-effort: le tracce nuove dell'indice partono subito in enrichment."""
+    if not track_ids:
+        return
+    try:
+        from app.services import enrichment_job
+        enrichment_job.start_job(track_ids=track_ids)
+    except Exception:  # noqa: BLE001 — l'indice non deve fallire per l'enrichment
+        logger.exception("Auto-enrichment non avviato per %d tracce nuove", len(track_ids))
+
+
 def _run_job(root: str) -> None:
     db = SessionLocal()
 
@@ -49,6 +60,7 @@ def _run_job(root: str) -> None:
         set_state(db, "last_index_at", datetime.now(timezone.utc).isoformat())
         _state.update(status="done", **{k: report[k] for k in
                       ("scanned", "matched", "created", "relinked", "duplicates", "lost", "failed", "unchanged", "archived", "errors")})
+        _autoenrich_created(report["created_ids"])
         logger.info("Indicizzazione libreria completata: %s", {
             k: report[k] for k in ("scanned", "matched", "created", "relinked", "lost", "failed", "unchanged", "archived")})
     except Exception as exc:  # noqa: BLE001
