@@ -338,3 +338,53 @@ def test_bridge_riempie_album_mancante(db, monkeypatch):
         rows = client.get("/api/issues", params={"type": "missing_metadata"}).json()
         assert rows[0]["suggested_fix_json"] == {
             "field": "album", "action": "retag", "to": "Bunker EP"}
+
+
+def test_mismatch_genere_da_fonte_affidabile(db, monkeypatch):
+    """Tag genre pulito ma diverso da Cratory (provider): nasce la issue."""
+    _configure(db)
+    _file(db, 1, artist="Rataxes", title="Acid Face", genre="Electro",
+          year=2024, label="Bunker", album="Bunker EP", isrc="DEAB12300123")
+    db.commit()
+    monkeypatch.setattr(cratory_bridge, "lookup", lambda *a, **k: dict(FOUND))
+    with TestClient(app) as client:
+        r = client.post("/api/issues/bridge-suggest").json()
+        assert r["mismatches"] == 1
+        rows = client.get("/api/issues", params={"type": "bridge_mismatch"}).json()
+        assert rows[0]["field"] == "genre"
+        assert rows[0]["suggested_fix_json"]["to"] == "Acid Techno"
+        assert rows[0]["status"] == "open"  # mai auto-accettata
+
+
+def test_niente_mismatch_genere_da_fonte_debole(db, monkeypatch):
+    """genre_source ai/file_tag: il dato remoto non e' meglio del tag locale."""
+    _configure(db)
+    _file(db, 1, artist="Rataxes", title="Acid Face", genre="Electro",
+          year=2024, label="Bunker", album="Bunker EP", isrc="DEAB12300123")
+    db.commit()
+    weak = dict(FOUND, genre_source="file_tag")
+    monkeypatch.setattr(cratory_bridge, "lookup", lambda *a, **k: weak)
+    with TestClient(app) as client:
+        r = client.post("/api/issues/bridge-suggest").json()
+        assert r["mismatches"] == 0
+
+
+def test_niente_mismatch_genere_se_uguale_normalizzato(db, monkeypatch):
+    _configure(db)
+    _file(db, 1, artist="Rataxes", title="Acid Face", genre="acid  techno",
+          year=2024, label="Bunker", album="Bunker EP", isrc="DEAB12300123")
+    db.commit()
+    monkeypatch.setattr(cratory_bridge, "lookup", lambda *a, **k: dict(FOUND))
+    with TestClient(app) as client:
+        assert client.post("/api/issues/bridge-suggest").json()["mismatches"] == 0
+
+
+def test_mismatch_genere_salta_genere_assente(db, monkeypatch):
+    """Genere mancante nel file: ci pensa missing_metadata, non il mismatch."""
+    _configure(db)
+    _file(db, 1, artist="Rataxes", title="Acid Face", genre=None,
+          year=2024, label="Bunker", album="Bunker EP", isrc="DEAB12300123")
+    db.commit()
+    monkeypatch.setattr(cratory_bridge, "lookup", lambda *a, **k: dict(FOUND))
+    with TestClient(app) as client:
+        assert client.post("/api/issues/bridge-suggest").json()["mismatches"] == 0

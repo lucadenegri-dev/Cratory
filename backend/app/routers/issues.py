@@ -287,6 +287,14 @@ def bridge_suggest(db: Session = Depends(get_db)):
                 if c_val and _norm(getattr(f, field)) \
                         and _norm(c_val) != _norm(getattr(f, field)):
                     expected[field] = c_val
+            # Genere: precedenza invertita (spec Lotto C) — il dato Cratory batte
+            # il tag pulito, ma SOLO se la sua fonte e' affidabile (manual/provider);
+            # ai/file_tag non sono meglio del file. Genere assente nel file:
+            # ci pensa missing_metadata, non il mismatch.
+            c_genre = (res.get("genre") or "").strip()
+            if c_genre and res.get("genre_source") in ("manual", "provider") \
+                    and _norm(f.genre) and _norm(c_genre) != _norm(f.genre):
+                expected["genre"] = c_genre
             existing = {i.field: i for i in db.scalars(
                 select(Issue).where(Issue.file_id == f.id,
                                     Issue.type == "bridge_mismatch")).all()}
