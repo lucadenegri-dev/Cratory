@@ -540,6 +540,23 @@ class LibraryStatsOut(BaseModel):
     energy_distribution: list[EnergyBucket] = []
 
 
+class PipelineOut(BaseModel):
+    """Snapshot della pipeline di orientamento (dashboard). Campi disco None = non configurato."""
+    playlists: int
+    total_tracks: int
+    missing_key: int
+    wishlist: int
+    with_local_file: int
+    ready_for_set: int
+    download_active: bool
+    download_pending: int
+    inbox_files: int | None = None
+    files_on_disk: int | None = None
+    index_mismatch: bool | None = None
+    last_index_at: str | None = None
+    organizer_url: str | None = None
+
+
 # --- Shazam: DJ set identificati (Fase 1) ------------------------------------
 
 
