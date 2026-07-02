@@ -21,6 +21,7 @@ from app.schemas import (
 )
 from app.serializers import track_detail_out, track_out
 from app.services.camelot import parse_camelot
+from app.services.genre_norm import normalize_genre
 from app.services.feature_enrichment import enrich_features
 from app.services import library_index_job
 
@@ -135,6 +136,10 @@ def patch_track(track_id: int, payload: TrackUpdateIn, db: Session = Depends(get
         if not parse_camelot(camelot):
             raise HTTPException(status_code=422, detail="Tonalità non valida: usa la notazione Camelot (es. 8A, 12B).")
         data["camelot_key"] = camelot
+    # Il genere corretto a mano e' la massima autorita' della catena.
+    if "genre" in data:
+        data["genre"] = normalize_genre(data.get("genre"))
+        data["genre_source"] = "manual" if data["genre"] else None
     track = update_track(db, track, data)
     return track_detail_out(track)
 

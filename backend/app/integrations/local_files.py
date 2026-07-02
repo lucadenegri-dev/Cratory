@@ -45,7 +45,7 @@ def _id3_text_safe(tags, frame: str) -> str | None:
 def read_tags(path: str | Path) -> dict:
     """Legge i tag principali. Valori assenti -> None. Non solleva su file taggati male."""
     out = {"title": None, "artist": None, "album": None, "year": None,
-           "duration_seconds": None, "isrc": None}
+           "duration_seconds": None, "isrc": None, "genre": None}
     try:
         audio = mutagen.File(str(path))
     except Exception as exc:  # noqa: BLE001 — file corrotto/illeggibile: tag vuoti, non fatale
@@ -65,6 +65,7 @@ def read_tags(path: str | Path) -> dict:
         out["artist"] = _id3_text(tags, "TPE1")
         out["album"] = _id3_text(tags, "TALB")
         out["isrc"] = _id3_text(tags, "TSRC")
+        out["genre"] = _id3_text(tags, "TCON")
         date = _id3_text(tags, "TDRC")
     else:
         # Vorbis comment (flac/ogg/opus): chiavi minuscole; MP4 (m4a): atom "©nam" ecc.
@@ -84,6 +85,7 @@ def read_tags(path: str | Path) -> dict:
         out["artist"] = first("artist", "\xa9ART")
         out["album"] = first("album", "\xa9alb")
         out["isrc"] = first("isrc")  # MP4 tiene l'ISRC in atom freeform: non coperto in v1
+        out["genre"] = first("genre", "\xa9gen")
         date = first("date", "\xa9day")
     if date and str(date)[:4].isdigit():
         out["year"] = int(str(date)[:4])

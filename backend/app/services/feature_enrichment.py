@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.models import EnrichmentCache, Track
 from app.services.camelot import parse_camelot
+from app.services.genre_norm import normalize_genre
 from app.services.track_status import refresh_status
 
 logger = logging.getLogger(__name__)
@@ -123,10 +124,11 @@ def apply_features(track: Track, data: dict[str, Any], *, source: str) -> set[st
             track.camelot_key = camelot
             applied.add("camelot_key")
     if not track.genre and data.get("genre_primary"):
-        track.genre = data["genre_primary"]
+        track.genre = normalize_genre(data["genre_primary"])
+        track.genre_source = "provider"
         applied.add("genre")
     if not track.genre_secondary and data.get("genre_secondary"):
-        track.genre_secondary = data["genre_secondary"]
+        track.genre_secondary = normalize_genre(data["genre_secondary"])
         applied.add("genre_secondary")
     if not track.mood and data.get("mood"):
         track.mood = data["mood"]

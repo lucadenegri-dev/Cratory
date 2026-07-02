@@ -22,6 +22,7 @@ from app.integrations.local_files import (
     read_tags,
 )
 from app.models import Track
+from app.services.genre_norm import normalize_genre
 from app.services.manual_import import parse_line
 from app.services.local_import import scan_folder
 from app.services.track_status import refresh_status
@@ -68,6 +69,12 @@ def _fill_identity(track: Track, tags: dict, path: Path) -> None:
     track.year = track.year or tags.get("year")
     track.duration_seconds = track.duration_seconds or tags.get("duration_seconds")
     track.isrc = track.isrc or tags.get("isrc")
+    # Genere dal tag del file: ultima spiaggia della catena (mai sovrascrivere).
+    if not track.genre and tags.get("genre"):
+        normalized = normalize_genre(tags["genre"])
+        if normalized:
+            track.genre = normalized
+            track.genre_source = "file_tag"
 
 
 def _own(track: Track, *, path: Path, digest: str) -> None:
