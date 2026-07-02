@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Music4, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ExternalLink, Pencil } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
-import { Input, Select, Checkbox, Alert, Badge } from "@/components/ui";
+import { Input, Select, Checkbox, Alert, Badge, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 
@@ -27,7 +27,7 @@ const STATUS_OPTIONS: [string, string][] = [
 type Order = "asc" | "desc";
 
 export default function Library() {
-  const [items, setItems] = useState<Track[]>([]);
+  const [items, setItems] = useState<Track[] | null>(null);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
@@ -141,7 +141,7 @@ export default function Library() {
             </tr>
           </thead>
           <tbody>
-            {items.map((t, i) => (
+            {(items ?? []).map((t, i) => (
               <tr key={t.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
                 <td className={`${cell} tnum text-faint`}>{String(offset + i + 1).padStart(2, "0")}</td>
                 <td className={cell}>
@@ -161,7 +161,7 @@ export default function Library() {
                 <td className={cell}>
                   <Badge tone={STATUS_TONE[t.status] ?? "neutral"}>{STATUS_LABEL[t.status] ?? t.status}</Badge>
                   {t.has_local_file && <Badge tone="success" className="ml-1">FILE</Badge>}
-          {t.archived && <Badge tone="warning" className="ml-1">SCARTATA</Badge>}
+                  {t.archived && <Badge tone="warning" className="ml-1">SCARTATA</Badge>}
                 </td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
@@ -171,7 +171,10 @@ export default function Library() {
                 </td>
               </tr>
             ))}
-            {items.length === 0 && (
+            {items === null && (
+              <tr><td colSpan={10} className="px-3"><Loading /></td></tr>
+            )}
+            {items?.length === 0 && (
               <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia con questi filtri. <Link href="/playlists" className="text-fg underline-offset-4 hover:underline">Importa una playlist</Link> per iniziare.</td></tr>
             )}
           </tbody>
@@ -192,7 +195,7 @@ export default function Library() {
         track={editing}
         open={editing !== null}
         onClose={() => setEditing(null)}
-        onSaved={(t) => setItems((cur) => cur.map((x) => (x.id === t.id ? t : x)))}
+        onSaved={(t) => setItems((cur) => (cur ?? []).map((x) => (x.id === t.id ? t : x)))}
       />
     </PageLayout>
   );

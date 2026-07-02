@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Users, Disc3 } from "lucide-react";
 import { getLabels, backfillLabels, type LabelStats } from "@/lib/api";
-import { Button, Spinner, Alert, EmptyState, Badge, Card, Equalizer } from "@/components/ui";
+import { Button, Spinner, Alert, EmptyState, Badge, Card, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 
@@ -73,7 +73,7 @@ export default function Labels() {
       {msg && <div className="mb-4"><Alert tone={msgTone === "warning" ? "warning" : "info"}>{msg}</Alert></div>}
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
-      {labels === null && !error && <p className="flex items-center gap-2 text-muted"><Equalizer className="h-3.5 w-3.5" /> Caricamento…</p>}
+      {labels === null && !error && <Loading />}
 
       {labels && labels.length === 0 && (
         <EmptyState icon={<Disc3 size={28} />} title="Nessuna etichetta">

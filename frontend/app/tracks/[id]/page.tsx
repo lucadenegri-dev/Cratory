@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { ArrowLeft, ExternalLink, Music4, ArrowRightLeft, Pencil, Sparkles } from "lucide-react";
 import { apiGet, enrichTrack, fmtDuration, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
-import { Card, CardHeader, Badge, Alert, Button, Spinner, Equalizer } from "@/components/ui";
+import { Card, CardHeader, Badge, Alert, Button, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 
@@ -55,7 +55,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
   }, [id]);
 
   if (error) return <PageLayout title="Traccia"><Alert tone="danger">⚠ {error}</Alert></PageLayout>;
-  if (!track) return <PageLayout title="Traccia"><p className="flex items-center gap-2 text-muted"><Equalizer className="h-3.5 w-3.5" /> Caricamento…</p></PageLayout>;
+  if (!track) return <PageLayout title="Traccia"><Loading /></PageLayout>;
 
   const rows: Array<[string, React.ReactNode]> = [
     ["Album", track.album ?? "—"], ["Genere", track.genre ?? "—"], ["Anno", track.year ?? "—"],

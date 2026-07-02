@@ -145,6 +145,16 @@ export function Equalizer({ className }: { className?: string }) {
 /* Alias di compatibilita': i consumer che importano Spinner restano invariati. */
 export const Spinner = Equalizer;
 
+
+/** Trattamento standard del caricamento pagina: Equalizer + testo muted. */
+export function Loading({ label = "Caricamento…" }: { label?: string }) {
+  return (
+    <p className="flex items-center gap-2 py-8 text-sm text-muted" role="status">
+      <Equalizer /> {label}
+    </p>
+  );
+}
+
 /* Pseudo-waveform deterministica (no Math.random: stessa forma su server e client). */
 const WAVE: number[] = Array.from({ length: 112 }, (_, i) => {
   const x = i / 112;

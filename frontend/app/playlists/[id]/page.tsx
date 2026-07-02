@@ -12,7 +12,7 @@ import {
   enrichPlaylist, enrichmentJobStatus, startPlaylistDownload,
   type Playlist, type Track, type GapAnalysis, type FeatureEnrichJob,
 } from "@/lib/api";
-import { Card, Badge, Alert, Button, Spinner, Input, Select, Checkbox, Equalizer } from "@/components/ui";
+import { Card, Badge, Alert, Button, Spinner, Input, Select, Checkbox, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { TrackEditModal } from "@/components/track-edit-modal";
@@ -203,7 +203,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
       <Alert tone="danger">⚠ {error}</Alert>
     </PageLayout>
   );
-  if (!playlist) return <PageLayout title="Playlist"><p className="flex items-center gap-2 text-muted"><Equalizer className="h-3.5 w-3.5" /> Caricamento…</p></PageLayout>;
+  if (!playlist) return <PageLayout title="Playlist"><Loading /></PageLayout>;
 
   const ready = tracks.filter((t) => t.status === "ready_for_set").length;
   const ownedCount = tracks.filter((t) => t.has_local_file).length;

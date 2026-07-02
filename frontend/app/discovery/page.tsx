@@ -18,7 +18,7 @@ import {
   type LabelStats,
   type DownloadCandidate,
 } from "@/lib/api";
-import { Card, Alert, Button, EmptyState, Spinner, Select, Input, Modal } from "@/components/ui";
+import { Card, Alert, Button, EmptyState, Spinner, Select, Input, Modal, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { cn } from "@/lib/cn";
@@ -255,7 +255,7 @@ export default function DiscoveryPage() {
           </div>
 
           {busy && !dig && (
-            <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> DIG in corso…</div>
+            <Loading label="DIG in corso…" />
           )}
           {dig && <LeadResults dig={dig} />}
           {!busy && !dig && (

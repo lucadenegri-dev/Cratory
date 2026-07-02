@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { ArrowLeft, Radar, Music4, ExternalLink, Clock } from "lucide-react";
 import { getDjSet, fmtDuration, fmtDate, type DjSetDetail } from "@/lib/api";
-import { Card, CardHeader, Badge, Alert, Equalizer } from "@/components/ui";
+import { Card, CardHeader, Badge, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 
 export default function DjSetDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,7 +22,7 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
       <Alert tone="danger">⚠ {error}</Alert>
     </PageLayout>
   );
-  if (!set) return <PageLayout title="Identificazione"><p className="flex items-center gap-2 text-muted"><Equalizer className="h-3.5 w-3.5" /> Caricamento…</p></PageLayout>;
+  if (!set) return <PageLayout title="Identificazione"><Loading /></PageLayout>;
 
   const marginalia = (
     <div className="space-y-2 text-xs">

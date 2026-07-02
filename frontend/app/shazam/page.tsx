@@ -7,7 +7,7 @@ import {
   shazamStatus, identifyMix, shazamIdentifyStatus, listDjSets, deleteDjSet, fmtDate,
   type DjSet, type ShazamIdentifyState,
 } from "@/lib/api";
-import { Card, Badge, Alert, Button, EmptyState, Spinner, Input } from "@/components/ui";
+import { Card, Badge, Alert, Button, EmptyState, Spinner, Input, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 
@@ -118,6 +118,8 @@ export default function ShazamPage() {
           </Button>
         </div>
       </Card>
+
+      {sets === null && !error && <Loading />}
 
       {sets && sets.length === 0 && (
         <EmptyState icon={<Radar size={28} />} title="Nessun set identificato">

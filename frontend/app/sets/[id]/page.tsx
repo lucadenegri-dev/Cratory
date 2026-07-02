@@ -11,7 +11,7 @@ import {
   apiGet, apiPost, apiPatch, apiDelete, exportSet, fmtDuration, trackLabel,
   type Setlist, type Alternative, type AlternativeMode, type AlternativesResponse,
 } from "@/lib/api";
-import { Card, CardHeader, Button, Input, Badge, Alert, Modal, Spinner, Equalizer } from "@/components/ui";
+import { Card, CardHeader, Button, Input, Badge, Alert, Modal, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { cn } from "@/lib/cn";
 
@@ -114,7 +114,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
       <Alert tone="danger">⚠ {error}</Alert>
     </PageLayout>
   );
-  if (!setlist) return <PageLayout title="Set"><p className="flex items-center gap-2 text-muted"><Equalizer className="h-3.5 w-3.5" /> Caricamento…</p></PageLayout>;
+  if (!setlist) return <PageLayout title="Set"><Loading /></PageLayout>;
 
   const v = setlist.validation ?? {};
   const n = setlist.tracks.length;

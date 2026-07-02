@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download as DownloadIcon, Search } from "lucide-react";
 import { PageLayout } from "@/components/page-layout";
-import { Alert, Badge, Button, Card, EmptyState, Input, Progress, Select } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Input, Progress, Select, Loading } from "@/components/ui";
 import {
   downloadManual,
   downloadStatus,
@@ -150,7 +150,7 @@ export default function DownloadsPage() {
               <Search size={14} /> Cerca
             </Button>
           </div>
-          {searching && <p className="mt-2 text-sm text-faint">Ricerca su Soulseek…</p>}
+          {searching && <Loading label="Ricerca su Soulseek…" />}
           {results && results.length === 0 && !searching && (
             <p className="mt-2 text-sm text-faint">Nessun risultato per «{query}».</p>
           )}

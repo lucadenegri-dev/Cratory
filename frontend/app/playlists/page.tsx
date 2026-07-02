@@ -12,7 +12,7 @@ import {
   type Playlist,
   type FeatureEnrichJob,
 } from "@/lib/api";
-import { Card, Badge, Alert, Button, EmptyState, Spinner } from "@/components/ui";
+import { Card, Badge, Alert, Button, EmptyState, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 
 function err(e: unknown): string {
@@ -97,6 +97,8 @@ export default function PlaylistsPage() {
       </p>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
+
+      {imported === null && !error && <Loading />}
       {notice && <div className="mb-4"><Alert tone="info">{notice}</Alert></div>}
 
       {job?.status === "done" && job.result && (

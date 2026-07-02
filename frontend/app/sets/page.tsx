@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Sparkles, ListMusic, Clock, ChevronRight } from "lucide-react";
 import { apiGet, fmtDuration, type SetlistSummary } from "@/lib/api";
-import { Card, Badge, Alert, EmptyState, Button } from "@/components/ui";
+import { Card, Badge, Alert, EmptyState, Button, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 
 function fmtDate(iso: string): string {
@@ -31,6 +31,8 @@ export default function SetsPage() {
   return (
     <PageLayout title="Set" meta={sets ? String(sets.length) : undefined} marginaliaTitle="Azioni" marginalia={marginalia}>
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
+
+      {sets === null && !error && <Loading />}
 
       {sets && sets.length === 0 && (
         <EmptyState icon={<ListMusic size={28} />} title="Nessun set salvato">

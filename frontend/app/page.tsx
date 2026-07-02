@@ -10,7 +10,7 @@ import {
   type LibraryStats, type LabelStats, type SetlistSummary, type Playlist, type PipelineStatus,
 } from "@/lib/api";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
-import { Card, Alert, Progress, Button, Badge } from "@/components/ui";
+import { Card, Alert, Progress, Button, Badge, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { Figure } from "@/components/dashboard/figure";
 import { Histogram } from "@/components/dashboard/histogram";
@@ -143,6 +143,8 @@ export default function Dashboard() {
   return (
     <PageLayout>
       {error && <div className="mb-6"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
+
+      {!stats && !error && <Loading />}
 
       {empty && (
         <Card>

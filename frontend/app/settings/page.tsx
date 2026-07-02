@@ -9,7 +9,7 @@ import {
   type ServiceStatus, type SpotifyStatus,
   type FeatureProviderStatus, type FeatureEnrichJob, type LibraryIndexJob,
 } from "@/lib/api";
-import { Button, Alert, Equalizer } from "@/components/ui";
+import { Button, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 
@@ -97,7 +97,7 @@ function SettingsInner() {
             </div>
           );
         })}
-        {!services && !error && <div className="flex items-center gap-2 p-5 text-sm text-muted"><Equalizer className="h-3.5 w-3.5" /> Caricamento…</div>}
+        {!services && !error && <div className="px-5"><Loading /></div>}
       </div>
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Arricchimento</div>
