@@ -8,16 +8,18 @@ import {
   apiGet,
   downloadCandidates,
   downloadManual,
+  downloadPending,
   downloadStatus,
   downloadTrack,
+  retryPending,
   fmtDuration,
   listImportedPlaylists,
   searchDownloads,
   startPlaylistDownload,
   type DownloadCandidate,
-  type DownloadItem,
   type DownloadStatus,
   type Playlist,
+  type Track,
   type TrackDetail,
 } from "@/lib/api";
 import { Modal, Spinner } from "@/components/ui";
@@ -49,7 +51,9 @@ export default function DownloadsPage() {
   const [results, setResults] = useState<DownloadCandidate[] | null>(null);
   const [searching, setSearching] = useState(false);
   // Revisione: candidati per una traccia "da rivedere"/"non trovata"
-  const [review, setReview] = useState<DownloadItem | null>(null);
+  type ReviewTarget = { track_id: number; artist: string | null; title: string | null };
+  const [review, setReview] = useState<ReviewTarget | null>(null);
+  const [pending, setPending] = useState<Track[] | null>(null);
   const [candidates, setCandidates] = useState<DownloadCandidate[] | null>(null);
   const [reviewDuration, setReviewDuration] = useState<number | null>(null);
   const [picking, setPicking] = useState(false);
@@ -62,6 +66,17 @@ export default function DownloadsPage() {
         /* backend offline: ignora */
       });
   }, []);
+
+  const refreshPending = useCallback(() => {
+    downloadPending()
+      .then((rows) => alive.current && setPending(rows))
+      .catch(() => {
+        /* backend offline: ignora */
+      });
+  }, []);
+
+  // Le "da sistemare" cambiano man mano che il job produce esiti.
+  useEffect(() => { refreshPending(); }, [refreshPending, status?.status, status?.processed]);
 
   useEffect(() => {
     alive.current = true;
@@ -76,7 +91,7 @@ export default function DownloadsPage() {
     };
   }, [poll]);
 
-  const openReview = async (it: DownloadItem) => {
+  const openReview = async (it: ReviewTarget) => {
     setReview(it);
     setCandidates(null);
     setReviewDuration(null);
@@ -100,11 +115,21 @@ export default function DownloadsPage() {
     try {
       setStatus(await downloadTrack(review.track_id, c));
       setReview(null);
+      refreshPending();
     } catch (e) {
       // 409 tipico: "Un download e' gia' in corso" — riprova a job finito.
       setError(err(e));
     } finally {
       setPicking(false);
+    }
+  };
+
+  const retryAll = async () => {
+    setError(null);
+    try {
+      setStatus(await retryPending());
+    } catch (e) {
+      setError(err(e));
     }
   };
 
@@ -219,6 +244,40 @@ export default function DownloadsPage() {
         </Card>
 
         {error && <Alert tone="danger">⚠ {error}</Alert>}
+
+        {pending && pending.length > 0 && (
+          <Card className="p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-muted">
+                Da sistemare ({pending.length})
+              </span>
+              <Button size="sm" variant="outline" onClick={retryAll} disabled={running || !available}>
+                <DownloadIcon size={13} /> Riprova tutte ({pending.length})
+              </Button>
+            </div>
+            <ul className="divide-y divide-border text-sm">
+              {pending.map((t) => (
+                <li key={t.id} className="flex items-center justify-between gap-3 py-1.5">
+                  <span className="truncate">
+                    {t.artist ?? "Artista sconosciuto"} — {t.title ?? "Senza titolo"}
+                    {t.last_download_reason && (
+                      <span className="ml-2 text-xs text-muted">({t.last_download_reason})</span>
+                    )}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <Button size="sm" variant="outline"
+                      onClick={() => openReview({ track_id: t.id, artist: t.artist, title: t.title })}>
+                      <Search size={13} /> Scegli file
+                    </Button>
+                    <Badge tone={OUTCOME_TONE[t.last_download_outcome ?? ""] ?? "neutral"}>
+                      {OUTCOME_LABEL[t.last_download_outcome ?? ""] ?? t.last_download_outcome}
+                    </Badge>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
         {status && status.total > 0 && (
           <Card className="p-3">

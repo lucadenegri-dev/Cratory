@@ -35,6 +35,8 @@ export interface Track {
   local_format: string | null;
   local_bitrate: number | null;
   archived: boolean;
+  last_download_outcome: string | null;
+  last_download_reason: string | null;
 }
 
 export interface Playlist {
@@ -764,6 +766,14 @@ export function downloadCandidates(artist: string, title: string, durationSecond
 
 export function startPlaylistDownload(playlistId: number) {
   return apiPost<DownloadStatus>(`/api/downloads/playlist/${playlistId}`);
+}
+
+export function downloadPending() {
+  return apiGet<Track[]>("/api/downloads/pending");
+}
+
+export function retryPending() {
+  return apiPost<DownloadStatus>("/api/downloads/retry-pending");
 }
 
 export function downloadTrack(trackId: number, candidate: DownloadCandidate) {
