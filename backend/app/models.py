@@ -51,6 +51,9 @@ class Track(Base):
     # path+mtime+size invariati => niente ri-hash).
     local_mtime: Mapped[float | None] = mapped_column(Float)
     local_size: Mapped[int | None] = mapped_column(Integer)
+    # Scartata: il file e' finito nell'archivio (PASSED in DJPlayer). Esclusa da
+    # wishlist/discovery/download; il possesso in Libreria la riabilita.
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
     # Identità audio (SHA-256 dello stream decodificato, vedi integrations/local_files.audio_hash):
     # stabile a rinomina/retag. Calcolata al download (acquisition) e all'indicizzazione libreria.
     audio_hash: Mapped[str | None] = mapped_column(String, index=True)

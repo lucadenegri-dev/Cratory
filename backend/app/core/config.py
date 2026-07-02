@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # Libreria canonica su disco (disk-first): radice indicizzata da /api/library/index.
     # Vuoto = indicizzazione disattiva. I file qui dentro SONO la libreria posseduta.
     library_root: str = ""
+    # Archivio delle scartate (PASSED di DJPlayer). Vuoto = riconoscimento disattivo.
+    archive_root: str = ""
     # URL del frontend DjOrganizer per il link "Apri DjOrganizer" in dashboard (opzionale).
     organizer_url: str = ""
 
