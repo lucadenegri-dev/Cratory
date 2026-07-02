@@ -18,7 +18,8 @@ def lookup(base_url: str, isrc: str | None = None, artist: str | None = None,
     Ritorna il body JSON del contratto:
     {"found": bool, "match": "isrc"|"fuzzy"|None, "track_id": int|None,
      "artist": ..., "title": ..., "genre": ..., "genre_secondary": ...,
-     "label": ..., "year": ..., "confidence": 100|70|0}
+     "genre_source": "manual"|"provider"|"ai"|"file_tag"|None,
+     "album": ..., "label": ..., "year": ..., "confidence": 100|70|0}
     Solleva CratoryUnreachable su timeout, errore di rete o status != 2xx.
     Solleva ValueError se mancano sia isrc che artist+title.
     """

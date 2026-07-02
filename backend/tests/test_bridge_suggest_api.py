@@ -7,9 +7,11 @@ from app.services import cratory_bridge
 
 FOUND = {"found": True, "match": "isrc", "track_id": 7, "artist": "Rataxes",
          "title": "Acid Face", "genre": "Acid Techno", "genre_secondary": None,
+         "genre_source": "provider", "album": "Bunker EP",
          "label": "Bunker", "year": 2024, "confidence": 100}
 NOT_FOUND = {"found": False, "match": None, "track_id": None, "artist": None,
-             "title": None, "genre": None, "genre_secondary": None, "label": None,
+             "title": None, "genre": None, "genre_secondary": None,
+             "genre_source": None, "album": None, "label": None,
              "year": None, "confidence": 0}
 EMPTY = {"configured": False, "files": 0, "suggested": 0,
          "unresolved": 0, "mismatches": 0}
