@@ -80,24 +80,48 @@ def _own(track: Track, *, path: Path, digest: str) -> None:
     track.audio_hash = digest
     track.local_mtime = stat.st_mtime
     track.local_size = stat.st_size
+    track.archived = False  # il possesso in Libreria vince sullo scarto
 
 
-def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:
-    """Indicizza la libreria canonica. Vedi docstring del modulo per la semantica."""
+def _discard(track: Track, *, path: Path, digest: str) -> None:
+    """Il file vive nell'archivio: traccia scartata, non posseduta.
+
+    local_path punta al file in archivio (si sa dov'e' finita); mtime/size
+    servono allo skip incrementale anche per l'archivio.
+    """
+    stat = path.stat()
+    track.archived = True
+    track.has_local_file = False
+    track.local_path = str(path.resolve())
+    track.local_format = None
+    track.local_bitrate = None
+    track.audio_hash = digest
+    track.local_mtime = stat.st_mtime
+    track.local_size = stat.st_size
+
+
+def index_library(db: Session, *, root: str | Path,
+                  archive_root: str | Path | None = None, on_progress=None) -> dict:
+    """Indicizza la libreria canonica e (se configurato) l'archivio delle scartate."""
     files = scan_folder(root)
+    archive_files: list[Path] = []
+    if archive_root and Path(archive_root).is_dir():
+        archive_files = scan_folder(archive_root)
+    total = len(files) + len(archive_files)
     report = {"scanned": len(files), "matched": 0, "created": 0,
               "relinked": 0, "duplicates": 0, "lost": 0, "failed": 0,
-              "unchanged": 0, "errors": []}
+              "unchanged": 0, "archived": 0, "errors": []}
     seen_paths: set[str] = set()
     seen_digests: set[str] = set()
 
-    # Passata 1 — incrementale: i file invariati (path noto, mtime+size uguali)
-    # reclamano subito path e hash SENZA ri-hash. Va fatta PRIMA della passata
-    # completa: altrimenti una copia nuova dello stesso audio, se scansionata
-    # prima dell'originale invariato, gli ruberebbe la traccia via riaggancio.
+    # Passata 1 — incrementale (Libreria E archivio): i file invariati (path noto,
+    # mtime+size uguali) reclamano subito path e hash SENZA ri-hash. Va fatta PRIMA
+    # della passata completa: altrimenti una copia nuova dello stesso audio, se
+    # scansionata prima dell'originale invariato, gli ruberebbe la traccia.
     done = 0
-    pending: list[Path] = []
-    for path in files:
+    pending: list[tuple[Path, bool]] = []
+    for path, in_archive in ([(p, False) for p in files]
+                             + [(p, True) for p in archive_files]):
         resolved = str(path.resolve())
         stat = path.stat()
         known = db.scalar(select(Track).where(Track.local_path == resolved))
@@ -109,12 +133,13 @@ def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:
                 seen_digests.add(known.audio_hash)
             done += 1
             if on_progress is not None:
-                on_progress(done, len(files))
+                on_progress(done, total)
         else:
-            pending.append(path)
+            pending.append((path, in_archive))
 
     # Passata 2 — flusso completo per i soli file nuovi o modificati.
-    for path in pending:
+    # La Libreria viene prima dell'archivio: a parita' di audio il possesso vince.
+    for path, in_archive in pending:
         done += 1
         i = done
         try:
@@ -130,11 +155,23 @@ def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:
             report["duplicates"] += 1
             logger.warning("Audio duplicato nello stesso run: %s (digest gia' visto)", path)
             if on_progress is not None:
-                on_progress(i, len(files))
+                on_progress(i, total)
             continue
         seen_digests.add(digest)
         tags = read_tags(path)
         track, how = _find_track(db, digest=digest, tags=tags)
+        if in_archive:
+            # In archivio non si creano tracce nuove: un file mai visto da
+            # Cratory che scarti non e' una wishlist da ricordare.
+            if track is not None:
+                _fill_identity(track, tags, path)
+                _discard(track, path=path, digest=digest)
+                refresh_status(track)
+                report["archived"] += 1
+                seen_paths.add(str(path.resolve()))
+            if on_progress is not None:
+                on_progress(i, total)
+            continue
         if track is None:
             track = Track(source_type=PLATFORM, platform=PLATFORM, platform_track_id=digest)
             db.add(track)
@@ -148,7 +185,7 @@ def index_library(db: Session, *, root: str | Path, on_progress=None) -> dict:
         refresh_status(track)
         seen_paths.add(str(path.resolve()))
         if on_progress is not None:
-            on_progress(i, len(files))
+            on_progress(i, total)
 
     # Anti-unmount (stesso principio dell'import locale): una radice vuota o
     # illeggibile (path sbagliato, disco smontato) non deve azzerare i possessi.

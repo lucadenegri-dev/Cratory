@@ -515,6 +515,7 @@ class LibraryIndexJobStatus(BaseModel):
     relinked: int = 0
     duplicates: int = 0
     unchanged: int = 0
+    archived: int = 0
     lost: int = 0
     failed: int = 0
     errors: list[dict] = []

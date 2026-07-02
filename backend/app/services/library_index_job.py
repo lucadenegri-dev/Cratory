@@ -17,7 +17,7 @@ _state: dict = {
     "status": "idle",  # idle | running | done | error
     "processed": 0, "total": 0,
     "scanned": 0, "matched": 0, "created": 0, "relinked": 0, "duplicates": 0, "lost": 0, "failed": 0,
-    "unchanged": 0,
+    "unchanged": 0, "archived": 0,
     "errors": [], "error": None, "root": None,
     "started_at": None, "finished_at": None,
 }
@@ -43,12 +43,14 @@ def _run_job(root: str) -> None:
         _state.update(processed=processed, total=total)
 
     try:
-        report = index_library(db, root=root, on_progress=on_progress)
+        report = index_library(db, root=root,
+                               archive_root=settings.archive_root or None,
+                               on_progress=on_progress)
         set_state(db, "last_index_at", datetime.now(timezone.utc).isoformat())
         _state.update(status="done", **{k: report[k] for k in
-                      ("scanned", "matched", "created", "relinked", "duplicates", "lost", "failed", "unchanged", "errors")})
+                      ("scanned", "matched", "created", "relinked", "duplicates", "lost", "failed", "unchanged", "archived", "errors")})
         logger.info("Indicizzazione libreria completata: %s", {
-            k: report[k] for k in ("scanned", "matched", "created", "relinked", "lost", "failed", "unchanged")})
+            k: report[k] for k in ("scanned", "matched", "created", "relinked", "lost", "failed", "unchanged", "archived")})
     except Exception as exc:  # noqa: BLE001
         _state.update(status="error", error=str(exc))
         logger.exception("Indicizzazione libreria fallita")
@@ -63,7 +65,7 @@ def start_job() -> dict:
         if _state["status"] == "running":
             return job_state()
         _state.update(status="running", processed=0, total=0, scanned=0, matched=0,
-                      created=0, relinked=0, duplicates=0, lost=0, failed=0, unchanged=0, errors=[], error=None,
+                      created=0, relinked=0, duplicates=0, lost=0, failed=0, unchanged=0, archived=0, errors=[], error=None,
                       root=settings.library_root,
                       started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)
     _spawn(lambda: _run_job(settings.library_root))
