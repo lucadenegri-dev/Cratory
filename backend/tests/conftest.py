@@ -53,3 +53,12 @@ def seed_tracks(db):
         db.commit()
 
     return _seed
+
+
+@pytest.fixture(autouse=True)
+def _no_real_llm(monkeypatch):
+    """I test non parlano MAI con l'API Anthropic vera: la chiave del .env
+    reale renderebbe attivo l'anello AI del genere (lento e a pagamento).
+    I test dell'AI monkeypatchano suggest_genre/il client esplicitamente."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "ai_api_key", "")
