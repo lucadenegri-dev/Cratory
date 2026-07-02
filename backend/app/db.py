@@ -66,6 +66,8 @@ def ensure_schema(eng=None) -> None:
             "local_size": "INTEGER",
             # Scartate (Lotto B)
             "archived": "BOOLEAN DEFAULT 0",
+            # Catena del genere (Lotto C)
+            "genre_source": "VARCHAR",
         },
         "setlists": {
             "generated_by": "VARCHAR DEFAULT 'algorithmic'",

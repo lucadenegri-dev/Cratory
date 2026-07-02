@@ -66,6 +66,8 @@ class Track(Base):
     album_id: Mapped[str | None] = mapped_column(String, index=True)  # id album Spotify (per backfill label)
     genre: Mapped[str | None] = mapped_column(String, index=True)  # genre_primary
     genre_secondary: Mapped[str | None] = mapped_column(String)
+    # Da dove viene il genere: manual | provider | ai | file_tag (catena di fiducia).
+    genre_source: Mapped[str | None] = mapped_column(String)
     year: Mapped[int | None] = mapped_column(Integer)
     release_date: Mapped[date | None] = mapped_column(Date)
     label: Mapped[str | None] = mapped_column(String)

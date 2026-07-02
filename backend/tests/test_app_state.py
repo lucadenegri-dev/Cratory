@@ -35,6 +35,7 @@ def test_job_indicizzazione_persiste_last_index_at(monkeypatch, tmp_path):
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     monkeypatch.setattr(library_index_job, "SessionLocal", factory)
     monkeypatch.setattr(settings, "library_root", str(tmp_path))
+    monkeypatch.setattr(settings, "archive_root", "")
     monkeypatch.setattr(library_index_job, "_spawn", lambda fn: fn())  # sincrono nel test
 
     library_index_job.start_job()

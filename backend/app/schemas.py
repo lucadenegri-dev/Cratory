@@ -24,6 +24,7 @@ class TrackOut(BaseModel):
     album: str | None = None
     genre: str | None = None
     genre_secondary: str | None = None
+    genre_source: str | None = None
     year: int | None = None
     duration_seconds: int | None = None
     bpm: float | None = None

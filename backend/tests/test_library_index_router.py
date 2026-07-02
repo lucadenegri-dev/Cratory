@@ -32,6 +32,7 @@ def test_avvio_e_status(monkeypatch, tmp_path):
     monkeypatch.setattr(library_index_job, "SessionLocal",
                         sessionmaker(bind=engine, expire_on_commit=False))
     monkeypatch.setattr(settings, "library_root", str(tmp_path))
+    monkeypatch.setattr(settings, "archive_root", "")
     # niente thread reale nel test: il job gira sincrono
     monkeypatch.setattr(library_index_job, "_spawn", lambda fn: fn())
     r = client.post("/api/library/index")
