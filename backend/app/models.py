@@ -230,3 +230,14 @@ class DjSetTrack(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     dj_set: Mapped[DjSet] = relationship(back_populates="tracks")
+
+
+class AppState(Base):
+    """Chiave-valore minimale per stato applicativo persistente (es. last_index_at:
+    lo stato del job di indicizzazione vive in memoria e si perde al riavvio)."""
+
+    __tablename__ = "app_state"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
