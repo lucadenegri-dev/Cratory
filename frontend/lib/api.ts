@@ -239,6 +239,27 @@ export function libraryIndexStatus() {
   return apiGet<LibraryIndexJob>("/api/library/index/status");
 }
 
+/** Snapshot della pipeline di orientamento (dashboard). Campi disco null = non configurato. */
+export interface PipelineStatus {
+  playlists: number;
+  total_tracks: number;
+  missing_key: number;
+  wishlist: number;
+  with_local_file: number;
+  ready_for_set: number;
+  download_active: boolean;
+  download_pending: number;
+  inbox_files: number | null;
+  files_on_disk: number | null;
+  index_mismatch: boolean | null;
+  last_index_at: string | null;
+  organizer_url: string | null;
+}
+
+export function getPipeline() {
+  return apiGet<PipelineStatus>("/api/pipeline");
+}
+
 export interface ServiceStatus {
   key: string;
   name: string;
