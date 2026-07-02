@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, ClipboardList, HardDriveDownload, Music2, Eye, Trash2, Calendar, Music4 } from "lucide-react";
+import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, Music4 } from "lucide-react";
 import {
   listImportedPlaylists,
   deletePlaylist,
@@ -80,7 +80,6 @@ export default function PlaylistsPage() {
     <div className="space-y-3">
       <Link href="/playlists/import-spotify" className="block"><Button size="sm" className="w-full"><Download size={15} /> Importa da Spotify</Button></Link>
       <Link href="/playlists/import-manual" className="block"><Button size="sm" variant="outline" className="w-full"><ClipboardList size={15} /> Inserisci manualmente</Button></Link>
-      <Link href="/playlists/import-local" className="block"><Button size="sm" variant="outline" className="w-full"><HardDriveDownload size={15} /> Importa da cartella</Button></Link>
       {imported && imported.length > 0 && (
         <div className="space-y-2 border-t border-border pt-4 text-xs">
           <div className="flex justify-between gap-2"><span className="text-muted">Playlist</span><span className="tnum text-fg">{imported.length}</span></div>
