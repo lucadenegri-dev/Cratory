@@ -184,10 +184,12 @@ export function EqMeter({ value, className }: { value: number | null; className?
       <div className="eqm-wave">
         {WAVE.map((a, i) => {
           const on = !indeterminate && i < lit;
+          // Coda "hot": le barre appena dietro la testina scaldano in danger.
+          const hot = on && i >= lit - 4;
           return (
             <span
               key={i}
-              className={cn("eqm-bar", on ? "eqm-on" : "eqm-off")}
+              className={cn("eqm-bar", on ? (hot ? "eqm-hot" : "eqm-on") : "eqm-off")}
               style={{ height: `${(a * 100).toFixed(1)}%`, animationDelay: on ? `${(-((i * 0.09) % 1.7)).toFixed(2)}s` : undefined }}
             />
           );

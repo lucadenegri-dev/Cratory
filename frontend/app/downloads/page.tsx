@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download as DownloadIcon, Search } from "lucide-react";
 import { PageLayout } from "@/components/page-layout";
-import { Alert, Badge, Button, Card, EmptyState, Input, Progress, Select, Loading } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Input, Select, Loading } from "@/components/ui";
+import { useJobs } from "@/components/jobs-provider";
 import {
   apiGet,
   downloadCandidates,
   downloadManual,
   downloadPending,
-  downloadStatus,
   downloadTrack,
   retryPending,
   fmtDuration,
@@ -17,7 +17,6 @@ import {
   searchDownloads,
   startPlaylistDownload,
   type DownloadCandidate,
-  type DownloadStatus,
   type Playlist,
   type Track,
   type TrackDetail,
@@ -43,9 +42,10 @@ const OUTCOME_LABEL: Record<string, string> = {
 };
 
 export default function DownloadsPage() {
+  // Lo stato del job arriva dal poller globale (JobsProvider): niente polling qui.
+  const { download: status, refresh } = useJobs();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selected, setSelected] = useState<string>("");
-  const [status, setStatus] = useState<DownloadStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<DownloadCandidate[] | null>(null);
@@ -58,14 +58,6 @@ export default function DownloadsPage() {
   const [reviewDuration, setReviewDuration] = useState<number | null>(null);
   const [picking, setPicking] = useState(false);
   const alive = useRef(true);
-
-  const poll = useCallback(() => {
-    downloadStatus()
-      .then((s) => alive.current && setStatus(s))
-      .catch(() => {
-        /* backend offline: ignora */
-      });
-  }, []);
 
   const refreshPending = useCallback(() => {
     downloadPending()
@@ -83,13 +75,10 @@ export default function DownloadsPage() {
     listImportedPlaylists()
       .then((p) => alive.current && setPlaylists(p))
       .catch(() => undefined);
-    poll();
-    const id = setInterval(poll, 2000);
     return () => {
       alive.current = false;
-      clearInterval(id);
     };
-  }, [poll]);
+  }, []);
 
   const openReview = async (it: ReviewTarget) => {
     setReview(it);
@@ -113,7 +102,8 @@ export default function DownloadsPage() {
     setPicking(true);
     setError(null);
     try {
-      setStatus(await downloadTrack(review.track_id, c));
+      await downloadTrack(review.track_id, c);
+      refresh();
       setReview(null);
       refreshPending();
     } catch (e) {
@@ -127,7 +117,8 @@ export default function DownloadsPage() {
   const retryAll = async () => {
     setError(null);
     try {
-      setStatus(await retryPending());
+      await retryPending();
+      refresh();
     } catch (e) {
       setError(err(e));
     }
@@ -137,7 +128,8 @@ export default function DownloadsPage() {
     if (!selected) return;
     setError(null);
     try {
-      setStatus(await startPlaylistDownload(Number(selected)));
+      await startPlaylistDownload(Number(selected));
+      refresh();
     } catch (e) {
       setError(err(e));
     }
@@ -161,7 +153,8 @@ export default function DownloadsPage() {
   const grab = async (c: DownloadCandidate) => {
     setError(null);
     try {
-      setStatus(await downloadManual(c));
+      await downloadManual(c);
+      refresh();
     } catch (e) {
       setError(err(e));
     }
@@ -169,7 +162,6 @@ export default function DownloadsPage() {
 
   const available = status?.available ?? true;
   const running = status?.status === "running";
-  const pct = status && status.total > 0 ? (status.processed / status.total) * 100 : 0;
 
   return (
     <PageLayout title="Download" meta={status?.total || undefined}>
@@ -288,7 +280,6 @@ export default function DownloadsPage() {
               <Badge tone="neutral">{status.not_found} non trovate</Badge>
               <Badge tone="danger">{status.failed} fallite</Badge>
             </div>
-            <Progress value={pct} />
             <ul className="mt-3 divide-y divide-border text-sm">
               {status.items.map((it) => (
                 <li key={it.track_id} className="flex items-center justify-between gap-3 py-1.5">

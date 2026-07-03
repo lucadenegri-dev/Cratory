@@ -213,6 +213,31 @@ def test_durata_coerente_viene_collegata(patch_job):
     db.close()
 
 
+def test_current_label_esposto_durante_la_lavorazione(patch_job):
+    # La barra job del frontend mostra la traccia in lavorazione: lo stato
+    # espone current_label ("Artista — Titolo") mentre si processa, None a riposo.
+    TestSession, fake = patch_job
+    seen = []
+    orig_search = fake.search
+
+    def search_and_capture(artist, title, **kw):
+        seen.append(job.job_state().get("current_label"))
+        return orig_search(artist, title, **kw)
+
+    fake.search = search_and_capture
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="s11", source_type="spotify",
+              title="Da Funk", artist="Daft Punk")
+    db.add(t)
+    db.commit()
+    track_id = t.id
+    db.close()
+
+    job._run([(track_id, None)], None)
+    assert seen == ["Daft Punk — Da Funk"]
+    assert job.job_state()["current_label"] is None
+
+
 def test_slskd_giu_ferma_il_job_con_errore_chiaro(patch_job, monkeypatch):
     # Daemon disconnesso dalla rete Soulseek: inutile macinare N tracce che
     # fallirebbero tutte uguali → il job si ferma con un errore leggibile.

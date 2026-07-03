@@ -42,9 +42,16 @@ _state: dict = {
     "playlist_id": None,
     "items": [],
     "error": None,
+    "current_label": None,
     "started_at": None,
     "finished_at": None,
 }
+
+
+def _track_label(track) -> str:
+    artist = (track.artist or "").strip() or "Artista sconosciuto"
+    title = (track.title or "").strip() or "Senza titolo"
+    return f"{artist} — {title}"
 
 
 def job_state() -> dict:
@@ -218,6 +225,9 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
             track = None
             reason = None
             if track_id is None:  # ricerca manuale: scarica + cataloga in libreria
+                _state["current_label"] = (
+                    Path(chosen.filename.replace("\\", "/")).name if chosen else None
+                )
                 try:
                     outcome = _process_manual(db, client, download_dir, chosen) if chosen else "failed"
                 except SlskdError:
@@ -231,6 +241,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                 if track is None:
                     outcome = "failed"
                 else:
+                    _state["current_label"] = _track_label(track)
                     try:
                         outcome, reason = _process_item(db, client, download_dir, track, chosen)
                     except SlskdError:
@@ -262,6 +273,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
         _state.update(status="error", error=str(exc))
         logger.exception("Job di download Soulseek interrotto: %s", exc)
     finally:
+        _state["current_label"] = None
         _state["finished_at"] = datetime.now(timezone.utc).isoformat()
         db.close()
 
@@ -273,6 +285,7 @@ def _start(items, playlist_id) -> dict:
         _state.update(status="running", processed=0, total=len(items),
                       downloaded=0, needs_review=0, not_found=0, failed=0,
                       playlist_id=playlist_id, items=[], error=None,
+                      current_label=None,
                       started_at=datetime.now(timezone.utc).isoformat(),
                       finished_at=None)
     threading.Thread(target=_run, args=(items, playlist_id), daemon=True).start()

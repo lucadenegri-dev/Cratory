@@ -6,7 +6,7 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-07-02
+**Ultimo aggiornamento:** 2026-07-03
 
 **Nome prodotto:** **Cratory** (rename eseguito il 2026-06-25 su UI, codice, docs e
 icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici legacy
@@ -18,6 +18,27 @@ disco, playlist streaming = lead); Discovery operativo (expand Last.fm + dig Dis
 enrichment multi-provider; Set Builder tecnico/creativo con garanzia "solo posseduti";
 audit leggero (quick win) e rifacimento documentazione fatti; identificazione mix via
 Shazam in integrazione.
+
+## Milestone 2026-07-03 - Barra job unificata (GlobalProgress)
+
+Tutte le operazioni lunghe passano dalla barra DJ in basso; spec approvata in
+`docs/superpowers/specs/2026-07-03-barra-job-unificata-design.md`.
+
+- **JobsProvider poller unico** (2s sui 4 endpoint di stato: enrichment, Shazam,
+  download, library index); espone gli stati raw a `/downloads` e Impostazioni,
+  che non hanno piu' polling propri. Client job con `updateClientJob`
+  (conteggi/dettaglio); DIG ed etichette passano il dettaglio.
+- **UI**: righe impilate (max 3 + "+N"), label + dettaglio ellissato (traccia in
+  corso via nuovo `current_label` sullo stato download, fase per enrichment/Shazam),
+  percentuale grande `.tnum`, riga cliccabile verso la pagina del job, coda "hot"
+  danger sulle barre dietro la testina (`.eqm-hot`), spacer dinamico anti-overlap.
+- **Esito visibile**: alla transizione running→done/error la riga resta 4s con
+  l'esito ("N scaricate · M da sistemare", errori in danger), poi scompare.
+- "Scarica mancanti" dalla playlist non fa piu' redirect: si resta sulla playlist,
+  il progresso vive nella barra.
+- Verifica: 386 test backend verdi (nuovo test TDD per `current_label`), lint/build
+  frontend ok, ciclo di vita barra osservato live su un retry reale (comparsa →
+  dettaglio traccia → 50% → esito 4s → scomparsa).
 
 ## Milestone 2026-07-01/02 - Disk-first (fette 1-4)
 

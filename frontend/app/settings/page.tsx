@@ -5,9 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import {
   apiGet, apiPost, servicesStatus, SPOTIFY_LOGIN_URL,
-  featureEnrichSummary, startLibraryIndex, libraryIndexStatus,
+  featureEnrichSummary, startLibraryIndex,
   type ServiceStatus, type SpotifyStatus,
-  type FeatureProviderStatus, type FeatureEnrichJob, type LibraryIndexJob,
+  type FeatureProviderStatus, type FeatureEnrichJob,
 } from "@/lib/api";
 import { Button, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -110,22 +110,13 @@ function SettingsInner() {
 }
 
 function LibraryIndexCard() {
-  const [libJob, setLibJob] = useState<LibraryIndexJob | null>(null);
+  // Lo stato arriva dal poller globale (JobsProvider): niente polling qui.
+  const { libraryIndex: libJob, refresh } = useJobs();
   const [libError, setLibError] = useState<string | null>(null);
-
-  useEffect(() => {
-    libraryIndexStatus().then(setLibJob).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (libJob?.status !== "running") return;
-    const t = setInterval(() => libraryIndexStatus().then(setLibJob).catch(() => {}), 2000);
-    return () => clearInterval(t);
-  }, [libJob?.status]);
 
   const runIndex = () => {
     setLibError(null);
-    startLibraryIndex().then(setLibJob).catch((e) => setLibError(String(e.message ?? e)));
+    startLibraryIndex().then(() => refresh()).catch((e) => setLibError(String(e.message ?? e)));
   };
 
   const busy = libJob?.status === "running";

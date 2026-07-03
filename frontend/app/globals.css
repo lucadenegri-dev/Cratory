@@ -100,6 +100,8 @@ body {
 .eqm-bar { flex: 1; }
 .eqm-off { background: var(--c-border); }
 .eqm-on { background: linear-gradient(to top, var(--c-fg), color-mix(in oklab, var(--c-danger) 60%, var(--c-fg)) 50%, var(--c-fg-strong)); animation: eqmBreathe 1.7s ease-in-out infinite; }
+/* Coda "hot" dietro la testina: le ultime barre accese scaldano in danger */
+.eqm-hot { background: linear-gradient(to top, var(--c-danger), color-mix(in oklab, var(--c-danger) 70%, var(--c-fg-strong))); animation: eqmBreathe 1.7s ease-in-out infinite; }
 .eqm-ph { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--c-danger); }
 .eqm-scan { position: absolute; top: 0; bottom: 0; left: -14%; width: 64px; background: linear-gradient(to right, transparent, color-mix(in srgb, var(--c-fg) 42%, transparent)); border-right: 2px solid var(--c-danger); animation: eqmScan 1.5s linear infinite; }
 @keyframes eqmScan { from { left: -14%; } to { left: 100%; } }
@@ -109,5 +111,5 @@ body {
   .eq-l1, .eq-l2, .eq-l3, .eq-l5 { animation: none !important; }
   .eq-fill { height: 62% !important; }
   .eqm-scan { animation: none; left: 38%; }
-  .eqm-on { animation: none; transform: none; }
+  .eqm-on, .eqm-hot { animation: none; transform: none; }
 }

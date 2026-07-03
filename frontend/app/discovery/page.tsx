@@ -106,6 +106,7 @@ export default function DiscoveryPage() {
     setError(null);
     setDig(null);
     jobs.startClientJob("dig", "Crate digging");
+    jobs.updateClientJob("dig", { detail: `Discogs · ${value}` });
     try {
       setDig(await discoveryDig(digSeed, value, { adventurousness, tastePlaylistId: tasteRef }));
     } catch (e) {

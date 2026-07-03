@@ -752,6 +752,8 @@ export type DownloadStatus = {
   playlist_id: number | null;
   items: DownloadItem[];
   error: string | null;
+  // Traccia in lavorazione ("Artista — Titolo"), null a riposo.
+  current_label: string | null;
 };
 
 export function downloadStatus() {

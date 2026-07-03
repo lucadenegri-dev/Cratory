@@ -233,9 +233,10 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     setDownloading(true);
     try {
       await startPlaylistDownload(pid);
-      router.push("/downloads"); // il monitor dei trasferimenti resta là
+      jobs.refresh(); // si resta qui: il progresso vive nella barra job in basso
     } catch (e) {
       setError(`Download non avviato: ${String((e as Error).message ?? e)}`);
+    } finally {
       setDownloading(false);
     }
   };

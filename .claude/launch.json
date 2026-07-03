@@ -18,6 +18,14 @@
       "autoPort": false
     },
     {
+      "name": "preview-prod",
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["node_modules/next/dist/bin/next", "start", "-p", "3001"],
+      "cwd": "frontend",
+      "port": 3001,
+      "autoPort": false
+    },
+    {
       "name": "backend",
       "runtimeExecutable": "backend/.venv/bin/python",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--app-dir", "backend"],
