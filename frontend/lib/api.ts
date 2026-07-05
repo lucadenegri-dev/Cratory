@@ -789,3 +789,28 @@ export function searchDownloads(query: string) {
 export function downloadManual(candidate: DownloadCandidate) {
   return apiPost<DownloadStatus>("/api/downloads/manual", { candidate });
 }
+
+/** "Ignora": azzera l'esito download, la traccia esce dall'archivio da sistemare. */
+export function ignoreDownload(trackId: number) {
+  return apiDelete<Track>(`/api/downloads/pending/${trackId}`);
+}
+
+// --- File locali (collegamento manuale) ---------------------------------------
+
+export interface LocalFileHit {
+  path: string;
+  name: string;
+  format: string | null;
+  size: number | null;
+  source: "library" | "downloads";
+}
+
+/** Cerca file audio per nome in LIBRARY_ROOT e nella cartella download slskd. */
+export function searchLocalFiles(q: string) {
+  return apiGet<LocalFileHit[]>("/api/files/search", { q });
+}
+
+/** Collega manualmente un file su disco alla traccia (possesso senza download). */
+export function linkLocalFile(trackId: number, path: string) {
+  return apiPost<TrackDetail>(`/api/tracks/${trackId}/link-file`, { path });
+}
