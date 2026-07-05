@@ -73,6 +73,19 @@ def download_pending(db: Session = Depends(get_db)):
     return [track_out(t) for t in tracks_download_pending(db)]
 
 
+@router.delete("/pending/{track_id}", response_model=TrackOut)
+def ignore_pending(track_id: int, db: Session = Depends(get_db)):
+    """Ignora una "da sistemare": azzera l'esito e la traccia esce dall'archivio."""
+    track = get_track(db, track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Traccia non trovata.")
+    track.last_download_outcome = None
+    track.last_download_reason = None
+    db.commit()
+    db.refresh(track)
+    return track_out(track)
+
+
 @router.post("/retry-pending", status_code=202)
 def retry_pending():
     """Ritenta l'auto-pick su tutte le "da sistemare". 409 se un job e' in corso."""
