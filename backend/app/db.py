@@ -35,6 +35,8 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 def ensure_schema(eng=None) -> None:
     """create_all + ALTER TABLE per colonne aggiunte dopo MVP 1 (niente Alembic: app locale)."""
     eng = eng or engine
+    with eng.begin() as conn:
+        _recover_legacy_tracks_leftover(conn)
     Base.metadata.create_all(eng)
     inspector = inspect(eng)
     # tabella -> {colonna: ddl} per colonne aggiunte dopo la creazione iniziale
@@ -111,57 +113,97 @@ def _table_exists(conn, name: str) -> bool:
     ).first())
 
 
+def _recover_legacy_tracks_leftover(conn) -> None:
+    """Recovery di un rebuild vecchio-stile (RENAME-based) interrotto a meta'.
+
+    Se `_tracks_legacy` esiste ancora, il RENAME di `tracks` era gia' avvenuto (le
+    REFERENCES dei figli puntano gia' a `_tracks_legacy`) ma il copy/drop successivo
+    no. Va eseguita PRIMA di `Base.metadata.create_all`: altrimenti create_all prova
+    a ricreare `tracks` (mancante) e gli indici `ix_tracks_*`, ancora attaccati a
+    `_tracks_legacy` con il vecchio nome, causano "index ... already exists".
+
+    Il RENAME back riscrive di nuovo le REFERENCES dei figli, stavolta a favore
+    (self-healing, stesso meccanismo verificato del RENAME che le rompe).
+    """
+    if not _table_exists(conn, "_tracks_legacy"):
+        return
+    conn.execute(text("DROP TABLE IF EXISTS tracks"))  # eventuale tracks vuota del run interrotto
+    conn.execute(text("ALTER TABLE _tracks_legacy RENAME TO tracks"))
+
+
 def _migrate_drop_legacy(conn) -> None:
     """Ripulisce i DB pre-pivot: rimuove colonne/tabelle Rekordbox e le righe legacy.
 
-    SQLite non supporta ALTER/DROP COLUMN affidabile con indici, quindi `tracks` viene
-    ricostruita dal modello corrente copiando le sole colonne sopravvissute (con
-    `camelot_key` = COALESCE(camelot_key, tonality) per non perdere la key). Le tabelle
-    e le righe dell'era Rekordbox vengono eliminate; i set che restano senza tracce
-    vengono potati.
+    Usa `ALTER TABLE ... DROP COLUMN` nativo (SQLite >= 3.35), come
+    `_migrate_drop_enrichment_cols`, invece del vecchio rebuild RENAME->copy->DROP:
+    con le foreign key attive il RENAME di `tracks` riscrive le clausole REFERENCES
+    di `playlist_tracks`/`setlist_tracks` verso il nome temporaneo, e il DROP della
+    tabella rinominata fallisce con "FOREIGN KEY constraint failed" se le membership
+    hanno righe (verificato su SQLite 3.53). Il DROP COLUMN non rinomina ne' ricrea
+    nulla: le FK dei figli restano intatte per costruzione.
 
-    Robusta agli interrupt: SQLite auto-committa il DDL, quindi la funzione e' scritta
-    per riprendere anche da un rebuild lasciato a meta' (tabella `_tracks_legacy`
-    presente, indici orfani) ed e' idempotente quando non c'e' nulla di legacy.
+    La colonna `camelot_key` va preservata via `UPDATE ... COALESCE` (da `tonality`)
+    PRIMA del drop, perche' il drop e' distruttivo. Le colonne del modello corrente
+    (incl. `camelot_key`) esistono gia' a questo punto: il loop `additions` di
+    `ensure_schema` (ALTER ADD) gira prima di questa funzione.
+
+    Robusta agli interrupt: ogni DROP COLUMN e' atomico, quindi una run successiva
+    droppa solo cio' che resta (idempotente). Il caso di un rebuild vecchio-stile
+    lasciato a meta' (tabella `_tracks_legacy` presente) e' gestito da
+    `_recover_legacy_tracks_leftover`, chiamata da `ensure_schema` PRIMA di
+    `create_all` (altrimenti create_all stesso fallisce sugli indici orfani) e di
+    nuovo qui in modo difensivo.
     """
     from app.models import Track  # import differito: models importa db.Base
 
+    # Difensivo: se qualcuno chiama questa funzione senza passare per ensure_schema
+    # (che fa gia' la recovery prima di create_all), il leftover va comunque sanato.
+    _recover_legacy_tracks_leftover(conn)
+
     cols = [r[1] for r in conn.execute(text("PRAGMA table_info(tracks)")).fetchall()]
-    tracks_is_legacy = bool(cols) and ("rekordbox_track_id" in cols or "play_count" in cols)
-    legacy_leftover = _table_exists(conn, "_tracks_legacy")
-    if not tracks_is_legacy and not legacy_leftover:
+    if not cols:
+        return
+    current_cols = set(Track.__table__.columns.keys())
+    dead = [c for c in cols if c not in current_cols]
+    tracks_is_legacy = "rekordbox_track_id" in cols or "play_count" in cols
+    if not dead and not tracks_is_legacy:
         return
 
-    if tracks_is_legacy:
-        conn.execute(text("DROP TABLE IF EXISTS _tracks_legacy"))
-        conn.execute(text("ALTER TABLE tracks RENAME TO _tracks_legacy"))
+    # Coalesce PRIMA del drop: la colonna morta `tonality` va persa solo dopo
+    # aver salvato il suo valore in `camelot_key` per le righe che non lo hanno.
+    if "tonality" in cols:
+        conn.execute(text("UPDATE tracks SET camelot_key = COALESCE(camelot_key, tonality)"))
 
-    # Gli indici seguono la tabella nel RENAME mantenendo il vecchio nome (ix_tracks_*):
-    # vanno eliminati o la ricreazione di `tracks` fallisce con "index ... already exists".
-    for (idx,) in conn.execute(text(
-        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='_tracks_legacy' AND sql IS NOT NULL"
-    )).fetchall():
-        conn.execute(text(f'DROP INDEX IF EXISTS "{idx}"'))
-
-    conn.execute(text("DROP TABLE IF EXISTS tracks"))  # eventuale tracks vuota di un run interrotto
-    Track.__table__.create(conn)  # schema + indici dal modello corrente
-
-    legacy_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(_tracks_legacy)")).fetchall()]
-    shared = [c for c in Track.__table__.columns.keys() if c in legacy_cols]
-    exprs = [
-        "COALESCE(camelot_key, tonality)" if c == "camelot_key" and "tonality" in legacy_cols else f'"{c}"'
-        for c in shared
-    ]
-    collist = ", ".join(f'"{c}"' for c in shared)
-    conn.execute(text(f"INSERT INTO tracks ({collist}) SELECT {', '.join(exprs)} FROM _tracks_legacy"))
-    conn.execute(text("DROP TABLE _tracks_legacy"))
+    if dead:
+        # SQLite rifiuta il DROP COLUMN su colonne indicizzate: droppa prima gli
+        # indici che le coprono (stesso pattern di _migrate_drop_enrichment_cols).
+        for (idx,) in conn.execute(text(
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='tracks' AND sql IS NOT NULL"
+        )).fetchall():
+            covered = {r[2] for r in conn.execute(text(f'PRAGMA index_info("{idx}")')).fetchall()}
+            if covered & set(dead):
+                conn.execute(text(f'DROP INDEX IF EXISTS "{idx}"'))
+        for col in dead:
+            conn.execute(text(f'ALTER TABLE tracks DROP COLUMN "{col}"'))
 
     for tbl in _LEGACY_TABLES:
         conn.execute(text(f"DROP TABLE IF EXISTS {tbl}"))
 
-    # Righe e set dell'era Rekordbox: elimina le tracce local/rekordbox, poi le voci di
-    # set orfane e i set rimasti senza tracce (i set "veri" su tracce streaming restano).
+    # Righe e set dell'era Rekordbox: con le FK attive le righe figlie (membership
+    # playlist/set) vanno eliminate prima delle tracce che referenziano, altrimenti
+    # il DELETE su `tracks` fallisce con "FOREIGN KEY constraint failed" (nessuna
+    # delle due relazioni ha ON DELETE CASCADE nei modelli). Poi si potano le voci
+    # di set orfane e i set rimasti senza tracce (i set "veri" su tracce streaming
+    # restano).
     legacy_src = ", ".join(f"'{s}'" for s in _LEGACY_SOURCES)
+    conn.execute(text(
+        f"DELETE FROM playlist_tracks WHERE track_id IN "
+        f"(SELECT id FROM tracks WHERE source_type IN ({legacy_src}))"
+    ))
+    conn.execute(text(
+        f"DELETE FROM setlist_tracks WHERE track_id IN "
+        f"(SELECT id FROM tracks WHERE source_type IN ({legacy_src}))"
+    ))
     conn.execute(text(f"DELETE FROM tracks WHERE source_type IN ({legacy_src})"))
     conn.execute(text("DELETE FROM setlist_tracks WHERE track_id NOT IN (SELECT id FROM tracks)"))
     conn.execute(text("DELETE FROM setlists WHERE id NOT IN (SELECT setlist_id FROM setlist_tracks)"))
