@@ -17,5 +17,11 @@ class Settings(BaseSettings):
     duration_max_s: float = 900.0
     fuzzy_dur_tol_s: float = 2.0
 
+    # Provider testuali (enrichment) e fingerprint. Chiavi opzionali: senza
+    # chiave il provider è semplicemente inattivo (degradazione pulita).
+    discogs_token: str | None = None
+    acoustid_api_key: str | None = None
+    musicbrainz_user_agent: str = "DjOrganizer/0.1 (+http://localhost)"
+
 
 settings = Settings()
