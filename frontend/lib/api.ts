@@ -547,6 +547,10 @@ export function playlistGaps(id: number) {
   return apiGet<GapAnalysis>(`/api/playlists/${id}/gaps`);
 }
 
+export function libraryGaps() {
+  return apiGet<GapAnalysis>("/api/playlists/library/gaps");
+}
+
 // --- Discovery (Fase F) -----------------------------------------------------
 
 export function discoveryStatus() {

@@ -279,6 +279,16 @@ def add_discovered_track(playlist_id: int, req: PlaylistAddTrackRequest, db: Ses
     )
 
 
+@router.get("/library/gaps", response_model=GapAnalysisResponse)
+def library_gaps(db: Session = Depends(get_db)):
+    tracks = all_playable_tracks(db)
+    gaps = analyze_gaps(tracks)
+    return GapAnalysisResponse(
+        scope="library", track_count=len(tracks),
+        gaps=[GapOut(**g) for g in gaps],
+    )
+
+
 @router.get("/{playlist_id}/gaps", response_model=GapAnalysisResponse)
 def playlist_gaps(playlist_id: int, db: Session = Depends(get_db)):
     if get_playlist(db, playlist_id) is None:
@@ -287,15 +297,5 @@ def playlist_gaps(playlist_id: int, db: Session = Depends(get_db)):
     gaps = analyze_gaps(tracks)
     return GapAnalysisResponse(
         scope="playlist", track_count=len(tracks),
-        gaps=[GapOut(**g) for g in gaps],
-    )
-
-
-@router.get("/library/gaps", response_model=GapAnalysisResponse)
-def library_gaps(db: Session = Depends(get_db)):
-    tracks = all_playable_tracks(db)
-    gaps = analyze_gaps(tracks)
-    return GapAnalysisResponse(
-        scope="library", track_count=len(tracks),
         gaps=[GapOut(**g) for g in gaps],
     )
