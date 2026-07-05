@@ -171,8 +171,17 @@ class SpotifyWebClient(SpotifyClient):
                 time.sleep(wait)
                 continue
             if r.status_code == 401 and attempt == 0:
-                # token revocato/scaduto lato server: forza refresh
-                self.db.query(SpotifyToken).filter_by(kind="user" if user else "client").delete()
+                # token scaduto/revocato lato server: azzera solo l'access
+                # token, cosi' _access_token imbocca il ramo refresh (kind
+                # 'user' ha un refresh_token da preservare). Per kind='client'
+                # (client credentials, nessun refresh possibile) la riga va
+                # comunque ricreata da zero.
+                kind = "user" if user else "client"
+                token = self.db.query(SpotifyToken).filter_by(kind=kind).one_or_none()
+                if user and token is not None and token.refresh_token:
+                    token.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+                else:
+                    self.db.query(SpotifyToken).filter_by(kind=kind).delete()
                 self.db.commit()
                 continue
             if r.status_code >= 400:
