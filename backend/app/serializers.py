@@ -28,15 +28,11 @@ def track_out(track: Track) -> TrackOut:
         artist=track.artist,
         album=track.album,
         genre=track.genre,
-        genre_secondary=track.genre_secondary,
         year=track.year,
         duration_seconds=track.duration_seconds,
         bpm=track.bpm,
         camelot_key=track.camelot_key,
-        mood=track.mood,
         energy=track.energy,
-        danceability=track.danceability,
-        vocalness=track.vocalness,
         label=track.label,
         status=track.status or "imported",
         url=track.url,
@@ -45,9 +41,6 @@ def track_out(track: Track) -> TrackOut:
         added_at=track.added_at,
         spotify_url=_spotify_url(track),
         album_art_url=track.album_art_url,
-        enriched=track.enriched_at is not None,
-        enrichment_source=track.enrichment_source,
-        enrichment_confidence=track.enrichment_confidence,
         has_local_file=bool(track.has_local_file),
         local_path=track.local_path,
         local_format=track.local_format,
@@ -55,7 +48,6 @@ def track_out(track: Track) -> TrackOut:
         archived=bool(track.archived),
         last_download_outcome=track.last_download_outcome,
         last_download_reason=track.last_download_reason,
-        genre_source=track.genre_source,
     )
 
 

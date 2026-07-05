@@ -115,8 +115,8 @@ def get_track(db: Session, track_id: int) -> Track | None:
     )
 
 
-# Campi feature musicali: se l'utente ne modifica uno a mano, la fonte diventa "manual".
-_MANUAL_FEATURE_FIELDS = {"bpm", "camelot_key", "mood", "energy", "danceability", "vocalness", "label"}
+# Campi feature musicali modificabili a mano (bpm/key/label): energy resta derivato.
+_MANUAL_FEATURE_FIELDS = {"bpm", "camelot_key", "label"}
 
 
 def update_track(db: Session, track: Track, data: dict) -> Track:
@@ -124,23 +124,14 @@ def update_track(db: Session, track: Track, data: dict) -> Track:
 
     `data` contiene solo i campi forniti (PATCH): le stringhe vuote diventano None
     (azzeramento), gli altri valori sovrascrivono anche dati gia' presenti — la
-    modifica manuale ha sempre la precedenza sull'enrichment. Aggiorna lo stato.
+    modifica manuale ha sempre la precedenza. Aggiorna lo stato.
     """
-    from datetime import datetime, timezone
-
     from app.services.track_status import refresh_status
 
-    touched_feature = False
     for field, value in data.items():
         if isinstance(value, str):
             value = value.strip() or None
         setattr(track, field, value)
-        if field in _MANUAL_FEATURE_FIELDS:
-            touched_feature = True
-    if touched_feature:
-        track.enrichment_source = "manual"
-        track.enrichment_confidence = 100  # inserito dall'utente: massima fiducia
-        track.enriched_at = datetime.now(timezone.utc)
     refresh_status(track)
     db.commit()
     db.refresh(track)
@@ -223,9 +214,7 @@ def library_stats(db: Session) -> dict:
     def count_where(*conds) -> int:
         return db.scalar(select(func.count()).select_from(Track).where(*conds)) or 0
 
-    with_features = count_where(
-        ((Track.mood.is_not(None)) & (Track.mood != "")) | (Track.energy.is_not(None))
-    )
+    with_features = count_where(Track.energy.is_not(None))
     ready_for_set = count_where(Track.status == "ready_for_set")
     with_local_file = count_where(Track.has_local_file.is_(True))
     missing_metadata = count_where(

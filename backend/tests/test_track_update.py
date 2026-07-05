@@ -1,7 +1,7 @@
 """Modifica manuale dei valori di una traccia (PATCH /api/tracks/{id}).
 
-L'utente puo' inserire/correggere a mano BPM, key, mood, energia... e quei valori
-hanno la precedenza sull'enrichment automatico. Test diretti su repository + router
+L'utente puo' inserire/correggere a mano BPM, key, energia... e quei valori
+sovrascrivono sempre i dati gia' presenti. Test diretti su repository + router
 (niente TestClient: stesso stile degli altri test del progetto).
 """
 
@@ -21,22 +21,19 @@ def _track(db, **kw) -> Track:
     return t
 
 
-def test_update_sets_features_and_marks_manual(db):
+def test_update_sets_features(db):
     t = _track(db, status="imported")
     update_track(db, t, {"bpm": 128.0, "camelot_key": "8A", "energy": 70})
     assert t.bpm == 128.0
     assert t.camelot_key == "8A"
     assert t.energy == 70
-    assert t.enrichment_source == "manual"
-    assert t.enrichment_confidence == 100
     assert t.status == "ready_for_set"  # bpm + key presenti
 
 
-def test_manual_overrides_existing_enrichment(db):
-    t = _track(db, bpm=120.0, camelot_key="5A", enrichment_source="getsongbpm", enrichment_confidence=60)
+def test_manual_overrides_existing_value(db):
+    t = _track(db, bpm=120.0, camelot_key="5A")
     update_track(db, t, {"bpm": 124.0})
-    assert t.bpm == 124.0  # la modifica manuale sovrascrive il dato enriched
-    assert t.enrichment_source == "manual"
+    assert t.bpm == 124.0  # la modifica manuale sovrascrive il dato precedente
 
 
 def test_empty_string_clears_field(db):
@@ -45,11 +42,11 @@ def test_empty_string_clears_field(db):
     assert t.genre is None
 
 
-def test_editing_only_metadata_does_not_touch_enrichment_source(db):
-    t = _track(db, enrichment_source="lastfm", enrichment_confidence=45)
+def test_editing_only_metadata_leaves_features_untouched(db):
+    t = _track(db, bpm=120.0)
     update_track(db, t, {"title": "Nuovo titolo"})
     assert t.title == "Nuovo titolo"
-    assert t.enrichment_source == "lastfm"  # non e' un campo feature
+    assert t.bpm == 120.0  # non e' stato toccato
 
 
 def test_patch_route_rejects_invalid_camelot(db):

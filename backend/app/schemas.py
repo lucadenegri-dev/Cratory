@@ -23,16 +23,11 @@ class TrackOut(BaseModel):
     artist: str | None = None
     album: str | None = None
     genre: str | None = None
-    genre_secondary: str | None = None
-    genre_source: str | None = None
     year: int | None = None
     duration_seconds: int | None = None
     bpm: float | None = None
     camelot_key: str | None = None
-    mood: str | None = None
     energy: int | None = None
-    danceability: int | None = None
-    vocalness: int | None = None
     label: str | None = None
     status: str = "imported"
     url: str | None = None
@@ -41,9 +36,6 @@ class TrackOut(BaseModel):
     added_at: datetime | None = None
     spotify_url: str | None = None
     album_art_url: str | None = None
-    enriched: bool = False
-    enrichment_source: str | None = None
-    enrichment_confidence: int | None = None
     has_local_file: bool = False
     local_path: str | None = None
     local_format: str | None = None
@@ -67,8 +59,7 @@ class TrackUpdateIn(BaseModel):
 
     Solo i campi presenti nel payload vengono toccati (PATCH parziale): un valore
     `null` azzera il campo, un campo assente resta invariato. I valori inseriti a
-    mano hanno la precedenza sull'enrichment automatico (l'utente sa cosa scrive):
-    se si tocca una feature musicale la fonte diventa `manual` con confidenza piena.
+    mano sovrascrivono sempre quelli gia' presenti (l'utente sa cosa scrive).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -77,15 +68,11 @@ class TrackUpdateIn(BaseModel):
     artist: str | None = None
     album: str | None = None
     genre: str | None = None
-    genre_secondary: str | None = None
     year: int | None = Field(default=None, ge=0, le=3000)
     duration_seconds: int | None = Field(default=None, ge=0)
     bpm: float | None = Field(default=None, gt=0, le=400)
     camelot_key: str | None = None
-    mood: str | None = None
     energy: int | None = Field(default=None, ge=0, le=100)
-    danceability: int | None = Field(default=None, ge=0, le=100)
-    vocalness: int | None = Field(default=None, ge=0, le=100)
     label: str | None = None
 
 
@@ -519,7 +506,7 @@ class LibraryStatsOut(BaseModel):
     by_source: dict[str, int]
     with_bpm: int
     with_key: int
-    with_features: int  # mood o energia presenti
+    with_features: int  # energia presente
     ready_for_set: int
     with_local_file: int = 0
     missing_metadata: int
