@@ -52,17 +52,41 @@ def get_with_retries(
     fallisce dopo tutti i tentativi. Eventuali header (es. User-Agent) vanno
     impostati sul client; qui passiamo solo i parametri di query.
     """
+    return _request_with_retries(
+        lambda: client.get(url, params=params), "GET", url,
+        error_cls=error_cls, retries=retries, backoff=backoff,
+    )
+
+
+def post_with_retries(
+    client: httpx.Client,
+    url: str,
+    *,
+    error_cls: type[Exception],
+    data: dict | None = None,
+    retries: int = DEFAULT_RETRIES,
+    backoff: float = DEFAULT_BACKOFF,
+) -> httpx.Response:
+    """Come get_with_retries ma in POST form-encoded (payload troppo lunghi per
+    una query string, es. i fingerprint Chromaprint verso AcoustID)."""
+    return _request_with_retries(
+        lambda: client.post(url, data=data), "POST", url,
+        error_cls=error_cls, retries=retries, backoff=backoff,
+    )
+
+
+def _request_with_retries(send, method: str, url: str, *, error_cls, retries, backoff):
     last_exc: Exception | None = None
     for attempt in range(retries + 1):
         try:
-            return client.get(url, params=params)
+            return send()
         except httpx.HTTPError as exc:  # SSL / connessione / lettura / timeout
             last_exc = exc
             if attempt < retries:
                 wait = backoff * (attempt + 1)
                 logger.warning(
-                    "GET %s fallita (tentativo %d/%d): %s — riprovo tra %.1fs",
-                    url, attempt + 1, retries + 1, exc, wait,
+                    "%s %s fallita (tentativo %d/%d): %s — riprovo tra %.1fs",
+                    method, url, attempt + 1, retries + 1, exc, wait,
                 )
                 time.sleep(wait)
     raise error_cls(f"connessione fallita dopo {retries + 1} tentativi ({last_exc})")

@@ -61,6 +61,8 @@ def ensure_schema(eng=None) -> None:
             "local_format": "VARCHAR",
             "local_bitrate": "INTEGER",
             "audio_hash": "VARCHAR",
+            # Fingerprinting AcoustID (identita' acustica -> MusicBrainz)
+            "mbid": "VARCHAR",
             # Scansione incrementale (Lotto A)
             "local_mtime": "FLOAT",
             "local_size": "INTEGER",

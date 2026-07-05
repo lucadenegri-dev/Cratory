@@ -124,7 +124,7 @@ def test_compute_status_transitions():
 class _FakeProvider:
     name = "fake"
 
-    def lookup(self, *, title, artist, isrc=None, duration_seconds=None):
+    def lookup(self, *, title, artist, isrc=None, duration_seconds=None, context=None):
         return {"bpm": 126, "camelot_key": "9A", "energy": 70, "mood": "dark",
                 "label": "Label X", "confidence": 80}
 

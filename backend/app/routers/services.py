@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db import get_db
+from app.integrations.acoustid import fpcalc_available
 from app.integrations.spotify import SpotifyWebClient
 
 router = APIRouter(prefix="/api/services", tags=["services"])
@@ -86,6 +87,18 @@ def services_status(db: Session = Depends(get_db)):
                 "detail": "Label, data di uscita e genere via ISRC. Richiede un User-Agent identificativo (no API key).",
                 "env": ["MUSICBRAINZ_USER_AGENT"],
                 "docs": "https://musicbrainz.org/doc/MusicBrainz_API",
+            },
+            {
+                "key": "acoustid", "name": "AcoustID", "category": "Libreria (disco)",
+                # Configurato = chiave presente; "collegato" = anche il binario fpcalc
+                # (Chromaprint) e' raggiungibile. Senza chiave il binario non conta.
+                "configured": bool(settings.acoustid_api_key),
+                "connected": fpcalc_available() if settings.acoustid_api_key else None,
+                "detail": "Fingerprinting dei file posseduti: audio -> MBID MusicBrainz "
+                          "(identita' certa per l'enrichment). Richiede anche il binario "
+                          "fpcalc di Chromaprint (brew install chromaprint).",
+                "env": ["ACOUSTID_API_KEY", "FPCALC"],
+                "docs": "https://acoustid.org/new-application",
             },
             {
                 "key": "slskd", "name": "slskd (Soulseek)", "category": "Download",

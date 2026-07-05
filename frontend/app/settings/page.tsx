@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import {
   apiGet, apiPost, servicesStatus, SPOTIFY_LOGIN_URL,
-  featureEnrichSummary, startLibraryIndex,
+  featureEnrichSummary, startFingerprint, startLibraryIndex,
   type ServiceStatus, type SpotifyStatus,
   type FeatureProviderStatus, type FeatureEnrichJob,
 } from "@/lib/api";
@@ -105,7 +105,52 @@ function SettingsInner() {
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Libreria (disco)</div>
       <LibraryIndexCard />
+      <div className="mt-4">
+        <FingerprintCard />
+      </div>
     </PageLayout>
+  );
+}
+
+function FingerprintCard() {
+  // Lo stato arriva dal poller globale (JobsProvider): niente polling qui.
+  const { fingerprint: fpJob, refresh } = useJobs();
+  const [fpError, setFpError] = useState<string | null>(null);
+
+  const runFingerprint = () => {
+    setFpError(null);
+    startFingerprint().then(() => refresh()).catch((e) => setFpError(String(e.message ?? e)));
+  };
+
+  const busy = fpJob?.status === "running";
+  const r = fpJob?.status === "done" ? fpJob.result : null;
+
+  return (
+    <div className="border border-border">
+      <div className="flex items-start justify-between gap-4 border-b border-border p-5">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold uppercase tracking-wide text-fg-strong">Fingerprint AcoustID</div>
+          <p className="mt-1 text-sm text-muted">
+            Identifica i file posseduti dall&apos;audio (MBID MusicBrainz): identità certa per
+            l&apos;arricchimento, senza dipendere dai tag. Richiede ACOUSTID_API_KEY e fpcalc.
+          </p>
+        </div>
+      </div>
+      <div className="space-y-3 p-5 text-sm">
+        {fpError && <Alert tone="danger">⚠ {fpError}</Alert>}
+        {fpJob?.status === "error" && <Alert tone="danger">⚠ {fpJob.error ?? "Fingerprinting fallito"}</Alert>}
+        <Button size="sm" onClick={runFingerprint} disabled={busy}>{busy ? "In corso…" : "Identifica ora"}</Button>
+        {busy && (
+          <p className="tnum text-sm text-muted">{fpJob.processed}/{fpJob.total} file processati…</p>
+        )}
+        {r && (
+          <p className="text-sm text-fg">
+            ✓ {r.identified} identificate · {r.below_threshold} incerte · {r.not_found} non trovate ·{" "}
+            {r.cache_hits} da cache · {r.errors} errori{r.missing_files > 0 ? ` · ${r.missing_files} file mancanti` : ""}
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 

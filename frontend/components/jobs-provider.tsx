@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  downloadStatus, enrichmentJobStatus, libraryIndexStatus, shazamIdentifyStatus,
-  type DownloadStatus, type LibraryIndexJob,
+  downloadStatus, enrichmentJobStatus, fingerprintStatus, libraryIndexStatus, shazamIdentifyStatus,
+  type DownloadStatus, type FingerprintJob, type LibraryIndexJob,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { EqMeter } from "./ui";
@@ -40,11 +40,13 @@ type JobsApi = {
   download: DownloadStatus | null;
   /** Stato raw dell'indicizzazione libreria per la pagina settings. */
   libraryIndex: LibraryIndexJob | null;
+  /** Stato raw del fingerprinting AcoustID per la pagina settings. */
+  fingerprint: FingerprintJob | null;
 };
 
 const JobsCtx = createContext<JobsApi>({
   refresh: () => {}, startClientJob: () => {}, updateClientJob: () => {},
-  endClientJob: () => {}, download: null, libraryIndex: null,
+  endClientJob: () => {}, download: null, libraryIndex: null, fingerprint: null,
 });
 
 export function useJobs() {
@@ -75,6 +77,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [clientJobs, setClientJobs] = useState<Record<string, { label: string } & ClientJobPatch>>({});
   const [download, setDownload] = useState<DownloadStatus | null>(null);
   const [libraryIndex, setLibraryIndex] = useState<LibraryIndexJob | null>(null);
+  const [fingerprint, setFingerprint] = useState<FingerprintJob | null>(null);
   const alive = useRef(true);
   const wasRunning = useRef<Set<string>>(new Set());
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -104,8 +107,9 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const [e, s, d, li] = await Promise.allSettled([
+    const [e, s, d, li, fp] = await Promise.allSettled([
       enrichmentJobStatus(), shazamIdentifyStatus(), downloadStatus(), libraryIndexStatus(),
+      fingerprintStatus(),
     ]);
 
     if (e.status === "fulfilled") {
@@ -141,6 +145,16 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         processed: v.processed, total: v.total, href: "/settings",
       }, v.status === "error" ? (v.error ?? "errore") : "completata");
     }
+    if (fp.status === "fulfilled") {
+      const v = fp.value;
+      if (alive.current) setFingerprint(v);
+      track(v.status, {
+        key: "fingerprint", label: "Fingerprint libreria",
+        processed: v.processed, total: v.total, href: "/settings",
+      }, v.status === "error"
+        ? (v.error ?? "errore")
+        : `${v.result?.identified ?? 0} identificate`);
+    }
 
     wasRunning.current = nowRunning;
     if (alive.current) setPolled(next);
@@ -174,8 +188,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   }, [pollOnce]);
 
   const api = useMemo<JobsApi>(
-    () => ({ refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex }),
-    [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex],
+    () => ({ refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, fingerprint }),
+    [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, fingerprint],
   );
 
   const jobs: Job[] = [

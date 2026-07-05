@@ -234,6 +234,73 @@ def test_musicbrainz_parse_recording_empty():
     assert p._parse_recording({"score": 50}, isrc=None, exact=False) is None
 
 
+def test_musicbrainz_lookup_diretto_con_mbid_nel_context():
+    """Con l'mbid nel context (fingerprinting): GET /recording/{mbid}, niente search fuzzy."""
+    recording = {
+        "id": "mbid-1", "title": "Track",
+        "releases": [{"date": "2019-03-01", "label-info": [{"label": {"name": "Afterlife"}}]}],
+        "tags": [{"name": "melodic techno", "count": 4}],
+    }
+    http = _FakeHttp(recording)
+    p = MusicBrainzProvider("ua", http=http)
+    p._MIN_INTERVAL = 0
+    out = p.lookup(title="X", artist="Y", context={"mbid": "mbid-1"})
+    assert out["label"] == "Afterlife"
+    assert out["genre_primary"] == "melodic techno"
+    assert out["confidence"] == 95  # identita' certa via mbid
+    assert len(http.calls) == 1
+    assert "/recording/mbid-1" in http.calls[0][0]
+
+
+def test_musicbrainz_mbid_fallito_fallback_su_search():
+    """Se il lookup per mbid fallisce (es. 404), si torna al percorso ISRC/search."""
+    search_payload = {"recordings": [
+        {"id": "mbid-2", "title": "Track", "score": 90,
+         "releases": [{"date": "2020-01-01"}], "tags": [{"name": "techno", "count": 2}]},
+    ]}
+
+    class _MixedHttp:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, params=None):
+            self.calls.append((url, params))
+            if "/recording/mbid-x" in url:
+                return _FakeResp({"error": "not found"}, status=404)
+            return _FakeResp(search_payload)
+
+    http = _MixedHttp()
+    p = MusicBrainzProvider("ua", http=http)
+    p._MIN_INTERVAL = 0
+    out = p.lookup(title="Track", artist="Y", context={"mbid": "mbid-x"})
+    assert out["genre_primary"] == "techno"
+    assert len(http.calls) == 2  # mbid fallito -> search
+
+
+def test_enrich_features_passa_mbid_nel_context(db):
+    """Le tracce con mbid (fingerprinting) lo espongono alla catena via context."""
+    from app.models import Track
+    from app.services.feature_enrichment import enrich_features
+
+    class Capture:
+        name = "cap"
+
+        def __init__(self):
+            self.contexts = []
+
+        def lookup(self, *, title, artist, isrc=None, duration_seconds=None, context=None):
+            self.contexts.append(context)
+            return None
+
+    with_mbid = Track(source_type="local_files", title="T1", artist="A", mbid="mbid-locale")
+    without = Track(source_type="spotify", title="T2", artist="B")
+    db.add_all([with_mbid, without])
+    db.commit()
+    prov = Capture()
+    enrich_features(db, prov, force=True, track_ids=[with_mbid.id, without.id])
+    assert prov.contexts == [{"mbid": "mbid-locale"}, None]
+
+
 def test_musicbrainz_best_recording_prefers_match():
     p = MusicBrainzProvider("ua")
     recs = [
@@ -458,6 +525,39 @@ def test_force_bypasses_cache(db, seed_tracks):
     r2 = enrich_features(db, p2, force=True)
     assert p2.calls == 4
     assert r2["cache_hits"] == 0
+
+
+def test_seleziona_anche_tracce_con_bpm_ma_senza_key(db):
+    """Senza force: una traccia con BPM ma senza key entra comunque nel batch.
+
+    Prima la selezione guardava solo `bpm IS NULL`: una traccia rimasta senza
+    key (o genere) non veniva mai riprocessata se non con force.
+    """
+    from app.models import Track
+    from app.services.feature_enrichment import enrich_features
+
+    db.add(Track(source_type="spotify", title="Has BPM", artist="A", bpm=126.0))
+    db.commit()
+
+    p = _CountingProvider()  # risponde bpm 128 + key 8A
+    r = enrich_features(db, p)
+    assert p.calls == 1
+    assert r["total"] == 1
+    track = db.query(Track).one()
+    assert track.camelot_key == "8A"   # la key mancante viene completata
+    assert track.bpm == 126.0          # il BPM esistente resta autorevole
+
+
+def test_non_seleziona_tracce_gia_complete(db, seed_tracks):
+    """Tracce con BPM e key restano fuori dal batch senza force."""
+    from app.services.feature_enrichment import enrich_features
+
+    seed_tracks(n=3)  # bpm e camelot_key gia' valorizzati
+
+    p = _CountingProvider()
+    r = enrich_features(db, p)
+    assert p.calls == 0
+    assert r["total"] == 0
 
 
 # --- Last.fm tag provider + energy proxy -------------------------------------

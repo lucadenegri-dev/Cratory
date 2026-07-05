@@ -70,21 +70,21 @@ def test_fill_identity_non_tocca_genere_esistente(db, tmp_path):
 
 def test_ai_entra_solo_se_genere_vuoto(db, monkeypatch):
     from app.services import genre_ai
-    from app.services.feature_enrichment import maybe_ai_genre
+    from app.services.feature_enrichment import _ai_genre_pass
     t = _track(db)
-    monkeypatch.setattr(genre_ai, "suggest_genre", lambda track: "Minimal Techno")
-    maybe_ai_genre(t)
-    assert t.genre == "Minimal Techno" and t.genre_source == "ai"
-
     t2 = _track(db, genre="House", genre_source="provider")
-    maybe_ai_genre(t2)
+    monkeypatch.setattr(genre_ai, "suggest_genres",
+                        lambda tracks: {tr.id: "Minimal Techno" for tr in tracks})
+    applied = _ai_genre_pass(db, [t, t2], force=False)
+    assert applied == 1
+    assert t.genre == "Minimal Techno" and t.genre_source == "ai"
     assert t2.genre == "House" and t2.genre_source == "provider"
 
 
 def test_ai_non_configurata_o_errore_neutra(db, monkeypatch):
     from app.services import genre_ai
-    from app.services.feature_enrichment import maybe_ai_genre
+    from app.services.feature_enrichment import _ai_genre_pass
     t = _track(db)
-    monkeypatch.setattr(genre_ai, "suggest_genre", lambda track: None)
-    maybe_ai_genre(t)
+    monkeypatch.setattr(genre_ai, "suggest_genres", lambda tracks: {})
+    assert _ai_genre_pass(db, [t], force=False) == 0
     assert t.genre is None and t.genre_source is None

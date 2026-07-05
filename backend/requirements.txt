@@ -11,3 +11,5 @@ anthropic>=0.69,<1.0
 yt-dlp>=2024.0
 shazamio>=0.5
 mutagen>=1.47
+# AcoustID — fingerprinting della libreria posseduta -> mbid (richiede anche fpcalc/chromaprint di sistema)
+pyacoustid>=1.3

@@ -6,7 +6,7 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-07-03
+**Ultimo aggiornamento:** 2026-07-05
 
 **Nome prodotto:** **Cratory** (rename eseguito il 2026-06-25 su UI, codice, docs e
 icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici legacy
@@ -37,6 +37,26 @@ Pagina persistente dei download problematici e possesso senza download; piano in
 - **Ignora**: `DELETE /api/downloads/pending/{track_id}` azzera esito e motivo.
 - Refactor: modal revisione Soulseek estratto in `download-review-modal.tsx`
   (pattern wrapper + key come TrackEditModal).
+
+## Milestone 2026-07-05 - Fingerprinting AcoustID + ottimizzazioni enrichment
+
+Identita' acustica certa per i file posseduti; piano in
+`docs/superpowers/plans/2026-07-05-fingerprinting-acoustid.md`.
+
+- **Fingerprinting AcoustID** (`integrations/acoustid.py`, `services/fingerprint*.py`):
+  audio -> MusicBrainz Recording MBID (colonna `tracks.mbid`), soglia score 0.85,
+  cache esiti definitivi in `EnrichmentCache` (errori ritentabili). Endpoint
+  `POST/GET /api/library/fingerprint[/status]`, card in Impostazioni, job nella
+  barra GlobalProgress. Richiede `ACOUSTID_API_KEY` + `fpcalc` (chromaprint).
+- **La catena enrichment usa l'mbid**: MusicBrainz lookup diretto
+  `/recording/{mbid}` (niente fuzzy, confidence 95, fallback su ISRC/search),
+  AcousticBrainz lo riceve dal context. L'mbid backfilla anche l'ISRC dei file
+  locali (sblocca Deezer per il BPM).
+- **Ottimizzazioni enrichment**: batch esteso a `bpm IS NULL OR camelot_key IS
+  NULL` (le tracce senza key non restano piu' orfane); genere AI in batch (una
+  chiamata LLM ogni 20 tracce, fase `genre_ai`) con cache anche dei null in
+  `EnrichmentCache` (chunk falliti non cachati -> ritentabili); stima energia
+  spostata dopo il genere (bias corretto); report con `ai_genres`.
 
 ## Milestone 2026-07-03 - Barra job unificata (GlobalProgress)
 

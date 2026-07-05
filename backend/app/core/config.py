@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     slskd_api_key: str = ""
     # slskd: cartella dove slskd scrive i download completati (usata per collegare il file alla Track).
     slskd_download_dir: str = ""
+    # AcoustID: fingerprinting dei file posseduti -> MusicBrainz Recording MBID.
+    # Chiave gratuita su acoustid.org; richiede anche il binario fpcalc (Chromaprint)
+    # nel PATH o indicato dalla env FPCALC. Vuoto = fingerprinting disattivo.
+    acoustid_api_key: str = ""
     # Deezer: BPM via ISRC, gratis e SENZA API key (endpoint pubblico). Attivo di default
     # perche' a costo zero e copre il BPM con l'identita' piu' affidabile (ISRC).
     deezer_enabled: bool = True

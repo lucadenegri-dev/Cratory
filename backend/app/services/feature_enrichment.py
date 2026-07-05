@@ -18,7 +18,7 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models import EnrichmentCache, Track
@@ -162,14 +162,72 @@ def apply_features(track: Track, data: dict[str, Any], *, source: str) -> set[st
     return applied
 
 
-def maybe_ai_genre(track: Track) -> None:
-    """Anello AI della catena del genere: solo su genere vuoto, mai sovrascrive."""
-    if track.genre:
-        return
-    genre = genre_ai.suggest_genre(track)
-    if genre:
-        track.genre = genre
-        track.genre_source = "ai"
+_AI_GENRE_PROVIDER = "genre_ai"
+
+
+def _ai_genre_pass(
+    db: Session, tracks: list[Track], *, force: bool,
+    on_progress: ProgressFn | None = None,
+) -> int:
+    """Anello AI della catena del genere, in batch: solo su genere vuoto, mai sovrascrive.
+
+    Una chiamata LLM ogni genre_ai.BATCH_SIZE tracce (non piu' una per traccia),
+    con cache in EnrichmentCache (provider "genre_ai"). Viene cachato anche il
+    null ("il modello non conosce il brano"): niente richieste ripetute. I chunk
+    falliti non compaiono nel risultato e NON vengono cachati -> ritentabili.
+    Ritorna il numero di generi applicati.
+    """
+    candidates = [t for t in tracks if not t.genre and t.artist and t.title]
+    if not candidates:
+        return 0
+
+    rows = db.scalars(
+        select(EnrichmentCache).where(
+            EnrichmentCache.provider == _AI_GENRE_PROVIDER,
+            EnrichmentCache.lookup_key.in_({_cache_key(t) for t in candidates}),
+        )
+    ).all()
+    row_map: dict[str, EnrichmentCache] = {row.lookup_key: row for row in rows}
+
+    applied = 0
+    to_ask: list[Track] = []
+    for track in candidates:
+        row = row_map.get(_cache_key(track))
+        if row is not None and not force:
+            genre = (row.result_json or {}).get("genre")
+            if genre:
+                track.genre = genre
+                track.genre_source = "ai"
+                applied += 1
+        else:
+            to_ask.append(track)
+
+    total = len(to_ask)
+    if on_progress and total:
+        on_progress(0, total, "genre_ai")
+    for start in range(0, total, genre_ai.BATCH_SIZE):
+        chunk = to_ask[start:start + genre_ai.BATCH_SIZE]
+        results = genre_ai.suggest_genres(chunk)
+        for track in chunk:
+            if track.id not in results:
+                continue  # chunk fallito o traccia scartata: niente cache, ritentabile
+            genre = results[track.id]
+            key = _cache_key(track)
+            if key in row_map:
+                row_map[key].result_json = {"genre": genre}
+                row_map[key].cached_at = datetime.now(timezone.utc)
+            else:
+                row = EnrichmentCache(provider=_AI_GENRE_PROVIDER, lookup_key=key,
+                                      result_json={"genre": genre})
+                db.add(row)
+                row_map[key] = row
+            if genre:
+                track.genre = genre
+                track.genre_source = "ai"
+                applied += 1
+        if on_progress:
+            on_progress(min(start + len(chunk), total), total, "genre_ai")
+    return applied
 
 
 def enrich_features(
@@ -205,7 +263,11 @@ def enrich_features(
             select(playlist_tracks.c.track_id).where(playlist_tracks.c.playlist_id == playlist_id)
         ))
     if not force:
-        stmt = stmt.where(Track.bpm.is_(None))
+        # Il batch include anche le tracce con BPM ma senza key: la cache assorbe
+        # i lookup ripetuti, e una key mancante e' una core feature quanto il BPM.
+        stmt = stmt.where(or_(
+            Track.bpm.is_(None), Track.camelot_key.is_(None), Track.camelot_key == "",
+        ))
     tracks = list(db.scalars(stmt).all())
     total = len(tracks)
     enriched = provider_matches = not_found = cache_hits = metadata_enriched = 0
@@ -237,6 +299,9 @@ def enrich_features(
                 artist=track.artist,
                 isrc=track.isrc,
                 duration_seconds=track.duration_seconds,
+                # MBID dal fingerprinting: MusicBrainz lo usa per il lookup diretto,
+                # AcousticBrainz per l'analisi audio (via context della catena).
+                context={"mbid": track.mbid} if track.mbid else None,
             )
             # Upsert cache: aggiorna la riga esistente o inserisce una nuova.
             if key in cache_row_map:
@@ -263,17 +328,19 @@ def enrich_features(
             not_found += 1
             refresh_status(track)
 
-        # Genere: se i provider non l'hanno dato, prova l'anello AI della catena.
-        maybe_ai_genre(track)
+        if on_progress:
+            on_progress(i, total, "feature")
 
-        # Energia: stima deterministica se nessun provider l'ha fornita (proxy da BPM/dance/genere).
+    # Genere: dove i provider non l'hanno dato, anello AI in batch (con cache).
+    ai_genres = _ai_genre_pass(db, tracks, force=force, on_progress=on_progress)
+
+    # Energia: stima deterministica se nessun provider l'ha fornita (proxy da
+    # BPM/dance/genere). Dopo l'anello AI: il genere entra come bias nel proxy.
+    for track in tracks:
         if track.energy is None and track.bpm is not None:
             track.energy = estimate_energy(track.bpm, track.danceability, track.genre)
             if track.energy is not None:
                 field_counts["energy"] = field_counts.get("energy", 0) + 1
-
-        if on_progress:
-            on_progress(i, total, "feature")
 
     db.commit()
     with_bpm = sum(1 for track in tracks if track.bpm is not None)
@@ -288,6 +355,7 @@ def enrich_features(
         "enriched": enriched,
         "provider_matches": provider_matches,
         "metadata_enriched": metadata_enriched,
+        "ai_genres": ai_genres,
         "not_found": not_found,
         "total": total,
         "cache_hits": cache_hits,

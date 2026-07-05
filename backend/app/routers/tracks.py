@@ -11,7 +11,9 @@ from app.integrations.getsongbpm import (
 )
 from app.models import Track
 from app.repositories import get_track, library_stats, list_tracks, update_track
+from app.integrations.acoustid import AcoustIDNotConfigured
 from app.schemas import (
+    FingerprintJobStatus,
     LibraryIndexJobStatus,
     LibraryStatsOut,
     TrackDetailOut,
@@ -25,7 +27,7 @@ from app.services.acquisition import LinkFileError, link_local_file
 from app.services.camelot import parse_camelot
 from app.services.genre_norm import normalize_genre
 from app.services.feature_enrichment import enrich_features
-from app.services import library_index_job
+from app.services import fingerprint_job, library_index_job
 
 router = APIRouter(prefix="/api", tags=["tracks"])
 
@@ -194,6 +196,20 @@ def start_library_index():
 @router.get("/library/index/status", response_model=LibraryIndexJobStatus)
 def library_index_status():
     return library_index_job.job_state()
+
+
+@router.post("/library/fingerprint", response_model=FingerprintJobStatus, status_code=202)
+def start_fingerprint(force: bool = Query(default=False)):
+    """Fingerprinting AcoustID delle tracce possedute: audio -> mbid (identita' certa)."""
+    try:
+        return fingerprint_job.start_job(force=force)
+    except AcoustIDNotConfigured as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/library/fingerprint/status", response_model=FingerprintJobStatus)
+def fingerprint_status():
+    return fingerprint_job.job_state()
 
 
 @router.get("/stats", response_model=LibraryStatsOut)

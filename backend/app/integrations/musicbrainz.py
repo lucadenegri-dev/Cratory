@@ -84,6 +84,17 @@ class MusicBrainzProvider(MusicFeatureProvider):
     def lookup(self, *, title, artist, isrc=None, duration_seconds=None, context=None):
         if self._suspended:
             return None  # breaker scattato: niente altri tentativi (ne' warning) nel run
+        # MBID gia' noto (fingerprinting AcoustID): lookup diretto, identita' certa,
+        # niente fuzzy. Se fallisce (rete/404) si degrada al percorso ISRC/search.
+        mbid = (context or {}).get("mbid")
+        if mbid:
+            try:
+                rec = self._get(f"/recording/{mbid}", {"inc": "releases+tags"})
+                parsed = self._parse_recording(rec, isrc=isrc, exact=True) if rec else None
+                if parsed:
+                    return parsed
+            except FeatureProviderError as exc:
+                logger.warning("MusicBrainz recording %s fallito: %s", mbid, exc)
         rec: dict | None = None
         exact = False
         if isrc:

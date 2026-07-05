@@ -60,6 +60,8 @@ POST  /api/tracks/{track_id}/link-file
 GET   /api/files/search
 POST  /api/library/index
 GET   /api/library/index/status
+POST  /api/library/fingerprint
+GET   /api/library/fingerprint/status
 GET   /api/stats
 ```
 
@@ -77,6 +79,12 @@ label, year, confidence}` — confidence: 100 ISRC, 70 fuzzy, 0 non trovata.
 (disk-first: il disco È la libreria) — scan + riaggancio per audio-hash +
 riconciliazione dei possessi; `409` se `LIBRARY_ROOT` non è configurata. Stato del
 job su `GET /api/library/index/status`.
+
+`POST /api/library/fingerprint` (202) identifica via fingerprinting AcoustID le
+tracce possedute senza `mbid` (audio → MusicBrainz Recording MBID, soglia score
+0.85; esiti definitivi in cache, errori ritentabili). Query `force=true` per
+riprocessare anche le identificate. `409` se mancano `ACOUSTID_API_KEY` o il
+binario `fpcalc`. Stato del job su `GET /api/library/fingerprint/status`.
 
 `PATCH /api/tracks/{track_id}` accetta aggiornamenti parziali su BPM, Camelot, mood,
 energia, danceability, vocalness, genere, label, anno e campi affini. I valori manuali
@@ -287,7 +295,8 @@ GET /api/services/status
 ```
 
 `/api/services/status` restituisce lo stato aggregato delle integrazioni: Spotify,
-AI, Deezer, GetSongBPM, AcousticBrainz, Last.fm, MusicBrainz e servizi affini.
+AI, Deezer, GetSongBPM, AcousticBrainz, Last.fm, MusicBrainz, AcoustID (per
+AcoustID `connected` = binario fpcalc presente), slskd e servizi affini.
 
 ## Convenzioni
 
