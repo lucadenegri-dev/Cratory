@@ -26,7 +26,14 @@ const NAV_GROUPS: { title: string | null; items: { href: string; label: string }
       { href: "/downloads", label: "Download" },
     ],
   },
-  { title: "Suona", items: [{ href: "/sets", label: "Set" }] },
+  {
+    title: "Suona",
+    items: [
+      { href: "/set-builder", label: "Set Builder" },
+      { href: "/sets", label: "Set" },
+      { href: "/transitions", label: "Transizioni" },
+    ],
+  },
 ];
 
 export function IndexNav() {
