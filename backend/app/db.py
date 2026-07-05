@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
@@ -16,7 +16,16 @@ def _make_engine(url: str):
         db_path = Path(url.removeprefix("sqlite:///"))
         if not db_path.parent.exists():
             db_path.parent.mkdir(parents=True, exist_ok=True)
-    return create_engine(url, connect_args=connect_args)
+    eng = create_engine(url, connect_args=connect_args)
+    if url.startswith("sqlite"):
+        @event.listens_for(eng, "connect")
+        def _set_sqlite_pragmas(dbapi_conn, _record):
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+    return eng
 
 
 engine = _make_engine(settings.database_url)
