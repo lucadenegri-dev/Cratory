@@ -1,15 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db import get_db
-from app.integrations.getsongbpm import (
-    FeatureProviderNotConfigured,
-    feature_provider_configured,
-    get_feature_provider,
-)
-from app.models import Track
 from app.repositories import get_track, library_stats, list_tracks, update_track
 from app.integrations.acoustid import AcoustIDNotConfigured
 from app.schemas import (
@@ -19,14 +12,12 @@ from app.schemas import (
     TrackDetailOut,
     TrackLinkFileIn,
     TrackListOut,
-    TrackLookupOut,
     TrackUpdateIn,
 )
 from app.serializers import track_detail_out, track_out
 from app.services.acquisition import LinkFileError, link_local_file
 from app.services.camelot import parse_camelot
 from app.services.genre_norm import normalize_genre
-from app.services.feature_enrichment import enrich_features
 from app.services import fingerprint_job, library_index_job
 
 router = APIRouter(prefix="/api", tags=["tracks"])
@@ -77,45 +68,6 @@ def get_tracks(  # noqa: PLR0913
     return TrackListOut(total=total, items=[track_out(t) for t in rows])
 
 
-@router.get("/tracks/lookup", response_model=TrackLookupOut)
-def lookup_track(
-    db: Session = Depends(get_db),
-    isrc: str | None = None,
-    artist: str | None = None,
-    title: str | None = None,
-):
-    """Lookup read-only per il bridge DjOrganizer: ISRC → fuzzy artist+title.
-
-    Sola lettura: nessuna scrittura, nessun side-effect. Mai 404: `found=false`.
-    """
-    if not isrc and not (artist and title):
-        raise HTTPException(
-            status_code=422,
-            detail="Servono isrc oppure artist+title.",
-        )
-    # limit(1): eventuali duplicati (stesso ISRC / stesso artist+title) non devono
-    # far fallire il lookup con MultipleResultsFound — si risponde col primo match.
-    hit, how, conf = None, None, 0
-    if isrc:
-        hit = db.scalars(select(Track).where(Track.isrc == isrc).limit(1)).first()
-        if hit:
-            how, conf = "isrc", 100
-    if hit is None and artist and title:
-        hit = db.scalars(select(Track).where(
-            Track.artist.ilike(artist), Track.title.ilike(title)).limit(1)).first()
-        if hit:
-            how, conf = "fuzzy", 70
-    if hit is None:
-        return TrackLookupOut(found=False)
-    return TrackLookupOut(
-        found=True, match=how, track_id=hit.id,
-        artist=hit.artist, title=hit.title,
-        genre=hit.genre, genre_secondary=hit.genre_secondary,
-        genre_source=hit.genre_source, album=hit.album,
-        label=hit.label, year=hit.year, confidence=conf,
-    )
-
-
 @router.get("/tracks/{track_id}", response_model=TrackDetailOut)
 def get_track_detail(track_id: int, db: Session = Depends(get_db)):
     track = get_track(db, track_id)
@@ -159,26 +111,6 @@ def link_file(track_id: int, payload: TrackLinkFileIn, db: Session = Depends(get
         track = link_local_file(db, track, path=payload.path)
     except LinkFileError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return track_detail_out(track)
-
-
-@router.post("/tracks/{track_id}/enrich", response_model=TrackDetailOut)
-def enrich_one(track_id: int, db: Session = Depends(get_db)):
-    """Arricchisce le feature musicali di UNA traccia (sincrono). Non sovrascrive BPM/key esistenti."""
-    track = get_track(db, track_id)
-    if track is None:
-        raise HTTPException(status_code=404, detail="Traccia non trovata")
-    if not feature_provider_configured():
-        raise HTTPException(
-            status_code=409,
-            detail=str(FeatureProviderNotConfigured(
-                "Nessun provider di feature configurato: abilita Deezer e/o imposta "
-                "GETSONGBPM_API_KEY / LASTFM_API_KEY (vedi Impostazioni)."
-            )),
-        )
-    # force=True: elabora la traccia anche se ha gia' BPM (completa i campi mancanti).
-    enrich_features(db, get_feature_provider(), force=True, track_ids=[track_id])
-    db.refresh(track)
     return track_detail_out(track)
 
 

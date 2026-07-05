@@ -184,3 +184,23 @@ def test_radice_vuota_non_azzera_i_possessi(db, fake_audio, tmp_path):
     db.refresh(t)
     assert report["lost"] == 0
     assert t.has_local_file is True  # nessuna riconciliazione su scan vuoto
+
+
+def test_report_indice_contiene_created_ids(db, tmp_path, monkeypatch):
+    """Il report espone gli id delle Track create: il chiamante (job in background)
+    li usa per agire sulle tracce nuove appena indicizzate."""
+    from app.services import library_index as li
+    from app.services.library_index import index_library
+
+    p = tmp_path / "Libreria" / "A - Nuova.mp3"
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"x")
+    monkeypatch.setattr(li, "audio_hash", lambda _: "H-NEW")
+    monkeypatch.setattr(li, "read_tags", lambda _: {
+        "title": "Nuova", "artist": "A", "album": None, "year": None,
+        "duration_seconds": 200, "isrc": None, "genre": None})
+    monkeypatch.setattr(li, "read_audio_quality", lambda _: {"format": "mp3", "bitrate": 320})
+
+    report = index_library(db, root=tmp_path / "Libreria")
+    assert report["created"] == 1
+    assert len(report["created_ids"]) == 1

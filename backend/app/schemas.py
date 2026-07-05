@@ -95,23 +95,6 @@ class TrackLinkFileIn(BaseModel):
     path: str
 
 
-class TrackLookupOut(BaseModel):
-    """Risposta del lookup read-only (bridge DjOrganizer): mai 404, sempre questo schema."""
-
-    found: bool
-    match: str | None = None  # "isrc" | "fuzzy" | None
-    track_id: int | None = None
-    artist: str | None = None
-    title: str | None = None
-    genre: str | None = None
-    genre_secondary: str | None = None
-    genre_source: str | None = None  # manual | provider | ai | file_tag
-    album: str | None = None
-    label: str | None = None
-    year: int | None = None
-    confidence: int = 0  # 100 = ISRC, 70 = fuzzy, 0 = non trovata
-
-
 class TransitionScoreOut(BaseModel):
     score: int = Field(ge=0, le=100)
     technical_reasons: list[str] = []

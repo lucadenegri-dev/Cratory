@@ -1,7 +1,6 @@
 """Test del nuovo flusso playlist->set (deterministico, nessuna rete/AI)."""
 
 from app.models import Playlist, Track
-from app.services.feature_enrichment import enrich_features
 from app.services.gap_analysis import analyze_gaps
 from app.services.playlist_import import import_playlist, normalize_spotify_item
 from app.services.scoring import (
@@ -112,34 +111,6 @@ def test_compute_status_transitions():
     assert compute_status(t) == "imported"
     t.camelot_key = "8A"
     assert compute_status(t) == "ready_for_set"
-
-
-# --- feature enrichment (fake provider, mai sovrascrive BPM esistente) -------
-
-
-class _FakeProvider:
-    name = "fake"
-
-    def lookup(self, *, title, artist, isrc=None, duration_seconds=None, context=None):
-        return {"bpm": 126, "camelot_key": "9A", "energy": 70, "mood": "dark",
-                "label": "Label X", "confidence": 80}
-
-
-def test_feature_enrichment_fills_only_missing(db):
-    keep = Track(source_type="spotify", title="rek", bpm=128.0, camelot_key="5A")
-    fill = Track(source_type="spotify", title="stream")
-    db.add_all([keep, fill])
-    db.commit()
-
-    report = enrich_features(db, _FakeProvider(), force=False)
-    assert report["enriched"] == 1  # solo quella senza BPM
-    db.refresh(keep)
-    db.refresh(fill)
-    assert keep.bpm == 128.0  # dato preesistente intatto
-    assert fill.bpm == 126.0
-    assert fill.camelot_key == "9A"
-    assert fill.status == "ready_for_set"
-    assert fill.enrichment_source == "fake"
 
 
 # --- analisi buchi -----------------------------------------------------------

@@ -13,7 +13,6 @@ from app.routers import (
     discovery,
     dj_sets,
     downloads,
-    enrichment,
     files,
     labels,
     pipeline,
@@ -72,7 +71,6 @@ app.include_router(sets.router)
 app.include_router(playlists.router)
 app.include_router(labels.router)
 app.include_router(spotify.router)
-app.include_router(enrichment.router)
 app.include_router(ai.router)
 app.include_router(discovery.router)
 app.include_router(dj_sets.router)

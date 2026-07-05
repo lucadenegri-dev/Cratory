@@ -128,7 +128,6 @@ def test_sync_endpoint_reports_added_and_removed(db, monkeypatch):
         _spotify_item("t9", name="Nine", artist="Z", isrc="ISRC0000009"),
     ])
     monkeypatch.setattr(playlists_router, "SpotifyWebClient", lambda _db: fake)
-    monkeypatch.setattr(playlists_router, "_autoenrich", lambda _pid: None)
 
     report = playlists_router.sync_playlist(playlist.id, db)
     assert report.created == 1
