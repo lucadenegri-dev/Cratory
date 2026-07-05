@@ -7,8 +7,7 @@ Regole comuni: cache persistente delle risposte, gestione rate limit, errori esp
 Separazione fonti dati DJ:
 - Spotify: identita' traccia + metadata editoriali (titolo, artista, cover,
   durata, isrc, url). NON fornisce BPM/key affidabili per il mixing.
-- Enrichment musicale (Deezer, MusicBrainz, AcousticBrainz, GetSongBPM, Last.fm):
-  BPM, key/camelot, genere, mood, energia, danceability, label, release.
+- Last.fm: similarita' (Discovery). Discogs: crate digging per genere/etichetta.
 """
 
 from abc import ABC, abstractmethod
