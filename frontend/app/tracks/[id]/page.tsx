@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, Music4, ArrowRightLeft, Pencil, Sparkles } from "lucide-react";
+import { ArrowLeft, ExternalLink, Link2, Music4, ArrowRightLeft, Pencil, Sparkles } from "lucide-react";
 import { apiGet, enrichTrack, fmtDuration, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
+import { LinkLocalFileModal } from "@/components/link-local-file-modal";
 
 function TransitionList({ title, items }: { title: string; items: TransitionCandidate[] }) {
   return (
@@ -35,6 +36,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
   const [editing, setEditing] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [enrichErr, setEnrichErr] = useState<string | null>(null);
+  const [linking, setLinking] = useState(false);
 
   const enrich = async () => {
     setEnriching(true);
@@ -115,7 +117,14 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
 
       <div className="mt-6">
         <Card>
-          <CardHeader title="Disco" />
+          <CardHeader
+            title="Disco"
+            action={
+              <Button size="sm" variant="outline" onClick={() => setLinking(true)}>
+                <Link2 size={14} /> {track.has_local_file ? "Sostituisci file" : "Collega file"}
+              </Button>
+            }
+          />
           <table className="w-full text-sm">
             <tbody>
               <tr className="border-b border-border/50 last:border-0">
@@ -156,6 +165,12 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
         open={editing}
         onClose={() => setEditing(false)}
         onSaved={(t) => setTrack(t)}
+      />
+
+      <LinkLocalFileModal
+        target={linking ? { id: track.id, artist: track.artist, title: track.title } : null}
+        onClose={() => setLinking(false)}
+        onLinked={(t) => setTrack(t)}
       />
     </PageLayout>
   );
