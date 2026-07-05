@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/cn";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
@@ -222,6 +223,18 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: {
   open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode; footer?: ReactNode;
   size?: "md" | "lg";
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div
@@ -229,12 +242,17 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: {
       onClick={onClose}
     >
       <div
-        className={cn("w-full border border-border-strong bg-surface", size === "lg" ? "max-w-lg" : "max-w-md")}
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? "modal-title" : undefined}
+        className={cn("w-full border border-border-strong bg-surface outline-none", size === "lg" ? "max-w-lg" : "max-w-md")}
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
           <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-3.5">
-            <h3 className="font-semibold uppercase tracking-wider text-fg-strong">{title}</h3>
+            <h3 id="modal-title" className="font-semibold uppercase tracking-wider text-fg-strong">{title}</h3>
             <button onClick={onClose} className="text-faint transition-colors hover:text-fg"><X size={18} /></button>
           </div>
         )}
