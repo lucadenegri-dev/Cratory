@@ -89,6 +89,12 @@ class TrackUpdateIn(BaseModel):
     label: str | None = None
 
 
+class TrackLinkFileIn(BaseModel):
+    """Collegamento manuale di un file su disco alla traccia."""
+
+    path: str
+
+
 class TrackLookupOut(BaseModel):
     """Risposta del lookup read-only (bridge DjOrganizer): mai 404, sempre questo schema."""
 

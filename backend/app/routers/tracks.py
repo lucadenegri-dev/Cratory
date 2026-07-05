@@ -15,11 +15,13 @@ from app.schemas import (
     LibraryIndexJobStatus,
     LibraryStatsOut,
     TrackDetailOut,
+    TrackLinkFileIn,
     TrackListOut,
     TrackLookupOut,
     TrackUpdateIn,
 )
 from app.serializers import track_detail_out, track_out
+from app.services.acquisition import LinkFileError, link_local_file
 from app.services.camelot import parse_camelot
 from app.services.genre_norm import normalize_genre
 from app.services.feature_enrichment import enrich_features
@@ -142,6 +144,19 @@ def patch_track(track_id: int, payload: TrackUpdateIn, db: Session = Depends(get
         data["genre"] = normalize_genre(data.get("genre"))
         data["genre_source"] = "manual" if data["genre"] else None
     track = update_track(db, track, data)
+    return track_detail_out(track)
+
+
+@router.post("/tracks/{track_id}/link-file", response_model=TrackDetailOut)
+def link_file(track_id: int, payload: TrackLinkFileIn, db: Session = Depends(get_db)):
+    """Collega manualmente un file su disco alla traccia (possesso senza download)."""
+    track = get_track(db, track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Traccia non trovata")
+    try:
+        track = link_local_file(db, track, path=payload.path)
+    except LinkFileError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return track_detail_out(track)
 
 
