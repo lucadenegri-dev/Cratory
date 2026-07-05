@@ -43,7 +43,7 @@ def get_tracks(  # noqa: PLR0913
     source: str | None = Query(default=None, pattern="^(spotify|soundcloud|manual|local_files)$"),
     status: str | None = Query(
         default=None,
-        pattern="^(imported|enriched|ready_for_set|missing_features|low_confidence)$",
+        pattern="^(imported|ready_for_set)$",
     ),
     bpm_min: float | None = None,
     bpm_max: float | None = None,

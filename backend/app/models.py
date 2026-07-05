@@ -87,7 +87,7 @@ class Track(Base):
     energy: Mapped[int | None] = mapped_column(Integer)
     danceability: Mapped[int | None] = mapped_column(Integer)
     vocalness: Mapped[int | None] = mapped_column(Integer)
-    # Stato traccia: imported | enriched | ready_for_set | missing_features | low_confidence
+    # Stato traccia: imported | ready_for_set
     status: Mapped[str] = mapped_column(String, default="imported", index=True)
     # Enrichment — cover, fonte e confidenza del match
     album_art_url: Mapped[str | None] = mapped_column(Text)  # artwork_url

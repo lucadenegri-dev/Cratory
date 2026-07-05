@@ -466,7 +466,7 @@ def test_enrichment_report_distinguishes_metadata_from_core_features(db):
     assert r["ready_for_set"] == 0
     assert r["missing_core_features"] == 1
     assert r["field_counts"] == {"genre": 1}
-    assert track.status == "missing_features"
+    assert track.status == "imported"
 
 
 def test_cache_serves_subsequent_run(db, seed_tracks):

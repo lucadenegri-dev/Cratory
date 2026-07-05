@@ -108,14 +108,10 @@ def test_imported_track_status_is_imported(db):
 def test_compute_status_transitions():
     t = Track(source_type="spotify")
     assert compute_status(t) == "imported"
-    t.enrichment_source = "getsongbpm"
-    assert compute_status(t) == "missing_features"
     t.bpm = 124.0
+    assert compute_status(t) == "imported"
     t.camelot_key = "8A"
-    t.enrichment_confidence = 90
     assert compute_status(t) == "ready_for_set"
-    t.enrichment_confidence = 20
-    assert compute_status(t) == "low_confidence"
 
 
 # --- feature enrichment (fake provider, mai sovrascrive BPM esistente) -------
