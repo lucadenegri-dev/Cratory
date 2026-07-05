@@ -79,8 +79,3 @@ class DiscogsClient:
             logger.warning("Discogs search_releases(%s) fallito: %s", params, exc)
             return []
         return data.get("results") or []
-
-
-def discogs_configured() -> bool:
-    """Discogs e' sempre utilizzabile (anche senza token); True se c'e' un token."""
-    return bool(settings.discogs_token)

@@ -13,7 +13,6 @@ from dataclasses import asdict, dataclass
 from app.models import Track
 
 # Soglie BPM per i bucket (electronic-oriented, ma generiche).
-_BPM_BUCKET = 2.0  # ampiezza istogramma BPM
 _OPENER_BPM_MAX = 120.0
 _PEAK_BPM_MIN = 126.0
 _MIN_OPENERS = 2

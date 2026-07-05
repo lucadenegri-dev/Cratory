@@ -1,15 +1,14 @@
-"""Interfacce verso servizi esterni (Spotify, SoundCloud, enrichment musicale, LLM).
+"""Interfacce verso servizi esterni (Spotify, enrichment musicale, LLM).
 
 Nuovo paradigma: il flusso parte da una playlist streaming. Le integrazioni stanno
 dietro interfacce astratte; le implementazioni concrete vivono nei moduli accanto.
 Regole comuni: cache persistente delle risposte, gestione rate limit, errori espliciti.
 
 Separazione fonti dati DJ:
-- Spotify/SoundCloud: identita' traccia + metadata editoriali (titolo, artista, cover,
-  durata, isrc, url). NON forniscono BPM/key affidabili per il mixing.
-- Enrichment musicale (MusicBrainz, GetSongBPM/Tunebat, Cyanite/Soundcharts, Last.fm):
+- Spotify: identita' traccia + metadata editoriali (titolo, artista, cover,
+  durata, isrc, url). NON fornisce BPM/key affidabili per il mixing.
+- Enrichment musicale (Deezer, MusicBrainz, AcousticBrainz, GetSongBPM, Last.fm):
   BPM, key/camelot, genere, mood, energia, danceability, label, release.
-- Rekordbox (storico opzionale): se presente, resta la fonte piu' affidabile per BPM/key/beatgrid.
 """
 
 from abc import ABC, abstractmethod
@@ -21,9 +20,6 @@ class SpotifyClient(ABC):
 
     @abstractmethod
     def get_track_metadata(self, spotify_track_id: str) -> dict[str, Any]: ...
-
-    @abstractmethod
-    def get_artist(self, spotify_artist_id: str) -> dict[str, Any]: ...
 
     @abstractmethod
     def list_user_playlists(self) -> list[dict[str, Any]]:
@@ -40,16 +36,6 @@ class SpotifyClient(ABC):
     @abstractmethod
     def create_playlist(self, name: str, track_ids: list[str]) -> str:
         """Crea una playlist e ritorna il suo URL."""
-
-
-class SoundCloudClient(ABC):
-    """Import playlist/liked SoundCloud. Implementazione concreta in fase successiva."""
-
-    @abstractmethod
-    def get_playlist_tracks(self, playlist_url_or_id: str) -> list[dict[str, Any]]: ...
-
-    @abstractmethod
-    def get_liked_tracks(self) -> list[dict[str, Any]]: ...
 
 
 class MusicFeatureProvider(ABC):
@@ -115,10 +101,3 @@ class SimilarityClient(ABC):
     @abstractmethod
     def top_tracks_by_tag(self, tag: str, *, limit: int = 20) -> list[dict[str, Any]]:
         """[{artist, title}] tracce top per un tag/genere."""
-
-
-class MusicBrainzClient(ABC):
-    """Identificazione aperta: artisti, release, ISRC, label."""
-
-    @abstractmethod
-    def search_artist(self, name: str) -> list[dict[str, Any]]: ...

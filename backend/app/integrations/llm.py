@@ -15,9 +15,6 @@ from app.integrations import LLMClient
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-opus-4-8"
-# Modello economico (input $1 / output $5 per 1M token): ottimo per la modalità
-# technical, dove l'AI ordina/narra ma non calcola compatibilità. Vedi AI_MODEL.
-ECONOMY_MODEL = "claude-haiku-4-5"
 MAX_TOKENS = 16000
 
 # Modelli che NON supportano `output_config.effort` né l'adaptive thinking: lo

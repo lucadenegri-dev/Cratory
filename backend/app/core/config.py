@@ -19,8 +19,6 @@ class Settings(BaseSettings):
     # Origini CORS ammesse (lista separata da virgola). 3000 = dev normale, 3001 = preview.
     frontend_origin: str = "http://localhost:3000,http://localhost:3001"
     log_level: str = "INFO"
-    # Import da cartella locale: radice consentita per il file-browser (vuoto = home utente).
-    local_import_root: str = ""
     # Libreria canonica su disco (disk-first): radice indicizzata da /api/library/index.
     # Vuoto = indicizzazione disattiva. I file qui dentro SONO la libreria posseduta.
     library_root: str = ""

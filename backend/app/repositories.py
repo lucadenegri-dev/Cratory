@@ -377,8 +377,3 @@ def delete_dj_set(db: Session, dj_set_id: int) -> bool:
     db.delete(dj_set)  # cascade elimina le DjSetTrack
     db.commit()
     return True
-
-
-def all_dj_set_tracks(db: Session) -> list[DjSetTrack]:
-    """Tutte le tracce identificate (corpus per la co-occorrenza, Fase 2)."""
-    return list(db.scalars(select(DjSetTrack)).all())

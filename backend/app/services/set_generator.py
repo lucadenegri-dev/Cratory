@@ -265,8 +265,3 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
     db.refresh(setlist)
     logger.info("Set generato: %s tracce, %ss (target %ss)", len(chosen), total_seconds, target_seconds)
     return setlist
-
-
-def preferred_keys_sanity(keys: list[str]) -> list[str]:
-    """Mantiene solo key Camelot valide (input utente)."""
-    return [k for k in keys if parse_camelot(k)]

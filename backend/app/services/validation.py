@@ -34,7 +34,6 @@ class ValidationResult:
         return {"warnings": self.warnings, "auto_fixes": self.auto_fixes, "stats": self.stats}
 
 
-BPM_JUMP_WARN = 8.0
 SHORT_TRACK_SECONDS = 90
 DURATION_TOLERANCE = 0.25  # +/- 25% del target
 

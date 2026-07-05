@@ -515,12 +515,6 @@ export function syncPlaylist(id: number) {
   return apiPost<PlaylistImportReport>(`/api/playlists/${id}/sync`);
 }
 
-export interface LocalDirEntry {
-  name: string;
-  path: string;
-  audio_file_count: number;
-}
-
 export interface LabelStats {
   label: string;
   track_count: number;
@@ -551,10 +545,6 @@ export function servicesStatus() {
 
 export function playlistGaps(id: number) {
   return apiGet<GapAnalysis>(`/api/playlists/${id}/gaps`);
-}
-
-export function libraryGaps() {
-  return apiGet<GapAnalysis>("/api/playlists/library/gaps");
 }
 
 // --- Discovery (Fase F) -----------------------------------------------------
@@ -594,18 +584,6 @@ export function discoveryAddLead(lead: DiscoveryLead) {
     artist: lead.artist,
     title: lead.title,
     album_art_url: lead.thumb_url,
-  });
-}
-
-export function discoveryAddToLibrary(c: DiscoveryCandidate) {
-  return apiPost<DiscoveryAddResponse>("/api/discovery/add", {
-    artist: c.artist,
-    title: c.title,
-    spotify_id: c.spotify_id,
-    isrc: c.isrc,
-    duration_seconds: c.duration_seconds,
-    album_art_url: c.album_art_url,
-    url: c.spotify_url,
   });
 }
 
@@ -703,10 +681,6 @@ export function deleteDjSet(id: number) {
 
 export function enrichmentJobStatus() {
   return apiGet<FeatureEnrichJob>("/api/enrichment/features/status");
-}
-
-export function startEnrichment(force = false) {
-  return apiPost<FeatureEnrichJob>(`/api/enrichment/features?force=${force}`);
 }
 
 /** Riesegue l'enrichment sulle sole tracce di una playlist (force: bypassa la cache). */
