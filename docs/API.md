@@ -56,6 +56,8 @@ GET   /api/tracks/lookup
 GET   /api/tracks/{track_id}
 PATCH /api/tracks/{track_id}
 POST  /api/tracks/{track_id}/enrich
+POST  /api/tracks/{track_id}/link-file
+GET   /api/files/search
 POST  /api/library/index
 GET   /api/library/index/status
 GET   /api/stats
@@ -83,6 +85,17 @@ hanno precedenza sull'enrichment.
 `POST /api/tracks/{track_id}/enrich` arricchisce le feature di una singola traccia in
 modo sincrono e completa i campi mancanti senza sovrascrivere BPM/key esistenti.
 Risponde `409` se nessun provider di feature e' configurato.
+
+`POST /api/tracks/{track_id}/link-file` collega manualmente un file su disco alla
+traccia (possesso senza download): valida esistenza ed estensione audio, imposta
+`has_local_file`/`local_path`/`local_format`/`local_bitrate` + audio-hash
+best-effort e azzera l'esito download (`last_download_outcome`/`reason`).
+Request: `{path}`. `400` su percorso non valido, `404` se la traccia non esiste.
+
+`GET /api/files/search?q=...` cerca file audio per nome (match AND dei termini,
+case-insensitive) in `LIBRARY_ROOT` e `SLSKD_DOWNLOAD_DIR`; max 50 risultati,
+query sotto i 2 caratteri restituisce lista vuota. Risposta: lista di
+`{path, name, format, size, source}` con `source` = `library` | `downloads`.
 
 ## Enrichment
 
@@ -222,8 +235,11 @@ entrano nella libreria principale.
 ## Downloads (Soulseek / slskd)
 
 ```text
-GET  /api/downloads/status
-POST /api/downloads/candidates
+GET    /api/downloads/status
+GET    /api/downloads/pending
+POST   /api/downloads/retry-pending
+DELETE /api/downloads/pending/{track_id}
+POST   /api/downloads/candidates
 POST /api/downloads/playlist/{playlist_id}
 POST /api/downloads/track
 ```
@@ -232,6 +248,12 @@ Acquisizione file via il daemon Soulseek headless slskd, deterministica (zero AI
 collega un file alla `Track` esistente (`has_local_file`/`local_path`/`local_format`/
 `local_bitrate`). Richiede `SLSKD_URL` e `SLSKD_DOWNLOAD_DIR` configurati; senza,
 `candidates`, `playlist/{id}` e `track` rispondono `409`.
+
+`GET /api/downloads/pending` elenca le "da sistemare" (esito `needs_review` /
+`not_found` / `failed` persistito sulla Track, tracce non possedute e non scartate);
+`POST /api/downloads/retry-pending` (`202`) ritenta l'auto-pick su tutte;
+`DELETE /api/downloads/pending/{track_id}` ("Ignora") azzera l'esito e toglie la
+traccia dall'archivio (`404` se la traccia non esiste).
 
 `GET /api/downloads/status` restituisce `available` (slskd configurato) piu' lo stato
 del job in background: `status` (`idle|running|done|error`), `processed`, `total`,

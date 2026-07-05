@@ -19,6 +19,25 @@ enrichment multi-provider; Set Builder tecnico/creativo con garanzia "solo posse
 audit leggero (quick win) e rifacimento documentazione fatti; identificazione mix via
 Shazam in integrazione.
 
+## Milestone 2026-07-05 - Archivio download da sistemare + collegamento manuale file
+
+Pagina persistente dei download problematici e possesso senza download; piano in
+`docs/superpowers/plans/2026-07-05-download-issues-e-link-file.md`.
+
+- **Pagina `/downloads/issues`**: archivio persistente delle tracce con esito
+  `not_found`/`needs_review`/`failed`, filtro per esito con contatori, azioni per
+  riga (Scegli file Soulseek, Collega file locale, Ignora) e "Riprova tutte". In
+  `/downloads` la sezione "Da sistemare" e' ora un riassunto con contatori + link.
+- **Collegamento manuale file locale**: `POST /api/tracks/{id}/link-file` valida
+  percorso/estensione audio, riusa `attach_local_file` (audio-hash best-effort) e
+  azzera l'esito download; ricerca sul disco con `GET /api/files/search`
+  (`LIBRARY_ROOT` + `SLSKD_DOWNLOAD_DIR`, match AND case-insensitive, cap 50).
+  Modal condiviso (`link-local-file-modal.tsx`) usato da archivio e dettaglio
+  traccia ("Collega file"/"Sostituisci file" nella card Disco).
+- **Ignora**: `DELETE /api/downloads/pending/{track_id}` azzera esito e motivo.
+- Refactor: modal revisione Soulseek estratto in `download-review-modal.tsx`
+  (pattern wrapper + key come TrackEditModal).
+
 ## Milestone 2026-07-03 - Barra job unificata (GlobalProgress)
 
 Tutte le operazioni lunghe passano dalla barra DJ in basso; spec approvata in
