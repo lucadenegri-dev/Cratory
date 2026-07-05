@@ -1,4 +1,4 @@
-"""Catena del genere: normalizzazione e tracciamento della sorgente."""
+"""Catena del genere: normalizzazione e fallback dal tag del file."""
 import pytest
 
 from app.services.genre_norm import normalize_genre
@@ -20,14 +20,6 @@ def test_normalize_genre(raw, expected):
     assert normalize_genre(raw) == expected
 
 
-def test_track_ha_genre_source(db):
-    from app.models import Track
-    t = Track(source_type="manual", title="T", artist="A",
-              genre="Techno", genre_source="provider")
-    db.add(t); db.commit(); db.refresh(t)
-    assert t.genre_source == "provider"
-
-
 def _track(db, **kw):
     from app.models import Track
     t = Track(source_type="spotify", spotify_id="s1", platform_track_id="s1",
@@ -42,12 +34,11 @@ def test_fill_identity_usa_tag_file_come_ultima_spiaggia(db, tmp_path):
     _fill_identity(t, {"artist": "A", "title": "T", "genre": "  deep   house "},
                    tmp_path / "A - T.mp3")
     assert t.genre == "Deep House"
-    assert t.genre_source == "file_tag"
 
 
 def test_fill_identity_non_tocca_genere_esistente(db, tmp_path):
     from app.services.library_index import _fill_identity
-    t = _track(db, genre="Techno", genre_source="provider")
+    t = _track(db, genre="Techno")
     _fill_identity(t, {"artist": "A", "title": "T", "genre": "House"},
                    tmp_path / "A - T.mp3")
-    assert t.genre == "Techno" and t.genre_source == "provider"
+    assert t.genre == "Techno"

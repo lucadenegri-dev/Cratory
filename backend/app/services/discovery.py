@@ -135,13 +135,11 @@ def _library_tracks(db: Session) -> list[Track]:
 def _playlist_profile(tracks: list[Track]) -> dict:
     bpms = [t.bpm for t in tracks if t.bpm is not None]
     genres = [t.genre for t in tracks if t.genre]
-    moods = [t.mood for t in tracks if t.mood]
     energies = [t.energy for t in tracks if t.energy is not None]
     return {
         "track_count": len(tracks),
         "top_artists": [a for a, _ in Counter(t.artist for t in tracks if t.artist).most_common(5)],
         "top_genres": [g for g, _ in Counter(genres).most_common(5)],
-        "top_moods": [m for m, _ in Counter(moods).most_common(3)],
         "bpm_range": {"min": round(min(bpms), 1), "max": round(max(bpms), 1)} if bpms else {},
         "avg_energy": round(sum(energies) / len(energies)) if energies else None,
     }

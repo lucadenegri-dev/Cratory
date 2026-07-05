@@ -54,7 +54,7 @@ Scrivi SEMPRE in italiano. Rispondi esclusivamente nel formato JSON richiesto.""
 # Modalità "creative": l'AI porta giudizio musicale, non solo matching tecnico.
 CREATIVE_SYSTEM_PROMPT = """Sei un DJ di esperienza che costruisce un set con gusto e racconto, non solo con la teoria.
 Ricevi una richiesta utente, vincoli strutturati, il profilo delle tracce candidate e la lista delle CANDIDATE
-(id, titolo, artista, BPM, Camelot, durata, genere, mood, energia, sorgente).
+(id, titolo, artista, BPM, Camelot, durata, genere, energia, sorgente).
 
 Oltre alla compatibilità tecnica, usa la TUA conoscenza musicale di questi brani e artisti — vibe, peso
 culturale, come funzionano in pista, il momento giusto della serata — per costruire un ARCO EMOTIVO:
@@ -131,7 +131,6 @@ def _candidate_payload(t: Track) -> dict:
         "key": t.camelot_key or "",
         "duration_seconds": t.duration_seconds or 0,
         "genre": t.genre or "",
-        "mood": t.mood or "",
         "energy": t.energy,
         "source": t.source_type,
     }
@@ -143,7 +142,6 @@ def _compute_candidate_profile(candidates: list[Track]) -> dict:
     keys = [t.camelot_key for t in candidates if t.camelot_key]
     genres = [t.genre for t in candidates if t.genre]
     energies = [t.energy for t in candidates if t.energy is not None]
-    moods = [t.mood for t in candidates if t.mood]
 
     return {
         "candidate_count": len(candidates),
@@ -155,7 +153,6 @@ def _compute_candidate_profile(candidates: list[Track]) -> dict:
         "key_distribution": dict(Counter(keys).most_common()),
         "top_genres": [g for g, _ in Counter(genres).most_common(5)],
         "avg_energy": round(sum(energies) / len(energies)) if energies else None,
-        "top_moods": [m for m, _ in Counter(moods).most_common(3)],
         "missing": {
             "bpm": len(candidates) - len(bpms),
             "key": len(candidates) - len(keys),

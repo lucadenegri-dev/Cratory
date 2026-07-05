@@ -18,7 +18,6 @@ _PEAK_BPM_MIN = 126.0
 _MIN_OPENERS = 2
 _MIN_PEAK = 3
 _UNIFORM_ENERGY_STD = 8.0   # sotto: energia troppo piatta
-_VOCAL_RUN_THRESHOLD = 70   # vocalness >= soglia -> traccia "vocal"
 _MAX_GENRE_SHARE = 0.6      # un genere oltre il 60% -> poco vario; molti generi -> dispersiva
 _MAX_DISTINCT_GENRES = 8
 
@@ -109,23 +108,6 @@ def _check_harmonic(tracks: list[Track]) -> Gap | None:
     return None
 
 
-def _check_vocal_runs(tracks: list[Track]) -> Gap | None:
-    run = best = 0
-    for t in tracks:
-        if t.vocalness is not None and t.vocalness >= _VOCAL_RUN_THRESHOLD:
-            run += 1
-            best = max(best, run)
-        else:
-            run = 0
-    if best >= 4:
-        return Gap(
-            "too_many_vocals", "info",
-            f"Fino a {best} tracce vocal consecutive: rischio di affaticare l'ascolto.",
-            "Intervalla con brani piu' strumentali/groove.",
-        )
-    return None
-
-
 def _check_genre_spread(tracks: list[Track]) -> Gap | None:
     genres = Counter(t.genre.split(",")[0].strip().lower() for t in tracks if t.genre)
     total = sum(genres.values())
@@ -153,7 +135,6 @@ _CHECKS = (
     _check_bpm_bridges,
     _check_energy_uniform,
     _check_harmonic,
-    _check_vocal_runs,
     _check_genre_spread,
 )
 

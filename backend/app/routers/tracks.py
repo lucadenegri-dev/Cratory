@@ -76,9 +76,9 @@ def get_track_detail(track_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/tracks/{track_id}", response_model=TrackDetailOut)
 def patch_track(track_id: int, payload: TrackUpdateIn, db: Session = Depends(get_db)):
-    """Modifica manuale dei valori di una traccia (BPM, key, mood, energia...).
+    """Modifica manuale dei valori di una traccia (BPM, key, energia...).
 
-    Inserimento a mano: i valori forniti hanno la precedenza sull'enrichment. Solo
+    Inserimento a mano: i valori forniti hanno la precedenza su quelli esistenti. Solo
     i campi presenti nel body vengono toccati; `null` azzera, assente resta com'e'.
     """
     track = get_track(db, track_id)
@@ -94,7 +94,6 @@ def patch_track(track_id: int, payload: TrackUpdateIn, db: Session = Depends(get
     # Il genere corretto a mano e' la massima autorita' della catena.
     if "genre" in data:
         data["genre"] = normalize_genre(data.get("genre"))
-        data["genre_source"] = "manual" if data["genre"] else None
     track = update_track(db, track, data)
     return track_detail_out(track)
 

@@ -60,10 +60,10 @@ def test_desired_energy_interpolation():
 
 
 def test_feature_fit_uses_only_available_signals():
-    prev = Track(source_type="spotify", energy=50, mood="dark", genre="techno")
-    cand = Track(source_type="spotify", energy=55, mood="dark", genre="techno")
+    prev = Track(source_type="spotify", energy=50, genre="techno")
+    cand = Track(source_type="spotify", energy=55, genre="techno")
     fit = _feature_fit(prev, cand, SetGenerationRequest(), None)
-    assert fit is not None and fit >= 80  # energia dolce + mood uguale + genere coerente
+    assert fit is not None and fit >= 80  # energia dolce + genere coerente
 
     # nessuna feature presente -> None (il termine non incide sul ranking)
     bare = Track(source_type="spotify")

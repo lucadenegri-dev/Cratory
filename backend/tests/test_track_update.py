@@ -71,9 +71,9 @@ def test_patch_route_404_for_missing_track(db):
 
 
 def test_patch_partial_leaves_unset_fields_untouched(db):
-    t = _track(db, bpm=128.0, camelot_key="8A", mood="dark")
+    t = _track(db, bpm=128.0, camelot_key="8A", genre="Techno")
     tracks.patch_track(t.id, TrackUpdateIn(energy=80), db)
     assert t.energy == 80
     assert t.bpm == 128.0      # non fornito: invariato
     assert t.camelot_key == "8A"
-    assert t.mood == "dark"
+    assert t.genre == "Techno"

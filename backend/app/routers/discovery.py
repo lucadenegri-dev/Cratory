@@ -132,7 +132,7 @@ def expand(req: DiscoveryExpandRequest, db: Session = Depends(get_db)):
     album_label_fn = owned = None
     if _spotify_configured():
         client = SpotifyWebClient(db)
-        album_label_fn = lambda aid: album_label(db, client, aid)  # noqa: E731
+        album_label_fn = lambda aid: album_label(client, aid)  # noqa: E731
         owned = _owned_labels(db)
     try:
         result = discover_for_playlist(

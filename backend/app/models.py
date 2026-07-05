@@ -1,8 +1,8 @@
 """Modelli SQLAlchemy.
 
-Il punto di partenza e' una playlist Spotify. BPM/tonalita'/genere/mood/energia
-vengono ricavati dal livello di enrichment esterno (services/enrichment +
-services/feature_enrichment + integrations/).
+Il punto di partenza e' una playlist Spotify. BPM/tonalita'/genere arrivano da
+provider esterni o da correzione manuale; l'energia e' stimata in modo
+deterministico (services/energy). Nessun motore di enrichment interno.
 """
 
 from datetime import date, datetime, timezone
@@ -36,7 +36,7 @@ class Track(Base):
     soundcloud_id: Mapped[str | None] = mapped_column(String, index=True)
     # Sorgente/piattaforma: spotify | soundcloud | manual
     source_type: Mapped[str] = mapped_column(String, index=True)
-    # Identita' streaming generica (import da playlist) + matching enrichment
+    # Identita' streaming generica (import da playlist)
     platform: Mapped[str | None] = mapped_column(String, index=True)  # spotify | soundcloud
     platform_track_id: Mapped[str | None] = mapped_column(String, index=True)
     isrc: Mapped[str | None] = mapped_column(String, index=True)
@@ -62,38 +62,24 @@ class Track(Base):
     # Identità audio (SHA-256 dello stream decodificato, vedi integrations/local_files.audio_hash):
     # stabile a rinomina/retag. Calcolata al download (acquisition) e all'indicizzazione libreria.
     audio_hash: Mapped[str | None] = mapped_column(String, index=True)
-    # MusicBrainz Recording MBID da fingerprinting AcoustID (identita' acustica certa,
-    # solo tracce possedute). Apre il lookup diretto MusicBrainz e AcousticBrainz.
-    mbid: Mapped[str | None] = mapped_column(String, index=True)
     added_at: Mapped[datetime | None] = mapped_column(DateTime)  # primo import in libreria; l'added_at per-playlist sta su playlist_tracks
     playlist_id: Mapped[int | None] = mapped_column(ForeignKey("playlists.id"), index=True)
     playlist_name: Mapped[str | None] = mapped_column(String)
     title: Mapped[str | None] = mapped_column(String)
     artist: Mapped[str | None] = mapped_column(String, index=True)
     album: Mapped[str | None] = mapped_column(String)
-    album_id: Mapped[str | None] = mapped_column(String, index=True)  # id album Spotify (per backfill label)
     genre: Mapped[str | None] = mapped_column(String, index=True)  # genre_primary
-    genre_secondary: Mapped[str | None] = mapped_column(String)
-    # Da dove viene il genere: manual | provider | ai | file_tag (catena di fiducia).
-    genre_source: Mapped[str | None] = mapped_column(String)
     year: Mapped[int | None] = mapped_column(Integer)
     release_date: Mapped[date | None] = mapped_column(Date)
     label: Mapped[str | None] = mapped_column(String)
     duration_seconds: Mapped[int | None] = mapped_column(Integer)
     bpm: Mapped[float | None] = mapped_column(Float, index=True)
     camelot_key: Mapped[str | None] = mapped_column(String, index=True)  # tonalita' Camelot, es. "7A"
-    # Feature musicali da enrichment esterno (0-100, mai inventate dall'AI)
-    mood: Mapped[str | None] = mapped_column(String)
+    # Energia stimata (0-100), derivata deterministicamente da BPM/genere (services/energy)
     energy: Mapped[int | None] = mapped_column(Integer)
-    danceability: Mapped[int | None] = mapped_column(Integer)
-    vocalness: Mapped[int | None] = mapped_column(Integer)
     # Stato traccia: imported | ready_for_set
     status: Mapped[str] = mapped_column(String, default="imported", index=True)
-    # Enrichment — cover, fonte e confidenza del match
-    album_art_url: Mapped[str | None] = mapped_column(Text)  # artwork_url
-    enrichment_source: Mapped[str | None] = mapped_column(String)  # musicbrainz|getsongbpm|lastfm
-    enrichment_confidence: Mapped[int | None] = mapped_column(Integer)  # 0-100
-    enriched_at: Mapped[datetime | None] = mapped_column(DateTime)
+    album_art_url: Mapped[str | None] = mapped_column(Text)  # artwork_url (cover album)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -136,20 +122,6 @@ class Playlist(Base):
     tracks: Mapped[list["Track"]] = relationship(
         secondary="playlist_tracks", back_populates="playlists", viewonly=True,
     )
-
-
-class EnrichmentCache(Base):
-    """Cache delle risposte dei provider feature (GetSongBPM, MusicBrainz...).
-    Evita lookup ripetuti per la stessa traccia. result_json=None = not found (anch'esso cachato).
-    """
-
-    __tablename__ = "enrichment_cache"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    provider: Mapped[str] = mapped_column(String, index=True)
-    lookup_key: Mapped[str] = mapped_column(String, index=True)
-    result_json: Mapped[dict | None] = mapped_column(JSON)
-    cached_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Setlist(Base):

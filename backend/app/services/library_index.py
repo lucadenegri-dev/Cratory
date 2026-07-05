@@ -74,7 +74,6 @@ def _fill_identity(track: Track, tags: dict, path: Path) -> None:
         normalized = normalize_genre(tags["genre"])
         if normalized:
             track.genre = normalized
-            track.genre_source = "file_tag"
 
 
 def _own(track: Track, *, path: Path, digest: str) -> None:

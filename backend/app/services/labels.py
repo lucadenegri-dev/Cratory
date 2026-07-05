@@ -8,8 +8,8 @@ Due responsabilita':
 
   Robusto contro il rate limit di Spotify in development mode (dove i batch danno
   403 e si finisce a fare GET singole):
-    * ``album_id`` memorizzato sulla traccia -> i run futuri saltano la lookup traccia;
-    * cache album->label in ``EnrichmentCache`` -> niente ri-fetch;
+    * dedup album->label nello stesso run (``run_cache``) -> un fetch per album;
+    * le tracce gia' etichettate escono dai candidati -> i run futuri non le ritoccano;
     * budget di lookup per chiamata (``max_lookups``) -> nessuna raffica;
     * stop pulito sul rate limit (commit parziale + report), niente lavoro perso.
 - ``labels_overview``: aggrega la libreria per etichetta (conteggi + info derivate).
@@ -23,15 +23,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.integrations.spotify import SpotifyError
-from app.models import EnrichmentCache, Track
+from app.models import Track
 
 logger = logging.getLogger(__name__)
 
 _MAX_GENRES_PER_LABEL = 6
-# v2: da nov. 2024 Spotify non espone piu' `label` su GET /albums/{id} in
-# development mode; l'etichetta si ricava da `copyrights`. Il bump invalida le
-# voci di cache "label None" salvate dalla versione precedente (bug).
-_ALBUM_LABEL_PROVIDER = "spotify_album_label_v2"
 
 # "X under exclusive licence to Y" -> tiene solo Y (l'etichetta del master).
 _LICENCE_RE = re.compile(r".*\bunder exclusive licen[cs]e to\s+", re.IGNORECASE)
@@ -99,33 +95,15 @@ def _is_rate_limit(exc: SpotifyError) -> bool:
     return "rate limit" in str(exc).lower()
 
 
-def _cached_album(db: Session, album_id: str) -> EnrichmentCache | None:
-    return db.scalar(
-        select(EnrichmentCache).where(
-            EnrichmentCache.provider == _ALBUM_LABEL_PROVIDER,
-            EnrichmentCache.lookup_key == album_id,
-        )
-    )
+def album_label(client, album_id: str) -> str | None:
+    """Etichetta (pulita) di un album Spotify. Ritorna None se non risolvibile.
 
-
-def _cache_album_label(db: Session, album_id: str, label: str | None) -> None:
-    db.add(EnrichmentCache(
-        provider=_ALBUM_LABEL_PROVIDER, lookup_key=album_id,
-        result_json={"label": label} if label else None,
-    ))
-
-
-def album_label(db: Session, client, album_id: str) -> str | None:
-    """Etichetta (pulita) di un album Spotify, con cache ``EnrichmentCache``.
-
-    Riusabile dal Discovery per annotare i candidati: stessa cache del backfill,
-    quindi non rilegge album gia' visti. Ritorna None se l'album non e' risolvibile.
+    Usata dal Discovery per annotare i candidati (che gia' deduplica per album nel
+    proprio run). Nessuna cache persistente dopo lo slim-down dello schema:
+    l'etichetta si rilegge dalla rete quando serve.
     """
     if not album_id:
         return None
-    cached = _cached_album(db, album_id)
-    if cached is not None:
-        return _clean_label((cached.result_json or {}).get("label"))
     try:
         obj = client.get_album(album_id)
     except SpotifyError:
@@ -133,8 +111,6 @@ def album_label(db: Session, client, album_id: str) -> str | None:
     label = None
     if obj:
         label = obj.get("label") or _label_from_copyrights(obj.get("copyrights"))
-    _cache_album_label(db, album_id, label)
-    db.commit()
     return _clean_label(label)
 
 
@@ -165,12 +141,31 @@ def backfill_labels(
         if lookups >= max_lookups:
             break
 
-        # 1) album_id (dalla traccia se gia' noto, altrimenti una lookup traccia)
-        album_id = track.album_id
+        # 1) traccia -> album (una lookup: l'album non e' piu' persistito sulla traccia)
+        sid = _spotify_track_id(track)
+        try:
+            obj = client.get_track_metadata(sid)
+            lookups += 1
+            if pause:
+                time.sleep(pause)
+        except SpotifyError as exc:
+            if _is_rate_limit(exc):
+                rate_limited = True
+                break
+            logger.warning("Backfill label: lookup traccia %s fallita: %s", sid, exc)
+            continue
+        album_id = (obj.get("album") or {}).get("id") if obj else None
         if not album_id:
-            sid = _spotify_track_id(track)
+            continue
+
+        # 2) album -> label (dedup nello stesso run, poi rete)
+        if album_id in run_cache:
+            label = run_cache[album_id]
+        else:
+            if lookups >= max_lookups:
+                break
             try:
-                obj = client.get_track_metadata(sid)
+                obj = client.get_album(album_id)
                 lookups += 1
                 if pause:
                     time.sleep(pause)
@@ -178,38 +173,11 @@ def backfill_labels(
                 if _is_rate_limit(exc):
                     rate_limited = True
                     break
-                logger.warning("Backfill label: lookup traccia %s fallita: %s", sid, exc)
+                logger.warning("Backfill label: lookup album %s fallita: %s", album_id, exc)
                 continue
-            album_id = (obj.get("album") or {}).get("id") if obj else None
-            track.album_id = album_id
-        if not album_id:
-            continue
-
-        # 2) album -> label (run cache -> EnrichmentCache -> rete)
-        if album_id in run_cache:
-            label = run_cache[album_id]
-        else:
-            cached = _cached_album(db, album_id)
-            if cached is not None:
-                label = (cached.result_json or {}).get("label")
-            else:
-                if lookups >= max_lookups:
-                    break
-                try:
-                    obj = client.get_album(album_id)
-                    lookups += 1
-                    if pause:
-                        time.sleep(pause)
-                except SpotifyError as exc:
-                    if _is_rate_limit(exc):
-                        rate_limited = True
-                        break
-                    logger.warning("Backfill label: lookup album %s fallita: %s", album_id, exc)
-                    continue
-                label = None
-                if obj:
-                    label = obj.get("label") or _label_from_copyrights(obj.get("copyrights"))
-                _cache_album_label(db, album_id, label)
+            label = None
+            if obj:
+                label = obj.get("label") or _label_from_copyrights(obj.get("copyrights"))
             run_cache[album_id] = label
 
         if label and (force or not track.label):

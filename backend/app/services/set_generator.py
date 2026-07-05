@@ -17,7 +17,6 @@ from app.services.scoring import (
     TransitionScore,
     energy_progression_score,
     genre_similarity_score,
-    mood_coherence_score,
     score_transition,
 )
 
@@ -38,7 +37,7 @@ _STRATEGY_CURVE = {
 # Peso dello score di transizione vs aderenza alla traiettoria BPM.
 _TRANSITION_WEIGHT = 0.55
 _TRAJECTORY_WEIGHT = 0.35
-_FEATURE_WEIGHT = 0.20  # energia/mood/genere quando le feature sono disponibili
+_FEATURE_WEIGHT = 0.20  # energia/genere quando le feature sono disponibili
 _KEY_PREF_BONUS = 8.0
 _SEED_BONUS = 15.0
 
@@ -108,7 +107,7 @@ def _desired_energy(req: SetGenerationRequest, progress: float) -> float | None:
 
 def _feature_fit(prev: Track, cand: Track, req: SetGenerationRequest,
                  desired_energy: float | None) -> float | None:
-    """Blend 0-100 di energia/mood/genere, solo sui segnali effettivamente presenti.
+    """Blend 0-100 di energia/genere, solo sui segnali effettivamente presenti.
 
     Ritorna None se la traccia non ha alcuna feature (dataset non arricchito):
     in quel caso il termine feature non incide sul ranking.
@@ -118,9 +117,6 @@ def _feature_fit(prev: Track, cand: Track, req: SetGenerationRequest,
         feats.append(float(energy_progression_score(prev.energy, cand.energy)))
     if desired_energy is not None and cand.energy is not None:
         feats.append(max(0.0, 100.0 - abs(cand.energy - desired_energy)))
-    ref_mood = req.start_mood or prev.mood
-    if cand.mood and ref_mood:
-        feats.append(float(mood_coherence_score(ref_mood, cand.mood)))
     if prev.genre and cand.genre:
         feats.append(float(genre_similarity_score(prev.genre, cand.genre)))
     return sum(feats) / len(feats) if feats else None

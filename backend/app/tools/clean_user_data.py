@@ -15,7 +15,7 @@ from sqlalchemy import text
 from app.core.config import BACKEND_DIR, settings
 from app.db import engine, ensure_schema
 
-DATA_TABLES = ("setlist_tracks", "setlists", "tracks", "playlists", "enrichment_cache")
+DATA_TABLES = ("setlist_tracks", "setlists", "tracks", "playlists")
 TOKEN_TABLES = ("spotify_tokens",)
 
 

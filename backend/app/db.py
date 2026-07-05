@@ -42,11 +42,9 @@ def ensure_schema(eng=None) -> None:
         "tracks": {
             # MVP 2 (Spotify)
             "album_art_url": "TEXT",
-            "enriched_at": "DATETIME",
             # Pivot playlist->set: identita' streaming, playlist di provenienza, stato
             "platform": "VARCHAR",
             "platform_track_id": "VARCHAR",
-            "album_id": "VARCHAR",
             "isrc": "VARCHAR",
             "url": "TEXT",
             "local_path": "TEXT",
@@ -54,31 +52,21 @@ def ensure_schema(eng=None) -> None:
             "playlist_id": "INTEGER",
             "playlist_name": "VARCHAR",
             "status": "VARCHAR DEFAULT 'imported'",
-            # Enrichment esterno (BPM/key/mood/energia/label/...)
-            "genre_secondary": "VARCHAR",
+            # Metadata editoriali + feature di mixing (provider esterni/manuale)
             "release_date": "DATE",
             "label": "VARCHAR",
             "camelot_key": "VARCHAR",
-            "mood": "VARCHAR",
             "energy": "INTEGER",
-            "danceability": "INTEGER",
-            "vocalness": "INTEGER",
-            "enrichment_source": "VARCHAR",
-            "enrichment_confidence": "INTEGER",
             # Ownership file locale (Soulseek download / import locale)
             "has_local_file": "BOOLEAN DEFAULT 0",
             "local_format": "VARCHAR",
             "local_bitrate": "INTEGER",
             "audio_hash": "VARCHAR",
-            # Fingerprinting AcoustID (identita' acustica -> MusicBrainz)
-            "mbid": "VARCHAR",
             # Scansione incrementale (Lotto A)
             "local_mtime": "FLOAT",
             "local_size": "INTEGER",
             # Scartate (Lotto B)
             "archived": "BOOLEAN DEFAULT 0",
-            # Catena del genere (Lotto C)
-            "genre_source": "VARCHAR",
             # Esiti download persistiti (sezione "da sistemare")
             "last_download_outcome": "VARCHAR",
             "last_download_reason": "VARCHAR",
@@ -107,6 +95,7 @@ def ensure_schema(eng=None) -> None:
                     continue  # colonna non ancora presente (tabella pre-migrazione minima)
                 idx.create(bind=conn, checkfirst=True)
         _migrate_drop_legacy(conn)
+        _migrate_drop_enrichment_cols(conn)
         _migrate_playlist_memberships(conn)
 
 
@@ -176,6 +165,43 @@ def _migrate_drop_legacy(conn) -> None:
     conn.execute(text(f"DELETE FROM tracks WHERE source_type IN ({legacy_src})"))
     conn.execute(text("DELETE FROM setlist_tracks WHERE track_id NOT IN (SELECT id FROM tracks)"))
     conn.execute(text("DELETE FROM setlists WHERE id NOT IN (SELECT setlist_id FROM setlist_tracks)"))
+
+
+# Colonne enrichment/fingerprint rimosse con lo slim-down (slice 1B). `energy` resta.
+_DEAD_TRACK_COLS = ("mood", "danceability", "vocalness", "genre_secondary",
+                    "genre_source", "album_id", "enrichment_source",
+                    "enrichment_confidence", "enriched_at", "mbid")
+
+
+def _migrate_drop_enrichment_cols(conn) -> None:
+    """Rimuove da `tracks` le colonne enrichment morte e la tabella `enrichment_cache`.
+
+    Usa `ALTER TABLE ... DROP COLUMN` (SQLite >= 3.35) invece del rebuild con RENAME
+    (pattern `_migrate_drop_legacy`): con le foreign key attive il RENAME di `tracks`
+    riscrive le clausole REFERENCES di `playlist_tracks`/`setlist_tracks` verso il nome
+    temporaneo e il DROP della tabella rinominata fallisce se le membership hanno righe
+    (verificato su SQLite 3.53). Il DROP COLUMN non rinomina ne' ricrea nulla: le FK dei
+    figli e gli indici delle colonne sopravvissute restano intatti.
+
+    Idempotente e robusta agli interrupt: niente tabella temporanea, ogni statement e'
+    atomico e una run successiva droppa solo cio' che e' ancora presente. Gli indici che
+    coprono una colonna morta vanno eliminati prima (SQLite rifiuta il DROP COLUMN su
+    colonne indicizzate, es. ix_tracks_mbid/ix_tracks_album_id dei DB storici).
+    `enrichment_cache` si droppa comunque, anche quando `tracks` e' gia' pulita.
+    """
+    conn.execute(text("DROP TABLE IF EXISTS enrichment_cache"))
+    cols = {r[1] for r in conn.execute(text("PRAGMA table_info(tracks)")).fetchall()}
+    dead = [c for c in _DEAD_TRACK_COLS if c in cols]
+    if not dead:
+        return
+    for (idx,) in conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='tracks' AND sql IS NOT NULL"
+    )).fetchall():
+        covered = {r[2] for r in conn.execute(text(f'PRAGMA index_info("{idx}")')).fetchall()}
+        if covered & set(dead):
+            conn.execute(text(f'DROP INDEX IF EXISTS "{idx}"'))
+    for col in dead:
+        conn.execute(text(f'ALTER TABLE tracks DROP COLUMN "{col}"'))
 
 
 def _migrate_playlist_memberships(conn) -> None:

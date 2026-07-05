@@ -31,4 +31,4 @@ def test_ensure_schema_creates_missing_indexes(tmp_path):
     assert ("archived",) in index_cols
     assert ("audio_hash",) in index_cols
     assert ("has_local_file",) in index_cols
-    assert ("mbid",) in index_cols
+    assert ("bpm",) in index_cols
