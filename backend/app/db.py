@@ -100,6 +100,12 @@ def ensure_schema(eng=None) -> None:
             for col, ddl in cols.items():
                 if col not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+        for table in Base.metadata.tables.values():
+            existing_cols = {c["name"] for c in inspect(conn).get_columns(table.name)}
+            for idx in table.indexes:
+                if not set(idx.columns.keys()).issubset(existing_cols):
+                    continue  # colonna non ancora presente (tabella pre-migrazione minima)
+                idx.create(bind=conn, checkfirst=True)
         _migrate_drop_legacy(conn)
         _migrate_playlist_memberships(conn)
 
