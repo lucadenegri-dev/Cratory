@@ -487,19 +487,6 @@ class LibraryIndexJobStatus(BaseModel):
     finished_at: str | None = None
 
 
-class FingerprintJobStatus(BaseModel):
-    """Stato del job di fingerprinting AcoustID (identita' acustica -> mbid)."""
-
-    status: str
-    phase: str | None = None
-    processed: int = 0
-    total: int = 0
-    result: dict | None = None
-    error: str | None = None
-    started_at: str | None = None
-    finished_at: str | None = None
-
-
 class LibraryStatsOut(BaseModel):
     total_tracks: int
     playlists: int = 0

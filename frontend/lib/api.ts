@@ -243,35 +243,6 @@ export function libraryIndexStatus() {
   return apiGet<LibraryIndexJob>("/api/library/index/status");
 }
 
-/** Report del fingerprinting AcoustID (audio → MusicBrainz MBID). */
-export interface FingerprintReport {
-  total: number;
-  identified: number;
-  below_threshold: number;
-  not_found: number;
-  cache_hits: number;
-  errors: number;
-  missing_files: number;
-}
-
-export interface FingerprintJob {
-  status: "idle" | "running" | "done" | "error";
-  phase: string | null;
-  processed: number;
-  total: number;
-  result: FingerprintReport | null;
-  error: string | null;
-}
-
-/** Fingerprinting delle tracce possedute: identità acustica certa (mbid). */
-export function startFingerprint(force = false) {
-  return apiPost<FingerprintJob>(`/api/library/fingerprint${force ? "?force=true" : ""}`);
-}
-
-export function fingerprintStatus() {
-  return apiGet<FingerprintJob>("/api/library/fingerprint/status");
-}
-
 /** Snapshot della pipeline di orientamento (dashboard). Campi disco null = non configurato. */
 export interface PipelineStatus {
   playlists: number;
