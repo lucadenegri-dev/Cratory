@@ -14,6 +14,7 @@ from app.routers import (
     dj_sets,
     downloads,
     enrichment,
+    files,
     labels,
     pipeline,
     playlists,
@@ -77,6 +78,7 @@ app.include_router(discovery.router)
 app.include_router(dj_sets.router)
 app.include_router(services.router)
 app.include_router(downloads.router)
+app.include_router(files.router)
 app.include_router(pipeline.router)
 
 
