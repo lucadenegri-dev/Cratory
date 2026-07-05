@@ -88,13 +88,17 @@ export default function PlanPage() {
 
         {result && <ApplyResultBanner result={result} />}
 
-        {blocking && plan && (
-          <div className="border border-danger px-4 py-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-danger">{plan.conflicts.length} conflitti bloccanti</div>
+        {plan && plan.conflicts.length > 0 && (
+          <div className={`border px-4 py-3 ${blocking ? "border-danger" : "border-border"}`}>
+            <div className={`text-xs font-semibold uppercase tracking-wider ${blocking ? "text-danger" : "text-warning"}`}>
+              {blocking
+                ? "Niente da applicare: tutte le operazioni sono in conflitto"
+                : `${plan.conflicts.length} conflitti — le operazioni coinvolte verranno saltate`}
+            </div>
             <div className="mt-2 flex flex-col gap-1 text-xs text-muted">
               {plan.conflicts.map((c, i) => <div key={i}>· {c.detail}</div>)}
             </div>
-            <div className="mt-2 text-[11px] text-faint">Risolvi in ISSUES / DUPLICATES / SETTINGS, poi ricostruisci.</div>
+            <div className="mt-2 text-[11px] text-faint">Il resto del piano si applica comunque. Risolvi in ISSUES / DUPLICATES / SETTINGS e ricostruisci per recuperare gli op saltati.</div>
           </div>
         )}
 
@@ -120,6 +124,7 @@ function Marginalia({ stats, disabled, onApply }: { stats: PlanStats; disabled: 
         <Row k="elimina" v={stats.n_delete} />
         <Row k="spazio liberato" v={`${Math.round(stats.space_freed_bytes / (1024 * 1024))} MB`} ok />
         <Row k="conflitti" v={stats.n_conflicts} danger={stats.n_conflicts > 0} />
+        {stats.n_skipped > 0 && <Row k="saltate" v={stats.n_skipped} danger />}
       </div>
       <Button variant="danger" onClick={onApply} disabled={disabled} className="w-full">▶ Applica il piano</Button>
       <p className="text-[10px] leading-relaxed text-faint">Apre un riepilogo di conferma. Tutto annullabile da HISTORY; gli eliminati vanno in quarantena.</p>
@@ -149,7 +154,10 @@ function ApplyResultBanner({ result }: { result: ApplyResult }) {
       ) : result.error ? (
         <span className="text-danger">Errore: {result.error}</span>
       ) : (
-        <span className="text-ok">✓ Applicate {result.applied_ops} operazioni · run #{result.run_id}. Vedi HISTORY per annullare.</span>
+        <span className="text-ok">
+          ✓ Applicate {result.applied_ops} operazioni
+          {result.skipped_ops > 0 ? ` (${result.skipped_ops} saltate per conflitto)` : ""} · run #{result.run_id}. Vedi HISTORY per annullare.
+        </span>
       )}
     </div>
   );

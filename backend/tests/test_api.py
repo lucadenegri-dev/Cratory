@@ -26,6 +26,22 @@ def test_sources_crud(tmp_path):
         assert client.get("/api/sources").json() == []
 
 
+def test_sources_count_excludes_missing(db, tmp_path):
+    from app.models import AudioFile, ScanRoot
+
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    db.add(ScanRoot(id=1, path=str(lib)))
+    for i, status in enumerate(["present", "present", "missing", "missing", "missing"]):
+        db.add(AudioFile(root_id=1, path=f"{lib}/{i}.mp3", ext="mp3", size_bytes=1,
+                         hash_method="file", status=status, has_cover=False))
+    db.commit()
+    with TestClient(app) as client:
+        row = client.get("/api/sources").json()[0]
+        assert row["file_count"] == 2       # solo i presenti su disco
+        assert row["missing_count"] == 3    # i mancanti restano visibili a parte
+
+
 def test_add_source_rejects_missing_path():
     with TestClient(app) as client:
         resp = client.post("/api/sources", json={"path": "/percorso/inesistente/xyz"})

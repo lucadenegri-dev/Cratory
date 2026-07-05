@@ -6,6 +6,7 @@ export interface ScanRoot {
   label: string | null;
   last_scanned_at: string | null;
   file_count: number;
+  missing_count: number;
 }
 
 export interface ScanResult {
@@ -244,6 +245,7 @@ export interface PlanOp {
   before: Record<string, unknown>;
   after: Record<string, unknown>;
   status: string;
+  skipped: boolean; // in conflitto: all'apply verrà saltato
 }
 export interface Conflict {
   kind: string;
@@ -257,7 +259,8 @@ export interface PlanStats {
   n_delete: number;
   space_freed_bytes: number;
   n_conflicts: number;
-  blocking: boolean;
+  n_skipped: number;
+  blocking: boolean; // niente da applicare (tutti gli op saltati)
 }
 export interface Plan {
   id: number;
@@ -271,6 +274,7 @@ export interface Plan {
 export interface ApplyResult {
   run_id: number | null;
   applied_ops: number;
+  skipped_ops: number;
   refused: boolean;
   stale: boolean;
   partial: boolean;

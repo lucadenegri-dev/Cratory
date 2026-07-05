@@ -1,3 +1,5 @@
+from sqlalchemy import select
+
 from app.models import AudioFile, Plan, PlanOp, ScanRoot
 from app.services.apply import apply_plan
 
@@ -20,8 +22,7 @@ def _setup(db, tmp_path, *, before_path):
     return plan
 
 
-def test_refused_on_blocking_conflict(db, tmp_path, copy_fixture):
-    # due file che renderizzano alla stessa destinazione → collisione bloccante
+def _seed_two_colliding(db, tmp_path, copy_fixture):
     root = tmp_path / "lib"; root.mkdir()
     for i in (1, 2):
         copy_fixture("flac", root / f"{i}.flac")
@@ -42,8 +43,51 @@ def test_refused_on_blocking_conflict(db, tmp_path, copy_fixture):
     db.add(PlanOp(plan_id=1, seq=1, kind="MOVE", file_id=2,
                   before_json={"path": str(root / "2.flac")}, after_json={"path": dest}, status="pending"))
     db.commit()
+    return plan, root
+
+
+def test_colliding_ops_are_skipped_not_refused(db, tmp_path, copy_fixture):
+    # due file che renderizzano alla stessa destinazione: entrambi saltati,
+    # l'apply non viene più rifiutato in blocco
+    plan, root = _seed_two_colliding(db, tmp_path, copy_fixture)
     res = apply_plan(db, plan)
-    assert res.refused is True
+    assert res.refused is False
+    assert res.applied_ops == 0 and res.skipped_ops == 2
+    assert (root / "1.flac").exists() and (root / "2.flac").exists()  # nessuno spostato
+    ops = db.scalars(select(PlanOp)).all()
+    assert {o.status for o in ops} == {"skipped"}
+    assert plan.status == "applied"
+
+
+def test_disk_occupied_op_skipped_others_applied(db, tmp_path, copy_fixture):
+    # la dest del file 1 è occupata su disco da un file NON nel DB → op saltato;
+    # il file 2 si sposta regolarmente
+    root = tmp_path / "lib"; root.mkdir()
+    copy_fixture("flac", root / "1.flac")
+    copy_fixture("flac", root / "2.flac")
+    dest1 = root / "House" / "A" / "A - T1.flac"
+    copy_fixture("flac", dest1)  # intruso su disco, sconosciuto al DB
+    db.add(ScanRoot(id=1, path=str(root)))
+    for i in (1, 2):
+        db.add(AudioFile(id=i, root_id=1, path=str(root / f"{i}.flac"), ext="flac", size_bytes=1,
+                         hash_method="file", status="present", has_cover=False,
+                         artist="A", title=f"T{i}", genre="House"))
+    plan = Plan(id=1, status="draft",
+                rules_json={"naming_template": "{artist} - {title}",
+                            "folder_template": "{genre}/{artist}", "targets": {"1": str(root)}})
+    db.add(plan)
+    dest2 = root / "House" / "A" / "A - T2.flac"
+    db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=1,
+                  before_json={"path": str(root / "1.flac")}, after_json={"path": str(dest1)}, status="pending"))
+    db.add(PlanOp(plan_id=1, seq=1, kind="MOVE", file_id=2,
+                  before_json={"path": str(root / "2.flac")}, after_json={"path": str(dest2)}, status="pending"))
+    db.commit()
+    res = apply_plan(db, plan)
+    assert res.applied_ops == 1 and res.skipped_ops == 1
+    assert (root / "1.flac").exists()      # saltato: resta dov'era
+    assert dest2.exists() and not (root / "2.flac").exists()  # applicato
+    by_id = {o.file_id: o for o in db.scalars(select(PlanOp)).all()}
+    assert by_id[1].status == "skipped" and by_id[2].status == "applied"
 
 
 def test_stale_when_before_path_mismatch(db, tmp_path, copy_fixture):

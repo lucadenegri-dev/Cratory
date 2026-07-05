@@ -34,7 +34,12 @@ export function SourcesTable({
               <tr key={r.id} className="border-b border-surface-2 last:border-0">
                 <td className="px-3 py-2 text-fg-strong">{r.path}</td>
                 <td className="px-3 py-2 text-muted">{r.label || "—"}</td>
-                <td className="tnum px-3 py-2 text-right text-fg">{r.file_count}</td>
+                <td className="tnum px-3 py-2 text-right text-fg">
+                  {r.file_count}
+                  {r.missing_count > 0 && (
+                    <span className="block text-[10px] text-faint">{r.missing_count} mancanti</span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-muted">{fmtDate(r.last_scanned_at)}</td>
                 <td className="px-3 py-2 text-right">
                   <button

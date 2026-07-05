@@ -32,6 +32,7 @@ class ScanRootRead(BaseModel):
     label: str | None
     last_scanned_at: datetime | None
     file_count: int
+    missing_count: int = 0
 
 
 class AnalyzeSummary(BaseModel):
@@ -128,6 +129,7 @@ class PlanOpRead(BaseModel):
     before: dict
     after: dict
     status: str
+    skipped: bool = False  # in conflitto: all'apply verrà saltato, non blocca il piano
 
 
 class ConflictRead(BaseModel):
@@ -143,6 +145,8 @@ class PlanStats(BaseModel):
     n_delete: int = 0
     space_freed_bytes: int = 0
     n_conflicts: int = 0
+    n_skipped: int = 0
+    # blocking = niente da applicare (tutti gli op in conflitto), non "c'è un conflitto"
     blocking: bool = False
 
 
@@ -159,6 +163,7 @@ class PlanRead(BaseModel):
 class ApplyResult(BaseModel):
     run_id: int | None = None
     applied_ops: int = 0
+    skipped_ops: int = 0
     refused: bool = False
     stale: bool = False
     partial: bool = False

@@ -68,3 +68,42 @@ def test_plan_includes_retag_and_delete_and_stats(db):
 
 def test_load_plan_none_when_absent(db):
     assert planning.load_plan(db) is None
+
+
+def test_collision_skips_ops_without_blocking(db):
+    # due file → stessa dest (collisione), un terzo si muove pulito:
+    # il piano NON è bloccante, gli op in conflitto sono marcati skipped.
+    db.add(ScanRoot(id=1, path="/lib"))
+    _file(db, 1, title="T")
+    _file(db, 2, title="T")     # stesso artist+title+genre → stessa dest
+    _file(db, 3, title="Solo")  # pulito
+    p = planning.create_plan(db)
+    assert p.stats.n_move == 3
+    assert p.stats.n_skipped == 2
+    assert p.stats.blocking is False
+    skipped = {o.file_id for o in p.ops if o.skipped}
+    assert skipped == {1, 2}
+
+
+def test_blocking_only_when_nothing_applicable(db):
+    db.add(ScanRoot(id=1, path="/lib"))
+    _file(db, 1, title="T")
+    _file(db, 2, title="T")  # solo op in collisione → niente da applicare
+    p = planning.create_plan(db)
+    assert p.stats.n_skipped == 2
+    assert p.stats.blocking is True
+
+
+def test_load_plan_flags_disk_occupied_dest(db, tmp_path):
+    # la dest esiste su disco ma non nel DB (Library non scansionata) →
+    # conflitto visibile già a livello di piano, op saltato.
+    root = tmp_path / "lib"
+    (root / "varie").mkdir(parents=True)
+    src = root / "varie" / "1.mp3"; src.write_text("a")
+    dest = root / "House" / "A" / "A - T1.mp3"
+    dest.parent.mkdir(parents=True); dest.write_text("b")
+    db.add(ScanRoot(id=1, path=str(root)))
+    _file(db, 1, path=str(src))
+    p = planning.create_plan(db)
+    assert any("su disco" in c.detail for c in p.conflicts)
+    assert p.stats.n_skipped == 1 and p.stats.blocking is True

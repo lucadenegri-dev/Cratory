@@ -90,22 +90,29 @@ def load_plan(db: Session) -> PlanRead | None:
     files, accepted, removals, snapshot, targets = _inputs(db)
     files_by_id = {f.id: f for f in files}
     op_computed = [PlanOpComputed(o.kind, o.file_id, o.before_json, o.after_json) for o in ops]
-    conflicts = conflict.check(op_computed, files_by_id, accepted, removals, snapshot, targets)
+    conflicts = conflict.check(op_computed, files_by_id, accepted, removals, snapshot, targets,
+                               disk_occupied=conflict.disk_occupied(op_computed))
+    skip_ids = {c.file_id for c in conflicts if c.kind in ("collision", "outside_root")}
 
     counts = {"RETAG": 0, "RENAME": 0, "MOVE": 0, "DELETE": 0}
     space = 0
+    n_skipped = 0
     for o in ops:
         counts[o.kind] = counts.get(o.kind, 0) + 1
+        if o.kind in ("RENAME", "MOVE") and o.file_id in skip_ids:
+            n_skipped += 1
         if o.kind == "DELETE":
             f = files_by_id.get(o.file_id)
             space += (f.size_bytes or 0) if f else 0
     stats = PlanStats(n_retag=counts["RETAG"], n_rename=counts["RENAME"],
                       n_move=counts["MOVE"], n_delete=counts["DELETE"],
                       space_freed_bytes=space, n_conflicts=len(conflicts),
-                      blocking=len(conflicts) > 0)
+                      n_skipped=n_skipped,
+                      blocking=len(ops) > 0 and n_skipped == len(ops))
     op_reads = [PlanOpRead(id=o.id, seq=o.seq, kind=o.kind, file_id=o.file_id,
                            file_path=files_by_id[o.file_id].path if o.file_id in files_by_id else "",
-                           before=o.before_json, after=o.after_json, status=o.status)
+                           before=o.before_json, after=o.after_json, status=o.status,
+                           skipped=o.kind in ("RENAME", "MOVE") and o.file_id in skip_ids)
                 for o in ops]
     conflict_reads = [ConflictRead(kind=c.kind, file_id=c.file_id, detail=c.detail)
                       for c in conflicts]

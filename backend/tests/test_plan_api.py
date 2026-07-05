@@ -37,5 +37,7 @@ def test_plan_reports_conflict_on_missing_data(db):
     db.commit()
     with TestClient(app) as client:
         body = client.post("/api/plan").json()
-        assert body["stats"]["blocking"] is True
+        # il conflitto è segnalato ma non blocca: il file resta semplicemente fermo
         assert any(c["kind"] == "missing_template_data" for c in body["conflicts"])
+        assert body["ops"] == []
+        assert body["stats"]["blocking"] is False

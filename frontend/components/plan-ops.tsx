@@ -19,7 +19,11 @@ function OpRow({ op }: { op: PlanOp }) {
   const isDelete = op.kind === "DELETE";
   return (
     <div className={cn("flex items-baseline gap-3 border border-t-0 border-surface-2 px-3 py-1.5 first:border-t",
-      isDelete ? "border-l-2 border-l-danger" : "border-l-2 border-l-border")}>
+      isDelete ? "border-l-2 border-l-danger" : "border-l-2 border-l-border",
+      op.skipped && "opacity-50")}>
+      {op.skipped && (
+        <span className="shrink-0 text-[9px] uppercase tracking-wider text-warning">salta</span>
+      )}
       <span className="min-w-[200px] max-w-[200px] truncate text-[11px] text-muted" title={op.file_path}>{basename(op.file_path)}</span>
       <span className="text-[11px]">
         {op.kind === "RETAG" ? (

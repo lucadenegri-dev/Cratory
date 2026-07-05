@@ -13,13 +13,19 @@ from app.schemas import ScanRootCreate, ScanRootRead
 router = APIRouter(prefix="/api/sources", tags=["sources"])
 
 
+def _count(db: Session, root_id: int, status: str) -> int:
+    return db.scalar(
+        select(func.count()).select_from(AudioFile)
+        .where(AudioFile.root_id == root_id, AudioFile.status == status)
+    ) or 0
+
+
 def _to_read(db: Session, root: ScanRoot) -> ScanRootRead:
-    count = db.scalar(
-        select(func.count()).select_from(AudioFile).where(AudioFile.root_id == root.id)
-    )
     return ScanRootRead(
         id=root.id, path=root.path, label=root.label,
-        last_scanned_at=root.last_scanned_at, file_count=count or 0,
+        last_scanned_at=root.last_scanned_at,
+        file_count=_count(db, root.id, "present"),
+        missing_count=_count(db, root.id, "missing"),
     )
 
 

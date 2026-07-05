@@ -43,6 +43,26 @@ def test_apply_move_and_delete_with_reorder(db, tmp_path, copy_fixture):
     assert {r.kind for r in rows} == {"MOVE", "DELETE"} and len(rows) == 2
 
 
+def test_apply_cleans_emptied_source_dirs(db, tmp_path, copy_fixture):
+    # dopo lo spostamento la vecchia cartella genere resta vuota → va rimossa
+    root = tmp_path / "lib"
+    src = copy_fixture("flac", root / "Hous" / "A" / "A - T1.flac")  # genere sporco
+    db.add(ScanRoot(id=1, path=str(root)))
+    _af(db, 1, src, title="T1", genre="House")
+    plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
+                "folder_template": "{genre}/{artist}", "targets": {"1": str(root)}})
+    db.add(plan)
+    dest = str(root / "House" / "A" / "A - T1.flac")
+    db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=1,
+                  before_json={"path": src}, after_json={"path": dest}, status="pending"))
+    db.commit()
+    res = apply_plan(db, plan)
+    assert res.applied_ops == 1
+    assert os.path.exists(dest)
+    assert not (root / "Hous").exists()  # catena svuotata rimossa
+    assert root.exists()
+
+
 def test_apply_retag(db, tmp_path, copy_fixture):
     root = tmp_path / "lib"
     f = copy_fixture("flac", root / "x.flac")

@@ -56,12 +56,20 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
     started = utcnow()
     ops, files, snapshot, targets, accepted, removals = _inputs(db, plan)
     op_computed = [PlanOpComputed(o.kind, o.file_id, o.before_json, o.after_json) for o in ops]
-    if conflict.check(op_computed, files, accepted, removals, snapshot, targets):
-        return ApplyResult(refused=True, reason="conflitti bloccanti",
-                           started_at=started, finished_at=utcnow())
+    # Gli op in conflitto (collisione DB o dest già esistente su disco) vengono
+    # saltati, non bloccano più l'intero piano: il resto si applica.
+    conflicts = conflict.check(op_computed, files, accepted, removals, snapshot, targets,
+                               disk_occupied=conflict.disk_occupied(op_computed))
+    skip_ids = {c.file_id for c in conflicts if c.kind in ("collision", "outside_root")}
+    skipped = [o for o in ops if o.kind in ("RENAME", "MOVE") and o.file_id in skip_ids]
+    for o in skipped:
+        o.status = "skipped"
+    db.commit()
+    ops = [o for o in ops if o.status != "skipped"]
     stale = _stale_op(ops, files)
     if stale is not None:
         return ApplyResult(stale=True, failed_op_seq=stale, reason="piano stale",
+                           skipped_ops=len(skipped),
                            started_at=started, finished_at=utcnow())
     retag_ops = [o for o in ops if o.kind == "RETAG"]
     move_ops = [o for o in ops if o.kind in ("RENAME", "MOVE")]
@@ -71,6 +79,11 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
     state = {"seq": 0, "applied": 0}
     current = {"seq": None}   # Fix 4: traccia il seq del PlanOp corrente
     total = len(ops)
+    src_dirs: set = set()     # cartelle sorgente svuotabili, pulite a fine run
+
+    def _cleanup_dirs():
+        roots = {r.path for r in db.scalars(select(ScanRoot)).all()} | set(targets.values())
+        fsops.cleanup_empty_dirs(src_dirs, roots)
 
     def _journal(kind, file_id, from_path=None, to_path=None, prior_tags=None, quarantine_path=None):
         db.add(UndoJournal(run_id=plan.id, op_seq=state["seq"], kind=kind, file_id=file_id,
@@ -89,6 +102,7 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
         q = fsops.quarantine_path_for(f.path, _root_path(db, f.root_id))
         _journal("DELETE", o.file_id, from_path=f.path, quarantine_path=q)  # journal PRIMA
         fsops.safe_move(f.path, q)                              # poi muta
+        src_dirs.add(os.path.dirname(f.path))
         o.status = "applied"
         db.commit()
         done.add(o.file_id)
@@ -113,6 +127,7 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
                 _do_delete(blocker)                            # delete-prima-di-move
             _journal(o.kind, o.file_id, from_path=f.path, to_path=dest)  # journal PRIMA
             fsops.safe_move(f.path, dest)                      # poi muta
+            src_dirs.add(os.path.dirname(f.path))
             o.status = "applied"
             db.commit()
             _progress()
@@ -123,11 +138,15 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
     except Exception as exc:  # noqa: BLE001 — stop pulito, journal intatto
         plan.status = "applied"
         db.commit()
+        _cleanup_dirs()
         return ApplyResult(run_id=plan.id, applied_ops=state["applied"], partial=True,
                            failed_op_seq=current["seq"], error=str(exc),  # Fix 4: seq del PlanOp
+                           skipped_ops=len(skipped),
                            started_at=started, finished_at=utcnow())
 
     plan.status = "applied"
     db.commit()
+    _cleanup_dirs()
     return ApplyResult(run_id=plan.id, applied_ops=state["applied"],
+                       skipped_ops=len(skipped),
                        started_at=started, finished_at=utcnow())
