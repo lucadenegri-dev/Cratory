@@ -1,27 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download as DownloadIcon, Search } from "lucide-react";
+import { Download as DownloadIcon, Search, Wrench } from "lucide-react";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, Badge, Button, Card, EmptyState, Input, Select, Loading } from "@/components/ui";
 import { useJobs } from "@/components/jobs-provider";
+import { DownloadReviewModal, type ReviewTarget } from "@/components/download-review-modal";
 import {
-  apiGet,
-  downloadCandidates,
   downloadManual,
   downloadPending,
-  downloadTrack,
   retryPending,
-  fmtDuration,
   listImportedPlaylists,
   searchDownloads,
   startPlaylistDownload,
   type DownloadCandidate,
   type Playlist,
   type Track,
-  type TrackDetail,
 } from "@/lib/api";
-import { Modal, Spinner } from "@/components/ui";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -50,13 +46,8 @@ export default function DownloadsPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<DownloadCandidate[] | null>(null);
   const [searching, setSearching] = useState(false);
-  // Revisione: candidati per una traccia "da rivedere"/"non trovata"
-  type ReviewTarget = { track_id: number; artist: string | null; title: string | null };
   const [review, setReview] = useState<ReviewTarget | null>(null);
   const [pending, setPending] = useState<Track[] | null>(null);
-  const [candidates, setCandidates] = useState<DownloadCandidate[] | null>(null);
-  const [reviewDuration, setReviewDuration] = useState<number | null>(null);
-  const [picking, setPicking] = useState(false);
   const alive = useRef(true);
 
   const refreshPending = useCallback(() => {
@@ -79,40 +70,6 @@ export default function DownloadsPage() {
       alive.current = false;
     };
   }, []);
-
-  const openReview = async (it: ReviewTarget) => {
-    setReview(it);
-    setCandidates(null);
-    setReviewDuration(null);
-    setError(null);
-    try {
-      // La durata attesa aiuta il ranking dei candidati (bonus/penalita' via backend).
-      const track = await apiGet<TrackDetail>(`/api/tracks/${it.track_id}`);
-      setReviewDuration(track.duration_seconds);
-      setCandidates(await downloadCandidates(
-        track.artist ?? it.artist ?? "", track.title ?? it.title ?? "", track.duration_seconds));
-    } catch (e) {
-      setError(err(e));
-      setCandidates([]);
-    }
-  };
-
-  const pickCandidate = async (c: DownloadCandidate) => {
-    if (!review) return;
-    setPicking(true);
-    setError(null);
-    try {
-      await downloadTrack(review.track_id, c);
-      refresh();
-      setReview(null);
-      refreshPending();
-    } catch (e) {
-      // 409 tipico: "Un download e' gia' in corso" — riprova a job finito.
-      setError(err(e));
-    } finally {
-      setPicking(false);
-    }
-  };
 
   const retryAll = async () => {
     setError(null);
@@ -162,6 +119,8 @@ export default function DownloadsPage() {
 
   const available = status?.available ?? true;
   const running = status?.status === "running";
+  const count = (k: string) =>
+    (pending ?? []).filter((t) => t.last_download_outcome === k).length;
 
   return (
     <PageLayout title="Download" meta={status?.total || undefined}>
@@ -239,35 +198,26 @@ export default function DownloadsPage() {
 
         {pending && pending.length > 0 && (
           <Card className="p-3">
-            <div className="mb-2 flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[10px] uppercase tracking-wider text-muted">
                 Da sistemare ({pending.length})
               </span>
-              <Button size="sm" variant="outline" onClick={retryAll} disabled={running || !available}>
-                <DownloadIcon size={13} /> Riprova tutte ({pending.length})
-              </Button>
+              <span className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={retryAll} disabled={running || !available}>
+                  <DownloadIcon size={13} /> Riprova tutte
+                </Button>
+                <Link href="/downloads/issues">
+                  <Button size="sm" variant="outline">
+                    <Wrench size={13} /> Vai all&apos;archivio
+                  </Button>
+                </Link>
+              </span>
             </div>
-            <ul className="divide-y divide-border text-sm">
-              {pending.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-3 py-1.5">
-                  <span className="truncate">
-                    {t.artist ?? "Artista sconosciuto"} — {t.title ?? "Senza titolo"}
-                    {t.last_download_reason && (
-                      <span className="ml-2 text-xs text-muted">({t.last_download_reason})</span>
-                    )}
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <Button size="sm" variant="outline"
-                      onClick={() => openReview({ track_id: t.id, artist: t.artist, title: t.title })}>
-                      <Search size={13} /> Scegli file
-                    </Button>
-                    <Badge tone={OUTCOME_TONE[t.last_download_outcome ?? ""] ?? "neutral"}>
-                      {OUTCOME_LABEL[t.last_download_outcome ?? ""] ?? t.last_download_outcome}
-                    </Badge>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Badge tone="neutral">{count("not_found")} non trovate</Badge>
+              <Badge tone="warning">{count("needs_review")} da rivedere</Badge>
+              <Badge tone="danger">{count("failed")} fallite</Badge>
+            </div>
           </Card>
         )}
 
@@ -289,7 +239,7 @@ export default function DownloadsPage() {
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
                     {it.outcome !== "downloaded" && it.track_id != null && (
-                      <Button size="sm" variant="outline" onClick={() => openReview(it)}>
+                      <Button size="sm" variant="outline" onClick={() => setReview(it)}>
                         <Search size={13} /> Scegli file
                       </Button>
                     )}
@@ -308,50 +258,15 @@ export default function DownloadsPage() {
         )}
       </div>
 
-      <Modal
-        open={review !== null}
+      <DownloadReviewModal
+        target={review}
         onClose={() => setReview(null)}
-        title="Scegli il file"
-        size="lg"
-      >
-        {review && (
-          <div className="p-4">
-            <p className="mb-3 text-sm text-muted">
-              {review.artist ?? "?"} — {review.title ?? "?"}
-              {reviewDuration != null && (
-                <span className="ml-2 text-xs text-faint">durata attesa {fmtDuration(reviewDuration)}</span>
-              )}
-            </p>
-            {candidates === null && <Loading label="Cerco i candidati su Soulseek…" />}
-            {candidates?.length === 0 && (
-              <p className="py-6 text-center text-sm text-muted">
-                Nessun candidato in questo momento: riprova più tardi (dipende da chi è online).
-              </p>
-            )}
-            {candidates && candidates.length > 0 && (
-              <ul className="max-h-80 divide-y divide-border overflow-y-auto border border-border">
-                {candidates.map((c, i) => (
-                  <li key={`${c.username}-${i}`} className="flex items-center gap-3 px-3 py-2 text-sm">
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-mono text-xs">{c.filename.split("\\").pop()}</div>
-                      <div className="mt-0.5 text-xs text-muted">
-                        {(c.format ?? "?").toUpperCase()}
-                        {c.bitrate ? ` · ${c.bitrate} kbps` : ""}
-                        {c.length ? ` · ${fmtDuration(c.length)}` : ""}
-                        {" · "}{c.username}
-                        {" · "}<span className="tnum">{c.confidence}</span>/100
-                      </div>
-                    </div>
-                    <Button size="sm" onClick={() => pickCandidate(c)} disabled={picking}>
-                      {picking ? <Spinner /> : <DownloadIcon size={13} />} Scarica
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </Modal>
+        onPicked={() => {
+          refresh();
+          setReview(null);
+          refreshPending();
+        }}
+      />
     </PageLayout>
   );
 }
