@@ -22,7 +22,9 @@ identified tracklist.
 **Disk-first:** the library is the disk. Cratory indexes your canonical music
 folder (`LIBRARY_ROOT`), re-links files by audio hash after DjOrganizer
 renames/moves them, and builds sets from tracks you actually own. Streaming
-playlists are *leads* — candidates to acquire — not the library.
+playlists are *leads* — candidates to acquire — not the library. The index
+re-runs automatically on every app startup and scans incrementally; an optional
+archive folder (`ARCHIVE_ROOT`) marks discarded tracks.
 
 ## Features
 
@@ -37,7 +39,12 @@ playlists are *leads* — candidates to acquire — not the library.
   genre/label via Discogs ("Scava").
 - Identify mix tracklists via Shazam/yt-dlp/ffmpeg into a corpus kept separate from the library.
 - Acquire files for tracks you already own the rights to via Soulseek (slskd), with
-  deterministic candidate ranking and per-playlist or per-track download.
+  deterministic candidate ranking and per-playlist or per-track download, plus free
+  search with manual pick and a persistent "to fix" queue (retry/ignore).
+- Fingerprint owned files via AcoustID/Chromaprint to pin a MusicBrainz identity (MBID)
+  that feeds MusicBrainz/AcousticBrainz enrichment.
+- Link a file already on disk to a track from the track detail (searches `LIBRARY_ROOT`
+  and the slskd download folder).
 
 ## Architecture at a glance
 
@@ -67,7 +74,9 @@ External:  Spotify, Deezer, MusicBrainz, AcousticBrainz, GetSongBPM, Last.fm, Di
 Prerequisites: Python 3.12+, Node.js 20+. The Shazam module also needs system `ffmpeg`
 plus the `yt-dlp` and `shazamio` Python dependencies (in `backend/requirements.txt`). File
 acquisition needs a separately running [slskd](https://github.com/slskd/slskd) instance
-(not bundled).
+(not bundled). Library fingerprinting (optional) needs the system `fpcalc` binary
+(Chromaprint) plus the `pyacoustid` Python dependency (already in
+`backend/requirements.txt`) and an `ACOUSTID_API_KEY`.
 
 Backend:
 
@@ -91,6 +100,10 @@ npm run dev
 Local URLs: app at `http://localhost:3000`, API docs at `http://localhost:8000/docs`,
 health at `http://localhost:8000/api/health`.
 
+Shortcut: `./start-dev.sh` (macOS/Linux) or `start-dev.bat` (Windows) starts backend +
+frontend, plus a local slskd (`:5030`) and the sibling DjOrganizer app (`:8010`/`:3010`)
+when available.
+
 ## Configuration
 
 Variables live in `backend/.env` (start from `backend/.env.example`).
@@ -112,10 +125,14 @@ LASTFM_API_KEY=
 DISCOGS_TOKEN=
 DEEZER_ENABLED=true
 ACOUSTICBRAINZ_ENABLED=true
+ACOUSTID_API_KEY=
 AI_API_KEY=
 AI_MODEL=
 AI_MODEL_CREATIVE=
 ```
+
+`ACOUSTID_API_KEY` is free (acoustid.org) and also needs the system `fpcalc`
+(Chromaprint) binary for audio fingerprinting.
 
 File acquisition (optional):
 
@@ -129,6 +146,8 @@ Disk-first library indexing (optional):
 
 ```text
 LIBRARY_ROOT=
+ARCHIVE_ROOT=
+ORGANIZER_URL=
 ```
 
 Spotify provides track identity, editorial metadata, covers, duration, ISRC, URLs and
@@ -138,8 +157,11 @@ point to your own running slskd instance; without them, file acquisition stays d
 and the rest of the app is unaffected. `LIBRARY_ROOT` points to your canonical, organized
 music folder (the one DjOrganizer manages); leave it empty to keep library indexing
 disabled — Settings → "Libreria (disco)" triggers `POST /api/library/index` once it is
-set, matching files to tracks by audio hash (falling back to legacy digest, ISRC, then
-fuzzy artist+title) and marking them as owned (`has_local_file`).
+set (the index also re-runs automatically at every app startup, incremental scan),
+matching files to tracks by audio hash (falling back to legacy digest, ISRC, then
+fuzzy artist+title) and marking them as owned (`has_local_file`). `ARCHIVE_ROOT` is an
+optional discarded-tracks folder (DJPlayer's PASSED bin) recognized alongside the
+library. `ORGANIZER_URL` powers the optional "Open DjOrganizer" link in the dashboard.
 
 ## Database
 

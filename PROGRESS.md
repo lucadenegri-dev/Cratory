@@ -17,7 +17,36 @@ migration. Disponibilita' `cratory.com` da confermare su registrar.
 disco, playlist streaming = lead); Discovery operativo (expand Last.fm + dig Discogs);
 enrichment multi-provider; Set Builder tecnico/creativo con garanzia "solo posseduti";
 audit leggero (quick win) e rifacimento documentazione fatti; identificazione mix via
-Shazam in integrazione.
+Shazam integrata (fase 1; co-occorrenza in backlog).
+
+## Milestone 2026-07-05 - Audit end-to-end: pulizia codice morto + riallineamento docs
+
+Audit multi-agente dell'intero progetto (backend, frontend, integrazioni, test,
+prodotto): ~135 proposte di miglioria raccolte e prioritizzate (report della sessione;
+le piu' rilevanti andranno in `docs/ROADMAP.md` quando decise).
+
+- **Codice morto rimosso** (verifica doppia: grep esaustivo + contesto/git):
+  ABC `SoundCloudClient`/`MusicBrainzClient` e `get_artist` dall'interfaccia
+  `SpotifyClient`; in `spotify.py` il fallback batch (`_get_many`,
+  `get_tracks_batch`, `get_artists_batch`, `get_artist`) e le costanti
+  `BATCH`/`SEARCH_LABEL_MAX`/`SINGLE_GET_DELAY`; `ECONOMY_MODEL` (llm.py);
+  `discogs_configured`; `all_dj_set_tracks`; `preferred_keys_sanity`;
+  `_BPM_BUCKET`; `BPM_JUMP_WARN`; `local_import_root` (config mai letta).
+  Frontend (`lib/api.ts`): `libraryGaps`, `discoveryAddToLibrary`,
+  `startEnrichment`, interfaccia `LocalDirEntry`. Test (432) e build verdi dopo
+  la rimozione.
+- **Tenuti deliberatamente**: `bpm_compatibility_score`/`key_compatibility_score`
+  (contratto "sei score deterministici" della spec, oggi solo test);
+  `POST /api/transitions/score` (endpoint mai chiamato dalla UI);
+  dipendenza `python-multipart`; colonne legacy `Track.playlist_id`/`playlist_name`.
+- **Docs riallineate al codice** (43 fix verificati): `API.md` (sezione Pipeline,
+  `downloads/search`+`manual`, `create-from-tracks`, filtri di `GET /api/tracks`);
+  `ARCHITECTURE.md`+`README.md` (AcoustID, disk-first, ricerca libera Soulseek,
+  `tools/`, start-dev); `ROADMAP.md` (stato completato: disk-first lotti A-D,
+  pipeline, barra job, archivio download, AcoustID, playlist dalla libreria);
+  `DESIGN.md` (loader EQ come eccezione One-Red documentata, tipografia, nav)
+  +`PRODUCT.md` (modello disk-first, moduli Soulseek/Etichette); `CLAUDE.md`
+  (elenco router) e `.env.example` (`ACOUSTID_API_KEY`).
 
 ## Milestone 2026-07-05 - Archivio download da sistemare + collegamento manuale file
 

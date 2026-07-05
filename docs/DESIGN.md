@@ -32,11 +32,16 @@ typography:
     fontWeight: 600
     textTransform: "uppercase"
     letterSpacing: "0.16em"
-  title:
+  title-page:
     fontWeight: 600
     textTransform: "uppercase"
     letterSpacing: "0.12em"
     fontSize: "0.875rem"
+  title-section:
+    fontWeight: 600
+    textTransform: "uppercase"
+    letterSpacing: "0.05em"
+    fontSize: "1rem"
   body:
     fontWeight: 400
     fontSize: "0.875rem"
@@ -44,7 +49,7 @@ typography:
   label:
     fontWeight: 500
     textTransform: "uppercase"
-    letterSpacing: "0.12em"
+    letterSpacing: "0.05em"
     fontSize: "0.625rem"
   data:
     fontWeight: 400
@@ -84,7 +89,7 @@ components:
     backgroundColor: "{surface}"
     border: "1px solid {border}"
     rounded: "0px"
-    padding: "16px"
+    padding: "impostato dal consumer, non dal componente (16px consigliato, 12px per card dense)"
   input:
     backgroundColor: "{bg}"
     textColor: "{fg}"
@@ -98,6 +103,13 @@ components:
     rounded: "0px"
     textTransform: "uppercase"
     padding: "2px 8px"
+  badge-semantic:
+    backgroundColor: "{elevated}"
+    textColor: "{fg} | {muted}"
+    rounded: "0px"
+    textTransform: "uppercase"
+    padding: "2px 8px"
+    note: "primary/info/warning/success collassano tutti sul rendering neutro (Monochrome Rule)"
   badge-danger:
     backgroundColor: "transparent"
     textColor: "{danger}"
@@ -120,7 +132,7 @@ This system explicitly rejects: consumer-music-app warmth (soft pastels, oversiz
 **Key Characteristics:**
 - Monospace (IBM Plex Mono) for the entire interface — chrome, labels, body, and data
 - Hairline grid: a three-zone editorial shell (INDEX / CONTENT / MARGINALIA) divided by 1px rules
-- Square geometry everywhere (`radius: 0`), no shadows except a dimmed modal backdrop
+- Square geometry everywhere (`radius: 0`), no shadows except a dimmed modal backdrop — unica eccezione ammessa: il dot di stato "hot" (1.5px) nella pipeline strip della dashboard, circolare
 - Near-monochrome: one red (`danger`) only, for errors and destructive actions
 - Two themes — **dark** (default, near-black) and **paper** (warm cream) — toggled at runtime, persisted, no FOUC
 - Tabular figures (`tnum`) on every metric so numbers align like a typeset index
@@ -136,12 +148,12 @@ A neutral near-black field with light-gray ink. `bg #0d0d0d`, `surface #161616`,
 A warm cream field with near-black ink. `bg #e9e5db`, `surface #f1eee6`, `elevated #e2ddd0`, hairline `border #cdc7b8` / `border-strong #b2ab99`, `muted #86806f`, `faint #a79f8d`, body `fg #2a2823`, emphasis `fg-strong #15140f`.
 
 ### The one color
-**Danger red** — `#d8593f` (dark) / `#a83a22` (paper). The *only* hue in the system. Used exclusively for error messages, destructive actions (delete), and invalid input (e.g. malformed Camelot notation). It never appears as decoration or as a status/quality indicator.
+**Danger red** — `#d8593f` (dark) / `#a83a22` (paper). The *only* hue in the system. Used for error messages, destructive actions (delete), and invalid input (e.g. malformed Camelot notation). Unica eccezione decorativa: i loader EQ/waveform (`Equalizer`, `EqMeter`) usano il danger come accento caldo — tacca di picco, coda "hot" dietro la testina, testina e bordo dello scan. Fuori dai loader, il rosso resta esclusivamente errore/distruzione, mai un indicatore di stato o qualità.
 
 ### Named Rules
 **The Monochrome Rule.** Nothing carries hue except `danger`. Camelot keys, mix-status, transition quality, risk levels, and provider states are all rendered in neutrals — distinguished by weight, uppercase labels, and position, never by color.
 
-**The One-Red Rule.** Red means error or destruction, full stop. A low score, a "risky" transition, or a warning state is *not* an error and must stay monochrome.
+**The One-Red Rule.** Red means error or destruction, salvo l'accento caldo intenzionale dei loader EQ/waveform. A low score, a "risky" transition, or a warning state is *not* an error and must stay monochrome.
 
 ## 3. Typography
 
@@ -151,9 +163,10 @@ A warm cream field with near-black ink. `bg #e9e5db`, `surface #f1eee6`, `elevat
 
 ### Hierarchy
 - **Brand** (600, uppercase, `0.16em` tracking): the `CRATORY` wordmark.
-- **Title** (600, uppercase, `0.12em` tracking, `text-sm`): page titles (rendered by `PageLayout`) and card/section/modal headers.
+- **Page title** (600, uppercase, `0.12em` tracking, `text-sm`): solo il titolo pagina, reso da `PageLayout`.
+- **Section/card/modal header** (600, uppercase, `0.05em` tracking / `tracking-wider`, base size `1rem`): `CardHeader` e il titolo del `Modal`.
 - **Body** (400, `text-sm`, 1.5 line-height): descriptions and prose; cap at ~46–60ch.
-- **Label** (500, uppercase, `0.12em` tracking, `~10px`): every column/section header and form-field label.
+- **Label** (500, uppercase, `0.05em` tracking / `tracking-wider`, `~10px`): every column/section header and form-field label.
 - **Data** (400, `font-variant-numeric: tabular-nums`): every BPM, Camelot key, energy, duration, and count, via the `.tnum` utility.
 
 ### Named Rules
@@ -179,11 +192,18 @@ Flat by definition. Depth is conveyed entirely by **hairline borders and the neu
 
 ### Badges (`rounded: 0`, uppercase, tracked, `~10px`)
 - **Neutral:** `elevated` background, `muted`/`fg` text. This is the default and near-universal badge — platform tags, statuses, transition classes, risk levels all use it.
-- **Danger:** transparent with a `danger` border and text. The only colored badge.
+- **Semantic tones** (`primary`/`info`/`warning`/`success`): il componente `Badge` espone questi tone (usati nelle pagine, es. stato traccia, esiti download) ma per la Monochrome Rule collassano tutti sul rendering neutro — `elevated` + `text-fg` (primary) o `elevated` + `text-muted` (info/warning/success). Nessuna tinta.
+- **Danger:** transparent with a `danger` border and text. The only colored badge/tone.
+
+### Companion fields e stati
+
+- **Alert:** riga con bordo pieno; tone `danger` ha bordo e testo `danger`, i tone `warning`/`info`/`success` hanno bordo neutro e testo `fg` (nessuna tinta fuori da danger).
+- **Field / Select / Textarea / Checkbox:** stesso stile input (`rounded: 0`, bordo, focus ring `fg`); `Field` aggiunge una label uppercase tracciata `~10px` sopra il controllo.
+- **KeyBadge:** rende il Camelot in monocromo — chiave valida in `fg-strong` tabulare, chiave assente o non valida in `faint` con trattino. Nessun colore per ruota/energia.
 
 ### Cards / Containers
 - **Background:** `surface` on the `bg` floor; **1px `border` hairline; `radius: 0`; no shadow.**
-- **Padding:** 16px (`p-4`) default; header rows use 20px horizontal (`px-5`). Prefer hairline-divided sections over nested cards.
+- **Padding:** il componente `Card` non applica padding — lo imposta il consumer via className. `p-4` (16px) è il default raccomandato; `p-3` (12px) è ammesso per card dense di statistiche. Header rows (`CardHeader`) use 20px horizontal (`px-5`), 16px vertical (`py-4`). Prefer hairline-divided sections over nested cards.
 
 ### Inputs / Fields (`rounded: 0`)
 - **Style:** inset `bg` (darker than the surface) with a 1px `border`, 40px tall; placeholder `faint`.
@@ -192,11 +212,11 @@ Flat by definition. Depth is conveyed entirely by **hairline borders and the neu
 - **Field label:** uppercase, tracked, `~10px`, muted, above the control.
 
 ### Shell & Navigation — the editorial grammar
-- **EditorialShell:** a three-zone, hairline-divided layout. **INDEX** (left, ~180px) holds the `CRATORY` wordmark, tagline, uppercase nav (active = underlined), and a footer with a live `HH:MM:SS` clock and the theme toggle. **CONTENT** (center) carries the page's primary object. **MARGINALIA** (right, ~240px, optional per page) carries contextual stats, actions, and notes.
-- **PageLayout:** renders the uppercase page title + optional meta over the content, plus the optional marginalia column with its hairline. Below the `lg` breakpoint, INDEX collapses to a top bar and marginalia drops below the content.
+- **EditorialShell:** a three-zone, hairline-divided layout. **INDEX** (left, ~180px) holds the `CRATORY` wordmark, tagline, and an uppercase nav (active = underlined) raggruppata per stazioni del flusso — *Scopri* (Playlist, Discovery, Shazam, Etichette), *Colleziona* (Libreria, Download), *Suona* (Set) — con intestazioni di gruppo uppercase `~9px` faint. Il footer porta il link "Impostazioni" sopra una riga con il live `HH:MM:SS` clock e il theme toggle. **CONTENT** (center) carries the page's primary object. **MARGINALIA** (right, ~240px, optional per page) carries contextual stats, actions, and notes.
+- **PageLayout:** renders the uppercase page title + optional meta over the content, plus the optional marginalia column with its hairline. Below the `lg` breakpoint, INDEX collapses to a top bar orizzontale con i gruppi separati da filetti verticali, e marginalia drops below the content.
 
 ### Progress & Coverage Bars
-- **Style:** 8px track on `elevated`, **square** (no radius), `fg` fill. Determinate bars animate width; indeterminate bars shimmer (`animate-shimmer`, 1.6s).
+- **Style:** 8px track on `elevated`, **square** (no radius), `fg` fill. Determinate bars animate width. Il caricamento indeterminato non usa shimmer: usa i loader DJ — `Equalizer` (EQ inline a 4 colonne segmentate) per stati inline, il pattern `Loading` (Equalizer + riga muted "Caricamento…") per il load di pagina, e `EqMeter` (pseudo-waveform a 112 barre) per i job: value numerico = riempimento sx→dx con testina, value null = scan indeterminato a 1.5s.
 
 ### Modal
 - **Style:** `fixed inset-0`, `z-50`, dimmed `bg-black/70` backdrop (no blur); `surface` panel with a `border-strong` hairline, `radius: 0`, no shadow. Header with title + `×`, optional right-aligned footer actions.

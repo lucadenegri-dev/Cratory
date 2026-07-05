@@ -83,6 +83,7 @@ Acquisizione file via Soulseek (slskd), distinta dal download temporaneo Shazam:
 Track in libreria (identita' streaming)
   -> SlskdClient.search (slskd REST)
   -> selezione deterministica (qualita' + match nome + disponibilita')
+     | ricerca libera -> selezione manuale (/api/downloads/search + /manual)
   -> auto-pick (blocco playlist) | mini-selettore (Discovery)
   -> slskd enqueue + polling transfer
   -> attach_local_file: has_local_file + local_path/format/bitrate
@@ -93,6 +94,17 @@ errore su una traccia non ferma il job. Richiede slskd configurato; senza, gli
 endpoint rispondono `409`. Il file resta collegato alla `Track` come riferimento
 locale, non viene ricaricato ne' ridistribuito dall'app.
 
+Oltre all'auto-pick, `POST /api/downloads/search` offre ricerca libera su slskd con
+selezione manuale del candidato (`POST /api/downloads/manual`). Gli esiti da rivedere
+(`needs_review|not_found|failed`) restano in coda "da sistemare", persistiti su
+`Track.last_download_outcome`/`last_download_reason` cosi' da sopravvivere a job e
+riavvii (`GET /api/downloads/pending`, `DELETE /api/downloads/pending/{track_id}`,
+`POST /api/downloads/retry-pending`). Un file gia' su disco puo' anche essere
+collegato manualmente dal dettaglio traccia (`POST /api/tracks/{track_id}/link-file`,
+ricerca per nome in `LIBRARY_ROOT` e nella cartella download slskd via
+`GET /api/files/search`), con lo stesso `attach_local_file`/`audio_hash`
+dell'acquisizione.
+
 ## Disk-first
 
 La libreria e' il disco: il possesso di una traccia (`has_local_file`) non e' un
@@ -102,6 +114,12 @@ muta mai — tag e organizzazione restano competenza di DjOrganizer.
 
 - **`LIBRARY_ROOT`**: cartella organizzata (gestita da DjOrganizer) che Cratory
   indicizza da Impostazioni -> "Libreria (disco)". Vuota = indicizzazione disattiva.
+  L'indicizzazione parte anche automaticamente a ogni avvio dell'app (job in
+  background, se `LIBRARY_ROOT` e' configurata), oltre che on-demand.
+- **`ARCHIVE_ROOT`**: archivio delle scartate (PASSED di DJPlayer), scansionato
+  insieme alla libreria. Un match in archivio marca la Track `archived=True` e
+  toglie il possesso, senza creare tracce nuove; il possesso in Libreria vince
+  sempre sullo scarto e riabilita la traccia.
 - **`audio_hash`**: SHA-256 dei primi secondi di audio decodificato via ffmpeg (mono,
   22050 Hz, s16le) — stabile a rinomina e retag, a differenza di path o tag ID3/MP4.
   Calcolato sia dall'indicizzazione di libreria sia dall'acquisizione Soulseek
@@ -111,13 +129,15 @@ muta mai — tag e organizzazione restano competenza di DjOrganizer.
   `audio_hash -> digest legacy (import locali storici, in platform_track_id) ->
   ISRC -> fuzzy artist+title`; se non trova nulla crea una nuova `Track`. I tag del
   file riempiono solo i campi identita' vuoti (mai sovrascrivere enrichment o
-  correzioni manuali). Riconciliazione: un possesso il cui file non e' piu' presente
+  correzioni manuali). Scan incrementale: un file con path+mtime+size invariati non
+  viene ri-hashato. Riconciliazione: un possesso il cui file non e' piu' presente
   nello scan (spostato, cancellato) perde `has_local_file`/`local_path` ma mantiene
   `audio_hash`, cosi' il riaggancio e' immediato se il file ricompare altrove. Guard
   anti-unmount: uno scan a zero file (radice vuota, path sbagliato, disco smontato)
   non tocca i possessi esistenti. `duplicates` conta i file con lo stesso hash visti
   nello stesso run (il primo vince; la dedup su disco resta compito di DjOrganizer).
-  Esposto via `POST /api/library/index` (202, job async) e
+  Le tracce nuove create dall'indice avviano l'enrichment automaticamente
+  (best-effort). Esposto via `POST /api/library/index` (202, job async) e
   `GET /api/library/index/status`; risponde `409` se `LIBRARY_ROOT` non e' configurata.
 - **`GET /api/tracks/lookup`**: bridge read-only per DjOrganizer, nessuna scrittura
   ne' side-effect. Query `isrc` oppure `artist`+`title` (altrimenti 422); match
@@ -128,6 +148,10 @@ muta mai — tag e organizzazione restano competenza di DjOrganizer.
   la scelta e' persistita su `Setlist.owned_only` e rispettata anche da editor
   (alternative, sostituzione traccia — 422 se la sostituta non e' posseduta e il set
   e' nato "solo posseduti").
+- **Fingerprinting AcoustID** (`backend/app/services/fingerprint.py`, job in background
+  `fingerprint_job.py`): identifica via audio le tracce possedute senza `mbid`, un job
+  on-demand distinto dall'indicizzazione. Esposto via `POST /api/library/fingerprint` e
+  `GET /api/library/fingerprint/status`.
 
 ## Layer backend
 
@@ -142,6 +166,7 @@ backend/app/
   serializers.py  ORM -> Pydantic, campi derivati
   integrations/   client esterni dietro interfacce
   core/           config, logging
+  tools/          script di manutenzione (es. clean_user_data)
 ```
 
 I router non devono contenere logica di business. Le integrazioni esterne devono
@@ -174,14 +199,17 @@ L'AI puo':
 - proporre una direzione narrativa;
 - spiegare scelte e transizioni;
 - suggerire alternative creative;
-- commentare candidati Discovery.
+- commentare candidati Discovery;
+- classificare il genere come anello di riserva della catena enrichment (solo a
+  genere vuoto, marcato `genre_source="ai"`, mai sovrascrive generi esistenti).
 
 L'AI non puo':
 
 - inventare track_id;
 - inventare BPM/key/ISRC/fonti;
 - selezionare tracce fuori dalle candidate ricevute;
-- bypassare il Validation Engine.
+- bypassare il Validation Engine;
+- toccare BPM/key o sovrascrivere generi gia' presenti con la classificazione genere.
 
 Modalita' Set Builder:
 
@@ -194,19 +222,25 @@ Entita' principali:
 
 - `Playlist`: playlist importata da Spotify o import manuale.
 - `Track`: traccia della libreria, con identita' streaming, metadata editoriali,
-  feature musicali, stato e tracciabilita' enrichment. Ownership file locale (import
-  da cartella, indicizzazione `LIBRARY_ROOT` o acquisizione Soulseek): `has_local_file`,
-  `local_path`, `local_format`, `local_bitrate`, `audio_hash` (vedi "Disk-first").
+  feature musicali, stato e tracciabilita' enrichment. Ownership file locale
+  (indicizzazione `LIBRARY_ROOT`, acquisizione Soulseek o collegamento manuale
+  link-file): `has_local_file`, `local_path`, `local_format`, `local_bitrate`,
+  `audio_hash` (vedi "Disk-first"). Altri campi: `mbid` (da fingerprinting
+  AcoustID), `archived` (file finito nell'archivio delle scartate),
+  `local_mtime`/`local_size` (scan incrementale), `last_download_outcome`/
+  `last_download_reason` (coda "da sistemare" dei download).
 - `playlist_tracks`: tabella associativa M2M (Playlist <-> Track) con `added_at`
   per-playlist. Un brano puo' appartenere a piu' playlist; l'import aggiunge
   membership senza sovrascrivere.
 - `Setlist`: set generato, prompt, strategia, spiegazione globale, validazione e
   `owned_only` (garanzia "solo posseduti", vedi "Disk-first").
 - `SetlistTrack`: posizione, ruolo, score, note di transizione, motivo AI e rischio.
-- `EnrichmentCache`: cache provider, incluso not-found.
+- `EnrichmentCache`: cache provider (catena feature, genere AI, AcoustID), incluso
+  not-found.
 - `SpotifyToken`: token OAuth Spotify persistiti per l'utente locale.
 - `DjSet`: mix esterno identificato via Shazam, separato dalla libreria.
 - `DjSetTrack`: traccia identificata dentro un `DjSet`.
+- `AppState`: chiave-valore persistente per stato applicativo (es. `last_index_at`).
 
 Campi legacy Rekordbox come beatgrid, cue, `rekordbox_track_id`, `play_count` e
 `tonality` sono fuori modello.
@@ -229,9 +263,17 @@ Ruoli:
 | GetSongBPM | BPM, key/Camelot, danceability con fallback fuzzy |
 | Last.fm | genere, mood dai tag e similarita' Discovery |
 
-La catena passa un `context` accumulato ai provider successivi. L'MBID trovato da
-MusicBrainz abilita AcousticBrainz. L'energia e' stimata deterministicamente quando
-nessun provider la fornisce.
+La catena passa un `context` accumulato ai provider successivi. L'MBID — trovato da
+MusicBrainz o ricavato dal fingerprinting AcoustID dei file posseduti (`Track.mbid`)
+e passato nel `context` della catena — abilita il lookup diretto MusicBrainz e
+AcousticBrainz.
+
+Catena del genere: `manual` > provider (Last.fm/MusicBrainz) > anello AI in batch
+(solo a genere vuoto, cache provider `genre_ai`, `genre_source="ai"`, mai
+sovrascrive) > tag del file (`genre_source="file_tag"`, applicato dall'indicizzazione
+di libreria, ultima spiaggia).
+
+L'energia e' stimata deterministicamente quando nessun provider la fornisce.
 
 ## Integrazioni
 
@@ -244,6 +286,7 @@ nessun provider la fornisce.
 | GetSongBPM | attiva | API key opzionale/consigliata |
 | Last.fm | attiva | API key per enrichment tag e Discovery |
 | Discogs | attiva | crate digging Discovery "Scava" per genere/etichetta; funziona senza token, `DISCOGS_TOKEN` alza il rate limit |
+| AcoustID | attiva se configurata | fingerprinting dei file posseduti -> MusicBrainz Recording MBID (`Track.mbid`); richiede `ACOUSTID_API_KEY` + binario `fpcalc` (Chromaprint); rate ~3 req/s; cache in `EnrichmentCache` (provider `acoustid`) |
 | LLM | attiva se configurata | output strutturati e validati |
 | Shazam | attiva se dipendenze presenti | ffmpeg, yt-dlp, shazamio |
 | slskd (Soulseek) | attiva se configurato | download via REST API; `SLSKD_URL`/`SLSKD_API_KEY`/`SLSKD_DOWNLOAD_DIR` |

@@ -61,7 +61,8 @@ Layer backend:
 ```text
 backend/app/
   routers/       HTTP only: playlists, tracks, transitions, sets, spotify,
-                 enrichment, ai, discovery, services, labels, dj_sets
+                 enrichment, ai, discovery, services, labels, dj_sets,
+                 downloads, files, pipeline
   services/      logica deterministica e orchestrazione
   repositories.py
   models.py

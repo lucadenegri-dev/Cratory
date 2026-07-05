@@ -35,7 +35,8 @@ migrazione esplicita.
 - Discovery playlist-seed Last.fm-centric con resolver Spotify e write-back.
 - PATCH manuale valori traccia.
 - UI Dashboard e Set Builder ridisegnate.
-- Shazam/mix identification in integrazione.
+- Shazam/mix identification integrata (fase 1: identificazione tracklist e corpus
+  DjSet separato); fase 2 (co-occorrenza) in backlog.
 - Test reale con chiavi completato.
 - Confronto modelli AI completato e implementato.
 - Rimossa la sezione Discovery che suggeriva tracce sulla base dei gap della playlist.
@@ -90,6 +91,34 @@ migrazione esplicita.
   se la sostituta non e' posseduta), toggle+badge in UI. Bridge DjOrganizer:
   `GET /api/tracks/lookup` read-only (isrc/artist+title, confidence 100/70/0,
   `limit(1)`). Le playlist streaming sono "lead" in UI, non la libreria.
+- **Rifiniture disk-first (2026-07-02, lotti A-D):** indicizzazione incrementale a due
+  passate (skip file invariati via mtime/size, contatore `unchanged`) con avvio
+  automatico all'apertura del backend; archivio scartate (`ARCHIVE_ROOT` + `Track.archived`:
+  l'indice scarta le tracce archiviate, escono da liste/coda download/wishlist, filtro
+  "Scartate" in Libreria e sezione Disco nel dettaglio traccia); catena del genere con
+  `Track.genre_source` (manuale/provider/tag file) e AI come anello di riserva, con
+  normalizzazione leggera dei generi; auto-enrichment delle tracce nuove (da download
+  Soulseek e da indice).
+- **Pipeline di orientamento:** `GET /api/pipeline` (snapshot conteggi DB+disco), striscia
+  PipelineStrip in dashboard con "Prossimo passo" cross-app (link a DjOrganizer via
+  `ORGANIZER_URL`), menu raggruppato per fasi Scopri → Colleziona → Suona; `start-dev`
+  avvia anche DjOrganizer se presente.
+- **Barra job unificata (GlobalProgress):** poller unico in JobsProvider su tutti i job
+  lunghi (enrichment, Shazam, download, indice, fingerprint), righe impilate con
+  dettaglio ed esito visibile 4s.
+- **Archivio download da sistemare + link file locale:** esiti download persistiti sulla
+  Track, pagina `/downloads/issues` con filtri/contatori e azioni per riga (Scegli file
+  Soulseek, Collega file locale, Ignora, Riprova tutte); collegamento manuale via
+  `POST /api/tracks/{id}/link-file` + ricerca su disco `GET /api/files/search`.
+- **Fingerprinting AcoustID:** audio → MusicBrainz Recording MBID (`Track.mbid`, soglia
+  0.85, cache esiti), endpoint `POST/GET /api/library/fingerprint[/status]`, card in
+  Impostazioni e job nella barra; richiede `ACOUSTID_API_KEY` + `fpcalc`. La catena
+  enrichment usa l'mbid (lookup MusicBrainz diretto, backfill ISRC → sblocca Deezer);
+  batch esteso alle tracce senza key, genere AI in batch con cache dei null.
+- **Playlist dalla libreria:** `POST /api/playlists/create-from-tracks` + composizione da
+  UI; "Scarica mancanti" direttamente dal dettaglio playlist. Rimosso l'import playlist
+  da cartella locale (superato dal disk-first: la cartella canonica si indicizza, non si
+  importa come playlist).
 
 ## Direzione prodotto
 
@@ -104,8 +133,9 @@ Il valore e' la qualita' del prodotto, non la scala.
 In ordine concordato (dettaglio operativo in `PROGRESS.md`):
 
 1. **Miglioramento Discovery.** Slice gusto + spiegazioni del dig **FATTO** (segnali di
-   gusto su riferimento selezionabile + reason code a chip). Restano nel backlog tecnico:
-   unificazione expand/dig e sorgenti extra (Last.fm tag, tracklist per-release).
+   gusto su riferimento selezionabile + reason code a chip). Restano nel backlog tecnico
+   le sorgenti extra del dig (Last.fm tag, tracklist per-release); l'unificazione
+   expand/dig e' superata (Discovery solo DIG, expand nel contesto Playlist di proposito).
 2. **Audit leggero + quick win** — quick win principali FATTI (SSRF, `library_stats`,
    endpoint morto, dipendenze); robustezza confermata solida. Threat model piccolo
    (nessun utente pubblico), niente authz da SaaS.

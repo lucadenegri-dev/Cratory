@@ -15,6 +15,21 @@ http://localhost:8000
 GET /api/health
 ```
 
+## Pipeline
+
+```text
+GET /api/pipeline
+```
+
+Snapshot unico per la striscia di orientamento in dashboard. Response `PipelineOut`:
+conteggi libreria (`playlists`, `total_tracks`, `missing_key`, `wishlist`,
+`archived_count`, `with_local_file`, `ready_for_set`), stato download
+(`download_active`, `download_pending`) e stato disco (`inbox_files` da
+`SLSKD_DOWNLOAD_DIR`, `files_on_disk` da `LIBRARY_ROOT`, `index_mismatch`,
+`last_index_at`, `organizer_url` da `ORGANIZER_URL`). I campi disco sono `null`
+quando la cartella corrispondente non e' configurata o non esiste (fase neutra,
+non errore).
+
 ## Playlists
 
 ```text
@@ -22,6 +37,7 @@ GET    /api/playlists/spotify/available
 POST   /api/playlists/import
 POST   /api/playlists/{playlist_id}/sync
 POST   /api/playlists/import-manual
+POST   /api/playlists/create-from-tracks
 GET    /api/playlists
 GET    /api/playlists/{playlist_id}
 DELETE /api/playlists/{playlist_id}
@@ -39,6 +55,10 @@ dall'utente collegato (quelle altrui che segue non sono importabili in dev mode)
 Spotify: importa le nuove tracce e scollega quelle rimosse (che restano in libreria).
 `POST /api/playlists/import-manual` crea una playlist da testo incollato. Tutti
 avviano l'enrichment automatico best-effort sulle tracce importate.
+`POST /api/playlists/create-from-tracks` (`201`) crea una playlist manuale
+componendo tracce gia' in libreria (disk-first), nell'ordine fornito. Request:
+`{name, track_ids}`. Response: `PlaylistOut`. `422` se il nome e' vuoto o un
+track_id non esiste. Non avvia enrichment (le tracce sono gia' in libreria).
 `POST /api/playlists/{playlist_id}/discovered-tracks` aggiunge a quella playlist una
 traccia scoperta dall'espansione (request: artist/title/spotify_id/isrc/
 duration_seconds/url/album_art_url). Importa il brano (idempotente), lo attacca alla
@@ -65,15 +85,18 @@ GET   /api/library/fingerprint/status
 GET   /api/stats
 ```
 
-Filtri supportati da `GET /api/tracks`: artista, titolo, album, genere, sorgente
-(incl. `local_files`), playlist, stato, BPM min/max, key, durata, presenza
-Spotify/SoundCloud, possesso (`has_local_file`), metadata incompleti, sort/order,
-limit/offset.
+Filtri supportati da `GET /api/tracks`: artista, titolo, album, genere, etichetta
+(`label`, match esatto) e archiviate (`archived`, default `false`: le archiviate
+sono escluse; `true` mostra solo le archiviate), sorgente (incl. `local_files`),
+stato, BPM min/max, key, durata, presenza Spotify/SoundCloud, possesso
+(`has_local_file`), metadata incompleti, sort/order, limit/offset — per le tracce
+di una playlist usare `GET /api/playlists/{playlist_id}/tracks`.
 
 `GET /api/tracks/lookup` — lookup read-only per il bridge DjOrganizer (sola lettura,
 mai 404). Query: `isrc` oppure `artist`+`title` (altrimenti 422). Risposta:
 `{found, match: "isrc"|"fuzzy"|null, track_id, artist, title, genre, genre_secondary,
-label, year, confidence}` — confidence: 100 ISRC, 70 fuzzy, 0 non trovata.
+genre_source, album, label, year, confidence}` — confidence: 100 ISRC, 70 fuzzy,
+0 non trovata.
 
 `POST /api/library/index` (202) indicizza la libreria canonica `LIBRARY_ROOT`
 (disk-first: il disco È la libreria) — scan + riaggancio per audio-hash +
@@ -250,12 +273,16 @@ DELETE /api/downloads/pending/{track_id}
 POST   /api/downloads/candidates
 POST /api/downloads/playlist/{playlist_id}
 POST /api/downloads/track
+POST   /api/downloads/search
+POST   /api/downloads/manual
 ```
 
 Acquisizione file via il daemon Soulseek headless slskd, deterministica (zero AI):
 collega un file alla `Track` esistente (`has_local_file`/`local_path`/`local_format`/
 `local_bitrate`). Richiede `SLSKD_URL` e `SLSKD_DOWNLOAD_DIR` configurati; senza,
-`candidates`, `playlist/{id}` e `track` rispondono `409`.
+tutti gli endpoint di ricerca/download (`candidates`, `search`, `playlist/{id}`,
+`track`, `manual`, `retry-pending`) rispondono `409`. Restano disponibili
+`GET status` (con `available=false`), `GET pending` e `DELETE pending/{track_id}`.
 
 `GET /api/downloads/pending` elenca le "da sistemare" (esito `needs_review` /
 `not_found` / `failed` persistito sulla Track, tracce non possedute e non scartate);
@@ -270,8 +297,20 @@ del job in background: `status` (`idle|running|done|error`), `processed`, `total
 
 `POST /api/downloads/candidates` cerca su slskd e restituisce i candidati ordinati
 deterministicamente (qualita' + aderenza nome + disponibilita'). Request: `artist`,
-`title`. Response: lista di candidati con `username`, `filename`, `size`, `bitrate`,
-`length`, `format`, `name_score`, `quality_tier`, `confidence`.
+`title`, `duration_seconds` (opzionale: durata attesa dalla Track, premia la
+versione giusta nel ranking). Response: lista di candidati con `username`,
+`filename`, `size`, `bitrate`, `length`, `format`, `name_score`, `quality_tier`,
+`confidence`.
+
+`POST /api/downloads/search` fa una ricerca libera su Soulseek. Request: `{query}`.
+Query vuota -> lista vuota. Response: stessa lista di candidati di `candidates` ma
+senza soglia di aderenza al nome (l'utente sceglie a vista). `409` se slskd non e'
+configurato, `502` su errore slskd.
+
+`POST /api/downloads/manual` (`202`) scarica un candidato scelto dalla ricerca
+libera senza collegarlo a una `Track` (il file finisce nella cartella download
+slskd). Request: `{candidate}` (stessa forma di `CandidateOut`). `409` se slskd non
+e' configurato o un job e' gia' in corso.
 
 `POST /api/downloads/playlist/{playlist_id}` (`202`) avvia il job per tutte le tracce
 della playlist senza file locale: per ciascuna cerca, sceglie in automatico il miglior
@@ -295,8 +334,10 @@ GET /api/services/status
 ```
 
 `/api/services/status` restituisce lo stato aggregato delle integrazioni: Spotify,
-AI, Deezer, GetSongBPM, AcousticBrainz, Last.fm, MusicBrainz, AcoustID (per
-AcoustID `connected` = binario fpcalc presente), slskd e servizi affini.
+AI, Deezer, GetSongBPM, AcousticBrainz, Last.fm, MusicBrainz, Discogs
+(`connected` = `DISCOGS_TOKEN` presente; funziona anche senza token, il token
+alza il rate limit), AcoustID (per AcoustID `connected` = binario fpcalc
+presente), slskd e servizi affini.
 
 ## Convenzioni
 
