@@ -1,5 +1,19 @@
+import struct
+
 from app.integrations import tagio
 from app.integrations.content_hash import compute
+
+
+def _append_malformed_riff_tail(path):
+    """Riproduce il difetto reale: una coda di byte non-chunk dopo i chunk validi,
+    coperta dalla dimensione dichiarata del RIFF. mutagen ci si blocca sopra e non
+    rilegge più l'`id3 ` appeso → i tag scritti risultano invisibili."""
+    with open(path, "rb") as fh:
+        data = bytearray(fh.read())
+    data += b"\x04\x00\x05\x00" + struct.pack("<I", 262149) + b"\x00" * 200
+    struct.pack_into("<I", data, 4, len(data) - 8)  # RIFF size copre anche la coda
+    with open(path, "wb") as fh:
+        fh.write(data)
 
 
 def test_write_then_read(copy_fixture, tmp_path):
@@ -42,6 +56,22 @@ def test_write_then_read_aiff(copy_fixture, tmp_path):
     tagio.write_tags(f, {"artist": "Plastikman", "title": "Spastik"})
     tags = tagio.read_tags(f)
     assert tags.artist == "Plastikman" and tags.title == "Spastik"
+
+
+def test_write_then_read_wav_with_malformed_riff_tail(copy_fixture, tmp_path):
+    # WAV con coda RIFF corrotta (tipico di alcuni file da DJ pool): mutagen scrive
+    # ma non rilegge i tag. write_tags deve riparare il contenitore e persistere.
+    f = copy_fixture("wav", tmp_path / "bad.wav")
+    _append_malformed_riff_tail(f)
+    dur_before = tagio.read_info(f).duration_s
+    tagio.write_tags(f, {"artist": "Hermeth", "title": "Strictly Acid",
+                         "genre": "Acid Techno"})
+    tags = tagio.read_tags(f)
+    assert tags.artist == "Hermeth"
+    assert tags.title == "Strictly Acid"
+    assert tags.genre == "Acid Techno"
+    # l'audio non deve essere toccato dalla riparazione
+    assert tagio.read_info(f).duration_s == dur_before
 
 
 def test_clear_field_wav(copy_fixture, tmp_path):

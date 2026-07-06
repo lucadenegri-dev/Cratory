@@ -1,6 +1,7 @@
 """Lettura tag e info tecniche via mutagen. Nessuna scrittura in questo chunk."""
 
 import re
+import struct
 from dataclasses import dataclass
 
 from mutagen import File as MutagenFile
@@ -51,7 +52,63 @@ def _write_id3_frames(tags: ID3, changes: dict) -> None:
             tags.setall(name, [frame_cls(encoding=3, text=str(value))])
 
 
+def _repair_riff_tail(path: str) -> bool:
+    """Ripara un WAV la cui coda RIFF è corrotta (chunk-id non ASCII o dimensione
+    oltre EOF): alcuni file da DJ pool hanno byte spuri dopo i chunk validi, e
+    mutagen ci si blocca sopra — scrive l'`id3 ` ma poi non lo rilegge.
+
+    Ricostruisce il file tenendo solo i chunk ben formati dall'inizio e scartando
+    la coda. Interviene SOLO se ha ritrovato sia `fmt ` sia `data` (mai rischiare
+    di troncare l'audio). Ritorna True se ha modificato il file."""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(12)
+            if len(head) < 12 or head[0:4] != b"RIFF" or head[8:12] != b"WAVE":
+                return False
+            size = fh.seek(0, 2)
+            chunks: list[tuple[bytes, int, int]] = []   # (id, start, total_len)
+            pos = 12
+            clean = True
+            while pos + 8 <= size:
+                fh.seek(pos)
+                cid = fh.read(4)
+                csz = struct.unpack("<I", fh.read(4))[0]
+                if not all(0x20 <= b < 0x7F for b in cid) or pos + 8 + csz > size:
+                    clean = False   # id non ASCII o dimensione oltre EOF → coda spuria
+                    break
+                chunks.append((cid, pos, 8 + csz + (csz & 1)))
+                pos += 8 + csz + (csz & 1)
+            if clean:
+                return False   # nessuna coda corrotta: niente da riparare
+            kept = {c[0] for c in chunks}
+            if b"fmt " not in kept or b"data" not in kept:
+                return False   # senza fmt+data validi non tocco nulla
+            fh.seek(0)
+            body = bytearray()
+            for _cid, start, total in chunks:
+                fh.seek(start)
+                body += fh.read(total)
+        with open(path, "wb") as out:
+            out.write(b"RIFF" + struct.pack("<I", 4 + len(body)) + b"WAVE" + body)
+        return True
+    except OSError as exc:
+        raise TagWriteError(str(exc)) from exc
+
+
+def _is_riff_wave(path: str) -> bool:
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(12)
+        return head[0:4] == b"RIFF" and head[8:12] == b"WAVE"
+    except OSError:
+        return False
+
+
 def write_tags(path: str, changes: dict) -> None:
+    # WAV con coda RIFF corrotta: ripara prima di scrivere, altrimenti mutagen
+    # scrive i tag ma non riesce più a rileggerli (RETAG che si ripete all'infinito).
+    if _is_riff_wave(path):
+        _repair_riff_tail(path)
     try:
         audio = MutagenFile(path, easy=True)
         if audio is None:

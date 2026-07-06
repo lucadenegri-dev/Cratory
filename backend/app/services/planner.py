@@ -2,6 +2,7 @@
 
 import os
 import re
+import unicodedata
 from dataclasses import dataclass
 
 _EFFECTIVE_FIELDS = ("artist", "title", "album", "album_artist", "genre", "year",
@@ -16,6 +17,18 @@ class PlanOpComputed:
     file_id: int
     before: dict
     after: dict
+
+
+def same_fs_path(a: str, b: str) -> bool:
+    """True se due percorsi indicano lo STESSO file sul filesystem locale.
+
+    macOS/APFS è insensibile a maiuscole/minuscole *e* alla forma di
+    normalizzazione Unicode: un nome scritto NFD su disco e lo stesso nome NFC
+    reso dai tag sono lo stesso file. Confrontarli come stringhe esatte farebbe
+    rigenerare all'infinito rinomine/spostamenti già soddisfatti (il file c'è
+    già, cambia solo la forma dei byte del nome, che `os.rename` non tocca)."""
+    return unicodedata.normalize("NFC", a).casefold() == \
+        unicodedata.normalize("NFC", b).casefold()
 
 
 def _sanitize(value: str) -> str:
@@ -84,14 +97,18 @@ def build_plan(files, accepted_issues, removals, settings_snapshot,
             eff = effective_tags(f, fixes)
             touched = sorted({fix["field"] for fix in fixes
                               if fix.get("field") in _EFFECTIVE_FIELDS})
-            if touched:
-                before = {field: getattr(f, field) for field in touched}
-                after = {field: eff[field] for field in touched}
+            # Solo i campi il cui valore è DAVVERO diverso da quello già sul file:
+            # una issue resta 'accepted' per sempre, e senza questo filtro
+            # rigenererebbe un RETAG no-op a ogni ricostruzione del piano.
+            changed = [field for field in touched if getattr(f, field) != eff[field]]
+            if changed:
+                before = {field: getattr(f, field) for field in changed}
+                after = {field: eff[field] for field in changed}
                 retag_ops.append(PlanOpComputed("RETAG", f.id, before, after))
 
         dest, _miss = render_destination(f, effective_tags(f, fixes),
                                          settings_snapshot, root_targets)
-        if dest is None or dest == f.path:
+        if dest is None or same_fs_path(dest, f.path):
             continue
         kind = "RENAME" if os.path.dirname(dest) == os.path.dirname(f.path) else "MOVE"
         move_ops.append(PlanOpComputed(kind, f.id, {"path": f.path}, {"path": dest}))

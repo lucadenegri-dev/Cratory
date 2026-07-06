@@ -1,3 +1,5 @@
+import unicodedata
+
 from app.models import Issue
 from app.services.planner import build_plan, render_destination, effective_tags
 from tests.conftest import make_audio_file
@@ -76,13 +78,62 @@ def test_removed_file_with_fix_only_delete():
 
 
 def test_order_and_determinism():
-    keep = make_audio_file(1, root_id=1, artist="A", title="T", genre="House",
+    keep = make_audio_file(1, root_id=1, artist="vecchio", title="T", genre="House",
                            path="/lib/varie/a.mp3", ext="mp3")
     rem = make_audio_file(2, root_id=1, artist="B", title="U", genre="House",
                           path="/lib/varie/b.mp3", ext="mp3")
     ops = build_plan([keep, rem], [_accepted(1, "artist", "A")], {2}, SNAP, TARGETS)
     assert [o.kind for o in ops] == ["RETAG", "MOVE", "DELETE"]
     assert build_plan([rem, keep], [_accepted(1, "artist", "A")], {2}, SNAP, TARGETS) == ops
+
+
+def test_no_op_when_path_differs_only_by_unicode_form():
+    # Il file è già al posto giusto, ma il nome su disco è in forma NFD mentre
+    # i tag rendono NFC (macOS/APFS li considera lo STESSO file). Non deve
+    # generare una RINOMINA fantasma che si ripete all'infinito.
+    nfd_path = unicodedata.normalize("NFD", "/lib/House/Café/Café - T.mp3")
+    f = make_audio_file(1, root_id=1, artist="Café", title="T", genre="House",
+                        path=nfd_path, ext="mp3")
+    assert unicodedata.is_normalized("NFD", f.path)  # il path resta NFD
+    ops = build_plan([f], [], set(), SNAP, TARGETS)
+    assert ops == []
+
+
+def test_no_op_when_folder_differs_only_by_case():
+    # Cartella su disco 'Electronic', tag genere 'electronic': su un FS
+    # case-insensitive (APFS) è la stessa cartella → nessuno SPOSTAMENTO.
+    f = make_audio_file(1, root_id=1, artist="Arca", title="Time", genre="electronic",
+                        path="/lib/Electronic/Arca/Arca - Time.mp3", ext="mp3")
+    ops = build_plan([f], [], set(), SNAP, TARGETS)
+    assert ops == []
+
+
+def test_genuine_move_still_emitted_despite_normalization():
+    # Regressione: una destinazione realmente diversa deve comunque produrre MOVE.
+    f = make_audio_file(1, root_id=1, artist="Arca", title="Time", genre="Techno",
+                        path="/lib/Electronic/Arca/Arca - Time.mp3", ext="mp3")
+    ops = build_plan([f], [], set(), SNAP, TARGETS)
+    assert [o.kind for o in ops] == ["MOVE"]
+    assert ops[0].after["path"] == "/lib/Techno/Arca/Arca - Time.mp3"
+
+
+def test_no_op_retag_when_tag_already_correct():
+    # Fix già applicato in un giro precedente: il tag ha già il valore target.
+    # Non deve rigenerare un RETAG fantasma (la issue resta 'accepted' per sempre).
+    f = make_audio_file(1, root_id=1, artist="Hermeth", title="T", genre="House",
+                        path="/lib/House/Hermeth/Hermeth - T.mp3", ext="mp3")
+    ops = build_plan([f], [_accepted(1, "artist", "Hermeth")], set(), SNAP, TARGETS)
+    assert [o for o in ops if o.kind == "RETAG"] == []
+
+
+def test_retag_includes_only_fields_that_differ():
+    # artist già giusto, title da correggere → il RETAG contiene solo title.
+    f = make_audio_file(1, root_id=1, artist="Hermeth", title="vecchio", genre="House",
+                        path="/lib/x.mp3", ext="mp3")
+    ops = build_plan([f], [_accepted(1, "artist", "Hermeth"), _accepted(1, "title", "Nuovo")],
+                     set(), SNAP, TARGETS)
+    retag = [o for o in ops if o.kind == "RETAG"][0]
+    assert retag.before == {"title": "vecchio"} and retag.after == {"title": "Nuovo"}
 
 
 def test_retag_after_matches_effective_when_two_fixes_same_field():

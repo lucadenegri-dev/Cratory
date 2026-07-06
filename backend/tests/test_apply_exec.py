@@ -81,3 +81,23 @@ def test_apply_retag(db, tmp_path, copy_fixture):
     assert tagio.read_tags(f).artist == "Pinco"
     row = db.scalar(select(UndoJournal).where(UndoJournal.kind == "RETAG"))
     assert row.prior_tags_json == {"artist": "PINCO"}  # prior letto dal file vivo
+
+
+def test_apply_retag_updates_db_row(db, tmp_path, copy_fixture):
+    # Dopo un RETAG la riga AudioFile deve riflettere i nuovi tag, così una
+    # ricostruzione del piano SENZA re-scan non rigenera un RETAG fantasma.
+    root = tmp_path / "lib"
+    f = copy_fixture("flac", root / "x.flac")
+    db.add(ScanRoot(id=1, path=str(root)))
+    _af(db, 1, f, artist=None, title=None, genre="House")
+    plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
+                "folder_template": "{genre}/{artist}", "targets": {"1": str(root)}})
+    db.add(plan)
+    db.add(PlanOp(plan_id=1, seq=0, kind="RETAG", file_id=1,
+                  before_json={"artist": None, "title": None},
+                  after_json={"artist": "Pinco", "title": "Bel Titolo"}, status="pending"))
+    db.commit()
+    res = apply_plan(db, plan)
+    assert res.applied_ops == 1
+    row = db.get(AudioFile, 1)
+    assert row.artist == "Pinco" and row.title == "Bel Titolo"

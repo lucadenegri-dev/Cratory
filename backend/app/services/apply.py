@@ -115,6 +115,8 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
             prior = {field: _tag_value(tagio.read_tags(f.path), field) for field in o.after_json}
             _journal("RETAG", o.file_id, from_path=f.path, prior_tags=prior)  # journal PRIMA
             tagio.write_tags(f.path, o.after_json)              # poi muta
+            for field, value in o.after_json.items():           # DB allineato al disco:
+                setattr(f, field, value)                        # niente RETAG fantasma pre-scan
             o.status = "applied"
             db.commit()
             _progress()
