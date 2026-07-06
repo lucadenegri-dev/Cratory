@@ -22,16 +22,12 @@ def get_settings(db: Session) -> Settings:
     return s
 
 
-def update_settings(db: Session, naming_template=None, folder_template=None,
-                    cratory_base_url=None) -> Settings:
+def update_settings(db: Session, naming_template=None, folder_template=None) -> Settings:
     s = get_settings(db)
     if naming_template is not None:
         s.naming_template = naming_template
     if folder_template is not None:
         s.folder_template = folder_template
-    if cratory_base_url is not None:
-        # Stringa vuota = bridge disattivato (colonna a NULL).
-        s.cratory_base_url = cratory_base_url.strip() or None
     s.updated_at = utcnow()
     db.commit()
     db.refresh(s)

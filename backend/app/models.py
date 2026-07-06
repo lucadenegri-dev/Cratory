@@ -114,7 +114,6 @@ class Settings(Base):
     naming_template: Mapped[str] = mapped_column(String, default="{artist} - {title}")
     folder_template: Mapped[str] = mapped_column(String, default="{genre}/{artist}")
     dedup_keep_rules_json: Mapped[dict | None] = mapped_column(JSON)
-    cratory_base_url: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
