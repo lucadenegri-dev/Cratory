@@ -401,6 +401,11 @@ async function apiSend<T>(method: string, path: string, body?: unknown): Promise
   );
 }
 
+/** Upload multipart: niente header Content-Type manuale, lo imposta fetch col boundary. */
+export async function apiUpload<T>(path: string, body: FormData): Promise<T> {
+  return handle<T>(await fetch(API + path, { method: "POST", body }));
+}
+
 export async function exportSet(setId: number, format: "text" | "csv" | "markdown"): Promise<string> {
   const res = await fetch(`${API}/api/sets/${setId}/export?format=${format}`, { method: "POST" });
   if (!res.ok) throw new Error(res.statusText);
@@ -722,4 +727,23 @@ export function searchLocalFiles(q: string) {
 /** Collega manualmente un file su disco alla traccia (possesso senza download). */
 export function linkLocalFile(trackId: number, path: string) {
   return apiPost<TrackDetail>(`/api/tracks/${trackId}/link-file`, { path });
+}
+
+// --- Rekordbox (import collezione XML) --------------------------------------
+
+export interface RekordboxImportReport {
+  in_file: number;
+  matched: number;
+  unmatched: number;
+  bpm_set: number;
+  key_set: number;
+  energy_set: number;
+}
+
+export const rekordboxPending = () => apiGet<{ pending: number }>("/api/rekordbox/pending");
+
+export async function importRekordbox(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  return apiUpload<RekordboxImportReport>("/api/rekordbox/import", fd);
 }

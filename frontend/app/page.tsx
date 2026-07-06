@@ -1,16 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  Music, Gauge, Sparkles, Compass, ArrowRight, Pencil, Tags, KeyRound, FolderOpen, RefreshCw,
+  Music, Gauge, Sparkles, Compass, ArrowRight, Pencil, Tags, KeyRound, FolderOpen, RefreshCw, Upload,
 } from "lucide-react";
 import {
   apiGet, getLabels, getPipeline, listImportedPlaylists, fmtDate,
+  rekordboxPending, importRekordbox,
   type LibraryStats, type LabelStats, type SetlistSummary, type Playlist, type PipelineStatus,
+  type RekordboxImportReport,
 } from "@/lib/api";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
-import { Card, Alert, Progress, Button, Badge, Loading } from "@/components/ui";
+import { Card, Alert, Progress, Button, Badge, Loading, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { Figure } from "@/components/dashboard/figure";
 import { Histogram } from "@/components/dashboard/histogram";
@@ -50,6 +52,61 @@ function QuickAction({ href, title, desc }: { href: string; title: string; desc:
       </div>
       <div className="mt-1 text-xs text-muted">{desc}</div>
     </Link>
+  );
+}
+
+/** Pannello upload rekordbox.xml: riempie BPM/key mancanti e ricalcola l'energia,
+ *  senza sovrascrivere valori già presenti (li imposta il backend). */
+function RekordboxImportPanel({ pending }: { pending: number | null }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [report, setReport] = useState<RekordboxImportReport | null>(null);
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    setReport(null);
+    try {
+      const r = await importRekordbox(file);
+      setReport(r);
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="mt-5 border-t border-border pt-4">
+      <SubLabel icon={<Upload size={12} />}>Import rekordbox.xml</SubLabel>
+      <p className="mb-2 text-xs text-muted">
+        Completa BPM e tonalità dalla collezione rekordbox (non sovrascrive valori già presenti).
+        {pending != null && pending > 0 && ` ${pending} tracce in attesa.`}
+      </p>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".xml"
+        disabled={busy}
+        onChange={(e) => onFile(e.target.files?.[0])}
+        className="block w-full text-xs text-muted file:mr-3 file:border file:border-border-strong file:bg-transparent file:px-3 file:py-1.5 file:text-xs file:font-medium file:uppercase file:tracking-wider file:text-fg hover:file:bg-elevated disabled:opacity-50"
+      />
+      {busy && <p className="mt-2 flex items-center gap-2 text-xs text-muted"><Spinner /> Importazione in corso…</p>}
+      {error && <div className="mt-2"><Alert tone="danger">⚠ {error}</Alert></div>}
+      {report && (
+        <div className="mt-2 space-y-1 text-xs">
+          <div className="flex justify-between gap-2"><span className="text-muted">Nel file</span><span className="tnum text-fg">{report.in_file}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">Abbinate</span><span className="tnum text-fg">{report.matched}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">Non abbinate</span><span className="tnum text-fg">{report.unmatched}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">BPM impostati</span><span className="tnum text-fg">{report.bpm_set}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">Tonalità impostate</span><span className="tnum text-fg">{report.key_set}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">Energia ricalcolata</span><span className="tnum text-fg">{report.energy_set}</span></div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -103,6 +160,7 @@ export default function Dashboard() {
   const [sets, setSets] = useState<SetlistSummary[] | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
+  const [rbPending, setRbPending] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -111,6 +169,7 @@ export default function Dashboard() {
     getLabels().then(setLabels).catch(() => {});
     apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch(() => setSets([]));
     listImportedPlaylists().then(setPlaylists).catch(() => setPlaylists([]));
+    rekordboxPending().then((r) => setRbPending(r.pending)).catch(() => setRbPending(null));
   }, []);
   useEffect(load, [load]);
 
@@ -245,6 +304,7 @@ export default function Dashboard() {
                 <Link href="/labels" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">Tutte →</Link>
               </div>
               <MiniBars rows={labelRows} />
+              <RekordboxImportPanel pending={rbPending} />
             </section>
           </div>
 
