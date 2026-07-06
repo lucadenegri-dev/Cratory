@@ -16,7 +16,6 @@ type Key = keyof TrackUpdate;
 const FIELDS: { key: Key; label: string; type: FieldType; hint?: string; min?: number; max?: number; placeholder?: string }[] = [
   { key: "bpm", label: "BPM", type: "number", placeholder: "128", min: 1, max: 400 },
   { key: "camelot_key", label: "Tonalità (Camelot)", type: "text", placeholder: "8A", hint: "es. 8A, 12B" },
-  { key: "energy", label: "Energia", type: "int", placeholder: "0–100", min: 0, max: 100 },
   { key: "genre", label: "Genere", type: "text", placeholder: "es. techno" },
   { key: "label", label: "Etichetta", type: "text", placeholder: "es. Kompakt" },
   { key: "year", label: "Anno", type: "int", placeholder: "2024", min: 0, max: 3000 },

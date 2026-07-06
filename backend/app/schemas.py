@@ -60,6 +60,11 @@ class TrackUpdateIn(BaseModel):
     Solo i campi presenti nel payload vengono toccati (PATCH parziale): un valore
     `null` azzera il campo, un campo assente resta invariato. I valori inseriti a
     mano sovrascrivono sempre quelli gia' presenti (l'utente sa cosa scrive).
+
+    `energy` non e' modificabile a mano: e' sempre derivata da bpm/genere
+    (services/energy) e viene ricalcolata in repositories.update_track quando il
+    patch cambia bpm o genere. extra="forbid" rifiuta (422) un payload che la
+    contenga.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -72,7 +77,6 @@ class TrackUpdateIn(BaseModel):
     duration_seconds: int | None = Field(default=None, ge=0)
     bpm: float | None = Field(default=None, gt=0, le=400)
     camelot_key: str | None = None
-    energy: int | None = Field(default=None, ge=0, le=100)
     label: str | None = None
 
 

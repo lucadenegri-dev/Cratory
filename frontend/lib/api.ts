@@ -163,7 +163,6 @@ export interface TrackUpdate {
   duration_seconds?: number | null;
   bpm?: number | null;
   camelot_key?: string | null;
-  energy?: number | null;
   label?: string | null;
 }
 
