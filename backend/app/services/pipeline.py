@@ -38,6 +38,10 @@ def pipeline_snapshot(db: Session) -> dict:
     total = count()
     with_key = count(Track.camelot_key.is_not(None), Track.camelot_key != "")
     with_local_file = count(Track.has_local_file.is_(True))
+    analyze_pending = count(
+        Track.has_local_file.is_(True),
+        (Track.bpm.is_(None)) | (Track.camelot_key.is_(None)) | (Track.camelot_key == ""),
+    )
 
     inbox_files = _count_audio_files(settings.slskd_download_dir)
     files_on_disk = _count_audio_files(settings.library_root)
@@ -53,6 +57,7 @@ def pipeline_snapshot(db: Session) -> dict:
                           (Track.has_local_file.is_(False)) | (Track.has_local_file.is_(None))),
         "archived_count": count(Track.archived.is_(True)),
         "with_local_file": with_local_file,
+        "analyze_pending": analyze_pending,
         "ready_for_set": count(Track.status == "ready_for_set"),
         "download_active": download_active,
         "download_pending": max(download["total"] - download["processed"], 0) if download_active else 0,

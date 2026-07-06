@@ -516,6 +516,7 @@ class PipelineOut(BaseModel):
     wishlist: int
     archived_count: int = 0
     with_local_file: int
+    analyze_pending: int
     ready_for_set: int
     download_active: bool
     download_pending: int

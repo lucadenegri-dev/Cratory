@@ -72,3 +72,13 @@ def test_disco_db_allineati(db, seed_tracks, tmp_path, monkeypatch):
 def test_organizer_url_esposto(db, monkeypatch):
     monkeypatch.setattr(settings, "organizer_url", "http://localhost:3100")
     assert pipeline_snapshot(db)["organizer_url"] == "http://localhost:3100"
+
+
+def test_analyze_pending_counts_owned_without_features(db):
+    from app.models import Track
+
+    db.add(Track(source_type="spotify", has_local_file=True))
+    db.add(Track(source_type="spotify", has_local_file=True, bpm=124.0, camelot_key="8A"))
+    db.add(Track(source_type="spotify", has_local_file=False))
+    db.commit()
+    assert pipeline_snapshot(db)["analyze_pending"] == 1
