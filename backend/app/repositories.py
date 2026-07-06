@@ -115,10 +115,6 @@ def get_track(db: Session, track_id: int) -> Track | None:
     )
 
 
-# Campi feature musicali modificabili a mano (bpm/key/label): energy resta derivato.
-_MANUAL_FEATURE_FIELDS = {"bpm", "camelot_key", "label"}
-
-
 def update_track(db: Session, track: Track, data: dict) -> Track:
     """Applica una modifica manuale parziale a una traccia.
 

@@ -232,13 +232,12 @@ export default function Dashboard() {
 
             <section className="p-5">
               <ColHead>Catalogo</ColHead>
-              <SubLabel icon={<Gauge size={12} />}>Copertura enrichment</SubLabel>
+              <SubLabel icon={<Gauge size={12} />}>Copertura BPM/key · energia</SubLabel>
               <div className="space-y-2.5">
                 <Coverage label="BPM e tonalità" n={stats.with_key} total={stats.total_tracks} />
-                <Coverage label="Mood / energia" n={stats.with_features} total={stats.total_tracks} />
+                <Coverage label="Energia" n={stats.with_features} total={stats.total_tracks} />
               </div>
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-                <Link href="/settings" className="inline-flex items-center gap-1 text-xs text-fg underline-offset-4 hover:underline">Arricchisci <ArrowRight size={13} /></Link>
                 <Link href="/library" className="inline-flex items-center gap-1 text-xs text-muted hover:text-fg"><Pencil size={12} /> Valori a mano</Link>
               </div>
               <div className="mb-2 mt-5 flex items-center justify-between">

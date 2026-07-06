@@ -9,19 +9,14 @@ import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 
 const STATUS_TONE: Record<string, "success" | "info" | "warning" | "neutral"> = {
-  ready_for_set: "success", enriched: "info", imported: "neutral",
-  missing_features: "warning", low_confidence: "warning",
+  ready_for_set: "success", imported: "neutral",
 };
 const STATUS_LABEL: Record<string, string> = {
-  ready_for_set: "ready", enriched: "enriched", imported: "imported",
-  missing_features: "no feat", low_confidence: "low conf",
+  ready_for_set: "ready", imported: "imported",
 };
 const STATUS_OPTIONS: [string, string][] = [
   ["ready_for_set", "Pronte per il set"],
-  ["enriched", "Arricchite"],
   ["imported", "Importate"],
-  ["missing_features", "Senza feature"],
-  ["low_confidence", "Bassa confidenza"],
 ];
 
 type Order = "asc" | "desc";

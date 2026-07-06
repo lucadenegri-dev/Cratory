@@ -10,15 +10,11 @@ export interface Track {
   artist: string | null;
   album: string | null;
   genre: string | null;
-  genre_secondary: string | null;
   year: number | null;
   duration_seconds: number | null;
   bpm: number | null;
   camelot_key: string | null;
-  mood: string | null;
   energy: number | null;
-  danceability: number | null;
-  vocalness: number | null;
   label: string | null;
   status: string;
   url: string | null;
@@ -27,9 +23,6 @@ export interface Track {
   added_at: string | null;
   spotify_url: string | null;
   album_art_url: string | null;
-  enriched: boolean;
-  enrichment_source: string | null;
-  enrichment_confidence: number | null;
   has_local_file: boolean;
   local_path: string | null;
   local_format: string | null;
@@ -166,15 +159,11 @@ export interface TrackUpdate {
   artist?: string | null;
   album?: string | null;
   genre?: string | null;
-  genre_secondary?: string | null;
   year?: number | null;
   duration_seconds?: number | null;
   bpm?: number | null;
   camelot_key?: string | null;
-  mood?: string | null;
   energy?: number | null;
-  danceability?: number | null;
-  vocalness?: number | null;
   label?: string | null;
 }
 
