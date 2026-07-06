@@ -17,6 +17,7 @@ from app.routers import (
     labels,
     pipeline,
     playlists,
+    rekordbox,
     services,
     sets,
     spotify,
@@ -78,6 +79,7 @@ app.include_router(services.router)
 app.include_router(downloads.router)
 app.include_router(files.router)
 app.include_router(pipeline.router)
+app.include_router(rekordbox.router)
 
 
 @app.get("/api/health")
