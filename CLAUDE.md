@@ -6,8 +6,10 @@ Guida operativa unica per l'AI che lavora su Cratory.
 
 **Cratory** e' il nuovo nome dell'app precedentemente chiamata DJ Assistant. E' una
 webapp personale, locale/self-hosted e mono-utente per importare
-playlist streaming, arricchire le tracce con feature musicali, costruire bozze di DJ
-set, analizzare buchi della libreria, fare discovery e identificare tracklist di mix.
+playlist streaming, costruire bozze di DJ set su tracce possedute (BPM/key da
+Rekordbox), analizzare buchi della libreria, fare discovery e identificare tracklist
+di mix. **L'arricchimento dei metadati (titolo/artista/album/label/genere) e il
+tagging sono di DjOrganizer.**
 
 Il progetto non riproduce audio. Il modulo Shazam scarica audio solo in modo temporaneo
 per fingerprinting e salva un corpus separato di tracklist identificate. Eccezione
@@ -30,23 +32,24 @@ Leggere in quest'ordine:
 ## Regole non negoziabili
 
 1. **Separare motore deterministico e AI.** Import, normalizzazione, deduplica,
-   enrichment, scoring, ruoli, gap analysis, discovery ranking e validazione sono
-   codice deterministico. Narrativa, interpretazione prompt e spiegazioni sono AI.
-2. **BPM/key/feature musicali non si inventano.** Arrivano da provider esterni o da
-   correzione manuale esplicita, con `enrichment_source` e `enrichment_confidence`.
-3. **Non sovrascrivere BPM/key esistenti.** Un dato gia' presente resta autorevole,
-   soprattutto se `enrichment_source="manual"`.
-4. **Lo streaming non fornisce feature di mixing.** Spotify da identita' traccia,
+   scoring, ruoli, gap analysis, discovery ranking e validazione sono codice
+   deterministico. Narrativa, interpretazione prompt e spiegazioni sono AI.
+2. **BPM/key vengono da Rekordbox.** Si importano dall'export XML della collezione
+   (`/api/rekordbox/import`) e non si sovrascrivono se già presenti (un dato
+   esistente resta autorevole). Cratory non stima né inventa BPM/key. `energy` è
+   un dato derivato deterministico (da BPM+genere).
+3. **Lo streaming non fornisce feature di mixing.** Spotify da identita' traccia,
    metadata editoriali, cover, durata, ISRC, URL e playlist.
-5. **L'AI non riceve mai l'intera libreria.** Riceve solo candidate filtrate dal
+4. **L'AI non riceve mai l'intera libreria.** Riceve solo candidate filtrate dal
    Candidate Engine, con cap 60.
-6. **Ogni output AI e' validato.** Usare schemi Pydantic e Validation Engine prima
+5. **Ogni output AI e' validato.** Usare schemi Pydantic e Validation Engine prima
    di mostrare o salvare risultati.
-7. **L'AI non inventa dati fattuali.** Deve distinguere fonte esterna, inferenza
+6. **L'AI non inventa dati fattuali.** Deve distinguere fonte esterna, inferenza
    musicale e ipotesi creativa.
-8. **Rekordbox resta fuori progetto.** Import XML, beatgrid/cue e colonne legacy sono
-   state rimosse.
-9. **La libreria è il disco.** Il possesso (`has_local_file`) viene dall'indicizzazione
+7. **Rekordbox è la fonte di BPM/tonalità.** L'utente analizza in Rekordbox ed
+   esporta la collezione in XML; Cratory la importa per riempire BPM/key sulle
+   tracce possedute. Beatgrid/cue restano fuori scope.
+8. **La libreria è il disco.** Il possesso (`has_local_file`) viene dall'indicizzazione
    di `LIBRARY_ROOT` (riaggancio per `audio_hash`); le playlist streaming sono lead.
    Cratory legge i file ma non li muta mai: i tag li scrive solo DjOrganizer.
 
@@ -61,7 +64,7 @@ Layer backend:
 ```text
 backend/app/
   routers/       HTTP only: playlists, tracks, transitions, sets, spotify,
-                 enrichment, ai, discovery, services, labels, dj_sets,
+                 rekordbox, ai, discovery, services, labels, dj_sets,
                  downloads, files, pipeline
   services/      logica deterministica e orchestrazione
   repositories.py
@@ -73,11 +76,9 @@ backend/app/
   core/
 ```
 
-Provider feature in catena:
-
-```text
-Deezer -> MusicBrainz -> AcousticBrainz -> GetSongBPM -> Last.fm
-```
+Nessuna catena di enrichment: BPM/key da Rekordbox, metadati testuali da DjOrganizer.
+I provider esterni rimasti servono **solo la Discovery**: Last.fm (similarita'),
+Discogs (dig "Scava"), Spotify (resolver).
 
 Discovery lavora per gusto, non per compatibilita' tecnica (quella resta al Set Builder):
 l'espansione playlist e' Last.fm-centric (similarita') con Spotify resolver via `/search`;
@@ -87,8 +88,8 @@ per app nuove o in development mode restituisce 403/404.
 ## Identita' tracce
 
 - Identita' streaming: `platform`, `platform_track_id`, `isrc`, `url`.
-- Deduplica/enrichment: `ISRC -> platform_track_id -> artist+title+duration -> fuzzy artist+title`.
-- Stati traccia: `imported | enriched | ready_for_set | missing_features | low_confidence`.
+- Deduplica: `ISRC -> platform_track_id -> artist+title+duration -> fuzzy artist+title`.
+- Stati traccia: `imported | ready_for_set` (ready = BPM+key presenti).
 
 ## Comandi
 
