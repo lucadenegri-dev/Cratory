@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, aiSuggestGenres,
-  bridgeSuggest, type Issue, type ScanRoot,
+  providerSuggest, type Issue, type ScanRoot,
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
@@ -18,7 +18,7 @@ export default function IssuesPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [genreBusy, setGenreBusy] = useState(false);
-  const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [providerBusy, setProviderBusy] = useState(false);
   const [aiNote, setAiNote] = useState<string | null>(null);
 
   const [sev, setSev] = useState("");
@@ -89,24 +89,24 @@ export default function IssuesPage() {
     }
   };
 
-  const onBridge = async () => {
+  const onProviderSuggest = async () => {
     setActionError(null);
     setAiNote(null);
-    setBridgeBusy(true);
+    setProviderBusy(true);
     try {
-      const r = await bridgeSuggest();
+      const r = await providerSuggest();
       if (!r.configured) {
-        setActionError("Configura l'URL di Cratory in Settings (e verifica che Cratory sia in esecuzione).");
+        setActionError("Configura le chiavi provider (MusicBrainz/Discogs) nel backend.");
       } else {
         load();
         setAiNote(
-          `${r.suggested} suggerimenti da Cratory${r.mismatches > 0 ? `, ${r.mismatches} discrepanze ISRC segnalate` : ""}${r.unresolved > 0 ? `, ${r.unresolved} non trovati` : ""} — rivedi e accetta col ✓.`,
+          `${r.suggested} suggerimenti da provider${r.unresolved > 0 ? `, ${r.unresolved} non trovati` : ""} — rivedi e accetta col ✓.`,
         );
       }
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Errore");
     } finally {
-      setBridgeBusy(false);
+      setProviderBusy(false);
     }
   };
 
@@ -144,7 +144,7 @@ export default function IssuesPage() {
           onAcceptFixable={acceptAllFixable} onDismissInfo={dismissAllInfo}
           onAiSuggest={onAiSuggest} aiBusy={aiBusy}
           onAiGenres={onAiGenres} genreBusy={genreBusy}
-          onBridge={onBridge} bridgeBusy={bridgeBusy}
+          onProviderSuggest={onProviderSuggest} providerBusy={providerBusy}
         />
       }
     >
@@ -192,7 +192,7 @@ export default function IssuesPage() {
   );
 }
 
-function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismissInfo, onAiSuggest, aiBusy, onAiGenres, genreBusy, onBridge, bridgeBusy }: {
+function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismissInfo, onAiSuggest, aiBusy, onAiGenres, genreBusy, onProviderSuggest, providerBusy }: {
   total: number;
   bySev: Record<string, number>;
   byType: Record<string, number>;
@@ -203,8 +203,8 @@ function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismiss
   aiBusy: boolean;
   onAiGenres: () => void;
   genreBusy: boolean;
-  onBridge: () => void;
-  bridgeBusy: boolean;
+  onProviderSuggest: () => void;
+  providerBusy: boolean;
 }) {
   return (
     <div className="flex flex-col gap-4 text-xs">
@@ -236,8 +236,8 @@ function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismiss
         <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
           {genreBusy ? "AI in corso…" : "✨ Suggerisci genere"}
         </Button>
-        <Button variant="primary" size="sm" onClick={onBridge} disabled={bridgeBusy}>
-          {bridgeBusy ? "Cratory in corso…" : "⇄ Suggerisci da Cratory"}
+        <Button variant="primary" size="sm" onClick={onProviderSuggest} disabled={providerBusy}>
+          {providerBusy ? "provider in corso…" : "⇄ Suggerisci da provider"}
         </Button>
         <Button variant="outline" size="sm" onClick={onAcceptFixable}>✓ accetta tutti i fixabili</Button>
         <Button variant="outline" size="sm" onClick={onDismissInfo}>✕ ignora tutti gli info</Button>

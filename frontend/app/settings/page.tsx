@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getSettings, updateSettings, setRootTarget, type Settings, type RootTarget } from "@/lib/api";
+import {
+  getSettings, updateSettings, setRootTarget, fingerprintStatus, runFingerprint,
+  type Settings, type RootTarget, type FingerprintStatus, type FingerprintResult,
+} from "@/lib/api";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, Button } from "@/components/ui";
 
@@ -22,17 +25,20 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [naming, setNaming] = useState("");
   const [folder, setFolder] = useState("");
-  const [cratory, setCratory] = useState("");
+  const [fpStatus, setFpStatus] = useState<FingerprintStatus | null>(null);
+  const [fpResult, setFpResult] = useState<FingerprintResult | null>(null);
+  const [fpBusy, setFpBusy] = useState(false);
 
   const load = useCallback(() => {
     getSettings()
       .then((s) => {
         setSettings(s); setNaming(s.naming_template); setFolder(s.folder_template);
-        setCratory(s.cratory_base_url ?? ""); setOffline(false);
+        setOffline(false);
       })
       .catch(() => setOffline(true));
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { fingerprintStatus().then(setFpStatus).catch(() => {}); }, []);
 
   const saveTemplates = async () => {
     setError(null);
@@ -44,10 +50,12 @@ export default function SettingsPage() {
     try { setSettings(await setRootTarget(rootId, target.trim() || null)); }
     catch (e) { setError(e instanceof Error ? e.message : "Errore"); }
   };
-  const saveCratory = async () => {
+  const onIdentify = async () => {
     setError(null);
-    try { setSettings(await updateSettings({ cratory_base_url: cratory.trim() })); }
+    setFpBusy(true);
+    try { setFpResult(await runFingerprint()); }
     catch (e) { setError(e instanceof Error ? e.message : "Errore"); }
+    finally { setFpBusy(false); }
   };
 
   return (
@@ -74,14 +82,38 @@ export default function SettingsPage() {
 
             <Button variant="outline" size="sm" className="self-start" onClick={saveTemplates}>salva template</Button>
 
-            <label className="block">
-              <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">cratory (bridge sola-lettura)</span>
-              <input className="w-full border border-border bg-surface px-3 py-2 text-sm text-fg-strong focus:border-border-strong focus:outline-none"
-                value={cratory} onChange={(e) => setCratory(e.target.value)} placeholder="http://localhost:8000" />
-              <span className="mt-1.5 block text-xs text-faint">vuoto = bridge disattivato. Suggerisce genere/label/anno/artista/titolo dalla libreria di Cratory (deve essere in esecuzione).</span>
-            </label>
-
-            <Button variant="outline" size="sm" className="self-start" onClick={saveCratory}>salva cratory</Button>
+            <div className="border border-border bg-surface p-4">
+              <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">provider testuali &amp; fingerprint</div>
+              <p className="mb-3 text-xs text-faint">
+                MusicBrainz/Discogs (metadati testuali) e AcoustID/Chromaprint (identità acustica → MBID).
+              </p>
+              <div className="mb-3 flex gap-4 text-xs">
+                <span className={fpStatus?.configured ? "text-ok" : "text-faint"}>
+                  AcoustID: {fpStatus ? (fpStatus.configured ? "configurato" : "non configurato") : "…"}
+                </span>
+                <span className={fpStatus?.fpcalc ? "text-ok" : "text-faint"}>
+                  fpcalc: {fpStatus ? (fpStatus.fpcalc ? "disponibile" : "non trovato") : "…"}
+                </span>
+              </div>
+              {fpStatus && !(fpStatus.configured && fpStatus.fpcalc) && (
+                <p className="mb-3 text-xs text-faint">
+                  Imposta ACOUSTID_API_KEY nel backend e installa fpcalc (Chromaprint) per abilitare l&apos;identificazione.
+                </p>
+              )}
+              <Button
+                variant="outline" size="sm"
+                disabled={fpBusy || !fpStatus?.configured || !fpStatus?.fpcalc}
+                onClick={onIdentify}
+              >
+                {fpBusy ? "identificazione in corso…" : "identifica ora"}
+              </Button>
+              {fpResult && (
+                <p className="mt-2 text-xs text-faint">
+                  {fpResult.identified} identificati, {fpResult.below_threshold} sotto soglia, {fpResult.not_found} non trovati
+                  {fpResult.errors > 0 ? `, ${fpResult.errors} errori` : ""} (su {fpResult.total}).
+                </p>
+              )}
+            </div>
 
             <div>
               <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">dove organizzare (target per radice)</div>

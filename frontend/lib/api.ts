@@ -195,15 +195,14 @@ export function aiSuggestGenres() {
   return apiSend<AiSuggestResult>("POST", "/api/issues/ai-suggest-genre");
 }
 
-export interface BridgeSuggestResult {
+export interface ProviderSuggestResult {
   configured: boolean;
   files: number;
   suggested: number;
   unresolved: number;
-  mismatches: number;
 }
-export function bridgeSuggest() {
-  return apiSend<BridgeSuggestResult>("POST", "/api/issues/bridge-suggest");
+export function providerSuggest() {
+  return apiSend<ProviderSuggestResult>("POST", "/api/issues/provider-suggest");
 }
 
 // --- DUPLICATES -------------------------------------------------------------
@@ -337,7 +336,6 @@ export interface RootTarget {
 export interface Settings {
   naming_template: string;
   folder_template: string;
-  cratory_base_url: string | null;
   roots: RootTarget[];
 }
 export function getSettings() {
@@ -346,12 +344,31 @@ export function getSettings() {
 export function updateSettings(body: {
   naming_template?: string;
   folder_template?: string;
-  cratory_base_url?: string;
 }) {
   return apiSend<Settings>("PUT", "/api/settings", body);
 }
 export function setRootTarget(rootId: number, target: string | null) {
   return apiSend<Settings>("PUT", `/api/settings/roots/${rootId}/target`, { target_root: target });
+}
+
+// --- FINGERPRINT --------------------------------------------------------------
+export interface FingerprintStatus {
+  configured: boolean;
+  fpcalc: boolean;
+}
+export interface FingerprintResult {
+  configured: boolean;
+  identified: number;
+  below_threshold: number;
+  not_found: number;
+  errors: number;
+  total: number;
+}
+export function fingerprintStatus() {
+  return apiGet<FingerprintStatus>("/api/fingerprint/status");
+}
+export function runFingerprint() {
+  return apiSend<FingerprintResult>("POST", "/api/fingerprint");
 }
 
 // --- helpers ----------------------------------------------------------------
