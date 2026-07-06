@@ -32,9 +32,6 @@ class Settings(BaseSettings):
     spotify_client_secret: str = ""
     # Spotify accetta solo HTTPS o loopback 127.0.0.1 (non "localhost") come redirect
     spotify_redirect_uri: str = "http://127.0.0.1:8000/api/spotify/callback"
-    musicbrainz_user_agent: str = ""
-    # Enrichment musicale esterno (BPM/key/mood/energia). Vuoti = provider disattivo.
-    getsongbpm_api_key: str = ""
     lastfm_api_key: str = ""
     # Discogs: sorgente di profondita' per Discovery (generi/stili, etichette, artisti).
     # Funziona anche senza token (rate ridotto a ~25/min); col token sale a ~60/min.
@@ -45,16 +42,6 @@ class Settings(BaseSettings):
     slskd_api_key: str = ""
     # slskd: cartella dove slskd scrive i download completati (usata per collegare il file alla Track).
     slskd_download_dir: str = ""
-    # AcoustID: fingerprinting dei file posseduti -> MusicBrainz Recording MBID.
-    # Chiave gratuita su acoustid.org; richiede anche il binario fpcalc (Chromaprint)
-    # nel PATH o indicato dalla env FPCALC. Vuoto = fingerprinting disattivo.
-    acoustid_api_key: str = ""
-    # Deezer: BPM via ISRC, gratis e SENZA API key (endpoint pubblico). Attivo di default
-    # perche' a costo zero e copre il BPM con l'identita' piu' affidabile (ISRC).
-    deezer_enabled: bool = True
-    # AcousticBrainz: analisi audio reale (BPM/key/mood/danceability/voce) via MBID, gratis e
-    # senza API key. Indicizzato per MBID: entra in catena solo se MusicBrainz e' configurato.
-    acousticbrainz_enabled: bool = True
     ai_api_key: str = ""
     ai_model: str = ""
     # Modello per la modalità "creative" del Set Builder (vuoto = stesso di ai_model).
