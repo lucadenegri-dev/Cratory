@@ -78,3 +78,24 @@ def test_stale_issue_deleted(db):
     db.commit()
     recompute(db)
     assert db.scalar(select(Issue).where(Issue.field == "genre")) is None
+
+
+def test_recompute_deletes_orphaned_bridge_mismatch(db):
+    # bridge_mismatch era un tipo di issue legacy (bridge Cratory) che l'Inspector
+    # non ricalcola più: T9 ha rimosso l'esenzione _EXTERNAL_TYPES, quindi il
+    # recompute deve cancellarle a prescindere dallo status, come qualsiasi altra
+    # issue orfana non più prodotta.
+    f = _add_file(db, path="/m/a.mp3", artist="A", title="T", genre="House", year=2020,
+                  label="X", duration_s=200.0, bitrate=320000, content_hash="a")
+    db.add(Issue(file_id=f.id, type="bridge_mismatch", field="bpm", severity="warning",
+                 detail="bpm diverso dal bridge", suggested_fix_json=None, status="open"))
+    db.add(Issue(file_id=f.id, type="bridge_mismatch", field="key", severity="warning",
+                 detail="key diversa dal bridge", suggested_fix_json=None, status="dismissed"))
+    db.add(Issue(file_id=f.id, type="bridge_mismatch", field="energy", severity="warning",
+                 detail="energy diversa dal bridge", suggested_fix_json=None, status="accepted"))
+    db.commit()
+    assert db.scalars(select(Issue).where(Issue.type == "bridge_mismatch")).all()
+
+    recompute(db)
+
+    assert db.scalars(select(Issue).where(Issue.type == "bridge_mismatch")).all() == []

@@ -118,6 +118,14 @@ class MusicBrainzProvider:
         return None
 
     @staticmethod
+    def _album(rec):
+        for rel in rec.get("releases") or []:
+            title = rel.get("title")
+            if title:
+                return title
+        return None
+
+    @staticmethod
     def _top_tag(rec):
         tags = [t for t in (rec.get("tags") or []) if t.get("name")]
         return max(tags, key=lambda t: t.get("count", 0))["name"] if tags else None
@@ -140,6 +148,8 @@ class MusicBrainzProvider:
             out["canonical_artist"] = artist
         if label := self._label(rec):
             out["label"] = label
+        if album := self._album(rec):
+            out["canonical_album"] = album
         if rd := self._release_date(rec):
             out["release_date"] = rd
         if genre := self._top_tag(rec):

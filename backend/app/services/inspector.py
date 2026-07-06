@@ -84,7 +84,8 @@ def _inspect_one(f: AudioFile) -> list[IssueComputed]:
         if not _present(getattr(f, field)):
             out.append(IssueComputed(f.id, "missing_metadata", field, "warning",
                                      f"{field} mancante", None))
-    # Album: il meno critico dei metadati — severita' info, riempibile dal bridge.
+    # Album: il meno critico dei metadati — severita' info, riempibile dai
+    # provider (MusicBrainz/Discogs).
     if not _present(f.album):
         out.append(IssueComputed(f.id, "missing_metadata", "album", "info",
                                  "album mancante", None))

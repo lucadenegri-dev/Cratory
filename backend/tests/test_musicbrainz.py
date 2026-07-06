@@ -6,7 +6,7 @@ def test_parse_recording_extracts_label_genre_date():
     rec = {
         "id": "mbid-1", "title": "Dreamscapes",
         "artist-credit": [{"name": "SLV"}],
-        "releases": [{"date": "2019-05-01",
+        "releases": [{"date": "2019-05-01", "title": "Dreamscapes EP",
                       "label-info": [{"label": {"name": "Drumcode"}}]}],
         "tags": [{"name": "techno", "count": 5}, {"name": "acid", "count": 2}],
     }
@@ -17,6 +17,7 @@ def test_parse_recording_extracts_label_genre_date():
     assert out["canonical_artist"] == "SLV"
     assert out["mbid"] == "mbid-1"
     assert out["confidence"] == 95
+    assert out["canonical_album"] == "Dreamscapes EP"
 
 
 def test_best_recording_prefers_title_match():

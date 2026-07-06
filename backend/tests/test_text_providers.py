@@ -37,3 +37,20 @@ def test_no_data_returns_empty():
     f = make_audio_file(3, artist="A", title="B")
     out = text_providers.lookup(f, mb=_MB(None), discogs=_Discogs(None))
     assert out == {}
+
+
+def test_musicbrainz_album_flows_through():
+    f = make_audio_file(4, artist="SLV", title="Dreamscapes")
+    mb = _MB({"canonical_artist": "SLV", "canonical_album": "Dreamscapes EP"})
+    out = text_providers.lookup(f, mb=mb, discogs=None)
+    assert out["album"] == "Dreamscapes EP"
+
+
+def test_musicbrainz_garbage_genre_does_not_block_discogs_gap_fill():
+    # normalize_genre("   ") -> None: se il genere MB normalizza a None non deve
+    # finire in out (garbage) né bloccare Discogs come "già presente".
+    f = make_audio_file(5, artist="A", title="B")
+    mb = _MB({"canonical_artist": "A", "genre_primary": "   "})
+    dg = _Discogs({"genre_primary": "Chicago House"})
+    out = text_providers.lookup(f, mb=mb, discogs=dg)
+    assert out["genre"] == "Chicago House"

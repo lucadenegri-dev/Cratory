@@ -18,16 +18,19 @@ def _year(value) -> int | None:
 def lookup(file, *, mb=None, discogs=None) -> dict[str, Any]:
     out: dict[str, Any] = {}
     mb_res = mb.lookup(title=file.title, artist=file.artist,
-                       isrc=(file.isrc or None), mbid=getattr(file, "mbid", None)) if mb else None
+                       isrc=(file.isrc.strip() or None) if file.isrc else None,
+                       mbid=getattr(file, "mbid", None)) if mb else None
     if mb_res:
         if mb_res.get("canonical_artist"):
             out["artist"] = mb_res["canonical_artist"]
         if mb_res.get("canonical_title"):
             out["title"] = mb_res["canonical_title"]
+        if mb_res.get("canonical_album"):
+            out["album"] = mb_res["canonical_album"]
         if mb_res.get("label"):
             out["label"] = mb_res["label"]
-        if mb_res.get("genre_primary"):
-            out["genre"] = normalize_genre(mb_res["genre_primary"])
+        if mb_res.get("genre_primary") and (g := normalize_genre(mb_res["genre_primary"])) is not None:
+            out["genre"] = g
         if (y := _year(mb_res.get("release_date"))) is not None:
             out["year"] = y
 
@@ -38,8 +41,9 @@ def lookup(file, *, mb=None, discogs=None) -> dict[str, Any]:
         if dg_res:
             if "label" not in out and dg_res.get("label"):
                 out["label"] = dg_res["label"]
-            if "genre" not in out and dg_res.get("genre_primary"):
-                out["genre"] = normalize_genre(dg_res["genre_primary"])
+            if "genre" not in out and dg_res.get("genre_primary") \
+                    and (g := normalize_genre(dg_res["genre_primary"])) is not None:
+                out["genre"] = g
             if "year" not in out and (y := _year(dg_res.get("release_date"))) is not None:
                 out["year"] = y
     return out
