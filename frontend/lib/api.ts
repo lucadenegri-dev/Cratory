@@ -204,6 +204,7 @@ export interface PipelineStatus {
   wishlist: number;
   archived_count: number;
   with_local_file: number;
+  analyze_pending: number;
   ready_for_set: number;
   download_active: boolean;
   download_pending: number;
