@@ -22,9 +22,9 @@ migrazione esplicita.
 - Spotify OAuth, import playlist, liked tracks, export playlist.
 - Import manuale da tracklist incollata.
 - Data model streaming-first.
-- Rimozione Rekordbox.
-- Cache enrichment.
-- Provider feature: Deezer, MusicBrainz, AcousticBrainz, GetSongBPM, Last.fm.
+- Rimozione Rekordbox (2026-06-14, storica): **poi reintrodotto nel 2026-07 come fonte
+  di BPM/key via import XML** — vedi "Pivot disk-first + Rekordbox" qui sotto. Non e'
+  tornato il vecchio scope (beatgrid/cue restano fuori), solo BPM/Camelot.
 - Gap Analysis.
 - Candidate Engine con cap 60.
 - AI Set Agent con output strutturato.
@@ -104,21 +104,38 @@ migrazione esplicita.
   `ORGANIZER_URL`), menu raggruppato per fasi Scopri → Colleziona → Suona; `start-dev`
   avvia anche DjOrganizer se presente.
 - **Barra job unificata (GlobalProgress):** poller unico in JobsProvider su tutti i job
-  lunghi (enrichment, Shazam, download, indice, fingerprint), righe impilate con
-  dettaglio ed esito visibile 4s.
+  lunghi (all'epoca: enrichment, Shazam, download, indice, fingerprint — i job
+  enrichment/fingerprint sono stati ritirati col pivot 2026-07, restano Shazam,
+  download e indice), righe impilate con dettaglio ed esito visibile 4s.
 - **Archivio download da sistemare + link file locale:** esiti download persistiti sulla
   Track, pagina `/downloads/issues` con filtri/contatori e azioni per riga (Scegli file
   Soulseek, Collega file locale, Ignora, Riprova tutte); collegamento manuale via
   `POST /api/tracks/{id}/link-file` + ricerca su disco `GET /api/files/search`.
-- **Fingerprinting AcoustID:** audio → MusicBrainz Recording MBID (`Track.mbid`, soglia
-  0.85, cache esiti), endpoint `POST/GET /api/library/fingerprint[/status]`, card in
-  Impostazioni e job nella barra; richiede `ACOUSTID_API_KEY` + `fpcalc`. La catena
-  enrichment usa l'mbid (lookup MusicBrainz diretto, backfill ISRC → sblocca Deezer);
-  batch esteso alle tracce senza key, genere AI in batch con cache dei null.
+- ~~Fingerprinting AcoustID (audio → MusicBrainz Recording MBID via `Track.mbid`,
+  endpoint `/api/library/fingerprint[/status]`)~~ — **rimosso nel pivot 2026-07**
+  insieme al motore di enrichment: era parte della catena feature esterna, ora
+  ritirata (vedi "Pivot disk-first + Rekordbox" sotto). Nota storica, non attivo.
 - **Playlist dalla libreria:** `POST /api/playlists/create-from-tracks` + composizione da
   UI; "Scarica mancanti" direttamente dal dettaglio playlist. Rimosso l'import playlist
   da cartella locale (superato dal disk-first: la cartella canonica si indicizza, non si
   importa come playlist).
+- **Pivot disk-first + Rekordbox (2026-07, slice 1A/1B/2/3):** ritirati il motore di
+  enrichment interno, il fingerprinting AcoustID e il bridge `GET /api/tracks/lookup`
+  per DjOrganizer (slice 1A/1B) — l'arricchimento testuale dei metadati e il tagging
+  su disco sono ora esclusivamente di DjOrganizer; le colonne DB del vecchio motore
+  sono state droppate con migrazione FK-safe. **BPM/key tornano in Cratory solo
+  dall'import della collezione Rekordbox XML** (`POST /api/rekordbox/import`, slice 2):
+  match path (NFC) → `audio_hash` (gated su basename) → artist+title, mai sovrascrive
+  un dato gia' presente; `energy` e' ora un campo derivato deterministico (BPM+genere),
+  ricalcolato all'import e sui PATCH di bpm/genere, non piu' editabile a mano (422).
+  Stati traccia ridotti a `imported | ready_for_set`. Dashboard: striscia a sei fasi
+  Scopri → Acquisisci → Organizza⤴ → Indicizza → Analizza⤴ → Suona (slice 3), con
+  pannello di import Rekordbox inline nella fase Analizza. Provider esterni residui
+  (Last.fm, Discogs, Spotify) servono solo la Discovery. `.env`: rimosse le chiavi dei
+  provider-audio/fingerprint (`MUSICBRAINZ_USER_AGENT`, `GETSONGBPM_API_KEY`,
+  `DEEZER_ENABLED`, `ACOUSTICBRAINZ_ENABLED`, `ACOUSTID_API_KEY`); restano
+  `SPOTIFY_*`, `LASTFM_API_KEY`, `DISCOGS_TOKEN`, `AI_*`, `SLSKD_*`, `LIBRARY_ROOT`,
+  `ARCHIVE_ROOT`, `ORGANIZER_URL`. Dettaglio completo in `PROGRESS.md`.
 
 ## Direzione prodotto
 
@@ -166,18 +183,20 @@ Backlog tecnico (non bloccante):
 
 | Rischio | Mitigazione |
 |---|---|
-| Provider con copertura disomogenea | chain multiprovider, cache, confidenza e stato `low_confidence` |
-| Tracce senza BPM/key | stato `missing_features`, correzione manuale, score neutri dove possibile |
-| Rate limit o errori rete | retry/backoff, job async, cache not-found |
+| Tracce senza BPM/key | stato traccia resta `imported` (non usabile dal Set Builder) finche' non arriva un import Rekordbox; nessuna stima automatica |
+| Rate limit o errori rete (provider Discovery) | retry/backoff, job async |
 | Output AI inventato | candidate cap, schema Pydantic, Validation Engine |
 | Spotify recommendation non disponibile | Discovery basato su Last.fm e resolver Spotify `/search` |
 | Spotify dev-mode limita la profondita' (5 utenti, search `label:` cap 10) | profondita' di genere/etichetta da Discogs (aperto); Spotify solo come resolver |
 | Rename prodotto rompe path dati | path legacy mantenuti, migrazione solo se esplicita |
+| Import Rekordbox disallineato (path/hash/nome non matchano) | tre livelli di match (path NFC → audio_hash gated su basename → artist+title), report con conteggio `unmatched` |
 
 ## Decisioni consolidate
 
 - Cratory e' uno strumento personale/self-hosted, non un SaaS pubblico (muro policy Spotify).
-- Rekordbox non torna nel progetto.
+- Rekordbox e' tornato nel progetto (pivot 2026-07) ma solo come fonte di import BPM/key
+  via export XML — non torna il vecchio scope (beatgrid/cue restano fuori, nessuna
+  integrazione live con l'app Rekordbox).
 - Spotify e' fonte di identita'/metadata, non di feature musicali.
 - Discovery: profondita' di genere/etichetta da Discogs (aperto); Spotify resta solo
   resolver di identita' (al salvataggio).
@@ -185,7 +204,11 @@ Backlog tecnico (non bloccante):
 - Discovery non suggerisce piu' tracce dai gap della playlist; quei gap restano analisi separata.
 - Discovery lavora per gusto, non per compatibilita' tecnica: BPM/key/transizioni
   sono competenza del Set Builder.
-- Il modulo Shazam non popola direttamente la libreria: produce un corpus separato.
+- Il modulo Shazam non popola direttamente la libreria: produce un corpus separato
+  (resta l'unico fingerprinting audio del progetto — identifica mix esterni, non
+  la libreria).
+- L'arricchimento testuale dei metadati (titolo/artista/album/label/genere) e il
+  tagging su disco sono competenza di DjOrganizer, non di Cratory (pivot 2026-07).
 - SQLite resta sufficiente per uso locale mono-utente.
 - Disk-first: la libreria e' il disco (`LIBRARY_ROOT`), non le playlist streaming
   (che restano lead). Cratory legge i file per indicizzarli ma non li scrive mai:

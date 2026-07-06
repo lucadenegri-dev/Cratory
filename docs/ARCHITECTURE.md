@@ -1,16 +1,23 @@
 # Architettura
 
 Cratory e' una webapp locale/self-hosted, mono-utente, per trasformare playlist
-streaming in materiale operativo da DJ: libreria arricchita, bozze di set, gap
+streaming e libreria su disco in materiale operativo da DJ: bozze di set, gap
 analysis, discovery e corpus di mix identificati.
 
 ## Principi
 
 - Il motore deterministico gestisce fatti, score, deduplica, ruoli, ranking e validazione.
 - L'AI gestisce linguaggio, narrativa, interpretazione del prompt e spiegazioni.
-- BPM, Camelot/key e feature musicali non vengono inventati.
-- Un dato musicale gia' presente non viene sovrascritto dai provider.
+- **BPM e Camelot/key vengono solo dall'import Rekordbox XML**: Cratory non li stima
+  ne' li inventa. Un dato gia' presente non viene mai sovrascritto dall'import.
+- **`energy` e' sempre derivata** (deterministica, da BPM+genere): non e' un dato di
+  provider ne' un campo editabile a mano.
+- **Cratory legge i file audio ma non li scrive mai.** Tag, rename e organizzazione
+  su disco restano competenza di DjOrganizer; l'arricchimento testuale dei metadati
+  (titolo/artista/album/label/genere) e' anch'esso di DjOrganizer.
 - Spotify non fornisce feature di mixing: serve per identita', metadata, import/export.
+- I provider esterni rimasti (Last.fm, Discogs, Spotify) servono **solo la Discovery**
+  per gusto e similarita', non la pipeline di feature.
 - L'AI non riceve mai tutta la libreria: il Candidate Engine le passa al massimo 60 candidate.
 - Ogni output AI passa da schema Pydantic e Validation Engine.
 - L'app non riproduce audio. Non conserva file audio, con un'eccezione dichiarata:
@@ -26,13 +33,23 @@ Spotify / import manuale
   -> Playlist Importer
   -> normalizzazione + deduplica
   -> SQLite
-  -> Music Feature Enrichment con cache
   -> Library Explorer / Gap Analysis
   -> Candidate Engine
   -> Set Builder deterministico
   -> AI Set Agent opzionale
   -> Validation Engine
   -> Set Editor / Export / Discovery write-back
+```
+
+In parallelo, la fonte di BPM/key:
+
+```text
+Rekordbox (analisi utente)
+  -> File > Export Collection in xml format
+  -> POST /api/rekordbox/import
+  -> match path (NFC) -> audio_hash (gated su basename) -> artist+title
+  -> bpm/camelot_key riempiti solo se assenti (mai sovrascritti)
+  -> energy ricalcolata deterministicamente
 ```
 
 Discovery ha due rami paralleli, entrambi orientati al **gusto** (non alla
@@ -75,7 +92,8 @@ URL SoundCloud/Mixcloud/YouTube
 ```
 
 Le tracce identificate nei mix non entrano nella libreria principale: restano un corpus
-separato per analisi e suggerimenti futuri.
+separato per analisi e suggerimenti futuri. Questo e' l'unico fingerprinting che Cratory
+esegue: identifica i brani di un mix esterno via Shazam, non le tracce della libreria.
 
 Acquisizione file via Soulseek (slskd), distinta dal download temporaneo Shazam:
 
@@ -109,8 +127,8 @@ dell'acquisizione.
 
 La libreria e' il disco: il possesso di una traccia (`has_local_file`) non e' un
 side-effect dell'acquisizione Soulseek soltanto, ma lo stato di una cartella
-canonica che Cratory indicizza attivamente. Cratory legge i file audio ma non li
-muta mai — tag e organizzazione restano competenza di DjOrganizer.
+canonica che Cratory indicizza attivamente. **Cratory legge i file audio ma non li
+muta mai** — tag, rename e organizzazione restano competenza esclusiva di DjOrganizer.
 
 - **`LIBRARY_ROOT`**: cartella organizzata (gestita da DjOrganizer) che Cratory
   indicizza da Impostazioni -> "Libreria (disco)". Vuota = indicizzazione disattiva.
@@ -123,35 +141,50 @@ muta mai — tag e organizzazione restano competenza di DjOrganizer.
 - **`audio_hash`**: SHA-256 dei primi secondi di audio decodificato via ffmpeg (mono,
   22050 Hz, s16le) — stabile a rinomina e retag, a differenza di path o tag ID3/MP4.
   Calcolato sia dall'indicizzazione di libreria sia dall'acquisizione Soulseek
-  (`attach_local_file`), cosi' i due percorsi convergono sullo stesso identificativo.
+  (`attach_local_file`) sia dal match di fallback dell'import Rekordbox, cosi' i
+  percorsi convergono sullo stesso identificativo.
 - **`library_index`** (`backend/app/services/library_index.py`, deterministico):
   per ogni file sotto `LIBRARY_ROOT` calcola l'hash e cerca un match nell'ordine
   `audio_hash -> digest legacy (import locali storici, in platform_track_id) ->
   ISRC -> fuzzy artist+title`; se non trova nulla crea una nuova `Track`. I tag del
-  file riempiono solo i campi identita' vuoti (mai sovrascrivere enrichment o
-  correzioni manuali). Scan incrementale: un file con path+mtime+size invariati non
-  viene ri-hashato. Riconciliazione: un possesso il cui file non e' piu' presente
-  nello scan (spostato, cancellato) perde `has_local_file`/`local_path` ma mantiene
-  `audio_hash`, cosi' il riaggancio e' immediato se il file ricompare altrove. Guard
-  anti-unmount: uno scan a zero file (radice vuota, path sbagliato, disco smontato)
-  non tocca i possessi esistenti. `duplicates` conta i file con lo stesso hash visti
-  nello stesso run (il primo vince; la dedup su disco resta compito di DjOrganizer).
-  Le tracce nuove create dall'indice avviano l'enrichment automaticamente
-  (best-effort). Esposto via `POST /api/library/index` (202, job async) e
-  `GET /api/library/index/status`; risponde `409` se `LIBRARY_ROOT` non e' configurata.
-- **`GET /api/tracks/lookup`**: bridge read-only per DjOrganizer, nessuna scrittura
-  ne' side-effect. Query `isrc` oppure `artist`+`title` (altrimenti 422); match
-  `isrc` (confidence 100) poi fuzzy artist+title (confidence 70), sempre `limit(1)`
-  per non far fallire il lookup su duplicati; mai 404, risponde `found: false`.
+  file riempiono solo i campi identita' vuoti, in sola lettura (mai sovrascrivere
+  BPM/key o correzioni manuali; Cratory non scrive mai sul file). Scan incrementale:
+  un file con path+mtime+size invariati non viene ri-hashato. Riconciliazione: un
+  possesso il cui file non e' piu' presente nello scan (spostato, cancellato) perde
+  `has_local_file`/`local_path` ma mantiene `audio_hash`, cosi' il riaggancio e'
+  immediato se il file ricompare altrove. Guard anti-unmount: uno scan a zero file
+  (radice vuota, path sbagliato, disco smontato) non tocca i possessi esistenti.
+  `duplicates` conta i file con lo stesso hash visti nello stesso run (il primo
+  vince; la dedup su disco resta compito di DjOrganizer). Esposto via
+  `POST /api/library/index` (202, job async) e `GET /api/library/index/status`;
+  risponde `409` se `LIBRARY_ROOT` non e' configurata.
 - Il possesso alimenta anche il Set Builder: `SetGenerationRequest.owned_only` (default
   `True`) filtra le candidate del Candidate Engine alle sole tracce con file locale;
   la scelta e' persistita su `Setlist.owned_only` e rispettata anche da editor
   (alternative, sostituzione traccia — 422 se la sostituta non e' posseduta e il set
   e' nato "solo posseduti").
-- **Fingerprinting AcoustID** (`backend/app/services/fingerprint.py`, job in background
-  `fingerprint_job.py`): identifica via audio le tracce possedute senza `mbid`, un job
-  on-demand distinto dall'indicizzazione. Esposto via `POST /api/library/fingerprint` e
-  `GET /api/library/fingerprint/status`.
+
+## Import Rekordbox (fonte di BPM/key)
+
+Cratory non stima ne' inventa BPM/tonalita': l'utente analizza la libreria in
+Rekordbox (fuori da Cratory) ed esporta la collezione (`File > Export Collection in
+xml format`); Cratory importa quell'XML per riempire BPM/Camelot sulle tracce gia'
+possedute sul disco. Beatgrid, cue e altri campi Rekordbox restano fuori scope.
+
+- **`POST /api/rekordbox/import`** (multipart, campo `file`): parsa l'XML
+  (`defusedxml`, anti-XXE) e per ogni `TRACK` cerca la `Track` posseduta
+  corrispondente nell'ordine: **path normalizzato NFC** (macOS/Rekordbox puo'
+  decodificare `Location` in NFD) -> **`audio_hash`** di fallback, gated sul
+  basename del path per evitare un decode ffmpeg costoso su righe non nostre ->
+  **fuzzy artist+title**. Su match, riempie `bpm`/`camelot_key` **solo se assenti**
+  (un dato gia' presente resta autorevole, non viene mai sovrascritto), ricalcola
+  `energy` deterministicamente quando il BPM e' impostato, e aggiorna lo stato
+  traccia. Risponde con i conteggi (`in_file`, `matched`, `unmatched`, `bpm_set`,
+  `key_set`, `energy_set`). `400` su file vuoto o XML non valido/non sicuro.
+- **`GET /api/rekordbox/pending`**: conta le tracce possedute (`has_local_file`)
+  ancora senza BPM o senza key — il numero che l'utente deve ancora "analizzare in
+  Rekordbox ed importare". Esposto anche in `GET /api/pipeline` come
+  `analyze_pending`.
 
 ## Layer backend
 
@@ -178,9 +211,11 @@ Responsabilita':
 
 - import playlist e import manuale;
 - deduplica con priorita' `ISRC -> platform_track_id -> artist+title+duration -> fuzzy`;
-- applicazione enrichment con fonte/confidenza;
-- stato traccia (`imported`, `enriched`, `ready_for_set`, `missing_features`, `low_confidence`);
-- score BPM, Camelot, energia, mood, genere e durata;
+- import Rekordbox (BPM/key, mai sovrascritti) e ricalcolo `energy` derivata;
+- stato traccia (`imported`, `ready_for_set`);
+- score BPM, Camelot, energia, genere e durata (il contratto include anche uno score
+  di coerenza mood, oggi sempre neutro: `Track` non ha piu' un campo mood da quando
+  il motore di enrichment e' stato ritirato);
 - classificazione transizioni;
 - assegnazione ruoli nell'arco del set;
 - candidate filtering con cap 60;
@@ -188,8 +223,9 @@ Responsabilita':
 - discovery ranking;
 - validazione output AI.
 
-L'assenza di una feature non deve bloccare il sistema: gli score parziali usano valori
-neutri dove possibile e lo stato traccia segnala cosa manca.
+L'assenza di BPM/key non blocca il sistema: la traccia resta `imported` (non
+usabile dal Set Builder finche' non arrivano da un import Rekordbox) e gli score
+parziali usano valori neutri dove possibile.
 
 ## AI
 
@@ -199,9 +235,7 @@ L'AI puo':
 - proporre una direzione narrativa;
 - spiegare scelte e transizioni;
 - suggerire alternative creative;
-- commentare candidati Discovery;
-- classificare il genere come anello di riserva della catena enrichment (solo a
-  genere vuoto, marcato `genre_source="ai"`, mai sovrascrive generi esistenti).
+- commentare candidati Discovery.
 
 L'AI non puo':
 
@@ -209,7 +243,7 @@ L'AI non puo':
 - inventare BPM/key/ISRC/fonti;
 - selezionare tracce fuori dalle candidate ricevute;
 - bypassare il Validation Engine;
-- toccare BPM/key o sovrascrivere generi gia' presenti con la classificazione genere.
+- toccare BPM/key/energy.
 
 Modalita' Set Builder:
 
@@ -222,80 +256,48 @@ Entita' principali:
 
 - `Playlist`: playlist importata da Spotify o import manuale.
 - `Track`: traccia della libreria, con identita' streaming, metadata editoriali,
-  feature musicali, stato e tracciabilita' enrichment. Ownership file locale
-  (indicizzazione `LIBRARY_ROOT`, acquisizione Soulseek o collegamento manuale
-  link-file): `has_local_file`, `local_path`, `local_format`, `local_bitrate`,
-  `audio_hash` (vedi "Disk-first"). Altri campi: `mbid` (da fingerprinting
-  AcoustID), `archived` (file finito nell'archivio delle scartate),
-  `local_mtime`/`local_size` (scan incrementale), `last_download_outcome`/
-  `last_download_reason` (coda "da sistemare" dei download).
+  BPM/Camelot (da import Rekordbox), `energy` derivata e stato. Ownership file
+  locale (indicizzazione `LIBRARY_ROOT`, acquisizione Soulseek o collegamento
+  manuale link-file): `has_local_file`, `local_path`, `local_format`,
+  `local_bitrate`, `audio_hash` (vedi "Disk-first"). Altri campi: `archived` (file
+  finito nell'archivio delle scartate), `local_mtime`/`local_size` (scan
+  incrementale), `last_download_outcome`/`last_download_reason` (coda "da
+  sistemare" dei download).
 - `playlist_tracks`: tabella associativa M2M (Playlist <-> Track) con `added_at`
   per-playlist. Un brano puo' appartenere a piu' playlist; l'import aggiunge
   membership senza sovrascrivere.
 - `Setlist`: set generato, prompt, strategia, spiegazione globale, validazione e
   `owned_only` (garanzia "solo posseduti", vedi "Disk-first").
 - `SetlistTrack`: posizione, ruolo, score, note di transizione, motivo AI e rischio.
-- `EnrichmentCache`: cache provider (catena feature, genere AI, AcoustID), incluso
-  not-found.
 - `SpotifyToken`: token OAuth Spotify persistiti per l'utente locale.
 - `DjSet`: mix esterno identificato via Shazam, separato dalla libreria.
 - `DjSetTrack`: traccia identificata dentro un `DjSet`.
 - `AppState`: chiave-valore persistente per stato applicativo (es. `last_index_at`).
 
 Campi legacy Rekordbox come beatgrid, cue, `rekordbox_track_id`, `play_count` e
-`tonality` sono fuori modello.
-
-## Enrichment feature
-
-Catena attuale:
-
-```text
-Deezer -> MusicBrainz -> AcousticBrainz -> GetSongBPM -> Last.fm
-```
-
-Ruoli:
-
-| Fonte | Ruolo |
-|---|---|
-| Deezer | BPM via ISRC, senza API key |
-| MusicBrainz | ISRC, MBID, release, label, genere/canonical fallback |
-| AcousticBrainz | BPM, key/Camelot, mood, danceability, vocalness via MBID |
-| GetSongBPM | BPM, key/Camelot, danceability con fallback fuzzy |
-| Last.fm | genere, mood dai tag e similarita' Discovery |
-
-La catena passa un `context` accumulato ai provider successivi. L'MBID — trovato da
-MusicBrainz o ricavato dal fingerprinting AcoustID dei file posseduti (`Track.mbid`)
-e passato nel `context` della catena — abilita il lookup diretto MusicBrainz e
-AcousticBrainz.
-
-Catena del genere: `manual` > provider (Last.fm/MusicBrainz) > anello AI in batch
-(solo a genere vuoto, cache provider `genre_ai`, `genre_source="ai"`, mai
-sovrascrive) > tag del file (`genre_source="file_tag"`, applicato dall'indicizzazione
-di libreria, ultima spiaggia).
-
-L'energia e' stimata deterministicamente quando nessun provider la fornisce.
+`tonality` sono fuori modello. Non esiste piu' un motore di enrichment interno ne'
+una cache di provider audio: `energy` e' un campo derivato (`services/energy`), non
+un dato esterno cacheable.
 
 ## Integrazioni
 
 | Integrazione | Stato | Note |
 |---|---|---|
 | Spotify | attiva | OAuth, import, resolver Discovery, export playlist |
-| Deezer | attiva | gratuita, BPM via ISRC |
-| MusicBrainz | attiva | richiede User-Agent configurato |
-| AcousticBrainz | attiva | dataset storico congelato al 2022 (bassa copertura sulle uscite recenti), nessuna API key |
-| GetSongBPM | attiva | API key opzionale/consigliata |
-| Last.fm | attiva | API key per enrichment tag e Discovery |
+| Last.fm | attiva | similarita' artisti/tracce per il Discovery (espansione playlist) |
 | Discogs | attiva | crate digging Discovery "Scava" per genere/etichetta; funziona senza token, `DISCOGS_TOKEN` alza il rate limit |
-| AcoustID | attiva se configurata | fingerprinting dei file posseduti -> MusicBrainz Recording MBID (`Track.mbid`); richiede `ACOUSTID_API_KEY` + binario `fpcalc` (Chromaprint); rate ~3 req/s; cache in `EnrichmentCache` (provider `acoustid`) |
 | LLM | attiva se configurata | output strutturati e validati |
-| Shazam | attiva se dipendenze presenti | ffmpeg, yt-dlp, shazamio |
+| Shazam | attiva se dipendenze presenti | ffmpeg, yt-dlp, shazamio; fingerprinting di mix esterni, non della libreria |
 | slskd (Soulseek) | attiva se configurato | download via REST API; `SLSKD_URL`/`SLSKD_API_KEY`/`SLSKD_DOWNLOAD_DIR` |
+| Rekordbox | manuale (via export XML) | fonte di BPM/key: `POST /api/rekordbox/import`; nessuna API/dipendenza esterna, solo parsing file |
 | SoundCloud import | backlog | da valutare fattibilita' API |
 | PostgreSQL | backlog | SQLite basta per mono-utente |
 
-Spotify `/recommendations` non deve essere usato: per app nuove o in development mode
-puo' restituire 403/404. Discovery usa Last.fm per similarita' e Spotify solo come
-resolver via `/search`.
+I provider esterni residui (Last.fm, Discogs, Spotify) servono **solo la
+Discovery**: nessuno di loro fornisce piu' BPM/key/mood/energia. L'arricchimento
+testuale dei metadati (titolo/artista/album/label/genere) e' di competenza di
+DjOrganizer, non di Cratory. Spotify `/recommendations` non deve essere usato: per
+app nuove o in development mode puo' restituire 403/404.
 
 ## Persistenza e migrazioni
 
@@ -305,6 +307,7 @@ SQLite resta il database operativo:
 backend/data/djassistant.db
 ```
 
-`ensure_schema()` crea tabelle e applica migrazioni idempotenti. Non c'e' Alembic.
-Per cambio nome prodotto, non rinominare automaticamente il DB: pianificare una
-migrazione o mantenere il path legacy per compatibilita'.
+`ensure_schema()` crea tabelle e applica migrazioni idempotenti (incluse quelle
+FK-safe che hanno droppato le colonne del vecchio motore di enrichment). Non c'e'
+Alembic. Per cambio nome prodotto, non rinominare automaticamente il DB: pianificare
+una migrazione o mantenere il path legacy per compatibilita'.

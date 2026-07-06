@@ -6,7 +6,7 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-07-05
+**Ultimo aggiornamento:** 2026-07-06
 
 **Nome prodotto:** **Cratory** (rename eseguito il 2026-06-25 su UI, codice, docs e
 icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici legacy
@@ -14,10 +14,56 @@ icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici
 migration. Disponibilita' `cratory.com` da confermare su registrar.
 
 **Fase:** core streaming-first completo; **disk-first completo** (la libreria e' il
-disco, playlist streaming = lead); Discovery operativo (expand Last.fm + dig Discogs);
-enrichment multi-provider; Set Builder tecnico/creativo con garanzia "solo posseduti";
-audit leggero (quick win) e rifacimento documentazione fatti; identificazione mix via
-Shazam integrata (fase 1; co-occorrenza in backlog).
+disco, playlist streaming = lead); **pivot al paradigma disk-first + Rekordbox
+completato** (motore di enrichment interno e fingerprinting AcoustID ritirati verso
+DjOrganizer, BPM/key ora solo da import Rekordbox XML, `energy` derivata); Discovery
+operativo (expand Last.fm + dig Discogs, ora solo-gusto); Set Builder tecnico/creativo
+con garanzia "solo posseduti"; dashboard con pipeline a sei fasi e documentazione
+riallineata al nuovo paradigma; identificazione mix via Shazam integrata (fase 1;
+co-occorrenza in backlog).
+
+## Milestone 2026-07-06 - Pivot disk-first + Rekordbox: enrichment su DjOrganizer, BPM/key da Rekordbox, dashboard e docs
+
+Riorientamento del prodotto in tre slice, eseguito su branch dedicati (`slice1a-*`,
+`slice1b-*`, `slice2-import-rekordbox-xml`, `slice3-dashboard-e-documentazione`):
+l'arricchimento testuale dei metadati e il tagging su disco passano interamente a
+DjOrganizer; Cratory riacquisisce BPM/key da un'unica fonte esplicita, l'export XML
+di Rekordbox.
+
+- **Slice 1A/1B — ritiro del motore di enrichment.** Rimossi il motore di
+  enrichment interno (catena Deezer/MusicBrainz/AcousticBrainz/GetSongBPM/Last.fm),
+  il fingerprinting AcoustID (`Track.mbid`, `POST/GET /api/library/fingerprint[/status]`)
+  e il bridge read-only `GET /api/tracks/lookup` per DjOrganizer: l'arricchimento
+  testuale e il tagging sul disco sono ora esclusivamente compito di DjOrganizer.
+  Colonne DB del vecchio motore (feature provider, cache enrichment, `mbid` e affini)
+  droppate con migrazione idempotente **FK-safe** in `db.py` (nessuna perdita di dati
+  su `tracks`/`setlist_tracks` collegate). Provider esterni rimasti: **solo Discovery**
+  (Last.fm similarita', Discogs dig, Spotify resolver) — nessuno fornisce piu'
+  BPM/key/genere/mood.
+- **Slice 2 — import Rekordbox XML.** Nuovo router `rekordbox` (`POST
+  /api/rekordbox/import`, `GET /api/rekordbox/pending`): parsing sicuro
+  (`defusedxml`) della collezione esportata da Rekordbox, match delle tracce
+  possedute in tre passi (path normalizzato NFC → `audio_hash` di fallback, gated
+  sul basename per evitare decode ffmpeg superflui → fuzzy artist+title), scrittura
+  di `bpm`/`camelot_key` **solo se assenti** (mai sovrascritti). `energy` diventa un
+  campo derivato deterministico (`services/energy`, BPM+genere): ricalcolato
+  all'import Rekordbox e sui PATCH che toccano bpm/genere, non piu' editabile a
+  mano (`TrackUpdateIn` con `extra="forbid"` → 422 se il payload lo contiene). Stati
+  traccia ridotti a `imported | ready_for_set` (rimossi `enriched`,
+  `missing_features`, `low_confidence`).
+- **Slice 3 — dashboard Analizza + documentazione.** `GET /api/pipeline` esteso con
+  `analyze_pending` (tracce possedute senza BPM o key); striscia dashboard a sei
+  fasi **Scopri → Acquisisci → Organizza⤴ → Indicizza → Analizza⤴ → Suona**, con
+  pannello di upload dell'XML Rekordbox inline nella fase Analizza. Riscritte le doc
+  vive (`README.md`, `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/PRODUCT.md`,
+  `docs/ROADMAP.md`) per rimuovere ogni riferimento a enrichment/fingerprint/bridge
+  attivi e riflettere il nuovo paradigma; verifica della superficie API contro i
+  router reali.
+- **`.env`:** rimosse le chiavi dei provider-audio/fingerprint
+  (`MUSICBRAINZ_USER_AGENT`, `GETSONGBPM_API_KEY`, `DEEZER_ENABLED`,
+  `ACOUSTICBRAINZ_ENABLED`, `ACOUSTID_API_KEY`); restano `SPOTIFY_*`,
+  `LASTFM_API_KEY`, `DISCOGS_TOKEN`, `AI_*`, `SLSKD_*`, `LIBRARY_ROOT`,
+  `ARCHIVE_ROOT`, `ORGANIZER_URL` (`backend/.env.example` aggiornato).
 
 ## Milestone 2026-07-05 - Audit end-to-end: pulizia codice morto + riallineamento docs
 

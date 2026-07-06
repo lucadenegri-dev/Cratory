@@ -5,9 +5,11 @@
 
 Cratory is a personal, local/self-hosted, single-user web app for DJ set preparation. It
 imports Spotify playlists (or pasted tracklists), normalizes and de-duplicates tracks,
-enriches them with mixing features (BPM, Camelot key, mood, energy) from external
-providers, analyzes library gaps, generates explained set drafts, and helps you discover
-music that fits your taste.
+indexes your on-disk library, imports BPM/Camelot key from a Rekordbox collection export,
+derives track energy deterministically, analyzes library gaps, generates explained set
+drafts, and helps you discover music that fits your taste. Text metadata enrichment
+(title/artist/album/label/genre) and disk tagging are handled by the companion app
+DjOrganizer, not by Cratory.
 
 It is **not a SaaS** — and that is a design choice, not a limitation. Spotify's Web API
 forbids a public multi-tenant Spotify app (development mode caps at 5 users; extended
@@ -24,25 +26,37 @@ folder (`LIBRARY_ROOT`), re-links files by audio hash after DjOrganizer
 renames/moves them, and builds sets from tracks you actually own. Streaming
 playlists are *leads* — candidates to acquire — not the library. The index
 re-runs automatically on every app startup and scans incrementally; an optional
-archive folder (`ARCHIVE_ROOT`) marks discarded tracks.
+archive folder (`ARCHIVE_ROOT`) marks discarded tracks. Cratory only *reads* files
+to index them — it never writes tags or moves anything on disk; that stays the job
+of DjOrganizer.
+
+**BPM/key come from Rekordbox, not from providers.** Cratory never estimates or
+invents mixing features: you analyze your library in Rekordbox and export the
+collection (`File > Export Collection in xml format`); Cratory imports that XML to
+fill in BPM and Camelot key on tracks you already own, without ever overwriting a
+value that's already set. `energy` is always a deterministic value derived from
+BPM + genre — it is not sourced from any provider and cannot be edited by hand.
 
 ## Features
 
 - Import Spotify playlists, liked tracks, and pasted tracklists.
 - De-duplicate by `ISRC → platform id → artist/title/duration → fuzzy match`.
-- Enrich features via Deezer, MusicBrainz, AcousticBrainz, GetSongBPM and Last.fm —
-  keeping source and confidence, and never overwriting existing BPM/key.
-- Manual corrections for BPM, Camelot, mood, energy, genre and label (manual wins).
+- Import BPM and Camelot key from a Rekordbox collection XML export
+  (`POST /api/rekordbox/import`), matching owned tracks by path, then audio hash,
+  then artist/title — never overwriting an existing value.
+- Manual corrections for BPM, Camelot key, genre and label (manual wins; `energy` is
+  derived only and not directly editable).
 - Generate sets with a deterministic engine plus optional, validated AI.
 - Classify transitions as technically safe, creative risk, or good reset.
 - Discovery by taste: expand a playlist (Last.fm + Spotify resolver) or crate-dig by
-  genre/label via Discogs ("Scava").
-- Identify mix tracklists via Shazam/yt-dlp/ffmpeg into a corpus kept separate from the library.
+  genre/label via Discogs ("Scava") — the only three external providers left, and
+  they serve Discovery only, not track features.
+- Identify mix tracklists via Shazam/yt-dlp/ffmpeg into a corpus kept separate from the
+  library — the only audio fingerprinting Cratory does (of external mixes, not of your
+  library).
 - Acquire files for tracks you already own the rights to via Soulseek (slskd), with
   deterministic candidate ranking and per-playlist or per-track download, plus free
   search with manual pick and a persistent "to fix" queue (retry/ignore).
-- Fingerprint owned files via AcoustID/Chromaprint to pin a MusicBrainz identity (MBID)
-  that feeds MusicBrainz/AcousticBrainz enrichment.
 - Link a file already on disk to a track from the track detail (searches `LIBRARY_ROOT`
   and the slskd download folder).
 
@@ -50,12 +64,13 @@ archive folder (`ARCHIVE_ROOT`) marks discarded tracks.
 
 ![Cratory architecture](docs/architettura.svg)
 
-A **deterministic engine** owns the facts: import, de-duplication, enrichment, scoring,
-roles, gap analysis, discovery ranking and validation. The **AI layer** owns language:
-prompt interpretation, narrative direction and explanations. The AI never sees the whole
+A **deterministic engine** owns the facts: import, de-duplication, scoring, roles, gap
+analysis, discovery ranking and validation. The **AI layer** owns language: prompt
+interpretation, narrative direction and explanations. The AI never sees the whole
 library — the Candidate Engine passes it at most 60 candidates — and every AI output is
-validated against Pydantic schemas before it is shown or saved. BPM, key and musical
-features are never invented: they come from providers or explicit manual correction.
+validated against Pydantic schemas before it is shown or saved. BPM and key are never
+invented: they come only from a Rekordbox import or explicit manual correction; `energy`
+is always derived deterministically from BPM and genre.
 
 Full picture in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -66,7 +81,7 @@ Backend:   Python, FastAPI, SQLAlchemy, Pydantic
 Frontend:  Next.js 16, React, Tailwind / design system
 Database:  SQLite (local); PostgreSQL in backlog
 AI:        LLM behind an interface, outputs validated with Pydantic
-External:  Spotify, Deezer, MusicBrainz, AcousticBrainz, GetSongBPM, Last.fm, Discogs, Shazam, slskd
+External:  Spotify, Last.fm, Discogs (Discovery only), Shazam, slskd, Rekordbox (XML import)
 ```
 
 ## Quickstart
@@ -74,9 +89,8 @@ External:  Spotify, Deezer, MusicBrainz, AcousticBrainz, GetSongBPM, Last.fm, Di
 Prerequisites: Python 3.12+, Node.js 20+. The Shazam module also needs system `ffmpeg`
 plus the `yt-dlp` and `shazamio` Python dependencies (in `backend/requirements.txt`). File
 acquisition needs a separately running [slskd](https://github.com/slskd/slskd) instance
-(not bundled). Library fingerprinting (optional) needs the system `fpcalc` binary
-(Chromaprint) plus the `pyacoustid` Python dependency (already in
-`backend/requirements.txt`) and an `ACOUSTID_API_KEY`.
+(not bundled). BPM/key import needs a Rekordbox collection exported as XML
+(`File > Export Collection in xml format`) — no extra dependency, it's just a file upload.
 
 Backend:
 
@@ -116,23 +130,15 @@ SPOTIFY_CLIENT_SECRET=
 SPOTIFY_REDIRECT_URI=http://127.0.0.1:8000/api/spotify/callback
 ```
 
-Recommended providers:
+Recommended providers (Discovery only — none of these feed BPM/key/genre):
 
 ```text
-MUSICBRAINZ_USER_AGENT=
-GETSONGBPM_API_KEY=
 LASTFM_API_KEY=
 DISCOGS_TOKEN=
-DEEZER_ENABLED=true
-ACOUSTICBRAINZ_ENABLED=true
-ACOUSTID_API_KEY=
 AI_API_KEY=
 AI_MODEL=
 AI_MODEL_CREATIVE=
 ```
-
-`ACOUSTID_API_KEY` is free (acoustid.org) and also needs the system `fpcalc`
-(Chromaprint) binary for audio fingerprinting.
 
 File acquisition (optional):
 
@@ -174,18 +180,25 @@ cd backend
 python -m app.tools.clean_user_data library --include-backups
 ```
 
-The `library` mode clears playlists, tracks, sets and the enrichment cache while preserving
-Spotify tokens; `all` also removes tokens unless `--preserve-tokens` is passed.
+The `library` mode clears playlists, tracks and sets while preserving Spotify tokens;
+`all` also removes tokens unless `--preserve-tokens` is passed.
 
 ## Workflow
 
-Start backend + frontend → in Settings, connect Spotify → import a playlist or paste a
-tracklist → let enrichment run → fix any important missing BPM/key → generate a set
-(technical or creative) → review transitions, warnings and alternatives → export or create
-a Spotify playlist → use Discovery (expand, or "Scava" by genre/label via Discogs) to find
-tracks that fit your taste → optionally acquire files for tracks you own via Soulseek
-(Downloads page, per-playlist or per-track from Discovery), once slskd is running and
-configured.
+The dashboard opens with a six-stage pipeline strip — **Discover → Acquire →
+Organize⤴ → Index → Analyze⤴ → Play** — that shows where you are and what's next.
+Organize and Analyze hand off to the companion apps (DjOrganizer for tagging, Rekordbox
+for BPM/key analysis) and loop back with an import.
+
+Typical run: start backend + frontend → in Settings, connect Spotify → import a playlist
+or paste a tracklist → run DjOrganizer separately to tag and organize new files onto disk
+→ index the library (Settings → "Libreria (disco)", or let it auto-run at startup) →
+analyze new tracks in Rekordbox and import the collection XML to fill in BPM/key →
+generate a set (technical or creative) → review transitions, warnings and alternatives →
+export or create a Spotify playlist → use Discovery (expand, or "Scava" by genre/label via
+Discogs) to find tracks that fit your taste → optionally acquire files for tracks you own
+via Soulseek (Downloads page, per-playlist or per-track from Discovery), once slskd is
+running and configured.
 
 **A note on responsible use.** Cratory is a personal, self-hosted tool, not a public
 service. The optional Soulseek acquisition feature is a thin client over your own slskd
