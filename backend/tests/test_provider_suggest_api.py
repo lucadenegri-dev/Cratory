@@ -28,5 +28,68 @@ def test_provider_suggest_fills_label(db, monkeypatch):
     body = r.json()
     assert body["configured"] is True and body["suggested"] == 1
     iss = db.query(Issue).filter_by(field="label").one()
-    assert iss.suggested_fix_json == {"field": "label", "action": "retag", "to": "Drumcode"}
+    assert iss.suggested_fix_json == {"field": "label", "action": "retag",
+                                      "to": "Drumcode", "source": "provider"}
     assert iss.status == "open"
+
+
+def test_provider_suggest_overwrites_ai_suggestion(db, monkeypatch):
+    """RED 1: provider sovrascrive un suggerimento AI marcato source:ai."""
+    f = _seed(db)
+    iss = db.query(Issue).filter_by(field="label").one()
+    iss.suggested_fix_json = {"field": "genre", "action": "retag", "to": "X", "source": "ai"}
+    iss.field = "genre"
+    db.commit()
+    monkeypatch.setattr("app.core.config.settings.musicbrainz_user_agent", "t/0.1")
+    monkeypatch.setattr("app.routers.issues.text_providers.lookup",
+                        lambda file, **kw: {"genre": "Y"})
+    r = client.post("/api/issues/provider-suggest")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["suggested"] == 1
+    db.refresh(iss)
+    assert iss.suggested_fix_json == {"field": "genre", "action": "retag",
+                                      "to": "Y", "source": "provider"}
+
+
+def test_provider_suggest_overwrites_legacy_without_marker(db, monkeypatch):
+    """RED 2: issue open con suggerimento legacy SENZA marker -> provider sovrascrive."""
+    f = _seed(db)
+    iss = db.query(Issue).filter_by(field="label").one()
+    iss.suggested_fix_json = {"field": "label", "action": "retag", "to": "Legacy"}
+    db.commit()
+    monkeypatch.setattr("app.core.config.settings.musicbrainz_user_agent", "t/0.1")
+    monkeypatch.setattr("app.routers.issues.text_providers.lookup",
+                        lambda file, **kw: {"label": "Drumcode"})
+    r = client.post("/api/issues/provider-suggest")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["suggested"] == 1
+    db.refresh(iss)
+    assert iss.suggested_fix_json == {"field": "label", "action": "retag",
+                                      "to": "Drumcode", "source": "provider"}
+
+
+def test_provider_suggest_idempotent_on_own_suggestions(db, monkeypatch):
+    """RED 3: issue già source:provider -> nessuna nuova lookup, dict intoccato."""
+    f = _seed(db)
+    iss = db.query(Issue).filter_by(field="label").one()
+    iss.suggested_fix_json = {"field": "label", "action": "retag",
+                              "to": "Drumcode", "source": "provider"}
+    db.commit()
+    monkeypatch.setattr("app.core.config.settings.musicbrainz_user_agent", "t/0.1")
+    called = {"n": 0}
+
+    def _fake_lookup(file, **kw):
+        called["n"] += 1
+        return {"label": "ShouldNotBeUsed"}
+
+    monkeypatch.setattr("app.routers.issues.text_providers.lookup", _fake_lookup)
+    r = client.post("/api/issues/provider-suggest")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["configured"] is True and body["suggested"] == 0 and body["files"] == 0
+    assert called["n"] == 0
+    db.refresh(iss)
+    assert iss.suggested_fix_json == {"field": "label", "action": "retag",
+                                      "to": "Drumcode", "source": "provider"}

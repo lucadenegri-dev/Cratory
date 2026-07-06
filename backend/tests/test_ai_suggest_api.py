@@ -27,9 +27,10 @@ def test_ai_suggest_sets_fixes_without_accepting(db, monkeypatch):
         rows = client.get("/api/issues", params={"type": "missing_required_tag"}).json()
         by_field = {i["field"]: i for i in rows}
         assert by_field["artist"]["suggested_fix_json"] == {
-            "field": "artist", "action": "retag", "to": "rataxes"}
+            "field": "artist", "action": "retag", "to": "rataxes", "source": "ai"}
         assert by_field["artist"]["status"] == "open"  # NON accettata
         assert by_field["title"]["suggested_fix_json"]["to"] == "acid face"
+        assert by_field["title"]["suggested_fix_json"]["source"] == "ai"
 
 
 def test_ai_suggest_no_key(db, monkeypatch):

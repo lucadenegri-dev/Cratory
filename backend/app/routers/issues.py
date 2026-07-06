@@ -129,7 +129,8 @@ def ai_suggest(db: Session = Depends(get_db)):
         g = guess_by_file.get(issue.file_id) or {}
         value = (g.get(issue.field) or "").strip()
         if value:
-            issue.suggested_fix_json = {"field": issue.field, "action": "retag", "to": value}
+            issue.suggested_fix_json = {"field": issue.field, "action": "retag",
+                                        "to": value, "source": "ai"}
             issue.updated_at = utcnow()
             suggested += 1
         else:
@@ -187,7 +188,8 @@ def ai_suggest_genre(db: Session = Depends(get_db)):
     for (issue, _f), genre in zip(todo, genres):
         value = (genre or "").strip()
         if value:
-            issue.suggested_fix_json = {"field": "genre", "action": "retag", "to": value}
+            issue.suggested_fix_json = {"field": "genre", "action": "retag",
+                                        "to": value, "source": "ai"}
             issue.updated_at = utcnow()
             suggested += 1
         else:
@@ -207,7 +209,13 @@ def provider_suggest(db: Session = Depends(get_db)):
     (MusicBrainz→Discogs). Precedenza manuale > tag pulito > provider > AI:
     tocca solo issue open (i tag puliti non hanno issue; i fix manuali sono
     accepted). Provider prima dell'AI (gli endpoint AI saltano le issue già
-    suggerite). Una lookup per file, con cache in-memory."""
+    suggerite). Una lookup per file, con cache in-memory.
+
+    Marker `source`: il provider considera "da riempire" una issue quando
+    suggested_fix_json è None OPPURE non ha source == "provider" — quindi
+    sovrascrive i suggerimenti AI e i legacy senza marker (che sono per forza
+    bridge/AI, dato che i fix manuali sono accepted), ed è idempotente sulle
+    issue già marcate provider (nessuna nuova lookup)."""
     from app.integrations.discogs_meta import DiscogsMetaClient
     from app.integrations.musicbrainz import MusicBrainzProvider
 
@@ -219,7 +227,9 @@ def provider_suggest(db: Session = Depends(get_db)):
         .where(Issue.status == "open", Issue.type.in_(_PROVIDER_TYPES),
                Issue.field.in_(_PROVIDER_FIELDS))
     ).all()
-    todo = [(i, f) for i, f in rows if i.suggested_fix_json is None]
+    todo = [(i, f) for i, f in rows
+            if i.suggested_fix_json is None
+            or i.suggested_fix_json.get("source") != "provider"]
     if not todo:
         return {"configured": True, "files": 0, "suggested": 0, "unresolved": 0}
 
@@ -238,7 +248,7 @@ def provider_suggest(db: Session = Depends(get_db)):
         value = res.get(issue.field)
         if value is not None:
             issue.suggested_fix_json = {"field": issue.field, "action": "retag",
-                                        "to": str(value)}
+                                        "to": str(value), "source": "provider"}
             issue.updated_at = utcnow()
             suggested += 1
         else:

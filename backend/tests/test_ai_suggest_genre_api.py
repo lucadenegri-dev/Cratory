@@ -40,7 +40,7 @@ def test_genre_uses_effective_artist_title(db, monkeypatch):
         rows = client.get("/api/issues", params={"type": "missing_metadata"}).json()
         genre = next(i for i in rows if i["field"] == "genre")
         assert genre["suggested_fix_json"] == {"field": "genre", "action": "retag",
-                                               "to": "Tech House"}
+                                               "to": "Tech House", "source": "ai"}
         assert genre["status"] == "open"
 
 
@@ -96,7 +96,7 @@ def test_genre_normalizes_dirty(db, monkeypatch):
         assert captured["descs"] == ["Plastikman - Spastik [genere attuale: Techno, House, Acid]"]
         rows = client.get("/api/issues", params={"type": "dirty_genre"}).json()
         assert rows[0]["suggested_fix_json"] == {"field": "genre", "action": "retag",
-                                                 "to": "Techno"}
+                                                 "to": "Techno", "source": "ai"}
         assert rows[0]["status"] == "open"
 
 
