@@ -21,8 +21,11 @@ def pending(db: Session = Depends(get_db)):
 
 
 @router.post("/import", response_model=dict)
-async def import_collection(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    content = await file.read()
+def import_collection(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    # Sync `def`: FastAPI la esegue nel threadpool invece che sull'event loop.
+    # Un XML grande (parsing) o l'hash audio di fallback (ffmpeg, decine di
+    # secondi) bloccherebbero l'intero backend se girassero sull'event loop.
+    content = file.file.read()
     if not content:
         raise HTTPException(status_code=400, detail="file vuoto")
     try:

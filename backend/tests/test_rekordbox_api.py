@@ -71,3 +71,13 @@ def test_import_empty_file_returns_400():
         assert r.status_code == 400
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+def test_import_endpoint_is_sync_def_runs_in_threadpool():
+    """I1: l'endpoint deve essere una funzione sync (`def`, non `async def`) cosi'
+    FastAPI la esegue nel threadpool invece che sull'event loop — un XML grande
+    o l'hash audio non devono bloccare il resto del backend."""
+    import inspect
+
+    from app.routers.rekordbox import import_collection
+    assert not inspect.iscoroutinefunction(import_collection)

@@ -25,3 +25,14 @@ def test_parse_collection_null_bpm_and_key():
     t = parse_collection(_XML)[1]
     assert t.bpm is None       # AverageBpm 0.00 → None
     assert t.camelot is None   # Tonality vuota → None
+
+
+def test_parse_collection_normalizes_lowercase_tonality_to_canonical_camelot():
+    """Tonality "8a" (minuscolo, come talvolta esporta Rekordbox) deve normalizzare
+    in Camelot canonico "8A", cosi' le key combaciano col percorso manuale."""
+    xml = b"""<DJ_PLAYLISTS><COLLECTION>
+    <TRACK Name="T" Artist="A" AverageBpm="120.00" Tonality="8a"
+           Location="file://localhost/music/t.mp3"/>
+    </COLLECTION></DJ_PLAYLISTS>"""
+    t = parse_collection(xml)[0]
+    assert t.camelot == "8A"

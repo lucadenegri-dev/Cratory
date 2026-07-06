@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import os
+import unicodedata
 from dataclasses import dataclass
 from urllib.parse import unquote, urlparse
 
@@ -58,7 +59,10 @@ def parse_collection(xml_bytes: bytes) -> list[RbTrack]:
     out: list[RbTrack] = []
     for el in root.iter("TRACK"):
         tonality = (el.get("Tonality") or "").strip()
-        camelot = tonality if tonality and parse_camelot(tonality) else None
+        parsed = parse_camelot(tonality) if tonality else None
+        # Canonico (numero+lettera maiuscola), non la stringa grezza: cosi' le key
+        # combaciano con la normalizzazione del percorso manuale (routers/tracks.py).
+        camelot = f"{parsed[0]}{parsed[1]}" if parsed else None
         out.append(RbTrack(
             path=_location_to_path(el.get("Location")),
             bpm=_bpm(el.get("AverageBpm")),
@@ -70,18 +74,24 @@ def parse_collection(xml_bytes: bytes) -> list[RbTrack]:
 
 
 def _norm_path(p: str | None) -> str | None:
-    return os.path.normpath(p) if p else None
+    # NFC: macOS/Rekordbox puo' decodificare Location in NFD (es. "e" + accento
+    # combinante), mentre l'indicizzatore salva local_path in NFC. Senza questa
+    # normalizzazione lo stesso percorso, byte-diverso, non farebbe mai match.
+    return os.path.normpath(unicodedata.normalize("NFC", p)) if p else None
 
 
 def _low(s: str | None) -> str:
     return (s or "").strip().lower()
 
 
-def _match(r, by_path, by_hash, by_at):
+def _match(r, by_path, by_hash, by_at, owned_basenames):
     t = by_path.get(_norm_path(r.path))
     if t is not None:
         return t
-    if r.path and os.path.isfile(r.path):
+    # Fallback hash: serve solo per "stesso file spostato" — in quel caso il nome
+    # file sopravvive quasi sempre. Gate sul basename per evitare un decode ffmpeg
+    # (audio_hash, ~60s) per ogni riga Rekordbox che non e' nostra.
+    if r.path and os.path.basename(_norm_path(r.path)) in owned_basenames and os.path.isfile(r.path):
         try:
             t = by_hash.get(audio_hash(r.path))
             if t is not None:
@@ -97,13 +107,17 @@ def apply_collection(db: Session, xml_bytes: bytes) -> dict:
     by_path = {_norm_path(t.local_path): t for t in owned if t.local_path}
     by_hash = {t.audio_hash: t for t in owned if t.audio_hash}
     by_at = {(_low(t.artist), _low(t.title)): t for t in owned if t.artist and t.title}
+    owned_basenames = {os.path.basename(_norm_path(t.local_path)) for t in owned if t.local_path}
 
-    matched = bpm_set = key_set = energy_set = 0
+    matched = bpm_set = key_set = energy_set = no_match = 0
     seen: set[int] = set()
     for r in rows:
-        t = _match(r, by_path, by_hash, by_at)
-        if t is None or t.id in seen:
+        t = _match(r, by_path, by_hash, by_at, owned_basenames)
+        if t is None:
+            no_match += 1
             continue
+        if t.id in seen:
+            continue  # riga duplicata su una traccia gia' matchata: non e' un mancato match
         seen.add(t.id)
         matched += 1
         if r.bpm is not None and t.bpm is None:
@@ -120,5 +134,5 @@ def apply_collection(db: Session, xml_bytes: bytes) -> dict:
         refresh_status(t)
     db.commit()
     return {"in_file": len(rows), "matched": matched,
-            "unmatched": len(rows) - matched, "bpm_set": bpm_set,
+            "unmatched": no_match, "bpm_set": bpm_set,
             "key_set": key_set, "energy_set": energy_set}
