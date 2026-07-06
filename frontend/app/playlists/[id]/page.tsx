@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Music4, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
@@ -9,8 +9,8 @@ import {
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, fmtDuration,
-  enrichPlaylist, enrichmentJobStatus, startPlaylistDownload,
-  type Playlist, type Track, type GapAnalysis, type FeatureEnrichJob,
+  startPlaylistDownload,
+  type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, Spinner, Input, Select, Checkbox, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -20,14 +20,11 @@ import { KeyBadge } from "@/components/key-badge";
 
 const SOURCE_TONE: Record<string, "info" | "warning" | "neutral"> = { spotify: "info", soundcloud: "warning", manual: "neutral" };
 const STATUS_TONE: Record<string, "success" | "info" | "warning" | "neutral"> = {
-  ready_for_set: "success", enriched: "info", imported: "neutral", missing_features: "warning", low_confidence: "warning",
+  ready_for_set: "success", imported: "neutral",
 };
 const STATUS_OPTIONS: [string, string][] = [
   ["ready_for_set", "Pronte per il set"],
-  ["enriched", "Arricchite"],
   ["imported", "Importate"],
-  ["missing_features", "Senza feature"],
-  ["low_confidence", "Bassa confidenza"],
 ];
 
 type Order = "asc" | "desc";
@@ -53,9 +50,6 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const [editing, setEditing] = useState<Track | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  const [job, setJob] = useState<FeatureEnrichJob | null>(null);
-  const [enriching, setEnriching] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Filtri (come in libreria) — applicati lato client sulla playlist (insieme limitato).
   const [artist, setArtist] = useState("");
@@ -75,43 +69,10 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     playlistGaps(pid).then(setGaps).catch(() => {});
   }, [pid]);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-  }, []);
-
-  const startPolling = useCallback(() => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const s = await enrichmentJobStatus();
-        setJob(s);
-        if (s.status === "done") { stopPolling(); reload(); }
-        else if (s.status === "idle") stopPolling();
-        else if (s.status === "error") { stopPolling(); setError(s.error ?? "Arricchimento fallito"); }
-      } catch (e) { stopPolling(); setError(String((e as Error).message ?? e)); }
-    }, 1000);
-  }, [reload, stopPolling]);
-
   useEffect(() => {
     getPlaylist(pid).then(setPlaylist).catch((e) => setError(String(e.message ?? e)));
     reload();
-    enrichmentJobStatus().then((s) => { setJob(s); if (s.status === "running") startPolling(); }).catch(() => {});
-    return stopPolling;
-  }, [pid, reload, startPolling, stopPolling]);
-
-  const doEnrich = async () => {
-    setError(null);
-    setEnriching(true);
-    try {
-      setJob(await enrichPlaylist(pid));
-      startPolling();
-      jobs.refresh();
-    } catch (e) {
-      setError(`Arricchimento fallito: ${String((e as Error).message ?? e)}`);
-    } finally {
-      setEnriching(false);
-    }
-  };
+  }, [pid, reload]);
 
   // Rank di inserimento STABILE: posizione cronologica per added_at crescente
   // (la traccia aggiunta per prima nella playlist Spotify = #1). Resta legato alla
@@ -211,7 +172,6 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const totalDur = tracks.reduce((s, t) => s + (t.duration_seconds ?? 0), 0);
   const cell = "px-3 py-2.5";
   const canSync = playlist.platform === "spotify" && (playlist.kind === "liked" || !!playlist.platform_playlist_id);
-  const running = job?.status === "running";
 
   const th = (label: string, col: string, numeric = false) => {
     const active = sort === col;
@@ -244,7 +204,6 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const marginalia = (
     <div className="space-y-3">
       <Link href={`/set-builder?playlist=${pid}`} className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> Costruisci un set</Button></Link>
-      <Button size="sm" variant="outline" className="w-full" onClick={doEnrich} disabled={enriching || running}>{enriching || running ? <Spinner /> : <Sparkles size={15} />} Arricchisci</Button>
       <Link href={`/playlists/${pid}/expand`} className="block"><Button size="sm" variant="outline" className="w-full"><Compass size={15} /> Scopri musica simile</Button></Link>
       {missing > 0 && (
         <Button size="sm" variant="outline" className="w-full" onClick={doDownloadMissing} disabled={downloading}>

@@ -1,16 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, Music4 } from "lucide-react";
 import {
   listImportedPlaylists,
   deletePlaylist,
-  enrichmentJobStatus,
-  featureEnrichSummary,
   fmtDate,
   type Playlist,
-  type FeatureEnrichJob,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -24,39 +21,14 @@ export default function PlaylistsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [job, setJob] = useState<FeatureEnrichJob | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const reload = useCallback(() => {
     listImportedPlaylists().then(setImported).catch((e) => setError(err(e)));
   }, []);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-  }, []);
-
-  const startPolling = useCallback(() => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const s = await enrichmentJobStatus();
-        setJob(s);
-        if (s.status === "done") { stopPolling(); reload(); }
-        else if (s.status === "idle") stopPolling();
-        else if (s.status === "error") { stopPolling(); setError(s.error ?? "Arricchimento fallito"); }
-      } catch (e) { stopPolling(); setError(err(e)); }
-    }, 1000);
-  }, [reload, stopPolling]);
-
   useEffect(() => {
     reload();
-    // Se un arricchimento è già in corso (es. avviato dall'auto-enrichment dopo
-    // l'import), riaggancia il polling per mostrarne l'avanzamento.
-    enrichmentJobStatus()
-      .then((s) => { setJob(s); if (s.status === "running") startPolling(); })
-      .catch(() => {});
-    return stopPolling;
-  }, [reload, startPolling, stopPolling]);
+  }, [reload]);
 
   const doDelete = async (p: Playlist) => {
     if (!window.confirm(`Rimuovere la playlist "${p.name}" e le sue ${p.track_count} tracce dalla libreria? L'operazione non si può annullare.`)) return;
@@ -100,10 +72,6 @@ export default function PlaylistsPage() {
 
       {imported === null && !error && <Loading />}
       {notice && <div className="mb-4"><Alert tone="info">{notice}</Alert></div>}
-
-      {job?.status === "done" && job.result && (
-        <div className="mb-4"><Alert tone="info">✓ Arricchimento completato: {featureEnrichSummary(job.result)}.</Alert></div>
-      )}
 
       {imported && imported.length === 0 && (
         <EmptyState icon={<Music2 size={28} />} title="Nessuna playlist importata">

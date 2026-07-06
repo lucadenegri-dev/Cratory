@@ -156,36 +156,6 @@ export interface DiscoveryGenres {
   styles: string[];
 }
 
-export interface FeatureProviderStatus {
-  configured: boolean;
-  provider: string | null;
-}
-
-export interface FeatureEnrichReport {
-  enriched: number;
-  provider_matches: number;
-  metadata_enriched: number;
-  ai_genres: number;
-  not_found: number;
-  total: number;
-  cache_hits: number;
-  with_bpm: number;
-  with_key: number;
-  ready_for_set: number;
-  missing_core_features: number;
-  field_counts: Record<string, number>;
-  lookup_sources: Record<string, number>;
-}
-
-export interface FeatureEnrichJob {
-  status: "idle" | "running" | "done" | "error";
-  phase: string | null;
-  processed: number;
-  total: number;
-  result: FeatureEnrichReport | null;
-  error: string | null;
-}
-
 export const SPOTIFY_LOGIN_URL = `${API}/api/spotify/login`;
 
 export type TrackDetail = Track;
@@ -211,11 +181,6 @@ export interface TrackUpdate {
 /** Modifica manuale di una traccia: i valori inseriti hanno la precedenza sull'enrichment. */
 export function updateTrack(id: number, patch: TrackUpdate) {
   return apiPatch<TrackDetail>(`/api/tracks/${id}`, patch);
-}
-
-/** Arricchisce le feature musicali di UNA traccia (sincrono). Ritorna la traccia aggiornata. */
-export function enrichTrack(id: number) {
-  return apiPost<TrackDetail>(`/api/tracks/${id}/enrich`);
 }
 
 export interface LibraryIndexJob {
@@ -652,34 +617,10 @@ export function deleteDjSet(id: number) {
   return apiDelete<void>(`/api/shazam/sets/${id}`);
 }
 
-// --- Enrichment feature musicali --------------------------------------------
-
-export function enrichmentJobStatus() {
-  return apiGet<FeatureEnrichJob>("/api/enrichment/features/status");
-}
-
-/** Riesegue l'enrichment sulle sole tracce di una playlist (force: bypassa la cache). */
-export function enrichPlaylist(playlistId: number) {
-  return apiPost<FeatureEnrichJob>(`/api/playlists/${playlistId}/enrich`);
-}
-
 export function trackLabel(t: Track): string {
   const artist = t.artist?.trim() || "Artista sconosciuto";
   const title = t.title?.trim() || "Senza titolo";
   return `${artist} — ${title}`;
-}
-
-export function featureEnrichSummary(r: FeatureEnrichReport): string {
-  const parts = [
-    `${r.ready_for_set}/${r.total} pronte per il set`,
-    `${r.with_bpm} con BPM`,
-    `${r.with_key} con key`,
-  ];
-  if (r.enriched) parts.push(`${r.enriched} aggiornate`);
-  if (r.metadata_enriched) parts.push(`${r.metadata_enriched} con metadati`);
-  if (r.missing_core_features) parts.push(`${r.missing_core_features} senza BPM/key`);
-  if (r.not_found) parts.push(`${r.not_found} non trovate`);
-  return parts.join(" - ");
 }
 
 export function fmtDuration(seconds: number | null | undefined): string {

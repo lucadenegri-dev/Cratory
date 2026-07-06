@@ -1,13 +1,11 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import {
-  apiGet, apiPost, servicesStatus, SPOTIFY_LOGIN_URL,
-  featureEnrichSummary, startFingerprint, startLibraryIndex,
+  apiGet, servicesStatus, SPOTIFY_LOGIN_URL, startLibraryIndex,
   type ServiceStatus, type SpotifyStatus,
-  type FeatureProviderStatus, type FeatureEnrichJob,
 } from "@/lib/api";
 import { Button, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -43,7 +41,6 @@ function SettingsInner() {
   const marginalia = (
     <div className="space-y-2 text-xs leading-relaxed text-muted">
       <p>Le chiavi si configurano in <code className="rounded-none bg-elevated px-1">backend/.env</code> e richiedono il riavvio del backend.</p>
-      <p>L&apos;arricchimento non sovrascrive mai i valori di BPM/key che inserisci a mano.</p>
     </div>
   );
 
@@ -100,57 +97,9 @@ function SettingsInner() {
         {!services && !error && <div className="px-5"><Loading /></div>}
       </div>
 
-      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Arricchimento</div>
-      <FeatureEnrichmentCard />
-
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Libreria (disco)</div>
       <LibraryIndexCard />
-      <div className="mt-4">
-        <FingerprintCard />
-      </div>
     </PageLayout>
-  );
-}
-
-function FingerprintCard() {
-  // Lo stato arriva dal poller globale (JobsProvider): niente polling qui.
-  const { fingerprint: fpJob, refresh } = useJobs();
-  const [fpError, setFpError] = useState<string | null>(null);
-
-  const runFingerprint = () => {
-    setFpError(null);
-    startFingerprint().then(() => refresh()).catch((e) => setFpError(String(e.message ?? e)));
-  };
-
-  const busy = fpJob?.status === "running";
-  const r = fpJob?.status === "done" ? fpJob.result : null;
-
-  return (
-    <div className="border border-border">
-      <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold uppercase tracking-wide text-fg-strong">Fingerprint AcoustID</div>
-          <p className="mt-1 text-sm text-muted">
-            Identifica i file posseduti dall&apos;audio (MBID MusicBrainz): identità certa per
-            l&apos;arricchimento, senza dipendere dai tag. Richiede ACOUSTID_API_KEY e fpcalc.
-          </p>
-        </div>
-      </div>
-      <div className="space-y-3 p-5 text-sm">
-        {fpError && <Alert tone="danger">⚠ {fpError}</Alert>}
-        {fpJob?.status === "error" && <Alert tone="danger">⚠ {fpJob.error ?? "Fingerprinting fallito"}</Alert>}
-        <Button size="sm" onClick={runFingerprint} disabled={busy}>{busy ? "In corso…" : "Identifica ora"}</Button>
-        {busy && (
-          <p className="tnum text-sm text-muted">{fpJob.processed}/{fpJob.total} file processati…</p>
-        )}
-        {r && (
-          <p className="text-sm text-fg">
-            ✓ {r.identified} identificate · {r.below_threshold} incerte · {r.not_found} non trovate ·{" "}
-            {r.cache_hits} da cache · {r.errors} errori{r.missing_files > 0 ? ` · ${r.missing_files} file mancanti` : ""}
-          </p>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -189,68 +138,6 @@ function LibraryIndexCard() {
             {libJob.duplicates} duplicati · {libJob.relinked} path aggiornati · {libJob.lost} perse ·{" "}
             {libJob.failed} errori
           </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function FeatureEnrichmentCard() {
-  const jobs = useJobs();
-  const [status, setStatus] = useState<FeatureProviderStatus | null>(null);
-  const [job, setJob] = useState<FeatureEnrichJob | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const stop = useCallback(() => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }, []);
-  const startPolling = useCallback(() => {
-    stop();
-    pollRef.current = setInterval(async () => {
-      try {
-        const s = await apiGet<FeatureEnrichJob>("/api/enrichment/features/status");
-        setJob(s);
-        if (s.status === "done" || s.status === "idle") stop();
-        else if (s.status === "error") { stop(); setError(s.error ?? "Enrichment fallito"); }
-      } catch (e) { stop(); setError(String((e as Error).message ?? e)); }
-    }, 800);
-  }, [stop]);
-
-  useEffect(() => {
-    apiGet<FeatureProviderStatus>("/api/enrichment/status").then(setStatus).catch(() => setStatus({ configured: false, provider: null }));
-    apiGet<FeatureEnrichJob>("/api/enrichment/features/status").then((s) => { setJob(s); if (s.status === "running") startPolling(); }).catch(() => {});
-    return stop;
-  }, [startPolling, stop]);
-
-  async function run(force: boolean) {
-    setError(null);
-    try { setJob(await apiPost<FeatureEnrichJob>(`/api/enrichment/features?force=${force}`)); startPolling(); jobs.refresh(); }
-    catch (e) { setError(String((e as Error).message ?? e)); }
-  }
-
-  const busy = job?.status === "running";
-
-  return (
-    <div className="border border-border">
-      <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold uppercase tracking-wide text-fg-strong">Feature musicali</div>
-          <p className="mt-1 text-sm text-muted">BPM, tonalità, genere, mood, energia per le tracce importate.</p>
-        </div>
-        {status && <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted">{status.configured ? status.provider ?? "attivo" : "nessun provider"}</span>}
-      </div>
-      <div className="space-y-3 p-5 text-sm">
-        <p className="text-muted">Ricava BPM via ISRC (Deezer), analisi audio reale via MusicBrainz + AcousticBrainz (BPM, tonalità, mood, danceability) e genere/mood dai tag (Last.fm); l&apos;energia è stimata da BPM e danceability quando manca. Non sovrascrive i valori che inserisci a mano.</p>
-        {error && <Alert tone="danger">⚠ {error}</Alert>}
-        {status && !status.configured ? (
-          <p className="text-muted">Configura almeno <code className="rounded-none bg-elevated px-1">GETSONGBPM_API_KEY</code> o <code className="rounded-none bg-elevated px-1">LASTFM_API_KEY</code> qui sopra per abilitare l&apos;arricchimento.</p>
-        ) : (
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => run(false)} disabled={busy}>{busy ? "In corso…" : "Arricchisci feature"}</Button>
-            <Button size="sm" variant="outline" onClick={() => run(true)} disabled={busy}>Forza</Button>
-          </div>
-        )}
-        {job?.status === "done" && job.result && (
-          <p className="text-sm text-fg">✓ {featureEnrichSummary(job.result)}.</p>
         )}
       </div>
     </div>
