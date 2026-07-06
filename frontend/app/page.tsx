@@ -57,7 +57,7 @@ function QuickAction({ href, title, desc }: { href: string; title: string; desc:
 
 /** Pannello upload rekordbox.xml: riempie BPM/key mancanti e ricalcola l'energia,
  *  senza sovrascrivere valori già presenti (li imposta il backend). */
-function RekordboxImportPanel({ pending }: { pending: number | null }) {
+function RekordboxImportPanel({ pending, onImported }: { pending: number | null; onImported: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +71,7 @@ function RekordboxImportPanel({ pending }: { pending: number | null }) {
     try {
       const r = await importRekordbox(file);
       setReport(r);
+      onImported(); // aggiorna pending e copertura BPM/key/energia dopo l'import
     } catch (e) {
       setError(String((e as Error).message ?? e));
     } finally {
@@ -84,7 +85,9 @@ function RekordboxImportPanel({ pending }: { pending: number | null }) {
       <SubLabel icon={<Upload size={12} />}>Import rekordbox.xml</SubLabel>
       <p className="mb-2 text-xs text-muted">
         Completa BPM e tonalità dalla collezione rekordbox (non sovrascrive valori già presenti).
-        {pending != null && pending > 0 && ` ${pending} tracce in attesa.`}
+        {pending != null && (pending > 0
+          ? ` ${pending} ${pending === 1 ? "traccia" : "tracce"} in attesa.`
+          : " Nessuna traccia in attesa.")}
       </p>
       <input
         ref={inputRef}
@@ -304,7 +307,7 @@ export default function Dashboard() {
                 <Link href="/labels" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">Tutte →</Link>
               </div>
               <MiniBars rows={labelRows} />
-              <RekordboxImportPanel pending={rbPending} />
+              <RekordboxImportPanel pending={rbPending} onImported={load} />
             </section>
           </div>
 
