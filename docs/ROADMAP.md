@@ -179,6 +179,48 @@ Backlog tecnico (non bloccante):
 - **PostgreSQL.** Bassa priorita': SQLite basta per uso personale (servirebbe solo con
   un eventuale multi-utente).
 
+### Backlog dall'audit end-to-end (triage post-pivot — dettaglio per ID in `docs/AUDIT-2026-07-05.md`)
+
+~70 item ancora validi dell'audit multi-agente del 2026-07-05, ri-triageati il
+2026-07-06 dopo il pivot (9 gia' risolti, ~12 obsoleti, 4 migrati a DjOrganizer).
+Per tema, in ordine indicativo di valore:
+
+- **Chiudere il flusso set → console** — A1 export M3U/CSV con `local_path` (post-pivot
+  ancora piu' sensato: BPM/key veri), A14 "aggiungi traccia" nell'editor, B4/B5 generazione
+  set nella barra job + percorso al set, A22 ruoli/note stantii, B12 riordino drag-and-drop,
+  B17 preset con riepilogo.
+- **Shazam** — A2 fase 2 "lite" (badge libreria + salva lead), A18 fallback ffprobe,
+  B13 UX dettaglio, E13 copertura test `mix_identify_job`.
+- **Soulseek/download** — A7 possesso non marcato su dedup ISRC, A8 needs_review senza
+  path + retry in loop, A19 auto-pick per confidenza, A20 stall-detection, E6 (cancel
+  transfer, match log storico, attese sincrone), B11 feedback per-candidato.
+- **Import/sync Spotify** — A10 job+polling, A11 dedup livello 3, A12 protezione
+  membership Discovery, A25 nome/copertina, E13 test OAuth/integrazione.
+- **Discovery** — A15 lead che scartano label/style/year, A16 dedup varianti in expand,
+  A17 paginazione Discogs + errori espliciti, A27 link Etichette→Scava, E12 cache
+  expand/dig, E10 `_explain` con Pydantic.
+- **Set Builder/scoring** — A3 strategie no-op, A4 half/double-time + soglie %, A5
+  ranking candidate AI, A21 soglie gap dai percentili, A23 energia nello score (ora che
+  e' derivata dai BPM veri), C-tenuti (score usati solo dai test + `mood_coherence_score`
+  morto: decidere in blocco).
+- **Libreria/indice** — E7 fuzzy-steal + mtime/size su attach, A28 "Cerca su Soulseek"
+  dal dettaglio, A6-UI lacune in dashboard, B1 filtri in querystring, B2 badge possesso
+  per riga, B15 tabella (overflow/a11y/empty), B8 label stato unificate.
+- **Robustezza backend** — E2 `index_library` (commit incrementale, guardie per-file,
+  copia dello stato job), E8 `expanduser` sui path config, E9 escaping ilike, E10
+  (transitions doppio calcolo, pipeline 2 walk FS con cache TTL, `file_search`,
+  `backfill_labels` che non converge), E5-residuo Retry-After, E1c/E1e (additions dal
+  modello, selectinload N+1).
+- **Tecnico frontend** — B24 API URL relativo (prerequisito uso da LAN), B19/B27 poller
+  (shazam nel provider, visibilitychange), B20 AbortController, B21/B22 api.ts spezzato
+  + ApiError, B23 immagini/virtualizzazione, B25/B26/B28, B9/B10/B14/B16/B18 UX minori,
+  E15 smoke Playwright.
+- **Pulizia** — colonne legacy `Track.playlist_id`/`playlist_name` (ora banale: basta
+  toglierle dal modello, la migrazione generalizzata le droppa), worktree stantio
+  `compassionate-montalcini` da rimuovere, dead export `rekordboxPending` in api.ts,
+  trim ridondanza regole 2/7 CLAUDE.md, commenti stale `local_files.py`/`scoring.py`.
+  **Nota inversione:** `python-multipart` ora serve (upload rekordbox.xml) — non rimuovere.
+
 ## Rischi
 
 | Rischio | Mitigazione |
