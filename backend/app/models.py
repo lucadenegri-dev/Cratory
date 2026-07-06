@@ -53,6 +53,7 @@ class AudioFile(Base):
     track_no: Mapped[int | None] = mapped_column(Integer)
     comment: Mapped[str | None] = mapped_column(Text)
     isrc: Mapped[str | None] = mapped_column(String)
+    mbid: Mapped[str | None] = mapped_column(String, index=True)
     has_cover: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String, default="present", index=True)
     scan_error: Mapped[str | None] = mapped_column(Text)

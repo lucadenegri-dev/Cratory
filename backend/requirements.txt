@@ -8,3 +8,4 @@ anthropic
 pytest
 httpx
 python-dotenv
+pyacoustid

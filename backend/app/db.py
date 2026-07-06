@@ -43,6 +43,9 @@ def ensure_schema(eng=None) -> None:
         if "isrc" not in cols:
             with eng.begin() as conn:
                 conn.execute(text("ALTER TABLE audio_file ADD COLUMN isrc VARCHAR"))
+        if "mbid" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text("ALTER TABLE audio_file ADD COLUMN mbid VARCHAR"))
 
 
 def get_db():
