@@ -54,9 +54,10 @@ serve `path` oppure `isrc` oppure `artist`+`title`.
 `POST /api/issues/bridge-suggest` accetta body `{"mode": "fill" | "import"}`,
 default `"fill"` (retro-compatibile con la POST senza body).
 
-Lookup per file (cache invariata, una GET per file): passa sempre il path
-assoluto (`root.path` + `path` relativo) più ISRC e artist+title se presenti.
-Ogni file present è quindi interrogabile, anche senza ISRC e senza tag.
+Lookup per file (cache invariata, una GET per file): passa sempre `AudioFile.path`
+(già assoluto: costruito da `os.walk(root.path)` in `scanner.py`, nessuna
+ricostruzione necessaria) più ISRC e artist+title se presenti. Ogni file
+present è quindi interrogabile, anche senza ISRC e senza tag.
 
 **Modalità `fill`** (ex comportamento, depurato):
 - Riempie `suggested_fix_json` sulle issue aperte (`missing_required_tag`,
@@ -74,6 +75,9 @@ generalizzato:
 - Campi: tutti e 6 (`artist`, `title`, `genre`, `year`, `label`, `album`).
   Confronto normalizzato (`_norm`) per le stringhe, confronto numerico per
   `year`. Campo vuoto in Cratory → si salta (mai proporre lo svuotamento).
+  Campo vuoto nel file (anche se Cratory ce l'ha) → si salta anche qui: è un
+  buco, ci pensa il riempimento (Step 1/`missing_metadata`), non il mismatch —
+  stessa regola già in vigore oggi per il genere, estesa a tutti i campi.
 - Genere: proposta di sovrascrittura solo se `genre_source ∈ {manual, provider}`.
 - Le issue `bridge_mismatch` aperte vengono aggiornate; quelle
   accettate/rifiutate non si toccano. Per i soli file con match certo, le
