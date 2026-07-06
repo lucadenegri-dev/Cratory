@@ -7,10 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db import get_db
 from app.models import AudioFile, Issue, utcnow
 from app.schemas import IssueBulkBody, IssueFixBody, IssueRead, IssueStatusBody
-from app.services import ai_tags, cratory_bridge, planning
+from app.services import ai_tags, cratory_bridge, planning, text_providers
 
 router = APIRouter(prefix="/api/issues", tags=["issues"])
 _VALID = {"open", "accepted", "dismissed"}
@@ -194,6 +195,57 @@ def ai_suggest_genre(db: Session = Depends(get_db)):
             unresolved += 1
     db.commit()
     return {"configured": True, "files": len(todo),
+            "suggested": suggested, "unresolved": unresolved}
+
+
+_PROVIDER_TYPES = ("missing_required_tag", "missing_metadata", "dirty_genre")
+_PROVIDER_FIELDS = ("artist", "title", "genre", "year", "label", "album")
+
+
+@router.post("/provider-suggest", response_model=dict)
+def provider_suggest(db: Session = Depends(get_db)):
+    """Riempie i suggested_fix delle issue aperte dai provider testuali
+    (MusicBrainz→Discogs). Precedenza manuale > tag pulito > provider > AI:
+    tocca solo issue open (i tag puliti non hanno issue; i fix manuali sono
+    accepted). Provider prima dell'AI (gli endpoint AI saltano le issue già
+    suggerite). Una lookup per file, con cache in-memory."""
+    from app.integrations.discogs_meta import DiscogsMetaClient
+    from app.integrations.musicbrainz import MusicBrainzProvider
+
+    mb = MusicBrainzProvider(user_agent=settings.musicbrainz_user_agent)
+    discogs = DiscogsMetaClient()
+
+    rows = db.execute(
+        select(Issue, AudioFile).join(AudioFile, Issue.file_id == AudioFile.id)
+        .where(Issue.status == "open", Issue.type.in_(_PROVIDER_TYPES),
+               Issue.field.in_(_PROVIDER_FIELDS))
+    ).all()
+    todo = [(i, f) for i, f in rows if i.suggested_fix_json is None]
+    if not todo:
+        return {"configured": True, "files": 0, "suggested": 0, "unresolved": 0}
+
+    cache: dict[int, dict] = {}
+
+    def _lookup(f: AudioFile) -> dict:
+        if f.id not in cache:
+            cache[f.id] = text_providers.lookup(f, mb=mb, discogs=discogs) or {}
+        return cache[f.id]
+
+    suggested = unresolved = 0
+    files_seen: set[int] = set()
+    for issue, f in todo:
+        files_seen.add(f.id)
+        res = _lookup(f)
+        value = res.get(issue.field)
+        if value is not None:
+            issue.suggested_fix_json = {"field": issue.field, "action": "retag",
+                                        "to": str(value)}
+            issue.updated_at = utcnow()
+            suggested += 1
+        else:
+            unresolved += 1
+    db.commit()
+    return {"configured": True, "files": len(files_seen),
             "suggested": suggested, "unresolved": unresolved}
 
 
