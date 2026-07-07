@@ -57,6 +57,7 @@ class IssueRead(BaseModel):
     file_path: str
     artist: str | None
     title: str | None
+    current_value: str | None = None
 
 
 class IssueStatusBody(BaseModel):

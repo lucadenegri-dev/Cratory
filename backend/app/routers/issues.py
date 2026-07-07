@@ -22,11 +22,13 @@ _RETAGGABLE = {"artist", "title", "album", "album_artist", "genre", "year",
 
 
 def _to_read(issue: Issue, file: AudioFile) -> IssueRead:
+    cur = getattr(file, issue.field, None) if issue.field else None
     return IssueRead(
         id=issue.id, file_id=issue.file_id, root_id=file.root_id, type=issue.type,
         field=issue.field, severity=issue.severity, detail=issue.detail,
         suggested_fix_json=issue.suggested_fix_json, status=issue.status,
         file_path=file.path, artist=file.artist, title=file.title,
+        current_value=None if cur is None else str(cur),
     )
 
 
