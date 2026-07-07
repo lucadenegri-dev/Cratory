@@ -230,16 +230,14 @@ export default function IssuesPage() {
 
           <div className="flex flex-wrap gap-1.5 lg:max-w-lg lg:justify-end">
             <Button variant="primary" size="sm" onClick={onAiSuggest} disabled={aiBusy}>
-              {aiBusy ? "AI…" : <><b className="font-bold">AI</b> artista/titolo</>}
+              {aiBusy ? "AI…" : "Recupera Artista/Titolo con AI"}
             </Button>
             <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
-              {genreBusy ? "AI…" : <><b className="font-bold">AI</b> genere</>}
+              {genreBusy ? "AI…" : "Recupera Genere con AI"}
             </Button>
-            <Button variant="outline" size="sm" onClick={onProviderSuggest} disabled={providerBusy}>
-              {providerBusy ? "provider…" : "⇄ da provider"}
+            <Button variant="primary" size="sm" onClick={onProviderSuggest} disabled={providerBusy}>
+              {providerBusy ? "importo…" : "Importa metadati mancanti da Provider"}
             </Button>
-            <Button variant="outline" size="sm" onClick={acceptAllFixable}>✓ accetta fixabili</Button>
-            <Button variant="outline" size="sm" onClick={dismissAllInfo}>✕ ignora info</Button>
           </div>
         </div>
 
@@ -264,10 +262,16 @@ export default function IssuesPage() {
               ))}
             </div>
             <Button variant="primary" size="sm" onClick={onProviderRescan} disabled={rescanRunning}>
-              {rescanRunning ? "rescan in corso…" : "⇄ Forza ricerca provider"}
+              {rescanRunning ? "importo…" : "Importa tutti i metadati da Provider"}
             </Button>
-            <Button variant="outline" size="sm" onClick={onAcceptHigh}>✓ accetta alta confidenza</Button>
           </div>
+        </div>
+
+        {/* azioni di massa sotto la sezione forza ricerca provider */}
+        <div className="flex flex-wrap gap-1.5">
+          <Button variant="outline" size="sm" onClick={onAcceptHigh}>✓ Accetta tutti alta confidenza</Button>
+          <Button variant="outline" size="sm" onClick={acceptAllFixable}>✓ Accetta tutti i fixabili</Button>
+          <Button variant="outline" size="sm" onClick={dismissAllInfo}>✕ Ignora tutti gli info</Button>
         </div>
 
         {filtered.length === 0 && !offline ? (
