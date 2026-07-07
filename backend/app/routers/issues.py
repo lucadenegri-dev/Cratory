@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db import get_db
 from app.models import AudioFile, Issue, utcnow
-from app.schemas import IssueBulkBody, IssueFixBody, IssueRead, IssueStatusBody
-from app.services import ai_tags, text_providers
+from app.schemas import (IssueBulkBody, IssueFixBody, IssueRead, IssueStatusBody,
+                         ProviderRescanBody)
+from app.services import ai_tags, apply_job, provider_rescan_job, scan_job, text_providers
 
 router = APIRouter(prefix="/api/issues", tags=["issues"])
 _VALID = {"open", "accepted", "dismissed"}
@@ -256,3 +257,30 @@ def provider_suggest(db: Session = Depends(get_db)):
     db.commit()
     return {"configured": True, "files": len(files_seen),
             "suggested": suggested, "unresolved": unresolved}
+
+
+@router.post("/provider-rescan", response_model=dict)
+def provider_rescan_start(body: ProviderRescanBody | None = None):
+    if scan_job.is_running() or apply_job.is_running():
+        raise HTTPException(status_code=409, detail="scan o apply in corso")
+    b = body or ProviderRescanBody()
+    return provider_rescan_job.start_job(folder=b.folder, genre=b.genre, fields=b.fields)
+
+
+@router.get("/provider-rescan/status", response_model=dict)
+def provider_rescan_status():
+    return provider_rescan_job.job_state()
+
+
+@router.post("/provider-override/accept-high", response_model=dict)
+def accept_high_overrides(db: Session = Depends(get_db)):
+    rows = db.scalars(select(Issue).where(
+        Issue.type == "provider_override", Issue.status == "open")).all()
+    updated = 0
+    for issue in rows:
+        if (issue.suggested_fix_json or {}).get("confidence") == "high":
+            issue.status = "accepted"
+            issue.updated_at = utcnow()
+            updated += 1
+    db.commit()
+    return {"updated": updated}

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class ScanSummary(BaseModel):
@@ -71,6 +71,21 @@ class IssueBulkBody(BaseModel):
 
 class IssueFixBody(BaseModel):
     value: str
+
+
+class ProviderRescanBody(BaseModel):
+    folder: str | None = None
+    genre: str | None = None
+    fields: list[str] = ["genre"]
+
+    @field_validator("fields")
+    @classmethod
+    def _only_allowed(cls, v: list[str]) -> list[str]:
+        allowed = {"genre", "album", "label", "year"}
+        bad = [f for f in v if f not in allowed]
+        if bad:
+            raise ValueError(f"campi non ammessi: {bad}")
+        return v or ["genre"]
 
 
 class DupMemberRead(BaseModel):
