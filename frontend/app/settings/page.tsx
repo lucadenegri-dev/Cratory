@@ -125,7 +125,7 @@ export default function SettingsPage() {
                 <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">dove organizzare — una destinazione per radice</div>
                 <p className="mb-3 text-xs text-faint">
                   Una <b className="text-muted">radice</b> è una cartella che hai aggiunto in <b className="text-muted">Sources</b> e che
-                  DjOrganizer scansiona. Per ognuna imposti una <b className="text-muted">destinazione</b>: dove spostare i suoi file
+                  Sortory scansiona. Per ognuna imposti una <b className="text-muted">destinazione</b>: dove spostare i suoi file
                   una volta organizzati. Lascia <b className="text-muted">vuoto</b> per tenerli dove sono (solo rinomina, niente spostamento).
                 </p>
                 <div className="flex flex-col gap-3">

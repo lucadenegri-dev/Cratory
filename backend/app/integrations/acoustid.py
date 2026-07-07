@@ -24,7 +24,7 @@ from app.integrations._http import post_with_retries
 logger = logging.getLogger(__name__)
 
 LOOKUP_URL = "https://api.acoustid.org/v2/lookup"
-_USER_AGENT = "DjOrganizer/0.1 (+http://localhost)"
+_USER_AGENT = "Sortory/0.1 (+http://localhost)"
 
 # (duration_seconds, fingerprint) dal file audio; il default usa pyacoustid/fpcalc.
 Fingerprinter = Callable[[str], tuple[int, bytes | str]]

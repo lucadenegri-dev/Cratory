@@ -11,7 +11,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DjOrganizer",
+  title: "Sortory",
   description: "Organizza i file musicali e preparali per Rekordbox",
 };
 

@@ -70,7 +70,7 @@ export default function SourcesPage() {
         )
       }
       guide={<>
-        <p>Le cartelle che DjOrganizer scansiona per trovare i file audio.</p>
+        <p>Le cartelle che Sortory scansiona per trovare i file audio.</p>
         <p>Aggiungine una e lancia uno <b className="text-fg">scan</b> per popolare la libreria.</p>
       </>}
     >

@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # chiave il provider è semplicemente inattivo (degradazione pulita).
     discogs_token: str | None = None
     acoustid_api_key: str | None = None
-    musicbrainz_user_agent: str = "DjOrganizer/0.1 (+http://localhost)"
+    musicbrainz_user_agent: str = "Sortory/0.1 (+http://localhost)"
 
 
 settings = Settings()

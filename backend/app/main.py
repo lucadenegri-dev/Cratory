@@ -1,4 +1,4 @@
-"""Entrypoint FastAPI di DjOrganizer."""
+"""Entrypoint FastAPI di Sortory."""
 
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="DjOrganizer", lifespan=lifespan)
+app = FastAPI(title="Sortory", lifespan=lifespan)
 
 # Tool locale: il frontend Next gira su un'altra porta (es. localhost:3000) e
 # chiama l'API cross-origin. Consenti qualunque porta su localhost/127.0.0.1.

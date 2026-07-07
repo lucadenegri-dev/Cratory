@@ -55,7 +55,7 @@ export function IndexNav() {
     <nav className="flex h-full flex-col">
       <div className="px-4 py-4">
         <Link href="/sources" className="block text-sm font-semibold tracking-[0.12em] text-fg-strong">
-          DJORGANIZER
+          SORTORY
         </Link>
         <p className="mt-1 text-[9px] uppercase tracking-wider text-faint">file → rekordbox</p>
       </div>

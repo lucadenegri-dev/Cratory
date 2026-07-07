@@ -11,7 +11,7 @@ def test_provider_settings_default_and_env(monkeypatch):
     s = Settings(_env_file=None)
     assert s.discogs_token is None
     assert s.acoustid_api_key is None
-    assert s.musicbrainz_user_agent.startswith("DjOrganizer")
+    assert s.musicbrainz_user_agent.startswith("Sortory")
 
     monkeypatch.setenv("DJORG_DISCOGS_TOKEN", "tok")
     monkeypatch.setenv("DJORG_ACOUSTID_API_KEY", "key")

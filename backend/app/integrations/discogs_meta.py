@@ -13,7 +13,7 @@ from app.integrations._http import get_with_retries
 
 logger = logging.getLogger(__name__)
 BASE = "https://api.discogs.com"
-_USER_AGENT = "DjOrganizer/0.1 (+http://localhost)"
+_USER_AGENT = "Sortory/0.1 (+http://localhost)"
 
 
 class DiscogsError(Exception):
