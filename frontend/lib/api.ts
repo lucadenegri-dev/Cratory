@@ -161,6 +161,20 @@ export function libraryFacets() {
   return apiGet<LibraryFacets>("/api/library/facets");
 }
 
+// --- PROVIDERS --------------------------------------------------------------
+export interface ProviderInfo {
+  key: string;
+  name: string;
+  category: string;
+  description: string;
+  env_vars: string[];
+  docs_url: string;
+  status: "configured" | "connected" | "missing";
+}
+export function listProviders() {
+  return apiGet<ProviderInfo[]>("/api/providers");
+}
+
 // --- ISSUES -----------------------------------------------------------------
 export interface Issue {
   id: number;

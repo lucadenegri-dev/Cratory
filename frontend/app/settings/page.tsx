@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  getSettings, updateSettings, setRootTarget, fingerprintStatus, runFingerprint,
-  type Settings, type RootTarget, type FingerprintStatus, type FingerprintResult,
+  getSettings, updateSettings, setRootTarget, runFingerprint, listProviders,
+  type Settings, type RootTarget, type FingerprintResult, type ProviderInfo,
 } from "@/lib/api";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, Button } from "@/components/ui";
@@ -36,7 +36,7 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [naming, setNaming] = useState("");
   const [folder, setFolder] = useState("");
-  const [fpStatus, setFpStatus] = useState<FingerprintStatus | null>(null);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [fpResult, setFpResult] = useState<FingerprintResult | null>(null);
   const [fpBusy, setFpBusy] = useState(false);
 
@@ -49,7 +49,7 @@ export default function SettingsPage() {
       .catch(() => setOffline(true));
   }, []);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { fingerprintStatus().then(setFpStatus).catch(() => {}); }, []);
+  useEffect(() => { listProviders().then(setProviders).catch(() => {}); }, []);
 
   const saveTemplates = async () => {
     setError(null);
@@ -130,42 +130,71 @@ export default function SettingsPage() {
               </div>
             </section>
 
-            <div className="border border-border bg-surface p-4">
-              <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">provider testuali &amp; fingerprint</div>
-              <p className="mb-3 text-xs text-faint">
-                MusicBrainz/Discogs (metadati testuali) e AcoustID/Chromaprint (identità acustica → MBID).
-              </p>
-              <div className="mb-3 flex gap-4 text-xs">
-                <span className={fpStatus?.configured ? "text-ok" : "text-faint"}>
-                  AcoustID: {fpStatus ? (fpStatus.configured ? "configurato" : "non configurato") : "…"}
-                </span>
-                <span className={fpStatus?.fpcalc ? "text-ok" : "text-faint"}>
-                  fpcalc: {fpStatus ? (fpStatus.fpcalc ? "disponibile" : "non trovato") : "…"}
-                </span>
-              </div>
-              {fpStatus && !(fpStatus.configured && fpStatus.fpcalc) && (
-                <p className="mb-3 text-xs text-faint">
-                  Imposta ACOUSTID_API_KEY nel backend e installa fpcalc (Chromaprint) per abilitare l&apos;identificazione.
-                </p>
-              )}
-              <Button
-                variant="outline" size="sm"
-                disabled={fpBusy || !fpStatus?.configured || !fpStatus?.fpcalc}
-                onClick={onIdentify}
-              >
-                {fpBusy ? "identificazione in corso…" : "identifica ora"}
-              </Button>
-              {fpResult && (
-                <p className="mt-2 text-xs text-faint">
-                  {fpResult.identified} identificati, {fpResult.below_threshold} sotto soglia, {fpResult.not_found} non trovati
-                  {fpResult.errors > 0 ? `, ${fpResult.errors} errori` : ""} (su {fpResult.total}).
-                </p>
-              )}
-            </div>
+            <ProviderList
+              providers={providers} fpResult={fpResult} fpBusy={fpBusy} onIdentify={onIdentify}
+            />
           </>
         )}
       </div>
     </PageLayout>
+  );
+}
+
+function StatusBadge({ status }: { status: ProviderInfo["status"] }) {
+  const label = status === "configured" ? "configurato" : status === "connected" ? "collegato" : "mancante";
+  return (
+    <span className={`shrink-0 text-[10px] uppercase tracking-wider ${status === "missing" ? "text-faint" : "text-ok"}`}>
+      {label}
+    </span>
+  );
+}
+
+function ProviderList({ providers, fpResult, fpBusy, onIdentify }: {
+  providers: ProviderInfo[];
+  fpResult: FingerprintResult | null;
+  fpBusy: boolean;
+  onIdentify: () => void;
+}) {
+  return (
+    <section>
+      <h2 className="text-sm font-medium text-fg-strong">Provider</h2>
+      <p className="mt-1 text-xs text-faint">Chiavi e binari nel file <span className="font-mono">backend/.env</span> (o nel PATH per fpcalc).</p>
+      <div className="mt-3 flex flex-col">
+        {providers.map((p, i) => (
+          <div key={p.key} className="border-t border-border py-4 first:border-t-0">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="tnum text-[11px] text-faint">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="text-sm font-medium uppercase tracking-wide text-fg-strong">{p.name}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-muted">{p.category}</span>
+                </div>
+                <p className="mt-1 max-w-xl text-xs text-faint">{p.description}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {p.env_vars.map((v) => (
+                    <code key={v} className="border border-border bg-bg px-1.5 py-0.5 font-mono text-[10px] text-muted">{v}</code>
+                  ))}
+                  <a href={p.docs_url} target="_blank" rel="noreferrer" className="text-[10px] text-muted underline-offset-2 hover:text-fg hover:underline">docs ↗</a>
+                  {p.key === "acoustid" && p.status === "configured" && (
+                    <button
+                      onClick={onIdentify} disabled={fpBusy}
+                      className="border border-border px-1.5 py-0.5 text-[10px] text-fg hover:bg-elevated disabled:opacity-40"
+                    >{fpBusy ? "identificazione…" : "identifica ora"}</button>
+                  )}
+                </div>
+                {p.key === "acoustid" && fpResult && (
+                  <p className="mt-1.5 text-[10px] text-faint">
+                    {fpResult.identified} identificati, {fpResult.below_threshold} sotto soglia, {fpResult.not_found} non trovati
+                    {fpResult.errors > 0 ? `, ${fpResult.errors} errori` : ""} (su {fpResult.total}).
+                  </p>
+                )}
+              </div>
+              <StatusBadge status={p.status} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
