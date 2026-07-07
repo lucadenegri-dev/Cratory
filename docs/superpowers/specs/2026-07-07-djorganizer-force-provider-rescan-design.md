@@ -78,12 +78,14 @@ case-insensitive** su `AudioFile.path`, così basta digitare un nome di sottocar
 `genre` (genere attuale == valore esatto). Poi, per ogni traccia:
 
 1. **Fingerprint auto:** se `AudioFile.mbid` è vuoto e AcoustID+fpcalc sono configurati →
-   fingerprint per popolare `mbid`. Se AcoustID/fpcalc **non** configurati → si salta il
-   fingerprint e si processa la traccia solo se ha già `mbid`/ISRC; le tracce senza identità
-   forte vengono **contate** in `result.skipped_no_id` (niente troncamento silenzioso).
-2. **Lookup provider:** MusicBrainz (via `mbid`/ISRC, o testuale artista+titolo se manca) →
-   Discogs per i campi mancanti (tipicamente `label`/`genre`). Riusa `text_providers.lookup()`
-   e le integrazioni esistenti.
+   fingerprint per popolare `mbid` (così il match MusicBrainz diventa esatto → `high`). Se
+   AcoustID/fpcalc **non** configurati → nessun fingerprint: la traccia viene comunque
+   processata e otterrà (se c'è match) proposte a confidenza `text`. Il risultato espone
+   `acoustid_available` e quante tracce sono state `fingerprinted`.
+2. **Lookup provider:** MusicBrainz (via `mbid`/ISRC → `high`, oppure testuale artista+titolo
+   → `text`) → Discogs per i campi mancanti (tipicamente `label`/`genre`, sempre `text`).
+   **Nessuna traccia viene scartata a priori**: i match deboli si *propongono* comunque, ma
+   etichettati `text` (§3.3.3), perché nulla viene scritto senza revisione.
 3. **Confidenza per-campo:** ogni campo proposto porta la confidenza con cui è stato ottenuto:
    - campo da MusicBrainz con match **MBID o ISRC esatto** → `high`;
    - campo da MusicBrainz con match **testuale** → `text`;
@@ -100,8 +102,15 @@ case-insensitive** su `AudioFile.path`, così basta digitare un nome di sottocar
      **elimina** (proposta non più necessaria).
    - i `provider_override` già `accepted`/`dismissed` **non si toccano** (decisione utente).
 
-`result` finale: `{configured, scanned, fingerprinted, matched, proposed_high, proposed_text,
-skipped_no_id, unresolved}`.
+`result` finale: `{configured, acoustid_available, scanned, fingerprinted, matched, no_match,
+proposed_high, proposed_text}`. `configured` è sempre vero (MusicBrainz ha uno user-agent di
+default); `acoustid_available` dice se il fingerprint — e quindi la confidenza `high` — è
+disponibile.
+
+Le issue `provider_override` hanno **severità `info`** (basso rumore). Per non perderle con
+l'azione esistente "ignora tutti gli info", l'endpoint `bulk()` viene reso **cieco al tipo
+`provider_override` quando il filtro è per sola severità** (le tocca solo se `body.type ==
+"provider_override"` esplicito).
 
 ### 3.4 Nuovo tipo issue `provider_override`
 - Aggiunto ai valori ammessi di `Issue.type`. Campo `field` ∈ `{genre,album,label,year}`.
@@ -125,8 +134,10 @@ skipped_no_id, unresolved}`.
   `phase`/`processed`/`total` (polling di `/status`, come lo scan). A fine job: nota riassuntiva
   dal `result` (es. *"58 proposte: 34 alta confidenza, 24 testuali; 12 tracce senza identità"*).
 - **Rendering delle issue `provider_override`:** badge **"override"**, riga **`vecchio → proposta`**
-  per il campo, e **badge di confidenza** distinto (es. verde "alta" / ambra "testuale"). Da lì
-  si accettano col flusso esistente (`✓` → `/fix` → PLAN).
+  per il campo (il "vecchio" arriva da un nuovo campo `current_value` di `IssueRead`, = valore
+  attuale del tag), e **badge di confidenza** distinto (es. verde "alta" / ambra "testuale",
+  letto da `suggested_fix_json.confidence`). Da lì si accettano col flusso esistente
+  (`✓` → `/status accepted` → PLAN; il `suggested_fix` è già pronto, niente reinserimento).
 - **Bulk "accetta tutte le alta confidenza":** bottone che accetta in un colpo tutte le
   `provider_override` `open` con `confidence == "high"` (chiamate `/fix` in serie o un endpoint
   bulk dedicato — decisione lasciata al plan), lasciando da rivedere a mano le `text`.
@@ -135,8 +146,9 @@ skipped_no_id, unresolved}`.
 
 - **Provider non configurato** (MusicBrainz user-agent assente) → `result.configured:false`,
   nessuna proposta, nessun crash.
-- **AcoustID/fpcalc assenti** → nessun fingerprint; si processano solo tracce con `mbid`/ISRC
-  già presenti; le altre in `skipped_no_id` (riportate in UI).
+- **AcoustID/fpcalc assenti** → nessun fingerprint; le tracce si processano lo stesso e
+  producono solo proposte `text` (nessuna `high`). Il flag `acoustid_available:false` lo segnala
+  in UI ("attiva il fingerprint per ottenere proposte ad alta confidenza").
 - **Nessun match** per una traccia → nessuna proposta; eventuali override aperti stantìi puliti.
 - **Il provider conferma il valore attuale** → nessuna issue (o pulizia di quella stantìa) → e
   comunque il planner scarterebbe il no-op.
