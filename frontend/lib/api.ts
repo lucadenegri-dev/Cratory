@@ -153,6 +153,7 @@ export interface Issue {
   file_path: string;
   artist: string | null;
   title: string | null;
+  current_value: string | null;
 }
 
 export interface IssueFilters {
@@ -203,6 +204,41 @@ export interface ProviderSuggestResult {
 }
 export function providerSuggest() {
   return apiSend<ProviderSuggestResult>("POST", "/api/issues/provider-suggest");
+}
+
+export interface ProviderRescanBody {
+  folder?: string | null;
+  genre?: string | null;
+  fields: string[];
+}
+export interface ProviderRescanResult {
+  configured: boolean;
+  acoustid_available: boolean;
+  scanned: number;
+  fingerprinted: number;
+  matched: number;
+  no_match: number;
+  proposed_high: number;
+  proposed_text: number;
+}
+export interface ProviderRescanJobState {
+  status: "idle" | "running" | "done" | "error";
+  phase: string | null;
+  processed: number;
+  total: number;
+  result: ProviderRescanResult | null;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+export function providerRescan(body: ProviderRescanBody) {
+  return apiSend<ProviderRescanJobState>("POST", "/api/issues/provider-rescan", body);
+}
+export function providerRescanStatus() {
+  return apiGet<ProviderRescanJobState>("/api/issues/provider-rescan/status");
+}
+export function acceptHighOverrides() {
+  return apiSend<{ updated: number }>("POST", "/api/issues/provider-override/accept-high");
 }
 
 // --- DUPLICATES -------------------------------------------------------------
