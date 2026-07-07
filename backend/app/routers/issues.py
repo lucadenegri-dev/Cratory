@@ -3,7 +3,7 @@
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -35,7 +35,7 @@ def _to_read(issue: Issue, file: AudioFile) -> IssueRead:
 @router.get("", response_model=list[IssueRead])
 def list_issues(severity: str | None = None, type: str | None = None,
                 status: str | None = None, root_id: int | None = None,
-                db: Session = Depends(get_db)):
+                q: str | None = None, db: Session = Depends(get_db)):
     stmt = select(Issue, AudioFile).join(AudioFile, Issue.file_id == AudioFile.id)
     if severity:
         stmt = stmt.where(Issue.severity == severity)
@@ -45,6 +45,10 @@ def list_issues(severity: str | None = None, type: str | None = None,
         stmt = stmt.where(Issue.status == status)
     if root_id is not None:
         stmt = stmt.where(AudioFile.root_id == root_id)
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(or_(AudioFile.path.ilike(like), AudioFile.artist.ilike(like),
+                             AudioFile.title.ilike(like)))
     return [_to_read(i, f) for i, f in db.execute(stmt).all()]
 
 

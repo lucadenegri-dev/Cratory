@@ -216,9 +216,23 @@ class FileRow(BaseModel):
     ext: str
     artist: str | None
     title: str | None
+    album: str | None = None
+    genre: str | None = None
+    year: int | None = None
+    label: str | None = None
     bitrate: int | None
     duration_s: float | None
     status: str
     issue_count: int
     worst_severity: str | None
     in_dup_group: bool
+
+
+class LibraryFacets(BaseModel):
+    """Valori distinti per popolare i filtri per-tag della pagina FILES."""
+    genre: list[str] = []
+    artist: list[str] = []
+    album: list[str] = []
+    label: list[str] = []
+    ext: list[str] = []
+    year: list[int] = []

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import AudioFile, DupGroup, DupMember, Issue, ScanRoot
-from app.schemas import FileRow, LibraryStatsRead
+from app.schemas import FileRow, LibraryFacets, LibraryStatsRead
 
 router = APIRouter(prefix="/api", tags=["library"])
 
@@ -57,6 +57,28 @@ _SORT_COLS = {
 }
 
 
+@router.get("/library/facets", response_model=LibraryFacets)
+def library_facets(db: Session = Depends(get_db)):
+    """Valori distinti (solo file `present`) per i filtri per-tag di FILES."""
+    def distinct(col):
+        return [
+            v for (v,) in db.execute(
+                select(col)
+                .where(AudioFile.status == "present", col.is_not(None), col != "")
+                .distinct().order_by(col)
+            ).all()
+        ]
+
+    return LibraryFacets(
+        genre=distinct(AudioFile.genre),
+        artist=distinct(AudioFile.artist),
+        album=distinct(AudioFile.album),
+        label=distinct(AudioFile.label),
+        ext=distinct(AudioFile.ext),
+        year=distinct(AudioFile.year),
+    )
+
+
 @router.get("/files", response_model=list[FileRow])
 def list_files(
     db: Session = Depends(get_db),
@@ -64,6 +86,12 @@ def list_files(
     status: str = "present",
     has_issues: bool | None = None,
     q: str | None = None,
+    genre: str | None = None,
+    artist: str | None = None,
+    album: str | None = None,
+    label: str | None = None,
+    ext: str | None = None,
+    year: int | None = None,
     sort: str = "path",
     limit: int = Query(500, ge=1, le=5000),
     offset: int = Query(0, ge=0),
@@ -97,6 +125,11 @@ def list_files(
         stmt = stmt.where(issue_count > 0)
     elif has_issues is False:
         stmt = stmt.where(issue_count == 0)
+    for col, val in ((AudioFile.genre, genre), (AudioFile.artist, artist),
+                     (AudioFile.album, album), (AudioFile.label, label),
+                     (AudioFile.ext, ext), (AudioFile.year, year)):
+        if val is not None and val != "":
+            stmt = stmt.where(col == val)
     if q:
         like = f"%{q}%"
         stmt = stmt.where(
@@ -109,7 +142,8 @@ def list_files(
     for f, n_issues, rank, dup_n in db.execute(stmt).all():
         rows.append(FileRow(
             id=f.id, root_id=f.root_id, path=f.path, ext=f.ext,
-            artist=f.artist, title=f.title, bitrate=f.bitrate, duration_s=f.duration_s,
+            artist=f.artist, title=f.title, album=f.album, genre=f.genre,
+            year=f.year, label=f.label, bitrate=f.bitrate, duration_s=f.duration_s,
             status=f.status, issue_count=n_issues or 0,
             worst_severity=_RANK_SEV.get(rank or 0), in_dup_group=bool(dup_n),
         ))
