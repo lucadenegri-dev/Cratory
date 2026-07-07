@@ -236,3 +236,16 @@ class LibraryFacets(BaseModel):
     label: list[str] = []
     ext: list[str] = []
     year: list[int] = []
+
+
+class ProviderInfo(BaseModel):
+    """Stato di un provider esterno per la pagina Settings.
+    status: 'configured' (chiave presente) | 'connected' (attivo senza chiave) |
+    'missing' (non configurato)."""
+    key: str
+    name: str
+    category: str
+    description: str
+    env_vars: list[str]
+    docs_url: str
+    status: str
