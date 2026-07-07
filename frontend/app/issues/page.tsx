@@ -209,6 +209,12 @@ export default function IssuesPage() {
         {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
         {actionError && <Alert>{actionError}</Alert>}
         {aiNote && <Alert tone="info">{aiNote}</Alert>}
+        {rescan?.status === "running" && (
+          <Alert tone="info">
+            Ricerca provider in corso{rescan.phase ? ` · ${rescan.phase}` : ""}
+            {rescan.total > 0 ? ` — ${rescan.processed}/${rescan.total}` : "…"}
+          </Alert>
+        )}
 
         <div className="flex flex-wrap gap-2">
           <Select value={sev} onChange={(e) => setSev(e.target.value)} className="w-auto">
