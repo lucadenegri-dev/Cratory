@@ -1,16 +1,18 @@
 import type { ReactNode } from "react";
 
 export function PageLayout({
-  title, meta, marginalia, marginaliaTitle, children,
+  title, meta, marginalia, marginaliaTitle, guide, children,
 }: {
   title?: string;
   meta?: ReactNode;
   marginalia?: ReactNode;
   marginaliaTitle?: string;
+  guide?: ReactNode;
   children: ReactNode;
 }) {
+  const hasAside = marginalia != null || guide != null;
   return (
-    <div className={marginalia ? "lg:grid lg:grid-cols-[1fr_240px]" : ""}>
+    <div className={hasAside ? "lg:grid lg:grid-cols-[1fr_240px]" : ""}>
       <section className="min-w-0 px-5 py-5 lg:px-6 lg:py-6">
         {title && (
           <header className="mb-5 flex items-baseline gap-3 border-b border-border pb-3">
@@ -20,12 +22,22 @@ export function PageLayout({
         )}
         {children}
       </section>
-      {marginalia && (
+      {hasAside && (
         <aside className="border-t border-border px-5 py-5 lg:border-l lg:border-t-0 lg:py-6">
-          {marginaliaTitle && (
-            <div className="mb-3 text-[10px] uppercase tracking-wider text-muted">{marginaliaTitle}</div>
+          {marginalia && (
+            <>
+              {marginaliaTitle && (
+                <div className="mb-3 text-[10px] uppercase tracking-wider text-muted">{marginaliaTitle}</div>
+              )}
+              {marginalia}
+            </>
           )}
-          {marginalia}
+          {guide && (
+            <div className={marginalia ? "mt-6 border-t border-border pt-4" : ""}>
+              <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">Guida</div>
+              <div className="space-y-1.5 text-[11px] leading-relaxed text-faint">{guide}</div>
+            </div>
+          )}
         </aside>
       )}
     </div>

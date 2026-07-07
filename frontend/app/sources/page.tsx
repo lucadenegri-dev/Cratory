@@ -69,6 +69,10 @@ export default function SourcesPage() {
           <p className="text-xs text-faint">Nessuno scan in questa sessione.</p>
         )
       }
+      guide={<>
+        <p>Le cartelle che DjOrganizer scansiona per trovare i file audio.</p>
+        <p>Aggiungine una e lancia uno <b className="text-fg">scan</b> per popolare la libreria.</p>
+      </>}
     >
       <div className="flex flex-col gap-5">
         {offline && <Alert>Backend non raggiungibile su {process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8010"}. Avvia il server FastAPI.</Alert>}

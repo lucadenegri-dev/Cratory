@@ -70,7 +70,14 @@ export default function SettingsPage() {
   };
 
   return (
-    <PageLayout title="Settings">
+    <PageLayout
+      title="Settings"
+      guide={<>
+        <p>Come vengono nominati e organizzati i file quando applichi il PLAN.</p>
+        <p><b className="text-fg">Template</b> nome/cartelle + <b className="text-fg">destinazione</b> per radice.</p>
+        <p>Sotto, lo stato dei <b className="text-fg">provider</b> (chiavi in backend/.env).</p>
+      </>}
+    >
       <div className="flex max-w-2xl flex-col gap-6">
         {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
         {error && <Alert>{error}</Alert>}

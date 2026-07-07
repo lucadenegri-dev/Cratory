@@ -44,6 +44,10 @@ export default function DuplicatesPage() {
       meta={`${active.length} gruppi`}
       marginaliaTitle="Riepilogo"
       marginalia={<Marginalia groups={active.length} filesToRemove={filesToRemove} byMatch={byMatch} />}
+      guide={<>
+        <p>Gruppi di file uguali o simili (per contenuto o per artista+titolo).</p>
+        <p>Scegli quale tenere: gli altri verranno rimossi quando applichi il PLAN.</p>
+      </>}
     >
       <div className="flex flex-col gap-4">
         {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}

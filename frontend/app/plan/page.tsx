@@ -63,6 +63,10 @@ export default function PlanPage() {
           <Marginalia stats={stats} disabled={blocking || nOps === 0 || applying} onApply={() => setModal(true)} />
         ) : undefined
       }
+      guide={<>
+        <p>Anteprima delle operazioni dalle issue accettate: retag, sposta, rinomina, elimina.</p>
+        <p>Nulla cambia sul disco finché non premi <b className="text-fg">Applica</b>.</p>
+      </>}
     >
       <div className="flex flex-col gap-4">
         {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}

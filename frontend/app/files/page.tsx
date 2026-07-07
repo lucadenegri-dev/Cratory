@@ -95,6 +95,11 @@ export default function FilesPage() {
       meta={stats ? `${rows.length}${stats.files_total > rows.length ? ` di ${stats.files_total}` : ""}` : undefined}
       marginaliaTitle="Libreria"
       marginalia={<Marginalia stats={stats} />}
+      guide={<>
+        <p>Tutti i file audio trovati nelle radici scansionate.</p>
+        <p>Filtra per tag (genere, formato…) o cerca per artista/titolo/path.</p>
+        <p>Il conteggio issue segnala i file con problemi sui tag.</p>
+      </>}
     >
       <div className="flex flex-col gap-4">
         {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}

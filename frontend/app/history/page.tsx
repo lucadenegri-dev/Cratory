@@ -48,6 +48,10 @@ export default function HistoryPage() {
           <div><div className="tnum text-2xl leading-none text-fg-strong">{undone}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-muted">annullate</div></div>
         </div>
       }
+      guide={<>
+        <p>Le applicazioni del PLAN già eseguite.</p>
+        <p>Puoi <b className="text-fg">annullare</b> un run per riportare i file com&apos;erano.</p>
+      </>}
     >
       <div className="flex flex-col gap-4">
         {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
