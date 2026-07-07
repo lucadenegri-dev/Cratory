@@ -57,11 +57,10 @@ function IssueRow({ issue, onFix, onDismiss, onReopen }: {
         {issue.status === "open" ? (
           fixable ? (
             <div className="flex flex-col gap-1">
-              {(issue.current_value || conf === "high" || conf === "text") && (
+              {issue.current_value && (
                 <div className="flex items-center gap-1.5 text-[10px]">
-                  <span className="text-faint line-through">{issue.current_value || "∅"}</span>
+                  <span className="text-faint line-through">{issue.current_value}</span>
                   <span className="text-faint">→</span>
-                  <ConfBadge conf={conf} />
                 </div>
               )}
               <input

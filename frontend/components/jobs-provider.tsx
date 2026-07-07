@@ -3,7 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   scanJobStatus, startScan as apiStartScan, applyStatus, startApply as apiStartApply,
-  type ScanJobState, type ApplyJobState,
+  providerRescanStatus, providerRescan as apiProviderRescan,
+  type ScanJobState, type ApplyJobState, type ProviderRescanJobState, type ProviderRescanBody,
 } from "@/lib/api";
 import { EqMeter } from "./ui";
 
@@ -12,17 +13,21 @@ const IDLE = {
   result: null, error: null, started_at: null, finished_at: null,
 };
 
+type ProgressJob = { status: string; phase: string | null; processed: number; total: number };
+
 type JobsApi = {
   scan: ScanJobState;
   apply: ApplyJobState;
+  rescan: ProviderRescanJobState;
   startScan: (rootIds?: number[]) => Promise<void>;
   startApply: () => Promise<void>;
+  startRescan: (body: ProviderRescanBody) => Promise<void>;
   refresh: () => void;
 };
 
 const JobsCtx = createContext<JobsApi>({
-  scan: IDLE, apply: IDLE,
-  startScan: async () => {}, startApply: async () => {}, refresh: () => {},
+  scan: IDLE, apply: IDLE, rescan: IDLE,
+  startScan: async () => {}, startApply: async () => {}, startRescan: async () => {}, refresh: () => {},
 });
 
 export function useJobs() {
@@ -37,6 +42,7 @@ export function useJobs() {
 export function JobsProvider({ children }: { children: ReactNode }) {
   const [scan, setScan] = useState<ScanJobState>(IDLE);
   const [apply, setApply] = useState<ApplyJobState>(IDLE);
+  const [rescan, setRescan] = useState<ProviderRescanJobState>(IDLE);
   const alive = useRef(true);
 
   const pollOnce = useCallback(async () => {
@@ -47,6 +53,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     try {
       const a = await applyStatus();
       if (alive.current) setApply(a);
+    } catch { /* backend offline */ }
+    try {
+      const r = await providerRescanStatus();
+      if (alive.current) setRescan(r);
     } catch { /* backend offline */ }
   }, []);
 
@@ -60,6 +70,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     const a = await apiStartApply();
     setApply(a);
   }, []);
+  const startRescan = useCallback(async (body: ProviderRescanBody) => {
+    const r = await apiProviderRescan(body);
+    setRescan(r);
+  }, []);
 
   useEffect(() => {
     alive.current = true;
@@ -70,14 +84,16 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   }, [pollOnce]);
 
   const api = useMemo<JobsApi>(
-    () => ({ scan, apply, startScan, startApply, refresh }),
-    [scan, apply, startScan, startApply, refresh],
+    () => ({ scan, apply, rescan, startScan, startApply, startRescan, refresh }),
+    [scan, apply, rescan, startScan, startApply, startRescan, refresh],
   );
 
-  const active = scan.status === "running"
-    ? { label: "Scansione", job: scan as ScanJobState | ApplyJobState }
+  const active: { label: string; job: ProgressJob } | null = scan.status === "running"
+    ? { label: "Scansione", job: scan }
     : apply.status === "running"
-    ? { label: "Applicazione", job: apply as ScanJobState | ApplyJobState }
+    ? { label: "Applicazione", job: apply }
+    : rescan.status === "running"
+    ? { label: "Ricerca provider", job: rescan }
     : null;
 
   return (
@@ -88,7 +104,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   );
 }
 
-function GlobalProgress({ label, job }: { label: string; job: ScanJobState | ApplyJobState }) {
+function GlobalProgress({ label, job }: { label: string; job: ProgressJob }) {
   const pct = job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border-strong bg-surface px-4 py-2.5">

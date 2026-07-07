@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, aiSuggestGenres,
-  providerSuggest, providerRescan, providerRescanStatus, acceptHighOverrides,
-  type Issue, type ScanRoot, type ProviderRescanJobState,
+  providerSuggest, acceptHighOverrides,
+  type Issue, type ScanRoot,
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
@@ -12,7 +12,7 @@ import { IssuesTable } from "@/components/issues-table";
 import { Alert, Button, EmptyState, Input, Select } from "@/components/ui";
 
 export default function IssuesPage() {
-  const { scan } = useJobs();
+  const { scan, rescan, startRescan } = useJobs();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [roots, setRoots] = useState<ScanRoot[]>([]);
   const [offline, setOffline] = useState(false);
@@ -25,7 +25,7 @@ export default function IssuesPage() {
   const [rescanFolder, setRescanFolder] = useState("");
   const [rescanGenre, setRescanGenre] = useState("");
   const [rescanFields, setRescanFields] = useState<string[]>(["genre"]);
-  const [rescan, setRescan] = useState<ProviderRescanJobState | null>(null);
+  const rescanRunning = rescan.status === "running";
 
   const [sev, setSev] = useState("");
   const [type, setType] = useState("");
@@ -120,19 +120,14 @@ export default function IssuesPage() {
   const toggleField = (f: string) =>
     setRescanFields((cur) => (cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f]));
 
-  const onProviderRescan = async () => {
+  const onProviderRescan = () => {
     setActionError(null);
     setAiNote(null);
-    try {
-      const st = await providerRescan({
-        folder: rescanFolder || null,
-        genre: rescanGenre || null,
-        fields: rescanFields.length ? rescanFields : ["genre"],
-      });
-      setRescan(st);
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Errore");
-    }
+    startRescan({
+      folder: rescanFolder || null,
+      genre: rescanGenre || null,
+      fields: rescanFields.length ? rescanFields : ["genre"],
+    }).catch((e) => setActionError(e instanceof Error ? e.message : "Errore"));
   };
 
   const onAcceptHigh = () =>
@@ -141,26 +136,24 @@ export default function IssuesPage() {
       setAiNote(`${r.updated} proposte ad alta confidenza accettate → andranno nel PLAN.`);
     });
 
+  // Il rescan gira nel job globale (barra in basso): quando passa running→done
+  // ricarico le issue e mostro il riepilogo; su errore lo segnalo.
+  const prevRescan = useRef(rescan.status);
   useEffect(() => {
-    if (rescan?.status !== "running") return;
-    const id = setInterval(async () => {
-      try {
-        const st = await providerRescanStatus();
-        setRescan(st);
-        if (st.status === "done") {
-          load();
-          const r = st.result;
-          setAiNote(
-            r
-              ? `Rescan: ${r.proposed_high} proposte alta confidenza, ${r.proposed_text} testuali su ${r.scanned} tracce${r.acoustid_available ? "" : " (fingerprint off: nessuna alta confidenza)"}.`
-              : "Rescan completato.",
-          );
-        }
-        if (st.status === "error") setActionError(st.error || "Rescan fallito");
-      } catch { /* backend offline */ }
-    }, 1500);
-    return () => clearInterval(id);
-  }, [rescan?.status, load]);
+    if (prevRescan.current === "running" && rescan.status === "done") {
+      load();
+      const r = rescan.result;
+      setAiNote(
+        r
+          ? `Rescan: ${r.proposed_high} proposte alta confidenza, ${r.proposed_text} testuali su ${r.scanned} tracce${r.acoustid_available ? "" : " (fingerprint off: nessuna alta confidenza)"}.`
+          : "Rescan completato.",
+      );
+    }
+    if (prevRescan.current === "running" && rescan.status === "error") {
+      setActionError(rescan.error || "Rescan fallito");
+    }
+    prevRescan.current = rescan.status;
+  }, [rescan.status, rescan.result, rescan.error, load]);
 
   const types = useMemo(() => [...new Set(issues.map((i) => i.type))].sort(), [issues]);
   const fields = useMemo(
@@ -197,20 +190,14 @@ export default function IssuesPage() {
       marginaliaTitle="Riepilogo"
       marginalia={<Marginalia total={issues.length} bySev={bySev} byType={byType} accepted={accepted} />}
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
         {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
         {actionError && <Alert>{actionError}</Alert>}
         {aiNote && <Alert tone="info">{aiNote}</Alert>}
-        {rescan?.status === "running" && (
-          <Alert tone="info">
-            Ricerca provider in corso{rescan.phase ? ` · ${rescan.phase}` : ""}
-            {rescan.total > 0 ? ` — ${rescan.processed}/${rescan.total}` : "…"}
-          </Alert>
-        )}
 
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-          {/* filtri compatti: griglia, ogni cella ~1/3 (il Select è w-full) */}
-          <div className="grid flex-1 grid-cols-2 gap-2 self-start text-xs sm:grid-cols-3">
+        {/* toolbar: filtri a sinistra, azioni a destra (Cratory pattern B) */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="grid w-full grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:max-w-xl">
             <Select value={sev} onChange={(e) => setSev(e.target.value)} className="h-8 text-xs">
               <option value="">severità: tutte</option>
               <option value="error">error</option>
@@ -237,24 +224,49 @@ export default function IssuesPage() {
             </Select>
             <Input
               value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="cerca artista/titolo/path…" className="h-8 text-xs"
+              placeholder="cerca…" className="h-8 text-xs"
             />
           </div>
 
-          {/* azioni: a destra dei filtri (non nella colonna Riepilogo) */}
-          <div className="w-full shrink-0 xl:w-72">
-            <Actions
-              onAcceptFixable={acceptAllFixable} onDismissInfo={dismissAllInfo}
-              onAiSuggest={onAiSuggest} aiBusy={aiBusy}
-              onAiGenres={onAiGenres} genreBusy={genreBusy}
-              onProviderSuggest={onProviderSuggest} providerBusy={providerBusy}
-              rescanFolder={rescanFolder} setRescanFolder={setRescanFolder}
-              rescanGenre={rescanGenre} setRescanGenre={setRescanGenre}
-              rescanFields={rescanFields} toggleField={toggleField}
-              onProviderRescan={onProviderRescan}
-              rescanRunning={rescan?.status === "running"}
-              onAcceptHigh={onAcceptHigh}
-            />
+          <div className="flex flex-wrap gap-1.5 lg:max-w-lg lg:justify-end">
+            <Button variant="primary" size="sm" onClick={onAiSuggest} disabled={aiBusy}>
+              {aiBusy ? "AI…" : <><b className="font-bold">AI</b> artista/titolo</>}
+            </Button>
+            <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
+              {genreBusy ? "AI…" : <><b className="font-bold">AI</b> genere</>}
+            </Button>
+            <Button variant="outline" size="sm" onClick={onProviderSuggest} disabled={providerBusy}>
+              {providerBusy ? "provider…" : "⇄ da provider"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={acceptAllFixable}>✓ accetta fixabili</Button>
+            <Button variant="outline" size="sm" onClick={dismissAllInfo}>✕ ignora info</Button>
+          </div>
+        </div>
+
+        {/* forza ricerca provider: toolbar orizzontale */}
+        <div className="border border-border bg-surface p-3">
+          <div className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted">forza ricerca provider</div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <input
+              className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
+              placeholder="cartella (es. House)…" value={rescanFolder}
+              onChange={(e) => setRescanFolder(e.target.value)} />
+            <input
+              className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
+              placeholder="genere attuale (opz.)…" value={rescanGenre}
+              onChange={(e) => setRescanGenre(e.target.value)} />
+            <div className="flex flex-wrap gap-2 text-[11px] text-muted">
+              {["genre", "album", "label", "year"].map((f) => (
+                <label key={f} className="flex items-center gap-1">
+                  <input type="checkbox" checked={rescanFields.includes(f)} onChange={() => toggleField(f)} />
+                  {f}
+                </label>
+              ))}
+            </div>
+            <Button variant="primary" size="sm" onClick={onProviderRescan} disabled={rescanRunning}>
+              {rescanRunning ? "rescan in corso…" : "⇄ Forza ricerca provider"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={onAcceptHigh}>✓ accetta alta confidenza</Button>
           </div>
         </div>
 
@@ -298,68 +310,6 @@ function Marginalia({ total, bySev, byType, accepted }: {
       <div>
         <div className="text-[10px] uppercase tracking-wider text-muted">accettate</div>
         <div className="mt-1 text-[11px] text-ok">{accepted} → andranno nel PLAN</div>
-      </div>
-    </div>
-  );
-}
-
-function Actions({ onAcceptFixable, onDismissInfo, onAiSuggest, aiBusy, onAiGenres, genreBusy, onProviderSuggest, providerBusy, rescanFolder, setRescanFolder, rescanGenre, setRescanGenre, rescanFields, toggleField, onProviderRescan, rescanRunning, onAcceptHigh }: {
-  onAcceptFixable: () => void;
-  onDismissInfo: () => void;
-  onAiSuggest: () => void;
-  aiBusy: boolean;
-  onAiGenres: () => void;
-  genreBusy: boolean;
-  onProviderSuggest: () => void;
-  providerBusy: boolean;
-  rescanFolder: string;
-  setRescanFolder: (v: string) => void;
-  rescanGenre: string;
-  setRescanGenre: (v: string) => void;
-  rescanFields: string[];
-  toggleField: (f: string) => void;
-  onProviderRescan: () => void;
-  rescanRunning: boolean;
-  onAcceptHigh: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-2 text-xs">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
-        <Button variant="primary" size="sm" onClick={onAiSuggest} disabled={aiBusy}>
-          {aiBusy ? "AI in corso…" : <><b className="font-bold">AI</b> Suggerisci artista/titolo</>}
-        </Button>
-        <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
-          {genreBusy ? "AI in corso…" : <><b className="font-bold">AI</b> Suggerisci genere</>}
-        </Button>
-        <Button variant="primary" size="sm" onClick={onProviderSuggest} disabled={providerBusy}>
-          {providerBusy ? "provider in corso…" : "⇄ Suggerisci da provider"}
-        </Button>
-        <Button variant="outline" size="sm" onClick={onAcceptFixable}>✓ accetta tutti i fixabili</Button>
-        <Button variant="outline" size="sm" onClick={onDismissInfo}>✕ ignora tutti gli info</Button>
-      </div>
-      <div className="mt-1 flex flex-col gap-1.5 border-t border-surface-2 pt-2">
-        <div className="text-[10px] uppercase tracking-wider text-muted">forza ricerca provider</div>
-        <input
-          className="border border-border bg-bg px-2 py-1 text-[11px] text-fg-strong placeholder:text-faint"
-          placeholder="cartella (es. House)…" value={rescanFolder}
-          onChange={(e) => setRescanFolder(e.target.value)} />
-        <input
-          className="border border-border bg-bg px-2 py-1 text-[11px] text-fg-strong placeholder:text-faint"
-          placeholder="genere attuale (opz.)…" value={rescanGenre}
-          onChange={(e) => setRescanGenre(e.target.value)} />
-        <div className="flex flex-wrap gap-2 text-[11px] text-muted">
-          {["genre", "album", "label", "year"].map((f) => (
-            <label key={f} className="flex items-center gap-1">
-              <input type="checkbox" checked={rescanFields.includes(f)}
-                onChange={() => toggleField(f)} />
-              {f}
-            </label>
-          ))}
-        </div>
-        <Button variant="primary" size="sm" onClick={onProviderRescan} disabled={rescanRunning}>
-          {rescanRunning ? "rescan in corso…" : "⇄ Forza ricerca provider"}
-        </Button>
-        <Button variant="outline" size="sm" onClick={onAcceptHigh}>✓ accetta tutte le alta confidenza</Button>
       </div>
     </div>
   );
