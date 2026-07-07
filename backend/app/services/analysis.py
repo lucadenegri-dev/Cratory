@@ -33,7 +33,10 @@ def _merge_issues(db: Session, computed) -> None:
                 row.suggested_fix_json = c.suggested_fix
             row.updated_at = utcnow()
     for key, row in existing.items():
-        if key not in seen:
+        # Le 'provider_override' non sono prodotte dall'Inspector: gestite solo
+        # dal job di rescan. Non cancellarle nel merge, o un re-scan azzererebbe
+        # gli override pendenti.
+        if key not in seen and row.type != "provider_override":
             db.delete(row)
 
 
