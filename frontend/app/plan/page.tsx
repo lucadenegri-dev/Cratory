@@ -65,7 +65,8 @@ export default function PlanPage() {
       }
       guide={<>
         <p>Anteprima delle operazioni dalle issue accettate: retag, sposta, rinomina, elimina.</p>
-        <p>Nulla cambia sul disco finché non premi <b className="text-fg">Applica</b>.</p>
+        <p><b className="text-fg">Applica</b> scrive davvero sul disco: i tag <b className="text-fg">dentro i file audio</b> e gli spostamenti/rinomine. Prima di allora nulla cambia.</p>
+        <p>Reversibile: i delete vanno in quarantena e ogni run ha un undo.</p>
       </>}
     >
       <div className="flex flex-col gap-4">
