@@ -106,17 +106,25 @@ export function JobsProvider({ children }: { children: ReactNode }) {
 
 function GlobalProgress({ label, job }: { label: string; job: ProgressJob }) {
   const pct = job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
+  // Spaziatore in flusso alto quanto la barra fissa: così il fondo pagina non
+  // resta tagliato/nascosto dietro la barra e lo scroll arriva fino in fondo.
+  const barRef = useRef<HTMLDivElement>(null);
+  const [padH, setPadH] = useState(0);
+  useEffect(() => { setPadH(barRef.current?.offsetHeight ?? 0); }, []);
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border-strong bg-surface px-4 py-2.5">
-      <div className="mx-auto flex max-w-5xl items-center gap-4">
-        <span className="whitespace-nowrap text-[10px] font-medium uppercase tracking-wider text-muted">
-          {label}{job.phase ? ` · ${job.phase}` : ""}
-        </span>
-        <div className="flex-1"><EqMeter value={pct} className="h-6 w-full" /></div>
-        <span className="tnum whitespace-nowrap text-[10px] text-muted">
-          {job.processed}/{job.total || "?"}{pct != null ? ` · ${pct}%` : ""}
-        </span>
+    <>
+      <div aria-hidden style={{ height: padH }} />
+      <div ref={barRef} className="fixed inset-x-0 bottom-0 z-40 border-t border-border-strong bg-surface px-4 py-2.5">
+        <div className="mx-auto flex max-w-5xl items-center gap-4">
+          <span className="whitespace-nowrap text-[10px] font-medium uppercase tracking-wider text-muted">
+            {label}{job.phase ? ` · ${job.phase}` : ""}
+          </span>
+          <div className="flex-1"><EqMeter value={pct} className="h-6 w-full" /></div>
+          <span className="tnum whitespace-nowrap text-[10px] text-muted">
+            {job.processed}/{job.total || "?"}{pct != null ? ` · ${pct}%` : ""}
+          </span>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

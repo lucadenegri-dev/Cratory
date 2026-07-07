@@ -189,56 +189,60 @@ export default function IssuesPage() {
       meta={`${filtered.length} / ${issues.length}`}
       marginaliaTitle="Riepilogo"
       marginalia={<Marginalia total={issues.length} bySev={bySev} byType={byType} accepted={accepted} />}
+      guide={<>
+        <p>Problemi e proposte sui tag dei tuoi file.</p>
+        <p>Riempi le proposte con AI o Provider, poi <b className="text-fg">✓ accetta</b> (va nel PLAN) o <b className="text-fg">✕ ignora</b>.</p>
+        <p><b className="text-fg">Conf.</b>: alta = match certo (fingerprint), testuale = da rivedere.</p>
+      </>}
     >
       <div className="flex flex-col gap-3">
         {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
         {actionError && <Alert>{actionError}</Alert>}
         {aiNote && <Alert tone="info">{aiNote}</Alert>}
 
-        {/* toolbar: filtri a sinistra, azioni a destra (Cratory pattern B) */}
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="grid w-full grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:max-w-xl">
-            <Select value={sev} onChange={(e) => setSev(e.target.value)} className="h-8 text-xs">
-              <option value="">severità: tutte</option>
-              <option value="error">error</option>
-              <option value="warning">warning</option>
-              <option value="info">info</option>
-            </Select>
-            <Select value={type} onChange={(e) => setType(e.target.value)} className="h-8 text-xs">
-              <option value="">tipo: tutti</option>
-              {types.map((t) => <option key={t} value={t}>{t}</option>)}
-            </Select>
-            <Select value={field} onChange={(e) => setField(e.target.value)} className="h-8 text-xs">
-              <option value="">campo: tutti</option>
-              {fields.map((f) => <option key={f} value={f}>{f}</option>)}
-            </Select>
-            <Select value={status} onChange={(e) => setStatus(e.target.value)} className="h-8 text-xs">
-              <option value="open">aperte</option>
-              <option value="accepted">accettate</option>
-              <option value="dismissed">ignorate</option>
-              <option value="">tutti gli stati</option>
-            </Select>
-            <Select value={rootId} onChange={(e) => setRootId(e.target.value)} className="h-8 text-xs">
-              <option value="">tutte le radici</option>
-              {roots.map((r) => <option key={r.id} value={r.id}>{r.label || r.path}</option>)}
-            </Select>
-            <Input
-              value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="cerca…" className="h-8 text-xs"
-            />
-          </div>
+        {/* filtri: a tutta larghezza */}
+        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
+          <Select value={sev} onChange={(e) => setSev(e.target.value)} className="h-8 text-xs">
+            <option value="">severità: tutte</option>
+            <option value="error">error</option>
+            <option value="warning">warning</option>
+            <option value="info">info</option>
+          </Select>
+          <Select value={type} onChange={(e) => setType(e.target.value)} className="h-8 text-xs">
+            <option value="">tipo: tutti</option>
+            {types.map((t) => <option key={t} value={t}>{t}</option>)}
+          </Select>
+          <Select value={field} onChange={(e) => setField(e.target.value)} className="h-8 text-xs">
+            <option value="">campo: tutti</option>
+            {fields.map((f) => <option key={f} value={f}>{f}</option>)}
+          </Select>
+          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="h-8 text-xs">
+            <option value="open">aperte</option>
+            <option value="accepted">accettate</option>
+            <option value="dismissed">ignorate</option>
+            <option value="">tutti gli stati</option>
+          </Select>
+          <Select value={rootId} onChange={(e) => setRootId(e.target.value)} className="h-8 text-xs">
+            <option value="">tutte le radici</option>
+            {roots.map((r) => <option key={r.id} value={r.id}>{r.label || r.path}</option>)}
+          </Select>
+          <Input
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="cerca…" className="h-8 text-xs"
+          />
+        </div>
 
-          <div className="flex flex-wrap gap-1.5 lg:max-w-lg lg:justify-end">
-            <Button variant="primary" size="sm" onClick={onAiSuggest} disabled={aiBusy}>
-              {aiBusy ? "AI…" : "Recupera Artista/Titolo con AI"}
-            </Button>
-            <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
-              {genreBusy ? "AI…" : "Recupera Genere con AI"}
-            </Button>
-            <Button variant="primary" size="sm" onClick={onProviderSuggest} disabled={providerBusy}>
-              {providerBusy ? "importo…" : "Importa metadati mancanti da Provider"}
-            </Button>
-          </div>
+        {/* bottoni bianchi: sotto i filtri, sopra la sezione forza ricerca */}
+        <div className="flex flex-wrap gap-1.5">
+          <Button variant="primary" size="sm" onClick={onAiSuggest} disabled={aiBusy}>
+            {aiBusy ? "AI…" : "Recupera Artista/Titolo con AI"}
+          </Button>
+          <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
+            {genreBusy ? "AI…" : "Recupera Genere con AI"}
+          </Button>
+          <Button variant="primary" size="sm" onClick={onProviderSuggest} disabled={providerBusy}>
+            {providerBusy ? "importo…" : "Importa metadati mancanti da Provider"}
+          </Button>
         </div>
 
         {/* forza ricerca provider: toolbar orizzontale */}
