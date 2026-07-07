@@ -73,8 +73,12 @@ function IssueRow({ issue, onFix, onDismiss, onReopen }: {
           ) : (
             <span className="text-faint">— non correggibile</span>
           )
+        ) : issue.status === "accepted" ? (
+          <span className="text-fg">{suggested || "—"}</span>
         ) : (
-          <span className="text-fg">{issue.status === "accepted" ? (suggested || "—") : "—"}</span>
+          <span className="text-faint" title="ignorata: il tag resta invariato">
+            {issue.current_value ? `${issue.current_value} · invariato` : "—"}
+          </span>
         )}
       </td>
       <td className="px-3 py-2"><ConfBadge conf={conf} /></td>
