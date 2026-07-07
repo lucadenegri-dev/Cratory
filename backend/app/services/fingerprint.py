@@ -12,6 +12,24 @@ from app.models import AudioFile
 logger = logging.getLogger(__name__)
 
 
+def fingerprint_one(file, client, *, threshold: float = 0.5) -> str | None:
+    """Fingerprint di un singolo file: imposta file.mbid (senza commit) e lo
+    ritorna se c'è un candidato sopra soglia; None altrimenti. Non solleva."""
+    from app.integrations.acoustid import AcoustIDError
+    try:
+        candidates = client.identify(file.path)
+    except AcoustIDError as exc:
+        logger.warning("Fingerprint %s fallito: %s", file.path, exc)
+        return None
+    if not candidates:
+        return None
+    best = candidates[0]
+    if best.get("score", 0) >= threshold and best.get("mbid"):
+        file.mbid = best["mbid"]
+        return best["mbid"]
+    return None
+
+
 def fingerprint_files(db: Session, client, *, threshold: float = 0.5) -> dict:
     files = db.scalars(
         select(AudioFile).where(AudioFile.status == "present", AudioFile.mbid.is_(None))
