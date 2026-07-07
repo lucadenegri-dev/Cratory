@@ -9,7 +9,7 @@ import {
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { IssuesTable } from "@/components/issues-table";
-import { Alert, Button, EmptyState, Select } from "@/components/ui";
+import { Alert, Button, EmptyState, Input, Select } from "@/components/ui";
 
 export default function IssuesPage() {
   const { scan } = useJobs();
@@ -32,6 +32,7 @@ export default function IssuesPage() {
   const [field, setField] = useState("");
   const [status, setStatus] = useState("open");
   const [rootId, setRootId] = useState("");
+  const [search, setSearch] = useState("");
 
   const load = useCallback(() => {
     listIssues()
@@ -167,12 +168,17 @@ export default function IssuesPage() {
     [issues],
   );
 
+  const needle = search.trim().toLowerCase();
   const filtered = issues.filter((i) =>
     (!sev || i.severity === sev) &&
     (!type || i.type === type) &&
     (!field || i.field === field) &&
     (!status || i.status === status) &&
-    (!rootId || i.root_id === Number(rootId)),
+    (!rootId || i.root_id === Number(rootId)) &&
+    (!needle ||
+      (i.artist || "").toLowerCase().includes(needle) ||
+      (i.title || "").toLowerCase().includes(needle) ||
+      i.file_path.toLowerCase().includes(needle)),
   );
 
   const bySev: Record<string, number> = { error: 0, warning: 0, info: 0 };
@@ -241,6 +247,10 @@ export default function IssuesPage() {
             <option value="">tutte le radici</option>
             {roots.map((r) => <option key={r.id} value={r.id}>{r.label || r.path}</option>)}
           </Select>
+          <Input
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="cerca artista/titolo/path…" className="w-56"
+          />
         </div>
 
         {filtered.length === 0 && !offline ? (
