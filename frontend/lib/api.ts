@@ -47,12 +47,25 @@ export interface FileRow {
   ext: string;
   artist: string | null;
   title: string | null;
+  album: string | null;
+  genre: string | null;
+  year: number | null;
+  label: string | null;
   bitrate: number | null;
   duration_s: number | null;
   status: string;
   issue_count: number;
   worst_severity: Severity | null;
   in_dup_group: boolean;
+}
+
+export interface LibraryFacets {
+  genre: string[];
+  artist: string[];
+  album: string[];
+  label: string[];
+  ext: string[];
+  year: number[];
 }
 
 export interface LibraryStats {
@@ -68,6 +81,12 @@ export interface FileQuery {
   status?: string;
   has_issues?: boolean;
   q?: string;
+  genre?: string;
+  artist?: string;
+  album?: string;
+  label?: string;
+  ext?: string;
+  year?: number;
   sort?: "path" | "artist" | "title" | "bitrate" | "duration";
   limit?: number;
   offset?: number;
@@ -138,6 +157,9 @@ export function listFiles(query?: FileQuery) {
 export function libraryStats() {
   return apiGet<LibraryStats>("/api/library/stats");
 }
+export function libraryFacets() {
+  return apiGet<LibraryFacets>("/api/library/facets");
+}
 
 // --- ISSUES -----------------------------------------------------------------
 export interface Issue {
@@ -161,6 +183,7 @@ export interface IssueFilters {
   type?: string;
   status?: string;
   root_id?: number;
+  q?: string;
   [key: string]: string | number | boolean | undefined;
 }
 

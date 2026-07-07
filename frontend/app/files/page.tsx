@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  listFiles, libraryStats, listSources,
-  type FileRow, type LibraryStats, type ScanRoot, type FileQuery,
+  listFiles, libraryStats, listSources, libraryFacets,
+  type FileRow, type LibraryStats, type LibraryFacets, type ScanRoot, type FileQuery,
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
@@ -11,6 +11,39 @@ import { FilesTable } from "@/components/files-table";
 import { Alert, EmptyState, Input, Select } from "@/components/ui";
 
 const LIMIT = 500;
+
+// campi tag filtrabili → placeholder mostrato nell'input
+const FACETS: [keyof LibraryFacets, string][] = [
+  ["genre", "genere…"], ["artist", "artista…"], ["album", "album…"],
+  ["label", "label…"], ["ext", "formato…"], ["year", "anno…"],
+];
+
+function facetOptions(facets: LibraryFacets | null, key: keyof LibraryFacets): string[] {
+  if (!facets) return [];
+  return facets[key].map((v) => String(v));
+}
+
+function FacetInput({ facet, placeholder, value, options, onChange }: {
+  facet: string;
+  placeholder: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  const listId = `facet-${facet}`;
+  return (
+    <>
+      <input
+        list={listId} value={value} placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-32 border border-border bg-bg px-2 py-1 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
+      />
+      <datalist id={listId}>
+        {options.map((o) => <option key={o} value={o} />)}
+      </datalist>
+    </>
+  );
+}
 
 export default function FilesPage() {
   const { scan } = useJobs();
@@ -23,6 +56,11 @@ export default function FilesPage() {
   const [onlyIssues, setOnlyIssues] = useState(false);
   const [sort, setSort] = useState<FileQuery["sort"]>("path");
   const [q, setQ] = useState("");
+  const [facets, setFacets] = useState<LibraryFacets | null>(null);
+  const [tag, setTag] = useState<Record<string, string>>({
+    genre: "", artist: "", album: "", label: "", ext: "", year: "",
+  });
+  const setTagField = (k: string, v: string) => setTag((t) => ({ ...t, [k]: v }));
 
   const load = useCallback(() => {
     const query: FileQuery = {
@@ -30,17 +68,26 @@ export default function FilesPage() {
       has_issues: onlyIssues ? true : undefined,
       sort,
       q: q.trim() || undefined,
+      genre: tag.genre || undefined,
+      artist: tag.artist || undefined,
+      album: tag.album || undefined,
+      label: tag.label || undefined,
+      ext: tag.ext || undefined,
+      year: tag.year ? Number(tag.year) : undefined,
       limit: LIMIT,
     };
     listFiles(query)
       .then((r) => { setRows(r); setOffline(false); })
       .catch(() => setOffline(true));
     libraryStats().then(setStats).catch(() => setStats(null));
-  }, [rootId, onlyIssues, sort, q]);
+  }, [rootId, onlyIssues, sort, q, tag]);
 
   useEffect(() => { listSources().then(setRoots).catch(() => {}); }, []);
+  useEffect(() => { libraryFacets().then(setFacets).catch(() => {}); }, []);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { if (scan.status === "done") load(); }, [scan.status, load]);
+  useEffect(() => {
+    if (scan.status === "done") { load(); libraryFacets().then(setFacets).catch(() => {}); }
+  }, [scan.status, load]);
 
   return (
     <PageLayout
@@ -69,6 +116,22 @@ export default function FilesPage() {
             <option value="duration">ordina: durata</option>
           </Select>
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="cerca…" className="w-48" />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {FACETS.map(([key, ph]) => (
+            <FacetInput
+              key={key} facet={key} placeholder={ph} value={tag[key]}
+              options={facetOptions(facets, key)}
+              onChange={(v) => setTagField(key, v)}
+            />
+          ))}
+          {Object.values(tag).some(Boolean) && (
+            <button
+              onClick={() => setTag({ genre: "", artist: "", album: "", label: "", ext: "", year: "" })}
+              className="border border-border px-2 py-1 text-[11px] text-muted hover:bg-elevated"
+            >✕ pulisci filtri</button>
+          )}
         </div>
 
         {rows.length === 0 && !offline ? (
