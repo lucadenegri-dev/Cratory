@@ -11,6 +11,12 @@ _TEMPLATE_FIELD_RE = re.compile(r"\{(\w+)\}")
 _SANITIZE_RE = re.compile(r'[/\\:*?"<>|]')
 
 
+def _norm(v):
+    # year/track_no sono colonne int ma il "to" degli override arriva come stringa:
+    # normalizziamo entrambi a str (preservando None) per non generare RETAG fantasma.
+    return None if v is None else str(v)
+
+
 @dataclass(frozen=True)
 class PlanOpComputed:
     kind: str
@@ -100,7 +106,7 @@ def build_plan(files, accepted_issues, removals, settings_snapshot,
             # Solo i campi il cui valore è DAVVERO diverso da quello già sul file:
             # una issue resta 'accepted' per sempre, e senza questo filtro
             # rigenererebbe un RETAG no-op a ogni ricostruzione del piano.
-            changed = [field for field in touched if getattr(f, field) != eff[field]]
+            changed = [field for field in touched if _norm(getattr(f, field)) != _norm(eff[field])]
             if changed:
                 before = {field: getattr(f, field) for field in changed}
                 after = {field: eff[field] for field in changed}

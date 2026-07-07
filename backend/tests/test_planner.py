@@ -145,3 +145,22 @@ def test_retag_after_matches_effective_when_two_fixes_same_field():
     move = [o for o in ops if o.kind in ("RENAME", "MOVE")][0]
     # after must equal the value the rename actually used
     assert retag.after["artist"] in move.after["path"]
+
+
+def test_no_op_retag_when_year_override_matches_int_year():
+    # L'override "year" arriva come stringa ("to": "2020") ma AudioFile.year è int.
+    # Se il valore è già quello giusto, non deve generare un RETAG fantasma.
+    f = make_audio_file(1, root_id=1, artist="A", title="T", genre="House", year=2020,
+                        path="/lib/House/A/A - T.mp3", ext="mp3")
+    ops = build_plan([f], [_accepted(1, "year", "2020")], set(), SNAP, TARGETS)
+    assert [o for o in ops if o.kind == "RETAG"] == []
+
+
+def test_real_year_change_still_produces_retag():
+    # Regressione: un cambio di anno effettivo deve comunque generare RETAG.
+    f = make_audio_file(1, root_id=1, artist="A", title="T", genre="House", year=2019,
+                        path="/lib/House/A/A - T.mp3", ext="mp3")
+    ops = build_plan([f], [_accepted(1, "year", "2020")], set(), SNAP, TARGETS)
+    retag = [o for o in ops if o.kind == "RETAG"]
+    assert len(retag) == 1
+    assert retag[0].after == {"year": "2020"}
