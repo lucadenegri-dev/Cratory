@@ -326,10 +326,10 @@ function Actions({ onAcceptFixable, onDismissInfo, onAiSuggest, aiBusy, onAiGenr
     <div className="flex flex-col gap-2 text-xs">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
         <Button variant="primary" size="sm" onClick={onAiSuggest} disabled={aiBusy}>
-          {aiBusy ? "AI in corso…" : "✨ Suggerisci artista/titolo"}
+          {aiBusy ? "AI in corso…" : <><b className="font-bold">AI</b> Suggerisci artista/titolo</>}
         </Button>
         <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
-          {genreBusy ? "AI in corso…" : "✨ Suggerisci genere"}
+          {genreBusy ? "AI in corso…" : <><b className="font-bold">AI</b> Suggerisci genere</>}
         </Button>
         <Button variant="primary" size="sm" onClick={onProviderSuggest} disabled={providerBusy}>
           {providerBusy ? "provider in corso…" : "⇄ Suggerisci da provider"}
