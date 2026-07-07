@@ -115,12 +115,11 @@ export default function SettingsPage() {
               <Button variant="outline" size="sm" className="self-start" onClick={saveTemplates}>salva template</Button>
 
               <div>
-                <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">dove organizzare — destinazione per radice</div>
+                <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">dove organizzare — una destinazione per radice</div>
                 <p className="mb-3 text-xs text-faint">
-                  Per ogni cartella sorgente, dove finiscono i file organizzati.
-                  <b className="text-muted"> Vuoto</b> = restano nella loro cartella (solo rinomina).
-                  Un <b className="text-muted">path assoluto</b> (es. <span className="font-mono">/Users/tu/Music/Library</span>)
-                  li sposta lì, dentro le sottocartelle del template.
+                  Una <b className="text-muted">radice</b> è una cartella che hai aggiunto in <b className="text-muted">Sources</b> e che
+                  DjOrganizer scansiona. Per ognuna imposti una <b className="text-muted">destinazione</b>: dove spostare i suoi file
+                  una volta organizzati. Lascia <b className="text-muted">vuoto</b> per tenerli dove sono (solo rinomina, niente spostamento).
                 </p>
                 <div className="flex flex-col gap-3">
                   {settings.roots.map((r) => (
@@ -212,21 +211,30 @@ function RootRow({ root, folder, naming, onSave }: {
     setTarget(root.target_root ?? "");
   }
   const save = async () => { setBusy(true); try { await onSave(root.id, target); } finally { setBusy(false); } };
+  const moves = target.trim().length > 0;
   return (
-    <div className="border border-border bg-surface p-2.5">
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-xs text-fg-strong" title={root.path}>{root.path}</div>
-          <div className="text-[10px] text-muted">{root.label || "—"}</div>
-        </div>
-        <input
-          className="w-64 border border-border bg-bg px-2 py-1 text-[11px] text-fg placeholder:text-faint focus:border-border-strong focus:outline-none"
-          value={target} onChange={(e) => setTarget(e.target.value)} placeholder="(stessa cartella)"
-        />
-        <Button variant="outline" size="sm" disabled={busy} onClick={save}>salva</Button>
+    <div className="border border-border bg-surface p-3">
+      <div className="flex flex-col gap-1">
+        <span className="text-[9px] font-medium uppercase tracking-wider text-muted">sorgente — cartella scansionata (da Sources)</span>
+        <div className="truncate font-mono text-xs text-fg-strong" title={root.path}>{root.path}</div>
+        {root.label && <div className="text-[10px] text-muted">{root.label}</div>}
       </div>
-      <div className="mt-1.5 overflow-x-auto whitespace-nowrap font-mono text-[10px] text-faint">
-        → <span className="text-ok">{renderDest(target, folder, naming)}</span>
+
+      <div className="mt-2.5 flex flex-col gap-1">
+        <span className="text-[9px] font-medium uppercase tracking-wider text-muted">destinazione — dove spostare i file organizzati</span>
+        <div className="flex items-center gap-2">
+          <input
+            className="w-full max-w-md border border-border bg-bg px-2 py-1 font-mono text-[11px] text-fg placeholder:text-faint focus:border-border-strong focus:outline-none"
+            value={target} onChange={(e) => setTarget(e.target.value)}
+            placeholder="vuoto = restano nella cartella sorgente (solo rinomina)"
+          />
+          <Button variant="outline" size="sm" disabled={busy} onClick={save}>salva</Button>
+        </div>
+      </div>
+
+      <div className="mt-2 overflow-x-auto whitespace-nowrap text-[10px] text-faint">
+        {moves ? "un file di questa radice diventa:" : "esempio (rinominato sul posto):"}{" "}
+        <span className="font-mono text-ok">{renderDest(target, folder, naming)}</span>
       </div>
     </div>
   );
