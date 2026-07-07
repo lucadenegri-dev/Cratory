@@ -46,3 +46,17 @@ def test_scan_folder_ricorsivo_ignora_non_audio(tmp_path):
     names = sorted(p.name for p in found)
     assert names == ["a.wav", "b.wav"]
 
+
+def test_scan_folder_ignora_cartelle_e_file_nascosti(tmp_path):
+    # File audio "veri" visibili
+    _write_wav(tmp_path / "a.wav", freq=440)
+    # Cartella nascosta (es. .quarantine): il suo contenuto NON va contato
+    hidden_dir = tmp_path / ".quarantine"
+    hidden_dir.mkdir()
+    _write_wav(hidden_dir / "b.wav", freq=660)
+    # File audio nascosto a livello root: neanche questo va contato
+    _write_wav(tmp_path / ".hidden.wav", freq=880)
+    found = scan_folder(tmp_path, recurse=True)
+    names = sorted(p.name for p in found)
+    assert names == ["a.wav"]
+

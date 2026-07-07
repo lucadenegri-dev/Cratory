@@ -170,6 +170,11 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex],
   );
 
+  // Dedup per chiave: un job che riparte entro OUTCOME_MS può comparire sia in
+  // `polled` (in corso) sia in `transient` (esito residuo del run precedente).
+  // Precedenza alla prima occorrenza → la riga attiva (polled) vince sull'esito,
+  // e le chiavi React restano uniche.
+  const seen = new Set<string>();
   const jobs: Job[] = [
     ...polled,
     ...Object.entries(clientJobs).map(([key, j]) => ({
@@ -178,7 +183,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       indeterminate: !j.total,
     })),
     ...transient,
-  ];
+  ].filter((j) => !seen.has(j.key) && seen.add(j.key));
 
   return (
     <JobsCtx.Provider value={api}>

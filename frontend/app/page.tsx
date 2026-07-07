@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Music, Gauge, Sparkles, Compass, ArrowRight, Pencil, Tags, KeyRound, FolderOpen, RefreshCw,
+  Music, Gauge, ArrowRight, Tags, KeyRound, Disc3,
 } from "lucide-react";
 import {
   apiGet, getLabels, getPipeline, listImportedPlaylists, fmtDate,
   type LibraryStats, type LabelStats, type SetlistSummary, type Playlist, type PipelineStatus,
 } from "@/lib/api";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
-import { Card, Alert, Progress, Button, Badge, Loading } from "@/components/ui";
+import { Card, Alert, Progress, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { Figure } from "@/components/dashboard/figure";
 import { Histogram } from "@/components/dashboard/histogram";
@@ -41,60 +41,6 @@ function Coverage({ label, n, total }: { label: string; n: number; total: number
   );
 }
 
-function QuickAction({ href, title, desc }: { href: string; title: string; desc: string }) {
-  return (
-    <Link href={href} className="group flex-1 px-5 py-5 transition-colors hover:bg-elevated">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-base font-semibold uppercase tracking-wide text-fg-strong">{title}</span>
-        <ArrowRight size={17} className="shrink-0 text-muted transition-transform group-hover:translate-x-1 group-hover:text-fg-strong" />
-      </div>
-      <div className="mt-1 text-xs text-muted">{desc}</div>
-    </Link>
-  );
-}
-
-/* --------------------------------------------------------- raccomandazione */
-
-type Reco = { icon: React.ReactNode; tag: string; title: string; desc?: string; href: string; cta: string };
-
-/** "Prossimo passo" suggerito: guida l'utente nel ciclo (anche cross-app) in base allo stato. */
-function recommend(s: LibraryStats, p: PipelineStatus | null): Reco | null {
-  if (s.total_tracks === 0) return null; // gestito dall'empty state
-  if (p && (p.inbox_files ?? 0) > 0) {
-    return {
-      icon: <FolderOpen size={22} />, tag: "Prossimo passo", title: "Organizza i download",
-      desc: `${p.inbox_files} file in inbox aspettano il triage e l'organizzazione (DJPlayer → DjOrganizer).`,
-      href: p.organizer_url ?? "/downloads", cta: p.organizer_url ? "Apri DjOrganizer" : "Vedi download",
-    };
-  }
-  if (p?.index_mismatch) {
-    return {
-      icon: <RefreshCw size={22} />, tag: "Prossimo passo", title: "La Libreria è cambiata",
-      desc: "I file su disco non coincidono con le tracce possedute: lancia una scansione dalla striscia qui sopra o dalla Libreria.",
-      href: "/library", cta: "Vai alla Libreria",
-    };
-  }
-  const keyPct = s.total_tracks ? s.with_key / s.total_tracks : 0;
-  if (keyPct < 0.6) {
-    return {
-      icon: <Gauge size={22} />, tag: "Prossimo passo", title: "Completa BPM e tonalità",
-      desc: `${s.with_key} tracce su ${s.total_tracks} hanno la tonalità. Analizza in Rekordbox e importa la collezione (fase Analizza qui sopra) o inserisci i valori a mano per sbloccare il Set Builder.`,
-      href: "/library", cta: "Valori a mano",
-    };
-  }
-  if (s.ready_for_set > 0) {
-    return {
-      icon: <Sparkles size={22} />, tag: "Prossimo passo", title: "Sei pronto per un set",
-      href: "/set-builder", cta: "Costruisci un set",
-    };
-  }
-  return {
-    icon: <Compass size={22} />, tag: "Prossimo passo", title: "Espandi la libreria",
-    desc: "Scopri tracce affini al gusto delle tue playlist e aggiungile alla libreria.",
-    href: "/discovery", cta: "Scopri musica",
-  };
-}
-
 /* ------------------------------------------------------------------ page */
 
 export default function Dashboard() {
@@ -115,13 +61,19 @@ export default function Dashboard() {
   useEffect(load, [load]);
 
   const empty = stats != null && stats.total_tracks === 0;
-  const reco = stats ? recommend(stats, pipeline) : null;
 
   const keyRows: MiniBarRow[] = stats
     ? Object.entries(stats.key_distribution)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 8)
         .map(([k, n]) => ({ label: k, value: n }))
+    : [];
+
+  const genreRows: MiniBarRow[] = stats
+    ? Object.entries(stats.genre_distribution ?? {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([g, n]) => ({ label: g, value: n, href: `/library?genre=${encodeURIComponent(g)}` }))
     : [];
 
   const labelRows: MiniBarRow[] = labels.slice(0, 5).map((l) => ({
@@ -170,14 +122,11 @@ export default function Dashboard() {
 
       {stats && !empty && (
         <>
-          {/* Figure hero */}
-          <div className="grid grid-cols-4 border-l border-t border-border">
-            <Figure label="Tracce" value={stats.total_tracks} />
-            <Figure label="Playlist" value={stats.playlists} />
-            <Figure label="Set salvati" value={sets ? sets.length : "—"} />
-            {/* Possesso disk-first: quante tracce hanno il file in libreria */}
+          {/* Figure hero: scoperte (tutte le tracce note) ⊇ possedute (file su disco) */}
+          <div className="grid grid-cols-2 border-l border-t border-border sm:grid-cols-4">
+            <Figure label="Tracce scoperte" value={stats.total_tracks} />
             <Figure
-              label="Possedute"
+              label="Tracce possedute"
               value={(
                 <>
                   {stats.with_local_file}
@@ -189,22 +138,9 @@ export default function Dashboard() {
                 </>
               )}
             />
+            <Figure label="Playlist" value={stats.playlists} />
+            <Figure label="Set salvati" value={sets ? sets.length : "—"} />
           </div>
-
-          {/* Prossimo passo */}
-          {reco && (
-            <Card className="mt-3">
-              <div className="flex flex-wrap items-center gap-4 p-5">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-none bg-elevated text-muted">{reco.icon}</span>
-                <div className="min-w-0 flex-1">
-                  <Badge tone="primary" className="mb-1.5">{reco.tag}</Badge>
-                  <div className="font-semibold text-fg-strong">{reco.title}</div>
-                  {reco.desc && <p className="text-sm text-muted">{reco.desc}</p>}
-                </div>
-                <Link href={reco.href}><Button>{reco.cta} <ArrowRight size={15} /></Button></Link>
-              </div>
-            </Card>
-          )}
 
           {/* Tre colonne */}
           <div className="mt-3 grid border border-border lg:grid-cols-3">
@@ -224,7 +160,7 @@ export default function Dashboard() {
               </div>
               <RecentList items={recentSets} empty="Nessun set ancora." />
               <div className="mb-2 mt-5 flex items-center justify-between">
-                <SubLabel>Ultime playlist</SubLabel>
+                <SubLabel>Ultime playlist importate</SubLabel>
                 <Link href="/playlists" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">Tutte →</Link>
               </div>
               <RecentList items={recentPlaylists} empty="Nessuna playlist ancora." />
@@ -237,22 +173,14 @@ export default function Dashboard() {
                 <Coverage label="BPM e tonalità" n={stats.with_key} total={stats.total_tracks} />
                 <Coverage label="Energia" n={stats.with_features} total={stats.total_tracks} />
               </div>
-              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-                <Link href="/library" className="inline-flex items-center gap-1 text-xs text-muted hover:text-fg"><Pencil size={12} /> Valori a mano</Link>
-              </div>
+              <SubLabel icon={<Disc3 size={12} />}>Generi più frequenti</SubLabel>
+              <MiniBars rows={genreRows} />
               <div className="mb-2 mt-5 flex items-center justify-between">
                 <SubLabel icon={<Tags size={12} />}>Top etichette</SubLabel>
                 <Link href="/labels" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">Tutte →</Link>
               </div>
               <MiniBars rows={labelRows} />
             </section>
-          </div>
-
-          {/* Azioni rapide */}
-          <div className="mt-3 flex flex-col border border-border sm:flex-row sm:divide-x sm:divide-border">
-            <QuickAction href="/playlists" title="Importa playlist" desc="Spotify, brani salvati o tracklist manuale" />
-            <QuickAction href="/discovery" title="Scopri musica" desc="Tracce che potrebbero interessarti" />
-            <QuickAction href="/shazam" title="Identifica un mix" desc="Riconosci le tracce di un DJ set" />
           </div>
         </>
       )}

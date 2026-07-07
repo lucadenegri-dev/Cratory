@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { ArrowLeft, Music4, ExternalLink, Pencil } from "lucide-react";
+import { ArrowLeft, ExternalLink, Pencil } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
 import { Badge, Alert } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { KeyBadge } from "@/components/key-badge";
+import { TrackCover } from "@/components/track-cover";
 import { TrackEditModal } from "@/components/track-edit-modal";
 
 const SOURCE_TONE: Record<string, "info" | "warning" | "neutral"> = { spotify: "info", soundcloud: "warning", manual: "neutral" };
@@ -62,9 +63,7 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
                 <td className={`${cell} tnum text-faint`}>{String(i + 1).padStart(2, "0")}</td>
                 <td className={cell}>
                   <Link href={`/tracks/${t.id}`} className="flex items-center gap-2.5">
-                    {t.album_art_url
-                      ? <img src={t.album_art_url} alt="" className="h-8 w-8 shrink-0 rounded-none object-cover" />
-                      : <span className="grid h-8 w-8 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={14} /></span>}
+                    <TrackCover track={t} className="h-8 w-8" iconSize={14} />
                     <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{t.title ?? <span className="italic text-faint">senza titolo</span>}</span>
                   </Link>
                 </td>

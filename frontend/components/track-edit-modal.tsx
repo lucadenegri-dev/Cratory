@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Music4, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import { updateTrack, type Track, type TrackUpdate } from "@/lib/api";
 import { Modal, Button, Field, Input, Alert, Spinner } from "@/components/ui";
+import { TrackCover } from "@/components/track-cover";
 
 const CAMELOT_KEYS = [
   ...Array.from({ length: 12 }, (_, i) => `${i + 1}A`),
@@ -95,9 +96,7 @@ function EditForm({ track, onClose, onSaved }: { track: Track; onClose: () => vo
       }
     >
       <div className="mb-4 flex items-center gap-3">
-        {track.album_art_url
-          ? <img src={track.album_art_url} alt="" className="h-11 w-11 shrink-0 rounded-none object-cover" />
-          : <span className="grid h-11 w-11 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={18} /></span>}
+        <TrackCover track={track} className="h-11 w-11" iconSize={18} />
         <div className="min-w-0">
           <div className="truncate font-medium">{track.title ?? <span className="italic text-faint">senza titolo</span>}</div>
           <div className="truncate text-sm text-muted">{track.artist ?? "—"}</div>

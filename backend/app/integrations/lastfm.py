@@ -12,36 +12,17 @@ Regole del progetto:
 """
 
 import logging
-import re
 from typing import Any
 
 import httpx
 
 from app.core.config import settings
-from app.integrations import MusicFeatureProvider, SimilarityClient
+from app.integrations import SimilarityClient
 from app.integrations._http import get_with_retries
 
 logger = logging.getLogger(__name__)
 
 API = "https://ws.audioscrobbler.com/2.0/"
-
-# Tag Last.fm che esprimono un MOOD -> mood normalizzato del modello.
-_MOOD_TAGS = {
-    "dark": "dark", "melancholic": "melancholic", "melancholy": "melancholic", "sad": "melancholic",
-    "moody": "dark", "chill": "chill", "chillout": "chill", "relaxing": "chill", "mellow": "chill",
-    "calm": "chill", "dreamy": "dreamy", "ethereal": "dreamy", "atmospheric": "atmospheric",
-    "uplifting": "uplifting", "happy": "happy", "feel good": "happy", "euphoric": "euphoric",
-    "energetic": "energetic", "banger": "energetic", "aggressive": "aggressive", "dark techno": "dark",
-    "groovy": "groovy", "funky": "groovy", "hypnotic": "hypnotic", "driving": "driving",
-    "emotional": "emotional", "epic": "epic", "romantic": "romantic", "sexy": "sensual",
-}
-# Tag-spazzatura (collezioni/giudizi personali) da non usare come genere.
-_TAG_JUNK = {
-    "favorites", "favourite", "favourites", "favorite", "seen live", "loved", "spotify",
-    "beautiful", "best", "awesome", "good", "amazing", "my music", "albums i own", "want to see",
-    "love", "cool", "wtf", "overrated", "underrated", "masterpiece",
-}
-_DECADE_RE = re.compile(r"^\d{2,4}s$")  # "90s", "00s", "2010s"...
 
 
 class LastFMError(Exception):
@@ -157,93 +138,6 @@ class LastFMClient(SimilarityClient):
             if name and a:
                 out.append({"artist": a, "title": name})
         return out
-
-    def top_tags(self, artist: str, title: str, *, limit: int = 8) -> list[str]:
-        """Tag piu' votati di una traccia (per ricavare mood/genere). Ordine = popolarita'."""
-        if not artist or not title:
-            return []
-        try:
-            data = self._get("track.gettoptags", {"artist": artist, "track": title, "autocorrect": 1})
-        except LastFMError as exc:
-            logger.warning("Last.fm top_tags(%r/%r) fallito: %s", artist, title, exc)
-            return []
-        tags = _as_list((data.get("toptags") or {}).get("tag"))
-        return [t["name"].strip() for t in tags if t.get("name")][:limit]
-
-    def canonical_track(self, artist: str, title: str) -> dict[str, str] | None:
-        """Title/artist canonici secondo Last.fm autocorrect."""
-        if not artist or not title:
-            return None
-        try:
-            data = self._get("track.getInfo", {"artist": artist, "track": title, "autocorrect": 1})
-        except LastFMError as exc:
-            logger.warning("Last.fm canonical_track(%r/%r) fallito: %s", artist, title, exc)
-            return None
-        track = data.get("track") or {}
-        canonical_title = track.get("name")
-        canonical_artist = (track.get("artist") or {}).get("name")
-        if not canonical_title and not canonical_artist:
-            return None
-        out: dict[str, str] = {}
-        if canonical_title:
-            out["canonical_title"] = canonical_title
-        if canonical_artist:
-            out["canonical_artist"] = canonical_artist
-        return out
-
-
-# ---- provider feature (mood/genere da tag) ------------------------------
-
-
-def _derive_mood(tags: list[str]) -> str | None:
-    for t in tags:
-        mood = _MOOD_TAGS.get(t.strip().lower())
-        if mood:
-            return mood
-    return None
-
-
-def _derive_genre(tags: list[str]) -> str | None:
-    for t in tags:
-        tl = t.strip().lower()
-        if tl in _MOOD_TAGS or tl in _TAG_JUNK or _DECADE_RE.match(tl):
-            continue
-        return t.strip()
-    return None
-
-
-class LastFmTagProvider(MusicFeatureProvider):
-    """Ricava mood e (in fallback) genere dai top tag Last.fm. NON fornisce BPM/key.
-
-    I tag sono crowd-sourced: confidenza bassa. Nel ChainedFeatureProvider il genere
-    di MusicBrainz (piu' autorevole) vince; Last.fm completa mood e i generi mancanti.
-    """
-
-    name = "lastfm"
-
-    def __init__(self, client: "LastFMClient"):
-        self.client = client
-
-    def lookup(self, *, title, artist, isrc=None, duration_seconds=None, context=None):
-        if not title or not artist:
-            return None
-        canonical = self.client.canonical_track(artist, title)
-        tags = self.client.top_tags(artist, title)
-        out: dict[str, Any] = {}
-        if canonical:
-            out.update(canonical)
-        if tags:
-            genre = _derive_genre(tags)
-            mood = _derive_mood(tags)
-            if genre:
-                out["genre_primary"] = genre
-            if mood:
-                out["mood"] = mood
-        if not out:
-            return None
-        out["confidence"] = 45 if tags else 35  # tag crowd-sourced: affidabilita' moderata
-        return out
-
 
 # ---- factory ------------------------------------------------------------
 

@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Settings } from "lucide-react";
+import { RefreshCw, Settings } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { startLibraryIndex } from "@/lib/api";
 import { Clock } from "./clock";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -39,6 +41,23 @@ const NAV_GROUPS: { title: string | null; items: { href: string; label: string }
 export function IndexNav() {
   const pathname = usePathname();
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+
+  /* Indicizza LIBRARY_ROOT: il disco è la libreria. Il job gira in background
+     lato server; qui mostriamo solo l'avvio (409 = LIBRARY_ROOT mancante o job
+     già in corso → torniamo a idle senza rumore). */
+  const [scan, setScan] = useState<"idle" | "busy" | "done">("idle");
+  const runIndex = async () => {
+    if (scan === "busy") return;
+    setScan("busy");
+    try {
+      await startLibraryIndex();
+      setScan("done");
+      setTimeout(() => setScan("idle"), 4000);
+    } catch {
+      setScan("idle");
+    }
+  };
+  const scanLabel = scan === "busy" ? "Avvio…" : scan === "done" ? "Avviata" : "Indicizza";
 
   return (
     <nav className="flex h-full flex-col">
@@ -83,6 +102,17 @@ export function IndexNav() {
       </div>
 
       <div className="hidden lg:block">
+        <button
+          type="button"
+          onClick={runIndex}
+          disabled={scan === "busy"}
+          className={cn(
+            "flex w-full items-center gap-2 border-t border-border px-4 py-2.5 text-left text-xs uppercase tracking-wider transition-colors disabled:cursor-default",
+            scan === "done" ? "text-fg-strong" : "text-muted hover:text-fg",
+          )}
+        >
+          <RefreshCw size={13} className={cn("shrink-0", scan === "busy" && "animate-spin")} /> {scanLabel}
+        </button>
         <Link
           href="/settings"
           aria-current={isActive("/settings") ? "page" : undefined}

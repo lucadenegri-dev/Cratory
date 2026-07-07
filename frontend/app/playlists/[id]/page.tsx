@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, Spinner, Input, Select, Checkbox, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { TrackCover } from "@/components/track-cover";
 import { useJobs } from "@/components/jobs-provider";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { KeyBadge } from "@/components/key-badge";
@@ -131,7 +132,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
 
   const doDelete = async () => {
     if (!playlist) return;
-    if (!window.confirm(`Rimuovere "${playlist.name}" e le sue ${playlist.track_count} tracce? Non si può annullare.`)) return;
+    if (!window.confirm(`Rimuovere "${playlist.name}"? I lead senza file su disco, non presenti in altre playlist né in un set, verranno cancellati. Non si può annullare.`)) return;
     setDeleting(true);
     try {
       await deletePlaylist(pid);
@@ -305,9 +306,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
                 <td className={`${cell} tnum text-faint`}>{insertionRank.get(t.id) ?? "—"}</td>
                 <td className={cell}>
                   <Link href={`/tracks/${t.id}`} className="flex items-center gap-2.5">
-                    {t.album_art_url
-                      ? <img src={t.album_art_url} alt="" className="h-8 w-8 shrink-0 rounded-none object-cover" />
-                      : <span className="grid h-8 w-8 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={14} /></span>}
+                    <TrackCover track={t} className="h-8 w-8" iconSize={14} />
                     <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{t.title ?? <span className="italic text-faint">senza titolo</span>}</span>
                   </Link>
                 </td>

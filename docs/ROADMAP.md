@@ -136,6 +136,27 @@ migrazione esplicita.
   `DEEZER_ENABLED`, `ACOUSTICBRAINZ_ENABLED`, `ACOUSTID_API_KEY`); restano
   `SPOTIFY_*`, `LASTFM_API_KEY`, `DISCOGS_TOKEN`, `AI_*`, `SLSKD_*`, `LIBRARY_ROOT`,
   `ARCHIVE_ROOT`, `ORGANIZER_URL`. Dettaglio completo in `PROGRESS.md`.
+- **Igiene DB disk-first (2026-07-08): disco autorevole, niente lead fantasma.**
+  `read_tags` legge anche `label` (ID3 `TPUB`/Vorbis `LABEL`, backfill dall'indice solo
+  se assente); cover della posseduta servita on-demand dal file
+  (`GET /api/tracks/{id}/cover`, artwork embedded, Spotify ha precedenza). `scan_folder`
+  ignora ovunque cartelle/file nascosti (`.quarantine`, `.DS_Store`, `.git`). La
+  riconciliazione dell'indice **elimina i lead orfani** (file non piu' visto e brano non
+  in playlist/set → rimosso, `orphans_removed`; altrimenti resta lead, `lost`), tenendo
+  `audio_hash` per il riaggancio; lo stesso avviene cancellando una playlist
+  (`DELETE /api/playlists/{id}` → `200 {deleted_tracks}`, helper condiviso
+  `delete_orphan_leads`). Tool una-tantum `tools/cleanup_disk_first.py` (dry-run,
+  `--apply`) su `services/db_hygiene.py`: elimina orfani, azzera residui legacy sui lead
+  (`genre`/`bpm`/`camelot_key`/`energy`), rilegge le possedute dal disco. Dashboard
+  ridisegnata: figure Tracce scoperte/possedute/Playlist/Set salvati + stat "Generi piu'
+  frequenti" (`genre_distribution`, link alla Libreria per genere), rimossi "Prossimo
+  passo" e azioni rapide; striscia pipeline a **cinque fasi** (Indicizza spostata su
+  pulsante nella nav), `GET /api/pipeline` senza `files_on_disk`/`index_mismatch`/
+  `last_index_at`. Libreria: stato per-riga a icone (pronta/posseduta/scartata) e link
+  Spotify in verde Spotify (eccezione documentata alla Monochrome Rule). Rimossi i
+  residui enrichment legacy (`LastFmTagProvider`, `MusicFeatureProvider`), droppata la
+  colonna `Track.release_date` (FK-safe), rimossi dead export `libraryGaps`/
+  `rekordboxPending` in `api.ts`.
 
 ## Direzione prodotto
 
@@ -215,10 +236,12 @@ Per tema, in ordine indicativo di valore:
   (shazam nel provider, visibilitychange), B20 AbortController, B21/B22 api.ts spezzato
   + ApiError, B23 immagini/virtualizzazione, B25/B26/B28, B9/B10/B14/B16/B18 UX minori,
   E15 smoke Playwright.
-- **Pulizia** — colonne legacy `Track.playlist_id`/`playlist_name` (ora banale: basta
-  toglierle dal modello, la migrazione generalizzata le droppa), worktree stantio
-  `compassionate-montalcini` da rimuovere, dead export `rekordboxPending` in api.ts,
-  trim ridondanza regole 2/7 CLAUDE.md, commenti stale `local_files.py`/`scoring.py`.
+- **Pulizia** — colonne legacy `Track.playlist_id`/`playlist_name`: **non droppabili**
+  su SQLite (FK baked-in su `playlist_id` → richiederebbe un rebuild di `tracks`, che il
+  progetto evita); restano in schema ma morte e vuote. `Track.release_date` droppata
+  (2026-07-08), dead export `rekordboxPending`/`libraryGaps` in api.ts rimossi
+  (2026-07-08). Restano: worktree stantio `compassionate-montalcini` da rimuovere, trim
+  ridondanza regole 2/7 CLAUDE.md, commenti stale `local_files.py`/`scoring.py`.
   **Nota inversione:** `python-multipart` ora serve (upload rekordbox.xml) — non rimuovere.
 
 ## Rischi

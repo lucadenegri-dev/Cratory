@@ -17,14 +17,14 @@ def fake_audio(monkeypatch, tmp_path):
     hashes: dict[str, str] = {}
     tags: dict[str, dict] = {}
 
-    def make(rel: str, *, digest: str, artist=None, title=None, isrc=None):
+    def make(rel: str, *, digest: str, artist=None, title=None, isrc=None, genre=None, label=None):
         p = tmp_path / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(b"x")
         hashes[str(p.resolve())] = digest
         tags[str(p.resolve())] = {
             "title": title, "artist": artist, "album": None, "year": None,
-            "duration_seconds": 200, "isrc": isrc,
+            "duration_seconds": 200, "isrc": isrc, "genre": genre, "label": label,
         }
         return p
 
@@ -51,6 +51,19 @@ def test_riaggancio_per_audio_hash(db, fake_audio):
     assert report["relinked"] == 1 and report["created"] == 0
     assert t.local_path.endswith("A - Origin.mp3")
     assert t.has_local_file is True and t.local_format == "mp3"
+
+
+def test_indicizzazione_backfilla_label_da_tag(db, fake_audio):
+    """La label del file (TPUB) riempie il campo label se vuoto (backfill-only)."""
+    from app.models import Track
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    make("Warp/Aphex - Xtal.mp3", digest="HL", artist="Aphex Twin", title="Xtal", label="Warp")
+    index_library(db, root=root)
+
+    t = db.query(Track).filter_by(audio_hash="HL").one()
+    assert t.label == "Warp"
 
 
 def test_match_per_isrc_da_tag(db, fake_audio):
@@ -132,24 +145,95 @@ def test_duplicati_stesso_run_primo_vince(db, fake_audio):
     assert t.local_path.endswith("a.mp3")  # scan_folder ordina: il primo file vince
 
 
-def test_riconciliazione_file_sparito(db, fake_audio, tmp_path):
-    """Possesso orfano (file cancellato/spostato fuori) ⇒ torna wishlist, hash conservato."""
-    from app.models import Track
+def test_riconciliazione_sgancia_ma_tiene_se_in_playlist(db, fake_audio, tmp_path):
+    """File sparito ma traccia in una playlist ⇒ si toglie solo il link (resta lead),
+    hash conservato per il riaggancio futuro."""
+    from app.models import Playlist, Track
+    from app.repositories import add_track_to_playlist
     from app.services.library_index import index_library
 
     make, root = fake_audio
+    pl = Playlist(platform="spotify", name="P"); db.add(pl)
     sparito = Track(source_type="spotify", title="Gone", artist="A",
                     has_local_file=True, local_path=str(tmp_path / "non-esiste.mp3"),
                     local_format="mp3", audio_hash="HGONE")
-    db.add(sparito); db.commit()
+    db.add(sparito); db.flush()
+    add_track_to_playlist(db, sparito, pl); db.commit()
 
     make("resta.mp3", digest="HSTAY", artist="B", title="Stay")
     report = index_library(db, root=root)
 
     db.refresh(sparito)
-    assert report["lost"] == 1
+    assert report["lost"] == 1 and report["orphans_removed"] == 0
     assert sparito.has_local_file is False and sparito.local_path is None
     assert sparito.audio_hash == "HGONE"
+
+
+def test_riconciliazione_elimina_lost_orfano(db, fake_audio, tmp_path):
+    """File sparito e traccia in nessuna playlist/set ⇒ rimossa (niente lead fantasma)."""
+    from app.models import Track
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    orfano = Track(source_type="local_files", title="Ghost", artist="A",
+                   has_local_file=True, local_path=str(tmp_path / "sparito.mp3"), audio_hash="HG")
+    db.add(orfano); db.commit()
+    gid = orfano.id
+
+    make("resta.mp3", digest="HSTAY")
+    report = index_library(db, root=root)
+
+    assert report["orphans_removed"] == 1 and report["lost"] == 0
+    assert db.get(Track, gid) is None
+
+
+def test_riconciliazione_sgancia_file_in_cartella_nascosta(db, fake_audio, tmp_path):
+    """File esistente ma dentro una cartella nascosta (scan_folder lo esclude) ⇒
+    non più posseduto; il file su disco non viene toccato."""
+    from app.models import Playlist, Track
+    from app.repositories import add_track_to_playlist
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    make("visibile.mp3", digest="HV")  # scan non vuoto (evita l'anti-unmount)
+    hidden = tmp_path / ".q" / "nascosto.mp3"
+    hidden.parent.mkdir(parents=True)
+    hidden.write_bytes(b"x")
+    pl = Playlist(platform="spotify", name="P"); db.add(pl)
+    t = Track(source_type="local_files", title="Hidden", artist="A",
+              has_local_file=True, local_path=str(hidden.resolve()), audio_hash="HH")
+    db.add(t); db.flush()
+    add_track_to_playlist(db, t, pl); db.commit()
+
+    index_library(db, root=root)
+
+    db.refresh(t)
+    assert t.has_local_file is False
+    assert hidden.exists()  # Cratory non muta i file su disco
+
+
+def test_file_che_rientra_si_riaggancia_al_lead_spotify(db, fake_audio):
+    """Un file che (ri)entra nella libreria si aggancia al lead Spotify per ISRC:
+    stessa riga, ora posseduta, ancora nella playlist."""
+    from app.models import Playlist, Track
+    from app.repositories import add_track_to_playlist, tracks_for_playlist
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    pl = Playlist(platform="spotify", name="P"); db.add(pl)
+    lead = Track(source_type="spotify", platform="spotify", spotify_id="s1",
+                 title="Song", artist="Artist", isrc="IT1234500001", has_local_file=False)
+    db.add(lead); db.flush()
+    add_track_to_playlist(db, lead, pl); db.commit()
+    lid = lead.id
+
+    make("Artist - Song.mp3", digest="HNEW", isrc="IT1234500001")
+    report = index_library(db, root=root)
+
+    db.refresh(lead)
+    assert report["created"] == 0 and report["matched"] == 1  # riaggancio, non nuova traccia
+    assert lead.id == lid and lead.has_local_file is True
+    assert lead in tracks_for_playlist(db, pl.id)
 
 
 def test_riconciliazione_non_tocca_i_visti(db, fake_audio):

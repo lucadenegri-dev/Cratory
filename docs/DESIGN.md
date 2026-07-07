@@ -125,7 +125,7 @@ components:
 
 Cratory reads like a printed catalogue of a record library. The interface is monospace throughout, laid out on a hairline grid, with square geometry and almost no color — ink on a near-black field by default, or on warm paper when toggled. Density is editorial, not dashboard-like: dense columns of type, numbered lists, uppercase section labels, and tabular figures that align like a typeset index.
 
-The system is built from **filets and type**, not fills and shadows. Depth comes from 1px hairline borders and a tight neutral stack, never from drop shadows or rounded cards. The only color in the entire system is a single restrained red, reserved for errors and destructive actions; everything else — including Camelot keys and mix-status, which carried color in the previous system — is rendered in monochrome, distinguished by weight, position, and uppercase labels.
+The system is built from **filets and type**, not fills and shadows. Depth comes from 1px hairline borders and a tight neutral stack, never from drop shadows or rounded cards. The only color in the entire system is a single restrained red, reserved for errors and destructive actions — with one narrow, documented brand exception, the Spotify glyph rendered in Spotify green (see The Brand-Green Exception). Everything else — including Camelot keys and mix-status, which carried color in the previous system — is rendered in monochrome, distinguished by weight, position, and uppercase labels.
 
 This system explicitly rejects: consumer-music-app warmth (soft pastels, oversized rounded artwork); generic SaaS dashboards (gradients, hero-metric templates, identical card grids); legacy DJ software density and skeuomorphism; and AI-tool-hype glassmorphism. It is a quiet, typographic, archival instrument.
 
@@ -151,9 +151,11 @@ A warm cream field with near-black ink. `bg #e9e5db`, `surface #f1eee6`, `elevat
 **Danger red** — `#d8593f` (dark) / `#a83a22` (paper). The *only* hue in the system. Used for error messages, destructive actions (delete), and invalid input (e.g. malformed Camelot notation). Unica eccezione decorativa: i loader EQ/waveform (`Equalizer`, `EqMeter`) usano il danger come accento caldo — tacca di picco, coda "hot" dietro la testina, testina e bordo dello scan. Fuori dai loader, il rosso resta esclusivamente errore/distruzione, mai un indicatore di stato o qualità.
 
 ### Named Rules
-**The Monochrome Rule.** Nothing carries hue except `danger`. Camelot keys, mix-status, transition quality, risk levels, and provider states are all rendered in neutrals — distinguished by weight, uppercase labels, and position, never by color.
+**The Monochrome Rule.** Nothing carries hue except `danger`. Camelot keys, mix-status, transition quality, risk levels, and provider states are all rendered in neutrals — distinguished by weight, uppercase labels, and position, never by color. There are exactly three documented exceptions, each deliberate and narrow: (1) the `danger` red for errors/destruction; (2) the warm `danger` accent inside the EQ/waveform loaders; and (3) the **Spotify glyph rendered in Spotify green** (`#1DB954`, hover `#1ed760`) on the "open on Spotify" affordance — a brand mark, not a status color. Nothing else earns a hue.
 
 **The One-Red Rule.** Red means error or destruction, salvo l'accento caldo intenzionale dei loader EQ/waveform. A low score, a "risky" transition, or a warning state is *not* an error and must stay monochrome.
+
+**The Brand-Green Exception.** The only non-red hue in the system is the Spotify green on the Spotify glyph (the "open on Spotify" link). It is a recognisable brand affordance, scoped strictly to that link — it is never used as a status, quality, or state color anywhere else.
 
 ## 3. Typography
 
@@ -200,6 +202,7 @@ Flat by definition. Depth is conveyed entirely by **hairline borders and the neu
 - **Alert:** riga con bordo pieno; tone `danger` ha bordo e testo `danger`, i tone `warning`/`info`/`success` hanno bordo neutro e testo `fg` (nessuna tinta fuori da danger).
 - **Field / Select / Textarea / Checkbox:** stesso stile input (`rounded: 0`, bordo, focus ring `fg`); `Field` aggiunge una label uppercase tracciata `~10px` sopra il controllo.
 - **KeyBadge:** rende il Camelot in monocromo — chiave valida in `fg-strong` tabulare, chiave assente o non valida in `faint` con trattino. Nessun colore per ruota/energia.
+- **Stato traccia in Libreria (icone):** nella tabella Libreria lo stato per-riga non e' piu' un badge testuale ma un gruppo di **icone compatte** monocrome con `title` esplicativo — pronta per il set = check (`CircleCheck`, `fg-strong`), posseduta/file su disco = disco rigido (`HardDrive`, `fg-strong`), scartata = archivio (`Archive`, `faint`). L'unica eccezione cromatica e' il **glyph Spotify in verde Spotify** per il link "apri su Spotify" (vedi The Brand-Green Exception).
 
 ### Cards / Containers
 - **Background:** `surface` on the `bg` floor; **1px `border` hairline; `radius: 0`; no shadow.**

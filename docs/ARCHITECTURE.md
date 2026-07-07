@@ -148,16 +148,42 @@ muta mai** — tag, rename e organizzazione restano competenza esclusiva di DjOr
   `audio_hash -> digest legacy (import locali storici, in platform_track_id) ->
   ISRC -> fuzzy artist+title`; se non trova nulla crea una nuova `Track`. I tag del
   file riempiono solo i campi identita' vuoti, in sola lettura (mai sovrascrivere
-  BPM/key o correzioni manuali; Cratory non scrive mai sul file). Scan incrementale:
-  un file con path+mtime+size invariati non viene ri-hashato. Riconciliazione: un
-  possesso il cui file non e' piu' presente nello scan (spostato, cancellato) perde
-  `has_local_file`/`local_path` ma mantiene `audio_hash`, cosi' il riaggancio e'
-  immediato se il file ricompare altrove. Guard anti-unmount: uno scan a zero file
-  (radice vuota, path sbagliato, disco smontato) non tocca i possessi esistenti.
-  `duplicates` conta i file con lo stesso hash visti nello stesso run (il primo
-  vince; la dedup su disco resta compito di DjOrganizer). Esposto via
+  BPM/key o correzioni manuali; Cratory non scrive mai sul file). Anche `label`
+  (ID3 `TPUB` / Vorbis `LABEL`) viene letta dal file e riempita solo se assente.
+  Lo scan **ignora sempre cartelle e file nascosti** (nome che inizia con `.`, es.
+  `.quarantine`, `.DS_Store`, `.git`): non sono contenuto di libreria, ne' per il
+  conteggio ne' per l'indicizzazione. Scan incrementale: un file con path+mtime+size
+  invariati non viene ri-hashato. Riconciliazione: un possesso il cui file la
+  scansione **non ha visto** — cancellato, spostato fuori da `LIBRARY_ROOT`, oppure
+  finito in una cartella nascosta (es. `.quarantine`) — viene sganciato
+  (`has_local_file=False`, `local_path` azzerato) ma mantiene `audio_hash`, cosi' il
+  riaggancio e' immediato se il file ricompare (anche a un lead Spotify esistente via
+  ISRC o artist+title). Se il brano sganciato non e' in nessuna playlist ne' in un set
+  salvato viene **eliminato** (niente lead fantasma, contatore `orphans_removed`);
+  altrimenti resta come lead senza file (contatore `lost`). Guard anti-unmount: uno
+  scan a zero file (radice vuota, path sbagliato, disco smontato) non tocca i possessi
+  esistenti. `duplicates` conta i file con lo stesso hash visti nello stesso run (il
+  primo vince; la dedup su disco resta compito di DjOrganizer). Esposto via
   `POST /api/library/index` (202, job async) e `GET /api/library/index/status`;
   risponde `409` se `LIBRARY_ROOT` non e' configurata.
+- **Cover art:** l'artwork della traccia posseduta e' servito on-demand dal file
+  (`GET /api/tracks/{id}/cover`, artwork incorporato letto al volo, non salvato in DB;
+  copre FLAC/OGG, ID3 APIC, MP4 `covr`). La cover Spotify (`album_art_url`) ha
+  precedenza quando presente; il frontend ripiega sull'endpoint solo per le possedute
+  senza cover streaming.
+- **Lead orfani e pulizia.** Un "lead orfano" e' una traccia senza file su disco che
+  non appartiene a nessuna playlist ne' a un set salvato: non ha piu' ragione di
+  esistere. Vengono rimossi in due punti, con l'helper condiviso `delete_orphan_leads`
+  / `unreferenced_track_ids` (in `repositories.py`): quando si **cancella una playlist**
+  (`DELETE /api/playlists/{id}` ritorna `{deleted_tracks}`) e durante la
+  **riconciliazione dell'indice** (vedi sopra). Per un allineamento una-tantum del DB
+  al paradigma disk-first c'e' `backend/app/tools/cleanup_disk_first.py` (dry-run di
+  default, `--apply` per scrivere), che si appoggia a
+  `backend/app/services/db_hygiene.py`: elimina i lead orfani, azzera sui lead i campi
+  residui legacy (`genre`/`bpm`/`camelot_key`/`energy`, senza writer nel flusso
+  attuale) e **rilegge le possedute dal disco** rendendolo autorevole sui campi
+  disco-derivabili (mai tocca BPM/key da Rekordbox ne' la cover Spotify; sola lettura
+  dei file).
 - Il possesso alimenta anche il Set Builder: `SetGenerationRequest.owned_only` (default
   `True`) filtra le candidate del Candidate Engine alle sole tracce con file locale;
   la scelta e' persistita su `Setlist.owned_only` e rispettata anche da editor
@@ -199,7 +225,7 @@ backend/app/
   serializers.py  ORM -> Pydantic, campi derivati
   integrations/   client esterni dietro interfacce
   core/           config, logging
-  tools/          script di manutenzione (es. clean_user_data)
+  tools/          script di manutenzione (es. clean_user_data, cleanup_disk_first)
 ```
 
 I router non devono contenere logica di business. Le integrazioni esterne devono
@@ -277,7 +303,12 @@ Entita' principali:
 Campi legacy Rekordbox come beatgrid, cue, `rekordbox_track_id`, `play_count` e
 `tonality` sono fuori modello. Non esiste piu' un motore di enrichment interno ne'
 una cache di provider audio: `energy` e' un campo derivato (`services/energy`), non
-un dato esterno cacheable.
+un dato esterno cacheable. Sono stati rimossi anche gli ultimi residui
+dell'enrichment legacy (i provider `LastFmTagProvider`, `MusicFeatureProvider`) e la
+colonna inutilizzata `Track.release_date` (droppata con migrazione FK-safe). Le
+colonne pre-M2M `Track.playlist_id`/`playlist_name` restano in schema — non sono
+droppabili su SQLite per una FK baked-in su `playlist_id` — ma sono morte e vuote
+(la membership vive su `playlist_tracks`).
 
 ## Integrazioni
 

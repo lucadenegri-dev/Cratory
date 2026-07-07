@@ -98,9 +98,45 @@ def test_delete_playlist_keeps_shared_track(db):
     add_track_to_playlist(db, t, a)
     add_track_to_playlist(db, t, b)
     db.commit()
-    assert delete_playlist(db, a.id) is True
+    assert delete_playlist(db, a.id) == 0        # in un'altra playlist: non orfano
     assert db.query(Track).count() == 1          # brano resta in libreria
     assert t in tracks_for_playlist(db, b.id)     # e nell'altra playlist
+
+
+def test_delete_playlist_removes_orphan_lead(db):
+    """Lead senza file, solo in questa playlist e in nessun set: viene cancellato."""
+    a, t = _pl(db, "A"), _tr(db, "solo")
+    add_track_to_playlist(db, t, a)
+    db.commit()
+    assert delete_playlist(db, a.id) == 1
+    assert db.query(Track).count() == 0
+
+
+def test_delete_playlist_keeps_owned_track(db):
+    """Traccia su disco: resta in libreria anche se orfana dalle playlist."""
+    a, t = _pl(db, "A"), _tr(db, "owned")
+    t.has_local_file = True
+    add_track_to_playlist(db, t, a)
+    db.commit()
+    assert delete_playlist(db, a.id) == 0
+    assert db.query(Track).count() == 1
+
+
+def test_delete_playlist_keeps_lead_used_in_setlist(db):
+    """Lead orfano dalle playlist ma usato in un set salvato: NON si cancella."""
+    from app.models import Setlist, SetlistTrack
+
+    a, t = _pl(db, "A"), _tr(db, "inset")
+    add_track_to_playlist(db, t, a)
+    s = Setlist(name="S"); db.add(s); db.flush()
+    db.add(SetlistTrack(setlist_id=s.id, track_id=t.id, position=0))
+    db.commit()
+    assert delete_playlist(db, a.id) == 0
+    assert db.query(Track).count() == 1
+
+
+def test_delete_playlist_missing_returns_none(db):
+    assert delete_playlist(db, 9999) is None
 
 
 def test_recount_playlist(db):

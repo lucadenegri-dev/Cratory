@@ -1,8 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db import get_db
+from app.integrations.local_files import read_cover
 from app.repositories import get_track, library_stats, list_tracks, update_track
 from app.schemas import (
     LibraryIndexJobStatus,
@@ -72,6 +75,23 @@ def get_track_detail(track_id: int, db: Session = Depends(get_db)):
     if track is None:
         raise HTTPException(status_code=404, detail="Traccia non trovata")
     return track_detail_out(track)
+
+
+@router.get("/tracks/{track_id}/cover")
+def get_track_cover(track_id: int, db: Session = Depends(get_db)):
+    """Artwork incorporato nel file della traccia posseduta (on-demand, non salvato in
+    DB). 404 se la traccia non esiste, non è posseduta, il file manca o non ha cover.
+    Il frontend usa `album_art_url` (Spotify) se presente e ripiega qui altrimenti."""
+    track = get_track(db, track_id)
+    if track is None or not track.has_local_file or not track.local_path:
+        raise HTTPException(status_code=404, detail="Cover non disponibile")
+    if not Path(track.local_path).exists():
+        raise HTTPException(status_code=404, detail="File non trovato")
+    cover = read_cover(track.local_path)
+    if cover is None:
+        raise HTTPException(status_code=404, detail="Nessuna cover nel file")
+    data, mime = cover
+    return Response(content=data, media_type=mime, headers={"Cache-Control": "max-age=3600"})
 
 
 @router.patch("/tracks/{track_id}", response_model=TrackDetailOut)

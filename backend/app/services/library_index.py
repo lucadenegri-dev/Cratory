@@ -22,6 +22,7 @@ from app.integrations.local_files import (
     read_tags,
 )
 from app.models import Track
+from app.repositories import unreferenced_track_ids
 from app.services.genre_norm import normalize_genre
 from app.services.manual_import import parse_line
 from app.services.local_import import scan_folder
@@ -69,6 +70,7 @@ def _fill_identity(track: Track, tags: dict, path: Path) -> None:
     track.year = track.year or tags.get("year")
     track.duration_seconds = track.duration_seconds or tags.get("duration_seconds")
     track.isrc = track.isrc or tags.get("isrc")
+    track.label = track.label or tags.get("label")
     # Genere dal tag del file: ultima spiaggia della catena (mai sovrascrivere).
     if not track.genre and tags.get("genre"):
         normalized = normalize_genre(tags["genre"])
@@ -106,6 +108,17 @@ def _discard(track: Track, *, path: Path, digest: str) -> None:
     track.local_size = stat.st_size
 
 
+def _is_hidden_path(path: Path, root: str | Path) -> bool:
+    """True se, sotto `root`, un segmento della path inizia per '.' (es. `.quarantine`):
+    `scan_folder` lo esclude, quindi non è più contenuto di libreria. File fuori da
+    `root` (o path non risolvibile): non considerati nascosti qui."""
+    try:
+        rel = path.resolve().relative_to(Path(root).resolve())
+    except (ValueError, OSError):
+        return False
+    return any(part.startswith(".") for part in rel.parts)
+
+
 def index_library(db: Session, *, root: str | Path,
                   archive_root: str | Path | None = None, on_progress=None) -> dict:
     """Indicizza la libreria canonica e (se configurato) l'archivio delle scartate."""
@@ -115,8 +128,8 @@ def index_library(db: Session, *, root: str | Path,
         archive_files = scan_folder(archive_root)
     total = len(files) + len(archive_files)
     report = {"scanned": len(files), "matched": 0, "created": 0,
-              "relinked": 0, "duplicates": 0, "lost": 0, "failed": 0,
-              "unchanged": 0, "archived": 0, "errors": [], "created_ids": []}
+              "relinked": 0, "duplicates": 0, "lost": 0, "orphans_removed": 0,
+              "failed": 0, "unchanged": 0, "archived": 0, "errors": [], "created_ids": []}
     seen_paths: set[str] = set()
     seen_digests: set[str] = set()
 
@@ -201,21 +214,38 @@ def index_library(db: Session, *, root: str | Path,
         db.commit()
         return report
 
-    # Riconciliazione: possessi il cui file non esiste piu' (spostato in archive/,
-    # cancellato a mano, inbox ripulita). L'audio_hash resta: se il file ricompare
-    # altrove, il riaggancio e' immediato.
+    # Riconciliazione: possessi il cui file la scansione non ha visto — cancellato,
+    # spostato fuori, oppure finito in una cartella nascosta (esclusa da scan_folder).
+    # L'audio_hash resta: se il file ricompare, il riaggancio (anche a un lead Spotify
+    # via ISRC/artista+titolo) e' immediato.
     owned = db.scalars(select(Track).where(Track.has_local_file.is_(True))).all()
+    lost: list[Track] = []
     for track in owned:
         if not track.local_path or track.local_path in seen_paths:
             continue
-        if Path(track.local_path).exists():
+        p = Path(track.local_path)
+        # Tenuto solo se il file esiste ancora ED e' in una cartella visibile: un
+        # file esistente ma nascosto non e' piu' libreria.
+        if p.exists() and not _is_hidden_path(p, root):
             continue
-        track.has_local_file = False
-        track.local_path = None
-        track.local_format = None
-        track.local_bitrate = None
-        refresh_status(track)
-        report["lost"] += 1
+        lost.append(track)
+
+    # I file persi il cui brano non e' in nessuna playlist/set si rimuovono del tutto
+    # (niente lead fantasma); gli altri restano come lead con il solo link al file
+    # tolto. Decidiamo PRIMA di mutare, cosi' gli orfani si cancellano via ORM senza
+    # conflitti di stato.
+    unref = set(unreferenced_track_ids(db, [t.id for t in lost]))
+    for track in lost:
+        if track.id in unref:
+            db.delete(track)
+            report["orphans_removed"] += 1
+        else:
+            track.has_local_file = False
+            track.local_path = None
+            track.local_format = None
+            track.local_bitrate = None
+            refresh_status(track)
+            report["lost"] += 1
 
     db.commit()
     return report

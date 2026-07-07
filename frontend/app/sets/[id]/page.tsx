@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import {
-  ArrowLeft, Sparkles, Download, Music4, Lightbulb, SlidersHorizontal,
+  ArrowLeft, Sparkles, Download, Lightbulb, SlidersHorizontal,
   ArrowUp, ArrowDown, Trash2, Replace, Pencil, Check, ChevronDown,
 } from "lucide-react";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { Card, CardHeader, Button, Input, Badge, Alert, Modal, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { TrackCover } from "@/components/track-cover";
 import { cn } from "@/lib/cn";
 
 const MODES: { key: AlternativeMode; label: string }[] = [
@@ -192,9 +193,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
             {setlist.tracks.map((st) => (
               <li key={st.position} className="flex items-center gap-3 rounded-none border border-border bg-bg p-3">
                 <span className="tnum w-5 text-right text-sm text-faint">{st.position}</span>
-                {st.track.album_art_url
-                  ? <img src={st.track.album_art_url} alt="" className="h-10 w-10 shrink-0 rounded-none object-cover" />
-                  : <span className="grid h-10 w-10 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={16} /></span>}
+                <TrackCover track={st.track} className="h-10 w-10" iconSize={16} />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     {st.role && <Badge tone="neutral">{st.role}</Badge>}
@@ -258,9 +257,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
           <ul className="space-y-1.5">
             {altItems.map((a) => (
               <li key={a.track.id} className="flex items-center gap-3 rounded-none border border-border bg-bg p-2.5">
-                {a.track.album_art_url
-                  ? <img src={a.track.album_art_url} alt="" className="h-9 w-9 shrink-0 rounded-none object-cover" />
-                  : <span className="grid h-9 w-9 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={15} /></span>}
+                <TrackCover track={a.track} className="h-9 w-9" iconSize={15} />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2">
                     <span className="truncate text-sm font-medium">{trackLabel(a.track)}</span>

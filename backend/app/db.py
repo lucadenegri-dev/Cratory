@@ -55,7 +55,6 @@ def ensure_schema(eng=None) -> None:
             "playlist_name": "VARCHAR",
             "status": "VARCHAR DEFAULT 'imported'",
             # Metadata editoriali + feature di mixing (provider esterni/manuale)
-            "release_date": "DATE",
             "label": "VARCHAR",
             "camelot_key": "VARCHAR",
             "energy": "INTEGER",
@@ -96,6 +95,7 @@ def ensure_schema(eng=None) -> None:
                 if not set(idx.columns.keys()).issubset(existing_cols):
                     continue  # colonna non ancora presente (tabella pre-migrazione minima)
                 idx.create(bind=conn, checkfirst=True)
+        _migrate_drop_lead_cols(conn)
         _migrate_drop_legacy(conn)
         _migrate_drop_enrichment_cols(conn)
         _migrate_playlist_memberships(conn)
@@ -264,6 +264,39 @@ def _migrate_playlist_memberships(conn) -> None:
     conn.execute(text(
         "UPDATE tracks SET playlist_id = NULL, playlist_name = NULL WHERE playlist_id IS NOT NULL"
     ))
+
+
+# `release_date`: colonna lead senza writer nel flusso attuale (metadati editoriali
+# spostati su DjOrganizer). Droppabile con DROP COLUMN: nessuna FK ne' indice.
+# NB: playlist_id/playlist_name NON sono qui: playlist_id ha una FK baked-in nel CREATE
+# TABLE e SQLite rifiuta il DROP COLUMN su una colonna referenziata in una foreign key;
+# rimuoverle richiederebbe un rebuild di `tracks`, che il progetto evita (vedi
+# _migrate_drop_legacy). Restano in schema, svuotate dal backfill M2M.
+_DEAD_LEAD_COLS = ("release_date",)
+
+
+def _migrate_drop_lead_cols(conn) -> None:
+    """Rimuove da `tracks` `release_date` (lead residue senza writer attuale).
+
+    Idempotente: droppa solo le colonne ancora presenti; su un DB fresco (create_all
+    dal modello corrente) non ne trova nessuna ed e' no-op.
+
+    Come `_migrate_drop_enrichment_cols` usa ALTER TABLE DROP COLUMN (niente rebuild
+    RENAME: le FK dei figli restano intatte) e droppa prima gli indici che coprono una
+    colonna morta (SQLite rifiuta il DROP COLUMN su colonne indicizzate).
+    """
+    cols = {r[1] for r in conn.execute(text("PRAGMA table_info(tracks)")).fetchall()}
+    dead = [c for c in _DEAD_LEAD_COLS if c in cols]
+    if not dead:
+        return
+    for (idx,) in conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='tracks' AND sql IS NOT NULL"
+    )).fetchall():
+        covered = {r[2] for r in conn.execute(text(f'PRAGMA index_info("{idx}")')).fetchall()}
+        if covered & set(dead):
+            conn.execute(text(f'DROP INDEX IF EXISTS "{idx}"'))
+    for col in dead:
+        conn.execute(text(f'ALTER TABLE tracks DROP COLUMN "{col}"'))
 
 
 def get_db():

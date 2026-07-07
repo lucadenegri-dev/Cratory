@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { Card, CardHeader, Button, Input, Textarea, Select, Field, Checkbox, Badge, EqMeter, Alert, EmptyState } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { TrackCover } from "@/components/track-cover";
 import { cn } from "@/lib/cn";
 
 const STRATEGIES: { value: string; label: string; desc: string }[] = [
@@ -413,9 +414,7 @@ function SetTrackRow({ st }: { st: SetlistTrack }) {
   return (
     <li className="flex gap-3 rounded-none border border-border bg-bg p-3">
       <span className="tnum w-5 pt-0.5 text-right text-sm text-faint">{st.position}</span>
-      {st.track.album_art_url
-        ? <img src={st.track.album_art_url} alt="" className="h-10 w-10 shrink-0 rounded-none object-cover" />
-        : <span className="grid h-10 w-10 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={16} /></span>}
+      <TrackCover track={st.track} className="h-10 w-10" iconSize={16} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {st.role && <Badge tone="neutral">{st.role}</Badge>}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChevronRight, ExternalLink, Upload } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
-  fmtDate, startLibraryIndex, importRekordbox,
+  importRekordbox,
   type PipelineStatus, type RekordboxImportReport,
 } from "@/lib/api";
 import { Card, Alert, Spinner } from "@/components/ui";
@@ -90,7 +90,7 @@ function StageCell({ s }: { s: StageDef }) {
         {s.hot && <span className="h-1.5 w-1.5 rounded-full bg-fg-strong" aria-hidden />}
       </span>
       <span className={cn("tnum text-lg font-semibold", s.hot ? "text-fg-strong" : "text-fg")}>{s.value}</span>
-      <span className="whitespace-nowrap text-[10px] text-faint">{s.sub}</span>
+      <span className="text-[10px] leading-tight text-faint">{s.sub}</span>
     </div>
   );
 }
@@ -98,19 +98,7 @@ function StageCell({ s }: { s: StageDef }) {
 export function PipelineStrip({ p, onRefresh }: { p: PipelineStatus; onRefresh: () => void }) {
   const [organizeOpen, setOrganizeOpen] = useState(false);
   const [analyzeOpen, setAnalyzeOpen] = useState(false);
-  const [scanStarted, setScanStarted] = useState(false);
 
-  const startScan = async () => {
-    try {
-      await startLibraryIndex();
-      setScanStarted(true);
-      onRefresh();
-    } catch {
-      /* 409 = LIBRARY_ROOT mancante o job già in corso: la striscia resta com'è */
-    }
-  };
-
-  const diskConfigured = p.files_on_disk !== null;
   const stages: StageDef[] = [
     {
       key: "scopri", label: "Scopri", value: String(p.playlists),
@@ -124,17 +112,7 @@ export function PipelineStrip({ p, onRefresh }: { p: PipelineStatus; onRefresh: 
     {
       key: "organizza", label: "Organizza ⤴",
       value: p.inbox_files === null ? "—" : String(p.inbox_files),
-      sub: "enrich testuale + tag + organizza (in DjOrganizer)", hot: (p.inbox_files ?? 0) > 0,
-    },
-    {
-      key: "indicizza", label: "Indicizza",
-      value: scanStarted ? "…" : p.index_mismatch ? "≠" : "ok",
-      sub: scanStarted
-        ? "scansione avviata"
-        : p.last_index_at
-          ? `ultima: ${fmtDate(p.last_index_at)} · clic per scansionare`
-          : "mai eseguita · clic per scansionare",
-      hot: !scanStarted && diskConfigured && (p.index_mismatch === true || !p.last_index_at),
+      sub: "Organizza le tracce che possiedi e i loro tag in DjOrganizer", hot: (p.inbox_files ?? 0) > 0,
     },
     {
       key: "analizza", label: "Analizza ⤴", value: String(p.analyze_pending),
@@ -148,8 +126,7 @@ export function PipelineStrip({ p, onRefresh }: { p: PipelineStatus; onRefresh: 
 
   const onStageClick = (key: string) => {
     if (key === "organizza") return setOrganizeOpen((v) => !v);
-    if (key === "analizza") return setAnalyzeOpen((v) => !v);
-    return startScan();
+    return setAnalyzeOpen((v) => !v);
   };
 
   return (

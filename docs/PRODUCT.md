@@ -14,7 +14,7 @@ Il job to be done: passare da "ho questi lead streaming e questi file sul disco"
 
 Cratory è un banco di lavoro personale per la preparazione di set DJ. Non è un player, non è un social. È lo spazio dove la libreria prende forma: importazione, normalizzazione, indicizzazione della libreria su disco, import BPM/tonalità da Rekordbox, acquisizione file (Soulseek/slskd) con archivio e revisione dei download, costruzione set, gap analysis, discovery, esplorazione della collezione per etichetta discografica (aggregati deterministici per label, backfill da Spotify), identificazione tracklist da mix.
 
-Il flusso in sei fasi (striscia di orientamento in dashboard): **Scopri** (playlist/lead) → **Acquisisci** (Soulseek/slskd) → **Organizza⤴** (enrich testuale, tag, organizzazione: in DjOrganizer) → **Indicizza** (scan `LIBRARY_ROOT`, il disco è la libreria) → **Analizza⤴** (analisi in Rekordbox, import BPM/key in Cratory) → **Suona** (Set Builder). Le due fasi con ⤴ escono da Cratory verso Rekordbox/DjOrganizer e rientrano con un import.
+Il flusso (striscia di orientamento in dashboard, cinque fasi): **Scopri** (playlist/lead) → **Acquisisci** (Soulseek/slskd) → **Organizza⤴** (enrich testuale, tag, organizzazione: in DjOrganizer) → **Analizza⤴** (analisi in Rekordbox, import BPM/key in Cratory) → **Suona** (Set Builder). Le due fasi con ⤴ escono da Cratory verso Rekordbox/DjOrganizer e rientrano con un import. L'indicizzazione della libreria (scan `LIBRARY_ROOT`, il disco è la libreria) non è una fase della striscia: si lancia dal pulsante "Indicizza" nella nav a sinistra (o parte automaticamente all'avvio).
 
 Successo = l'utente entra con playlist grezze ed esce con un set strutturato, annotato, una lista di tracce da aggiungere e i relativi file acquisiti in libreria.
 
@@ -39,7 +39,7 @@ Il sistema visivo completo (token, temi dark/paper, componenti) vive in [DESIGN.
 
 1. **Dati prima, narrativa dopo.** I numeri (BPM, Camelot, energia) sono il linguaggio. Mostrarli con precisione e densità calibrata. Il layer creativo (AI, narrativa set) avvolge i dati senza sostituirli.
 
-2. **Ogni schermata spinge avanti.** L'utente ha un obiettivo — costruire un set. La nav raggruppa le stazioni in tre macro-fasi, Scopri (Playlist, Discovery, Shazam, Etichette) → Colleziona (Libreria, Download) → Suona (Set builder, Set), non sezioni indipendenti. Il percorso è sempre visibile: la dashboard apre con una pipeline strip a sei fasi — Scopri → Acquisisci → Organizza⤴ → Indicizza → Analizza⤴ → Suona — che dice a che punto del ciclo sei e qual è il prossimo passo.
+2. **Ogni schermata spinge avanti.** L'utente ha un obiettivo — costruire un set. La nav raggruppa le stazioni in tre macro-fasi, Scopri (Playlist, Discovery, Shazam, Etichette) → Colleziona (Libreria, Download) → Suona (Set builder, Set), non sezioni indipendenti. Il percorso è sempre visibile: la dashboard apre con una pipeline strip a cinque fasi — Scopri → Acquisisci → Organizza⤴ → Analizza⤴ → Suona — che dice a che punto del ciclo sei e qual è il prossimo passo (l'indicizzazione della libreria è un pulsante nella nav, non una fase della striscia).
 
 3. **Denso ma respirabile.** Una libreria DJ è dati densi. L'interfaccia li gestisce senza collassare in un foglio di calcolo. Spaziatura deliberata, gerarchia visiva chiara, raggruppamento semantico.
 

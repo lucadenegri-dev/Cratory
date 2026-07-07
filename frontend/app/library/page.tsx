@@ -2,18 +2,14 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Music4, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ExternalLink, Pencil } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, HardDrive, Archive, CircleCheck, Pencil } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
-import { Input, Select, Checkbox, Alert, Badge, Loading } from "@/components/ui";
+import { Input, Select, Checkbox, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
+import { TrackCover } from "@/components/track-cover";
+import { SpotifyGlyph } from "@/components/spotify-glyph";
 
-const STATUS_TONE: Record<string, "success" | "info" | "warning" | "neutral"> = {
-  ready_for_set: "success", imported: "neutral",
-};
-const STATUS_LABEL: Record<string, string> = {
-  ready_for_set: "ready", imported: "imported",
-};
 const STATUS_OPTIONS: [string, string][] = [
   ["ready_for_set", "Pronte per il set"],
   ["imported", "Importate"],
@@ -30,7 +26,10 @@ export default function Library() {
 
   const [artist, setArtist] = useState("");
   const [title, setTitle] = useState("");
-  const [genre, setGenre] = useState("");
+  // Filtro genere pre-impostato via query param (es. link "Generi" dalla dashboard).
+  const [genre, setGenre] = useState(
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("genre") ?? "" : "",
+  );
   const [source, setSource] = useState("");
   const [status, setStatus] = useState("");
   const [bpmMin, setBpmMin] = useState("");
@@ -131,7 +130,7 @@ export default function Library() {
               {th("Energy", "energy", true)}
               {th("Genere", "genre")}
               {th("Dur", "duration", true)}
-              {th("Stato", "status")}
+              <th className={cell}>Stato</th>
               <th className={cell}></th>
             </tr>
           </thead>
@@ -141,9 +140,7 @@ export default function Library() {
                 <td className={`${cell} tnum text-faint`}>{String(offset + i + 1).padStart(2, "0")}</td>
                 <td className={cell}>
                   <Link href={`/tracks/${t.id}`} className="flex items-center gap-2.5">
-                    {t.album_art_url
-                      ? <img src={t.album_art_url} alt="" className="h-8 w-8 shrink-0 rounded-none object-cover" />
-                      : <span className="grid h-8 w-8 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={14} /></span>}
+                    <TrackCover track={t} className="h-8 w-8" iconSize={14} />
                     <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{t.title ?? <span className="italic text-faint">senza titolo</span>}</span>
                   </Link>
                 </td>
@@ -154,14 +151,25 @@ export default function Library() {
                 <td className={`${cell} max-w-[10rem] truncate text-muted`}>{t.genre ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
                 <td className={cell}>
-                  <Badge tone={STATUS_TONE[t.status] ?? "neutral"}>{STATUS_LABEL[t.status] ?? t.status}</Badge>
-                  {t.has_local_file && <Badge tone="success" className="ml-1">FILE</Badge>}
-                  {t.archived && <Badge tone="warning" className="ml-1">SCARTATA</Badge>}
+                  <div className="flex items-center gap-2 text-faint">
+                    {t.status === "ready_for_set" && (
+                      <span title="Pronta per il set (BPM + tonalità)"><CircleCheck size={14} className="text-fg-strong" /></span>
+                    )}
+                    {t.has_local_file && (
+                      <span title="File in libreria (su disco)"><HardDrive size={14} className="text-fg-strong" /></span>
+                    )}
+                    {t.archived && (
+                      <span title="Scartata (nell'archivio)"><Archive size={14} /></span>
+                    )}
+                    {t.spotify_url && (
+                      <a href={t.spotify_url} target="_blank" rel="noreferrer" title="Apri su Spotify"
+                         className="text-[#1DB954] transition-colors hover:text-[#1ed760]"><SpotifyGlyph size={14} /></a>
+                    )}
+                  </div>
                 </td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
-                    {t.spotify_url && <a href={t.spotify_url} target="_blank" rel="noreferrer" title="Apri su Spotify" className="text-faint hover:text-fg"><ExternalLink size={14} /></a>}
                   </div>
                 </td>
               </tr>

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, Link2, Music4, ArrowRightLeft, Pencil } from "lucide-react";
+import { ArrowLeft, ExternalLink, Link2, ArrowRightLeft, Pencil } from "lucide-react";
 import { apiGet, fmtDuration, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
+import { TrackCover } from "@/components/track-cover";
 import { LinkLocalFileModal } from "@/components/link-local-file-modal";
 
 function TransitionList({ title, items }: { title: string; items: TransitionCandidate[] }) {
@@ -71,9 +72,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
       <Link href="/library" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Libreria</Link>
 
       <div className="mb-6 flex items-center gap-4">
-        {track.album_art_url
-          ? <img src={track.album_art_url} alt="" className="h-20 w-20 rounded-none object-cover" />
-          : <span className="grid h-20 w-20 place-items-center rounded-none bg-surface-2 text-faint"><Music4 size={28} /></span>}
+        <TrackCover track={track} className="h-20 w-20" iconSize={28} />
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-semibold tracking-tight">{track.title ?? <span className="italic text-faint">Senza titolo</span>}</h1>
           <p className="text-muted">{track.artist ?? "Artista sconosciuto"}</p>

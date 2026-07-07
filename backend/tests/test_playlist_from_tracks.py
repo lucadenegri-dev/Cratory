@@ -42,6 +42,27 @@ def test_crea_playlist_da_tracce(client_db):
     assert sorted(t["title"] for t in tracks) == ["T0", "T1", "T2"]
 
 
+def test_delete_endpoint_ritorna_conteggio_orfani(client_db):
+    from app.models import Playlist
+    from app.repositories import add_track_to_playlist
+
+    client, db = client_db
+    pl = Playlist(platform="spotify", name="P", kind="playlist")
+    t = Track(source_type="spotify", title="Lead", artist="A")
+    db.add_all([pl, t]); db.flush()
+    add_track_to_playlist(db, t, pl); db.commit()
+
+    r = client.delete(f"/api/playlists/{pl.id}")
+    assert r.status_code == 200
+    assert r.json() == {"deleted_tracks": 1}
+    assert db.query(Track).count() == 0
+
+
+def test_delete_endpoint_404_su_inesistente(client_db):
+    client, _ = client_db
+    assert client.delete("/api/playlists/9999").status_code == 404
+
+
 def test_422_su_input_vuoti(client_db):
     client, _ = client_db
     assert client.post("/api/playlists/create-from-tracks",

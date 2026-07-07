@@ -16,6 +16,7 @@ from app.integrations.local_files import (
     AUDIO_EXTENSIONS,
     LocalFilesError,
     audio_hash,
+    read_cover,
     read_tags,
 )
 
@@ -44,8 +45,8 @@ def _write_wav(path, *, freq: int = 440, secs: float = 1.0, rate: int = 22050) -
         w.writeframes(frames)
 
 
-def _tag_wav(path, *, title=None, artist=None, album=None, date=None, isrc=None) -> None:
-    from mutagen.id3 import TALB, TDRC, TIT2, TPE1, TSRC
+def _tag_wav(path, *, title=None, artist=None, album=None, date=None, isrc=None, label=None) -> None:
+    from mutagen.id3 import TALB, TDRC, TIT2, TPE1, TPUB, TSRC
     from mutagen.wave import WAVE
 
     w = WAVE(str(path))
@@ -61,6 +62,8 @@ def _tag_wav(path, *, title=None, artist=None, album=None, date=None, isrc=None)
         w.tags.add(TDRC(encoding=3, text=[date]))
     if isrc:
         w.tags.add(TSRC(encoding=3, text=[isrc]))
+    if label:
+        w.tags.add(TPUB(encoding=3, text=[label]))
     w.save()
 
 
@@ -99,6 +102,35 @@ def test_read_tags_legge_id3(tmp_path):
     assert tags["duration_seconds"] == 1
 
 
+def test_read_tags_legge_label_id3(tmp_path):
+    p = tmp_path / "a.wav"
+    _write_wav(p, secs=1.0)
+    _tag_wav(p, title="Windowlicker", artist="Aphex Twin", label="Warp")
+    tags = read_tags(p)
+    assert tags["label"] == "Warp"
+
+
+def test_read_tags_label_assente_e_none(tmp_path):
+    p = tmp_path / "a.wav"
+    _write_wav(p, secs=1.0)
+    _tag_wav(p, title="No Label", artist="Anon")
+    tags = read_tags(p)
+    assert tags["label"] is None
+
+
+def test_read_tags_legge_label_vorbis(tmp_path):
+    # Vorbis comment (FLAC): la label sta nella chiave LABEL/ORGANIZATION.
+    from mutagen.flac import FLAC
+
+    p = tmp_path / "x.flac"
+    _ffmpeg_encode(p, title="Xtal", artist="Aphex Twin")
+    f = FLAC(str(p))
+    f["LABEL"] = "R&S Records"
+    f.save()
+    tags = read_tags(p)
+    assert tags["label"] == "R&S Records"
+
+
 def test_read_tags_file_senza_tag(tmp_path):
     p = tmp_path / "a.wav"
     _write_wav(p, secs=1.0)
@@ -131,6 +163,32 @@ def test_audio_extensions_minuscole_con_punto():
     assert all(e.startswith(".") and e == e.lower() for e in AUDIO_EXTENSIONS)
     # Verifica che tutte le estensioni fondamentali siano presenti
     assert {".mp3", ".flac", ".m4a", ".aac", ".aiff", ".aif", ".wav", ".ogg", ".opus", ".wma"} <= AUDIO_EXTENSIONS
+
+
+def test_read_cover_flac_embedded(tmp_path):
+    from mutagen.flac import FLAC, Picture
+
+    p = tmp_path / "x.flac"
+    _ffmpeg_encode(p, title="X", artist="A")
+    pic = Picture()
+    pic.type = 3  # front cover
+    pic.mime = "image/png"
+    pic.data = b"\x89PNG\r\n\x1a\nFAKEIMAGE"
+    f = FLAC(str(p))
+    f.add_picture(pic)
+    f.save()
+
+    cover = read_cover(p)
+    assert cover is not None
+    data, mime = cover
+    assert data == b"\x89PNG\r\n\x1a\nFAKEIMAGE"
+    assert mime == "image/png"
+
+
+def test_read_cover_senza_artwork_e_none(tmp_path):
+    p = tmp_path / "x.flac"
+    _ffmpeg_encode(p, title="X", artist="A")
+    assert read_cover(p) is None
 
 
 def test_audio_hash_su_file_non_audio_solleva(tmp_path):

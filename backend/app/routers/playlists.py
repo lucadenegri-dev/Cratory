@@ -35,6 +35,7 @@ from app.schemas import (
     ManualImportRequest,
     PlaylistAddTrackRequest,
     PlaylistAddTrackResponse,
+    PlaylistDeleteResult,
     PlaylistFromTracksRequest,
     PlaylistImportReport,
     PlaylistImportRequest,
@@ -202,11 +203,14 @@ def playlist_detail(playlist_id: int, db: Session = Depends(get_db)):
     return PlaylistOut.model_validate(playlist)
 
 
-@router.delete("/{playlist_id}", status_code=204)
+@router.delete("/{playlist_id}", response_model=PlaylistDeleteResult)
 def remove_playlist(playlist_id: int, db: Session = Depends(get_db)):
-    """Rimuove una playlist importata e le sue tracce dalla libreria dell'app."""
-    if not delete_playlist(db, playlist_id):
+    """Rimuove una playlist importata e i lead diventati orfani (non su disco, non in
+    altre playlist, non in alcun set salvato). Ritorna quante tracce sono state rimosse."""
+    removed = delete_playlist(db, playlist_id)
+    if removed is None:
         raise HTTPException(status_code=404, detail="Playlist non trovata")
+    return PlaylistDeleteResult(deleted_tracks=removed)
 
 
 @router.get("/{playlist_id}/tracks", response_model=list[TrackOut])

@@ -1,6 +1,8 @@
 """Query di accesso dati (layer repository)."""
 
-from sqlalchemy import func, select
+from collections.abc import Iterable
+
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import DjSet, DjSetTrack, Playlist, Setlist, SetlistTrack, Track, playlist_tracks
@@ -212,6 +214,21 @@ def library_stats(db: Session) -> dict:
             .group_by(Track.camelot_key)
         ).all()
     )
+    # Distribuzione generi per la stat di dashboard. I tag su disco hanno grafie
+    # incoerenti ("Ambient"/"ambient"): li fondiamo case-insensitive tenendo come
+    # etichetta la grafia più frequente. È solo presentazione — il valore
+    # autorevole resta il tag sul file (scritto da DjOrganizer), non lo tocchiamo.
+    _genre_variants: dict[str, dict[str, int]] = {}
+    for label, n in db.execute(
+        select(Track.genre, func.count())
+        .where(Track.genre.is_not(None), Track.genre != "")
+        .group_by(Track.genre)
+    ):
+        _genre_variants.setdefault(label.casefold(), {})[label] = n
+    genre_distribution = {
+        max(variants, key=variants.__getitem__): sum(variants.values())
+        for variants in _genre_variants.values()
+    }
 
     def count_where(*conds) -> int:
         return db.scalar(select(func.count()).select_from(Track).where(*conds)) or 0
@@ -236,6 +253,9 @@ def library_stats(db: Session) -> dict:
         "bpm_min": min(bpms) if bpms else None,
         "bpm_max": max(bpms) if bpms else None,
         "key_distribution": dict(sorted(key_distribution.items())),
+        "genre_distribution": dict(
+            sorted(genre_distribution.items(), key=lambda kv: kv[1], reverse=True)
+        ),
         "bpm_histogram": _bpm_histogram(bpms),
         "energy_distribution": _energy_distribution(energies),
     }
@@ -330,16 +350,71 @@ def tracks_without_local_file(db: Session, playlist_id: int) -> list[Track]:
     ))
 
 
-def delete_playlist(db: Session, playlist_id: int) -> bool:
-    """Rimuove una playlist: cancella le sue membership; le tracce restano in libreria
-    (e nelle altre playlist). Ritorna False se la playlist non esiste."""
+def orphan_lead_ids(db: Session, candidate_ids: Iterable[int] | None = None) -> list[int]:
+    """Id dei lead orfani: non su disco (`has_local_file` non True), non in nessuna
+    playlist e non in alcun set salvato. Se `candidate_ids` è dato, si restringe a
+    quelli (utile a valle di una eliminazione playlist); altrimenti scandisce tutto
+    il DB (usato dalla pulizia una-tantum)."""
+    stmt = select(Track.id).where(
+        Track.has_local_file.is_not(True),
+        Track.id.not_in(select(playlist_tracks.c.track_id)),
+        Track.id.not_in(select(SetlistTrack.track_id)),
+    )
+    if candidate_ids is not None:
+        ids = list(candidate_ids)
+        if not ids:
+            return []
+        stmt = stmt.where(Track.id.in_(ids))
+    return list(db.scalars(stmt))
+
+
+def unreferenced_track_ids(db: Session, candidate_ids: Iterable[int] | None = None) -> list[int]:
+    """Tra i candidati (o tutte le tracce), quelle non in nessuna playlist né set
+    salvato — a prescindere dal possesso su disco. Usato dall'indicizzazione per
+    decidere se una traccia sganciata va rimossa o tenuta come lead."""
+    stmt = select(Track.id).where(
+        Track.id.not_in(select(playlist_tracks.c.track_id)),
+        Track.id.not_in(select(SetlistTrack.track_id)),
+    )
+    if candidate_ids is not None:
+        ids = list(candidate_ids)
+        if not ids:
+            return []
+        stmt = stmt.where(Track.id.in_(ids))
+    return list(db.scalars(stmt))
+
+
+def delete_orphan_leads(db: Session, candidate_ids: Iterable[int] | None = None) -> int:
+    """Cancella i lead orfani (vedi `orphan_lead_ids`) e ritorna quanti. Non committa
+    (lo fa il chiamante)."""
+    ids = orphan_lead_ids(db, candidate_ids)
+    if not ids:
+        return 0
+    db.execute(
+        delete(Track).where(Track.id.in_(ids)),
+        execution_options={"synchronize_session": False},
+    )
+    return len(ids)
+
+
+def delete_playlist(db: Session, playlist_id: int) -> int | None:
+    """Rimuove una playlist e i lead diventati orfani (non su disco, non in altre
+    playlist, non in alcun set salvato). Ritorna il numero di tracce orfane
+    cancellate, o None se la playlist non esiste."""
     playlist = get_playlist(db, playlist_id)
     if playlist is None:
-        return False
+        return None
+    candidate_ids = [
+        r[0] for r in db.execute(
+            select(playlist_tracks.c.track_id).where(playlist_tracks.c.playlist_id == playlist_id)
+        )
+    ]
     db.execute(playlist_tracks.delete().where(playlist_tracks.c.playlist_id == playlist_id))
     db.delete(playlist)
+    db.flush()  # le membership rimosse devono essere visibili al check orfani
+    removed = delete_orphan_leads(db, candidate_ids)
     db.commit()
-    return True
+    return removed
 
 
 # --- DJ set identificati via Shazam (corpus per i suggerimenti) ---------------

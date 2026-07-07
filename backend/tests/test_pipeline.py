@@ -19,9 +19,6 @@ def test_snapshot_vuoto(db):
     assert snap["playlists"] == 0
     assert snap["download_active"] is False
     assert snap["inbox_files"] is None
-    assert snap["files_on_disk"] is None
-    assert snap["index_mismatch"] is None
-    assert snap["last_index_at"] is None
     assert snap["organizer_url"] is None
 
 
@@ -50,23 +47,6 @@ def test_inbox_cartella_vuota(db, tmp_path, monkeypatch):
 def test_inbox_cartella_inesistente_e_neutra(db, monkeypatch):
     monkeypatch.setattr(settings, "slskd_download_dir", "/percorso/che/non/esiste")
     assert pipeline_snapshot(db)["inbox_files"] is None
-
-
-def test_disallineamento_disco_db(db, seed_tracks, tmp_path, monkeypatch):
-    seed_tracks(3)                          # 3 tracce possedute nel DB...
-    (tmp_path / "a.mp3").write_bytes(b"x")  # ...ma 1 solo file su disco
-    monkeypatch.setattr(settings, "library_root", str(tmp_path))
-    snap = pipeline_snapshot(db)
-    assert snap["files_on_disk"] == 1
-    assert snap["index_mismatch"] is True
-
-
-def test_disco_db_allineati(db, seed_tracks, tmp_path, monkeypatch):
-    seed_tracks(2)
-    (tmp_path / "a.mp3").write_bytes(b"x")
-    (tmp_path / "b.mp3").write_bytes(b"x")
-    monkeypatch.setattr(settings, "library_root", str(tmp_path))
-    assert pipeline_snapshot(db)["index_mismatch"] is False
 
 
 def test_organizer_url_esposto(db, monkeypatch):

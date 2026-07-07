@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Search, X, Music4 } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { apiGet, trackLabel, type Track, type TransitionCandidate } from "@/lib/api";
 import { Card, Input, Badge } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { TrackCover } from "@/components/track-cover";
 import { cn } from "@/lib/cn";
 
 export default function TransitionFinder() {
@@ -80,9 +81,7 @@ export default function TransitionFinder() {
         <>
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2.5 rounded-none border border-border bg-surface px-3 py-2">
-              {selected.album_art_url
-                ? <img src={selected.album_art_url} alt="" className="h-8 w-8 rounded-none object-cover" />
-                : <span className="grid h-8 w-8 place-items-center rounded-none bg-elevated text-faint"><Music4 size={14} /></span>}
+              <TrackCover track={selected} className="h-8 w-8" iconSize={14} />
               <span className="text-sm font-medium">{trackLabel(selected)}</span>
               <span className="tnum text-xs text-faint">{selected.bpm?.toFixed(0)} · {selected.camelot_key ?? "?"}</span>
               <button onClick={() => setSelected(null)} className="ml-1 text-faint hover:text-fg"><X size={15} /></button>

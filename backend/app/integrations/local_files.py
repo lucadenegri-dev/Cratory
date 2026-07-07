@@ -45,7 +45,7 @@ def _id3_text_safe(tags, frame: str) -> str | None:
 def read_tags(path: str | Path) -> dict:
     """Legge i tag principali. Valori assenti -> None. Non solleva su file taggati male."""
     out = {"title": None, "artist": None, "album": None, "year": None,
-           "duration_seconds": None, "isrc": None, "genre": None}
+           "duration_seconds": None, "isrc": None, "genre": None, "label": None}
     try:
         audio = mutagen.File(str(path))
     except Exception as exc:  # noqa: BLE001 — file corrotto/illeggibile: tag vuoti, non fatale
@@ -66,6 +66,7 @@ def read_tags(path: str | Path) -> dict:
         out["album"] = _id3_text(tags, "TALB")
         out["isrc"] = _id3_text(tags, "TSRC")
         out["genre"] = _id3_text(tags, "TCON")
+        out["label"] = _id3_text(tags, "TPUB")  # publisher = etichetta discografica
         date = _id3_text(tags, "TDRC")
     else:
         # Vorbis comment (flac/ogg/opus): chiavi minuscole; MP4 (m4a): atom "©nam" ecc.
@@ -86,6 +87,7 @@ def read_tags(path: str | Path) -> dict:
         out["album"] = first("album", "\xa9alb")
         out["isrc"] = first("isrc")  # MP4 tiene l'ISRC in atom freeform: non coperto in v1
         out["genre"] = first("genre", "\xa9gen")
+        out["label"] = first("label", "organization", "publisher")  # MP4 label freeform: non coperto
         date = first("date", "\xa9day")
     if date and str(date)[:4].isdigit():
         out["year"] = int(str(date)[:4])
@@ -105,6 +107,38 @@ def read_audio_quality(path: str | Path) -> dict:
     if bitrate:
         out["bitrate"] = int(bitrate) // 1000
     return out
+
+
+def read_cover(path: str | Path) -> tuple[bytes, str] | None:
+    """Artwork incorporato nel file: `(bytes, mime)` o None se assente/illeggibile.
+
+    Copre FLAC/OGG (`pictures`), ID3 APIC (mp3/wav) e MP4 `covr` (m4a)."""
+    try:
+        audio = mutagen.File(str(path))
+    except Exception:  # noqa: BLE001 — file corrotto: nessuna cover, non fatale
+        return None
+    if audio is None:
+        return None
+    pics = getattr(audio, "pictures", None)  # FLAC/OGG: lista di Picture
+    if pics:
+        pic = pics[0]
+        return bytes(pic.data), (pic.mime or "image/jpeg")
+    tags = getattr(audio, "tags", None)
+    if tags is None:
+        return None
+    if hasattr(tags, "getall"):  # ID3 (mp3 / wav)
+        apics = tags.getall("APIC")
+        if apics:
+            return bytes(apics[0].data), (apics[0].mime or "image/jpeg")
+    try:
+        covr = tags.get("covr")  # MP4 (m4a)
+    except (ValueError, KeyError):
+        covr = None
+    if covr:
+        cover = covr[0]
+        mime = "image/png" if getattr(cover, "imageformat", None) == 14 else "image/jpeg"
+        return bytes(cover), mime
+    return None
 
 
 def audio_hash(path: str | Path, *, seconds: int = HASH_SECONDS) -> str:

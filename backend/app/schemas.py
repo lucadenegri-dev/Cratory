@@ -267,6 +267,12 @@ class PlaylistOut(BaseModel):
     imported_at: datetime
 
 
+class PlaylistDeleteResult(BaseModel):
+    """Esito eliminazione playlist: quante tracce-lead orfane sono state rimosse."""
+
+    deleted_tracks: int = 0
+
+
 class SpotifyPlaylistRef(BaseModel):
     """Playlist disponibile su Spotify (per la selezione, prima dell'import)."""
 
@@ -504,6 +510,7 @@ class LibraryStatsOut(BaseModel):
     bpm_min: float | None = None
     bpm_max: float | None = None
     key_distribution: dict[str, int]
+    genre_distribution: dict[str, int] = {}
     bpm_histogram: list[BpmBin] = []
     energy_distribution: list[EnergyBucket] = []
 
@@ -521,9 +528,6 @@ class PipelineOut(BaseModel):
     download_active: bool
     download_pending: int
     inbox_files: int | None = None
-    files_on_disk: int | None = None
-    index_mismatch: bool | None = None
-    last_index_at: str | None = None
     organizer_url: str | None = None
 
 

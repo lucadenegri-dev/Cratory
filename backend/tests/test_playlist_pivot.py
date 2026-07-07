@@ -182,7 +182,7 @@ def test_delete_playlist_keeps_shared_tracks(db):
     assert db.query(Track).count() == 1  # dedup per ISRC: una sola riga
 
     deleted_playlist_id = rep_liked["playlist_id"]
-    assert delete_playlist(db, deleted_playlist_id) is True
+    assert delete_playlist(db, deleted_playlist_id) == 0  # brano condiviso: non orfano
     # il brano resta in libreria dopo la delete
     assert db.query(Track).count() == 1
     # la membership per la playlist cancellata non esiste piu'

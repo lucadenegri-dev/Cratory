@@ -185,10 +185,12 @@ The `library` mode clears playlists, tracks and sets while preserving Spotify to
 
 ## Workflow
 
-The dashboard opens with a six-stage pipeline strip — **Discover → Acquire →
-Organize⤴ → Index → Analyze⤴ → Play** — that shows where you are and what's next.
+The dashboard opens with a five-stage pipeline strip — **Discover → Acquire →
+Organize⤴ → Analyze⤴ → Play** — that shows where you are and what's next.
 Organize and Analyze hand off to the companion apps (DjOrganizer for tagging, Rekordbox
-for BPM/key analysis) and loop back with an import.
+for BPM/key analysis) and loop back with an import. Indexing the library (scanning
+`LIBRARY_ROOT`) runs from the "Index" button in the left nav (or automatically at
+startup), so it isn't a strip stage.
 
 Typical run: start backend + frontend → in Settings, connect Spotify → import a playlist
 or paste a tracklist → run DjOrganizer separately to tag and organize new files onto disk

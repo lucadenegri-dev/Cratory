@@ -5,9 +5,9 @@ provider esterni o da correzione manuale; l'energia e' stimata in modo
 deterministico (services/energy). Nessun motore di enrichment interno.
 """
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Table, Text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -63,6 +63,9 @@ class Track(Base):
     # stabile a rinomina/retag. Calcolata al download (acquisition) e all'indicizzazione libreria.
     audio_hash: Mapped[str | None] = mapped_column(String, index=True)
     added_at: Mapped[datetime | None] = mapped_column(DateTime)  # primo import in libreria; l'added_at per-playlist sta su playlist_tracks
+    # Legacy pre-M2M (playlist di provenienza sulla traccia): superate da playlist_tracks
+    # e svuotate dal backfill. Non droppabili: FK baked-in su playlist_id -> DROP COLUMN
+    # richiederebbe un rebuild di `tracks`, che il progetto evita per FK-safety.
     playlist_id: Mapped[int | None] = mapped_column(ForeignKey("playlists.id"), index=True)
     playlist_name: Mapped[str | None] = mapped_column(String)
     title: Mapped[str | None] = mapped_column(String)
@@ -70,7 +73,6 @@ class Track(Base):
     album: Mapped[str | None] = mapped_column(String)
     genre: Mapped[str | None] = mapped_column(String, index=True)  # genre_primary
     year: Mapped[int | None] = mapped_column(Integer)
-    release_date: Mapped[date | None] = mapped_column(Date)
     label: Mapped[str | None] = mapped_column(String)
     duration_seconds: Mapped[int | None] = mapped_column(Integer)
     bpm: Mapped[float | None] = mapped_column(Float, index=True)

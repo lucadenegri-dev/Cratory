@@ -31,13 +31,17 @@ export default function PlaylistsPage() {
   }, [reload]);
 
   const doDelete = async (p: Playlist) => {
-    if (!window.confirm(`Rimuovere la playlist "${p.name}" e le sue ${p.track_count} tracce dalla libreria? L'operazione non si può annullare.`)) return;
+    if (!window.confirm(`Rimuovere la playlist "${p.name}"? I lead senza file su disco, non presenti in altre playlist né in un set, verranno cancellati dalla libreria. L'operazione non si può annullare.`)) return;
     setError(null);
     setNotice(null);
     setBusy(`del-${p.id}`);
     try {
-      await deletePlaylist(p.id);
-      setNotice(`Playlist "${p.name}" rimossa.`);
+      const { deleted_tracks } = await deletePlaylist(p.id);
+      setNotice(
+        deleted_tracks > 0
+          ? `Playlist "${p.name}" rimossa · ${deleted_tracks} ${deleted_tracks === 1 ? "traccia orfana rimossa" : "tracce orfane rimosse"}.`
+          : `Playlist "${p.name}" rimossa.`,
+      );
       reload();
     } catch (e) {
       setError(`Rimozione fallita: ${err(e)}`);

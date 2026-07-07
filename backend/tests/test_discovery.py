@@ -38,15 +38,6 @@ def test_lastfm_similar_artists_parsing():
     assert client.http.calls[0][1]["api_key"] == "KEY"
 
 
-def test_lastfm_top_tags_parsing():
-    payload = {"toptags": {"tag": [
-        {"name": "techno", "count": 100},
-        {"name": "dark", "count": 40},
-    ]}}
-    client = LastFMClient("KEY", http=_FakeHttp(payload))
-    assert client.top_tags("Artist", "Title") == ["techno", "dark"]
-
-
 def test_lastfm_normalizes_single_dict():
     """Last.fm restituisce un dict (non lista) quando c'e' un solo risultato."""
     payload = {"similartracks": {"track": {

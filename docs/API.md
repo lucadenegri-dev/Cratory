@@ -26,12 +26,13 @@ Snapshot unico per la striscia di orientamento in dashboard. Response `PipelineO
 conteggi libreria (`playlists`, `total_tracks`, `missing_key`, `wishlist`,
 `archived_count`, `with_local_file`, `analyze_pending`, `ready_for_set`), stato
 download (`download_active`, `download_pending`) e stato disco (`inbox_files` da
-`SLSKD_DOWNLOAD_DIR`, `files_on_disk` da `LIBRARY_ROOT`, `index_mismatch`,
-`last_index_at`, `organizer_url` da `ORGANIZER_URL`). `analyze_pending` conta le
+`SLSKD_DOWNLOAD_DIR`, `organizer_url` da `ORGANIZER_URL`). `analyze_pending` conta le
 tracce possedute senza BPM o senza key, cioe' quante restano da "analizzare in
-Rekordbox ed importare" (stesso numero di `GET /api/rekordbox/pending`). I campi
-disco sono `null` quando la cartella corrispondente non e' configurata o non
-esiste (fase neutra, non errore).
+Rekordbox ed importare" (stesso numero di `GET /api/rekordbox/pending`). `inbox_files`
+e' `null` quando `SLSKD_DOWNLOAD_DIR` non e' configurata o non esiste (fase neutra,
+non errore). L'indicizzazione della libreria non e' piu' un campo di questo snapshot
+(i vecchi `files_on_disk`/`index_mismatch`/`last_index_at` sono stati rimossi): si
+lancia dal pulsante "Indicizza" nella nav.
 
 ## Rekordbox (fonte di BPM/key)
 
@@ -74,6 +75,10 @@ dall'utente collegato (quelle altrui che segue non sono importabili in dev mode)
 `POST /api/playlists/import` importa una playlist Spotify o i liked tracks.
 `POST /api/playlists/{playlist_id}/sync` riallinea una playlist gia' importata con
 Spotify: importa le nuove tracce e scollega quelle rimosse (che restano in libreria).
+`DELETE /api/playlists/{playlist_id}` rimuove la playlist e i suoi "lead orfani":
+tracce senza file locale che non sono in nessun'altra playlist ne' in un set salvato
+(le tracce su disco, o presenti in altra playlist/set, restano). Risponde `200` con
+`{deleted_tracks}` (quante tracce orfane sono state rimosse), `404` se non esiste.
 `POST /api/playlists/import-manual` crea una playlist da testo incollato. Nessuno di
 questi avvia piu' enrichment: il testuale (titolo/artista/album/label/genere) e' di
 DjOrganizer, BPM/key arrivano solo dall'import Rekordbox.
@@ -95,6 +100,7 @@ Spotify (write-back best-effort). Response: `created`, `track`, `spotify_added`,
 ```text
 GET   /api/tracks
 GET   /api/tracks/{track_id}
+GET   /api/tracks/{track_id}/cover
 PATCH /api/tracks/{track_id}
 POST  /api/tracks/{track_id}/link-file
 GET   /api/files/search
@@ -110,6 +116,12 @@ stato (`imported` | `ready_for_set`), BPM min/max, key, durata, presenza
 Spotify/SoundCloud, possesso (`has_local_file`), metadata incompleti, sort/order,
 limit/offset — per le tracce di una playlist usare
 `GET /api/playlists/{playlist_id}/tracks`.
+
+`GET /api/tracks/{track_id}/cover` serve l'artwork **incorporato nel file** di una
+traccia posseduta, letto on-demand dal disco (non salvato in DB). Risponde con i byte
+dell'immagine (`Cache-Control: max-age=3600`); `404` se la traccia non esiste, non e'
+posseduta (`has_local_file`), il file manca o non contiene cover. Il frontend usa
+`album_art_url` (Spotify) quando presente e ripiega su questo endpoint altrimenti.
 
 `POST /api/library/index` (202) indicizza la libreria canonica `LIBRARY_ROOT`
 (disk-first: il disco È la libreria) — scan + riaggancio per audio-hash +
@@ -133,6 +145,11 @@ Request: `{path}`. `400` su percorso non valido, `404` se la traccia non esiste.
 case-insensitive) in `LIBRARY_ROOT` e `SLSKD_DOWNLOAD_DIR`; max 50 risultati,
 query sotto i 2 caratteri restituisce lista vuota. Risposta: lista di
 `{path, name, format, size, source}` con `source` = `library` | `downloads`.
+
+`GET /api/stats` restituisce gli aggregati deterministici della libreria
+(`LibraryStatsOut`): conteggi, copertura BPM/key, `key_distribution` e
+`genre_distribution` (mappa genere->conteggio; i generi sono fusi
+case-insensitive tenendo la grafia piu' frequente), istogramma BPM ed energia.
 
 ## Labels
 

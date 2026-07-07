@@ -37,5 +37,4 @@ def test_get_pipeline(client, monkeypatch):
     assert body["total_tracks"] == 0
     assert body["download_active"] is False
     assert body["inbox_files"] is None
-    assert body["index_mismatch"] is None
     assert body["organizer_url"] is None

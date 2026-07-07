@@ -209,9 +209,6 @@ export interface PipelineStatus {
   download_active: boolean;
   download_pending: number;
   inbox_files: number | null;
-  files_on_disk: number | null;
-  index_mismatch: boolean | null;
-  last_index_at: string | null;
   organizer_url: string | null;
 }
 
@@ -350,6 +347,7 @@ export interface LibraryStats {
   bpm_min: number | null;
   bpm_max: number | null;
   key_distribution: Record<string, number>;
+  genre_distribution: Record<string, number>;
   bpm_histogram: BpmBin[];
   energy_distribution: EnergyBucket[];
 }
@@ -433,8 +431,22 @@ export function getPlaylist(id: number) {
   return apiGet<Playlist>(`/api/playlists/${id}`);
 }
 
+export interface PlaylistDeleteResult {
+  deleted_tracks: number;
+}
+
+/** Sorgente cover di una traccia: Spotify se presente, altrimenti l'artwork
+ *  embedded nel file (endpoint on-demand) per le possedute, altrimenti nessuna. */
+export function trackCoverSrc(
+  t: { id: number; album_art_url?: string | null; has_local_file?: boolean | null },
+): string | null {
+  if (t.album_art_url) return t.album_art_url;
+  if (t.has_local_file) return `${API}/api/tracks/${t.id}/cover`;
+  return null;
+}
+
 export function deletePlaylist(id: number) {
-  return apiDelete<void>(`/api/playlists/${id}`);
+  return apiDelete<PlaylistDeleteResult>(`/api/playlists/${id}`);
 }
 
 export function playlistTracks(id: number) {
@@ -475,10 +487,6 @@ export function servicesStatus() {
 
 export function playlistGaps(id: number) {
   return apiGet<GapAnalysis>(`/api/playlists/${id}/gaps`);
-}
-
-export function libraryGaps() {
-  return apiGet<GapAnalysis>("/api/playlists/library/gaps");
 }
 
 // --- Discovery (Fase F) -----------------------------------------------------
@@ -739,8 +747,6 @@ export interface RekordboxImportReport {
   key_set: number;
   energy_set: number;
 }
-
-export const rekordboxPending = () => apiGet<{ pending: number }>("/api/rekordbox/pending");
 
 export async function importRekordbox(file: File) {
   const fd = new FormData();

@@ -6,7 +6,7 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-07-06
+**Ultimo aggiornamento:** 2026-07-08
 
 **Nome prodotto:** **Cratory** (rename eseguito il 2026-06-25 su UI, codice, docs e
 icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici legacy
@@ -18,9 +18,58 @@ disco, playlist streaming = lead); **pivot al paradigma disk-first + Rekordbox
 completato** (motore di enrichment interno e fingerprinting AcoustID ritirati verso
 DjOrganizer, BPM/key ora solo da import Rekordbox XML, `energy` derivata); Discovery
 operativo (expand Last.fm + dig Discogs, ora solo-gusto); Set Builder tecnico/creativo
-con garanzia "solo posseduti"; dashboard con pipeline a sei fasi e documentazione
-riallineata al nuovo paradigma; identificazione mix via Shazam integrata (fase 1;
-co-occorrenza in backlog).
+con garanzia "solo posseduti"; dashboard con pipeline a cinque fasi (Indicizza
+spostata su pulsante nella nav) e documentazione riallineata al nuovo paradigma;
+identificazione mix via Shazam integrata (fase 1; co-occorrenza in backlog).
+
+## Milestone 2026-07-08 - Igiene DB disk-first: disco autorevole, niente lead fantasma, dashboard ripulita
+
+Consolidamento del paradigma disk-first: il disco diventa la fonte autorevole per i
+metadati disco-derivabili delle possedute e i "lead orfani" (senza file, non in
+playlist ne' in un set salvato) non sopravvivono piu' nel DB.
+
+- **Lettura tag piu' completa + cover on-demand.** `read_tags` legge ora anche
+  `label` (ID3 `TPUB` / Vorbis `LABEL`); l'indicizzazione fa backfill di `label` dal
+  disco solo se assente. Nuova `read_cover` + endpoint `GET /api/tracks/{id}/cover`:
+  serve l'artwork incorporato nel file della traccia posseduta on-demand (non salvato
+  in DB; copre FLAC/OGG, ID3 APIC, MP4 `covr`), `404` se assente. Il frontend usa la
+  cover Spotify (`album_art_url`) quando c'e' e ripiega sull'endpoint (nuovi
+  `TrackCover`/`trackCoverSrc`).
+- **Cartelle nascoste escluse ovunque.** `scan_folder` salta cartelle e file che
+  iniziano per `.` (`.quarantine`, `.DS_Store`, `.git`) in conteggio inbox/disco e
+  indicizzazione: non sono contenuto di libreria.
+- **Riconciliazione indice senza lead fantasma.** Un possesso il cui file lo scan non
+  vede — cancellato, spostato fuori da `LIBRARY_ROOT`, o finito in una cartella
+  nascosta — viene sganciato (`has_local_file=False`, `local_path` azzerato) tenendo
+  `audio_hash` per il riaggancio (anche a un lead Spotify via ISRC/artist+title). Se
+  il brano non e' in nessuna playlist ne' set salvato viene **eliminato**
+  (`orphans_removed`); altrimenti resta lead (`lost`).
+- **Pulizia lead orfani su delete playlist.** `DELETE /api/playlists/{id}` ora ritorna
+  `200` con `{deleted_tracks}` e rimuove i lead diventati orfani (helper condiviso
+  `delete_orphan_leads`/`unreferenced_track_ids` in `repositories.py`); tracce su disco
+  o in altra playlist/set restano.
+- **Tool di manutenzione una-tantum.** `backend/app/tools/cleanup_disk_first.py`
+  (dry-run di default, `--apply` per scrivere) su `backend/app/services/db_hygiene.py`:
+  elimina i lead orfani, azzera sui lead i campi residui legacy
+  (`genre`/`bpm`/`camelot_key`/`energy`) e rilegge le possedute dal disco (disco
+  autorevole; mai tocca BPM/key Rekordbox ne' cover Spotify, sola lettura dei file).
+- **Dashboard ridisegnata.** Le quattro figure sono ora Tracce scoperte / Tracce
+  possedute / Playlist / Set salvati; nuova stat "Generi piu' frequenti"
+  (`stats.genre_distribution`, generi fusi case-insensitive) le cui righe linkano alla
+  Libreria filtrata per genere (`/library?genre=...`). Rimossi la card "Prossimo passo"
+  e i tre pulsanti di azione rapida. La striscia pipeline scende a cinque fasi:
+  "Indicizza" e' ora un pulsante nella nav a sinistra (sopra Impostazioni), non piu' una
+  fase della striscia; `GET /api/pipeline` perde `files_on_disk`/`index_mismatch`/
+  `last_index_at` (resta `inbox_files`).
+- **Stato traccia a icone + Spotify verde.** In Libreria lo stato per-riga passa da
+  badge testuali a icone compatte (pronta=check, posseduta=disco rigido, scartata=
+  archivio); il link Spotify usa un glyph in verde Spotify — eccezione documentata alla
+  Monochrome Rule (affordance di brand), accanto al rosso danger e ai loader EQ.
+- **Rimozione codice morto.** Eliminati gli ultimi residui dell'enrichment legacy
+  (`LastFmTagProvider`, `MusicFeatureProvider`), droppata la colonna inutilizzata
+  `Track.release_date` (migrazione FK-safe). `Track.playlist_id`/`playlist_name`
+  restano in schema (FK baked-in, non droppabili su SQLite) ma morte e vuote. Rimossi
+  anche `libraryGaps`/`rekordboxPending` dead export in `api.ts`.
 
 ## Milestone 2026-07-06 - Pivot disk-first + Rekordbox: enrichment su DjOrganizer, BPM/key da Rekordbox, dashboard e docs
 

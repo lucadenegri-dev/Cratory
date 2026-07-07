@@ -37,31 +37,6 @@ class SpotifyClient(ABC):
         """Crea una playlist e ritorna il suo URL."""
 
 
-class MusicFeatureProvider(ABC):
-    """Provider di feature musicali per l'enrichment esterno (BPM, key, mood, energia...).
-
-    Il matching usa, in ordine di priorita': ISRC -> platform_track_id ->
-    artist+title+duration -> fuzzy artist+title. L'implementazione ritorna un dict
-    con i campi disponibili e una `confidence` (0-100), oppure None se nessun match.
-    """
-
-    name: str = "provider"
-
-    @abstractmethod
-    def lookup(
-        self,
-        *,
-        title: str | None,
-        artist: str | None,
-        isrc: str | None = None,
-        duration_seconds: int | None = None,
-        context: dict[str, Any] | None = None,
-    ) -> dict[str, Any] | None:
-        """`context` = dati gia' raccolti dai provider precedenti nella catena
-        (es. `mbid` di MusicBrainz per AcousticBrainz). I provider che non ne hanno
-        bisogno lo ignorano."""
-
-
 class LLMClient(ABC):
     """L'output dell'agente e' sempre JSON validato dal Validation Engine.
 
