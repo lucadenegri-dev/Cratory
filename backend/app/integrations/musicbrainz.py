@@ -61,7 +61,7 @@ class MusicBrainzProvider:
             return None
         if mbid:
             try:
-                rec = self._get(f"/recording/{mbid}", {"inc": "releases+tags"})
+                rec = self._get(f"/recording/{mbid}", {"inc": "releases+tags+artist-credits+release-groups"})
                 parsed = self._parse_recording(rec, isrc=isrc, exact=True) if rec else None
                 if parsed:
                     return parsed
@@ -70,7 +70,7 @@ class MusicBrainzProvider:
         rec, exact = None, False
         if isrc:
             try:
-                data = self._get(f"/isrc/{isrc}", {"inc": "releases+tags"})
+                data = self._get(f"/isrc/{isrc}", {"inc": "releases+tags+artist-credits+release-groups"})
                 recs = data.get("recordings") or []
                 rec, exact = (recs[0] if recs else None), bool(recs)
             except MusicBrainzError as exc:
@@ -78,7 +78,7 @@ class MusicBrainzProvider:
         if rec is None and title:
             query = f'recording:"{title}"' + (f' AND artist:"{artist}"' if artist else "")
             try:
-                data = self._get("/recording", {"query": query, "limit": 5, "inc": "releases+tags"})
+                data = self._get("/recording", {"query": query, "limit": 5, "inc": "releases+tags+artist-credits+release-groups"})
             except MusicBrainzError as exc:
                 logger.warning("MusicBrainz search '%s' fallito: %s", title, exc)
                 return None
@@ -109,8 +109,25 @@ class MusicBrainzProvider:
         return None
 
     @staticmethod
+    def _is_va_comp(rel):
+        """True se la release è una compilation Various Artists o un DJ-mix.
+        Una traccia che compare solo su una compilation-mix non ha lì il suo
+        album/label 'reale' (es. 'Progressive'): quella release va scartata come
+        fonte per album e label. Richiede inc=artist-credits+release-groups."""
+        credit = " ".join(
+            (c.get("name") or (c.get("artist") or {}).get("name") or "")
+            for c in (rel.get("artist-credit") or [])
+        ).strip().lower()
+        if credit == "various artists":
+            return True
+        secondary = (rel.get("release-group") or {}).get("secondary-types") or []
+        return any(s in ("Compilation", "DJ-mix") for s in secondary)
+
+    @staticmethod
     def _label(rec):
         for rel in rec.get("releases") or []:
+            if MusicBrainzProvider._is_va_comp(rel):
+                continue
             for li in rel.get("label-info") or []:
                 name = (li.get("label") or {}).get("name")
                 if name:
@@ -120,6 +137,8 @@ class MusicBrainzProvider:
     @staticmethod
     def _album(rec):
         for rel in rec.get("releases") or []:
+            if MusicBrainzProvider._is_va_comp(rel):
+                continue
             title = rel.get("title")
             if title:
                 return title
