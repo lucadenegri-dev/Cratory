@@ -78,6 +78,7 @@ function IssueRow({ issue, onFix, onDismiss, onReopen }: {
           <span className="text-fg">{issue.status === "accepted" ? (suggested || "—") : "—"}</span>
         )}
       </td>
+      <td className="px-3 py-2"><ConfBadge conf={conf} /></td>
       <td className="whitespace-nowrap px-3 py-2">
         {issue.status === "open" ? (
           <span className="flex gap-1">
@@ -125,6 +126,7 @@ export function IssuesTable({ issues, onFix, onDismiss, onReopen }: {
             <th className="px-3 py-2 font-normal">Traccia</th>
             <th className="px-3 py-2 font-normal">Campo</th>
             <th className="px-3 py-2 font-normal">Correzione</th>
+            <th className="px-3 py-2 font-normal">Conf.</th>
             <th className="px-3 py-2 font-normal">Azioni</th>
           </tr>
         </thead>

@@ -101,7 +101,14 @@ def fix_issue(issue_id: int, body: IssueFixBody, db: Session = Depends(get_db)):
     value = body.value.strip()
     if not value:
         raise HTTPException(status_code=400, detail="valore vuoto")
-    issue.suggested_fix_json = {"field": issue.field, "action": "retag", "to": value}
+    fix = {"field": issue.field, "action": "retag", "to": value}
+    # Preserva i marcatori (source/confidence) del suggerimento esistente: così
+    # accettando per-riga un provider_override non si perde il badge di confidenza.
+    prev = issue.suggested_fix_json or {}
+    for marker in ("source", "confidence"):
+        if prev.get(marker) is not None:
+            fix[marker] = prev[marker]
+    issue.suggested_fix_json = fix
     issue.status = "accepted"
     issue.updated_at = utcnow()
     db.commit()
