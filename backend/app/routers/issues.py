@@ -223,22 +223,29 @@ _PROVIDER_FIELDS = ("artist", "title", "genre", "year", "label", "album")
 
 @router.post("/provider-suggest", response_model=dict)
 def provider_suggest(db: Session = Depends(get_db)):
-    """Riempie i suggested_fix delle issue aperte dai provider testuali
-    (MusicBrainz→Discogs). Precedenza manuale > tag pulito > provider > AI:
-    tocca solo issue open (i tag puliti non hanno issue; i fix manuali sono
-    accepted). Provider prima dell'AI (gli endpoint AI saltano le issue già
-    suggerite). Una lookup per file, con cache in-memory.
+    """Riempie i suggested_fix delle issue aperte dai provider (MusicBrainz→
+    Discogs), **fingerprint-first**: se il file non ha mbid e AcoustID è
+    configurato, lo fingerprinta prima della lookup → match esatto e confidenza
+    'high' invece del testuale (meno errori tipo compilation). Sincrono come
+    /api/fingerprint.
 
-    Marker `source`: il provider considera "da riempire" una issue quando
-    suggested_fix_json è None OPPURE non ha source == "provider" — quindi
-    sovrascrive i suggerimenti AI e i legacy senza marker (che sono per forza
-    bridge/AI, dato che i fix manuali sono accepted), ed è idempotente sulle
-    issue già marcate provider (nessuna nuova lookup)."""
+    Tocca solo issue open (i tag puliti non hanno issue; i fix manuali sono
+    accepted); riempie quando suggested_fix_json è None o non ha source ==
+    'provider' (sovrascrive AI/legacy, idempotente sulle sue). Ogni proposta è
+    marcata source='provider' + confidence ('high'|'text'). Una lookup per file."""
+    from app.integrations import acoustid
     from app.integrations.discogs_meta import DiscogsMetaClient
     from app.integrations.musicbrainz import MusicBrainzProvider
+    from app.services.fingerprint import fingerprint_one
 
     mb = MusicBrainzProvider(user_agent=settings.musicbrainz_user_agent)
     discogs = DiscogsMetaClient()
+    ac_client = None
+    if acoustid.acoustid_configured() and acoustid.fpcalc_available():
+        try:
+            ac_client = acoustid.get_acoustid_client()
+        except acoustid.AcoustIDError:
+            ac_client = None
 
     rows = db.execute(
         select(Issue, AudioFile).join(AudioFile, Issue.file_id == AudioFile.id)
@@ -249,13 +256,18 @@ def provider_suggest(db: Session = Depends(get_db)):
             if i.suggested_fix_json is None
             or i.suggested_fix_json.get("source") != "provider"]
     if not todo:
-        return {"configured": True, "files": 0, "suggested": 0, "unresolved": 0}
+        return {"configured": True, "acoustid_available": ac_client is not None,
+                "files": 0, "suggested": 0, "unresolved": 0, "fingerprinted": 0}
 
     cache: dict[int, dict] = {}
+    fingerprinted = 0
 
     def _lookup(f: AudioFile) -> dict:
+        nonlocal fingerprinted
         if f.id not in cache:
-            cache[f.id] = text_providers.lookup(f, mb=mb, discogs=discogs) or {}
+            if not f.mbid and ac_client is not None and fingerprint_one(f, ac_client):
+                fingerprinted += 1
+            cache[f.id] = text_providers.lookup_with_conf(f, mb=mb, discogs=discogs) or {}
         return cache[f.id]
 
     suggested = unresolved = 0
@@ -263,17 +275,20 @@ def provider_suggest(db: Session = Depends(get_db)):
     for issue, f in todo:
         files_seen.add(f.id)
         res = _lookup(f)
-        value = res.get(issue.field)
-        if value is not None:
+        pair = res.get(issue.field)
+        if pair is not None:
+            value, conf = pair
             issue.suggested_fix_json = {"field": issue.field, "action": "retag",
-                                        "to": str(value), "source": "provider"}
+                                        "to": str(value), "source": "provider",
+                                        "confidence": conf}
             issue.updated_at = utcnow()
             suggested += 1
         else:
             unresolved += 1
     db.commit()
-    return {"configured": True, "files": len(files_seen),
-            "suggested": suggested, "unresolved": unresolved}
+    return {"configured": True, "acoustid_available": ac_client is not None,
+            "files": len(files_seen), "suggested": suggested,
+            "unresolved": unresolved, "fingerprinted": fingerprinted}
 
 
 @router.post("/provider-rescan", response_model=dict)

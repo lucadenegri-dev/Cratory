@@ -235,9 +235,11 @@ export function aiSuggestGenres() {
 
 export interface ProviderSuggestResult {
   configured: boolean;
+  acoustid_available: boolean;
   files: number;
   suggested: number;
   unresolved: number;
+  fingerprinted: number;
 }
 export function providerSuggest() {
   return apiSend<ProviderSuggestResult>("POST", "/api/issues/provider-suggest");

@@ -107,7 +107,7 @@ export default function IssuesPage() {
       } else {
         load();
         setAiNote(
-          `${r.suggested} suggerimenti da provider${r.unresolved > 0 ? `, ${r.unresolved} non trovati` : ""} — rivedi e accetta col ✓.`,
+          `${r.suggested} suggerimenti da provider${r.fingerprinted > 0 ? ` (${r.fingerprinted} via fingerprint)` : ""}${r.unresolved > 0 ? `, ${r.unresolved} non trovati` : ""}${r.acoustid_available ? "" : " — fingerprint off, solo match testuale"} — rivedi e accetta col ✓.`,
         );
       }
     } catch (e) {

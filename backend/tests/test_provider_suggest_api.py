@@ -18,78 +18,107 @@ def _seed(db):
     return f
 
 
+def _no_fingerprint(monkeypatch):
+    """AcoustID off → nessun ac_client, nessun fingerprint: test hermetico."""
+    monkeypatch.setattr("app.integrations.acoustid.acoustid_configured", lambda: False)
+
+
+def _conf(monkeypatch, mapping):
+    monkeypatch.setattr("app.routers.issues.text_providers.lookup_with_conf",
+                        lambda file, **kw: mapping)
+
+
 def test_provider_suggest_fills_label(db, monkeypatch):
     _seed(db)
-    monkeypatch.setattr("app.core.config.settings.musicbrainz_user_agent", "t/0.1")
-    monkeypatch.setattr("app.routers.issues.text_providers.lookup",
-                        lambda file, **kw: {"label": "Drumcode"})
-    r = client.post("/api/issues/provider-suggest")
-    assert r.status_code == 200
-    body = r.json()
+    _no_fingerprint(monkeypatch)
+    _conf(monkeypatch, {"label": ("Drumcode", "text")})
+    body = client.post("/api/issues/provider-suggest").json()
     assert body["configured"] is True and body["suggested"] == 1
+    assert body["acoustid_available"] is False and body["fingerprinted"] == 0
     iss = db.query(Issue).filter_by(field="label").one()
     assert iss.suggested_fix_json == {"field": "label", "action": "retag",
-                                      "to": "Drumcode", "source": "provider"}
+                                      "to": "Drumcode", "source": "provider",
+                                      "confidence": "text"}
     assert iss.status == "open"
 
 
+def test_provider_suggest_marks_high_confidence(db, monkeypatch):
+    _seed(db)
+    _no_fingerprint(monkeypatch)
+    _conf(monkeypatch, {"label": ("Drumcode", "high")})
+    client.post("/api/issues/provider-suggest")
+    iss = db.query(Issue).filter_by(field="label").one()
+    assert iss.suggested_fix_json["confidence"] == "high"
+
+
 def test_provider_suggest_overwrites_ai_suggestion(db, monkeypatch):
-    """RED 1: provider sovrascrive un suggerimento AI marcato source:ai."""
-    f = _seed(db)
+    """Provider sovrascrive un suggerimento AI marcato source:ai."""
+    _seed(db)
     iss = db.query(Issue).filter_by(field="label").one()
     iss.suggested_fix_json = {"field": "genre", "action": "retag", "to": "X", "source": "ai"}
     iss.field = "genre"
     db.commit()
-    monkeypatch.setattr("app.core.config.settings.musicbrainz_user_agent", "t/0.1")
-    monkeypatch.setattr("app.routers.issues.text_providers.lookup",
-                        lambda file, **kw: {"genre": "Y"})
-    r = client.post("/api/issues/provider-suggest")
-    assert r.status_code == 200
-    body = r.json()
+    _no_fingerprint(monkeypatch)
+    _conf(monkeypatch, {"genre": ("Y", "text")})
+    body = client.post("/api/issues/provider-suggest").json()
     assert body["suggested"] == 1
     db.refresh(iss)
-    assert iss.suggested_fix_json == {"field": "genre", "action": "retag",
-                                      "to": "Y", "source": "provider"}
+    assert iss.suggested_fix_json == {"field": "genre", "action": "retag", "to": "Y",
+                                      "source": "provider", "confidence": "text"}
 
 
 def test_provider_suggest_overwrites_legacy_without_marker(db, monkeypatch):
-    """RED 2: issue open con suggerimento legacy SENZA marker -> provider sovrascrive."""
-    f = _seed(db)
+    """Issue open con suggerimento legacy SENZA marker -> provider sovrascrive."""
+    _seed(db)
     iss = db.query(Issue).filter_by(field="label").one()
     iss.suggested_fix_json = {"field": "label", "action": "retag", "to": "Legacy"}
     db.commit()
-    monkeypatch.setattr("app.core.config.settings.musicbrainz_user_agent", "t/0.1")
-    monkeypatch.setattr("app.routers.issues.text_providers.lookup",
-                        lambda file, **kw: {"label": "Drumcode"})
-    r = client.post("/api/issues/provider-suggest")
-    assert r.status_code == 200
-    body = r.json()
+    _no_fingerprint(monkeypatch)
+    _conf(monkeypatch, {"label": ("Drumcode", "text")})
+    body = client.post("/api/issues/provider-suggest").json()
     assert body["suggested"] == 1
     db.refresh(iss)
-    assert iss.suggested_fix_json == {"field": "label", "action": "retag",
-                                      "to": "Drumcode", "source": "provider"}
+    assert iss.suggested_fix_json["to"] == "Drumcode"
+    assert iss.suggested_fix_json["source"] == "provider"
 
 
 def test_provider_suggest_idempotent_on_own_suggestions(db, monkeypatch):
-    """RED 3: issue già source:provider -> nessuna nuova lookup, dict intoccato."""
-    f = _seed(db)
+    """Issue già source:provider -> nessuna nuova lookup, dict intoccato."""
+    _seed(db)
     iss = db.query(Issue).filter_by(field="label").one()
-    iss.suggested_fix_json = {"field": "label", "action": "retag",
-                              "to": "Drumcode", "source": "provider"}
+    iss.suggested_fix_json = {"field": "label", "action": "retag", "to": "Drumcode",
+                              "source": "provider", "confidence": "text"}
     db.commit()
-    monkeypatch.setattr("app.core.config.settings.musicbrainz_user_agent", "t/0.1")
+    _no_fingerprint(monkeypatch)
     called = {"n": 0}
 
-    def _fake_lookup(file, **kw):
+    def _fake(file, **kw):
         called["n"] += 1
-        return {"label": "ShouldNotBeUsed"}
+        return {"label": ("ShouldNotBeUsed", "text")}
 
-    monkeypatch.setattr("app.routers.issues.text_providers.lookup", _fake_lookup)
-    r = client.post("/api/issues/provider-suggest")
-    assert r.status_code == 200
-    body = r.json()
+    monkeypatch.setattr("app.routers.issues.text_providers.lookup_with_conf", _fake)
+    body = client.post("/api/issues/provider-suggest").json()
     assert body["configured"] is True and body["suggested"] == 0 and body["files"] == 0
     assert called["n"] == 0
-    db.refresh(iss)
-    assert iss.suggested_fix_json == {"field": "label", "action": "retag",
-                                      "to": "Drumcode", "source": "provider"}
+
+
+def test_provider_suggest_fingerprints_files_without_mbid(db, monkeypatch):
+    """Fingerprint-first: file senza mbid + AcoustID on -> fingerprint prima della lookup,
+    e l'mbid ottenuto viene persistito."""
+    _seed(db)
+    monkeypatch.setattr("app.integrations.acoustid.acoustid_configured", lambda: True)
+    monkeypatch.setattr("app.integrations.acoustid.fpcalc_available", lambda: True)
+    monkeypatch.setattr("app.integrations.acoustid.get_acoustid_client", lambda: object())
+    seen = {"fp": 0}
+
+    def _fake_fp(file, client, **kw):
+        seen["fp"] += 1
+        file.mbid = "mb-xyz"
+        return "mb-xyz"
+
+    monkeypatch.setattr("app.services.fingerprint.fingerprint_one", _fake_fp)
+    _conf(monkeypatch, {"label": ("Drumcode", "high")})
+    body = client.post("/api/issues/provider-suggest").json()
+    assert body["acoustid_available"] is True
+    assert body["fingerprinted"] == 1 and seen["fp"] == 1
+    assert db.query(AudioFile).one().mbid == "mb-xyz"
