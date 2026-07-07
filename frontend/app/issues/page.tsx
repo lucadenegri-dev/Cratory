@@ -9,7 +9,7 @@ import {
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { IssuesTable } from "@/components/issues-table";
-import { Alert, Button, EmptyState, Input, Select } from "@/components/ui";
+import { Alert, Button, Checkbox, EmptyState, Input, Modal, Select } from "@/components/ui";
 
 export default function IssuesPage() {
   const { scan, rescan, startRescan } = useJobs();
@@ -25,6 +25,9 @@ export default function IssuesPage() {
   const [rescanFolder, setRescanFolder] = useState("");
   const [rescanGenre, setRescanGenre] = useState("");
   const [rescanFields, setRescanFields] = useState<string[]>(["genre"]);
+  const [rescanModal, setRescanModal] = useState(false);
+  const [inclAccepted, setInclAccepted] = useState(false);
+  const [inclDismissed, setInclDismissed] = useState(false);
   const rescanRunning = rescan.status === "running";
 
   const [sev, setSev] = useState("");
@@ -123,10 +126,13 @@ export default function IssuesPage() {
   const onProviderRescan = () => {
     setActionError(null);
     setAiNote(null);
+    setRescanModal(false);
     startRescan({
       folder: rescanFolder || null,
       genre: rescanGenre || null,
       fields: rescanFields.length ? rescanFields : ["genre"],
+      include_accepted: inclAccepted,
+      include_dismissed: inclDismissed,
     }).catch((e) => setActionError(e instanceof Error ? e.message : "Errore"));
   };
 
@@ -265,11 +271,36 @@ export default function IssuesPage() {
                 </label>
               ))}
             </div>
-            <Button variant="primary" size="sm" onClick={onProviderRescan} disabled={rescanRunning}>
+            <Button variant="primary" size="sm" onClick={() => setRescanModal(true)} disabled={rescanRunning}>
               {rescanRunning ? "importo…" : "Importa tutti i metadati da Provider"}
             </Button>
           </div>
         </div>
+
+        <Modal
+          open={rescanModal}
+          onClose={() => setRescanModal(false)}
+          title="Importa tutti i metadati da Provider"
+          footer={<>
+            <Button variant="ghost" size="sm" onClick={() => setRescanModal(false)}>Annulla</Button>
+            <Button variant="primary" size="sm" onClick={onProviderRescan}>Avvia</Button>
+          </>}
+        >
+          <p className="text-sm text-muted">
+            Reinterroga i provider sulle tracce{" "}
+            {rescanFolder ? <>in <b className="text-fg-strong">{rescanFolder}</b></> : "presenti"}
+            {rescanGenre ? <> con genere <b className="text-fg-strong">{rescanGenre}</b></> : null}
+            {" "}per i campi <b className="text-fg-strong">{(rescanFields.length ? rescanFields : ["genre"]).join(", ")}</b>.
+            Un campo viene riproposto solo se differisce da quello già sul file.
+          </p>
+          <div className="mt-4 flex flex-col gap-3">
+            <Checkbox label="Riconsidera anche le proposte già accettate" checked={inclAccepted} onChange={setInclAccepted} />
+            <Checkbox label="Riconsidera anche le proposte ignorate" checked={inclDismissed} onChange={setInclDismissed} />
+            <p className="text-xs text-faint">
+              Di default tocca solo le proposte ancora aperte. Le riconsiderate tornano da rivedere (aperte), ma solo se il provider ha un valore diverso.
+            </p>
+          </div>
+        </Modal>
 
         {/* azioni di massa sotto la sezione forza ricerca provider */}
         <div className="flex flex-wrap gap-1.5">

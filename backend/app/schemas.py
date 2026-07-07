@@ -78,6 +78,8 @@ class ProviderRescanBody(BaseModel):
     folder: str | None = None
     genre: str | None = None
     fields: list[str] = ["genre"]
+    include_accepted: bool = False
+    include_dismissed: bool = False
 
     @field_validator("fields")
     @classmethod

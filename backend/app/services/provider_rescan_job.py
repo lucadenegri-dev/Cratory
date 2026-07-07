@@ -29,7 +29,7 @@ def is_running() -> bool:
         return _state["status"] == "running"
 
 
-def _run(folder, genre, fields) -> None:
+def _run(folder, genre, fields, include_accepted, include_dismissed) -> None:
     db = SessionLocal()
 
     def on_progress(processed: int, total: int, phase: str) -> None:
@@ -50,7 +50,8 @@ def _run(folder, genre, fields) -> None:
                 ac_client = None
         result = provider_rescan.rescan(
             db, folder=folder, genre=genre, fields=fields,
-            mb=mb, discogs=discogs, ac_client=ac_client, on_progress=on_progress)
+            mb=mb, discogs=discogs, ac_client=ac_client, on_progress=on_progress,
+            include_accepted=include_accepted, include_dismissed=include_dismissed)
         with _lock:
             _state.update(status="done", phase=None, result=result,
                           finished_at=utcnow().isoformat())
@@ -63,7 +64,8 @@ def _run(folder, genre, fields) -> None:
         db.close()
 
 
-def start_job(folder=None, genre=None, fields=None) -> dict:
+def start_job(folder=None, genre=None, fields=None,
+              include_accepted=False, include_dismissed=False) -> dict:
     with _lock:
         if _state["status"] == "running":
             return dict(_state)
@@ -72,5 +74,7 @@ def start_job(folder=None, genre=None, fields=None) -> dict:
             result=None, error=None, started_at=utcnow().isoformat(), finished_at=None,
         )
         snapshot = dict(_state)
-    threading.Thread(target=_run, args=(folder, genre, fields), daemon=True).start()
+    threading.Thread(
+        target=_run, args=(folder, genre, fields, include_accepted, include_dismissed),
+        daemon=True).start()
     return snapshot

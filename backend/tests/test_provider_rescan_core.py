@@ -94,3 +94,63 @@ def test_keeps_accepted_override_untouched(db):
     provider_rescan.rescan(db, fields=["genre"], mb=mb, discogs=FakeDiscogs())
     iss = db.query(Issue).filter_by(type="provider_override").one()
     assert iss.status == "accepted" and iss.suggested_fix_json["to"] == "Deep House"
+
+
+def _override(db, file_id, to, status):
+    db.add(Issue(file_id=file_id, type="provider_override", field="genre",
+                 severity="info", detail="x",
+                 suggested_fix_json={"field": "genre", "action": "retag", "to": to,
+                                     "source": "provider", "confidence": "text"},
+                 status=status))
+    db.commit()
+
+
+def test_accepted_kept_without_flag_even_if_differs(db):
+    f = _add(db, path="/m/a.mp3", title="A", artist="X", genre="house")
+    _override(db, f.id, "Old", "accepted")
+    mb = FakeMB({"A": {"genre_primary": "House", "confidence": 95}})
+    provider_rescan.rescan(db, fields=["genre"], mb=mb, discogs=FakeDiscogs())
+    iss = db.query(Issue).filter_by(type="provider_override").one()
+    assert iss.status == "accepted" and iss.suggested_fix_json["to"] == "Old"
+
+
+def test_include_accepted_reopens_when_differs(db):
+    f = _add(db, path="/m/a.mp3", title="A", artist="X", genre="house")
+    _override(db, f.id, "Old", "accepted")
+    mb = FakeMB({"A": {"genre_primary": "House", "confidence": 95}})
+    res = provider_rescan.rescan(db, fields=["genre"], mb=mb, discogs=FakeDiscogs(),
+                                 include_accepted=True)
+    iss = db.query(Issue).filter_by(type="provider_override").one()
+    assert iss.status == "open" and iss.suggested_fix_json["to"] == "House"
+    assert iss.suggested_fix_json["confidence"] == "high"
+    assert res["proposed_high"] == 1
+
+
+def test_include_dismissed_reopens_when_differs(db):
+    f = _add(db, path="/m/a.mp3", title="A", artist="X", genre="house")
+    _override(db, f.id, "Old", "dismissed")
+    mb = FakeMB({"A": {"genre_primary": "House", "confidence": 95}})
+    provider_rescan.rescan(db, fields=["genre"], mb=mb, discogs=FakeDiscogs(),
+                           include_dismissed=True)
+    iss = db.query(Issue).filter_by(type="provider_override").one()
+    assert iss.status == "open" and iss.suggested_fix_json["to"] == "House"
+
+
+def test_include_accepted_not_reopened_when_equal(db):
+    f = _add(db, path="/m/a.mp3", title="A", artist="X", genre="House")
+    _override(db, f.id, "House", "accepted")
+    mb = FakeMB({"A": {"genre_primary": "House", "confidence": 95}})
+    provider_rescan.rescan(db, fields=["genre"], mb=mb, discogs=FakeDiscogs(),
+                           include_accepted=True)
+    iss = db.query(Issue).filter_by(type="provider_override").one()
+    assert iss.status == "accepted"  # provider == file → non riaperto
+
+
+def test_include_dismissed_does_not_touch_accepted(db):
+    f = _add(db, path="/m/a.mp3", title="A", artist="X", genre="house")
+    _override(db, f.id, "Old", "accepted")
+    mb = FakeMB({"A": {"genre_primary": "House", "confidence": 95}})
+    provider_rescan.rescan(db, fields=["genre"], mb=mb, discogs=FakeDiscogs(),
+                           include_dismissed=True)  # solo dismissed, non accepted
+    iss = db.query(Issue).filter_by(type="provider_override").one()
+    assert iss.status == "accepted"

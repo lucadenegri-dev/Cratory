@@ -31,7 +31,13 @@ def _get_override(db: Session, file_id: int, field: str) -> Issue | None:
         Issue.file_id == file_id, Issue.type == _OVERRIDE_TYPE, Issue.field == field))
 
 
-def upsert_override(db: Session, file_id: int, field: str, value: Any, confidence: str) -> None:
+def upsert_override(db: Session, file_id: int, field: str, value: Any, confidence: str,
+                    *, include_accepted: bool = False, include_dismissed: bool = False) -> bool:
+    """Crea/aggiorna la proposta override. Ritorna True se ha effettivamente
+    proposto (creata o (ri)aperta), False se ha lasciato intatta una decisione
+    utente. Di default accepted/dismissed NON si toccano; con i flag si
+    'riaprono' (ri-proposte) — ma solo perché il chiamante arriva qui già solo
+    quando il valore differisce dal file (vedi rescan)."""
     fix = {"field": field, "action": "retag", "to": str(value),
            "source": "provider", "confidence": confidence}
     detail = f"provider: {field} → {value}"
@@ -39,10 +45,20 @@ def upsert_override(db: Session, file_id: int, field: str, value: Any, confidenc
     if row is None:
         db.add(Issue(file_id=file_id, type=_OVERRIDE_TYPE, field=field,
                      severity="info", detail=detail, suggested_fix_json=fix, status="open"))
-    elif row.status == "open":  # le decisioni utente (accepted/dismissed) restano
+        return True
+    if row.status == "open":
         row.suggested_fix_json = fix
         row.detail = detail
         row.updated_at = utcnow()
+        return True
+    if (row.status == "accepted" and include_accepted) or \
+            (row.status == "dismissed" and include_dismissed):
+        row.suggested_fix_json = fix
+        row.detail = detail
+        row.status = "open"
+        row.updated_at = utcnow()
+        return True
+    return False
 
 
 def delete_stale_override(db: Session, file_id: int, field: str) -> None:
@@ -61,7 +77,8 @@ def _differs(current: Any, value: Any) -> bool:
 
 def rescan(db: Session, *, folder: str | None = None, genre: str | None = None,
            fields: list[str] | None = None, mb, discogs, ac_client=None,
-           on_progress=None) -> dict:
+           on_progress=None, include_accepted: bool = False,
+           include_dismissed: bool = False) -> dict:
     fields = [f for f in (fields or ["genre"]) if f in RESCAN_FIELDS] or ["genre"]
     stmt = select(AudioFile).where(AudioFile.status == "present")
     if folder:
@@ -91,8 +108,10 @@ def rescan(db: Session, *, folder: str | None = None, genre: str | None = None,
                 continue
             if has_open_inspector_issue(db, f.id, field):
                 continue
-            upsert_override(db, f.id, field, value, conf)
-            res["proposed_high" if conf == "high" else "proposed_text"] += 1
+            if upsert_override(db, f.id, field, value, conf,
+                               include_accepted=include_accepted,
+                               include_dismissed=include_dismissed):
+                res["proposed_high" if conf == "high" else "proposed_text"] += 1
         db.commit()
 
     if on_progress is not None:

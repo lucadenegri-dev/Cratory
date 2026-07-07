@@ -249,6 +249,8 @@ export interface ProviderRescanBody {
   folder?: string | null;
   genre?: string | null;
   fields: string[];
+  include_accepted?: boolean;
+  include_dismissed?: boolean;
 }
 export interface ProviderRescanResult {
   configured: boolean;

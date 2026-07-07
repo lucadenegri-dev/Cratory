@@ -296,7 +296,9 @@ def provider_rescan_start(body: ProviderRescanBody | None = None):
     if scan_job.is_running() or apply_job.is_running():
         raise HTTPException(status_code=409, detail="scan o apply in corso")
     b = body or ProviderRescanBody()
-    return provider_rescan_job.start_job(folder=b.folder, genre=b.genre, fields=b.fields)
+    return provider_rescan_job.start_job(
+        folder=b.folder, genre=b.genre, fields=b.fields,
+        include_accepted=b.include_accepted, include_dismissed=b.include_dismissed)
 
 
 @router.get("/provider-rescan/status", response_model=dict)
