@@ -195,21 +195,7 @@ export default function IssuesPage() {
       title="Issues"
       meta={`${filtered.length} / ${issues.length}`}
       marginaliaTitle="Riepilogo"
-      marginalia={
-        <Marginalia
-          total={issues.length} bySev={bySev} byType={byType} accepted={accepted}
-          onAcceptFixable={acceptAllFixable} onDismissInfo={dismissAllInfo}
-          onAiSuggest={onAiSuggest} aiBusy={aiBusy}
-          onAiGenres={onAiGenres} genreBusy={genreBusy}
-          onProviderSuggest={onProviderSuggest} providerBusy={providerBusy}
-          rescanFolder={rescanFolder} setRescanFolder={setRescanFolder}
-          rescanGenre={rescanGenre} setRescanGenre={setRescanGenre}
-          rescanFields={rescanFields} toggleField={toggleField}
-          onProviderRescan={onProviderRescan}
-          rescanRunning={rescan?.status === "running"}
-          onAcceptHigh={onAcceptHigh}
-        />
-      }
+      marginalia={<Marginalia total={issues.length} bySev={bySev} byType={byType} accepted={accepted} />}
     >
       <div className="flex flex-col gap-4">
         {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
@@ -222,35 +208,54 @@ export default function IssuesPage() {
           </Alert>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          <Select value={sev} onChange={(e) => setSev(e.target.value)} className="w-auto">
-            <option value="">severità: tutte</option>
-            <option value="error">error</option>
-            <option value="warning">warning</option>
-            <option value="info">info</option>
-          </Select>
-          <Select value={type} onChange={(e) => setType(e.target.value)} className="w-auto">
-            <option value="">tipo: tutti</option>
-            {types.map((t) => <option key={t} value={t}>{t}</option>)}
-          </Select>
-          <Select value={field} onChange={(e) => setField(e.target.value)} className="w-auto">
-            <option value="">campo: tutti</option>
-            {fields.map((f) => <option key={f} value={f}>{f}</option>)}
-          </Select>
-          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-auto">
-            <option value="open">aperte</option>
-            <option value="accepted">accettate</option>
-            <option value="dismissed">ignorate</option>
-            <option value="">tutti gli stati</option>
-          </Select>
-          <Select value={rootId} onChange={(e) => setRootId(e.target.value)} className="w-auto">
-            <option value="">tutte le radici</option>
-            {roots.map((r) => <option key={r.id} value={r.id}>{r.label || r.path}</option>)}
-          </Select>
-          <Input
-            value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="cerca artista/titolo/path…" className="w-56"
-          />
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+          {/* filtri compatti: griglia, ogni cella ~1/3 (il Select è w-full) */}
+          <div className="grid flex-1 grid-cols-2 gap-2 self-start text-xs sm:grid-cols-3">
+            <Select value={sev} onChange={(e) => setSev(e.target.value)} className="h-8 text-xs">
+              <option value="">severità: tutte</option>
+              <option value="error">error</option>
+              <option value="warning">warning</option>
+              <option value="info">info</option>
+            </Select>
+            <Select value={type} onChange={(e) => setType(e.target.value)} className="h-8 text-xs">
+              <option value="">tipo: tutti</option>
+              {types.map((t) => <option key={t} value={t}>{t}</option>)}
+            </Select>
+            <Select value={field} onChange={(e) => setField(e.target.value)} className="h-8 text-xs">
+              <option value="">campo: tutti</option>
+              {fields.map((f) => <option key={f} value={f}>{f}</option>)}
+            </Select>
+            <Select value={status} onChange={(e) => setStatus(e.target.value)} className="h-8 text-xs">
+              <option value="open">aperte</option>
+              <option value="accepted">accettate</option>
+              <option value="dismissed">ignorate</option>
+              <option value="">tutti gli stati</option>
+            </Select>
+            <Select value={rootId} onChange={(e) => setRootId(e.target.value)} className="h-8 text-xs">
+              <option value="">tutte le radici</option>
+              {roots.map((r) => <option key={r.id} value={r.id}>{r.label || r.path}</option>)}
+            </Select>
+            <Input
+              value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="cerca artista/titolo/path…" className="h-8 text-xs"
+            />
+          </div>
+
+          {/* azioni: a destra dei filtri (non nella colonna Riepilogo) */}
+          <div className="w-full shrink-0 xl:w-72">
+            <Actions
+              onAcceptFixable={acceptAllFixable} onDismissInfo={dismissAllInfo}
+              onAiSuggest={onAiSuggest} aiBusy={aiBusy}
+              onAiGenres={onAiGenres} genreBusy={genreBusy}
+              onProviderSuggest={onProviderSuggest} providerBusy={providerBusy}
+              rescanFolder={rescanFolder} setRescanFolder={setRescanFolder}
+              rescanGenre={rescanGenre} setRescanGenre={setRescanGenre}
+              rescanFields={rescanFields} toggleField={toggleField}
+              onProviderRescan={onProviderRescan}
+              rescanRunning={rescan?.status === "running"}
+              onAcceptHigh={onAcceptHigh}
+            />
+          </div>
         </div>
 
         {filtered.length === 0 && !offline ? (
@@ -265,28 +270,11 @@ export default function IssuesPage() {
   );
 }
 
-function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismissInfo, onAiSuggest, aiBusy, onAiGenres, genreBusy, onProviderSuggest, providerBusy, rescanFolder, setRescanFolder, rescanGenre, setRescanGenre, rescanFields, toggleField, onProviderRescan, rescanRunning, onAcceptHigh }: {
+function Marginalia({ total, bySev, byType, accepted }: {
   total: number;
   bySev: Record<string, number>;
   byType: Record<string, number>;
   accepted: number;
-  onAcceptFixable: () => void;
-  onDismissInfo: () => void;
-  onAiSuggest: () => void;
-  aiBusy: boolean;
-  onAiGenres: () => void;
-  genreBusy: boolean;
-  onProviderSuggest: () => void;
-  providerBusy: boolean;
-  rescanFolder: string;
-  setRescanFolder: (v: string) => void;
-  rescanGenre: string;
-  setRescanGenre: (v: string) => void;
-  rescanFields: string[];
-  toggleField: (f: string) => void;
-  onProviderRescan: () => void;
-  rescanRunning: boolean;
-  onAcceptHigh: () => void;
 }) {
   return (
     <div className="flex flex-col gap-4 text-xs">
@@ -311,7 +299,32 @@ function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismiss
         <div className="text-[10px] uppercase tracking-wider text-muted">accettate</div>
         <div className="mt-1 text-[11px] text-ok">{accepted} → andranno nel PLAN</div>
       </div>
-      <div className="flex flex-col gap-2">
+    </div>
+  );
+}
+
+function Actions({ onAcceptFixable, onDismissInfo, onAiSuggest, aiBusy, onAiGenres, genreBusy, onProviderSuggest, providerBusy, rescanFolder, setRescanFolder, rescanGenre, setRescanGenre, rescanFields, toggleField, onProviderRescan, rescanRunning, onAcceptHigh }: {
+  onAcceptFixable: () => void;
+  onDismissInfo: () => void;
+  onAiSuggest: () => void;
+  aiBusy: boolean;
+  onAiGenres: () => void;
+  genreBusy: boolean;
+  onProviderSuggest: () => void;
+  providerBusy: boolean;
+  rescanFolder: string;
+  setRescanFolder: (v: string) => void;
+  rescanGenre: string;
+  setRescanGenre: (v: string) => void;
+  rescanFields: string[];
+  toggleField: (f: string) => void;
+  onProviderRescan: () => void;
+  rescanRunning: boolean;
+  onAcceptHigh: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 text-xs">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
         <Button variant="primary" size="sm" onClick={onAiSuggest} disabled={aiBusy}>
           {aiBusy ? "AI in corso…" : "✨ Suggerisci artista/titolo"}
         </Button>
@@ -324,7 +337,7 @@ function Marginalia({ total, bySev, byType, accepted, onAcceptFixable, onDismiss
         <Button variant="outline" size="sm" onClick={onAcceptFixable}>✓ accetta tutti i fixabili</Button>
         <Button variant="outline" size="sm" onClick={onDismissInfo}>✕ ignora tutti gli info</Button>
       </div>
-      <div className="mt-2 flex flex-col gap-1.5 border-t border-surface-2 pt-2">
+      <div className="mt-1 flex flex-col gap-1.5 border-t border-surface-2 pt-2">
         <div className="text-[10px] uppercase tracking-wider text-muted">forza ricerca provider</div>
         <input
           className="border border-border bg-bg px-2 py-1 text-[11px] text-fg-strong placeholder:text-faint"
