@@ -15,6 +15,18 @@ function SevMark({ sev }: { sev: string }) {
   return <span className="text-faint">·</span>;
 }
 
+function ConfBadge({ conf }: { conf: unknown }) {
+  if (conf !== "high" && conf !== "text") return null;
+  const high = conf === "high";
+  return (
+    <span className={cn(
+      "border px-1 py-0.5 text-[9px] uppercase tracking-wider",
+      high ? "border-ok text-ok" : "border-warning text-warning")}>
+      {high ? "alta" : "testuale"}
+    </span>
+  );
+}
+
 function IssueRow({ issue, onFix, onDismiss, onReopen }: {
   issue: Issue;
   onFix: (id: number, value: string) => Promise<void>;
@@ -24,6 +36,7 @@ function IssueRow({ issue, onFix, onDismiss, onReopen }: {
   const fixable = issue.field != null && RETAGGABLE.has(issue.field);
   const suggested = typeof issue.suggested_fix_json?.to === "string"
     ? (issue.suggested_fix_json.to as string) : "";
+  const conf = issue.suggested_fix_json?.confidence;
   const [value, setValue] = useState(suggested);
   const [busy, setBusy] = useState(false);
   const run = async (fn: () => Promise<void>) => {
@@ -43,12 +56,21 @@ function IssueRow({ issue, onFix, onDismiss, onReopen }: {
       <td className="px-3 py-2">
         {issue.status === "open" ? (
           fixable ? (
-            <input
-              className="w-36 border border-border bg-bg px-2 py-1 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder={`scrivi ${issue.field}…`}
-            />
+            <div className="flex flex-col gap-1">
+              {(issue.current_value || conf === "high" || conf === "text") && (
+                <div className="flex items-center gap-1.5 text-[10px]">
+                  <span className="text-faint line-through">{issue.current_value || "∅"}</span>
+                  <span className="text-faint">→</span>
+                  <ConfBadge conf={conf} />
+                </div>
+              )}
+              <input
+                className="w-36 border border-border bg-bg px-2 py-1 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder={`scrivi ${issue.field}…`}
+              />
+            </div>
           ) : (
             <span className="text-faint">— non correggibile</span>
           )
