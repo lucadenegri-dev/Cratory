@@ -5,6 +5,7 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Music4, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
+  HardDrive, Archive, CircleCheck,
   RefreshCw, ChevronUp, ChevronDown, Download,
 } from "lucide-react";
 import {
@@ -18,11 +19,9 @@ import { TrackCover } from "@/components/track-cover";
 import { useJobs } from "@/components/jobs-provider";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { KeyBadge } from "@/components/key-badge";
+import { SpotifyGlyph } from "@/components/spotify-glyph";
 
 const SOURCE_TONE: Record<string, "info" | "warning" | "neutral"> = { spotify: "info", soundcloud: "warning", manual: "neutral" };
-const STATUS_TONE: Record<string, "success" | "info" | "warning" | "neutral"> = {
-  ready_for_set: "success", imported: "neutral",
-};
 const STATUS_OPTIONS: [string, string][] = [
   ["ready_for_set", "Pronte per il set"],
   ["imported", "Importate"],
@@ -296,7 +295,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
               {th("BPM", "bpm", true)}
               {th("Key", "key")}
               {th("Dur", "duration", true)}
-              {th("Stato", "status")}
+              <th className={cell}>Stato</th>
               <th className={cell}></th>
             </tr>
           </thead>
@@ -315,11 +314,26 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
                 <td className={`${cell} tnum`}>{t.bpm?.toFixed(0) ?? "—"}</td>
                 <td className={`${cell} tnum`}><KeyBadge camelot={t.camelot_key} /></td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
-                <td className={cell}><Badge tone={STATUS_TONE[t.status] ?? "neutral"}>{t.status}</Badge></td>
+                <td className={cell}>
+                  <div className="flex items-center gap-2 text-faint">
+                    {t.status === "ready_for_set" && (
+                      <span title="Pronta per il set (BPM + tonalità)"><CircleCheck size={14} className="text-fg-strong" /></span>
+                    )}
+                    {t.has_local_file && (
+                      <span title="File in libreria (su disco)"><HardDrive size={14} className="text-fg-strong" /></span>
+                    )}
+                    {t.archived && (
+                      <span title="Scartata (nell'archivio)"><Archive size={14} /></span>
+                    )}
+                    {t.spotify_url && (
+                      <a href={t.spotify_url} target="_blank" rel="noreferrer" title="Apri su Spotify"
+                         className="text-[#1DB954] transition-colors hover:text-[#1ed760]"><SpotifyGlyph size={14} /></a>
+                    )}
+                  </div>
+                </td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
-                    {t.spotify_url && <a href={t.spotify_url} target="_blank" rel="noreferrer" title="Apri su Spotify" className="text-faint hover:text-fg"><ExternalLink size={14} /></a>}
                   </div>
                 </td>
               </tr>
