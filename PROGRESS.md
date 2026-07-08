@@ -50,9 +50,19 @@ playlist ne' in un set salvato) non sopravvivono piu' nel DB.
   o in altra playlist/set restano.
 - **Tool di manutenzione una-tantum.** `backend/app/tools/cleanup_disk_first.py`
   (dry-run di default, `--apply` per scrivere) su `backend/app/services/db_hygiene.py`:
-  elimina i lead orfani, azzera sui lead i campi residui legacy
-  (`genre`/`bpm`/`camelot_key`/`energy`) e rilegge le possedute dal disco (disco
+  fonde i doppioni stesso-file, elimina i lead orfani, azzera sui lead i campi residui
+  legacy (`genre`/`bpm`/`camelot_key`/`energy`) e rilegge le possedute dal disco (disco
   autorevole; mai tocca BPM/key Rekordbox ne' cover Spotify, sola lettura dei file).
+- **Match piu' robusto + fusione doppioni.** Nuovo helper `merge_tracks(keep, drop)`
+  (sposta membership playlist/set, riempie i campi vuoti, cancella il doppione). Il
+  **collegamento manuale** di un file (`attach_local_file`) ora fonde la traccia che
+  possiede gia' quello stesso file invece di lasciare due righe. Il match automatico
+  (`_find_track`) aggiunge un passo **fuzzy normalizzato** (toglie `feat.`/`(Original
+  Mix)`/`- ... Remix`/diacritici) su lead senza file, con **guardia sulla durata**
+  (±7s), cosi' casi come "Rápido & Lento ;) feat. Verraco (Original Mix)" si agganciano
+  da soli al lead Spotify. Nuova operazione **dedup per `audio_hash`**
+  (`dedupe_by_audio_hash`) per i doppioni gia' esistenti, tiene la riga con identita'
+  streaming (`spotify_id`/`isrc`).
 - **Dashboard ridisegnata.** Le quattro figure sono ora Tracce scoperte / Tracce
   possedute / Playlist / Set salvati; nuova stat "Generi piu' frequenti"
   (`stats.genre_distribution`, generi fusi case-insensitive) le cui righe linkano alla

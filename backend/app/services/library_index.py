@@ -10,6 +10,8 @@ restano autorevoli (regola: mai sovrascrivere).
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 from pathlib import Path
 
 from sqlalchemy import select
@@ -33,8 +35,30 @@ logger = logging.getLogger(__name__)
 PLATFORM = "local_files"
 
 
+def _norm_key(s: str | None) -> str:
+    """Chiave di confronto per artista/titolo: senza diacritici, minuscola, senza
+    suffissi tipici (`feat.`/`(Original Mix)`/`- ... Remix`) e senza punteggiatura.
+    Serve ad agganciare 'X feat. Y (Original Mix)' al lead 'X'."""
+    if not s:
+        return ""
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    s = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", s)                      # (Original Mix), [xxx]
+    s = re.sub(r"\b(feat|ft)\.?\s.*$", " ", s)                       # feat. X ... a fine
+    s = re.sub(r"\s[-–]\s.*\b(mix|remix|edit|version|dub|rework)\b.*$", " ", s)  # " - ... Mix"
+    s = re.sub(r"[^a-z0-9]+", " ", s)                                # punteggiatura -> spazio
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _duration_ok(a: int | None, b: int | None, tol: int = 7) -> bool:
+    """Durate compatibili (o almeno una assente): guardia contro merge sbagliati."""
+    if a is None or b is None:
+        return True
+    return abs(a - b) <= tol
+
+
 def _find_track(db: Session, *, digest: str, tags: dict) -> tuple[Track | None, str]:
-    """Match nell'ordine di affidabilità. Ritorna (track, come) — come ∈ hash|digest|isrc|fuzzy."""
+    """Match nell'ordine di affidabilità. Ritorna (track, come)."""
     hit = db.scalar(select(Track).where(Track.audio_hash == digest))
     if hit:
         return hit, "hash"
@@ -53,6 +77,19 @@ def _find_track(db: Session, *, digest: str, tags: dict) -> tuple[Track | None, 
             Track.artist.ilike(artist), Track.title.ilike(title)))
         if hit:
             return hit, "fuzzy"
+        # Fuzzy normalizzato: titoli con suffissi diversi ma stesso brano. Solo su
+        # tracce SENZA file (lead da agganciare), con guardia sulla durata: non si
+        # ruba il file a una posseduta né si fonde un brano col suo remix.
+        na, nt = _norm_key(artist), _norm_key(title)
+        if na and nt:
+            file_dur = tags.get("duration_seconds")
+            for cand in db.scalars(select(Track).where(
+                Track.has_local_file.is_not(True),
+                Track.artist.is_not(None), Track.title.is_not(None),
+            )):
+                if (_norm_key(cand.artist) == na and _norm_key(cand.title) == nt
+                        and _duration_ok(cand.duration_seconds, file_dur)):
+                    return cand, "fuzzy-norm"
     return None, ""
 
 

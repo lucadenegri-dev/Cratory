@@ -146,7 +146,12 @@ muta mai** — tag, rename e organizzazione restano competenza esclusiva di DjOr
 - **`library_index`** (`backend/app/services/library_index.py`, deterministico):
   per ogni file sotto `LIBRARY_ROOT` calcola l'hash e cerca un match nell'ordine
   `audio_hash -> digest legacy (import locali storici, in platform_track_id) ->
-  ISRC -> fuzzy artist+title`; se non trova nulla crea una nuova `Track`. I tag del
+  ISRC -> fuzzy artist+title esatto -> fuzzy normalizzato`; se non trova nulla crea
+  una nuova `Track`. Il **fuzzy normalizzato** aggancia titoli con suffissi diversi
+  ma stesso brano (toglie `feat./ft.`, `(Original Mix)`, `- ... Remix`, diacritici e
+  punteggiatura) confrontando artista+titolo normalizzati, ma **solo su lead senza
+  file** e con **guardia sulla durata** (±7s): non ruba il file a una posseduta ne'
+  fonde un brano col suo remix di durata diversa. I tag del
   file riempiono solo i campi identita' vuoti, in sola lettura (mai sovrascrivere
   BPM/key o correzioni manuali; Cratory non scrive mai sul file). Anche `label`
   (ID3 `TPUB` / Vorbis `LABEL`) viene letta dal file e riempita solo se assente.
@@ -179,11 +184,22 @@ muta mai** — tag, rename e organizzazione restano competenza esclusiva di DjOr
   **riconciliazione dell'indice** (vedi sopra). Per un allineamento una-tantum del DB
   al paradigma disk-first c'e' `backend/app/tools/cleanup_disk_first.py` (dry-run di
   default, `--apply` per scrivere), che si appoggia a
-  `backend/app/services/db_hygiene.py`: elimina i lead orfani, azzera sui lead i campi
-  residui legacy (`genre`/`bpm`/`camelot_key`/`energy`, senza writer nel flusso
-  attuale) e **rilegge le possedute dal disco** rendendolo autorevole sui campi
+  `backend/app/services/db_hygiene.py`: fonde i doppioni stesso-file, elimina i lead
+  orfani, azzera sui lead i campi residui legacy (`genre`/`bpm`/`camelot_key`/`energy`,
+  senza writer nel flusso attuale) e **rilegge le possedute dal disco** rendendolo
+  autorevole sui campi
   disco-derivabili (mai tocca BPM/key da Rekordbox ne' la cover Spotify; sola lettura
   dei file).
+- **Fusione doppioni (stesso brano in due righe).** L'helper `merge_tracks(keep, drop)`
+  (in `repositories.py`) sposta le membership playlist/set su `keep`, riempie i suoi
+  campi vuoti da `drop` (keep resta autorevole su cio' che ha gia') e cancella `drop`.
+  Usato in due punti: il **collegamento manuale di un file** (`attach_local_file`)
+  fonde una traccia che possiede gia' quello stesso file (stesso `audio_hash`/
+  `local_path`), cosi' non restano due righe; e la **dedup per `audio_hash`**
+  (`dedupe_by_audio_hash` in `db_hygiene`, operazione dello script
+  `cleanup_disk_first`) fonde le righe che condividono lo stesso file, tenendo quella
+  con identita' streaming (`spotify_id`/`isrc`). Con questi e il fuzzy normalizzato il
+  match manuale dovrebbe essere raramente necessario.
 - Il possesso alimenta anche il Set Builder: `SetGenerationRequest.owned_only` (default
   `True`) filtra le candidate del Candidate Engine alle sole tracce con file locale;
   la scelta e' persistita su `Setlist.owned_only` e rispettata anche da editor

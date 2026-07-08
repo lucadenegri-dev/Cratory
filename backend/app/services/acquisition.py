@@ -9,12 +9,14 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.integrations.local_files import (
     AUDIO_EXTENSIONS, LocalFilesError, audio_hash, read_audio_quality,
 )
 from app.models import Track
+from app.repositories import merge_tracks
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,17 @@ def attach_local_file(db: Session, track: Track, *, path: str,
     except LocalFilesError as exc:
         # L'hash e' il riaggancio futuro, non un requisito del possesso: non bloccare.
         logger.warning("Audio-hash non calcolabile per %s: %s", path, exc)
+    db.flush()  # rende visibili hash/path per la ricerca dei doppioni
+    # Se un'altra traccia possiede gia' lo stesso file (es. gia' indicizzata come
+    # local_files), la fonde qui dentro: niente doppione dopo il collegamento.
+    conds = [Track.local_path == path]
+    if track.audio_hash:
+        conds.append(Track.audio_hash == track.audio_hash)
+    dupes = db.scalars(
+        select(Track).where(and_(Track.id != track.id, or_(*conds)))
+    ).all()
+    for dup in dupes:
+        merge_tracks(db, track, dup)
     db.commit()
     db.refresh(track)
     return track

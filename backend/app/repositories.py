@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import DjSet, DjSetTrack, Playlist, Setlist, SetlistTrack, Track, playlist_tracks
@@ -366,6 +366,52 @@ def orphan_lead_ids(db: Session, candidate_ids: Iterable[int] | None = None) -> 
             return []
         stmt = stmt.where(Track.id.in_(ids))
     return list(db.scalars(stmt))
+
+
+# Campi che, fondendo, riempiono un buco di `keep` col valore di `drop` (keep resta
+# autorevole sui campi gia' valorizzati). Identita' streaming, dati Rekordbox,
+# possesso su disco e metadati editoriali.
+_MERGE_BACKFILL_FIELDS = (
+    "spotify_id", "soundcloud_id", "platform", "platform_track_id", "isrc", "url",
+    "title", "artist", "album", "genre", "year", "label", "duration_seconds",
+    "bpm", "camelot_key", "energy", "album_art_url",
+    "local_path", "local_format", "local_bitrate", "local_mtime", "local_size", "audio_hash",
+)
+
+
+def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
+    """Fonde `drop` dentro `keep` (stesso brano in due righe): sposta le membership
+    playlist/set su keep, riempie i campi vuoti di keep con quelli di drop (keep
+    resta autorevole su cio' che ha gia'), poi cancella drop. Ritorna keep. Non
+    committa (lo fa il chiamante)."""
+    if keep.id == drop.id:
+        return keep
+    # Membership playlist: sposta quelle di drop non gia' presenti su keep.
+    keep_pls = {
+        r[0] for r in db.execute(
+            select(playlist_tracks.c.playlist_id).where(playlist_tracks.c.track_id == keep.id)
+        )
+    }
+    for pid, added in db.execute(
+        select(playlist_tracks.c.playlist_id, playlist_tracks.c.added_at)
+        .where(playlist_tracks.c.track_id == drop.id)
+    ).all():
+        if pid not in keep_pls:
+            db.execute(playlist_tracks.insert().values(playlist_id=pid, track_id=keep.id, added_at=added))
+    db.execute(playlist_tracks.delete().where(playlist_tracks.c.track_id == drop.id))
+    # Membership set: ripunta i SetlistTrack di drop a keep.
+    db.execute(
+        update(SetlistTrack).where(SetlistTrack.track_id == drop.id).values(track_id=keep.id)
+    )
+    # Backfill dei soli campi vuoti di keep.
+    for f in _MERGE_BACKFILL_FIELDS:
+        if getattr(keep, f) in (None, "") and getattr(drop, f) not in (None, ""):
+            setattr(keep, f, getattr(drop, f))
+    if drop.has_local_file and not keep.has_local_file:
+        keep.has_local_file = True
+    db.flush()  # applica gli spostamenti prima di cancellare drop
+    db.delete(drop)
+    return keep
 
 
 def unreferenced_track_ids(db: Session, candidate_ids: Iterable[int] | None = None) -> list[int]:

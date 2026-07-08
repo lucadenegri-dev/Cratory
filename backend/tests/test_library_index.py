@@ -212,6 +212,44 @@ def test_riconciliazione_sgancia_file_in_cartella_nascosta(db, fake_audio, tmp_p
     assert hidden.exists()  # Cratory non muta i file su disco
 
 
+def test_fuzzy_normalizzato_aggancia_titolo_con_suffissi(db, fake_audio):
+    """File 'X feat. Y (Original Mix)' si aggancia al lead Spotify 'X' (stesso
+    artista, durata coerente) invece di creare un doppione."""
+    from app.models import Track
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    lead = Track(source_type="spotify", spotify_id="s1", title="Rápido & Lento ;)",
+                 artist="Brenda, Verraco", duration_seconds=200, has_local_file=False)
+    db.add(lead); db.commit()
+    lid = lead.id
+
+    make("f.mp3", digest="HFZ", artist="Brenda, Verraco",
+         title="Rápido & Lento ;) feat. Verraco (Original Mix)")
+    report = index_library(db, root=root)
+
+    db.refresh(lead)
+    assert report["created"] == 0 and report["matched"] == 1
+    assert lead.id == lid and lead.has_local_file is True
+
+
+def test_fuzzy_normalizzato_rispetta_la_guardia_durata(db, fake_audio):
+    """Durata troppo diversa (brano vs suo remix esteso) ⇒ NON si fonde."""
+    from app.models import Track
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    lead = Track(source_type="spotify", title="Song", artist="A",
+                 duration_seconds=120, has_local_file=False)
+    db.add(lead); db.commit()
+
+    make("f.mp3", digest="HG", artist="A", title="Song (Extended Mix)")  # tags: duration 200
+    report = index_library(db, root=root)
+
+    db.refresh(lead)
+    assert report["created"] == 1 and lead.has_local_file is False
+
+
 def test_file_che_rientra_si_riaggancia_al_lead_spotify(db, fake_audio):
     """Un file che (ri)entra nella libreria si aggancia al lead Spotify per ISRC:
     stessa riga, ora posseduta, ancora nella playlist."""

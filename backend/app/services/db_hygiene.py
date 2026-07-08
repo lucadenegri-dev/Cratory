@@ -13,11 +13,12 @@ servita on-demand dall'endpoint, non scritta qui.
 """
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.integrations.local_files import read_tags
 from app.models import Track
+from app.repositories import merge_tracks
 from app.services.energy import estimate_energy
 from app.services.genre_norm import normalize_genre
 from app.services.manual_import import parse_line
@@ -28,6 +29,35 @@ LEAD_RESIDUE_FIELDS = ("genre", "bpm", "camelot_key", "energy")
 
 # Campi che, su una posseduta, devono rispecchiare il disco.
 DISK_FIELDS = ("title", "artist", "album", "genre", "year", "isrc", "duration_seconds", "label")
+
+
+def _dedupe_keeper(group: list[Track]) -> Track:
+    """Nella dedup, tiene la traccia con identità streaming (spotify_id/isrc); a
+    parità, quella con l'id minore."""
+    return max(group, key=lambda t: (1 if (t.spotify_id or t.isrc) else 0, -t.id))
+
+
+def dedupe_by_audio_hash(db: Session, *, apply: bool) -> int:
+    """Fonde le tracce che condividono lo stesso `audio_hash` (stesso file su disco):
+    tiene la 'migliore' e fonde le altre dentro. Ritorna quante ne (verrebbero) fuse."""
+    groups = db.execute(
+        select(Track.audio_hash, func.count())
+        .where(Track.audio_hash.is_not(None), Track.audio_hash != "")
+        .group_by(Track.audio_hash)
+        .having(func.count() > 1)
+    ).all()
+    merged = 0
+    for digest, _n in groups:
+        rows = list(db.scalars(select(Track).where(Track.audio_hash == digest)))
+        keep = _dedupe_keeper(rows)
+        for t in rows:
+            if t.id != keep.id:
+                merged += 1
+                if apply:
+                    merge_tracks(db, keep, t)
+    if apply:
+        db.commit()
+    return merged
 
 
 def purge_lead_residue(db: Session, *, apply: bool) -> dict[str, int]:

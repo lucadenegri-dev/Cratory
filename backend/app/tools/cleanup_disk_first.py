@@ -1,9 +1,10 @@
 """Pulizia una-tantum disk-first: allinea il DB alle regole attuali di Cratory.
 
-Tre operazioni:
-  1. Elimina i lead orfani (senza file, non in playlist né in un set salvato).
-  2. Azzera sui lead i campi residui legacy (genre/bpm/camelot_key/energy).
-  3. Riallinea le possedute al disco (rilegge i tag; disco autorevole).
+Quattro operazioni:
+  1. Fonde i doppioni dello stesso file (stesso audio_hash).
+  2. Elimina i lead orfani (senza file, non in playlist né in un set salvato).
+  3. Azzera sui lead i campi residui legacy (genre/bpm/camelot_key/energy).
+  4. Riallinea le possedute al disco (rilegge i tag; disco autorevole).
 
 Uso:
   python -m app.tools.cleanup_disk_first            # DRY-RUN: mostra cosa cambierebbe
@@ -18,28 +19,36 @@ import argparse
 
 from app.db import SessionLocal, ensure_schema
 from app.repositories import delete_orphan_leads, orphan_lead_ids
-from app.services.db_hygiene import purge_lead_residue, realign_owned_from_disk
+from app.services.db_hygiene import (
+    dedupe_by_audio_hash,
+    purge_lead_residue,
+    realign_owned_from_disk,
+)
 
 
 def run(*, apply: bool) -> dict:
     ensure_schema()
     db = SessionLocal()
     try:
-        # 1) Lead orfani (eliminati prima, così non li si conta anche come residui).
+        # 1) Doppioni dello stesso file (fusi prima di tutto il resto).
+        deduped = dedupe_by_audio_hash(db, apply=apply)
+
+        # 2) Lead orfani (eliminati prima dei residui, così non li si conta due volte).
         orphan_ids = orphan_lead_ids(db)
         orphans = len(orphan_ids)
         if apply and orphan_ids:
             delete_orphan_leads(db)
             db.commit()
 
-        # 2) Residui legacy sui lead rimasti.
+        # 3) Residui legacy sui lead rimasti.
         residue = purge_lead_residue(db, apply=apply)
 
-        # 3) Possedute allineate al disco.
+        # 4) Possedute allineate al disco.
         owned = realign_owned_from_disk(db, apply=apply)
     finally:
         db.close()
-    return {"dry_run": not apply, "orphan_leads_deleted": orphans, "lead_residue": residue, "owned_realign": owned}
+    return {"dry_run": not apply, "duplicates_merged": deduped,
+            "orphan_leads_deleted": orphans, "lead_residue": residue, "owned_realign": owned}
 
 
 def main() -> None:
@@ -50,6 +59,7 @@ def main() -> None:
 
     mode = "APPLICATO" if args.apply else "DRY-RUN (nessuna scrittura)"
     print(f"== Pulizia disk-first — {mode} ==")
+    print(f"Doppioni stesso file {'fusi' if args.apply else 'da fondere'}: {report['duplicates_merged']}")
     print(f"Lead orfani {'eliminati' if args.apply else 'da eliminare'}: {report['orphan_leads_deleted']}")
     print("Residui legacy sui lead (azzerati per campo):")
     for field, n in report["lead_residue"].items():

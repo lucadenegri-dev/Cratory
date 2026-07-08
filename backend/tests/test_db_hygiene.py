@@ -3,7 +3,11 @@
 - riallineamento delle possedute al disco.
 """
 from app.models import Track
-from app.services.db_hygiene import purge_lead_residue, realign_owned_from_disk
+from app.services.db_hygiene import (
+    dedupe_by_audio_hash,
+    purge_lead_residue,
+    realign_owned_from_disk,
+)
 from app.services.genre_norm import normalize_genre
 
 
@@ -114,3 +118,31 @@ def test_realign_owned_conta_file_mancante(db, tmp_path):
     _owned(db, tmp_path / "non-esiste.mp3", title="T", artist="A")
     rep = realign_owned_from_disk(db, apply=True)
     assert rep["missing_file"] == 1
+
+
+def test_dedupe_by_audio_hash_fonde_stesso_file(db):
+    # Stesso file (stesso audio_hash) in due righe: tiene l'identità Spotify, fonde l'altra.
+    a = Track(source_type="spotify", spotify_id="s1", title="Song", artist="X",
+              isrc="I1", audio_hash="H1", has_local_file=True)
+    b = Track(source_type="local_files", title="Song (Original Mix)", artist="X",
+              audio_hash="H1", bpm=128.0, has_local_file=True)
+    c = Track(source_type="spotify", title="Other", artist="Y", audio_hash="H2", has_local_file=True)
+    db.add_all([a, b, c]); db.commit()
+    bid = b.id
+
+    n = dedupe_by_audio_hash(db, apply=True)
+
+    assert n == 1
+    assert db.query(Track).count() == 2      # c intatta
+    db.refresh(a)
+    assert a.bpm == 128.0                      # backfill dal duplicato
+    assert a.spotify_id == "s1" and a.isrc == "I1"  # tenuta l'identità Spotify
+    assert db.get(Track, bid) is None
+
+
+def test_dedupe_by_audio_hash_dry_run_non_scrive(db):
+    a = Track(source_type="spotify", title="S", artist="X", audio_hash="H", has_local_file=True)
+    b = Track(source_type="local_files", title="S", artist="X", audio_hash="H", has_local_file=True)
+    db.add_all([a, b]); db.commit()
+    n = dedupe_by_audio_hash(db, apply=False)
+    assert n == 1 and db.query(Track).count() == 2  # solo conteggio, nessuna fusione
