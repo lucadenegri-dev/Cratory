@@ -138,6 +138,68 @@ def test_generator_drops_fuzzy_duplicate(db):
     assert sirens <= 1  # non due volte lo stesso brano
 
 
+# --- A1) export M3U8 per Rekordbox -------------------------------------------
+
+
+def _set_with_paths(db, specs):
+    """specs: (bpm, key, artist, title, local_path|None). local_path None = no file."""
+    from app.models import Playlist, Track
+    from app.repositories import add_track_to_playlist
+    pl = Playlist(platform="spotify", name="PL")
+    db.add(pl)
+    db.flush()
+    for bpm, key, artist, title, path in specs:
+        t = Track(source_type="spotify", title=title, artist=artist, duration_seconds=210,
+                  bpm=bpm, camelot_key=key, has_local_file=path is not None, local_path=path)
+        db.add(t)
+        db.flush()
+        add_track_to_playlist(db, t, pl)
+    db.commit()
+    return pl
+
+
+def test_m3u8_export_uses_local_paths_in_order(db):
+    from app.routers.sets import export
+    from app.services.set_generator import generate_set
+    pl = _set_with_paths(db, [
+        (124.0, "8A", "A0", "T0", "/music/a0.aiff"),
+        (125.0, "8A", "A1", "T1", "/music/a1.aiff"),
+        (126.0, "8A", "A2", "T2", "/music/a2.aiff"),
+    ])
+    sl = generate_set(db, SetGenerationRequest(playlist_id=pl.id, target_duration_minutes=15))
+    resp = export(sl.id, format="m3u8", db=db)
+    body = resp.body.decode()
+    lines = body.splitlines()
+    assert lines[0] == "#EXTM3U"
+    # ogni traccia: riga #EXTINF con durata e "artist — title", poi il path assoluto
+    assert "#EXTINF:210,A0 — T0" in lines
+    assert "#EXTINF:210,A1 — T1" in lines
+    # i path compaiono nell'ordine reale del set (non quello d'inserimento)
+    set_paths = [st.track.local_path for st in sl.tracks]
+    m3u_paths = [ln for ln in lines if ln.startswith("/music/")]
+    assert m3u_paths == set_paths
+    # ogni #EXTINF è seguito immediatamente dal suo path
+    i = lines.index("#EXTINF:210,A0 — T0")
+    assert lines[i + 1] == "/music/a0.aiff"
+
+
+def test_m3u8_export_skips_tracks_without_file_with_comment(db):
+    from app.routers.sets import export
+    from app.services.set_generator import generate_set
+    pl = _set_with_paths(db, [
+        (124.0, "8A", "Owned0", "Has File 0", "/music/owned0.aiff"),
+        (125.0, "8A", "Owned1", "Has File 1", "/music/owned1.aiff"),
+        (126.0, "8A", "Owned2", "Has File 2", "/music/owned2.aiff"),
+        (127.0, "8A", "Lead", "No File", None),
+    ])
+    sl = generate_set(db, SetGenerationRequest(playlist_id=pl.id, target_duration_minutes=30,
+                                               owned_only=False))
+    body = export(sl.id, format="m3u8", db=db).body.decode()
+    assert "/music/owned0.aiff" in body
+    assert "No File" not in body           # la traccia senza file è esclusa
+    assert "1 tracce senza file locale non incluse" in body  # commento con conteggio
+
+
 # --- Fix 4) tab Transizioni: lente per classe --------------------------------
 
 def test_transitions_lens_filters_by_class(db):

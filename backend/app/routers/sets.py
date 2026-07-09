@@ -153,10 +153,10 @@ def _fmt_dur(seconds: int | None) -> str:
 @router.post("/{setlist_id}/export", response_class=PlainTextResponse)
 def export(
     setlist_id: int,
-    format: str = Query(default="text", pattern="^(text|csv|markdown)$"),
+    format: str = Query(default="text", pattern="^(text|csv|markdown|m3u8)$"),
     db: Session = Depends(get_db),
 ):
-    """Export del set: testo, CSV o Markdown. Export playlist Spotify: endpoint dedicato."""
+    """Export del set: testo, CSV, Markdown o M3U8 (playlist Rekordbox). Export playlist Spotify: endpoint dedicato."""
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
         raise HTTPException(status_code=404, detail="Set non trovato")
@@ -199,6 +199,23 @@ def export(
                 f"{t.camelot_key or '?'} | {_fmt_dur(t.duration_seconds)} | {note} |"
             )
         return PlainTextResponse("\n".join(md), media_type="text/markdown")
+
+    if format == "m3u8":
+        # Playlist importabile in Rekordbox: punta ai file locali in libreria.
+        # Una traccia senza file su disco non può stare in una playlist Rekordbox: la
+        # escludiamo e segnaliamo il conteggio con un commento (le righe '#' non-direttiva
+        # sono ignorate da Rekordbox).
+        owned = [st for st in setlist.tracks if st.track.local_path]
+        skipped = len(setlist.tracks) - len(owned)
+        m3u = ["#EXTM3U"]
+        if skipped:
+            m3u.append(f"# {skipped} tracce senza file locale non incluse")
+        for st in owned:
+            t = st.track
+            secs = int(t.duration_seconds) if t.duration_seconds else -1
+            m3u.append(f"#EXTINF:{secs},{t.artist or '?'} — {t.title or t.spotify_id or '?'}")
+            m3u.append(t.local_path)
+        return PlainTextResponse("\n".join(m3u), media_type="audio/x-mpegurl")
 
     lines = [f"# {setlist.name}", ""]
     if setlist.global_explanation:

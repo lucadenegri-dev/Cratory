@@ -140,11 +140,11 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
     await reload(apiPost<Setlist>(`/api/sets/${id}/tracks/${pos}/replace`, { track_id: alt.track.id }));
   }
 
-  async function doExport(format: "text" | "csv" | "markdown") {
+  async function doExport(format: "text" | "csv" | "markdown" | "m3u8") {
     if (!setlist) return;
     try {
       const text = await exportSet(setlist.id, format);
-      const ext = format === "markdown" ? "md" : format === "csv" ? "csv" : "txt";
+      const ext = format === "markdown" ? "md" : format === "csv" ? "csv" : format === "m3u8" ? "m3u8" : "txt";
       const name = `${slugName(setlist.name)}.${ext}`;
       const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
       const a = document.createElement("a");
@@ -189,6 +189,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
         <Button variant="outline" size="sm" onClick={() => doExport("csv")}>CSV</Button>
         <Button variant="outline" size="sm" onClick={() => doExport("markdown")}>MD</Button>
       </div>
+      <Button variant="outline" size="sm" className="w-full" onClick={() => doExport("m3u8")}><Download size={14} /> Esporta per Rekordbox (M3U8)</Button>
       <Button variant="outline" size="sm" className="w-full" onClick={createPlaylist} disabled={playlistBusy}>{playlistBusy ? "…" : "Crea playlist Spotify"}</Button>
       <Button variant="danger" size="sm" className="w-full" onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Elimina set</Button>
       <div className="space-y-2 border-t border-border pt-4 text-xs">

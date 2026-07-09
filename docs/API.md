@@ -191,7 +191,11 @@ Generazione:
   rispetta: `alternatives` esclude i lead dal pool e `replace` con una traccia senza
   file locale risponde 422.
 
-Export: CSV, Markdown/testo o creazione playlist Spotify tramite endpoint Spotify.
+Export (`POST /api/sets/{setlist_id}/export?format=`): `text` | `csv` | `markdown` |
+`m3u8`. Il formato `m3u8` produce una playlist importabile in Rekordbox (`#EXTM3U` +
+`#EXTINF` per traccia, righe con il `local_path` assoluto del file in libreria); le
+tracce senza file locale sono escluse e segnalate con un commento in testa. In
+alternativa, creazione playlist Spotify tramite endpoint Spotify.
 
 ## Transitions
 

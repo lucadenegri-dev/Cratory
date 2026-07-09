@@ -405,7 +405,7 @@ export async function apiUpload<T>(path: string, body: FormData): Promise<T> {
   return handle<T>(await fetch(API + path, { method: "POST", body }));
 }
 
-export async function exportSet(setId: number, format: "text" | "csv" | "markdown"): Promise<string> {
+export async function exportSet(setId: number, format: "text" | "csv" | "markdown" | "m3u8"): Promise<string> {
   const res = await fetch(`${API}/api/sets/${setId}/export?format=${format}`, { method: "POST" });
   if (!res.ok) throw new Error(res.statusText);
   return res.text();
