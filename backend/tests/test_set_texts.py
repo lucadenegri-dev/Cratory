@@ -183,6 +183,29 @@ def test_m3u8_export_uses_local_paths_in_order(db):
     assert lines[i + 1] == "/music/a0.aiff"
 
 
+def test_csv_export_includes_local_path(db):
+    import csv as csvmod
+    import io as iomod
+    from app.routers.sets import export
+    from app.services.set_generator import generate_set
+    pl = _set_with_paths(db, [
+        (124.0, "8A", "A0", "T0", "/music/a0.aiff"),
+        (125.0, "8A", "A1", "T1", None),
+        (126.0, "8A", "A2", "T2", "/music/a2.aiff"),
+    ])
+    sl = generate_set(db, SetGenerationRequest(playlist_id=pl.id, target_duration_minutes=15,
+                                               owned_only=False))
+    body = export(sl.id, format="csv", db=db).body.decode()
+    rows = list(csvmod.reader(iomod.StringIO(body)))
+    header = rows[0]
+    assert "local_path" in header
+    idx = header.index("local_path")
+    by_title = {row[header.index("title")]: row[idx] for row in rows[1:]}
+    assert by_title["T0"] == "/music/a0.aiff"
+    assert by_title["T1"] == ""             # nessun file locale -> stringa vuota
+    assert by_title["T2"] == "/music/a2.aiff"
+
+
 def test_m3u8_export_skips_tracks_without_file_with_comment(db):
     from app.routers.sets import export
     from app.services.set_generator import generate_set

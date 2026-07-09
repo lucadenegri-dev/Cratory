@@ -192,10 +192,11 @@ Generazione:
   file locale risponde 422.
 
 Export (`POST /api/sets/{setlist_id}/export?format=`): `text` | `csv` | `markdown` |
-`m3u8`. Il formato `m3u8` produce una playlist importabile in Rekordbox (`#EXTM3U` +
-`#EXTINF` per traccia, righe con il `local_path` assoluto del file in libreria); le
-tracce senza file locale sono escluse e segnalate con un commento in testa. In
-alternativa, creazione playlist Spotify tramite endpoint Spotify.
+`m3u8`. Il CSV include la colonna `local_path` (stringa vuota se la traccia non ha
+file locale). Il formato `m3u8` produce una playlist importabile in Rekordbox
+(`#EXTM3U` + `#EXTINF` per traccia, righe con il `local_path` assoluto del file in
+libreria); le tracce senza file locale sono escluse e segnalate con un commento in
+testa. In alternativa, creazione playlist Spotify tramite endpoint Spotify.
 
 ## Transitions
 

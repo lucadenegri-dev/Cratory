@@ -65,5 +65,10 @@ M3U esteso, encoding UTF-8 (→ estensione `.m3u8`):
 
 ## Fuori scope
 
-- Aggiunta di `local_path` al CSV esistente (item A1 secondario, rimandato).
 - Export XML nativo Rekordbox (collection format).
+
+## Addendum 2026-07-09
+
+Aggiunta anche la colonna `local_path` al CSV esistente (completa l'item A1):
+stringa vuota se la traccia non ha file locale. Nessun cambio di formato per le
+colonne esistenti, solo append in coda.

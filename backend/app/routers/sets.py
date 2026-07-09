@@ -166,7 +166,7 @@ def export(
         writer = csv.writer(buf)
         writer.writerow(["position", "role", "title", "artist", "bpm", "key", "duration_seconds",
                          "source", "spotify_id", "url", "transition_score", "risk_level",
-                         "transition_class"])
+                         "transition_class", "local_path"])
         prev = None
         for st in setlist.tracks:
             t = st.track
@@ -174,7 +174,7 @@ def export(
             writer.writerow([st.position, st.role or "", t.title or "", t.artist or "", t.bpm or "",
                              t.camelot_key or "", t.duration_seconds or "", t.source_type,
                              t.spotify_id or "", t.url or "", st.transition_score or "", st.risk_level or "",
-                             cls])
+                             cls, t.local_path or ""])
             prev = t
         return PlainTextResponse(buf.getvalue(), media_type="text/csv")
 
