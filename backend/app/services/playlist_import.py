@@ -286,6 +286,26 @@ def _liked_playlist(db: Session, platform: str = "spotify") -> Playlist | None:
     )
 
 
+DISCOVERY_PLAYLIST_NAME = "Scoperte"
+
+
+def get_or_create_discovery_playlist(db: Session) -> Playlist:
+    """La playlist di sistema per le tracce 'per dopo' del dig Discovery.
+
+    Ne esiste al più una (kind='discovery'), creata al primo uso — stesso
+    pattern di _liked_playlist, ma qui va anche creata se assente (i liked
+    nascono dall'import Spotify, 'Scoperte' nasce dal primo 'per dopo').
+    """
+    playlist = db.scalar(
+        select(Playlist).where(Playlist.platform == "manual", Playlist.kind == "discovery")
+    )
+    if playlist is None:
+        playlist = Playlist(platform="manual", name=DISCOVERY_PLAYLIST_NAME, kind="discovery")
+        db.add(playlist)
+        db.flush()
+    return playlist
+
+
 def preview_liked_tracks(db: Session, items: list) -> list[dict]:
     """Item liked di Spotify -> anteprima selezionabile, senza importare nulla.
 

@@ -413,3 +413,18 @@ def test_release_detail_502_on_discogs_error(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         get_release_detail(249504)
     assert exc_info.value.status_code == 502
+
+
+# --- Task 4: playlist di sistema "Scoperte" -----------------------------------
+
+
+def test_get_or_create_discovery_playlist_is_idempotent(db):
+    from app.services.playlist_import import get_or_create_discovery_playlist
+
+    p1 = get_or_create_discovery_playlist(db)
+    db.commit()
+    p2 = get_or_create_discovery_playlist(db)
+    assert p1.id == p2.id
+    assert p1.name == "Scoperte"
+    assert p1.kind == "discovery"
+    assert p1.platform == "manual"
