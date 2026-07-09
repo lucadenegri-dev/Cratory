@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { RefreshCw, Settings } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { startLibraryIndex } from "@/lib/api";
+import { downloadPending, startLibraryIndex } from "@/lib/api";
 import { Clock } from "./clock";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -41,6 +41,16 @@ const NAV_GROUPS: { title: string | null; items: { href: string; label: string }
 export function IndexNav() {
   const pathname = usePathname();
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+
+  // Conteggio "da sistemare" sulla voce Download (l'archivio separato non esiste più).
+  const [pendingCount, setPendingCount] = useState(0);
+  useEffect(() => {
+    let live = true;
+    downloadPending()
+      .then((rows) => { if (live) setPendingCount(rows.length); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, [pathname]);  // rivaluta a ogni navigazione (es. dopo aver sistemato tracce)
 
   /* Indicizza LIBRARY_ROOT: il disco è la libreria. Il job gira in background
      lato server; qui mostriamo solo l'avvio (409 = LIBRARY_ROOT mancante o job
@@ -88,11 +98,14 @@ export function IndexNav() {
                     href={href}
                     aria-current={isActive(href) ? "page" : undefined}
                     className={cn(
-                      "block whitespace-nowrap py-1 text-xs uppercase tracking-wider transition-colors",
+                      "flex items-center gap-1.5 whitespace-nowrap py-1 text-xs uppercase tracking-wider transition-colors",
                       isActive(href) ? "text-fg-strong underline underline-offset-4" : "text-muted hover:text-fg",
                     )}
                   >
                     {label}
+                    {href === "/downloads" && pendingCount > 0 && (
+                      <span className="tnum text-[10px] text-faint">({pendingCount})</span>
+                    )}
                   </Link>
                 </li>
               ))}
