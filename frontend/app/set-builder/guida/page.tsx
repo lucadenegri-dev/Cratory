@@ -106,9 +106,18 @@ export default function SetBuilderGuide() {
             </li>
             <li>
               Ogni passo è guidato dallo <K>score di transizione</K>{" "}(sotto), dall&apos;aderenza
-              alla traiettoria BPM, dall&apos;arco di energia e dal carattere della strategia.
+              alla traiettoria BPM, dall&apos;arco di energia, dalla <K>coerenza di genere</K>{" "}e
+              dal carattere della strategia.
             </li>
           </ol>
+          <p>
+            <K>Coerenza di genere</K>{" "}— il motore conosce le <K>famiglie di genere</K>{" "}
+            (techno/acid, house/garage, breaks/electro, ambient/downtempo…): sottogeneri della
+            stessa famiglia sono coerenti anche senza parole in comune (Ambient ~ Downtempo),
+            i super-generi come «Electronic» sono neutri, un cambio di famiglia è un vero
+            stacco. A parità di BPM e tonalità il set resta nello stesso mondo sonoro invece
+            di zigzagare; le strategie esplorative allentano il vincolo (sotto).
+          </p>
           <p>
             <K>AI</K>{" "}— interpreta il prompt («parti morbido e atmosferico, poi vira club…»).
             Non vede mai l&apos;intera libreria: riceve al massimo <K>60 candidate</K>{" "}già
@@ -141,7 +150,7 @@ export default function SetBuilderGuide() {
                 <tr><td className={TD}>Fluido</td><td className={TD}>lineare</td><td className={`${TD} tnum`}>—</td><td className={TD}>penalizzati</td><td className={TD}>transizioni morbide, rischio minimo</td></tr>
                 <tr><td className={TD}>Progressivo</td><td className={TD}>lineare</td><td className={`${TD} tnum`}>35 → 85</td><td className={TD}>penalizzati</td><td className={TD}>energia in salita costante</td></tr>
                 <tr><td className={TD}>Contrasti</td><td className={TD}>lineare</td><td className={`${TD} tnum`}>—</td><td className={TD}>ammessi</td><td className={TD}>2-3 stacchi deliberati a ⅓ e ⅔ del set</td></tr>
-                <tr><td className={TD}>Sperimentale</td><td className={TD}>lineare</td><td className={`${TD} tnum`}>—</td><td className={TD}>ammessi</td><td className={TD}>premia cambi di tonalità e genere</td></tr>
+                <tr><td className={TD}>Sperimentale</td><td className={TD}>lineare</td><td className={`${TD} tnum`}>—</td><td className={TD}>ammessi</td><td className={TD}>premia cambi di tonalità e genere, coerenza di genere dimezzata</td></tr>
                 <tr><td className={TD}>Peak time</td><td className={TD}>sale in fretta</td><td className={`${TD} tnum`}>70 → 92</td><td className={TD}>penalizzati</td><td className={TD}>dritto al clou, resta alto</td></tr>
                 <tr><td className={TD}>Warm-up</td><td className={TD}>sale piano</td><td className={`${TD} tnum`}>25 → 55</td><td className={TD}>penalizzati</td><td className={TD}>apre la serata, resta basso</td></tr>
                 <tr><td className={TD}>Chiusura</td><td className={TD}>lineare</td><td className={`${TD} tnum`}>75 → 40</td><td className={TD}>penalizzati</td><td className={TD}>scende nel finale, reset premiato in coda</td></tr>
@@ -197,7 +206,7 @@ export default function SetBuilderGuide() {
               </thead>
               <tbody className="text-fg">
                 <tr><td className={TD}>Tecnicamente sicura</td><td className={TD}>score ≥ 70 <em>e</em> chiave compatibile</td><td className={TD}>beatmatch e blend, mix tranquillo</td></tr>
-                <tr><td className={TD}>Reset voluto</td><td className={TD}>calo di energia ≥ 15 o cambio di genere</td><td className={TD}>stacco netto per resettare la pista</td></tr>
+                <tr><td className={TD}>Reset voluto</td><td className={TD}>calo di energia ≥ 15 o cambio di famiglia di genere</td><td className={TD}>stacco netto per resettare la pista</td></tr>
                 <tr><td className={TD}>Azzardo creativo</td><td className={TD}>tutto il resto (anche BPM facile ma key in contrasto)</td><td className={TD}>mix breve, maschera con l&apos;EQ</td></tr>
               </tbody>
             </table>
