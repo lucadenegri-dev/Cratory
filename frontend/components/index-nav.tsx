@@ -18,13 +18,13 @@ const NAV_GROUPS: { title: string | null; items: { href: string; label: string }
       { href: "/playlists", label: "Playlist" },
       { href: "/discovery", label: "Discovery" },
       { href: "/shazam", label: "Shazam" },
-      { href: "/labels", label: "Etichette" },
     ],
   },
   {
     title: "Colleziona",
     items: [
       { href: "/library", label: "Libreria" },
+      { href: "/labels", label: "Etichette" },
       { href: "/downloads", label: "Download" },
     ],
   },

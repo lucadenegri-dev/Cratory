@@ -318,16 +318,10 @@ class LabelStatsOut(BaseModel):
     label: str
     track_count: int
     artist_count: int
+    artists: list[str] = []
     genres: list[str] = []
     year_min: int | None = None
     year_max: int | None = None
-
-
-class LabelBackfillReport(BaseModel):
-    updated: int = 0
-    candidates: int = 0
-    remaining: int = 0
-    rate_limited: bool = False
 
 
 # --- Analisi buchi playlist (nuovo_progetto.md sez. 6) -----------------------

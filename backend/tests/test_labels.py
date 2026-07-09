@@ -1,12 +1,10 @@
-"""Sezione Etichette: backfill label da Spotify (robusto: budget, dedup, rate-limit) + panoramica."""
+"""Sezione Etichette: normalizzazione label (Discovery) + panoramica per etichetta."""
 
-from app.integrations.spotify import SpotifyError
 from app.models import Track
 from app.services.labels import (
     _clean_label,
     _label_from_copyrights,
     album_label,
-    backfill_labels,
     labels_overview,
 )
 
@@ -99,123 +97,12 @@ def test_label_from_copyrights_strips_year_and_symbols():
     ]) == "Real Label"
 
 
-def test_backfill_derives_label_from_copyrights(db):
-    t = _track(db, spotify_id="s1", title="A")
-    client = _FakeSpotifyCopyrights(track_albums={"s1": "alb1"}, album_copyrights={"alb1": [
-        {"text": "2013 Warp Records", "type": "C"},
-        {"text": "2013 Warp Records", "type": "P"},
-    ]})
-    report = backfill_labels(db, client)
-    assert report["updated"] == 1
-    db.refresh(t)
-    assert t.label == "Warp Records"
-
-
-class _FakeSpotify:
-    """Client finto: traccia -> album.id, album -> label. Conta le chiamate di rete."""
-
-    def __init__(self, track_albums=None, album_labels=None, rate_limit_albums=None):
-        self._track_albums = track_albums or {}
-        self._album_labels = album_labels or {}
-        self._rate_limit_albums = rate_limit_albums or set()
-        self.track_calls = 0
-        self.album_calls = 0
-
-    def get_track_metadata(self, sid):
-        self.track_calls += 1
-        return {"id": sid, "album": {"id": self._track_albums.get(sid)}}
-
-    def get_album(self, album_id):
-        self.album_calls += 1
-        if album_id in self._rate_limit_albums:
-            raise SpotifyError("Spotify ha applicato un rate limit prolungato")
-        return {"id": album_id, "label": self._album_labels.get(album_id)}
-
-
 def _track(db, **kw) -> Track:
     kw.setdefault("source_type", "spotify")
     t = Track(**kw)
     db.add(t)
     db.commit()
     return t
-
-
-def test_backfill_sets_label_from_album(db):
-    t1 = _track(db, spotify_id="s1", title="A")
-    t2 = _track(db, spotify_id="s2", title="B")
-    _track(db, source_type="manual", title="C")  # niente identita' Spotify -> ignorata
-
-    client = _FakeSpotify(track_albums={"s1": "alb1", "s2": "alb1"},
-                          album_labels={"alb1": "Warp Records"})
-    report = backfill_labels(db, client)
-
-    assert report["updated"] == 2
-    assert report["remaining"] == 0
-    assert report["rate_limited"] is False
-    db.refresh(t1); db.refresh(t2)
-    assert t1.label == t2.label == "Warp Records"
-    # un solo album distinto -> una sola chiamata album (dedup nello stesso run)
-    assert client.album_calls == 1
-    # una lookup traccia per candidata (l'album non e' piu' persistito sulla traccia)
-    assert client.track_calls == 2
-
-
-def test_backfill_resolves_album_via_track_lookup(db):
-    t = _track(db, spotify_id="s1", title="A")
-    client = _FakeSpotify(track_albums={"s1": "alb1"}, album_labels={"alb1": "Hyperdub"})
-    backfill_labels(db, client)
-    db.refresh(t)
-    assert t.label == "Hyperdub"
-    assert client.track_calls == 1
-
-
-def test_backfill_respects_lookup_budget(db):
-    for i in range(5):
-        _track(db, spotify_id=f"s{i}", title=f"T{i}")
-    client = _FakeSpotify(track_albums={f"s{i}": f"alb{i}" for i in range(5)},
-                          album_labels={f"alb{i}": f"Label {i}" for i in range(5)})
-
-    # ogni traccia costa 2 lookup (traccia + album): budget 4 -> 2 tracce elaborate
-    report = backfill_labels(db, client, max_lookups=4)
-
-    assert report["updated"] == 2
-    assert report["remaining"] == 3
-    assert client.track_calls == 2 and client.album_calls == 2  # budget rispettato
-
-
-def test_backfill_skips_labeled_tracks_on_next_run(db):
-    t1 = _track(db, spotify_id="s1", title="A")
-    client = _FakeSpotify(track_albums={"s1": "alb1"}, album_labels={"alb1": "PAN"})
-    backfill_labels(db, client)
-    db.refresh(t1)
-    assert t1.label == "PAN"
-
-    # secondo run: la traccia etichettata non e' piu' candidata -> zero rete
-    client2 = _FakeSpotify()
-    report = backfill_labels(db, client2)
-    assert report["candidates"] == 0
-    assert client2.track_calls == 0 and client2.album_calls == 0
-
-
-def test_backfill_stops_gracefully_on_rate_limit(db):
-    _track(db, spotify_id="s1", title="A")
-    _track(db, spotify_id="s2", title="B")
-    client = _FakeSpotify(track_albums={"s1": "alb1", "s2": "alb2"},
-                          album_labels={"alb1": "Warp"}, rate_limit_albums={"alb2"})
-
-    report = backfill_labels(db, client, max_lookups=100)
-
-    assert report["rate_limited"] is True
-    assert report["updated"] == 1  # la prima e' stata salvata prima dello stop
-
-
-def test_backfill_does_not_overwrite_existing_label(db):
-    t = _track(db, spotify_id="s1", title="A", label="Etichetta esistente")
-    client = _FakeSpotify(track_albums={"s1": "alb1"}, album_labels={"alb1": "Nuova"})
-    report = backfill_labels(db, client)
-    assert report["updated"] == 0
-    db.refresh(t)
-    assert t.label == "Etichetta esistente"
 
 
 def test_labels_overview_aggregates_counts_and_info(db):
@@ -230,6 +117,7 @@ def test_labels_overview_aggregates_counts_and_info(db):
     warp = overview[0]
     assert warp["track_count"] == 2
     assert warp["artist_count"] == 2
+    assert set(warp["artists"]) == {"Artist 1", "Artist 2"}
     assert set(warp["genres"]) == {"idm", "electronic"}
     assert warp["year_min"] == 2018
     assert warp["year_max"] == 2020

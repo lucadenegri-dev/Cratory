@@ -1,31 +1,19 @@
 """Sezione Etichette (deterministica).
 
-Due responsabilita':
-- ``backfill_labels``: completa ``Track.label`` leggendo l'etichetta dall'album
-  Spotify completo (la label NON c'e' nell'album semplificato annidato nelle tracce
-  di playlist/liked, va letta da GET /albums/{id}). Metadata editoriale, non una
-  feature di mixing: non sovrascrive una label gia' presente.
-
-  Robusto contro il rate limit di Spotify in development mode (dove i batch danno
-  403 e si finisce a fare GET singole):
-    * dedup album->label nello stesso run (``run_cache``) -> un fetch per album;
-    * le tracce gia' etichettate escono dai candidati -> i run futuri non le ritoccano;
-    * budget di lookup per chiamata (``max_lookups``) -> nessuna raffica;
-    * stop pulito sul rate limit (commit parziale + report), niente lavoro perso.
-- ``labels_overview``: aggrega la libreria per etichetta (conteggi + info derivate).
+- ``album_label`` / ``_label_from_copyrights`` / ``_clean_label``: risolvono e
+  normalizzano il nome di un'etichetta dall'album Spotify (usate dal Discovery per
+  annotare i candidati). Metadata editoriale, non una feature di mixing.
+- ``labels_overview``: aggrega la libreria per etichetta (conteggi + info derivate),
+  normalizzando a read-time le varianti dello stesso label via ``_clean_label``.
 """
 
-import logging
 import re
-import time
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.integrations.spotify import SpotifyError
 from app.models import Track
-
-logger = logging.getLogger(__name__)
 
 _MAX_GENRES_PER_LABEL = 6
 
@@ -54,10 +42,6 @@ def _clean_label(raw: str | None) -> str | None:
         prev = s
         s = _LEGAL_SUFFIX_RE.sub("", s).strip()
     return s or None
-
-
-def _spotify_track_id(track: Track) -> str | None:
-    return track.spotify_id or track.platform_track_id
 
 
 def _label_from_copyrights(copyrights) -> str | None:
@@ -91,10 +75,6 @@ def _label_from_copyrights(copyrights) -> str | None:
     return _clean_label(s)
 
 
-def _is_rate_limit(exc: SpotifyError) -> bool:
-    return "rate limit" in str(exc).lower()
-
-
 def album_label(client, album_id: str) -> str | None:
     """Etichetta (pulita) di un album Spotify. Ritorna None se non risolvibile.
 
@@ -112,88 +92,6 @@ def album_label(client, album_id: str) -> str | None:
     if obj:
         label = obj.get("label") or _label_from_copyrights(obj.get("copyrights"))
     return _clean_label(label)
-
-
-def backfill_labels(
-    db: Session, client, tracks: list[Track] | None = None,
-    *, max_lookups: int = 60, force: bool = False, pause: float = 0.0,
-) -> dict:
-    """Popola ``Track.label`` dall'album Spotify. Bounded e ripetibile. Ritorna un report.
-
-    ``client`` espone ``get_track_metadata(id)`` e ``get_album(id)`` (GET singole).
-    ``max_lookups`` limita le chiamate di rete per invocazione: se restano candidati,
-    il report riporta ``remaining`` > 0 e basta rilanciare.
-    """
-    if tracks is None:
-        tracks = list(db.scalars(select(Track)).all())
-
-    candidates = [
-        t for t in tracks
-        if _spotify_track_id(t) is not None and (force or not t.label)
-    ]
-
-    updated = 0
-    lookups = 0
-    rate_limited = False
-    run_cache: dict[str, str | None] = {}  # album_id -> label (dedup nello stesso run)
-
-    for track in candidates:
-        if lookups >= max_lookups:
-            break
-
-        # 1) traccia -> album (una lookup: l'album non e' piu' persistito sulla traccia)
-        sid = _spotify_track_id(track)
-        try:
-            obj = client.get_track_metadata(sid)
-            lookups += 1
-            if pause:
-                time.sleep(pause)
-        except SpotifyError as exc:
-            if _is_rate_limit(exc):
-                rate_limited = True
-                break
-            logger.warning("Backfill label: lookup traccia %s fallita: %s", sid, exc)
-            continue
-        album_id = (obj.get("album") or {}).get("id") if obj else None
-        if not album_id:
-            continue
-
-        # 2) album -> label (dedup nello stesso run, poi rete)
-        if album_id in run_cache:
-            label = run_cache[album_id]
-        else:
-            if lookups >= max_lookups:
-                break
-            try:
-                obj = client.get_album(album_id)
-                lookups += 1
-                if pause:
-                    time.sleep(pause)
-            except SpotifyError as exc:
-                if _is_rate_limit(exc):
-                    rate_limited = True
-                    break
-                logger.warning("Backfill label: lookup album %s fallita: %s", album_id, exc)
-                continue
-            label = None
-            if obj:
-                label = obj.get("label") or _label_from_copyrights(obj.get("copyrights"))
-            run_cache[album_id] = label
-
-        if label and (force or not track.label):
-            track.label = label
-            updated += 1
-
-    db.commit()
-    remaining = sum(1 for t in candidates if not t.label)
-    report = {
-        "updated": updated,
-        "candidates": len(candidates),
-        "remaining": remaining,
-        "rate_limited": rate_limited,
-    }
-    logger.info("Backfill label da Spotify: %s", report)
-    return report
 
 
 def labels_overview(db: Session) -> list[dict]:
@@ -221,6 +119,7 @@ def labels_overview(db: Session) -> list[dict]:
             "label": label,
             "track_count": len(items),
             "artist_count": len(artists),
+            "artists": sorted(artists),
             "genres": sorted(genres)[:_MAX_GENRES_PER_LABEL],
             "year_min": min(years) if years else None,
             "year_max": max(years) if years else None,

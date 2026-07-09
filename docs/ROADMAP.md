@@ -43,7 +43,8 @@ migrazione esplicita.
 - Reset documentazione 2026-06-18.
 - Rebranding UI "editorial archive" (monocromo, IBM Plex Mono, tema dark/paper).
 - Dashboard command center (figure, istogramma BPM, attivita', copertura, azioni).
-- Sezione Etichette: backfill da copyright Spotify + normalizzazione nomi.
+- Sezione Etichette: aggregati per label con nomi normalizzati (label letta dal disco;
+  filtri etichetta/artista/genere; il backfill da Spotify è stato rimosso).
 - Discovery con etichette: Radar Etichette (`label:`) + segnale-etichetta su expand;
   rimossa la "compatibilita' tecnica" dal Discovery (resta del Set Builder).
 - Import Spotify: solo playlist possedute; sync/aggiorna delle gia' importate.

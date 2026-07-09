@@ -155,16 +155,14 @@ case-insensitive tenendo la grafia piu' frequente), istogramma BPM ed energia.
 
 ```text
 GET  /api/labels
-POST /api/labels/backfill
 ```
 
 `GET /api/labels` restituisce la panoramica deterministica delle etichette presenti in
-libreria (aggregati con nomi normalizzati e merge delle varianti).
-
-`POST /api/labels/backfill` recupera l'etichetta dall'album Spotify completo per le
-tracce che ne sono prive (la label non e' nell'album semplificato annidato nelle
-tracce di playlist/liked). E' bounded e ripetibile: elabora un lotto per chiamata; se
-`remaining > 0`, va rilanciato per continuare.
+libreria (aggregati con nomi normalizzati e merge delle varianti). Ogni voce espone
+`label`, `track_count`, `artist_count`, `artists` (lista completa, per il filtro per
+artista), `genres` (cap) e il range anni. La `label` arriva dal tag del file (letta in
+indicizzazione, scritta da DjOrganizer): il vecchio backfill da Spotify e' stato
+rimosso.
 
 ## Set Builder e set salvati
 

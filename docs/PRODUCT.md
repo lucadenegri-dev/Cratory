@@ -12,7 +12,7 @@ Il job to be done: passare da "ho questi lead streaming e questi file sul disco"
 
 ## Product Purpose
 
-Cratory è un banco di lavoro personale per la preparazione di set DJ. Non è un player, non è un social. È lo spazio dove la libreria prende forma: importazione, normalizzazione, indicizzazione della libreria su disco, import BPM/tonalità da Rekordbox, acquisizione file (Soulseek/slskd) con archivio e revisione dei download, costruzione set, gap analysis, discovery, esplorazione della collezione per etichetta discografica (aggregati deterministici per label, backfill da Spotify), identificazione tracklist da mix.
+Cratory è un banco di lavoro personale per la preparazione di set DJ. Non è un player, non è un social. È lo spazio dove la libreria prende forma: importazione, normalizzazione, indicizzazione della libreria su disco, import BPM/tonalità da Rekordbox, acquisizione file (Soulseek/slskd) con archivio e revisione dei download, costruzione set, gap analysis, discovery, esplorazione della collezione per etichetta discografica (aggregati deterministici per label, con la label letta dal tag del file), identificazione tracklist da mix.
 
 Il flusso (striscia di orientamento in dashboard, cinque fasi): **Scopri** (playlist/lead) → **Acquisisci** (Soulseek/slskd) → **Organizza⤴** (enrich testuale, tag, organizzazione: in DjOrganizer) → **Analizza⤴** (analisi in Rekordbox, import BPM/key in Cratory) → **Suona** (Set Builder). Le due fasi con ⤴ escono da Cratory verso Rekordbox/DjOrganizer e rientrano con un import. L'indicizzazione della libreria (scan `LIBRARY_ROOT`, il disco è la libreria) non è una fase della striscia: si lancia dal pulsante "Indicizza" nella nav a sinistra (o parte automaticamente all'avvio).
 

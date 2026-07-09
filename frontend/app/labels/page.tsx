@@ -1,92 +1,86 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { RefreshCw, Users, Disc3 } from "lucide-react";
-import { getLabels, backfillLabels, type LabelStats } from "@/lib/api";
-import { Button, Spinner, Alert, EmptyState, Badge, Card, Loading } from "@/components/ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Users, Disc3 } from "lucide-react";
+import { apiGet, getLabels, type LabelStats, type LibraryStats } from "@/lib/api";
+import { Alert, EmptyState, Badge, Card, Input, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
-import { useJobs } from "@/components/jobs-provider";
+import { MiniBars, type MiniBarRow } from "@/components/dashboard/mini-bars";
 
 export default function Labels() {
   const [labels, setLabels] = useState<LabelStats[] | null>(null);
+  const [genres, setGenres] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [msgTone, setMsgTone] = useState<"success" | "warning">("success");
-  const [remaining, setRemaining] = useState(0);
-  const { startClientJob, updateClientJob, endClientJob } = useJobs();
+  const [qLabel, setQLabel] = useState("");
+  const [qArtist, setQArtist] = useState("");
+  const [qGenre, setQGenre] = useState("");
 
   const load = useCallback(() => {
     getLabels().then(setLabels).catch((e) => setError(String(e.message ?? e)));
+    apiGet<LibraryStats>("/api/stats").then((s) => setGenres(s.genre_distribution ?? {})).catch(() => {});
   }, []);
 
   useEffect(load, [load]);
 
-  const doBackfill = async () => {
-    setBusy(true);
-    setMsg(null);
-    setError(null);
-    startClientJob("labels", "Scaricamento etichette");
-    if (remaining > 0) updateClientJob("labels", { detail: `${remaining} tracce da controllare` });
-    try {
-      const r = await backfillLabels();
-      setRemaining(r.remaining);
-      const parts: string[] = [];
-      parts.push(r.updated > 0 ? `${r.updated} tracce aggiornate con l'etichetta` : "Nessuna nuova etichetta in questo lotto");
-      if (r.rate_limited) {
-        parts.push("Spotify ha applicato un rate limit: riprova più tardi");
-        setMsgTone("warning");
-      } else if (r.remaining > 0) {
-        parts.push(`${r.remaining} tracce ancora da controllare — premi di nuovo per continuare`);
-        setMsgTone("warning");
-      } else {
-        setMsgTone("success");
-      }
-      setMsg(parts.join(" · "));
-      load();
-    } catch (e) {
-      setError(String((e as Error).message ?? e));
-    } finally {
-      setBusy(false);
-      endClientJob("labels");
-    }
-  };
+  const filtered = useMemo(() => {
+    const inc = (v: string, q: string) => v.toLowerCase().includes(q.toLowerCase());
+    return (labels ?? []).filter((l) =>
+      (!qLabel || inc(l.label, qLabel)) &&
+      (!qArtist || l.artists.some((a) => inc(a, qArtist))) &&
+      (!qGenre || l.genres.some((g) => inc(g, qGenre))),
+    );
+  }, [labels, qLabel, qArtist, qGenre]);
 
-  const total = labels?.reduce((s, l) => s + l.track_count, 0) ?? 0;
+  const total = filtered.reduce((s, l) => s + l.track_count, 0);
+
+  const genreRows: MiniBarRow[] = Object.entries(genres)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([g, n]) => ({ label: g, value: n, href: `/library?genre=${encodeURIComponent(g)}` }));
 
   const marginalia = (
-    <div className="space-y-3">
-      <Button size="sm" variant="outline" className="w-full" onClick={doBackfill} disabled={busy}>
-        {busy ? <Spinner /> : <RefreshCw size={14} />} {remaining > 0 ? "Continua il recupero" : "Recupera da Spotify"}
-      </Button>
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Input className="h-9" placeholder="Etichetta" value={qLabel} onChange={(e) => setQLabel(e.target.value)} />
+        <Input className="h-9" placeholder="Artista" value={qArtist} onChange={(e) => setQArtist(e.target.value)} />
+        <Input className="h-9" placeholder="Genere" value={qGenre} onChange={(e) => setQGenre(e.target.value)} />
+      </div>
       {labels && (
         <div className="space-y-2 border-t border-border pt-4 text-xs">
-          <div className="flex justify-between gap-2"><span className="text-muted">Etichette</span><span className="tnum text-fg">{labels.length}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">Etichette</span><span className="tnum text-fg">{filtered.length}</span></div>
           <div className="flex justify-between gap-2"><span className="text-muted">Tracce</span><span className="tnum text-fg">{total}</span></div>
+        </div>
+      )}
+      {genreRows.length > 0 && (
+        <div className="border-t border-border pt-4">
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">Generi in libreria</div>
+          <MiniBars rows={genreRows} />
         </div>
       )}
     </div>
   );
 
   return (
-    <PageLayout title="Etichette" meta={labels ? `${labels.length}` : undefined} marginaliaTitle="Totali" marginalia={marginalia}>
-      {msg && <div className="mb-4"><Alert tone={msgTone === "warning" ? "warning" : "info"}>{msg}</Alert></div>}
+    <PageLayout title="Etichette" meta={labels ? `${labels.length}` : undefined} marginaliaTitle="Panoramica" marginalia={marginalia}>
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
       {labels === null && !error && <Loading />}
 
       {labels && labels.length === 0 && (
         <EmptyState icon={<Disc3 size={28} />} title="Nessuna etichetta">
-          Le tracce non hanno ancora l&apos;informazione sull&apos;etichetta. Premi
-          <span className="font-medium text-fg"> “Recupera da Spotify” </span>
-          per leggerla dagli album.
+          Le tracce non hanno ancora l&apos;informazione sull&apos;etichetta. La label viene
+          letta dal tag del file (scritto da DjOrganizer) durante l&apos;indicizzazione.
         </EmptyState>
       )}
 
-      {labels && labels.length > 0 && (
+      {labels && labels.length > 0 && filtered.length === 0 && (
+        <p className="py-10 text-center text-sm text-muted">Nessuna etichetta con questi filtri.</p>
+      )}
+
+      {filtered.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {labels.map((l) => {
+          {filtered.map((l) => {
             const years = l.year_min ? (l.year_max && l.year_max !== l.year_min ? `${l.year_min}–${l.year_max}` : `${l.year_min}`) : null;
             return (
               <Link key={l.label} href={`/labels/${encodeURIComponent(l.label)}`}>
