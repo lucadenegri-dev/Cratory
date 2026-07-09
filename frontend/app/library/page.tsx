@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
 import { Input, Select, Checkbox, Alert, Loading } from "@/components/ui";
@@ -17,7 +18,7 @@ const STATUS_OPTIONS: [string, string][] = [
 
 type Order = "asc" | "desc";
 
-export default function Library() {
+function LibraryInner() {
   const [items, setItems] = useState<Track[] | null>(null);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -27,9 +28,11 @@ export default function Library() {
   const [artist, setArtist] = useState("");
   const [title, setTitle] = useState("");
   // Filtro genere pre-impostato via query param (es. link "Generi" dalla dashboard).
-  const [genre, setGenre] = useState(
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("genre") ?? "" : "",
-  );
+  // useSearchParams() è coerente fra SSR e client (niente hydration mismatch) e resta
+  // reattivo se il param cambia mentre si è già sulla pagina.
+  const genreParam = useSearchParams().get("genre") ?? "";
+  const [genre, setGenre] = useState(genreParam);
+  useEffect(() => { setGenre(genreParam); setOffset(0); }, [genreParam]);
   const [source, setSource] = useState("");
   const [status, setStatus] = useState("");
   const [bpmMin, setBpmMin] = useState("");
@@ -180,4 +183,8 @@ export default function Library() {
       />
     </PageLayout>
   );
+}
+
+export default function Library() {
+  return <Suspense><LibraryInner /></Suspense>;
 }

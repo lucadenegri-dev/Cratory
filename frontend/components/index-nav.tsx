@@ -31,7 +31,6 @@ const NAV_GROUPS: { title: string | null; items: { href: string; label: string }
   {
     title: "Suona",
     items: [
-      { href: "/set-builder", label: "Set Builder" },
       { href: "/sets", label: "Set" },
       { href: "/transitions", label: "Transizioni" },
     ],
