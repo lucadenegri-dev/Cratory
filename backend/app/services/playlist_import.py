@@ -209,6 +209,10 @@ def import_playlist(
                 Playlist.platform_playlist_id == platform_playlist_id,
             )
         )
+    elif kind == "liked":
+        # I liked non hanno platform_playlist_id: la playlist va ritrovata per `kind`,
+        # altrimenti ogni import ne creerebbe una duplicata.
+        playlist = _liked_playlist(db, platform)
     if playlist is None:
         playlist = Playlist(platform=platform, name=name, kind=kind)
         db.add(playlist)
@@ -268,3 +272,68 @@ def import_playlist(
     }
     logger.info("Import playlist '%s': %s", name, report)
     return report
+
+
+# --- Liked selettivi ---------------------------------------------------------
+
+LIKED_PLAYLIST_NAME = "Liked Spotify"
+
+
+def _liked_playlist(db: Session, platform: str = "spotify") -> Playlist | None:
+    """La playlist dei brani salvati (kind="liked"). Ne esiste al più una per piattaforma."""
+    return db.scalar(
+        select(Playlist).where(Playlist.platform == platform, Playlist.kind == "liked")
+    )
+
+
+def preview_liked_tracks(db: Session, items: list) -> list[dict]:
+    """Item liked di Spotify -> anteprima selezionabile, senza importare nulla.
+
+    Ogni voce è marcata ``already_imported`` se la traccia è già collegata alla
+    playlist Liked locale (match ISRC / platform_track_id / spotify_id, coerente
+    con la dedup di ``_find_existing``).
+    """
+    playlist = _liked_playlist(db)
+    isrcs: set[str] = set()
+    platform_ids: set[str] = set()
+    if playlist is not None:
+        for t in tracks_for_playlist(db, playlist.id):
+            if t.isrc:
+                isrcs.add(t.isrc)
+            if t.platform_track_id:
+                platform_ids.add(t.platform_track_id)
+            if t.spotify_id:
+                platform_ids.add(t.spotify_id)
+
+    out: list[dict] = []
+    for item in items:
+        norm = normalize_spotify_item(item)
+        if norm is None or not norm.platform_track_id:
+            continue
+        already = (
+            (norm.isrc is not None and norm.isrc in isrcs)
+            or norm.platform_track_id in platform_ids
+        )
+        out.append({
+            "spotify_id": norm.platform_track_id,
+            "isrc": norm.isrc,
+            "title": norm.title,
+            "artist": norm.artist,
+            "duration_seconds": norm.duration_seconds,
+            "artwork_url": norm.artwork_url,
+            "already_imported": already,
+        })
+    return out
+
+
+def import_selected_liked_tracks(db: Session, items: list, spotify_ids: list[str]) -> dict:
+    """Importa nella playlist Liked SOLO gli item selezionati. Additivo (niente prune)."""
+    wanted = set(spotify_ids)
+    selected = [
+        item for item in items
+        if (item.get("track") or item.get("item") or {}).get("id") in wanted
+    ]
+    return import_playlist(
+        db, platform="spotify", name=LIKED_PLAYLIST_NAME,
+        items=selected, kind="liked", prune=False,
+    )

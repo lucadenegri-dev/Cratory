@@ -104,7 +104,7 @@ export default function ImportSpotifyPage() {
             subtitle="Seleziona una playlist da importare"
             action={
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => doImport("liked", "Brani che ti piacciono")} disabled={busy !== null}>
+                <Button size="sm" variant="outline" onClick={() => router.push("/playlists/import-spotify/liked")} disabled={busy !== null}>
                   <Heart size={15} /> Liked
                 </Button>
                 <Button size="sm" onClick={loadAvailable} disabled={busy !== null}>

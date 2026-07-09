@@ -5,7 +5,7 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Music4, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
-  RefreshCw, ChevronUp, ChevronDown, Download,
+  RefreshCw, ChevronUp, ChevronDown, Download, Heart,
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, fmtDuration,
@@ -208,7 +208,9 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
           {downloading ? <Spinner /> : <Download size={15} />} Scarica mancanti ({missing})
         </Button>
       )}
-      {canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da Spotify</Button>}
+      {playlist.kind === "liked"
+        ? <Link href="/playlists/import-spotify/liked" className="block"><Button size="sm" variant="outline" className="w-full"><Heart size={14} /> Aggiungi altri liked</Button></Link>
+        : canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da Spotify</Button>}
       {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> Spotify</Button></a>}
       <Button size="sm" variant="danger" className="w-full" onClick={doDelete} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} Rimuovi</Button>
       <div className="space-y-2 border-t border-border pt-4 text-xs">

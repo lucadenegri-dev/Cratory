@@ -289,6 +289,20 @@ class PlaylistImportRequest(BaseModel):
     playlist_id: str  # id Spotify della playlist, oppure "liked" per i brani salvati
 
 
+class LikedTrackPreview(BaseModel):
+    spotify_id: str
+    isrc: str | None = None
+    title: str | None = None
+    artist: str | None = None
+    duration_seconds: int | None = None
+    artwork_url: str | None = None
+    already_imported: bool = False
+
+
+class LikedSelectedImportRequest(BaseModel):
+    spotify_ids: list[str] = Field(default_factory=list)
+
+
 class PlaylistImportReport(BaseModel):
     playlist_id: int
     name: str

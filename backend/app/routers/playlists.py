@@ -32,6 +32,8 @@ from app.repositories import (
 from app.schemas import (
     GapAnalysisResponse,
     GapOut,
+    LikedSelectedImportRequest,
+    LikedTrackPreview,
     ManualImportRequest,
     PlaylistAddTrackRequest,
     PlaylistAddTrackResponse,
@@ -46,7 +48,12 @@ from app.schemas import (
 from app.serializers import track_out
 from app.services.gap_analysis import analyze_gaps
 from app.services.manual_import import import_manual_playlist
-from app.services.playlist_import import import_playlist, import_single_track
+from app.services.playlist_import import (
+    import_playlist,
+    import_selected_liked_tracks,
+    import_single_track,
+    preview_liked_tracks,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/playlists", tags=["playlists"])
@@ -104,7 +111,7 @@ def import_from_spotify(req: PlaylistImportRequest, db: Session = Depends(get_db
         if req.playlist_id == "liked":
             items = client.get_liked_tracks()
             report = import_playlist(
-                db, platform="spotify", name="Brani che ti piacciono",
+                db, platform="spotify", name="Liked Spotify",
                 items=items, kind="liked",
             )
         else:
@@ -123,6 +130,32 @@ def import_from_spotify(req: PlaylistImportRequest, db: Session = Depends(get_db
     except SpotifyError as exc:
         raise _http_error(exc) from exc
     # Enrichment non piu' avviato qui: e' ora responsabilita' di Sortory.
+    return PlaylistImportReport(**report)
+
+
+@router.get("/spotify/liked/preview", response_model=list[LikedTrackPreview])
+def liked_preview(db: Session = Depends(get_db)):
+    """Anteprima dei brani salvati (liked) di Spotify, selezionabili per l'import.
+
+    Non importa nulla: marca quali sono già nella playlist Liked locale.
+    """
+    client = SpotifyWebClient(db)
+    try:
+        items = client.get_liked_tracks()
+    except SpotifyError as exc:
+        raise _http_error(exc) from exc
+    return [LikedTrackPreview(**p) for p in preview_liked_tracks(db, items)]
+
+
+@router.post("/import/liked/selected", response_model=PlaylistImportReport)
+def import_liked_selected(req: LikedSelectedImportRequest, db: Session = Depends(get_db)):
+    """Importa nella playlist Liked solo i brani selezionati. Additivo (niente prune)."""
+    client = SpotifyWebClient(db)
+    try:
+        items = client.get_liked_tracks()
+    except SpotifyError as exc:
+        raise _http_error(exc) from exc
+    report = import_selected_liked_tracks(db, items, req.spotify_ids)
     return PlaylistImportReport(**report)
 
 

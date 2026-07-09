@@ -424,6 +424,28 @@ export function importPlaylist(playlistId: string) {
   });
 }
 
+export interface LikedTrackPreview {
+  spotify_id: string;
+  isrc: string | null;
+  title: string | null;
+  artist: string | null;
+  duration_seconds: number | null;
+  artwork_url: string | null;
+  already_imported: boolean;
+}
+
+/** Anteprima dei liked Spotify: non importa nulla, marca i già presenti in libreria. */
+export function previewLikedTracks() {
+  return apiGet<LikedTrackPreview[]>("/api/playlists/spotify/liked/preview");
+}
+
+/** Importa nella playlist "Liked Spotify" solo i brani selezionati (additivo). */
+export function importSelectedLikedTracks(spotifyIds: string[]) {
+  return apiPost<PlaylistImportReport>("/api/playlists/import/liked/selected", {
+    spotify_ids: spotifyIds,
+  });
+}
+
 export function listImportedPlaylists() {
   return apiGet<Playlist[]>("/api/playlists");
 }
