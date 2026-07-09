@@ -79,3 +79,13 @@ class DiscogsClient:
             logger.warning("Discogs search_releases(%s) fallito: %s", params, exc)
             return []
         return data.get("results") or []
+
+    def get_release(self, release_id: int) -> dict[str, Any]:
+        """Dettaglio di una release, inclusa la tracklist reale.
+
+        A differenza di search_releases (che degrada a lista vuota su errore:
+        una ricerca fallita non deve rompere il dig), qui l'errore Discogs
+        SOLLEVA DiscogsError: il chiamante (l'endpoint del Task 3) deve poterlo
+        distinguere e mostrarlo, mai propagarlo come 500 grezzo.
+        """
+        return self._get(f"/releases/{release_id}")

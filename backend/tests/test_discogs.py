@@ -1,6 +1,8 @@
 """Test integrazione Discogs (nessuna rete: http finto)."""
 
-from app.integrations.discogs import DiscogsClient
+import pytest
+
+from app.integrations.discogs import DiscogsClient, DiscogsError
 
 
 class _Resp:
@@ -53,3 +55,20 @@ def test_token_sets_auth_header():
     c = DiscogsClient(token="abc")
     assert c.http.headers.get("Authorization") == "Discogs token=abc"
     assert "Cratory" in c.http.headers.get("User-Agent", "")
+
+
+def test_get_release_returns_payload():
+    payload = {"id": 1, "title": "Selected Ambient Works 85-92"}
+    http = _FakeHttp(payload)
+    c = DiscogsClient(token=None, http=http)
+    out = c.get_release(1)
+    assert out == payload
+    url, params = http.calls[0]
+    assert url.endswith("/releases/1")
+
+
+def test_get_release_error_raises():
+    http = _FakeHttp({"error": "boom"}, status=500)
+    c = DiscogsClient(token=None, http=http)
+    with pytest.raises(DiscogsError):
+        c.get_release(1)
