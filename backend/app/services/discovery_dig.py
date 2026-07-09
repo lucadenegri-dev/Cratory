@@ -39,6 +39,27 @@ _VARIANT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Badge di formato per la UI (grid cell): primo match in ordine di priorità sui
+# descrittori Discogs. Match ESATTO (intersezione di insiemi), non per sostringa:
+# 'ep' e' sottostringa di 'repress' (r-e-p...), e le ristampe sono frequentissime
+# nel crate digging — una ristampa LP verrebbe marcata "EP". Il campo `format` e'
+# gia' nella risposta di /database/search: nessuna chiamata di rete aggiuntiva.
+_FORMAT_BADGES = [
+    ({"ep"}, "EP"),
+    ({"lp"}, "LP"),
+    ({"album"}, "Album"),
+    ({"single"}, "Single"),
+    ({'12"'}, '12"'),
+]
+
+
+def _format_badge(formats: set[str]) -> str | None:
+    for needles, badge in _FORMAT_BADGES:
+        if needles & formats:
+            return badge
+    return None
+
+
 # Pesi del termine "gusto" nello score (somma 1.0). Tarabili.
 W_ARTIST = 0.5
 W_LABEL = 0.3
@@ -76,6 +97,7 @@ class DiscoveryLead:
     thumb_url: str | None = None
     have: int = 0
     want: int = 0
+    format_badge: str | None = None    # EP | LP | Album | Single | 12" | None
     isrc: str | None = None
     score: float = 0.0
     reasons: list[Reason] = field(default_factory=list)
@@ -193,6 +215,7 @@ def _lead_from_release(item: dict[str, Any], seed: str) -> DiscoveryLead | None:
         discogs_url=f"https://www.discogs.com{uri}" if uri.startswith("/") else (uri or None),
         thumb_url=item.get("cover_image") or item.get("thumb") or None,
         have=have, want=want,
+        format_badge=_format_badge(formats),
     )
 
 

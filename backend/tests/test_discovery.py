@@ -1,5 +1,7 @@
 """Test Discovery mode (Fase F) — nessuna rete: similarity, resolver e LLM finti."""
 
+import pytest
+
 from app.integrations.lastfm import LastFMClient
 from app.services.discovery import discover_for_playlist
 
@@ -309,6 +311,36 @@ def test_dig_endpoint_returns_reasons(db, monkeypatch):
     assert resp.leads, "atteso almeno un lead"
     codes = {r.code for r in resp.leads[0].reasons}
     assert "rare_wanted" in codes and "deep_cut" in codes
+
+
+def test_format_badge_priority():
+    from app.services.discovery_dig import _format_badge
+
+    assert _format_badge({"vinyl", "ep"}) == "EP"
+    assert _format_badge({"vinyl", "lp", "album"}) == "LP"  # LP ha priorità su Album
+    assert _format_badge({"vinyl", "12\""}) == '12"'
+    assert _format_badge({"vinyl"}) is None
+    assert _format_badge(set()) is None
+    # Regressione: match ESATTO, non per sostringa. Una ristampa LP ha il
+    # descrittore "repress" che CONTIENE "ep" — non deve diventare "EP".
+    assert _format_badge({"vinyl", "lp", "album", "repress"}) == "LP"
+
+
+def test_dig_endpoint_exposes_discogs_id_and_format_badge(db, monkeypatch):
+    release = {
+        "id": 42, "title": "Cult - Grail", "year": 2024,
+        "label": ["Lbl"], "style": ["Acid House"],
+        "community": {"have": 3, "want": 120}, "format": ["Vinyl", "EP"],
+        "uri": "/release/42", "cover_image": "http://img",
+    }
+    monkeypatch.setattr(
+        DiscogsClient, "search_releases",
+        lambda self, **kw: [release],
+    )
+    resp = dig_endpoint(DiscoveryDigRequest(seed_type="genre", value="Acid House"), db)
+    lead = resp.leads[0]
+    assert lead.discogs_id == 42
+    assert lead.format_badge == "EP"
 
 
 def test_dig_endpoint_honors_taste_playlist_id(db, monkeypatch):

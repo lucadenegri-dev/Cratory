@@ -447,6 +447,8 @@ class DiscoveryLeadOut(BaseModel):
     have: int = 0
     want: int = 0
     reasons: list[ReasonOut] = []
+    discogs_id: int | None = None
+    format_badge: str | None = None
 
 
 class DiscoveryDigRequest(BaseModel):

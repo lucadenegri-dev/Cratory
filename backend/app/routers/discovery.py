@@ -158,6 +158,7 @@ def _lead_out(lead: DiscoveryLead) -> DiscoveryLeadOut:
         discogs_url=lead.discogs_url, thumb_url=lead.thumb_url,
         have=lead.have, want=lead.want,
         reasons=[ReasonOut(code=r.code, data=r.data) for r in lead.reasons],
+        discogs_id=lead.discogs_id, format_badge=lead.format_badge,
     )
 
 
