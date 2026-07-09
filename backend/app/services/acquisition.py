@@ -1,7 +1,7 @@
 """Collega un file audio acquisito a una Track esistente (ownership).
 
 Non tocca lo status di enrichment ne' le feature musicali. Calcola l'audio-hash
-(best-effort): e' la chiave di riaggancio quando DjOrganizer rinomina/sposta il
+(best-effort): e' la chiave di riaggancio quando Sortory rinomina/sposta il
 file nella libreria canonica.
 """
 from __future__ import annotations

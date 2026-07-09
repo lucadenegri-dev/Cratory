@@ -16,7 +16,7 @@ migration. Disponibilita' `cratory.com` da confermare su registrar.
 **Fase:** core streaming-first completo; **disk-first completo** (la libreria e' il
 disco, playlist streaming = lead); **pivot al paradigma disk-first + Rekordbox
 completato** (motore di enrichment interno e fingerprinting AcoustID ritirati verso
-DjOrganizer, BPM/key ora solo da import Rekordbox XML, `energy` derivata); Discovery
+Sortory, BPM/key ora solo da import Rekordbox XML, `energy` derivata); Discovery
 operativo (expand Last.fm + dig Discogs, ora solo-gusto); Set Builder tecnico/creativo
 con garanzia "solo posseduti"; dashboard con pipeline a cinque fasi (Indicizza
 spostata su pulsante nella nav) e documentazione riallineata al nuovo paradigma;
@@ -81,19 +81,19 @@ playlist ne' in un set salvato) non sopravvivono piu' nel DB.
   restano in schema (FK baked-in, non droppabili su SQLite) ma morte e vuote. Rimossi
   anche `libraryGaps`/`rekordboxPending` dead export in `api.ts`.
 
-## Milestone 2026-07-06 - Pivot disk-first + Rekordbox: enrichment su DjOrganizer, BPM/key da Rekordbox, dashboard e docs
+## Milestone 2026-07-06 - Pivot disk-first + Rekordbox: enrichment su Sortory, BPM/key da Rekordbox, dashboard e docs
 
 Riorientamento del prodotto in tre slice, eseguito su branch dedicati (`slice1a-*`,
 `slice1b-*`, `slice2-import-rekordbox-xml`, `slice3-dashboard-e-documentazione`):
 l'arricchimento testuale dei metadati e il tagging su disco passano interamente a
-DjOrganizer; Cratory riacquisisce BPM/key da un'unica fonte esplicita, l'export XML
+Sortory; Cratory riacquisisce BPM/key da un'unica fonte esplicita, l'export XML
 di Rekordbox.
 
 - **Slice 1A/1B — ritiro del motore di enrichment.** Rimossi il motore di
   enrichment interno (catena Deezer/MusicBrainz/AcousticBrainz/GetSongBPM/Last.fm),
   il fingerprinting AcoustID (`Track.mbid`, `POST/GET /api/library/fingerprint[/status]`)
-  e il bridge read-only `GET /api/tracks/lookup` per DjOrganizer: l'arricchimento
-  testuale e il tagging sul disco sono ora esclusivamente compito di DjOrganizer.
+  e il bridge read-only `GET /api/tracks/lookup` per Sortory: l'arricchimento
+  testuale e il tagging sul disco sono ora esclusivamente compito di Sortory.
   Colonne DB del vecchio motore (feature provider, cache enrichment, `mbid` e affini)
   droppate con migrazione idempotente **FK-safe** in `db.py` (nessuna perdita di dati
   su `tracks`/`setlist_tracks` collegate). Provider esterni rimasti: **solo Discovery**
@@ -238,8 +238,8 @@ attivamente. Quattro fette, sviluppate su branch dedicati e poi rifinite:
   sostituzione traccia) rispetta la garanzia con 422 se la sostituta non e' posseduta;
   toggle "solo brani posseduti" + badge in UI, indicatore "possiedi N di M" nel
   dettaglio playlist.
-- **Fetta 4 — bridge DjOrganizer e copy** (branch `feat/lookup-endpoint`, poi
-  `feat/disk-first-rifiniture`). `GET /api/tracks/lookup` read-only per DjOrganizer:
+- **Fetta 4 — bridge Sortory e copy** (branch `feat/lookup-endpoint`, poi
+  `feat/disk-first-rifiniture`). `GET /api/tracks/lookup` read-only per Sortory:
   ISRC -> fuzzy artist+title, confidence 100/70/0, sempre `limit(1)` (mai
   `MultipleResultsFound` su duplicati), mai 404 (`found: false`). Copy UI: le
   playlist streaming sono presentate come "lead", non come la libreria.
@@ -253,7 +253,7 @@ file" spostata da backlog a fatto).
 **Punto di ripresa:** branch `feat/disk-first-rifiniture` (rifinitura finale, sopra
 `feat/disk-first-core` + `feat/lookup-endpoint` + `feat/set-builder-owned` +
 `feat/set-editor-owned`). Il disk-first e' chiuso end-to-end: indicizzazione, superficie
-UI, Set Builder e bridge DjOrganizer. Prossimo fronte aperto: **miglioramento Discovery**
+UI, Set Builder e bridge Sortory. Prossimo fronte aperto: **miglioramento Discovery**
 (unificazione expand/dig, Last.fm tag come 2a sorgente, tracklist per-release) — invariato.
 
 ## Milestone 2026-06-28 - Playlist many-to-many
@@ -390,7 +390,7 @@ Priorità e backlog completi in `docs/ROADMAP.md` (fonte di verità di stato). I
 core assestato, audit quick-win e rifacimento documentazione fatti; playlist many-to-many
 completato; **disk-first completato** (fette 1-4: indicizzazione `LIBRARY_ROOT` per
 `audio_hash`, possesso in superficie, Set Builder "solo posseduti", bridge
-`GET /api/tracks/lookup` per DjOrganizer — branch `feat/disk-first-rifiniture`). Il
+`GET /api/tracks/lookup` per Sortory — branch `feat/disk-first-rifiniture`). Il
 prossimo fronte aperto è il **miglioramento Discovery** (unificazione expand/dig,
 Last.fm tag come 2a sorgente, tracklist per-release). i18n EN e multi-account pubblico
 restano sospesi.

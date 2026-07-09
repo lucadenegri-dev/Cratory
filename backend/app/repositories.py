@@ -229,7 +229,7 @@ def library_stats(db: Session) -> dict:
     # Distribuzione generi per la stat di dashboard. I tag su disco hanno grafie
     # incoerenti ("Ambient"/"ambient"): li fondiamo case-insensitive tenendo come
     # etichetta la grafia più frequente. È solo presentazione — il valore
-    # autorevole resta il tag sul file (scritto da DjOrganizer), non lo tocchiamo.
+    # autorevole resta il tag sul file (scritto da Sortory), non lo tocchiamo.
     _genre_variants: dict[str, dict[str, int]] = {}
     for label, n in db.execute(
         select(Track.genre, func.count())

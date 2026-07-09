@@ -218,7 +218,7 @@ def index_library(db: Session, *, root: str | Path,
             continue
         if digest in seen_digests:
             # Due file con lo stesso audio nello stesso run: il primo vince, gli altri
-            # si contano soltanto (la dedup su disco e' compito di DjOrganizer).
+            # si contano soltanto (la dedup su disco e' compito di Sortory).
             report["duplicates"] += 1
             logger.warning("Audio duplicato nello stesso run: %s (digest gia' visto)", path)
             if on_progress is not None:

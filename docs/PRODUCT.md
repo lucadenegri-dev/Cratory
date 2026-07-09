@@ -6,7 +6,7 @@ product
 
 ## Users
 
-Un singolo DJ — utente personale, strumento self-hosted, nessun multi-tenancy. Contesto d'uso: preparazione pre-sessione. L'utente ha una libreria di file audio sul disco (`LIBRARY_ROOT`, fonte di verità del possesso) e usa playlist streaming e tracklist incollate (Spotify o import manuale testo/CSV) come lead. Vuole indicizzare la collezione posseduta, importare BPM/tonalità da Rekordbox, costruire una scaletta, scoprire tracce mancanti e identificarle nei mix esterni, acquisirne i file. L'arricchimento testuale dei metadati (titolo/artista/album/label/genere) e il tagging sul disco sono compiti di DjOrganizer, non di Cratory.
+Un singolo DJ — utente personale, strumento self-hosted, nessun multi-tenancy. Contesto d'uso: preparazione pre-sessione. L'utente ha una libreria di file audio sul disco (`LIBRARY_ROOT`, fonte di verità del possesso) e usa playlist streaming e tracklist incollate (Spotify o import manuale testo/CSV) come lead. Vuole indicizzare la collezione posseduta, importare BPM/tonalità da Rekordbox, costruire una scaletta, scoprire tracce mancanti e identificarle nei mix esterni, acquisirne i file. L'arricchimento testuale dei metadati (titolo/artista/album/label/genere) e il tagging sul disco sono compiti di Sortory, non di Cratory.
 
 Il job to be done: passare da "ho questi lead streaming e questi file sul disco" a "ho una scaletta pronta con transizioni ragionate, le lacune riempite e i file delle tracce posseduti sul disco".
 
@@ -14,7 +14,7 @@ Il job to be done: passare da "ho questi lead streaming e questi file sul disco"
 
 Cratory è un banco di lavoro personale per la preparazione di set DJ. Non è un player, non è un social. È lo spazio dove la libreria prende forma: importazione, normalizzazione, indicizzazione della libreria su disco, import BPM/tonalità da Rekordbox, acquisizione file (Soulseek/slskd) con archivio e revisione dei download, costruzione set, gap analysis, discovery, esplorazione della collezione per etichetta discografica (aggregati deterministici per label, con la label letta dal tag del file), identificazione tracklist da mix.
 
-Il flusso (striscia di orientamento in dashboard, cinque fasi): **Scopri** (playlist/lead) → **Acquisisci** (Soulseek/slskd) → **Organizza⤴** (enrich testuale, tag, organizzazione: in DjOrganizer) → **Analizza⤴** (analisi in Rekordbox, import BPM/key in Cratory) → **Suona** (Set Builder). Le due fasi con ⤴ escono da Cratory verso Rekordbox/DjOrganizer e rientrano con un import. L'indicizzazione della libreria (scan `LIBRARY_ROOT`, il disco è la libreria) non è una fase della striscia: si lancia dal pulsante "Indicizza" nella nav a sinistra (o parte automaticamente all'avvio).
+Il flusso (striscia di orientamento in dashboard, cinque fasi): **Scopri** (playlist/lead) → **Acquisisci** (Soulseek/slskd) → **Organizza⤴** (enrich testuale, tag, organizzazione: in Sortory) → **Analizza⤴** (analisi in Rekordbox, import BPM/key in Cratory) → **Suona** (Set Builder). Le due fasi con ⤴ escono da Cratory verso Rekordbox/Sortory e rientrano con un import. L'indicizzazione della libreria (scan `LIBRARY_ROOT`, il disco è la libreria) non è una fase della striscia: si lancia dal pulsante "Indicizza" nella nav a sinistra (o parte automaticamente all'avvio).
 
 Successo = l'utente entra con playlist grezze ed esce con un set strutturato, annotato, una lista di tracce da aggiungere e i relativi file acquisiti in libreria.
 

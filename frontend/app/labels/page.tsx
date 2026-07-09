@@ -70,7 +70,7 @@ export default function Labels() {
       {labels && labels.length === 0 && (
         <EmptyState icon={<Disc3 size={28} />} title="Nessuna etichetta">
           Le tracce non hanno ancora l&apos;informazione sull&apos;etichetta. La label viene
-          letta dal tag del file (scritto da DjOrganizer) durante l&apos;indicizzazione.
+          letta dal tag del file (scritto da Sortory) durante l&apos;indicizzazione.
         </EmptyState>
       )}
 

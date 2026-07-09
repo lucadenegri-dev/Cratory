@@ -13,8 +13,8 @@ analysis, discovery e corpus di mix identificati.
 - **`energy` e' sempre derivata** (deterministica, da BPM+genere): non e' un dato di
   provider ne' un campo editabile a mano.
 - **Cratory legge i file audio ma non li scrive mai.** Tag, rename e organizzazione
-  su disco restano competenza di DjOrganizer; l'arricchimento testuale dei metadati
-  (titolo/artista/album/label/genere) e' anch'esso di DjOrganizer.
+  su disco restano competenza di Sortory; l'arricchimento testuale dei metadati
+  (titolo/artista/album/label/genere) e' anch'esso di Sortory.
 - Spotify non fornisce feature di mixing: serve per identita', metadata, import/export.
 - I provider esterni rimasti (Last.fm, Discogs, Spotify) servono **solo la Discovery**
   per gusto e similarita', non la pipeline di feature.
@@ -128,9 +128,9 @@ dell'acquisizione.
 La libreria e' il disco: il possesso di una traccia (`has_local_file`) non e' un
 side-effect dell'acquisizione Soulseek soltanto, ma lo stato di una cartella
 canonica che Cratory indicizza attivamente. **Cratory legge i file audio ma non li
-muta mai** — tag, rename e organizzazione restano competenza esclusiva di DjOrganizer.
+muta mai** — tag, rename e organizzazione restano competenza esclusiva di Sortory.
 
-- **`LIBRARY_ROOT`**: cartella organizzata (gestita da DjOrganizer) che Cratory
+- **`LIBRARY_ROOT`**: cartella organizzata (gestita da Sortory) che Cratory
   indicizza da Impostazioni -> "Libreria (disco)". Vuota = indicizzazione disattiva.
   L'indicizzazione parte anche automaticamente a ogni avvio dell'app (job in
   background, se `LIBRARY_ROOT` e' configurata), oltre che on-demand.
@@ -168,7 +168,7 @@ muta mai** — tag, rename e organizzazione restano competenza esclusiva di DjOr
   altrimenti resta come lead senza file (contatore `lost`). Guard anti-unmount: uno
   scan a zero file (radice vuota, path sbagliato, disco smontato) non tocca i possessi
   esistenti. `duplicates` conta i file con lo stesso hash visti nello stesso run (il
-  primo vince; la dedup su disco resta compito di DjOrganizer). Esposto via
+  primo vince; la dedup su disco resta compito di Sortory). Esposto via
   `POST /api/library/index` (202, job async) e `GET /api/library/index/status`;
   risponde `409` se `LIBRARY_ROOT` non e' configurata.
 - **Cover art:** l'artwork della traccia posseduta e' servito on-demand dal file
@@ -343,7 +343,7 @@ droppabili su SQLite per una FK baked-in su `playlist_id` — ma sono morte e vu
 I provider esterni residui (Last.fm, Discogs, Spotify) servono **solo la
 Discovery**: nessuno di loro fornisce piu' BPM/key/mood/energia. L'arricchimento
 testuale dei metadati (titolo/artista/album/label/genere) e' di competenza di
-DjOrganizer, non di Cratory. Spotify `/recommendations` non deve essere usato: per
+Sortory, non di Cratory. Spotify `/recommendations` non deve essere usato: per
 app nuove o in development mode puo' restituire 403/404.
 
 ## Persistenza e migrazioni

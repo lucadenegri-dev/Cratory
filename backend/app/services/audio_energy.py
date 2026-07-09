@@ -5,7 +5,7 @@ durante l'indicizzazione, estrae tre feature — RMS (quanto spinge), centroide
 spettrale (brillantezza/aggressività), flusso spettrale (densità di transienti) —
 le combina in un `energy_raw` per-file (0..1) e poi calibra `energy` (0-100) per
 percentili sulla libreria dell'utente. Nessuna nuova dipendenza: ffmpeg e numpy
-sono già presenti; i tag li scrive solo DjOrganizer, qui si legge soltanto.
+sono già presenti; i tag li scrive solo Sortory, qui si legge soltanto.
 """
 
 import numpy as np

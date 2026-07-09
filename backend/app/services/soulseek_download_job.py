@@ -137,7 +137,7 @@ def _attempt_download(db, client, download_dir, track, file: SlskdFile,
 
 def _process_manual(client, download_dir, file: SlskdFile) -> str:
     """Ricerca manuale: scarica il file sul disco (inbox slskd). NON lo cataloga in
-    Cratory: entra in libreria via DjOrganizer (sposta i file in LIBRARY_ROOT) +
+    Cratory: entra in libreria via Sortory (sposta i file in LIBRARY_ROOT) +
     indicizzazione, come un qualsiasi file posseduto. Niente playlist 'Soulseek'."""
     path = _download_candidate(client, download_dir, file)
     return "downloaded" if path else "failed"
@@ -226,7 +226,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                 "reason": reason,
             })
         _state.update(status="done")
-        # Enrichment non piu' avviato qui: e' ora responsabilita' di DjOrganizer.
+        # Enrichment non piu' avviato qui: e' ora responsabilita' di Sortory.
     except Exception as exc:  # noqa: BLE001
         _state.update(status="error", error=str(exc))
         logger.exception("Job di download Soulseek interrotto: %s", exc)

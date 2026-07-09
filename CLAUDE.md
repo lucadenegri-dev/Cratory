@@ -9,7 +9,7 @@ webapp personale, locale/self-hosted e mono-utente per importare
 playlist streaming, costruire bozze di DJ set su tracce possedute (BPM/key da
 Rekordbox), analizzare buchi della libreria, fare discovery e identificare tracklist
 di mix. **L'arricchimento dei metadati (titolo/artista/album/label/genere) e il
-tagging sono di DjOrganizer.**
+tagging sono di Sortory.**
 
 Il progetto non riproduce audio. Il modulo Shazam scarica audio solo in modo temporaneo
 per fingerprinting e salva un corpus separato di tracklist identificate. Eccezione
@@ -51,7 +51,7 @@ Leggere in quest'ordine:
    tracce possedute. Beatgrid/cue restano fuori scope.
 8. **La libreria è il disco.** Il possesso (`has_local_file`) viene dall'indicizzazione
    di `LIBRARY_ROOT` (riaggancio per `audio_hash`); le playlist streaming sono lead.
-   Cratory legge i file ma non li muta mai: i tag li scrive solo DjOrganizer.
+   Cratory legge i file ma non li muta mai: i tag li scrive solo Sortory.
 
 ## Stack e layout
 
@@ -76,7 +76,7 @@ backend/app/
   core/
 ```
 
-Nessuna catena di enrichment: BPM/key da Rekordbox, metadati testuali da DjOrganizer.
+Nessuna catena di enrichment: BPM/key da Rekordbox, metadati testuali da Sortory.
 I provider esterni rimasti servono **solo la Discovery**: Last.fm (similarita'),
 Discogs (dig "Scava"), Spotify (resolver).
 

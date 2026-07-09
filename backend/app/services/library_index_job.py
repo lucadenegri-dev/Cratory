@@ -49,7 +49,7 @@ def _run_job(root: str) -> None:
         set_state(db, "last_index_at", datetime.now(timezone.utc).isoformat())
         _state.update(status="done", **{k: report[k] for k in
                       ("scanned", "matched", "created", "relinked", "duplicates", "lost", "failed", "unchanged", "archived", "errors")})
-        # Enrichment non piu' avviato qui: e' ora responsabilita' di DjOrganizer.
+        # Enrichment non piu' avviato qui: e' ora responsabilita' di Sortory.
         logger.info("Indicizzazione libreria completata: %s", {
             k: report[k] for k in ("scanned", "matched", "created", "relinked", "lost", "failed", "unchanged", "archived")})
     except Exception as exc:  # noqa: BLE001

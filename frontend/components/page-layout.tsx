@@ -3,12 +3,14 @@ import type { ReactNode } from "react";
 export function PageLayout({
   title,
   meta,
+  action,
   marginalia,
   marginaliaTitle,
   children,
 }: {
   title?: string;
   meta?: ReactNode;
+  action?: ReactNode;
   marginalia?: ReactNode;
   marginaliaTitle?: string;
   children: ReactNode;
@@ -20,6 +22,7 @@ export function PageLayout({
           <header className="mb-5 flex items-baseline gap-3 border-b border-border pb-3">
             <h1 className="text-sm font-semibold uppercase tracking-[0.12em] text-fg-strong">{title}</h1>
             {meta != null && <span className="tnum text-xs text-muted">{meta}</span>}
+            {action != null && <span className="ml-auto self-center">{action}</span>}
           </header>
         )}
         {children}

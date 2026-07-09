@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     library_root: str = ""
     # Archivio delle scartate (PASSED di DJPlayer). Vuoto = riconoscimento disattivo.
     archive_root: str = ""
-    # URL del frontend DjOrganizer per il link "Apri DjOrganizer" in dashboard (opzionale).
+    # URL del frontend Sortory per il link "Apri Sortory" in dashboard (opzionale).
     organizer_url: str = ""
 
     # Integrazioni future (MVP 2+)

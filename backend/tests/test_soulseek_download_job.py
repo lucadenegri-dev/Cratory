@@ -148,7 +148,7 @@ def test_fallback_tries_next_user_when_first_fails(patch_job, monkeypatch):
 
 def test_manual_download_lascia_il_file_senza_catalogare(patch_job):
     # Ricerca manuale (track_id None): scarica il file sul disco ma NON lo cataloga
-    # in Cratory. Entra in libreria via DjOrganizer (sposta in LIBRARY_ROOT) +
+    # in Cratory. Entra in libreria via Sortory (sposta in LIBRARY_ROOT) +
     # indicizzazione: niente playlist "Soulseek", niente traccia local_files qui.
     from sqlalchemy import select
 

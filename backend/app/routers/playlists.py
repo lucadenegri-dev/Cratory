@@ -61,7 +61,7 @@ def _http_error(exc: SpotifyError) -> HTTPException:
 
 
 # L'auto-enrichment delle tracce appena importate non e' piu' responsabilita' di
-# Cratory: il motore di enrichment (feature/genere) vive ora in DjOrganizer.
+# Cratory: il motore di enrichment (feature/genere) vive ora in Sortory.
 
 
 @router.get("/spotify/available", response_model=list[SpotifyPlaylistRef])
@@ -122,7 +122,7 @@ def import_from_spotify(req: PlaylistImportRequest, db: Session = Depends(get_db
             )
     except SpotifyError as exc:
         raise _http_error(exc) from exc
-    # Enrichment non piu' avviato qui: e' ora responsabilita' di DjOrganizer.
+    # Enrichment non piu' avviato qui: e' ora responsabilita' di Sortory.
     return PlaylistImportReport(**report)
 
 
@@ -154,7 +154,7 @@ def sync_playlist(playlist_id: int, db: Session = Depends(get_db)):
         owner=playlist.owner, url=playlist.url, artwork_url=playlist.artwork_url,
         kind=playlist.kind, prune=True,
     )
-    # Enrichment non piu' avviato qui: e' ora responsabilita' di DjOrganizer.
+    # Enrichment non piu' avviato qui: e' ora responsabilita' di Sortory.
     return PlaylistImportReport(**report)
 
 
@@ -164,7 +164,7 @@ def import_manual(req: ManualImportRequest, db: Session = Depends(get_db)):
     report = import_manual_playlist(db, name=req.name, text=req.text)
     if report["total"] == 0:
         raise HTTPException(status_code=422, detail="Nessuna traccia riconosciuta nel testo fornito.")
-    # Enrichment non piu' avviato qui: e' ora responsabilita' di DjOrganizer.
+    # Enrichment non piu' avviato qui: e' ora responsabilita' di Sortory.
     return PlaylistImportReport(**report)
 
 

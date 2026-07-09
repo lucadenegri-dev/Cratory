@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Sparkles, Wand2, ListMusic, Music4, Cpu,
+  Sparkles, Wand2, ListMusic, Music4, Cpu, HelpCircle,
   TrendingUp, SlidersHorizontal, ArrowRight, Sunrise, Flame, Sunset, ChevronDown,
 } from "lucide-react";
 import {
@@ -98,7 +98,8 @@ export default function SetBuilder() {
   }, []);
 
   useEffect(() => {
-    apiGet<AiStatus>("/api/ai/status").then((s) => { setAiStatus(s); setUseAi(s.configured); }).catch(() => setAiStatus({ configured: false, model: null }));
+    // Il default è il motore deterministico: l'AI si sceglie esplicitamente.
+    apiGet<AiStatus>("/api/ai/status").then(setAiStatus).catch(() => setAiStatus({ configured: false, model: null }));
     apiGet<Playlist[]>("/api/playlists").then(setPlaylists).catch(() => {});
     apiGet<{ genre: string; count: number }[]>("/api/library/genres").then(setGenres).catch(() => {});
     return stopAll;
@@ -183,7 +184,15 @@ export default function SetBuilder() {
   const aiReady = !!aiStatus?.configured;
 
   return (
-    <PageLayout title="Set Builder">
+    <PageLayout
+      title="Set Builder"
+      action={
+        <Link href="/set-builder/guida" title="Guida del Set Builder" aria-label="Guida del Set Builder"
+          className="text-faint transition-colors hover:text-fg">
+          <HelpCircle size={17} />
+        </Link>
+      }
+    >
       <p className="mb-6 text-sm text-muted">Genera una scaletta dai vincoli, o descrivi a parole il set che vuoi e lascia ragionare l&apos;AI. Il set si apre nel workbench, dove lo riordini e sostituisci le tracce.</p>
 
       <div onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generate(); }}>

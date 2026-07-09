@@ -112,7 +112,7 @@ export function PipelineStrip({ p, onRefresh }: { p: PipelineStatus; onRefresh: 
     {
       key: "organizza", label: "Organizza ⤴",
       value: p.inbox_files === null ? "—" : String(p.inbox_files),
-      sub: "Organizza le tracce che possiedi e i loro tag in DjOrganizer", hot: (p.inbox_files ?? 0) > 0,
+      sub: "Organizza le tracce che possiedi e i loro tag in Sortory", hot: (p.inbox_files ?? 0) > 0,
     },
     {
       key: "analizza", label: "Analizza ⤴", value: String(p.analyze_pending),
@@ -156,14 +156,14 @@ export function PipelineStrip({ p, onRefresh }: { p: PipelineStatus; onRefresh: 
           <span>
             {p.inbox_files === null
               ? "Inbox non configurata: imposta SLSKD_DOWNLOAD_DIR nel .env del backend."
-              : `${p.inbox_files} file audio in inbox aspettano il triage (DJPlayer), l'enrich testuale + tag e l'organizzazione (DjOrganizer); poi torna qui e indicizza.`}
+              : `${p.inbox_files} file audio in inbox aspettano il triage (DJPlayer), l'enrich testuale + tag e l'organizzazione (Sortory); poi torna qui e indicizza.`}
           </span>
           {p.organizer_url && (
             <a
               href={p.organizer_url} target="_blank" rel="noreferrer"
               className="inline-flex shrink-0 items-center gap-1.5 text-fg-strong hover:underline"
             >
-              Apri DjOrganizer <ExternalLink size={12} />
+              Apri Sortory <ExternalLink size={12} />
             </a>
           )}
         </div>

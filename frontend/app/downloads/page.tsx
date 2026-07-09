@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download as DownloadIcon, EyeOff, Link2, Search } from "lucide-react";
 import { PageLayout } from "@/components/page-layout";
-import { Alert, Badge, Button, Card, EmptyState, EqMeter, Input, Loading, Select } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Input, Loading, Select } from "@/components/ui";
 import { useJobs } from "@/components/jobs-provider";
 import { DownloadReviewModal, type ReviewTarget } from "@/components/download-review-modal";
 import { LinkLocalFileModal, type LinkTarget } from "@/components/link-local-file-modal";
@@ -130,18 +130,8 @@ export default function DownloadsPage() {
               <DownloadIcon size={14} /> Scarica playlist
             </Button>
           </div>
-          {status && status.total > 0 && (
-            <div className="mt-3 border border-border p-3">
-              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-                <span className="tnum">{status.processed}/{status.total}</span>
-                {status.current_label && <span className="truncate">· {status.current_label}</span>}
-                <span className="tnum ml-auto">
-                  {status.downloaded} scaricate · {status.needs_review + status.not_found + status.failed} da sistemare
-                </span>
-              </div>
-              <EqMeter value={running ? status.processed / Math.max(status.total, 1) : null} />
-            </div>
-          )}
+          {/* Il progresso del job vive nella barra globale in basso (JobsProvider):
+              qui non lo duplichiamo. I risultati persistono nella sezione "da sistemare". */}
         </section>
 
         {/* 2. Download singolo — ricerca manuale su Soulseek */}

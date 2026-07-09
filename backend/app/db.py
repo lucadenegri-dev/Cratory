@@ -274,7 +274,7 @@ def _migrate_playlist_memberships(conn) -> None:
 
 
 # `release_date`: colonna lead senza writer nel flusso attuale (metadati editoriali
-# spostati su DjOrganizer). Droppabile con DROP COLUMN: nessuna FK ne' indice.
+# spostati su Sortory). Droppabile con DROP COLUMN: nessuna FK ne' indice.
 # NB: playlist_id/playlist_name NON sono qui: playlist_id ha una FK baked-in nel CREATE
 # TABLE e SQLite rifiuta il DROP COLUMN su una colonna referenziata in una foreign key;
 # rimuoverle richiederebbe un rebuild di `tracks`, che il progetto evita (vedi

@@ -89,7 +89,7 @@ migrazione esplicita.
   filtro "Wishlist (senza file)" — card Impostazioni per indicizzare, figura
   "Possedute" in dashboard. Set Builder: `SetGenerationRequest.owned_only=True` di
   default, persistito su `Setlist.owned_only`, rispettato da editor/alternative (422
-  se la sostituta non e' posseduta), toggle+badge in UI. Bridge DjOrganizer:
+  se la sostituta non e' posseduta), toggle+badge in UI. Bridge Sortory:
   `GET /api/tracks/lookup` read-only (isrc/artist+title, confidence 100/70/0,
   `limit(1)`). Le playlist streaming sono "lead" in UI, non la libreria.
 - **Rifiniture disk-first (2026-07-02, lotti A-D):** indicizzazione incrementale a due
@@ -101,9 +101,9 @@ migrazione esplicita.
   normalizzazione leggera dei generi; auto-enrichment delle tracce nuove (da download
   Soulseek e da indice).
 - **Pipeline di orientamento:** `GET /api/pipeline` (snapshot conteggi DB+disco), striscia
-  PipelineStrip in dashboard con "Prossimo passo" cross-app (link a DjOrganizer via
+  PipelineStrip in dashboard con "Prossimo passo" cross-app (link a Sortory via
   `ORGANIZER_URL`), menu raggruppato per fasi Scopri → Colleziona → Suona; `start-dev`
-  avvia anche DjOrganizer se presente.
+  avvia anche Sortory se presente.
 - **Barra job unificata (GlobalProgress):** poller unico in JobsProvider su tutti i job
   lunghi (all'epoca: enrichment, Shazam, download, indice, fingerprint — i job
   enrichment/fingerprint sono stati ritirati col pivot 2026-07, restano Shazam,
@@ -122,8 +122,8 @@ migrazione esplicita.
   importa come playlist).
 - **Pivot disk-first + Rekordbox (2026-07, slice 1A/1B/2/3):** ritirati il motore di
   enrichment interno, il fingerprinting AcoustID e il bridge `GET /api/tracks/lookup`
-  per DjOrganizer (slice 1A/1B) — l'arricchimento testuale dei metadati e il tagging
-  su disco sono ora esclusivamente di DjOrganizer; le colonne DB del vecchio motore
+  per Sortory (slice 1A/1B) — l'arricchimento testuale dei metadati e il tagging
+  su disco sono ora esclusivamente di Sortory; le colonne DB del vecchio motore
   sono state droppate con migrazione FK-safe. **BPM/key tornano in Cratory solo
   dall'import della collezione Rekordbox XML** (`POST /api/rekordbox/import`, slice 2):
   match path (NFC) → `audio_hash` (gated su basename) → artist+title, mai sovrascrive
@@ -204,7 +204,7 @@ Backlog tecnico (non bloccante):
 ### Backlog dall'audit end-to-end (triage post-pivot — dettaglio per ID in `docs/AUDIT-2026-07-05.md`)
 
 ~70 item ancora validi dell'audit multi-agente del 2026-07-05, ri-triageati il
-2026-07-06 dopo il pivot (9 gia' risolti, ~12 obsoleti, 4 migrati a DjOrganizer).
+2026-07-06 dopo il pivot (9 gia' risolti, ~12 obsoleti, 4 migrati a Sortory).
 Per tema, in ordine indicativo di valore:
 
 - **Chiudere il flusso set → console** — A1 export M3U/CSV con `local_path` (post-pivot
@@ -274,8 +274,8 @@ Per tema, in ordine indicativo di valore:
   (resta l'unico fingerprinting audio del progetto — identifica mix esterni, non
   la libreria).
 - L'arricchimento testuale dei metadati (titolo/artista/album/label/genere) e il
-  tagging su disco sono competenza di DjOrganizer, non di Cratory (pivot 2026-07).
+  tagging su disco sono competenza di Sortory, non di Cratory (pivot 2026-07).
 - SQLite resta sufficiente per uso locale mono-utente.
 - Disk-first: la libreria e' il disco (`LIBRARY_ROOT`), non le playlist streaming
   (che restano lead). Cratory legge i file per indicizzarli ma non li scrive mai:
-  tag e organizzazione restano competenza di DjOrganizer.
+  tag e organizzazione restano competenza di Sortory.

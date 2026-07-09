@@ -81,7 +81,7 @@ tracce senza file locale che non sono in nessun'altra playlist ne' in un set sal
 `{deleted_tracks}` (quante tracce orfane sono state rimosse), `404` se non esiste.
 `POST /api/playlists/import-manual` crea una playlist da testo incollato. Nessuno di
 questi avvia piu' enrichment: il testuale (titolo/artista/album/label/genere) e' di
-DjOrganizer, BPM/key arrivano solo dall'import Rekordbox.
+Sortory, BPM/key arrivano solo dall'import Rekordbox.
 `POST /api/playlists/create-from-tracks` (`201`) crea una playlist manuale
 componendo tracce gia' in libreria (disk-first), nell'ordine fornito. Request:
 `{name, track_ids}`. Response: `PlaylistOut`. `422` se il nome e' vuoto o un
@@ -161,7 +161,7 @@ GET  /api/labels
 libreria (aggregati con nomi normalizzati e merge delle varianti). Ogni voce espone
 `label`, `track_count`, `artist_count`, `artists` (lista completa, per il filtro per
 artista), `genres` (cap) e il range anni. La `label` arriva dal tag del file (letta in
-indicizzazione, scritta da DjOrganizer): il vecchio backfill da Spotify e' stato
+indicizzazione, scritta da Sortory): il vecchio backfill da Spotify e' stato
 rimosso.
 
 ## Set Builder e set salvati
