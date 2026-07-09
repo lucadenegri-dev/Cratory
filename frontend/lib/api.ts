@@ -137,6 +137,8 @@ export interface DiscoveryLead {
   have: number;
   want: number;
   reasons: Reason[];
+  discogs_id: number | null;
+  format_badge: string | null;
 }
 
 export interface DiscoveryDigResponse {
@@ -534,12 +536,45 @@ export function discoveryDig(
   });
 }
 
-export function discoveryAddLead(lead: DiscoveryLead) {
-  return apiPost<DiscoveryAddResponse>("/api/discovery/add", {
-    artist: lead.artist,
-    title: lead.title,
-    album_art_url: lead.thumb_url,
-  });
+export interface DiscogsTrack {
+  position: string;
+  title: string;
+  duration_seconds: number | null;
+}
+
+export interface DiscogsRelease {
+  discogs_id: number;
+  title: string;
+  artist: string;
+  thumb_url: string | null;
+  discogs_url: string | null;
+  year: number | null;
+  label: string | null;
+  tracks: DiscogsTrack[];
+}
+
+export function getDiscogsRelease(discogsId: number) {
+  return apiGet<DiscogsRelease>(`/api/discovery/release/${discogsId}`);
+}
+
+export interface DiscoveryImportInput {
+  artist: string;
+  title: string;
+  duration_seconds?: number | null;
+  album_art_url?: string | null;
+  url?: string | null;
+}
+
+export function discoveryImportTrack(input: DiscoveryImportInput) {
+  return apiPost<DiscoveryAddResponse>("/api/discovery/add", input);
+}
+
+export function discoverySaveForLater(input: DiscoveryImportInput) {
+  return apiPost<DiscoveryAddResponse>("/api/discovery/save-for-later", input);
+}
+
+export function downloadTrackAuto(trackId: number) {
+  return apiPost<DownloadStatus>("/api/downloads/track/auto", { track_id: trackId });
 }
 
 export interface PlaylistAddTrackResult {
