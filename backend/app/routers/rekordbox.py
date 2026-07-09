@@ -21,14 +21,16 @@ def pending(db: Session = Depends(get_db)):
 
 
 @router.post("/import", response_model=dict)
-def import_collection(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def import_collection(file: UploadFile = File(...), overwrite: bool = False,
+                      db: Session = Depends(get_db)):
     # Sync `def`: FastAPI la esegue nel threadpool invece che sull'event loop.
     # Un XML grande (parsing) o l'hash audio di fallback (ffmpeg, decine di
     # secondi) bloccherebbero l'intero backend se girassero sull'event loop.
+    # ?overwrite=true: la ri-analisi Rekordbox sovrascrive BPM/key esistenti.
     content = file.file.read()
     if not content:
         raise HTTPException(status_code=400, detail="file vuoto")
     try:
-        return apply_collection(db, content)
+        return apply_collection(db, content, overwrite=overwrite)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

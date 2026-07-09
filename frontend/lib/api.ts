@@ -808,8 +808,10 @@ export interface RekordboxImportReport {
   energy_set: number;
 }
 
-export async function importRekordbox(file: File) {
+export async function importRekordbox(file: File, overwrite = false) {
   const fd = new FormData();
   fd.append("file", file);
-  return apiUpload<RekordboxImportReport>("/api/rekordbox/import", fd);
+  return apiUpload<RekordboxImportReport>(
+    `/api/rekordbox/import${overwrite ? "?overwrite=true" : ""}`, fd,
+  );
 }

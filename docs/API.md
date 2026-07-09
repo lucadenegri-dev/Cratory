@@ -47,9 +47,12 @@ senza BPM o senza Camelot key. Response: `{pending}`.
 `POST /api/rekordbox/import` (multipart, campo `file`) importa l'XML esportato da
 Rekordbox (`File > Export Collection in xml format`). Per ogni traccia dell'XML
 cerca la `Track` posseduta corrispondente nell'ordine: path normalizzato NFC ->
-`audio_hash` di fallback (gated sul basename) -> fuzzy artist+title. Riempie
-`bpm`/`camelot_key` **solo se assenti** (non sovrascrive mai un dato gia'
-presente) e ricalcola `energy` quando il BPM viene impostato. Response:
+`audio_hash` di fallback (gated sul basename) -> fuzzy artist+title. Di default
+riempie `bpm`/`camelot_key` **solo se assenti** (protegge le correzioni manuali);
+con `?overwrite=true` la ri-analisi Rekordbox vince sui valori esistenti, ma un
+dato assente nell'XML non azzera mai quello in libreria. Ricalcola `energy`
+quando il BPM cambia. I contatori `bpm_set`/`key_set` contano solo i valori
+effettivamente cambiati. Response:
 `{in_file, matched, unmatched, bpm_set, key_set, energy_set}`. `400` su file
 vuoto o XML non valido/non sicuro.
 

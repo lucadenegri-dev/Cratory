@@ -22,11 +22,13 @@ type StageDef = {
   href?: string;
 };
 
-/** Pannello upload rekordbox.xml: riempie BPM/key mancanti e ricalcola l'energia,
- *  senza sovrascrivere valori già presenti (li imposta il backend). */
+/** Pannello upload rekordbox.xml: riempie BPM/key mancanti e ricalcola l'energia.
+ *  Di default non sovrascrive valori già presenti; il toggle "sovrascrivi" fa
+ *  vincere la ri-analisi Rekordbox (il comportamento lo imposta il backend). */
 function RekordboxImportPanel({ pending, onImported }: { pending: number; onImported: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [overwrite, setOverwrite] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<RekordboxImportReport | null>(null);
 
@@ -36,7 +38,7 @@ function RekordboxImportPanel({ pending, onImported }: { pending: number; onImpo
     setError(null);
     setReport(null);
     try {
-      const r = await importRekordbox(file);
+      const r = await importRekordbox(file, overwrite);
       setReport(r);
       onImported(); // aggiorna analyze_pending e copertura BPM/key/energia dopo l'import
     } catch (e) {
@@ -52,8 +54,7 @@ function RekordboxImportPanel({ pending, onImported }: { pending: number; onImpo
       <div className="min-w-[16rem] flex-1">
         <p className="mb-2">
           Analizza le tracce in Rekordbox (beatgrid/tonalità), poi importa qui il file{" "}
-          <code className="text-fg">rekordbox.xml</code> della collezione per completare BPM e tonalità
-          (non sovrascrive valori già presenti).{" "}
+          <code className="text-fg">rekordbox.xml</code> della collezione per completare BPM e tonalità.{" "}
           {pending > 0 ? `${pending} ${pending === 1 ? "traccia" : "tracce"} in attesa.` : "Nessuna traccia in attesa."}
         </p>
         <input
@@ -64,6 +65,19 @@ function RekordboxImportPanel({ pending, onImported }: { pending: number; onImpo
           onChange={(e) => onFile(e.target.files?.[0])}
           className="block w-full max-w-sm text-xs text-muted file:mr-3 file:border file:border-border-strong file:bg-transparent file:px-3 file:py-1.5 file:text-xs file:font-medium file:uppercase file:tracking-wider file:text-fg hover:file:bg-elevated disabled:opacity-50"
         />
+        <label className="mt-2 flex w-fit cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            checked={overwrite}
+            disabled={busy}
+            onChange={(e) => setOverwrite(e.target.checked)}
+            className="accent-fg-strong"
+          />
+          <span>
+            Sovrascrivi BPM/tonalità già presenti (la ri-analisi Rekordbox vince; eventuali
+            correzioni manuali vengono riallineate)
+          </span>
+        </label>
         {busy && <p className="mt-2 flex items-center gap-2"><Spinner /> Importazione in corso…</p>}
         {error && <div className="mt-2"><Alert tone="danger">⚠ {error}</Alert></div>}
         {report && (

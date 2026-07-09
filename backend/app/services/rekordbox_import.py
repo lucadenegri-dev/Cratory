@@ -101,7 +101,11 @@ def _match(r, by_path, by_hash, by_at, owned_basenames):
     return by_at.get((_low(r.artist), _low(r.title)))
 
 
-def apply_collection(db: Session, xml_bytes: bytes) -> dict:
+def apply_collection(db: Session, xml_bytes: bytes, overwrite: bool = False) -> dict:
+    """Applica BPM/key dell'XML alle tracce possedute. Di default riempie solo i
+    campi vuoti (protegge le correzioni manuali); con overwrite=True la ri-analisi
+    Rekordbox vince sui valori esistenti, ma un dato assente nell'XML non azzera
+    mai quello in libreria."""
     rows = parse_collection(xml_bytes)
     owned = list(db.scalars(select(Track).where(Track.has_local_file.is_(True))).all())
     by_path = {_norm_path(t.local_path): t for t in owned if t.local_path}
@@ -120,10 +124,10 @@ def apply_collection(db: Session, xml_bytes: bytes) -> dict:
             continue  # riga duplicata su una traccia gia' matchata: non e' un mancato match
         seen.add(t.id)
         matched += 1
-        if r.bpm is not None and t.bpm is None:
+        if r.bpm is not None and (overwrite or t.bpm is None) and t.bpm != r.bpm:
             t.bpm = r.bpm
             bpm_set += 1
-        if r.camelot and not t.camelot_key:
+        if r.camelot and (overwrite or not t.camelot_key) and t.camelot_key != r.camelot:
             t.camelot_key = r.camelot
             key_set += 1
         if apply_estimated_energy(t):

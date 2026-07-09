@@ -35,9 +35,10 @@ Leggere in quest'ordine:
    scoring, ruoli, gap analysis, discovery ranking e validazione sono codice
    deterministico. Narrativa, interpretazione prompt e spiegazioni sono AI.
 2. **BPM/key vengono da Rekordbox.** Si importano dall'export XML della collezione
-   (`/api/rekordbox/import`) e non si sovrascrivono se già presenti (un dato
-   esistente resta autorevole). Cratory non stima né inventa BPM/key. `energy` è
-   un dato derivato deterministico (da BPM+genere).
+   (`/api/rekordbox/import`); di default un dato già presente non si sovrascrive
+   (protegge le correzioni manuali), con `?overwrite=true` la ri-analisi Rekordbox
+   vince. Cratory non stima né inventa BPM/key. `energy` è un dato derivato
+   deterministico (da BPM+genere).
 3. **Lo streaming non fornisce feature di mixing.** Spotify da identita' traccia,
    metadata editoriali, cover, durata, ISRC, URL e playlist.
 4. **L'AI non riceve mai l'intera libreria.** Riceve solo candidate filtrate dal

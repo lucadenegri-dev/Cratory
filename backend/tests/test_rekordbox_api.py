@@ -36,6 +36,24 @@ def test_import_endpoint_applies():
         app.dependency_overrides.pop(get_db, None)
 
 
+def test_import_endpoint_overwrite_query_param():
+    """?overwrite=true: il re-import Rekordbox sovrascrive BPM/key esistenti."""
+    db = _db()
+    t = Track(source_type="spotify", has_local_file=True, local_path="/music/a.mp3",
+              bpm=120.0, camelot_key="5B")
+    db.add(t); db.commit()
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        r = TestClient(app).post("/api/rekordbox/import?overwrite=true",
+                        files={"file": ("rekordbox.xml", io.BytesIO(_XML), "text/xml")})
+        assert r.status_code == 200
+        assert r.json()["bpm_set"] == 1
+        db.refresh(t)
+        assert t.bpm == 128.0 and t.camelot_key == "8A"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 def test_pending_counts_owned_without_features():
     db = _db()
     db.add(Track(source_type="spotify", has_local_file=True, local_path="/m/x.mp3"))

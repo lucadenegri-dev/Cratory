@@ -32,6 +32,31 @@ def test_apply_does_not_overwrite_existing_bpm(db):
     assert t.bpm == 120.0                   # valore preesistente autorevole
 
 
+def test_apply_overwrite_replaces_existing_bpm_and_key(db):
+    """Con overwrite=True la ri-analisi Rekordbox vince sui valori esistenti
+    (Rekordbox e' la fonte di verita' di BPM/key) e l'energia viene ricalcolata."""
+    t = _owned(db, local_path="/music/a.mp3", bpm=120.0, camelot_key="5B",
+               genre="Techno", energy=45, energy_source="estimated")
+    report = apply_collection(db, _XML, overwrite=True)
+    db.refresh(t)
+    assert t.bpm == 128.0 and t.camelot_key == "8A"
+    assert t.energy != 45                   # ricalcolata sul nuovo BPM
+    assert report["bpm_set"] == 1 and report["key_set"] == 1
+
+
+def test_apply_overwrite_does_not_blank_missing_rekordbox_values(db):
+    """overwrite=True sovrascrive solo con valori presenti nell'XML: una riga
+    senza AverageBpm/Tonality non deve azzerare i dati esistenti."""
+    xml = b"""<DJ_PLAYLISTS><COLLECTION>
+    <TRACK Name="Dreamscapes" Artist="SLV"
+           Location="file://localhost/music/a.mp3"/>
+    </COLLECTION></DJ_PLAYLISTS>"""
+    t = _owned(db, local_path="/music/a.mp3", bpm=120.0, camelot_key="5B")
+    apply_collection(db, xml, overwrite=True)
+    db.refresh(t)
+    assert t.bpm == 120.0 and t.camelot_key == "5B"
+
+
 def test_apply_matches_by_artist_title_fallback(db):
     t = _owned(db, local_path="/other/path.mp3", artist="SLV", title="Dreamscapes")
     report = apply_collection(db, _XML)
