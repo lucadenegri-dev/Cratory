@@ -14,7 +14,7 @@ import re
 import unicodedata
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.integrations.local_files import (
@@ -23,7 +23,7 @@ from app.integrations.local_files import (
     read_audio_quality,
     read_tags,
 )
-from app.models import Track
+from app.models import ArchiveSeen, Track
 from app.repositories import unreferenced_track_ids
 from app.services.audio_energy import analyze_file, recompute_energy
 from app.services.genre_norm import normalize_genre
@@ -172,7 +172,8 @@ def index_library(db: Session, *, root: str | Path,
     """Indicizza la libreria canonica e (se configurato) l'archivio delle scartate."""
     files = scan_folder(root)
     archive_files: list[Path] = []
-    if archive_root and Path(archive_root).is_dir():
+    archive_scanned = bool(archive_root and Path(archive_root).is_dir())
+    if archive_scanned:
         archive_files = scan_folder(archive_root)
     total = len(files) + len(archive_files)
     report = {"scanned": len(files), "matched": 0, "created": 0,
@@ -180,6 +181,11 @@ def index_library(db: Session, *, root: str | Path,
               "failed": 0, "unchanged": 0, "archived": 0, "errors": [], "created_ids": []}
     seen_paths: set[str] = set()
     seen_digests: set[str] = set()
+    # Firme dei file d'archivio già visti che non corrispondono ad alcuna traccia:
+    # senza questo, verrebbero ri-hashati (ffmpeg) a ogni run. {path: (mtime, size)}
+    archive_seen: dict[str, tuple[float, int]] = {}
+    if archive_files:
+        archive_seen = {r.path: (r.mtime, r.size) for r in db.scalars(select(ArchiveSeen))}
 
     # Passata 1 — incrementale (Libreria E archivio): i file invariati (path noto,
     # mtime+size uguali) reclamano subito path e hash SENZA ri-hash. Va fatta PRIMA
@@ -198,6 +204,13 @@ def index_library(db: Session, *, root: str | Path,
             seen_paths.add(resolved)
             if known.audio_hash:
                 seen_digests.add(known.audio_hash)
+            done += 1
+            if on_progress is not None:
+                on_progress(done, total)
+        elif in_archive and archive_seen.get(resolved) == (stat.st_mtime, stat.st_size):
+            # File d'archivio senza traccia, ma già visto e invariato: niente ri-hash.
+            report["unchanged"] += 1
+            seen_paths.add(resolved)
             done += 1
             if on_progress is not None:
                 on_progress(done, total)
@@ -236,6 +249,10 @@ def index_library(db: Session, *, root: str | Path,
                 refresh_status(track)
                 report["archived"] += 1
                 seen_paths.add(str(path.resolve()))
+            else:
+                # Senza traccia: ricorda la firma per non ri-hasharlo al prossimo run.
+                stat = path.stat()
+                db.merge(ArchiveSeen(path=str(path.resolve()), mtime=stat.st_mtime, size=stat.st_size))
             if on_progress is not None:
                 on_progress(i, total)
             continue
@@ -255,6 +272,13 @@ def index_library(db: Session, *, root: str | Path,
         seen_paths.add(str(path.resolve()))
         if on_progress is not None:
             on_progress(i, total)
+
+    # Pulisci la cache d'archivio dalle firme di file non più presenti.
+    if archive_scanned:
+        current_archive = {str(p.resolve()) for p in archive_files}
+        stale = [pth for pth in archive_seen if pth not in current_archive]
+        if stale:
+            db.execute(delete(ArchiveSeen).where(ArchiveSeen.path.in_(stale)))
 
     # Anti-unmount (stesso principio dell'import locale): una radice vuota o
     # illeggibile (path sbagliato, disco smontato) non deve azzerare i possessi.

@@ -32,11 +32,11 @@ logger = logging.getLogger("app.request")
 async def lifespan(app: FastAPI):
     setup_logging()
     ensure_schema()
-    # Disk-first: il disco È la libreria — riallineala a ogni avvio.
-    # Il job è un thread daemon in background: non blocca l'avvio; con la
-    # scansione incrementale il costo dei run ripetuti è minimo.
+    # Disk-first: il disco È la libreria — riallineala all'avvio, ma non a ogni
+    # reload di uvicorn: start_job_if_due salta se un run è finito da poco. Il job
+    # è un thread daemon; con la scansione incrementale il costo è minimo.
     if settings.library_root:
-        library_index_job.start_job()
+        library_index_job.start_job_if_due()
     yield
 
 

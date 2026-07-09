@@ -93,3 +93,36 @@ def test_duplicato_di_file_invariato_rilevato(db, fake_audio):
 
     assert report["unchanged"] == 1
     assert report["duplicates"] == 1
+
+
+def test_archivio_non_matchato_niente_rehash(db, fake_audio, monkeypatch):
+    """Un file nell'archivio che non corrisponde ad alcuna traccia NON deve essere
+    ri-hashato a ogni run: era la causa dell'indicizzazione lenta a libreria ferma."""
+    from app.services import library_index as li
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    make("lib/A - keep.mp3", digest="H1", artist="A", title="keep")          # libreria
+    make("arch/X - orphan.mp3", digest="ARCH1", artist="X", title="orphan")  # archivio, non matcha
+    lib, arch = root / "lib", root / "arch"
+    index_library(db, root=lib, archive_root=arch)  # primo run: hash tutto
+
+    calls: list[str] = []
+    original = li.audio_hash
+    monkeypatch.setattr(li, "audio_hash", lambda p: calls.append(str(p)) or original(p))
+    report = index_library(db, root=lib, archive_root=arch)  # secondo run, tutto invariato
+
+    assert calls == []             # niente ri-hash, né libreria né archivio
+    assert report["unchanged"] >= 2
+
+
+def test_auto_index_due_decision():
+    """Il gate dell'auto-indicizzazione allo startup: salta se un run è finito da poco."""
+    from datetime import datetime, timedelta, timezone
+    from app.services.library_index_job import _auto_index_due
+
+    now = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
+    assert _auto_index_due(None, now) is True                                    # mai indicizzato
+    assert _auto_index_due((now - timedelta(minutes=3)).isoformat(), now) is False   # troppo recente
+    assert _auto_index_due((now - timedelta(minutes=30)).isoformat(), now) is True   # abbastanza vecchio
+    assert _auto_index_due("non-una-data", now) is True                          # valore corrotto: procedi

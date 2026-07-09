@@ -241,3 +241,15 @@ class AppState(Base):
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class ArchiveSeen(Base):
+    """Firma (path, mtime, size) dei file d'archivio che non corrispondono ad alcuna
+    traccia: senza una Track non li vedrebbe la passata incrementale e verrebbero
+    ri-hashati (ffmpeg) a ogni indicizzazione. Qui li ricordiamo per saltarli."""
+
+    __tablename__ = "archive_seen"
+
+    path: Mapped[str] = mapped_column(String, primary_key=True)
+    mtime: Mapped[float] = mapped_column(Float)
+    size: Mapped[int] = mapped_column(Integer)
