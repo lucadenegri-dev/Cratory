@@ -60,6 +60,26 @@ def pitch_to_camelot(value: str | None) -> str | None:
     return table[pc]
 
 
+# Punteggio graduato (0-100) per distanza sulla ruota Camelot. A differenza dei
+# tre livelli same/compatible/weak, distingue un +2 "energy boost" (8A->10A,
+# mixabile con intento) da un tritono (8A->2A, stonatura). num_dist = passi minimi
+# sulla ruota (0-6); la lettera uguale/diversa distingue relativa e diagonale.
+_SAME_LETTER_SCORE = {0: 100, 1: 85, 2: 65, 3: 35, 4: 25, 5: 18, 6: 10}
+_DIFF_LETTER_SCORE = {0: 90, 1: 60, 2: 45, 3: 30, 4: 22, 5: 15, 6: 10}
+
+
+def camelot_score(key_a: str | None, key_b: str | None) -> int:
+    """Compatibilità armonica graduata (0-100). 50 (neutro) se una key manca."""
+    a, b = parse_camelot(key_a), parse_camelot(key_b)
+    if a is None or b is None:
+        return 50
+    num_a, let_a = a
+    num_b, let_b = b
+    num_dist = min((num_a - num_b) % 12, (num_b - num_a) % 12)
+    table = _SAME_LETTER_SCORE if let_a == let_b else _DIFF_LETTER_SCORE
+    return table[num_dist]
+
+
 def camelot_compatibility(key_a: str | None, key_b: str | None) -> tuple[str, str]:
     """Classifica la compatibilita' armonica tra due key Camelot.
 

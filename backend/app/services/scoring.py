@@ -10,7 +10,7 @@ Composizione score (0-100), tutta basata su dati ottenuti dall'enrichment estern
 from dataclasses import dataclass, field
 
 from app.models import Track
-from app.services.camelot import camelot_compatibility
+from app.services.camelot import camelot_compatibility, camelot_score
 
 SHORT_TRACK_SECONDS = 90
 
@@ -60,7 +60,10 @@ def classify_transition(from_track: Track, to_track: Track) -> TransitionClassif
     - creative_risk: salto di BPM/tonalità deliberato ma azzardato.
     """
     score = score_transition(from_track, to_track).score
-    if score >= SAFE_CLASSIFICATION_SCORE:
+    level, _ = camelot_compatibility(from_track.camelot_key, to_track.camelot_key)
+    harmonic_ok = level in ("same", "compatible")
+    # "Sicura" richiede ANCHE l'armonia: un BPM perfetto con key stonata non è un mix sicuro.
+    if score >= SAFE_CLASSIFICATION_SCORE and harmonic_ok:
         return TransitionClassification(
             "technically_safe", "tecnicamente sicura",
             "BPM e tonalità compatibili: mix sicuro",
@@ -87,6 +90,15 @@ def classify_transition(from_track: Track, to_track: Track) -> TransitionClassif
             f"Stacco netto ({', '.join(bits)}): utile per resettare la pista",
         )
 
+    # BPM in riga ma key in contrasto: azzardo di sola tonalità, non un salto di tempo.
+    bpm_close = False
+    if from_track.bpm and to_track.bpm:
+        bpm_close = effective_bpm_diff(from_track.bpm, to_track.bpm)[0] <= 5
+    if bpm_close and not harmonic_ok:
+        return TransitionClassification(
+            "creative_risk", "azzardo creativo",
+            "Beatmatch facile ma tonalità in contrasto: mix breve o maschera con l'EQ",
+        )
     return TransitionClassification(
         "creative_risk", "azzardo creativo",
         "Salto di BPM/tonalità voluto ma azzardato: gestire con cura",
@@ -103,18 +115,22 @@ def mixing_tip(from_track: Track, to_track: Track) -> str:
 
     fb, tb = from_track.bpm, to_track.bpm
     if fb and tb:
-        delta = tb - fb
-        ad = abs(delta)
-        if ad <= 0.5:
-            parts.append("stesso BPM: beatmatch diretto")
-        elif ad <= 2:
-            parts.append(f"{delta:+.0f} BPM: ritocca il pitch, blend lungo")
-        elif ad <= 5:
-            parts.append(f"{delta:+.0f} BPM: pitch bend o blend graduale sull'intro")
-        elif ad <= 8:
-            parts.append(f"{delta:+.0f} BPM: salto deciso, usa un break o un EQ blend")
+        eff, folded = effective_bpm_diff(fb, tb)
+        if folded and eff <= 5:
+            parts.append("mezzo/doppio tempo: allinea la griglia sul break")
         else:
-            parts.append(f"{delta:+.0f} BPM: stacco netto, meglio un cut o una traccia ponte")
+            delta = tb - fb
+            ad = abs(delta)
+            if ad <= 0.5:
+                parts.append("stesso BPM: beatmatch diretto")
+            elif ad <= 2:
+                parts.append(f"{delta:+.0f} BPM: ritocca il pitch, blend lungo")
+            elif ad <= 5:
+                parts.append(f"{delta:+.0f} BPM: pitch bend o blend graduale sull'intro")
+            elif ad <= 8:
+                parts.append(f"{delta:+.0f} BPM: salto deciso, usa un break o un EQ blend")
+            else:
+                parts.append(f"{delta:+.0f} BPM: stacco netto, meglio un cut o una traccia ponte")
     else:
         parts.append("BPM mancante: sincronizza a orecchio")
 
@@ -196,9 +212,24 @@ def mixing_overview(tracks: list[Track]) -> list[str]:
     return bullets
 
 
+def effective_bpm_diff(a: float, b: float) -> tuple[float, bool]:
+    """Differenza BPM efficace tenendo conto di mezzo/doppio tempo (griglia condivisa).
+
+    Ritorna (diff, folded): folded=True quando il match half/double è migliore di
+    quello diretto (es. 87<->174, 140<->70), cioè un mix a mezzo tempo intenzionale.
+    """
+    direct = abs(a - b)
+    folded = min(abs(a - 2 * b), abs(2 * a - b))
+    return (folded, True) if folded < direct else (direct, False)
+
+
 def _bpm_points(from_bpm: float | None, to_bpm: float | None) -> tuple[float, str, str | None]:
     if not from_bpm or not to_bpm:
         return 25.0, "BPM mancante su una delle tracce: valutazione neutra", "BPM mancante"
+    diff, folded = effective_bpm_diff(from_bpm, to_bpm)
+    if folded and diff <= 5:
+        pts = 40.0 if diff <= 2 else 30.0
+        return pts, f"mezzo/doppio tempo (Δ effettivo {diff:.1f})", "mezzo/doppio tempo: allinea la griglia sul break"
     diff = abs(from_bpm - to_bpm)
     if diff <= 2:
         return 50.0, f"differenza BPM ottima ({diff:.1f})", None
@@ -211,13 +242,12 @@ def _bpm_points(from_bpm: float | None, to_bpm: float | None) -> tuple[float, st
 
 def _key_points(from_key: str | None, to_key: str | None) -> tuple[float, str, str | None]:
     level, desc = camelot_compatibility(from_key, to_key)
-    if level == "same":
-        return 40.0, desc, None
-    if level == "compatible":
-        return 32.0, desc, None
+    pts = camelot_score(from_key, to_key) / 100.0 * 40.0  # graduato: distingue +2 boost da tritono
     if level == "unknown":
-        return 18.0, desc, "tonalita' non confrontabile"
-    return 10.0, desc, "key poco compatibili: mix armonico difficile"
+        return pts, desc, "tonalita' non confrontabile"
+    if level == "weak":
+        return pts, desc, "key poco compatibili: mix armonico difficile"
+    return pts, desc, None
 
 
 def score_transition(from_track: Track, to_track: Track) -> TransitionScore:
@@ -259,9 +289,12 @@ def score_transition(from_track: Track, to_track: Track) -> TransitionScore:
 
 
 def bpm_compatibility_score(from_bpm: float | None, to_bpm: float | None) -> int:
-    """Compatibilita' di tempo (0-100). Stessa scala a gradini di `_bpm_points`."""
+    """Compatibilita' di tempo (0-100), consapevole di mezzo/doppio tempo."""
     if not from_bpm or not to_bpm:
         return 50
+    diff, folded = effective_bpm_diff(from_bpm, to_bpm)
+    if folded and diff <= 5:
+        return 100 if diff <= 2 else 75
     diff = abs(from_bpm - to_bpm)
     if diff <= 2:
         return 100
@@ -273,9 +306,8 @@ def bpm_compatibility_score(from_bpm: float | None, to_bpm: float | None) -> int
 
 
 def key_compatibility_score(from_key: str | None, to_key: str | None) -> int:
-    """Compatibilita' armonica Camelot (0-100)."""
-    level, _ = camelot_compatibility(from_key, to_key)
-    return {"same": 100, "compatible": 80, "weak": 25}.get(level, 50)  # unknown -> neutro
+    """Compatibilita' armonica Camelot (0-100), graduata sulla distanza della ruota."""
+    return camelot_score(from_key, to_key)
 
 
 def energy_progression_score(from_energy: int | None, to_energy: int | None) -> int:

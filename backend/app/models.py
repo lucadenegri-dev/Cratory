@@ -80,8 +80,11 @@ class Track(Base):
     duration_seconds: Mapped[int | None] = mapped_column(Integer)
     bpm: Mapped[float | None] = mapped_column(Float, index=True)
     camelot_key: Mapped[str | None] = mapped_column(String, index=True)  # tonalita' Camelot, es. "7A"
-    # Energia stimata (0-100), derivata deterministicamente da BPM/genere (services/energy)
+    # Energia (0-100). Da BPM/genere (proxy) oppure calcolata dai file audio (PR4).
     energy: Mapped[int | None] = mapped_column(Integer)
+    # Feature audio grezza (0..1) e provenienza dell'energia: computed | estimated.
+    energy_raw: Mapped[float | None] = mapped_column(Float)
+    energy_source: Mapped[str | None] = mapped_column(String)
     # Stato traccia: imported | ready_for_set
     status: Mapped[str] = mapped_column(String, default="imported", index=True)
     album_art_url: Mapped[str | None] = mapped_column(Text)  # artwork_url (cover album)

@@ -25,6 +25,7 @@ from app.integrations.local_files import (
 )
 from app.models import Track
 from app.repositories import unreferenced_track_ids
+from app.services.audio_energy import analyze_file, recompute_energy
 from app.services.genre_norm import normalize_genre
 from app.services.manual_import import parse_line
 from app.services.local_import import scan_folder
@@ -126,6 +127,16 @@ def _own(track: Track, *, path: Path, digest: str) -> None:
     track.local_mtime = stat.st_mtime
     track.local_size = stat.st_size
     track.archived = False  # il possesso in Libreria vince sullo scarto
+    # Energia vera dai campioni audio (PR4). Solo qui, cioè sui file nuovi/cambiati
+    # (la passata incrementale salta gli invariati). Fallback silenzioso: la
+    # calibrazione a fine job trasforma energy_raw in energy (0-100).
+    try:
+        raw = analyze_file(path, track.duration_seconds)
+    except Exception as exc:  # decode/analisi non deve mai far fallire l'indicizzazione
+        logger.debug("Analisi energia saltata per %s: %s", path, exc)
+        raw = None
+    if raw is not None:
+        track.energy_raw = raw
 
 
 def _discard(track: Track, *, path: Path, digest: str) -> None:
@@ -285,4 +296,7 @@ def index_library(db: Session, *, root: str | Path,
             report["lost"] += 1
 
     db.commit()
+    # Calibrazione energia: mappa gli energy_raw (0..1) in energy 0-100 per percentili
+    # sull'INTERA libreria, così "100" è la traccia più energica dell'utente.
+    report["energy_computed"] = recompute_energy(db)
     return report

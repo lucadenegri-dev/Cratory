@@ -21,7 +21,8 @@ def _score_out(from_track: Track, to_track: Track) -> TransitionScoreOut:
     )
 
 
-def _ranked(db: Session, track_id: int, *, incoming: bool, limit: int) -> list[TransitionCandidateOut]:
+def _ranked(db: Session, track_id: int, *, incoming: bool, limit: int,
+            lens: str | None = None) -> list[TransitionCandidateOut]:
     anchor = get_track(db, track_id)
     if anchor is None:
         raise HTTPException(status_code=404, detail="Traccia non trovata")
@@ -30,21 +31,32 @@ def _ranked(db: Session, track_id: int, *, incoming: bool, limit: int) -> list[T
         if other.id == anchor.id:
             continue
         out = _score_out(other, anchor) if incoming else _score_out(anchor, other)
+        # La lente ordina DENTRO una classe (sicura/reset/azzardo): così i reset e gli
+        # azzardi — che hanno score più basso — emergono invece di restare sepolti.
+        if lens and out.classification != lens:
+            continue
         results.append((out.score, other, out))
     results.sort(key=lambda item: item[0], reverse=True)
     return [TransitionCandidateOut(track=track_out(t), score=s) for _, t, s in results[:limit]]
 
 
+_LENSES = {"technically_safe", "good_reset", "creative_risk"}
+
+
 @router.get("/after/{track_id}", response_model=list[TransitionCandidateOut])
-def transitions_after(track_id: int, limit: int = Query(default=20, le=100), db: Session = Depends(get_db)):
-    """Cosa posso mettere dopo questa traccia."""
-    return _ranked(db, track_id, incoming=False, limit=limit)
+def transitions_after(track_id: int, limit: int = Query(default=20, le=100),
+                      lens: str | None = Query(default=None), db: Session = Depends(get_db)):
+    """Cosa posso mettere dopo questa traccia. `lens` opzionale: filtra per classe."""
+    return _ranked(db, track_id, incoming=False, limit=limit,
+                   lens=lens if lens in _LENSES else None)
 
 
 @router.get("/before/{track_id}", response_model=list[TransitionCandidateOut])
-def transitions_before(track_id: int, limit: int = Query(default=20, le=100), db: Session = Depends(get_db)):
-    """Cosa posso mettere prima di questa traccia."""
-    return _ranked(db, track_id, incoming=True, limit=limit)
+def transitions_before(track_id: int, limit: int = Query(default=20, le=100),
+                       lens: str | None = Query(default=None), db: Session = Depends(get_db)):
+    """Cosa posso mettere prima di questa traccia. `lens` opzionale: filtra per classe."""
+    return _ranked(db, track_id, incoming=True, limit=limit,
+                   lens=lens if lens in _LENSES else None)
 
 
 @router.post("/score", response_model=TransitionScoreOut)

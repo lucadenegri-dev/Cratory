@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.integrations.local_files import audio_hash
 from app.models import Track
 from app.services.camelot import parse_camelot
-from app.services.energy import estimate_energy
+from app.services.energy import apply_estimated_energy
 from app.services.track_status import refresh_status
 
 logger = logging.getLogger(__name__)
@@ -126,11 +126,8 @@ def apply_collection(db: Session, xml_bytes: bytes) -> dict:
         if r.camelot and not t.camelot_key:
             t.camelot_key = r.camelot
             key_set += 1
-        if t.bpm is not None:
-            new_energy = estimate_energy(t.bpm, None, t.genre)
-            if new_energy is not None and new_energy != t.energy:
-                t.energy = new_energy
-                energy_set += 1
+        if apply_estimated_energy(t):
+            energy_set += 1
         refresh_status(t)
     db.commit()
     return {"in_file": len(rows), "matched": matched,

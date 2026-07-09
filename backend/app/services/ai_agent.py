@@ -39,8 +39,10 @@ Regole inderogabili:
   suggerimenti riferisciti ai brani per «artista – titolo».
 - Costruisci una scaletta coerente che rispetti durata target, arco BPM e vincoli.
 - Ordina le tracce in modo musicalmente sensato (mixaggio armonico Camelot, progressione BPM).
-- reason: in una frase, perché quel brano in quel punto. transition_note: come mixare dal
-  precedente (BPM, key, energia). risk_level: low|medium|high.
+- reason: in una frase, perché quel brano in quel punto. transition_note: l'INTENZIONE del
+  passaggio (energia, groove, stacco). NON affermare che due tonalità sono compatibili né che
+  il mix è "armonico"/"in chiave": la compatibilità la calcola il sistema deterministico, e
+  affermarla a vanvera è un errore. risk_level: low|medium|high.
 - missing_library_suggestions: 0-3 consigli CONCRETI per migliorare il set, cioè che TIPO di
   traccia aggiungere alla libreria (BPM, tonalità, energia, mood, ruolo) per colmare un punto
   debole. Niente id, niente nomi di brani non presenti.
@@ -66,6 +68,8 @@ Regole inderogabili (NON negoziabili):
 - Usa SOLO le tracce candidate fornite. Seleziona ogni brano col suo "track_id".
 - NON citare MAI l'id numerico nei testi: riferisciti ai brani per «artista – titolo».
 - I dati tecnici forniti (BPM, Camelot) sono autorevoli: ragiona su quelli, non inventarli.
+- Nei testi NON dichiarare compatibilità armonica o "mix in chiave" (la calcola il sistema):
+  descrivi l'intenzione musicale — tensione, rilascio, contrasto, il momento della serata.
 - Rispetta la durata target e i vincoli espliciti dell'utente (mood/energia/durata).
 - Per ogni traccia: reason (perché lì, anche per ragioni musicali/emotive), transition_note (come mixare), risk_level (low|medium|high).
 - missing_library_suggestions: max 3 consigli concreti su che TIPO di traccia aggiungere (BPM/tonalità/energia/mood/ruolo) per rendere il set migliore. Niente id.
@@ -105,21 +109,72 @@ class AIAgentError(Exception):
     pass
 
 
+CORRIDOR_BANDS = 6  # fasce lungo l'arco BPM per il campionamento stratificato
+
+
 def _rank_candidates(candidates: list[Track], req: SetGenerationRequest) -> list[Track]:
-    """Ordina e taglia le candidate per rilevanza, garantendo gli artisti seed."""
+    """Taglia le candidate a MAX_CANDIDATES garantendo che coprano l'intero arco BPM.
+
+    I seed sono sempre inclusi. Il resto è campionato in modo stratificato lungo il
+    corridoio [start_bpm, end_bpm]: così l'AI riceve materiale per tutto il viaggio,
+    non solo ammassato vicino allo start (che affamava il finale dell'arco).
+    """
     seeds = [s.lower() for s in req.seed_artists]
-    anchor_bpm = req.start_bpm or 0
 
-    def relevance(t: Track) -> float:
-        score = 0.0
-        if seeds and t.artist and any(s in t.artist.lower() for s in seeds):
-            score += 1000.0
-        if anchor_bpm and t.bpm:
-            score -= abs(t.bpm - anchor_bpm)
-        return score
+    def is_seed(t: Track) -> bool:
+        return bool(seeds and t.artist and any(s in t.artist.lower() for s in seeds))
 
-    ranked = sorted(candidates, key=relevance, reverse=True)
-    return ranked[:MAX_CANDIDATES]
+    seed_tracks = [t for t in candidates if is_seed(t)]
+    rest = [t for t in candidates if not is_seed(t)]
+    budget = MAX_CANDIDATES - len(seed_tracks)
+    if budget <= 0:
+        return seed_tracks[:MAX_CANDIDATES]
+
+    declared = [b for b in (req.start_bpm, req.end_bpm) if b]
+    lo, hi = (min(declared), max(declared)) if declared else (None, None)
+
+    if lo is None or hi == lo:
+        # Nessun corridoio dichiarato: vicinanza allo start (o ordine per BPM).
+        anchor = req.start_bpm or 0
+        chosen = sorted(rest, key=lambda t: (abs((t.bpm or anchor) - anchor), t.id))[:budget]
+        return seed_tracks + chosen
+
+    width = (hi - lo) / CORRIDOR_BANDS
+
+    def band_of(bpm: float | None) -> int:
+        if bpm is None:
+            return -1
+        if bpm <= lo:
+            return 0
+        if bpm >= hi:
+            return CORRIDOR_BANDS - 1
+        return min(CORRIDOR_BANDS - 1, int((bpm - lo) / width))
+
+    buckets: dict[int, list[Track]] = {}
+    for t in rest:
+        buckets.setdefault(band_of(t.bpm), []).append(t)
+
+    per_band = max(1, budget // CORRIDOR_BANDS)
+    chosen: list[Track] = []
+    picked: set[int] = set()
+    for band in range(CORRIDOR_BANDS):
+        center = lo + (band + 0.5) * width
+        band_tracks = sorted(buckets.get(band, []), key=lambda t: (abs((t.bpm or center) - center), t.id))
+        for t in band_tracks[:per_band]:
+            chosen.append(t)
+            picked.add(t.id)
+
+    # Riempi lo spazio residuo con le migliori rimanenti (vicinanza al corridoio).
+    if len(chosen) < budget:
+        def corridor_dist(t: Track) -> float:
+            if t.bpm is None:
+                return 1e9
+            return max(0.0, lo - t.bpm, t.bpm - hi)
+        leftover = sorted((t for t in rest if t.id not in picked),
+                          key=lambda t: (corridor_dist(t), t.id))
+        chosen.extend(leftover[:budget - len(chosen)])
+
+    return seed_tracks + chosen[:budget]
 
 
 def _candidate_payload(t: Track) -> dict:

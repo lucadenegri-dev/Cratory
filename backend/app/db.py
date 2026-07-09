@@ -58,6 +58,9 @@ def ensure_schema(eng=None) -> None:
             "label": "VARCHAR",
             "camelot_key": "VARCHAR",
             "energy": "INTEGER",
+            # Energia calcolata dai file audio (PR4): feature grezza + provenienza
+            "energy_raw": "FLOAT",
+            "energy_source": "VARCHAR",
             # Ownership file locale (Soulseek download / import locale)
             "has_local_file": "BOOLEAN DEFAULT 0",
             "local_format": "VARCHAR",

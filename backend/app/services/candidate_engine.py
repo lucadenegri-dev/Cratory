@@ -2,6 +2,9 @@
 per la costruzione di un set. In MVP 3 sara' anche il filtro a monte dell'AI Agent.
 """
 
+import re
+import unicodedata
+
 from sqlalchemy.orm import Session
 
 from app.models import Track
@@ -10,6 +13,39 @@ from app.schemas import SetGenerationRequest
 
 MIN_TRACK_SECONDS = 120  # esclude sample/oneshot del sampler Rekordbox
 BPM_WINDOW_TOLERANCE = 12.0
+
+
+def _norm(value: str | None) -> str:
+    ascii_ = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", " ", ascii_.lower()).strip()
+
+
+def _fuzzy_key(track: Track) -> str:
+    """Chiave normalizzata artista+titolo per la dedup: accenti/punteggiatura/case
+    ignorati, e un eventuale prefisso «artista - » nel titolo rimosso (es. la stessa
+    traccia salvata come "Raär – Sirens" e "Raar - Raar - Sirens")."""
+    artist = _norm(track.artist)
+    title = _norm(track.title)
+    if artist and title.startswith(artist + " "):
+        title = title[len(artist) + 1:]
+    return f"{artist}|{title}"
+
+
+def _dedupe_fuzzy(tracks: list[Track]) -> list[Track]:
+    """Collassa i duplicati fuzzy (stesso brano, grafie diverse). Preferisce la copia
+    posseduta; a parità tiene la prima. Le tracce senza artista né titolo non si toccano."""
+    result: list[Track] = []
+    seen: dict[str, int] = {}  # chiave fuzzy -> indice in result
+    for t in tracks:
+        key = _fuzzy_key(t)
+        if key == "|":  # niente identità testuale: non deduplicare
+            result.append(t)
+        elif key not in seen:
+            seen[key] = len(result)
+            result.append(t)
+        elif t.has_local_file and not result[seen[key]].has_local_file:
+            result[seen[key]] = t  # la copia posseduta vince
+    return result
 
 
 def select_candidates(db: Session, req: SetGenerationRequest) -> list[Track]:
@@ -52,4 +88,5 @@ def select_candidates(db: Session, req: SetGenerationRequest) -> list[Track]:
 
     # Gli artisti seed non filtrano: garantiscono presenza, gestiti dal generator.
     _ = seeds
-    return candidates
+    # Duplicati fuzzy (stesso brano in grafie diverse): un set non deve ripeterlo.
+    return _dedupe_fuzzy(candidates)

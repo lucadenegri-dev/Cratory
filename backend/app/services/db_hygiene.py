@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.integrations.local_files import read_tags
 from app.models import Track
 from app.repositories import merge_tracks
-from app.services.energy import estimate_energy
+from app.services.energy import apply_estimated_energy
 from app.services.genre_norm import normalize_genre
 from app.services.manual_import import parse_line
 
@@ -122,7 +122,7 @@ def realign_owned_from_disk(db: Session, *, apply: bool) -> dict:
         if track_changed:
             changed_tracks += 1
             if apply:
-                t.energy = estimate_energy(t.bpm, None, t.genre)
+                apply_estimated_energy(t)
     if apply:
         db.commit()
     return {"changed_tracks": changed_tracks, "changed_fields": changed_fields, "missing_file": missing_file}

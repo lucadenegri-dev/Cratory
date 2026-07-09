@@ -12,6 +12,21 @@ _LOW_ENERGY_GENRES = (
 )
 
 
+def apply_estimated_energy(track) -> bool:
+    """Applica l'energia-proxy (da BPM/genere) a `track`, MA senza calpestare un
+    valore calcolato dai file audio (energy_source='computed' vince). Imposta
+    energy_source='estimated' quando scrive. Ritorna True se ha cambiato l'energia.
+    """
+    if getattr(track, "energy_source", None) == "computed" or track.bpm is None:
+        return False
+    value = estimate_energy(track.bpm, None, track.genre)
+    if value is None or value == track.energy:
+        return False
+    track.energy = value
+    track.energy_source = "estimated"
+    return True
+
+
 def estimate_energy(bpm, danceability, genre):
     if bpm is None:
         return None

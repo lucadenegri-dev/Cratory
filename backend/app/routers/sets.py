@@ -33,7 +33,7 @@ from app.services.set_editor import (
     rename_set,
     replace_track,
 )
-from app.services.scoring import classify_transition
+from app.services.scoring import classify_transition, mixing_tip
 from app.services.set_generator import SetGenerationError, generate_set
 
 logger = logging.getLogger(__name__)
@@ -184,10 +184,13 @@ def export(
             md += [setlist.global_explanation, ""]
         md += ["| # | Ruolo | Traccia | BPM | Key | Durata | Transizione |",
                "|--:|---|---|--:|---|--:|---|"]
+        prev = None
         for st in setlist.tracks:
             t = st.track
             label = f"{t.artist or '?'} — {t.title or t.spotify_id or '?'}"
-            note = (st.transition_note or st.transition_reason or "").replace("|", "/").replace("\n", " ")
+            # Nota di mix deterministica e accurata (mai il log grezzo o claim AI non verificati).
+            note = (mixing_tip(prev, t) if prev is not None else "apertura").replace("|", "/").replace("\n", " ")
+            prev = t
             md.append(
                 f"| {st.position} | {st.role or ''} | {label} | "
                 f"{t.bpm:.0f} | {t.camelot_key or '?'} | {_fmt_dur(t.duration_seconds)} | {note} |"

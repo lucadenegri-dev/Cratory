@@ -127,15 +127,15 @@ def update_track(db: Session, track: Track, data: dict) -> Track:
     (services/energy) e viene ricalcolata qui quando il patch tocca bpm o
     genere e la traccia ha un bpm. Aggiorna lo stato.
     """
-    from app.services.energy import estimate_energy
+    from app.services.energy import apply_estimated_energy
     from app.services.track_status import refresh_status
 
     for field, value in data.items():
         if isinstance(value, str):
             value = value.strip() or None
         setattr(track, field, value)
-    if ("bpm" in data or "genre" in data) and track.bpm is not None:
-        track.energy = estimate_energy(track.bpm, None, track.genre)
+    if "bpm" in data or "genre" in data:
+        apply_estimated_energy(track)
     refresh_status(track)
     db.commit()
     db.refresh(track)

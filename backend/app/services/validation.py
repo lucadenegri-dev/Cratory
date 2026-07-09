@@ -10,7 +10,8 @@ from dataclasses import dataclass, field
 
 from app.models import Track
 from app.schemas import AISetResponse, SetGenerationRequest
-from app.services.scoring import score_transition
+from app.services.camelot import camelot_compatibility
+from app.services.scoring import effective_bpm_diff, score_transition
 
 
 @dataclass
@@ -47,6 +48,11 @@ def _label(track: Track) -> str:
     return title or artist or "traccia senza titolo"
 
 
+def _positions(positions: list[int]) -> str:
+    nums = ", ".join(str(p) for p in positions)
+    return f"al brano {nums}" if len(positions) == 1 else f"ai brani {nums}"
+
+
 def validate_ai_set(
     ai: AISetResponse,
     candidates_by_id: dict[int, Track],
@@ -58,6 +64,10 @@ def validate_ai_set(
     seen: set[int] = set()
     artist_counts: dict[str, int] = {}
     risk_by_level = {"low", "medium", "high"}
+    # Posizioni (1-based) dei problemi, per aggregarli in pochi warning leggibili.
+    weak_key_at: list[int] = []
+    bpm_jump_at: list[int] = []
+    short_at: list[int] = []
 
     for choice in ordered:
         track = candidates_by_id.get(choice.track_id)
@@ -82,6 +92,7 @@ def validate_ai_set(
             artist_counts[artist_key] = artist_counts.get(artist_key, 0) + 1
 
         # score tecnico deterministico della transizione dal brano precedente
+        position = len(result.tracks) + 1  # posizione finale di questo brano nel set
         transition_score: float | None = None
         transition_reason = "traccia di apertura"
         if result.tracks:
@@ -89,11 +100,13 @@ def validate_ai_set(
             ts = score_transition(prev, track)
             transition_score = float(ts.score)
             transition_reason = "; ".join(ts.technical_reasons)
-            for w in ts.warnings:
-                result.warnings.append(f"{_label(prev)} → {_label(track)}: {w}")
+            if camelot_compatibility(prev.camelot_key, track.camelot_key)[0] == "weak":
+                weak_key_at.append(position)
+            if prev.bpm and track.bpm and effective_bpm_diff(prev.bpm, track.bpm)[0] > 8:
+                bpm_jump_at.append(position)
 
         if (track.duration_seconds or 0) and track.duration_seconds < SHORT_TRACK_SECONDS:
-            result.warnings.append(f"traccia molto corta ({track.duration_seconds}s): {_label(track)}")
+            short_at.append(position)
 
         risk = choice.risk_level if choice.risk_level in risk_by_level else "medium"
         result.tracks.append(ValidatedTrack(
@@ -105,13 +118,27 @@ def validate_ai_set(
             transition_note=choice.transition_note,
         ))
 
-    # durata totale vs target
+    # --- Warning aggregati, in ordine di importanza (durata prima) ---
+    # Gli avvisi di scarto raccolti nel loop (traccia non candidata/sorgente) restano
+    # in coda; qui davanti mettiamo i pochi warning azionabili e sintetici.
     total = sum(vt.track.duration_seconds or 0 for vt in result.tracks)
     target = req.target_duration_minutes * 60
+    aggregated: list[str] = []
     if target and abs(total - target) > target * DURATION_TOLERANCE:
-        result.warnings.append(
-            f"durata {total // 60} min lontana dal target {req.target_duration_minutes} min"
+        verso = "aggiungi tracce" if total < target else "accorcia il set"
+        aggregated.append(
+            f"Durata {total // 60} min lontana dal target {req.target_duration_minutes} min: {verso}."
         )
+    if weak_key_at:
+        noun = "transizione fuori chiave" if len(weak_key_at) == 1 else "transizioni fuori chiave"
+        aggregated.append(f"{len(weak_key_at)} {noun} ({_positions(weak_key_at)}): tienile brevi o maschera con l'EQ.")
+    if bpm_jump_at:
+        noun = "salto di BPM marcato" if len(bpm_jump_at) == 1 else "salti di BPM marcati"
+        aggregated.append(f"{len(bpm_jump_at)} {noun} ({_positions(bpm_jump_at)}): usa un break o una traccia ponte.")
+    if short_at:
+        noun = "traccia molto corta" if len(short_at) == 1 else "tracce molto corte"
+        aggregated.append(f"{len(short_at)} {noun} ({_positions(short_at)}).")
+    result.warnings = aggregated + result.warnings
 
     result.stats = {
         "track_count": len(result.tracks),

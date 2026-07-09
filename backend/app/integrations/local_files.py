@@ -141,6 +141,25 @@ def read_cover(path: str | Path) -> tuple[bytes, str] | None:
     return None
 
 
+def decode_pcm_bytes(path: str | Path, *, offset: float = 0.0, seconds: float = HASH_SECONDS) -> bytes:
+    """PCM grezzo mono 22050 Hz s16le da `offset` per `seconds`, via ffmpeg.
+
+    Stessa pipeline di `audio_hash` (che resta intatta perché è identità-critica);
+    qui il seek `-ss` permette di campionare finestre a metà/fine traccia (PR4).
+    """
+    cmd = [
+        "ffmpeg", "-v", "error", "-ss", f"{offset}", "-i", str(path),
+        "-t", f"{seconds}", "-ac", "1", "-ar", "22050", "-f", "s16le", "-",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, check=True)
+    except FileNotFoundError as exc:
+        raise LocalFilesError("ffmpeg non trovato: necessario per l'analisi audio dei file locali.") from exc
+    except subprocess.CalledProcessError as exc:
+        raise LocalFilesError(f"ffmpeg non ha potuto decodificare {path}") from exc
+    return proc.stdout
+
+
 def audio_hash(path: str | Path, *, seconds: int = HASH_SECONDS) -> str:
     """SHA-256 dei primi `seconds` di audio decodificato (mono 22050 Hz s16le).
 
