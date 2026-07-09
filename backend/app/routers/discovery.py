@@ -27,6 +27,7 @@ from app.integrations.lastfm import (
 from app.integrations.llm import get_llm_client, llm_configured
 from app.integrations.spotify import SpotifyWebClient
 from app.models import Track
+from app.repositories import add_track_to_playlist
 from app.schemas import (
     DiscogsReleaseOut,
     DiscogsTrackOut,
@@ -39,6 +40,8 @@ from app.schemas import (
     DiscoveryGenresOut,
     DiscoveryLeadOut,
     DiscoveryResponse,
+    DiscoverySaveForLaterRequest,
+    DiscoverySaveForLaterResponse,
     ReasonOut,
 )
 from app.serializers import track_out
@@ -49,7 +52,7 @@ from app.services.discovery import (
 )
 from app.services.discovery_dig import DiscoveryLead, dig
 from app.services.labels import _clean_label, album_label, labels_overview
-from app.services.playlist_import import import_single_track
+from app.services.playlist_import import get_or_create_discovery_playlist, import_single_track
 
 # Stili Discogs curati per il drill-down "Generi" (oltre ai generi gia' in libreria).
 _CURATED_STYLES = [
@@ -268,3 +271,18 @@ def add_to_library(req: DiscoveryAddRequest, db: Session = Depends(get_db)):
         duration_seconds=req.duration_seconds, url=req.url, artwork_url=req.album_art_url,
     )
     return DiscoveryAddResponse(created=created, track=track_out(track))
+
+
+@router.post("/save-for-later", response_model=DiscoverySaveForLaterResponse)
+def save_for_later(req: DiscoverySaveForLaterRequest, db: Session = Depends(get_db)):
+    """Importa una traccia della tracklist e la mette nella playlist di sistema
+    'Scoperte'. Nessun download: solo per-dopo."""
+    track, created = import_single_track(
+        db, platform="manual", title=req.title, artist=req.artist,
+        duration_seconds=req.duration_seconds, url=req.url, artwork_url=req.album_art_url,
+    )
+    playlist = get_or_create_discovery_playlist(db)
+    add_track_to_playlist(db, track, playlist)
+    db.commit()
+    db.refresh(track)
+    return DiscoverySaveForLaterResponse(created=created, track=track_out(track))

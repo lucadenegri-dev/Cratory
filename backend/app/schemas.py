@@ -487,6 +487,21 @@ class DiscogsReleaseOut(BaseModel):
     tracks: list[DiscogsTrackOut] = []
 
 
+class DiscoverySaveForLaterRequest(BaseModel):
+    """Una traccia della tracklist di un disco, segnata 'per dopo'."""
+
+    artist: str
+    title: str
+    duration_seconds: int | None = None
+    album_art_url: str | None = None
+    url: str | None = None
+
+
+class DiscoverySaveForLaterResponse(BaseModel):
+    created: bool
+    track: TrackOut
+
+
 class BpmBin(BaseModel):
     # 'from' e' parola chiave Python: campo from_ con alias "from" sul JSON.
     model_config = ConfigDict(populate_by_name=True)
