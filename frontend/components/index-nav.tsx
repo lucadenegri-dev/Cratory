@@ -15,7 +15,6 @@ const NAV_GROUPS: { title: string | null; items: { href: string; label: string }
   {
     title: "Scopri",
     items: [
-      { href: "/playlists", label: "Playlist" },
       { href: "/discovery", label: "Discovery" },
       { href: "/shazam", label: "Shazam" },
     ],
@@ -24,6 +23,7 @@ const NAV_GROUPS: { title: string | null; items: { href: string; label: string }
     title: "Colleziona",
     items: [
       { href: "/library", label: "Libreria" },
+      { href: "/playlists", label: "Playlists" },
       { href: "/labels", label: "Etichette" },
       { href: "/downloads", label: "Download" },
     ],

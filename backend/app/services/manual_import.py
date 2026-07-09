@@ -53,28 +53,23 @@ def _find_by_name(db: Session, artist: str | None, title: str) -> Track | None:
     return db.scalar(stmt)
 
 
-def import_manual_playlist(db: Session, *, name: str, text: str) -> dict:
-    """Crea una playlist 'manual' dalle righe di testo. Idempotente sui nomi traccia.
-
-    Ritorna un report {playlist_id, name, created, updated, skipped, total}.
-    """
-    playlist = Playlist(platform="manual", name=name.strip() or "Playlist manuale", kind="manual")
+def _import_pairs(db: Session, *, name: str, items, default_name: str, source: str = "manual") -> dict:
+    """Crea una playlist da coppie ``(artista, titolo, isrc)``, marcata con `source`
+    (es. 'manual' o 'shazam'). Idempotente sui nomi traccia (dedup case-insensitive).
+    Ritorna il report d'import."""
+    playlist = Playlist(platform=source, name=name.strip() or default_name, kind=source)
     db.add(playlist)
     db.flush()  # serve playlist.id
 
     created = updated = skipped = 0
     seen: set[tuple[str, str]] = set()
-    for raw in text.splitlines():
-        parsed = parse_line(raw)
-        if parsed is None:
-            continue
-        artist, title = parsed
+    for artist, title, isrc in items:
         if not title:
             skipped += 1
             continue
         key = (_norm(artist), _norm(title))
         if key in seen:
-            skipped += 1  # duplicato nello stesso incolla
+            skipped += 1  # duplicato nello stesso lotto
             continue
         seen.add(key)
 
@@ -85,7 +80,7 @@ def import_manual_playlist(db: Session, *, name: str, text: str) -> dict:
             add_track_to_playlist(db, existing, playlist)
             updated += 1
         else:
-            track = Track(source_type="manual", platform="manual", artist=artist, title=title)
+            track = Track(source_type=source, platform=source, artist=artist, title=title, isrc=isrc or None)
             db.add(track)
             refresh_status(track)
             db.flush()
@@ -95,7 +90,7 @@ def import_manual_playlist(db: Session, *, name: str, text: str) -> dict:
     recount_playlist(db, playlist)
     db.commit()
     db.refresh(playlist)
-    report = {
+    return {
         "playlist_id": playlist.id,
         "name": playlist.name,
         "created": created,
@@ -103,5 +98,25 @@ def import_manual_playlist(db: Session, *, name: str, text: str) -> dict:
         "skipped": skipped,
         "total": created + updated,
     }
+
+
+def import_manual_playlist(db: Session, *, name: str, text: str) -> dict:
+    """Crea una playlist 'manual' dalle righe di testo ('Artista - Titolo'/CSV/TSV).
+    Idempotente sui nomi traccia. Ritorna {playlist_id, name, created, updated, skipped, total}."""
+    items = []
+    for raw in text.splitlines():
+        parsed = parse_line(raw)
+        if parsed is None:
+            continue
+        items.append((parsed[0], parsed[1], None))
+    report = _import_pairs(db, name=name, items=items, default_name="Playlist manuale")
     logger.info("Import manuale '%s': %s", name, report)
+    return report
+
+
+def import_track_pairs(db: Session, *, name: str, items, source: str = "manual") -> dict:
+    """Crea una playlist da coppie ``(artista, titolo, isrc)`` gia' separate, marcata
+    con `source` (usato per importare un set Shazam come playlist di lead)."""
+    report = _import_pairs(db, name=name, items=items, default_name="Playlist", source=source)
+    logger.info("Import coppie '%s' (%s): %s", name, source, report)
     return report

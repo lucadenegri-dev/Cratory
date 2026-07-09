@@ -270,6 +270,7 @@ POST   /api/shazam/identify
 GET    /api/shazam/identify-status
 GET    /api/shazam/sets
 GET    /api/shazam/sets/{dj_set_id}
+POST   /api/shazam/sets/{dj_set_id}/import-playlist
 DELETE /api/shazam/sets/{dj_set_id}
 ```
 
@@ -277,6 +278,13 @@ Richiede `ffmpeg`, `yt-dlp` e `shazamio`. Il job scarica temporaneamente l'audio
 campiona segmenti, riconosce le tracce e persiste `DjSet`/`DjSetTrack`. Le tracce non
 entrano nella libreria principale. Questo e' l'unico fingerprinting audio del
 progetto: identifica i brani di un mix esterno, non le tracce della libreria.
+
+`POST /api/shazam/sets/{id}/import-playlist` promuove le tracce identificate a lead in
+una playlist con `source=shazam` (dedup su artista+titolo, ISRC conservato per il
+riaggancio disk-first). Ritorna un `PlaylistImportReport`. Ripetibile bloccato finché
+la playlist esiste: il set memorizza `imported_playlist_id` (esposto in `DjSetOut`) e
+risponde `409` alla seconda import; l'eliminazione di quella playlist azzera il
+riferimento e riabilita l'import.
 
 ## Downloads (Soulseek / slskd)
 

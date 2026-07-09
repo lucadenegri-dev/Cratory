@@ -2,19 +2,34 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { ArrowLeft, Radar, Music4, ExternalLink, Clock } from "lucide-react";
-import { getDjSet, fmtDuration, fmtDate, type DjSetDetail } from "@/lib/api";
-import { Card, CardHeader, Badge, Alert, Loading } from "@/components/ui";
+import { ArrowLeft, Radar, Music4, ExternalLink, Clock, ListPlus } from "lucide-react";
+import { getDjSet, importDjSetAsPlaylist, fmtDuration, fmtDate, type DjSetDetail } from "@/lib/api";
+import { Card, CardHeader, Badge, Alert, Button, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 
 export default function DjSetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [set, setSet] = useState<DjSetDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<{ id: number; created: number } | null>(null);
 
   useEffect(() => {
     getDjSet(Number(id)).then(setSet).catch((e) => setError(String(e.message ?? e)));
   }, [id]);
+
+  const doImport = async () => {
+    setImporting(true);
+    setError(null);
+    try {
+      const r = await importDjSetAsPlaylist(Number(id));
+      setImported({ id: r.playlist_id, created: r.created });
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    } finally {
+      setImporting(false);
+    }
+  };
 
   if (error) return (
     <PageLayout title="Identificazione">
@@ -24,6 +39,8 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
   );
   if (!set) return <PageLayout title="Identificazione"><Loading /></PageLayout>;
 
+  const importedPlaylistId = imported?.id ?? set.imported_playlist_id;
+
   const marginalia = (
     <div className="space-y-2 text-xs">
       <div className="flex justify-between gap-2"><span className="text-muted">DJ</span><span className="truncate text-fg">{set.dj_name ?? "—"}</span></div>
@@ -32,6 +49,20 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
       <a href={set.source_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 border-t border-border pt-3 text-fg underline-offset-4 hover:underline">
         <ExternalLink size={13} /> Sorgente
       </a>
+      {set.tracks.length > 0 && (
+        <div className="border-t border-border pt-3">
+          {importedPlaylistId ? (
+            <p className="text-[11px] text-muted">
+              Importata come playlist{imported ? ` (${imported.created} tracce)` : ""} ·{" "}
+              <Link href={`/playlists/${importedPlaylistId}`} className="text-fg underline-offset-4 hover:underline">apri</Link>
+            </p>
+          ) : (
+            <Button size="sm" variant="outline" className="w-full" onClick={doImport} disabled={importing}>
+              {importing ? <Spinner /> : <ListPlus size={14} />} Importa come playlist
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -56,7 +87,7 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
       </div>
 
       <Card>
-        <CardHeader title="Tracce identificate" subtitle="Riconosciute via Shazam — non entrano in libreria" />
+        <CardHeader title="Tracce identificate" subtitle="Riconosciute via Shazam" />
         {set.tracks.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-muted">
             Nessuna traccia riconosciuta {set.status === "error" ? "(identificazione fallita)" : "in questo set"}.

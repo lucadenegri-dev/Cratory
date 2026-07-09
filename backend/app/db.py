@@ -82,6 +82,9 @@ def ensure_schema(eng=None) -> None:
             "role": "VARCHAR",
             "transition_note": "TEXT",
         },
+        "dj_sets": {
+            "imported_playlist_id": "INTEGER",
+        },
     }
     with eng.begin() as conn:
         for table, cols in additions.items():

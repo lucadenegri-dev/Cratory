@@ -37,7 +37,6 @@ export default function Library() {
   const [key, setKey] = useState("");
   const [incomplete, setIncomplete] = useState(false);
   const [owned, setOwned] = useState(""); // "" = tutte | "true" = possedute | "false" = wishlist
-  const [archived, setArchived] = useState(""); // "" = nascoste (default) | "true" = solo scartate
   const [sort, setSort] = useState("");
   const [order, setOrder] = useState<Order>("asc");
   const [editing, setEditing] = useState<Track | null>(null);
@@ -47,13 +46,12 @@ export default function Library() {
       artist, title, genre, source, status, bpm_min: bpmMin, bpm_max: bpmMax, key,
       incomplete_metadata: incomplete ? true : undefined,
       has_local_file: owned || undefined,
-      archived: archived || undefined,
       sort: sort || undefined, order: sort ? order : undefined,
       limit, offset,
     })
       .then((r) => { setItems(r.items); setTotal(r.total); setError(null); })
       .catch((e) => setError(String(e.message ?? e)));
-  }, [artist, title, genre, source, status, bpmMin, bpmMax, key, incomplete, owned, archived, sort, order, offset]);
+  }, [artist, title, genre, source, status, bpmMin, bpmMax, key, incomplete, owned, sort, order, offset]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
 
@@ -100,10 +98,6 @@ export default function Library() {
         <option value="">Possesso: tutte</option>
         <option value="true">Solo posseduti</option>
         <option value="false">Wishlist (senza file)</option>
-      </Select>
-      <Select className="h-9" value={archived} onChange={(e) => { setArchived(e.target.value); setOffset(0); }}>
-        <option value="">Scartate: nascoste</option>
-        <option value="true">Solo scartate</option>
       </Select>
       <div className="grid grid-cols-2 gap-2">
         <Input className="h-9" type="number" placeholder="BPM min" value={bpmMin} onChange={(e) => { setBpmMin(e.target.value); setOffset(0); }} />

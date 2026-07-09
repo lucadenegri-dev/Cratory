@@ -168,10 +168,9 @@ export default function Dashboard() {
 
             <section className="p-5">
               <ColHead>Catalogo</ColHead>
-              <SubLabel icon={<Gauge size={12} />}>Copertura BPM/key · energia</SubLabel>
+              <SubLabel icon={<Gauge size={12} />}>Copertura BPM/key</SubLabel>
               <div className="space-y-2.5">
                 <Coverage label="BPM e tonalità" n={stats.with_key} total={stats.total_tracks} />
-                <Coverage label="Energia" n={stats.with_features} total={stats.total_tracks} />
               </div>
               <SubLabel icon={<Disc3 size={12} />}>Generi più frequenti</SubLabel>
               <MiniBars rows={genreRows} />

@@ -456,6 +456,8 @@ def delete_playlist(db: Session, playlist_id: int) -> int | None:
         )
     ]
     db.execute(playlist_tracks.delete().where(playlist_tracks.c.playlist_id == playlist_id))
+    # Un set Shazam importato in questa playlist torna re-importabile.
+    db.execute(update(DjSet).where(DjSet.imported_playlist_id == playlist_id).values(imported_playlist_id=None))
     db.delete(playlist)
     db.flush()  # le membership rimosse devono essere visibili al check orfani
     removed = delete_orphan_leads(db, candidate_ids)

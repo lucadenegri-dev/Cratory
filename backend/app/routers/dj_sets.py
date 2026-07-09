@@ -14,8 +14,9 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.repositories import delete_dj_set, get_dj_set, list_dj_sets
-from app.schemas import DjSetCreateIn, DjSetOut, DjSetSummaryOut
+from app.schemas import DjSetCreateIn, DjSetOut, DjSetSummaryOut, PlaylistImportReport
 from app.services import mix_identify_job
+from app.services.manual_import import import_track_pairs
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/shazam", tags=["shazam"])
@@ -64,6 +65,24 @@ def get_set(dj_set_id: int, db: Session = Depends(get_db)):
     if dj_set is None:
         raise HTTPException(status_code=404, detail="Set non trovato")
     return dj_set
+
+
+@router.post("/sets/{dj_set_id}/import-playlist", response_model=PlaylistImportReport, status_code=201)
+def import_as_playlist(dj_set_id: int, db: Session = Depends(get_db)):
+    """Importa le tracce identificate di un set come playlist di lead (manual).
+
+    Le tracce Shazam non entrano automaticamente in libreria: qui l'utente le
+    promuove a lead (dedup su artista+titolo, ISRC conservato per il riaggancio)."""
+    dj_set = get_dj_set(db, dj_set_id)
+    if dj_set is None:
+        raise HTTPException(status_code=404, detail="Set non trovato")
+    if dj_set.imported_playlist_id is not None:
+        raise HTTPException(status_code=409, detail="Set già importato come playlist")
+    items = [(t.artist, t.title, t.isrc) for t in dj_set.tracks]
+    report = import_track_pairs(db, name=dj_set.title or "Set Shazam", items=items, source="shazam")
+    dj_set.imported_playlist_id = report["playlist_id"]
+    db.commit()
+    return PlaylistImportReport(**report)
 
 
 @router.delete("/sets/{dj_set_id}", status_code=204)

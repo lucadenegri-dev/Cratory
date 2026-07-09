@@ -568,6 +568,7 @@ export interface DjSet {
   status: "pending" | "identifying" | "done" | "error";
   error: string | null;
   identified_count: number;
+  imported_playlist_id: number | null;
   created_at: string;
 }
 
@@ -603,6 +604,11 @@ export function listDjSets() {
 
 export function getDjSet(id: number) {
   return apiGet<DjSetDetail>(`/api/shazam/sets/${id}`);
+}
+
+/** Promuove le tracce identificate del set a lead in una playlist 'manual'. */
+export function importDjSetAsPlaylist(id: number) {
+  return apiPost<PlaylistImportReport>(`/api/shazam/sets/${id}/import-playlist`);
 }
 
 export function deleteDjSet(id: number) {
