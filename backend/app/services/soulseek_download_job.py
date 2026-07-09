@@ -274,6 +274,13 @@ def start_track_job(track_id: int, chosen: SlskdFile) -> dict:
     return _start([(track_id, chosen)], None)
 
 
+def start_track_autopick_job(track_id: int) -> dict:
+    """Auto-pick immediato per una singola traccia (es. 'Scarica ora' dalla
+    tracklist di un lead Discovery): nessun candidato pre-scelto, stessa
+    cascata di ricerca usata da start_playlist_job/start_retry_job."""
+    return _start([(track_id, None)], None)
+
+
 def start_manual_job(chosen: SlskdFile) -> dict:
     """Ricerca manuale: scarica il candidato scelto e lo cataloga in libreria."""
     return _start([(None, chosen)], None)

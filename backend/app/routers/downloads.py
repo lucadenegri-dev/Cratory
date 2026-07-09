@@ -46,6 +46,10 @@ class TrackDownloadIn(BaseModel):
     candidate: CandidateOut
 
 
+class TrackAutopickIn(BaseModel):
+    track_id: int
+
+
 class SearchIn(BaseModel):
     query: str
 
@@ -161,6 +165,24 @@ def download_track(req: TrackDownloadIn):
     finally:
         db.close()
     return {"available": True, **job.start_track_job(req.track_id, _slskd_file(req.candidate))}
+
+
+@router.post("/track/auto", status_code=202)
+def download_track_auto(req: TrackAutopickIn):
+    """Download immediato in auto-pick di una singola traccia (es. 'Scarica
+    ora' dalla tracklist di un lead Discovery): nessun candidato scelto
+    dall'utente, stessa cascata di ricerca del job playlist."""
+    if not slskd_configured():
+        raise HTTPException(status_code=409, detail="slskd non configurato.")
+    if job.is_running():
+        raise HTTPException(status_code=409, detail="Un download e' gia' in corso.")
+    db = SessionLocal()
+    try:
+        if get_track(db, req.track_id) is None:
+            raise HTTPException(status_code=404, detail="Traccia non trovata.")
+    finally:
+        db.close()
+    return {"available": True, **job.start_track_autopick_job(req.track_id)}
 
 
 @router.post("/search", response_model=list[CandidateOut])

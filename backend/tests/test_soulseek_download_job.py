@@ -299,3 +299,14 @@ def test_slskd_giu_ferma_il_job_con_errore_chiaro(patch_job, monkeypatch):
     assert st["status"] == "error"
     assert "Disconnected" in (st["error"] or "")
     assert st["processed"] < 2  # si e' fermato alla prima, niente accanimento
+
+
+def test_start_track_autopick_job_builds_correct_items(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        job, "_start",
+        lambda items, pid: captured.update(items=items, playlist_id=pid) or {"status": "running"},
+    )
+    job.start_track_autopick_job(42)
+    assert captured["items"] == [(42, None)]
+    assert captured["playlist_id"] is None
