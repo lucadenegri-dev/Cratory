@@ -13,6 +13,9 @@ from app.services import soulseek_download_job as job
 from app.schemas import TrackOut
 from app.serializers import track_out
 from app.services.soulseek_select import rank_candidates, search_candidates
+from app.services.download_review import (
+    NoReviewFileError, discard_downloaded, keep_downloaded, review_detail,
+)
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
@@ -48,6 +51,10 @@ class SearchIn(BaseModel):
 
 class ManualDownloadIn(BaseModel):
     candidate: CandidateOut
+
+
+class ReviewActionIn(BaseModel):
+    track_id: int
 
 
 def _candidate_out(c) -> CandidateOut:
@@ -162,3 +169,34 @@ def download_manual(req: ManualDownloadIn):
     if job.is_running():
         raise HTTPException(status_code=409, detail="Un download e' gia' in corso.")
     return {"available": True, **job.start_manual_job(_slskd_file(req.candidate))}
+
+
+@router.get("/review/{track_id}")
+def review(track_id: int, db: Session = Depends(get_db)):
+    """Confronto atteso-vs-scaricato per un needs_review-per-durata."""
+    track = get_track(db, track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Traccia non trovata.")
+    return review_detail(db, track)
+
+
+@router.post("/keep-review", response_model=TrackOut)
+def keep_review(req: ReviewActionIn, db: Session = Depends(get_db)):
+    """Tieni il file dubbio già scaricato: lo aggancia e svuota l'esito."""
+    track = get_track(db, req.track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Traccia non trovata.")
+    try:
+        track = keep_downloaded(db, track)
+    except NoReviewFileError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return track_out(track)
+
+
+@router.post("/discard-review", response_model=TrackOut)
+def discard_review(req: ReviewActionIn, db: Session = Depends(get_db)):
+    """Scarta il file dubbio: lo elimina dall'inbox e sgancia la traccia."""
+    track = get_track(db, req.track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Traccia non trovata.")
+    return track_out(discard_downloaded(db, track))
