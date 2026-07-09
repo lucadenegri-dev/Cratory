@@ -9,6 +9,7 @@ aggiunge la spiegazione di ogni suggerimento.
 """
 
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db import get_db
-from app.integrations.discogs import DiscogsClient
+from app.integrations.discogs import DiscogsClient, DiscogsError
 from app.integrations.lastfm import (
     LastFMError,
     LastFMNotConfigured,
@@ -27,6 +28,8 @@ from app.integrations.llm import get_llm_client, llm_configured
 from app.integrations.spotify import SpotifyWebClient
 from app.models import Track
 from app.schemas import (
+    DiscogsReleaseOut,
+    DiscogsTrackOut,
     DiscoveryAddRequest,
     DiscoveryAddResponse,
     DiscoveryCandidateOut,
@@ -56,6 +59,30 @@ _CURATED_STYLES = [
     "Nu-Disco", "Ambient", "Downtempo", "Trip Hop", "IDM", "Dubstep", "Hip Hop",
     "Funk / Soul", "Afrobeat",
 ]
+
+# Discogs disambigua artisti omonimi con un suffisso numerico ("Aphex Twin (2)"):
+# rumore per la UI, va tolto.
+_ARTIST_SUFFIX_RE = re.compile(r"\s*\(\d+\)\s*$")
+
+
+def _clean_artist_name(name: str) -> str:
+    return _ARTIST_SUFFIX_RE.sub("", name).strip()
+
+
+def _parse_duration(value: str | None) -> int | None:
+    """'mm:ss' -> secondi. Vuota o non parsabile -> None (il ranking Soulseek
+    tratta l'ignoto come neutro, mai penalizzato)."""
+    if not value:
+        return None
+    parts = value.strip().split(":")
+    if len(parts) != 2:
+        return None
+    try:
+        minutes, seconds = int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+    return minutes * 60 + seconds
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/discovery", tags=["discovery"])
@@ -190,6 +217,44 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
     return DiscoveryDigResponse(
         seed_type=result.seed_type, value=result.value,
         leads=[_lead_out(lead) for lead in result.leads],
+    )
+
+
+@router.get("/release/{discogs_id}", response_model=DiscogsReleaseOut)
+def get_release_detail(discogs_id: int):
+    """Dettaglio di un disco del dig: tracklist reale, fetch lazy all'apertura
+    del pannello (mai in batch per tutta la griglia)."""
+    client = DiscogsClient()
+    try:
+        payload = client.get_release(discogs_id)
+    except DiscogsError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    names = [a.get("name", "") for a in (payload.get("artists") or []) if a.get("name")]
+    artist = _clean_artist_name(", ".join(names)) if names else "Sconosciuto"
+    labels = payload.get("labels") or []
+    images = payload.get("images") or []
+    uri = payload.get("uri") or ""
+
+    tracks = [
+        DiscogsTrackOut(
+            position=item.get("position") or "",
+            title=item.get("title") or "",
+            duration_seconds=_parse_duration(item.get("duration")),
+        )
+        for item in (payload.get("tracklist") or [])
+        if item.get("type_") == "track"
+    ]
+
+    return DiscogsReleaseOut(
+        discogs_id=discogs_id,
+        title=payload.get("title") or "",
+        artist=artist,
+        thumb_url=images[0]["uri"] if images else None,
+        discogs_url=f"https://www.discogs.com{uri}" if uri.startswith("/") else (uri or None),
+        year=payload.get("year"),
+        label=labels[0]["name"] if labels else None,
+        tracks=tracks,
     )
 
 

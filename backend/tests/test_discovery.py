@@ -287,7 +287,7 @@ def test_expand_annotates_owned_label(db):
 
 # --- Task 4: router dig — reasons in output, taste_playlist_id in input -------
 
-from app.integrations.discogs import DiscogsClient
+from app.integrations.discogs import DiscogsClient, DiscogsError
 from app.models import Playlist, Track
 from app.routers.discovery import dig_endpoint
 from app.schemas import DiscoveryDigRequest
@@ -365,3 +365,51 @@ def test_dig_endpoint_honors_taste_playlist_id(db, monkeypatch):
     )
     codes = {r.code for r in resp.leads[0].reasons}
     assert {"label_followed", "artist_collected", "style_match"} <= codes
+
+
+# --- Task 3: GET /api/discovery/release/{discogs_id} — tracklist reale -------
+
+_RELEASE_DETAIL = {
+    "id": 249504,
+    "title": "Selected Ambient Works 85-92",
+    "artists": [{"name": "Aphex Twin (2)"}],
+    "year": 1992,
+    "labels": [{"name": "Apollo"}],
+    "images": [{"type": "primary", "uri": "http://img/cover.jpg"}],
+    "tracklist": [
+        {"position": "A1", "type_": "track", "title": "Xtal", "duration": "4:56"},
+        {"position": "", "type_": "heading", "title": "Side B"},
+        {"position": "B1", "type_": "track", "title": "Tha", "duration": "4:35"},
+        {"position": "B2", "type_": "track", "title": "Untitled", "duration": ""},
+    ],
+    "uri": "https://www.discogs.com/release/249504-Aphex-Twin-Selected-Ambient-Works-85-92",
+}
+
+
+def test_release_detail_normalizes_tracklist(db, monkeypatch):
+    from app.routers.discovery import get_release_detail
+
+    monkeypatch.setattr(DiscogsClient, "get_release", lambda self, rid: _RELEASE_DETAIL)
+    out = get_release_detail(249504)
+    assert out.discogs_id == 249504
+    assert out.title == "Selected Ambient Works 85-92"
+    assert out.artist == "Aphex Twin"  # suffisso di disambiguazione Discogs "(2)" rimosso
+    assert out.label == "Apollo"
+    assert out.thumb_url == "http://img/cover.jpg"
+    assert out.discogs_url == _RELEASE_DETAIL["uri"]
+    # la voce "heading" (Side B) e' esclusa: non e' una traccia
+    assert [t.title for t in out.tracks] == ["Xtal", "Tha", "Untitled"]
+    assert out.tracks[0].duration_seconds == 296  # "4:56" -> 4*60+56
+    assert out.tracks[2].duration_seconds is None  # durata vuota -> None
+
+
+def test_release_detail_502_on_discogs_error(monkeypatch):
+    from fastapi import HTTPException
+    from app.routers.discovery import get_release_detail
+
+    def _raise(self, rid):
+        raise DiscogsError("Discogs 500: boom")
+    monkeypatch.setattr(DiscogsClient, "get_release", _raise)
+    with pytest.raises(HTTPException) as exc_info:
+        get_release_detail(249504)
+    assert exc_info.value.status_code == 502

@@ -470,6 +470,23 @@ class DiscoveryGenresOut(BaseModel):
     styles: list[str] = []    # stili curati (sottoinsieme Discogs) per il drill-down
 
 
+class DiscogsTrackOut(BaseModel):
+    position: str
+    title: str
+    duration_seconds: int | None = None
+
+
+class DiscogsReleaseOut(BaseModel):
+    discogs_id: int
+    title: str
+    artist: str
+    thumb_url: str | None = None
+    discogs_url: str | None = None
+    year: int | None = None
+    label: str | None = None
+    tracks: list[DiscogsTrackOut] = []
+
+
 class BpmBin(BaseModel):
     # 'from' e' parola chiave Python: campo from_ con alias "from" sul JSON.
     model_config = ConfigDict(populate_by_name=True)
