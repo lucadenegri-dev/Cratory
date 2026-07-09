@@ -102,7 +102,15 @@ export default function SetBuilder() {
     apiGet<AiStatus>("/api/ai/status").then(setAiStatus).catch(() => setAiStatus({ configured: false, model: null }));
     apiGet<Playlist[]>("/api/playlists").then(setPlaylists).catch(() => {});
     apiGet<{ genre: string; count: number }[]>("/api/library/genres").then(setGenres).catch(() => {});
-    return stopAll;
+    // Se una generazione è già in corso sul server (es. AI avviata prima di navigare
+    // via), la pagina si riaggancia: busy veritiero, niente richieste inghiottite.
+    apiGet<GenStatus>("/api/sets/generate-status").then((s) => {
+      if (s.status === "running") {
+        setJob(s);
+        startPolling();
+      }
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stopAll]);
 
   const busy = job?.status === "running";

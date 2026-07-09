@@ -102,7 +102,12 @@ def generate_async(req: SetGenerationRequest):
         raise HTTPException(status_code=409, detail="AI non configurata (AI_API_KEY mancante).")
     with _gen_lock:
         if _gen_state["status"] == "running":
-            return {"status": "running", "phase": _gen_state["phase"], "using_ai": _gen_state["using_ai"]}
+            # Mai inghiottire una richiesta nuova nel job in corso: quel job puo' avere
+            # un motore diverso (es. AI) da quello appena chiesto dall'utente.
+            raise HTTPException(
+                status_code=409,
+                detail="Una generazione è già in corso: attendi che finisca e riprova.",
+            )
         _gen_state.update(status="running", phase=None, using_ai=use_ai, setlist_id=None,
                           error=None, started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)
     threading.Thread(target=_run_generation, args=(req, use_ai), daemon=True).start()
