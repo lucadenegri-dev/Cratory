@@ -1,49 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExternalLink, Plus, Check, Disc3, Search, Tags, Download } from "lucide-react";
+import { Disc3, Tags } from "lucide-react";
 import {
   discoveryDig,
-  discoveryAddLead,
   getDiscoveryGenres,
   listImportedPlaylists,
   getLabels,
-  downloadCandidates,
-  downloadTrack,
   type DiscoveryDigResponse,
-  type DiscoveryLead,
-  type Reason,
   type DiscoveryGenres,
   type Playlist,
   type LabelStats,
-  type DownloadCandidate,
 } from "@/lib/api";
-import { Card, Alert, Button, EmptyState, Spinner, Select, Input, Modal, Loading } from "@/components/ui";
+import { Alert, Button, EmptyState, Spinner, Select, Input, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { cn } from "@/lib/cn";
+import { DiscoveryLeadGrid } from "@/components/discovery-lead-grid";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
-}
-
-function reasonLabel(r: Reason): string {
-  switch (r.code) {
-    case "rare_wanted":
-      return `raro & richiesto ${r.data.have}/${r.data.want}`;
-    case "deep_cut":
-      return "deep cut";
-    case "label_followed":
-      return `etichetta che segui${r.data.label ? ` · ${r.data.label}` : ""}`;
-    case "artist_collected":
-      return "artista che collezioni";
-    case "style_match":
-      return "stile che ascolti";
-    case "recent":
-      return `recente${r.data.year ? ` · ${r.data.year}` : ""}`;
-    default:
-      return r.code;
-  }
 }
 
 type DigSeed = "genre" | "label";
@@ -258,7 +234,7 @@ export default function DiscoveryPage() {
           {busy && !dig && (
             <Loading label="DIG in corso…" />
           )}
-          {dig && <LeadResults dig={dig} />}
+          {dig && <DiscoveryLeadGrid dig={dig} />}
           {!busy && !dig && (
             <EmptyState icon={<Disc3 size={28} />} title="Pronto per scavare">
               {digReady
@@ -286,158 +262,5 @@ function Chip({ on, onClick, disabled, children }: { on: boolean; onClick: () =>
     >
       {children}
     </button>
-  );
-}
-
-function LeadResults({ dig }: { dig: DiscoveryDigResponse }) {
-  if (dig.leads.length === 0) {
-    return (
-      <EmptyState icon={<Disc3 size={28} />} title="Niente da scavare">
-        Nessun brano nuovo per “{dig.value}”. Prova un altro {dig.seed_type === "label" ? "valore" : "stile"} o alza l’audacia.
-      </EmptyState>
-    );
-  }
-  return (
-    <div>
-      <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
-        {dig.leads.length} da esplorare · {dig.value}
-      </h2>
-      <div className="grid gap-2">
-        {dig.leads.map((l, i) => (
-          <LeadRow key={`${l.artist}-${l.title}-${i}`} l={l} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function LeadRow({ l }: { l: DiscoveryLead }) {
-  const [adding, setAdding] = useState(false);
-  const [added, setAdded] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
-
-  const [dlOpen, setDlOpen] = useState(false);
-  const [dlLoading, setDlLoading] = useState(false);
-  const [dlCands, setDlCands] = useState<DownloadCandidate[]>([]);
-  const [dlError, setDlError] = useState<string | null>(null);
-  const [dlDone, setDlDone] = useState(false);
-
-  const spotifySearch = `https://open.spotify.com/search/${encodeURIComponent(`${l.artist} ${l.title}`)}`;
-  const linkCls =
-    "inline-flex items-center gap-1 rounded-none border border-border-strong px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:bg-elevated";
-
-  const add = async () => {
-    setAdding(true);
-    setAddError(null);
-    try {
-      await discoveryAddLead(l);
-      setAdded(true);
-    } catch (e) {
-      setAddError(err(e));
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const openDownload = async () => {
-    setDlOpen(true);
-    setDlLoading(true);
-    setDlError(null);
-    try {
-      setDlCands(await downloadCandidates(l.artist, l.title));
-    } catch (e) {
-      setDlError(err(e));
-    } finally {
-      setDlLoading(false);
-    }
-  };
-
-  const pick = async (cand: DownloadCandidate) => {
-    setDlLoading(true);
-    setDlError(null);
-    try {
-      const { track } = await discoveryAddLead(l);
-      await downloadTrack(track.id, cand);
-      setDlDone(true);
-      setDlOpen(false);
-    } catch (e) {
-      setDlError(err(e));
-    } finally {
-      setDlLoading(false);
-    }
-  };
-
-  return (
-    <Card className="flex items-center gap-3 p-3">
-      {l.thumb_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={l.thumb_url} alt="" className="h-12 w-12 shrink-0 rounded-none object-cover" />
-      ) : (
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-none bg-elevated text-faint">
-          <Disc3 size={18} />
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{l.artist} — {l.title}</div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-faint">
-          {l.style && <span>{l.style}</span>}
-          {l.label && <span>· {l.label}</span>}
-          {l.year != null && <span>· {l.year}</span>}
-          <span>· {l.have} in collezione</span>
-          {l.want > 0 && <span>· {l.want} cercano</span>}
-        </div>
-        {l.reasons.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {l.reasons.map((r, i) => (
-              <span
-                key={`${r.code}-${i}`}
-                className="inline-flex items-center rounded-none border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted"
-              >
-                {reasonLabel(r)}
-              </span>
-            ))}
-          </div>
-        )}
-        {addError && <p className="mt-1 text-xs text-danger">⚠ {addError}</p>}
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        {l.discogs_url && (
-          <a href={l.discogs_url} target="_blank" rel="noreferrer" className={linkCls}>
-            <ExternalLink size={13} /> Discogs
-          </a>
-        )}
-        <a href={spotifySearch} target="_blank" rel="noreferrer" className={linkCls}>
-          <Search size={13} /> Spotify
-        </a>
-        <Button size="sm" variant={added ? "ghost" : "outline"} onClick={add} disabled={adding || added}>
-          {added ? <><Check size={14} /> Salvato</> : adding ? <Spinner /> : <><Plus size={14} /> Salva</>}
-        </Button>
-        <Button size="sm" variant={dlDone ? "ghost" : "outline"} onClick={openDownload} disabled={dlDone}>
-          {dlDone ? <><Check size={14} /> Scaricato</> : <><Download size={14} /> Download</>}
-        </Button>
-      </div>
-      <Modal open={dlOpen} onClose={() => setDlOpen(false)} title={`Download — ${l.artist} ${l.title}`}>
-        {dlError && <Alert tone="danger">⚠ {dlError}</Alert>}
-        {dlLoading && <p className="text-sm text-faint">Ricerca su Soulseek…</p>}
-        {!dlLoading && !dlError && dlCands.length === 0 && (
-          <p className="text-sm text-faint">Nessun candidato trovato su Soulseek.</p>
-        )}
-        <ul className="divide-y divide-border">
-          {dlCands.map((c, i) => (
-            <li key={`${c.username}-${i}`} className="flex items-center justify-between gap-2 py-2">
-              <div className="min-w-0">
-                <div className="truncate text-sm">{c.filename.split(/[\\/]/).pop()}</div>
-                <div className="text-xs text-faint">
-                  {c.format?.toUpperCase()} {c.bitrate ? `· ${c.bitrate}kbps` : ""} · conf {Math.round(c.confidence * 100)}%
-                </div>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => pick(c)} disabled={dlLoading}>
-                <Download size={13} /> Scarica
-              </Button>
-            </li>
-          ))}
-        </ul>
-      </Modal>
-    </Card>
   );
 }
