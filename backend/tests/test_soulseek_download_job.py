@@ -195,6 +195,36 @@ def test_durata_incoerente_va_in_needs_review(patch_job):
     db.close()
 
 
+def test_chosen_in_sottocartella_persiste_il_path(patch_job):
+    # Scenario reale (track 127): candidato scelto dall'utente (chosen != None),
+    # file in una sottocartella dell'inbox, durata incoerente → needs_review.
+    # Il path del file dubbio DEVE essere persistito per la revisione.
+    from pathlib import Path
+
+    TestSession, fake = patch_job
+    sub = Path(job.settings.slskd_download_dir) / "1998 - Love (Loved)"
+    sub.mkdir()
+    _write_wav(sub / "02. Love (Loved).wav", secs=2)  # 2s reali
+    fake._filename = "bob\\1998 - Love (Loved)\\02. Love (Loved).wav"
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="sub1", source_type="spotify",
+              title="Loved", artist="Luke Slater", duration_seconds=237)  # 237 vs 2 → mismatch
+    db.add(t)
+    db.commit()
+    track_id = t.id
+    db.close()
+
+    chosen = fake.search("Luke Slater", "Loved")[0]
+    job._run([(track_id, chosen)], None)  # chosen != None: percorso di start_track_job
+    st = job.job_state()
+    assert st["needs_review"] == 1
+    db = TestSession()
+    t2 = db.get(Track, track_id)
+    assert t2.last_download_path is not None, "path NON persistito (bug)"
+    assert t2.last_download_path.endswith("02. Love (Loved).wav")
+    db.close()
+
+
 def test_durata_coerente_viene_collegata(patch_job):
     from pathlib import Path
 
