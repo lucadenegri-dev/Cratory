@@ -135,44 +135,12 @@ def _attempt_download(db, client, download_dir, track, file: SlskdFile,
     return "downloaded", None, None
 
 
-def _import_to_library(db, path: str) -> None:
-    """Cataloga un file scaricato manualmente in libreria (playlist virtuale 'Soulseek').
-
-    Riusa la pipeline dei file locali: legge i tag, identita' via hash audio, dedup.
-    La pipeline locale imposta solo local_path, quindi marca esplicitamente il possesso
-    (has_local_file/local_format/local_bitrate) via attach_local_file.
-    """
-    from sqlalchemy import select
-
-    from app.models import Track
-    from app.services.local_import import build_normalized
-    from app.services.playlist_import import identity_normalize, import_playlist
-
-    nt = build_normalized(path)  # LocalFilesError se ffmpeg/hash fallisce
-    import_playlist(db, platform="local_files", name="Soulseek", items=[nt],
-                    normalize=identity_normalize, kind="local",
-                    platform_playlist_id="soulseek-manual", prune=False)
-    track = db.scalar(select(Track).where(
-        Track.platform == "local_files",
-        Track.platform_track_id == nt.platform_track_id,
-    ))
-    if track is not None:
-        quality = read_audio_quality(path)
-        attach_local_file(db, track, path=path, fmt=quality["format"],
-                          bitrate=quality["bitrate"])
-
-
-def _process_manual(db, client, download_dir, file: SlskdFile) -> str:
-    """Ricerca manuale: scarica il candidato scelto e lo cataloga in libreria."""
+def _process_manual(client, download_dir, file: SlskdFile) -> str:
+    """Ricerca manuale: scarica il file sul disco (inbox slskd). NON lo cataloga in
+    Cratory: entra in libreria via DjOrganizer (sposta i file in LIBRARY_ROOT) +
+    indicizzazione, come un qualsiasi file posseduto. Niente playlist 'Soulseek'."""
     path = _download_candidate(client, download_dir, file)
-    if not path:
-        return "failed"
-    try:
-        _import_to_library(db, path)
-    except Exception:  # noqa: BLE001
-        logger.exception("Catalogazione in libreria fallita per %s", path)
-        return "failed"
-    return "downloaded"
+    return "downloaded" if path else "failed"
 
 
 def _process_item(db, client, download_dir, track,
@@ -219,7 +187,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                     Path(chosen.filename.replace("\\", "/")).name if chosen else None
                 )
                 try:
-                    outcome = _process_manual(db, client, download_dir, chosen) if chosen else "failed"
+                    outcome = _process_manual(client, download_dir, chosen) if chosen else "failed"
                 except SlskdError:
                     raise  # daemon giu'/disconnesso: le restanti fallirebbero tutte uguali
                 except Exception:  # noqa: BLE001 — un fallimento non ferma il job

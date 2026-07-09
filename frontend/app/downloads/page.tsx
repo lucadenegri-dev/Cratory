@@ -147,7 +147,7 @@ export default function DownloadsPage() {
         {/* 2. Download singolo — ricerca manuale su Soulseek */}
         <section>
           <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">
-            Download singolo — pesca un file e aggiungilo alla collezione
+            Download singolo — scarica un file sul disco (entra in libreria dopo l&apos;organizzazione)
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Input value={query} onChange={(e) => setQuery(e.target.value)}
