@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Sparkles, Download, Lightbulb, SlidersHorizontal,
   ArrowUp, ArrowDown, Trash2, Replace, Pencil, Check, ChevronDown,
@@ -14,7 +14,30 @@ import {
 import { Card, CardHeader, Button, Input, Badge, Alert, Modal, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackCover } from "@/components/track-cover";
+import { SetArc } from "@/components/set-arc";
 import { cn } from "@/lib/cn";
+
+/* Riordino ottimistico: scambio due righe subito, il server poi restituisce la verità
+   (con transition_score/mix_tip ricalcolati). */
+function swapTracks(s: Setlist, a: number, b: number): Setlist {
+  const tracks = s.tracks.map((t) => ({ ...t }));
+  const ta = tracks.find((t) => t.position === a);
+  const tb = tracks.find((t) => t.position === b);
+  if (!ta || !tb) return s;
+  ta.position = b;
+  tb.position = a;
+  tracks.sort((x, y) => x.position - y.position);
+  return { ...s, tracks };
+}
+function dropTrack(s: Setlist, pos: number): Setlist {
+  const tracks = s.tracks
+    .filter((t) => t.position !== pos)
+    .map((t) => (t.position > pos ? { ...t, position: t.position - 1 } : t));
+  return { ...s, tracks };
+}
+function slugName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "set";
+}
 
 const MODES: { key: AlternativeMode; label: string }[] = [
   { key: "safer", label: "Più sicura" },
@@ -49,11 +72,19 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
     apiGet<Setlist>(`/api/sets/${id}`).then(setSetlist).catch((e) => setError(String(e.message ?? e)));
   }, [id]);
 
-  async function reload(p: Promise<Setlist>) {
-    setBusy(true);
+  async function reload(p: Promise<Setlist>, opts?: { silent?: boolean }) {
+    if (!opts?.silent) setBusy(true);
     setError(null);
     setExported(null);
-    try { setSetlist(await p); } catch (e) { setError(String((e as Error).message ?? e)); } finally { setBusy(false); }
+    try {
+      setSetlist(await p);
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+      // dopo un fallimento su update ottimistico, riallineo alla verità del server
+      apiGet<Setlist>(`/api/sets/${id}`).then(setSetlist).catch(() => {});
+    } finally {
+      if (!opts?.silent) setBusy(false);
+    }
   }
 
   async function loadAlternatives(position: number, mode: AlternativeMode) {
@@ -71,9 +102,24 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
     }
   }
 
-  const move = (pos: number, dir: "up" | "down") =>
-    reload(apiPost<Setlist>(`/api/sets/${id}/tracks/${pos}/move`, { direction: dir }));
-  const remove = (pos: number) => reload(apiDelete<Setlist>(`/api/sets/${id}/tracks/${pos}`));
+  // Guard leggero: ignoro nuove mutazioni finché la precedente non risponde (niente disabilitazione globale).
+  const mutating = useRef(false);
+
+  function move(pos: number, dir: "up" | "down") {
+    const target = dir === "up" ? pos - 1 : pos + 1;
+    if (mutating.current || !setlist || target < 1 || target > setlist.tracks.length) return;
+    mutating.current = true;
+    setSetlist((cur) => (cur ? swapTracks(cur, pos, target) : cur)); // ottimistico
+    reload(apiPost<Setlist>(`/api/sets/${id}/tracks/${pos}/move`, { direction: dir }), { silent: true })
+      .finally(() => { mutating.current = false; });
+  }
+  function remove(pos: number) {
+    if (mutating.current || !setlist || setlist.tracks.length <= 1) return;
+    mutating.current = true;
+    setSetlist((cur) => (cur ? dropTrack(cur, pos) : cur)); // ottimistico
+    reload(apiDelete<Setlist>(`/api/sets/${id}/tracks/${pos}`), { silent: true })
+      .finally(() => { mutating.current = false; });
+  }
 
   async function doRename() {
     const name = renameValue.trim();
@@ -96,7 +142,20 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
 
   async function doExport(format: "text" | "csv" | "markdown") {
     if (!setlist) return;
-    setExported(await exportSet(setlist.id, format));
+    try {
+      const text = await exportSet(setlist.id, format);
+      const ext = format === "markdown" ? "md" : format === "csv" ? "csv" : "txt";
+      const name = `${slugName(setlist.name)}.${ext}`;
+      const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExported(name);
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    }
   }
 
   async function createPlaylist() {
@@ -120,6 +179,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
   const v = setlist.validation ?? {};
   const n = setlist.tracks.length;
   const improvements = v.missing_library_suggestions ?? [];
+  const attention = [...(v.critical_points ?? []), ...(v.warnings ?? [])];
   const altTrack = altPos != null ? setlist.tracks.find((st) => st.position === altPos) : null;
 
   const marginalia = (
@@ -164,6 +224,24 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
         <div className="space-y-4 p-5">
           {error && <Alert tone="danger">⚠ {error}</Alert>}
           {playlistUrl && <Alert tone="info">✓ Playlist creata: <a href={playlistUrl} target="_blank" rel="noreferrer" className="underline">{playlistUrl}</a></Alert>}
+          {exported && <Alert tone="info">✓ Scaricato <span className="tnum">{exported}</span></Alert>}
+
+          <SetArc tracks={setlist.tracks} />
+
+          {setlist.global_explanation && (
+            <p className="text-sm leading-relaxed text-fg">{setlist.global_explanation}</p>
+          )}
+
+          {attention.length > 0 && (
+            <div className="border border-danger/50 bg-bg p-3">
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-danger">
+                <SlidersHorizontal size={14} /> Punti critici
+              </div>
+              <ul className="space-y-1 text-sm text-fg">
+                {attention.map((it, i) => <li key={i} className="flex gap-1.5"><span className="shrink-0 text-danger">·</span>{it}</li>)}
+              </ul>
+            </div>
+          )}
 
           {setlist.mixing_overview.length > 0 && (
             <details className="group border border-border">
@@ -198,7 +276,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     {st.role && <Badge tone="neutral">{st.role}</Badge>}
                     <Link href={`/tracks/${st.track.id}`} className="truncate font-medium hover:text-fg-strong">{trackLabel(st.track)}</Link>
-                    <span className="tnum shrink-0 text-xs text-faint">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? "?"} · {fmtDuration(st.track.duration_seconds)}</span>
+                    <span className="tnum shrink-0 text-xs text-fg">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? "?"} <span className="text-muted">· {fmtDuration(st.track.duration_seconds)}</span></span>
                     {st.transition_class && (
                       <Badge tone="neutral">
                         <span title={st.transition_class_reason ?? undefined}>{st.transition_class_label ?? st.transition_class}</span>
@@ -206,20 +284,18 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                     )}
                   </div>
                   {st.mix_tip
-                    ? <p className="mt-1 flex gap-1.5 text-xs text-muted"><span className="shrink-0 text-faint">↪</span>{st.mix_tip}</p>
-                    : <p className="mt-1 text-xs text-faint">apertura del set</p>}
+                    ? <p className="mt-1 flex gap-1.5 text-xs text-fg"><span className="shrink-0 text-faint">↪</span>{st.mix_tip}</p>
+                    : <p className="mt-1 text-xs text-muted">apertura del set</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5">
-                  <IconBtn title="Su" disabled={busy || st.position === 1} onClick={() => move(st.position, "up")}><ArrowUp size={15} /></IconBtn>
-                  <IconBtn title="Giù" disabled={busy || st.position === n} onClick={() => move(st.position, "down")}><ArrowDown size={15} /></IconBtn>
-                  <IconBtn title="Alternative" disabled={busy} onClick={() => loadAlternatives(st.position, "safer")}><Replace size={15} /></IconBtn>
-                  <IconBtn title="Rimuovi" danger disabled={busy || n <= 1} onClick={() => remove(st.position)}><Trash2 size={15} /></IconBtn>
+                  <IconBtn title="Su" disabled={st.position === 1} onClick={() => move(st.position, "up")}><ArrowUp size={15} /></IconBtn>
+                  <IconBtn title="Giù" disabled={st.position === n} onClick={() => move(st.position, "down")}><ArrowDown size={15} /></IconBtn>
+                  <IconBtn title="Alternative" onClick={() => loadAlternatives(st.position, "safer")}><Replace size={15} /></IconBtn>
+                  <IconBtn title="Rimuovi" danger disabled={n <= 1} onClick={() => remove(st.position)}><Trash2 size={15} /></IconBtn>
                 </div>
               </li>
             ))}
           </ol>
-
-          {exported && <pre className="max-h-72 overflow-auto rounded-none border border-border bg-bg p-3 text-xs text-muted">{exported}</pre>}
         </div>
       </Card>
 
@@ -241,7 +317,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
         title={<span className="flex items-center gap-2"><Replace size={16} className="text-muted" /> Alternative {altTrack && <span className="truncate text-sm font-normal text-muted">· {trackLabel(altTrack.track)}</span>}</span>}>
         <div className="mb-3 flex flex-wrap gap-1.5">
           {MODES.map((m) => (
-            <button key={m.key} onClick={() => altPos != null && loadAlternatives(altPos, m.key)}
+            <button key={m.key} aria-pressed={altMode === m.key} onClick={() => altPos != null && loadAlternatives(altPos, m.key)}
               className={cn("rounded-none px-3 py-1 text-xs font-medium uppercase tracking-wider transition-colors",
                 altMode === m.key ? "bg-fg-strong text-bg" : "bg-elevated text-muted hover:text-fg")}>
               {m.label}
@@ -261,7 +337,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2">
                     <span className="truncate text-sm font-medium">{trackLabel(a.track)}</span>
-                    <span className="tnum shrink-0 text-xs text-faint">{a.track.bpm?.toFixed(0) ?? "—"} · {a.track.camelot_key ?? "?"}</span>
+                    <span className="tnum shrink-0 text-xs text-fg">{a.track.bpm?.toFixed(0) ?? "—"} · {a.track.camelot_key ?? "?"}</span>
                     <Badge tone="neutral">{a.risk_level}</Badge>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-muted">{a.reason}
