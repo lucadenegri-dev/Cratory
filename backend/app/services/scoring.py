@@ -7,6 +7,7 @@ Composizione score (0-100), tutta basata su dati ottenuti dall'enrichment estern
 - Durata: max 10  (penalita' per tracce molto corte)
 """
 
+import re
 from dataclasses import dataclass, field
 
 from app.models import Track
@@ -328,13 +329,63 @@ def mood_coherence_score(from_mood: str | None, to_mood: str | None) -> int:
     return 100 if from_mood.strip().lower() == to_mood.strip().lower() else 60
 
 
+# Famiglie di genere: stesso "mondo sonoro" anche senza token in comune
+# (Ambient/Downtempo, Techno/Acid). Un genere puo' appartenere a piu' famiglie
+# ("Acid House" -> techno+house). Match per parola intera sul genere normalizzato,
+# cosi' "electro" non cattura "electronic". Mappa deterministica, niente AI.
+_GENRE_FAMILIES: dict[str, tuple[str, ...]] = {
+    "techno": ("techno", "acid", "industrial", "ebm", "schranz"),
+    "house": ("house", "garage", "ukg", "disco", "funky"),
+    "breaks": ("breakbeat", "breaks", "electro", "idm", "braindance", "juke", "footwork"),
+    "dnb": ("drum & bass", "drum and bass", "dnb", "jungle", "liquid"),
+    "chill": ("ambient", "downtempo", "chillout", "chill", "drone", "trip hop", "abstract"),
+    "trance": ("trance", "psytrance", "goa"),
+    "bass": ("dubstep", "grime", "bass music", "bassline", "deconstructed club"),
+    "hiphop": ("hip hop", "rap", "r&b", "soul", "funk"),
+    "pop_rock": ("pop", "rock", "indie", "punk", "metal"),
+}
+# Super-generi: dicono poco, ma non sono uno stacco. Match esatto, valore neutro.
+_UMBRELLA_GENRES = frozenset({"electronic", "electronica", "edm", "dance", "club",
+                              "experimental", "alternative", "music"})
+_GENRE_SPACES = re.compile(r"\s+")
+
+# Valori di similarita' (0-100), allineati alle soglie d'uso:
+# cross-family < RESET_GENRE_SIMILARITY (45) -> vale come reset di genere;
+# umbrella > 45 -> mai un falso reset; same-family > 60 -> mai "novelty".
+_GENRE_SAME_FAMILY = 80
+_GENRE_SUBGENRE_BONUS = 10   # famiglia condivisa + token condiviso (sottogenere)
+_GENRE_CROSS_FAMILY = 25
+_GENRE_UMBRELLA = 55
+
+
+def _norm_genre(raw: str) -> str:
+    return _GENRE_SPACES.sub(" ", raw.lower().replace("-", " ").replace("_", " ")).strip()
+
+
+def _genre_families(norm: str) -> frozenset[str]:
+    padded = f" {norm} "
+    return frozenset(fam for fam, keywords in _GENRE_FAMILIES.items()
+                     if any(f" {kw} " in padded for kw in keywords))
+
+
 def genre_similarity_score(from_genre: str | None, to_genre: str | None) -> int:
-    """Similarita' grezza basata sulla sovrapposizione dei token di genere."""
+    """Similarita' di genere (0-100): famiglie note prima, token overlap come fallback."""
     if not from_genre or not to_genre:
         return 50
-    a = {g.strip().lower() for g in from_genre.replace(",", " ").split() if g.strip()}
-    b = {g.strip().lower() for g in to_genre.replace(",", " ").split() if g.strip()}
+    a, b = _norm_genre(from_genre), _norm_genre(to_genre)
     if not a or not b:
         return 50
-    overlap = len(a & b) / len(a | b)
+    if a == b:
+        return 100
+    fam_a, fam_b = _genre_families(a), _genre_families(b)
+    if fam_a and fam_b:
+        if fam_a & fam_b:
+            shared_token = bool(set(a.split()) & set(b.split()))
+            return _GENRE_SAME_FAMILY + (_GENRE_SUBGENRE_BONUS if shared_token else 0)
+        return _GENRE_CROSS_FAMILY
+    if a in _UMBRELLA_GENRES or b in _UMBRELLA_GENRES:
+        return _GENRE_UMBRELLA
+    # Generi fuori mappa: sovrapposizione grezza dei token, come prima.
+    tokens_a, tokens_b = set(a.split()), set(b.split())
+    overlap = len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
     return round(40 + overlap * 60)

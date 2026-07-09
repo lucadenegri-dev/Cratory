@@ -31,8 +31,10 @@ logger = logging.getLogger(__name__)
 # Peso dello score di transizione vs aderenza alla traiettoria BPM.
 _TRANSITION_WEIGHT = 0.55
 _TRAJECTORY_WEIGHT = 0.35
-_FEATURE_WEIGHT = 0.20  # smoothness energia + genere quando disponibili
+_FEATURE_WEIGHT = 0.20  # smoothness dell'energia quando disponibile
 _ENERGY_ARC_WEIGHT = 0.30  # aderenza al target di energia della posizione (arco strategia/utente)
+_GENRE_WEIGHT = 0.25   # coerenza di genere: termine dedicato (come l'arco di energia),
+#                        cosi' il set resta nello stesso mondo sonoro invece di zigzagare
 _KEY_PREF_BONUS = 8.0
 _SEED_BONUS = 15.0
 _SHARP_PENALTY = 40.0  # scoraggia i salti bruschi quando la strategia non li vuole
@@ -51,6 +53,9 @@ class StrategyProfile:
     - energy_arc: (energia_iniziale, energia_finale) 0-100 imposta dalla strategia quando
       l'utente non specifica un arco; None = nessun arco imposto. Ora che l'energia è reale
       (dai file audio) questo distingue davvero progressive (in salita) da smooth (piatto).
+    - genre_coherence: moltiplicatore (0-1) del termine di coerenza di genere. 1 =
+      il set resta nello stesso mondo sonoro; ridotto per le strategie esplorative,
+      così il novelty_bonus non viene neutralizzato dalla coerenza.
     """
     bpm_curve: float
     allow_sharp: bool
@@ -58,6 +63,7 @@ class StrategyProfile:
     reset_bonus: float
     novelty_bonus: float
     energy_arc: tuple[float, float] | None = None
+    genre_coherence: float = 1.0
 
 
 _DEFAULT_PROFILE = StrategyProfile(1.0, False, (), 0.0, 0.0)
@@ -65,7 +71,8 @@ _STRATEGY_PROFILES: dict[str, StrategyProfile] = {
     "smooth":       StrategyProfile(1.0, False, (), 0.0, 0.0, energy_arc=None),
     "progressive":  StrategyProfile(1.0, False, (), 0.0, 0.0, energy_arc=(35, 85)),
     "contrast":     StrategyProfile(1.0, True, (0.34, 0.67), 22.0, 0.0, energy_arc=None),
-    "experimental": StrategyProfile(1.0, True, (0.5,), 12.0, 12.0, energy_arc=None),
+    "experimental": StrategyProfile(1.0, True, (0.5,), 12.0, 12.0, energy_arc=None,
+                                    genre_coherence=0.5),
     "peak_time":    StrategyProfile(0.6, False, (), 0.0, 0.0, energy_arc=(70, 92)),
     "warm_up":      StrategyProfile(1.6, False, (), 0.0, 0.0, energy_arc=(25, 55)),
     "closing":      StrategyProfile(1.0, False, (0.85,), 15.0, 0.0, energy_arc=(75, 40)),
@@ -169,21 +176,17 @@ def _desired_energy(req: SetGenerationRequest, progress: float,
 
 def _feature_fit(prev: Track, cand: Track, req: SetGenerationRequest,
                  desired_energy: float | None) -> float | None:
-    """Blend 0-100 di energia/genere, solo sui segnali effettivamente presenti.
+    """Smoothness dell'energia (0-100), solo se il dato e' presente.
 
-    Ritorna None se la traccia non ha alcuna feature (dataset non arricchito):
-    in quel caso il termine feature non incide sul ranking.
+    Ritorna None se manca l'energia (dataset non arricchito): il termine non
+    incide sul ranking. L'aderenza all'arco di energia e la coerenza di genere
+    NON sono qui: sono termini dedicati in _candidate_score (con peso proprio),
+    così ciascun segnale modella il set invece di diluirsi in una media.
     """
-    # Nota: l'aderenza all'arco di energia NON è qui — è un termine dedicato in
-    # _candidate_score (con peso proprio), così l'arco della strategia modella davvero
-    # il set invece di diluirsi nella media con smoothness/genere.
     _ = desired_energy
-    feats: list[float] = []
     if prev.energy is not None and cand.energy is not None:
-        feats.append(float(energy_progression_score(prev.energy, cand.energy)))
-    if prev.genre and cand.genre:
-        feats.append(float(genre_similarity_score(prev.genre, cand.genre)))
-    return sum(feats) / len(feats) if feats else None
+        return float(energy_progression_score(prev.energy, cand.energy))
+    return None
 
 
 def _pick_first(candidates: list[Track], req: SetGenerationRequest, start_bpm: float) -> Track:
@@ -215,6 +218,10 @@ def _candidate_score(
     feature_fit = _feature_fit(prev, cand, req, desired_energy)
     if feature_fit is not None:
         total += feature_fit * _FEATURE_WEIGHT
+    # Coerenza di genere: sempre attiva (50 = neutro quando il dato manca), così
+    # una traccia senza genere non batte né perde contro una coerente per assenza.
+    total += (float(genre_similarity_score(prev.genre, cand.genre))
+              * _GENRE_WEIGHT * profile.genre_coherence)
     # Aderenza all'arco di energia (termine dedicato): tira le tracce verso il target
     # di energia della posizione, così l'arco della strategia modella il set.
     if desired_energy is not None and cand.energy is not None:
