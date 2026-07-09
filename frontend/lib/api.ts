@@ -30,6 +30,7 @@ export interface Track {
   archived: boolean;
   last_download_outcome: string | null;
   last_download_reason: string | null;
+  last_download_path: string | null;
 }
 
 export interface Playlist {
@@ -731,6 +732,32 @@ export function searchLocalFiles(q: string) {
 /** Collega manualmente un file su disco alla traccia (possesso senza download). */
 export function linkLocalFile(trackId: number, path: string) {
   return apiPost<TrackDetail>(`/api/tracks/${trackId}/link-file`, { path });
+}
+
+// --- Revisione file dubbio (needs_review-per-durata) --------------------------
+
+export type DownloadReview = {
+  expected: { artist: string | null; title: string | null; duration_seconds: number | null };
+  downloaded: {
+    path: string; name: string; format: string | null; bitrate: number | null;
+    duration_seconds: number | null; size: number | null;
+  } | null;
+  reason: string | null;
+};
+
+/** Atteso vs file già scaricato per una traccia da rivedere. */
+export function downloadReview(trackId: number) {
+  return apiGet<DownloadReview>(`/api/downloads/review/${trackId}`);
+}
+
+/** Tieni il file dubbio: lo aggancia come possesso e svuota l'esito. */
+export function keepReview(trackId: number) {
+  return apiPost<Track>("/api/downloads/keep-review", { track_id: trackId });
+}
+
+/** Scarta il file dubbio: lo elimina dall'inbox e sgancia la traccia. */
+export function discardReview(trackId: number) {
+  return apiPost<Track>("/api/downloads/discard-review", { track_id: trackId });
 }
 
 // --- Rekordbox (import collezione XML) --------------------------------------
