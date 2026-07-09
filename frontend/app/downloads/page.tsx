@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Card, EmptyState, EqMeter, Input, Loading, Select
 import { useJobs } from "@/components/jobs-provider";
 import { DownloadReviewModal, type ReviewTarget } from "@/components/download-review-modal";
 import { LinkLocalFileModal, type LinkTarget } from "@/components/link-local-file-modal";
+import { AutoLinkModal } from "@/components/auto-link-modal";
 import {
   downloadManual, downloadPending, ignoreDownload, listImportedPlaylists,
   retryPending, searchDownloads, startPlaylistDownload, trackLabel,
@@ -49,6 +50,7 @@ export default function DownloadsPage() {
   const [searching, setSearching] = useState(false);
   const [review, setReview] = useState<ReviewTarget | null>(null);
   const [linking, setLinking] = useState<LinkTarget | null>(null);
+  const [autoLink, setAutoLink] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
 
@@ -116,7 +118,7 @@ export default function DownloadsPage() {
         )}
         {error && <Alert tone="danger">⚠ {error}</Alert>}
 
-        {/* 1. Acquisizione (azione primaria) */}
+        {/* 1. Acquisizione da playlist (azione primaria) */}
         <section>
           <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">Acquisizione</div>
           <div className="flex flex-wrap items-center gap-2">
@@ -142,7 +144,43 @@ export default function DownloadsPage() {
           )}
         </section>
 
-        {/* 2. Work-list persistito (il cuore) */}
+        {/* 2. Download singolo — ricerca manuale su Soulseek */}
+        <section>
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">
+            Download singolo — pesca un file e aggiungilo alla collezione
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input value={query} onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
+              placeholder="Cerca su Soulseek (artista, titolo…)" disabled={!available} />
+            <Button variant="outline" onClick={runSearch} disabled={!available || searching || !query.trim()}>
+              <Search size={14} /> Cerca
+            </Button>
+          </div>
+          {searching && <Loading label="Ricerca su Soulseek…" />}
+          {results && results.length === 0 && !searching && (
+            <p className="mt-2 text-sm text-faint">Nessun risultato per «{query}».</p>
+          )}
+          {results && results.length > 0 && (
+            <ul className="mt-3 divide-y divide-border border border-border">
+              {results.slice(0, 40).map((c, i) => (
+                <li key={`${c.username}-${i}`} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm">{c.filename.split(/[\\/]/).pop()}</div>
+                    <div className="text-xs text-faint">
+                      {c.format?.toUpperCase()}{c.bitrate ? ` · ${c.bitrate}kbps` : ""} · {c.username}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => grab(c)} disabled={running}>
+                    <DownloadIcon size={13} /> Scarica
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* 3. Work-list persistito (il cuore) */}
         <section>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filtra per esito">
@@ -154,9 +192,14 @@ export default function DownloadsPage() {
               ))}
             </div>
             {(pending?.length ?? 0) > 0 && (
-              <Button size="sm" variant="outline" onClick={retryAll} disabled={running || !available}>
-                <DownloadIcon size={13} /> Riprova tutte
-              </Button>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button size="sm" variant="outline" onClick={() => setAutoLink(true)}>
+                  <Link2 size={13} /> Collega tutte
+                </Button>
+                <Button size="sm" variant="outline" onClick={retryAll} disabled={running || !available}>
+                  <DownloadIcon size={13} /> Riprova tutte
+                </Button>
+              </div>
             )}
           </div>
 
@@ -197,42 +240,6 @@ export default function DownloadsPage() {
             </Card>
           )}
         </section>
-
-        {/* 3. Ricerca manuale (blocco di pari livello, in evidenza) */}
-        <section>
-          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">
-            Ricerca manuale — pesca un file e aggiungilo alla collezione
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Input value={query} onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
-              placeholder="Cerca su Soulseek (artista, titolo…)" disabled={!available} />
-            <Button variant="outline" onClick={runSearch} disabled={!available || searching || !query.trim()}>
-              <Search size={14} /> Cerca
-            </Button>
-          </div>
-          {searching && <Loading label="Ricerca su Soulseek…" />}
-          {results && results.length === 0 && !searching && (
-            <p className="mt-2 text-sm text-faint">Nessun risultato per «{query}».</p>
-          )}
-          {results && results.length > 0 && (
-            <ul className="mt-3 divide-y divide-border border border-border">
-              {results.slice(0, 40).map((c, i) => (
-                <li key={`${c.username}-${i}`} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm">{c.filename.split(/[\\/]/).pop()}</div>
-                    <div className="text-xs text-faint">
-                      {c.format?.toUpperCase()}{c.bitrate ? ` · ${c.bitrate}kbps` : ""} · {c.username}
-                    </div>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => grab(c)} disabled={running}>
-                    <DownloadIcon size={13} /> Scarica
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
       </div>
 
       <DownloadReviewModal
@@ -244,6 +251,11 @@ export default function DownloadsPage() {
         target={linking}
         onClose={() => setLinking(null)}
         onLinked={() => { setLinking(null); refreshPending(); }}
+      />
+      <AutoLinkModal
+        open={autoLink}
+        onClose={() => setAutoLink(false)}
+        onLinked={refreshPending}
       />
     </PageLayout>
   );

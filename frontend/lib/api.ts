@@ -760,6 +760,21 @@ export function discardReview(trackId: number) {
   return apiPost<Track>("/api/downloads/discard-review", { track_id: trackId });
 }
 
+// --- Auto-collega file locale su tutte le da sistemare ------------------------
+
+export type AutoLinkProposal = {
+  track_id: number;
+  label: string;
+  artist: string | null;
+  title: string | null;
+  hit: { path: string; name: string; format: string | null; size: number | null; source: "library" | "downloads" } | null;
+};
+
+/** Per ogni traccia da sistemare, il miglior file locale che combacia (o null). Non collega. */
+export function autoLinkPreview() {
+  return apiGet<AutoLinkProposal[]>("/api/downloads/auto-link");
+}
+
 // --- Rekordbox (import collezione XML) --------------------------------------
 
 export interface RekordboxImportReport {
