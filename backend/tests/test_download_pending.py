@@ -29,12 +29,13 @@ def test_job_persiste_esito_sulla_traccia(monkeypatch):
     monkeypatch.setattr(job, "SessionLocal", factory)
     monkeypatch.setattr(job, "get_slskd_client", lambda: object())
     monkeypatch.setattr(job, "_process_item",
-                        lambda *a, **k: ("needs_review", "confidenza sotto soglia"))
+                        lambda *a, **k: ("needs_review", "confidenza sotto soglia", None))
     job._run([(t.id, None)], None)
 
     db.refresh(t)
     assert t.last_download_outcome == "needs_review"
     assert t.last_download_reason == "confidenza sotto soglia"
+    assert t.last_download_path is None
 
 
 def test_pending_endpoint_filtra_giusto():

@@ -113,25 +113,26 @@ def _download_candidate(client, download_dir, file: SlskdFile) -> str | None:
 
 
 def _attempt_download(db, client, download_dir, track, file: SlskdFile,
-                      expected_duration: int | None = None) -> tuple[str, str | None]:
-    """Scarica un candidato e lo collega a una Track. Ritorna (esito, motivo).
+                      expected_duration: int | None = None) -> tuple[str, str | None, str | None]:
+    """Scarica un candidato e lo collega a una Track. Ritorna (esito, motivo, path_dubbio).
 
     Verifica post-download: se la durata reale del file non e' coerente con quella
     attesa (>20s di scarto) e' quasi certamente la versione sbagliata → il file
-    resta in inbox per revisione e la Track NON viene marcata posseduta.
+    resta in inbox per revisione, il suo path viene restituito e la Track NON viene
+    marcata posseduta.
     """
     path = _download_candidate(client, download_dir, file)
     if not path:
-        return "failed", None
+        return "failed", None, None
     real = read_tags(path).get("duration_seconds")
     if expected_duration and real and abs(real - expected_duration) > 20:
         return "needs_review", (
             f"durata non corrisponde (attesa {expected_duration}s, file {real}s)"
-        )
+        ), path
     quality = read_audio_quality(path)
     attach_local_file(db, track, path=path, fmt=quality["format"],
                       bitrate=quality["bitrate"])
-    return "downloaded", None
+    return "downloaded", None, None
 
 
 def _import_to_library(db, path: str) -> None:
@@ -175,7 +176,7 @@ def _process_manual(db, client, download_dir, file: SlskdFile) -> str:
 
 
 def _process_item(db, client, download_dir, track,
-                  chosen: SlskdFile | None) -> tuple[str, str | None]:
+                  chosen: SlskdFile | None) -> tuple[str, str | None, str | None]:
     expected = track.duration_seconds
     # Discovery/singola: candidato gia' scelto dall'utente, un solo tentativo.
     if chosen is not None:
@@ -185,9 +186,9 @@ def _process_item(db, client, download_dir, track,
     ranked = search_candidates(client, artist=track.artist or "",
                                title=track.title or "", expected_duration=expected)
     if not ranked:
-        return "not_found", None
+        return "not_found", None, None
     if ranked[0].confidence < AUTO_PICK_MIN_CONFIDENCE:
-        return "needs_review", "confidenza sotto soglia per l'auto-pick"
+        return "needs_review", "confidenza sotto soglia per l'auto-pick", None
     # Fallback: prova i migliori candidati, un utente diverso alla volta, finche' uno riesce.
     tried: set[str] = set()
     for cand in ranked:
@@ -196,11 +197,11 @@ def _process_item(db, client, download_dir, track,
         if cand.file.username in tried:
             continue
         tried.add(cand.file.username)
-        outcome, reason = _attempt_download(db, client, download_dir, track,
-                                            cand.file, expected)
+        outcome, reason, path = _attempt_download(db, client, download_dir, track,
+                                                  cand.file, expected)
         if outcome != "failed":
-            return outcome, reason
-    return "failed", None
+            return outcome, reason, path
+    return "failed", None, None
 
 
 def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> None:
@@ -212,6 +213,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
         for i, (track_id, chosen) in enumerate(items, start=1):
             track = None
             reason = None
+            path = None
             if track_id is None:  # ricerca manuale: scarica + cataloga in libreria
                 _state["current_label"] = (
                     Path(chosen.filename.replace("\\", "/")).name if chosen else None
@@ -231,7 +233,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                 else:
                     _state["current_label"] = _track_label(track)
                     try:
-                        outcome, reason = _process_item(db, client, download_dir, track, chosen)
+                        outcome, reason, path = _process_item(db, client, download_dir, track, chosen)
                     except SlskdError:
                         raise  # daemon giu'/disconnesso: fail-fast col messaggio in _state.error
                     except Exception:  # noqa: BLE001 — un fallimento non ferma il job
@@ -241,9 +243,11 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
             _state[outcome] = _state.get(outcome, 0) + 1
             if track is not None:
                 # Persisti l'esito sulla traccia: la sezione "da sistemare"
-                # deve sopravvivere a job e riavvii.
+                # deve sopravvivere a job e riavvii. path != None solo per un
+                # needs_review-per-durata (file dubbio in inbox da rivedere).
                 track.last_download_outcome = outcome
                 track.last_download_reason = reason
+                track.last_download_path = path
                 db.commit()
             _state["processed"] = i
             _state["items"].append({

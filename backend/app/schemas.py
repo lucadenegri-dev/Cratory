@@ -43,6 +43,7 @@ class TrackOut(BaseModel):
     archived: bool = False
     last_download_outcome: str | None = None
     last_download_reason: str | None = None
+    last_download_path: str | None = None
 
 
 class TrackListOut(BaseModel):

@@ -48,6 +48,7 @@ def track_out(track: Track) -> TrackOut:
         archived=bool(track.archived),
         last_download_outcome=track.last_download_outcome,
         last_download_reason=track.last_download_reason,
+        last_download_path=track.last_download_path,
     )
 
 

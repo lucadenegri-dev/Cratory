@@ -187,7 +187,11 @@ def test_durata_incoerente_va_in_needs_review(patch_job):
     assert st["downloaded"] == 0
     assert "durata" in (st["items"][0]["reason"] or "")
     db = TestSession()
-    assert db.get(Track, track_id).has_local_file is False
+    t2 = db.get(Track, track_id)
+    assert t2.has_local_file is False
+    # Il path del file dubbio è persistito per la revisione "Tieni comunque".
+    assert t2.last_download_path is not None
+    assert t2.last_download_path.endswith("Da Funk.wav")
     db.close()
 
 
@@ -209,7 +213,9 @@ def test_durata_coerente_viene_collegata(patch_job):
     st = job.job_state()
     assert st["downloaded"] == 1
     db = TestSession()
-    assert db.get(Track, track_id).has_local_file is True
+    t2 = db.get(Track, track_id)
+    assert t2.has_local_file is True
+    assert t2.last_download_path is None  # nessun residuo dopo il collegamento
     db.close()
 
 

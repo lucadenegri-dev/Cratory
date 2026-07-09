@@ -59,6 +59,9 @@ class Track(Base):
     # a job e riavvii (lo stato del job e' in memoria).
     last_download_outcome: Mapped[str | None] = mapped_column(String)
     last_download_reason: Mapped[str | None] = mapped_column(String)
+    # Path del file dubbio nell'inbox slskd quando l'esito è needs_review-per-durata:
+    # alimenta la revisione "Tieni comunque / Scarta". None se non c'è file da rivedere.
+    last_download_path: Mapped[str | None] = mapped_column(Text)
     # Identità audio (SHA-256 dello stream decodificato, vedi integrations/local_files.audio_hash):
     # stabile a rinomina/retag. Calcolata al download (acquisition) e all'indicizzazione libreria.
     audio_hash: Mapped[str | None] = mapped_column(String, index=True)
