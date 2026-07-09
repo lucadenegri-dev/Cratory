@@ -123,6 +123,32 @@ def test_experimental_rewards_novelty():
     assert _candidate_score(prev, novel, 128, req, {}, sm, 0.5)[0] < _candidate_score(prev, same, 128, req, {}, sm, 0.5)[0]
 
 
+def test_progressive_has_energy_arc_smooth_does_not():
+    from app.services.set_generator import _desired_energy, strategy_profile
+    req = _req()  # nessuna energia richiesta dall'utente
+    prog = strategy_profile("progressive")
+    smooth = strategy_profile("smooth")
+    assert prog.energy_arc is not None
+    assert smooth.energy_arc is None
+    # progressive impone un arco di energia crescente; smooth non impone nulla
+    assert _desired_energy(req, 1.0, prog) > _desired_energy(req, 0.0, prog)
+    assert _desired_energy(req, 0.5, smooth) is None
+    # l'energia esplicita dell'utente vince sempre sul profilo
+    assert _desired_energy(_req(start_energy=90, end_energy=90), 0.5, prog) == 90
+
+
+def test_progressive_orders_tracks_by_rising_energy(db):
+    from app.services.set_generator import generate_set
+    # stesso BPM/key, energia varia: progressive deve costruire un arco crescente
+    for i, e in enumerate([20, 40, 60, 80]):
+        _lib_track(db, i, bpm=128.0, camelot_key="8A", energy=e)
+    db.commit()
+    sl = generate_set(db, _req(strategy="progressive", start_bpm=128, end_bpm=128,
+                               target_duration_minutes=15, max_tracks_per_artist=5))
+    energies = [st.track.energy for st in sorted(sl.tracks, key=lambda s: s.position)]
+    assert energies[-1] > energies[0]  # il set finisce più in alto di dove parte
+
+
 # --- D) Beam search ----------------------------------------------------------
 
 def _lib_track(db, i, **kw):

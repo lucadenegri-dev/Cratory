@@ -31,7 +31,8 @@ logger = logging.getLogger(__name__)
 # Peso dello score di transizione vs aderenza alla traiettoria BPM.
 _TRANSITION_WEIGHT = 0.55
 _TRAJECTORY_WEIGHT = 0.35
-_FEATURE_WEIGHT = 0.20  # energia/genere quando le feature sono disponibili
+_FEATURE_WEIGHT = 0.20  # smoothness energia + genere quando disponibili
+_ENERGY_ARC_WEIGHT = 0.30  # aderenza al target di energia della posizione (arco strategia/utente)
 _KEY_PREF_BONUS = 8.0
 _SEED_BONUS = 15.0
 _SHARP_PENALTY = 40.0  # scoraggia i salti bruschi quando la strategia non li vuole
@@ -47,23 +48,27 @@ class StrategyProfile:
     - reset_points: frazioni del set (0-1) dove uno stacco "reset" è premiato invece che penalizzato.
     - reset_bonus: entità del premio a una transizione di reset vicino a un reset point.
     - novelty_bonus: premio al cambio di tonalità/genere (esplorazione voluta).
+    - energy_arc: (energia_iniziale, energia_finale) 0-100 imposta dalla strategia quando
+      l'utente non specifica un arco; None = nessun arco imposto. Ora che l'energia è reale
+      (dai file audio) questo distingue davvero progressive (in salita) da smooth (piatto).
     """
     bpm_curve: float
     allow_sharp: bool
     reset_points: tuple[float, ...]
     reset_bonus: float
     novelty_bonus: float
+    energy_arc: tuple[float, float] | None = None
 
 
 _DEFAULT_PROFILE = StrategyProfile(1.0, False, (), 0.0, 0.0)
 _STRATEGY_PROFILES: dict[str, StrategyProfile] = {
-    "smooth":       StrategyProfile(1.0, False, (), 0.0, 0.0),
-    "progressive":  StrategyProfile(1.0, False, (), 0.0, 0.0),
-    "contrast":     StrategyProfile(1.0, True, (0.34, 0.67), 22.0, 0.0),
-    "experimental": StrategyProfile(1.0, True, (0.5,), 12.0, 12.0),
-    "peak_time":    StrategyProfile(0.6, False, (), 0.0, 0.0),
-    "warm_up":      StrategyProfile(1.6, False, (), 0.0, 0.0),
-    "closing":      StrategyProfile(1.0, False, (0.85,), 15.0, 0.0),
+    "smooth":       StrategyProfile(1.0, False, (), 0.0, 0.0, energy_arc=None),
+    "progressive":  StrategyProfile(1.0, False, (), 0.0, 0.0, energy_arc=(35, 85)),
+    "contrast":     StrategyProfile(1.0, True, (0.34, 0.67), 22.0, 0.0, energy_arc=None),
+    "experimental": StrategyProfile(1.0, True, (0.5,), 12.0, 12.0, energy_arc=None),
+    "peak_time":    StrategyProfile(0.6, False, (), 0.0, 0.0, energy_arc=(70, 92)),
+    "warm_up":      StrategyProfile(1.6, False, (), 0.0, 0.0, energy_arc=(25, 55)),
+    "closing":      StrategyProfile(1.0, False, (0.85,), 15.0, 0.0, energy_arc=(75, 40)),
 }
 
 
@@ -145,13 +150,21 @@ def _trajectory_fit(bpm: float | None, desired: float) -> float:
     return max(0.0, 100.0 - abs(bpm - desired) * 8.0)
 
 
-def _desired_energy(req: SetGenerationRequest, progress: float) -> float | None:
-    """Energia target lungo il set (0-100), interpolata start->end. None se non richiesta."""
-    if req.start_energy is None and req.end_energy is None:
-        return None
-    start = req.start_energy if req.start_energy is not None else req.end_energy
-    end = req.end_energy if req.end_energy is not None else req.start_energy
-    return start + (end - start) * progress
+def _desired_energy(req: SetGenerationRequest, progress: float,
+                    profile: "StrategyProfile | None" = None) -> float | None:
+    """Energia target lungo il set (0-100), interpolata start->end.
+
+    L'energia esplicita dell'utente vince; altrimenti si usa l'arco della strategia
+    (energy_arc); se nessuno dei due, None (nessun vincolo di energia).
+    """
+    if req.start_energy is not None or req.end_energy is not None:
+        start = req.start_energy if req.start_energy is not None else req.end_energy
+        end = req.end_energy if req.end_energy is not None else req.start_energy
+        return start + (end - start) * progress
+    if profile is not None and profile.energy_arc is not None:
+        start, end = profile.energy_arc
+        return start + (end - start) * progress
+    return None
 
 
 def _feature_fit(prev: Track, cand: Track, req: SetGenerationRequest,
@@ -161,11 +174,13 @@ def _feature_fit(prev: Track, cand: Track, req: SetGenerationRequest,
     Ritorna None se la traccia non ha alcuna feature (dataset non arricchito):
     in quel caso il termine feature non incide sul ranking.
     """
+    # Nota: l'aderenza all'arco di energia NON è qui — è un termine dedicato in
+    # _candidate_score (con peso proprio), così l'arco della strategia modella davvero
+    # il set invece di diluirsi nella media con smoothness/genere.
+    _ = desired_energy
     feats: list[float] = []
     if prev.energy is not None and cand.energy is not None:
         feats.append(float(energy_progression_score(prev.energy, cand.energy)))
-    if desired_energy is not None and cand.energy is not None:
-        feats.append(max(0.0, 100.0 - abs(cand.energy - desired_energy)))
     if prev.genre and cand.genre:
         feats.append(float(genre_similarity_score(prev.genre, cand.genre)))
     return sum(feats) / len(feats) if feats else None
@@ -200,6 +215,10 @@ def _candidate_score(
     feature_fit = _feature_fit(prev, cand, req, desired_energy)
     if feature_fit is not None:
         total += feature_fit * _FEATURE_WEIGHT
+    # Aderenza all'arco di energia (termine dedicato): tira le tracce verso il target
+    # di energia della posizione, così l'arco della strategia modella il set.
+    if desired_energy is not None and cand.energy is not None:
+        total += max(0.0, 100.0 - abs(cand.energy - desired_energy)) * _ENERGY_ARC_WEIGHT
     if req.prefer_harmonic and req.preferred_keys and cand.camelot_key in req.preferred_keys:
         total += _KEY_PREF_BONUS
     seeds = [s.lower() for s in req.seed_artists]
@@ -299,7 +318,7 @@ def _beam_search(
         prev = b["chosen"][-1][0]
         progress = min(1.0, b["secs"] / target_seconds)
         desired = _desired_bpm(start_bpm, end_bpm, progress, profile.bpm_curve)
-        desired_energy = _desired_energy(req, progress)
+        desired_energy = _desired_energy(req, progress, profile)
         eligible = [
             t for t in candidates
             if t.id not in b["used"]
