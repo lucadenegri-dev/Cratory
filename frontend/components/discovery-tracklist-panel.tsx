@@ -18,24 +18,37 @@ export function DiscoveryTracklistPanel({ lead, onClose }: {
   lead: DiscoveryLead | null;
   onClose: () => void;
 }) {
+  return (
+    <Modal
+      open={lead !== null}
+      onClose={onClose}
+      title={lead ? `${lead.artist} — ${lead.title}` : undefined}
+      size="lg"
+    >
+      {lead?.discogs_id != null ? (
+        <PanelBody key={lead.discogs_id} lead={lead} />
+      ) : lead ? (
+        // lead without a discogs_id: no fetch possible — show a minimal fallback, not an empty modal
+        <p className="py-6 text-sm text-muted">Nessun dettaglio disponibile per questo disco.</p>
+      ) : null}
+    </Modal>
+  );
+}
+
+function PanelBody({ lead }: { lead: DiscoveryLead }) {
   const [release, setRelease] = useState<DiscogsRelease | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!lead?.discogs_id) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets stale release when the modal closes/switches to a lead without a discogs_id
-      setRelease(null);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    setRelease(null);
-    getDiscogsRelease(lead.discogs_id)
+    getDiscogsRelease(lead.discogs_id!)
       .then(setRelease)
       .catch((e) => setError(err(e)))
       .finally(() => setLoading(false));
-  }, [lead?.discogs_id]);
+    // Runs once per mount: the parent keys PanelBody on lead.discogs_id, so a fresh
+    // mount (and fresh state) already happens whenever the disc changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const tracks: PanelTrack[] = release
     ? release.tracks.length
@@ -44,12 +57,7 @@ export function DiscoveryTracklistPanel({ lead, onClose }: {
     : [];
 
   return (
-    <Modal
-      open={lead !== null}
-      onClose={onClose}
-      title={lead ? `${lead.artist} — ${lead.title}` : undefined}
-      size="lg"
-    >
+    <>
       {error && <Alert tone="danger">⚠ {error}</Alert>}
       {loading && (
         <p className="flex items-center gap-2 py-6 text-sm text-muted">
@@ -92,7 +100,7 @@ export function DiscoveryTracklistPanel({ lead, onClose }: {
           </ul>
         </div>
       )}
-    </Modal>
+    </>
   );
 }
 
