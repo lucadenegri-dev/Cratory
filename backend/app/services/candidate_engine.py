@@ -65,7 +65,10 @@ def select_candidates(db: Session, req: SetGenerationRequest) -> list[Track]:
 
     min_duration = MIN_TRACK_SECONDS if req.avoid_short_tracks else 30
     seeds = [s.lower() for s in req.seed_artists]
-    genre = req.genre.lower() if req.genre else None
+    # Filtro genere: match ESATTO (case-insensitive) sui generi scelti dall'utente.
+    # Strict: se svuota il pool, l'errore "candidate insufficienti" lo dice chiaramente
+    # (niente auto-ignore silenzioso: l'utente deve sapere che il filtro non ha match).
+    wanted_genres = {g.strip().lower() for g in req.genres if g and g.strip()}
 
     for t in tracks:
         if req.owned_only and not t.has_local_file:
@@ -76,15 +79,9 @@ def select_candidates(db: Session, req: SetGenerationRequest) -> list[Track]:
             continue
         if bpm_lo is not None and t.bpm and not (bpm_lo <= t.bpm <= bpm_hi):
             continue
+        if wanted_genres and (not t.genre or t.genre.strip().lower() not in wanted_genres):
+            continue
         candidates.append(t)
-
-    # Il filtro genere e' soft: nel dataset reale Genre e' quasi sempre vuoto
-    # (arrivera' dagli artist genres Spotify in MVP 2). Se il filtro stretto
-    # svuota la lista, si ignora.
-    if genre:
-        strict = [t for t in candidates if t.genre and genre in t.genre.lower()]
-        if strict:
-            candidates = strict
 
     # Gli artisti seed non filtrano: garantiscono presenza, gestiti dal generator.
     _ = seeds

@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db import get_db
 from app.integrations.local_files import read_cover
-from app.repositories import get_track, library_stats, list_tracks, update_track
+from app.repositories import genres_overview, get_track, library_stats, list_tracks, update_track
 from app.schemas import (
+    GenreCountOut,
     LibraryIndexJobStatus,
     LibraryStatsOut,
     TrackDetailOut,
@@ -150,3 +151,9 @@ def library_index_status():
 @router.get("/stats", response_model=LibraryStatsOut)
 def get_stats(db: Session = Depends(get_db)):
     return library_stats(db)
+
+
+@router.get("/library/genres", response_model=list[GenreCountOut])
+def library_genres(db: Session = Depends(get_db)):
+    """Generi della libreria col conteggio, per il filtro del Set Builder."""
+    return genres_overview(db)

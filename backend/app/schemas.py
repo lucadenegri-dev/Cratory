@@ -114,13 +114,12 @@ class SetGenerationRequest(BaseModel):
     target_duration_minutes: int = Field(default=60, ge=10, le=300)
     start_bpm: float | None = None
     end_bpm: float | None = None
-    # progressione di energia (0-100) e mood lungo il set (nuovo_progetto.md sez. 4)
+    # progressione di energia (0-100) lungo il set
     start_energy: int | None = Field(default=None, ge=0, le=100)
     end_energy: int | None = Field(default=None, ge=0, le=100)
-    start_mood: str | None = None
-    end_mood: str | None = None
     seed_artists: list[str] = []
-    genre: str | None = None
+    # filtro genere: match esatto sui tag di libreria; vuoto = tutti i generi
+    genres: list[str] = []
     preferred_keys: list[str] = []
     strategy: str = "smooth"  # smooth|progressive|contrast|experimental|peak_time|warm_up|closing
     max_tracks_per_artist: int = Field(default=2, ge=1, le=10)
@@ -508,6 +507,11 @@ class LibraryStatsOut(BaseModel):
     genre_distribution: dict[str, int] = {}
     bpm_histogram: list[BpmBin] = []
     energy_distribution: list[EnergyBucket] = []
+
+
+class GenreCountOut(BaseModel):
+    genre: str
+    count: int
 
 
 class PipelineOut(BaseModel):

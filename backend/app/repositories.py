@@ -198,6 +198,18 @@ def _energy_distribution(energies: list[int]) -> list[dict]:
     ]
 
 
+def genres_overview(db: Session) -> list[dict]:
+    """Generi presenti tra le tracce candidabili (con BPM), col conteggio, ordinati
+    per frequenza. Alimenta il multi-select del Set Builder."""
+    rows = db.execute(
+        select(Track.genre, func.count())
+        .where(Track.bpm.is_not(None), Track.genre.is_not(None), Track.genre != "")
+        .group_by(Track.genre)
+        .order_by(func.count().desc(), Track.genre)
+    ).all()
+    return [{"genre": g, "count": n} for g, n in rows]
+
+
 def library_stats(db: Session) -> dict:
     # Aggregati in SQL (colonne/indici esistenti) invece di caricare l'intera
     # tabella in oggetti ORM: bpm/energy come sole colonne per i bin in Python.

@@ -80,8 +80,8 @@ export default function SetBuilder() {
   );
   const [startEnergy, setStartEnergy] = useState("");
   const [endEnergy, setEndEnergy] = useState("");
-  const [startMood, setStartMood] = useState("");
-  const [endMood, setEndMood] = useState("");
+  const [genres, setGenres] = useState<{ genre: string; count: number }[]>([]);
+  const [selGenres, setSelGenres] = useState<string[]>([]);
   const [activePreset, setActivePreset] = useState<string | null>(null);
 
   const [job, setJob] = useState<GenStatus | null>(null);
@@ -100,6 +100,7 @@ export default function SetBuilder() {
   useEffect(() => {
     apiGet<AiStatus>("/api/ai/status").then((s) => { setAiStatus(s); setUseAi(s.configured); }).catch(() => setAiStatus({ configured: false, model: null }));
     apiGet<Playlist[]>("/api/playlists").then(setPlaylists).catch(() => {});
+    apiGet<{ genre: string; count: number }[]>("/api/library/genres").then(setGenres).catch(() => {});
     return stopAll;
   }, [stopAll]);
 
@@ -107,6 +108,10 @@ export default function SetBuilder() {
 
   function toggleSource(s: string) {
     setSources((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
+  }
+
+  function toggleGenre(g: string) {
+    setSelGenres((cur) => (cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g]));
   }
 
   function applyPreset(p: (typeof PRESETS)[number]) {
@@ -156,8 +161,7 @@ export default function SetBuilder() {
         end_bpm: endBpm ? Number(endBpm) : null,
         start_energy: startEnergy ? Number(startEnergy) : null,
         end_energy: endEnergy ? Number(endEnergy) : null,
-        start_mood: startMood || null,
-        end_mood: endMood || null,
+        genres: selGenres,
         seed_artists: seedArtists.split(",").map((s) => s.trim()).filter(Boolean),
         strategy,
         max_tracks_per_artist: maxPerArtist,
@@ -174,7 +178,7 @@ export default function SetBuilder() {
       setError(String((e as Error).message ?? e));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, playlistId, duration, startBpm, endBpm, startEnergy, endEnergy, startMood, endMood, seedArtists, strategy, maxPerArtist, sources, avoidShort, ownedOnly, prompt, useAi, mode]);
+  }, [busy, playlistId, duration, startBpm, endBpm, startEnergy, endEnergy, selGenres, seedArtists, strategy, maxPerArtist, sources, avoidShort, ownedOnly, prompt, useAi, mode]);
 
   const aiReady = !!aiStatus?.configured;
 
@@ -290,16 +294,13 @@ export default function SetBuilder() {
               </summary>
               <div className="mt-4">
                 <Section icon={<TrendingUp size={13} className="text-faint" />} title="Arco del set">
-                  <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <ArcField label="BPM" hint="vuoto = automatico"
                       from={<Input type="number" placeholder="da" value={startBpm} onChange={(e) => { setStartBpm(e.target.value); clearPreset(); }} />}
                       to={<Input type="number" placeholder="a" value={endBpm} onChange={(e) => { setEndBpm(e.target.value); clearPreset(); }} />} />
-                    <ArcField label="Energia" hint="0–100"
+                    <ArcField label="Energia" hint="0–100, dai file audio"
                       from={<Input type="number" min={0} max={100} placeholder="da" value={startEnergy} onChange={(e) => { setStartEnergy(e.target.value); clearPreset(); }} />}
                       to={<Input type="number" min={0} max={100} placeholder="a" value={endEnergy} onChange={(e) => { setEndEnergy(e.target.value); clearPreset(); }} />} />
-                    <ArcField label="Mood"
-                      from={<Input placeholder="es. dark" value={startMood} onChange={(e) => setStartMood(e.target.value)} />}
-                      to={<Input placeholder="es. euphoric" value={endMood} onChange={(e) => setEndMood(e.target.value)} />} />
                   </div>
                 </Section>
 
@@ -322,6 +323,36 @@ export default function SetBuilder() {
                       <Checkbox key={s.value} label={`solo ${s.label}`} checked={sources.includes(s.value)} onChange={() => toggleSource(s.value)} />
                     ))}
                   </div>
+
+                  {genres.length > 0 && (
+                    <div className="mt-4">
+                      <span className="mb-2 block text-[10px] font-medium uppercase tracking-wider text-muted">
+                        Generi {selGenres.length > 0 && <span className="text-faint">· {selGenres.length} selezionati</span>}
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {genres.slice(0, 20).map(({ genre, count }) => {
+                          const on = selGenres.includes(genre);
+                          return (
+                            <button
+                              key={genre}
+                              type="button"
+                              onClick={() => toggleGenre(genre)}
+                              aria-pressed={on}
+                              className={cn(
+                                "inline-flex items-center gap-1.5 rounded-none border px-2.5 py-1 text-xs transition-colors",
+                                on
+                                  ? "border-border-strong bg-elevated text-fg"
+                                  : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
+                              )}
+                            >
+                              {genre} <span className="tnum text-faint">{count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <span className="mt-1.5 block text-xs text-faint">Vuoto = tutti i generi. Match esatto sui tag.</span>
+                    </div>
+                  )}
                 </Section>
               </div>
             </details>
