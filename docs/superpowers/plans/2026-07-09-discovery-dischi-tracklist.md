@@ -121,6 +121,9 @@ def test_format_badge_priority():
     assert _format_badge({"vinyl", "12\""}) == '12"'
     assert _format_badge({"vinyl"}) is None
     assert _format_badge(set()) is None
+    # Regressione: match ESATTO, non per sostringa. Una ristampa LP ha il
+    # descrittore "repress" che CONTIENE "ep" — non deve diventare "EP".
+    assert _format_badge({"vinyl", "lp", "album", "repress"}) == "LP"
 
 
 def test_dig_endpoint_exposes_discogs_id_and_format_badge(db, monkeypatch):
@@ -140,7 +143,7 @@ def test_dig_endpoint_exposes_discogs_id_and_format_badge(db, monkeypatch):
     assert lead.format_badge == "EP"
 ```
 
-`DiscogsClient`, `dig_endpoint` e `DiscoveryDigRequest` sono già importati in cima al file (verifica: se non lo sono nel blocco dei test dig esistenti, aggiungi `from app.integrations.discogs import DiscogsClient`, `from app.routers.discovery import dig_endpoint`, `from app.schemas import DiscoveryDigRequest` — gli stessi import già usati da `test_dig_endpoint_returns_reasons` poco sopra nel file).
+Attenzione alla collocazione degli import: `test_discovery.py` NON tiene tutti gli import in cima al file — c'è un blocco di import locale al gruppo di test del dig (a `test_discovery.py:288` circa, subito prima di `_fake_release`/`test_dig_endpoint_returns_reasons`) con `from app.integrations.discogs import DiscogsClient`, `from app.models import Playlist, Track`, `from app.routers.discovery import dig_endpoint`, `from app.schemas import DiscoveryDigRequest`. `DiscogsClient`, `dig_endpoint` e `DiscoveryDigRequest` sono quindi già disponibili per i nuovi test dig. Manca `import pytest`: aggiungilo in cima al file (i test qui sotto non ne hanno bisogno, ma i test del Task 3 sì — anticiparlo evita un secondo tocco allo stesso file).
 
 - [ ] **Step 2: Esegui i test e verifica che falliscano**
 
@@ -153,20 +156,22 @@ In `backend/app/services/discovery_dig.py`, aggiungi vicino alle altre costanti 
 
 ```python
 # Badge di formato per la UI (grid cell): primo match in ordine di priorità sui
-# descrittori Discogs (lowercase, sostringa). Nessuna chiamata di rete aggiuntiva:
-# il campo `format` e' gia' nella risposta di /database/search.
+# descrittori Discogs. Match ESATTO (intersezione di insiemi), non per sostringa:
+# 'ep' e' sottostringa di 'repress' (r-e-p...), e le ristampe sono frequentissime
+# nel crate digging — una ristampa LP verrebbe marcata "EP". Il campo `format` e'
+# gia' nella risposta di /database/search: nessuna chiamata di rete aggiuntiva.
 _FORMAT_BADGES = [
-    ("ep", "EP"),
-    ("lp", "LP"),
-    ("album", "Album"),
-    ("single", "Single"),
-    ('12"', '12"'),
+    ({"ep"}, "EP"),
+    ({"lp"}, "LP"),
+    ({"album"}, "Album"),
+    ({"single"}, "Single"),
+    ({'12"'}, '12"'),
 ]
 
 
 def _format_badge(formats: set[str]) -> str | None:
-    for needle, badge in _FORMAT_BADGES:
-        if any(needle in f for f in formats):
+    for needles, badge in _FORMAT_BADGES:
+        if needles & formats:
             return badge
     return None
 ```
@@ -293,7 +298,7 @@ def test_release_detail_502_on_discogs_error(monkeypatch):
     assert exc_info.value.status_code == 502
 ```
 
-Aggiungi `import pytest` in cima a `test_discovery.py` se non già presente, e `from app.integrations.discogs import DiscogsClient, DiscogsError` (se `DiscogsError` non è già importato dal Task 2).
+`import pytest` è già stato aggiunto in cima al file dal Task 2. `DiscogsClient` è già importato nel blocco dig a `test_discovery.py:288`; aggiungi lì `DiscogsError` (`from app.integrations.discogs import DiscogsClient, DiscogsError`). `HTTPException` e `get_release_detail` sono importati localmente dentro il test `test_release_detail_502_on_discogs_error` (vedi il codice sopra), nessun import globale da toccare per loro.
 
 - [ ] **Step 2: Esegui i test e verifica che falliscano**
 
@@ -982,12 +987,57 @@ con
   const [selectedLabel, setSelectedLabel] = useState<string>(initialSeed === "label" ? initialValue : "");
 ```
 
-- [ ] **Step 4: Scrivi l'URL e ri-lancia il dig quando cambia**
+- [ ] **Step 4: L'URL è la sorgente di verità — separa "esegui il dig" da "committa i parametri"**
 
-Sostituisci la funzione `runDig` esistente in modo che, oltre a lanciare la ricerca, aggiorni la query string (usando `router.push`, così back/forward del browser passano tra i dig precedenti):
+Architettura (chiude un bug: se il dig venisse eseguito dentro `runDig` con un `useEffect([])` di auto-run, il back/forward del browser cambierebbe l'URL ma NON ri-eseguirebbe il dig — lo stato del form e i risultati resterebbero fermi, perché gli inizializzatori `useState` e l'effect `[]` girano solo al mount. In più, aprire un URL già con parametri farebbe partire `runDig` → `router.push(stesso-url)` → una voce di cronologia duplicata).
+
+La soluzione: i campi del form (`digSeed`/`genre`/`selectedLabel`/`adventurousness`/`tasteRef`) restano **bozza** locale, inizializzata dall'URL al mount (Step 3). Un `executeDig(...)` fa SOLO la chiamata di rete + stato. Un `useEffect` legato alla query string esegue il dig ogni volta che i parametri cambiano — al mount (bookmark/reload), al click su DIG (che scrive l'URL) e al back/forward. Il bottone DIG **non** esegue nulla: scrive solo l'URL.
+
+Aggiungi `executeDig` (con `useCallback`, così l'effect non lo ha in dipendenze instabili) dentro `DiscoveryInner`, vicino alla vecchia `runDig`:
 
 ```tsx
-  const runDig = async () => {
+  const executeDig = useCallback(
+    async (seed: DigSeed, value: string, adv: number, taste: number | null) => {
+      setBusy(true);
+      setError(null);
+      setDig(null);
+      jobs.startClientJob("dig", "Crate digging");
+      jobs.updateClientJob("dig", { detail: `Discogs · ${value}` });
+      try {
+        setDig(await discoveryDig(seed, value, { adventurousness: adv, tastePlaylistId: taste }));
+      } catch (e) {
+        setError(err(e));
+      } finally {
+        setBusy(false);
+        jobs.endClientJob("dig");
+      }
+    },
+    [jobs],
+  );
+```
+
+Aggiungi l'effect che legge l'URL ed esegue. La dipendenza è la **stringa** dei parametri (`searchParams.toString()`), non l'oggetto `searchParams` (la cui identità cambia a ogni render): l'effect fa così solo quando i parametri cambiano davvero.
+
+```tsx
+  const paramsKey = searchParams.toString();
+  useEffect(() => {
+    const seed: DigSeed = searchParams.get("seed") === "label" ? "label" : "genre";
+    const value = searchParams.get("value") ?? "";
+    if (!value) return; // pagina aperta senza un dig: mostra l'empty state, non eseguire
+    const advRaw = Number(searchParams.get("adv") ?? "0.45");
+    const adv = Number.isFinite(advRaw) ? Math.min(1, Math.max(0, advRaw)) : 0.45;
+    const tasteRaw = searchParams.get("taste");
+    executeDig(seed, value, adv, tasteRaw ? Number(tasteRaw) : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsKey]);
+```
+
+- [ ] **Step 5: Il bottone DIG committa i parametri nell'URL (niente esecuzione diretta)**
+
+Sostituisci la vecchia `runDig` con una versione sincrona che scrive solo l'URL (l'esecuzione la fa l'effect del Step 4):
+
+```tsx
+  const runDig = () => {
     const value = digSeed === "genre" ? genre.trim() : selectedLabel;
     if (!value) return;
     const params = new URLSearchParams();
@@ -996,42 +1046,21 @@ Sostituisci la funzione `runDig` esistente in modo che, oltre a lanciare la rice
     params.set("adv", String(adventurousness));
     if (tasteRef != null) params.set("taste", String(tasteRef));
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    setBusy(true);
-    setError(null);
-    setDig(null);
-    jobs.startClientJob("dig", "Crate digging");
-    jobs.updateClientJob("dig", { detail: `Discogs · ${value}` });
-    try {
-      setDig(await discoveryDig(digSeed, value, { adventurousness, tastePlaylistId: tasteRef }));
-    } catch (e) {
-      setError(err(e));
-    } finally {
-      setBusy(false);
-      jobs.endClientJob("dig");
-    }
   };
 ```
 
-- [ ] **Step 5: Auto-lancia il dig se la pagina si apre già con i parametri in query string**
-
-Aggiungi un nuovo `useEffect`, dopo quello esistente che carica playlist/generi/etichette (che gira una sola volta al mount, `[]`):
-
-```tsx
-  useEffect(() => {
-    // Arrivo su un link bookmarkato/back-forward con un dig già specificato
-    // (vale per entrambi i semi: initialValue è il genere o l'etichetta a
-    // seconda di initialSeed): ri-lancia la stessa ricerca deterministica,
-    // nessuna cache da invalidare.
-    if (initialValue) runDig();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-```
+Note:
+- Cliccare DIG con parametri identici a quelli già nell'URL non ri-esegue (la query string non cambia, l'effect non scatta) — corretto, perché un dig deterministico con gli stessi parametri dà gli stessi risultati. Il bottone `<Button onClick={runDig} disabled={busy || !digReady}>` non cambia: `runDig` ora è sincrona, va bene lo stesso come handler.
+- Al back/forward si ri-eseguono i **risultati** (l'effect resync), ma i campi del form (testo genere, preset attivo, seme) restano sull'ultima modifica dell'utente, non tornano ai valori dell'URL precedente. Per un tool mono-utente è accettabile (il form è una bozza, i risultati riflettono l'URL). Se in futuro dà fastidio, si aggiunge un secondo effect su `paramsKey` che risincronizza `digSeed`/`genre`/`selectedLabel`/`adventurousness`/`tasteRef` dai parametri — fuori scope per questo slice.
 
 - [ ] **Step 6: Verifica manuale in browser**
 
 Run: `cd frontend && npm run dev` (o riusa il dev server già attivo)
 
-Apri `http://localhost:3000/discovery?seed=genre&value=Acid%20House&adv=0.85`: il picker deve mostrare "Genere" attivo, il campo genere precompilato con "Acid House", il preset "Avventuroso" attivo, e il dig deve partire da solo. Premi "DIG" con un valore diverso: l'URL nella barra degli indirizzi deve aggiornarsi. Premi "Indietro" nel browser: l'URL torna al dig precedente (il dig si ri-lancia automaticamente perché `initialValue` cambia — se non si ri-lancia, verifica che `initialValue` derivi da `searchParams` reattivamente, non da uno snapshot preso solo al primo render).
+- Apri `http://localhost:3000/discovery?seed=genre&value=Acid%20House&adv=0.85`: il picker deve mostrare "Genere" attivo, il campo genere precompilato con "Acid House", il preset "Avventuroso" attivo, e il dig deve **partire da solo** (l'effect legge l'URL al mount).
+- Premi "DIG" con un valore diverso: l'URL nella barra degli indirizzi si aggiorna e i risultati cambiano.
+- Premi "Indietro" nel browser: l'URL torna al dig precedente e **i risultati si ri-caricano** da soli (l'effect scatta perché `paramsKey` cambia). Questa è la verifica che il bug F2 è chiuso: se i risultati NON cambiano al back, l'effect non è legato a `searchParams.toString()` o `executeDig` cattura uno stato vecchio.
+- Ricarica la pagina (F5) con l'URL parametrizzato: il dig si ri-esegue identico. Nessuna voce di cronologia duplicata (il mount non fa `router.push`).
 
 - [ ] **Step 7: Lint**
 
