@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Disc3, Tags } from "lucide-react";
 import {
   discoveryDig,
@@ -31,21 +32,32 @@ const PRESETS: { key: string; label: string; value: number; desc: string }[] = [
   { key: "avventuroso", label: "Avventuroso", value: 0.85, desc: "Rarità e deep cut richiesti che non conosci." },
 ];
 
-export default function DiscoveryPage() {
+function DiscoveryInner() {
   const jobs = useJobs();
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const initialSeed = (searchParams.get("seed") === "label" ? "label" : "genre") as DigSeed;
+  const initialValue = searchParams.get("value") ?? "";
+  const initialAdv = Number(searchParams.get("adv") ?? "0.45");
+  const initialTaste = searchParams.get("taste");
 
   // riferimento di gusto (playlist) per il dig
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
 
   // scava (dig Discogs)
-  const [digSeed, setDigSeed] = useState<DigSeed>("genre");
+  const [digSeed, setDigSeed] = useState<DigSeed>(initialSeed);
   const [genres, setGenres] = useState<DiscoveryGenres | null>(null);
-  const [genre, setGenre] = useState<string>("");
+  const [genre, setGenre] = useState<string>(initialSeed === "genre" ? initialValue : "");
   const [labels, setLabels] = useState<LabelStats[] | null>(null);
-  const [selectedLabel, setSelectedLabel] = useState<string>("");
+  const [selectedLabel, setSelectedLabel] = useState<string>(initialSeed === "label" ? initialValue : "");
   const [showAllLabels, setShowAllLabels] = useState(false);
-  const [adventurousness, setAdventurousness] = useState(0.45);
-  const [tasteRef, setTasteRef] = useState<number | null>(null); // null = tutta la libreria
+  const [adventurousness, setAdventurousness] = useState(
+    Number.isFinite(initialAdv) ? Math.min(1, Math.max(0, initialAdv)) : 0.45,
+  );
+  const [tasteRef, setTasteRef] = useState<number | null>(initialTaste ? Number(initialTaste) : null); // null = tutta la libreria
   const [dig, setDig] = useState<DiscoveryDigResponse | null>(null);
 
   const [busy, setBusy] = useState(false);
@@ -58,15 +70,16 @@ export default function DiscoveryPage() {
     getDiscoveryGenres()
       .then((g) => {
         setGenres(g);
-        setGenre(g.library[0] ?? g.styles[0] ?? "");
+        if (!initialValue) setGenre(g.library[0] ?? g.styles[0] ?? "");
       })
       .catch(() => setGenres({ library: [], styles: [] }));
     getLabels()
       .then((ls) => {
         setLabels(ls);
-        if (ls.length) setSelectedLabel(ls[0].label);
+        if (!initialValue && ls.length) setSelectedLabel(ls[0].label);
       })
       .catch(() => setLabels([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const switchSeed = (s: DigSeed) => {
@@ -75,22 +88,47 @@ export default function DiscoveryPage() {
     setError(null);
   };
 
-  const runDig = async () => {
+  const executeDig = useCallback(
+    async (seed: DigSeed, value: string, adv: number, taste: number | null) => {
+      setBusy(true);
+      setError(null);
+      setDig(null);
+      jobs.startClientJob("dig", "Crate digging");
+      jobs.updateClientJob("dig", { detail: `Discogs · ${value}` });
+      try {
+        setDig(await discoveryDig(seed, value, { adventurousness: adv, tastePlaylistId: taste }));
+      } catch (e) {
+        setError(err(e));
+      } finally {
+        setBusy(false);
+        jobs.endClientJob("dig");
+      }
+    },
+    [jobs],
+  );
+
+  const paramsKey = searchParams.toString();
+  useEffect(() => {
+    const seed: DigSeed = searchParams.get("seed") === "label" ? "label" : "genre";
+    const value = searchParams.get("value") ?? "";
+    if (!value) return; // pagina aperta senza un dig: mostra l'empty state, non eseguire
+    const advRaw = Number(searchParams.get("adv") ?? "0.45");
+    const adv = Number.isFinite(advRaw) ? Math.min(1, Math.max(0, advRaw)) : 0.45;
+    const tasteRaw = searchParams.get("taste");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- il dig è l'external system: l'effect risincronizza i risultati sull'URL (query string), non su state locale
+    executeDig(seed, value, adv, tasteRaw ? Number(tasteRaw) : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsKey]);
+
+  const runDig = () => {
     const value = digSeed === "genre" ? genre.trim() : selectedLabel;
     if (!value) return;
-    setBusy(true);
-    setError(null);
-    setDig(null);
-    jobs.startClientJob("dig", "Crate digging");
-    jobs.updateClientJob("dig", { detail: `Discogs · ${value}` });
-    try {
-      setDig(await discoveryDig(digSeed, value, { adventurousness, tastePlaylistId: tasteRef }));
-    } catch (e) {
-      setError(err(e));
-    } finally {
-      setBusy(false);
-      jobs.endClientJob("dig");
-    }
+    const params = new URLSearchParams();
+    params.set("seed", digSeed);
+    params.set("value", value);
+    params.set("adv", String(adventurousness));
+    if (tasteRef != null) params.set("taste", String(tasteRef));
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
   const quickGenres = (genres?.library.length ? genres.library : genres?.styles ?? []).slice(0, 10);
@@ -243,6 +281,14 @@ export default function DiscoveryPage() {
             </EmptyState>
           )}
     </PageLayout>
+  );
+}
+
+export default function DiscoveryPage() {
+  return (
+    <Suspense>
+      <DiscoveryInner />
+    </Suspense>
   );
 }
 
