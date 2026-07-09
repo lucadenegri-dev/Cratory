@@ -257,7 +257,12 @@ Responsabilita':
 - stato traccia (`imported`, `ready_for_set`);
 - score BPM, Camelot, energia, genere e durata (il contratto include anche uno score
   di coerenza mood, oggi sempre neutro: `Track` non ha piu' un campo mood da quando
-  il motore di enrichment e' stato ritirato);
+  il motore di enrichment e' stato ritirato). La similarita' di genere usa una mappa
+  deterministica di famiglie (techno/house/breaks/chill/...): sottogeneri della stessa
+  famiglia sono coerenti anche senza token in comune, i super-generi ("Electronic")
+  sono neutri, famiglie diverse valgono come stacco. Nel set generator la coerenza di
+  genere e' un termine di ranking dedicato (come l'arco di energia), modulato per
+  strategia (`StrategyProfile.genre_coherence`: le strategie esplorative lo riducono);
 - classificazione transizioni;
 - assegnazione ruoli nell'arco del set;
 - candidate filtering con cap 60;

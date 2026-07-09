@@ -158,6 +158,14 @@ migrazione esplicita.
   residui enrichment legacy (`LastFmTagProvider`, `MusicFeatureProvider`), droppata la
   colonna `Track.release_date` (FK-safe), rimossi dead export `libraryGaps`/
   `rekordboxPending` in `api.ts`.
+- **Coerenza di genere nel set generator (2026-07-09).** `genre_similarity_score` ora
+  usa una mappa deterministica di famiglie di genere (techno/house/breaks/chill/...):
+  sottogeneri coerenti anche senza token comuni, super-generi ("Electronic") neutri,
+  famiglie diverse sotto la soglia di reset. Nel ranking del generator la coerenza di
+  genere e' un termine dedicato (`_GENRE_WEIGHT=0.25`, neutro a 50 senza dato), modulato
+  per strategia (`StrategyProfile.genre_coherence`: experimental lo dimezza per non
+  neutralizzare il novelty bonus). Il set resta nello stesso mondo sonoro invece di
+  zigzagare tra generi a parita' di BPM/key.
 
 ## Direzione prodotto
 

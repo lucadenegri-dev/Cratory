@@ -6,7 +6,7 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-07-08
+**Ultimo aggiornamento:** 2026-07-09
 
 **Nome prodotto:** **Cratory** (rename eseguito il 2026-06-25 su UI, codice, docs e
 icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici legacy
@@ -21,6 +21,28 @@ operativo (expand Last.fm + dig Discogs, ora solo-gusto); Set Builder tecnico/cr
 con garanzia "solo posseduti"; dashboard con pipeline a cinque fasi (Indicizza
 spostata su pulsante nella nav) e documentazione riallineata al nuovo paradigma;
 identificazione mix via Shazam integrata (fase 1; co-occorrenza in backlog).
+
+## Milestone 2026-07-09 - Coerenza di genere nel set generator
+
+Il genere diventa un segnale di prima classe nella generazione dei set (prima pesava
+~3 punti, diluito nella media con l'energia).
+
+- `genre_similarity_score` (scoring.py) ora conosce le **famiglie di genere** (mappa
+  deterministica techno/house/breaks/dnb/chill/trance/bass/hiphop/pop_rock, match per
+  parola intera): sottogeneri della stessa famiglia coerenti anche senza token comuni
+  (Ambient~Downtempo=80, Techno~Acid Techno=90), super-generi ("Electronic", "Dance")
+  neutri a 55 (mai un falso reset), famiglie diverse a 25 (sotto la soglia di reset 45).
+  Fallback alla vecchia sovrapposizione token per i generi fuori mappa.
+- Set generator: **termine di coerenza di genere dedicato** nel ranking
+  (`_GENRE_WEIGHT=0.25`, come l'arco di energia), sempre attivo con neutro 50 quando il
+  dato manca; `_feature_fit` resta solo smoothness dell'energia.
+- `StrategyProfile.genre_coherence` (default 1.0): experimental usa 0.5 cosi' il
+  novelty bonus continua a premiare l'esplorazione. "Electro" e' famiglia breaks (non
+  techno): techno→electro conta come cambio di mondo sonoro.
+- Verifica su DB reale: set smooth 60min con 0 stacchi cross-family su 8 transizioni,
+  BPM/key invariati per qualita'. Test: `tests/test_genre_coherence.py` (9 test), suite
+  intera verde. Commit `29d82c3` (nota: finito sul branch `discovery-dischi-tracklist`
+  per via della sessione parallela; cherry-pick su master se serve prima del merge).
 
 ## Milestone 2026-07-08 - Igiene DB disk-first: disco autorevole, niente lead fantasma, dashboard ripulita
 
