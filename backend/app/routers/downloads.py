@@ -16,6 +16,7 @@ from app.services.soulseek_select import rank_candidates, search_candidates
 from app.services.download_review import (
     NoReviewFileError, discard_downloaded, keep_downloaded, review_detail,
 )
+from app.services.auto_link import auto_link_preview
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
@@ -55,6 +56,22 @@ class ManualDownloadIn(BaseModel):
 
 class ReviewActionIn(BaseModel):
     track_id: int
+
+
+class AutoLinkHit(BaseModel):
+    path: str
+    name: str
+    format: str | None = None
+    size: int | None = None
+    source: str
+
+
+class AutoLinkProposal(BaseModel):
+    track_id: int
+    label: str
+    artist: str | None = None
+    title: str | None = None
+    hit: AutoLinkHit | None = None
 
 
 def _candidate_out(c) -> CandidateOut:
@@ -200,3 +217,13 @@ def discard_review(req: ReviewActionIn, db: Session = Depends(get_db)):
     if track is None:
         raise HTTPException(status_code=404, detail="Traccia non trovata.")
     return track_out(discard_downloaded(db, track))
+
+
+@router.get("/auto-link", response_model=list[AutoLinkProposal])
+def auto_link(db: Session = Depends(get_db)):
+    """Proposte di collegamento file-locale per tutte le tracce da sistemare.
+
+    Sola lettura: non collega nulla, restituisce (traccia, miglior match locale).
+    Il collegamento vero passa per POST /api/tracks/{id}/link-file dopo la conferma.
+    """
+    return auto_link_preview(db)
