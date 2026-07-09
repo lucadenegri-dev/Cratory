@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, HardDrive, Archive, CircleCheck, Pencil } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
 import { Input, Select, Checkbox, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { TrackCover } from "@/components/track-cover";
-import { SpotifyGlyph } from "@/components/spotify-glyph";
+import { TrackStateIcons } from "@/components/track-state-icons";
 
 const STATUS_OPTIONS: [string, string][] = [
   ["ready_for_set", "Pronte per il set"],
@@ -150,23 +150,7 @@ export default function Library() {
                 <td className={`${cell} tnum text-muted`}>{t.energy ?? "—"}</td>
                 <td className={`${cell} max-w-[10rem] truncate text-muted`}>{t.genre ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
-                <td className={cell}>
-                  <div className="flex items-center gap-2 text-faint">
-                    {t.status === "ready_for_set" && (
-                      <span title="Pronta per il set (BPM + tonalità)"><CircleCheck size={14} className="text-fg-strong" /></span>
-                    )}
-                    {t.has_local_file && (
-                      <span title="File in libreria (su disco)"><HardDrive size={14} className="text-fg-strong" /></span>
-                    )}
-                    {t.archived && (
-                      <span title="Scartata (nell'archivio)"><Archive size={14} /></span>
-                    )}
-                    {t.spotify_url && (
-                      <a href={t.spotify_url} target="_blank" rel="noreferrer" title="Apri su Spotify"
-                         className="text-[#1DB954] transition-colors hover:text-[#1ed760]"><SpotifyGlyph size={14} /></a>
-                    )}
-                  </div>
-                </td>
+                <td className={cell}><TrackStateIcons track={t} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
