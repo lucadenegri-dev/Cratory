@@ -114,9 +114,10 @@ function DiscoveryInner() {
     if (!value) return; // pagina aperta senza un dig: mostra l'empty state, non eseguire
     const advRaw = Number(searchParams.get("adv") ?? "0.45");
     const adv = Number.isFinite(advRaw) ? Math.min(1, Math.max(0, advRaw)) : 0.45;
-    const tasteRaw = searchParams.get("taste");
+    const tasteRaw = Number(searchParams.get("taste"));
+    const taste = Number.isFinite(tasteRaw) && tasteRaw > 0 ? tasteRaw : null;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- il dig è l'external system: l'effect risincronizza i risultati sull'URL (query string), non su state locale
-    executeDig(seed, value, adv, tasteRaw ? Number(tasteRaw) : null);
+    executeDig(seed, value, adv, taste);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramsKey]);
 
@@ -128,6 +129,10 @@ function DiscoveryInner() {
     params.set("value", value);
     params.set("adv", String(adventurousness));
     if (tasteRef != null) params.set("taste", String(tasteRef));
+    // Params identici a quelli già nell'URL: la ricerca è deterministica, il
+    // risultato sarebbe lo stesso. Non pushare, così non si accumula una voce
+    // di cronologia duplicata (back richiederebbe due click).
+    if (params.toString() === searchParams.toString()) return;
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 

@@ -253,10 +253,10 @@ def get_release_detail(discogs_id: int):
         discogs_id=discogs_id,
         title=payload.get("title") or "",
         artist=artist,
-        thumb_url=images[0]["uri"] if images else None,
+        thumb_url=images[0].get("uri") if images else None,
         discogs_url=f"https://www.discogs.com{uri}" if uri.startswith("/") else (uri or None),
         year=payload.get("year"),
-        label=labels[0]["name"] if labels else None,
+        label=labels[0].get("name") if labels else None,
         tracks=tracks,
     )
 

@@ -415,6 +415,24 @@ def test_release_detail_502_on_discogs_error(monkeypatch):
     assert exc_info.value.status_code == 502
 
 
+def test_release_detail_tolerates_image_and_label_without_keys(monkeypatch):
+    """Un'immagine/etichetta Discogs priva della chiave attesa non deve far
+    esplodere l'endpoint con un 500 grezzo: thumb_url/label degradano a None."""
+    from app.routers.discovery import get_release_detail
+
+    payload = {
+        "id": 1, "title": "Rel", "artists": [{"name": "A"}],
+        "images": [{"type": "primary"}],   # nessun "uri"
+        "labels": [{"catno": "X-1"}],        # nessun "name"
+        "tracklist": [{"position": "A1", "type_": "track", "title": "T", "duration": "3:00"}],
+    }
+    monkeypatch.setattr(DiscogsClient, "get_release", lambda self, rid: payload)
+    out = get_release_detail(1)
+    assert out.thumb_url is None
+    assert out.label is None
+    assert [t.title for t in out.tracks] == ["T"]
+
+
 # --- Task 4: playlist di sistema "Scoperte" -----------------------------------
 
 
