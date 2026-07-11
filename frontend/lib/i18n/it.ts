@@ -1,6 +1,24 @@
 // Traduzione italiana: `Dictionary` (= typeof en) garantisce a compile-time che
 // ogni chiave esista e nessuna sia di troppo.
 import type { Dictionary } from "./en";
+import { humanizeType } from "./en";
+
+// Etichette leggibili per i tipi di issue noti (IT). I non mappati passano
+// per humanizeType, così la UI regge tipi nuovi senza rompersi.
+const ISSUE_TYPE_LABELS_IT: Record<string, string> = {
+  missing_cover: "Copertina mancante",
+  missing_metadata: "Metadati mancanti",
+  missing_required_tag: "Tag obbligatorio mancante",
+  missing_template_data: "Dati mancanti per la rinomina",
+  junk_tag: "Spazzatura nel tag",
+  dirty_genre: "Genere sporco",
+  filename_tag_mismatch: "Nome file ≠ tag",
+  inconsistent_casing: "Maiuscole incoerenti",
+  low_quality: "File di bassa qualità",
+  suspicious_duration: "Durata sospetta",
+  scan_error: "Errore di scansione",
+  retag: "Tag da ripulire",
+};
 
 export const it: Dictionary = {
   common: {
@@ -198,8 +216,8 @@ export const it: Dictionary = {
     providerNote: (suggested, covers, fingerprinted, unresolved, acoustid) =>
       `${suggested} suggerimenti da provider${covers > 0 ? `, ${covers} copertine trovate` : ""}${fingerprinted > 0 ? ` (${fingerprinted} via fingerprint)` : ""}${unresolved > 0 ? `, ${unresolved} non trovati` : ""}${acoustid ? "" : " — fingerprint off, solo match testuale"} — rivedi e accetta col ✓.`,
     acceptHighNote: (updated) => `${updated} proposte ad alta confidenza accettate → andranno nel PLAN.`,
-    rescanNote: (high, text, scanned, acoustid) =>
-      `Rescan: ${high} proposte alta confidenza, ${text} testuali su ${scanned} tracce${acoustid ? "" : " (fingerprint off: nessuna alta confidenza)"}.`,
+    rescanNote: (high, text, scanned, acoustid, covers) =>
+      `Rescan: ${high} proposte alta confidenza, ${text} testuali${covers > 0 ? `, ${covers} copertine` : ""} su ${scanned} tracce${acoustid ? "" : " (fingerprint off: nessuna alta confidenza)"}.`,
     rescanDone: "Rescan completato.",
     rescanFailed: "Rescan fallito",
     sevAll: "severità: tutte",
@@ -232,6 +250,35 @@ export const it: Dictionary = {
     acceptHighBtn: "✓ Accetta tutti alta confidenza",
     acceptFixableBtn: "✓ Accetta tutti i fixabili",
     dismissInfoBtn: "✕ Ignora tutti gli info",
+    acceptCoversBtn: "✓ Accetta tutte le copertine",
+    acceptCoversNote: (n) => `${n} copertine accettate → andranno nel PLAN.`,
+
+    // Pannello Enrich — tre sorgenti che riempiono le proposte vuote
+    enrichTitle: "Arricchisci le proposte",
+    enrichHint: "Riempi le proposte vuote da una sorgente, poi rivedi e accetta ciascuna col ✓.",
+    enrichAiTagsDesc: "Indovina Artista e Titolo dal nome del file, per i file con tag sporchi o mancanti.",
+    enrichAiGenresDesc: "Propone un Genere dove manca o è disordinato. Bassa confidenza — rivedi prima di accettare.",
+    enrichProviderDesc: "Recupera Artista, Titolo, Album, Anno, Etichetta e copertina da MusicBrainz / Discogs.",
+    enrichAi: "Claude AI",
+    enrichProviderTag: "Provider",
+    forceLookupToggle: "Forza ricerca provider",
+    forceLookupHint: "Reinterroga i provider su una cartella o un genere specifici, anche per i campi già pieni — artist/title inclusi, per riscrivere tutto.",
+    rewriteReviewNote: "Crea proposte da rivedere (vecchio → nuovo) come issue aperte. Niente viene scritto finché non accetti e fai apply.",
+    rescanCovers: "copertine",
+    rescanOnlyNew: "solo file nuovi",
+    fetchCoversBtn: "Cerca copertine (tutte le mancanti)",
+    fetchCoversDesc: "Cerca la copertina dai provider per ogni file che non ne ha — non solo quelli con tag da sistemare.",
+    newFilesOnly: "solo nuovi",
+    newFilesTitle: "Solo i file dall'ultima scansione (mai ri-scansionati)",
+
+    // Raggruppamento
+    groupByLabel: "raggruppa",
+    groupByType: "per tipo",
+    groupBySeverity: "per gravità",
+    groupByNone: "lista piatta",
+    groupMeta: (open, total) => (open > 0 ? `${open} aperte · ${total}` : `${total}`),
+    groupAccept: "✓ accetta gruppo",
+    typeLabel: (ty) => ISSUE_TYPE_LABELS_IT[ty] ?? humanizeType(ty),
     emptyTitle: "Nessuna issue",
     emptyClean: "La libreria è pulita (o non ancora scansionata).",
     emptyFiltered: "Nessuna issue con questi filtri.",

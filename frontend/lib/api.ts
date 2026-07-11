@@ -197,6 +197,7 @@ export interface Issue {
   artist: string | null;
   title: string | null;
   current_value: string | null;
+  is_new: boolean;
 }
 
 export interface IssueFilters {
@@ -262,6 +263,8 @@ export interface ProviderRescanBody {
   fields: string[];
   include_accepted?: boolean;
   include_dismissed?: boolean;
+  covers?: boolean;
+  only_new?: boolean;
 }
 export interface ProviderRescanResult {
   configured: boolean;
@@ -272,6 +275,7 @@ export interface ProviderRescanResult {
   no_match: number;
   proposed_high: number;
   proposed_text: number;
+  covers: number;
 }
 export interface ProviderRescanJobState {
   status: "idle" | "running" | "done" | "error";

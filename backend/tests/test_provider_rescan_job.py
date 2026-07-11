@@ -21,8 +21,9 @@ def test_job_runs_and_reports_done(db, monkeypatch):
     db.commit()
 
     # provider + fingerprint neutralizzati: niente rete nel test
-    monkeypatch.setattr("app.services.provider_rescan.text_providers.lookup_with_conf",
-                        lambda f, **kw: {})
+    from app.services.text_providers import ResolvedText
+    monkeypatch.setattr("app.services.provider_rescan.text_providers.resolve",
+                        lambda f, **kw: ResolvedText(fields={}, release_mbids=[], confidence=None))
     monkeypatch.setattr(provider_rescan_job.acoustid, "acoustid_configured", lambda: False)
 
     provider_rescan_job.start_job(fields=["genre"])

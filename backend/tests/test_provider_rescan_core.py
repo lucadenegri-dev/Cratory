@@ -154,3 +154,66 @@ def test_include_dismissed_does_not_touch_accepted(db):
                            include_dismissed=True)  # solo dismissed, non accepted
     iss = db.query(Issue).filter_by(type="provider_override").one()
     assert iss.status == "accepted"
+
+
+# --- estensioni: artist/title, covers, only_new -----------------------------
+
+class FakeCAA:
+    def front_thumb(self, mbid):
+        return b"IMG" if mbid else None
+
+    def front_url(self, mbid):
+        return f"caa/{mbid}"
+
+
+def test_proposes_artist_title_override(db):
+    _add(db, path="/m/a.mp3", title="old t", artist="old a", genre="House")
+    db.commit()
+    mb = FakeMB({"old t": {"canonical_artist": "New A", "canonical_title": "New T",
+                           "confidence": 95}})
+    res = provider_rescan.rescan(db, fields=["artist", "title"], mb=mb, discogs=FakeDiscogs())
+    overrides = {i.field: i for i in db.query(Issue).filter_by(type="provider_override")}
+    assert set(overrides) == {"artist", "title"}
+    assert overrides["artist"].suggested_fix_json["to"] == "New A"
+    assert overrides["title"].suggested_fix_json["to"] == "New T"
+    assert res["proposed_high"] == 2
+
+
+def test_covers_fetched_for_files_without_cover(db):
+    _add(db, path="/m/a.mp3", title="A", artist="X", genre="House", has_cover=False)
+    db.commit()
+    mb = FakeMB({"A": {"canonical_title": "A", "confidence": 95, "release_mbids": ["r1"]}})
+    res = provider_rescan.rescan(db, fields=[], covers=True, mb=mb,
+                                 discogs=FakeDiscogs(), caa=FakeCAA())
+    cover_iss = db.query(Issue).filter_by(type="missing_cover").one()
+    assert cover_iss.field == "cover" and cover_iss.status == "open"
+    assert res["covers"] == 1
+
+
+def test_covers_skipped_when_file_has_cover(db):
+    _add(db, path="/m/a.mp3", title="A", artist="X", genre="House", has_cover=True)
+    db.commit()
+    mb = FakeMB({"A": {"canonical_title": "A", "confidence": 95, "release_mbids": ["r1"]}})
+    res = provider_rescan.rescan(db, fields=[], covers=True, mb=mb,
+                                 discogs=FakeDiscogs(), caa=FakeCAA())
+    assert db.query(Issue).filter_by(type="missing_cover").count() == 0
+    assert res["covers"] == 0
+
+
+def test_only_new_scopes_to_fresh_files(db):
+    from datetime import datetime, timedelta
+    t0 = datetime(2020, 1, 1)
+    new = _add(db, path="/m/new.mp3", title="A", artist="X", genre="x")
+    old = _add(db, path="/m/old.mp3", title="B", artist="Y", genre="x")
+    new.first_seen_at = t0
+    new.last_scanned_at = t0
+    old.first_seen_at = t0
+    old.last_scanned_at = t0 + timedelta(days=1)
+    db.commit()
+    mb = FakeMB({"A": {"genre_primary": "House", "confidence": 95},
+                 "B": {"genre_primary": "Techno", "confidence": 95}})
+    res = provider_rescan.rescan(db, fields=["genre"], only_new=True,
+                                 mb=mb, discogs=FakeDiscogs())
+    assert res["scanned"] == 1
+    ov = db.query(Issue).filter_by(type="provider_override").one()
+    assert db.get(AudioFile, ov.file_id).path == "/m/new.mp3"

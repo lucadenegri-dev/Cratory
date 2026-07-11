@@ -8,8 +8,9 @@ import {
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
-import { IssuesTable } from "@/components/issues-table";
+import { IssuesTable, type GroupBy } from "@/components/issues-table";
 import { Alert, Button, Checkbox, EmptyState, Input, Modal, Select } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 
 export default function IssuesPage() {
@@ -27,6 +28,8 @@ export default function IssuesPage() {
   const [rescanFolder, setRescanFolder] = useState("");
   const [rescanGenre, setRescanGenre] = useState("");
   const [rescanFields, setRescanFields] = useState<string[]>(["genre"]);
+  const [rescanCovers, setRescanCovers] = useState(false);
+  const [rescanOnlyNew, setRescanOnlyNew] = useState(false);
   const [rescanModal, setRescanModal] = useState(false);
   const [inclAccepted, setInclAccepted] = useState(false);
   const [inclDismissed, setInclDismissed] = useState(false);
@@ -38,6 +41,9 @@ export default function IssuesPage() {
   const [status, setStatus] = useState("open");
   const [rootId, setRootId] = useState("");
   const [search, setSearch] = useState("");
+  const [onlyNew, setOnlyNew] = useState(false);
+  const [groupBy, setGroupBy] = useState<GroupBy>("type");
+  const [forceOpen, setForceOpen] = useState(false);
 
   const load = useCallback(() => {
     listIssues()
@@ -59,6 +65,14 @@ export default function IssuesPage() {
   const onReopen = (id: number) => act(() => setIssueStatus(id, "open"));
   const acceptAllFixable = () => act(() => bulkIssues({ status: "accepted" }));
   const dismissAllInfo = () => act(() => bulkIssues({ severity: "info", status: "dismissed" }));
+  const onAcceptCovers = () => act(async () => {
+    const r = await bulkIssues({ type: "missing_cover", status: "accepted" });
+    setAiNote(t.issues.acceptCoversNote(r.updated));
+  });
+  const onAcceptGroup = (key: string) => act(() =>
+    bulkIssues(groupBy === "severity"
+      ? { severity: key, status: "accepted" }
+      : { type: key, status: "accepted" }));
 
   const onAiSuggest = async () => {
     setActionError(null);
@@ -127,10 +141,21 @@ export default function IssuesPage() {
     startRescan({
       folder: rescanFolder || null,
       genre: rescanGenre || null,
-      fields: rescanFields.length ? rescanFields : ["genre"],
+      fields: rescanFields,
       include_accepted: inclAccepted,
       include_dismissed: inclDismissed,
+      covers: rescanCovers,
+      only_new: rescanOnlyNew,
     }).catch((e) => setActionError(e instanceof Error ? e.message : t.common.error));
+  };
+
+  // Cerca la copertina da provider per TUTTI i file che non ne hanno (non solo
+  // quelli con tag da sistemare): rescan cover-only su tutta la libreria.
+  const onFetchAllCovers = () => {
+    setActionError(null);
+    setAiNote(null);
+    startRescan({ fields: [], covers: true })
+      .catch((e) => setActionError(e instanceof Error ? e.message : t.common.error));
   };
 
   const onAcceptHigh = () =>
@@ -148,7 +173,7 @@ export default function IssuesPage() {
       const r = rescan.result;
       setAiNote(
         r
-          ? t.issues.rescanNote(r.proposed_high, r.proposed_text, r.scanned, r.acoustid_available)
+          ? t.issues.rescanNote(r.proposed_high, r.proposed_text, r.scanned, r.acoustid_available, r.covers)
           : t.issues.rescanDone,
       );
     }
@@ -171,6 +196,7 @@ export default function IssuesPage() {
     (!field || i.field === field) &&
     (!status || i.status === status) &&
     (!rootId || i.root_id === Number(rootId)) &&
+    (!onlyNew || i.is_new) &&
     (!needle ||
       (i.artist || "").toLowerCase().includes(needle) ||
       (i.title || "").toLowerCase().includes(needle) ||
@@ -180,11 +206,29 @@ export default function IssuesPage() {
   const bySev: Record<string, number> = { error: 0, warning: 0, info: 0 };
   const byType: Record<string, number> = {};
   let accepted = 0;
+  let openCovers = 0;
   for (const i of issues) {
     bySev[i.severity] = (bySev[i.severity] ?? 0) + 1;
     byType[i.type] = (byType[i.type] ?? 0) + 1;
     if (i.status === "accepted") accepted++;
+    if (i.type === "missing_cover" && i.status === "open") openCovers++;
   }
+
+  // Le tre sorgenti che riempiono le proposte vuote: bottone + spiegazione.
+  const enrichSources = [
+    { onClick: onAiSuggest, busy: aiBusy,
+      label: aiBusy ? t.issues.aiBusy : t.issues.aiTagsBtn,
+      desc: t.issues.enrichAiTagsDesc, tag: t.issues.enrichAi },
+    { onClick: onAiGenres, busy: genreBusy,
+      label: genreBusy ? t.issues.aiBusy : t.issues.aiGenresBtn,
+      desc: t.issues.enrichAiGenresDesc, tag: t.issues.enrichAi },
+    { onClick: onProviderSuggest, busy: providerBusy,
+      label: providerBusy ? t.issues.providerImportBusy : t.issues.providerSuggestBtn,
+      desc: t.issues.enrichProviderDesc, tag: t.issues.enrichProviderTag },
+    { onClick: onFetchAllCovers, busy: rescanRunning,
+      label: rescanRunning ? t.issues.providerImportBusy : t.issues.fetchCoversBtn,
+      desc: t.issues.fetchCoversDesc, tag: t.issues.enrichProviderTag },
+  ];
 
   return (
     <PageLayout
@@ -235,44 +279,75 @@ export default function IssuesPage() {
           />
         </div>
 
-        {/* bottoni bianchi: sotto i filtri, sopra la sezione forza ricerca */}
-        <div className="flex flex-wrap gap-1.5">
-          <Button variant="primary" size="sm" onClick={onAiSuggest} disabled={aiBusy}>
-            {aiBusy ? t.issues.aiBusy : t.issues.aiTagsBtn}
-          </Button>
-          <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
-            {genreBusy ? t.issues.aiBusy : t.issues.aiGenresBtn}
-          </Button>
-          <Button variant="primary" size="sm" onClick={onProviderSuggest} disabled={providerBusy}>
-            {providerBusy ? t.issues.providerImportBusy : t.issues.providerSuggestBtn}
-          </Button>
-        </div>
-
-        {/* forza ricerca provider: toolbar orizzontale */}
-        <div className="border border-border bg-surface p-3">
-          <div className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted">{t.issues.forceProvider}</div>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <input
-              className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
-              placeholder={t.issues.folderPlaceholder} value={rescanFolder}
-              onChange={(e) => setRescanFolder(e.target.value)} />
-            <input
-              className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
-              placeholder={t.issues.currentGenrePlaceholder} value={rescanGenre}
-              onChange={(e) => setRescanGenre(e.target.value)} />
-            <div className="flex flex-wrap gap-2 text-[11px] text-muted">
-              {["genre", "album", "label", "year"].map((f) => (
-                <label key={f} className="flex items-center gap-1">
-                  <input type="checkbox" checked={rescanFields.includes(f)} onChange={() => toggleField(f)} />
-                  {f}
-                </label>
-              ))}
-            </div>
-            <Button variant="primary" size="sm" onClick={() => setRescanModal(true)} disabled={rescanRunning}>
-              {rescanRunning ? t.issues.providerImportBusy : t.issues.providerRescanBtn}
-            </Button>
+        {/* Pannello Enrich: le tre sorgenti di proposte, ciascuna con la sua
+            spiegazione, + la ricerca forzata provider ripiegata (progressive
+            disclosure) invece di una toolbar sempre aperta. */}
+        <section className="border border-border bg-surface">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border px-3 py-2">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted">{t.issues.enrichTitle}</span>
+            <span className="text-[10px] text-muted">{t.issues.enrichHint}</span>
           </div>
-        </div>
+          <ul className="divide-y divide-border">
+            {enrichSources.map((s, i) => (
+              <li key={i} className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3">
+                <Button
+                  variant="primary" size="sm" onClick={s.onClick} disabled={s.busy}
+                  className="w-full shrink-0 justify-start sm:w-64"
+                >{s.label}</Button>
+                <p className="text-[11px] leading-relaxed text-fg">
+                  {s.desc}
+                  <span className="ml-1.5 border border-border px-1 py-0.5 align-middle text-[9px] uppercase tracking-wider text-muted">{s.tag}</span>
+                </p>
+              </li>
+            ))}
+          </ul>
+          <div className="border-t border-border">
+            <button
+              type="button"
+              onClick={() => setForceOpen((v) => !v)}
+              className="flex w-full items-center gap-2 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted transition-colors hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg"
+              aria-expanded={forceOpen}
+            >
+              <span className="w-3 text-faint">{forceOpen ? "▾" : "▸"}</span>
+              {t.issues.forceLookupToggle}
+            </button>
+            {forceOpen && (
+              <div className="border-t border-border px-3 py-3">
+                <p className="mb-2.5 text-[11px] leading-relaxed text-fg">{t.issues.forceLookupHint}</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+                  <input
+                    className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
+                    placeholder={t.issues.folderPlaceholder} value={rescanFolder}
+                    onChange={(e) => setRescanFolder(e.target.value)} />
+                  <input
+                    className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
+                    placeholder={t.issues.currentGenrePlaceholder} value={rescanGenre}
+                    onChange={(e) => setRescanGenre(e.target.value)} />
+                  <div className="flex flex-wrap gap-2 text-[11px] text-fg">
+                    {["genre", "album", "label", "year", "artist", "title"].map((f) => (
+                      <label key={f} className="flex items-center gap-1">
+                        <input type="checkbox" checked={rescanFields.includes(f)} onChange={() => toggleField(f)} />
+                        {f}
+                      </label>
+                    ))}
+                    <label className="flex items-center gap-1 text-ok">
+                      <input type="checkbox" checked={rescanCovers} onChange={(e) => setRescanCovers(e.target.checked)} />
+                      {t.issues.rescanCovers}
+                    </label>
+                    <label className="flex items-center gap-1" title={t.issues.newFilesTitle}>
+                      <input type="checkbox" checked={rescanOnlyNew} onChange={(e) => setRescanOnlyNew(e.target.checked)} />
+                      {t.issues.rescanOnlyNew}
+                    </label>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setRescanModal(true)} disabled={rescanRunning}>
+                    {rescanRunning ? t.issues.providerImportBusy : t.issues.providerRescanBtn}
+                  </Button>
+                </div>
+                <p className="mt-2.5 text-[11px] leading-relaxed text-muted">{t.issues.rewriteReviewNote}</p>
+              </div>
+            )}
+          </div>
+        </section>
 
         <Modal
           open={rescanModal}
@@ -299,11 +374,42 @@ export default function IssuesPage() {
           </div>
         </Modal>
 
-        {/* azioni di massa sotto la sezione forza ricerca provider */}
-        <div className="flex flex-wrap gap-1.5">
-          <Button variant="outline" size="sm" onClick={onAcceptHigh}>{t.issues.acceptHighBtn}</Button>
-          <Button variant="outline" size="sm" onClick={acceptAllFixable}>{t.issues.acceptFixableBtn}</Button>
-          <Button variant="outline" size="sm" onClick={dismissAllInfo}>{t.issues.dismissInfoBtn}</Button>
+        {/* barra sopra la lista: azioni di massa a sinistra, raggruppamento a destra */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            <Button variant="outline" size="sm" onClick={onAcceptHigh}>{t.issues.acceptHighBtn}</Button>
+            <Button variant="outline" size="sm" onClick={acceptAllFixable}>{t.issues.acceptFixableBtn}</Button>
+            <Button variant="outline" size="sm" onClick={dismissAllInfo}>{t.issues.dismissInfoBtn}</Button>
+            {openCovers > 0 && (
+              <Button variant="outline" size="sm" onClick={onAcceptCovers}>{t.issues.acceptCoversBtn}</Button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setOnlyNew((v) => !v)}
+              title={t.issues.newFilesTitle}
+              aria-pressed={onlyNew}
+              className={cn(
+                "h-8 border px-2.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
+                onlyNew
+                  ? "border-fg-strong bg-fg-strong text-bg"
+                  : "border-border-strong text-muted hover:text-fg",
+              )}
+            >{t.issues.newFilesOnly}</button>
+            <label className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted">
+              {t.issues.groupByLabel}
+              <Select
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                className="h-8 w-28 text-[11px]"
+              >
+                <option value="type">{t.issues.groupByType}</option>
+                <option value="severity">{t.issues.groupBySeverity}</option>
+                <option value="none">{t.issues.groupByNone}</option>
+              </Select>
+            </label>
+          </div>
         </div>
 
         {filtered.length === 0 && !offline ? (
@@ -311,7 +417,11 @@ export default function IssuesPage() {
             {issues.length === 0 ? t.issues.emptyClean : t.issues.emptyFiltered}
           </EmptyState>
         ) : (
-          <IssuesTable issues={filtered} onFix={onFix} onAccept={onAccept} onDismiss={onDismiss} onReopen={onReopen} />
+          <IssuesTable
+            issues={filtered} groupBy={groupBy}
+            onFix={onFix} onAccept={onAccept} onDismiss={onDismiss} onReopen={onReopen}
+            onAcceptGroup={onAcceptGroup}
+          />
         )}
       </div>
     </PageLayout>

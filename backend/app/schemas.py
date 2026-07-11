@@ -59,6 +59,7 @@ class IssueRead(BaseModel):
     artist: str | None
     title: str | None
     current_value: str | None = None
+    is_new: bool = False
 
 
 class IssueStatusBody(BaseModel):
@@ -85,15 +86,19 @@ class ProviderRescanBody(BaseModel):
     fields: list[str] = ["genre"]
     include_accepted: bool = False
     include_dismissed: bool = False
+    covers: bool = False
+    only_new: bool = False
 
     @field_validator("fields")
     @classmethod
     def _only_allowed(cls, v: list[str]) -> list[str]:
-        allowed = {"genre", "album", "label", "year"}
+        allowed = {"genre", "album", "label", "year", "artist", "title"}
         bad = [f for f in v if f not in allowed]
         if bad:
             raise ValueError(f"campi non ammessi: {bad}")
-        return v or ["genre"]
+        # I campi possono essere vuoti (es. rescan solo-cover): il core ricade
+        # su 'genre' solo se non si chiedono nemmeno le copertine.
+        return v
 
 
 class DupMemberRead(BaseModel):

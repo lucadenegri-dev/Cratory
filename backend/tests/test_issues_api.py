@@ -116,3 +116,27 @@ def test_fix_rejects_empty_value(db):
 def test_fix_404(db):
     with TestClient(app) as client:
         assert client.post("/api/issues/999/fix", json={"value": "x"}).status_code == 404
+
+
+def test_only_new_filters_issues_by_fresh_files(db):
+    from datetime import datetime, timedelta
+    t0 = datetime(2020, 1, 1)
+    new = AudioFile(id=1, root_id=1, path="/m/new.mp3", ext="mp3", size_bytes=1,
+                    hash_method="file", status="present", artist="A", title="T",
+                    first_seen_at=t0, last_scanned_at=t0)
+    old = AudioFile(id=2, root_id=1, path="/m/old.mp3", ext="mp3", size_bytes=1,
+                    hash_method="file", status="present", artist="B", title="U",
+                    first_seen_at=t0, last_scanned_at=t0 + timedelta(days=1))
+    db.add_all([new, old])
+    db.add(Issue(file_id=1, type="missing_metadata", field="genre", severity="warning",
+                 detail="x", status="open"))
+    db.add(Issue(file_id=2, type="missing_metadata", field="genre", severity="warning",
+                 detail="x", status="open"))
+    db.commit()
+    with TestClient(app) as client:
+        only_new = client.get("/api/issues", params={"only_new": True}).json()
+        assert [i["file_path"] for i in only_new] == ["/m/new.mp3"]
+        all_ = client.get("/api/issues").json()
+        assert len(all_) == 2
+        by_path = {i["file_path"]: i["is_new"] for i in all_}
+        assert by_path == {"/m/new.mp3": True, "/m/old.mp3": False}

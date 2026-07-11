@@ -6,7 +6,7 @@ import threading
 
 from app.core.config import settings
 from app.db import SessionLocal
-from app.integrations import acoustid
+from app.integrations import acoustid, cover_art
 from app.models import utcnow
 from app.services import provider_rescan
 
@@ -29,7 +29,8 @@ def is_running() -> bool:
         return _state["status"] == "running"
 
 
-def _run(folder, genre, fields, include_accepted, include_dismissed) -> None:
+def _run(folder, genre, fields, include_accepted, include_dismissed,
+         covers, only_new) -> None:
     db = SessionLocal()
 
     def on_progress(processed: int, total: int, phase: str) -> None:
@@ -42,6 +43,7 @@ def _run(folder, genre, fields, include_accepted, include_dismissed) -> None:
 
         mb = MusicBrainzProvider(user_agent=settings.musicbrainz_user_agent)
         discogs = DiscogsMetaClient()
+        caa = cover_art.CoverArtArchiveClient() if covers else None
         ac_client = None
         if acoustid.acoustid_configured() and acoustid.fpcalc_available():
             try:
@@ -50,7 +52,8 @@ def _run(folder, genre, fields, include_accepted, include_dismissed) -> None:
                 ac_client = None
         result = provider_rescan.rescan(
             db, folder=folder, genre=genre, fields=fields,
-            mb=mb, discogs=discogs, ac_client=ac_client, on_progress=on_progress,
+            mb=mb, discogs=discogs, ac_client=ac_client, caa=caa,
+            covers=covers, only_new=only_new, on_progress=on_progress,
             include_accepted=include_accepted, include_dismissed=include_dismissed)
         with _lock:
             _state.update(status="done", phase=None, result=result,
@@ -65,7 +68,8 @@ def _run(folder, genre, fields, include_accepted, include_dismissed) -> None:
 
 
 def start_job(folder=None, genre=None, fields=None,
-              include_accepted=False, include_dismissed=False) -> dict:
+              include_accepted=False, include_dismissed=False,
+              covers=False, only_new=False) -> dict:
     with _lock:
         if _state["status"] == "running":
             return dict(_state)
@@ -75,6 +79,8 @@ def start_job(folder=None, genre=None, fields=None,
         )
         snapshot = dict(_state)
     threading.Thread(
-        target=_run, args=(folder, genre, fields, include_accepted, include_dismissed),
+        target=_run,
+        args=(folder, genre, fields, include_accepted, include_dismissed,
+              covers, only_new),
         daemon=True).start()
     return snapshot

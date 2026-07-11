@@ -86,9 +86,13 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
             select(AudioFile).where(AudioFile.root_id == root.id, AudioFile.path == path)
         )
         if existing is None:
+            # Stesso timestamp per entrambi: un file "nuovo" ha
+            # first_seen_at == last_scanned_at finché non lo si ri-scansiona
+            # (base del filtro "solo file nuovi").
+            now = utcnow()
             row = AudioFile(
                 root_id=root.id, path=path, status="present",
-                first_seen_at=utcnow(), last_scanned_at=utcnow(), **fields,
+                first_seen_at=now, last_scanned_at=now, **fields,
             )
             db.add(row)
             new_inserts.append(row)

@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models import AudioFile, Issue, ScanRoot
+from app.services import provider_rescan_job
 
 client = TestClient(app)
 
@@ -23,8 +24,18 @@ def _file(db):
     return f
 
 
-def test_rejects_artist_title_fields():
-    r = client.post("/api/issues/provider-rescan", json={"fields": ["artist"]})
+def test_accepts_artist_title_fields(monkeypatch):
+    # artist/title sono ora campi override validi (riscrittura completa da provider).
+    # Neutralizzo il job: qui verifico solo che lo schema li accetti (niente rete).
+    monkeypatch.setattr(provider_rescan_job, "start_job",
+                        lambda **kw: {"status": "running"})
+    r = client.post("/api/issues/provider-rescan",
+                    json={"fields": ["artist", "title"]})
+    assert r.status_code == 200
+
+
+def test_rejects_unknown_field():
+    r = client.post("/api/issues/provider-rescan", json={"fields": ["bpm"]})
     assert r.status_code == 422
 
 

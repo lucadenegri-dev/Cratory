@@ -1,5 +1,29 @@
 // Fonte di verità delle chiavi i18n. NIENTE `as const`: i valori devono restare
 // `string`/funzioni così `it.ts` può tipizzarsi con `typeof en`.
+
+// Fallback per i tipi di issue non mappati: snake_case → "Snake case".
+export function humanizeType(ty: string): string {
+  const s = ty.replace(/_/g, " ").trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : ty;
+}
+
+// Etichette leggibili per i tipi di issue noti (EN). I non mappati passano
+// per humanizeType, così la UI regge tipi nuovi senza rompersi.
+const ISSUE_TYPE_LABELS_EN: Record<string, string> = {
+  missing_cover: "Missing cover art",
+  missing_metadata: "Missing metadata",
+  missing_required_tag: "Missing required tag",
+  missing_template_data: "Missing data for renaming",
+  junk_tag: "Junk in tag",
+  dirty_genre: "Messy genre",
+  filename_tag_mismatch: "Filename ≠ tags",
+  inconsistent_casing: "Inconsistent casing",
+  low_quality: "Low quality file",
+  suspicious_duration: "Suspicious duration",
+  scan_error: "Scan error",
+  retag: "Tag to clean up",
+};
+
 export const en = {
   common: {
     loading: "Loading…",
@@ -196,8 +220,8 @@ export const en = {
     providerNote: (suggested: number, covers: number, fingerprinted: number, unresolved: number, acoustid: boolean) =>
       `${suggested} suggestions from providers${covers > 0 ? `, ${covers} covers found` : ""}${fingerprinted > 0 ? ` (${fingerprinted} via fingerprint)` : ""}${unresolved > 0 ? `, ${unresolved} not found` : ""}${acoustid ? "" : " — fingerprint off, text match only"} — review and accept with ✓.`,
     acceptHighNote: (updated: number) => `${updated} high-confidence proposals accepted → they'll go into the PLAN.`,
-    rescanNote: (high: number, text: number, scanned: number, acoustid: boolean) =>
-      `Rescan: ${high} high-confidence proposals, ${text} textual over ${scanned} tracks${acoustid ? "" : " (fingerprint off: no high confidence)"}.`,
+    rescanNote: (high: number, text: number, scanned: number, acoustid: boolean, covers: number) =>
+      `Rescan: ${high} high-confidence proposals, ${text} textual${covers > 0 ? `, ${covers} covers` : ""} over ${scanned} tracks${acoustid ? "" : " (fingerprint off: no high confidence)"}.`,
     rescanDone: "Rescan complete.",
     rescanFailed: "Rescan failed",
     sevAll: "severity: all",
@@ -230,6 +254,36 @@ export const en = {
     acceptHighBtn: "✓ Accept all high-confidence",
     acceptFixableBtn: "✓ Accept all fixable",
     dismissInfoBtn: "✕ Dismiss all info",
+    acceptCoversBtn: "✓ Accept all covers",
+    acceptCoversNote: (n: number) => `${n} covers accepted → they'll go into the PLAN.`,
+
+    // Enrich panel — three sources that fill empty proposals
+    enrichTitle: "Enrich proposals",
+    enrichHint: "Fill empty proposals from a source, then review and accept each with ✓.",
+    enrichAiTagsDesc: "Guess Artist & Title from the filename, for files whose tags are junk or missing.",
+    enrichAiGenresDesc: "Propose a Genre where it's missing or messy. Low confidence — review before accepting.",
+    enrichProviderDesc: "Match Artist, Title, Album, Year, Label and cover art from MusicBrainz / Discogs.",
+    enrichAi: "Claude AI",
+    enrichProviderTag: "Providers",
+    forceLookupToggle: "Force provider lookup",
+    forceLookupHint: "Re-query providers on a specific folder or genre, even for fields already filled — artist/title included, for a full rewrite.",
+    rewriteReviewNote: "Creates proposals to review (old → new) as open issues. Nothing is written until you accept and apply.",
+    rescanCovers: "cover art",
+    rescanOnlyNew: "only new files",
+    fetchCoversBtn: "Fetch covers (all missing)",
+    fetchCoversDesc: "Look up cover art from providers for every file that has none — not just files with tag issues.",
+    newFilesOnly: "new only",
+    newFilesTitle: "Only files from the latest scan (never re-scanned)",
+
+    // Grouping
+    groupByLabel: "group",
+    groupByType: "by type",
+    groupBySeverity: "by severity",
+    groupByNone: "flat list",
+    groupMeta: (open: number, total: number) =>
+      open > 0 ? `${open} open · ${total}` : `${total}`,
+    groupAccept: "✓ accept group",
+    typeLabel: (ty: string) => ISSUE_TYPE_LABELS_EN[ty] ?? humanizeType(ty),
     emptyTitle: "No issues",
     emptyClean: "The library is clean (or not scanned yet).",
     emptyFiltered: "No issues with these filters.",

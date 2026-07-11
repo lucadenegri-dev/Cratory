@@ -5,10 +5,14 @@ import { coverThumbUrl, type Issue } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 
+export type GroupBy = "type" | "severity" | "none";
+
 // Stessi campi retaggabili del backend (planner._EFFECTIVE_FIELDS).
 const RETAGGABLE = new Set([
   "artist", "title", "album", "album_artist", "genre", "year", "label", "track_no", "comment",
 ]);
+
+const SEV_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
 
 function SevMark({ sev }: { sev: string }) {
   if (sev === "error") return <span className="text-danger">▲</span>;
@@ -29,8 +33,34 @@ function ConfBadge({ conf }: { conf: unknown }) {
   );
 }
 
-function IssueRow({ issue, onFix, onAccept, onDismiss, onReopen }: {
+function Cover({ fileId, dismissed }: { fileId: number; dismissed: boolean }) {
+  const t = useT();
+  const [zoom, setZoom] = useState(false);
+  if (dismissed) return <span className="text-faint">{t.issues.coverNotApplied}</span>;
+  return (
+    <>
+      <button type="button" onClick={() => setZoom(true)}
+        className="block h-14 w-14 overflow-hidden border border-border transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg"
+        title={t.issues.zoomTitle}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={coverThumbUrl(fileId)} alt="cover" className="h-full w-full object-cover" />
+      </button>
+      {zoom && (
+        <div onClick={() => setZoom(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-8">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={coverThumbUrl(fileId)} alt="cover"
+               className="max-h-[80vh] max-w-[80vw] border border-border" />
+        </div>
+      )}
+    </>
+  );
+}
+
+function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReopen }: {
   issue: Issue;
+  showSev: boolean;
+  showType: boolean;
   onFix: (id: number, value: string) => Promise<void>;
   onAccept: (id: number) => Promise<void>;
   onDismiss: (id: number) => Promise<void>;
@@ -38,7 +68,6 @@ function IssueRow({ issue, onFix, onAccept, onDismiss, onReopen }: {
 }) {
   const t = useT();
   const isCover = issue.type === "missing_cover";
-  const [zoom, setZoom] = useState(false);
   const fixable = issue.field != null && RETAGGABLE.has(issue.field);
   const suggested = typeof issue.suggested_fix_json?.to === "string"
     ? (issue.suggested_fix_json.to as string) : "";
@@ -52,26 +81,16 @@ function IssueRow({ issue, onFix, onAccept, onDismiss, onReopen }: {
 
   return (
     <tr className={cn("border-b border-surface-2 last:border-0 hover:bg-surface", issue.status !== "open" && "opacity-70")}>
-      <td className="px-3 py-2 text-center"><SevMark sev={issue.severity} /></td>
-      <td className="whitespace-nowrap px-3 py-2 text-fg">{issue.type}</td>
-      <td className="px-3 py-2">
+      {showSev && <td className="px-3 py-2 text-center align-top"><SevMark sev={issue.severity} /></td>}
+      {showType && <td className="whitespace-nowrap px-3 py-2 align-top text-[11px] text-muted">{t.issues.typeLabel(issue.type)}</td>}
+      <td className="px-3 py-2 align-top">
         <div className="text-fg-strong">{issue.artist || t.common.empty}{issue.title ? ` — ${issue.title}` : ""}</div>
-        <div className="max-w-[220px] truncate text-[10px] text-faint" title={issue.file_path}>{issue.file_path}</div>
+        <div className="max-w-[240px] truncate text-[10px] text-faint" title={issue.file_path}>{issue.file_path}</div>
       </td>
-      <td className="px-3 py-2 text-muted">{issue.field || t.common.empty}</td>
-      <td className="px-3 py-2">
+      <td className="px-3 py-2 align-top text-muted">{issue.field || t.common.empty}</td>
+      <td className="px-3 py-2 align-top">
         {isCover ? (
-          issue.status === "dismissed" ? (
-            <span className="text-faint">{t.issues.coverNotApplied}</span>
-          ) : (
-            <button type="button" onClick={() => setZoom(true)}
-              className="block h-11 w-11 overflow-hidden border border-border hover:border-border-strong"
-              title={t.issues.zoomTitle}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={coverThumbUrl(issue.file_id)} alt="cover"
-                   className="h-full w-full object-cover" />
-            </button>
-          )
+          <Cover fileId={issue.file_id} dismissed={issue.status === "dismissed"} />
         ) : issue.status === "open" ? (
           fixable ? (
             <div className="flex flex-col gap-1">
@@ -82,7 +101,7 @@ function IssueRow({ issue, onFix, onAccept, onDismiss, onReopen }: {
                 </div>
               )}
               <input
-                className="w-36 border border-border bg-bg px-2 py-1 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
+                className="w-40 border border-border bg-bg px-2 py-1 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 placeholder={t.issues.writeField(issue.field ?? "")}
@@ -98,19 +117,11 @@ function IssueRow({ issue, onFix, onAccept, onDismiss, onReopen }: {
             {issue.current_value ? `${issue.current_value} ${t.issues.unchangedSuffix}` : t.common.empty}
           </span>
         )}
-        {zoom && (
-          <div onClick={() => setZoom(false)}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-8">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={coverThumbUrl(issue.file_id)} alt="cover"
-                 className="max-h-[80vh] max-w-[80vw] border border-border" />
-          </div>
-        )}
       </td>
-      <td className="px-3 py-2"><ConfBadge conf={conf} /></td>
-      <td className="whitespace-nowrap px-3 py-2">
+      <td className="px-3 py-2 align-top"><ConfBadge conf={conf} /></td>
+      <td className="whitespace-nowrap px-3 py-2 align-top text-right">
         {issue.status === "open" ? (
-          <span className="flex gap-1">
+          <span className="flex justify-end gap-1">
             {isCover ? (
               <button disabled={busy}
                 onClick={() => run(() => onAccept(issue.id))}
@@ -130,7 +141,7 @@ function IssueRow({ issue, onFix, onAccept, onDismiss, onReopen }: {
             >{t.issues.dismissShort}</button>
           </span>
         ) : (
-          <span className="flex items-center gap-2">
+          <span className="flex items-center justify-end gap-2">
             <span className={cn("border px-1.5 py-0.5 text-[9px] uppercase tracking-wider",
               issue.status === "accepted" ? "border-border text-ok" : "border-border text-faint")}>
               {issue.status === "accepted" ? t.issues.badgeAccepted : t.issues.badgeDismissed}
@@ -144,39 +155,129 @@ function IssueRow({ issue, onFix, onAccept, onDismiss, onReopen }: {
   );
 }
 
-export function IssuesTable({ issues, onFix, onAccept, onDismiss, onReopen }: {
+// key stabile per riga: include il suggerimento così, quando l'AI lo imposta
+// dopo il mount, la riga si rimonta e l'input mostra il valore.
+function rowKey(i: Issue): string {
+  const sug = typeof i.suggested_fix_json?.to === "string" ? i.suggested_fix_json.to : "";
+  return `${i.id}:${sug}`;
+}
+
+export function IssuesTable({
+  issues, groupBy, onFix, onAccept, onDismiss, onReopen, onAcceptGroup,
+}: {
   issues: Issue[];
+  groupBy: GroupBy;
   onFix: (id: number, value: string) => Promise<void>;
   onAccept: (id: number) => Promise<void>;
   onDismiss: (id: number) => Promise<void>;
   onReopen: (id: number) => Promise<void>;
+  onAcceptGroup: (key: string) => Promise<void>;
 }) {
   const t = useT();
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [groupBusy, setGroupBusy] = useState<string | null>(null);
+
+  const showSev = groupBy !== "severity";
+  const showType = groupBy !== "type";
+  const colCount = 5 + (showSev ? 1 : 0) + (showType ? 1 : 0);
+
+  const head = (
+    <thead>
+      <tr className="border-b border-border text-left text-[9px] uppercase tracking-wider text-faint">
+        {showSev && <th className="px-3 py-2 text-center font-normal">!</th>}
+        {showType && <th className="px-3 py-2 font-normal">{t.issues.colType}</th>}
+        <th className="px-3 py-2 font-normal">{t.issues.colTrack}</th>
+        <th className="px-3 py-2 font-normal">{t.issues.colField}</th>
+        <th className="px-3 py-2 font-normal">{t.issues.colFix}</th>
+        <th className="px-3 py-2 font-normal">{t.issues.colConf}</th>
+        <th className="px-3 py-2 text-right font-normal">{t.issues.colActions}</th>
+      </tr>
+    </thead>
+  );
+
+  const rowFor = (i: Issue) => (
+    <IssueRow key={rowKey(i)} issue={i} showSev={showSev} showType={showType}
+      onFix={onFix} onAccept={onAccept} onDismiss={onDismiss} onReopen={onReopen} />
+  );
+
+  if (groupBy === "none") {
+    return (
+      <div className="overflow-x-auto border border-border">
+        <table className="w-full border-collapse text-xs">
+          {head}
+          <tbody>{issues.map(rowFor)}</tbody>
+        </table>
+      </div>
+    );
+  }
+
+  // Raggruppa preservando l'ordine d'inserimento dei gruppi.
+  const groups = new Map<string, Issue[]>();
+  for (const i of issues) {
+    const key = groupBy === "type" ? i.type : i.severity;
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(i);
+  }
+  const entries = [...groups.entries()].sort((a, b) =>
+    groupBy === "severity"
+      ? (SEV_ORDER[a[0]] ?? 9) - (SEV_ORDER[b[0]] ?? 9)
+      : b[1].length - a[1].length,
+  );
+
+  const labelFor = (key: string) =>
+    groupBy === "type" ? t.issues.typeLabel(key) : key;
+
+  const toggle = (key: string) =>
+    setCollapsed((cur) => {
+      const next = new Set(cur);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+
+  const acceptGroup = async (key: string) => {
+    setGroupBusy(key);
+    try { await onAcceptGroup(key); } finally { setGroupBusy(null); }
+  };
+
   return (
     <div className="overflow-x-auto border border-border">
       <table className="w-full border-collapse text-xs">
-        <thead>
-          <tr className="border-b border-border text-left text-[9px] uppercase tracking-wider text-faint">
-            <th className="px-3 py-2 text-center font-normal">!</th>
-            <th className="px-3 py-2 font-normal">{t.issues.colType}</th>
-            <th className="px-3 py-2 font-normal">{t.issues.colTrack}</th>
-            <th className="px-3 py-2 font-normal">{t.issues.colField}</th>
-            <th className="px-3 py-2 font-normal">{t.issues.colFix}</th>
-            <th className="px-3 py-2 font-normal">{t.issues.colConf}</th>
-            <th className="px-3 py-2 font-normal">{t.issues.colActions}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {issues.map((i) => {
-            // La key include il suggerimento: quando l'AI lo imposta dopo il mount,
-            // la riga si rimonta e l'input mostra il valore (useState si re-inizializza).
-            const sug = typeof i.suggested_fix_json?.to === "string" ? i.suggested_fix_json.to : "";
-            return (
-              <IssueRow key={`${i.id}:${sug}`} issue={i}
-                onFix={onFix} onAccept={onAccept} onDismiss={onDismiss} onReopen={onReopen} />
-            );
-          })}
-        </tbody>
+        {head}
+        {entries.map(([key, list]) => {
+          const isOpen = !collapsed.has(key);
+          const open = list.filter((i) => i.status === "open").length;
+          return (
+            <tbody key={key} className="border-t border-border first:border-t-0">
+              <tr className="bg-surface-2">
+                <td colSpan={colCount} className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggle(key)}
+                      className="flex items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg"
+                      aria-expanded={isOpen}
+                    >
+                      <span className="w-3 text-faint">{isOpen ? "▾" : "▸"}</span>
+                      {groupBy === "severity" && <SevMark sev={key} />}
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-strong">
+                        {labelFor(key)}
+                      </span>
+                      <span className="tnum text-[10px] text-muted">{t.issues.groupMeta(open, list.length)}</span>
+                    </button>
+                    {open > 0 && (
+                      <button
+                        type="button"
+                        disabled={groupBusy === key}
+                        onClick={() => acceptGroup(key)}
+                        className="ml-auto border border-border px-2 py-0.5 text-[10px] text-ok hover:bg-elevated disabled:opacity-40"
+                      >{t.issues.groupAccept}</button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+              {isOpen && list.map(rowFor)}
+            </tbody>
+          );
+        })}
       </table>
     </div>
   );

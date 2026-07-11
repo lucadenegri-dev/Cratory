@@ -14,7 +14,7 @@ from app.integrations import acoustid, cover_art
 from app.models import AudioFile, Issue, utcnow
 from app.schemas import (IssueBulkBody, IssueFixBody, IssueRead, IssueStatusBody,
                          ProviderRescanBody, ProviderSuggestBody)
-from app.services import ai_tags, apply_job, cover_cache, provider_rescan_job, scan_job, text_providers
+from app.services import ai_tags, apply_job, cover_cache, covers as cover_svc, provider_rescan_job, scan_job, text_providers
 
 router = APIRouter(prefix="/api/issues", tags=["issues"])
 _VALID = {"open", "accepted", "dismissed"}
@@ -32,13 +32,15 @@ def _to_read(issue: Issue, file: AudioFile) -> IssueRead:
         suggested_fix_json=issue.suggested_fix_json, status=issue.status,
         file_path=file.path, artist=file.artist, title=file.title,
         current_value=None if cur is None else str(cur),
+        is_new=file.first_seen_at == file.last_scanned_at,
     )
 
 
 @router.get("", response_model=list[IssueRead])
 def list_issues(severity: str | None = None, type: str | None = None,
                 status: str | None = None, root_id: int | None = None,
-                q: str | None = None, db: Session = Depends(get_db)):
+                q: str | None = None, only_new: bool = False,
+                db: Session = Depends(get_db)):
     stmt = select(Issue, AudioFile).join(AudioFile, Issue.file_id == AudioFile.id)
     if severity:
         stmt = stmt.where(Issue.severity == severity)
@@ -48,6 +50,9 @@ def list_issues(severity: str | None = None, type: str | None = None,
         stmt = stmt.where(Issue.status == status)
     if root_id is not None:
         stmt = stmt.where(AudioFile.root_id == root_id)
+    if only_new:
+        # "nuovo" = visto in una sola scansione (first_seen == last_scanned).
+        stmt = stmt.where(AudioFile.first_seen_at == AudioFile.last_scanned_at)
     if q:
         like = f"%{q}%"
         stmt = stmt.where(or_(AudioFile.path.ilike(like), AudioFile.artist.ilike(like),
@@ -224,25 +229,6 @@ _PROVIDER_TYPES = ("missing_required_tag", "missing_metadata", "dirty_genre")
 _PROVIDER_FIELDS = ("artist", "title", "genre", "year", "label", "album")
 
 
-def _upsert_cover_issue(db: Session, file_id: int, cover, thumb_bytes: bytes) -> bool:
-    """Crea/aggiorna l'issue missing_cover. Non tocca (né ri-cacha) le proposte
-    già accettate o ignorate. Ritorna True se ha agito."""
-    issue = db.scalar(select(Issue).where(
-        Issue.file_id == file_id, Issue.type == "missing_cover", Issue.field == "cover"))
-    if issue is not None and issue.status != "open":
-        return False  # non resuscitare (né ri-cacha la thumb di) proposte accettate/ignorate
-    ref = cover_cache.save_thumb(file_id, thumb_bytes)
-    if issue is None:
-        issue = Issue(file_id=file_id, type="missing_cover", field="cover",
-                      severity="info", detail="copertina mancante", status="open")
-        db.add(issue)
-    issue.suggested_fix_json = {"field": "cover", "source": cover.source,
-                                "confidence": cover.confidence,
-                                "full_url": cover.full_url, "thumb_ref": ref}
-    issue.updated_at = utcnow()
-    return True
-
-
 @router.post("/provider-suggest", response_model=dict)
 def provider_suggest(body: ProviderSuggestBody | None = None, db: Session = Depends(get_db)):
     """Riempie i suggested_fix delle issue aperte dai provider (MusicBrainz→
@@ -320,15 +306,7 @@ def provider_suggest(body: ProviderSuggestBody | None = None, db: Session = Depe
     covers = 0
     if want_covers:
         for fid, res in cache.items():
-            f = files_by_id[fid]
-            if f.has_cover:
-                continue
-            cover = cover_art.lookup_cover(
-                release_mbids=res.release_mbids, confidence=res.confidence,
-                artist=f.artist, title=f.title, caa=caa, discogs=discogs)
-            if cover is None:
-                continue
-            if _upsert_cover_issue(db, fid, cover, cover.thumb_bytes):
+            if cover_svc.fetch_cover(db, files_by_id[fid], res, caa=caa, discogs=discogs):
                 covers += 1
 
     db.commit()
@@ -352,7 +330,8 @@ def provider_rescan_start(body: ProviderRescanBody | None = None):
     b = body or ProviderRescanBody()
     return provider_rescan_job.start_job(
         folder=b.folder, genre=b.genre, fields=b.fields,
-        include_accepted=b.include_accepted, include_dismissed=b.include_dismissed)
+        include_accepted=b.include_accepted, include_dismissed=b.include_dismissed,
+        covers=b.covers, only_new=b.only_new)
 
 
 @router.get("/provider-rescan/status", response_model=dict)

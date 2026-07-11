@@ -9,10 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import AudioFile, Issue, utcnow
+from app.services import covers as cover_svc
 from app.services import text_providers
 from app.services.fingerprint import fingerprint_one
 
-RESCAN_FIELDS = ("genre", "album", "label", "year")
+RESCAN_FIELDS = ("genre", "album", "label", "year", "artist", "title")
 _OVERRIDE_TYPE = "provider_override"
 
 
@@ -76,27 +77,37 @@ def _differs(current: Any, value: Any) -> bool:
 
 
 def rescan(db: Session, *, folder: str | None = None, genre: str | None = None,
-           fields: list[str] | None = None, mb, discogs, ac_client=None,
-           on_progress=None, include_accepted: bool = False,
-           include_dismissed: bool = False) -> dict:
-    fields = [f for f in (fields or ["genre"]) if f in RESCAN_FIELDS] or ["genre"]
+           fields: list[str] | None = None, mb, discogs, ac_client=None, caa=None,
+           covers: bool = False, only_new: bool = False, on_progress=None,
+           include_accepted: bool = False, include_dismissed: bool = False) -> dict:
+    # I campi override sono opzionali quando si cercano solo le copertine; se non
+    # si chiede né campi né cover, si ricade sul default 'genre' (comportamento
+    # storico). Un file è "nuovo" se visto in una sola scansione: first_seen == last_scanned.
+    fields = [f for f in (fields or []) if f in RESCAN_FIELDS]
+    if not fields and not covers:
+        fields = ["genre"]
     stmt = select(AudioFile).where(AudioFile.status == "present")
     if folder:
         stmt = stmt.where(AudioFile.path.ilike(f"%{folder}%"))
     if genre:
         stmt = stmt.where(AudioFile.genre == genre)
+    if only_new:
+        stmt = stmt.where(AudioFile.first_seen_at == AudioFile.last_scanned_at)
     files = db.scalars(stmt).all()
     total = len(files)
     res = {"configured": True, "acoustid_available": ac_client is not None,
            "scanned": total, "fingerprinted": 0, "matched": 0, "no_match": 0,
-           "proposed_high": 0, "proposed_text": 0}
+           "proposed_high": 0, "proposed_text": 0, "covers": 0}
 
     for idx, f in enumerate(files):
         if on_progress is not None:
             on_progress(idx, total, "looking_up")
         if not f.mbid and ac_client is not None and fingerprint_one(f, ac_client):
             res["fingerprinted"] += 1
-        found = text_providers.lookup_with_conf(f, mb=mb, discogs=discogs)
+        # resolve() dà i campi (come lookup_with_conf) *e* i release-MBID, che
+        # servono alla ricerca cover.
+        resolved = text_providers.resolve(f, mb=mb, discogs=discogs)
+        found = resolved.fields
         res["matched" if found else "no_match"] += 1
         for field in fields:
             if field not in found:
@@ -112,6 +123,8 @@ def rescan(db: Session, *, folder: str | None = None, genre: str | None = None,
                                include_accepted=include_accepted,
                                include_dismissed=include_dismissed):
                 res["proposed_high" if conf == "high" else "proposed_text"] += 1
+        if covers and cover_svc.fetch_cover(db, f, resolved, caa=caa, discogs=discogs):
+            res["covers"] += 1
         db.commit()
 
     if on_progress is not None:
