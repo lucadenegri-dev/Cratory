@@ -78,6 +78,7 @@ export default function ImportSoundcloudLikesPage() {
     <div className="space-y-2 text-xs leading-relaxed text-muted">
       <p>La playlist <span className="text-fg">SoundCloud Likes</span> cresce solo con i brani che selezioni. L&apos;import è additivo.</p>
       <p>Vengono mostrati gli ultimi 100 like: quelli già importati appaiono spuntati e disabilitati.</p>
+      <p>L&apos;anteprima è veloce ma approssimata: artista e titolo vengono dedotti dal solo titolo SoundCloud, e per alcuni brani l&apos;artista può mancare. All&apos;import ogni traccia selezionata viene riletta con i metadati completi (artista reale, durata, cover) — conta circa un secondo a traccia.</p>
     </div>
   );
 
@@ -95,7 +96,7 @@ export default function ImportSoundcloudLikesPage() {
         <Card>
           <CardHeader
             title="I tuoi like recenti"
-            subtitle={`${preview.length} like · ${alreadyCount} già importati · ${selected.size} selezionati`}
+            subtitle={`Ultimi ${preview.length} like (dal più recente) · ${alreadyCount} già importati · ${selected.size} selezionati`}
             action={
               <Button size="sm" onClick={doImport} disabled={selected.size === 0 || importing}>
                 {importing ? <Spinner /> : <Download size={15} />} Importa selezionati ({selected.size})
