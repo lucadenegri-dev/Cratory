@@ -3,6 +3,7 @@ L'orchestratore lookup_cover (Task 3) combina CAA con il fallback Discogs.
 http iniettabile → test senza rete, come musicbrainz/discogs_meta."""
 
 import logging
+from dataclasses import dataclass
 
 import httpx
 
@@ -52,3 +53,34 @@ class CoverArtArchiveClient:
 
     def front_url(self, mbid: str) -> str:
         return f"{CAA}/release/{mbid}/front"
+
+
+@dataclass
+class CoverResult:
+    thumb_bytes: bytes
+    full_url: str
+    source: str       # 'caa' | 'discogs'
+    confidence: str   # 'high' | 'text'
+
+
+def lookup_cover(*, release_mbids, confidence, artist, title,
+                 caa=None, discogs=None, fetch=None) -> CoverResult | None:
+    """CAA (release-MBID) su match 'high'; Discogs cover come fallback (sempre 'text').
+    Ritorna None se nessuna immagine trovata o scaricabile."""
+    if confidence == "high" and caa is not None:
+        for mbid in release_mbids or []:
+            thumb = caa.front_thumb(mbid)
+            if thumb:
+                return CoverResult(thumb, caa.front_url(mbid), "caa", "high")
+    if discogs is not None:
+        cov = discogs.cover(artist=artist, title=title)
+        if cov:
+            fetcher = fetch or fetch_image
+            try:
+                thumb = fetcher(cov.get("thumb_url") or cov.get("full_url"))
+            except CoverArtError:
+                return None
+            if thumb:
+                full = cov.get("full_url") or cov.get("thumb_url")
+                return CoverResult(thumb, full, "discogs", "text")
+    return None
