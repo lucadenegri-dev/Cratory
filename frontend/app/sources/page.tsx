@@ -7,8 +7,10 @@ import { PageLayout } from "@/components/page-layout";
 import { AddSource } from "@/components/add-source";
 import { SourcesTable } from "@/components/sources-table";
 import { Alert, EmptyState } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 export default function SourcesPage() {
+  const t = useT();
   const { scan, startScan, refresh } = useJobs();
   const [roots, setRoots] = useState<ScanRoot[]>([]);
   const [offline, setOffline] = useState(false);
@@ -31,7 +33,7 @@ export default function SourcesPage() {
       await startScan();
       refresh();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Impossibile avviare lo scan");
+      setActionError(e instanceof Error ? e.message : t.sources.scanStartFailed);
     }
   };
   const onDelete = async (id: number) => {
@@ -41,7 +43,7 @@ export default function SourcesPage() {
     try {
       await deleteSource(id);
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Impossibile rimuovere la radice");
+      setActionError(e instanceof Error ? e.message : t.sources.rootRemoveFailed);
     } finally {
       setDeletingId(null);
       load();
@@ -53,33 +55,33 @@ export default function SourcesPage() {
   return (
     <PageLayout
       title="Sources"
-      meta={`${roots.length} radici`}
-      marginaliaTitle="Ultimo scan"
+      meta={t.sources.rootsCount(roots.length)}
+      marginaliaTitle={t.sources.lastScan}
       marginalia={
         r ? (
           <div className="flex flex-col gap-1.5 text-xs">
-            <Row k="trovati" v={r.found} />
-            <Row k="nuovi" v={`+${r.inserted}`} />
-            <Row k="aggiornati" v={r.updated} />
-            <Row k="spostati" v={r.moved} />
-            <Row k="mancanti" v={r.missing} />
-            <Row k="errori" v={r.errors} danger={r.errors > 0} />
+            <Row k={t.sources.statFound} v={r.found} />
+            <Row k={t.sources.statNew} v={`+${r.inserted}`} />
+            <Row k={t.sources.statUpdated} v={r.updated} />
+            <Row k={t.sources.statMoved} v={r.moved} />
+            <Row k={t.sources.statMissing} v={r.missing} />
+            <Row k={t.sources.statErrors} v={r.errors} danger={r.errors > 0} />
           </div>
         ) : (
-          <p className="text-xs text-faint">Nessuno scan in questa sessione.</p>
+          <p className="text-xs text-faint">{t.sources.noScanSession}</p>
         )
       }
       guide={<>
-        <p>Le cartelle che Sortory scansiona per trovare i file audio.</p>
-        <p>Aggiungine una e lancia uno <b className="text-fg">scan</b> per popolare la libreria.</p>
+        <p>{t.sources.guideFolders}</p>
+        <p>{t.sources.guideAddPre}<b className="text-fg">scan</b>{t.sources.guideAddPost}</p>
       </>}
     >
       <div className="flex flex-col gap-5">
-        {offline && <Alert>Backend non raggiungibile su {process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8010"}. Avvia il server FastAPI.</Alert>}
+        {offline && <Alert>{t.sources.offline(process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8010")}</Alert>}
         {actionError && <Alert>{actionError}</Alert>}
         <AddSource onAdded={load} />
         {roots.length === 0 && !offline ? (
-          <EmptyState title="Nessuna radice">Aggiungi una cartella di musica per iniziare.</EmptyState>
+          <EmptyState title={t.sources.emptyTitle}>{t.sources.emptyBody}</EmptyState>
         ) : (
           <SourcesTable roots={roots} onScan={onScan} onDelete={onDelete} deletingId={deletingId} />
         )}
