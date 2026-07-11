@@ -9,14 +9,12 @@ import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { FilesTable } from "@/components/files-table";
 import { Alert, EmptyState, Input, Select } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 const LIMIT = 500;
 
-// campi tag filtrabili → placeholder mostrato nell'input
-const FACETS: [keyof LibraryFacets, string][] = [
-  ["genre", "genere…"], ["artist", "artista…"], ["album", "album…"],
-  ["label", "label…"], ["ext", "formato…"], ["year", "anno…"],
-];
+// campi tag filtrabili (il placeholder è risolto da t.files.facet*)
+const FACET_KEYS: (keyof LibraryFacets)[] = ["genre", "artist", "album", "label", "ext", "year"];
 
 function facetOptions(facets: LibraryFacets | null, key: keyof LibraryFacets): string[] {
   if (!facets) return [];
@@ -46,6 +44,7 @@ function FacetInput({ facet, placeholder, value, options, onChange }: {
 }
 
 export default function FilesPage() {
+  const t = useT();
   const { scan } = useJobs();
   const [rows, setRows] = useState<FileRow[]>([]);
   const [stats, setStats] = useState<LibraryStats | null>(null);
@@ -60,7 +59,12 @@ export default function FilesPage() {
   const [tag, setTag] = useState<Record<string, string>>({
     genre: "", artist: "", album: "", label: "", ext: "", year: "",
   });
-  const setTagField = (k: string, v: string) => setTag((t) => ({ ...t, [k]: v }));
+  const setTagField = (k: string, v: string) => setTag((prev) => ({ ...prev, [k]: v }));
+
+  const facetPlaceholder: Record<string, string> = {
+    genre: t.files.facetGenre, artist: t.files.facetArtist, album: t.files.facetAlbum,
+    label: t.files.facetLabel, ext: t.files.facetExt, year: t.files.facetYear,
+  };
 
   const load = useCallback(() => {
     const query: FileQuery = {
@@ -92,41 +96,41 @@ export default function FilesPage() {
   return (
     <PageLayout
       title="Files"
-      meta={stats ? `${rows.length}${stats.files_total > rows.length ? ` di ${stats.files_total}` : ""}` : undefined}
-      marginaliaTitle="Libreria"
+      meta={stats ? (stats.files_total > rows.length ? t.files.metaOf(rows.length, stats.files_total) : String(rows.length)) : undefined}
+      marginaliaTitle={t.files.library}
       marginalia={<Marginalia stats={stats} />}
       guide={<>
-        <p>Tutti i file audio trovati nelle radici scansionate.</p>
-        <p>Filtra per tag (genere, formato…) o cerca per artista/titolo/path.</p>
-        <p>Il conteggio issue segnala i file con problemi sui tag.</p>
+        <p>{t.files.guide1}</p>
+        <p>{t.files.guide2}</p>
+        <p>{t.files.guide3}</p>
       </>}
     >
       <div className="flex flex-col gap-4">
-        {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
+        {offline && <Alert>{t.common.backendOffline}</Alert>}
 
         <div className="flex flex-wrap items-center gap-2">
           <Select value={rootId} onChange={(e) => setRootId(e.target.value)} className="w-auto">
-            <option value="">tutte le radici</option>
+            <option value="">{t.files.allRoots}</option>
             {roots.map((r) => <option key={r.id} value={r.id}>{r.label || r.path}</option>)}
           </Select>
           <Select value={onlyIssues ? "issues" : "all"} onChange={(e) => setOnlyIssues(e.target.value === "issues")} className="w-auto">
-            <option value="all">tutti</option>
-            <option value="issues">con issue</option>
+            <option value="all">{t.files.filterAll}</option>
+            <option value="issues">{t.files.filterIssues}</option>
           </Select>
           <Select value={sort} onChange={(e) => setSort(e.target.value as FileQuery["sort"])} className="w-auto">
-            <option value="path">ordina: path</option>
-            <option value="artist">ordina: artist</option>
-            <option value="title">ordina: title</option>
-            <option value="bitrate">ordina: kbps</option>
-            <option value="duration">ordina: durata</option>
+            <option value="path">{t.files.sortPath}</option>
+            <option value="artist">{t.files.sortArtist}</option>
+            <option value="title">{t.files.sortTitle}</option>
+            <option value="bitrate">{t.files.sortBitrate}</option>
+            <option value="duration">{t.files.sortDuration}</option>
           </Select>
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="cerca…" className="w-48" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.files.searchPlaceholder} className="w-48" />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {FACETS.map(([key, ph]) => (
+          {FACET_KEYS.map((key) => (
             <FacetInput
-              key={key} facet={key} placeholder={ph} value={tag[key]}
+              key={key} facet={key} placeholder={facetPlaceholder[key]} value={tag[key]}
               options={facetOptions(facets, key)}
               onChange={(v) => setTagField(key, v)}
             />
@@ -135,12 +139,12 @@ export default function FilesPage() {
             <button
               onClick={() => setTag({ genre: "", artist: "", album: "", label: "", ext: "", year: "" })}
               className="border border-border px-2 py-1 text-[11px] text-muted hover:bg-elevated"
-            >✕ pulisci filtri</button>
+            >{t.files.clearFilters}</button>
           )}
         </div>
 
         {rows.length === 0 && !offline ? (
-          <EmptyState title="Nessun file">Aggiungi una radice in Sources e lancia uno scan.</EmptyState>
+          <EmptyState title={t.files.emptyTitle}>{t.files.emptyBody}</EmptyState>
         ) : (
           <FilesTable rows={rows} />
         )}
@@ -150,23 +154,24 @@ export default function FilesPage() {
 }
 
 function Marginalia({ stats }: { stats: LibraryStats | null }) {
-  if (!stats) return <p className="text-xs text-faint">—</p>;
+  const t = useT();
+  if (!stats) return <p className="text-xs text-faint">{t.common.empty}</p>;
   const sev = stats.issues_by_severity;
   const issuesTotal = Object.values(sev).reduce((a, b) => a + b, 0);
   return (
     <div className="flex flex-col gap-4 text-xs">
-      <Stat v={stats.files_total} k="file" />
+      <Stat v={stats.files_total} k={t.files.statFiles} />
       <div>
-        <Stat v={issuesTotal} k="issue" />
+        <Stat v={issuesTotal} k={t.files.statIssues} />
         <div className="mt-1 flex gap-3 text-[11px]">
-          <span className="text-danger">{sev.error ?? 0} err</span>
-          <span className="text-warning">{sev.warning ?? 0} warn</span>
-          <span className="text-muted">{sev.info ?? 0} info</span>
+          <span className="text-danger">{sev.error ?? 0} {t.files.sevErr}</span>
+          <span className="text-warning">{sev.warning ?? 0} {t.files.sevWarn}</span>
+          <span className="text-muted">{sev.info ?? 0} {t.files.sevInfo}</span>
         </div>
       </div>
-      <Stat v={stats.dup_groups} k="doppioni" />
+      <Stat v={stats.dup_groups} k={t.files.statDups} />
       <div>
-        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">Formati</div>
+        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">{t.files.formats}</div>
         <div className="flex flex-col gap-1">
           {Object.entries(stats.by_ext).sort((a, b) => b[1] - a[1]).map(([ext, n]) => (
             <div key={ext} className="flex justify-between">

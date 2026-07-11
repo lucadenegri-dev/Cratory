@@ -1,4 +1,4 @@
-import { translateApiError, type Language } from "@/lib/i18n/runtime";
+import { getCurrentLanguage, translateApiError, type Language } from "@/lib/i18n/runtime";
 
 const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8010";
 
@@ -476,8 +476,10 @@ export function fmtDuration(seconds: number | null | undefined): string {
 }
 
 export function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "mai";
+  const lang = getCurrentLanguage();
+  if (!iso) return lang === "it" ? "mai" : "never";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  const locale = lang === "it" ? "it-IT" : "en-GB";
+  return d.toLocaleString(locale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
