@@ -6,12 +6,14 @@ import { Sparkles, ListMusic, Clock, ChevronRight } from "lucide-react";
 import { apiGet, fmtDuration, type SetlistSummary } from "@/lib/api";
 import { Card, Badge, Alert, EmptyState, Button, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useT } from "@/lib/i18n";
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export default function SetsPage() {
+  const t = useT();
   const [sets, setSets] = useState<SetlistSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,22 +23,22 @@ export default function SetsPage() {
 
   const marginalia = (
     <div className="space-y-3">
-      <Link href="/set-builder" className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> Nuovo set</Button></Link>
+      <Link href="/set-builder" className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> {t.sets.newSetButton}</Button></Link>
       <div className="border-t border-border pt-4 text-xs">
-        <div className="flex justify-between gap-2"><span className="text-muted">Set salvati</span><span className="tnum text-fg">{sets?.length ?? 0}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.sets.savedSetsLabel}</span><span className="tnum text-fg">{sets?.length ?? 0}</span></div>
       </div>
     </div>
   );
 
   return (
-    <PageLayout title="Set" meta={sets ? String(sets.length) : undefined} marginaliaTitle="Azioni" marginalia={marginalia}>
+    <PageLayout title={t.sets.pageTitle} meta={sets ? String(sets.length) : undefined} marginaliaTitle={t.sets.actionsTitle} marginalia={marginalia}>
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
       {sets === null && !error && <Loading />}
 
       {sets && sets.length === 0 && (
-        <EmptyState icon={<ListMusic size={28} />} title="Nessun set salvato">
-          Genera la tua prima scaletta nel <Link href="/set-builder" className="text-fg underline-offset-4 hover:underline">Set Builder</Link>.
+        <EmptyState icon={<ListMusic size={28} />} title={t.sets.emptyTitle}>
+          {t.sets.emptyBodyPrefix} <Link href="/set-builder" className="text-fg underline-offset-4 hover:underline">Set Builder</Link>.
         </EmptyState>
       )}
 
@@ -47,11 +49,11 @@ export default function SetsPage() {
               <div className="mb-3 flex items-start justify-between gap-2">
                 <h3 className="truncate font-medium leading-snug group-hover:text-fg-strong">{s.name}</h3>
                 <Badge tone={s.generated_by === "ai" ? "primary" : "neutral"}>
-                  {s.generated_by === "ai" ? <><Sparkles size={11} /> AI</> : "algo"}
+                  {s.generated_by === "ai" ? <><Sparkles size={11} /> AI</> : t.sets.algoBadge}
                 </Badge>
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                <span className="inline-flex items-center gap-1"><ListMusic size={13} /> {s.track_count} tracce</span>
+                <span className="inline-flex items-center gap-1"><ListMusic size={13} /> {t.sets.trackCountLabel(s.track_count)}</span>
                 {s.total_duration_seconds > 0 && (
                   <span className="tnum inline-flex items-center gap-1"><Clock size={13} /> {fmtDuration(s.total_duration_seconds)}</span>
                 )}

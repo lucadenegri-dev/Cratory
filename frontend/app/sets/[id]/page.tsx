@@ -16,13 +16,14 @@ import { PageLayout } from "@/components/page-layout";
 import { TrackCover } from "@/components/track-cover";
 import { SetArc } from "@/components/set-arc";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n";
 
 /* Riordino ottimistico: scambio due righe subito, il server poi restituisce la verità
    (con transition_score/mix_tip ricalcolati). */
 function swapTracks(s: Setlist, a: number, b: number): Setlist {
-  const tracks = s.tracks.map((t) => ({ ...t }));
-  const ta = tracks.find((t) => t.position === a);
-  const tb = tracks.find((t) => t.position === b);
+  const tracks = s.tracks.map((tr) => ({ ...tr }));
+  const ta = tracks.find((tr) => tr.position === a);
+  const tb = tracks.find((tr) => tr.position === b);
   if (!ta || !tb) return s;
   ta.position = b;
   tb.position = a;
@@ -31,23 +32,25 @@ function swapTracks(s: Setlist, a: number, b: number): Setlist {
 }
 function dropTrack(s: Setlist, pos: number): Setlist {
   const tracks = s.tracks
-    .filter((t) => t.position !== pos)
-    .map((t) => (t.position > pos ? { ...t, position: t.position - 1 } : t));
+    .filter((tr) => tr.position !== pos)
+    .map((tr) => (tr.position > pos ? { ...tr, position: tr.position - 1 } : tr));
   return { ...s, tracks };
 }
 function slugName(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "set";
 }
 
-const MODES: { key: AlternativeMode; label: string }[] = [
-  { key: "safer", label: "Più sicura" },
-  { key: "softer", label: "Più morbida" },
-  { key: "harder", label: "Più dura" },
-  { key: "same_artist", label: "Stesso artista" },
-  { key: "surprising", label: "Sorprendente" },
-];
+const MODE_KEYS: AlternativeMode[] = ["safer", "softer", "harder", "same_artist", "surprising"];
+const MODE_LABEL_KEY: Record<AlternativeMode, "safer" | "softer" | "harder" | "sameArtist" | "surprising"> = {
+  safer: "safer",
+  softer: "softer",
+  harder: "harder",
+  same_artist: "sameArtist",
+  surprising: "surprising",
+};
 
 export default function SetDetail({ params }: { params: Promise<{ id: string }> }) {
+  const t = useT();
   const { id } = use(params);
   const router = useRouter();
 
@@ -169,12 +172,12 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
   }
 
   if (error && !setlist) return (
-    <PageLayout title="Set">
-      <Link href="/sets" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Set</Link>
+    <PageLayout title={t.sets.pageTitle}>
+      <Link href="/sets" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.sets.backLink}</Link>
       <Alert tone="danger">⚠ {error}</Alert>
     </PageLayout>
   );
-  if (!setlist) return <PageLayout title="Set"><Loading /></PageLayout>;
+  if (!setlist) return <PageLayout title={t.sets.pageTitle}><Loading /></PageLayout>;
 
   const v = setlist.validation ?? {};
   const n = setlist.tracks.length;
@@ -189,20 +192,20 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
         <Button variant="outline" size="sm" onClick={() => doExport("csv")}>CSV</Button>
         <Button variant="outline" size="sm" onClick={() => doExport("markdown")}>MD</Button>
       </div>
-      <Button variant="outline" size="sm" className="w-full" onClick={() => doExport("m3u8")}><Download size={14} /> Esporta per Rekordbox (M3U8)</Button>
-      <Button variant="outline" size="sm" className="w-full" onClick={createPlaylist} disabled={playlistBusy}>{playlistBusy ? "…" : "Crea playlist Spotify"}</Button>
-      <Button variant="danger" size="sm" className="w-full" onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Elimina set</Button>
+      <Button variant="outline" size="sm" className="w-full" onClick={() => doExport("m3u8")}><Download size={14} /> {t.sets.exportRekordboxButton}</Button>
+      <Button variant="outline" size="sm" className="w-full" onClick={createPlaylist} disabled={playlistBusy}>{playlistBusy ? "…" : t.sets.createSpotifyPlaylistButton}</Button>
+      <Button variant="danger" size="sm" className="w-full" onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> {t.sets.deleteSetButton}</Button>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
-        <div className="flex justify-between gap-2"><span className="text-muted">Tracce</span><span className="tnum text-fg">{n}</span></div>
-        <div className="flex justify-between gap-2"><span className="text-muted">Durata</span><span className="tnum text-fg">{fmtDuration(setlist.total_duration_seconds)}</span></div>
-        <div className="flex justify-between gap-2"><span className="text-muted">Origine</span><span className="text-fg">{setlist.generated_by === "ai" ? "AI" : "algoritmico"}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.sets.tracksLabel}</span><span className="tnum text-fg">{n}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.sets.durationLabel}</span><span className="tnum text-fg">{fmtDuration(setlist.total_duration_seconds)}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.sets.originLabel}</span><span className="text-fg">{setlist.generated_by === "ai" ? "AI" : t.sets.algorithmicBadge}</span></div>
       </div>
     </div>
   );
 
   return (
-    <PageLayout title="Set" meta={`${n} TRACCE`} marginaliaTitle="Dettagli" marginalia={marginalia}>
-      <Link href="/sets" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Set</Link>
+    <PageLayout title={t.sets.pageTitle} meta={t.sets.tracksMeta(n)} marginaliaTitle={t.sets.detailsTitle} marginalia={marginalia}>
+      <Link href="/sets" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.sets.backLink}</Link>
 
       <Card>
         <CardHeader
@@ -210,22 +213,22 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
             <span className="flex items-center gap-2">
               {setlist.name}
               <Badge tone={setlist.generated_by === "ai" ? "primary" : "neutral"}>
-                {setlist.generated_by === "ai" ? <><Sparkles size={11} /> AI</> : "algoritmico"}
+                {setlist.generated_by === "ai" ? <><Sparkles size={11} /> AI</> : t.sets.algorithmicBadge}
               </Badge>
-              {setlist.owned_only && <Badge tone="success">solo posseduti</Badge>}
+              {setlist.owned_only && <Badge tone="success">{t.sets.ownedOnlyBadge}</Badge>}
               <button
                 onClick={() => { setRenameValue(setlist.name); setRenameOpen(true); }}
-                title="Rinomina" className="text-faint transition-colors hover:text-fg"
+                title={t.sets.renameTitle} className="text-faint transition-colors hover:text-fg"
               ><Pencil size={14} /></button>
             </span>
           }
-          subtitle={`${n} tracce · ${fmtDuration(setlist.total_duration_seconds)}${busy ? " · aggiorno…" : ""}`}
+          subtitle={`${t.sets.trackCountLabel(n)} · ${fmtDuration(setlist.total_duration_seconds)}${busy ? t.sets.updatingSuffix : ""}`}
         />
 
         <div className="space-y-4 p-5">
           {error && <Alert tone="danger">⚠ {error}</Alert>}
-          {playlistUrl && <Alert tone="info">✓ Playlist creata: <a href={playlistUrl} target="_blank" rel="noreferrer" className="underline">{playlistUrl}</a></Alert>}
-          {exported && <Alert tone="info">✓ Scaricato <span className="tnum">{exported}</span></Alert>}
+          {playlistUrl && <Alert tone="info">{t.sets.playlistCreatedPrefix}<a href={playlistUrl} target="_blank" rel="noreferrer" className="underline">{playlistUrl}</a></Alert>}
+          {exported && <Alert tone="info">{t.sets.downloadedPrefix}<span className="tnum">{exported}</span></Alert>}
 
           <SetArc tracks={setlist.tracks} />
 
@@ -236,7 +239,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
           {attention.length > 0 && (
             <div className="border border-danger/50 bg-bg p-3">
               <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-danger">
-                <SlidersHorizontal size={14} /> Punti critici
+                <SlidersHorizontal size={14} /> {t.sets.criticalPointsTitle}
               </div>
               <ul className="space-y-1 text-sm text-fg">
                 {attention.map((it, i) => <li key={i} className="flex gap-1.5"><span className="shrink-0 text-danger">·</span>{it}</li>)}
@@ -247,7 +250,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
           {setlist.mixing_overview.length > 0 && (
             <details className="group border border-border">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
-                <span className="flex items-center gap-1.5"><SlidersHorizontal size={14} /> Come mixare il set</span>
+                <span className="flex items-center gap-1.5"><SlidersHorizontal size={14} /> {t.sets.mixingOverviewTitle}</span>
                 <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
               </summary>
               <ul className="space-y-1 border-t border-border p-3 text-sm text-muted">
@@ -259,7 +262,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
           {improvements.length > 0 && (
             <details className="group border border-border">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
-                <span className="flex items-center gap-1.5"><Lightbulb size={14} /> Come migliorare il tuo set</span>
+                <span className="flex items-center gap-1.5"><Lightbulb size={14} /> {t.sets.improvementsTitle}</span>
                 <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
               </summary>
               <ul className="space-y-1 border-t border-border p-3 text-sm text-muted">
@@ -286,13 +289,13 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                   </div>
                   {st.mix_tip
                     ? <p className="mt-1 flex gap-1.5 text-xs text-fg"><span className="shrink-0 text-faint">↪</span>{st.mix_tip}</p>
-                    : <p className="mt-1 text-xs text-muted">apertura del set</p>}
+                    : <p className="mt-1 text-xs text-muted">{t.sets.openingTrackLabel}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5">
-                  <IconBtn title="Su" disabled={st.position === 1} onClick={() => move(st.position, "up")}><ArrowUp size={15} /></IconBtn>
-                  <IconBtn title="Giù" disabled={st.position === n} onClick={() => move(st.position, "down")}><ArrowDown size={15} /></IconBtn>
-                  <IconBtn title="Alternative" onClick={() => loadAlternatives(st.position, "safer")}><Replace size={15} /></IconBtn>
-                  <IconBtn title="Rimuovi" danger disabled={n <= 1} onClick={() => remove(st.position)}><Trash2 size={15} /></IconBtn>
+                  <IconBtn title={t.sets.moveUpTitle} disabled={st.position === 1} onClick={() => move(st.position, "up")}><ArrowUp size={15} /></IconBtn>
+                  <IconBtn title={t.sets.moveDownTitle} disabled={st.position === n} onClick={() => move(st.position, "down")}><ArrowDown size={15} /></IconBtn>
+                  <IconBtn title={t.sets.alternativesTitle} onClick={() => loadAlternatives(st.position, "safer")}><Replace size={15} /></IconBtn>
+                  <IconBtn title={t.sets.removeTitle} danger disabled={n <= 1} onClick={() => remove(st.position)}><Trash2 size={15} /></IconBtn>
                 </div>
               </li>
             ))}
@@ -301,34 +304,34 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
       </Card>
 
       {/* Rinomina */}
-      <Modal open={renameOpen} onClose={() => setRenameOpen(false)} title="Rinomina set"
-        footer={<><Button variant="ghost" size="sm" onClick={() => setRenameOpen(false)}>Annulla</Button><Button size="sm" onClick={doRename}><Check size={15} /> Salva</Button></>}>
+      <Modal open={renameOpen} onClose={() => setRenameOpen(false)} title={t.sets.renameModalTitle}
+        footer={<><Button variant="ghost" size="sm" onClick={() => setRenameOpen(false)}>{t.common.cancel}</Button><Button size="sm" onClick={doRename}><Check size={15} /> {t.common.save}</Button></>}>
         <Input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") doRename(); }} placeholder="Nome del set" />
+          onKeyDown={(e) => { if (e.key === "Enter") doRename(); }} placeholder={t.sets.setNamePlaceholder} />
       </Modal>
 
       {/* Conferma eliminazione */}
-      <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Eliminare il set?"
-        footer={<><Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>Annulla</Button><Button variant="danger" size="sm" onClick={doDelete}><Trash2 size={15} /> Elimina</Button></>}>
-        <p className="text-sm text-muted">«{setlist.name}» verrà eliminato definitivamente.</p>
+      <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title={t.sets.deleteModalTitle}
+        footer={<><Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>{t.common.cancel}</Button><Button variant="danger" size="sm" onClick={doDelete}><Trash2 size={15} /> {t.common.delete}</Button></>}>
+        <p className="text-sm text-muted">{t.sets.deleteConfirmBody(setlist.name)}</p>
       </Modal>
 
       {/* Alternative per traccia */}
       <Modal open={altPos != null} onClose={() => setAltPos(null)} size="lg"
-        title={<span className="flex items-center gap-2"><Replace size={16} className="text-muted" /> Alternative {altTrack && <span className="truncate text-sm font-normal text-muted">· {trackLabel(altTrack.track)}</span>}</span>}>
+        title={<span className="flex items-center gap-2"><Replace size={16} className="text-muted" /> {t.sets.alternativesModalTitle} {altTrack && <span className="truncate text-sm font-normal text-muted">· {trackLabel(altTrack.track)}</span>}</span>}>
         <div className="mb-3 flex flex-wrap gap-1.5">
-          {MODES.map((m) => (
-            <button key={m.key} aria-pressed={altMode === m.key} onClick={() => altPos != null && loadAlternatives(altPos, m.key)}
+          {MODE_KEYS.map((key) => (
+            <button key={key} aria-pressed={altMode === key} onClick={() => altPos != null && loadAlternatives(altPos, key)}
               className={cn("rounded-none px-3 py-1 text-xs font-medium uppercase tracking-wider transition-colors",
-                altMode === m.key ? "bg-fg-strong text-bg" : "bg-elevated text-muted hover:text-fg")}>
-              {m.label}
+                altMode === key ? "bg-fg-strong text-bg" : "bg-elevated text-muted hover:text-fg")}>
+              {t.sets.modes[MODE_LABEL_KEY[key]]}
             </button>
           ))}
         </div>
 
-        {altLoading && <div className="flex items-center gap-2 py-6 text-sm text-muted"><Spinner /> Cerco alternative…</div>}
+        {altLoading && <div className="flex items-center gap-2 py-6 text-sm text-muted"><Spinner /> {t.sets.loadingAlternatives}</div>}
         {!altLoading && altItems && altItems.length === 0 && (
-          <p className="py-6 text-center text-sm text-muted">Nessuna alternativa per questa modalità.</p>
+          <p className="py-6 text-center text-sm text-muted">{t.sets.noAlternatives}</p>
         )}
         {!altLoading && altItems && altItems.length > 0 && (
           <ul className="space-y-1.5">
@@ -342,10 +345,10 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                     <Badge tone="neutral">{a.risk_level}</Badge>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-muted">{a.reason}
-                    <span className="tnum text-faint"> · prev {a.score_prev ?? "—"}{a.score_next != null && ` · next ${a.score_next}`}</span>
+                    <span className="tnum text-faint"> · {t.sets.altScorePrev} {a.score_prev ?? "—"}{a.score_next != null && t.sets.altScoreNext(a.score_next)}</span>
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => substitute(a)}><Check size={14} /> Usa</Button>
+                <Button size="sm" variant="outline" onClick={() => substitute(a)}><Check size={14} /> {t.sets.useAlternativeButton}</Button>
               </li>
             ))}
           </ul>

@@ -1,4 +1,7 @@
+"use client";
+
 import type { SetlistTrack } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 /* Arco del set: sparkline doppia (BPM linea piena + Energia area) sopra la scaletta.
    Monocromo, filetti a 1px, cifre tabulari — coerente col linguaggio "indice tipografico".
@@ -14,8 +17,8 @@ type Pt = { x: number; bpm: number | null; energy: number | null; pos: number };
 
 function scale(v: number, min: number, max: number) {
   if (max <= min) return H - PB; // serie piatta → linea bassa
-  const t = (v - min) / (max - min);
-  return H - PB - t * (H - PT - PB);
+  const ratio = (v - min) / (max - min);
+  return H - PB - ratio * (H - PT - PB);
 }
 
 function polyline(pts: { x: number; y: number }[]) {
@@ -23,6 +26,7 @@ function polyline(pts: { x: number; y: number }[]) {
 }
 
 export function SetArc({ tracks }: { tracks: SetlistTrack[] }) {
+  const t = useT();
   const data: Pt[] = tracks.map((st, i) => ({
     x: PX + (tracks.length <= 1 ? W / 2 - PX : (i * (W - 2 * PX)) / (tracks.length - 1)),
     bpm: st.track.bpm ?? null,
@@ -37,8 +41,8 @@ export function SetArc({ tracks }: { tracks: SetlistTrack[] }) {
   if (!hasBpm && !hasEnergy) {
     return (
       <div className="border border-border bg-bg px-3 py-2.5 text-xs text-muted">
-        <span className="font-semibold uppercase tracking-wide">Arco del set</span>
-        <span className="ml-2 text-faint">dati BPM/energia insufficienti per tracciare l&apos;arco</span>
+        <span className="font-semibold uppercase tracking-wide">{t.sets.arc.title}</span>
+        <span className="ml-2 text-faint">{t.sets.arc.insufficientData}</span>
       </div>
     );
   }
@@ -53,18 +57,18 @@ export function SetArc({ tracks }: { tracks: SetlistTrack[] }) {
     : "";
 
   const label = [
-    hasBpm && `BPM da ${bpmMin.toFixed(0)} a ${bpmMax.toFixed(0)}`,
-    hasEnergy && `energia da ${data.find((d) => d.energy != null)?.energy} a ${[...data].reverse().find((d) => d.energy != null)?.energy}`,
-    `${tracks.length} tracce`,
+    hasBpm && t.sets.arc.bpmRangeLabel(Math.round(bpmMin), Math.round(bpmMax)),
+    hasEnergy && t.sets.arc.energyRangeLabel(data.find((d) => d.energy != null)?.energy ?? 0, [...data].reverse().find((d) => d.energy != null)?.energy ?? 0),
+    t.sets.arc.trackCountLabel(tracks.length),
   ].filter(Boolean).join(", ");
 
   return (
     <div className="border border-border bg-bg p-3">
       <div className="mb-1.5 flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted">Arco del set</span>
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted">{t.sets.arc.title}</span>
         <span className="flex items-center gap-3 text-[10px] uppercase tracking-wider text-muted">
           <span className="flex items-center gap-1"><span className="inline-block h-px w-3 bg-fg-strong" /> BPM</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-3 bg-elevated" /> Energia</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-3 bg-elevated" /> {t.sets.arc.energyLegend}</span>
         </span>
       </div>
       <svg
@@ -72,7 +76,7 @@ export function SetArc({ tracks }: { tracks: SetlistTrack[] }) {
         className="h-16 w-full"
         preserveAspectRatio="none"
         role="img"
-        aria-label={`Arco del set: ${label}`}
+        aria-label={t.sets.arc.ariaLabel(label)}
       >
         {/* gridlines */}
         {[PT, (PT + (H - PB)) / 2, H - PB].map((y, i) => (
