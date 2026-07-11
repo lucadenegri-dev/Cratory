@@ -255,6 +255,15 @@ def import_playlist(
         # I liked non hanno platform_playlist_id: la playlist va ritrovata per `kind`,
         # altrimenti ogni import ne creerebbe una duplicata.
         playlist = _liked_playlist(db, platform)
+    elif url:
+        # Fallback per playlist URL-based senza platform_playlist_id (es. alcuni
+        # link SoundCloud la cui estrazione flat non espone un id di set): senza
+        # questo ramo ogni re-import/sync dello stesso URL creerebbe un duplicato.
+        # Non tocca Spotify: le playlist reali hanno sempre platform_playlist_id
+        # (primo ramo) e i liked passano da `kind=="liked"` (secondo ramo).
+        playlist = db.scalar(
+            select(Playlist).where(Playlist.platform == platform, Playlist.url == url)
+        )
     if playlist is None:
         playlist = Playlist(platform=platform, name=name, kind=kind)
         db.add(playlist)
