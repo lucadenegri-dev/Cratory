@@ -13,6 +13,7 @@ import {
   retryPending, searchDownloads, startPlaylistDownload, trackLabel,
   type DownloadCandidate, type Playlist, type Track,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -21,24 +22,25 @@ function err(e: unknown): string {
 type Outcome = "not_found" | "needs_review" | "failed";
 type Filter = "all" | Outcome;
 
-const OUTCOME_LABEL: Record<Outcome, string> = {
-  not_found: "non trovata",
-  needs_review: "da rivedere",
-  failed: "fallita",
-};
 const OUTCOME_TONE: Record<Outcome, "warning" | "danger" | "neutral"> = {
   not_found: "neutral",
   needs_review: "warning",
   failed: "danger",
 };
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: "all", label: "Tutte" },
-  { key: "needs_review", label: "Da rivedere" },
-  { key: "not_found", label: "Non trovate" },
-  { key: "failed", label: "Fallite" },
-];
 
 export default function DownloadsPage() {
+  const t = useT();
+  const OUTCOME_LABEL: Record<Outcome, string> = {
+    not_found: t.downloads.outcomeNotFound,
+    needs_review: t.downloads.outcomeNeedsReview,
+    failed: t.downloads.outcomeFailed,
+  };
+  const FILTERS: { key: Filter; label: string }[] = [
+    { key: "all", label: t.downloads.filterAll },
+    { key: "needs_review", label: t.downloads.filterNeedsReview },
+    { key: "not_found", label: t.downloads.filterNotFound },
+    { key: "failed", label: t.downloads.filterFailed },
+  ];
   // Un solo poller (JobsProvider) per lo stato job; il work-list è persistito.
   const { download: status, refresh } = useJobs();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -71,10 +73,10 @@ export default function DownloadsPage() {
 
   const available = status?.available ?? true;
   const running = status?.status === "running";
-  const rows = (pending ?? []).filter((t) => filter === "all" || t.last_download_outcome === filter);
+  const rows = (pending ?? []).filter((tr) => filter === "all" || tr.last_download_outcome === filter);
   const count = (k: Filter) => k === "all"
     ? (pending?.length ?? 0)
-    : (pending ?? []).filter((t) => t.last_download_outcome === k).length;
+    : (pending ?? []).filter((tr) => tr.last_download_outcome === k).length;
 
   const start = async () => {
     if (!selected) return;
@@ -100,34 +102,33 @@ export default function DownloadsPage() {
     try { await downloadManual(c); refresh(); }
     catch (e) { setError(err(e)); }
   };
-  const ignore = async (t: Track) => {
-    if (!window.confirm(`Ignorare «${trackLabel(t)}»? Uscirà da questo elenco.`)) return;
+  const ignore = async (tr: Track) => {
+    if (!window.confirm(t.downloads.ignoreConfirm(trackLabel(tr)))) return;
     setError(null);
-    try { await ignoreDownload(t.id); refreshPending(); }
+    try { await ignoreDownload(tr.id); refreshPending(); }
     catch (e) { setError(err(e)); }
   };
 
   return (
-    <PageLayout title="Download" meta={pending?.length || status?.total || undefined}>
+    <PageLayout title={t.downloads.pageTitle} meta={pending?.length || status?.total || undefined}>
       <div className="space-y-6">
         {!available && (
           <Alert tone="info">
-            slskd non e&apos; configurato. Imposta SLSKD_URL, SLSKD_API_KEY e
-            SLSKD_DOWNLOAD_DIR in backend/.env per abilitare i download.
+            {t.downloads.notConfigured}
           </Alert>
         )}
         {error && <Alert tone="danger">⚠ {error}</Alert>}
 
         {/* 1. Acquisizione da playlist (azione primaria) */}
         <section>
-          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">Acquisizione</div>
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.downloads.acquisitionHeading}</div>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={selected} onChange={(e) => setSelected(e.target.value)} disabled={!available || running}>
-              <option value="">Scegli una playlist…</option>
+              <option value="">{t.downloads.choosePlaylistOption}</option>
               {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </Select>
             <Button onClick={start} disabled={!available || running || !selected}>
-              <DownloadIcon size={14} /> Scarica playlist
+              <DownloadIcon size={14} /> {t.downloads.downloadPlaylistButton}
             </Button>
           </div>
           {/* Il progresso del job vive nella barra globale in basso (JobsProvider):
@@ -137,19 +138,19 @@ export default function DownloadsPage() {
         {/* 2. Download singolo — ricerca manuale su Soulseek */}
         <section>
           <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">
-            Download singolo — scarica un file sul disco (entra in libreria dopo l&apos;organizzazione)
+            {t.downloads.singleDownloadHeading}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Input value={query} onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
-              placeholder="Cerca su Soulseek (artista, titolo…)" disabled={!available} />
+              placeholder={t.downloads.searchPlaceholder} disabled={!available} />
             <Button variant="outline" onClick={runSearch} disabled={!available || searching || !query.trim()}>
-              <Search size={14} /> Cerca
+              <Search size={14} /> {t.downloads.searchButton}
             </Button>
           </div>
-          {searching && <Loading label="Ricerca su Soulseek…" />}
+          {searching && <Loading label={t.downloads.searchingLabel} />}
           {results && results.length === 0 && !searching && (
-            <p className="mt-2 text-sm text-faint">Nessun risultato per «{query}».</p>
+            <p className="mt-2 text-sm text-faint">{t.downloads.noSearchResults(query)}</p>
           )}
           {results && results.length > 0 && (
             <ul className="mt-3 divide-y divide-border border border-border">
@@ -162,7 +163,7 @@ export default function DownloadsPage() {
                     </div>
                   </div>
                   <Button size="sm" variant="outline" onClick={() => grab(c)} disabled={running}>
-                    <DownloadIcon size={13} /> Scarica
+                    <DownloadIcon size={13} /> {t.downloads.downloadButton}
                   </Button>
                 </li>
               ))}
@@ -173,7 +174,7 @@ export default function DownloadsPage() {
         {/* 3. Work-list persistito (il cuore) */}
         <section>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filtra per esito">
+            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={t.downloads.filterByOutcomeAria}>
               {FILTERS.map((f) => (
                 <Button key={f.key} size="sm" role="tab" aria-selected={filter === f.key}
                   variant={filter === f.key ? "primary" : "outline"} onClick={() => setFilter(f.key)}>
@@ -184,10 +185,10 @@ export default function DownloadsPage() {
             {(pending?.length ?? 0) > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <Button size="sm" variant="outline" onClick={() => setAutoLink(true)}>
-                  <Link2 size={13} /> Collega tutte
+                  <Link2 size={13} /> {t.downloads.linkAllButton}
                 </Button>
                 <Button size="sm" variant="outline" onClick={retryAll} disabled={running || !available}>
-                  <DownloadIcon size={13} /> Riprova tutte
+                  <DownloadIcon size={13} /> {t.downloads.retryAllButton}
                 </Button>
               </div>
             )}
@@ -195,32 +196,32 @@ export default function DownloadsPage() {
 
           {pending === null && <Loading />}
           {pending !== null && rows.length === 0 && (
-            <EmptyState icon={<DownloadIcon size={28} />} title="Niente da sistemare">
-              Scegli una playlist e avvia il download; le tracce non trovate, da rivedere o fallite compariranno qui.
+            <EmptyState icon={<DownloadIcon size={28} />} title={t.downloads.emptyTitle}>
+              {t.downloads.emptyBody}
             </EmptyState>
           )}
           {rows.length > 0 && (
             <Card>
               <ul className="divide-y divide-border text-sm">
-                {rows.map((t) => {
-                  const outcome = t.last_download_outcome as Outcome;
-                  const hasFile = outcome === "needs_review" && !!t.last_download_path;
+                {rows.map((tr) => {
+                  const outcome = tr.last_download_outcome as Outcome;
+                  const hasFile = outcome === "needs_review" && !!tr.last_download_path;
                   return (
-                    <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
+                    <li key={tr.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
                       <div className="min-w-0 flex-1">
-                        <a href={`/tracks/${t.id}`} className="block truncate hover:text-fg-strong">{trackLabel(t)}</a>
-                        {t.last_download_reason && <div className="text-xs text-muted">{t.last_download_reason}</div>}
+                        <a href={`/tracks/${tr.id}`} className="block truncate hover:text-fg-strong">{trackLabel(tr)}</a>
+                        {tr.last_download_reason && <div className="text-xs text-muted">{tr.last_download_reason}</div>}
                       </div>
                       <span className="flex shrink-0 flex-wrap items-center gap-2">
                         <Badge tone={OUTCOME_TONE[outcome] ?? "neutral"}>{OUTCOME_LABEL[outcome] ?? outcome}</Badge>
-                        <Button size="sm" onClick={() => setReview({ track_id: t.id, artist: t.artist, title: t.title })}>
-                          <Search size={13} /> {hasFile ? "Rivedi" : "Scegli file"}
+                        <Button size="sm" onClick={() => setReview({ track_id: tr.id, artist: tr.artist, title: tr.title })}>
+                          <Search size={13} /> {hasFile ? t.downloads.reviewButton : t.downloads.chooseFileButton}
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => setLinking({ id: t.id, artist: t.artist, title: t.title })}>
-                          <Link2 size={13} /> Collega file
+                        <Button size="sm" variant="outline" onClick={() => setLinking({ id: tr.id, artist: tr.artist, title: tr.title })}>
+                          <Link2 size={13} /> {t.downloads.linkFileButton}
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => ignore(t)}>
-                          <EyeOff size={13} /> Ignora
+                        <Button size="sm" variant="ghost" onClick={() => ignore(tr)}>
+                          <EyeOff size={13} /> {t.downloads.ignoreButton}
                         </Button>
                       </span>
                     </li>

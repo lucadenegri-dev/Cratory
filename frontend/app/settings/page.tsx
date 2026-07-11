@@ -10,14 +10,14 @@ import {
 import { Alert, Button, Card, CardHeader, Field, Input, Loading, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, useT, type Dictionary } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
-function statusLabel(s: ServiceStatus): { text: string; strong: boolean } {
-  if (s.connected === true) return { text: "Collegato", strong: true };
-  if (s.connected === false) return { text: "Da collegare", strong: false };
-  if (s.configured) return { text: "Configurato", strong: true };
-  return { text: "Non configurato", strong: false };
+function statusLabel(s: ServiceStatus, t: Dictionary): { text: string; strong: boolean } {
+  if (s.connected === true) return { text: t.settings.statusConnected, strong: true };
+  if (s.connected === false) return { text: t.settings.statusToConnect, strong: false };
+  if (s.configured) return { text: t.settings.statusConfigured, strong: true };
+  return { text: t.settings.statusNotConfigured, strong: false };
 }
 
 function SettingsInner() {
@@ -43,15 +43,15 @@ function SettingsInner() {
 
   const marginalia = (
     <div className="space-y-2 text-xs leading-relaxed text-muted">
-      <p>Le chiavi si configurano in <code className="rounded-none bg-elevated px-1">backend/.env</code> e richiedono il riavvio del backend.</p>
+      <p>{t.settings.marginaliaPrefix} <code className="rounded-none bg-elevated px-1">backend/.env</code> {t.settings.marginaliaSuffix}</p>
     </div>
   );
 
   return (
-    <PageLayout title="Impostazioni" marginaliaTitle="Aiuto" marginalia={marginalia}>
-      {oauth === "connected" && <div className="mb-4"><Alert tone="info">✓ Account Spotify collegato.</Alert></div>}
-      {oauth === "error" && <div className="mb-4"><Alert tone="danger">Login Spotify fallito ({params.get("detail")}).</Alert></div>}
-      {error && <div className="mb-4"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
+    <PageLayout title={t.settings.pageTitle} marginaliaTitle={t.settings.helpTitle} marginalia={marginalia}>
+      {oauth === "connected" && <div className="mb-4"><Alert tone="info">{t.settings.spotifyConnected}</Alert></div>}
+      {oauth === "error" && <div className="mb-4"><Alert tone="danger">{t.settings.spotifyLoginFailed(params.get("detail") ?? "")}</Alert></div>}
+      {error && <div className="mb-4"><Alert tone="danger">{t.dashboard.backendDown(error)}</Alert></div>}
 
       <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.settings.languageLabel}</div>
       <div className="border border-border p-5">
@@ -77,10 +77,10 @@ function SettingsInner() {
         </div>
       </div>
 
-      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Servizi &amp; API</div>
+      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">{t.settings.servicesHeading}</div>
       <div className="border border-border">
         {services?.map((s, i) => {
-          const st = statusLabel(s);
+          const st = statusLabel(s, t);
           return (
             <div key={s.key} className="border-b border-border p-5 last:border-0">
               <div className="flex items-start justify-between gap-4">
@@ -102,7 +102,7 @@ function SettingsInner() {
                   <span className={`text-[10px] uppercase tracking-wider ${st.strong ? "text-fg-strong" : "text-muted"}`}>{st.text}</span>
                   {s.key === "spotify" && (
                     <a href={SPOTIFY_LOGIN_URL}>
-                      <Button size="sm" variant="outline"><ExternalLink size={14} /> {s.connected ? "Ricollega" : "Collega"}</Button>
+                      <Button size="sm" variant="outline"><ExternalLink size={14} /> {s.connected ? t.settings.reconnectButton : t.settings.connectButton}</Button>
                     </a>
                   )}
                 </div>
@@ -110,12 +110,16 @@ function SettingsInner() {
 
               {s.key === "spotify" && spotify?.configured && (
                 <div className="mt-3 border border-border bg-bg p-3">
-                  <p className="mb-1.5 text-xs text-muted">Redirect URI da incollare <strong>esatto</strong> nel dashboard Spotify:</p>
+                  <p className="mb-1.5 text-xs text-muted">{t.settings.redirectUriPrefix} <strong>{t.settings.redirectUriExactTerm}</strong> {t.settings.redirectUriSuffix}</p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 break-all bg-elevated px-2 py-1 text-xs text-fg">{spotify.redirect_uri}</code>
-                    <Button size="sm" variant="outline" onClick={copyRedirect}>{copied ? <><Check size={14} /> Copiato</> : <><Copy size={14} /> Copia</>}</Button>
+                    <Button size="sm" variant="outline" onClick={copyRedirect}>{copied ? <><Check size={14} /> {t.settings.copiedLabel}</> : <><Copy size={14} /> {t.settings.copyButton}</>}</Button>
                   </div>
-                  {s.connected && <p className="mt-2 text-xs text-muted">Se l&apos;import playlist dà <code className="rounded-none bg-elevated px-1">403</code>, usa <strong>Ricollega</strong> per riautorizzare i permessi.</p>}
+                  {s.connected && (
+                    <p className="mt-2 text-xs text-muted">
+                      {t.settings.reauthorizeHintPrefix} <code className="rounded-none bg-elevated px-1">403</code>, {t.settings.reauthorizeHintMiddle} <strong>{t.settings.reconnectButton}</strong> {t.settings.reauthorizeHintSuffix}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -124,7 +128,7 @@ function SettingsInner() {
         {!services && !error && <div className="px-5"><Loading /></div>}
       </div>
 
-      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Libreria (disco)</div>
+      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">{t.settings.libraryHeading}</div>
       <LibraryIndexCard />
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">SoundCloud</div>
@@ -134,6 +138,7 @@ function SettingsInner() {
 }
 
 function SoundCloudCard() {
+  const t = useT();
   const [status, setStatus] = useState<SoundCloudStatus | null>(null);
   const [username, setUsername] = useState("");
   const [saving, setSaving] = useState(false);
@@ -164,24 +169,24 @@ function SoundCloudCard() {
     <Card>
       <CardHeader
         title="SoundCloud"
-        subtitle="Username per l'import dei like. Le playlist si importano incollando l'URL."
+        subtitle={t.settings.soundcloudSubtitle}
       />
       <div className="grid gap-3 p-4">
         {status && !status.available && (
-          <Alert tone="warning">yt-dlp non disponibile nel backend: l&apos;import SoundCloud non funzionerà.</Alert>
+          <Alert tone="warning">{t.settings.soundcloudYtdlpUnavailable}</Alert>
         )}
         {error && <Alert tone="danger">⚠ {error}</Alert>}
-        <Field label="Username SoundCloud">
+        <Field label={t.settings.usernameLabel}>
           <div className="flex items-center gap-2">
             <Input
               className="flex-1"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="es. luca-denegri"
+              placeholder={t.settings.usernamePlaceholder}
               disabled={saving}
             />
             <Button size="sm" onClick={save} disabled={saving || username.trim() === ""}>
-              {saving ? <Spinner /> : "Salva"}
+              {saving ? <Spinner /> : t.common.save}
             </Button>
           </div>
         </Field>
@@ -194,6 +199,7 @@ function SoundCloudCard() {
 }
 
 function LibraryIndexCard() {
+  const t = useT();
   // Lo stato arriva dal poller globale (JobsProvider): niente polling qui.
   const { libraryIndex: libJob, refresh } = useJobs();
   const [libError, setLibError] = useState<string | null>(null);
@@ -209,24 +215,22 @@ function LibraryIndexCard() {
     <div className="border border-border">
       <div className="flex items-start justify-between gap-4 border-b border-border p-5">
         <div className="min-w-0">
-          <div className="text-sm font-semibold uppercase tracking-wide text-fg-strong">Libreria canonica</div>
+          <div className="text-sm font-semibold uppercase tracking-wide text-fg-strong">{t.settings.canonicalLibraryTitle}</div>
           <p className="mt-1 text-sm text-muted">
-            La libreria canonica è la cartella LIBRARY_ROOT sul disco: indicizzala dopo ogni riorganizzazione.
+            {t.settings.canonicalLibraryBody}
           </p>
         </div>
       </div>
       <div className="space-y-3 p-5 text-sm">
         {libError && <Alert tone="danger">⚠ {libError}</Alert>}
-        {libJob?.status === "error" && <Alert tone="danger">⚠ {libJob.error ?? "Indicizzazione fallita"}</Alert>}
-        <Button size="sm" onClick={runIndex} disabled={busy}>{busy ? "In corso…" : "Indicizza ora"}</Button>
+        {libJob?.status === "error" && <Alert tone="danger">⚠ {libJob.error ?? t.settings.indexFailedFallback}</Alert>}
+        <Button size="sm" onClick={runIndex} disabled={busy}>{busy ? t.settings.indexingLabel : t.settings.indexNowButton}</Button>
         {busy && (
-          <p className="tnum text-sm text-muted">{libJob.processed}/{libJob.total} file processati…</p>
+          <p className="tnum text-sm text-muted">{t.settings.indexingProgress(libJob.processed, libJob.total)}</p>
         )}
         {libJob?.status === "done" && (
           <p className="text-sm text-fg">
-            ✓ {libJob.scanned} file · {libJob.matched} riagganciate · {libJob.created} nuove ·{" "}
-            {libJob.duplicates} duplicati · {libJob.relinked} path aggiornati · {libJob.lost} perse ·{" "}
-            {libJob.failed} errori
+            {t.settings.indexResultSummary(libJob.scanned, libJob.matched, libJob.created, libJob.duplicates, libJob.relinked, libJob.lost, libJob.failed)}
           </p>
         )}
       </div>
