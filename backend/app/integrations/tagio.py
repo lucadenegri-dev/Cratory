@@ -6,7 +6,9 @@ from dataclasses import dataclass
 
 from mutagen import File as MutagenFile
 from mutagen import MutagenError
-from mutagen.id3 import ID3, COMM, TALB, TCON, TDRC, TIT2, TPE1, TPE2, TPUB, TRCK
+from mutagen.flac import FLAC, Picture
+from mutagen.id3 import ID3, APIC, COMM, TALB, TCON, TDRC, TIT2, TPE1, TPE2, TPUB, TRCK
+from mutagen.mp4 import MP4, MP4Cover
 
 
 class TagReadError(Exception):
@@ -131,6 +133,51 @@ def write_tags(path: str, changes: dict) -> None:
                 except (KeyError, ValueError):
                     continue  # campo non supportato dal formato easy → salta
         audio.save()
+    except MutagenError as exc:
+        raise TagWriteError(str(exc)) from exc
+
+
+def write_cover(path: str, data: bytes, mime: str = "image/jpeg") -> None:
+    """Embed della cover (type 3 = front). FLAC Picture, ID3 APIC (mp3/wav/aiff),
+    MP4 covr. Sostituisce eventuali cover esistenti."""
+    try:
+        raw = MutagenFile(path)
+        if raw is None:
+            raise TagWriteError(f"formato non scrivibile: {path}")
+        if isinstance(raw, FLAC):
+            pic = Picture()
+            pic.type = 3
+            pic.mime = mime
+            pic.data = data
+            raw.clear_pictures()
+            raw.add_picture(pic)
+        elif isinstance(raw, MP4):
+            fmt = MP4Cover.FORMAT_PNG if mime == "image/png" else MP4Cover.FORMAT_JPEG
+            raw["covr"] = [MP4Cover(data, imageformat=fmt)]
+        else:  # ID3-based: mp3, wav, aiff
+            if raw.tags is None:
+                raw.add_tags()
+            raw.tags.delall("APIC")
+            raw.tags.add(APIC(encoding=3, mime=mime, type=3, desc="", data=data))
+        raw.save()
+    except MutagenError as exc:
+        raise TagWriteError(str(exc)) from exc
+
+
+def remove_cover(path: str) -> None:
+    """Rimuove ogni cover embeddata (usato dall'undo)."""
+    try:
+        raw = MutagenFile(path)
+        if raw is None:
+            return
+        if isinstance(raw, FLAC):
+            raw.clear_pictures()
+        elif isinstance(raw, MP4):
+            if "covr" in raw:
+                del raw["covr"]
+        elif raw.tags is not None and hasattr(raw.tags, "delall"):
+            raw.tags.delall("APIC")
+        raw.save()
     except MutagenError as exc:
         raise TagWriteError(str(exc)) from exc
 

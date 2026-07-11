@@ -74,6 +74,10 @@ class IssueFixBody(BaseModel):
     value: str
 
 
+class ProviderSuggestBody(BaseModel):
+    covers: bool = True
+
+
 class ProviderRescanBody(BaseModel):
     folder: str | None = None
     genre: str | None = None
@@ -156,6 +160,7 @@ class ConflictRead(BaseModel):
 
 class PlanStats(BaseModel):
     n_retag: int = 0
+    n_cover: int = 0
     n_rename: int = 0
     n_move: int = 0
     n_delete: int = 0

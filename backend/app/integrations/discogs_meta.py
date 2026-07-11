@@ -62,3 +62,29 @@ class DiscogsMetaClient:
         if top.get("year"):
             out["release_date"] = str(top["year"])
         return out or None
+
+    def cover(self, *, artist: str | None, title: str | None) -> dict[str, Any] | None:
+        """Copertina (full + thumb) della miglior release per 'Artista Titolo'.
+        None se nessun risultato o nessuna immagine. Match TESTUALE → confidenza 'text'."""
+        if not title:
+            return None
+        q = f"{artist} {title}".strip() if artist else title
+        try:
+            r = get_with_retries(self.http, f"{BASE}/database/search",
+                                 params={"type": "release", "q": q, "per_page": 5},
+                                 error_cls=DiscogsError)
+        except DiscogsError as exc:
+            logger.warning("Discogs cover '%s' fallito: %s", q, exc)
+            return None
+        if r.status_code >= 400:
+            return None
+        try:
+            results = (r.json() or {}).get("results") or []
+        except ValueError:
+            return None
+        for top in results:
+            full = top.get("cover_image")
+            thumb = top.get("thumb") or full
+            if full:
+                return {"full_url": full, "thumb_url": thumb}
+        return None

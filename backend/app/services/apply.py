@@ -5,7 +5,7 @@ import os
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.integrations import fsops, tagio
+from app.integrations import cover_art, fsops, tagio
 from app.models import AudioFile, DupMember, Issue, Plan, PlanOp, ScanRoot, UndoJournal, utcnow
 from app.schemas import ApplyResult
 from app.services import conflict
@@ -66,12 +66,14 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
         o.status = "skipped"
     db.commit()
     ops = [o for o in ops if o.status != "skipped"]
+    cover_skipped = 0
     stale = _stale_op(ops, files)
     if stale is not None:
         return ApplyResult(stale=True, failed_op_seq=stale, reason="piano stale",
-                           skipped_ops=len(skipped),
+                           skipped_ops=len(skipped) + cover_skipped,
                            started_at=started, finished_at=utcnow())
     retag_ops = [o for o in ops if o.kind == "RETAG"]
+    cover_ops = [o for o in ops if o.kind == "COVER"]
     move_ops = [o for o in ops if o.kind in ("RENAME", "MOVE")]
     del_ops = [o for o in ops if o.kind == "DELETE"]
     del_by_path = {o.before_json["path"]: o for o in del_ops}
@@ -120,6 +122,27 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
             o.status = "applied"
             db.commit()
             _progress()
+        for o in cover_ops:
+            current["seq"] = o.seq
+            f = files[o.file_id]
+            if f.has_cover:
+                o.status = "skipped"
+                db.commit()
+                cover_skipped += 1
+                continue
+            try:
+                data = cover_art.fetch_image(o.after_json["full_url"])
+            except cover_art.CoverArtError:
+                o.status = "skipped"
+                db.commit()
+                cover_skipped += 1
+                continue
+            _journal("COVER", o.file_id, from_path=f.path)   # prior = nessuna cover
+            tagio.write_cover(f.path, data)
+            f.has_cover = True
+            o.status = "applied"
+            db.commit()
+            _progress()
         for o in move_ops:
             current["seq"] = o.seq   # Fix 4
             f = files[o.file_id]
@@ -143,12 +166,12 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
         _cleanup_dirs()
         return ApplyResult(run_id=plan.id, applied_ops=state["applied"], partial=True,
                            failed_op_seq=current["seq"], error=str(exc),  # Fix 4: seq del PlanOp
-                           skipped_ops=len(skipped),
+                           skipped_ops=len(skipped) + cover_skipped,
                            started_at=started, finished_at=utcnow())
 
     plan.status = "applied"
     db.commit()
     _cleanup_dirs()
     return ApplyResult(run_id=plan.id, applied_ops=state["applied"],
-                       skipped_ops=len(skipped),
+                       skipped_ops=len(skipped) + cover_skipped,
                        started_at=started, finished_at=utcnow())

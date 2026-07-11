@@ -90,6 +90,7 @@ def build_plan(files, accepted_issues, removals, settings_snapshot,
                root_targets) -> list[PlanOpComputed]:
     removals = set(removals)
     by_file = fixes_by_file(accepted_issues)
+    files_by_id = {f.id: f for f in files}
     retag_ops: list[PlanOpComputed] = []
     move_ops: list[PlanOpComputed] = []
     del_ops: list[PlanOpComputed] = []
@@ -119,4 +120,17 @@ def build_plan(files, accepted_issues, removals, settings_snapshot,
         kind = "RENAME" if os.path.dirname(dest) == os.path.dirname(f.path) else "MOVE"
         move_ops.append(PlanOpComputed(kind, f.id, {"path": f.path}, {"path": dest}))
 
-    return retag_ops + move_ops + del_ops
+    cover_ops: list[PlanOpComputed] = []
+    for issue in accepted_issues:
+        if issue.type != "missing_cover" or not issue.suggested_fix_json:
+            continue
+        f = files_by_id.get(issue.file_id)
+        if f is None or f.id in removals or f.has_cover:
+            continue
+        fix = issue.suggested_fix_json
+        cover_ops.append(PlanOpComputed(
+            "COVER", f.id, {"has_cover": False},
+            {"full_url": fix.get("full_url"), "source": fix.get("source"),
+             "confidence": fix.get("confidence")}))
+
+    return retag_ops + cover_ops + move_ops + del_ops

@@ -74,3 +74,18 @@ def test_best_recording_prefers_title_match():
     ]
     best = p._best_recording(recs, "Dreamscapes", "SLV")
     assert best["title"] == "Dreamscapes"
+
+
+def test_parse_exposes_release_mbids_non_va_first():
+    from app.integrations.musicbrainz import MusicBrainzProvider
+    mb = MusicBrainzProvider(user_agent="test")
+    rec = {
+        "id": "REC-1", "title": "T", "score": 100,
+        "artist-credit": [{"name": "A"}],
+        "releases": [
+            {"id": "VA", "artist-credit": [{"name": "Various Artists"}]},
+            {"id": "SINGLE", "artist-credit": [{"name": "A"}]},
+        ],
+    }
+    out = mb._parse_recording(rec, isrc=None, exact=True)
+    assert out["release_mbids"] == ["SINGLE", "VA"]  # non-VA prima

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { type Issue } from "@/lib/api";
+import { coverThumbUrl, type Issue } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
 // Stessi campi retaggabili del backend (planner._EFFECTIVE_FIELDS).
@@ -27,12 +27,15 @@ function ConfBadge({ conf }: { conf: unknown }) {
   );
 }
 
-function IssueRow({ issue, onFix, onDismiss, onReopen }: {
+function IssueRow({ issue, onFix, onAccept, onDismiss, onReopen }: {
   issue: Issue;
   onFix: (id: number, value: string) => Promise<void>;
+  onAccept: (id: number) => Promise<void>;
   onDismiss: (id: number) => Promise<void>;
   onReopen: (id: number) => Promise<void>;
 }) {
+  const isCover = issue.type === "missing_cover";
+  const [zoom, setZoom] = useState(false);
   const fixable = issue.field != null && RETAGGABLE.has(issue.field);
   const suggested = typeof issue.suggested_fix_json?.to === "string"
     ? (issue.suggested_fix_json.to as string) : "";
@@ -54,7 +57,19 @@ function IssueRow({ issue, onFix, onDismiss, onReopen }: {
       </td>
       <td className="px-3 py-2 text-muted">{issue.field || "—"}</td>
       <td className="px-3 py-2">
-        {issue.status === "open" ? (
+        {isCover ? (
+          issue.status === "dismissed" ? (
+            <span className="text-faint">copertina · non applicata</span>
+          ) : (
+            <button type="button" onClick={() => setZoom(true)}
+              className="block h-11 w-11 overflow-hidden border border-border hover:border-border-strong"
+              title="ingrandisci">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={coverThumbUrl(issue.file_id)} alt="cover"
+                   className="h-full w-full object-cover" />
+            </button>
+          )
+        ) : issue.status === "open" ? (
           fixable ? (
             <div className="flex flex-col gap-1">
               {issue.current_value && (
@@ -80,12 +95,25 @@ function IssueRow({ issue, onFix, onDismiss, onReopen }: {
             {issue.current_value ? `${issue.current_value} · invariato` : "—"}
           </span>
         )}
+        {zoom && (
+          <div onClick={() => setZoom(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-8">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={coverThumbUrl(issue.file_id)} alt="cover"
+                 className="max-h-[80vh] max-w-[80vw] border border-border" />
+          </div>
+        )}
       </td>
       <td className="px-3 py-2"><ConfBadge conf={conf} /></td>
       <td className="whitespace-nowrap px-3 py-2">
         {issue.status === "open" ? (
           <span className="flex gap-1">
-            {fixable && (
+            {isCover ? (
+              <button disabled={busy}
+                onClick={() => run(() => onAccept(issue.id))}
+                className="border border-border px-2 py-0.5 text-[10px] text-ok hover:bg-elevated disabled:opacity-40"
+              >✓ accetta</button>
+            ) : fixable && (
               <button
                 disabled={busy || !value.trim()}
                 onClick={() => run(() => onFix(issue.id, value.trim()))}
@@ -113,9 +141,10 @@ function IssueRow({ issue, onFix, onDismiss, onReopen }: {
   );
 }
 
-export function IssuesTable({ issues, onFix, onDismiss, onReopen }: {
+export function IssuesTable({ issues, onFix, onAccept, onDismiss, onReopen }: {
   issues: Issue[];
   onFix: (id: number, value: string) => Promise<void>;
+  onAccept: (id: number) => Promise<void>;
   onDismiss: (id: number) => Promise<void>;
   onReopen: (id: number) => Promise<void>;
 }) {
@@ -140,7 +169,7 @@ export function IssuesTable({ issues, onFix, onDismiss, onReopen }: {
             const sug = typeof i.suggested_fix_json?.to === "string" ? i.suggested_fix_json.to : "";
             return (
               <IssueRow key={`${i.id}:${sug}`} issue={i}
-                onFix={onFix} onDismiss={onDismiss} onReopen={onReopen} />
+                onFix={onFix} onAccept={onAccept} onDismiss={onDismiss} onReopen={onReopen} />
             );
           })}
         </tbody>

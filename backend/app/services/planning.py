@@ -90,7 +90,7 @@ def load_plan(db: Session) -> PlanRead | None:
                                disk_occupied=conflict.disk_occupied(op_computed))
     skip_ids = {c.file_id for c in conflicts if c.kind in ("collision", "outside_root")}
 
-    counts = {"RETAG": 0, "RENAME": 0, "MOVE": 0, "DELETE": 0}
+    counts = {"RETAG": 0, "COVER": 0, "RENAME": 0, "MOVE": 0, "DELETE": 0}
     space = 0
     n_skipped = 0
     for o in ops:
@@ -100,7 +100,8 @@ def load_plan(db: Session) -> PlanRead | None:
         if o.kind == "DELETE":
             f = files_by_id.get(o.file_id)
             space += (f.size_bytes or 0) if f else 0
-    stats = PlanStats(n_retag=counts["RETAG"], n_rename=counts["RENAME"],
+    stats = PlanStats(n_retag=counts["RETAG"], n_cover=counts["COVER"],
+                      n_rename=counts["RENAME"],
                       n_move=counts["MOVE"], n_delete=counts["DELETE"],
                       space_freed_bytes=space, n_conflicts=len(conflicts),
                       n_skipped=n_skipped,

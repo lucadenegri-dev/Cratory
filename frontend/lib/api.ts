@@ -240,9 +240,13 @@ export interface ProviderSuggestResult {
   suggested: number;
   unresolved: number;
   fingerprinted: number;
+  covers: number;
 }
-export function providerSuggest() {
-  return apiSend<ProviderSuggestResult>("POST", "/api/issues/provider-suggest");
+export function providerSuggest(covers = true) {
+  return apiSend<ProviderSuggestResult>("POST", "/api/issues/provider-suggest", { covers });
+}
+export function coverThumbUrl(fileId: number): string {
+  return `${API}/api/issues/cover-thumb/${fileId}`;
 }
 
 export interface ProviderRescanBody {
@@ -330,6 +334,7 @@ export interface Conflict {
 }
 export interface PlanStats {
   n_retag: number;
+  n_cover: number;
   n_rename: number;
   n_move: number;
   n_delete: number;

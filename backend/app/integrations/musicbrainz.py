@@ -150,6 +150,16 @@ class MusicBrainzProvider:
         return max(tags, key=lambda t: t.get("count", 0))["name"] if tags else None
 
     @staticmethod
+    def _release_mbids(rec):
+        prio, rest = [], []
+        for rel in rec.get("releases") or []:
+            rid = rel.get("id")
+            if not rid:
+                continue
+            (rest if MusicBrainzProvider._is_va_comp(rel) else prio).append(rid)
+        return prio + rest
+
+    @staticmethod
     def _artist_credit(rec):
         for credit in rec.get("artist-credit") or []:
             name = credit.get("name") or (credit.get("artist") or {}).get("name")
@@ -175,6 +185,8 @@ class MusicBrainzProvider:
             out["genre_primary"] = genre
         if isrc:
             out["isrc"] = isrc
+        if rels := self._release_mbids(rec):
+            out["release_mbids"] = rels
         if not out:
             return None
         out["confidence"] = 95 if exact else min(90, int(rec.get("score") or 60))
