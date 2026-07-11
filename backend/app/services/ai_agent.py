@@ -15,6 +15,7 @@ from app.integrations import LLMClient
 from app.models import Setlist, SetlistTrack, Track
 from app.repositories import library_stats
 from app.schemas import AISetResponse, SetGenerationRequest
+from app.services.app_state import get_language
 from app.services.candidate_engine import select_candidates
 from app.services.set_generator import assign_roles
 from app.services.validation import validate_ai_set
@@ -50,8 +51,7 @@ Regole inderogabili:
 Sii CONCISO per restare reattivo:
 - reason e transition_note: una frase breve ciascuno (max ~18 parole).
 - global_explanation: max 2 frasi.
-- missing_library_suggestions: max 3 voci brevi.
-Scrivi SEMPRE in italiano. Rispondi esclusivamente nel formato JSON richiesto."""
+- missing_library_suggestions: max 3 voci brevi."""
 
 # Modalità "creative": l'AI porta giudizio musicale, non solo matching tecnico.
 CREATIVE_SYSTEM_PROMPT = """Sei un DJ di esperienza che costruisce un set con gusto e racconto, non solo con la teoria.
@@ -74,8 +74,12 @@ Regole inderogabili (NON negoziabili):
 - Per ogni traccia: reason (perché lì, anche per ragioni musicali/emotive), transition_note (come mixare), risk_level (low|medium|high).
 - missing_library_suggestions: max 3 consigli concreti su che TIPO di traccia aggiungere (BPM/tonalità/energia/mood/ruolo) per rendere il set migliore. Niente id.
 
-Sii CONCISO: reason e transition_note una frase breve; global_explanation max 2 frasi; missing_library_suggestions max 3 voci.
-Scrivi SEMPRE in italiano. Rispondi esclusivamente nel formato JSON richiesto."""
+Sii CONCISO: reason e transition_note una frase breve; global_explanation max 2 frasi; missing_library_suggestions max 3 voci."""
+
+LANGUAGE_INSTRUCTIONS = {
+    "it": "Scrivi SEMPRE in italiano. Rispondi esclusivamente nel formato JSON richiesto.",
+    "en": "ALWAYS write in English. Reply exclusively in the requested JSON format.",
+}
 
 # JSON Schema per structured outputs (additionalProperties:false ovunque).
 OUTPUT_SCHEMA = {
@@ -107,6 +111,30 @@ OUTPUT_SCHEMA = {
 
 class AIAgentError(Exception):
     pass
+
+
+_PHASES = {
+    "candidates": {"it": "Seleziono le tracce candidate", "en": "Selecting candidate tracks"},
+    "building": {"it": "L'AI sta costruendo il set (puo' richiedere un minuto)",
+                 "en": "The AI is building the set (may take a minute)"},
+    "validating": {"it": "Valido il risultato", "en": "Validating the result"},
+}
+
+_ERRORS = {
+    "not_enough_candidates": {
+        "it": "Tracce candidate insufficienti per l'AI: allargare i vincoli o importare piu' tracce.",
+        "en": "Not enough candidate tracks for the AI: widen the constraints or import more tracks.",
+    },
+    "no_valid_tracks": {
+        "it": "L'AI non ha prodotto tracce valide tra le candidate.",
+        "en": "The AI did not produce any valid tracks among the candidates.",
+    },
+}
+
+
+def _safe_lang(lang: str) -> str:
+    """Guardia lingua sconosciuta -> "it" (stesso default di get_language)."""
+    return lang if lang in ("it", "en") else "it"
 
 
 CORRIDOR_BANDS = 6  # fasce lungo l'arco BPM per il campionamento stratificato
@@ -218,16 +246,16 @@ def _compute_candidate_profile(candidates: list[Track]) -> dict:
 
 def generate_ai_set(db, req, llm, on_phase=None):
     """on_phase(str) opzionale per riportare la fase corrente a un job asincrono."""
+    lang = _safe_lang(get_language(db))
+
     def phase(p: str) -> None:
         if on_phase:
             on_phase(p)
 
-    phase("Seleziono le tracce candidate")
+    phase(_PHASES["candidates"][lang])
     candidates = select_candidates(db, req)
     if len(candidates) < 3:
-        raise AIAgentError(
-            "Tracce candidate insufficienti per l'AI: allargare i vincoli o importare piu' tracce."
-        )
+        raise AIAgentError(_ERRORS["not_enough_candidates"][lang])
     chosen_candidates = _rank_candidates(candidates, req)
     candidates_by_id = {t.id: t for t in chosen_candidates}
 
@@ -254,17 +282,18 @@ def generate_ai_set(db, req, llm, on_phase=None):
         "library_context": _safe_library_context(db),
     }
 
-    system = CREATIVE_SYSTEM_PROMPT if getattr(req, "mode", "technical") == "creative" else SYSTEM_PROMPT
+    base_prompt = CREATIVE_SYSTEM_PROMPT if getattr(req, "mode", "technical") == "creative" else SYSTEM_PROMPT
+    system = base_prompt + "\n" + LANGUAGE_INSTRUCTIONS[lang]
     logger.info("AI Set Agent (%s): %s candidate, prompt=%r",
                 getattr(req, "mode", "technical"), len(chosen_candidates), (req.prompt or "")[:80])
-    phase("L'AI sta costruendo il set (puo' richiedere un minuto)")
+    phase(_PHASES["building"][lang])
     raw = llm.complete_json(system, payload, OUTPUT_SCHEMA)
     ai = AISetResponse.model_validate(raw)
 
-    phase("Valido il risultato")
+    phase(_PHASES["validating"][lang])
     result = validate_ai_set(ai, candidates_by_id, req)
     if not result.tracks:
-        raise AIAgentError("L'AI non ha prodotto tracce valide tra le candidate.")
+        raise AIAgentError(_ERRORS["no_valid_tracks"][lang])
 
     setlist = Setlist(
         name=ai.set_title or req.name or "Set AI",
