@@ -492,6 +492,8 @@ export const en = {
     advancedOptionsLabel: "Advanced options",
     sectionArc: "Set arc",
     bpmHint: "empty = automatic",
+    fromPlaceholder: "from",
+    toPlaceholder: "to",
     energyLabel: "Energy",
     energyHint: "0–100, from audio files",
     sectionConstraints: "Constraints",

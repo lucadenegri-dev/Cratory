@@ -494,6 +494,8 @@ export const it: Dictionary = {
     advancedOptionsLabel: "Opzioni avanzate",
     sectionArc: "Arco del set",
     bpmHint: "vuoto = automatico",
+    fromPlaceholder: "da",
+    toPlaceholder: "a",
     energyLabel: "Energia",
     energyHint: "0–100, dai file audio",
     sectionConstraints: "Vincoli",

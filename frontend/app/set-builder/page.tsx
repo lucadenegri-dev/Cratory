@@ -315,11 +315,11 @@ export default function SetBuilder() {
                 <Section icon={<TrendingUp size={13} className="text-faint" />} title={t.setBuilder.sectionArc}>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <ArcField label="BPM" hint={t.setBuilder.bpmHint}
-                      from={<Input type="number" placeholder="da" value={startBpm} onChange={(e) => { setStartBpm(e.target.value); clearPreset(); }} />}
-                      to={<Input type="number" placeholder="a" value={endBpm} onChange={(e) => { setEndBpm(e.target.value); clearPreset(); }} />} />
+                      from={<Input type="number" placeholder={t.setBuilder.fromPlaceholder} value={startBpm} onChange={(e) => { setStartBpm(e.target.value); clearPreset(); }} />}
+                      to={<Input type="number" placeholder={t.setBuilder.toPlaceholder} value={endBpm} onChange={(e) => { setEndBpm(e.target.value); clearPreset(); }} />} />
                     <ArcField label={t.setBuilder.energyLabel} hint={t.setBuilder.energyHint}
-                      from={<Input type="number" min={0} max={100} placeholder="da" value={startEnergy} onChange={(e) => { setStartEnergy(e.target.value); clearPreset(); }} />}
-                      to={<Input type="number" min={0} max={100} placeholder="a" value={endEnergy} onChange={(e) => { setEndEnergy(e.target.value); clearPreset(); }} />} />
+                      from={<Input type="number" min={0} max={100} placeholder={t.setBuilder.fromPlaceholder} value={startEnergy} onChange={(e) => { setStartEnergy(e.target.value); clearPreset(); }} />}
+                      to={<Input type="number" min={0} max={100} placeholder={t.setBuilder.toPlaceholder} value={endEnergy} onChange={(e) => { setEndEnergy(e.target.value); clearPreset(); }} />} />
                   </div>
                 </Section>
 
