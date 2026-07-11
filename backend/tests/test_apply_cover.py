@@ -86,3 +86,38 @@ def test_apply_cover_skips_on_write_failure_without_halting(db, copy_fixture, tm
     assert tagio.read_tags(fpath).has_cover is False
     db.refresh(f)
     assert f.has_cover is False
+
+
+def _add_cover_issue(db, file_id, status="accepted"):
+    from app.models import Issue
+    iss = Issue(file_id=file_id, type="missing_cover", field="cover", severity="info",
+                detail="copertina mancante", status=status,
+                suggested_fix_json={"field": "cover", "source": "caa",
+                                    "confidence": "high", "full_url": "http://f.jpg"})
+    db.add(iss)
+    db.commit()
+    return iss
+
+
+def test_apply_cover_reopens_issue_on_write_failure(db, copy_fixture, tmp_path):
+    """Cover non scrivibile → la issue missing_cover torna 'open' (visibile in ISSUES)."""
+    plan, f, fpath = _seed_cover_plan(db, copy_fixture, tmp_path)
+    iss = _add_cover_issue(db, f.id)
+    with patch("app.services.apply.cover_art.fetch_image", return_value=_JPG), \
+         patch("app.services.apply.tagio.write_cover",
+               side_effect=Exception("block is too long to write")):
+        res = apply_svc.apply_plan(db, plan)
+    assert res.skipped_ops == 1
+    db.refresh(iss)
+    assert iss.status == "open"
+
+
+def test_apply_cover_reopens_issue_on_download_failure(db, copy_fixture, tmp_path):
+    from app.integrations.cover_art import CoverArtError
+    plan, f, fpath = _seed_cover_plan(db, copy_fixture, tmp_path)
+    iss = _add_cover_issue(db, f.id)
+    with patch("app.services.apply.cover_art.fetch_image", side_effect=CoverArtError("dead")):
+        res = apply_svc.apply_plan(db, plan)
+    assert res.skipped_ops == 1
+    db.refresh(iss)
+    assert iss.status == "open"

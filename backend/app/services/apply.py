@@ -97,6 +97,16 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
         db.commit()
         state["seq"] += 1
 
+    def _reopen_cover_issue(file_id):
+        # Cover skippata per errore (download/scrittura): rimetti la issue
+        # missing_cover a 'open' così torna visibile in ISSUES per una decisione,
+        # invece di restare 'accepted' e ritentare in silenzio al prossimo piano.
+        iss = db.scalar(select(Issue).where(
+            Issue.file_id == file_id, Issue.type == "missing_cover"))
+        if iss is not None and iss.status != "open":
+            iss.status = "open"
+            iss.updated_at = utcnow()
+
     def _progress():
         state["applied"] += 1
         if on_progress is not None:
@@ -137,6 +147,7 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
                 data = cover_art.fetch_image(cover_art.bounded_cover_url(o.after_json["full_url"]))
             except cover_art.CoverArtError:
                 o.status = "skipped"
+                _reopen_cover_issue(o.file_id)
                 db.commit()
                 cover_skipped += 1
                 continue
@@ -150,6 +161,7 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
                 # remove_cover idempotente su un file senza cover).
                 logger.warning("write_cover fallita su %s: %s", f.path, exc)
                 o.status = "skipped"
+                _reopen_cover_issue(o.file_id)
                 db.commit()
                 cover_skipped += 1
                 continue

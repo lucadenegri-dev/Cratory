@@ -300,6 +300,8 @@ export const en = {
     dismissedTagUnchanged: "dismissed: the tag stays unchanged",
     unchangedSuffix: "· unchanged",
     acceptShort: "✓ accept",
+    emptyShort: "✓ empty",
+    emptyValueMark: "(empty)",
     dismissShort: "✕ dismiss",
     badgeAccepted: "accepted",
     badgeDismissed: "dismissed",

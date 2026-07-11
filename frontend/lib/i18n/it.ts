@@ -295,6 +295,8 @@ export const it: Dictionary = {
     dismissedTagUnchanged: "ignorata: il tag resta invariato",
     unchangedSuffix: "· invariato",
     acceptShort: "✓ accetta",
+    emptyShort: "✓ svuota",
+    emptyValueMark: "(vuoto)",
     dismissShort: "✕ ignora",
     badgeAccepted: "accettata",
     badgeDismissed: "ignorata",

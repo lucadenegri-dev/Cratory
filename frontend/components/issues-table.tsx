@@ -69,6 +69,9 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
   const t = useT();
   const isCover = issue.type === "missing_cover";
   const fixable = issue.field != null && RETAGGABLE.has(issue.field);
+  // Proposta di svuotamento (es. commento/titolo spazzatura): non c'è un valore
+  // da digitare, si accetta "a vuoto".
+  const isClear = issue.suggested_fix_json?.action === "clear";
   const suggested = typeof issue.suggested_fix_json?.to === "string"
     ? (issue.suggested_fix_json.to as string) : "";
   const conf = issue.suggested_fix_json?.confidence;
@@ -92,7 +95,15 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
         {isCover ? (
           <Cover fileId={issue.file_id} dismissed={issue.status === "dismissed"} />
         ) : issue.status === "open" ? (
-          fixable ? (
+          !fixable ? (
+            <span className="text-faint">{t.issues.notFixable}</span>
+          ) : isClear ? (
+            <div className="flex items-center gap-1.5 text-[10px]">
+              {issue.current_value && <span className="max-w-[200px] truncate text-faint line-through" title={issue.current_value}>{issue.current_value}</span>}
+              <span className="text-faint">→</span>
+              <span className="text-muted">{t.issues.emptyValueMark}</span>
+            </div>
+          ) : (
             <div className="flex flex-col gap-1">
               {issue.current_value && (
                 <div className="flex items-center gap-1.5 text-[10px]">
@@ -107,8 +118,6 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
                 placeholder={t.issues.writeField(issue.field ?? "")}
               />
             </div>
-          ) : (
-            <span className="text-faint">{t.issues.notFixable}</span>
           )
         ) : issue.status === "accepted" ? (
           <span className="text-fg">{suggested || t.common.empty}</span>
@@ -122,11 +131,11 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
       <td className="whitespace-nowrap px-3 py-2 align-top text-right">
         {issue.status === "open" ? (
           <span className="flex justify-end gap-1">
-            {isCover ? (
+            {isCover || (fixable && isClear) ? (
               <button disabled={busy}
                 onClick={() => run(() => onAccept(issue.id))}
                 className="border border-border px-2 py-0.5 text-[10px] text-ok hover:bg-elevated disabled:opacity-40"
-              >{t.issues.acceptShort}</button>
+              >{isClear ? t.issues.emptyShort : t.issues.acceptShort}</button>
             ) : fixable && (
               <button
                 disabled={busy || !value.trim()}
