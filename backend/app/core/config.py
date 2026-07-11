@@ -23,5 +23,8 @@ class Settings(BaseSettings):
     acoustid_api_key: str | None = None
     musicbrainz_user_agent: str = "Sortory/0.1 (+http://localhost)"
 
+    # Cache thumbnail delle cover proposte (git-ignored, come ./data).
+    cover_cache_dir: str = "./data/cover_cache"
+
 
 settings = Settings()
