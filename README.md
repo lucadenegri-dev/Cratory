@@ -163,7 +163,7 @@ works without it; the token only raises the rate limit. `SLSKD_URL`/`SLSKD_DOWNL
 point to your own running slskd instance; without them, file acquisition stays disabled
 and the rest of the app is unaffected. `LIBRARY_ROOT` points to your canonical, organized
 music folder (the one Sortory manages); leave it empty to keep library indexing
-disabled — Settings → "Libreria (disco)" triggers `POST /api/library/index` once it is
+disabled — Settings → "Library (disk)" triggers `POST /api/library/index` once it is
 set (the index also re-runs automatically at every app startup, incremental scan),
 matching files to tracks by audio hash (falling back to legacy digest, ISRC, then
 fuzzy artist+title) and marking them as owned (`has_local_file`). `ARCHIVE_ROOT` is an
@@ -195,7 +195,7 @@ startup), so it isn't a strip stage.
 
 Typical run: start backend + frontend → in Settings, connect Spotify → import a playlist
 or paste a tracklist → run Sortory separately to tag and organize new files onto disk
-→ index the library (Settings → "Libreria (disco)", or let it auto-run at startup) →
+→ index the library (Settings → "Library (disk)", or let it auto-run at startup) →
 analyze new tracks in Rekordbox and import the collection XML to fill in BPM/key →
 generate a set (technical or creative) → review transitions, warnings and alternatives →
 export or create a Spotify playlist → use Discovery (expand, or "Scava" by genre/label via

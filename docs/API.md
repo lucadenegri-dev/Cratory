@@ -1,10 +1,10 @@
 # API
 
-Contratti REST correnti del backend FastAPI. Tutte le response principali sono
-validate con Pydantic in `backend/app/schemas.py`. Superficie verificata contro
-i router in `backend/app/routers/`.
+Current REST contracts of the FastAPI backend. All main responses are validated
+with Pydantic in `backend/app/schemas.py`. Surface verified against the routers in
+`backend/app/routers/`.
 
-Base locale:
+Local base:
 
 ```text
 http://localhost:8000
@@ -22,39 +22,38 @@ GET /api/health
 GET /api/pipeline
 ```
 
-Snapshot unico per la striscia di orientamento in dashboard. Response `PipelineOut`:
-conteggi libreria (`playlists`, `total_tracks`, `missing_key`, `wishlist`,
-`archived_count`, `with_local_file`, `analyze_pending`, `ready_for_set`), stato
-download (`download_active`, `download_pending`) e stato disco (`inbox_files` da
-`SLSKD_DOWNLOAD_DIR`, `organizer_url` da `ORGANIZER_URL`). `analyze_pending` conta le
-tracce possedute senza BPM o senza key, cioe' quante restano da "analizzare in
-Rekordbox ed importare" (stesso numero di `GET /api/rekordbox/pending`). `inbox_files`
-e' `null` quando `SLSKD_DOWNLOAD_DIR` non e' configurata o non esiste (fase neutra,
-non errore). L'indicizzazione della libreria non e' piu' un campo di questo snapshot
-(i vecchi `files_on_disk`/`index_mismatch`/`last_index_at` sono stati rimossi): si
-lancia dal pulsante "Indicizza" nella nav.
+Single snapshot for the orientation strip in the dashboard. Response `PipelineOut`:
+library counts (`playlists`, `total_tracks`, `missing_key`, `wishlist`,
+`archived_count`, `with_local_file`, `analyze_pending`, `ready_for_set`), download
+state (`download_active`, `download_pending`) and disk state (`inbox_files` from
+`SLSKD_DOWNLOAD_DIR`, `organizer_url` from `ORGANIZER_URL`). `analyze_pending` counts
+the owned tracks without BPM or without key, i.e. how many remain to "analyze in
+Rekordbox and import" (same number as `GET /api/rekordbox/pending`). `inbox_files` is
+`null` when `SLSKD_DOWNLOAD_DIR` is not configured or does not exist (neutral phase,
+not an error). Library indexing is no longer a field of this snapshot (the old
+`files_on_disk`/`index_mismatch`/`last_index_at` have been removed): it is launched
+from the "Index" button in the nav.
 
-## Rekordbox (fonte di BPM/key)
+## Rekordbox (source of BPM/key)
 
 ```text
 GET  /api/rekordbox/pending
 POST /api/rekordbox/import
 ```
 
-`GET /api/rekordbox/pending` conta le tracce possedute (`has_local_file`) ancora
-senza BPM o senza Camelot key. Response: `{pending}`.
+`GET /api/rekordbox/pending` counts the owned tracks (`has_local_file`) still
+without BPM or without Camelot key. Response: `{pending}`.
 
-`POST /api/rekordbox/import` (multipart, campo `file`) importa l'XML esportato da
-Rekordbox (`File > Export Collection in xml format`). Per ogni traccia dell'XML
-cerca la `Track` posseduta corrispondente nell'ordine: path normalizzato NFC ->
-`audio_hash` di fallback (gated sul basename) -> fuzzy artist+title. Di default
-riempie `bpm`/`camelot_key` **solo se assenti** (protegge le correzioni manuali);
-con `?overwrite=true` la ri-analisi Rekordbox vince sui valori esistenti, ma un
-dato assente nell'XML non azzera mai quello in libreria. Ricalcola `energy`
-quando il BPM cambia. I contatori `bpm_set`/`key_set` contano solo i valori
-effettivamente cambiati. Response:
-`{in_file, matched, unmatched, bpm_set, key_set, energy_set}`. `400` su file
-vuoto o XML non valido/non sicuro.
+`POST /api/rekordbox/import` (multipart, `file` field) imports the XML exported from
+Rekordbox (`File > Export Collection in xml format`). For each track in the XML it
+looks for the matching owned `Track` in this order: NFC-normalized path ->
+`audio_hash` fallback (gated on the basename) -> fuzzy artist+title. By default it
+fills `bpm`/`camelot_key` **only if absent** (it protects manual corrections); with
+`?overwrite=true` the Rekordbox re-analysis wins over existing values, but a value
+absent in the XML never clears the one in the library. It recomputes `energy` when
+the BPM changes. The `bpm_set`/`key_set` counters count only the values that actually
+changed. Response: `{in_file, matched, unmatched, bpm_set, key_set, energy_set}`.
+`400` on an empty file or invalid/unsafe XML.
 
 ## Playlists
 
@@ -73,35 +72,35 @@ GET    /api/playlists/{playlist_id}/gaps
 GET    /api/playlists/library/gaps
 ```
 
-`GET /api/playlists/spotify/available` elenca solo le playlist **possedute**
-dall'utente collegato (quelle altrui che segue non sono importabili in dev mode).
-`POST /api/playlists/import` importa una playlist Spotify o i liked tracks.
-`POST /api/playlists/{playlist_id}/sync` riallinea una playlist gia' importata con
-la piattaforma d'origine. Spotify: importa le nuove tracce e scollega quelle
-rimosse (che restano in libreria). SoundCloud (vedi sezione dedicata): sempre
-additivo, mai prune; solo per playlist importate da URL (non i "like"). Risponde
-`409` per una playlist SoundCloud di tipo "like" o senza un `url` salvato.
-`DELETE /api/playlists/{playlist_id}` rimuove la playlist e i suoi "lead orfani":
-tracce senza file locale che non sono in nessun'altra playlist ne' in un set salvato
-(le tracce su disco, o presenti in altra playlist/set, restano). Risponde `200` con
-`{deleted_tracks}` (quante tracce orfane sono state rimosse), `404` se non esiste.
-`POST /api/playlists/import-manual` crea una playlist da testo incollato. Nessuno di
-questi avvia piu' enrichment: il testuale (titolo/artista/album/label/genere) e' di
-Sortory, BPM/key arrivano solo dall'import Rekordbox.
-`POST /api/playlists/create-from-tracks` (`201`) crea una playlist manuale
-componendo tracce gia' in libreria (disk-first), nell'ordine fornito. Request:
-`{name, track_ids}`. Response: `PlaylistOut`. `422` se il nome e' vuoto o un
-track_id non esiste.
-`POST /api/playlists/{playlist_id}/discovered-tracks` aggiunge a quella playlist una
-traccia scoperta dall'espansione (request: artist/title/spotify_id/isrc/
-duration_seconds/url/album_art_url). Importa il brano (idempotente), lo attacca alla
-playlist (modello 1:1: non sposta una traccia gia' appartenente ad altra playlist) e,
-se la playlist e' una Spotify posseduta e il brano e' risolto, lo aggiunge anche su
-Spotify (write-back best-effort). Response: `created`, `track`, `spotify_added`,
-`spotify_error`. L'espansione si lancia dal dettaglio playlist
-(`/playlists/[id]/expand`); l'endpoint `POST /api/discovery/expand` resta invariato.
+`GET /api/playlists/spotify/available` lists only the playlists **owned** by the
+connected user (the ones by others that they follow are not importable in dev mode).
+`POST /api/playlists/import` imports a Spotify playlist or the liked tracks.
+`POST /api/playlists/{playlist_id}/sync` realigns an already-imported playlist with
+the source platform. Spotify: imports the new tracks and unlinks the removed ones
+(which stay in the library). SoundCloud (see dedicated section): always additive,
+never prune; only for playlists imported from URL (not the "likes"). Responds `409`
+for a "like"-type SoundCloud playlist or one without a saved `url`.
+`DELETE /api/playlists/{playlist_id}` removes the playlist and its "orphan leads":
+tracks without a local file that are in no other playlist nor in a saved set (tracks
+on disk, or present in another playlist/set, stay). Responds `200` with
+`{deleted_tracks}` (how many orphan tracks were removed), `404` if it does not exist.
+`POST /api/playlists/import-manual` creates a playlist from pasted text. None of these
+start any enrichment: the text metadata (title/artist/album/label/genre) is Sortory's
+job, BPM/key come only from the Rekordbox import.
+`POST /api/playlists/create-from-tracks` (`201`) creates a manual playlist composed of
+tracks already in the library (disk-first), in the given order. Request:
+`{name, track_ids}`. Response: `PlaylistOut`. `422` if the name is empty or a
+track_id does not exist.
+`POST /api/playlists/{playlist_id}/discovered-tracks` adds to that playlist a track
+discovered by the expansion (request: artist/title/spotify_id/isrc/
+duration_seconds/url/album_art_url). It imports the track (idempotent), attaches it to
+the playlist (1:1 model: it does not move a track already belonging to another
+playlist) and, if the playlist is an owned Spotify one and the track is resolved, adds
+it on Spotify too (best-effort write-back). Response: `created`, `track`,
+`spotify_added`, `spotify_error`. The expansion is launched from the playlist detail
+(`/playlists/[id]/expand`); the `POST /api/discovery/expand` endpoint stays unchanged.
 
-## Tracks e libreria
+## Tracks and library
 
 ```text
 GET   /api/tracks
@@ -115,47 +114,46 @@ GET   /api/library/index/status
 GET   /api/stats
 ```
 
-Filtri supportati da `GET /api/tracks`: artista, titolo, album, genere, etichetta
-(`label`, match esatto) e archiviate (`archived`, default `false`: le archiviate
-sono escluse; `true` mostra solo le archiviate), sorgente (incl. `local_files`),
-stato (`imported` | `ready_for_set`), BPM min/max, key, durata, presenza
-Spotify/SoundCloud, possesso (`has_local_file`), metadata incompleti, sort/order,
-limit/offset — per le tracce di una playlist usare
-`GET /api/playlists/{playlist_id}/tracks`.
+Filters supported by `GET /api/tracks`: artist, title, album, genre, label
+(`label`, exact match) and archived (`archived`, default `false`: archived ones are
+excluded; `true` shows only the archived ones), source (incl. `local_files`), state
+(`imported` | `ready_for_set`), BPM min/max, key, duration, Spotify/SoundCloud
+presence, ownership (`has_local_file`), incomplete metadata, sort/order, limit/offset
+— for the tracks of a playlist use `GET /api/playlists/{playlist_id}/tracks`.
 
-`GET /api/tracks/{track_id}/cover` serve l'artwork **incorporato nel file** di una
-traccia posseduta, letto on-demand dal disco (non salvato in DB). Risponde con i byte
-dell'immagine (`Cache-Control: max-age=3600`); `404` se la traccia non esiste, non e'
-posseduta (`has_local_file`), il file manca o non contiene cover. Il frontend usa
-`album_art_url` (Spotify) quando presente e ripiega su questo endpoint altrimenti.
+`GET /api/tracks/{track_id}/cover` serves the artwork **embedded in the file** of an
+owned track, read on-demand from disk (not saved in the DB). Responds with the image
+bytes (`Cache-Control: max-age=3600`); `404` if the track does not exist, is not owned
+(`has_local_file`), the file is missing or contains no cover. The frontend uses
+`album_art_url` (Spotify) when present and falls back to this endpoint otherwise.
 
-`POST /api/library/index` (202) indicizza la libreria canonica `LIBRARY_ROOT`
-(disk-first: il disco È la libreria) — scan + riaggancio per audio-hash +
-riconciliazione dei possessi; `409` se `LIBRARY_ROOT` non è configurata. Stato del
-job su `GET /api/library/index/status`.
+`POST /api/library/index` (202) indexes the canonical `LIBRARY_ROOT` library
+(disk-first: the disk IS the library) — scan + re-link by audio-hash + ownership
+reconciliation; `409` if `LIBRARY_ROOT` is not configured. Job state on
+`GET /api/library/index/status`.
 
-`PATCH /api/tracks/{track_id}` accetta aggiornamenti parziali su BPM, Camelot,
-genere, label, anno e campi affini. I valori manuali hanno precedenza sui dati
-importati. `422` su tonalita' non in notazione Camelot valida. `energy` **non e'
-accettato**: e' sempre derivata da BPM+genere e viene ricalcolata automaticamente
-quando il patch tocca `bpm` o `genere`; un payload che include `energy` viene
-rifiutato con `422` (schema `extra="forbid"`).
+`PATCH /api/tracks/{track_id}` accepts partial updates on BPM, Camelot, genre, label,
+year and related fields. Manual values take precedence over imported data. `422` on a
+key not in valid Camelot notation. `energy` is **not accepted**: it is always derived
+from BPM+genre and is recomputed automatically when the patch touches `bpm` or
+`genre`; a payload that includes `energy` is rejected with `422` (schema
+`extra="forbid"`).
 
-`POST /api/tracks/{track_id}/link-file` collega manualmente un file su disco alla
-traccia (possesso senza download): valida esistenza ed estensione audio, imposta
-`has_local_file`/`local_path`/`local_format`/`local_bitrate` + audio-hash
-best-effort e azzera l'esito download (`last_download_outcome`/`reason`).
-Request: `{path}`. `400` su percorso non valido, `404` se la traccia non esiste.
+`POST /api/tracks/{track_id}/link-file` manually links a file on disk to the track
+(ownership without download): it validates existence and audio extension, sets
+`has_local_file`/`local_path`/`local_format`/`local_bitrate` + best-effort audio-hash
+and clears the download outcome (`last_download_outcome`/`reason`). Request: `{path}`.
+`400` on an invalid path, `404` if the track does not exist.
 
-`GET /api/files/search?q=...` cerca file audio per nome (match AND dei termini,
-case-insensitive) in `LIBRARY_ROOT` e `SLSKD_DOWNLOAD_DIR`; max 50 risultati,
-query sotto i 2 caratteri restituisce lista vuota. Risposta: lista di
-`{path, name, format, size, source}` con `source` = `library` | `downloads`.
+`GET /api/files/search?q=...` searches audio files by name (AND match of the terms,
+case-insensitive) in `LIBRARY_ROOT` and `SLSKD_DOWNLOAD_DIR`; max 50 results, a query
+under 2 characters returns an empty list. Response: list of
+`{path, name, format, size, source}` with `source` = `library` | `downloads`.
 
-`GET /api/stats` restituisce gli aggregati deterministici della libreria
-(`LibraryStatsOut`): conteggi, copertura BPM/key, `key_distribution` e
-`genre_distribution` (mappa genere->conteggio; i generi sono fusi
-case-insensitive tenendo la grafia piu' frequente), istogramma BPM ed energia.
+`GET /api/stats` returns the deterministic library aggregates (`LibraryStatsOut`):
+counts, BPM/key coverage, `key_distribution` and `genre_distribution` (genre->count
+map; genres are merged case-insensitively keeping the most frequent spelling), BPM and
+energy histogram.
 
 ## Labels
 
@@ -163,14 +161,14 @@ case-insensitive tenendo la grafia piu' frequente), istogramma BPM ed energia.
 GET  /api/labels
 ```
 
-`GET /api/labels` restituisce la panoramica deterministica delle etichette presenti in
-libreria (aggregati con nomi normalizzati e merge delle varianti). Ogni voce espone
-`label`, `track_count`, `artist_count`, `artists` (lista completa, per il filtro per
-artista), `genres` (cap) e il range anni. La `label` arriva dal tag del file (letta in
-indicizzazione, scritta da Sortory): il vecchio backfill da Spotify e' stato
-rimosso.
+`GET /api/labels` returns the deterministic overview of the labels present in the
+library (aggregates with normalized names and merging of variants). Each entry exposes
+`label`, `track_count`, `artist_count`, `artists` (full list, for the by-artist
+filter), `genres` (capped) and the year range. The `label` comes from the file tag
+(read at indexing time, written by Sortory): the old backfill from Spotify has been
+removed.
 
-## Set Builder e set salvati
+## Set Builder and saved sets
 
 ```text
 POST   /api/sets/generate
@@ -187,22 +185,22 @@ POST   /api/sets/{setlist_id}/tracks/{position}/replace
 POST   /api/sets/{setlist_id}/alternatives
 ```
 
-Generazione:
+Generation:
 
-- `generate` restituisce subito il set.
-- `generate-async` avvia un job e la UI legge `generate-status`.
-- `mode=technical|creative` seleziona il comportamento AI quando disponibile.
-- Disk-first: `owned_only` (default `true`) genera il set dai soli brani posseduti.
-  Il flag resta sul set salvato (esposto in `SetlistOut.owned_only`) e l'editing lo
-  rispetta: `alternatives` esclude i lead dal pool e `replace` con una traccia senza
-  file locale risponde 422.
+- `generate` returns the set immediately.
+- `generate-async` starts a job and the UI reads `generate-status`.
+- `mode=technical|creative` selects the AI behavior when available.
+- Disk-first: `owned_only` (default `true`) generates the set from owned tracks only.
+  The flag stays on the saved set (exposed in `SetlistOut.owned_only`) and editing
+  respects it: `alternatives` excludes leads from the pool and `replace` with a track
+  without a local file responds 422.
 
 Export (`POST /api/sets/{setlist_id}/export?format=`): `text` | `csv` | `markdown` |
-`m3u8`. Il CSV include la colonna `local_path` (stringa vuota se la traccia non ha
-file locale). Il formato `m3u8` produce una playlist importabile in Rekordbox
-(`#EXTM3U` + `#EXTINF` per traccia, righe con il `local_path` assoluto del file in
-libreria); le tracce senza file locale sono escluse e segnalate con un commento in
-testa. In alternativa, creazione playlist Spotify tramite endpoint Spotify.
+`m3u8`. The CSV includes the `local_path` column (empty string if the track has no
+local file). The `m3u8` format produces a playlist importable in Rekordbox (`#EXTM3U`
++ `#EXTINF` per track, lines with the absolute `local_path` of the file in the
+library); tracks without a local file are excluded and flagged with a comment at the
+top. Alternatively, Spotify playlist creation via the Spotify endpoint.
 
 ## Transitions
 
@@ -212,7 +210,7 @@ GET  /api/transitions/before/{track_id}
 POST /api/transitions/score
 ```
 
-Le transizioni espongono score tecnico e classificazione deterministica:
+Transitions expose a technical score and a deterministic classification:
 
 ```text
 technically_safe | creative_risk | good_reset
@@ -227,7 +225,7 @@ GET  /api/spotify/callback
 POST /api/spotify/create-playlist
 ```
 
-Spotify gestisce OAuth, import e export playlist. Non e' una fonte di BPM/key.
+Spotify handles OAuth, playlist import and export. It is not a source of BPM/key.
 
 ## SoundCloud
 
@@ -239,35 +237,33 @@ GET  /api/soundcloud/likes/preview
 POST /api/soundcloud/import/likes
 ```
 
-Import via yt-dlp: solo metadati, mai audio, niente ISRC (SoundCloud non lo
-espone). La preview dei like usa l'estrazione flat (veloce, senza uploader né
-durata); import e sync ri-fetchano ogni traccia in modalità piena (uploader
-reale, durata, artwork — ~1s a traccia, le playlist nei like sono filtrate).
-`GET status` restituisce `available` (yt-dlp
-importabile), `ytdlp_version` e lo `username` configurato. `PUT config` salva lo
-username (`{username}`, spoglia la `@` iniziale). Gli endpoint di preview/import
-dei like senza username configurato rispondono `409`.
+Import via yt-dlp: metadata only, never audio, no ISRC (SoundCloud does not expose
+it). The likes preview uses flat extraction (fast, without uploader or duration);
+import and sync re-fetch each track in full mode (real uploader, duration, artwork —
+~1s per track, playlists inside the likes are filtered out). `GET status` returns
+`available` (yt-dlp importable), `ytdlp_version` and the configured `username`. `PUT
+config` saves the username (`{username}`, strips the leading `@`). The likes
+preview/import endpoints without a configured username respond `409`.
 
-`POST /api/soundcloud/import` importa una playlist pubblica o un secret link da
-URL (`{url}`) come lead in libreria (stesso `PlaylistImportReport` degli altri
-import). Un URL `/likes` risponde `422`: i like passano solo dal flusso
-selettivo qui sotto. URL non-`soundcloud.com` o non http(s) rispondono `422`
-(guardia anti-SSRF), errori di fetch/estrazione yt-dlp rispondono `502`.
+`POST /api/soundcloud/import` imports a public playlist or a secret link from URL
+(`{url}`) as leads in the library (same `PlaylistImportReport` as the other imports).
+A `/likes` URL responds `422`: likes go only through the selective flow below.
+Non-`soundcloud.com` or non-http(s) URLs respond `422` (anti-SSRF guard), yt-dlp
+fetch/extraction errors respond `502`.
 
-`GET /api/soundcloud/likes/preview?limit=100` recupera i like piu' recenti
-dell'utente configurato e li annota con `already_imported` (gia' in libreria per
-`platform_track_id`), senza importare nulla.
+`GET /api/soundcloud/likes/preview?limit=100` fetches the most recent likes of the
+configured user and annotates them with `already_imported` (already in the library by
+`platform_track_id`), without importing anything.
 
-`POST /api/soundcloud/import/likes` importa SOLO i like selezionati
-(`{track_ids: [...], limit: 100}`) nella playlist di sistema "SoundCloud
-Likes". Stateless: rifetcha i like e filtra per id. Additivo (nessun prune).
+`POST /api/soundcloud/import/likes` imports ONLY the selected likes
+(`{track_ids: [...], limit: 100}`) into the system playlist "SoundCloud Likes".
+Stateless: it re-fetches the likes and filters by id. Additive (no prune).
 
-Dedup: niente ISRC, solo `platform_track_id`. `POST
-/api/playlists/{playlist_id}/sync` su una playlist SoundCloud importata da URL
-riallinea con la sorgente in modo **sempre additivo** (mai prune, a differenza
-di Spotify): un brano rimosso/in takedown non scollega la traccia gia'
-importata. Le playlist "like" (`kind=liked`) non sono sincronizzabili da questo
-endpoint: crescono solo via il flusso selettivo sopra.
+Dedup: no ISRC, only `platform_track_id`. `POST /api/playlists/{playlist_id}/sync` on
+a SoundCloud playlist imported from URL realigns with the source in an **always
+additive** way (never prune, unlike Spotify): a removed/taken-down track does not
+unlink the already-imported track. The "like" playlists (`kind=liked`) are not
+syncable from this endpoint: they only grow via the selective flow above.
 
 ## Discovery
 
@@ -279,39 +275,39 @@ POST /api/discovery/dig
 POST /api/discovery/add
 ```
 
-`expand` espande una playlist importata, suggerendo brani di **gusto affine** da
-aggiungere (non una compatibilita' tecnica: BPM/key/transizioni restano del Set Builder):
+`expand` expands an imported playlist, suggesting tracks of **affine taste** to add
+(not a technical compatibility: BPM/key/transitions stay with the Set Builder):
 
 ```text
-playlist -> seed artisti/tracce -> Last.fm similarity -> resolver Spotify -> ranking per gusto
+playlist -> seed artists/tracks -> Last.fm similarity -> Spotify resolver -> ranking by taste
 ```
 
-I candidati di `expand` sono annotati con la loro **etichetta**: chi e' su
-un'etichetta che gia' collezioni riceve un piccolo boost ed e' marcato `label_owned`.
+The `expand` candidates are annotated with their **label**: one on a label you
+already collect gets a small boost and is marked `label_owned`.
 
-`dig` ("Scava") fa crate digging via **Discogs** per genere o etichetta: trova
-release/tracce non ancora possedute, con ranking per profondita'/novita' (domanda
-want/have) e preset Familiare/Bilanciato/Avventuroso. `genres` elenca generi e stili
-disponibili come seme del dig.
+`dig` ("Scava") does crate digging via **Discogs** by genre or label: it finds
+releases/tracks not yet owned, with ranking by depth/novelty (want/have demand) and
+Familiar/Balanced/Adventurous presets. `genres` lists the genres and styles available
+as a dig seed.
 
-Il ranking del dig combina la scoperta (novita'+domanda) con il **gusto**: familiarita'
-graduata sull'artista, etichetta posseduta e affinita' di stile coi tuoi generi.
-L'affinita' e' misurata rispetto a un riferimento selezionabile via il campo opzionale
-`taste_playlist_id` (default: tutta la libreria); la **dedup resta sempre library-wide**.
-Ogni lead porta `reasons[]` deterministici (`{code, data}`) per spiegare il perche'
-(es. `rare_wanted`, `deep_cut`, `label_followed`, `artist_collected`, `style_match`,
-`recent`); il testo dei chip lo compone la UI.
+The dig ranking combines discovery (novelty+demand) with **taste**: graduated
+familiarity on the artist, owned label and style affinity with your genres. The
+affinity is measured against a reference selectable via the optional
+`taste_playlist_id` field (default: the whole library); the **dedup stays always
+library-wide**. Each lead carries deterministic `reasons[]` (`{code, data}`) to
+explain why (e.g. `rare_wanted`, `deep_cut`, `label_followed`, `artist_collected`,
+`style_match`, `recent`); the chip text is composed by the UI.
 
-`add` importa un candidato nella libreria dell'app in modo idempotente. Non scrive su
-Spotify. L'AI, se configurata e richiesta, aggiunge spiegazioni ma non sceglie i
-candidati.
+`add` imports a candidate into the app's library idempotently. It does not write to
+Spotify. The AI, if configured and requested, adds explanations but does not choose
+the candidates.
 
-La vecchia modalita' Discovery basata sui gap della playlist e' stata rimossa:
-Discovery espande playlist, mentre Gap Analysis resta un endpoint separato di lettura.
+The old Discovery mode based on playlist gaps has been removed: Discovery expands
+playlists, while Gap Analysis stays a separate read-only endpoint.
 
-Nota: questi tre provider (Last.fm, Discogs, Spotify-come-resolver) sono gli unici
-rimasti in Cratory e servono solo la Discovery — non forniscono BPM/key/genere/mood
-alla libreria.
+Note: these three providers (Last.fm, Discogs, Spotify-as-resolver) are the only ones
+left in Cratory and serve Discovery only — they do not provide BPM/key/genre/mood to
+the library.
 
 ## Shazam / mix identification
 
@@ -325,17 +321,16 @@ POST   /api/shazam/sets/{dj_set_id}/import-playlist
 DELETE /api/shazam/sets/{dj_set_id}
 ```
 
-Richiede `ffmpeg`, `yt-dlp` e `shazamio`. Il job scarica temporaneamente l'audio,
-campiona segmenti, riconosce le tracce e persiste `DjSet`/`DjSetTrack`. Le tracce non
-entrano nella libreria principale. Questo e' l'unico fingerprinting audio del
-progetto: identifica i brani di un mix esterno, non le tracce della libreria.
+Requires `ffmpeg`, `yt-dlp` and `shazamio`. The job temporarily downloads the audio,
+samples segments, recognizes the tracks and persists `DjSet`/`DjSetTrack`. The tracks
+do not enter the main library. This is the only audio fingerprinting in the project:
+it identifies the tracks of an external mix, not the library tracks.
 
-`POST /api/shazam/sets/{id}/import-playlist` promuove le tracce identificate a lead in
-una playlist con `source=shazam` (dedup su artista+titolo, ISRC conservato per il
-riaggancio disk-first). Ritorna un `PlaylistImportReport`. Ripetibile bloccato finché
-la playlist esiste: il set memorizza `imported_playlist_id` (esposto in `DjSetOut`) e
-risponde `409` alla seconda import; l'eliminazione di quella playlist azzera il
-riferimento e riabilita l'import.
+`POST /api/shazam/sets/{id}/import-playlist` promotes the identified tracks to leads in
+a playlist with `source=shazam` (dedup on artist+title, ISRC kept for the disk-first
+re-link). Returns a `PlaylistImportReport`. Repeat blocked while the playlist exists:
+the set stores `imported_playlist_id` (exposed in `DjSetOut`) and responds `409` on the
+second import; deleting that playlist clears the reference and re-enables the import.
 
 ## Downloads (Soulseek / slskd)
 
@@ -351,65 +346,65 @@ POST   /api/downloads/search
 POST   /api/downloads/manual
 ```
 
-Acquisizione file via il daemon Soulseek headless slskd, deterministica (zero AI):
-collega un file alla `Track` esistente (`has_local_file`/`local_path`/`local_format`/
-`local_bitrate`). Richiede `SLSKD_URL` e `SLSKD_DOWNLOAD_DIR` configurati; senza,
-tutti gli endpoint di ricerca/download (`candidates`, `search`, `playlist/{id}`,
-`track`, `manual`, `retry-pending`) rispondono `409`. Restano disponibili
-`GET status` (con `available=false`), `GET pending` e `DELETE pending/{track_id}`.
+File acquisition via the headless Soulseek daemon slskd, deterministic (zero AI):
+links a file to the existing `Track` (`has_local_file`/`local_path`/`local_format`/
+`local_bitrate`). Requires `SLSKD_URL` and `SLSKD_DOWNLOAD_DIR` configured; without
+them, all the search/download endpoints (`candidates`, `search`, `playlist/{id}`,
+`track`, `manual`, `retry-pending`) respond `409`. Still available:
+`GET status` (with `available=false`), `GET pending` and `DELETE pending/{track_id}`.
 
-`GET /api/downloads/pending` elenca le "da sistemare" (esito `needs_review` /
-`not_found` / `failed` persistito sulla Track, tracce non possedute e non scartate);
-`POST /api/downloads/retry-pending` (`202`) ritenta l'auto-pick su tutte;
-`DELETE /api/downloads/pending/{track_id}` ("Ignora") azzera l'esito e toglie la
-traccia dall'archivio (`404` se la traccia non esiste).
+`GET /api/downloads/pending` lists the "to sort out" ones (outcome `needs_review` /
+`not_found` / `failed` persisted on the Track, tracks not owned and not discarded);
+`POST /api/downloads/retry-pending` (`202`) retries the auto-pick on all of them;
+`DELETE /api/downloads/pending/{track_id}` ("Ignore") clears the outcome and removes
+the track from the archive (`404` if the track does not exist).
 
-`GET /api/downloads/status` restituisce `available` (slskd configurato) piu' lo stato
-del job in background: `status` (`idle|running|done|error`), `processed`, `total`,
+`GET /api/downloads/status` returns `available` (slskd configured) plus the state of
+the background job: `status` (`idle|running|done|error`), `processed`, `total`,
 `downloaded`, `needs_review`, `not_found`, `failed`, `playlist_id`, `items[]`,
 `error`, `started_at`, `finished_at`.
 
-`POST /api/downloads/candidates` cerca su slskd e restituisce i candidati ordinati
-deterministicamente (qualita' + aderenza nome + disponibilita'). Request: `artist`,
-`title`, `duration_seconds` (opzionale: durata attesa dalla Track, premia la
-versione giusta nel ranking). Response: lista di candidati con `username`,
+`POST /api/downloads/candidates` searches on slskd and returns the candidates ordered
+deterministically (quality + name adherence + availability). Request: `artist`,
+`title`, `duration_seconds` (optional: duration expected from the Track, rewards the
+right version in the ranking). Response: list of candidates with `username`,
 `filename`, `size`, `bitrate`, `length`, `format`, `name_score`, `quality_tier`,
 `confidence`.
 
-`POST /api/downloads/search` fa una ricerca libera su Soulseek. Request: `{query}`.
-Query vuota -> lista vuota. Response: stessa lista di candidati di `candidates` ma
-senza soglia di aderenza al nome (l'utente sceglie a vista). `409` se slskd non e'
-configurato, `502` su errore slskd.
+`POST /api/downloads/search` does a free search on Soulseek. Request: `{query}`.
+Empty query -> empty list. Response: same candidate list as `candidates` but without
+the name-adherence threshold (the user chooses by sight). `409` if slskd is not
+configured, `502` on slskd error.
 
-`POST /api/downloads/manual` (`202`) scarica un candidato scelto dalla ricerca
-libera senza collegarlo a una `Track` (il file finisce nella cartella download
-slskd). Request: `{candidate}` (stessa forma di `CandidateOut`). `409` se slskd non
-e' configurato o un job e' gia' in corso.
+`POST /api/downloads/manual` (`202`) downloads a candidate chosen from the free search
+without linking it to a `Track` (the file lands in the slskd download folder).
+Request: `{candidate}` (same shape as `CandidateOut`). `409` if slskd is not configured
+or a job is already in progress.
 
-`POST /api/downloads/playlist/{playlist_id}` (`202`) avvia il job per tutte le tracce
-della playlist senza file locale: per ciascuna cerca, sceglie in automatico il miglior
-candidato (auto-pick sopra soglia di confidenza) ed esegue il download. `409` se slskd
-non e' configurato o un job e' gia' in corso.
+`POST /api/downloads/playlist/{playlist_id}` (`202`) starts the job for all the
+playlist tracks without a local file: for each it searches, automatically picks the
+best candidate (auto-pick above a confidence threshold) and runs the download. `409`
+if slskd is not configured or a job is already in progress.
 
-`POST /api/downloads/track` (`202`) avvia il job per una singola traccia con un
-candidato scelto esplicitamente (mini-selettore, es. da Discovery). Request: `track_id`,
-`candidate` (stessa forma di `CandidateOut`). `404` se la traccia non esiste, `409` se
-slskd non e' configurato o un job e' gia' in corso.
+`POST /api/downloads/track` (`202`) starts the job for a single track with an
+explicitly chosen candidate (mini-selector, e.g. from Discovery). Request: `track_id`,
+`candidate` (same shape as `CandidateOut`). `404` if the track does not exist, `409` if
+slskd is not configured or a job is already in progress.
 
-Il job e' mono-istanza (un download alla volta, come l'indicizzazione libreria): un
-errore su una traccia non ferma le altre. La UI fa polling di `GET /api/downloads/status`
-durante l'esecuzione.
+The job is single-instance (one download at a time, like library indexing): an error
+on one track does not stop the others. The UI polls `GET /api/downloads/status` during
+execution.
 
-## AI e servizi
+## AI and services
 
 ```text
 GET /api/ai/status
 GET /api/services/status
 ```
 
-`/api/services/status` restituisce lo stato aggregato delle integrazioni: Spotify,
-AI, Last.fm, Discogs (`connected` = `DISCOGS_TOKEN` presente; funziona anche senza
-token, il token alza il rate limit), slskd e servizi affini.
+`/api/services/status` returns the aggregate state of the integrations: Spotify, AI,
+Last.fm, Discogs (`connected` = `DISCOGS_TOKEN` present; works even without a token,
+the token raises the rate limit), slskd and related services.
 
 ## Settings
 
@@ -418,16 +413,15 @@ GET /api/settings/language
 PUT /api/settings/language
 ```
 
-Impostazione persistita in `AppState` (chiave `language`, niente tabella dedicata:
-app locale mono-utente). `GET /api/settings/language` restituisce
-`{"language": "it"|"en"}` (default `"it"` se non ancora impostata). `PUT
-/api/settings/language` con body `{"language": "it"|"en"}` salva la scelta e
-restituisce lo stesso oggetto; `422` su valori diversi da `"it"`/`"en"`.
+Setting persisted in `AppState` (key `language`, no dedicated table: single-user local
+app). `GET /api/settings/language` returns `{"language": "it"|"en"}` (default `"it"` if
+not set yet). `PUT /api/settings/language` with body `{"language": "it"|"en"}` saves
+the choice and returns the same object; `422` on values other than `"it"`/`"en"`.
 
-## Convenzioni
+## Conventions
 
-- Errori tramite `HTTPException` con `detail` leggibile.
-- Operazioni lunghe tramite job e polling.
-- Rate limit, retry, cache e fallback stanno nel layer `integrations/` o `services/`,
-  non nei router.
-- I router non devono contenere logica di scoring, deduplica o ranking.
+- Errors via `HTTPException` with a readable `detail`.
+- Long operations via jobs and polling.
+- Rate limit, retry, cache and fallback live in the `integrations/` or `services/`
+  layer, not in the routers.
+- Routers must not contain scoring, dedup or ranking logic.
