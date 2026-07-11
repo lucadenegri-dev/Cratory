@@ -19,11 +19,7 @@ import { useJobs } from "@/components/jobs-provider";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { KeyBadge } from "@/components/key-badge";
 import { TrackStateIcons } from "@/components/track-state-icons";
-
-const STATUS_OPTIONS: [string, string][] = [
-  ["ready_for_set", "Pronte per il set"],
-  ["imported", "Importate"],
-];
+import { useT } from "@/lib/i18n";
 
 type Order = "asc" | "desc";
 
@@ -35,6 +31,11 @@ function camelotRank(key: string | null): number {
 }
 
 export default function PlaylistDetail({ params }: { params: Promise<{ id: string }> }) {
+  const t = useT();
+  const STATUS_OPTIONS: [string, string][] = [
+    ["ready_for_set", t.library.statusReadyOption],
+    ["imported", t.library.statusImportedOption],
+  ];
   const { id } = use(params);
   const pid = Number(id);
   const router = useRouter();
@@ -84,33 +85,33 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
       return a.id - b.id;
     });
     const map = new Map<number, number>();
-    ranked.forEach((t, i) => map.set(t.id, i + 1));
+    ranked.forEach((tr, i) => map.set(tr.id, i + 1));
     return map;
   }, [tracks]);
 
   const visible = useMemo(() => {
     const inc = (v: string | null, q: string) => (v ?? "").toLowerCase().includes(q.toLowerCase());
-    let rows = tracks.filter((t) => {
-      if (artist && !inc(t.artist, artist)) return false;
-      if (title && !inc(t.title, title)) return false;
-      if (genre && !inc(t.genre, genre)) return false;
-      if (source && t.source_type !== source) return false;
-      if (status && t.status !== status) return false;
-      if (key && !inc(t.camelot_key, key)) return false;
-      if (bpmMin && (t.bpm ?? -Infinity) < Number(bpmMin)) return false;
-      if (bpmMax && (t.bpm ?? Infinity) > Number(bpmMax)) return false;
-      if (incomplete && t.bpm != null && t.camelot_key != null && t.title != null && t.artist != null) return false;
+    let rows = tracks.filter((tr) => {
+      if (artist && !inc(tr.artist, artist)) return false;
+      if (title && !inc(tr.title, title)) return false;
+      if (genre && !inc(tr.genre, genre)) return false;
+      if (source && tr.source_type !== source) return false;
+      if (status && tr.status !== status) return false;
+      if (key && !inc(tr.camelot_key, key)) return false;
+      if (bpmMin && (tr.bpm ?? -Infinity) < Number(bpmMin)) return false;
+      if (bpmMax && (tr.bpm ?? Infinity) > Number(bpmMax)) return false;
+      if (incomplete && tr.bpm != null && tr.camelot_key != null && tr.title != null && tr.artist != null) return false;
       return true;
     });
 
     const dir = order === "asc" ? 1 : -1;
     const num = (v: number | null) => (v == null ? (order === "asc" ? Infinity : -Infinity) : v);
     const str = (v: string | null) => (v ?? "").toLowerCase();
-    const getters: Record<string, (t: Track) => number | string> = {
-      rank: (t) => insertionRank.get(t.id) ?? 0,
-      title: (t) => str(t.title), artist: (t) => str(t.artist), source: (t) => t.source_type,
-      bpm: (t) => num(t.bpm), key: (t) => camelotRank(t.camelot_key), energy: (t) => num(t.energy),
-      genre: (t) => str(t.genre), duration: (t) => num(t.duration_seconds), status: (t) => t.status,
+    const getters: Record<string, (tr: Track) => number | string> = {
+      rank: (tr) => insertionRank.get(tr.id) ?? 0,
+      title: (tr) => str(tr.title), artist: (tr) => str(tr.artist), source: (tr) => tr.source_type,
+      bpm: (tr) => num(tr.bpm), key: (tr) => camelotRank(tr.camelot_key), energy: (tr) => num(tr.energy),
+      genre: (tr) => str(tr.genre), duration: (tr) => num(tr.duration_seconds), status: (tr) => tr.status,
     };
     if (sort && getters[sort]) {
       const g = getters[sort];
@@ -129,7 +130,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
 
   const doDelete = async () => {
     if (!playlist) return;
-    if (!window.confirm(`Rimuovere "${playlist.name}"? I lead senza file su disco, non presenti in altre playlist né in un set, verranno cancellati. Non si può annullare.`)) return;
+    if (!window.confirm(t.playlists.detailDeleteConfirm(playlist.name))) return;
     setDeleting(true);
     try {
       await deletePlaylist(pid);
@@ -145,8 +146,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     setSyncMsg(null);
     try {
       const r = await syncPlaylist(pid);
-      const parts = [`${r.created} nuove`, `${r.removed} rimosse (restano in libreria)`, `${r.total} totali`];
-      setSyncMsg(parts.join(" · "));
+      setSyncMsg(t.playlists.syncSummary(r.created, r.removed, r.total));
       getPlaylist(pid).then(setPlaylist).catch(() => {});
       reload();
     } catch (e) {
@@ -157,17 +157,17 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   };
 
   if (error) return (
-    <PageLayout title="Playlist">
-      <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Playlist</Link>
+    <PageLayout title={t.playlists.pageTitle}>
+      <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.playlists.backLink}</Link>
       <Alert tone="danger">⚠ {error}</Alert>
     </PageLayout>
   );
-  if (!playlist) return <PageLayout title="Playlist"><Loading /></PageLayout>;
+  if (!playlist) return <PageLayout title={t.playlists.pageTitle}><Loading /></PageLayout>;
 
-  const ready = tracks.filter((t) => t.status === "ready_for_set").length;
-  const ownedCount = tracks.filter((t) => t.has_local_file).length;
-  const missing = tracks.filter((t) => !t.has_local_file && !t.archived).length;
-  const totalDur = tracks.reduce((s, t) => s + (t.duration_seconds ?? 0), 0);
+  const ready = tracks.filter((tr) => tr.status === "ready_for_set").length;
+  const ownedCount = tracks.filter((tr) => tr.has_local_file).length;
+  const missing = tracks.filter((tr) => !tr.has_local_file && !tr.archived).length;
+  const totalDur = tracks.reduce((s, tr) => s + (tr.duration_seconds ?? 0), 0);
   const cell = "px-3 py-2.5";
   const canSync =
     (playlist.platform === "spotify" && (playlist.kind === "liked" || !!playlist.platform_playlist_id)) ||
@@ -180,7 +180,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     return (
       <th
         onClick={() => toggleSort(col)}
-        title="Ordina per questa colonna"
+        title={t.library.sortColumnHint}
         className={`${cell} ${numeric ? "tnum " : ""}cursor-pointer select-none whitespace-nowrap transition-colors hover:text-fg ${active ? "text-fg" : ""}`}
       >
         <span className="inline-flex items-center gap-1">
@@ -197,7 +197,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
       await startPlaylistDownload(pid);
       jobs.refresh(); // si resta qui: il progresso vive nella barra job in basso
     } catch (e) {
-      setError(`Download non avviato: ${String((e as Error).message ?? e)}`);
+      setError(t.playlists.downloadNotStarted(String((e as Error).message ?? e)));
     } finally {
       setDownloading(false);
     }
@@ -205,30 +205,30 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
 
   const marginalia = (
     <div className="space-y-3">
-      <Link href={`/set-builder?playlist=${pid}`} className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> Costruisci un set</Button></Link>
-      <Link href={`/playlists/${pid}/expand`} className="block"><Button size="sm" variant="outline" className="w-full"><Compass size={15} /> Scopri musica simile</Button></Link>
+      <Link href={`/set-builder?playlist=${pid}`} className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> {t.playlists.buildSetButton}</Button></Link>
+      <Link href={`/playlists/${pid}/expand`} className="block"><Button size="sm" variant="outline" className="w-full"><Compass size={15} /> {t.playlists.discoverSimilarButton}</Button></Link>
       {missing > 0 && (
         <Button size="sm" variant="outline" className="w-full" onClick={doDownloadMissing} disabled={downloading}>
-          {downloading ? <Spinner /> : <Download size={15} />} Scarica mancanti ({missing})
+          {downloading ? <Spinner /> : <Download size={15} />} {t.playlists.downloadMissingButton(missing)}
         </Button>
       )}
       {playlist.kind === "liked"
-        ? <Link href={likedImportHref} className="block"><Button size="sm" variant="outline" className="w-full"><Heart size={14} /> Aggiungi altri liked</Button></Link>
-        : canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da {platformName}</Button>}
+        ? <Link href={likedImportHref} className="block"><Button size="sm" variant="outline" className="w-full"><Heart size={14} /> {t.playlists.addMoreLiked}</Button></Link>
+        : canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} {t.playlists.syncFromButton(platformName)}</Button>}
       {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> {platformName}</Button></a>}
-      <Button size="sm" variant="danger" className="w-full" onClick={doDelete} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} Rimuovi</Button>
+      <Button size="sm" variant="danger" className="w-full" onClick={doDelete} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} {t.playlists.removeButton}</Button>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
-        <div className="flex justify-between gap-2"><span className="text-muted">Tracce</span><span className="tnum text-fg">{playlist.track_count}</span></div>
-        <div className="flex justify-between gap-2"><span className="text-muted">Pronte</span><span className="tnum text-fg">{ready}</span></div>
-        <div className="flex justify-between gap-2"><span className="text-muted">Durata</span><span className="tnum text-fg">{fmtDuration(totalDur)}</span></div>
-        <div className="flex justify-between gap-2"><span className="text-muted">Owner</span><span className="truncate text-fg">{playlist.owner ?? "—"}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.playlists.statTracksLabel}</span><span className="tnum text-fg">{playlist.track_count}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.playlists.statReadyLabel}</span><span className="tnum text-fg">{ready}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.playlists.statDurationLabel}</span><span className="tnum text-fg">{fmtDuration(totalDur)}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.playlists.statOwnerLabel}</span><span className="truncate text-fg">{playlist.owner ?? "—"}</span></div>
       </div>
     </div>
   );
 
   return (
-    <PageLayout title="Playlist" meta={playlist.name} marginaliaTitle="Dettagli" marginalia={marginalia}>
-      <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Playlist</Link>
+    <PageLayout title={t.playlists.pageTitle} meta={playlist.name} marginaliaTitle={t.playlists.marginaliaDetails} marginalia={marginalia}>
+      <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.playlists.backLink}</Link>
 
       <div className="mb-6 flex flex-wrap items-start gap-4">
         {playlist.artwork_url
@@ -240,16 +240,16 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
             <Badge tone="neutral">{playlist.platform}</Badge>
             {playlist.kind === "liked" && <Badge tone="neutral">liked</Badge>}
           </div>
-          <p className="mt-1 text-sm text-muted">{playlist.track_count} tracce · {ready} pronte per il set · possiedi {ownedCount} di {tracks.length} · {fmtDuration(totalDur)}{playlist.owner ? ` · ${playlist.owner}` : ""}</p>
+          <p className="mt-1 text-sm text-muted">{t.playlists.trackCount(playlist.track_count)} · {t.playlists.readyForSetLabel(ready)} · {t.playlists.ownedOfLabel(ownedCount, tracks.length)} · {fmtDuration(totalDur)}{playlist.owner ? ` · ${playlist.owner}` : ""}</p>
         </div>
       </div>
 
-      {syncMsg && <div className="mb-4"><Alert tone="info">Sincronizzato: {syncMsg}</Alert></div>}
+      {syncMsg && <div className="mb-4"><Alert tone="info">{t.playlists.syncedPrefix}{syncMsg}</Alert></div>}
 
       {gaps && gaps.gaps.length > 0 && (
         <details className="group mb-4 border border-border">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
-            <span>Tips · {gaps.gaps.length}</span>
+            <span>{t.playlists.tipsHeading(gaps.gaps.length)}</span>
             <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
           </summary>
           <div className="grid gap-2 border-t border-border p-4">
@@ -268,24 +268,24 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
       <Card className="mb-4">
         <div className="p-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            <Input className="h-9" placeholder="Artista" value={artist} onChange={(e) => setArtist(e.target.value)} />
-            <Input className="h-9" placeholder="Titolo" value={title} onChange={(e) => setTitle(e.target.value)} />
-            <Input className="h-9" placeholder="Genere" value={genre} onChange={(e) => setGenre(e.target.value)} />
+            <Input className="h-9" placeholder={t.library.filterArtistPlaceholder} value={artist} onChange={(e) => setArtist(e.target.value)} />
+            <Input className="h-9" placeholder={t.library.filterTitlePlaceholder} value={title} onChange={(e) => setTitle(e.target.value)} />
+            <Input className="h-9" placeholder={t.library.filterGenrePlaceholder} value={genre} onChange={(e) => setGenre(e.target.value)} />
             <Select className="h-9" value={source} onChange={(e) => setSource(e.target.value)}>
-              <option value="">Tutte le sorgenti</option>
+              <option value="">{t.library.sourceAllOption}</option>
               <option value="spotify">Spotify</option>
               <option value="soundcloud">SoundCloud</option>
-              <option value="manual">Manuale</option>
+              <option value="manual">{t.library.sourceManualOption}</option>
             </Select>
             <Select className="h-9" value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="">Tutti gli stati</option>
+              <option value="">{t.library.statusAllOption}</option>
               {STATUS_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </Select>
-            <Input className="h-9" type="number" placeholder="BPM min" value={bpmMin} onChange={(e) => setBpmMin(e.target.value)} />
-            <Input className="h-9" type="number" placeholder="BPM max" value={bpmMax} onChange={(e) => setBpmMax(e.target.value)} />
-            <Input className="h-9" placeholder="Key (es. 7A)" value={key} onChange={(e) => setKey(e.target.value)} />
+            <Input className="h-9" type="number" placeholder={t.library.bpmMinPlaceholder} value={bpmMin} onChange={(e) => setBpmMin(e.target.value)} />
+            <Input className="h-9" type="number" placeholder={t.library.bpmMaxPlaceholder} value={bpmMax} onChange={(e) => setBpmMax(e.target.value)} />
+            <Input className="h-9" placeholder={t.library.keyPlaceholder} value={key} onChange={(e) => setKey(e.target.value)} />
           </div>
-          <div className="mt-2"><Checkbox label="solo dati incompleti (manca BPM/key o metadati)" checked={incomplete} onChange={setIncomplete} /></div>
+          <div className="mt-2"><Checkbox label={t.playlists.incompleteOnlyLabel} checked={incomplete} onChange={setIncomplete} /></div>
         </div>
       </Card>
 
@@ -298,34 +298,34 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
               {th("Artist", "artist")}
               {th("BPM", "bpm", true)}
               {th("Key", "key")}
-              {th("Dur", "duration", true)}
-              <th className={cell}>Stato</th>
+              {th(t.library.colDuration, "duration", true)}
+              <th className={cell}>{t.library.colStatus}</th>
               <th className={cell}></th>
             </tr>
           </thead>
           <tbody>
-            {visible.map((t) => (
-              <tr key={t.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
-                <td className={`${cell} tnum text-faint`}>{insertionRank.get(t.id) ?? "—"}</td>
+            {visible.map((tr) => (
+              <tr key={tr.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
+                <td className={`${cell} tnum text-faint`}>{insertionRank.get(tr.id) ?? "—"}</td>
                 <td className={cell}>
-                  <Link href={`/tracks/${t.id}`} className="flex items-center gap-2.5">
-                    <TrackCover track={t} className="h-8 w-8" iconSize={14} />
-                    <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{t.title ?? <span className="italic text-faint">senza titolo</span>}</span>
+                  <Link href={`/tracks/${tr.id}`} className="flex items-center gap-2.5">
+                    <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
+                    <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
                   </Link>
                 </td>
-                <td className={`${cell} text-muted`}>{t.artist ?? "—"}</td>
-                <td className={`${cell} tnum`}>{t.bpm?.toFixed(0) ?? "—"}</td>
-                <td className={`${cell} tnum`}><KeyBadge camelot={t.camelot_key} /></td>
-                <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
-                <td className={cell}><TrackStateIcons track={t} /></td>
+                <td className={`${cell} text-muted`}>{tr.artist ?? "—"}</td>
+                <td className={`${cell} tnum`}>{tr.bpm?.toFixed(0) ?? "—"}</td>
+                <td className={`${cell} tnum`}><KeyBadge camelot={tr.camelot_key} /></td>
+                <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
+                <td className={cell}><TrackStateIcons track={tr} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
+                    <button onClick={() => setEditing(tr)} title={t.library.editValuesTitle} className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
                   </div>
                 </td>
               </tr>
             ))}
-            {visible.length === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia con questi filtri.</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -334,7 +334,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
         track={editing}
         open={editing !== null}
         onClose={() => setEditing(null)}
-        onSaved={(t) => setTracks((cur) => cur.map((x) => (x.id === t.id ? t : x)))}
+        onSaved={(tr) => setTracks((cur) => cur.map((x) => (x.id === tr.id ? tr : x)))}
       />
     </PageLayout>
   );

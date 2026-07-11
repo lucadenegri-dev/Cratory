@@ -12,12 +12,14 @@ import {
 } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Spinner, Input, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
 
 export default function ImportSoundcloudLikesPage() {
+  const t = useT();
   const router = useRouter();
   const [preview, setPreview] = useState<SoundCloudLikedTrackPreview[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +34,7 @@ export default function ImportSoundcloudLikesPage() {
   }, []);
 
   const alreadyCount = useMemo(
-    () => (preview ?? []).filter((t) => t.already_imported).length,
+    () => (preview ?? []).filter((tr) => tr.already_imported).length,
     [preview],
   );
 
@@ -41,9 +43,9 @@ export default function ImportSoundcloudLikesPage() {
     const needle = q.trim().toLowerCase();
     if (!needle) return rows;
     return rows.filter(
-      (t) =>
-        (t.title ?? "").toLowerCase().includes(needle) ||
-        (t.artist ?? "").toLowerCase().includes(needle),
+      (tr) =>
+        (tr.title ?? "").toLowerCase().includes(needle) ||
+        (tr.artist ?? "").toLowerCase().includes(needle),
     );
   }, [preview, q]);
 
@@ -58,9 +60,11 @@ export default function ImportSoundcloudLikesPage() {
   const selectVisible = () =>
     setSelected((cur) => {
       const next = new Set(cur);
-      for (const t of filtered) if (!t.already_imported) next.add(t.track_id);
+      for (const tr of filtered) if (!tr.already_imported) next.add(tr.track_id);
       return next;
     });
+
+  const likes = t.playlists.importSoundcloud.likes;
 
   const doImport = async () => {
     setError(null);
@@ -69,22 +73,22 @@ export default function ImportSoundcloudLikesPage() {
       await importSelectedSoundcloudLikes([...selected]);
       router.push("/playlists");
     } catch (e) {
-      setError(`Import fallito: ${err(e)}`);
+      setError(likes.importFailed(err(e)));
       setImporting(false);
     }
   };
 
   const marginalia = (
     <div className="space-y-2 text-xs leading-relaxed text-muted">
-      <p>La playlist <span className="text-fg">SoundCloud Likes</span> cresce solo con i brani che selezioni. L&apos;import è additivo.</p>
-      <p>Vengono mostrati gli ultimi 100 like: quelli già importati appaiono spuntati e disabilitati.</p>
+      <p>{likes.noteCuratedPrefix} <span className="text-fg">{likes.noteCuratedTerm}</span> {likes.noteCuratedSuffix}</p>
+      <p>{likes.noteRecent}</p>
     </div>
   );
 
   return (
-    <PageLayout title="Import — Like SoundCloud" marginaliaTitle="Note" marginalia={marginalia}>
+    <PageLayout title={likes.pageTitle} marginaliaTitle={t.playlists.marginaliaNotes} marginalia={marginalia}>
       <Link href="/playlists/import-soundcloud" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
-        <ArrowLeft size={15} /> Import SoundCloud
+        <ArrowLeft size={15} /> {likes.backLink}
       </Link>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
@@ -94,11 +98,11 @@ export default function ImportSoundcloudLikesPage() {
       {preview && (
         <Card>
           <CardHeader
-            title="I tuoi like recenti"
-            subtitle={`${preview.length} like · ${alreadyCount} già importati · ${selected.size} selezionati`}
+            title={likes.cardTitle}
+            subtitle={likes.cardSubtitle(preview.length, alreadyCount, selected.size)}
             action={
               <Button size="sm" onClick={doImport} disabled={selected.size === 0 || importing}>
-                {importing ? <Spinner /> : <Download size={15} />} Importa selezionati ({selected.size})
+                {importing ? <Spinner /> : <Download size={15} />} {likes.importSelectedButton(selected.size)}
               </Button>
             }
           />
@@ -108,39 +112,39 @@ export default function ImportSoundcloudLikesPage() {
                 <Search size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
                 <Input
                   className="h-9 pl-8"
-                  placeholder="Filtra per artista o titolo"
+                  placeholder={likes.filterPlaceholder}
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                 />
               </div>
-              <Button size="sm" variant="outline" onClick={selectVisible}>Seleziona visibili</Button>
-              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} disabled={selected.size === 0}>Deseleziona</Button>
+              <Button size="sm" variant="outline" onClick={selectVisible}>{likes.selectVisibleButton}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} disabled={selected.size === 0}>{likes.deselectButton}</Button>
             </div>
 
-            {preview.length === 0 && <p className="text-sm text-muted">Nessun like trovato.</p>}
-            {preview.length > 0 && filtered.length === 0 && <p className="text-sm text-muted">Nessun brano con questo filtro.</p>}
+            {preview.length === 0 && <p className="text-sm text-muted">{likes.noLikesFound}</p>}
+            {preview.length > 0 && filtered.length === 0 && <p className="text-sm text-muted">{likes.noMatchFilter}</p>}
 
             <div className="max-h-[32rem] overflow-y-auto">
               <div className="grid gap-1">
-                {filtered.map((t) => {
-                  const checked = t.already_imported || selected.has(t.track_id);
+                {filtered.map((tr) => {
+                  const checked = tr.already_imported || selected.has(tr.track_id);
                   return (
                     <label
-                      key={t.track_id}
-                      className={`flex items-center gap-3 border border-border px-3 py-2 ${t.already_imported ? "opacity-50" : "cursor-pointer hover:bg-elevated/40"}`}
+                      key={tr.track_id}
+                      className={`flex items-center gap-3 border border-border px-3 py-2 ${tr.already_imported ? "opacity-50" : "cursor-pointer hover:bg-elevated/40"}`}
                     >
                       <input
                         type="checkbox"
                         checked={checked}
-                        disabled={t.already_imported}
-                        onChange={() => toggle(t.track_id)}
+                        disabled={tr.already_imported}
+                        onChange={() => toggle(tr.track_id)}
                         className="h-4 w-4 shrink-0 accent-[var(--color-fg)]"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium">{t.title ?? <span className="italic text-faint">senza titolo</span>}</div>
-                        <div className="truncate text-xs text-faint">{t.artist ?? "—"}</div>
+                        <div className="truncate text-sm font-medium">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</div>
+                        <div className="truncate text-xs text-faint">{tr.artist ?? "—"}</div>
                       </div>
-                      <span className="tnum shrink-0 text-xs text-muted">{fmtDuration(t.duration_seconds)}</span>
+                      <span className="tnum shrink-0 text-xs text-muted">{fmtDuration(tr.duration_seconds)}</span>
                     </label>
                   );
                 })}
