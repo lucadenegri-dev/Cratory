@@ -2,12 +2,13 @@
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.http_errors import api_error
 from app.db import get_db
 from app.integrations import acoustid, cover_art
 from app.models import AudioFile, Issue, utcnow
@@ -57,12 +58,12 @@ def list_issues(severity: str | None = None, type: str | None = None,
 @router.post("/{issue_id}/status", response_model=dict)
 def set_status(issue_id: int, body: IssueStatusBody, db: Session = Depends(get_db)):
     if body.status not in _VALID:
-        raise HTTPException(status_code=400, detail="status non valido")
+        raise api_error(400, "issue_status_invalid", "Invalid status")
     issue = db.get(Issue, issue_id)
     if issue is None:
-        raise HTTPException(status_code=404, detail="issue non trovato")
+        raise api_error(404, "issue_not_found", "Issue not found")
     if body.status == "accepted" and issue.suggested_fix_json is None:
-        raise HTTPException(status_code=400, detail="issue non auto-fixabile")
+        raise api_error(400, "issue_not_autofixable", "Issue is not auto-fixable")
     issue.status = body.status
     issue.updated_at = utcnow()
     db.commit()
@@ -72,7 +73,7 @@ def set_status(issue_id: int, body: IssueStatusBody, db: Session = Depends(get_d
 @router.post("/bulk", response_model=dict)
 def bulk(body: IssueBulkBody, db: Session = Depends(get_db)):
     if body.status not in _VALID:
-        raise HTTPException(status_code=400, detail="status non valido")
+        raise api_error(400, "issue_status_invalid", "Invalid status")
     stmt = select(Issue)
     if body.type:
         stmt = stmt.where(Issue.type == body.type)
@@ -97,12 +98,12 @@ def bulk(body: IssueBulkBody, db: Session = Depends(get_db)):
 def fix_issue(issue_id: int, body: IssueFixBody, db: Session = Depends(get_db)):
     issue = db.get(Issue, issue_id)
     if issue is None:
-        raise HTTPException(status_code=404, detail="issue non trovato")
+        raise api_error(404, "issue_not_found", "Issue not found")
     if issue.field not in _RETAGGABLE:
-        raise HTTPException(status_code=400, detail="campo non correggibile a mano")
+        raise api_error(400, "issue_field_not_editable", "Field can't be edited by hand")
     value = body.value.strip()
     if not value:
-        raise HTTPException(status_code=400, detail="valore vuoto")
+        raise api_error(400, "issue_value_empty", "Empty value")
     fix = {"field": issue.field, "action": "retag", "to": value}
     # Preserva i marcatori (source/confidence) del suggerimento esistente: così
     # accettando per-riga un provider_override non si perde il badge di confidenza.
@@ -340,14 +341,14 @@ def provider_suggest(body: ProviderSuggestBody | None = None, db: Session = Depe
 def cover_thumb(file_id: int):
     data = cover_cache.read_thumb(file_id)
     if data is None:
-        raise HTTPException(status_code=404, detail="nessuna thumbnail")
+        raise api_error(404, "thumb_missing", "No thumbnail")
     return Response(content=data, media_type="image/jpeg")
 
 
 @router.post("/provider-rescan", response_model=dict)
 def provider_rescan_start(body: ProviderRescanBody | None = None):
     if scan_job.is_running() or apply_job.is_running():
-        raise HTTPException(status_code=409, detail="scan o apply in corso")
+        raise api_error(409, "scan_or_apply_running", "Scan or apply in progress")
     b = body or ProviderRescanBody()
     return provider_rescan_job.start_job(
         folder=b.folder, genre=b.genre, fields=b.fields,

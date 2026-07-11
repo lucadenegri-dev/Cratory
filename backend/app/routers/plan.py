@@ -1,9 +1,10 @@
 """Router PLAN: costruisce e legge il piano draft. Sottile."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.core.http_errors import api_error
 from app.schemas import PlanRead
 from app.services import planning
 
@@ -19,5 +20,5 @@ def post_plan(db: Session = Depends(get_db)):
 def get_plan(db: Session = Depends(get_db)):
     plan = planning.load_plan(db)
     if plan is None:
-        raise HTTPException(status_code=404, detail="nessun piano draft")
+        raise api_error(404, "plan_draft_missing", "No draft plan")
     return plan

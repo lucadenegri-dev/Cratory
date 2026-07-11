@@ -1,3 +1,5 @@
+import { getCurrentLanguage, translateApiError, type Language } from "@/lib/i18n/runtime";
+
 const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8010";
 
 export interface ScanRoot {
@@ -98,7 +100,12 @@ async function handle<T>(res: Response): Promise<T> {
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      const d = body.detail;
+      if (d && typeof d === "object" && !Array.isArray(d) && typeof d.code === "string") {
+        detail = translateApiError(d.code, d.params ?? {}, d.message ?? res.statusText);
+      } else {
+        detail = typeof d === "string" ? d : JSON.stringify(d);
+      }
     } catch {
       /* keep statusText */
     }
@@ -432,6 +439,12 @@ export function updateSettings(body: {
 export function setRootTarget(rootId: number, target: string | null) {
   return apiSend<Settings>("PUT", `/api/settings/roots/${rootId}/target`, { target_root: target });
 }
+export function getLanguage() {
+  return apiGet<{ language: Language }>("/api/settings/language");
+}
+export function setLanguage(language: Language) {
+  return apiSend<{ language: Language }>("PUT", "/api/settings/language", { language });
+}
 
 // --- FINGERPRINT --------------------------------------------------------------
 export interface FingerprintStatus {
@@ -463,8 +476,10 @@ export function fmtDuration(seconds: number | null | undefined): string {
 }
 
 export function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "mai";
+  const lang = getCurrentLanguage();
+  if (!iso) return lang === "it" ? "mai" : "never";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  const locale = lang === "it" ? "it-IT" : "en-GB";
+  return d.toLocaleString(locale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }

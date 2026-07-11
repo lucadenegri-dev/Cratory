@@ -10,8 +10,10 @@ import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { IssuesTable } from "@/components/issues-table";
 import { Alert, Button, Checkbox, EmptyState, Input, Modal, Select } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 export default function IssuesPage() {
+  const t = useT();
   const { scan, rescan, startRescan } = useJobs();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [roots, setRoots] = useState<ScanRoot[]>([]);
@@ -49,7 +51,7 @@ export default function IssuesPage() {
   const act = async (fn: () => Promise<unknown>) => {
     setActionError(null);
     try { await fn(); load(); }
-    catch (e) { setActionError(e instanceof Error ? e.message : "Errore"); }
+    catch (e) { setActionError(e instanceof Error ? e.message : t.common.error); }
   };
   const onFix = (id: number, value: string) => act(() => fixIssue(id, value));
   const onAccept = (id: number) => act(() => setIssueStatus(id, "accepted"));
@@ -65,15 +67,13 @@ export default function IssuesPage() {
     try {
       const r = await aiSuggestTags();
       if (!r.configured) {
-        setActionError("Imposta ANTHROPIC_API_KEY nel backend per usare l'AI.");
+        setActionError(t.issues.aiNotConfigured);
       } else {
         load();
-        setAiNote(
-          `${r.suggested} suggerimenti pronti${r.unresolved > 0 ? `, ${r.unresolved} non ricavabili dal nome file` : ""} — rivedi e accetta col ✓.`,
-        );
+        setAiNote(t.issues.aiTagsNote(r.suggested, r.unresolved));
       }
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Errore");
+      setActionError(e instanceof Error ? e.message : t.common.error);
     } finally {
       setAiBusy(false);
     }
@@ -86,15 +86,13 @@ export default function IssuesPage() {
     try {
       const r = await aiSuggestGenres();
       if (!r.configured) {
-        setActionError("Imposta ANTHROPIC_API_KEY nel backend per usare l'AI.");
+        setActionError(t.issues.aiNotConfigured);
       } else {
         load();
-        setAiNote(
-          `${r.suggested} generi suggeriti — mancanti + sporchi (bassa confidenza, rivedi)${r.unresolved > 0 ? `, ${r.unresolved} non ricavabili` : ""} — accetta col ✓.`,
-        );
+        setAiNote(t.issues.aiGenresNote(r.suggested, r.unresolved));
       }
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Errore");
+      setActionError(e instanceof Error ? e.message : t.common.error);
     } finally {
       setGenreBusy(false);
     }
@@ -107,15 +105,13 @@ export default function IssuesPage() {
     try {
       const r = await providerSuggest();
       if (!r.configured) {
-        setActionError("Configura le chiavi provider (MusicBrainz/Discogs) nel backend.");
+        setActionError(t.issues.providerNotConfigured);
       } else {
         load();
-        setAiNote(
-          `${r.suggested} suggerimenti da provider${r.covers > 0 ? `, ${r.covers} copertine trovate` : ""}${r.fingerprinted > 0 ? ` (${r.fingerprinted} via fingerprint)` : ""}${r.unresolved > 0 ? `, ${r.unresolved} non trovati` : ""}${r.acoustid_available ? "" : " — fingerprint off, solo match testuale"} — rivedi e accetta col ✓.`,
-        );
+        setAiNote(t.issues.providerNote(r.suggested, r.covers, r.fingerprinted, r.unresolved, r.acoustid_available));
       }
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Errore");
+      setActionError(e instanceof Error ? e.message : t.common.error);
     } finally {
       setProviderBusy(false);
     }
@@ -134,13 +130,13 @@ export default function IssuesPage() {
       fields: rescanFields.length ? rescanFields : ["genre"],
       include_accepted: inclAccepted,
       include_dismissed: inclDismissed,
-    }).catch((e) => setActionError(e instanceof Error ? e.message : "Errore"));
+    }).catch((e) => setActionError(e instanceof Error ? e.message : t.common.error));
   };
 
   const onAcceptHigh = () =>
     act(async () => {
       const r = await acceptHighOverrides();
-      setAiNote(`${r.updated} proposte ad alta confidenza accettate → andranno nel PLAN.`);
+      setAiNote(t.issues.acceptHighNote(r.updated));
     });
 
   // Il rescan gira nel job globale (barra in basso): quando passa running→done
@@ -152,15 +148,15 @@ export default function IssuesPage() {
       const r = rescan.result;
       setAiNote(
         r
-          ? `Rescan: ${r.proposed_high} proposte alta confidenza, ${r.proposed_text} testuali su ${r.scanned} tracce${r.acoustid_available ? "" : " (fingerprint off: nessuna alta confidenza)"}.`
-          : "Rescan completato.",
+          ? t.issues.rescanNote(r.proposed_high, r.proposed_text, r.scanned, r.acoustid_available)
+          : t.issues.rescanDone,
       );
     }
     if (prevRescan.current === "running" && rescan.status === "error") {
-      setActionError(rescan.error || "Rescan fallito");
+      setActionError(rescan.error || t.issues.rescanFailed);
     }
     prevRescan.current = rescan.status;
-  }, [rescan.status, rescan.result, rescan.error, load]);
+  }, [rescan.status, rescan.result, rescan.error, load, t]);
 
   const types = useMemo(() => [...new Set(issues.map((i) => i.type))].sort(), [issues]);
   const fields = useMemo(
@@ -194,75 +190,75 @@ export default function IssuesPage() {
     <PageLayout
       title="Issues"
       meta={`${filtered.length} / ${issues.length}`}
-      marginaliaTitle="Riepilogo"
+      marginaliaTitle={t.issues.summary}
       marginalia={<Marginalia total={issues.length} bySev={bySev} byType={byType} accepted={accepted} />}
       guide={<>
-        <p>Problemi e proposte sui tag dei tuoi file.</p>
-        <p>Riempi le proposte con AI o Provider, poi <b className="text-fg">✓ accetta</b> (va nel PLAN) o <b className="text-fg">✕ ignora</b>.</p>
-        <p><b className="text-fg">Conf.</b>: alta = match certo (fingerprint), testuale = da rivedere.</p>
+        <p>{t.issues.guide1}</p>
+        <p>{t.issues.guide2pre}<b className="text-fg">{t.issues.guide2accept}</b>{t.issues.guide2mid}<b className="text-fg">{t.issues.guide2dismiss}</b>{t.issues.guide2post}</p>
+        <p><b className="text-fg">{t.issues.guide3label}</b>{t.issues.guide3post}</p>
       </>}
     >
       <div className="flex flex-col gap-3">
-        {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
+        {offline && <Alert>{t.common.backendOffline}</Alert>}
         {actionError && <Alert>{actionError}</Alert>}
         {aiNote && <Alert tone="info">{aiNote}</Alert>}
 
         {/* filtri: a tutta larghezza */}
         <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
           <Select value={sev} onChange={(e) => setSev(e.target.value)} className="h-8 text-xs">
-            <option value="">severità: tutte</option>
+            <option value="">{t.issues.sevAll}</option>
             <option value="error">error</option>
             <option value="warning">warning</option>
             <option value="info">info</option>
           </Select>
           <Select value={type} onChange={(e) => setType(e.target.value)} className="h-8 text-xs">
-            <option value="">tipo: tutti</option>
-            {types.map((t) => <option key={t} value={t}>{t}</option>)}
+            <option value="">{t.issues.typeAll}</option>
+            {types.map((ty) => <option key={ty} value={ty}>{ty}</option>)}
           </Select>
           <Select value={field} onChange={(e) => setField(e.target.value)} className="h-8 text-xs">
-            <option value="">campo: tutti</option>
+            <option value="">{t.issues.fieldAll}</option>
             {fields.map((f) => <option key={f} value={f}>{f}</option>)}
           </Select>
           <Select value={status} onChange={(e) => setStatus(e.target.value)} className="h-8 text-xs">
-            <option value="open">aperte</option>
-            <option value="accepted">accettate</option>
-            <option value="dismissed">ignorate</option>
-            <option value="">tutti gli stati</option>
+            <option value="open">{t.issues.statusOpen}</option>
+            <option value="accepted">{t.issues.statusAccepted}</option>
+            <option value="dismissed">{t.issues.statusDismissed}</option>
+            <option value="">{t.issues.statusAll}</option>
           </Select>
           <Select value={rootId} onChange={(e) => setRootId(e.target.value)} className="h-8 text-xs">
-            <option value="">tutte le radici</option>
+            <option value="">{t.issues.allRoots}</option>
             {roots.map((r) => <option key={r.id} value={r.id}>{r.label || r.path}</option>)}
           </Select>
           <Input
             value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="cerca…" className="h-8 text-xs"
+            placeholder={t.issues.searchPlaceholder} className="h-8 text-xs"
           />
         </div>
 
         {/* bottoni bianchi: sotto i filtri, sopra la sezione forza ricerca */}
         <div className="flex flex-wrap gap-1.5">
           <Button variant="primary" size="sm" onClick={onAiSuggest} disabled={aiBusy}>
-            {aiBusy ? "AI…" : "Recupera Artista/Titolo con AI"}
+            {aiBusy ? t.issues.aiBusy : t.issues.aiTagsBtn}
           </Button>
           <Button variant="primary" size="sm" onClick={onAiGenres} disabled={genreBusy}>
-            {genreBusy ? "AI…" : "Recupera Genere con AI"}
+            {genreBusy ? t.issues.aiBusy : t.issues.aiGenresBtn}
           </Button>
           <Button variant="primary" size="sm" onClick={onProviderSuggest} disabled={providerBusy}>
-            {providerBusy ? "importo…" : "Importa metadati mancanti da Provider"}
+            {providerBusy ? t.issues.providerImportBusy : t.issues.providerSuggestBtn}
           </Button>
         </div>
 
         {/* forza ricerca provider: toolbar orizzontale */}
         <div className="border border-border bg-surface p-3">
-          <div className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted">forza ricerca provider</div>
+          <div className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted">{t.issues.forceProvider}</div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <input
               className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
-              placeholder="cartella (es. House)…" value={rescanFolder}
+              placeholder={t.issues.folderPlaceholder} value={rescanFolder}
               onChange={(e) => setRescanFolder(e.target.value)} />
             <input
               className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
-              placeholder="genere attuale (opz.)…" value={rescanGenre}
+              placeholder={t.issues.currentGenrePlaceholder} value={rescanGenre}
               onChange={(e) => setRescanGenre(e.target.value)} />
             <div className="flex flex-wrap gap-2 text-[11px] text-muted">
               {["genre", "album", "label", "year"].map((f) => (
@@ -273,7 +269,7 @@ export default function IssuesPage() {
               ))}
             </div>
             <Button variant="primary" size="sm" onClick={() => setRescanModal(true)} disabled={rescanRunning}>
-              {rescanRunning ? "importo…" : "Importa tutti i metadati da Provider"}
+              {rescanRunning ? t.issues.providerImportBusy : t.issues.providerRescanBtn}
             </Button>
           </div>
         </div>
@@ -281,38 +277,38 @@ export default function IssuesPage() {
         <Modal
           open={rescanModal}
           onClose={() => setRescanModal(false)}
-          title="Importa tutti i metadati da Provider"
+          title={t.issues.providerRescanBtn}
           footer={<>
-            <Button variant="ghost" size="sm" onClick={() => setRescanModal(false)}>Annulla</Button>
-            <Button variant="primary" size="sm" onClick={onProviderRescan}>Avvia</Button>
+            <Button variant="ghost" size="sm" onClick={() => setRescanModal(false)}>{t.common.cancel}</Button>
+            <Button variant="primary" size="sm" onClick={onProviderRescan}>{t.issues.modalStart}</Button>
           </>}
         >
           <p className="text-sm text-muted">
-            Reinterroga i provider sulle tracce{" "}
-            {rescanFolder ? <>in <b className="text-fg-strong">{rescanFolder}</b></> : "presenti"}
-            {rescanGenre ? <> con genere <b className="text-fg-strong">{rescanGenre}</b></> : null}
-            {" "}per i campi <b className="text-fg-strong">{(rescanFields.length ? rescanFields : ["genre"]).join(", ")}</b>.
-            Un campo viene riproposto solo se differisce da quello già sul file.
+            {t.issues.modalBodyPre}
+            {rescanFolder ? <>in <b className="text-fg-strong">{rescanFolder}</b></> : t.issues.modalBodyPresent}
+            {rescanGenre ? <>{t.issues.modalBodyGenrePre}<b className="text-fg-strong">{rescanGenre}</b></> : null}
+            {t.issues.modalBodyFieldsPre}<b className="text-fg-strong">{(rescanFields.length ? rescanFields : ["genre"]).join(", ")}</b>
+            {t.issues.modalBodyPost}
           </p>
           <div className="mt-4 flex flex-col gap-3">
-            <Checkbox label="Riconsidera anche le proposte già accettate" checked={inclAccepted} onChange={setInclAccepted} />
-            <Checkbox label="Riconsidera anche le proposte ignorate" checked={inclDismissed} onChange={setInclDismissed} />
+            <Checkbox label={t.issues.reconsiderAccepted} checked={inclAccepted} onChange={setInclAccepted} />
+            <Checkbox label={t.issues.reconsiderDismissed} checked={inclDismissed} onChange={setInclDismissed} />
             <p className="text-xs text-faint">
-              Di default tocca solo le proposte ancora aperte. Le riconsiderate tornano da rivedere (aperte), ma solo se il provider ha un valore diverso.
+              {t.issues.reconsiderHint}
             </p>
           </div>
         </Modal>
 
         {/* azioni di massa sotto la sezione forza ricerca provider */}
         <div className="flex flex-wrap gap-1.5">
-          <Button variant="outline" size="sm" onClick={onAcceptHigh}>✓ Accetta tutti alta confidenza</Button>
-          <Button variant="outline" size="sm" onClick={acceptAllFixable}>✓ Accetta tutti i fixabili</Button>
-          <Button variant="outline" size="sm" onClick={dismissAllInfo}>✕ Ignora tutti gli info</Button>
+          <Button variant="outline" size="sm" onClick={onAcceptHigh}>{t.issues.acceptHighBtn}</Button>
+          <Button variant="outline" size="sm" onClick={acceptAllFixable}>{t.issues.acceptFixableBtn}</Button>
+          <Button variant="outline" size="sm" onClick={dismissAllInfo}>{t.issues.dismissInfoBtn}</Button>
         </div>
 
         {filtered.length === 0 && !offline ? (
-          <EmptyState title="Nessuna issue">
-            {issues.length === 0 ? "La libreria è pulita (o non ancora scansionata)." : "Nessuna issue con questi filtri."}
+          <EmptyState title={t.issues.emptyTitle}>
+            {issues.length === 0 ? t.issues.emptyClean : t.issues.emptyFiltered}
           </EmptyState>
         ) : (
           <IssuesTable issues={filtered} onFix={onFix} onAccept={onAccept} onDismiss={onDismiss} onReopen={onReopen} />
@@ -328,28 +324,29 @@ function Marginalia({ total, bySev, byType, accepted }: {
   byType: Record<string, number>;
   accepted: number;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-4 text-xs">
       <div>
         <div className="tnum text-2xl leading-none text-fg-strong">{total}</div>
-        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">issue</div>
+        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.issues.statIssues}</div>
         <div className="mt-1 flex gap-3 text-[11px]">
-          <span className="text-danger">{bySev.error ?? 0} err</span>
-          <span className="text-warning">{bySev.warning ?? 0} warn</span>
-          <span className="text-muted">{bySev.info ?? 0} info</span>
+          <span className="text-danger">{bySev.error ?? 0} {t.files.sevErr}</span>
+          <span className="text-warning">{bySev.warning ?? 0} {t.files.sevWarn}</span>
+          <span className="text-muted">{bySev.info ?? 0} {t.files.sevInfo}</span>
         </div>
       </div>
       <div>
-        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">per tipo</div>
+        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">{t.issues.byType}</div>
         <div className="flex flex-col gap-1">
-          {Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([t, n]) => (
-            <div key={t} className="flex justify-between"><span className="text-muted">{t}</span><span className="tnum text-fg">{n}</span></div>
+          {Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([ty, n]) => (
+            <div key={ty} className="flex justify-between"><span className="text-muted">{ty}</span><span className="tnum text-fg">{n}</span></div>
           ))}
         </div>
       </div>
       <div>
-        <div className="text-[10px] uppercase tracking-wider text-muted">accettate</div>
-        <div className="mt-1 text-[11px] text-ok">{accepted} → andranno nel PLAN</div>
+        <div className="text-[10px] uppercase tracking-wider text-muted">{t.issues.acceptedLabel}</div>
+        <div className="mt-1 text-[11px] text-ok">{t.issues.acceptedNote(accepted)}</div>
       </div>
     </div>
   );

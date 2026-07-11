@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/lib/i18n";
 
 type Theme = "dark" | "paper";
 
 export function ThemeToggle() {
+  const t = useT();
   const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
@@ -27,11 +29,11 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      aria-label="Cambia tema"
+      aria-label={t.nav.toggleTheme}
       className="inline-flex items-center gap-1.5 uppercase tracking-wider text-muted transition-colors hover:text-fg"
     >
       <span aria-hidden>◑</span>
-      {theme === "dark" ? "Paper" : "Dark"}
+      {theme === "dark" ? t.nav.themePaper : t.nav.themeDark}
     </button>
   );
 }

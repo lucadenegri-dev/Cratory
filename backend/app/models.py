@@ -113,6 +113,7 @@ class Settings(Base):
     id: Mapped[int] = mapped_column(primary_key=True)  # riga singola, id=1
     naming_template: Mapped[str] = mapped_column(String, default="{artist} - {title}")
     folder_template: Mapped[str] = mapped_column(String, default="{genre}/{artist}")
+    language: Mapped[str] = mapped_column(String, default="en")
     dedup_keep_rules_json: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

@@ -1,6 +1,7 @@
 """Schemi Pydantic I/O validato."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -138,6 +139,10 @@ class SettingsUpdate(BaseModel):
 
 class RootTargetUpdate(BaseModel):
     target_root: str | None = None
+
+
+class LanguageSetting(BaseModel):
+    language: Literal["it", "en"]
 
 
 class PlanOpRead(BaseModel):

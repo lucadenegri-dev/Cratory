@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useT } from "@/lib/i18n";
 
 export function PageLayout({
   title, meta, marginalia, marginaliaTitle, guide, children,
@@ -10,6 +13,7 @@ export function PageLayout({
   guide?: ReactNode;
   children: ReactNode;
 }) {
+  const t = useT();
   const hasAside = marginalia != null || guide != null;
   return (
     <div className={hasAside ? "lg:grid lg:grid-cols-[1fr_240px]" : ""}>
@@ -34,7 +38,7 @@ export function PageLayout({
           )}
           {guide && (
             <div className={marginalia ? "mt-6 border-t border-border pt-4" : ""}>
-              <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">Guida</div>
+              <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.common.guide}</div>
               <div className="space-y-1.5 text-[11px] leading-relaxed text-faint">{guide}</div>
             </div>
           )}

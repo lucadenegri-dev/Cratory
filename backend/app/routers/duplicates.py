@@ -1,10 +1,11 @@
 """Router DUPLICATES: lista gruppi + scelta keeper / dismiss. Sottile."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.core.http_errors import api_error
 from app.models import AudioFile, DupGroup, DupMember
 from app.schemas import DupGroupRead, DupMemberRead, KeeperBody
 
@@ -35,10 +36,10 @@ def list_duplicates(db: Session = Depends(get_db)):
 def set_keeper(group_id: int, body: KeeperBody, db: Session = Depends(get_db)):
     grp = db.get(DupGroup, group_id)
     if grp is None:
-        raise HTTPException(status_code=404, detail="gruppo non trovato")
+        raise api_error(404, "dup_group_not_found", "Group not found")
     members = db.scalars(select(DupMember).where(DupMember.group_id == group_id)).all()
     if body.file_id not in {m.file_id for m in members}:
-        raise HTTPException(status_code=400, detail="file_id non membro del gruppo")
+        raise api_error(400, "dup_file_not_member", "file_id is not a member of the group")
     grp.keeper_file_id = body.file_id
     grp.keeper_overridden = True
     grp.dismissed = False
@@ -52,7 +53,7 @@ def set_keeper(group_id: int, body: KeeperBody, db: Session = Depends(get_db)):
 def dismiss(group_id: int, db: Session = Depends(get_db)):
     grp = db.get(DupGroup, group_id)
     if grp is None:
-        raise HTTPException(status_code=404, detail="gruppo non trovato")
+        raise api_error(404, "dup_group_not_found", "Group not found")
     grp.dismissed = True
     for m in db.scalars(select(DupMember).where(DupMember.group_id == group_id)).all():
         m.action = "keep"

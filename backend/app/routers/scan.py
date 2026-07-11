@@ -1,9 +1,10 @@
 """Router SCAN: avvio e stato del job di scansione. Router sottile."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.services import apply_job, scan_job
+from app.core.http_errors import api_error
 
 router = APIRouter(prefix="/api/scan", tags=["scan"])
 
@@ -15,7 +16,7 @@ class ScanStart(BaseModel):
 @router.post("")
 def start_scan(body: ScanStart | None = None):
     if apply_job.is_running():
-        raise HTTPException(status_code=409, detail="apply in corso")
+        raise api_error(409, "apply_running", "Apply in progress")
     root_ids = body.root_ids if body else None
     return scan_job.start_job(root_ids)
 

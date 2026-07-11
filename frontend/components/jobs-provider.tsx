@@ -7,6 +7,7 @@ import {
   type ScanJobState, type ApplyJobState, type ProviderRescanJobState, type ProviderRescanBody,
 } from "@/lib/api";
 import { EqMeter } from "./ui";
+import { useT } from "@/lib/i18n";
 
 const IDLE = {
   status: "idle" as const, phase: null, processed: 0, total: 0,
@@ -40,6 +41,7 @@ export function useJobs() {
  * sono mutuamente esclusivi lato backend (409).
  */
 export function JobsProvider({ children }: { children: ReactNode }) {
+  const t = useT();
   const [scan, setScan] = useState<ScanJobState>(IDLE);
   const [apply, setApply] = useState<ApplyJobState>(IDLE);
   const [rescan, setRescan] = useState<ProviderRescanJobState>(IDLE);
@@ -89,11 +91,11 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   );
 
   const active: { label: string; job: ProgressJob } | null = scan.status === "running"
-    ? { label: "Scansione", job: scan }
+    ? { label: t.jobs.scan, job: scan }
     : apply.status === "running"
-    ? { label: "Applicazione", job: apply }
+    ? { label: t.jobs.apply, job: apply }
     : rescan.status === "running"
-    ? { label: "Ricerca provider", job: rescan }
+    ? { label: t.jobs.providerLookup, job: rescan }
     : null;
 
   return (

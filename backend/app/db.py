@@ -38,6 +38,11 @@ def ensure_schema(eng=None) -> None:
         if "target_root" not in cols:
             with eng.begin() as conn:
                 conn.execute(text("ALTER TABLE scan_root ADD COLUMN target_root VARCHAR"))
+    if "settings" in inspector.get_table_names():
+        cols = {c["name"] for c in inspector.get_columns("settings")}
+        if "language" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text("ALTER TABLE settings ADD COLUMN language VARCHAR DEFAULT 'en'"))
     if "audio_file" in inspector.get_table_names():
         cols = {c["name"] for c in inspector.get_columns("audio_file")}
         if "isrc" not in cols:

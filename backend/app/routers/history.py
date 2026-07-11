@@ -1,10 +1,11 @@
 """Router HISTORY: run applicate/annullate + undo. Sottile."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.core.http_errors import api_error
 from app.models import Plan, PlanOp
 from app.schemas import HistoryItem, UndoResult
 from app.services import undo
@@ -27,7 +28,7 @@ def list_history(db: Session = Depends(get_db)):
 def undo_plan(plan_id: int, db: Session = Depends(get_db)):
     plan = db.get(Plan, plan_id)
     if plan is None:
-        raise HTTPException(status_code=404, detail="run non trovata")
+        raise api_error(404, "run_not_found", "Run not found")
     if plan.status != "applied":
-        raise HTTPException(status_code=400, detail="la run non è in stato 'applied'")
+        raise api_error(400, "run_not_applied", "Run is not in the 'applied' state")
     return undo.undo_run(db, plan)

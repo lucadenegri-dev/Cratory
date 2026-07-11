@@ -2,8 +2,10 @@
 
 import { fmtDuration, type FileRow } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n";
 
 function Indicator({ row }: { row: FileRow }) {
+  const t = useT();
   const sev = row.worst_severity;
   return (
     <span className="inline-flex items-center justify-center gap-1">
@@ -19,7 +21,7 @@ function Indicator({ row }: { row: FileRow }) {
       ) : !row.in_dup_group ? (
         <span className="text-faint">·</span>
       ) : null}
-      {row.in_dup_group && <span className="text-muted" title="doppione">⧉</span>}
+      {row.in_dup_group && <span className="text-muted" title={t.files.dupTitle}>⧉</span>}
     </span>
   );
 }
