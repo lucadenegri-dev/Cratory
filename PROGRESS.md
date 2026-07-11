@@ -6,7 +6,7 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-07-09
+**Ultimo aggiornamento:** 2026-07-11
 
 **Nome prodotto:** **Cratory** (rename eseguito il 2026-06-25 su UI, codice, docs e
 icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici legacy
@@ -20,7 +20,38 @@ Sortory, BPM/key ora solo da import Rekordbox XML, `energy` derivata); Discovery
 operativo (expand Last.fm + dig Discogs, ora solo-gusto); Set Builder tecnico/creativo
 con garanzia "solo posseduti"; dashboard con pipeline a cinque fasi (Indicizza
 spostata su pulsante nella nav) e documentazione riallineata al nuovo paradigma;
-identificazione mix via Shazam integrata (fase 1; co-occorrenza in backlog).
+identificazione mix via Shazam integrata (fase 1; co-occorrenza in backlog);
+import SoundCloud (playlist/secret link + like selettivi) via yt-dlp.
+
+## Milestone 2026-07-11 - Import SoundCloud via yt-dlp
+
+L'API ufficiale SoundCloud resta chiusa a nuove app (serve Artist Pro): niente
+OAuth, workaround via client yt-dlp solo-metadati (mai audio).
+
+- **`integrations/soundcloud.py`.** Estrazione flat yt-dlp (`extract_flat="in_playlist"`,
+  `skip_download`), fetch sequenziali senza parallelismo (profilo basso su API non
+  ufficiale). `fetch_playlist` (pubblica o secret link) e `fetch_likes` (like
+  dell'utente, piu' recenti prima). Guardia URL: solo http(s) su host
+  `*.soundcloud.com` (anti-SSRF/file://), `is_likes_url` per rifiutare i `/likes`
+  dal flusso import-playlist. `SoundCloudError`/`SoundCloudInvalidUrl` (422 vs 502).
+- **Normalizzatore.** `normalize_soundcloud_item` (services/playlist_import.py):
+  entry flat -> `NormalizedTrack`, artista/titolo via split su `" - "` del
+  titolo con fallback all'uploader, niente ISRC (non esposto).
+- **Servizi like.** `preview_soundcloud_likes` (anteprima con `already_imported`,
+  nessun import) e `import_selected_soundcloud_likes` (import selettivo, stateless:
+  rifetcha e filtra per id) nella playlist di sistema "SoundCloud Likes".
+- **Router `/api/soundcloud/*`.** `GET status`, `PUT config` (username, salvato
+  in `app_state`), `POST import` (playlist/secret link), `GET likes/preview`,
+  `POST import/likes`. `409` se username non configurato sugli endpoint like.
+- **Sync per piattaforma.** `POST /api/playlists/{id}/sync` esteso: SoundCloud
+  sempre additivo (mai prune, a differenza di Spotify — un takedown non scollega
+  il lead), solo per playlist importate da URL (i "like" non sono risincronizzabili
+  qui, crescono solo via flusso selettivo).
+- **Frontend.** Username SoundCloud in Impostazioni; pagine dedicate
+  `/playlists/import-soundcloud` (import da URL) e
+  `/playlists/import-soundcloud/likes` (selezione like con `already_imported`).
+- Verifica finale: suite backend e lint/build frontend verdi (dettaglio nel report
+  del task).
 
 ## Milestone 2026-07-09 - Coerenza di genere nel set generator
 

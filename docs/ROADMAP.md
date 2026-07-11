@@ -166,6 +166,16 @@ migrazione esplicita.
   per strategia (`StrategyProfile.genre_coherence`: experimental lo dimezza per non
   neutralizzare il novelty bonus). Il set resta nello stesso mondo sonoro invece di
   zigzagare tra generi a parita' di BPM/key.
+- **Import SoundCloud via yt-dlp (2026-07-11).** L'API ufficiale resta chiusa a nuove
+  app (serve Artist Pro): client provvisorio via estrazione flat yt-dlp, solo
+  metadati (mai audio). Username in Impostazioni; `POST /api/soundcloud/import`
+  per playlist pubbliche/secret link (un URL `/likes` e' rifiutato, `422`);
+  `GET /likes/preview` + `POST /import/likes` per un import selettivo dei like
+  nella playlist di sistema "SoundCloud Likes" (stateless, rifetcha e filtra per
+  id). Niente ISRC (non esposto da SoundCloud), dedup su `platform_track_id`.
+  Sync (`POST /api/playlists/{id}/sync`) sempre additivo, mai prune, a differenza
+  di Spotify (un takedown non scollega il lead). Pagine frontend dedicate
+  `/playlists/import-soundcloud` e `/playlists/import-soundcloud/likes`.
 
 ## Direzione prodotto
 
@@ -205,7 +215,6 @@ Backlog tecnico (non bloccante):
   sue tracce) e Last.fm tag come 2a sorgente. (Genere+Etichetta gia' unificati; Playlist
   resta Spotify-resolved di proposito, goal diverso.)
 - **Shazam fase 2.** `DjSetTrack` come corpus per suggerimenti di co-occorrenza.
-- **SoundCloud import.** API chiusa a nuove app: rivalutare solo se riapre.
 - **PostgreSQL.** Bassa priorita': SQLite basta per uso personale (servirebbe solo con
   un eventuale multi-utente).
 

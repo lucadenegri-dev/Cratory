@@ -77,7 +77,9 @@ GET    /api/playlists/library/gaps
 dall'utente collegato (quelle altrui che segue non sono importabili in dev mode).
 `POST /api/playlists/import` importa una playlist Spotify o i liked tracks.
 `POST /api/playlists/{playlist_id}/sync` riallinea una playlist gia' importata con
-Spotify: importa le nuove tracce e scollega quelle rimosse (che restano in libreria).
+la piattaforma d'origine. Spotify: importa le nuove tracce e scollega quelle
+rimosse (che restano in libreria). SoundCloud (vedi sezione dedicata): sempre
+additivo, mai prune; solo per playlist importate da URL (non i "like").
 `DELETE /api/playlists/{playlist_id}` rimuove la playlist e i suoi "lead orfani":
 tracce senza file locale che non sono in nessun'altra playlist ne' in un set salvato
 (le tracce su disco, o presenti in altra playlist/set, restano). Risponde `200` con
@@ -225,6 +227,43 @@ POST /api/spotify/create-playlist
 ```
 
 Spotify gestisce OAuth, import e export playlist. Non e' una fonte di BPM/key.
+
+## SoundCloud
+
+```text
+GET  /api/soundcloud/status
+PUT  /api/soundcloud/config
+POST /api/soundcloud/import
+GET  /api/soundcloud/likes/preview
+POST /api/soundcloud/import/likes
+```
+
+Import via yt-dlp (estrazione flat): solo metadati, mai audio, niente ISRC
+(SoundCloud non lo espone). `GET status` restituisce `available` (yt-dlp
+importabile), `ytdlp_version` e lo `username` configurato. `PUT config` salva lo
+username (`{username}`, spoglia la `@` iniziale). Gli endpoint di preview/import
+dei like senza username configurato rispondono `409`.
+
+`POST /api/soundcloud/import` importa una playlist pubblica o un secret link da
+URL (`{url}`) come lead in libreria (stesso `PlaylistImportReport` degli altri
+import). Un URL `/likes` risponde `422`: i like passano solo dal flusso
+selettivo qui sotto. URL non-`soundcloud.com` o non http(s) rispondono `422`
+(guardia anti-SSRF), errori di fetch/estrazione yt-dlp rispondono `502`.
+
+`GET /api/soundcloud/likes/preview?limit=100` recupera i like piu' recenti
+dell'utente configurato e li annota con `already_imported` (gia' in libreria per
+`platform_track_id`), senza importare nulla.
+
+`POST /api/soundcloud/import/likes` importa SOLO i like selezionati
+(`{track_ids: [...], limit: 100}`) nella playlist di sistema "SoundCloud
+Likes". Stateless: rifetcha i like e filtra per id. Additivo (nessun prune).
+
+Dedup: niente ISRC, solo `platform_track_id`. `POST
+/api/playlists/{playlist_id}/sync` su una playlist SoundCloud importata da URL
+riallinea con la sorgente in modo **sempre additivo** (mai prune, a differenza
+di Spotify): un brano rimosso/in takedown non scollega la traccia gia'
+importata. Le playlist "like" (`kind=liked`) non sono sincronizzabili da questo
+endpoint: crescono solo via il flusso selettivo sopra.
 
 ## Discovery
 
