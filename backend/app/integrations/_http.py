@@ -58,23 +58,6 @@ def get_with_retries(
     )
 
 
-def post_with_retries(
-    client: httpx.Client,
-    url: str,
-    *,
-    error_cls: type[Exception],
-    data: dict | None = None,
-    retries: int = DEFAULT_RETRIES,
-    backoff: float = DEFAULT_BACKOFF,
-) -> httpx.Response:
-    """Come get_with_retries ma in POST form-encoded (payload troppo lunghi per
-    una query string)."""
-    return _request_with_retries(
-        lambda: client.post(url, data=data), "POST", url,
-        error_cls=error_cls, retries=retries, backoff=backoff,
-    )
-
-
 def _request_with_retries(send, method: str, url: str, *, error_cls, retries, backoff):
     last_exc: Exception | None = None
     for attempt in range(retries + 1):
