@@ -95,14 +95,14 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
         {isCover ? (
           <Cover fileId={issue.file_id} dismissed={issue.status === "dismissed"} />
         ) : issue.status === "open" ? (
-          !fixable ? (
-            <span className="text-faint">{t.issues.notFixable}</span>
-          ) : isClear ? (
+          isClear ? (
             <div className="flex items-center gap-1.5 text-[10px]">
               {issue.current_value && <span className="max-w-[200px] truncate text-faint line-through" title={issue.current_value}>{issue.current_value}</span>}
               <span className="text-faint">→</span>
               <span className="text-muted">{t.issues.emptyValueMark}</span>
             </div>
+          ) : !fixable ? (
+            <span className="text-faint">{t.issues.notFixable}</span>
           ) : (
             <div className="flex flex-col gap-1">
               {issue.current_value && (
@@ -131,7 +131,7 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
       <td className="whitespace-nowrap px-3 py-2 align-top text-right">
         {issue.status === "open" ? (
           <span className="flex justify-end gap-1">
-            {isCover || (fixable && isClear) ? (
+            {isCover || isClear ? (
               <button disabled={busy}
                 onClick={() => run(() => onAccept(issue.id))}
                 className="border border-border px-2 py-0.5 text-[10px] text-ok hover:bg-elevated disabled:opacity-40"

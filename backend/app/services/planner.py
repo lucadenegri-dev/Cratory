@@ -133,4 +133,14 @@ def build_plan(files, accepted_issues, removals, settings_snapshot,
             {"full_url": fix.get("full_url"), "source": fix.get("source"),
              "confidence": fix.get("confidence")}))
 
-    return retag_ops + cover_ops + move_ops + del_ops
+    rating_ops: list[PlanOpComputed] = []
+    for issue in accepted_issues:
+        if issue.type != "stray_rating" or not issue.suggested_fix_json:
+            continue
+        f = files_by_id.get(issue.file_id)
+        if f is None or f.id in removals:
+            continue
+        rating_ops.append(PlanOpComputed(
+            "RATING", f.id, {"rating": "present"}, {"action": "clear"}))
+
+    return retag_ops + cover_ops + rating_ops + move_ops + del_ops

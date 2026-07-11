@@ -69,14 +69,15 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
         o.status = "skipped"
     db.commit()
     ops = [o for o in ops if o.status != "skipped"]
-    cover_skipped = 0
+    soft_skipped = 0
     stale = _stale_op(ops, files)
     if stale is not None:
         return ApplyResult(stale=True, failed_op_seq=stale, reason="piano stale",
-                           skipped_ops=len(skipped) + cover_skipped,
+                           skipped_ops=len(skipped) + soft_skipped,
                            started_at=started, finished_at=utcnow())
     retag_ops = [o for o in ops if o.kind == "RETAG"]
     cover_ops = [o for o in ops if o.kind == "COVER"]
+    rating_ops = [o for o in ops if o.kind == "RATING"]
     move_ops = [o for o in ops if o.kind in ("RENAME", "MOVE")]
     del_ops = [o for o in ops if o.kind == "DELETE"]
     del_by_path = {o.before_json["path"]: o for o in del_ops}
@@ -141,7 +142,7 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
             if f.has_cover:
                 o.status = "skipped"
                 db.commit()
-                cover_skipped += 1
+                soft_skipped += 1
                 continue
             try:
                 data = cover_art.fetch_image(cover_art.bounded_cover_url(o.after_json["full_url"]))
@@ -149,7 +150,7 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
                 o.status = "skipped"
                 _reopen_cover_issue(o.file_id)
                 db.commit()
-                cover_skipped += 1
+                soft_skipped += 1
                 continue
             _journal("COVER", o.file_id, from_path=f.path)   # prior = nessuna cover
             try:
@@ -163,9 +164,31 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
                 o.status = "skipped"
                 _reopen_cover_issue(o.file_id)
                 db.commit()
-                cover_skipped += 1
+                soft_skipped += 1
                 continue
             f.has_cover = True
+            o.status = "applied"
+            db.commit()
+            _progress()
+        for o in rating_ops:
+            current["seq"] = o.seq
+            f = files[o.file_id]
+            prior = tagio.read_rating(f.path)
+            if not prior:
+                o.status = "skipped"   # niente rating da togliere (già pulito)
+                db.commit()
+                soft_skipped += 1
+                continue
+            # journal PRIMA: prior_tags conserva il rating nativo per l'undo.
+            _journal("RATING", o.file_id, from_path=f.path, prior_tags={"rating": prior})
+            try:
+                tagio.clear_rating(f.path)
+            except tagio.TagWriteError as exc:
+                logger.warning("clear_rating fallita su %s: %s", f.path, exc)
+                o.status = "skipped"
+                db.commit()
+                soft_skipped += 1
+                continue
             o.status = "applied"
             db.commit()
             _progress()
@@ -192,12 +215,12 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
         _cleanup_dirs()
         return ApplyResult(run_id=plan.id, applied_ops=state["applied"], partial=True,
                            failed_op_seq=current["seq"], error=str(exc),  # Fix 4: seq del PlanOp
-                           skipped_ops=len(skipped) + cover_skipped,
+                           skipped_ops=len(skipped) + soft_skipped,
                            started_at=started, finished_at=utcnow())
 
     plan.status = "applied"
     db.commit()
     _cleanup_dirs()
     return ApplyResult(run_id=plan.id, applied_ops=state["applied"],
-                       skipped_ops=len(skipped) + cover_skipped,
+                       skipped_ops=len(skipped) + soft_skipped,
                        started_at=started, finished_at=utcnow())

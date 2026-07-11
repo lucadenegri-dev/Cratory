@@ -33,6 +33,10 @@ def undo_run(db: Session, plan: Plan) -> UndoResult:
             elif r.kind == "COVER":
                 if os.path.exists(r.from_path):
                     tagio.remove_cover(r.from_path)
+            elif r.kind == "RATING":
+                prior = (r.prior_tags_json or {}).get("rating")
+                if prior and os.path.exists(r.from_path):
+                    tagio.set_rating(r.from_path, prior)
             else:
                 raise ValueError(f"kind sconosciuto nell'undo: {r.kind}")  # Fix 3
             r.reversed = True

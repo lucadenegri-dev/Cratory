@@ -5,12 +5,13 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import type { Dictionary } from "@/lib/i18n";
 
-const GROUP_KINDS = ["RETAG", "COVER", "RENAME", "MOVE", "DELETE"] as const;
+const GROUP_KINDS = ["RETAG", "COVER", "RATING", "RENAME", "MOVE", "DELETE"] as const;
 
 function groupLabel(t: Dictionary, kind: (typeof GROUP_KINDS)[number]): string {
   switch (kind) {
     case "RETAG": return t.plan.groupRetag;
     case "COVER": return t.plan.groupCover;
+    case "RATING": return t.plan.groupRating;
     case "RENAME": return t.plan.groupRename;
     case "MOVE": return t.plan.groupMove;
     case "DELETE": return t.plan.groupDelete;
@@ -49,6 +50,8 @@ function OpRow({ op }: { op: PlanOp }) {
               {" → "}<span className="text-fg-strong">{String(op.after[f] ?? t.common.empty)}</span>
             </span>
           ))
+        ) : op.kind === "RATING" ? (
+          <span className="text-fg-strong">{t.plan.clearRating}</span>
         ) : isDelete ? (
           <span><span className="text-faint">→</span> <span className="text-warning">{t.plan.quarantine}</span></span>
         ) : (

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from mutagen import File as MutagenFile
 from mutagen import MutagenError
 from mutagen.flac import FLAC, Picture
-from mutagen.id3 import ID3, APIC, COMM, TALB, TCON, TDRC, TIT2, TPE1, TPE2, TPUB, TRCK
+from mutagen.id3 import ID3, APIC, COMM, POPM, TALB, TCON, TDRC, TIT2, TPE1, TPE2, TPUB, TRCK
 from mutagen.mp4 import MP4, MP4Cover
 
 
@@ -135,6 +135,74 @@ def write_tags(path: str, changes: dict) -> None:
         audio.save()
     except MutagenError as exc:
         raise TagWriteError(str(exc)) from exc
+
+
+# --- Rating (stelline) -------------------------------------------------------
+# Il rating è format-specifico: POPM per ID3 (mp3/aiff/wav), chiave RATING
+# Vorbis per FLAC. MP4 non gestito in v1 (→ None / no-op). Email canonica usata
+# solo per il ripristino da undo (il valore-stelle si conserva, non l'email
+# dell'app originale).
+_RATING_EMAIL = "Sortory"
+
+
+def _read_rating(raw) -> str | None:
+    if raw is None:
+        return None
+    if isinstance(raw, FLAC):
+        vals = raw.get("rating")
+        v = str(vals[0]).strip() if vals else ""
+        return v or None
+    tags = getattr(raw, "tags", None)
+    if isinstance(tags, ID3):
+        rated = [p for p in tags.getall("POPM") if getattr(p, "rating", 0)]
+        return str(rated[0].rating) if rated else None
+    return None
+
+
+def read_rating(path: str) -> str | None:
+    """Rating nativo del file come stringa (POPM 0-255 per ID3, valore RATING per
+    FLAC/Vorbis). None se assente o formato non gestito (es. MP4)."""
+    try:
+        raw = MutagenFile(path)
+    except MutagenError as exc:
+        raise TagReadError(str(exc)) from exc
+    return _read_rating(raw)
+
+
+def _apply_rating(path: str, value) -> None:
+    clear = _empty(value)
+    try:
+        raw = MutagenFile(path)
+        if raw is None:
+            raise TagWriteError(f"formato non scrivibile: {path}")
+        if isinstance(raw, FLAC):
+            if clear:
+                if "rating" in raw:
+                    del raw["rating"]
+            else:
+                raw["rating"] = [str(value)]
+            raw.save()
+            return
+        tags = getattr(raw, "tags", None)
+        if isinstance(tags, ID3):
+            tags.delall("POPM")
+            if not clear:
+                tags.add(POPM(email=_RATING_EMAIL, rating=int(value), count=0))
+            raw.save()
+            return
+        # MP4 e altri formati: rating non gestito in v1 → no-op.
+    except (MutagenError, ValueError) as exc:
+        raise TagWriteError(str(exc)) from exc
+
+
+def clear_rating(path: str) -> None:
+    """Rimuove il rating (POPM/RATING). No-op sui formati non gestiti."""
+    _apply_rating(path, None)
+
+
+def set_rating(path: str, value: str) -> None:
+    """Riscrive il rating (per il ripristino da undo)."""
+    _apply_rating(path, value)
 
 
 def write_cover(path: str, data: bytes, mime: str = "image/jpeg") -> None:

@@ -14,7 +14,7 @@ from app.integrations import acoustid, cover_art
 from app.models import AudioFile, Issue, utcnow
 from app.schemas import (IssueBulkBody, IssueFixBody, IssueRead, IssueStatusBody,
                          ProviderRescanBody, ProviderSuggestBody)
-from app.services import ai_tags, apply_job, cover_cache, covers as cover_svc, provider_rescan_job, scan_job, text_providers
+from app.services import ai_tags, apply_job, cover_cache, covers as cover_svc, provider_rescan_job, ratings, scan_job, text_providers
 
 router = APIRouter(prefix="/api/issues", tags=["issues"])
 _VALID = {"open", "accepted", "dismissed"}
@@ -122,6 +122,13 @@ def fix_issue(issue_id: int, body: IssueFixBody, db: Session = Depends(get_db)):
     db.commit()
     file = db.get(AudioFile, issue.file_id)
     return _to_read(issue, file)
+
+
+@router.post("/detect-ratings", response_model=dict)
+def detect_ratings(db: Session = Depends(get_db)):
+    """Rileva i file con un rating (stelline) embeddato e crea le issue
+    stray_rating (svuotamento). Sincrono."""
+    return ratings.detect_ratings(db)
 
 
 @router.post("/ai-suggest", response_model=dict)

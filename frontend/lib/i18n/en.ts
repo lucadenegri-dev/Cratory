@@ -22,6 +22,7 @@ const ISSUE_TYPE_LABELS_EN: Record<string, string> = {
   suspicious_duration: "Suspicious duration",
   scan_error: "Scan error",
   retag: "Tag to clean up",
+  stray_rating: "Star rating",
 };
 
 export const en = {
@@ -265,6 +266,7 @@ export const en = {
     enrichProviderDesc: "Match Artist, Title, Album, Year, Label and cover art from MusicBrainz / Discogs.",
     enrichAi: "Claude AI",
     enrichProviderTag: "Providers",
+    enrichLocal: "Local",
     forceLookupToggle: "Force provider lookup",
     forceLookupHint: "Re-query providers on a specific folder or genre, even for fields already filled — artist/title included, for a full rewrite.",
     rewriteReviewNote: "Creates proposals to review (old → new) as open issues. Nothing is written until you accept and apply.",
@@ -272,6 +274,11 @@ export const en = {
     rescanOnlyNew: "only new files",
     fetchCoversBtn: "Fetch covers (all missing)",
     fetchCoversDesc: "Look up cover art from providers for every file that has none — not just files with tag issues.",
+    detectRatingsBtn: "Detect star ratings",
+    detectRatingsDesc: "Find files with an embedded star rating (POPM) and propose emptying it — review each, then accept to clear.",
+    detectRatingsNote: (found: number, created: number) =>
+      `${found} files with a rating${created > 0 ? `, ${created} new issues` : ""} — review and accept with ✓ empty.`,
+    detectRatingsNone: "No embedded star ratings found.",
     newFilesOnly: "new only",
     newFilesTitle: "Only files from the latest scan (never re-scanned)",
 
@@ -352,11 +359,13 @@ export const en = {
     resSuccess: (applied: number, skipped: number, runId: number | null) => `✓ Applied ${applied} operations${skipped > 0 ? ` (${skipped} skipped due to conflict)` : ""} · run #${runId}. See HISTORY to undo.`,
     groupRetag: "Retag",
     groupCover: "Cover",
+    groupRating: "Rating",
     groupRename: "Rename",
     groupMove: "Move",
     groupDelete: "Delete",
     skip: "skip",
     embedCover: "embed cover",
+    clearRating: "clear star rating",
     quarantine: "quarantine",
     modalTitle: "Apply the plan?",
     modalApplyBtn: (total: number) => `▶ Apply ${total} operations`,

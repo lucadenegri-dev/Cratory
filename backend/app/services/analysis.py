@@ -33,11 +33,15 @@ def _merge_issues(db: Session, computed) -> None:
                 row.suggested_fix_json = c.suggested_fix
             row.updated_at = utcnow()
     for key, row in existing.items():
-        # Le 'provider_override' non sono prodotte dall'Inspector: gestite solo
-        # dal job di rescan. Non cancellarle nel merge, o un re-scan azzererebbe
-        # gli override pendenti.
-        if key not in seen and row.type != "provider_override":
+        # Tipi sintetici (non prodotti dall'Inspector ma da azioni on-demand:
+        # rescan provider, ricerca cover, rilevamento rating): NON cancellarli nel
+        # merge, o un re-scan azzererebbe proposte pendenti già create/accettate.
+        if key not in seen and row.type not in _SYNTHETIC_TYPES:
             db.delete(row)
+
+
+# Issue create fuori dall'Inspector (azioni on-demand): sopravvivono al re-scan.
+_SYNTHETIC_TYPES = {"provider_override", "missing_cover", "stray_rating"}
 
 
 def _signature(member_ids) -> str:

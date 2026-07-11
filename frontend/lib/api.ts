@@ -257,6 +257,15 @@ export function coverThumbUrl(fileId: number): string {
   return `${API}/api/issues/cover-thumb/${fileId}`;
 }
 
+export interface DetectRatingsResult {
+  files: number;
+  found: number;
+  created: number;
+}
+export function detectRatings() {
+  return apiSend<DetectRatingsResult>("POST", "/api/issues/detect-ratings");
+}
+
 export interface ProviderRescanBody {
   folder?: string | null;
   genre?: string | null;

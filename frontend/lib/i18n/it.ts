@@ -18,6 +18,7 @@ const ISSUE_TYPE_LABELS_IT: Record<string, string> = {
   suspicious_duration: "Durata sospetta",
   scan_error: "Errore di scansione",
   retag: "Tag da ripulire",
+  stray_rating: "Stelline (rating)",
 };
 
 export const it: Dictionary = {
@@ -261,6 +262,7 @@ export const it: Dictionary = {
     enrichProviderDesc: "Recupera Artista, Titolo, Album, Anno, Etichetta e copertina da MusicBrainz / Discogs.",
     enrichAi: "Claude AI",
     enrichProviderTag: "Provider",
+    enrichLocal: "Locale",
     forceLookupToggle: "Forza ricerca provider",
     forceLookupHint: "Reinterroga i provider su una cartella o un genere specifici, anche per i campi già pieni — artist/title inclusi, per riscrivere tutto.",
     rewriteReviewNote: "Crea proposte da rivedere (vecchio → nuovo) come issue aperte. Niente viene scritto finché non accetti e fai apply.",
@@ -268,6 +270,11 @@ export const it: Dictionary = {
     rescanOnlyNew: "solo file nuovi",
     fetchCoversBtn: "Cerca copertine (tutte le mancanti)",
     fetchCoversDesc: "Cerca la copertina dai provider per ogni file che non ne ha — non solo quelli con tag da sistemare.",
+    detectRatingsBtn: "Rileva stelline",
+    detectRatingsDesc: "Trova i file con un rating a stelle embeddato (POPM) e propone di svuotarlo — rivedi ciascuno, poi accetti per pulire.",
+    detectRatingsNote: (found, created) =>
+      `${found} file con rating${created > 0 ? `, ${created} nuove issue` : ""} — rivedi e accetta col ✓ svuota.`,
+    detectRatingsNone: "Nessun rating a stelle embeddato trovato.",
     newFilesOnly: "solo nuovi",
     newFilesTitle: "Solo i file dall'ultima scansione (mai ri-scansionati)",
 
@@ -347,11 +354,13 @@ export const it: Dictionary = {
     resSuccess: (applied, skipped, runId) => `✓ Applicate ${applied} operazioni${skipped > 0 ? ` (${skipped} saltate per conflitto)` : ""} · run #${runId}. Vedi HISTORY per annullare.`,
     groupRetag: "Retag",
     groupCover: "Copertina",
+    groupRating: "Rating",
     groupRename: "Rinomina",
     groupMove: "Sposta",
     groupDelete: "Elimina",
     skip: "salta",
     embedCover: "embed copertina",
+    clearRating: "svuota stelline",
     quarantine: "quarantena",
     modalTitle: "Applicare il piano?",
     modalApplyBtn: (total) => `▶ Applica ${total} operazioni`,

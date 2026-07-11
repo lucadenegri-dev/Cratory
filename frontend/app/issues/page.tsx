@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, aiSuggestGenres,
-  providerSuggest, acceptHighOverrides,
+  providerSuggest, acceptHighOverrides, detectRatings,
   type Issue, type ScanRoot,
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
@@ -23,6 +23,7 @@ export default function IssuesPage() {
   const [aiBusy, setAiBusy] = useState(false);
   const [genreBusy, setGenreBusy] = useState(false);
   const [providerBusy, setProviderBusy] = useState(false);
+  const [ratingBusy, setRatingBusy] = useState(false);
   const [aiNote, setAiNote] = useState<string | null>(null);
 
   const [rescanFolder, setRescanFolder] = useState("");
@@ -149,6 +150,21 @@ export default function IssuesPage() {
     }).catch((e) => setActionError(e instanceof Error ? e.message : t.common.error));
   };
 
+  const onDetectRatings = async () => {
+    setActionError(null);
+    setAiNote(null);
+    setRatingBusy(true);
+    try {
+      const r = await detectRatings();
+      load();
+      setAiNote(r.found > 0 ? t.issues.detectRatingsNote(r.found, r.created) : t.issues.detectRatingsNone);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : t.common.error);
+    } finally {
+      setRatingBusy(false);
+    }
+  };
+
   // Cerca la copertina da provider per TUTTI i file che non ne hanno (non solo
   // quelli con tag da sistemare): rescan cover-only su tutta la libreria.
   const onFetchAllCovers = () => {
@@ -228,6 +244,9 @@ export default function IssuesPage() {
     { onClick: onFetchAllCovers, busy: rescanRunning,
       label: rescanRunning ? t.issues.providerImportBusy : t.issues.fetchCoversBtn,
       desc: t.issues.fetchCoversDesc, tag: t.issues.enrichProviderTag },
+    { onClick: onDetectRatings, busy: ratingBusy,
+      label: ratingBusy ? t.issues.aiBusy : t.issues.detectRatingsBtn,
+      desc: t.issues.detectRatingsDesc, tag: t.issues.enrichLocal },
   ];
 
   return (
