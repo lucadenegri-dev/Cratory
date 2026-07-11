@@ -158,12 +158,12 @@ export default function Dashboard() {
               <ColHead>{t.dashboard.recentActivity}</ColHead>
               <div className="mb-2 flex items-center justify-between">
                 <SubLabel>{t.dashboard.recentSets}</SubLabel>
-                <Link href="/sets" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">{t.dashboard.viewAll}</Link>
+                <Link href="/sets" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">{t.dashboard.viewAllMasculine}</Link>
               </div>
               <RecentList items={recentSets} empty={t.dashboard.noSetsYet} />
               <div className="mb-2 mt-5 flex items-center justify-between">
                 <SubLabel>{t.dashboard.recentPlaylistsHeading}</SubLabel>
-                <Link href="/playlists" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">{t.dashboard.viewAll}</Link>
+                <Link href="/playlists" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">{t.dashboard.viewAllFeminine}</Link>
               </div>
               <RecentList items={recentPlaylists} empty={t.dashboard.noPlaylistsYet} />
             </section>
@@ -178,7 +178,7 @@ export default function Dashboard() {
               <MiniBars rows={genreRows} />
               <div className="mb-2 mt-5 flex items-center justify-between">
                 <SubLabel icon={<Tags size={12} />}>{t.dashboard.topLabels}</SubLabel>
-                <Link href="/labels" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">{t.dashboard.viewAll}</Link>
+                <Link href="/labels" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">{t.dashboard.viewAllFeminine}</Link>
               </div>
               <MiniBars rows={labelRows} />
             </section>
