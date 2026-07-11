@@ -138,3 +138,40 @@ def test_normalize_campi_mancanti():
     assert norm.title == "Solo Titolo"
     assert norm.duration_seconds is None
     assert norm.artwork_url is None
+
+
+# --- like: preview selettiva e import dei selezionati ---------------------------
+
+from app.models import Playlist
+from app.services.playlist_import import (
+    SC_LIKED_PLAYLIST_NAME,
+    import_selected_soundcloud_likes,
+    preview_soundcloud_likes,
+)
+
+
+def test_preview_marca_gia_importate(db):
+    entries = [_entry(1), _entry(2, title="Other - Tune")]
+    # primo import: entra solo la traccia 1
+    import_selected_soundcloud_likes(db, entries, ["1001"])
+    preview = preview_soundcloud_likes(db, entries)
+    assert [p["track_id"] for p in preview] == ["1001", "1002"]
+    assert preview[0]["already_imported"] is True
+    assert preview[1]["already_imported"] is False
+    assert preview[0]["artist"] == "Artist X"
+
+
+def test_import_selected_filtra_e_riusa_la_playlist_liked(db):
+    entries = [_entry(1), _entry(2, title="Other - Tune"), _entry(3, title="Third - One")]
+    r1 = import_selected_soundcloud_likes(db, entries, ["1001", "1003"])
+    assert r1["created"] == 2
+    # secondo giro: idempotente sulla stessa playlist di sistema, additivo
+    r2 = import_selected_soundcloud_likes(db, entries, ["1002"])
+    assert r2["created"] == 1
+    assert r2["removed"] == 0
+    liked = db.query(Playlist).filter(
+        Playlist.platform == "soundcloud", Playlist.kind == "liked",
+    ).all()
+    assert len(liked) == 1
+    assert liked[0].name == SC_LIKED_PLAYLIST_NAME
+    assert liked[0].track_count == 3

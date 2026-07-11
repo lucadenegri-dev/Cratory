@@ -399,3 +399,47 @@ def import_selected_liked_tracks(db: Session, items: list, spotify_ids: list[str
         db, platform="spotify", name=LIKED_PLAYLIST_NAME,
         items=selected, kind="liked", prune=False,
     )
+
+
+SC_LIKED_PLAYLIST_NAME = "SoundCloud Likes"
+
+
+def preview_soundcloud_likes(db: Session, entries: list) -> list[dict]:
+    """Entry like yt-dlp -> anteprima selezionabile, senza importare nulla.
+
+    ``already_imported`` = la traccia è già collegata alla playlist liked
+    SoundCloud locale (match per platform_track_id: l'ISRC qui non esiste).
+    """
+    playlist = _liked_playlist(db, "soundcloud")
+    platform_ids: set[str] = set()
+    if playlist is not None:
+        for t in tracks_for_playlist(db, playlist.id):
+            if t.platform_track_id:
+                platform_ids.add(t.platform_track_id)
+
+    out: list[dict] = []
+    for entry in entries:
+        norm = normalize_soundcloud_item(entry)
+        if norm is None or not norm.platform_track_id:
+            continue
+        out.append({
+            "track_id": norm.platform_track_id,
+            "title": norm.title,
+            "artist": norm.artist,
+            "duration_seconds": norm.duration_seconds,
+            "artwork_url": norm.artwork_url,
+            "url": norm.url,
+            "already_imported": norm.platform_track_id in platform_ids,
+        })
+    return out
+
+
+def import_selected_soundcloud_likes(db: Session, entries: list, track_ids: list[str]) -> dict:
+    """Importa nella playlist liked SoundCloud SOLO le entry selezionate. Additivo."""
+    wanted = {str(t) for t in track_ids}
+    selected = [e for e in entries if e and str(e.get("id")) in wanted]
+    return import_playlist(
+        db, platform="soundcloud", name=SC_LIKED_PLAYLIST_NAME,
+        items=selected, normalize=normalize_soundcloud_item,
+        kind="liked", prune=False,
+    )
