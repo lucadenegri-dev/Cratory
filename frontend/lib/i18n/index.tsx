@@ -22,8 +22,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem(STORAGE_KEY);
     const initial: Language = stored === "it" ? "it" : "en";
     setCurrentLanguage(initial);
-    setLangState(initial);
     document.documentElement.lang = initial;
+    // setState fuori dalla fase sincrona dell'effect (come theme-toggle).
+    const raf = requestAnimationFrame(() => setLangState(initial));
     getLanguage()
       .then(({ language }) => {
         if (language !== initial) {
@@ -34,6 +35,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch(() => undefined); // backend giù: si resta sulla lingua locale
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   const setLang = (next: Language) => {

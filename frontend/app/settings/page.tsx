@@ -7,6 +7,7 @@ import {
 } from "@/lib/api";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, Button } from "@/components/ui";
+import { useI18n } from "@/lib/i18n";
 
 // Valori d'esempio per l'anteprima client-side (approssimata: la resa reale con
 // sanitizzazione è lato planner).
@@ -31,6 +32,7 @@ function renderDest(targetRoot: string, folder: string, naming: string): string 
 }
 
 export default function SettingsPage() {
+  const { lang, setLang, t } = useI18n();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [offline, setOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +81,20 @@ export default function SettingsPage() {
       </>}
     >
       <div className="flex max-w-2xl flex-col gap-6">
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-medium text-fg-strong">{t.settings.languageLabel}</h2>
+          <div className="flex gap-2">
+            <button
+              type="button" onClick={() => setLang("it")} aria-pressed={lang === "it"}
+              className={`border px-2 py-1 text-xs uppercase tracking-wider ${lang === "it" ? "border-border-strong bg-surface-2 text-fg-strong" : "border-border text-muted hover:text-fg"}`}
+            >{t.settings.languageIt}</button>
+            <button
+              type="button" onClick={() => setLang("en")} aria-pressed={lang === "en"}
+              className={`border px-2 py-1 text-xs uppercase tracking-wider ${lang === "en" ? "border-border-strong bg-surface-2 text-fg-strong" : "border-border text-muted hover:text-fg"}`}
+            >{t.settings.languageEn}</button>
+          </div>
+        </section>
+
         {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
         {error && <Alert>{error}</Alert>}
 
