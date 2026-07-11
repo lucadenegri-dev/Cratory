@@ -6,7 +6,7 @@
 
 ## Stato attuale
 
-**Ultimo aggiornamento:** 2026-07-11
+**Ultimo aggiornamento:** 2026-07-12
 
 **Nome prodotto:** **Cratory** (rename eseguito il 2026-06-25 su UI, codice, docs e
 icona). "SetArc" e "DJ Assistant" restano solo come nomi storici; i path tecnici legacy
@@ -22,6 +22,33 @@ con garanzia "solo posseduti"; dashboard con pipeline a cinque fasi (Indicizza
 spostata su pulsante nella nav) e documentazione riallineata al nuovo paradigma;
 identificazione mix via Shazam integrata (fase 1; co-occorrenza in backlog);
 import SoundCloud (playlist/secret link + like selettivi) via yt-dlp.
+
+## Milestone 2026-07-12 - Doppia lingua IT/EN (i18n)
+
+App resa bilingue italiano/inglese su tre superfici. Toggle di lingua persistente in
+Impostazioni (chiave `language` in `AppState`, default `it`, endpoint
+`GET/PUT /api/settings/language`); nessun routing per locale.
+
+- **UI**: dizionario TypeScript in `frontend/lib/i18n/` (`en.ts` fonte di verita',
+  `it.ts` tipizzato `: Dictionary` → parita' chiavi enforced a compile-time),
+  `I18nProvider`/`useT()` + `runtime.ts` (stato lingua fuori da React, niente cicli
+  con `lib/api.ts`). Migrate tutte le pagine/componenti; sweep finale a zero stringhe
+  UI italiane residue.
+- **Errori backend**: da stringhe italiane a codici stabili via
+  `api_error(status, code, message, **params)` (`app/core/http_errors.py`), tradotti
+  dal frontend (`errors` namespace, `translateApiError`); backend language-agnostic.
+  Tutti i router migrati (~55 raise), catalogo `errors` in parita' IT/EN.
+- **Frasi generate + AI**: cataloghi per-lingua indicizzati da `get_language(db)`.
+  Rimosso `label_it`; classificazione/reason transizioni, `technical_reasons`/
+  `warnings`, mixing tip/overview, fasi dei job e testi dell'agente AI ora bilingui.
+  I prompt di sistema AI restano IT (istruzioni al modello); solo la direttiva sulla
+  lingua di output e' parametrica.
+
+Verifica: 535 test backend verdi, frontend build/lint puliti, sweep residui a zero
+(UI, `detail=` italiani, `label_it`). Verifica live end-to-end nell'app in esecuzione
+differita (DB SQLite condiviso con sessione parallela attiva). Spec e piano in
+`docs/superpowers/`. Limite noto: i `transition_reason` salvati in DB alla generazione
+restano nella lingua del momento.
 
 ## Milestone 2026-07-11 - Import SoundCloud via yt-dlp
 
