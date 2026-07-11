@@ -52,6 +52,7 @@ export default function IssuesPage() {
     catch (e) { setActionError(e instanceof Error ? e.message : "Errore"); }
   };
   const onFix = (id: number, value: string) => act(() => fixIssue(id, value));
+  const onAccept = (id: number) => act(() => setIssueStatus(id, "accepted"));
   const onDismiss = (id: number) => act(() => setIssueStatus(id, "dismissed"));
   const onReopen = (id: number) => act(() => setIssueStatus(id, "open"));
   const acceptAllFixable = () => act(() => bulkIssues({ status: "accepted" }));
@@ -110,7 +111,7 @@ export default function IssuesPage() {
       } else {
         load();
         setAiNote(
-          `${r.suggested} suggerimenti da provider${r.fingerprinted > 0 ? ` (${r.fingerprinted} via fingerprint)` : ""}${r.unresolved > 0 ? `, ${r.unresolved} non trovati` : ""}${r.acoustid_available ? "" : " — fingerprint off, solo match testuale"} — rivedi e accetta col ✓.`,
+          `${r.suggested} suggerimenti da provider${r.covers > 0 ? `, ${r.covers} copertine trovate` : ""}${r.fingerprinted > 0 ? ` (${r.fingerprinted} via fingerprint)` : ""}${r.unresolved > 0 ? `, ${r.unresolved} non trovati` : ""}${r.acoustid_available ? "" : " — fingerprint off, solo match testuale"} — rivedi e accetta col ✓.`,
         );
       }
     } catch (e) {
@@ -314,7 +315,7 @@ export default function IssuesPage() {
             {issues.length === 0 ? "La libreria è pulita (o non ancora scansionata)." : "Nessuna issue con questi filtri."}
           </EmptyState>
         ) : (
-          <IssuesTable issues={filtered} onFix={onFix} onDismiss={onDismiss} onReopen={onReopen} />
+          <IssuesTable issues={filtered} onFix={onFix} onAccept={onAccept} onDismiss={onDismiss} onReopen={onReopen} />
         )}
       </div>
     </PageLayout>
