@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import ScanRoot
-from app.schemas import RootTargetRead, RootTargetUpdate, SettingsRead, SettingsUpdate
+from app.schemas import (
+    LanguageSetting, RootTargetRead, RootTargetUpdate, SettingsRead, SettingsUpdate,
+)
 from app.services import planning
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -32,6 +34,17 @@ def put_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
     planning.update_settings(db, naming_template=body.naming_template,
                              folder_template=body.folder_template)
     return _read(db)
+
+
+@router.get("/language", response_model=LanguageSetting)
+def get_language_route(db: Session = Depends(get_db)):
+    return LanguageSetting(language=planning.get_language(db))
+
+
+@router.put("/language", response_model=LanguageSetting)
+def put_language_route(body: LanguageSetting, db: Session = Depends(get_db)):
+    planning.set_language(db, body.language)
+    return body
 
 
 @router.put("/roots/{root_id}/target", response_model=SettingsRead)

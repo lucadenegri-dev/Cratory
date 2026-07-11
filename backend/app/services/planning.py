@@ -34,6 +34,24 @@ def update_settings(db: Session, naming_template=None, folder_template=None) -> 
     return s
 
 
+DEFAULT_LANGUAGE = "en"
+
+
+def get_language(db: Session) -> str:
+    """Lingua dell'app ("it" | "en"): valori sconosciuti degradano al default EN."""
+    s = get_settings(db)
+    return s.language if s.language in ("it", "en") else DEFAULT_LANGUAGE
+
+
+def set_language(db: Session, value: str) -> Settings:
+    s = get_settings(db)
+    s.language = value
+    s.updated_at = utcnow()
+    db.commit()
+    db.refresh(s)
+    return s
+
+
 def set_root_target(db: Session, root_id: int, target_root) -> ScanRoot | None:
     root = db.get(ScanRoot, root_id)
     if root is None:
