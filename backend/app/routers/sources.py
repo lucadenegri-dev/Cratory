@@ -2,11 +2,12 @@
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.core.http_errors import api_error
 from app.models import AudioFile, ScanRoot
 from app.schemas import ScanRootCreate, ScanRootRead
 
@@ -38,9 +39,9 @@ def list_sources(db: Session = Depends(get_db)):
 def add_source(body: ScanRootCreate, db: Session = Depends(get_db)):
     path = os.path.abspath(os.path.expanduser(body.path))
     if not os.path.isdir(path):
-        raise HTTPException(status_code=400, detail="Il path non esiste o non è una cartella")
+        raise api_error(400, "source_path_invalid", "Path does not exist or is not a folder")
     if db.scalar(select(ScanRoot).where(ScanRoot.path == path)):
-        raise HTTPException(status_code=409, detail="Radice già presente")
+        raise api_error(409, "source_already_present", "Root already present")
     root = ScanRoot(path=path, label=body.label)
     db.add(root)
     db.commit()
@@ -52,6 +53,6 @@ def add_source(body: ScanRootCreate, db: Session = Depends(get_db)):
 def delete_source(root_id: int, db: Session = Depends(get_db)):
     root = db.get(ScanRoot, root_id)
     if root is None:
-        raise HTTPException(status_code=404, detail="Radice non trovata")
+        raise api_error(404, "source_not_found", "Root not found")
     db.delete(root)
     db.commit()

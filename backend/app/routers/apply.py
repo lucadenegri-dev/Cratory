@@ -1,10 +1,11 @@
 """Router APPLY: avvia/segue il job di applicazione. Sottile."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.core.http_errors import api_error
 from app.models import Plan
 from app.services import apply_job, scan_job
 
@@ -14,9 +15,9 @@ router = APIRouter(prefix="/api/apply", tags=["apply"])
 @router.post("")
 def start_apply(db: Session = Depends(get_db)):
     if scan_job.is_running():
-        raise HTTPException(status_code=409, detail="scan in corso")
+        raise api_error(409, "scan_running", "Scan in progress")
     if db.scalar(select(Plan).where(Plan.status == "draft")) is None:
-        raise HTTPException(status_code=400, detail="nessun piano draft da applicare")
+        raise api_error(400, "plan_draft_missing", "No draft plan to apply")
     return apply_job.start_job()
 
 

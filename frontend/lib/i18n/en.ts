@@ -346,7 +346,26 @@ export const en = {
     badgeUndone: "undone",
     undo: "↺ undo",
   },
-  errors: {} as Record<string, string | ((p: Record<string, unknown>) => string)>,
+  errors: {
+    plan_draft_missing: "No draft plan.",
+    issue_status_invalid: "Invalid status.",
+    issue_not_found: "Issue not found.",
+    issue_not_autofixable: "Issue is not auto-fixable.",
+    issue_field_not_editable: "This field can't be edited by hand.",
+    issue_value_empty: "Empty value.",
+    thumb_missing: "No thumbnail.",
+    scan_or_apply_running: "A scan or apply is already running.",
+    dup_group_not_found: "Group not found.",
+    dup_file_not_member: "This file is not a member of the group.",
+    source_path_invalid: "The path does not exist or is not a folder.",
+    source_already_present: "Root already present.",
+    source_not_found: "Root not found.",
+    target_root_not_absolute: "The destination must be an absolute path.",
+    apply_running: "An apply is already running.",
+    scan_running: "A scan is already running.",
+    run_not_found: "Run not found.",
+    run_not_applied: "This run is not in the 'applied' state.",
+  } as Record<string, string | ((p: Record<string, unknown>) => string)>,
 };
 
 export type Dictionary = typeof en;

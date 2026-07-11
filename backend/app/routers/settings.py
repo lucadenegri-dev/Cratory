@@ -2,11 +2,12 @@
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.core.http_errors import api_error
 from app.models import ScanRoot
 from app.schemas import (
     LanguageSetting, RootTargetRead, RootTargetUpdate, SettingsRead, SettingsUpdate,
@@ -50,7 +51,7 @@ def put_language_route(body: LanguageSetting, db: Session = Depends(get_db)):
 @router.put("/roots/{root_id}/target", response_model=SettingsRead)
 def put_root_target(root_id: int, body: RootTargetUpdate, db: Session = Depends(get_db)):
     if body.target_root is not None and not os.path.isabs(body.target_root):
-        raise HTTPException(status_code=400, detail="target_root deve essere un path assoluto")
+        raise api_error(400, "target_root_not_absolute", "target_root must be an absolute path")
     if planning.set_root_target(db, root_id, body.target_root) is None:
-        raise HTTPException(status_code=404, detail="radice non trovata")
+        raise api_error(404, "source_not_found", "Root not found")
     return _read(db)
