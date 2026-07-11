@@ -91,6 +91,20 @@ l'italiano è il file di traduzione. Default alla prima esecuzione: italiano.
 Ogni fase è committabile e funzionante da sola: l'app resta in italiano finché
 il toggle non esiste, poi migra progressivamente.
 
+## Addendum (emerso in pianificazione)
+
+Il motore deterministico genera altre stringhe italiane user-visible oltre a
+`label_it`: le `reason` di `classify_transition`, `mixing_tip`,
+`mixing_overview` (in `scoring.py`) e i messaggi `phase(...)` / `AIAgentError`
+in `ai_agent.py`. Regola uniforme:
+
+- **Etichette enum** (`label`, codici errore): il frontend traduce dal codice.
+- **Frasi generate** (reason, mixing tip/overview, fasi dei job, errori AI):
+  il backend le produce direttamente nella lingua selezionata, tramite un
+  parametro `lang` letto da `AppState` nel punto di ingresso (router/job).
+  Sono testi composti da logica deterministica: spedirli come codici+params
+  costerebbe più della deroga alla purezza language-agnostic.
+
 ## Fuori scope
 
 - Routing per locale (`/en`, `/it`), SEO, negotiation `Accept-Language`.
