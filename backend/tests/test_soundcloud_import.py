@@ -86,3 +86,55 @@ def test_fetch_likes_costruisce_url_e_passa_il_limit(monkeypatch):
 def test_fetch_likes_senza_username_solleva():
     with pytest.raises(SoundCloudError):
         fetch_likes("   ")
+
+
+# --- normalizzazione -----------------------------------------------------------
+
+from app.services.playlist_import import normalize_soundcloud_item, split_artist_title
+
+
+def test_split_alla_prima_occorrenza():
+    # trattini multipli: solo il primo separa artista e titolo
+    assert split_artist_title("Artist X - Cool Track - Extended", "chan") == (
+        "Artist X", "Cool Track - Extended",
+    )
+
+
+def test_split_senza_separatore_usa_uploader():
+    assert split_artist_title("Cool Track (Bootleg)", "channelY") == ("channelY", "Cool Track (Bootleg)")
+
+
+def test_split_senza_separatore_ne_uploader():
+    assert split_artist_title("Cool Track", None) == (None, "Cool Track")
+
+
+def test_split_titolo_vuoto():
+    assert split_artist_title(None, "channelY") == ("channelY", None)
+
+
+def test_normalize_entry_completa():
+    norm = normalize_soundcloud_item(_entry(1))
+    assert norm is not None
+    assert norm.platform == "soundcloud"
+    assert norm.platform_track_id == "1001"
+    assert norm.artist == "Artist X"
+    assert norm.title == "Cool Track"
+    assert norm.duration_seconds == 245
+    assert norm.url == "https://soundcloud.com/u/track-1"
+    assert norm.isrc is None
+
+
+def test_normalize_entry_senza_id_scartata():
+    assert normalize_soundcloud_item(_entry(1, id=None)) is None
+    assert normalize_soundcloud_item({}) is None
+    assert normalize_soundcloud_item(None) is None
+
+
+def test_normalize_campi_mancanti():
+    norm = normalize_soundcloud_item({"id": 42, "title": "Solo Titolo"})
+    assert norm is not None
+    assert norm.platform_track_id == "42"  # id numerico -> stringa
+    assert norm.artist is None
+    assert norm.title == "Solo Titolo"
+    assert norm.duration_seconds is None
+    assert norm.artwork_url is None

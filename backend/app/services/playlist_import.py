@@ -88,6 +88,48 @@ def normalize_spotify_item(item: dict) -> NormalizedTrack | None:
     )
 
 
+SC_TITLE_SEPARATOR = " - "
+
+
+def split_artist_title(raw_title: str | None, uploader: str | None) -> tuple[str | None, str | None]:
+    """Split deterministico "Artist - Title" alla PRIMA occorrenza del separatore.
+
+    Su SoundCloud il titolo spesso contiene tutto e l'"artista" è lo username
+    dell'uploader (magari un canale): senza separatore si ripiega su quello.
+    È normalizzazione da import (competenza Cratory), non enrichment (Sortory).
+    """
+    raw_title = (raw_title or "").strip()
+    uploader = (uploader or "").strip() or None
+    if SC_TITLE_SEPARATOR in raw_title:
+        left, _, right = raw_title.partition(SC_TITLE_SEPARATOR)
+        return (left.strip() or uploader), (right.strip() or raw_title)
+    return uploader, (raw_title or None)
+
+
+def normalize_soundcloud_item(entry: dict | None) -> NormalizedTrack | None:
+    """Entry flat yt-dlp -> NormalizedTrack. Niente ISRC: SoundCloud non lo espone."""
+    if not entry:
+        return None
+    tid = entry.get("id")
+    if not tid:
+        return None
+    artist, title = split_artist_title(entry.get("title"), entry.get("uploader"))
+    duration = entry.get("duration")
+    thumbnails = entry.get("thumbnails") or []
+    return NormalizedTrack(
+        platform="soundcloud",
+        platform_track_id=str(tid),
+        title=title,
+        artist=artist,
+        album=None,
+        duration_seconds=int(duration) if duration else None,
+        url=entry.get("url") or entry.get("webpage_url"),
+        artwork_url=(thumbnails[-1].get("url") if thumbnails else None),
+        isrc=None,
+        added_at=None,  # non disponibile in flat mode
+    )
+
+
 def identity_normalize(item: NormalizedTrack) -> NormalizedTrack:
     """Passthrough per chi fornisce già NormalizedTrack (es. import locale)."""
     return item
