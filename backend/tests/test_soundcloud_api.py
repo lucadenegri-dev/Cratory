@@ -109,3 +109,34 @@ def test_likes_preview_e_import_selettivo(api_db, monkeypatch):
     # nella preview successiva la 1002 risulta importata
     preview = client.get("/api/soundcloud/likes/preview").json()
     assert {p["track_id"]: p["already_imported"] for p in preview} == {"1001": False, "1002": True}
+
+
+# --- sync per piattaforma --------------------------------------------------------
+
+
+def test_sync_soundcloud_additivo_senza_prune(api_db, monkeypatch):
+    monkeypatch.setattr(sc_router, "fetch_playlist", lambda url: _info([_entry(1), _entry(2)]))
+    body = client.post("/api/soundcloud/import",
+                       json={"url": "https://soundcloud.com/digger/sets/deep-crate"}).json()
+
+    # al secondo fetch la traccia 1 è sparita (takedown) e c'è una nuova traccia 3
+    import app.routers.playlists as pl_router
+    monkeypatch.setattr(pl_router, "sc_fetch_playlist",
+                        lambda url: _info([_entry(2), _entry(3, title="Third - One")]))
+    r = client.post(f"/api/playlists/{body['playlist_id']}/sync")
+    assert r.status_code == 200
+    report = r.json()
+    assert report["created"] == 1
+    assert report["removed"] == 0  # additivo: il takedown non scollega nulla
+    pl = api_db.get(Playlist, body["playlist_id"])
+    assert pl.track_count == 3
+
+
+def test_sync_liked_soundcloud_409(api_db, monkeypatch):
+    client.put("/api/soundcloud/config", json={"username": "luca"})
+    monkeypatch.setattr(sc_router, "fetch_likes", lambda username, limit=100: _info([_entry(1)]))
+    client.post("/api/soundcloud/import/likes", json={"track_ids": ["1001"]})
+    liked = api_db.query(Playlist).filter(
+        Playlist.platform == "soundcloud", Playlist.kind == "liked",
+    ).one()
+    assert client.post(f"/api/playlists/{liked.id}/sync").status_code == 409

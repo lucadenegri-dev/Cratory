@@ -14,6 +14,11 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Playlist, Track
+from app.integrations.soundcloud import (
+    SoundCloudError,
+    SoundCloudInvalidUrl,
+    fetch_playlist as sc_fetch_playlist,
+)
 from app.integrations.spotify import (
     SpotifyError,
     SpotifyNotConfigured,
@@ -52,6 +57,7 @@ from app.services.playlist_import import (
     import_playlist,
     import_selected_liked_tracks,
     import_single_track,
+    normalize_soundcloud_item,
     preview_liked_tracks,
 )
 
@@ -161,14 +167,35 @@ def import_liked_selected(req: LikedSelectedImportRequest, db: Session = Depends
 
 @router.post("/{playlist_id}/sync", response_model=PlaylistImportReport)
 def sync_playlist(playlist_id: int, db: Session = Depends(get_db)):
-    """Riallinea la playlist con Spotify: importa le nuove tracce e scollega quelle
-    rimosse (che restano comunque in libreria). Applica e ritorna un report.
+    """Riallinea la playlist con la piattaforma d'origine: Spotify con prune,
+    SoundCloud solo additivo.
     """
     playlist = get_playlist(db, playlist_id)
     if playlist is None:
         raise HTTPException(status_code=404, detail="Playlist non trovata")
+
+    if playlist.platform == "soundcloud":
+        # I liked SoundCloud crescono solo via flusso selettivo: niente sync totale.
+        if playlist.kind == "liked" or not playlist.url:
+            raise HTTPException(status_code=409, detail="Playlist SoundCloud non sincronizzabile: usa il flusso selettivo dei like o reimporta l'URL.")
+        try:
+            info = sc_fetch_playlist(playlist.url)
+        except SoundCloudError as exc:
+            status_code = 422 if isinstance(exc, SoundCloudInvalidUrl) else 502
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+        # Additivo (prune=False): su SoundCloud un takedown non significa
+        # "non mi interessa più" — il lead resta collegato.
+        report = import_playlist(
+            db, platform="soundcloud", name=playlist.name, items=info["entries"],
+            normalize=normalize_soundcloud_item,
+            platform_playlist_id=playlist.platform_playlist_id,
+            owner=playlist.owner, url=playlist.url, artwork_url=playlist.artwork_url,
+            kind=playlist.kind, prune=False,
+        )
+        return PlaylistImportReport(**report)
+
     if playlist.platform != "spotify":
-        raise HTTPException(status_code=409, detail="Solo le playlist Spotify sono sincronizzabili.")
+        raise HTTPException(status_code=409, detail="Solo le playlist Spotify e SoundCloud sono sincronizzabili.")
     if playlist.kind != "liked" and not playlist.platform_playlist_id:
         raise HTTPException(status_code=409, detail="Playlist non sincronizzabile da Spotify.")
 
