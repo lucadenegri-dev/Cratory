@@ -50,6 +50,18 @@ def test_apply_cover_skips_on_download_failure(db, copy_fixture, tmp_path):
     assert tagio.read_tags(fpath).has_cover is False
 
 
+def test_apply_cover_skips_when_has_cover_already_true(db, copy_fixture, tmp_path):
+    plan, f, fpath = _seed_cover_plan(db, copy_fixture, tmp_path)
+    f.has_cover = True
+    db.commit()
+    with patch("app.services.apply.cover_art.fetch_image", side_effect=AssertionError(
+            "fetch_image non deve essere chiamato se has_cover è già True")) as mock_fetch:
+        res = apply_svc.apply_plan(db, plan)
+    mock_fetch.assert_not_called()
+    assert res.applied_ops == 0
+    assert res.skipped_ops == 1
+
+
 def test_undo_cover_removes_embedded_art(db, copy_fixture, tmp_path):
     plan, f, fpath = _seed_cover_plan(db, copy_fixture, tmp_path)
     with patch("app.services.apply.cover_art.fetch_image", return_value=_JPG):

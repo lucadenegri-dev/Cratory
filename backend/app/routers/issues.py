@@ -223,20 +223,23 @@ _PROVIDER_TYPES = ("missing_required_tag", "missing_metadata", "dirty_genre")
 _PROVIDER_FIELDS = ("artist", "title", "genre", "year", "label", "album")
 
 
-def _upsert_cover_issue(db: Session, file_id: int, cover, thumb_ref: str) -> None:
-    """Crea/aggiorna l'issue missing_cover. Non tocca le proposte già accettate."""
+def _upsert_cover_issue(db: Session, file_id: int, cover, thumb_bytes: bytes) -> bool:
+    """Crea/aggiorna l'issue missing_cover. Non tocca (né ri-cacha) le proposte
+    già accettate o ignorate. Ritorna True se ha agito."""
     issue = db.scalar(select(Issue).where(
         Issue.file_id == file_id, Issue.type == "missing_cover", Issue.field == "cover"))
     if issue is not None and issue.status != "open":
-        return  # non resuscitare proposte accettate o ignorate
+        return False  # non resuscitare (né ri-cacha la thumb di) proposte accettate/ignorate
+    ref = cover_cache.save_thumb(file_id, thumb_bytes)
     if issue is None:
         issue = Issue(file_id=file_id, type="missing_cover", field="cover",
                       severity="info", detail="copertina mancante", status="open")
         db.add(issue)
     issue.suggested_fix_json = {"field": "cover", "source": cover.source,
                                 "confidence": cover.confidence,
-                                "full_url": cover.full_url, "thumb_ref": thumb_ref}
+                                "full_url": cover.full_url, "thumb_ref": ref}
     issue.updated_at = utcnow()
+    return True
 
 
 @router.post("/provider-suggest", response_model=dict)
@@ -324,9 +327,8 @@ def provider_suggest(body: ProviderSuggestBody | None = None, db: Session = Depe
                 artist=f.artist, title=f.title, caa=caa, discogs=discogs)
             if cover is None:
                 continue
-            ref = cover_cache.save_thumb(fid, cover.thumb_bytes)
-            _upsert_cover_issue(db, fid, cover, ref)
-            covers += 1
+            if _upsert_cover_issue(db, fid, cover, cover.thumb_bytes):
+                covers += 1
 
     db.commit()
     return {"configured": True, "acoustid_available": ac_client is not None,

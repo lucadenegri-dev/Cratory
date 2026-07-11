@@ -86,19 +86,24 @@ def _run_with_cover(db, tmp_path, monkeypatch, cover):
 
 
 def test_accepted_cover_issue_not_clobbered(db, tmp_path, monkeypatch):
+    from app.core.config import settings
+    from app.services import cover_cache
+    monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     fid = _seed(db)
+    cover_cache.save_thumb(fid, b"ORIGINAL")
     prev = {"field": "cover", "source": "discogs", "confidence": "text",
             "full_url": "http://old.jpg", "thumb_ref": f"cover_cache/{fid}.jpg"}
     db.add(Issue(file_id=fid, type="missing_cover", field="cover", severity="info",
                  detail="copertina mancante", status="accepted", suggested_fix_json=prev))
     db.commit()
     new_cover = __import__("app.integrations.cover_art", fromlist=["CoverResult"]).CoverResult(
-        thumb_bytes=b"\xff\xd8NEW", full_url="http://new.jpg", source="caa", confidence="high")
+        thumb_bytes=b"NEWDIFFERENT", full_url="http://new.jpg", source="caa", confidence="high")
     r = _run_with_cover(db, tmp_path, monkeypatch, new_cover)
     assert r.status_code == 200
     iss = db.query(Issue).filter(Issue.type == "missing_cover").one()
     assert iss.status == "accepted"
     assert iss.suggested_fix_json == prev
+    assert cover_cache.read_thumb(fid) == b"ORIGINAL"
 
 
 def test_dismissed_cover_issue_not_resurrected(db, tmp_path, monkeypatch):

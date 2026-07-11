@@ -6,7 +6,7 @@ from app.integrations import tagio
 _JPG = bytes.fromhex("ffd8ffe000104a46494600010100000100010000ffd9")
 
 
-@pytest.mark.parametrize("fmt", ["flac", "mp3", "m4a", "aiff"])
+@pytest.mark.parametrize("fmt", ["flac", "mp3", "m4a", "aiff", "wav"])
 def test_write_then_detect_cover(copy_fixture, tmp_path, fmt):
     f = copy_fixture(fmt, tmp_path / f"a.{fmt}")
     assert tagio.read_tags(f).has_cover is False
@@ -14,7 +14,7 @@ def test_write_then_detect_cover(copy_fixture, tmp_path, fmt):
     assert tagio.read_tags(f).has_cover is True
 
 
-@pytest.mark.parametrize("fmt", ["flac", "mp3", "m4a", "aiff"])
+@pytest.mark.parametrize("fmt", ["flac", "mp3", "m4a", "aiff", "wav"])
 def test_remove_cover(copy_fixture, tmp_path, fmt):
     f = copy_fixture(fmt, tmp_path / f"a.{fmt}")
     tagio.write_cover(f, _JPG)

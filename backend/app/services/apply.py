@@ -125,6 +125,11 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
         for o in cover_ops:
             current["seq"] = o.seq
             f = files[o.file_id]
+            if f.has_cover:
+                o.status = "skipped"
+                db.commit()
+                cover_skipped += 1
+                continue
             try:
                 data = cover_art.fetch_image(o.after_json["full_url"])
             except cover_art.CoverArtError:
