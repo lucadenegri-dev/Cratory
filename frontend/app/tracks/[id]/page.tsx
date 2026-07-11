@@ -150,7 +150,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
         track={track}
         open={editing}
         onClose={() => setEditing(false)}
-        onSaved={(t) => setTrack(t)}
+        onSaved={(saved) => setTrack(saved)}
       />
 
       <LinkLocalFileModal
