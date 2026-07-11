@@ -334,6 +334,7 @@ export interface Conflict {
 }
 export interface PlanStats {
   n_retag: number;
+  n_cover: number;
   n_rename: number;
   n_move: number;
   n_delete: number;

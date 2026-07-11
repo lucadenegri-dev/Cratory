@@ -1,10 +1,11 @@
 "use client";
 
-import { type PlanOp } from "@/lib/api";
+import { coverThumbUrl, type PlanOp } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
 const GROUPS: { kind: string; label: string }[] = [
   { kind: "RETAG", label: "Retag" },
+  { kind: "COVER", label: "Copertina" },
   { kind: "RENAME", label: "Rinomina" },
   { kind: "MOVE", label: "Sposta" },
   { kind: "DELETE", label: "Elimina" },
@@ -25,8 +26,16 @@ function OpRow({ op }: { op: PlanOp }) {
         <span className="shrink-0 text-[9px] uppercase tracking-wider text-warning">salta</span>
       )}
       <span className="min-w-[200px] max-w-[200px] truncate text-[11px] text-muted" title={op.file_path}>{basename(op.file_path)}</span>
-      <span className="text-[11px]">
-        {op.kind === "RETAG" ? (
+      <span className="flex items-center gap-2 text-[11px]">
+        {op.kind === "COVER" ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={coverThumbUrl(op.file_id)} alt="cover"
+                 className="h-8 w-8 border border-border object-cover" />
+            <span className="text-fg-strong">embed copertina</span>
+            <span className="text-faint">({String(op.after.source ?? "")})</span>
+          </>
+        ) : op.kind === "RETAG" ? (
           Object.keys(op.after).map((f, i) => (
             <span key={f}>
               {i > 0 ? " · " : ""}{f}: <span className="text-faint">{String(op.before[f] ?? "—")}</span>
