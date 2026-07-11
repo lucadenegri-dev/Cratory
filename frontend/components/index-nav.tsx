@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { useJobs } from "./jobs-provider";
 import { Clock } from "./clock";
 import { ThemeToggle } from "./theme-toggle";
+import { useT } from "@/lib/i18n";
 
 const NAV = [
   { href: "/sources", label: "Sources" },
@@ -26,6 +27,7 @@ function sumIssues(s: LibraryStats | null): number {
 
 export function IndexNav() {
   const pathname = usePathname();
+  const t = useT();
   const { scan } = useJobs();
   const [stats, setStats] = useState<LibraryStats | null>(null);
 
@@ -57,7 +59,7 @@ export function IndexNav() {
         <Link href="/sources" className="block text-sm font-semibold tracking-[0.12em] text-fg-strong">
           SORTORY
         </Link>
-        <p className="mt-1 text-[9px] uppercase tracking-wider text-faint">file → rekordbox</p>
+        <p className="mt-1 text-[9px] uppercase tracking-wider text-faint">{t.nav.tagline}</p>
       </div>
 
       <ul className="flex gap-4 overflow-x-auto px-2 pb-3 lg:flex-1 lg:flex-col lg:gap-px lg:overflow-visible lg:pb-0">

@@ -15,6 +15,13 @@ export const en = {
     retry: "Retry",
     never: "never",
     empty: "—",
+    guide: "Guide",
+    inProgress: "In progress",
+  },
+  jobs: {
+    scan: "Scan",
+    apply: "Apply",
+    providerLookup: "Provider lookup",
   },
   nav: {
     tagline: "file → rekordbox",

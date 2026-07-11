@@ -17,6 +17,13 @@ export const it: Dictionary = {
     retry: "Riprova",
     never: "mai",
     empty: "—",
+    guide: "Guida",
+    inProgress: "In corso",
+  },
+  jobs: {
+    scan: "Scansione",
+    apply: "Applicazione",
+    providerLookup: "Ricerca provider",
   },
   nav: {
     tagline: "file → rekordbox",
