@@ -11,16 +11,16 @@ aggiunge la spiegazione di ogni suggerimento.
 import logging
 import re
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.http_errors import api_error
 from app.db import get_db
 from app.integrations.discogs import DiscogsClient, DiscogsError
 from app.integrations.lastfm import (
     LastFMError,
-    LastFMNotConfigured,
     get_lastfm_client,
     lastfm_configured,
 )
@@ -136,12 +136,9 @@ def _response(result: DiscoveryResult) -> DiscoveryResponse:
 
 def _require_lastfm() -> None:
     if not lastfm_configured():
-        raise HTTPException(
-            status_code=409,
-            detail=str(LastFMNotConfigured(
-                "LASTFM_API_KEY mancante in backend/.env: serve per il Discovery "
-                "(chiave gratuita su last.fm/api)."
-            )),
+        raise api_error(
+            409, "lastfm_not_configured",
+            "Last.fm not configured: needed for Discovery (free key at last.fm/api).",
         )
 
 
@@ -172,9 +169,11 @@ def expand(req: DiscoveryExpandRequest, db: Session = Depends(get_db)):
             album_label_fn=album_label_fn, owned_labels=owned, limit=req.limit,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise api_error(404, "discovery_not_found", f"Discovery not found: {exc}",
+                         reason=str(exc)) from exc
     except LastFMError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise api_error(502, "discovery_provider_error", f"Discovery provider error: {exc}",
+                         reason=str(exc)) from exc
     return _response(result)
 
 
@@ -231,7 +230,8 @@ def get_release_detail(discogs_id: int):
     try:
         payload = client.get_release(discogs_id)
     except DiscogsError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise api_error(502, "discovery_provider_error", f"Discovery provider error: {exc}",
+                         reason=str(exc)) from exc
 
     names = [a.get("name", "") for a in (payload.get("artists") or []) if a.get("name")]
     artist = _clean_artist_name(", ".join(names)) if names else "Sconosciuto"

@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.core.http_errors import api_error
 from app.db import get_db
 from app.models import Track
 from app.repositories import all_playable_tracks, get_track
@@ -25,7 +26,7 @@ def _ranked(db: Session, track_id: int, *, incoming: bool, limit: int,
             lens: str | None = None) -> list[TransitionCandidateOut]:
     anchor = get_track(db, track_id)
     if anchor is None:
-        raise HTTPException(status_code=404, detail="Traccia non trovata")
+        raise api_error(404, "track_not_found", "Track not found")
     results: list[tuple[int, Track, TransitionScoreOut]] = []
     for other in all_playable_tracks(db):
         if other.id == anchor.id:
@@ -64,5 +65,5 @@ def score(req: TransitionScoreRequest, db: Session = Depends(get_db)):
     from_track = get_track(db, req.from_track_id)
     to_track = get_track(db, req.to_track_id)
     if from_track is None or to_track is None:
-        raise HTTPException(status_code=404, detail="Traccia non trovata")
+        raise api_error(404, "track_not_found", "Track not found")
     return _score_out(from_track, to_track)

@@ -9,9 +9,10 @@ suggerimenti per co-occorrenza (Fase 2). L'analisi e' un job in background con p
 import importlib.util
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.core.http_errors import api_error
 from app.db import get_db
 from app.repositories import delete_dj_set, get_dj_set, list_dj_sets
 from app.schemas import DjSetCreateIn, DjSetOut, DjSetSummaryOut, PlaylistImportReport
@@ -42,9 +43,9 @@ def status():
 def identify(req: DjSetCreateIn):
     """Avvia l'identificazione di un mix (o riusa un set gia' analizzato)."""
     if not _deps_available():
-        raise HTTPException(
-            status_code=409,
-            detail="Identificazione non disponibile: servono ffmpeg, yt-dlp e shazamio nel backend.",
+        raise api_error(
+            409, "shazam_deps_missing",
+            "Identification unavailable: ffmpeg, yt-dlp and shazamio are required on the backend.",
         )
     return mix_identify_job.start_job(req.url)
 
@@ -63,7 +64,7 @@ def list_sets(db: Session = Depends(get_db)):
 def get_set(dj_set_id: int, db: Session = Depends(get_db)):
     dj_set = get_dj_set(db, dj_set_id)
     if dj_set is None:
-        raise HTTPException(status_code=404, detail="Set non trovato")
+        raise api_error(404, "set_not_found", "Set not found")
     return dj_set
 
 
@@ -75,9 +76,9 @@ def import_as_playlist(dj_set_id: int, db: Session = Depends(get_db)):
     promuove a lead (dedup su artista+titolo, ISRC conservato per il riaggancio)."""
     dj_set = get_dj_set(db, dj_set_id)
     if dj_set is None:
-        raise HTTPException(status_code=404, detail="Set non trovato")
+        raise api_error(404, "set_not_found", "Set not found")
     if dj_set.imported_playlist_id is not None:
-        raise HTTPException(status_code=409, detail="Set già importato come playlist")
+        raise api_error(409, "dj_set_already_imported", "Set already imported as playlist")
     items = [(t.artist, t.title, t.isrc) for t in dj_set.tracks]
     report = import_track_pairs(db, name=dj_set.title or "Set Shazam", items=items, source="shazam")
     dj_set.imported_playlist_id = report["playlist_id"]
@@ -88,4 +89,4 @@ def import_as_playlist(dj_set_id: int, db: Session = Depends(get_db)):
 @router.delete("/sets/{dj_set_id}", status_code=204)
 def remove_set(dj_set_id: int, db: Session = Depends(get_db)):
     if not delete_dj_set(db, dj_set_id):
-        raise HTTPException(status_code=404, detail="Set non trovato")
+        raise api_error(404, "set_not_found", "Set not found")

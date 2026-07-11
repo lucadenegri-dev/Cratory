@@ -1,9 +1,10 @@
 """HTTP per l'acquisizione file via slskd. Nessuna logica di business qui."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from app.core.http_errors import api_error
 from app.db import SessionLocal, get_db
 from app.integrations.slskd import (
     SlskdError, SlskdFile, get_slskd_client, slskd_configured,
@@ -106,7 +107,7 @@ def ignore_pending(track_id: int, db: Session = Depends(get_db)):
     """Ignora una "da sistemare": azzera l'esito e la traccia esce dall'archivio."""
     track = get_track(db, track_id)
     if track is None:
-        raise HTTPException(status_code=404, detail="Traccia non trovata.")
+        raise api_error(404, "track_not_found", "Track not found.")
     track.last_download_outcome = None
     track.last_download_reason = None
     db.commit()
@@ -118,9 +119,10 @@ def ignore_pending(track_id: int, db: Session = Depends(get_db)):
 def retry_pending():
     """Ritenta l'auto-pick su tutte le "da sistemare". 409 se un job e' in corso."""
     if not slskd_configured():
-        raise HTTPException(status_code=409, detail="slskd non configurato.")
+        raise api_error(409, "slskd_not_configured",
+                        "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     if job.is_running():
-        raise HTTPException(status_code=409, detail="Un download e' gia' in corso.")
+        raise api_error(409, "download_already_running", "A download is already running.")
     return job.start_retry_job()
 
 
@@ -132,36 +134,39 @@ def status():
 @router.post("/candidates", response_model=list[CandidateOut])
 def candidates(req: CandidatesIn):
     if not slskd_configured():
-        raise HTTPException(status_code=409, detail="slskd non configurato (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
+        raise api_error(409, "slskd_not_configured",
+                        "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     try:
         # Cascata di varianti di query: la letterale spesso esclude file validi.
         ranked = search_candidates(get_slskd_client(), artist=req.artist,
                                    title=req.title,
                                    expected_duration=req.duration_seconds)
     except SlskdError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise api_error(502, "slskd_error", f"slskd error: {exc}", reason=str(exc)) from exc
     return [_candidate_out(c) for c in ranked]
 
 
 @router.post("/playlist/{playlist_id}", status_code=202)
 def download_playlist(playlist_id: int):
     if not slskd_configured():
-        raise HTTPException(status_code=409, detail="slskd non configurato.")
+        raise api_error(409, "slskd_not_configured",
+                        "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     if job.is_running():
-        raise HTTPException(status_code=409, detail="Un download e' gia' in corso.")
+        raise api_error(409, "download_already_running", "A download is already running.")
     return {"available": True, **job.start_playlist_job(playlist_id)}
 
 
 @router.post("/track", status_code=202)
 def download_track(req: TrackDownloadIn):
     if not slskd_configured():
-        raise HTTPException(status_code=409, detail="slskd non configurato.")
+        raise api_error(409, "slskd_not_configured",
+                        "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     if job.is_running():
-        raise HTTPException(status_code=409, detail="Un download e' gia' in corso.")
+        raise api_error(409, "download_already_running", "A download is already running.")
     db = SessionLocal()
     try:
         if get_track(db, req.track_id) is None:
-            raise HTTPException(status_code=404, detail="Traccia non trovata.")
+            raise api_error(404, "track_not_found", "Track not found.")
     finally:
         db.close()
     return {"available": True, **job.start_track_job(req.track_id, _slskd_file(req.candidate))}
@@ -173,13 +178,14 @@ def download_track_auto(req: TrackAutopickIn):
     ora' dalla tracklist di un lead Discovery): nessun candidato scelto
     dall'utente, stessa cascata di ricerca del job playlist."""
     if not slskd_configured():
-        raise HTTPException(status_code=409, detail="slskd non configurato.")
+        raise api_error(409, "slskd_not_configured",
+                        "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     if job.is_running():
-        raise HTTPException(status_code=409, detail="Un download e' gia' in corso.")
+        raise api_error(409, "download_already_running", "A download is already running.")
     db = SessionLocal()
     try:
         if get_track(db, req.track_id) is None:
-            raise HTTPException(status_code=404, detail="Traccia non trovata.")
+            raise api_error(404, "track_not_found", "Track not found.")
     finally:
         db.close()
     return {"available": True, **job.start_track_autopick_job(req.track_id)}
@@ -188,14 +194,15 @@ def download_track_auto(req: TrackAutopickIn):
 @router.post("/search", response_model=list[CandidateOut])
 def search(req: SearchIn):
     if not slskd_configured():
-        raise HTTPException(status_code=409, detail="slskd non configurato (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
+        raise api_error(409, "slskd_not_configured",
+                        "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     query = req.query.strip()
     if not query:
         return []
     try:
         files = get_slskd_client().search(query, "")
     except SlskdError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise api_error(502, "slskd_error", f"slskd error: {exc}", reason=str(exc)) from exc
     # Ricerca libera: slskd ha gia' filtrato per query, l'utente sceglie a vista.
     ranked = rank_candidates(files, artist="", title=query, min_name_score=0.0)
     return [_candidate_out(c) for c in ranked]
@@ -204,9 +211,10 @@ def search(req: SearchIn):
 @router.post("/manual", status_code=202)
 def download_manual(req: ManualDownloadIn):
     if not slskd_configured():
-        raise HTTPException(status_code=409, detail="slskd non configurato.")
+        raise api_error(409, "slskd_not_configured",
+                        "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     if job.is_running():
-        raise HTTPException(status_code=409, detail="Un download e' gia' in corso.")
+        raise api_error(409, "download_already_running", "A download is already running.")
     return {"available": True, **job.start_manual_job(_slskd_file(req.candidate))}
 
 
@@ -215,7 +223,7 @@ def review(track_id: int, db: Session = Depends(get_db)):
     """Confronto atteso-vs-scaricato per un needs_review-per-durata."""
     track = get_track(db, track_id)
     if track is None:
-        raise HTTPException(status_code=404, detail="Traccia non trovata.")
+        raise api_error(404, "track_not_found", "Track not found.")
     return review_detail(db, track)
 
 
@@ -224,11 +232,12 @@ def keep_review(req: ReviewActionIn, db: Session = Depends(get_db)):
     """Tieni il file dubbio già scaricato: lo aggancia e svuota l'esito."""
     track = get_track(db, req.track_id)
     if track is None:
-        raise HTTPException(status_code=404, detail="Traccia non trovata.")
+        raise api_error(404, "track_not_found", "Track not found.")
     try:
         track = keep_downloaded(db, track)
     except NoReviewFileError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise api_error(409, "download_review_error", f"Download review error: {exc}",
+                         reason=str(exc)) from exc
     return track_out(track)
 
 
@@ -237,7 +246,7 @@ def discard_review(req: ReviewActionIn, db: Session = Depends(get_db)):
     """Scarta il file dubbio: lo elimina dall'inbox e sgancia la traccia."""
     track = get_track(db, req.track_id)
     if track is None:
-        raise HTTPException(status_code=404, detail="Traccia non trovata.")
+        raise api_error(404, "track_not_found", "Track not found.")
     return track_out(discard_downloaded(db, track))
 
 

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.http_errors import api_error
 from app.db import get_db
 from app.integrations.spotify import (
     SpotifyError,
@@ -45,10 +46,10 @@ def _consume_state(state: str | None) -> bool:
 
 def _http_error(exc: SpotifyError) -> HTTPException:
     if isinstance(exc, SpotifyNotConfigured):
-        return HTTPException(status_code=409, detail=str(exc))
+        return api_error(409, "spotify_not_configured", str(exc), reason=str(exc))
     if isinstance(exc, SpotifyNotConnected):
-        return HTTPException(status_code=401, detail=str(exc))
-    return HTTPException(status_code=502, detail=str(exc))
+        return api_error(401, "spotify_not_connected", str(exc), reason=str(exc))
+    return api_error(502, "spotify_error", str(exc), reason=str(exc))
 
 
 @router.get("/status")
@@ -101,10 +102,10 @@ class CreatePlaylistRequest(BaseModel):
 def create_playlist(req: CreatePlaylistRequest, db: Session = Depends(get_db)):
     setlist = get_setlist(db, req.setlist_id)
     if setlist is None:
-        raise HTTPException(status_code=404, detail="Set non trovato")
+        raise api_error(404, "set_not_found", "Set not found")
     track_ids = [st.track.spotify_id for st in setlist.tracks if st.track.spotify_id]
     if not track_ids:
-        raise HTTPException(status_code=422, detail="Il set non contiene tracce Spotify")
+        raise api_error(422, "set_no_spotify_tracks", "The set has no Spotify tracks")
     try:
         url = SpotifyWebClient(db).create_playlist(req.name or setlist.name, track_ids)
     except SpotifyError as exc:

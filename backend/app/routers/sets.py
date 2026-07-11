@@ -9,6 +9,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.http_errors import api_error
 from app.db import SessionLocal, get_db
 from app.integrations.llm import LLMError, LLMNotConfigured, get_llm_client, llm_configured
 from app.repositories import get_setlist, list_setlists
@@ -99,14 +100,15 @@ def generate_async(req: SetGenerationRequest):
     """Avvia la generazione in background e ritorna subito. Seguire /generate-status."""
     use_ai = _should_use_ai(req)
     if use_ai and not llm_configured():
-        raise HTTPException(status_code=409, detail="AI non configurata (AI_API_KEY mancante).")
+        raise api_error(409, "ai_not_configured", "AI not configured: AI_API_KEY missing.",
+                         reason="AI_API_KEY mancante")
     with _gen_lock:
         if _gen_state["status"] == "running":
             # Mai inghiottire una richiesta nuova nel job in corso: quel job puo' avere
             # un motore diverso (es. AI) da quello appena chiesto dall'utente.
-            raise HTTPException(
-                status_code=409,
-                detail="Una generazione è già in corso: attendi che finisca e riprova.",
+            raise api_error(
+                409, "set_generation_in_progress",
+                "A generation is already running: wait for it to finish and try again.",
             )
         _gen_state.update(status="running", phase=None, using_ai=use_ai, setlist_id=None,
                           error=None, started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)
@@ -125,14 +127,17 @@ def generate(req: SetGenerationRequest, db: Session = Depends(get_db)):
         try:
             setlist = generate_ai_set(db, req, get_llm_client(_model_for(req)))
         except LLMNotConfigured as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise api_error(409, "ai_not_configured", f"AI not configured: {exc}",
+                             reason=str(exc)) from exc
         except (AIAgentError, LLMError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise api_error(422, "set_ai_generation_failed", f"AI set generation failed: {exc}",
+                             reason=str(exc)) from exc
         return setlist_out(setlist)
     try:
         setlist = generate_set(db, req)
     except SetGenerationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise api_error(422, "set_generation_failed", f"Set generation failed: {exc}",
+                         reason=str(exc)) from exc
     return setlist_out(setlist)
 
 
@@ -145,7 +150,7 @@ def get_all(db: Session = Depends(get_db)):
 def get_one(setlist_id: int, db: Session = Depends(get_db)):
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
-        raise HTTPException(status_code=404, detail="Set non trovato")
+        raise api_error(404, "set_not_found", "Set not found")
     return setlist_out(setlist)
 
 
@@ -164,7 +169,7 @@ def export(
     """Export del set: testo, CSV, Markdown o M3U8 (playlist Rekordbox). Export playlist Spotify: endpoint dedicato."""
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
-        raise HTTPException(status_code=404, detail="Set non trovato")
+        raise api_error(404, "set_not_found", "Set not found")
 
     if format == "csv":
         buf = io.StringIO()
@@ -239,7 +244,7 @@ def export(
 
 def _edit_error(exc: SetEditError) -> HTTPException:
     status = 404 if "non trovato" in str(exc).lower() else 422
-    return HTTPException(status_code=status, detail=str(exc))
+    return api_error(status, "set_edit_error", f"Set edit error: {exc}", reason=str(exc))
 
 
 @router.patch("/{setlist_id}", response_model=SetlistOut)
@@ -286,11 +291,12 @@ def replace(setlist_id: int, position: int, req: ReplaceTrackRequest, db: Sessio
 def alternatives(setlist_id: int, req: AlternativesRequest, db: Session = Depends(get_db)):
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
-        raise HTTPException(status_code=404, detail="Set non trovato")
+        raise api_error(404, "set_not_found", "Set not found")
     try:
         alts = find_alternatives(db, setlist, req.position, req.mode, req.limit)
     except AlternativesError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise api_error(422, "alternatives_error", f"Alternatives error: {exc}",
+                         reason=str(exc)) from exc
     return AlternativesResponse(
         position=req.position,
         mode=req.mode,

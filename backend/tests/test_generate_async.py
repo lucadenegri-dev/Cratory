@@ -18,4 +18,4 @@ def test_generate_async_rejects_new_request_while_running(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         sets_router.generate_async(SetGenerationRequest(use_ai=False))
     assert exc_info.value.status_code == 409
-    assert "in corso" in exc_info.value.detail
+    assert exc_info.value.detail["code"] == "set_generation_in_progress"
