@@ -60,7 +60,7 @@ def test_is_likes_url():
 # --- fetch con estrattore mockato ----------------------------------------------
 
 def test_fetch_playlist_materializza_le_entries(monkeypatch):
-    def fake_extract(url, *, limit=None):
+    def fake_extract(url, *, limit=None, flat=True):
         return _info(iter([_entry(1), _entry(2)]))  # generatore: va materializzato
 
     monkeypatch.setattr(sc, "_extract", fake_extract)
@@ -69,23 +69,66 @@ def test_fetch_playlist_materializza_le_entries(monkeypatch):
     assert len(info["entries"]) == 2
 
 
+def test_fetch_playlist_usa_estrazione_piena(monkeypatch):
+    # L'import playlist vuole i metadati pieni (uploader/durata), non il flat.
+    seen = {}
+
+    def fake_extract(url, *, limit=None, flat=True):
+        seen["flat"] = flat
+        return _info([_entry(1)])
+
+    monkeypatch.setattr(sc, "_extract", fake_extract)
+    fetch_playlist("https://soundcloud.com/digger/sets/deep-crate")
+    assert seen["flat"] is False
+
+
 def test_fetch_likes_costruisce_url_e_passa_il_limit(monkeypatch):
     seen = {}
 
-    def fake_extract(url, *, limit=None):
+    def fake_extract(url, *, limit=None, flat=True):
         seen["url"] = url
         seen["limit"] = limit
+        seen["flat"] = flat
         return _info([_entry(1)])
 
     monkeypatch.setattr(sc, "_extract", fake_extract)
     fetch_likes("  @luca ", limit=50)
     assert seen["url"] == "https://soundcloud.com/luca/likes"
     assert seen["limit"] == 50
+    assert seen["flat"] is True  # la preview dei like resta flat (veloce)
+
+
+def test_fetch_likes_filtra_le_playlist_nei_like(monkeypatch):
+    # Nei like possono esserci anche playlist (/sets/): non sono tracce.
+    def fake_extract(url, *, limit=None, flat=True):
+        return _info([
+            _entry(1),
+            _entry(2, url="https://soundcloud.com/u/sets/una-playlist"),
+        ])
+
+    monkeypatch.setattr(sc, "_extract", fake_extract)
+    info = fetch_likes("luca")
+    assert [e["id"] for e in info["entries"]] == ["1001"]
 
 
 def test_fetch_likes_senza_username_solleva():
     with pytest.raises(SoundCloudError):
         fetch_likes("   ")
+
+
+def test_fetch_track_estrazione_piena_e_url_validato(monkeypatch):
+    seen = {}
+
+    def fake_extract(url, *, limit=None, flat=True):
+        seen["flat"] = flat
+        return {"id": "77", "title": "T", "uploader": "U"}
+
+    monkeypatch.setattr(sc, "_extract", fake_extract)
+    e = sc.fetch_track("https://soundcloud.com/u/track")
+    assert e["id"] == "77"
+    assert seen["flat"] is False
+    with pytest.raises(SoundCloudInvalidUrl):
+        sc.fetch_track("https://example.com/x")
 
 
 # --- normalizzazione -----------------------------------------------------------
@@ -110,6 +153,44 @@ def test_split_senza_separatore_ne_uploader():
 
 def test_split_titolo_vuoto():
     assert split_artist_title(None, "channelY") == ("channelY", None)
+
+
+def test_split_scarta_prefisso_posizione_vinile():
+    # "a1 - Pariah - Caterpillar": la posizione della tracklist non è un artista
+    assert split_artist_title("a1 - Pariah - Caterpillar (VOAM009)", "Voam") == (
+        "Pariah", "Caterpillar (VOAM009)",
+    )
+    assert split_artist_title("01 - Artist - Track", None) == ("Artist", "Track")
+    # prefisso senza secondo separatore: resta solo il titolo, artista dall'uploader
+    assert split_artist_title("B2 - Some Track", "chan") == ("chan", "Some Track")
+
+
+def test_split_inverte_quando_la_destra_matcha_uploader():
+    # Convenzione "Titolo - Artista": la destra coincide con chi ha caricato
+    assert split_artist_title("Atmosphera - Fabz & Viruks", "Fabz") == (
+        "Fabz & Viruks", "Atmosphera",
+    )
+    assert split_artist_title("Old-fashioned - JAVB DJ", "JAVB") == (
+        "JAVB DJ", "Old-fashioned",
+    )
+
+
+def test_split_non_inverte_quando_la_sinistra_matcha_uploader():
+    assert split_artist_title("Mi Figue Mi Goyave - To The Moon", "Mi Figue Mi Goyave") == (
+        "Mi Figue Mi Goyave", "To The Moon",
+    )
+    assert split_artist_title("FROND - Anx [Open Culture]", "FROND") == (
+        "FROND", "Anx [Open Culture]",
+    )
+
+
+def test_split_nessun_match_uploader_resta_normale():
+    # uploader = label/canale terzo: la convenzione "Artista - Titolo" vince
+    assert split_artist_title("Grooveyard - Watch Me Now", "Secret Cinema") == (
+        "Grooveyard", "Watch Me Now",
+    )
+    # uploader troppo corto per un match affidabile: nessuna inversione
+    assert split_artist_title("Ambient - DJ", "DJ") == ("Ambient", "DJ")
 
 
 def test_normalize_entry_completa():

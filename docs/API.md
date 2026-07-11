@@ -239,8 +239,11 @@ GET  /api/soundcloud/likes/preview
 POST /api/soundcloud/import/likes
 ```
 
-Import via yt-dlp (estrazione flat): solo metadati, mai audio, niente ISRC
-(SoundCloud non lo espone). `GET status` restituisce `available` (yt-dlp
+Import via yt-dlp: solo metadati, mai audio, niente ISRC (SoundCloud non lo
+espone). La preview dei like usa l'estrazione flat (veloce, senza uploader né
+durata); import e sync ri-fetchano ogni traccia in modalità piena (uploader
+reale, durata, artwork — ~1s a traccia, le playlist nei like sono filtrate).
+`GET status` restituisce `available` (yt-dlp
 importabile), `ytdlp_version` e lo `username` configurato. `PUT config` salva lo
 username (`{username}`, spoglia la `@` iniziale). Gli endpoint di preview/import
 dei like senza username configurato rispondono `409`.

@@ -342,7 +342,7 @@ droppabili su SQLite per una FK baked-in su `playlist_id` — ma sono morte e vu
 | Shazam | attiva se dipendenze presenti | ffmpeg, yt-dlp, shazamio; fingerprinting di mix esterni, non della libreria |
 | slskd (Soulseek) | attiva se configurato | download via REST API; `SLSKD_URL`/`SLSKD_API_KEY`/`SLSKD_DOWNLOAD_DIR` |
 | Rekordbox | manuale (via export XML) | fonte di BPM/key: `POST /api/rekordbox/import`; nessuna API/dipendenza esterna, solo parsing file |
-| SoundCloud | attiva se dipendenze presenti | yt-dlp (estrazione flat, solo metadati, mai audio) per playlist/secret link e like; niente ISRC (non esposto), dedup su `platform_track_id`; sync sempre additivo (mai prune, a differenza di Spotify) |
+| SoundCloud | attiva se dipendenze presenti | yt-dlp (solo metadati, mai audio) per playlist/secret link e like: preview like flat (veloce), import/sync con estrazione piena per-traccia (uploader/durata/artwork, ~1s a traccia); niente ISRC (non esposto), dedup su `platform_track_id`; sync sempre additivo (mai prune, a differenza di Spotify) |
 | PostgreSQL | backlog | SQLite basta per mono-utente |
 
 I provider esterni residui (Last.fm, Discogs, Spotify) servono **solo la

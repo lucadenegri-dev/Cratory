@@ -118,6 +118,35 @@ def test_likes_preview_e_import_selettivo(api_db, monkeypatch):
     assert {p["track_id"]: p["already_imported"] for p in preview} == {"1001": False, "1002": True}
 
 
+def test_import_likes_arricchisce_con_fetch_pieno(api_db, monkeypatch):
+    """L'import dei selezionati rifetcha ogni traccia in modalità piena
+    (uploader/durata veri); se il fetch pieno fallisce, ripiega sull'entry flat."""
+    from app.models import Track
+
+    client.put("/api/soundcloud/config", json={"username": "luca"})
+    # entries flat: senza uploader né durata (come nella realtà)
+    flat = [
+        _entry(1, title="Axis", uploader=None, duration=None),
+        _entry(2, title="Evolution", uploader=None, duration=None),
+    ]
+    monkeypatch.setattr(sc_router, "fetch_likes", lambda username, limit=100: _info(list(flat)))
+
+    def fake_fetch_track(url):
+        if url.endswith("track-2"):
+            raise SoundCloudError("giù")  # fallback: si importa l'entry flat
+        return _entry(1, title="Axis", uploader="Nuclear Hyde", duration=380.2)
+
+    monkeypatch.setattr(sc_router, "fetch_track", fake_fetch_track)
+    r = client.post("/api/soundcloud/import/likes", json={"track_ids": ["1001", "1002"]})
+    assert r.status_code == 200
+    assert r.json()["created"] == 2
+    by_id = {t.platform_track_id: t for t in api_db.query(Track).all()}
+    assert by_id["1001"].artist == "Nuclear Hyde"  # dal fetch pieno
+    assert by_id["1001"].duration_seconds == 380
+    assert by_id["1002"].artist is None  # fallback flat: uploader non noto
+    assert by_id["1002"].title == "Evolution"
+
+
 # --- sync per piattaforma --------------------------------------------------------
 
 

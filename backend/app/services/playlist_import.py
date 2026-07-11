@@ -11,6 +11,7 @@ successivo e separato (services/enrichment + integrations/).
 """
 
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -90,19 +91,49 @@ def normalize_spotify_item(item: dict) -> NormalizedTrack | None:
 
 SC_TITLE_SEPARATOR = " - "
 
+# Posizione di tracklist/vinile usata come prefisso del titolo ("a1 - ...",
+# "B2 - ...", "01 - ..."): non è un artista.
+_SC_POSITION_RE = re.compile(r"^(?:[a-d]\d{1,2}|\d{1,2}\.?)$", re.IGNORECASE)
+
+
+def _norm_name(value: str | None) -> str:
+    """Normalizza un nome per il confronto con l'uploader: via il contenuto tra
+    parentesi/quadre (numeri di catalogo, note remix), poi casefold alfanumerico."""
+    value = re.sub(r"[(\[].*?[)\]]", "", value or "")
+    return re.sub(r"[^a-z0-9]", "", value.casefold())
+
 
 def split_artist_title(raw_title: str | None, uploader: str | None) -> tuple[str | None, str | None]:
     """Split deterministico "Artist - Title" alla PRIMA occorrenza del separatore.
 
-    Su SoundCloud il titolo spesso contiene tutto e l'"artista" è lo username
-    dell'uploader (magari un canale): senza separatore si ripiega su quello.
-    È normalizzazione da import (competenza Cratory), non enrichment (Sortory).
+    Regole (in ordine), tutte deterministiche — normalizzazione da import
+    (competenza Cratory), non enrichment (Sortory):
+    - un prefisso di posizione tracklist/vinile ("a1", "B2", "01") a sinistra
+      del primo separatore si scarta e si ri-splitta il resto;
+    - se la parte destra coincide con l'uploader (e la sinistra no) il titolo
+      segue la convenzione "Titolo - Artista": si inverte;
+    - senza separatore l'artista è l'uploader (il fetch pieno dà il nome vero).
     """
     raw_title = (raw_title or "").strip()
     uploader = (uploader or "").strip() or None
     if SC_TITLE_SEPARATOR in raw_title:
         left, _, right = raw_title.partition(SC_TITLE_SEPARATOR)
-        return (left.strip() or uploader), (right.strip() or raw_title)
+        left, right = left.strip(), right.strip()
+        if _SC_POSITION_RE.match(left):
+            # "a1 - Pariah - Caterpillar" -> ri-splitta "Pariah - Caterpillar";
+            # "B2 - Some Track" -> solo titolo, artista dall'uploader.
+            if SC_TITLE_SEPARATOR not in right:
+                return uploader, (right or raw_title)
+            left, _, right = right.partition(SC_TITLE_SEPARATOR)
+            left, right = left.strip(), right.strip()
+        norm_up = _norm_name(uploader)
+        if len(norm_up) >= 3:  # nomi troppo corti ("DJ") matchano per caso
+            norm_left, norm_right = _norm_name(left), _norm_name(right)
+            right_matches = norm_right and (norm_up in norm_right or norm_right in norm_up)
+            left_matches = norm_left and (norm_up in norm_left or norm_left in norm_up)
+            if right_matches and not left_matches:
+                return (right or uploader), (left or raw_title)
+        return (left or uploader), (right or raw_title)
     return uploader, (raw_title or None)
 
 

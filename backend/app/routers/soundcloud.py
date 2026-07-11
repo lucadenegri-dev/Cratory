@@ -9,6 +9,7 @@ from app.integrations.soundcloud import (
     SoundCloudInvalidUrl,
     fetch_likes,
     fetch_playlist,
+    fetch_track,
     is_likes_url,
     soundcloud_available,
     ytdlp_version,
@@ -101,11 +102,25 @@ def likes_preview(limit: int = DEFAULT_LIKES_LIMIT, db: Session = Depends(get_db
 
 @router.post("/import/likes", response_model=PlaylistImportReport)
 def import_likes(req: SoundCloudLikedSelectedRequest, db: Session = Depends(get_db)):
-    """Importa SOLO i like selezionati. Stateless: rifetcha e filtra per id. Additivo."""
+    """Importa SOLO i like selezionati. Stateless: rifetcha e filtra per id. Additivo.
+
+    Le entry flat dei like non hanno uploader né durata: ogni selezionata viene
+    ri-fetchata in modalità piena (~1s l'una). Se il fetch pieno fallisce si
+    ripiega sull'entry flat: meglio un lead povero che un lead perso.
+    """
     username = _username_or_409(db)
     try:
         info = fetch_likes(username, limit=req.limit)
     except SoundCloudError as exc:
         raise _http_error(exc) from exc
-    report = import_selected_soundcloud_likes(db, info["entries"], req.track_ids)
+    wanted = {str(t) for t in req.track_ids}
+    selected = [e for e in info["entries"] if e and str(e.get("id")) in wanted]
+    full: list[dict] = []
+    for entry in selected:
+        track_url = entry.get("url") or entry.get("webpage_url")
+        try:
+            full.append(fetch_track(track_url) if track_url else entry)
+        except SoundCloudError:
+            full.append(entry)
+    report = import_selected_soundcloud_likes(db, full, req.track_ids)
     return PlaylistImportReport(**report)
