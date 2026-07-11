@@ -14,6 +14,7 @@ export const en = {
     none: "None",
     error: "Error",
     retry: "Retry",
+    inProgress: "In progress",
   },
   nav: {
     tagline: "DJ set workbench",
@@ -39,6 +40,15 @@ export const en = {
     languageLabel: "Language",
     languageIt: "Italiano",
     languageEn: "English",
+  },
+  jobs: {
+    shazamIdentify: "Mix identification",
+    soulseekDownload: "Soulseek download",
+    libraryIndex: "Library indexing",
+    completed: "Completed",
+    downloadSummary: (downloaded: number, pending: number) =>
+      `${downloaded} downloaded${pending > 0 ? ` · ${pending} to review` : ""}`,
+    moreJobs: (n: number) => (n === 1 ? "+1 more job" : `+${n} more jobs`),
   },
   errors: {} as Record<string, string | ((p: Record<string, unknown>) => string)>,
 };

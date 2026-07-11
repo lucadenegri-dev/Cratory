@@ -16,6 +16,7 @@ export const it: Dictionary = {
     none: "Nessuna",
     error: "Errore",
     retry: "Riprova",
+    inProgress: "In corso",
   },
   nav: {
     tagline: "Workbench per DJ set",
@@ -41,6 +42,15 @@ export const it: Dictionary = {
     languageLabel: "Lingua",
     languageIt: "Italiano",
     languageEn: "English",
+  },
+  jobs: {
+    shazamIdentify: "Identificazione mix",
+    soulseekDownload: "Download Soulseek",
+    libraryIndex: "Indicizzazione libreria",
+    completed: "Completata",
+    downloadSummary: (downloaded: number, pending: number) =>
+      `${downloaded} scaricate${pending > 0 ? ` · ${pending} da sistemare` : ""}`,
+    moreJobs: (n: number) => (n === 1 ? "+1 altro job" : `+${n} altri job`),
   },
   errors: {},
 };

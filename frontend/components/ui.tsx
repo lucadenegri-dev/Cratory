@@ -3,6 +3,7 @@
 import { ChevronDown, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 /* ---------------------------------------------------------------- Card */
@@ -140,8 +141,9 @@ export function Progress({ value }: { value: number }) {
 
 /* Loader inline: equalizzatore a colonne con tacca di picco calda. */
 export function Equalizer({ className }: { className?: string }) {
+  const t = useT();
   return (
-    <span role="status" aria-label="Caricamento" className={cn("eq", className ?? "h-4 w-4")}>
+    <span role="status" aria-label={t.common.loading} className={cn("eq", className ?? "h-4 w-4")}>
       <span className="eq-bar"><span className="eq-track" /><span className="eq-fill eq-l1" /></span>
       <span className="eq-bar"><span className="eq-track" /><span className="eq-fill eq-l2" /></span>
       <span className="eq-bar"><span className="eq-track" /><span className="eq-fill eq-l3" /></span>
@@ -155,10 +157,11 @@ export const Spinner = Equalizer;
 
 
 /** Trattamento standard del caricamento pagina: Equalizer + testo muted. */
-export function Loading({ label = "Caricamento…" }: { label?: string }) {
+export function Loading({ label }: { label?: string }) {
+  const t = useT();
   return (
     <p className="flex items-center gap-2 py-8 text-sm text-muted" role="status">
-      <Equalizer /> {label}
+      <Equalizer /> {label ?? t.common.loading}
     </p>
   );
 }
@@ -177,6 +180,7 @@ const WAVE: number[] = Array.from({ length: 112 }, (_, i) => {
 /* Meter a waveform "rekordbox": value numerico -> riempimento sx->dx con testina;
    value null -> indeterminato con scan che spazza. */
 export function EqMeter({ value, className }: { value: number | null; className?: string }) {
+  const t = useT();
   const indeterminate = value == null;
   const v = indeterminate ? 0 : Math.min(100, Math.max(0, value));
   const lit = indeterminate ? 0 : Math.round((WAVE.length * v) / 100);
@@ -184,7 +188,7 @@ export function EqMeter({ value, className }: { value: number | null; className?
     <div
       className={cn("eqm", className ?? "h-6 w-full")}
       role={indeterminate ? "status" : "progressbar"}
-      aria-label={indeterminate ? "In corso" : undefined}
+      aria-label={indeterminate ? t.common.inProgress : undefined}
       aria-valuenow={indeterminate ? undefined : Math.round(v)}
       aria-valuemin={indeterminate ? undefined : 0}
       aria-valuemax={indeterminate ? undefined : 100}
