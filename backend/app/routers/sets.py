@@ -58,6 +58,10 @@ def _model_for(req: SetGenerationRequest) -> str | None:
     return None  # None = default (AI_MODEL / DEFAULT_MODEL)
 
 
+# Fase mostrata durante la generazione deterministica (non-AI); le fasi del
+# path AI sono già bilingui in ai_agent.py (_PHASES).
+_BUILDING_SET_PHASE = {"it": "Costruisco il set", "en": "Building the set"}
+
 # --- Generazione asincrona (la generazione AI puo' richiedere ~1-3 min) -------
 # App locale mono-utente: un job alla volta, stato in memoria con lock.
 _gen_lock = threading.Lock()
@@ -81,7 +85,8 @@ def _run_generation(req: SetGenerationRequest, use_ai: bool) -> None:
                 on_phase=lambda p: _gen_state.update(phase=p),
             )
         else:
-            _gen_state["phase"] = "Costruisco il set"
+            lang = get_language(db)
+            _gen_state["phase"] = _BUILDING_SET_PHASE.get(lang, _BUILDING_SET_PHASE["it"])
             setlist = generate_set(db, req)
         _gen_state.update(status="done", setlist_id=setlist.id, phase=None)
         logger.info("Job generazione completato: set %s (%s)", setlist.id, setlist.generated_by)
