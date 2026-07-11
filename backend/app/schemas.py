@@ -74,6 +74,10 @@ class IssueFixBody(BaseModel):
     value: str
 
 
+class ProviderSuggestBody(BaseModel):
+    covers: bool = True
+
+
 class ProviderRescanBody(BaseModel):
     folder: str | None = None
     genre: str | None = None

@@ -3,15 +3,17 @@
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db import get_db
+from app.integrations import acoustid, cover_art
 from app.models import AudioFile, Issue, utcnow
 from app.schemas import (IssueBulkBody, IssueFixBody, IssueRead, IssueStatusBody,
-                         ProviderRescanBody)
-from app.services import ai_tags, apply_job, provider_rescan_job, scan_job, text_providers
+                         ProviderRescanBody, ProviderSuggestBody)
+from app.services import ai_tags, apply_job, cover_cache, provider_rescan_job, scan_job, text_providers
 
 router = APIRouter(prefix="/api/issues", tags=["issues"])
 _VALID = {"open", "accepted", "dismissed"}
@@ -221,8 +223,24 @@ _PROVIDER_TYPES = ("missing_required_tag", "missing_metadata", "dirty_genre")
 _PROVIDER_FIELDS = ("artist", "title", "genre", "year", "label", "album")
 
 
+def _upsert_cover_issue(db: Session, file_id: int, cover, thumb_ref: str) -> None:
+    """Crea/aggiorna l'issue missing_cover. Non tocca le proposte già accettate."""
+    issue = db.scalar(select(Issue).where(
+        Issue.file_id == file_id, Issue.type == "missing_cover", Issue.field == "cover"))
+    if issue is not None and issue.status != "open":
+        return  # non resuscitare proposte accettate o ignorate
+    if issue is None:
+        issue = Issue(file_id=file_id, type="missing_cover", field="cover",
+                      severity="info", detail="copertina mancante", status="open")
+        db.add(issue)
+    issue.suggested_fix_json = {"field": "cover", "source": cover.source,
+                                "confidence": cover.confidence,
+                                "full_url": cover.full_url, "thumb_ref": thumb_ref}
+    issue.updated_at = utcnow()
+
+
 @router.post("/provider-suggest", response_model=dict)
-def provider_suggest(db: Session = Depends(get_db)):
+def provider_suggest(body: ProviderSuggestBody | None = None, db: Session = Depends(get_db)):
     """Riempie i suggested_fix delle issue aperte dai provider (MusicBrainz→
     Discogs), **fingerprint-first**: se il file non ha mbid e AcoustID è
     configurato, lo fingerprinta prima della lookup → match esatto e confidenza
@@ -232,14 +250,20 @@ def provider_suggest(db: Session = Depends(get_db)):
     Tocca solo issue open (i tag puliti non hanno issue; i fix manuali sono
     accepted); riempie quando suggested_fix_json è None o non ha source ==
     'provider' (sovrascrive AI/legacy, idempotente sulle sue). Ogni proposta è
-    marcata source='provider' + confidence ('high'|'text'). Una lookup per file."""
-    from app.integrations import acoustid
+    marcata source='provider' + confidence ('high'|'text'). Una lookup per file.
+
+    Se covers=True (default), per i file risolti in questa passata con
+    has_cover=False cerca anche una copertina (CAA/Discogs, riusando la
+    stessa lookup testuale: nessuna chiamata MB extra) e la mette in cache
+    su disco, creando/aggiornando l'issue 'missing_cover'."""
     from app.integrations.discogs_meta import DiscogsMetaClient
     from app.integrations.musicbrainz import MusicBrainzProvider
     from app.services.fingerprint import fingerprint_one
 
+    want_covers = (body or ProviderSuggestBody()).covers
     mb = MusicBrainzProvider(user_agent=settings.musicbrainz_user_agent)
     discogs = DiscogsMetaClient()
+    caa = cover_art.CoverArtArchiveClient() if want_covers else None
     ac_client = None
     if acoustid.acoustid_configured() and acoustid.fpcalc_available():
         try:
@@ -257,17 +281,20 @@ def provider_suggest(db: Session = Depends(get_db)):
             or i.suggested_fix_json.get("source") != "provider"]
     if not todo:
         return {"configured": True, "acoustid_available": ac_client is not None,
-                "files": 0, "suggested": 0, "unresolved": 0, "fingerprinted": 0}
+                "files": 0, "suggested": 0, "unresolved": 0, "fingerprinted": 0,
+                "covers": 0}
 
-    cache: dict[int, dict] = {}
+    cache: dict[int, "text_providers.ResolvedText"] = {}
+    files_by_id: dict[int, AudioFile] = {}
     fingerprinted = 0
 
-    def _lookup(f: AudioFile) -> dict:
+    def _lookup(f: AudioFile):
         nonlocal fingerprinted
+        files_by_id[f.id] = f
         if f.id not in cache:
             if not f.mbid and ac_client is not None and fingerprint_one(f, ac_client):
                 fingerprinted += 1
-            cache[f.id] = text_providers.lookup_with_conf(f, mb=mb, discogs=discogs) or {}
+            cache[f.id] = text_providers.resolve(f, mb=mb, discogs=discogs)
         return cache[f.id]
 
     suggested = unresolved = 0
@@ -275,7 +302,7 @@ def provider_suggest(db: Session = Depends(get_db)):
     for issue, f in todo:
         files_seen.add(f.id)
         res = _lookup(f)
-        pair = res.get(issue.field)
+        pair = res.fields.get(issue.field)
         if pair is not None:
             value, conf = pair
             issue.suggested_fix_json = {"field": issue.field, "action": "retag",
@@ -285,10 +312,34 @@ def provider_suggest(db: Session = Depends(get_db)):
             suggested += 1
         else:
             unresolved += 1
+
+    covers = 0
+    if want_covers:
+        for fid, res in cache.items():
+            f = files_by_id[fid]
+            if f.has_cover:
+                continue
+            cover = cover_art.lookup_cover(
+                release_mbids=res.release_mbids, confidence=res.confidence,
+                artist=f.artist, title=f.title, caa=caa, discogs=discogs)
+            if cover is None:
+                continue
+            ref = cover_cache.save_thumb(fid, cover.thumb_bytes)
+            _upsert_cover_issue(db, fid, cover, ref)
+            covers += 1
+
     db.commit()
     return {"configured": True, "acoustid_available": ac_client is not None,
             "files": len(files_seen), "suggested": suggested,
-            "unresolved": unresolved, "fingerprinted": fingerprinted}
+            "unresolved": unresolved, "fingerprinted": fingerprinted, "covers": covers}
+
+
+@router.get("/cover-thumb/{file_id}")
+def cover_thumb(file_id: int):
+    data = cover_cache.read_thumb(file_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="nessuna thumbnail")
+    return Response(content=data, media_type="image/jpeg")
 
 
 @router.post("/provider-rescan", response_model=dict)
