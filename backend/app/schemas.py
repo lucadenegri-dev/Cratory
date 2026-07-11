@@ -160,6 +160,7 @@ class ConflictRead(BaseModel):
 
 class PlanStats(BaseModel):
     n_retag: int = 0
+    n_cover: int = 0
     n_rename: int = 0
     n_move: int = 0
     n_delete: int = 0

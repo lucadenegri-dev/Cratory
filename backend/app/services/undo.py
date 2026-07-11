@@ -30,6 +30,9 @@ def undo_run(db: Session, plan: Plan) -> UndoResult:
             elif r.kind == "DELETE":
                 if os.path.exists(r.quarantine_path):
                     fsops.safe_move(r.quarantine_path, r.from_path)
+            elif r.kind == "COVER":
+                if os.path.exists(r.from_path):
+                    tagio.remove_cover(r.from_path)
             else:
                 raise ValueError(f"kind sconosciuto nell'undo: {r.kind}")  # Fix 3
             r.reversed = True
