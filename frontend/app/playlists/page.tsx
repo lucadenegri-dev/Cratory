@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, Music4 } from "lucide-react";
+import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, Music4, CloudDownload } from "lucide-react";
 import {
   listImportedPlaylists,
   deletePlaylist,
@@ -55,6 +55,7 @@ export default function PlaylistsPage() {
   const marginalia = (
     <div className="space-y-3">
       <Link href="/playlists/import-spotify" className="block"><Button size="sm" className="w-full"><Download size={15} /> Importa da Spotify</Button></Link>
+      <Link href="/playlists/import-soundcloud" className="block"><Button size="sm" variant="outline" className="w-full"><CloudDownload size={15} /> Importa da SoundCloud</Button></Link>
       <Link href="/playlists/import-manual" className="block"><Button size="sm" variant="outline" className="w-full"><ClipboardList size={15} /> Inserisci manualmente</Button></Link>
       {imported && imported.length > 0 && (
         <div className="space-y-2 border-t border-border pt-4 text-xs">
@@ -79,7 +80,7 @@ export default function PlaylistsPage() {
 
       {imported && imported.length === 0 && (
         <EmptyState icon={<Music2 size={28} />} title="Nessuna playlist importata">
-          Usa “Importa da Spotify” o “Inserisci manualmente” per iniziare a costruire un set.
+          Usa “Importa da Spotify”, “Importa da SoundCloud” o “Inserisci manualmente” per iniziare a costruire un set.
         </EmptyState>
       )}
 
