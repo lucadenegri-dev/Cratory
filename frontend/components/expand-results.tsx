@@ -9,30 +9,25 @@ import {
   type DiscoveryCandidate,
 } from "@/lib/api";
 import { Card, Badge, Button, EmptyState, Spinner } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
 
-const SOURCE_LABEL: Record<DiscoveryCandidate["source"], string> = {
-  similar_artist: "artista affine",
-  similar_track: "traccia affine",
-  tag: "genere",
-  label: "etichetta",
-};
-
 export function ExpandResults({ result, playlistId }: { result: DiscoveryResponse; playlistId: number }) {
+  const t = useT();
   if (result.candidates.length === 0) {
     return (
-      <EmptyState icon={<Compass size={28} />} title="Nessun suggerimento">
-        La fonte di similarità non ha restituito tracce nuove per questa playlist.
+      <EmptyState icon={<Compass size={28} />} title={t.playlists.expand.noSuggestionsTitle}>
+        {t.playlists.expand.noSuggestionsBody}
       </EmptyState>
     );
   }
   return (
     <div>
       <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
-        {result.candidates.length} suggerimenti · {result.scope}
+        {t.playlists.expand.suggestionsHeading(result.candidates.length, result.scope)}
       </h2>
       <div className="grid gap-2">
         {result.candidates.map((c, i) => (
@@ -44,6 +39,13 @@ export function ExpandResults({ result, playlistId }: { result: DiscoveryRespons
 }
 
 function CandidateRow({ c, playlistId }: { c: DiscoveryCandidate; playlistId: number }) {
+  const t = useT();
+  const SOURCE_LABEL: Record<DiscoveryCandidate["source"], string> = {
+    similar_artist: t.playlists.expand.sourceSimilarArtist,
+    similar_track: t.playlists.expand.sourceSimilarTrack,
+    tag: t.playlists.expand.sourceTag,
+    label: t.playlists.expand.sourceLabel,
+  };
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const [onSpotify, setOnSpotify] = useState(false);
@@ -80,9 +82,9 @@ function CandidateRow({ c, playlistId }: { c: DiscoveryCandidate; playlistId: nu
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-xs text-faint">
           <span>{SOURCE_LABEL[c.source]}</span>
-          {c.seed && c.source !== "label" && <span className="truncate">· da {c.seed}</span>}
+          {c.seed && c.source !== "label" && <span className="truncate">· {t.playlists.expand.fromSeedPrefix} {c.seed}</span>}
           {c.duration_seconds != null && <span>· {fmtDuration(c.duration_seconds)}</span>}
-          {added && onSpotify && <span>· anche su Spotify</span>}
+          {added && onSpotify && <span>· {t.playlists.expand.alsoOnSpotify}</span>}
         </div>
         {c.explanation && <p className="mt-1 text-xs text-muted">{c.explanation}</p>}
         {addError && <p className="mt-1 text-xs text-danger">⚠ {addError}</p>}
@@ -99,7 +101,7 @@ function CandidateRow({ c, playlistId }: { c: DiscoveryCandidate; playlistId: nu
           </a>
         )}
         <Button size="sm" variant={added ? "ghost" : "outline"} onClick={add} disabled={adding || added}>
-          {added ? <><Check size={14} /> Aggiunto</> : adding ? <Spinner /> : <><Plus size={14} /> Aggiungi</>}
+          {added ? <><Check size={14} /> {t.playlists.expand.addedButton}</> : adding ? <Spinner /> : <><Plus size={14} /> {t.playlists.expand.addButton}</>}
         </Button>
       </div>
     </Card>

@@ -7,8 +7,10 @@ import { apiGet, getLabels, type LabelStats, type LibraryStats } from "@/lib/api
 import { Alert, EmptyState, Badge, Card, Input, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { MiniBars, type MiniBarRow } from "@/components/dashboard/mini-bars";
+import { useT } from "@/lib/i18n";
 
 export default function Labels() {
+  const t = useT();
   const [labels, setLabels] = useState<LabelStats[] | null>(null);
   const [genres, setGenres] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
@@ -42,19 +44,19 @@ export default function Labels() {
   const marginalia = (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Input className="h-9" placeholder="Etichetta" value={qLabel} onChange={(e) => setQLabel(e.target.value)} />
-        <Input className="h-9" placeholder="Artista" value={qArtist} onChange={(e) => setQArtist(e.target.value)} />
-        <Input className="h-9" placeholder="Genere" value={qGenre} onChange={(e) => setQGenre(e.target.value)} />
+        <Input className="h-9" placeholder={t.labels.filterLabelPlaceholder} value={qLabel} onChange={(e) => setQLabel(e.target.value)} />
+        <Input className="h-9" placeholder={t.library.filterArtistPlaceholder} value={qArtist} onChange={(e) => setQArtist(e.target.value)} />
+        <Input className="h-9" placeholder={t.library.filterGenrePlaceholder} value={qGenre} onChange={(e) => setQGenre(e.target.value)} />
       </div>
       {labels && (
         <div className="space-y-2 border-t border-border pt-4 text-xs">
-          <div className="flex justify-between gap-2"><span className="text-muted">Etichette</span><span className="tnum text-fg">{filtered.length}</span></div>
-          <div className="flex justify-between gap-2"><span className="text-muted">Tracce</span><span className="tnum text-fg">{total}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">{t.labels.statLabelsCount}</span><span className="tnum text-fg">{filtered.length}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">{t.labels.statTracksCount}</span><span className="tnum text-fg">{total}</span></div>
         </div>
       )}
       {genreRows.length > 0 && (
         <div className="border-t border-border pt-4">
-          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">Generi in libreria</div>
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.labels.genresInLibrary}</div>
           <MiniBars rows={genreRows} />
         </div>
       )}
@@ -62,20 +64,19 @@ export default function Labels() {
   );
 
   return (
-    <PageLayout title="Etichette" meta={labels ? `${labels.length}` : undefined} marginaliaTitle="Panoramica" marginalia={marginalia}>
+    <PageLayout title={t.labels.pageTitle} meta={labels ? `${labels.length}` : undefined} marginaliaTitle={t.labels.marginaliaTitle} marginalia={marginalia}>
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
       {labels === null && !error && <Loading />}
 
       {labels && labels.length === 0 && (
-        <EmptyState icon={<Disc3 size={28} />} title="Nessuna etichetta">
-          Le tracce non hanno ancora l&apos;informazione sull&apos;etichetta. La label viene
-          letta dal tag del file (scritto da Sortory) durante l&apos;indicizzazione.
+        <EmptyState icon={<Disc3 size={28} />} title={t.labels.emptyTitle}>
+          {t.labels.emptyBody}
         </EmptyState>
       )}
 
       {labels && labels.length > 0 && filtered.length === 0 && (
-        <p className="py-10 text-center text-sm text-muted">Nessuna etichetta con questi filtri.</p>
+        <p className="py-10 text-center text-sm text-muted">{t.labels.noMatchFilters}</p>
       )}
 
       {filtered.length > 0 && (
@@ -90,8 +91,8 @@ export default function Labels() {
                     <Badge tone="neutral">{l.track_count}</Badge>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                    <span className="inline-flex items-center gap-1"><Disc3 size={13} /> {l.track_count} tracce</span>
-                    <span className="inline-flex items-center gap-1"><Users size={13} /> {l.artist_count} artisti</span>
+                    <span className="inline-flex items-center gap-1"><Disc3 size={13} /> {t.labels.trackCountInline(l.track_count)}</span>
+                    <span className="inline-flex items-center gap-1"><Users size={13} /> {t.labels.artistCountInline(l.artist_count)}</span>
                     {years && <span>{years}</span>}
                   </div>
                   {l.genres.length > 0 && (

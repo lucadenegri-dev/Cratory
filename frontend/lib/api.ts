@@ -1,3 +1,5 @@
+import { translateApiError } from "@/lib/i18n/runtime";
+
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export interface Track {
@@ -237,7 +239,6 @@ export interface TransitionScore {
   technical_reasons: string[];
   warnings: string[];
   classification: TransitionClass | null;
-  classification_label: string | null;
   classification_reason: string | null;
 }
 
@@ -256,7 +257,6 @@ export interface SetlistTrack {
   ai_reason: string | null;
   risk_level: string | null;
   transition_class: TransitionClass | null;
-  transition_class_label: string | null;
   transition_class_reason: string | null;
   mix_tip: string | null;
 }
@@ -360,7 +360,12 @@ async function handle<T>(res: Response): Promise<T> {
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      const d = body.detail;
+      if (d && typeof d === "object" && !Array.isArray(d) && typeof d.code === "string") {
+        detail = translateApiError(d.code, d.params ?? {}, d.message ?? res.statusText);
+      } else {
+        detail = typeof d === "string" ? d : JSON.stringify(d);
+      }
     } catch {
       /* keep statusText */
     }

@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.http_errors import api_error
 from app.db import get_db
 from app.integrations.soundcloud import (
     DEFAULT_LIKES_LIMIT,
@@ -37,14 +38,14 @@ USERNAME_KEY = "soundcloud_username"
 
 def _http_error(exc: SoundCloudError) -> HTTPException:
     if isinstance(exc, SoundCloudInvalidUrl):
-        return HTTPException(status_code=422, detail=str(exc))
-    return HTTPException(status_code=502, detail=str(exc))
+        return api_error(422, "soundcloud_invalid_url", str(exc), reason=str(exc))
+    return api_error(502, "soundcloud_error", str(exc), reason=str(exc))
 
 
 def _username_or_409(db: Session) -> str:
     username = get_state(db, USERNAME_KEY)
     if not username:
-        raise HTTPException(status_code=409, detail="Username SoundCloud non configurato (Impostazioni).")
+        raise api_error(409, "soundcloud_username_missing", "SoundCloud username not configured (Settings).")
     return username
 
 
@@ -61,7 +62,7 @@ def status(db: Session = Depends(get_db)):
 def set_config(req: SoundCloudConfigRequest, db: Session = Depends(get_db)):
     username = req.username.strip().lstrip("@")
     if not username:
-        raise HTTPException(status_code=422, detail="Username SoundCloud non valido.")
+        raise api_error(422, "soundcloud_username_invalid", "Invalid SoundCloud username.")
     set_state(db, USERNAME_KEY, username)
     return status(db)
 
@@ -70,7 +71,10 @@ def set_config(req: SoundCloudConfigRequest, db: Session = Depends(get_db)):
 def import_from_url(req: SoundCloudImportRequest, db: Session = Depends(get_db)):
     """Importa una playlist SoundCloud (pubblica o secret link) come lead."""
     if is_likes_url(req.url):
-        raise HTTPException(status_code=422, detail="Per i like usa il flusso 'I miei like' (import selettivo).")
+        raise api_error(
+            422, "soundcloud_likes_url_not_supported",
+            "For likes, use the 'My likes' flow (selective import).",
+        )
     try:
         info = fetch_playlist(req.url)
     except SoundCloudError as exc:

@@ -6,46 +6,53 @@ import { type DiscoveryDigResponse, type DiscoveryLead, type Reason } from "@/li
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/ui";
 import { DiscoveryTracklistPanel } from "@/components/discovery-tracklist-panel";
+import { useT, type Dictionary } from "@/lib/i18n";
 
-function reasonLabel(r: Reason): string {
+function reasonLabel(r: Reason, t: Dictionary): string {
   switch (r.code) {
     case "rare_wanted":
-      return `raro & richiesto ${r.data.have}/${r.data.want}`;
+      return t.discovery.reasonRareWanted(r.data.have, r.data.want);
     case "deep_cut":
-      return "deep cut";
+      return t.discovery.reasonDeepCut;
     case "label_followed":
-      return `etichetta che segui${r.data.label ? ` · ${r.data.label}` : ""}`;
+      return t.discovery.reasonLabelFollowed(r.data.label);
     case "artist_collected":
-      return "artista che collezioni";
+      return t.discovery.reasonArtistCollected;
     case "style_match":
-      return "stile che ascolti";
+      return t.discovery.reasonStyleMatch;
     case "recent":
-      return `recente${r.data.year ? ` · ${r.data.year}` : ""}`;
+      return t.discovery.reasonRecent(r.data.year);
     default:
       return r.code;
   }
 }
 
-const FORMAT_FILTERS = ["Tutti", "LP", "EP", "12\"", "Album", "Single"] as const;
-type FormatFilter = (typeof FORMAT_FILTERS)[number];
+const FORMAT_VALUES = ["LP", "EP", "12\"", "Album", "Single"] as const;
+type FormatFilter = (typeof FORMAT_VALUES)[number] | null;
 type SortMode = "score" | "recent";
-const SORT_OPTIONS: [SortMode, string][] = [["score", "Punteggio"], ["recent", "Più recenti"]];
 
 export function DiscoveryLeadGrid({ dig }: { dig: DiscoveryDigResponse }) {
-  const [format, setFormat] = useState<FormatFilter>("Tutti");
+  const t = useT();
+  const [format, setFormat] = useState<FormatFilter>(null);
   const [sort, setSort] = useState<SortMode>("score");
   const [openLead, setOpenLead] = useState<DiscoveryLead | null>(null);
 
+  const formatOptions: [string, FormatFilter][] = [
+    [t.discovery.formatAllOption, null],
+    ...FORMAT_VALUES.map((f): [string, FormatFilter] => [f, f]),
+  ];
+  const SORT_OPTIONS: [SortMode, string][] = [["score", t.discovery.sortScore], ["recent", t.discovery.sortRecent]];
+
   const filtered = useMemo(() => {
-    const base = format === "Tutti" ? dig.leads : dig.leads.filter((l) => l.format_badge === format);
+    const base = format === null ? dig.leads : dig.leads.filter((l) => l.format_badge === format);
     if (sort === "score") return base;
     return [...base].sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
   }, [dig.leads, format, sort]);
 
   if (dig.leads.length === 0) {
     return (
-      <EmptyState icon={<Disc3 size={28} />} title="Niente da scavare">
-        Nessun brano nuovo per “{dig.value}”. Prova un altro {dig.seed_type === "label" ? "valore" : "stile"} o alza l’audacia.
+      <EmptyState icon={<Disc3 size={28} />} title={t.discovery.nothingToDigTitle}>
+        {t.discovery.nothingToDigBody(dig.value, dig.seed_type === "label" ? t.discovery.seedTypeValue : t.discovery.seedTypeStyle)}
       </EmptyState>
     );
   }
@@ -54,9 +61,9 @@ export function DiscoveryLeadGrid({ dig }: { dig: DiscoveryDigResponse }) {
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5">
-          {FORMAT_FILTERS.map((f) => (
+          {formatOptions.map(([label, f]) => (
             <button
-              key={f}
+              key={f ?? "all"}
               type="button"
               onClick={() => setFormat(f)}
               aria-pressed={format === f}
@@ -67,7 +74,7 @@ export function DiscoveryLeadGrid({ dig }: { dig: DiscoveryDigResponse }) {
                   : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
               )}
             >
-              {f}
+              {label}
             </button>
           ))}
         </div>
@@ -90,7 +97,7 @@ export function DiscoveryLeadGrid({ dig }: { dig: DiscoveryDigResponse }) {
       </div>
 
       {filtered.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">Nessun disco con questo formato.</p>
+        <p className="py-8 text-center text-sm text-muted">{t.discovery.noFormatMatch}</p>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3">
           {filtered.map((l, i) => (
@@ -105,6 +112,7 @@ export function DiscoveryLeadGrid({ dig }: { dig: DiscoveryDigResponse }) {
 }
 
 function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -128,7 +136,7 @@ function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void })
         <div className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-full bg-bg/95 px-1.5 py-1 text-[10px] leading-tight text-muted opacity-0 transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
           {lead.label && <div className="truncate">{lead.label}</div>}
           {lead.year != null && <div>{lead.year}</div>}
-          {lead.reasons[0] && <div className="truncate text-faint">{reasonLabel(lead.reasons[0])}</div>}
+          {lead.reasons[0] && <div className="truncate text-faint">{reasonLabel(lead.reasons[0], t)}</div>}
         </div>
       </div>
       <div className="min-w-0">

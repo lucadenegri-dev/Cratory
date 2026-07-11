@@ -7,6 +7,7 @@ import {
   type DownloadStatus, type LibraryIndexJob,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n";
 import { EqMeter } from "./ui";
 
 type Outcome = "done" | "error";
@@ -70,6 +71,7 @@ const MAX_ROWS = 3;
  *   l'esito, poi scompare.
  */
 export function JobsProvider({ children }: { children: ReactNode }) {
+  const t = useT();
   const [polled, setPolled] = useState<Job[]>([]);
   const [transient, setTransient] = useState<Job[]>([]);
   const [clientJobs, setClientJobs] = useState<Record<string, { label: string } & ClientJobPatch>>({});
@@ -111,32 +113,32 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     if (s.status === "fulfilled") {
       const v = s.value;
       track(v.status, {
-        key: "shazam", label: "Identificazione mix", detail: v.phase ?? undefined,
+        key: "shazam", label: t.jobs.shazamIdentify, detail: v.phase ?? undefined,
         processed: v.processed, total: v.total, href: "/shazam",
-      }, v.status === "error" ? (v.error ?? "errore") : "completata");
+      }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
     }
     if (d.status === "fulfilled") {
       const v = d.value;
       if (alive.current) setDownload(v);
       const pending = v.needs_review + v.not_found + v.failed;
       track(v.status, {
-        key: "download", label: "Download Soulseek", detail: v.current_label ?? undefined,
+        key: "download", label: t.jobs.soulseekDownload, detail: v.current_label ?? undefined,
         processed: v.processed, total: v.total, href: "/downloads",
       }, v.status === "error"
-        ? (v.error ?? "errore")
-        : `${v.downloaded} scaricate${pending > 0 ? ` · ${pending} da sistemare` : ""}`);
+        ? (v.error ?? t.common.error)
+        : t.jobs.downloadSummary(v.downloaded, pending));
     }
     if (li.status === "fulfilled") {
       const v = li.value;
       if (alive.current) setLibraryIndex(v);
       track(v.status, {
-        key: "library-index", label: "Indicizzazione libreria",
+        key: "library-index", label: t.jobs.libraryIndex,
         processed: v.processed, total: v.total, href: "/settings",
-      }, v.status === "error" ? (v.error ?? "errore") : "completata");
+      }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
     }
     wasRunning.current = nowRunning;
     if (alive.current) setPolled(next);
-  }, [pushOutcome]);
+  }, [pushOutcome, t]);
 
   const refresh = useCallback(() => { pollOnce(); }, [pollOnce]);
 
@@ -194,6 +196,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
 }
 
 function GlobalProgress({ jobs }: { jobs: Job[] }) {
+  const t = useT();
   const barRef = useRef<HTMLDivElement>(null);
   const [padH, setPadH] = useState(0);
   const visible = jobs.slice(0, MAX_ROWS);
@@ -212,7 +215,7 @@ function GlobalProgress({ jobs }: { jobs: Job[] }) {
           {visible.map((j, i) => <JobRow key={j.key} job={j} first={i === 0} />)}
           {extra > 0 && (
             <p className="border-t border-border py-1 text-center text-[10px] uppercase tracking-wider text-faint">
-              +{extra} altri job
+              {t.jobs.moreJobs(extra)}
             </p>
           )}
         </div>

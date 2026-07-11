@@ -51,7 +51,9 @@ def test_400_su_file_inesistente(tmp_path):
         r = TestClient(app).post(f"/api/tracks/{t.id}/link-file",
                                  json={"path": str(tmp_path / "manca.mp3")})
         assert r.status_code == 400
-        assert "non trovato" in r.json()["detail"]
+        detail = r.json()["detail"]
+        assert detail["code"] == "track_link_failed"
+        assert "non trovato" in detail["params"]["reason"]
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -65,7 +67,9 @@ def test_400_su_estensione_non_audio(tmp_path):
     try:
         r = TestClient(app).post(f"/api/tracks/{t.id}/link-file", json={"path": str(f)})
         assert r.status_code == 400
-        assert "non audio" in r.json()["detail"]
+        detail = r.json()["detail"]
+        assert detail["code"] == "track_link_failed"
+        assert "non audio" in detail["params"]["reason"]
     finally:
         app.dependency_overrides.pop(get_db, None)
 

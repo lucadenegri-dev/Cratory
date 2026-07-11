@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 
 from app.models import Track
-from app.services.camelot import camelot_compatibility, camelot_score
+from app.services.camelot import camelot_compatibility, camelot_score, parse_camelot
 
 SHORT_TRACK_SECONDS = 90
 
@@ -44,31 +44,127 @@ RESET_ENERGY_DROP = 15          # calo di energia (0-100) che segnala un reset v
 RESET_GENRE_SIMILARITY = 45     # sotto questa similarità i generi sono "diversi"
 #                                 (generi senza token in comune valgono 40)
 
+_LANGS = ("it", "en")
+
+# --- Cataloghi di frasi per lingua --------------------------------------------
+# Le frasi generate (reason, mixing tip/overview) sono deterministiche ma
+# bilingui: il codice sceglie SEMPRE il testo dal catalogo, mai stringhe
+# hardcoded fuori da qui. `label` (il codice enum) resta indipendente dalla
+# lingua: la label leggibile la traduce il frontend (namespace `transitionLabels`).
+
+_REASONS = {
+    "harmonic_safe": {
+        "it": "BPM e tonalità compatibili: mix sicuro",
+        "en": "Compatible BPM and key: safe mix",
+    },
+    "energy_drop": {"it": "calo di energia ({delta:+d})", "en": "energy drop ({delta:+d})"},
+    "genre_change": {"it": "cambio di genere", "en": "genre change"},
+    "reset": {
+        "it": "Stacco netto ({bits}): utile per resettare la pista",
+        "en": "Hard cut ({bits}): useful to reset the floor",
+    },
+    "key_clash": {
+        "it": "Beatmatch facile ma tonalità in contrasto: mix breve o maschera con l'EQ",
+        "en": "Easy beatmatch but clashing keys: keep the mix short or mask with EQ",
+    },
+    "creative_jump": {
+        "it": "Salto di BPM/tonalità voluto ma azzardato: gestire con cura",
+        "en": "Deliberate but risky BPM/key jump: handle with care",
+    },
+    # --- score_transition: reasons/warnings tecnici (_bpm_points/_key_points) ---
+    "bpm_pts_missing_reason": {
+        "it": "BPM mancante su una delle tracce: valutazione neutra",
+        "en": "Missing BPM on one of the tracks: neutral rating",
+    },
+    "bpm_pts_missing_warn": {"it": "BPM mancante", "en": "Missing BPM"},
+    "bpm_pts_halftime_reason": {
+        "it": "mezzo/doppio tempo (Δ effettivo {diff:.1f})",
+        "en": "half/double time (effective Δ {diff:.1f})",
+    },
+    "bpm_pts_halftime_warn": {
+        "it": "mezzo/doppio tempo: allinea la griglia sul break",
+        "en": "half/double time: align the grid on the break",
+    },
+    "bpm_pts_great": {
+        "it": "differenza BPM ottima ({diff:.1f})",
+        "en": "great BPM difference ({diff:.1f})",
+    },
+    "bpm_pts_good": {
+        "it": "differenza BPM buona ({diff:.1f})",
+        "en": "good BPM difference ({diff:.1f})",
+    },
+    "bpm_pts_risky_reason": {
+        "it": "differenza BPM rischiosa ({diff:.1f})",
+        "en": "risky BPM difference ({diff:.1f})",
+    },
+    "bpm_pts_risky_warn": {
+        "it": "salto BPM di {diff:.1f}: transizione rischiosa",
+        "en": "BPM jump of {diff:.1f}: risky transition",
+    },
+    "bpm_pts_hard_reason": {
+        "it": "differenza BPM difficile ({diff:.1f})",
+        "en": "difficult BPM difference ({diff:.1f})",
+    },
+    "bpm_pts_hard_warn": {
+        "it": "salto BPM di {diff:.1f}: transizione difficile",
+        "en": "BPM jump of {diff:.1f}: difficult transition",
+    },
+    "key_desc_unknown": {
+        "it": "tonalità mancante o non in formato Camelot",
+        "en": "key missing or not in Camelot format",
+    },
+    "key_warn_unknown": {"it": "tonalità non confrontabile", "en": "key not comparable"},
+    "key_desc_same": {"it": "stessa key ({k})", "en": "same key ({k})"},
+    "key_desc_same_num": {
+        "it": "stesso numero, lettera diversa ({a} -> {b})",
+        "en": "same number, different letter ({a} -> {b})",
+    },
+    "key_desc_adjacent": {
+        "it": "key adiacente sulla ruota Camelot ({a} -> {b})",
+        "en": "adjacent key on the Camelot wheel ({a} -> {b})",
+    },
+    "key_desc_weak": {
+        "it": "key poco compatibili ({a} -> {b})",
+        "en": "poorly compatible keys ({a} -> {b})",
+    },
+    "key_warn_weak": {
+        "it": "key poco compatibili: mix armonico difficile",
+        "en": "poorly compatible keys: difficult harmonic mix",
+    },
+    "short_incoming_warn": {
+        "it": "traccia in entrata molto corta ({duration}s)",
+        "en": "incoming track very short ({duration}s)",
+    },
+}
+
+
+def _txt(key: str, lang: str, **fmt) -> str:
+    return _REASONS[key][lang if lang in _LANGS else "it"].format(**fmt)
+
 
 @dataclass
 class TransitionClassification:
-    label: str       # technically_safe | creative_risk | good_reset
-    label_it: str    # etichetta leggibile in italiano
+    label: str       # technically_safe | creative_risk | good_reset (indipendente dalla lingua)
     reason: str
 
 
-def classify_transition(from_track: Track, to_track: Track) -> TransitionClassification:
+def classify_transition(from_track: Track, to_track: Track, lang: str = "it") -> TransitionClassification:
     """Classifica una transizione in technically_safe | creative_risk | good_reset.
 
     - technically_safe: BPM/key compatibili (score tecnico alto), rischio basso.
     - good_reset: stacco netto voluto (forte calo di energia o cambio di genere),
       utile per "resettare" la pista.
     - creative_risk: salto di BPM/tonalità deliberato ma azzardato.
+
+    `lang` ("it" | "en") sceglie la lingua di `reason`; `label` resta il codice enum,
+    tradotto in etichetta leggibile lato frontend.
     """
     score = score_transition(from_track, to_track).score
     level, _ = camelot_compatibility(from_track.camelot_key, to_track.camelot_key)
     harmonic_ok = level in ("same", "compatible")
     # "Sicura" richiede ANCHE l'armonia: un BPM perfetto con key stonata non è un mix sicuro.
     if score >= SAFE_CLASSIFICATION_SCORE and harmonic_ok:
-        return TransitionClassification(
-            "technically_safe", "tecnicamente sicura",
-            "BPM e tonalità compatibili: mix sicuro",
-        )
+        return TransitionClassification("technically_safe", _txt("harmonic_safe", lang))
 
     energy_delta = None
     if from_track.energy is not None and to_track.energy is not None:
@@ -83,34 +179,110 @@ def classify_transition(from_track: Track, to_track: Track) -> TransitionClassif
     if big_energy_drop or genre_change:
         bits = []
         if big_energy_drop:
-            bits.append(f"calo di energia ({energy_delta:+d})")
+            bits.append(_txt("energy_drop", lang, delta=energy_delta))
         if genre_change:
-            bits.append("cambio di genere")
-        return TransitionClassification(
-            "good_reset", "reset voluto",
-            f"Stacco netto ({', '.join(bits)}): utile per resettare la pista",
-        )
+            bits.append(_txt("genre_change", lang))
+        return TransitionClassification("good_reset", _txt("reset", lang, bits=", ".join(bits)))
 
     # BPM in riga ma key in contrasto: azzardo di sola tonalità, non un salto di tempo.
     bpm_close = False
     if from_track.bpm and to_track.bpm:
         bpm_close = effective_bpm_diff(from_track.bpm, to_track.bpm)[0] <= 5
     if bpm_close and not harmonic_ok:
-        return TransitionClassification(
-            "creative_risk", "azzardo creativo",
-            "Beatmatch facile ma tonalità in contrasto: mix breve o maschera con l'EQ",
-        )
-    return TransitionClassification(
-        "creative_risk", "azzardo creativo",
-        "Salto di BPM/tonalità voluto ma azzardato: gestire con cura",
-    )
+        return TransitionClassification("creative_risk", _txt("key_clash", lang))
+    return TransitionClassification("creative_risk", _txt("creative_jump", lang))
 
 
-def mixing_tip(from_track: Track, to_track: Track) -> str:
+_TIPS = {
+    "halftime": {
+        "it": "mezzo/doppio tempo: allinea la griglia sul break",
+        "en": "half/double time: align the grid on the break",
+    },
+    "same_bpm": {"it": "stesso BPM: beatmatch diretto", "en": "same BPM: direct beatmatch"},
+    "bpm_nudge": {
+        "it": "{delta:+.0f} BPM: ritocca il pitch, blend lungo",
+        "en": "{delta:+.0f} BPM: nudge the pitch, long blend",
+    },
+    "bpm_gradual": {
+        "it": "{delta:+.0f} BPM: pitch bend o blend graduale sull'intro",
+        "en": "{delta:+.0f} BPM: pitch bend or gradual blend on the intro",
+    },
+    "bpm_sharp": {
+        "it": "{delta:+.0f} BPM: salto deciso, usa un break o un EQ blend",
+        "en": "{delta:+.0f} BPM: sharp jump, use a break or an EQ blend",
+    },
+    "bpm_hardcut": {
+        "it": "{delta:+.0f} BPM: stacco netto, meglio un cut o una traccia ponte",
+        "en": "{delta:+.0f} BPM: hard cut, better a cut or a bridge track",
+    },
+    "bpm_missing": {"it": "BPM mancante: sincronizza a orecchio", "en": "Missing BPM: sync by ear"},
+    "key_same": {
+        "it": "{fk} stessa key: mix armonico totale",
+        "en": "{fk} same key: fully harmonic mix",
+    },
+    "key_compatible": {
+        "it": "{fk}→{tk} compatibile: mix armonico",
+        "en": "{fk}→{tk} compatible: harmonic mix",
+    },
+    "key_weak": {
+        "it": "{fk}→{tk} fuori chiave: mix breve o maschera con l'EQ",
+        "en": "{fk}→{tk} out of key: keep the mix short or mask with EQ",
+    },
+    "energy_up": {"it": "porta su l'energia", "en": "bring the energy up"},
+    "energy_down": {"it": "scarica l'energia (reset)", "en": "drop the energy (reset)"},
+    "opening_track": {"it": "apertura", "en": "opener"},
+    "at_track_one": {"it": "al brano {nums}", "en": "at track {nums}"},
+    "at_track_many": {"it": "ai brani {nums}", "en": "at tracks {nums}"},
+    "overview_harmony": {
+        "it": "Armonia: {harmonic}/{known} cambi in chiave (mix armonico Camelot).",
+        "en": "Harmony: {harmonic}/{known} changes in key (Camelot harmonic mix).",
+    },
+    "overview_harmony_weak": {
+        "it": " {weak} fuori chiave: tienili brevi o maschera con l'EQ.",
+        "en": " {weak} out of key: keep them short or mask with EQ.",
+    },
+    "overview_bpm_arc": {"it": "BPM da {lo:.0f} a {hi:.0f}", "en": "BPM from {lo:.0f} to {hi:.0f}"},
+    "overview_bpm_jump_one": {"it": "salto marcato", "en": "sharp jump"},
+    "overview_bpm_jump_many": {"it": "salti marcati", "en": "sharp jumps"},
+    "overview_bpm_jump_line": {
+        "it": "{arc}: {noun} {at} — meglio un cut su un break o una traccia ponte; altrove beatmatch e blend lungo.",
+        "en": "{arc}: {noun} {at} — better a cut on a break or a bridge track; elsewhere beatmatch and long blend.",
+    },
+    "overview_bpm_smooth_line": {
+        "it": "{arc}: differenze contenute, lega in beatmatch con blend graduale sull'intro.",
+        "en": "{arc}: contained differences, link in beatmatch with a gradual blend on the intro.",
+    },
+    "overview_energy_trend_up": {"it": "in salita", "en": "climbing"},
+    "overview_energy_trend_down": {"it": "in discesa", "en": "dropping"},
+    "overview_energy_trend_stable": {"it": "stabile", "en": "stable"},
+    "overview_energy_line": {
+        "it": "Energia {trend} ({e0} → {e1}).",
+        "en": "Energy {trend} ({e0} → {e1}).",
+    },
+    "overview_reset_one": {"it": "Stacco di reset", "en": "Reset break"},
+    "overview_reset_many": {"it": "Stacchi di reset", "en": "Reset breaks"},
+    "overview_reset_line": {
+        "it": " {noun} {at}: sfrutta il calo per cambiare zona.",
+        "en": " {noun} {at}: use the drop to change zone.",
+    },
+}
+
+
+def _tip(key: str, lang: str, **fmt) -> str:
+    return _TIPS[key][lang if lang in _LANGS else "it"].format(**fmt)
+
+
+def opening_track_label(lang: str = "it") -> str:
+    """Etichetta per la prima traccia di un set (nessuna transizione precedente)."""
+    return _tip("opening_track", lang)
+
+
+def mixing_tip(from_track: Track, to_track: Track, lang: str = "it") -> str:
     """Istruzione concisa e DETERMINISTICA su come mixare due brani consecutivi.
 
     Tutto dai dati di enrichment (BPM, Camelot, energia): niente AI, niente id.
     Pensata per il DJ: cosa fare in pratica per passare dal brano precedente a questo.
+    `lang` ("it" | "en") sceglie la lingua del testo.
     """
     parts: list[str] = []
 
@@ -118,48 +290,49 @@ def mixing_tip(from_track: Track, to_track: Track) -> str:
     if fb and tb:
         eff, folded = effective_bpm_diff(fb, tb)
         if folded and eff <= 5:
-            parts.append("mezzo/doppio tempo: allinea la griglia sul break")
+            parts.append(_tip("halftime", lang))
         else:
             delta = tb - fb
             ad = abs(delta)
             if ad <= 0.5:
-                parts.append("stesso BPM: beatmatch diretto")
+                parts.append(_tip("same_bpm", lang))
             elif ad <= 2:
-                parts.append(f"{delta:+.0f} BPM: ritocca il pitch, blend lungo")
+                parts.append(_tip("bpm_nudge", lang, delta=delta))
             elif ad <= 5:
-                parts.append(f"{delta:+.0f} BPM: pitch bend o blend graduale sull'intro")
+                parts.append(_tip("bpm_gradual", lang, delta=delta))
             elif ad <= 8:
-                parts.append(f"{delta:+.0f} BPM: salto deciso, usa un break o un EQ blend")
+                parts.append(_tip("bpm_sharp", lang, delta=delta))
             else:
-                parts.append(f"{delta:+.0f} BPM: stacco netto, meglio un cut o una traccia ponte")
+                parts.append(_tip("bpm_hardcut", lang, delta=delta))
     else:
-        parts.append("BPM mancante: sincronizza a orecchio")
+        parts.append(_tip("bpm_missing", lang))
 
     level, _ = camelot_compatibility(from_track.camelot_key, to_track.camelot_key)
     fk, tk = from_track.camelot_key, to_track.camelot_key
     if level == "same":
-        parts.append(f"{fk} stessa key: mix armonico totale")
+        parts.append(_tip("key_same", lang, fk=fk))
     elif level == "compatible":
-        parts.append(f"{fk}→{tk} compatibile: mix armonico")
+        parts.append(_tip("key_compatible", lang, fk=fk, tk=tk))
     elif level == "weak":
-        parts.append(f"{fk}→{tk} fuori chiave: mix breve o maschera con l'EQ")
+        parts.append(_tip("key_weak", lang, fk=fk, tk=tk))
     # level == "unknown": tonalità mancante, nessun consiglio armonico
 
     fe, te = from_track.energy, to_track.energy
     if fe is not None and te is not None:
         ed = te - fe
         if ed >= 12:
-            parts.append("porta su l'energia")
+            parts.append(_tip("energy_up", lang))
         elif ed <= -12:
-            parts.append("scarica l'energia (reset)")
+            parts.append(_tip("energy_down", lang))
 
     return " · ".join(parts)
 
 
-def mixing_overview(tracks: list[Track]) -> list[str]:
+def mixing_overview(tracks: list[Track], lang: str = "it") -> list[str]:
     """Piano di mixaggio del set, DETERMINISTICO: una sintesi tecnica di come legare
     i brani (armonia, salti di BPM, arco di energia). Complementa i `mixing_tip` per
     traccia con la visione d'insieme. I numeri di brano sono le posizioni 1-based.
+    `lang` ("it" | "en") sceglie la lingua del testo.
     """
     pairs = list(zip(tracks, tracks[1:]))
     if not pairs:
@@ -168,7 +341,8 @@ def mixing_overview(tracks: list[Track]) -> list[str]:
 
     def at_tracks(positions: list[int]) -> str:
         nums = ", ".join(str(p) for p in positions)
-        return f"al brano {nums}" if len(positions) == 1 else f"ai brani {nums}"
+        key = "at_track_one" if len(positions) == 1 else "at_track_many"
+        return _tip(key, lang, nums=nums)
 
     # Armonia (Camelot)
     harmonic = weak = known = 0
@@ -181,21 +355,21 @@ def mixing_overview(tracks: list[Track]) -> list[str]:
             weak += 1
             known += 1
     if known:
-        s = f"Armonia: {harmonic}/{known} cambi in chiave (mix armonico Camelot)."
+        s = _tip("overview_harmony", lang, harmonic=harmonic, known=known)
         if weak:
-            s += f" {weak} fuori chiave: tienili brevi o maschera con l'EQ."
+            s += _tip("overview_harmony_weak", lang, weak=weak)
         bullets.append(s)
 
     # BPM: arco e salti che richiedono un cut/ponte
     bpms = [t.bpm for t in tracks if t.bpm]
     jumps = [i + 2 for i, (a, b) in enumerate(pairs) if a.bpm and b.bpm and abs(b.bpm - a.bpm) > 8]
     if bpms:
-        arc = f"BPM da {min(bpms):.0f} a {max(bpms):.0f}"
+        arc = _tip("overview_bpm_arc", lang, lo=min(bpms), hi=max(bpms))
         if jumps:
-            noun = "salto marcato" if len(jumps) == 1 else "salti marcati"
-            bullets.append(f"{arc}: {noun} {at_tracks(jumps)} — meglio un cut su un break o una traccia ponte; altrove beatmatch e blend lungo.")
+            noun = _tip("overview_bpm_jump_one", lang) if len(jumps) == 1 else _tip("overview_bpm_jump_many", lang)
+            bullets.append(_tip("overview_bpm_jump_line", lang, arc=arc, noun=noun, at=at_tracks(jumps)))
         else:
-            bullets.append(f"{arc}: differenze contenute, lega in beatmatch con blend graduale sull'intro.")
+            bullets.append(_tip("overview_bpm_smooth_line", lang, arc=arc))
 
     # Energia: andamento e reset
     energies = [t.energy for t in tracks if t.energy is not None]
@@ -203,11 +377,16 @@ def mixing_overview(tracks: list[Track]) -> list[str]:
               if a.energy is not None and b.energy is not None and b.energy - a.energy <= -15]
     if len(energies) >= 2:
         delta = energies[-1] - energies[0]
-        trend = "in salita" if delta >= 8 else "in discesa" if delta <= -8 else "stabile"
-        s = f"Energia {trend} ({energies[0]} → {energies[-1]})."
+        if delta >= 8:
+            trend = _tip("overview_energy_trend_up", lang)
+        elif delta <= -8:
+            trend = _tip("overview_energy_trend_down", lang)
+        else:
+            trend = _tip("overview_energy_trend_stable", lang)
+        s = _tip("overview_energy_line", lang, trend=trend, e0=energies[0], e1=energies[-1])
         if resets:
-            noun = "Stacco di reset" if len(resets) == 1 else "Stacchi di reset"
-            s += f" {noun} {at_tracks(resets)}: sfrutta il calo per cambiare zona."
+            noun = _tip("overview_reset_one", lang) if len(resets) == 1 else _tip("overview_reset_many", lang)
+            s += _tip("overview_reset_line", lang, noun=noun, at=at_tracks(resets))
         bullets.append(s)
 
     return bullets
@@ -224,45 +403,54 @@ def effective_bpm_diff(a: float, b: float) -> tuple[float, bool]:
     return (folded, True) if folded < direct else (direct, False)
 
 
-def _bpm_points(from_bpm: float | None, to_bpm: float | None) -> tuple[float, str, str | None]:
+def _bpm_points(from_bpm: float | None, to_bpm: float | None, lang: str = "it") -> tuple[float, str, str | None]:
     if not from_bpm or not to_bpm:
-        return 25.0, "BPM mancante su una delle tracce: valutazione neutra", "BPM mancante"
+        return 25.0, _txt("bpm_pts_missing_reason", lang), _txt("bpm_pts_missing_warn", lang)
     diff, folded = effective_bpm_diff(from_bpm, to_bpm)
     if folded and diff <= 5:
         pts = 40.0 if diff <= 2 else 30.0
-        return pts, f"mezzo/doppio tempo (Δ effettivo {diff:.1f})", "mezzo/doppio tempo: allinea la griglia sul break"
+        return pts, _txt("bpm_pts_halftime_reason", lang, diff=diff), _txt("bpm_pts_halftime_warn", lang)
     diff = abs(from_bpm - to_bpm)
     if diff <= 2:
-        return 50.0, f"differenza BPM ottima ({diff:.1f})", None
+        return 50.0, _txt("bpm_pts_great", lang, diff=diff), None
     if diff <= 5:
-        return 38.0, f"differenza BPM buona ({diff:.1f})", None
+        return 38.0, _txt("bpm_pts_good", lang, diff=diff), None
     if diff <= 8:
-        return 20.0, f"differenza BPM rischiosa ({diff:.1f})", f"salto BPM di {diff:.1f}: transizione rischiosa"
-    return 5.0, f"differenza BPM difficile ({diff:.1f})", f"salto BPM di {diff:.1f}: transizione difficile"
+        return 20.0, _txt("bpm_pts_risky_reason", lang, diff=diff), _txt("bpm_pts_risky_warn", lang, diff=diff)
+    return 5.0, _txt("bpm_pts_hard_reason", lang, diff=diff), _txt("bpm_pts_hard_warn", lang, diff=diff)
 
 
-def _key_points(from_key: str | None, to_key: str | None) -> tuple[float, str, str | None]:
-    level, desc = camelot_compatibility(from_key, to_key)
+def _key_points(from_key: str | None, to_key: str | None, lang: str = "it") -> tuple[float, str, str | None]:
+    # `desc`/`warn` derivati dal livello Camelot (non dal testo IT di
+    # camelot_compatibility, che resta invariato per il resto del motore).
     pts = camelot_score(from_key, to_key) / 100.0 * 40.0  # graduato: distingue +2 boost da tritono
-    if level == "unknown":
-        return pts, desc, "tonalita' non confrontabile"
-    if level == "weak":
-        return pts, desc, "key poco compatibili: mix armonico difficile"
-    return pts, desc, None
+    a, b = parse_camelot(from_key), parse_camelot(to_key)
+    if a is None or b is None:
+        return pts, _txt("key_desc_unknown", lang), _txt("key_warn_unknown", lang)
+    if a == b:
+        return pts, _txt("key_desc_same", lang, k=from_key), None
+    num_a, let_a = a
+    num_b, let_b = b
+    if num_a == num_b:
+        return pts, _txt("key_desc_same_num", lang, a=from_key, b=to_key), None
+    diff = min((num_a - num_b) % 12, (num_b - num_a) % 12)
+    if diff == 1 and let_a == let_b:
+        return pts, _txt("key_desc_adjacent", lang, a=from_key, b=to_key), None
+    return pts, _txt("key_desc_weak", lang, a=from_key, b=to_key), _txt("key_warn_weak", lang)
 
 
-def score_transition(from_track: Track, to_track: Track) -> TransitionScore:
+def score_transition(from_track: Track, to_track: Track, lang: str = "it") -> TransitionScore:
     reasons: list[str] = []
     warnings: list[str] = []
     total = 0.0
 
-    pts, reason, warn = _bpm_points(from_track.bpm, to_track.bpm)
+    pts, reason, warn = _bpm_points(from_track.bpm, to_track.bpm, lang)
     total += pts
     reasons.append(reason)
     if warn:
         warnings.append(warn)
 
-    pts, reason, warn = _key_points(from_track.camelot_key, to_track.camelot_key)
+    pts, reason, warn = _key_points(from_track.camelot_key, to_track.camelot_key, lang)
     total += pts
     reasons.append(reason)
     if warn:
@@ -273,7 +461,7 @@ def score_transition(from_track: Track, to_track: Track) -> TransitionScore:
     duration = to_track.duration_seconds or 0
     if duration and duration < SHORT_TRACK_SECONDS:
         structure -= 8.0
-        warnings.append(f"traccia in entrata molto corta ({duration}s)")
+        warnings.append(_txt("short_incoming_warn", lang, duration=duration))
     total += max(structure, 0.0)
 
     return TransitionScore(

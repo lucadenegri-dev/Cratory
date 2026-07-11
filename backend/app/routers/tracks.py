@@ -1,9 +1,10 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.http_errors import api_error
 from app.db import get_db
 from app.integrations.local_files import read_cover
 from app.repositories import genres_overview, get_track, library_stats, list_tracks, update_track
@@ -74,7 +75,7 @@ def get_tracks(  # noqa: PLR0913
 def get_track_detail(track_id: int, db: Session = Depends(get_db)):
     track = get_track(db, track_id)
     if track is None:
-        raise HTTPException(status_code=404, detail="Traccia non trovata")
+        raise api_error(404, "track_not_found", "Track not found")
     return track_detail_out(track)
 
 
@@ -85,12 +86,12 @@ def get_track_cover(track_id: int, db: Session = Depends(get_db)):
     Il frontend usa `album_art_url` (Spotify) se presente e ripiega qui altrimenti."""
     track = get_track(db, track_id)
     if track is None or not track.has_local_file or not track.local_path:
-        raise HTTPException(status_code=404, detail="Cover non disponibile")
+        raise api_error(404, "track_cover_unavailable", "Cover not available")
     if not Path(track.local_path).exists():
-        raise HTTPException(status_code=404, detail="File non trovato")
+        raise api_error(404, "track_file_not_found", "File not found")
     cover = read_cover(track.local_path)
     if cover is None:
-        raise HTTPException(status_code=404, detail="Nessuna cover nel file")
+        raise api_error(404, "track_no_embedded_cover", "No cover embedded in the file")
     data, mime = cover
     return Response(content=data, media_type=mime, headers={"Cache-Control": "max-age=3600"})
 
@@ -104,13 +105,14 @@ def patch_track(track_id: int, payload: TrackUpdateIn, db: Session = Depends(get
     """
     track = get_track(db, track_id)
     if track is None:
-        raise HTTPException(status_code=404, detail="Traccia non trovata")
+        raise api_error(404, "track_not_found", "Track not found")
     data = payload.model_dump(exclude_unset=True)
     # La tonalita' non si inventa: se fornita, deve essere un valore Camelot valido.
     if data.get("camelot_key"):
         camelot = str(data["camelot_key"]).strip().upper()
         if not parse_camelot(camelot):
-            raise HTTPException(status_code=422, detail="Tonalità non valida: usa la notazione Camelot (es. 8A, 12B).")
+            raise api_error(422, "invalid_camelot_key",
+                             "Invalid key: use Camelot notation (e.g. 8A, 12B).")
         data["camelot_key"] = camelot
     # Il genere corretto a mano e' la massima autorita' della catena.
     if "genre" in data:
@@ -124,11 +126,12 @@ def link_file(track_id: int, payload: TrackLinkFileIn, db: Session = Depends(get
     """Collega manualmente un file su disco alla traccia (possesso senza download)."""
     track = get_track(db, track_id)
     if track is None:
-        raise HTTPException(status_code=404, detail="Traccia non trovata")
+        raise api_error(404, "track_not_found", "Track not found")
     try:
         track = link_local_file(db, track, path=payload.path)
     except LinkFileError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise api_error(400, "track_link_failed", f"Track link failed: {exc}",
+                         reason=str(exc)) from exc
     return track_detail_out(track)
 
 
@@ -136,9 +139,9 @@ def link_file(track_id: int, payload: TrackLinkFileIn, db: Session = Depends(get
 def start_library_index():
     """Indicizza la libreria canonica (LIBRARY_ROOT): il disco È la libreria."""
     if not settings.library_root:
-        raise HTTPException(
-            status_code=409,
-            detail="LIBRARY_ROOT non configurata: imposta nel .env la cartella della libreria canonica.",
+        raise api_error(
+            409, "library_root_not_configured",
+            "LIBRARY_ROOT not configured: set the canonical library folder in .env.",
         )
     return library_index_job.start_job()
 

@@ -6,7 +6,7 @@
 
 ## Current state
 
-**Last updated:** 2026-07-11
+**Last updated:** 2026-07-12
 
 **Product name:** **Cratory** (rename done on 2026-06-25 across UI, code, docs and
 icon). "SetArc" and "DJ Assistant" remain only as historical names; legacy technical
@@ -21,7 +21,32 @@ expand + Discogs dig, now taste-only); technical/creative Set Builder with an "o
 guarantee; dashboard with a five-stage pipeline (Index moved to a nav button) and
 documentation realigned to the new paradigm; mix identification via Shazam integrated
 (phase 1; co-occurrence in backlog); SoundCloud import (playlists/secret links + selective
-likes) via yt-dlp.
+likes) via yt-dlp; the app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-07-12 - Bilingual IT/EN (i18n)
+
+The app is made bilingual Italian/English across three surfaces. A persistent language toggle
+in Settings (key `language` in `AppState`, default `it`, endpoints
+`GET/PUT /api/settings/language`); no per-locale routing.
+
+- **UI**: TypeScript dictionary in `frontend/lib/i18n/` (`en.ts` the source of truth, `it.ts`
+  typed `: Dictionary` → key parity enforced at compile time), `I18nProvider`/`useT()` +
+  `runtime.ts` (language state outside React, no cycles with `lib/api.ts`). All
+  pages/components migrated; final sweep to zero residual Italian UI strings.
+- **Backend errors**: from Italian strings to stable codes via
+  `api_error(status, code, message, **params)` (`app/core/http_errors.py`), translated by the
+  frontend (`errors` namespace, `translateApiError`); backend language-agnostic. All routers
+  migrated (~55 raises), `errors` catalog at IT/EN parity.
+- **Generated phrases + AI**: per-language catalogs indexed by `get_language(db)`. Removed
+  `label_it`; transition classification/reason, `technical_reasons`/`warnings`, mixing
+  tip/overview, job phases and the AI agent's texts are now bilingual. The AI system prompts
+  stay IT (instructions to the model); only the output-language directive is parametric.
+
+Verification: 535 backend tests green, frontend build/lint clean, residual sweep at zero (UI,
+Italian `detail=`, `label_it`). Live end-to-end verification in the deferred running app
+(SQLite DB shared with the active parallel session). Spec and plan in `docs/superpowers/`.
+Known limitation: `transition_reason` values saved in the DB at set generation stay in the
+language active at that moment.
 
 ## Milestone 2026-07-11 - SoundCloud import via yt-dlp
 

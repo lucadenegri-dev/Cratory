@@ -7,6 +7,7 @@ import {
   type DiscogsRelease, type DiscoveryLead,
 } from "@/lib/api";
 import { Alert, Button, Modal, Spinner } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -18,6 +19,7 @@ export function DiscoveryTracklistPanel({ lead, onClose }: {
   lead: DiscoveryLead | null;
   onClose: () => void;
 }) {
+  const t = useT();
   return (
     <Modal
       open={lead !== null}
@@ -29,13 +31,14 @@ export function DiscoveryTracklistPanel({ lead, onClose }: {
         <PanelBody key={lead.discogs_id} lead={lead} />
       ) : lead ? (
         // lead without a discogs_id: no fetch possible — show a minimal fallback, not an empty modal
-        <p className="py-6 text-sm text-muted">Nessun dettaglio disponibile per questo disco.</p>
+        <p className="py-6 text-sm text-muted">{t.discovery.noDetails}</p>
       ) : null}
     </Modal>
   );
 }
 
 function PanelBody({ lead }: { lead: DiscoveryLead }) {
+  const t = useT();
   const [release, setRelease] = useState<DiscogsRelease | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +64,7 @@ function PanelBody({ lead }: { lead: DiscoveryLead }) {
       {error && <Alert tone="danger">⚠ {error}</Alert>}
       {loading && (
         <p className="flex items-center gap-2 py-6 text-sm text-muted">
-          <Spinner /> Carico la tracklist…
+          <Spinner /> {t.discovery.loadingTracklist}
         </p>
       )}
       {release && (
@@ -94,8 +97,8 @@ function PanelBody({ lead }: { lead: DiscoveryLead }) {
             <SaveAllButton release={release} tracks={tracks} />
           </div>
           <ul className="divide-y divide-border">
-            {tracks.map((t, i) => (
-              <TrackRow key={`${t.position}-${t.title}-${i}`} release={release} track={t} />
+            {tracks.map((trk, i) => (
+              <TrackRow key={`${trk.position}-${trk.title}-${i}`} release={release} track={trk} />
             ))}
           </ul>
         </div>
@@ -105,6 +108,7 @@ function PanelBody({ lead }: { lead: DiscoveryLead }) {
 }
 
 function SaveAllButton({ release, tracks }: { release: DiscogsRelease; tracks: PanelTrack[] }) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -113,9 +117,9 @@ function SaveAllButton({ release, tracks }: { release: DiscogsRelease; tracks: P
     setSaving(true);
     setSaveError(null);
     try {
-      for (const t of tracks) {
+      for (const trk of tracks) {
         await discoverySaveForLater({
-          artist: release.artist, title: t.title, duration_seconds: t.duration_seconds,
+          artist: release.artist, title: trk.title, duration_seconds: trk.duration_seconds,
           album_art_url: release.thumb_url, url: release.discogs_url,
         });
       }
@@ -130,7 +134,7 @@ function SaveAllButton({ release, tracks }: { release: DiscogsRelease; tracks: P
   return (
     <div className="shrink-0 text-right">
       <Button size="sm" variant={done ? "ghost" : "outline"} onClick={saveAll} disabled={saving || done}>
-        {done ? <><Check size={14} /> Tutte salvate</> : saving ? <Spinner /> : "Tutte per dopo"}
+        {done ? <><Check size={14} /> {t.discovery.allSaved}</> : saving ? <Spinner /> : t.discovery.allForLater}
       </Button>
       {saveError && <p className="mt-1 text-xs text-danger">⚠ {saveError}</p>}
     </div>
@@ -138,6 +142,7 @@ function SaveAllButton({ release, tracks }: { release: DiscogsRelease; tracks: P
 }
 
 function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTrack }) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -188,10 +193,10 @@ function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTra
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <Button size="sm" variant={saved ? "ghost" : "outline"} onClick={saveForLater} disabled={saving || saved}>
-          {saved ? <Check size={14} /> : saving ? <Spinner /> : "Per dopo"}
+          {saved ? <Check size={14} /> : saving ? <Spinner /> : t.discovery.forLater}
         </Button>
         <Button size="sm" variant={downloaded ? "ghost" : "outline"} onClick={downloadNow} disabled={downloading || downloaded}>
-          {downloaded ? <><Check size={14} /> In coda</> : downloading ? <Spinner /> : <><Download size={13} /> Scarica ora</>}
+          {downloaded ? <><Check size={14} /> {t.discovery.queued}</> : downloading ? <Spinner /> : <><Download size={13} /> {t.discovery.downloadNow}</>}
         </Button>
       </div>
     </li>

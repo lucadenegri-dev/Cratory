@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n";
 import type { BpmBin } from "@/lib/api";
 
 /** Istogramma monocromatico interattivo: passando il mouse evidenzia il bin e
  *  mostra range BPM + conteggio sopra le barre. */
 export function Histogram({ bins }: { bins: BpmBin[] }) {
+  const t = useT();
   const [hover, setHover] = useState<number | null>(null);
   if (bins.length === 0) return <p className="text-sm text-faint">—</p>;
   const max = Math.max(...bins.map((b) => b.count), 1);
@@ -17,7 +19,7 @@ export function Histogram({ bins }: { bins: BpmBin[] }) {
     <div>
       <div className="mb-1 h-4 text-[10px] uppercase tracking-wider text-muted">
         {active && (
-          <span className="tnum">{active.from.toFixed(0)}–{active.to.toFixed(0)} BPM · {active.count} {active.count === 1 ? "traccia" : "tracce"}</span>
+          <span className="tnum">{active.from.toFixed(0)}–{active.to.toFixed(0)} BPM · {t.dashboard.trackCount(active.count)}</span>
         )}
       </div>
       <div className="flex h-14 items-end gap-1">

@@ -53,8 +53,9 @@ In the agreed order (operational detail in [PROGRESS.md](../PROGRESS.md)):
 
 ## Suspended / revised
 
-- **Copy + multi-language (English)** — suspended (deferred). String extraction for i18n and
-  a page-by-page copy/microcopy review; the Cratory name rollout is already done.
+- **Copy + multi-language (IT/EN)** — DONE (2026-07-12). The app is bilingual with a persistent
+  language toggle: UI dictionary, backend error codes, deterministic phrases and AI output are
+  all localized. (See "Settled decisions" and PROGRESS.)
 - **Public multi-account** — suspended (Spotify wall + personal direction). A possible future
   reshape = a small self-hosted crew with their own Spotify credentials, only if needed.
 - **Pitch** — to be reframed around the product's real nature (not a "Spotify SaaS").
@@ -147,3 +148,7 @@ order of value:
 - Disk-first: the library is the disk (`LIBRARY_ROOT`), not the streaming playlists (which stay
   leads). Cratory reads the files to index them but never writes them: tagging and organization
   stay Sortory's competence.
+- Bilingual IT/EN app (2026-07): language as a persistent setting (default `it`), no per-locale
+  routing. UI via a typed TypeScript dictionary; backend errors as stable codes translated by
+  the frontend; deterministic phrases and AI output produced in the selected language. `en.ts`
+  is the source of truth for the keys.

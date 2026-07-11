@@ -25,6 +25,7 @@ from app.routers import (
     tracks,
     transitions,
 )
+from app.routers import settings as settings_router
 
 logger = logging.getLogger("app.request")
 
@@ -82,6 +83,7 @@ app.include_router(files.router)
 app.include_router(pipeline.router)
 app.include_router(rekordbox.router)
 app.include_router(soundcloud.router)
+app.include_router(settings_router.router)
 
 
 @app.get("/api/health")

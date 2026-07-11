@@ -10,15 +10,16 @@ import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { TrackCover } from "@/components/track-cover";
 import { TrackStateIcons } from "@/components/track-state-icons";
-
-const STATUS_OPTIONS: [string, string][] = [
-  ["ready_for_set", "Pronte per il set"],
-  ["imported", "Importate"],
-];
+import { useT } from "@/lib/i18n";
 
 type Order = "asc" | "desc";
 
 function LibraryInner() {
+  const t = useT();
+  const STATUS_OPTIONS: [string, string][] = [
+    ["ready_for_set", t.library.statusReadyOption],
+    ["imported", t.library.statusImportedOption],
+  ];
   const [items, setItems] = useState<Track[] | null>(null);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +57,7 @@ function LibraryInner() {
       .catch((e) => setError(String(e.message ?? e)));
   }, [artist, title, genre, source, status, bpmMin, bpmMax, key, incomplete, owned, sort, order, offset]);
 
-  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
+  useEffect(() => { const timer = setTimeout(load, 250); return () => clearTimeout(timer); }, [load]);
 
   const cell = "px-3 py-2.5";
 
@@ -71,7 +72,7 @@ function LibraryInner() {
     return (
       <th
         onClick={() => toggleSort(col)}
-        title="Ordina per questa colonna"
+        title={t.library.sortColumnHint}
         className={`${cell} ${numeric ? "tnum " : ""}cursor-pointer select-none whitespace-nowrap transition-colors hover:text-fg ${active ? "text-fg" : ""}`}
       >
         <span className="inline-flex items-center gap-1">
@@ -84,36 +85,36 @@ function LibraryInner() {
 
   const filters = (
     <div className="space-y-2">
-      <Input className="h-9" placeholder="Artista" value={artist} onChange={(e) => { setArtist(e.target.value); setOffset(0); }} />
-      <Input className="h-9" placeholder="Titolo" value={title} onChange={(e) => { setTitle(e.target.value); setOffset(0); }} />
-      <Input className="h-9" placeholder="Genere" value={genre} onChange={(e) => { setGenre(e.target.value); setOffset(0); }} />
+      <Input className="h-9" placeholder={t.library.filterArtistPlaceholder} value={artist} onChange={(e) => { setArtist(e.target.value); setOffset(0); }} />
+      <Input className="h-9" placeholder={t.library.filterTitlePlaceholder} value={title} onChange={(e) => { setTitle(e.target.value); setOffset(0); }} />
+      <Input className="h-9" placeholder={t.library.filterGenrePlaceholder} value={genre} onChange={(e) => { setGenre(e.target.value); setOffset(0); }} />
       <Select className="h-9" value={source} onChange={(e) => { setSource(e.target.value); setOffset(0); }}>
-        <option value="">Tutte le sorgenti</option>
-        <option value="spotify">Spotify</option>
-        <option value="soundcloud">SoundCloud</option>
-        <option value="manual">Manuale</option>
-        <option value="local_files">File locali</option>
+        <option value="">{t.library.sourceAllOption}</option>
+        <option value="spotify">{t.library.sourceSpotifyOption}</option>
+        <option value="soundcloud">{t.library.sourceSoundcloudOption}</option>
+        <option value="manual">{t.library.sourceManualOption}</option>
+        <option value="local_files">{t.library.sourceLocalFilesOption}</option>
       </Select>
       <Select className="h-9" value={status} onChange={(e) => { setStatus(e.target.value); setOffset(0); }}>
-        <option value="">Tutti gli stati</option>
+        <option value="">{t.library.statusAllOption}</option>
         {STATUS_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </Select>
       <Select className="h-9" value={owned} onChange={(e) => { setOwned(e.target.value); setOffset(0); }}>
-        <option value="">Possesso: tutte</option>
-        <option value="true">Solo posseduti</option>
-        <option value="false">Wishlist (senza file)</option>
+        <option value="">{t.library.ownedAllOption}</option>
+        <option value="true">{t.library.ownedTrueOption}</option>
+        <option value="false">{t.library.ownedFalseOption}</option>
       </Select>
       <div className="grid grid-cols-2 gap-2">
-        <Input className="h-9" type="number" placeholder="BPM min" value={bpmMin} onChange={(e) => { setBpmMin(e.target.value); setOffset(0); }} />
-        <Input className="h-9" type="number" placeholder="BPM max" value={bpmMax} onChange={(e) => { setBpmMax(e.target.value); setOffset(0); }} />
+        <Input className="h-9" type="number" placeholder={t.library.bpmMinPlaceholder} value={bpmMin} onChange={(e) => { setBpmMin(e.target.value); setOffset(0); }} />
+        <Input className="h-9" type="number" placeholder={t.library.bpmMaxPlaceholder} value={bpmMax} onChange={(e) => { setBpmMax(e.target.value); setOffset(0); }} />
       </div>
-      <Input className="h-9" placeholder="Key (es. 7A)" value={key} onChange={(e) => { setKey(e.target.value); setOffset(0); }} />
-      <div className="pt-1"><Checkbox label="solo dati incompleti" checked={incomplete} onChange={(v) => { setIncomplete(v); setOffset(0); }} /></div>
+      <Input className="h-9" placeholder={t.library.keyPlaceholder} value={key} onChange={(e) => { setKey(e.target.value); setOffset(0); }} />
+      <div className="pt-1"><Checkbox label={t.library.incompleteOnlyLabel} checked={incomplete} onChange={(v) => { setIncomplete(v); setOffset(0); }} /></div>
     </div>
   );
 
   return (
-    <PageLayout title="Libreria" meta={`${total} TRACCE`} marginaliaTitle="Filtri" marginalia={filters}>
+    <PageLayout title={t.library.title} meta={t.library.tracksMeta(total)} marginaliaTitle={t.library.filtersTitle} marginalia={filters}>
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
       <div className="border border-border">
@@ -126,32 +127,32 @@ function LibraryInner() {
               {th("BPM", "bpm", true)}
               {th("Key", "key")}
               {th("Energy", "energy", true)}
-              {th("Genere", "genre")}
-              {th("Dur", "duration", true)}
-              <th className={cell}>Stato</th>
+              {th(t.library.colGenre, "genre")}
+              {th(t.library.colDuration, "duration", true)}
+              <th className={cell}>{t.library.colStatus}</th>
               <th className={cell}></th>
             </tr>
           </thead>
           <tbody>
-            {(items ?? []).map((t, i) => (
-              <tr key={t.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
+            {(items ?? []).map((tr, i) => (
+              <tr key={tr.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
                 <td className={`${cell} tnum text-faint`}>{String(offset + i + 1).padStart(2, "0")}</td>
                 <td className={cell}>
-                  <Link href={`/tracks/${t.id}`} className="flex items-center gap-2.5">
-                    <TrackCover track={t} className="h-8 w-8" iconSize={14} />
-                    <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{t.title ?? <span className="italic text-faint">senza titolo</span>}</span>
+                  <Link href={`/tracks/${tr.id}`} className="flex items-center gap-2.5">
+                    <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
+                    <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
                   </Link>
                 </td>
-                <td className={`${cell} text-muted`}>{t.artist ?? <span className="text-faint">—</span>}</td>
-                <td className={`${cell} tnum`}>{t.bpm?.toFixed(0) ?? "—"}</td>
-                <td className={`${cell} tnum text-muted`}>{t.camelot_key ?? "—"}</td>
-                <td className={`${cell} tnum text-muted`}>{t.energy ?? "—"}</td>
-                <td className={`${cell} max-w-[10rem] truncate text-muted`}>{t.genre ?? "—"}</td>
-                <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
-                <td className={cell}><TrackStateIcons track={t} /></td>
+                <td className={`${cell} text-muted`}>{tr.artist ?? <span className="text-faint">—</span>}</td>
+                <td className={`${cell} tnum`}>{tr.bpm?.toFixed(0) ?? "—"}</td>
+                <td className={`${cell} tnum text-muted`}>{tr.camelot_key ?? "—"}</td>
+                <td className={`${cell} tnum text-muted`}>{tr.energy ?? "—"}</td>
+                <td className={`${cell} max-w-[10rem] truncate text-muted`}>{tr.genre ?? "—"}</td>
+                <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
+                <td className={cell}><TrackStateIcons track={tr} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
+                    <button onClick={() => setEditing(tr)} title={t.library.editValuesTitle} className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
                   </div>
                 </td>
               </tr>
@@ -160,19 +161,19 @@ function LibraryInner() {
               <tr><td colSpan={10} className="px-3"><Loading /></td></tr>
             )}
             {items?.length === 0 && (
-              <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia con questi filtri. <Link href="/playlists" className="text-fg underline-offset-4 hover:underline">Importa una playlist</Link> per iniziare.</td></tr>
+              <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix} <Link href="/playlists" className="text-fg underline-offset-4 hover:underline">{t.dashboard.importPlaylist}</Link> {t.library.emptyStateSuffix}</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
       <div className="mt-4 flex items-center justify-between text-sm">
-        <span className="text-muted">{total === 0 ? "0" : `${offset + 1}–${Math.min(offset + limit, total)}`} di {total}</span>
+        <span className="text-muted">{total === 0 ? "0" : `${offset + 1}–${Math.min(offset + limit, total)}`} {t.library.paginationOf} {total}</span>
         <div className="flex gap-2">
           <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}
-            className="inline-flex h-8 items-center gap-1 rounded-none border border-border-strong px-3 hover:bg-elevated disabled:opacity-40"><ChevronLeft size={15} /> Prec</button>
+            className="inline-flex h-8 items-center gap-1 rounded-none border border-border-strong px-3 hover:bg-elevated disabled:opacity-40"><ChevronLeft size={15} /> {t.library.prevPage}</button>
           <button disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)}
-            className="inline-flex h-8 items-center gap-1 rounded-none border border-border-strong px-3 hover:bg-elevated disabled:opacity-40">Succ <ChevronRight size={15} /></button>
+            className="inline-flex h-8 items-center gap-1 rounded-none border border-border-strong px-3 hover:bg-elevated disabled:opacity-40">{t.library.nextPage} <ChevronRight size={15} /></button>
         </div>
       </div>
 
@@ -180,7 +181,7 @@ function LibraryInner() {
         track={editing}
         open={editing !== null}
         onClose={() => setEditing(null)}
-        onSaved={(t) => setItems((cur) => (cur ?? []).map((x) => (x.id === t.id ? t : x)))}
+        onSaved={(saved) => setItems((cur) => (cur ?? []).map((x) => (x.id === saved.id ? saved : x)))}
       />
     </PageLayout>
   );

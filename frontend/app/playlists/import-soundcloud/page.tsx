@@ -7,12 +7,14 @@ import { ArrowLeft, Download, Heart, Settings } from "lucide-react";
 import { importSoundcloudPlaylist, soundcloudStatus, type SoundCloudStatus } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Spinner, Input, Field } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
 
 export default function ImportSoundcloudPage() {
+  const t = useT();
   const router = useRouter();
   const [status, setStatus] = useState<SoundCloudStatus | null>(null);
   const [url, setUrl] = useState("");
@@ -23,6 +25,8 @@ export default function ImportSoundcloudPage() {
     soundcloudStatus().then(setStatus).catch(() => setStatus(null));
   }, []);
 
+  const isc = t.playlists.importSoundcloud;
+
   const doImport = async () => {
     setError(null);
     setBusy(true);
@@ -30,52 +34,51 @@ export default function ImportSoundcloudPage() {
       await importSoundcloudPlaylist(url.trim());
       router.push("/playlists");
     } catch (e) {
-      setError(`Import fallito: ${err(e)}`);
+      setError(isc.importFailed(err(e)));
       setBusy(false);
     }
   };
 
   const marginalia = (
     <div className="space-y-2 text-xs leading-relaxed text-muted">
-      <p>Solo metadati: titolo, artista, durata, link. Nessun audio, mai.</p>
-      <p>Per una playlist privata incolla il <span className="text-fg">secret link</span> (Share → Copy link).</p>
-      <p>Su SoundCloud l&apos;artista è spesso l&apos;uploader: i titoli &quot;Artista - Titolo&quot; vengono separati in automatico.</p>
+      <p>{isc.noteMetadataOnly}</p>
+      <p>{isc.notePrivateHintPrefix} <span className="text-fg">{isc.notePrivateHintTerm}</span> {isc.notePrivateHintSuffix}</p>
+      <p>{isc.noteUploaderHintPrefix} {isc.noteUploaderHintTerm} {isc.noteUploaderHintSuffix}</p>
     </div>
   );
 
   return (
-    <PageLayout title="Import — SoundCloud" marginaliaTitle="Note" marginalia={marginalia}>
+    <PageLayout title={isc.pageTitle} marginaliaTitle={t.playlists.marginaliaNotes} marginalia={marginalia}>
       <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
-        <ArrowLeft size={15} /> Playlist
+        <ArrowLeft size={15} /> {t.playlists.backLink}
       </Link>
       <p className="mb-6 text-sm text-muted">
-        Incolla l&apos;URL di una playlist SoundCloud: le tracce entrano come lead,
-        da arricchire, scaricare e organizzare.
+        {isc.intro}
       </p>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
       {status && !status.available && (
         <div className="mb-6">
-          <Alert tone="warning">yt-dlp non disponibile nel backend: l&apos;import non funzionerà.</Alert>
+          <Alert tone="warning">{isc.ytdlpWarning}</Alert>
         </div>
       )}
 
       <div className="grid gap-4">
         <Card>
-          <CardHeader title="Playlist da URL" subtitle="Pubblica o secret link" />
+          <CardHeader title={isc.urlCardTitle} subtitle={isc.urlCardSubtitle} />
           <div className="grid gap-3 p-4">
-            <Field label="URL playlist">
+            <Field label={isc.urlFieldLabel}>
               <Input
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://soundcloud.com/utente/sets/nome-playlist"
+                placeholder={isc.urlPlaceholder}
                 disabled={busy}
               />
             </Field>
             <div className="flex justify-end">
               <Button onClick={doImport} disabled={busy || url.trim() === ""}>
-                {busy ? <Spinner /> : <Download size={15} />} Importa playlist
+                {busy ? <Spinner /> : <Download size={15} />} {isc.importPlaylistButton}
               </Button>
             </div>
           </div>
@@ -83,17 +86,17 @@ export default function ImportSoundcloudPage() {
 
         <Card>
           <CardHeader
-            title="I miei like"
+            title={isc.likesCardTitle}
             subtitle={status?.username
-              ? `Like recenti di ${status.username}, con selezione`
-              : "Configura lo username SoundCloud in Impostazioni"}
+              ? isc.likesSubtitleWithUser(status.username)
+              : isc.likesSubtitleNoUser}
             action={status?.username ? (
               <Button size="sm" variant="outline" onClick={() => router.push("/playlists/import-soundcloud/likes")}>
-                <Heart size={15} /> Apri
+                <Heart size={15} /> {t.playlists.openButton}
               </Button>
             ) : (
               <Button size="sm" variant="outline" onClick={() => router.push("/settings")}>
-                <Settings size={15} /> Impostazioni
+                <Settings size={15} /> {t.nav.settings}
               </Button>
             )}
           />

@@ -6,38 +6,41 @@ import { usePathname } from "next/navigation";
 import { RefreshCw, Settings } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { downloadPending, startLibraryIndex } from "@/lib/api";
+import { useT, type Dictionary } from "@/lib/i18n";
 import { Clock } from "./clock";
 import { ThemeToggle } from "./theme-toggle";
 
 /* Il menu racconta la sequenza del flusso: Scopri → Colleziona → Suona. */
-const NAV_GROUPS: { title: string | null; items: { href: string; label: string }[] }[] = [
-  { title: null, items: [{ href: "/", label: "Dashboard" }] },
+const navGroups = (t: Dictionary): { title: string | null; items: { href: string; label: string }[] }[] => [
+  { title: null, items: [{ href: "/", label: t.nav.dashboard }] },
   {
-    title: "Scopri",
+    title: t.nav.groupDiscover,
     items: [
-      { href: "/discovery", label: "Discovery" },
-      { href: "/shazam", label: "Shazam" },
+      { href: "/discovery", label: t.nav.discovery },
+      { href: "/shazam", label: t.nav.shazam },
     ],
   },
   {
-    title: "Colleziona",
+    title: t.nav.groupCollect,
     items: [
-      { href: "/library", label: "Libreria" },
-      { href: "/playlists", label: "Playlists" },
-      { href: "/labels", label: "Etichette" },
-      { href: "/downloads", label: "Download" },
+      { href: "/library", label: t.nav.library },
+      { href: "/playlists", label: t.nav.playlists },
+      { href: "/labels", label: t.nav.labels },
+      { href: "/downloads", label: t.nav.downloads },
     ],
   },
   {
-    title: "Suona",
+    title: t.nav.groupPlay,
     items: [
-      { href: "/sets", label: "Set" },
-      { href: "/transitions", label: "Transizioni" },
+      { href: "/sets", label: t.nav.sets },
+      { href: "/transitions", label: t.nav.transitions },
     ],
   },
 ];
 
 export function IndexNav() {
+  const t = useT();
+  const NAV_GROUPS = navGroups(t);
   const pathname = usePathname();
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
@@ -66,15 +69,15 @@ export function IndexNav() {
       setScan("idle");
     }
   };
-  const scanLabel = scan === "busy" ? "Avvio…" : scan === "done" ? "Avviata" : "Indicizza";
+  const scanLabel = scan === "busy" ? t.nav.indexStarting : scan === "done" ? t.nav.indexStarted : t.nav.index;
 
   return (
     <nav className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-3 px-4 py-4 lg:block">
         <Link href="/" className="block text-sm font-semibold tracking-[0.16em] text-fg-strong">CRATORY</Link>
-        <p className="hidden text-[10px] uppercase tracking-wider text-muted lg:mt-1 lg:block">Workbench per DJ set</p>
+        <p className="hidden text-[10px] uppercase tracking-wider text-muted lg:mt-1 lg:block">{t.nav.tagline}</p>
         <div className="flex items-center gap-3 text-[10px] lg:hidden">
-          <Link href="/settings" aria-label="Impostazioni" aria-current={isActive("/settings") ? "page" : undefined} className={cn("transition-colors hover:text-fg", isActive("/settings") ? "text-fg-strong" : "text-muted")}><Settings size={14} /></Link>
+          <Link href="/settings" aria-label={t.nav.settings} aria-current={isActive("/settings") ? "page" : undefined} className={cn("transition-colors hover:text-fg", isActive("/settings") ? "text-fg-strong" : "text-muted")}><Settings size={14} /></Link>
           <ThemeToggle />
         </div>
       </div>
@@ -133,7 +136,7 @@ export function IndexNav() {
             isActive("/settings") ? "text-fg-strong" : "text-muted hover:text-fg",
           )}
         >
-          <Settings size={13} /> Impostazioni
+          <Settings size={13} /> {t.nav.settings}
         </Link>
         <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3 text-[10px]">
           <Clock />

@@ -7,6 +7,7 @@ import {
   discardReview, downloadCandidates, downloadReview, downloadTrack, fmtDuration,
   keepReview, type DownloadCandidate, type DownloadReview,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 export type ReviewTarget = { track_id: number; artist: string | null; title: string | null };
 
@@ -35,6 +36,7 @@ function ReviewDialog({ target, onClose, onPicked }: {
   onClose: () => void;
   onPicked: () => void;
 }) {
+  const t = useT();
   const [review, setReview] = useState<DownloadReview | null>(null);
   const [candidates, setCandidates] = useState<DownloadCandidate[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -83,12 +85,12 @@ function ReviewDialog({ target, onClose, onPicked }: {
   const delta = expDur != null && dlDur != null ? dlDur - expDur : null;
 
   return (
-    <Modal open onClose={onClose} title="Rivedi il download" size="lg">
+    <Modal open onClose={onClose} title={t.downloads.review.modalTitle} size="lg">
       <div className="space-y-4 p-4">
         <p className="text-sm text-muted">
           {exp?.artist ?? target.artist ?? "?"} — {exp?.title ?? target.title ?? "?"}
           {expDur != null && (
-            <span className="ml-2 text-xs text-faint">durata attesa {fmtDuration(expDur)}</span>
+            <span className="ml-2 text-xs text-faint">{t.downloads.review.expectedDuration(fmtDuration(expDur))}</span>
           )}
         </p>
         {error && <Alert tone="danger">⚠ {error}</Alert>}
@@ -96,7 +98,7 @@ function ReviewDialog({ target, onClose, onPicked }: {
         {dl && (
           <div className="border border-border-strong p-3">
             <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted">
-              File già scaricato
+              {t.downloads.review.fileAlreadyDownloaded}
             </div>
             <div className="truncate font-mono text-xs">{dl.name}</div>
             <div className="mt-0.5 text-xs text-muted">
@@ -105,18 +107,18 @@ function ReviewDialog({ target, onClose, onPicked }: {
               {dl.duration_seconds != null ? ` · ${fmtDuration(dl.duration_seconds)}` : ""}
               {delta != null && (
                 <span className="ml-1 text-fg-strong">
-                  ({delta > 0 ? "+" : ""}{delta}s vs atteso)
+                  ({delta > 0 ? "+" : ""}{delta}s {t.downloads.review.vsExpected})
                 </span>
               )}
               {dl.size ? ` · ${fmtSize(dl.size)}` : ""}
             </div>
             <div className="mt-2 flex gap-2">
               <Button size="sm" onClick={() => run(() => keepReview(target.track_id))} disabled={busy}>
-                {busy ? <Spinner /> : <Check size={13} />} Tieni comunque
+                {busy ? <Spinner /> : <Check size={13} />} {t.downloads.review.keepAnywayButton}
               </Button>
               <Button size="sm" variant="danger"
                 onClick={() => run(() => discardReview(target.track_id))} disabled={busy}>
-                <Trash2 size={13} /> Scarta
+                <Trash2 size={13} /> {t.downloads.review.discardButton}
               </Button>
             </div>
           </div>
@@ -124,12 +126,12 @@ function ReviewDialog({ target, onClose, onPicked }: {
 
         <div>
           <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted">
-            {dl ? "Oppure sostituisci con" : "Scegli un file"}
+            {dl ? t.downloads.review.replaceWithHeading : t.downloads.review.chooseFileHeading}
           </div>
-          {candidates === null && <Loading label="Cerco i candidati su Soulseek…" />}
+          {candidates === null && <Loading label={t.downloads.review.searchingCandidates} />}
           {candidates?.length === 0 && (
             <p className="py-6 text-center text-sm text-muted">
-              Nessun candidato in questo momento: riprova più tardi (dipende da chi è online).
+              {t.downloads.review.noCandidates}
             </p>
           )}
           {candidates && candidates.length > 0 && (
@@ -148,7 +150,7 @@ function ReviewDialog({ target, onClose, onPicked }: {
                   </div>
                   <Button size="sm" variant="outline"
                     onClick={() => run(() => downloadTrack(target.track_id, c))} disabled={busy}>
-                    {busy ? <Spinner /> : <DownloadIcon size={13} />} Scarica
+                    {busy ? <Spinner /> : <DownloadIcon size={13} />} {t.downloads.review.downloadButton}
                   </Button>
                 </li>
               ))}

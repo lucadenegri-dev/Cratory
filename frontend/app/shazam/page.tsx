@@ -10,19 +10,14 @@ import {
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Input, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
+import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
 
-const STATUS: Record<DjSet["status"], { tone: "success" | "info" | "danger" | "neutral"; label: string }> = {
-  done: { tone: "success", label: "identificato" },
-  identifying: { tone: "info", label: "in corso…" },
-  error: { tone: "danger", label: "errore" },
-  pending: { tone: "neutral", label: "in attesa" },
-};
-
 export default function ShazamPage() {
+  const t = useT();
   const [available, setAvailable] = useState<boolean | null>(null);
   const [sets, setSets] = useState<DjSet[] | null>(null);
   const [url, setUrl] = useState("");
@@ -31,6 +26,13 @@ export default function ShazamPage() {
   const [busy, setBusy] = useState(false);
   const jobs = useJobs();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const STATUS: Record<DjSet["status"], { tone: "success" | "info" | "danger" | "neutral"; label: string }> = {
+    done: { tone: "success", label: t.shazam.statusDone },
+    identifying: { tone: "info", label: t.shazam.statusIdentifying },
+    error: { tone: "danger", label: t.shazam.statusError },
+    pending: { tone: "neutral", label: t.shazam.statusPending },
+  };
 
   const reload = useCallback(() => {
     listDjSets().then(setSets).catch((e) => setError(err(e)));
@@ -48,10 +50,10 @@ export default function ShazamPage() {
         setJob(s);
         if (s.status === "done") { stopPolling(); reload(); }
         else if (s.status === "idle") stopPolling();
-        else if (s.status === "error") { stopPolling(); setError(s.error ?? "Identificazione fallita"); }
+        else if (s.status === "error") { stopPolling(); setError(s.error ?? t.shazam.identifyFailed); }
       } catch (e) { stopPolling(); setError(err(e)); }
     }, 1500);
-  }, [reload, stopPolling]);
+  }, [reload, stopPolling, t]);
 
   useEffect(() => {
     shazamStatus().then((s) => setAvailable(s.available)).catch(() => setAvailable(false));
@@ -81,7 +83,7 @@ export default function ShazamPage() {
   };
 
   const doDelete = async (s: DjSet) => {
-    if (!window.confirm(`Rimuovere il set "${s.title ?? s.source_url}" e le sue tracce identificate?`)) return;
+    if (!window.confirm(t.shazam.deleteConfirm(s.title ?? s.source_url))) return;
     try { await deleteDjSet(s.id); reload(); } catch (e) { setError(err(e)); }
   };
 
@@ -89,17 +91,17 @@ export default function ShazamPage() {
 
   const marginalia = (
     <p className="text-xs leading-relaxed text-muted">
-      Sorgenti: SoundCloud, Mixcloud, YouTube. L&apos;audio viene scaricato solo temporaneamente per il fingerprinting, mai conservato.
+      {t.shazam.sourcesNote}
     </p>
   );
 
   return (
-    <PageLayout title="Shazam" meta={sets ? String(sets.length) : undefined} marginaliaTitle="Note" marginalia={marginalia}>
-      <p className="mb-6 text-sm text-muted">Identifica le tracce di un set DJ da un URL (SoundCloud, Mixcloud, YouTube).</p>
+    <PageLayout title="Shazam" meta={sets ? String(sets.length) : undefined} marginaliaTitle={t.shazam.notesTitle} marginalia={marginalia}>
+      <p className="mb-6 text-sm text-muted">{t.shazam.intro}</p>
 
       {available === false && (
         <div className="mb-4"><Alert tone="warning">
-          Identificazione non disponibile: il backend richiede <code className="rounded-none bg-elevated px-1">ffmpeg</code>, <code className="rounded-none bg-elevated px-1">yt-dlp</code> e <code className="rounded-none bg-elevated px-1">shazamio</code>.
+          {t.shazam.unavailablePrefix}<code className="rounded-none bg-elevated px-1">ffmpeg</code>, <code className="rounded-none bg-elevated px-1">yt-dlp</code>{t.shazam.unavailableAnd}<code className="rounded-none bg-elevated px-1">shazamio</code>.
         </Alert></div>
       )}
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
@@ -114,7 +116,7 @@ export default function ShazamPage() {
             disabled={available === false || running}
           />
           <Button onClick={identify} disabled={busy || running || available === false || !url.trim()} className="shrink-0">
-            {busy || running ? <Spinner /> : <AudioLines size={16} />} Identifica
+            {busy || running ? <Spinner /> : <AudioLines size={16} />} {t.shazam.identifyButton}
           </Button>
         </div>
       </Card>
@@ -122,8 +124,8 @@ export default function ShazamPage() {
       {sets === null && !error && <Loading />}
 
       {sets && sets.length === 0 && (
-        <EmptyState icon={<Radar size={28} />} title="Nessun set identificato">
-          Incolla l&apos;URL di un mix e premi <strong>Identifica</strong> per estrarne la tracklist.
+        <EmptyState icon={<Radar size={28} />} title={t.shazam.emptyTitle}>
+          {t.shazam.emptyBodyPrefix}<strong>{t.shazam.identifyButton}</strong>{t.shazam.emptyBodySuffix}
         </EmptyState>
       )}
 
@@ -144,13 +146,13 @@ export default function ShazamPage() {
                       {s.platform && <Badge tone="neutral">{s.platform}</Badge>}
                     </div>
                     <div className="mt-0.5 truncate text-xs text-faint">
-                      {s.dj_name ?? "—"} · {s.identified_count} tracce identificate · {fmtDate(s.created_at)}
+                      {s.dj_name ?? "—"} · {t.shazam.identifiedTracksCount(s.identified_count)} · {fmtDate(s.created_at)}
                     </div>
                     {s.status === "error" && s.error && <div className="mt-1 truncate text-xs text-danger">⚠ {s.error}</div>}
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-1.5">
-                  <Link href={`/shazam/${s.id}`}><Button size="sm" variant="outline"><Eye size={15} /> Apri</Button></Link>
+                  <Link href={`/shazam/${s.id}`}><Button size="sm" variant="outline"><Eye size={15} /> {t.shazam.openButton}</Button></Link>
                   <Button size="sm" variant="danger" onClick={() => doDelete(s)}><Trash2 size={15} /></Button>
                 </div>
               </div>

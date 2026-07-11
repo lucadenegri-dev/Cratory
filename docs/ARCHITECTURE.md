@@ -297,6 +297,36 @@ Modalita' Set Builder:
 - `technical`: prudente, basata sui dati forniti.
 - `creative`: usa anche conoscenza musicale generale, ma resta vincolata a candidate e validazione.
 
+## Internazionalizzazione (i18n IT/EN)
+
+Cratory e' bilingue italiano/inglese. La lingua e' un'impostazione persistente
+(chiave `language` in `AppState`, default `it`), scelta da un toggle in Impostazioni;
+nessun routing per locale (app mono-utente, niente SEO). Endpoint `GET/PUT
+/api/settings/language`.
+
+Tre superfici, tre strategie:
+
+- **UI frontend**: dizionario TypeScript fatto in casa in `frontend/lib/i18n/`.
+  `en.ts` e' la fonte di verita' delle chiavi; `it.ts` e' tipizzato `: Dictionary`
+  (`= typeof en`), cosi' una chiave mancante o in piu' e' errore di compilazione.
+  `I18nProvider`/`useT()` espongono il dizionario attivo; `runtime.ts` tiene lo stato
+  lingua accessibile fuori da React (usato da `lib/api.ts`) senza cicli di import.
+- **Errori backend**: language-agnostic. Ogni `HTTPException` passa per
+  `api_error(status, code, message, **params)` (`app/core/http_errors.py`) con `detail`
+  strutturato `{code, message, params?}`; il frontend traduce il `code` dal namespace
+  `errors` del dizionario (`translateApiError`), con `message` inglese come fallback.
+- **Frasi generate + output AI**: prodotte dal backend direttamente nella lingua
+  selezionata. Le etichette enum (es. classificazione transizione) restano codici
+  tradotti dal frontend; le frasi composte (reason/mixing tip/overview in
+  `services/scoring.py`, fasi dei job, testi dell'agente AI in `services/ai_agent.py`)
+  escono da cataloghi per-lingua indicizzati da `get_language(db)` al punto d'ingresso.
+  I prompt di sistema dell'AI restano in italiano come istruzioni al modello: solo la
+  direttiva sulla lingua dell'output e' parametrica.
+
+Limite noto: i `transition_reason` persistiti nel DB al momento della generazione del
+set restano nella lingua attiva a quel momento (la lingua di visualizzazione futura non
+e' nota alla generazione).
+
 ## Modello dati
 
 Entita' principali:
