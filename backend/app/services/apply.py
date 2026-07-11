@@ -1,5 +1,6 @@
 """Motore Apply: pre-volo (conflitti snapshot + stale) e — nel Task 5 — esecuzione."""
 
+import logging
 import os
 
 from sqlalchemy import select
@@ -10,6 +11,8 @@ from app.models import AudioFile, DupMember, Issue, Plan, PlanOp, ScanRoot, Undo
 from app.schemas import ApplyResult
 from app.services import conflict
 from app.services.planner import PlanOpComputed
+
+logger = logging.getLogger(__name__)
 
 
 def _root_path(db: Session, root_id: int) -> str:
@@ -131,14 +134,25 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
                 cover_skipped += 1
                 continue
             try:
-                data = cover_art.fetch_image(o.after_json["full_url"])
+                data = cover_art.fetch_image(cover_art.bounded_cover_url(o.after_json["full_url"]))
             except cover_art.CoverArtError:
                 o.status = "skipped"
                 db.commit()
                 cover_skipped += 1
                 continue
             _journal("COVER", o.file_id, from_path=f.path)   # prior = nessuna cover
-            tagio.write_cover(f.path, data)
+            try:
+                tagio.write_cover(f.path, data)
+            except Exception as exc:  # noqa: BLE001
+                # Scrittura cover fallita (es. immagine troppo grande per il
+                # blocco metadati FLAC): salta QUESTA cover per-op, il resto del
+                # piano continua. L'entry di journal resta ma è innocua (undo →
+                # remove_cover idempotente su un file senza cover).
+                logger.warning("write_cover fallita su %s: %s", f.path, exc)
+                o.status = "skipped"
+                db.commit()
+                cover_skipped += 1
+                continue
             f.has_cover = True
             o.status = "applied"
             db.commit()

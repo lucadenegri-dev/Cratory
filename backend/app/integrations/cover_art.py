@@ -3,6 +3,7 @@ L'orchestratore lookup_cover (Task 3) combina CAA con il fallback Discogs.
 http iniettabile → test senza rete, come musicbrainz/discogs_meta."""
 
 import logging
+import re
 from dataclasses import dataclass
 
 import httpx
@@ -12,6 +13,16 @@ from app.integrations._http import get_with_retries
 logger = logging.getLogger(__name__)
 CAA = "https://coverartarchive.org"
 _USER_AGENT = "Sortory/0.1 (+http://localhost)"
+
+# URL CAA 'front' senza suffisso di dimensione = originale full-res.
+_CAA_FRONT_FULL = re.compile(r"(coverartarchive\.org/release/[^/]+/front)$")
+
+
+def bounded_cover_url(url: str) -> str:
+    """Se `url` è un CAA 'front' full-res, lo porta alla variante 500px; gli altri
+    URL restano invariati. Difesa retroattiva: i full_url già salvati nelle proposte
+    accettate puntano all'originale, che può sforare il blocco metadati FLAC (16 MB)."""
+    return _CAA_FRONT_FULL.sub(r"\1-500", url)
 
 
 class CoverArtError(Exception):
@@ -52,7 +63,9 @@ class CoverArtArchiveClient:
         return r.content
 
     def front_url(self, mbid: str) -> str:
-        return f"{CAA}/release/{mbid}/front"
+        # Dimensione LIMITATA (500px, ridimensionata lato CAA): l'originale
+        # full-res può sforare il blocco metadati FLAC da 16 MB in fase di embed.
+        return f"{CAA}/release/{mbid}/front-500"
 
 
 @dataclass

@@ -69,3 +69,20 @@ def test_undo_cover_removes_embedded_art(db, copy_fixture, tmp_path):
     assert tagio.read_tags(fpath).has_cover is True
     undo_svc.undo_run(db, plan)
     assert tagio.read_tags(fpath).has_cover is False
+
+
+def test_apply_cover_skips_on_write_failure_without_halting(db, copy_fixture, tmp_path):
+    """Una write_cover fallita (es. immagine troppo grande per il blocco FLAC)
+    salta l'op per-op senza fermare l'intero apply."""
+    plan, f, fpath = _seed_cover_plan(db, copy_fixture, tmp_path)
+    with patch("app.services.apply.cover_art.fetch_image", return_value=_JPG), \
+         patch("app.services.apply.tagio.write_cover",
+               side_effect=Exception("block is too long to write")):
+        res = apply_svc.apply_plan(db, plan)
+    assert res.applied_ops == 0
+    assert res.skipped_ops == 1
+    assert res.partial is False          # NON deve fermare il piano
+    assert res.failed_op_seq is None
+    assert tagio.read_tags(fpath).has_cover is False
+    db.refresh(f)
+    assert f.has_cover is False

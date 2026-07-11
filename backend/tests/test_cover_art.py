@@ -40,9 +40,11 @@ def test_front_thumb_none_on_transport_error():
     assert client.front_thumb("REL-MBID") is None
 
 
-def test_front_url_is_stable():
+def test_front_url_is_bounded_size():
+    # La cover EMBEDDATA usa una dimensione limitata lato CAA (non l'originale
+    # full-res, che può sforare il blocco metadati FLAC da 16 MB).
     client = cover_art.CoverArtArchiveClient(http=_FakeHttp(_FakeResp(200)))
-    assert client.front_url("REL-MBID").endswith("/release/REL-MBID/front")
+    assert client.front_url("REL-MBID").endswith("/release/REL-MBID/front-500")
 
 
 def test_fetch_image_returns_bytes():
@@ -57,3 +59,19 @@ def test_fetch_image_raises_on_error():
         assert False, "attesa CoverArtError"
     except cover_art.CoverArtError:
         pass
+
+
+def test_bounded_cover_url_caps_caa_full():
+    # URL CAA full-res → variante 500px (retroattivo sui full_url già salvati).
+    assert cover_art.bounded_cover_url(
+        "https://coverartarchive.org/release/R1/front"
+    ) == "https://coverartarchive.org/release/R1/front-500"
+
+
+def test_bounded_cover_url_leaves_sized_and_others_untouched():
+    assert cover_art.bounded_cover_url(
+        "https://coverartarchive.org/release/R1/front-500"
+    ) == "https://coverartarchive.org/release/R1/front-500"
+    assert cover_art.bounded_cover_url(
+        "https://i.discogs.com/abc.jpeg"
+    ) == "https://i.discogs.com/abc.jpeg"
