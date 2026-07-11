@@ -6,8 +6,10 @@ import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, EmptyState } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n";
 
 export default function HistoryPage() {
+  const t = useT();
   const { apply } = useJobs();
   const [runs, setRuns] = useState<HistoryItem[]>([]);
   const [offline, setOffline] = useState(false);
@@ -30,7 +32,7 @@ export default function HistoryPage() {
       const res = await undoRun(id);
       if (res.error) setError(res.error);
     }
-    catch (e) { setError(e instanceof Error ? e.message : "Errore"); }
+    catch (e) { setError(e instanceof Error ? e.message : t.common.error); }
     finally { setBusyId(null); load(); }
   };
 
@@ -40,34 +42,34 @@ export default function HistoryPage() {
   return (
     <PageLayout
       title="History"
-      meta={`${runs.length} run`}
-      marginaliaTitle="Riepilogo"
+      meta={t.history.runsCount(runs.length)}
+      marginaliaTitle={t.common.summary}
       marginalia={
         <div className="flex flex-col gap-4 text-xs">
-          <div><div className="tnum text-2xl leading-none text-fg-strong">{applied}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-muted">applicate</div></div>
-          <div><div className="tnum text-2xl leading-none text-fg-strong">{undone}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-muted">annullate</div></div>
+          <div><div className="tnum text-2xl leading-none text-fg-strong">{applied}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.history.statApplied}</div></div>
+          <div><div className="tnum text-2xl leading-none text-fg-strong">{undone}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.history.statUndone}</div></div>
         </div>
       }
       guide={<>
-        <p>Le applicazioni del PLAN già eseguite.</p>
-        <p>Puoi <b className="text-fg">annullare</b> un run per riportare i file com&apos;erano.</p>
+        <p>{t.history.guide1}</p>
+        <p>{t.history.guide2pre}<b className="text-fg">{t.history.guide2undo}</b>{t.history.guide2post}</p>
       </>}
     >
       <div className="flex flex-col gap-4">
-        {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
+        {offline && <Alert>{t.common.backendOffline}</Alert>}
         {error && <Alert>{error}</Alert>}
 
         {runs.length === 0 && !offline ? (
-          <EmptyState title="Nessuna run">Applica un piano da PLAN per vederlo qui.</EmptyState>
+          <EmptyState title={t.history.emptyTitle}>{t.history.emptyBody}</EmptyState>
         ) : (
           <div className="overflow-x-auto border border-border">
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="border-b border-border text-left text-[9px] uppercase tracking-wider text-faint">
-                  <th className="px-3 py-2 font-normal">Run</th>
-                  <th className="px-3 py-2 font-normal">Quando</th>
-                  <th className="px-3 py-2 text-right font-normal">Operazioni</th>
-                  <th className="px-3 py-2 font-normal">Stato</th>
+                  <th className="px-3 py-2 font-normal">{t.history.colRun}</th>
+                  <th className="px-3 py-2 font-normal">{t.history.colWhen}</th>
+                  <th className="px-3 py-2 text-right font-normal">{t.history.colOps}</th>
+                  <th className="px-3 py-2 font-normal">{t.history.colStatus}</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -80,7 +82,7 @@ export default function HistoryPage() {
                     <td className="px-3 py-2">
                       <span className={cn("border border-border px-2 py-0.5 text-[9px] uppercase tracking-wider",
                         r.status === "applied" ? "text-ok" : "text-faint")}>
-                        {r.status === "applied" ? "applicata" : "annullata"}
+                        {r.status === "applied" ? t.history.badgeApplied : t.history.badgeUndone}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -89,9 +91,9 @@ export default function HistoryPage() {
                           disabled={busyId !== null}
                           onClick={() => onUndo(r.id)}
                           className="border border-border px-2 py-0.5 text-[10px] text-muted hover:bg-elevated disabled:opacity-40"
-                        >↺ annulla</button>
+                        >{t.history.undo}</button>
                       ) : (
-                        <span className="text-faint">—</span>
+                        <span className="text-faint">{t.common.empty}</span>
                       )}
                     </td>
                   </tr>

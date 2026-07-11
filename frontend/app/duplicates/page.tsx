@@ -6,8 +6,10 @@ import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { DupGroupCard } from "@/components/dup-group";
 import { Alert, EmptyState } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 export default function DuplicatesPage() {
+  const t = useT();
   const { scan } = useJobs();
   const [groups, setGroups] = useState<DupGroup[]>([]);
   const [offline, setOffline] = useState(false);
@@ -24,7 +26,7 @@ export default function DuplicatesPage() {
   const act = async (fn: () => Promise<unknown>) => {
     setActionError(null);
     try { await fn(); load(); }
-    catch (e) { setActionError(e instanceof Error ? e.message : "Errore"); }
+    catch (e) { setActionError(e instanceof Error ? e.message : t.common.error); }
   };
   const onSetKeeper = (groupId: number, fileId: number) => act(() => setKeeper(groupId, fileId));
   const onDismiss = (groupId: number) => act(() => dismissDuplicate(groupId));
@@ -41,20 +43,20 @@ export default function DuplicatesPage() {
   return (
     <PageLayout
       title="Duplicates"
-      meta={`${active.length} gruppi`}
-      marginaliaTitle="Riepilogo"
+      meta={t.duplicates.groupsCount(active.length)}
+      marginaliaTitle={t.common.summary}
       marginalia={<Marginalia groups={active.length} filesToRemove={filesToRemove} byMatch={byMatch} />}
       guide={<>
-        <p>Gruppi di file uguali o simili (per contenuto o per artista+titolo).</p>
-        <p>Scegli quale tenere: gli altri verranno rimossi quando applichi il PLAN.</p>
+        <p>{t.duplicates.guide1}</p>
+        <p>{t.duplicates.guide2}</p>
       </>}
     >
       <div className="flex flex-col gap-4">
-        {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
+        {offline && <Alert>{t.common.backendOffline}</Alert>}
         {actionError && <Alert>{actionError}</Alert>}
 
         {groups.length === 0 && !offline ? (
-          <EmptyState title="Nessun doppione">Nessun gruppo di doppioni (o libreria non ancora scansionata).</EmptyState>
+          <EmptyState title={t.duplicates.emptyTitle}>{t.duplicates.emptyBody}</EmptyState>
         ) : (
           ordered.map((g) => (
             <DupGroupCard key={g.id} group={g} onSetKeeper={onSetKeeper} onDismiss={onDismiss} />
@@ -70,25 +72,26 @@ function Marginalia({ groups, filesToRemove, byMatch }: {
   filesToRemove: number;
   byMatch: Record<string, number>;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-4 text-xs">
       <div>
         <div className="tnum text-2xl leading-none text-fg-strong">{groups}</div>
-        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">gruppi</div>
+        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.duplicates.statGroups}</div>
       </div>
       <div>
         <div className="tnum text-2xl leading-none text-fg-strong">{filesToRemove}</div>
-        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">file da rimuovere</div>
+        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.duplicates.filesToRemove}</div>
       </div>
       <div>
-        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">per match</div>
+        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">{t.duplicates.byMatch}</div>
         <div className="flex flex-col gap-1">
           {Object.entries(byMatch).sort((a, b) => b[1] - a[1]).map(([k, n]) => (
             <div key={k} className="flex justify-between"><span className="text-muted">{k}</span><span className="tnum text-fg">{n}</span></div>
           ))}
         </div>
       </div>
-      <div className="text-[11px] text-ok">{filesToRemove} rimozioni → andranno nel PLAN</div>
+      <div className="text-[11px] text-ok">{t.duplicates.removalsNote(filesToRemove)}</div>
     </div>
   );
 }
