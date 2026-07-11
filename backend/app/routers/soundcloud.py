@@ -61,7 +61,10 @@ def status(db: Session = Depends(get_db)):
 
 @router.put("/config", response_model=SoundCloudStatus)
 def set_config(req: SoundCloudConfigRequest, db: Session = Depends(get_db)):
-    set_state(db, USERNAME_KEY, req.username.strip().lstrip("@"))
+    username = req.username.strip().lstrip("@")
+    if not username:
+        raise HTTPException(status_code=422, detail="Username SoundCloud non valido.")
+    set_state(db, USERNAME_KEY, username)
     return status(db)
 
 

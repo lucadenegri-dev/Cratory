@@ -10,10 +10,7 @@ Fetch sequenziali, nessun parallelismo: profilo basso su API non ufficiale.
 from __future__ import annotations
 
 import importlib.util
-import logging
 from urllib.parse import urlparse
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_LIKES_LIMIT = 100
 _SOCKET_TIMEOUT = 20
