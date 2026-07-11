@@ -91,6 +91,7 @@ plus the `yt-dlp` and `shazamio` Python dependencies (in `backend/requirements.t
 acquisition needs a separately running [slskd](https://github.com/slskd/slskd) instance
 (not bundled). BPM/key import needs a Rekordbox collection exported as XML
 (`File > Export Collection in xml format`) — no extra dependency, it's just a file upload.
+Full dependency list in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
 Backend:
 
@@ -221,13 +222,10 @@ cd frontend && npm run lint && npm run build
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Principles, pipeline, backend layers, data model, integrations |
 | [docs/API.md](docs/API.md) | Current FastAPI REST contracts |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Status, naming, backlog, next steps — the source of truth for project state |
-| [docs/PRODUCT.md](docs/PRODUCT.md) | Product brief: users, job-to-be-done, principles |
-| [docs/DESIGN.md](docs/DESIGN.md) | Design system ("editorial archive") |
+| [docs/DESIGN.md](docs/DESIGN.md) | Product context + design system ("editorial archive") |
+| [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | All runtime/build dependencies and external services |
 | [PROGRESS.md](PROGRESS.md) | Chronological work diary |
 | [CLAUDE.md](CLAUDE.md) | Guide for the AI collaborator |
-
-> Note: the README is in English as the project's showcase; the reference docs above are in
-> Italian (except the design system).
 
 ## Status
 
