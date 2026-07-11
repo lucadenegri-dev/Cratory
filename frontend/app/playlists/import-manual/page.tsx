@@ -30,7 +30,7 @@ export default function ImportManualPage() {
 
   useEffect(() => {
     if (mode !== "library") return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       apiGet<{ total: number; items: Track[] }>("/api/tracks", {
         title: query || undefined,
         has_local_file: ownedOnly ? "true" : undefined,
@@ -39,7 +39,7 @@ export default function ImportManualPage() {
         .then((r) => setResults(r.items))
         .catch(() => setResults([]));
     }, 300);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [mode, query, ownedOnly]);
 
   const doImport = async () => {
