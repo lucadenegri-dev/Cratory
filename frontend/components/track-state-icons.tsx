@@ -1,5 +1,6 @@
 import { CircleCheck, HardDrive, Archive } from "lucide-react";
 import { SpotifyGlyph } from "./spotify-glyph";
+import { SoundcloudGlyph } from "./soundcloud-glyph";
 import type { Track } from "@/lib/api";
 
 /** Stato di una traccia come icone compatte, condiviso da Libreria e dettaglio
@@ -32,6 +33,17 @@ export function TrackStateIcons({ track }: { track: Track }) {
           className="text-[#1DB954] transition-colors hover:text-[#1ed760]"
         >
           <SpotifyGlyph size={14} />
+        </a>
+      )}
+      {track.platform === "soundcloud" && track.url && (
+        <a
+          href={track.url}
+          target="_blank"
+          rel="noreferrer"
+          title="Apri su SoundCloud"
+          className="text-[#ff5500] transition-colors hover:text-[#ff7700]"
+        >
+          <SoundcloudGlyph size={14} />
         </a>
       )}
     </div>

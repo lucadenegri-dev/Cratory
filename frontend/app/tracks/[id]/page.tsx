@@ -79,6 +79,9 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
           {track.spotify_url && (
             <a href={track.spotify_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex"><Button size="sm" variant="outline"><ExternalLink size={14} /> Spotify</Button></a>
           )}
+          {track.platform === "soundcloud" && track.url && (
+            <a href={track.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex"><Button size="sm" variant="outline"><ExternalLink size={14} /> SoundCloud</Button></a>
+          )}
         </div>
       </div>
 

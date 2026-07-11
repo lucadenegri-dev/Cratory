@@ -169,7 +169,11 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const missing = tracks.filter((t) => !t.has_local_file && !t.archived).length;
   const totalDur = tracks.reduce((s, t) => s + (t.duration_seconds ?? 0), 0);
   const cell = "px-3 py-2.5";
-  const canSync = playlist.platform === "spotify" && (playlist.kind === "liked" || !!playlist.platform_playlist_id);
+  const canSync =
+    (playlist.platform === "spotify" && (playlist.kind === "liked" || !!playlist.platform_playlist_id)) ||
+    (playlist.platform === "soundcloud" && playlist.kind !== "liked" && !!playlist.url);
+  const platformName = playlist.platform === "soundcloud" ? "SoundCloud" : "Spotify";
+  const likedImportHref = playlist.platform === "soundcloud" ? "/playlists/import-soundcloud/likes" : "/playlists/import-spotify/liked";
 
   const th = (label: string, col: string, numeric = false) => {
     const active = sort === col;
@@ -209,9 +213,9 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
         </Button>
       )}
       {playlist.kind === "liked"
-        ? <Link href="/playlists/import-spotify/liked" className="block"><Button size="sm" variant="outline" className="w-full"><Heart size={14} /> Aggiungi altri liked</Button></Link>
-        : canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da Spotify</Button>}
-      {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> Spotify</Button></a>}
+        ? <Link href={likedImportHref} className="block"><Button size="sm" variant="outline" className="w-full"><Heart size={14} /> Aggiungi altri liked</Button></Link>
+        : canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} Aggiorna da {platformName}</Button>}
+      {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> {platformName}</Button></a>}
       <Button size="sm" variant="danger" className="w-full" onClick={doDelete} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} Rimuovi</Button>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
         <div className="flex justify-between gap-2"><span className="text-muted">Tracce</span><span className="tnum text-fg">{playlist.track_count}</span></div>
@@ -270,6 +274,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
             <Select className="h-9" value={source} onChange={(e) => setSource(e.target.value)}>
               <option value="">Tutte le sorgenti</option>
               <option value="spotify">Spotify</option>
+              <option value="soundcloud">SoundCloud</option>
               <option value="manual">Manuale</option>
             </Select>
             <Select className="h-9" value={status} onChange={(e) => setStatus(e.target.value)}>

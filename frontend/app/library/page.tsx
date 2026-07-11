@@ -90,6 +90,7 @@ function LibraryInner() {
       <Select className="h-9" value={source} onChange={(e) => { setSource(e.target.value); setOffset(0); }}>
         <option value="">Tutte le sorgenti</option>
         <option value="spotify">Spotify</option>
+        <option value="soundcloud">SoundCloud</option>
         <option value="manual">Manuale</option>
         <option value="local_files">File locali</option>
       </Select>
