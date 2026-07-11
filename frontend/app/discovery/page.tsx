@@ -18,6 +18,7 @@ import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { cn } from "@/lib/cn";
 import { DiscoveryLeadGrid } from "@/components/discovery-lead-grid";
+import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -26,14 +27,15 @@ function err(e: unknown): string {
 type DigSeed = "genre" | "label";
 const CHIP_CAP = 12;
 
-const PRESETS: { key: string; label: string; value: number; desc: string }[] = [
-  { key: "familiare", label: "Familiare", value: 0.15, desc: "Artisti e nomi che probabilmente conosci già." },
-  { key: "bilanciato", label: "Bilanciato", value: 0.45, desc: "Un mix tra noto e nuovo." },
-  { key: "avventuroso", label: "Avventuroso", value: 0.85, desc: "Rarità e deep cut richiesti che non conosci." },
-];
-
 function DiscoveryInner() {
+  const t = useT();
   const jobs = useJobs();
+
+  const PRESETS: { key: string; label: string; value: number; desc: string }[] = [
+    { key: "familiare", label: t.discovery.presetFamiliarLabel, value: 0.15, desc: t.discovery.presetFamiliarDesc },
+    { key: "bilanciato", label: t.discovery.presetBalancedLabel, value: 0.45, desc: t.discovery.presetBalancedDesc },
+    { key: "avventuroso", label: t.discovery.presetAdventurousLabel, value: 0.85, desc: t.discovery.presetAdventurousDesc },
+  ];
 
   const router = useRouter();
   const pathname = usePathname();
@@ -93,7 +95,7 @@ function DiscoveryInner() {
       setBusy(true);
       setError(null);
       setDig(null);
-      jobs.startClientJob("dig", "Crate digging");
+      jobs.startClientJob("dig", t.jobs.dig);
       jobs.updateClientJob("dig", { detail: `Discogs · ${value}` });
       try {
         setDig(await discoveryDig(seed, value, { adventurousness: adv, tastePlaylistId: taste }));
@@ -104,7 +106,7 @@ function DiscoveryInner() {
         jobs.endClientJob("dig");
       }
     },
-    [jobs],
+    [jobs, t],
   );
 
   const paramsKey = searchParams.toString();
@@ -148,7 +150,7 @@ function DiscoveryInner() {
 
   return (
     <PageLayout title="Discovery">
-      <p className="mb-4 text-sm text-muted">Scava nuova musica per genere o etichetta.</p>
+      <p className="mb-4 text-sm text-muted">{t.discovery.intro}</p>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
@@ -157,11 +159,11 @@ function DiscoveryInner() {
             {/* riga alta: Parti da (sx) + preset profondità e DIG (dx) */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-wider text-muted">Parti da</span>
+                <span className="text-[10px] uppercase tracking-wider text-muted">{t.discovery.startFromLabel}</span>
                 <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
                   {([
-                    ["genre", "Genere", <Disc3 key="i" size={13} />],
-                    ["label", "Etichetta", <Tags key="i" size={13} />],
+                    ["genre", t.discovery.seedGenre, <Disc3 key="i" size={13} />],
+                    ["label", t.discovery.seedLabel, <Tags key="i" size={13} />],
                   ] as const).map(([s, label, icon]) => (
                     <button
                       key={s}
@@ -199,7 +201,7 @@ function DiscoveryInner() {
                   ))}
                 </div>
                 <Button onClick={runDig} disabled={busy || !digReady}>
-                  {busy ? <Spinner /> : <Disc3 size={15} />} DIG
+                  {busy ? <Spinner /> : <Disc3 size={15} />} {t.discovery.dig}
                 </Button>
               </div>
             </div>
@@ -207,13 +209,13 @@ function DiscoveryInner() {
             {/* riferimento di gusto: rispetto a cosa misurare l'affinità */}
             {(playlists?.length ?? 0) > 0 && (
               <div className="mt-3 flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-wider text-muted">Affinità rispetto a</span>
+                <span className="text-[10px] uppercase tracking-wider text-muted">{t.discovery.affinityLabel}</span>
                 <Select
                   value={tasteRef ?? ""}
                   onChange={(e) => setTasteRef(e.target.value ? Number(e.target.value) : null)}
                   disabled={busy}
                 >
-                  <option value="">Tutta la libreria</option>
+                  <option value="">{t.discovery.wholeLibraryOption}</option>
                   {playlists?.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
@@ -229,7 +231,7 @@ function DiscoveryInner() {
                   value={genre}
                   onChange={(e) => setGenre(e.target.value)}
                   disabled={busy}
-                  placeholder="es. Acid House, Dub Techno, Italo-Disco…"
+                  placeholder={t.discovery.genrePlaceholder}
                 />
                 <datalist id="genre-suggestions">
                   {genres?.library.map((g) => <option key={`l-${g}`} value={g} />)}
@@ -250,7 +252,7 @@ function DiscoveryInner() {
               <div className="mt-3">
                 {noLabels ? (
                   <p className="text-sm text-muted">
-                    Nessuna etichetta in libreria: recuperale dalla sezione Etichette, oppure scava per genere.
+                    {t.discovery.noLabels}
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
@@ -265,7 +267,7 @@ function DiscoveryInner() {
                         onClick={() => setShowAllLabels((v) => !v)}
                         className="rounded-none px-2.5 py-1 text-xs text-muted underline underline-offset-4 transition-colors hover:text-fg"
                       >
-                        {showAllLabels ? "− meno" : `+${hiddenLabelCount} altre`}
+                        {showAllLabels ? t.discovery.showLess : t.discovery.showMore(hiddenLabelCount)}
                       </button>
                     )}
                   </div>
@@ -275,14 +277,14 @@ function DiscoveryInner() {
           </div>
 
           {busy && !dig && (
-            <Loading label="DIG in corso…" />
+            <Loading label={t.discovery.digInProgress} />
           )}
           {dig && <DiscoveryLeadGrid dig={dig} />}
           {!busy && !dig && (
-            <EmptyState icon={<Disc3 size={28} />} title="Pronto per scavare">
+            <EmptyState icon={<Disc3 size={28} />} title={t.discovery.readyTitle}>
               {digReady
-                ? "Premi “DIG” per esplorare a fondo."
-                : "Scegli un genere o un’etichetta qui sopra, poi premi “DIG”."}
+                ? t.discovery.readyBodyReady
+                : t.discovery.readyBodyNotReady}
             </EmptyState>
           )}
     </PageLayout>
