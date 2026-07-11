@@ -8,6 +8,7 @@ import {
   importRekordbox,
   type PipelineStatus, type RekordboxImportReport,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { Card, Alert, Spinner } from "@/components/ui";
 
 /* Una fase della striscia: numero vivo + etichetta, "accesa" (pallino) se c'è
@@ -26,6 +27,7 @@ type StageDef = {
  *  Di default non sovrascrive valori già presenti; il toggle "sovrascrivi" fa
  *  vincere la ri-analisi Rekordbox (il comportamento lo imposta il backend). */
 function RekordboxImportPanel({ pending, onImported }: { pending: number; onImported: () => void }) {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [overwrite, setOverwrite] = useState(false);
@@ -53,9 +55,8 @@ function RekordboxImportPanel({ pending, onImported }: { pending: number; onImpo
     <div className="flex flex-wrap items-start justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted">
       <div className="min-w-[16rem] flex-1">
         <p className="mb-2">
-          Analizza le tracce in Rekordbox (beatgrid/tonalità), poi importa qui il file{" "}
-          <code className="text-fg">rekordbox.xml</code> della collezione per completare BPM e tonalità.{" "}
-          {pending > 0 ? `${pending} ${pending === 1 ? "traccia" : "tracce"} in attesa.` : "Nessuna traccia in attesa."}
+          {t.dashboard.rekordboxIntroPrefix}<code className="text-fg">rekordbox.xml</code>{t.dashboard.rekordboxIntroSuffix}
+          {t.dashboard.pendingTracks(pending)}
         </p>
         <input
           ref={inputRef}
@@ -74,20 +75,19 @@ function RekordboxImportPanel({ pending, onImported }: { pending: number; onImpo
             className="accent-fg-strong"
           />
           <span>
-            Sovrascrivi BPM/tonalità già presenti (la ri-analisi Rekordbox vince; eventuali
-            correzioni manuali vengono riallineate)
+            {t.dashboard.overwriteLabel}
           </span>
         </label>
-        {busy && <p className="mt-2 flex items-center gap-2"><Spinner /> Importazione in corso…</p>}
+        {busy && <p className="mt-2 flex items-center gap-2"><Spinner /> {t.dashboard.importing}</p>}
         {error && <div className="mt-2"><Alert tone="danger">⚠ {error}</Alert></div>}
         {report && (
           <div className="mt-2 grid max-w-sm grid-cols-2 gap-x-4 gap-y-1">
-            <span>Nel file</span><span className="tnum text-fg">{report.in_file}</span>
-            <span>Abbinate</span><span className="tnum text-fg">{report.matched}</span>
-            <span>Non abbinate</span><span className="tnum text-fg">{report.unmatched}</span>
-            <span>BPM impostati</span><span className="tnum text-fg">{report.bpm_set}</span>
-            <span>Tonalità impostate</span><span className="tnum text-fg">{report.key_set}</span>
-            <span>Energia ricalcolata</span><span className="tnum text-fg">{report.energy_set}</span>
+            <span>{t.dashboard.reportInFile}</span><span className="tnum text-fg">{report.in_file}</span>
+            <span>{t.dashboard.reportMatched}</span><span className="tnum text-fg">{report.matched}</span>
+            <span>{t.dashboard.reportUnmatched}</span><span className="tnum text-fg">{report.unmatched}</span>
+            <span>{t.dashboard.reportBpmSet}</span><span className="tnum text-fg">{report.bpm_set}</span>
+            <span>{t.dashboard.reportKeySet}</span><span className="tnum text-fg">{report.key_set}</span>
+            <span>{t.dashboard.reportEnergySet}</span><span className="tnum text-fg">{report.energy_set}</span>
           </div>
         )}
       </div>
@@ -110,31 +110,32 @@ function StageCell({ s }: { s: StageDef }) {
 }
 
 export function PipelineStrip({ p, onRefresh }: { p: PipelineStatus; onRefresh: () => void }) {
+  const t = useT();
   const [organizeOpen, setOrganizeOpen] = useState(false);
   const [analyzeOpen, setAnalyzeOpen] = useState(false);
 
   const stages: StageDef[] = [
     {
-      key: "scopri", label: "Scopri", value: String(p.playlists),
-      sub: "playlist importate", hot: p.total_tracks === 0, href: "/playlists",
+      key: "scopri", label: t.dashboard.stageDiscover, value: String(p.playlists),
+      sub: t.dashboard.stageDiscoverSub, hot: p.total_tracks === 0, href: "/playlists",
     },
     {
-      key: "acquisisci", label: "Acquisisci", value: String(p.wishlist),
-      sub: p.download_active ? `download attivi · ${p.download_pending} in coda` : "in wishlist",
+      key: "acquisisci", label: t.dashboard.stageAcquire, value: String(p.wishlist),
+      sub: t.dashboard.stageAcquireSub(p.download_active, p.download_pending),
       hot: p.wishlist > 0 || p.download_active, href: "/downloads",
     },
     {
-      key: "organizza", label: "Organizza ⤴",
+      key: "organizza", label: t.dashboard.stageOrganize,
       value: p.inbox_files === null ? "—" : String(p.inbox_files),
-      sub: "Organizza le tracce che possiedi e i loro tag in Sortory", hot: (p.inbox_files ?? 0) > 0,
+      sub: t.dashboard.stageOrganizeSub, hot: (p.inbox_files ?? 0) > 0,
     },
     {
-      key: "analizza", label: "Analizza ⤴", value: String(p.analyze_pending),
-      sub: "analizza in Rekordbox → importa BPM/key", hot: p.analyze_pending > 0,
+      key: "analizza", label: t.dashboard.stageAnalyze, value: String(p.analyze_pending),
+      sub: t.dashboard.stageAnalyzeSub, hot: p.analyze_pending > 0,
     },
     {
-      key: "suona", label: "Suona", value: String(p.ready_for_set),
-      sub: "pronte per un set", hot: false, href: "/set-builder",
+      key: "suona", label: t.dashboard.stagePlay, value: String(p.ready_for_set),
+      sub: t.dashboard.stagePlaySub, hot: false, href: "/set-builder",
     },
   ];
 
@@ -169,15 +170,15 @@ export function PipelineStrip({ p, onRefresh }: { p: PipelineStatus; onRefresh: 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted">
           <span>
             {p.inbox_files === null
-              ? "Inbox non configurata: imposta SLSKD_DOWNLOAD_DIR nel .env del backend."
-              : `${p.inbox_files} file audio in inbox aspettano il triage (DJPlayer), l'enrich testuale + tag e l'organizzazione (Sortory); poi torna qui e indicizza.`}
+              ? t.dashboard.inboxNotConfigured
+              : t.dashboard.inboxWaiting(p.inbox_files)}
           </span>
           {p.organizer_url && (
             <a
               href={p.organizer_url} target="_blank" rel="noreferrer"
               className="inline-flex shrink-0 items-center gap-1.5 text-fg-strong hover:underline"
             >
-              Apri Sortory <ExternalLink size={12} />
+              {t.dashboard.openSortory} <ExternalLink size={12} />
             </a>
           )}
         </div>

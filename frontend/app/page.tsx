@@ -9,6 +9,7 @@ import {
   apiGet, getLabels, getPipeline, listImportedPlaylists, fmtDate,
   type LibraryStats, type LabelStats, type SetlistSummary, type Playlist, type PipelineStatus,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
 import { Card, Alert, Progress, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -44,6 +45,7 @@ function Coverage({ label, n, total }: { label: string; n: number; total: number
 /* ------------------------------------------------------------------ page */
 
 export default function Dashboard() {
+  const t = useT();
   const [stats, setStats] = useState<LibraryStats | null>(null);
   const [labels, setLabels] = useState<LabelStats[]>([]);
   const [sets, setSets] = useState<SetlistSummary[] | null>(null);
@@ -90,11 +92,11 @@ export default function Dashboard() {
     .slice()
     .sort((a, b) => (a.imported_at < b.imported_at ? 1 : -1))
     .slice(0, 3)
-    .map((p, i) => ({ n: String(i + 1).padStart(2, "0"), title: p.name, meta: `${p.track_count} tr.`, href: `/playlists/${p.id}` }));
+    .map((p, i) => ({ n: String(i + 1).padStart(2, "0"), title: p.name, meta: t.dashboard.tracksAbbrev(p.track_count), href: `/playlists/${p.id}` }));
 
   return (
     <PageLayout>
-      {error && <div className="mb-6"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
+      {error && <div className="mb-6"><Alert tone="danger">{t.dashboard.backendDown(error)}</Alert></div>}
 
       {!stats && !error && <Loading />}
 
@@ -103,11 +105,11 @@ export default function Dashboard() {
           <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
             <Music size={36} className="text-faint" />
             <div>
-              <p className="font-medium text-fg-strong">Nessuna playlist ancora</p>
-              <p className="mt-1 text-sm text-muted">Importa una playlist Spotify per iniziare a costruire un set.</p>
+              <p className="font-medium text-fg-strong">{t.dashboard.emptyTitle}</p>
+              <p className="mt-1 text-sm text-muted">{t.dashboard.emptyBody}</p>
             </div>
             <Link href="/playlists" className="inline-flex items-center gap-1.5 bg-fg-strong px-4 py-2 text-xs font-medium uppercase tracking-wider text-bg transition-colors hover:bg-fg">
-              Importa una playlist <ArrowRight size={14} />
+              {t.dashboard.importPlaylist} <ArrowRight size={14} />
             </Link>
           </div>
         </Card>
@@ -124,9 +126,9 @@ export default function Dashboard() {
         <>
           {/* Figure hero: scoperte (tutte le tracce note) ⊇ possedute (file su disco) */}
           <div className="grid grid-cols-2 border-l border-t border-border sm:grid-cols-4">
-            <Figure label="Tracce scoperte" value={stats.total_tracks} />
+            <Figure label={t.dashboard.figureDiscovered} value={stats.total_tracks} />
             <Figure
-              label="Tracce possedute"
+              label={t.dashboard.figureOwned}
               value={(
                 <>
                   {stats.with_local_file}
@@ -138,45 +140,45 @@ export default function Dashboard() {
                 </>
               )}
             />
-            <Figure label="Playlist" value={stats.playlists} />
-            <Figure label="Set salvati" value={sets ? sets.length : "—"} />
+            <Figure label={t.dashboard.figurePlaylists} value={stats.playlists} />
+            <Figure label={t.dashboard.figureSets} value={sets ? sets.length : "—"} />
           </div>
 
           {/* Tre colonne */}
           <div className="mt-3 grid border border-border lg:grid-cols-3">
             <section className="border-b border-border p-5 lg:border-b-0 lg:border-r">
-              <ColHead>Forma della libreria</ColHead>
-              <SubLabel icon={<Gauge size={12} />}>Istogramma BPM{stats.bpm_min ? ` · ${stats.bpm_min.toFixed(0)}–${stats.bpm_max?.toFixed(0)}` : ""}</SubLabel>
+              <ColHead>{t.dashboard.libraryShape}</ColHead>
+              <SubLabel icon={<Gauge size={12} />}>{t.dashboard.bpmHistogram}{stats.bpm_min ? ` · ${stats.bpm_min.toFixed(0)}–${stats.bpm_max?.toFixed(0)}` : ""}</SubLabel>
               <Histogram bins={stats.bpm_histogram} />
-              <SubLabel icon={<KeyRound size={12} />}>Tonalità più frequenti</SubLabel>
+              <SubLabel icon={<KeyRound size={12} />}>{t.dashboard.topKeys}</SubLabel>
               <MiniBars rows={keyRows} />
             </section>
 
             <section className="border-b border-border p-5 lg:border-b-0 lg:border-r">
-              <ColHead>Attività recente</ColHead>
+              <ColHead>{t.dashboard.recentActivity}</ColHead>
               <div className="mb-2 flex items-center justify-between">
-                <SubLabel>Ultimi set</SubLabel>
-                <Link href="/sets" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">Tutti →</Link>
+                <SubLabel>{t.dashboard.recentSets}</SubLabel>
+                <Link href="/sets" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">{t.dashboard.viewAll}</Link>
               </div>
-              <RecentList items={recentSets} empty="Nessun set ancora." />
+              <RecentList items={recentSets} empty={t.dashboard.noSetsYet} />
               <div className="mb-2 mt-5 flex items-center justify-between">
-                <SubLabel>Ultime playlist importate</SubLabel>
-                <Link href="/playlists" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">Tutte →</Link>
+                <SubLabel>{t.dashboard.recentPlaylistsHeading}</SubLabel>
+                <Link href="/playlists" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">{t.dashboard.viewAll}</Link>
               </div>
-              <RecentList items={recentPlaylists} empty="Nessuna playlist ancora." />
+              <RecentList items={recentPlaylists} empty={t.dashboard.noPlaylistsYet} />
             </section>
 
             <section className="p-5">
-              <ColHead>Catalogo</ColHead>
-              <SubLabel icon={<Gauge size={12} />}>Copertura BPM/key</SubLabel>
+              <ColHead>{t.dashboard.catalog}</ColHead>
+              <SubLabel icon={<Gauge size={12} />}>{t.dashboard.bpmKeyCoverage}</SubLabel>
               <div className="space-y-2.5">
-                <Coverage label="BPM e tonalità" n={stats.with_key} total={stats.total_tracks} />
+                <Coverage label={t.dashboard.bpmKeyLabel} n={stats.with_key} total={stats.total_tracks} />
               </div>
-              <SubLabel icon={<Disc3 size={12} />}>Generi più frequenti</SubLabel>
+              <SubLabel icon={<Disc3 size={12} />}>{t.dashboard.topGenres}</SubLabel>
               <MiniBars rows={genreRows} />
               <div className="mb-2 mt-5 flex items-center justify-between">
-                <SubLabel icon={<Tags size={12} />}>Top etichette</SubLabel>
-                <Link href="/labels" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">Tutte →</Link>
+                <SubLabel icon={<Tags size={12} />}>{t.dashboard.topLabels}</SubLabel>
+                <Link href="/labels" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">{t.dashboard.viewAll}</Link>
               </div>
               <MiniBars rows={labelRows} />
             </section>
