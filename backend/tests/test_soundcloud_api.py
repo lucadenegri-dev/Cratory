@@ -59,6 +59,13 @@ def test_status_e_config(api_db, monkeypatch):
     assert client.get("/api/soundcloud/status").json()["username"] == "luca"
 
 
+def test_config_username_solo_chiocciola_422(api_db):
+    # "@" spogliato del prefisso diventa stringa vuota: va rifiutato, non persistito.
+    r = client.put("/api/soundcloud/config", json={"username": "@"})
+    assert r.status_code == 422
+    assert client.get("/api/soundcloud/status").json()["username"] is None
+
+
 def test_import_da_url_crea_playlist(api_db, monkeypatch):
     monkeypatch.setattr(sc_router, "fetch_playlist", lambda url: _info([_entry(1), _entry(2)]))
     r = client.post("/api/soundcloud/import",
@@ -140,3 +147,49 @@ def test_sync_liked_soundcloud_409(api_db, monkeypatch):
         Playlist.platform == "soundcloud", Playlist.kind == "liked",
     ).one()
     assert client.post(f"/api/playlists/{liked.id}/sync").status_code == 409
+
+
+def test_sync_soundcloud_mappa_errori(api_db, monkeypatch):
+    monkeypatch.setattr(sc_router, "fetch_playlist", lambda url: _info([_entry(1)]))
+    body = client.post("/api/soundcloud/import",
+                       json={"url": "https://soundcloud.com/digger/sets/deep-crate"}).json()
+
+    import app.routers.playlists as pl_router
+
+    def boom_invalid(url):
+        raise SoundCloudInvalidUrl("URL non valido")
+    monkeypatch.setattr(pl_router, "sc_fetch_playlist", boom_invalid)
+    r = client.post(f"/api/playlists/{body['playlist_id']}/sync")
+    assert r.status_code == 422
+
+    def boom_remote(url):
+        raise SoundCloudError("estrazione fallita")
+    monkeypatch.setattr(pl_router, "sc_fetch_playlist", boom_remote)
+    r = client.post(f"/api/playlists/{body['playlist_id']}/sync")
+    assert r.status_code == 502
+
+
+def test_import_e_sync_senza_id_non_duplica_playlist(api_db, monkeypatch):
+    # yt-dlp puo' non esporre un id di set (secret link "grezzi"): senza fallback
+    # sull'URL, ogni /import o /sync creerebbe una nuova Playlist.
+    info_senza_id = _info([_entry(1), _entry(2)])
+    info_senza_id.pop("id")
+    monkeypatch.setattr(sc_router, "fetch_playlist", lambda url: info_senza_id)
+    url = "https://soundcloud.com/digger/sets/deep-crate/s-abc123"
+
+    r1 = client.post("/api/soundcloud/import", json={"url": url})
+    assert r1.status_code == 200
+    r2 = client.post("/api/soundcloud/import", json={"url": url})
+    assert r2.status_code == 200
+    assert r1.json()["playlist_id"] == r2.json()["playlist_id"]
+
+    playlists = api_db.query(Playlist).filter(Playlist.platform == "soundcloud").all()
+    assert len(playlists) == 1
+    assert playlists[0].platform_playlist_id is None
+
+    import app.routers.playlists as pl_router
+    monkeypatch.setattr(pl_router, "sc_fetch_playlist", lambda url: info_senza_id)
+    r3 = client.post(f"/api/playlists/{r1.json()['playlist_id']}/sync")
+    assert r3.status_code == 200
+    playlists = api_db.query(Playlist).filter(Playlist.platform == "soundcloud").all()
+    assert len(playlists) == 1
