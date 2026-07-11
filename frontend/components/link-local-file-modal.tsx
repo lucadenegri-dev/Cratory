@@ -7,6 +7,7 @@ import {
   linkLocalFile, searchLocalFiles,
   type LocalFileHit, type TrackDetail,
 } from "@/lib/api";
+import { useT, type Dictionary } from "@/lib/i18n";
 
 export type LinkTarget = { id: number; artist: string | null; title: string | null };
 
@@ -19,10 +20,9 @@ function fmtSize(bytes: number | null): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-const SOURCE_LABEL: Record<string, string> = {
-  library: "libreria",
-  downloads: "download",
-};
+function sourceLabel(t: Dictionary): Record<string, string> {
+  return { library: t.tracks.sourceLibrary, downloads: t.tracks.sourceDownloads };
+}
 
 /** Wrapper: monta il dialog solo con un target e lo rigenera per ogni traccia. */
 export function LinkLocalFileModal({ target, onClose, onLinked }: {
@@ -40,6 +40,8 @@ function LinkDialog({ target, onClose, onLinked }: {
   onClose: () => void;
   onLinked: (track: TrackDetail) => void;
 }) {
+  const t = useT();
+  const SOURCE_LABEL = sourceLabel(t);
   // Precompilata con "artista titolo": di solito basta per trovare il file.
   const [query, setQuery] = useState(() =>
     `${target.artist ?? ""} ${target.title ?? ""}`.trim());
@@ -79,7 +81,7 @@ function LinkDialog({ target, onClose, onLinked }: {
   };
 
   return (
-    <Modal open onClose={onClose} title="Collega file locale" size="lg">
+    <Modal open onClose={onClose} title={t.tracks.linkFileTitle} size="lg">
       <div className="space-y-4 p-4">
         <p className="text-sm text-muted">{target.artist ?? "?"} — {target.title ?? "?"}</p>
         {error && <Alert tone="danger">⚠ {error}</Alert>}
@@ -91,17 +93,17 @@ function LinkDialog({ target, onClose, onLinked }: {
             onKeyDown={(e) => {
               if (e.key === "Enter") runSearch();
             }}
-            placeholder="Cerca per nome file…"
+            placeholder={t.tracks.searchByNamePlaceholder}
           />
           <Button variant="outline" onClick={runSearch}
             disabled={searching || query.trim().length < 2}>
-            <Search size={14} /> Cerca
+            <Search size={14} /> {t.common.search}
           </Button>
         </div>
-        {searching && <Loading label="Cerco sul disco…" />}
+        {searching && <Loading label={t.tracks.searchingDiskShort} />}
         {hits && hits.length === 0 && !searching && (
           <p className="text-sm text-faint">
-            Nessun file trovato: prova con meno parole o incolla il percorso qui sotto.
+            {t.tracks.noFileFound}
           </p>
         )}
         {hits && hits.length > 0 && (
@@ -118,7 +120,7 @@ function LinkDialog({ target, onClose, onLinked }: {
                   </div>
                 </div>
                 <Button size="sm" onClick={() => link(h.path)} disabled={linking}>
-                  {linking ? <Spinner /> : <Link2 size={13} />} Collega
+                  {linking ? <Spinner /> : <Link2 size={13} />} {t.tracks.linkAction}
                 </Button>
               </li>
             ))}
@@ -127,17 +129,17 @@ function LinkDialog({ target, onClose, onLinked }: {
 
         <div className="border-t border-border pt-3">
           <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted">
-            Percorso esatto
+            {t.tracks.exactPathLabel}
           </div>
           <div className="flex items-center gap-2">
             <Input
               value={manualPath}
               onChange={(e) => setManualPath(e.target.value)}
-              placeholder="/percorso/assoluto/del/file.mp3"
+              placeholder={t.tracks.exactPathPlaceholder}
             />
             <Button variant="outline" onClick={() => link(manualPath.trim())}
               disabled={linking || !manualPath.trim()}>
-              <Link2 size={14} /> Collega
+              <Link2 size={14} /> {t.tracks.linkAction}
             </Button>
           </div>
         </div>

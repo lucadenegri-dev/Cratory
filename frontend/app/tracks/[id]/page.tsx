@@ -9,8 +9,9 @@ import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { TrackCover } from "@/components/track-cover";
 import { LinkLocalFileModal } from "@/components/link-local-file-modal";
+import { useT } from "@/lib/i18n";
 
-function TransitionList({ title, items }: { title: string; items: TransitionCandidate[] }) {
+function TransitionList({ title, items, emptyLabel }: { title: string; items: TransitionCandidate[]; emptyLabel: string }) {
   return (
     <Card>
       <CardHeader title={title} />
@@ -22,13 +23,14 @@ function TransitionList({ title, items }: { title: string; items: TransitionCand
             <span className="tnum shrink-0 text-xs text-faint">{track.bpm?.toFixed(0)} · {track.camelot_key ?? "?"}</span>
           </li>
         ))}
-        {items.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted">Nessuna traccia.</li>}
+        {items.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted">{emptyLabel}</li>}
       </ul>
     </Card>
   );
 }
 
 export default function TrackPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = useT();
   const { id } = use(params);
   const [track, setTrack] = useState<TrackDetail | null>(null);
   const [after, setAfter] = useState<TransitionCandidate[]>([]);
@@ -43,39 +45,39 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
     apiGet<TransitionCandidate[]>(`/api/transitions/before/${id}`, { limit: 8 }).then(setBefore).catch(() => {});
   }, [id]);
 
-  if (error) return <PageLayout title="Traccia"><Alert tone="danger">⚠ {error}</Alert></PageLayout>;
-  if (!track) return <PageLayout title="Traccia"><Loading /></PageLayout>;
+  if (error) return <PageLayout title={t.tracks.pageTitle}><Alert tone="danger">⚠ {error}</Alert></PageLayout>;
+  if (!track) return <PageLayout title={t.tracks.pageTitle}><Loading /></PageLayout>;
 
   const rows: Array<[string, React.ReactNode]> = [
-    ["Album", track.album ?? "—"], ["Genere", track.genre ?? "—"], ["Anno", track.year ?? "—"],
-    ["BPM", track.bpm?.toFixed(2) ?? "—"], ["Key (Camelot)", track.camelot_key ?? "—"], ["Durata", fmtDuration(track.duration_seconds)],
-    ["Energia", track.energy ?? "—"], ["Label", track.label ?? "—"],
-    ["Sorgente", track.source_type], ["ISRC", track.isrc ?? "—"], ["Stato", track.status],
+    ["Album", track.album ?? "—"], [t.tracks.rowGenre, track.genre ?? "—"], [t.tracks.rowYear, track.year ?? "—"],
+    ["BPM", track.bpm?.toFixed(2) ?? "—"], ["Key (Camelot)", track.camelot_key ?? "—"], [t.tracks.rowDuration, fmtDuration(track.duration_seconds)],
+    [t.tracks.rowEnergy, track.energy ?? "—"], [t.tracks.rowLabel, track.label ?? "—"],
+    [t.tracks.rowSource, track.source_type], ["ISRC", track.isrc ?? "—"], [t.tracks.rowStatus, track.status],
     ["Playlist", track.playlists.length ? track.playlists.map((p) => p.name).join(", ") : "—"],
   ];
 
   const marginalia = (
     <div className="space-y-4">
       <div className="flex flex-col gap-2">
-        <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> Modifica valori</Button>
+        <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> {t.tracks.editValues}</Button>
       </div>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
-        <div className="flex justify-between gap-2"><span className="text-muted">Sorgente</span><span className="text-fg">{track.source_type}</span></div>
-        <div className="flex justify-between gap-2"><span className="text-muted">Stato</span><span className="text-fg">{track.status}</span></div>
-        <div className="flex justify-between gap-2"><span className="text-muted">Label</span><span className="truncate text-fg">{track.label ?? "—"}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.tracks.rowSource}</span><span className="text-fg">{track.source_type}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.tracks.rowStatus}</span><span className="text-fg">{track.status}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.tracks.rowLabel}</span><span className="truncate text-fg">{track.label ?? "—"}</span></div>
       </div>
     </div>
   );
 
   return (
-    <PageLayout title="Traccia" meta={track.artist ?? undefined} marginaliaTitle="Dettagli" marginalia={marginalia}>
-      <Link href="/library" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Libreria</Link>
+    <PageLayout title={t.tracks.pageTitle} meta={track.artist ?? undefined} marginaliaTitle={t.tracks.detailsTitle} marginalia={marginalia}>
+      <Link href="/library" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.nav.library}</Link>
 
       <div className="mb-6 flex items-center gap-4">
         <TrackCover track={track} className="h-20 w-20" iconSize={28} />
         <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold tracking-tight">{track.title ?? <span className="italic text-faint">Senza titolo</span>}</h1>
-          <p className="text-muted">{track.artist ?? "Artista sconosciuto"}</p>
+          <h1 className="truncate text-2xl font-semibold tracking-tight">{track.title ?? <span className="italic text-faint">{t.tracks.untitledHeading}</span>}</h1>
+          <p className="text-muted">{track.artist ?? t.tracks.unknownArtist}</p>
           {track.spotify_url && (
             <a href={track.spotify_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex"><Button size="sm" variant="outline"><ExternalLink size={14} /> Spotify</Button></a>
           )}
@@ -86,7 +88,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
       </div>
 
       <Card>
-        <CardHeader title="Metadata" />
+        <CardHeader title={t.tracks.metadataTitle} />
         <table className="w-full text-sm">
           <tbody>
             {rows.map(([k, v]) => (
@@ -102,21 +104,21 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
       <div className="mt-6">
         <Card>
           <CardHeader
-            title="Disco"
+            title={t.tracks.diskCardTitle}
             action={
               <Button size="sm" variant="outline" onClick={() => setLinking(true)}>
-                <Link2 size={14} /> {track.has_local_file ? "Sostituisci file" : "Collega file"}
+                <Link2 size={14} /> {track.has_local_file ? t.tracks.replaceFile : t.tracks.linkFile}
               </Button>
             }
           />
           <table className="w-full text-sm">
             <tbody>
               <tr className="border-b border-border/50 last:border-0">
-                <td className="px-4 py-2 text-muted">Stato</td>
+                <td className="px-4 py-2 text-muted">{t.tracks.rowStatus}</td>
                 <td className="px-4 py-2 text-right">
-                  {track.has_local_file ? <Badge tone="success">Posseduta</Badge>
-                    : track.archived ? <Badge tone="warning">Scartata</Badge>
-                    : <Badge tone="neutral">Senza file</Badge>}
+                  {track.has_local_file ? <Badge tone="success">{t.tracks.badgeOwned}</Badge>
+                    : track.archived ? <Badge tone="warning">{t.tracks.badgeArchived}</Badge>
+                    : <Badge tone="neutral">{t.tracks.badgeNoFile}</Badge>}
                 </td>
               </tr>
               {track.local_path && (
@@ -127,7 +129,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
               )}
               {track.local_format && (
                 <tr className="border-b border-border/50 last:border-0">
-                  <td className="px-4 py-2 text-muted">Formato</td>
+                  <td className="px-4 py-2 text-muted">{t.tracks.rowFormat}</td>
                   <td className="px-4 py-2 tnum text-right">
                     {track.local_format.toUpperCase()}{track.local_bitrate ? ` · ${track.local_bitrate} kbps` : ""}
                   </td>
@@ -138,10 +140,10 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
         </Card>
       </div>
 
-      <h2 className="mb-3 mt-8 flex items-center gap-2 text-lg font-semibold tracking-tight"><ArrowRightLeft size={18} className="text-muted" /> Transizioni</h2>
+      <h2 className="mb-3 mt-8 flex items-center gap-2 text-lg font-semibold tracking-tight"><ArrowRightLeft size={18} className="text-muted" /> {t.tracks.transitionsHeading}</h2>
       <div className="grid gap-4 lg:grid-cols-2">
-        <TransitionList title="Cosa mettere prima" items={before} />
-        <TransitionList title="Cosa mettere dopo" items={after} />
+        <TransitionList title={t.tracks.beforeHeading} items={before} emptyLabel={t.tracks.noTransitions} />
+        <TransitionList title={t.tracks.afterHeading} items={after} emptyLabel={t.tracks.noTransitions} />
       </div>
 
       <TrackEditModal
