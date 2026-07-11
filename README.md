@@ -13,7 +13,7 @@ squadrato). Le due app non comunicano via rete: l'unica interfaccia tra loro è 
 
 ## Stato
 
-Operativo end-to-end, oltre 240 test backend verdi. Pipeline completa:
+Operativo end-to-end, oltre 290 test backend verdi. Pipeline completa:
 `Sources → scan → Issues → Duplicates → Plan → Apply → History (undo)` + `Settings`.
 Owner unico dei metadati testuali (Titolo/Artista/Album/Label/Genere/Anno): li pulisce,
 li arricchisce da provider esterni e ne certifica l'identità via fingerprint acustico.
@@ -21,6 +21,16 @@ li arricchisce da provider esterni e ne certifica l'identità via fingerprint ac
 Interfaccia: pipeline a pagine con una **Guida** contestuale nel riepilogo di ognuna;
 i job lunghi (scan, apply, ricerca provider) mostrano una **barra di progresso** fissa
 in basso.
+
+## Lingua (IT/EN)
+
+App bilingue italiano/inglese, con toggle in **Settings** (default **inglese**). La
+lingua è persistita lato backend (`Settings.language`, `GET/PUT /api/settings/language`)
+e mirrorata in `localStorage` per evitare il flash al primo render. Il dizionario è un
+modulo TypeScript fatto in casa (`frontend/lib/i18n/`, EN fonte di verità, IT tipizzato
+contro EN: chiave mancante = errore di compilazione). Gli errori del backend viaggiano
+come **codici stabili** (`{code, message, params}` via `app/core/http_errors.api_error`)
+e vengono tradotti nel frontend, così il backend resta language-agnostic.
 
 ## Posto nella catena
 
