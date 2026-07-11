@@ -7,7 +7,7 @@ import {
 } from "@/lib/api";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, Button } from "@/components/ui";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, useT } from "@/lib/i18n";
 
 // Valori d'esempio per l'anteprima client-side (approssimata: la resa reale con
 // sanitizzazione è lato planner).
@@ -24,8 +24,8 @@ function preview(tpl: string): string {
 // cartelle + template nome, con i tag SAMPLE. Serve a mostrare "dove finisce"
 // davvero un file (anteprima approssimata; la resa reale è lato planner).
 const SAMPLE_SOURCE = "…/Downloads/ANNA - Hidden Beauties.wav";
-function renderDest(targetRoot: string, folder: string, naming: string): string {
-  const base = targetRoot.trim() || "(stessa cartella del file)";
+function renderDest(targetRoot: string, folder: string, naming: string, sameFolderLabel: string): string {
+  const base = targetRoot.trim() || sameFolderLabel;
   const folderPart = folder.trim() ? `${preview(folder)}/` : "";
   const namePart = preview(naming) || "{artist} - {title}";
   return `${base}/${folderPart}${namePart}.flac`;
@@ -56,18 +56,18 @@ export default function SettingsPage() {
   const saveTemplates = async () => {
     setError(null);
     try { setSettings(await updateSettings({ naming_template: naming, folder_template: folder })); }
-    catch (e) { setError(e instanceof Error ? e.message : "Errore"); }
+    catch (e) { setError(e instanceof Error ? e.message : t.common.error); }
   };
   const saveTarget = async (rootId: number, target: string) => {
     setError(null);
     try { setSettings(await setRootTarget(rootId, target.trim() || null)); }
-    catch (e) { setError(e instanceof Error ? e.message : "Errore"); }
+    catch (e) { setError(e instanceof Error ? e.message : t.common.error); }
   };
   const onIdentify = async () => {
     setError(null);
     setFpBusy(true);
     try { setFpResult(await runFingerprint()); }
-    catch (e) { setError(e instanceof Error ? e.message : "Errore"); }
+    catch (e) { setError(e instanceof Error ? e.message : t.common.error); }
     finally { setFpBusy(false); }
   };
 
@@ -75,9 +75,9 @@ export default function SettingsPage() {
     <PageLayout
       title="Settings"
       guide={<>
-        <p>Come vengono nominati e organizzati i file quando applichi il PLAN.</p>
-        <p><b className="text-fg">Template</b> nome/cartelle + <b className="text-fg">destinazione</b> per radice.</p>
-        <p>Sotto, lo stato dei <b className="text-fg">provider</b> (chiavi in backend/.env).</p>
+        <p>{t.settings.guideL1}</p>
+        <p><b className="text-fg">{t.settings.guideTemplate}</b>{t.settings.guideL2mid}<b className="text-fg">{t.settings.guideDestination}</b>{t.settings.guideL2post}</p>
+        <p>{t.settings.guideProviderPre}<b className="text-fg">{t.settings.guideProvider}</b>{t.settings.guideProviderPost}</p>
       </>}
     >
       <div className="flex max-w-2xl flex-col gap-6">
@@ -95,54 +95,52 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {offline && <Alert>Backend non raggiungibile. Avvia il server FastAPI.</Alert>}
+        {offline && <Alert>{t.common.backendOffline}</Alert>}
         {error && <Alert>{error}</Alert>}
 
         {settings && (
           <>
             <section className="flex flex-col gap-4">
               <div>
-                <h2 className="text-sm font-medium text-fg-strong">Organizzazione</h2>
+                <h2 className="text-sm font-medium text-fg-strong">{t.settings.organization}</h2>
                 <p className="mt-1 text-xs text-faint">
-                  Applicando un PLAN ogni file viene spostato e rinominato in base a tre cose:
-                  <b className="text-muted"> dove</b> finisce (destinazione per radice, in fondo),
-                  in quali <b className="text-muted">sottocartelle</b> (template cartelle) e con che
-                  <b className="text-muted"> nome</b> (template nome file).
+                  {t.settings.orgIntroA}
+                  <b className="text-muted">{t.settings.orgWhere}</b>{t.settings.orgIntroB}
+                  <b className="text-muted">{t.settings.orgSubfolders}</b>{t.settings.orgIntroC}
+                  <b className="text-muted">{t.settings.orgName}</b>{t.settings.orgIntroD}
                 </p>
               </div>
 
               <label className="block">
-                <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">template nome file</span>
+                <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">{t.settings.tplNameLabel}</span>
                 <input className="w-full border border-border bg-surface px-3 py-2 text-sm text-fg-strong focus:border-border-strong focus:outline-none"
                   value={naming} onChange={(e) => setNaming(e.target.value)} />
-                <span className="mt-1.5 block text-xs text-faint">campi: <span className="font-mono">{"{artist} {title} {album} {genre} {year} {label} {track_no}"}</span></span>
+                <span className="mt-1.5 block text-xs text-faint">{t.settings.fieldsLabel} <span className="font-mono">{"{artist} {title} {album} {genre} {year} {label} {track_no}"}</span></span>
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">template cartelle</span>
+                <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">{t.settings.tplFolderLabel}</span>
                 <input className="w-full border border-border bg-surface px-3 py-2 text-sm text-fg-strong focus:border-border-strong focus:outline-none"
                   value={folder} onChange={(e) => setFolder(e.target.value)} />
-                <span className="mt-1.5 block text-xs text-faint">{folder.trim() ? <>sottocartelle: <span className="text-ok">{preview(folder)}/</span></> : "vuoto = niente sottocartelle"}</span>
+                <span className="mt-1.5 block text-xs text-faint">{folder.trim() ? <>{t.settings.subfoldersLabel} <span className="text-ok">{preview(folder)}/</span></> : t.settings.noSubfolders}</span>
               </label>
 
               <div className="border border-border bg-surface p-3">
-                <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted">anteprima percorso</div>
+                <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted">{t.settings.pathPreview}</div>
                 <div className="overflow-x-auto whitespace-nowrap font-mono text-[11px] leading-relaxed">
                   <div className="text-faint">{SAMPLE_SOURCE}</div>
                   <div className="text-muted">↓</div>
-                  <div className="text-ok">{renderDest(settings.roots[0]?.target_root ?? "", folder, naming)}</div>
+                  <div className="text-ok">{renderDest(settings.roots[0]?.target_root ?? "", folder, naming, t.settings.sameFolder)}</div>
                 </div>
-                <p className="mt-1.5 text-[10px] text-faint">esempio con la destinazione della prima radice — ognuna può avere la sua (sotto).</p>
+                <p className="mt-1.5 text-[10px] text-faint">{t.settings.previewHint}</p>
               </div>
 
-              <Button variant="outline" size="sm" className="self-start" onClick={saveTemplates}>salva template</Button>
+              <Button variant="outline" size="sm" className="self-start" onClick={saveTemplates}>{t.settings.saveTemplates}</Button>
 
               <div>
-                <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">dove organizzare — una destinazione per radice</div>
+                <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">{t.settings.whereToOrganize}</div>
                 <p className="mb-3 text-xs text-faint">
-                  Una <b className="text-muted">radice</b> è una cartella che hai aggiunto in <b className="text-muted">Sources</b> e che
-                  Sortory scansiona. Per ognuna imposti una <b className="text-muted">destinazione</b>: dove spostare i suoi file
-                  una volta organizzati. Lascia <b className="text-muted">vuoto</b> per tenerli dove sono (solo rinomina, niente spostamento).
+                  {t.settings.rootExplainA}<b className="text-muted">{t.settings.rootExplainRoot}</b>{t.settings.rootExplainB}<b className="text-muted">{t.settings.rootExplainSources}</b>{t.settings.rootExplainC}<b className="text-muted">{t.settings.rootExplainDest}</b>{t.settings.rootExplainD}<b className="text-muted">{t.settings.rootExplainEmpty}</b>{t.settings.rootExplainE}
                 </p>
                 <div className="flex flex-col gap-3">
                   {settings.roots.map((r) => (
@@ -163,7 +161,8 @@ export default function SettingsPage() {
 }
 
 function StatusBadge({ status }: { status: ProviderInfo["status"] }) {
-  const label = status === "configured" ? "configurato" : status === "connected" ? "collegato" : "mancante";
+  const t = useT();
+  const label = status === "configured" ? t.settings.statusConfigured : status === "connected" ? t.settings.statusConnected : t.settings.statusMissing;
   return (
     <span className={`shrink-0 text-[10px] uppercase tracking-wider ${status === "missing" ? "text-faint" : "text-ok"}`}>
       {label}
@@ -177,10 +176,11 @@ function ProviderList({ providers, fpResult, fpBusy, onIdentify }: {
   fpBusy: boolean;
   onIdentify: () => void;
 }) {
+  const t = useT();
   return (
     <section>
-      <h2 className="text-sm font-medium text-fg-strong">Provider</h2>
-      <p className="mt-1 text-xs text-faint">Chiavi e binari nel file <span className="font-mono">backend/.env</span> (o nel PATH per fpcalc).</p>
+      <h2 className="text-sm font-medium text-fg-strong">{t.settings.providerTitle}</h2>
+      <p className="mt-1 text-xs text-faint">{t.settings.providerHintPre}<span className="font-mono">backend/.env</span>{t.settings.providerHintPost}</p>
       <div className="mt-3 flex flex-col">
         {providers.map((p, i) => (
           <div key={p.key} className="border-t border-border py-4 first:border-t-0">
@@ -189,9 +189,9 @@ function ProviderList({ providers, fpResult, fpBusy, onIdentify }: {
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                   <span className="tnum text-[11px] text-faint">{String(i + 1).padStart(2, "0")}</span>
                   <span className="text-sm font-medium uppercase tracking-wide text-fg-strong">{p.name}</span>
-                  <span className="text-[10px] uppercase tracking-wider text-muted">{p.category}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-muted">{t.settings.providersMeta[p.key]?.category ?? p.category}</span>
                 </div>
-                <p className="mt-1 max-w-xl text-xs text-faint">{p.description}</p>
+                <p className="mt-1 max-w-xl text-xs text-faint">{t.settings.providersMeta[p.key]?.description ?? p.description}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   {p.env_vars.map((v) => (
                     <code key={v} className="border border-border bg-bg px-1.5 py-0.5 font-mono text-[10px] text-muted">{v}</code>
@@ -201,13 +201,12 @@ function ProviderList({ providers, fpResult, fpBusy, onIdentify }: {
                     <button
                       onClick={onIdentify} disabled={fpBusy}
                       className="border border-border px-1.5 py-0.5 text-[10px] text-fg hover:bg-elevated disabled:opacity-40"
-                    >{fpBusy ? "identificazione…" : "identifica ora"}</button>
+                    >{fpBusy ? t.settings.identifyBusy : t.settings.identifyNow}</button>
                   )}
                 </div>
                 {p.key === "acoustid" && fpResult && (
                   <p className="mt-1.5 text-[10px] text-faint">
-                    {fpResult.identified} identificati, {fpResult.below_threshold} sotto soglia, {fpResult.not_found} non trovati
-                    {fpResult.errors > 0 ? `, ${fpResult.errors} errori` : ""} (su {fpResult.total}).
+                    {t.settings.fpResult(fpResult.identified, fpResult.below_threshold, fpResult.not_found, fpResult.errors, fpResult.total)}
                   </p>
                 )}
               </div>
@@ -226,6 +225,7 @@ function RootRow({ root, folder, naming, onSave }: {
   naming: string;
   onSave: (rootId: number, target: string) => Promise<void>;
 }) {
+  const t = useT();
   const [savedTargetRoot, setSavedTargetRoot] = useState(root.target_root);
   const [target, setTarget] = useState(root.target_root ?? "");
   const [busy, setBusy] = useState(false);
@@ -238,26 +238,26 @@ function RootRow({ root, folder, naming, onSave }: {
   return (
     <div className="border border-border bg-surface p-3">
       <div className="flex flex-col gap-1">
-        <span className="text-[9px] font-medium uppercase tracking-wider text-muted">sorgente — cartella scansionata (da Sources)</span>
+        <span className="text-[9px] font-medium uppercase tracking-wider text-muted">{t.settings.rowSource}</span>
         <div className="truncate font-mono text-xs text-fg-strong" title={root.path}>{root.path}</div>
         {root.label && <div className="text-[10px] text-muted">{root.label}</div>}
       </div>
 
       <div className="mt-2.5 flex flex-col gap-1">
-        <span className="text-[9px] font-medium uppercase tracking-wider text-muted">destinazione — dove spostare i file organizzati</span>
+        <span className="text-[9px] font-medium uppercase tracking-wider text-muted">{t.settings.rowDestination}</span>
         <div className="flex items-center gap-2">
           <input
             className="w-full max-w-md border border-border bg-bg px-2 py-1 font-mono text-[11px] text-fg placeholder:text-faint focus:border-border-strong focus:outline-none"
             value={target} onChange={(e) => setTarget(e.target.value)}
-            placeholder="vuoto = restano nella cartella sorgente (solo rinomina)"
+            placeholder={t.settings.targetPlaceholder}
           />
-          <Button variant="outline" size="sm" disabled={busy} onClick={save}>salva</Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={save}>{t.settings.save}</Button>
         </div>
       </div>
 
       <div className="mt-2 overflow-x-auto whitespace-nowrap text-[10px] text-faint">
-        {moves ? "un file di questa radice diventa:" : "esempio (rinominato sul posto):"}{" "}
-        <span className="font-mono text-ok">{renderDest(target, folder, naming)}</span>
+        {moves ? t.settings.fileBecomes : t.settings.exampleInPlace}{" "}
+        <span className="font-mono text-ok">{renderDest(target, folder, naming, t.settings.sameFolder)}</span>
       </div>
     </div>
   );
