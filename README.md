@@ -1,105 +1,154 @@
 # Sortory
 
-Tool personale, locale e standalone per **organizzare** le cartelle di musica sul disco
-e prepararle all'import in **Rekordbox**: pulizia tag/metadata, arricchimento da
-provider esterni, rinomina file e struttura cartelle, deduplica e quality check.
+Personal, local, standalone tool to **organize** music folders on disk and
+prepare them for import into **Rekordbox**: tag/metadata cleanup, enrichment from
+external providers, file renaming and folder structuring, deduplication and
+quality checks.
 
-Non riproduce audio, non conserva audio e **non analizza BPM/key** (quello lo fa
-Rekordbox).
+It does not play audio, does not store audio, and **does not analyze BPM/key**
+(Rekordbox does that).
 
-App separata da **Cratory**, con cui condivide il design system (monospace, editoriale,
-squadrato). Le due app non comunicano via rete: l'unica interfaccia tra loro è il disco
-(i tag dei file in `Libreria/`). Sortory funziona sempre al 100% da solo.
+A separate app from **Cratory**, with which it shares the design system
+(monospace, editorial, square). The two apps never talk over the network: the
+only interface between them is the disk (the file tags in `Library/`). Sortory
+always works 100% on its own.
 
-## Stato
+> Formerly named **DjOrganizer**. Some historical identifiers were kept for
+> stability: the local folder (`DjOrganizer01`), the `DJORG_` env-var prefix, and
+> the SQLite file (`djorganizer.db`). See [CLAUDE.md](CLAUDE.md).
 
-Operativo end-to-end, oltre 240 test backend verdi. Pipeline completa:
-`Sources → scan → Issues → Duplicates → Plan → Apply → History (undo)` + `Settings`.
-Owner unico dei metadati testuali (Titolo/Artista/Album/Label/Genere/Anno): li pulisce,
-li arricchisce da provider esterni e ne certifica l'identità via fingerprint acustico.
+## Status
 
-Interfaccia: pipeline a pagine con una **Guida** contestuale nel riepilogo di ognuna;
-i job lunghi (scan, apply, ricerca provider) mostrano una **barra di progresso** fissa
-in basso.
+Operational end-to-end, ~295 backend tests green. Full pipeline:
+`Sources → scan → Issues → Duplicates → Plan → Apply → History (undo)` +
+`Settings`. Single owner of the textual metadata (Title/Artist/Album/Label/
+Genre/Year): it cleans them, enriches them from external providers, and certifies
+their identity via acoustic fingerprint.
 
-## Posto nella catena
+Interface: a page-based pipeline with a contextual **Guide** in each page's
+summary; long jobs (scan, apply, provider search) show a fixed **progress bar**
+at the bottom.
 
-`Downloads/` → **Sortory** → `Libreria/{genere}/{artist}/Artist - Title.ext` → Rekordbox.
-Unico scrittore dei tag dell'ecosistema.
+The UI is bilingual **English / Italian** (English is the default); switch the
+language in **Settings**. See [Internationalization](#internationalization).
 
-## Owner dei metadati testuali
+## Place in the chain
 
-Sortory è l'unico punto dell'ecosistema che scrive Titolo, Artista, Album, Label, Genere
-e Anno nei tag dei file. Catena di precedenza, dalla più alla meno autorevole:
+`Downloads/` → **Sortory** → `Library/{genre}/{artist}/Artist - Title.ext` →
+Rekordbox. The only tag writer in the ecosystem.
+
+## Textual metadata ownership
+
+Sortory is the only point in the ecosystem that writes Title, Artist, Album,
+Label, Genre and Year into file tags. Precedence chain, most → least
+authoritative:
 
 ```
-manuale > tag pulito del file > provider (fingerprint > testuale) > AI dal nome file
+manual > cleaned file tag > provider (fingerprint > text) > AI from filename
 ```
 
-Ogni suggerimento salvato in `Issue.suggested_fix_json` porta un marker `source`
-(`"provider"` | `"ai"`) e, per il provider, una `confidence` (`"high"` = match certo via
-MBID/ISRC, `"text"` = match testuale, da rivedere). Un fix manuale chiude subito l'issue
-(`accepted`), fuori dalla competizione. Tra i suggerimenti aperti il provider sovrascrive
-AI e legacy; l'AI non tocca mai un suggerimento già `provider`. Nessuna sovrascrittura
-silenziosa: i conflitti restano issue aperte finché non li accetti tu.
+Every suggestion saved in `Issue.suggested_fix_json` carries a `source` marker
+(`"provider"` | `"ai"`) and, for providers, a `confidence` (`"high"` = certain
+match via MBID/ISRC, `"text"` = textual match, to review). A manual fix closes
+the issue immediately (`accepted`), out of competition. Among open suggestions
+the provider overwrites AI and legacy; AI never touches a suggestion already
+marked `provider`. No silent overwrites: conflicts stay open issues until you
+accept them yourself.
 
-### Azioni nella pagina Issues
+### Actions on the Issues page
 
-- **Recupera Artista/Titolo con AI** (`/api/issues/ai-suggest`) — Claude Haiku ricava
-  artista/titolo dal nome file. Manuale.
-- **Recupera Genere con AI** (`/api/issues/ai-suggest-genre`) — Haiku propone il genere
-  principale da artista+titolo. Bassa confidenza, da rivedere.
-- **Importa metadati mancanti da Provider** (`/api/issues/provider-suggest`) —
-  **fingerprint-first**: se il file non ha `mbid` e AcoustID è configurato, lo
-  fingerprinta prima della lookup MusicBrainz→Discogs → match esatto e confidenza `high`;
-  altrimenti match testuale. Riempie solo le issue aperte, non accetta mai da solo.
-- **Importa tutti i metadati da Provider** (`/api/issues/provider-rescan`) — ricerca
-  provider **per traccia** (non per-issue): reinterroga i provider su tracce **già
-  taggate** per riclassificare la libreria, creando issue sintetiche `provider_override`
-  (con confidenza) solo dove il valore differisce da quello sul file. Gira come **job in
-  background** con progress; filtrabile per cartella/genere e per campo
-  (`genre/album/label/year`); un pop-up chiede se riconsiderare anche le proposte già
-  accettate/ignorate.
-- **Accetta tutti alta confidenza** (`/api/issues/provider-override/accept-high`) — accetta
-  in blocco le override `high`. Più *accetta fixabili* / *ignora info* per le azioni di massa.
+- **Resolve Artist/Title with AI** (`/api/issues/ai-suggest`) — Claude Haiku
+  derives artist/title from the filename. Manual.
+- **Resolve Genre with AI** (`/api/issues/ai-suggest-genre`) — Haiku proposes the
+  primary genre from artist+title. Low confidence, to review.
+- **Import missing metadata from Providers** (`/api/issues/provider-suggest`) —
+  **fingerprint-first**: if the file has no `mbid` and AcoustID is configured, it
+  fingerprints before the MusicBrainz→Discogs lookup → exact match and `high`
+  confidence; otherwise a textual match. Fills only open issues, never accepts on
+  its own.
+- **Import all metadata from Providers** (`/api/issues/provider-rescan`) —
+  provider search **per track** (not per-issue): re-queries providers on
+  **already-tagged** tracks to reclassify the library, creating synthetic
+  `provider_override` issues (with confidence) only where the value differs from
+  the one on the file. Runs as a **background job** with progress; filterable by
+  folder/genre and by field (`genre/album/label/year`); a pop-up asks whether to
+  reconsider already accepted/ignored proposals too.
+- **Accept all high confidence** (`/api/issues/provider-override/accept-high`) —
+  bulk-accepts `high` overrides. Plus *accept fixable* / *ignore info* for bulk
+  actions.
 
-## Fingerprint acustico (AcoustID)
+## Acoustic fingerprint (AcoustID)
 
-`POST /api/fingerprint` calcola l'impronta acustica dei file (via `fpcalc`/Chromaprint) e
-la confronta col database AcoustID per risolvere un `AudioFile.mbid` certo. È usato anche
-automaticamente da *Importa metadati mancanti/tutti da Provider* (fingerprint-first).
-`GET /api/fingerprint/status` riporta se la feature è configurata (chiave AcoustID +
-binario `fpcalc`). Senza, tutto degrada in modo pulito (solo match testuale) e la pipeline
-continua a funzionare.
+`POST /api/fingerprint` computes the acoustic fingerprint of files (via
+`fpcalc`/Chromaprint) and matches them against the AcoustID database to resolve a
+certain `AudioFile.mbid`. It is also used automatically by *Import missing/all
+metadata from Providers* (fingerprint-first). `GET /api/fingerprint/status`
+reports whether the feature is configured (AcoustID key + `fpcalc` binary).
+Without it, everything degrades cleanly (textual match only) and the pipeline
+keeps working.
 
-## Provider e stato
+## Providers and status
 
-`GET /api/providers` elenca i provider (MusicBrainz, Discogs, AcoustID/Chromaprint,
-Anthropic) con categoria, env-var, docs e stato (`configured`/`connected`/`missing`),
-mostrati nella pagina **Settings** in stile uniforme a Cratory.
+`GET /api/providers` lists the providers (MusicBrainz, Discogs,
+AcoustID/Chromaprint, Anthropic) with category, env-var, docs and status
+(`configured`/`connected`/`missing`), shown on the **Settings** page in a style
+uniform with Cratory.
 
-## Pagina Files
+## Files page
 
-`/api/files` filtra per tag (`genre/artist/album/label/ext/year`) e cerca per
-path/artista/titolo; `GET /api/library/facets` fornisce i valori distinti per i filtri.
+`/api/files` filters by tag (`genre/artist/album/label/ext/year`) and searches by
+path/artist/title; `GET /api/library/facets` provides the distinct values for the
+filters.
 
-## Configurazione (`.env`)
+## Configuration (`.env`)
 
-Copia `backend/.env.example` in `backend/.env` e compila (le env-var mantengono il prefisso
-storico `DJORG_`):
+Copy `backend/.env.example` to `backend/.env` and fill it in (env-vars keep the
+historical `DJORG_` prefix):
 
-- `DJORG_DATABASE_URL` — DB SQLite locale (default `./data/djorganizer.db`).
-- `ANTHROPIC_API_KEY` — chiave Anthropic per le azioni AI (Claude Haiku). Non ha prefisso
-  `DJORG_`. Senza, i bottoni AI restano disabilitati.
-- `DJORG_MUSICBRAINZ_USER_AGENT` — nessuna chiave richiesta, ma serve uno User-Agent
-  identificabile: mettici un contatto reale (email o URL).
-- `DJORG_DISCOGS_TOKEN` — opzionale: funziona anche senza (~25 req/min), con token gratuito
-  sale a ~60/min. Si genera su discogs.com/settings/developers.
-- `DJORG_ACOUSTID_API_KEY` — chiave gratuita da acoustid.org/new-application. Serve anche il
-  binario `fpcalc`: `brew install chromaprint`.
+- `DJORG_DATABASE_URL` — local SQLite DB (default `./data/djorganizer.db`).
+- `ANTHROPIC_API_KEY` — Anthropic key for the AI actions (Claude Haiku). No
+  `DJORG_` prefix. Without it, the AI buttons stay disabled.
+- `DJORG_MUSICBRAINZ_USER_AGENT` — no key required, but an identifiable
+  User-Agent is needed: put a real contact (email or URL).
+- `DJORG_DISCOGS_TOKEN` — optional: works without it (~25 req/min), a free token
+  raises it to ~60/min. Generate one at discogs.com/settings/developers.
+- `DJORG_ACOUSTID_API_KEY` — free key from acoustid.org/new-application. Also
+  needs the `fpcalc` binary: `brew install chromaprint`.
 
-## Principio di sicurezza
+See [DEPENDENCIES.md](DEPENDENCIES.md) for the full dependency list.
 
-Ogni operazione sui file è prima un **piano** che approvi. Le modifiche sono in-place ma
-reversibili: i delete vanno in **quarantena** (mai hard-delete) e ogni run scrive un
-**undo journal** per annullare tutto.
+## Internationalization
+
+The UI ships in **English (default)** and **Italian**. The chosen language is
+persisted per-user in the backend (`Settings.language`, endpoints
+`GET/PUT /api/settings/language`) and mirrored to `localStorage` to avoid a flash
+on load. Dictionaries live in `frontend/lib/i18n/` — `en.ts` is the source of
+truth for keys and `it.ts` is typed against it, so a missing translation is a
+compile error.
+
+## Running
+
+Backend (from `backend/`):
+
+```bash
+python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/uvicorn app.main:app --reload --port 8010
+```
+
+Frontend (from `frontend/`):
+
+```bash
+npm install && npm run dev
+```
+
+Tests (use the venv — the code needs Python 3.11):
+
+```bash
+backend/.venv/bin/python -m pytest backend/tests -q
+```
+
+## Safety principle
+
+Every file operation is first a **plan** you approve. Changes are in-place but
+reversible: deletes go to **quarantine** (never hard-delete) and every run writes
+an **undo journal** to roll everything back.
