@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/transitions", tags=["transitions"])
 
 
 def _score_out(from_track: Track, to_track: Track, lang: str = "it") -> TransitionScoreOut:
-    ts = score_transition(from_track, to_track)
+    ts = score_transition(from_track, to_track, lang)
     cls = classify_transition(from_track, to_track, lang)
     return TransitionScoreOut(
         score=ts.score, technical_reasons=ts.technical_reasons, warnings=ts.warnings,

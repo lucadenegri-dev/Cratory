@@ -4,7 +4,12 @@ il frontend da `label`, il codice).
 """
 
 from app.models import Track
-from app.services.scoring import classify_transition, mixing_overview, mixing_tip
+from app.services.scoring import (
+    classify_transition,
+    mixing_overview,
+    mixing_tip,
+    score_transition,
+)
 
 
 def make_track(bpm=None, key=None, duration=300, energy=None, genre=None) -> Track:
@@ -62,6 +67,33 @@ def test_mixing_tip_en_missing_bpm():
     assert tip_it != tip_en
     assert "sincronizza a orecchio" in tip_it
     assert "sync by ear" in tip_en
+
+
+def test_score_transition_reasons_en():
+    a = make_track(bpm=130, key="7A")
+    b = make_track(bpm=131, key="7A")
+    it = score_transition(a, b)
+    en = score_transition(a, b, lang="en")
+    assert it.score == en.score                       # lo score numerico non dipende dalla lingua
+    assert it.technical_reasons != en.technical_reasons
+
+
+def test_score_transition_warnings_en():
+    # salto BPM grosso + key debole + traccia in entrata corta: warnings garantiti
+    a = make_track(bpm=130, key="7A")
+    b = make_track(bpm=150, key="2B", duration=40)
+    it = score_transition(a, b)
+    en = score_transition(a, b, lang="en")
+    assert it.score == en.score
+    assert it.warnings and en.warnings
+    assert it.warnings != en.warnings
+    assert any("BPM" in w for w in en.warnings)       # il codice BPM resta nel testo EN
+
+
+def test_score_transition_score_stable_across_langs():
+    a = make_track(bpm=128, key="8A", duration=300)
+    b = make_track(bpm=133, key="10A", duration=45)
+    assert score_transition(a, b).score == score_transition(a, b, lang="en").score
 
 
 def test_mixing_overview_en():

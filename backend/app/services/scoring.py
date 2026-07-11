@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 
 from app.models import Track
-from app.services.camelot import camelot_compatibility, camelot_score
+from app.services.camelot import camelot_compatibility, camelot_score, parse_camelot
 
 SHORT_TRACK_SECONDS = 90
 
@@ -70,6 +70,70 @@ _REASONS = {
     "creative_jump": {
         "it": "Salto di BPM/tonalità voluto ma azzardato: gestire con cura",
         "en": "Deliberate but risky BPM/key jump: handle with care",
+    },
+    # --- score_transition: reasons/warnings tecnici (_bpm_points/_key_points) ---
+    "bpm_pts_missing_reason": {
+        "it": "BPM mancante su una delle tracce: valutazione neutra",
+        "en": "Missing BPM on one of the tracks: neutral rating",
+    },
+    "bpm_pts_missing_warn": {"it": "BPM mancante", "en": "Missing BPM"},
+    "bpm_pts_halftime_reason": {
+        "it": "mezzo/doppio tempo (Δ effettivo {diff:.1f})",
+        "en": "half/double time (effective Δ {diff:.1f})",
+    },
+    "bpm_pts_halftime_warn": {
+        "it": "mezzo/doppio tempo: allinea la griglia sul break",
+        "en": "half/double time: align the grid on the break",
+    },
+    "bpm_pts_great": {
+        "it": "differenza BPM ottima ({diff:.1f})",
+        "en": "great BPM difference ({diff:.1f})",
+    },
+    "bpm_pts_good": {
+        "it": "differenza BPM buona ({diff:.1f})",
+        "en": "good BPM difference ({diff:.1f})",
+    },
+    "bpm_pts_risky_reason": {
+        "it": "differenza BPM rischiosa ({diff:.1f})",
+        "en": "risky BPM difference ({diff:.1f})",
+    },
+    "bpm_pts_risky_warn": {
+        "it": "salto BPM di {diff:.1f}: transizione rischiosa",
+        "en": "BPM jump of {diff:.1f}: risky transition",
+    },
+    "bpm_pts_hard_reason": {
+        "it": "differenza BPM difficile ({diff:.1f})",
+        "en": "difficult BPM difference ({diff:.1f})",
+    },
+    "bpm_pts_hard_warn": {
+        "it": "salto BPM di {diff:.1f}: transizione difficile",
+        "en": "BPM jump of {diff:.1f}: difficult transition",
+    },
+    "key_desc_unknown": {
+        "it": "tonalità mancante o non in formato Camelot",
+        "en": "key missing or not in Camelot format",
+    },
+    "key_warn_unknown": {"it": "tonalità non confrontabile", "en": "key not comparable"},
+    "key_desc_same": {"it": "stessa key ({k})", "en": "same key ({k})"},
+    "key_desc_same_num": {
+        "it": "stesso numero, lettera diversa ({a} -> {b})",
+        "en": "same number, different letter ({a} -> {b})",
+    },
+    "key_desc_adjacent": {
+        "it": "key adiacente sulla ruota Camelot ({a} -> {b})",
+        "en": "adjacent key on the Camelot wheel ({a} -> {b})",
+    },
+    "key_desc_weak": {
+        "it": "key poco compatibili ({a} -> {b})",
+        "en": "poorly compatible keys ({a} -> {b})",
+    },
+    "key_warn_weak": {
+        "it": "key poco compatibili: mix armonico difficile",
+        "en": "poorly compatible keys: difficult harmonic mix",
+    },
+    "short_incoming_warn": {
+        "it": "traccia in entrata molto corta ({duration}s)",
+        "en": "incoming track very short ({duration}s)",
     },
 }
 
@@ -339,45 +403,54 @@ def effective_bpm_diff(a: float, b: float) -> tuple[float, bool]:
     return (folded, True) if folded < direct else (direct, False)
 
 
-def _bpm_points(from_bpm: float | None, to_bpm: float | None) -> tuple[float, str, str | None]:
+def _bpm_points(from_bpm: float | None, to_bpm: float | None, lang: str = "it") -> tuple[float, str, str | None]:
     if not from_bpm or not to_bpm:
-        return 25.0, "BPM mancante su una delle tracce: valutazione neutra", "BPM mancante"
+        return 25.0, _txt("bpm_pts_missing_reason", lang), _txt("bpm_pts_missing_warn", lang)
     diff, folded = effective_bpm_diff(from_bpm, to_bpm)
     if folded and diff <= 5:
         pts = 40.0 if diff <= 2 else 30.0
-        return pts, f"mezzo/doppio tempo (Δ effettivo {diff:.1f})", "mezzo/doppio tempo: allinea la griglia sul break"
+        return pts, _txt("bpm_pts_halftime_reason", lang, diff=diff), _txt("bpm_pts_halftime_warn", lang)
     diff = abs(from_bpm - to_bpm)
     if diff <= 2:
-        return 50.0, f"differenza BPM ottima ({diff:.1f})", None
+        return 50.0, _txt("bpm_pts_great", lang, diff=diff), None
     if diff <= 5:
-        return 38.0, f"differenza BPM buona ({diff:.1f})", None
+        return 38.0, _txt("bpm_pts_good", lang, diff=diff), None
     if diff <= 8:
-        return 20.0, f"differenza BPM rischiosa ({diff:.1f})", f"salto BPM di {diff:.1f}: transizione rischiosa"
-    return 5.0, f"differenza BPM difficile ({diff:.1f})", f"salto BPM di {diff:.1f}: transizione difficile"
+        return 20.0, _txt("bpm_pts_risky_reason", lang, diff=diff), _txt("bpm_pts_risky_warn", lang, diff=diff)
+    return 5.0, _txt("bpm_pts_hard_reason", lang, diff=diff), _txt("bpm_pts_hard_warn", lang, diff=diff)
 
 
-def _key_points(from_key: str | None, to_key: str | None) -> tuple[float, str, str | None]:
-    level, desc = camelot_compatibility(from_key, to_key)
+def _key_points(from_key: str | None, to_key: str | None, lang: str = "it") -> tuple[float, str, str | None]:
+    # `desc`/`warn` derivati dal livello Camelot (non dal testo IT di
+    # camelot_compatibility, che resta invariato per il resto del motore).
     pts = camelot_score(from_key, to_key) / 100.0 * 40.0  # graduato: distingue +2 boost da tritono
-    if level == "unknown":
-        return pts, desc, "tonalita' non confrontabile"
-    if level == "weak":
-        return pts, desc, "key poco compatibili: mix armonico difficile"
-    return pts, desc, None
+    a, b = parse_camelot(from_key), parse_camelot(to_key)
+    if a is None or b is None:
+        return pts, _txt("key_desc_unknown", lang), _txt("key_warn_unknown", lang)
+    if a == b:
+        return pts, _txt("key_desc_same", lang, k=from_key), None
+    num_a, let_a = a
+    num_b, let_b = b
+    if num_a == num_b:
+        return pts, _txt("key_desc_same_num", lang, a=from_key, b=to_key), None
+    diff = min((num_a - num_b) % 12, (num_b - num_a) % 12)
+    if diff == 1 and let_a == let_b:
+        return pts, _txt("key_desc_adjacent", lang, a=from_key, b=to_key), None
+    return pts, _txt("key_desc_weak", lang, a=from_key, b=to_key), _txt("key_warn_weak", lang)
 
 
-def score_transition(from_track: Track, to_track: Track) -> TransitionScore:
+def score_transition(from_track: Track, to_track: Track, lang: str = "it") -> TransitionScore:
     reasons: list[str] = []
     warnings: list[str] = []
     total = 0.0
 
-    pts, reason, warn = _bpm_points(from_track.bpm, to_track.bpm)
+    pts, reason, warn = _bpm_points(from_track.bpm, to_track.bpm, lang)
     total += pts
     reasons.append(reason)
     if warn:
         warnings.append(warn)
 
-    pts, reason, warn = _key_points(from_track.camelot_key, to_track.camelot_key)
+    pts, reason, warn = _key_points(from_track.camelot_key, to_track.camelot_key, lang)
     total += pts
     reasons.append(reason)
     if warn:
@@ -388,7 +461,7 @@ def score_transition(from_track: Track, to_track: Track) -> TransitionScore:
     duration = to_track.duration_seconds or 0
     if duration and duration < SHORT_TRACK_SECONDS:
         structure -= 8.0
-        warnings.append(f"traccia in entrata molto corta ({duration}s)")
+        warnings.append(_txt("short_incoming_warn", lang, duration=duration))
     total += max(structure, 0.0)
 
     return TransitionScore(
