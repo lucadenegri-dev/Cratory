@@ -822,7 +822,24 @@ export const en = {
       filtered ? "No transitions of this class for this track." : "No transitions for this track.",
     hasFileBadge: "FILE",
   },
-  errors: {} as Record<string, string | ((p: Record<string, unknown>) => string)>,
+  errors: {
+    playlist_not_found: "Playlist not found",
+    soundcloud_playlist_not_syncable:
+      "SoundCloud playlists can't be synced: use the selective likes flow or re-import the URL.",
+    playlist_not_syncable: "This playlist can't be synced from Spotify.",
+    playlist_platform_not_syncable: "Only Spotify and SoundCloud playlists can be synced.",
+    no_tracks_recognized: "No tracks recognized in the given text.",
+    soundcloud_username_missing: "SoundCloud username not configured (Settings).",
+    soundcloud_username_invalid: "Invalid SoundCloud username.",
+    soundcloud_likes_url_not_supported: "For likes, use the 'My likes' flow (selective import).",
+    soundcloud_invalid_url: (p: Record<string, unknown>) => `Invalid SoundCloud URL: ${p.reason ?? ""}`,
+    soundcloud_error: (p: Record<string, unknown>) => `SoundCloud error: ${p.reason ?? ""}`,
+    spotify_not_configured: (p: Record<string, unknown>) => `Spotify not configured: ${p.reason ?? ""}`,
+    spotify_not_connected: (p: Record<string, unknown>) => `Spotify not connected: ${p.reason ?? ""}`,
+    spotify_error: (p: Record<string, unknown>) => `Spotify error: ${p.reason ?? ""}`,
+    tracks_not_found: (p: Record<string, unknown>) => `Nonexistent tracks: ${JSON.stringify(p.missing ?? [])}`,
+    playlist_name_empty: "Playlist name is empty.",
+  } as Record<string, string | ((p: Record<string, unknown>) => string)>,
 };
 
 export type Dictionary = typeof en;

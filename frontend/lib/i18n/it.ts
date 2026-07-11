@@ -824,5 +824,22 @@ export const it: Dictionary = {
       filtered ? "Nessuna transizione di questa classe per questa traccia." : "Nessuna transizione per questa traccia.",
     hasFileBadge: "FILE",
   },
-  errors: {},
+  errors: {
+    playlist_not_found: "Playlist non trovata",
+    soundcloud_playlist_not_syncable:
+      "Playlist SoundCloud non sincronizzabile: usa il flusso selettivo dei like o reimporta l'URL.",
+    playlist_not_syncable: "Playlist non sincronizzabile da Spotify.",
+    playlist_platform_not_syncable: "Solo le playlist Spotify e SoundCloud sono sincronizzabili.",
+    no_tracks_recognized: "Nessuna traccia riconosciuta nel testo fornito.",
+    soundcloud_username_missing: "Username SoundCloud non configurato (Impostazioni).",
+    soundcloud_username_invalid: "Username SoundCloud non valido.",
+    soundcloud_likes_url_not_supported: "Per i like usa il flusso 'I miei like' (import selettivo).",
+    soundcloud_invalid_url: (p: Record<string, unknown>) => `URL SoundCloud non valido: ${p.reason ?? ""}`,
+    soundcloud_error: (p: Record<string, unknown>) => `Errore SoundCloud: ${p.reason ?? ""}`,
+    spotify_not_configured: (p: Record<string, unknown>) => `Spotify non configurato: ${p.reason ?? ""}`,
+    spotify_not_connected: (p: Record<string, unknown>) => `Spotify non connesso: ${p.reason ?? ""}`,
+    spotify_error: (p: Record<string, unknown>) => `Errore Spotify: ${p.reason ?? ""}`,
+    tracks_not_found: (p: Record<string, unknown>) => `Tracce inesistenti: ${JSON.stringify(p.missing ?? [])}`,
+    playlist_name_empty: "Nome playlist vuoto.",
+  } as Record<string, string | ((p: Record<string, unknown>) => string)>,
 };

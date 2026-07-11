@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.http_errors import api_error
 from app.db import get_db
 from app.models import Playlist, Track
 from app.integrations.soundcloud import (
@@ -67,10 +68,10 @@ router = APIRouter(prefix="/api/playlists", tags=["playlists"])
 
 def _http_error(exc: SpotifyError) -> HTTPException:
     if isinstance(exc, SpotifyNotConfigured):
-        return HTTPException(status_code=409, detail=str(exc))
+        return api_error(409, "spotify_not_configured", str(exc), reason=str(exc))
     if isinstance(exc, SpotifyNotConnected):
-        return HTTPException(status_code=401, detail=str(exc))
-    return HTTPException(status_code=502, detail=str(exc))
+        return api_error(401, "spotify_not_connected", str(exc), reason=str(exc))
+    return api_error(502, "spotify_error", str(exc), reason=str(exc))
 
 
 # L'auto-enrichment delle tracce appena importate non e' piu' responsabilita' di
@@ -172,17 +173,21 @@ def sync_playlist(playlist_id: int, db: Session = Depends(get_db)):
     """
     playlist = get_playlist(db, playlist_id)
     if playlist is None:
-        raise HTTPException(status_code=404, detail="Playlist non trovata")
+        raise api_error(404, "playlist_not_found", "Playlist not found")
 
     if playlist.platform == "soundcloud":
         # I liked SoundCloud crescono solo via flusso selettivo: niente sync totale.
         if playlist.kind == "liked" or not playlist.url:
-            raise HTTPException(status_code=409, detail="Playlist SoundCloud non sincronizzabile: usa il flusso selettivo dei like o reimporta l'URL.")
+            raise api_error(
+                409, "soundcloud_playlist_not_syncable",
+                "SoundCloud playlists can't be synced: use the selective likes flow or re-import the URL.",
+            )
         try:
             info = sc_fetch_playlist(playlist.url)
         except SoundCloudError as exc:
-            status_code = 422 if isinstance(exc, SoundCloudInvalidUrl) else 502
-            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+            if isinstance(exc, SoundCloudInvalidUrl):
+                raise api_error(422, "soundcloud_invalid_url", str(exc), reason=str(exc)) from exc
+            raise api_error(502, "soundcloud_error", str(exc), reason=str(exc)) from exc
         # Additivo (prune=False): su SoundCloud un takedown non significa
         # "non mi interessa più" — il lead resta collegato.
         report = import_playlist(
@@ -195,9 +200,12 @@ def sync_playlist(playlist_id: int, db: Session = Depends(get_db)):
         return PlaylistImportReport(**report)
 
     if playlist.platform != "spotify":
-        raise HTTPException(status_code=409, detail="Solo le playlist Spotify e SoundCloud sono sincronizzabili.")
+        raise api_error(
+            409, "playlist_platform_not_syncable",
+            "Only Spotify and SoundCloud playlists can be synced.",
+        )
     if playlist.kind != "liked" and not playlist.platform_playlist_id:
-        raise HTTPException(status_code=409, detail="Playlist non sincronizzabile da Spotify.")
+        raise api_error(409, "playlist_not_syncable", "This playlist can't be synced from Spotify.")
 
     client = SpotifyWebClient(db)
     try:
@@ -223,7 +231,7 @@ def import_manual(req: ManualImportRequest, db: Session = Depends(get_db)):
     """Crea una playlist dalla tracklist incollata ('Artista - Titolo' o CSV)."""
     report = import_manual_playlist(db, name=req.name, text=req.text)
     if report["total"] == 0:
-        raise HTTPException(status_code=422, detail="Nessuna traccia riconosciuta nel testo fornito.")
+        raise api_error(422, "no_tracks_recognized", "No tracks recognized in the given text.")
     # Enrichment non piu' avviato qui: e' ora responsabilita' di Sortory.
     return PlaylistImportReport(**report)
 
@@ -235,9 +243,9 @@ def create_from_tracks(req: PlaylistFromTracksRequest, db: Session = Depends(get
     by_id = {t.id: t for t in tracks}
     missing = [i for i in req.track_ids if i not in by_id]
     if missing:
-        raise HTTPException(status_code=422, detail=f"Tracce inesistenti: {missing}")
+        raise api_error(422, "tracks_not_found", f"Nonexistent tracks: {missing}", missing=missing)
     if not req.name.strip():
-        raise HTTPException(status_code=422, detail="Nome playlist vuoto.")
+        raise api_error(422, "playlist_name_empty", "Playlist name is empty.")
     # Stessa costruzione delle playlist manuali (services/manual_import.py).
     playlist = Playlist(platform="manual", name=req.name.strip(), kind="manual")
     db.add(playlist)
@@ -259,7 +267,7 @@ def list_imported(db: Session = Depends(get_db)):
 def playlist_detail(playlist_id: int, db: Session = Depends(get_db)):
     playlist = get_playlist(db, playlist_id)
     if playlist is None:
-        raise HTTPException(status_code=404, detail="Playlist non trovata")
+        raise api_error(404, "playlist_not_found", "Playlist not found")
     return PlaylistOut.model_validate(playlist)
 
 
@@ -269,14 +277,14 @@ def remove_playlist(playlist_id: int, db: Session = Depends(get_db)):
     altre playlist, non in alcun set salvato). Ritorna quante tracce sono state rimosse."""
     removed = delete_playlist(db, playlist_id)
     if removed is None:
-        raise HTTPException(status_code=404, detail="Playlist non trovata")
+        raise api_error(404, "playlist_not_found", "Playlist not found")
     return PlaylistDeleteResult(deleted_tracks=removed)
 
 
 @router.get("/{playlist_id}/tracks", response_model=list[TrackOut])
 def playlist_tracks(playlist_id: int, db: Session = Depends(get_db)):
     if get_playlist(db, playlist_id) is None:
-        raise HTTPException(status_code=404, detail="Playlist non trovata")
+        raise api_error(404, "playlist_not_found", "Playlist not found")
     return [track_out(t) for t in tracks_for_playlist(db, playlist_id)]
 
 
@@ -285,7 +293,7 @@ def add_discovered_track(playlist_id: int, req: PlaylistAddTrackRequest, db: Ses
     """Aggiunge una traccia scoperta a questa playlist; write-back Spotify best-effort."""
     playlist = get_playlist(db, playlist_id)
     if playlist is None:
-        raise HTTPException(status_code=404, detail="Playlist non trovata")
+        raise api_error(404, "playlist_not_found", "Playlist not found")
 
     platform = "spotify" if req.spotify_id else "manual"
     track, created = import_single_track(
@@ -326,7 +334,7 @@ def library_gaps(db: Session = Depends(get_db)):
 @router.get("/{playlist_id}/gaps", response_model=GapAnalysisResponse)
 def playlist_gaps(playlist_id: int, db: Session = Depends(get_db)):
     if get_playlist(db, playlist_id) is None:
-        raise HTTPException(status_code=404, detail="Playlist non trovata")
+        raise api_error(404, "playlist_not_found", "Playlist not found")
     tracks = tracks_for_playlist(db, playlist_id)
     gaps = analyze_gaps(tracks)
     return GapAnalysisResponse(
