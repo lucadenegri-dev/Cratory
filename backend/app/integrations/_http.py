@@ -68,7 +68,7 @@ def post_with_retries(
     backoff: float = DEFAULT_BACKOFF,
 ) -> httpx.Response:
     """Come get_with_retries ma in POST form-encoded (payload troppo lunghi per
-    una query string, es. i fingerprint Chromaprint verso AcoustID)."""
+    una query string)."""
     return _request_with_retries(
         lambda: client.post(url, data=data), "POST", url,
         error_cls=error_cls, retries=retries, backoff=backoff,

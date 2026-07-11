@@ -13,9 +13,6 @@ and `frontend/package.json` — those manifests are authoritative; this document
 | Node.js | 20+ | Frontend |
 | ffmpeg | system install | Shazam module (audio decode for fingerprinting) |
 
-> `fpcalc`/chromaprint was previously required by AcoustID fingerprinting. That feature
-> was removed in the 2026-07 disk-first pivot — see the cleanup note below.
-
 ## Backend (Python) — `backend/requirements.txt`
 
 **Web / API**
@@ -74,10 +71,8 @@ Not Python/Node packages, but required for the corresponding feature to work:
 None of Last.fm/Discogs/Spotify feed BPM/key/genre — those providers serve **Discovery
 only**. BPM/key come from Rekordbox; text metadata/tagging come from Sortory.
 
-## Cleanup note (documentation finding)
+## History
 
-`backend/requirements.txt` still lists `pyacoustid>=1.3` with an AcoustID comment, but
-AcoustID fingerprinting of the owned library was **removed in the 2026-07 disk-first
-pivot** (see `docs/ROADMAP.md`). It is very likely a dead dependency. Verify and remove it
-(and drop `fpcalc`/chromaprint from system requirements) in a separate code-cleanup task —
-this document does not edit `requirements.txt`.
+`pyacoustid` (and the `fpcalc`/chromaprint system requirement) backed AcoustID
+fingerprinting of the owned library. That feature was **removed in the 2026-07 disk-first
+pivot**; the dead dependency was dropped from `requirements.txt` on 2026-07-11.
