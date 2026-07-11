@@ -10,6 +10,8 @@ import {
 import { Alert, Button, Card, CardHeader, Field, Input, Loading, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
+import { useI18n } from "@/lib/i18n";
+import { cn } from "@/lib/cn";
 
 function statusLabel(s: ServiceStatus): { text: string; strong: boolean } {
   if (s.connected === true) return { text: "Collegato", strong: true };
@@ -19,6 +21,7 @@ function statusLabel(s: ServiceStatus): { text: string; strong: boolean } {
 }
 
 function SettingsInner() {
+  const { lang, setLang, t } = useI18n();
   const params = useSearchParams();
   const oauth = params.get("spotify");
   const [services, setServices] = useState<ServiceStatus[] | null>(null);
@@ -50,7 +53,31 @@ function SettingsInner() {
       {oauth === "error" && <div className="mb-4"><Alert tone="danger">Login Spotify fallito ({params.get("detail")}).</Alert></div>}
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error} — il backend è attivo su :8000?</Alert></div>}
 
-      <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">Servizi &amp; API</div>
+      <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.settings.languageLabel}</div>
+      <div className="border border-border p-5">
+        <div role="group" aria-label={t.settings.languageLabel} className="inline-flex rounded-none border border-border bg-surface p-1">
+          <button
+            type="button"
+            aria-pressed={lang === "it"}
+            onClick={() => setLang("it")}
+            className={cn("rounded-none px-3 py-1 text-xs font-medium uppercase tracking-wider transition-colors",
+              lang === "it" ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+          >
+            {t.settings.languageIt}
+          </button>
+          <button
+            type="button"
+            aria-pressed={lang === "en"}
+            onClick={() => setLang("en")}
+            className={cn("rounded-none px-3 py-1 text-xs font-medium uppercase tracking-wider transition-colors",
+              lang === "en" ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+          >
+            {t.settings.languageEn}
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Servizi &amp; API</div>
       <div className="border border-border">
         {services?.map((s, i) => {
           const st = statusLabel(s);
