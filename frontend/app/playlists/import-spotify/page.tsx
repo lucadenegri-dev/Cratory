@@ -15,12 +15,14 @@ import {
 } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
 
 export default function ImportSpotifyPage() {
+  const t = useT();
   const router = useRouter();
   const [spotify, setSpotify] = useState<SpotifyStatus | null>(null);
   const [available, setAvailable] = useState<SpotifyPlaylistRef[] | null>(null);
@@ -58,28 +60,28 @@ export default function ImportSpotifyPage() {
       // viene mostrato l'avanzamento.
       router.push("/playlists");
     } catch (e) {
-      setError(`Import di ${label} fallito: ${err(e)}`);
+      setError(t.playlists.importSpotify.importFailed(label, err(e)));
       setBusy(null);
     }
   };
 
   const connected = spotify?.configured && spotify?.user_connected;
+  const isf = t.playlists.importSpotify;
 
   const marginalia = (
     <div className="space-y-2 text-xs leading-relaxed text-muted">
-      <p>Spotify fornisce identità traccia, metadata editoriali, cover, durata, ISRC e URL.</p>
-      <p>BPM, key e feature di mixing <span className="text-fg">non</span> arrivano da Spotify: vengono aggiunti dall&apos;arricchimento dopo l&apos;import.</p>
+      <p>{isf.noteIdentity}</p>
+      <p>{isf.noteBpmKeyPrefix} <span className="text-fg">{isf.noteBpmKeyNot}</span> {isf.noteBpmKeySuffix}</p>
     </div>
   );
 
   return (
-    <PageLayout title="Import — Spotify" marginaliaTitle="Note" marginalia={marginalia}>
+    <PageLayout title={isf.pageTitle} marginaliaTitle={t.playlists.marginaliaNotes} marginalia={marginalia}>
       <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
-        <ArrowLeft size={15} /> Playlist
+        <ArrowLeft size={15} /> {t.playlists.backLink}
       </Link>
       <p className="mb-6 text-sm text-muted">
-        L&apos;import non aggiunge file alla libreria: porta dentro i lead della playlist,
-        da arricchire, scaricare e organizzare.
+        {isf.intro}
       </p>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
@@ -88,10 +90,10 @@ export default function ImportSpotifyPage() {
         <div className="mb-6">
           <Alert tone="info">
             {spotify && !spotify.configured
-              ? "Spotify non configurato: imposta le credenziali in Impostazioni."
-              : "Collega l'account Spotify per leggere le tue playlist."}
+              ? isf.notConfigured
+              : isf.connectHint}
             {spotify?.configured && (
-              <a href={SPOTIFY_LOGIN_URL} className="ml-2 font-medium underline">Collega Spotify →</a>
+              <a href={SPOTIFY_LOGIN_URL} className="ml-2 font-medium underline">{isf.connectButton}</a>
             )}
           </Alert>
         </div>
@@ -100,22 +102,22 @@ export default function ImportSpotifyPage() {
       {connected && (
         <Card>
           <CardHeader
-            title="Le tue playlist"
-            subtitle="Seleziona una playlist da importare"
+            title={isf.yourPlaylistsTitle}
+            subtitle={isf.selectSubtitle}
             action={
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => router.push("/playlists/import-spotify/liked")} disabled={busy !== null}>
-                  <Heart size={15} /> Liked
+                  <Heart size={15} /> {isf.likedButton}
                 </Button>
                 <Button size="sm" onClick={loadAvailable} disabled={busy !== null}>
-                  {busy === "available" ? <Spinner /> : <RefreshCw size={15} />} Carica
+                  {busy === "available" ? <Spinner /> : <RefreshCw size={15} />} {isf.loadButton}
                 </Button>
               </div>
             }
           />
           <div className="px-5 py-4">
-            {!available && <p className="text-sm text-muted">Premi “Carica” per elencare le tue playlist.</p>}
-            {available && available.length === 0 && <p className="text-sm text-muted">Nessuna playlist trovata.</p>}
+            {!available && <p className="text-sm text-muted">{isf.pressLoadHint}</p>}
+            {available && available.length === 0 && <p className="text-sm text-muted">{isf.noPlaylistsFound}</p>}
             <div className="grid gap-2">
               {available?.map((p) => {
                 const alreadyImported = imported.has(p.platform_playlist_id);
@@ -124,7 +126,7 @@ export default function ImportSpotifyPage() {
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium">{p.name}</div>
                       <div className="text-xs text-faint">
-                        {p.track_count} tracce{p.owner ? ` · ${p.owner}` : ""}{alreadyImported ? " · importata" : ""}
+                        {t.playlists.trackCount(p.track_count)}{p.owner ? ` · ${p.owner}` : ""}{alreadyImported ? ` · ${isf.alreadyImportedSuffix}` : ""}
                       </div>
                     </div>
                     <Button
@@ -137,9 +139,9 @@ export default function ImportSpotifyPage() {
                       {busy === p.platform_playlist_id ? (
                         <Spinner />
                       ) : alreadyImported ? (
-                        <><RefreshCw size={15} /> Aggiorna</>
+                        <><RefreshCw size={15} /> {isf.updateButton}</>
                       ) : (
-                        <><Download size={15} /> Importa</>
+                        <><Download size={15} /> {isf.importButton}</>
                       )}
                     </Button>
                   </div>

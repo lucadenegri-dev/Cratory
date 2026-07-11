@@ -11,12 +11,14 @@ import {
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
 
 export default function PlaylistsPage() {
+  const t = useT();
   const [imported, setImported] = useState<Playlist[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export default function PlaylistsPage() {
   }, [reload]);
 
   const doDelete = async (p: Playlist) => {
-    if (!window.confirm(`Rimuovere la playlist "${p.name}"? I lead senza file su disco, non presenti in altre playlist né in un set, verranno cancellati dalla libreria. L'operazione non si può annullare.`)) return;
+    if (!window.confirm(t.playlists.deleteConfirm(p.name))) return;
     setError(null);
     setNotice(null);
     setBusy(`del-${p.id}`);
@@ -39,12 +41,12 @@ export default function PlaylistsPage() {
       const { deleted_tracks } = await deletePlaylist(p.id);
       setNotice(
         deleted_tracks > 0
-          ? `Playlist "${p.name}" rimossa · ${deleted_tracks} ${deleted_tracks === 1 ? "traccia orfana rimossa" : "tracce orfane rimosse"}.`
-          : `Playlist "${p.name}" rimossa.`,
+          ? t.playlists.deletedWithOrphans(p.name, deleted_tracks)
+          : t.playlists.deleted(p.name),
       );
       reload();
     } catch (e) {
-      setError(`Rimozione fallita: ${err(e)}`);
+      setError(t.playlists.deleteFailed(err(e)));
     } finally {
       setBusy(null);
     }
@@ -54,23 +56,22 @@ export default function PlaylistsPage() {
 
   const marginalia = (
     <div className="space-y-3">
-      <Link href="/playlists/import-spotify" className="block"><Button size="sm" className="w-full"><Download size={15} /> Importa da Spotify</Button></Link>
-      <Link href="/playlists/import-soundcloud" className="block"><Button size="sm" variant="outline" className="w-full"><CloudDownload size={15} /> Importa da SoundCloud</Button></Link>
-      <Link href="/playlists/import-manual" className="block"><Button size="sm" variant="outline" className="w-full"><ClipboardList size={15} /> Inserisci manualmente</Button></Link>
+      <Link href="/playlists/import-spotify" className="block"><Button size="sm" className="w-full"><Download size={15} /> {t.playlists.importSpotifyButton}</Button></Link>
+      <Link href="/playlists/import-soundcloud" className="block"><Button size="sm" variant="outline" className="w-full"><CloudDownload size={15} /> {t.playlists.importSoundcloudButton}</Button></Link>
+      <Link href="/playlists/import-manual" className="block"><Button size="sm" variant="outline" className="w-full"><ClipboardList size={15} /> {t.playlists.importManualButton}</Button></Link>
       {imported && imported.length > 0 && (
         <div className="space-y-2 border-t border-border pt-4 text-xs">
-          <div className="flex justify-between gap-2"><span className="text-muted">Playlist</span><span className="tnum text-fg">{imported.length}</span></div>
-          <div className="flex justify-between gap-2"><span className="text-muted">Tracce totali</span><span className="tnum text-fg">{totalTracks}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">{t.playlists.statsPlaylists}</span><span className="tnum text-fg">{imported.length}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-muted">{t.playlists.statsTracksTotal}</span><span className="tnum text-fg">{totalTracks}</span></div>
         </div>
       )}
     </div>
   );
 
   return (
-    <PageLayout title="Playlist" meta={imported ? String(imported.length) : undefined} marginaliaTitle="Sorgente" marginalia={marginalia}>
+    <PageLayout title={t.playlists.pageTitle} meta={imported ? String(imported.length) : undefined} marginaliaTitle={t.playlists.marginaliaSource} marginalia={marginalia}>
       <p className="mb-6 text-sm text-muted">
-        Le playlist importate sono liste di lead: candidati da scaricare.
-        La libreria — ciò che possiedi — è il disco.
+        {t.playlists.intro}
       </p>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
@@ -79,8 +80,8 @@ export default function PlaylistsPage() {
       {notice && <div className="mb-4"><Alert tone="info">{notice}</Alert></div>}
 
       {imported && imported.length === 0 && (
-        <EmptyState icon={<Music2 size={28} />} title="Nessuna playlist importata">
-          Usa “Importa da Spotify”, “Importa da SoundCloud” o “Inserisci manualmente” per iniziare a costruire un set.
+        <EmptyState icon={<Music2 size={28} />} title={t.playlists.emptyTitle}>
+          {t.playlists.emptyBody}
         </EmptyState>
       )}
 
@@ -100,15 +101,15 @@ export default function PlaylistsPage() {
                     {p.kind === "liked" && <Badge tone="neutral">liked</Badge>}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-faint">
-                    <span>{p.track_count} tracce</span>
+                    <span>{t.playlists.trackCount(p.track_count)}</span>
                     <span>· {p.owner ?? "—"}</span>
-                    <span className="inline-flex items-center gap-1">· <Calendar size={11} /> importata il {fmtDate(p.imported_at)}</span>
+                    <span className="inline-flex items-center gap-1">· <Calendar size={11} /> {t.playlists.importedOn(fmtDate(p.imported_at))}</span>
                   </div>
                 </div>
               </div>
               <div className="flex shrink-0 gap-1.5">
                 <Link href={`/playlists/${p.id}`}>
-                  <Button size="sm" variant="outline"><Eye size={15} /> Apri</Button>
+                  <Button size="sm" variant="outline"><Eye size={15} /> {t.playlists.openButton}</Button>
                 </Link>
                 <Button size="sm" variant="danger" onClick={() => doDelete(p)} disabled={busy !== null}>
                   {busy === `del-${p.id}` ? <Spinner /> : <Trash2 size={15} />}

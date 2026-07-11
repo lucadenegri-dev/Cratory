@@ -9,6 +9,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.http_errors import api_error
 from app.db import SessionLocal, get_db
 from app.integrations.llm import LLMError, LLMNotConfigured, get_llm_client, llm_configured
 from app.repositories import get_setlist, list_setlists
@@ -25,6 +26,7 @@ from app.schemas import (
 from app.serializers import alternative_out, setlist_out, setlist_summary_out
 from app.services.ai_agent import AIAgentError, generate_ai_set
 from app.services.alternatives import AlternativesError, find_alternatives
+from app.services.app_state import get_language
 from app.services.set_editor import (
     SetEditError,
     delete_set,
@@ -33,7 +35,7 @@ from app.services.set_editor import (
     rename_set,
     replace_track,
 )
-from app.services.scoring import classify_transition, mixing_tip
+from app.services.scoring import classify_transition, mixing_tip, opening_track_label
 from app.services.set_generator import SetGenerationError, generate_set
 
 logger = logging.getLogger(__name__)
@@ -55,6 +57,10 @@ def _model_for(req: SetGenerationRequest) -> str | None:
         return settings.ai_model_creative
     return None  # None = default (AI_MODEL / DEFAULT_MODEL)
 
+
+# Fase mostrata durante la generazione deterministica (non-AI); le fasi del
+# path AI sono già bilingui in ai_agent.py (_PHASES).
+_BUILDING_SET_PHASE = {"it": "Costruisco il set", "en": "Building the set"}
 
 # --- Generazione asincrona (la generazione AI puo' richiedere ~1-3 min) -------
 # App locale mono-utente: un job alla volta, stato in memoria con lock.
@@ -79,7 +85,8 @@ def _run_generation(req: SetGenerationRequest, use_ai: bool) -> None:
                 on_phase=lambda p: _gen_state.update(phase=p),
             )
         else:
-            _gen_state["phase"] = "Costruisco il set"
+            lang = get_language(db)
+            _gen_state["phase"] = _BUILDING_SET_PHASE.get(lang, _BUILDING_SET_PHASE["it"])
             setlist = generate_set(db, req)
         _gen_state.update(status="done", setlist_id=setlist.id, phase=None)
         logger.info("Job generazione completato: set %s (%s)", setlist.id, setlist.generated_by)
@@ -99,14 +106,15 @@ def generate_async(req: SetGenerationRequest):
     """Avvia la generazione in background e ritorna subito. Seguire /generate-status."""
     use_ai = _should_use_ai(req)
     if use_ai and not llm_configured():
-        raise HTTPException(status_code=409, detail="AI non configurata (AI_API_KEY mancante).")
+        raise api_error(409, "ai_not_configured", "AI not configured: AI_API_KEY missing.",
+                         reason="AI_API_KEY mancante")
     with _gen_lock:
         if _gen_state["status"] == "running":
             # Mai inghiottire una richiesta nuova nel job in corso: quel job puo' avere
             # un motore diverso (es. AI) da quello appena chiesto dall'utente.
-            raise HTTPException(
-                status_code=409,
-                detail="Una generazione è già in corso: attendi che finisca e riprova.",
+            raise api_error(
+                409, "set_generation_in_progress",
+                "A generation is already running: wait for it to finish and try again.",
             )
         _gen_state.update(status="running", phase=None, using_ai=use_ai, setlist_id=None,
                           error=None, started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)
@@ -121,19 +129,23 @@ def generate_status():
 
 @router.post("/generate", response_model=SetlistOut)
 def generate(req: SetGenerationRequest, db: Session = Depends(get_db)):
+    lang = get_language(db)
     if _should_use_ai(req):
         try:
             setlist = generate_ai_set(db, req, get_llm_client(_model_for(req)))
         except LLMNotConfigured as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise api_error(409, "ai_not_configured", f"AI not configured: {exc}",
+                             reason=str(exc)) from exc
         except (AIAgentError, LLMError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return setlist_out(setlist)
+            raise api_error(422, "set_ai_generation_failed", f"AI set generation failed: {exc}",
+                             reason=str(exc)) from exc
+        return setlist_out(setlist, lang)
     try:
         setlist = generate_set(db, req)
     except SetGenerationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return setlist_out(setlist)
+        raise api_error(422, "set_generation_failed", f"Set generation failed: {exc}",
+                         reason=str(exc)) from exc
+    return setlist_out(setlist, lang)
 
 
 @router.get("", response_model=list[SetlistSummaryOut])
@@ -145,8 +157,8 @@ def get_all(db: Session = Depends(get_db)):
 def get_one(setlist_id: int, db: Session = Depends(get_db)):
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
-        raise HTTPException(status_code=404, detail="Set non trovato")
-    return setlist_out(setlist)
+        raise api_error(404, "set_not_found", "Set not found")
+    return setlist_out(setlist, get_language(db))
 
 
 def _fmt_dur(seconds: int | None) -> str:
@@ -164,7 +176,8 @@ def export(
     """Export del set: testo, CSV, Markdown o M3U8 (playlist Rekordbox). Export playlist Spotify: endpoint dedicato."""
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
-        raise HTTPException(status_code=404, detail="Set non trovato")
+        raise api_error(404, "set_not_found", "Set not found")
+    lang = get_language(db)
 
     if format == "csv":
         buf = io.StringIO()
@@ -175,7 +188,7 @@ def export(
         prev = None
         for st in setlist.tracks:
             t = st.track
-            cls = classify_transition(prev, t).label if prev is not None else ""
+            cls = classify_transition(prev, t, lang).label if prev is not None else ""
             writer.writerow([st.position, st.role or "", t.title or "", t.artist or "", t.bpm or "",
                              t.camelot_key or "", t.duration_seconds or "", t.source_type,
                              t.spotify_id or "", t.url or "", st.transition_score or "", st.risk_level or "",
@@ -194,7 +207,7 @@ def export(
             t = st.track
             label = f"{t.artist or '?'} — {t.title or t.spotify_id or '?'}"
             # Nota di mix deterministica e accurata (mai il log grezzo o claim AI non verificati).
-            note = (mixing_tip(prev, t) if prev is not None else "apertura").replace("|", "/").replace("\n", " ")
+            note = (mixing_tip(prev, t, lang) if prev is not None else opening_track_label(lang)).replace("|", "/").replace("\n", " ")
             prev = t
             md.append(
                 f"| {st.position} | {st.role or ''} | {label} | "
@@ -239,13 +252,13 @@ def export(
 
 def _edit_error(exc: SetEditError) -> HTTPException:
     status = 404 if "non trovato" in str(exc).lower() else 422
-    return HTTPException(status_code=status, detail=str(exc))
+    return api_error(status, "set_edit_error", f"Set edit error: {exc}", reason=str(exc))
 
 
 @router.patch("/{setlist_id}", response_model=SetlistOut)
 def rename(setlist_id: int, req: SetRenameRequest, db: Session = Depends(get_db)):
     try:
-        return setlist_out(rename_set(db, setlist_id, req.name))
+        return setlist_out(rename_set(db, setlist_id, req.name), get_language(db))
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
@@ -261,7 +274,7 @@ def delete(setlist_id: int, db: Session = Depends(get_db)):
 @router.delete("/{setlist_id}/tracks/{position}", response_model=SetlistOut)
 def delete_track(setlist_id: int, position: int, db: Session = Depends(get_db)):
     try:
-        return setlist_out(remove_track(db, setlist_id, position))
+        return setlist_out(remove_track(db, setlist_id, position), get_language(db))
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
@@ -269,7 +282,7 @@ def delete_track(setlist_id: int, position: int, db: Session = Depends(get_db)):
 @router.post("/{setlist_id}/tracks/{position}/move", response_model=SetlistOut)
 def move(setlist_id: int, position: int, req: MoveTrackRequest, db: Session = Depends(get_db)):
     try:
-        return setlist_out(move_track(db, setlist_id, position, req.direction))
+        return setlist_out(move_track(db, setlist_id, position, req.direction), get_language(db))
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
@@ -277,7 +290,7 @@ def move(setlist_id: int, position: int, req: MoveTrackRequest, db: Session = De
 @router.post("/{setlist_id}/tracks/{position}/replace", response_model=SetlistOut)
 def replace(setlist_id: int, position: int, req: ReplaceTrackRequest, db: Session = Depends(get_db)):
     try:
-        return setlist_out(replace_track(db, setlist_id, position, req.track_id))
+        return setlist_out(replace_track(db, setlist_id, position, req.track_id), get_language(db))
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
@@ -286,11 +299,12 @@ def replace(setlist_id: int, position: int, req: ReplaceTrackRequest, db: Sessio
 def alternatives(setlist_id: int, req: AlternativesRequest, db: Session = Depends(get_db)):
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
-        raise HTTPException(status_code=404, detail="Set non trovato")
+        raise api_error(404, "set_not_found", "Set not found")
     try:
         alts = find_alternatives(db, setlist, req.position, req.mode, req.limit)
     except AlternativesError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise api_error(422, "alternatives_error", f"Alternatives error: {exc}",
+                         reason=str(exc)) from exc
     return AlternativesResponse(
         position=req.position,
         mode=req.mode,

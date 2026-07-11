@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FolderOpen, Link2 } from "lucide-react";
 import { Alert, Button, Loading, Modal, Spinner } from "@/components/ui";
 import { autoLinkPreview, linkLocalFile, type AutoLinkProposal } from "@/lib/api";
+import { useT, type Dictionary } from "@/lib/i18n";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -14,7 +15,9 @@ function fmtSize(bytes: number | null): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-const SOURCE_LABEL: Record<string, string> = { library: "libreria", downloads: "download" };
+function sourceLabel(t: Dictionary): Record<string, string> {
+  return { library: t.tracks.sourceLibrary, downloads: t.tracks.sourceDownloads };
+}
 
 /** Wrapper: monta il dialog solo da aperto e lo rigenera a ogni apertura. */
 export function AutoLinkModal({ open, onClose, onLinked }: {
@@ -29,6 +32,8 @@ export function AutoLinkModal({ open, onClose, onLinked }: {
 /** "Collega file automatico": propone un file locale per ogni traccia da sistemare,
     l'utente deseleziona i match sbagliati e conferma (il collegamento vero è per-traccia). */
 function Dialog({ onClose, onLinked }: { onClose: () => void; onLinked: () => void }) {
+  const t = useT();
+  const SOURCE_LABEL = sourceLabel(t);
   const [proposals, setProposals] = useState<AutoLinkProposal[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [linking, setLinking] = useState(false);
@@ -75,25 +80,24 @@ function Dialog({ onClose, onLinked }: { onClose: () => void; onLinked: () => vo
 
   const footer = (
     <Button onClick={apply} disabled={linking || selected.size === 0}>
-      {linking ? <Spinner /> : <Link2 size={13} />} Collega selezionate ({selected.size})
+      {linking ? <Spinner /> : <Link2 size={13} />} {t.tracks.linkSelected(selected.size)}
     </Button>
   );
 
   return (
-    <Modal open onClose={onClose} title="Collega file automatico" size="lg" footer={footer}>
+    <Modal open onClose={onClose} title={t.tracks.autoLinkTitle} size="lg" footer={footer}>
       <div className="space-y-3 p-4">
         {error && <Alert tone="danger">⚠ {error}</Alert>}
-        {proposals === null && <Loading label="Cerco i file sul disco…" />}
+        {proposals === null && <Loading label={t.tracks.searchingDisk} />}
         {proposals !== null && withHit.length === 0 && (
           <p className="py-6 text-center text-sm text-muted">
-            Nessun file locale combacia con le tracce da sistemare.
+            {t.tracks.noAutoMatches}
           </p>
         )}
         {withHit.length > 0 && (
           <>
             <p className="text-xs text-muted">
-              {withHit.length} tracce con un match sul disco{noHit > 0 ? ` · ${noHit} senza match` : ""}.
-              Deseleziona quelle sbagliate, poi collega.
+              {t.tracks.autoLinkSummary(withHit.length, noHit)}
             </p>
             <ul className="max-h-96 divide-y divide-border overflow-y-auto border border-border">
               {withHit.map((p) => (
@@ -117,7 +121,7 @@ function Dialog({ onClose, onLinked }: { onClose: () => void; onLinked: () => vo
                 </li>
               ))}
             </ul>
-            {linking && <p className="tnum text-xs text-muted">Collegate {done}/{selected.size}…</p>}
+            {linking && <p className="tnum text-xs text-muted">{t.tracks.linkedProgress(done, selected.size)}</p>}
           </>
         )}
       </div>

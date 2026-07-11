@@ -22,3 +22,13 @@ def set_state(db: Session, key: str, value: str) -> None:
     else:
         row.value = value
     db.commit()
+
+
+LANGUAGE_KEY = "language"
+DEFAULT_LANGUAGE = "it"
+
+
+def get_language(db: Session) -> str:
+    """Lingua dell'app ("it" | "en"): valori sconosciuti degradano al default."""
+    value = get_state(db, LANGUAGE_KEY)
+    return value if value in ("it", "en") else DEFAULT_LANGUAGE

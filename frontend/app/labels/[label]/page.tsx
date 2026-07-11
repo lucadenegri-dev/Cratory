@@ -11,8 +11,10 @@ import { TrackCover } from "@/components/track-cover";
 import { TrackStateIcons } from "@/components/track-state-icons";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { MiniBars, type MiniBarRow } from "@/components/dashboard/mini-bars";
+import { useT } from "@/lib/i18n";
 
 export default function LabelDetail({ params }: { params: Promise<{ label: string }> }) {
+  const t = useT();
   const { label: raw } = use(params);
   const label = decodeURIComponent(raw);
   const [all, setAll] = useState<Track[]>([]);
@@ -31,16 +33,16 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
 
   const tracks = useMemo(() => {
     const inc = (v: string | null, q: string) => !q || (v ?? "").toLowerCase().includes(q.toLowerCase());
-    return all.filter((t) => inc(t.title, qTitle) && inc(t.artist, qArtist) && inc(t.genre, qGenre));
+    return all.filter((tr) => inc(tr.title, qTitle) && inc(tr.artist, qArtist) && inc(tr.genre, qGenre));
   }, [all, qTitle, qArtist, qGenre]);
 
   const cell = "px-3 py-2.5";
-  const totalDur = tracks.reduce((s, t) => s + (t.duration_seconds ?? 0), 0);
-  const artistCount = new Set(tracks.map((t) => t.artist).filter(Boolean)).size;
+  const totalDur = tracks.reduce((s, tr) => s + (tr.duration_seconds ?? 0), 0);
+  const artistCount = new Set(tracks.map((tr) => tr.artist).filter(Boolean)).size;
 
   const genreRows: MiniBarRow[] = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const t of tracks) if (t.genre) counts[t.genre] = (counts[t.genre] ?? 0) + 1;
+    for (const tr of tracks) if (tr.genre) counts[tr.genre] = (counts[tr.genre] ?? 0) + 1;
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
@@ -50,18 +52,18 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
   const marginalia = (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Input className="h-9" placeholder="Titolo" value={qTitle} onChange={(e) => setQTitle(e.target.value)} />
-        <Input className="h-9" placeholder="Artista" value={qArtist} onChange={(e) => setQArtist(e.target.value)} />
-        <Input className="h-9" placeholder="Genere" value={qGenre} onChange={(e) => setQGenre(e.target.value)} />
+        <Input className="h-9" placeholder={t.library.filterTitlePlaceholder} value={qTitle} onChange={(e) => setQTitle(e.target.value)} />
+        <Input className="h-9" placeholder={t.library.filterArtistPlaceholder} value={qArtist} onChange={(e) => setQArtist(e.target.value)} />
+        <Input className="h-9" placeholder={t.library.filterGenrePlaceholder} value={qGenre} onChange={(e) => setQGenre(e.target.value)} />
       </div>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
-        <div className="flex justify-between gap-2"><span className="text-muted">Tracce</span><span className="tnum text-fg">{tracks.length}</span></div>
-        <div className="flex justify-between gap-2"><span className="text-muted">Artisti</span><span className="tnum text-fg">{artistCount}</span></div>
-        <div className="flex justify-between gap-2"><span className="text-muted">Durata</span><span className="tnum text-fg">{fmtDuration(totalDur)}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.labels.detail.statTracks}</span><span className="tnum text-fg">{tracks.length}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.labels.detail.statArtists}</span><span className="tnum text-fg">{artistCount}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.labels.detail.statDuration}</span><span className="tnum text-fg">{fmtDuration(totalDur)}</span></div>
       </div>
       {genreRows.length > 0 && (
         <div className="border-t border-border pt-4">
-          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">Generi</div>
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.labels.detail.genresHeading}</div>
           <MiniBars rows={genreRows} />
         </div>
       )}
@@ -69,8 +71,8 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
   );
 
   return (
-    <PageLayout title="Etichetta" meta={label} marginaliaTitle="Filtra" marginalia={marginalia}>
-      <Link href="/labels" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> Etichette</Link>
+    <PageLayout title={t.labels.detail.pageTitle} meta={label} marginaliaTitle={t.labels.detail.marginaliaTitle} marginalia={marginalia}>
+      <Link href="/labels" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.labels.detail.backLink}</Link>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
@@ -83,34 +85,34 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
               <th className={cell}>Artist</th>
               <th className={`${cell} tnum`}>BPM</th>
               <th className={cell}>Key</th>
-              <th className={`${cell} tnum`}>Dur</th>
-              <th className={cell}>Stato</th>
+              <th className={`${cell} tnum`}>{t.labels.detail.colDuration}</th>
+              <th className={cell}>{t.labels.detail.colStatus}</th>
               <th className={cell}></th>
             </tr>
           </thead>
           <tbody>
-            {tracks.map((t, i) => (
-              <tr key={t.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
+            {tracks.map((tr, i) => (
+              <tr key={tr.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
                 <td className={`${cell} tnum text-faint`}>{String(i + 1).padStart(2, "0")}</td>
                 <td className={cell}>
-                  <Link href={`/tracks/${t.id}`} className="flex items-center gap-2.5">
-                    <TrackCover track={t} className="h-8 w-8" iconSize={14} />
-                    <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{t.title ?? <span className="italic text-faint">senza titolo</span>}</span>
+                  <Link href={`/tracks/${tr.id}`} className="flex items-center gap-2.5">
+                    <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
+                    <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
                   </Link>
                 </td>
-                <td className={`${cell} text-muted`}>{t.artist ?? "—"}</td>
-                <td className={`${cell} tnum`}>{t.bpm?.toFixed(0) ?? "—"}</td>
-                <td className={`${cell} tnum`}><KeyBadge camelot={t.camelot_key} /></td>
-                <td className={`${cell} tnum text-muted`}>{fmtDuration(t.duration_seconds)}</td>
-                <td className={cell}><TrackStateIcons track={t} /></td>
+                <td className={`${cell} text-muted`}>{tr.artist ?? "—"}</td>
+                <td className={`${cell} tnum`}>{tr.bpm?.toFixed(0) ?? "—"}</td>
+                <td className={`${cell} tnum`}><KeyBadge camelot={tr.camelot_key} /></td>
+                <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
+                <td className={cell}><TrackStateIcons track={tr} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => setEditing(t)} title="Modifica valori a mano" className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
+                    <button onClick={() => setEditing(tr)} title={t.library.editValuesTitle} className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
                   </div>
                 </td>
               </tr>
             ))}
-            {tracks.length === 0 && !error && <tr><td colSpan={8} className="px-3 py-10 text-center text-sm text-muted">Nessuna traccia con questi filtri.</td></tr>}
+            {tracks.length === 0 && !error && <tr><td colSpan={8} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -119,7 +121,7 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
         track={editing}
         open={editing !== null}
         onClose={() => setEditing(null)}
-        onSaved={(t) => setAll((cur) => cur.map((x) => (x.id === t.id ? t : x)))}
+        onSaved={(saved) => setAll((cur) => cur.map((x) => (x.id === saved.id ? saved : x)))}
       />
     </PageLayout>
   );

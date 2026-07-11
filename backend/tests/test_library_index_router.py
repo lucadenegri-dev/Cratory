@@ -11,7 +11,7 @@ def test_409_senza_library_root(monkeypatch):
     monkeypatch.setattr(settings, "library_root", "")
     r = client.post("/api/library/index")
     assert r.status_code == 409
-    assert "LIBRARY_ROOT" in r.json()["detail"]
+    assert r.json()["detail"]["code"] == "library_root_not_configured"
 
 
 def test_avvio_e_status(monkeypatch, tmp_path):

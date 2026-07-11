@@ -5,6 +5,7 @@ import pytest
 from app.integrations import LLMClient
 from app.schemas import SetGenerationRequest
 from app.services.ai_agent import AIAgentError, generate_ai_set
+from app.services.app_state import set_state
 
 
 class FakeLLM(LLMClient):
@@ -119,6 +120,39 @@ def test_technical_mode_is_default(db, seed_tracks):
     llm = FakeLLM(n=6)
     generate_ai_set(db, _req(), llm)  # default = technical
     assert "arco emotivo" not in llm.last_system.lower()
+
+
+def test_prompt_lingua_default_italiano(db, seed_tracks):
+    seed_tracks(n=30)
+    llm = FakeLLM(n=6)
+    generate_ai_set(db, _req(), llm)
+    assert "Scrivi SEMPRE in italiano" in llm.last_system
+    assert "ALWAYS write in English" not in llm.last_system
+
+
+def test_prompt_lingua_en(db, seed_tracks):
+    seed_tracks(n=30)
+    set_state(db, "language", "en")
+    llm = FakeLLM(n=6)
+    generate_ai_set(db, _req(), llm)
+    assert "ALWAYS write in English" in llm.last_system
+    assert "italiano" not in llm.last_system
+
+
+def test_fasi_lingua_en(db, seed_tracks):
+    seed_tracks(n=30)
+    set_state(db, "language", "en")
+    phases = []
+    generate_ai_set(db, _req(), FakeLLM(n=5), on_phase=phases.append)
+    assert any("Selecting candidate tracks" in p for p in phases)
+    assert any("building" in p.lower() for p in phases)
+    assert not any("Seleziono" in p for p in phases)
+
+
+def test_errore_candidate_insufficienti_lingua_en(db):
+    set_state(db, "language", "en")
+    with pytest.raises(AIAgentError, match="Not enough candidate tracks"):
+        generate_ai_set(db, _req(), FakeLLM())
 
 
 def test_prompt_contains_candidate_profile(db, seed_tracks):

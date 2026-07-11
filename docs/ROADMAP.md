@@ -296,3 +296,7 @@ Per tema, in ordine indicativo di valore:
 - Disk-first: la libreria e' il disco (`LIBRARY_ROOT`), non le playlist streaming
   (che restano lead). Cratory legge i file per indicizzarli ma non li scrive mai:
   tag e organizzazione restano competenza di Sortory.
+- App bilingue IT/EN (2026-07): lingua come impostazione persistente (default `it`),
+  nessun routing per locale. UI via dizionario TypeScript tipizzato; errori backend
+  come codici stabili tradotti dal frontend; frasi deterministiche e output AI prodotti
+  nella lingua selezionata. `en.ts` e' la fonte di verita' delle chiavi.

@@ -8,16 +8,18 @@ import { Card, Input, Badge } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackCover } from "@/components/track-cover";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n";
 
-const LENSES = [
-  { value: "all", label: "Tutte" },
-  { value: "technically_safe", label: "Sicure" },
-  { value: "good_reset", label: "Reset" },
-  { value: "creative_risk", label: "Azzardi" },
+const LENS_DEFS = [
+  { value: "all", key: "all" },
+  { value: "technically_safe", key: "technicallySafe" },
+  { value: "good_reset", key: "goodReset" },
+  { value: "creative_risk", key: "creativeRisk" },
 ] as const;
-type Lens = (typeof LENSES)[number]["value"];
+type Lens = (typeof LENS_DEFS)[number]["value"];
 
 export default function TransitionFinder() {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<Track[]>([]);
   const [selected, setSelected] = useState<Track | null>(null);
@@ -27,16 +29,16 @@ export default function TransitionFinder() {
 
   useEffect(() => {
     if (!query) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       Promise.all([
         apiGet<{ items: Track[] }>("/api/tracks", { title: query, limit: 8 }),
         apiGet<{ items: Track[] }>("/api/tracks", { artist: query, limit: 8 }),
       ]).then(([a, b]) => {
         const seen = new Set<number>();
-        setMatches([...a.items, ...b.items].filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true))).slice(0, 10));
+        setMatches([...a.items, ...b.items].filter((tr) => (seen.has(tr.id) ? false : (seen.add(tr.id), true))).slice(0, 10));
       }).catch(() => setMatches([]));
     }, 250);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [query]);
 
   useEffect(() => {
@@ -50,29 +52,29 @@ export default function TransitionFinder() {
   const marginalia = (
     <div className="space-y-3 text-xs leading-relaxed text-muted">
       <div>
-        <p className="mb-1 font-semibold uppercase tracking-wide text-fg">Score 0–100</p>
-        <p>Compatibilità tecnica: BPM (max 50) + tonalità (40) + durata (10). L&apos;energia non entra nello score.</p>
+        <p className="mb-1 font-semibold uppercase tracking-wide text-fg">{t.transitions.scoreHeading}</p>
+        <p>{t.transitions.scoreExplanation}</p>
       </div>
       <div>
-        <p className="mb-1 font-semibold uppercase tracking-wide text-fg">Classi</p>
-        <p><span className="text-fg">Sicura</span>: BPM e chiave compatibili.</p>
-        <p><span className="text-fg">Reset voluto</span>: stacco netto (calo di energia o cambio di genere).</p>
-        <p><span className="text-fg">Azzardo</span>: BPM o tonalità in contrasto, da gestire.</p>
+        <p className="mb-1 font-semibold uppercase tracking-wide text-fg">{t.transitions.classesHeading}</p>
+        <p><span className="text-fg">{t.transitions.classSafeLabel}</span>{t.transitions.classSafeDesc}</p>
+        <p><span className="text-fg">{t.transitions.classResetLabel}</span>{t.transitions.classResetDesc}</p>
+        <p><span className="text-fg">{t.transitions.classRiskLabel}</span>{t.transitions.classRiskDesc}</p>
       </div>
-      <p className="text-faint">Score e classi sono deterministici, mai inventati.</p>
+      <p className="text-faint">{t.transitions.deterministicNote}</p>
     </div>
   );
 
   return (
-    <PageLayout title="Transizioni" marginaliaTitle="Legenda" marginalia={marginalia}>
-      <p className="mb-6 text-sm text-muted">Scegli una traccia e scopri cosa ci sta bene prima o dopo, con uno score tecnico.</p>
+    <PageLayout title={t.transitions.pageTitle} marginaliaTitle={t.transitions.legendTitle} marginalia={marginalia}>
+      <p className="mb-6 text-sm text-muted">{t.transitions.intro}</p>
 
       {!selected && (
         <div className="relative max-w-lg">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
           <Input
             className="pl-9"
-            placeholder="Cerca per titolo o artista…"
+            placeholder={t.transitions.searchPlaceholder}
             value={query}
             onChange={(e) => {
               const value = e.target.value;
@@ -83,11 +85,11 @@ export default function TransitionFinder() {
           {matches.length > 0 && (
             <Card className="absolute z-10 mt-1 w-full overflow-hidden">
               <ul className="divide-y divide-border">
-                {matches.map((t) => (
-                  <li key={t.id}>
-                    <button onClick={() => { setSelected(t); setQuery(""); setMatches([]); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated">
-                      <span className="truncate">{trackLabel(t)}</span>
-                      <span className="tnum ml-auto shrink-0 text-xs text-faint">{t.bpm?.toFixed(0)} · {t.camelot_key ?? "?"}</span>
+                {matches.map((tr) => (
+                  <li key={tr.id}>
+                    <button onClick={() => { setSelected(tr); setQuery(""); setMatches([]); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated">
+                      <span className="truncate">{trackLabel(tr)}</span>
+                      <span className="tnum ml-auto shrink-0 text-xs text-faint">{tr.bpm?.toFixed(0)} · {tr.camelot_key ?? "?"}</span>
                     </button>
                   </li>
                 ))}
@@ -109,15 +111,15 @@ export default function TransitionFinder() {
             <div className="ml-auto inline-flex overflow-hidden rounded-none border border-border-strong text-sm">
               {(["after", "before"] as const).map((d) => (
                 <button key={d} onClick={() => setDirection(d)} className={cn("px-3 py-1.5", direction === d ? "bg-fg-strong text-bg font-medium" : "text-muted hover:bg-elevated")}>
-                  {d === "after" ? "Dopo" : "Prima"}
+                  {d === "after" ? t.transitions.afterLabel : t.transitions.beforeLabel}
                 </button>
               ))}
             </div>
           </div>
 
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <span className="text-xs uppercase tracking-wide text-muted">Lente</span>
-            {LENSES.map((l) => (
+            <span className="text-xs uppercase tracking-wide text-muted">{t.transitions.lensLabel}</span>
+            {LENS_DEFS.map((l) => (
               <button
                 key={l.value}
                 type="button"
@@ -130,7 +132,7 @@ export default function TransitionFinder() {
                     : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
                 )}
               >
-                {l.label}
+                {t.transitions.lenses[l.key]}
               </button>
             ))}
           </div>
@@ -138,7 +140,7 @@ export default function TransitionFinder() {
           <div className="overflow-hidden border border-border">
             {results.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-muted">
-                Nessuna transizione {lens !== "all" ? "di questa classe" : ""} per questa traccia.
+                {t.transitions.noResultsMessage(lens !== "all")}
               </p>
             ) : (
               <ul className="divide-y divide-border">
@@ -147,10 +149,12 @@ export default function TransitionFinder() {
                     <div className="flex items-center gap-3">
                       <Badge tone="neutral" className="tnum w-9 justify-center">{score.score}</Badge>
                       <Link href={`/tracks/${track.id}`} className="min-w-0 flex-1 truncate font-medium hover:text-fg-strong">{trackLabel(track)}</Link>
-                      {track.has_local_file && <Badge tone="success" className="shrink-0">FILE</Badge>}
+                      {track.has_local_file && <Badge tone="success" className="shrink-0">{t.transitions.hasFileBadge}</Badge>}
                       {score.classification && (
                         <Badge tone="neutral" className="shrink-0">
-                          <span title={score.classification_reason ?? undefined}>{score.classification_label ?? score.classification}</span>
+                          <span title={score.classification_reason ?? undefined}>
+                            {t.transitionLabels[score.classification as keyof typeof t.transitionLabels] ?? score.classification}
+                          </span>
                         </Badge>
                       )}
                       <span className="tnum shrink-0 text-xs text-muted">{track.bpm?.toFixed(0)} BPM · {track.camelot_key ?? "?"}</span>

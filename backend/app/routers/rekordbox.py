@@ -1,9 +1,10 @@
 """Router REKORDBOX: import della collezione XML (BPM/key) e conteggio pending."""
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.core.http_errors import api_error
 from app.db import get_db
 from app.models import Track
 from app.services.rekordbox_import import apply_collection
@@ -29,8 +30,9 @@ def import_collection(file: UploadFile = File(...), overwrite: bool = False,
     # ?overwrite=true: la ri-analisi Rekordbox sovrascrive BPM/key esistenti.
     content = file.file.read()
     if not content:
-        raise HTTPException(status_code=400, detail="file vuoto")
+        raise api_error(400, "rekordbox_empty_file", "Empty file.")
     try:
         return apply_collection(db, content, overwrite=overwrite)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise api_error(400, "rekordbox_import_failed", f"Rekordbox import failed: {exc}",
+                         reason=str(exc)) from exc
