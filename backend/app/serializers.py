@@ -56,13 +56,13 @@ def track_detail_out(track: Track) -> TrackDetailOut:
     return TrackDetailOut(**track_out(track).model_dump())
 
 
-def setlist_out(setlist: Setlist) -> SetlistOut:
+def setlist_out(setlist: Setlist, lang: str = "it") -> SetlistOut:
     # F10: classifichiamo ogni transizione dal brano precedente (deterministico,
     # ricalcolato in lettura dai dati delle due tracce: nessuna colonna in DB).
     items = []
     prev = None
     for st in setlist.tracks:
-        cls = classify_transition(prev, st.track) if prev is not None else None
+        cls = classify_transition(prev, st.track, lang) if prev is not None else None
         items.append(SetlistTrackOut(
             position=st.position,
             role=st.role,
@@ -73,9 +73,8 @@ def setlist_out(setlist: Setlist) -> SetlistOut:
             ai_reason=st.ai_reason,
             risk_level=st.risk_level,
             transition_class=cls.label if cls else None,
-            transition_class_label=cls.label_it if cls else None,
             transition_class_reason=cls.reason if cls else None,
-            mix_tip=mixing_tip(prev, st.track) if prev is not None else None,
+            mix_tip=mixing_tip(prev, st.track, lang) if prev is not None else None,
         ))
         prev = st.track
     total = sum(st.track.duration_seconds or 0 for st in setlist.tracks)
@@ -91,7 +90,7 @@ def setlist_out(setlist: Setlist) -> SetlistOut:
         generated_by=setlist.generated_by or "algorithmic",
         owned_only=bool(setlist.owned_only),
         validation=setlist.validation or {},
-        mixing_overview=mixing_overview([st.track for st in setlist.tracks]),
+        mixing_overview=mixing_overview([st.track for st in setlist.tracks], lang),
         total_duration_seconds=total,
         created_at=setlist.created_at,
         tracks=items,

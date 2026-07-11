@@ -152,7 +152,9 @@ export default function TransitionFinder() {
                       {track.has_local_file && <Badge tone="success" className="shrink-0">{t.transitions.hasFileBadge}</Badge>}
                       {score.classification && (
                         <Badge tone="neutral" className="shrink-0">
-                          <span title={score.classification_reason ?? undefined}>{score.classification_label ?? score.classification}</span>
+                          <span title={score.classification_reason ?? undefined}>
+                            {t.transitionLabels[score.classification as keyof typeof t.transitionLabels] ?? score.classification}
+                          </span>
                         </Badge>
                       )}
                       <span className="tnum shrink-0 text-xs text-muted">{track.bpm?.toFixed(0)} BPM · {track.camelot_key ?? "?"}</span>

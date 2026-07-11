@@ -26,6 +26,7 @@ from app.schemas import (
 from app.serializers import alternative_out, setlist_out, setlist_summary_out
 from app.services.ai_agent import AIAgentError, generate_ai_set
 from app.services.alternatives import AlternativesError, find_alternatives
+from app.services.app_state import get_language
 from app.services.set_editor import (
     SetEditError,
     delete_set,
@@ -34,7 +35,7 @@ from app.services.set_editor import (
     rename_set,
     replace_track,
 )
-from app.services.scoring import classify_transition, mixing_tip
+from app.services.scoring import classify_transition, mixing_tip, opening_track_label
 from app.services.set_generator import SetGenerationError, generate_set
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,7 @@ def generate_status():
 
 @router.post("/generate", response_model=SetlistOut)
 def generate(req: SetGenerationRequest, db: Session = Depends(get_db)):
+    lang = get_language(db)
     if _should_use_ai(req):
         try:
             setlist = generate_ai_set(db, req, get_llm_client(_model_for(req)))
@@ -132,13 +134,13 @@ def generate(req: SetGenerationRequest, db: Session = Depends(get_db)):
         except (AIAgentError, LLMError) as exc:
             raise api_error(422, "set_ai_generation_failed", f"AI set generation failed: {exc}",
                              reason=str(exc)) from exc
-        return setlist_out(setlist)
+        return setlist_out(setlist, lang)
     try:
         setlist = generate_set(db, req)
     except SetGenerationError as exc:
         raise api_error(422, "set_generation_failed", f"Set generation failed: {exc}",
                          reason=str(exc)) from exc
-    return setlist_out(setlist)
+    return setlist_out(setlist, lang)
 
 
 @router.get("", response_model=list[SetlistSummaryOut])
@@ -151,7 +153,7 @@ def get_one(setlist_id: int, db: Session = Depends(get_db)):
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
         raise api_error(404, "set_not_found", "Set not found")
-    return setlist_out(setlist)
+    return setlist_out(setlist, get_language(db))
 
 
 def _fmt_dur(seconds: int | None) -> str:
@@ -170,6 +172,7 @@ def export(
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
         raise api_error(404, "set_not_found", "Set not found")
+    lang = get_language(db)
 
     if format == "csv":
         buf = io.StringIO()
@@ -180,7 +183,7 @@ def export(
         prev = None
         for st in setlist.tracks:
             t = st.track
-            cls = classify_transition(prev, t).label if prev is not None else ""
+            cls = classify_transition(prev, t, lang).label if prev is not None else ""
             writer.writerow([st.position, st.role or "", t.title or "", t.artist or "", t.bpm or "",
                              t.camelot_key or "", t.duration_seconds or "", t.source_type,
                              t.spotify_id or "", t.url or "", st.transition_score or "", st.risk_level or "",
@@ -199,7 +202,7 @@ def export(
             t = st.track
             label = f"{t.artist or '?'} — {t.title or t.spotify_id or '?'}"
             # Nota di mix deterministica e accurata (mai il log grezzo o claim AI non verificati).
-            note = (mixing_tip(prev, t) if prev is not None else "apertura").replace("|", "/").replace("\n", " ")
+            note = (mixing_tip(prev, t, lang) if prev is not None else opening_track_label(lang)).replace("|", "/").replace("\n", " ")
             prev = t
             md.append(
                 f"| {st.position} | {st.role or ''} | {label} | "
@@ -250,7 +253,7 @@ def _edit_error(exc: SetEditError) -> HTTPException:
 @router.patch("/{setlist_id}", response_model=SetlistOut)
 def rename(setlist_id: int, req: SetRenameRequest, db: Session = Depends(get_db)):
     try:
-        return setlist_out(rename_set(db, setlist_id, req.name))
+        return setlist_out(rename_set(db, setlist_id, req.name), get_language(db))
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
@@ -266,7 +269,7 @@ def delete(setlist_id: int, db: Session = Depends(get_db)):
 @router.delete("/{setlist_id}/tracks/{position}", response_model=SetlistOut)
 def delete_track(setlist_id: int, position: int, db: Session = Depends(get_db)):
     try:
-        return setlist_out(remove_track(db, setlist_id, position))
+        return setlist_out(remove_track(db, setlist_id, position), get_language(db))
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
@@ -274,7 +277,7 @@ def delete_track(setlist_id: int, position: int, db: Session = Depends(get_db)):
 @router.post("/{setlist_id}/tracks/{position}/move", response_model=SetlistOut)
 def move(setlist_id: int, position: int, req: MoveTrackRequest, db: Session = Depends(get_db)):
     try:
-        return setlist_out(move_track(db, setlist_id, position, req.direction))
+        return setlist_out(move_track(db, setlist_id, position, req.direction), get_language(db))
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
@@ -282,7 +285,7 @@ def move(setlist_id: int, position: int, req: MoveTrackRequest, db: Session = De
 @router.post("/{setlist_id}/tracks/{position}/replace", response_model=SetlistOut)
 def replace(setlist_id: int, position: int, req: ReplaceTrackRequest, db: Session = Depends(get_db)):
     try:
-        return setlist_out(replace_track(db, setlist_id, position, req.track_id))
+        return setlist_out(replace_track(db, setlist_id, position, req.track_id), get_language(db))
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 

@@ -824,6 +824,11 @@ export const it: Dictionary = {
       filtered ? "Nessuna transizione di questa classe per questa traccia." : "Nessuna transizione per questa traccia.",
     hasFileBadge: "FILE",
   },
+  transitionLabels: {
+    technically_safe: "Tecnicamente sicura",
+    creative_risk: "Azzardo creativo",
+    good_reset: "Reset voluto",
+  },
   errors: {
     playlist_not_found: "Playlist non trovata",
     soundcloud_playlist_not_syncable:

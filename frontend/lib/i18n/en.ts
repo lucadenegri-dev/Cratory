@@ -822,6 +822,13 @@ export const en = {
       filtered ? "No transitions of this class for this track." : "No transitions for this track.",
     hasFileBadge: "FILE",
   },
+  // Etichette leggibili per il codice enum `classification`/`transition_class` (deterministico,
+  // via `label` dal backend): la label la traduce SEMPRE il frontend, il backend manda solo il codice.
+  transitionLabels: {
+    technically_safe: "Technically safe",
+    creative_risk: "Creative risk",
+    good_reset: "Good reset",
+  },
   errors: {
     playlist_not_found: "Playlist not found",
     soundcloud_playlist_not_syncable:

@@ -239,7 +239,6 @@ export interface TransitionScore {
   technical_reasons: string[];
   warnings: string[];
   classification: TransitionClass | null;
-  classification_label: string | null;
   classification_reason: string | null;
 }
 
@@ -258,7 +257,6 @@ export interface SetlistTrack {
   ai_reason: string | null;
   risk_level: string | null;
   transition_class: TransitionClass | null;
-  transition_class_label: string | null;
   transition_class_reason: string | null;
   mix_tip: string | null;
 }

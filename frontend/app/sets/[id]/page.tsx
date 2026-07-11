@@ -283,7 +283,9 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                     <span className="tnum shrink-0 text-xs text-fg">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? "?"} <span className="text-muted">· {fmtDuration(st.track.duration_seconds)}{st.track.genre ? ` · ${st.track.genre}` : ""}</span></span>
                     {st.transition_class && (
                       <Badge tone="neutral">
-                        <span title={st.transition_class_reason ?? undefined}>{st.transition_class_label ?? st.transition_class}</span>
+                        <span title={st.transition_class_reason ?? undefined}>
+                          {t.transitionLabels[st.transition_class as keyof typeof t.transitionLabels] ?? st.transition_class}
+                        </span>
                       </Badge>
                     )}
                   </div>
