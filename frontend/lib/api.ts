@@ -475,8 +475,10 @@ export function importSoundcloudPlaylist(url: string) {
 
 export interface SoundCloudLikedTrackPreview {
   track_id: string;
+  /** Titolo grezzo, come appare su SoundCloud (lo split artista/titolo avviene all'import). */
   title: string | null;
-  artist: string | null;
+  /** Utente che ha caricato la traccia (dallo slug dell'URL). */
+  uploader: string | null;
   duration_seconds: number | null;
   artwork_url: string | null;
   url: string | null;

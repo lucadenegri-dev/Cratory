@@ -461,6 +461,8 @@ def preview_soundcloud_likes(db: Session, entries: list) -> list[dict]:
             if t.platform_track_id:
                 platform_ids.add(t.platform_track_id)
 
+    from app.integrations.soundcloud import uploader_from_url
+
     out: list[dict] = []
     for entry in entries:
         norm = normalize_soundcloud_item(entry)
@@ -468,8 +470,10 @@ def preview_soundcloud_likes(db: Session, entries: list) -> list[dict]:
             continue
         out.append({
             "track_id": norm.platform_track_id,
-            "title": norm.title,
-            "artist": norm.artist,
+            # Come su SoundCloud: titolo grezzo + utente (slug URL). Nessun
+            # parsing artista/titolo qui: avviene all'import col fetch pieno.
+            "title": (entry.get("title") or "").strip() or None,
+            "uploader": uploader_from_url(norm.url),
             "duration_seconds": norm.duration_seconds,
             "artwork_url": norm.artwork_url,
             "url": norm.url,

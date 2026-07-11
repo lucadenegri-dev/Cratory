@@ -239,7 +239,23 @@ def test_preview_marca_gia_importate(db):
     assert [p["track_id"] for p in preview] == ["1001", "1002"]
     assert preview[0]["already_imported"] is True
     assert preview[1]["already_imported"] is False
-    assert preview[0]["artist"] == "Artist X"
+
+
+def test_preview_mostra_titolo_grezzo_e_utente_dallo_slug(db):
+    """La preview rispecchia SoundCloud: titolo com'è + utente che ha caricato
+    (dallo slug dell'URL, il display name non c'è in flat mode). Nessun parsing
+    artista/titolo: quello avviene all'import."""
+    entries = [
+        _entry(1, title="a1 - Pariah - Caterpillar (VOAM009)",
+               url="https://soundcloud.com/voamlabel/a1-pariah-caterpillar"),
+        _entry(2, title="MARECHIARO 9",
+               url="https://soundcloud.com/bruno-ruotolo-711086630/marechiaro-9-10"),
+    ]
+    preview = preview_soundcloud_likes(db, entries)
+    assert preview[0]["title"] == "a1 - Pariah - Caterpillar (VOAM009)"  # grezzo, non splittato
+    assert preview[0]["uploader"] == "voamlabel"
+    assert preview[1]["uploader"] == "bruno ruotolo"  # slug ripulito: via dash e suffisso numerico
+    assert "artist" not in preview[0]
 
 
 def test_import_selected_filtra_e_riusa_la_playlist_liked(db):

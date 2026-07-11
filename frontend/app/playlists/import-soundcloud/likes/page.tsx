@@ -43,7 +43,7 @@ export default function ImportSoundcloudLikesPage() {
     return rows.filter(
       (t) =>
         (t.title ?? "").toLowerCase().includes(needle) ||
-        (t.artist ?? "").toLowerCase().includes(needle),
+        (t.uploader ?? "").toLowerCase().includes(needle),
     );
   }, [preview, q]);
 
@@ -78,7 +78,7 @@ export default function ImportSoundcloudLikesPage() {
     <div className="space-y-2 text-xs leading-relaxed text-muted">
       <p>La playlist <span className="text-fg">SoundCloud Likes</span> cresce solo con i brani che selezioni. L&apos;import è additivo.</p>
       <p>Vengono mostrati gli ultimi 100 like: quelli già importati appaiono spuntati e disabilitati.</p>
-      <p>L&apos;anteprima è veloce ma approssimata: artista e titolo vengono dedotti dal solo titolo SoundCloud, e per alcuni brani l&apos;artista può mancare. All&apos;import ogni traccia selezionata viene riletta con i metadati completi (artista reale, durata, cover) — conta circa un secondo a traccia.</p>
+      <p>L&apos;anteprima mostra i brani come su SoundCloud: titolo originale e utente che li ha caricati. Artista e titolo &quot;puliti&quot; vengono ricavati all&apos;import, quando ogni traccia selezionata è riletta coi metadati completi (artista reale, durata, cover) — conta circa un secondo a traccia.</p>
     </div>
   );
 
@@ -109,7 +109,7 @@ export default function ImportSoundcloudLikesPage() {
                 <Search size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
                 <Input
                   className="h-9 pl-8"
-                  placeholder="Filtra per artista o titolo"
+                  placeholder="Filtra per titolo o utente"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                 />
@@ -139,7 +139,7 @@ export default function ImportSoundcloudLikesPage() {
                       />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium">{t.title ?? <span className="italic text-faint">senza titolo</span>}</div>
-                        <div className="truncate text-xs text-faint">{t.artist ?? "—"}</div>
+                        <div className="truncate text-xs text-faint">{t.uploader ?? "—"}</div>
                       </div>
                       <span className="tnum shrink-0 text-xs text-muted">{fmtDuration(t.duration_seconds)}</span>
                     </label>

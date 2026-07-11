@@ -337,8 +337,8 @@ class SoundCloudImportRequest(BaseModel):
 
 class SoundCloudLikedTrackPreview(BaseModel):
     track_id: str
-    title: str | None = None
-    artist: str | None = None
+    title: str | None = None  # grezzo, come appare su SoundCloud (split all'import)
+    uploader: str | None = None  # utente che ha caricato, dallo slug dell'URL
     duration_seconds: int | None = None
     artwork_url: str | None = None
     url: str | None = None

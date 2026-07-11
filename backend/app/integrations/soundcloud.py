@@ -15,6 +15,7 @@ Fetch sequenziali, nessun parallelismo: profilo basso su API non ufficiale.
 from __future__ import annotations
 
 import importlib.util
+import re
 from urllib.parse import urlparse
 
 DEFAULT_LIKES_LIMIT = 100
@@ -103,6 +104,17 @@ def _is_set_entry(entry: dict) -> bool:
     # Nei like possono comparire anche playlist (/sets/): non sono tracce.
     url = entry.get("url") or entry.get("webpage_url") or ""
     return "/sets/" in urlparse(url).path
+
+
+def uploader_from_url(url: str | None) -> str | None:
+    """Utente che ha caricato, dallo slug dell'URL traccia (per la preview flat,
+    dove il display name non c'è): "bruno-ruotolo-711086630" -> "bruno ruotolo".
+    """
+    segments = [s for s in urlparse(url or "").path.split("/") if s]
+    if not segments:
+        return None
+    slug = re.sub(r"-\d+$", "", segments[0])  # via il suffisso numerico di disambiguazione
+    return slug.replace("-", " ").replace("_", " ").strip() or None
 
 
 def fetch_playlist(url: str) -> dict:
