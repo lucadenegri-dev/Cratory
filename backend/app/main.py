@@ -20,6 +20,7 @@ from app.routers import (
     rekordbox,
     services,
     sets,
+    soundcloud,
     spotify,
     tracks,
     transitions,
@@ -80,6 +81,7 @@ app.include_router(downloads.router)
 app.include_router(files.router)
 app.include_router(pipeline.router)
 app.include_router(rekordbox.router)
+app.include_router(soundcloud.router)
 
 
 @app.get("/api/health")

@@ -318,6 +318,38 @@ class ManualImportRequest(BaseModel):
     text: str = Field(min_length=1)  # righe "Artista - Titolo" o CSV "artista,titolo"
 
 
+# --- SoundCloud ---------------------------------------------------------------
+
+
+class SoundCloudStatus(BaseModel):
+    available: bool  # yt-dlp importabile
+    ytdlp_version: str | None = None
+    username: str | None = None
+
+
+class SoundCloudConfigRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+
+
+class SoundCloudImportRequest(BaseModel):
+    url: str = Field(min_length=1)  # playlist pubblica o secret link
+
+
+class SoundCloudLikedTrackPreview(BaseModel):
+    track_id: str
+    title: str | None = None
+    artist: str | None = None
+    duration_seconds: int | None = None
+    artwork_url: str | None = None
+    url: str | None = None
+    already_imported: bool = False
+
+
+class SoundCloudLikedSelectedRequest(BaseModel):
+    track_ids: list[str] = Field(default_factory=list)
+    limit: int = 100  # quanti like recenti rifetchare per filtrare i selezionati
+
+
 # --- Import locale -----------------------------------------------------------
 
 
