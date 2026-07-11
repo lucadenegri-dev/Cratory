@@ -175,3 +175,20 @@ def test_import_selected_filtra_e_riusa_la_playlist_liked(db):
     assert len(liked) == 1
     assert liked[0].name == SC_LIKED_PLAYLIST_NAME
     assert liked[0].track_count == 3
+
+
+def test_import_popola_soundcloud_id_come_spotify(db):
+    """Parità con Spotify: la Track importata valorizza la colonna dedicata
+    soundcloud_id (non solo platform_track_id), così il filtro has_soundcloud
+    su /api/tracks e il campo serializzato soundcloud_id funzionano."""
+    from app.models import Track
+    from app.repositories import list_tracks
+
+    import_selected_soundcloud_likes(db, [_entry(1)], ["1001"])
+    track = db.query(Track).filter(Track.platform == "soundcloud").one()
+    assert track.soundcloud_id == "1001"
+    assert track.platform_track_id == "1001"
+    # il filtro has_soundcloud (repositories) ora trova la traccia importata
+    total, found = list_tracks(db, has_soundcloud=True)
+    assert total == 1
+    assert found[0].id == track.id

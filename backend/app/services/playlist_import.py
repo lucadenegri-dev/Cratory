@@ -161,6 +161,10 @@ def _apply_fields(track: Track, norm: NormalizedTrack) -> None:
     track.platform_track_id = track.platform_track_id or norm.platform_track_id
     if norm.platform == "spotify":
         track.spotify_id = track.spotify_id or norm.platform_track_id
+    elif norm.platform == "soundcloud":
+        # Popola la colonna dedicata (come spotify_id): abilita il filtro
+        # has_soundcloud su /api/tracks e l'esposizione di soundcloud_id.
+        track.soundcloud_id = track.soundcloud_id or norm.platform_track_id
     track.source_type = track.source_type or norm.platform
     track.title = track.title or norm.title
     track.artist = track.artist or norm.artist
