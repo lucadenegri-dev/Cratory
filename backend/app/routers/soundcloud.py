@@ -1,6 +1,4 @@
 """HTTP only: stato/config SoundCloud, import playlist da URL, like selettivi."""
-import logging
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -31,7 +29,6 @@ from app.services.playlist_import import (
     preview_soundcloud_likes,
 )
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/soundcloud", tags=["soundcloud"])
 
 USERNAME_KEY = "soundcloud_username"
