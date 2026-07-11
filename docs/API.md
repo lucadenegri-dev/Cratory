@@ -408,6 +408,19 @@ GET /api/services/status
 AI, Last.fm, Discogs (`connected` = `DISCOGS_TOKEN` presente; funziona anche senza
 token, il token alza il rate limit), slskd e servizi affini.
 
+## Settings
+
+```text
+GET /api/settings/language
+PUT /api/settings/language
+```
+
+Impostazione persistita in `AppState` (chiave `language`, niente tabella dedicata:
+app locale mono-utente). `GET /api/settings/language` restituisce
+`{"language": "it"|"en"}` (default `"it"` se non ancora impostata). `PUT
+/api/settings/language` con body `{"language": "it"|"en"}` salva la scelta e
+restituisce lo stesso oggetto; `422` su valori diversi da `"it"`/`"en"`.
+
 ## Convenzioni
 
 - Errori tramite `HTTPException` con `detail` leggibile.
