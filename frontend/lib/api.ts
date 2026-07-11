@@ -388,6 +388,10 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return apiSend<T>("PATCH", path, body);
 }
 
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  return apiSend<T>("PUT", path, body ?? {});
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   return apiSend<T>("DELETE", path);
 }
@@ -446,6 +450,47 @@ export function importSelectedLikedTracks(spotifyIds: string[]) {
   return apiPost<PlaylistImportReport>("/api/playlists/import/liked/selected", {
     spotify_ids: spotifyIds,
   });
+}
+
+// --- SoundCloud ---------------------------------------------------------------
+
+export interface SoundCloudStatus {
+  available: boolean;
+  ytdlp_version: string | null;
+  username: string | null;
+}
+
+export function soundcloudStatus() {
+  return apiGet<SoundCloudStatus>("/api/soundcloud/status");
+}
+
+export function setSoundcloudUsername(username: string) {
+  return apiPut<SoundCloudStatus>("/api/soundcloud/config", { username });
+}
+
+/** Importa una playlist SoundCloud da URL (pubblica o secret link). Solo metadati. */
+export function importSoundcloudPlaylist(url: string) {
+  return apiPost<PlaylistImportReport>("/api/soundcloud/import", { url });
+}
+
+export interface SoundCloudLikedTrackPreview {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  duration_seconds: number | null;
+  artwork_url: string | null;
+  url: string | null;
+  already_imported: boolean;
+}
+
+/** Anteprima dei like SoundCloud recenti: non importa nulla. */
+export function previewSoundcloudLikes(limit = 100) {
+  return apiGet<SoundCloudLikedTrackPreview[]>("/api/soundcloud/likes/preview", { limit });
+}
+
+/** Importa nella playlist "SoundCloud Likes" solo i brani selezionati (additivo). */
+export function importSelectedSoundcloudLikes(trackIds: string[], limit = 100) {
+  return apiPost<PlaylistImportReport>("/api/soundcloud/import/likes", { track_ids: trackIds, limit });
 }
 
 export function listImportedPlaylists() {

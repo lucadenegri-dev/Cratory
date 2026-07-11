@@ -4,10 +4,10 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import {
-  apiGet, servicesStatus, SPOTIFY_LOGIN_URL, startLibraryIndex,
-  type ServiceStatus, type SpotifyStatus,
+  apiGet, servicesStatus, setSoundcloudUsername, soundcloudStatus, SPOTIFY_LOGIN_URL, startLibraryIndex,
+  type ServiceStatus, type SoundCloudStatus, type SpotifyStatus,
 } from "@/lib/api";
-import { Button, Alert, Loading } from "@/components/ui";
+import { Alert, Button, Card, CardHeader, Field, Input, Loading, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 
@@ -99,7 +99,70 @@ function SettingsInner() {
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Libreria (disco)</div>
       <LibraryIndexCard />
+
+      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">SoundCloud</div>
+      <SoundCloudCard />
     </PageLayout>
+  );
+}
+
+function SoundCloudCard() {
+  const [status, setStatus] = useState<SoundCloudStatus | null>(null);
+  const [username, setUsername] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    soundcloudStatus()
+      .then((s) => {
+        setStatus(s);
+        setUsername(s.username ?? "");
+      })
+      .catch(() => setStatus(null));
+  }, []);
+
+  const save = async () => {
+    setError(null);
+    setSaving(true);
+    try {
+      setStatus(await setSoundcloudUsername(username.trim()));
+    } catch (e) {
+      setError(String((e as { message?: string })?.message ?? e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        title="SoundCloud"
+        subtitle="Username per l'import dei like. Le playlist si importano incollando l'URL."
+      />
+      <div className="grid gap-3 p-4">
+        {status && !status.available && (
+          <Alert tone="warning">yt-dlp non disponibile nel backend: l&apos;import SoundCloud non funzionerà.</Alert>
+        )}
+        {error && <Alert tone="danger">⚠ {error}</Alert>}
+        <Field label="Username SoundCloud">
+          <div className="flex items-center gap-2">
+            <Input
+              className="flex-1"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="es. luca-denegri"
+              disabled={saving}
+            />
+            <Button size="sm" onClick={save} disabled={saving || username.trim() === ""}>
+              {saving ? <Spinner /> : "Salva"}
+            </Button>
+          </div>
+        </Field>
+        {status?.ytdlp_version && (
+          <p className="text-xs text-faint">yt-dlp {status.ytdlp_version}</p>
+        )}
+      </div>
+    </Card>
   );
 }
 
