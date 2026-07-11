@@ -79,7 +79,8 @@ dall'utente collegato (quelle altrui che segue non sono importabili in dev mode)
 `POST /api/playlists/{playlist_id}/sync` riallinea una playlist gia' importata con
 la piattaforma d'origine. Spotify: importa le nuove tracce e scollega quelle
 rimosse (che restano in libreria). SoundCloud (vedi sezione dedicata): sempre
-additivo, mai prune; solo per playlist importate da URL (non i "like").
+additivo, mai prune; solo per playlist importate da URL (non i "like"). Risponde
+`409` per una playlist SoundCloud di tipo "like" o senza un `url` salvato.
 `DELETE /api/playlists/{playlist_id}` rimuove la playlist e i suoi "lead orfani":
 tracce senza file locale che non sono in nessun'altra playlist ne' in un set salvato
 (le tracce su disco, o presenti in altra playlist/set, restano). Risponde `200` con
