@@ -27,17 +27,26 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = initial;
     // requestAnimationFrame: evita setState sincrono nel body dell'effect
     // (stesso pattern di components/theme-toggle.tsx per react-hooks/set-state-in-effect).
-    const raf = requestAnimationFrame(() => setLangState(initial));
+    // `synced` evita la race col fetch: su backend locale la .then può risolvere
+    // PRIMA del rAF; senza guardia il rAF differito sovrascriverebbe la lingua
+    // già applicata dal backend, lasciando la UI bloccata sulla lingua sbagliata.
+    let synced = false;
+    const raf = requestAnimationFrame(() => {
+      if (!synced) setLangState(initial);
+    });
     apiGet<{ language: Language }>("/api/settings/language")
       .then(({ language }) => {
+        synced = true;
         if (language !== initial) {
           setCurrentLanguage(language);
-          setLangState(language);
           localStorage.setItem(STORAGE_KEY, language);
           document.documentElement.lang = language;
         }
+        setLangState(language); // verità dal backend una volta nota
       })
-      .catch(() => undefined); // backend giù: si resta sulla lingua locale
+      .catch(() => {
+        if (!synced) setLangState(initial); // backend giù: si resta sulla lingua locale
+      });
     return () => cancelAnimationFrame(raf);
   }, []);
 
