@@ -1,98 +1,95 @@
-# CLAUDE.md - Guida per l'AI collaboratrice
+# CLAUDE.md - Guide for the AI collaborator
 
-Guida operativa unica per l'AI che lavora su Cratory.
+The single operational guide for the AI working on Cratory.
 
-## Progetto
+## Project
 
-**Cratory** e' il nuovo nome dell'app precedentemente chiamata DJ Assistant. E' una
-webapp personale, locale/self-hosted e mono-utente per importare
-playlist streaming, costruire bozze di DJ set su tracce possedute (BPM/key da
-Rekordbox), analizzare buchi della libreria, fare discovery e identificare tracklist
-di mix. **L'arricchimento dei metadati (titolo/artista/album/label/genere) e il
-tagging sono di Sortory.**
+**Cratory** is the new name of the app previously called DJ Assistant. It is a personal,
+local/self-hosted, single-user web app to import streaming playlists, build DJ set drafts
+on owned tracks (BPM/key from Rekordbox), analyze library gaps, do discovery, and identify
+mix tracklists. **Metadata enrichment (title/artist/album/label/genre) and tagging are
+Sortory's job.**
 
-Il progetto non riproduce audio. Il modulo Shazam scarica audio solo in modo temporaneo
-per fingerprinting e salva un corpus separato di tracklist identificate. Eccezione
-esplicita al "non conserva file audio" (il "non riproduce" resta valido): l'acquisizione
-persistente via Soulseek/slskd, che collega un file alla `Track` esistente in libreria
+The project does not play audio. The Shazam module downloads audio only temporarily for
+fingerprinting and saves a separate corpus of identified tracklists. An explicit exception
+to "does not keep audio files" (the "does not play" still holds): persistent acquisition via
+Soulseek/slskd, which links a file to the existing `Track` in the library
 (`has_local_file`/`local_path`/`local_format`/`local_bitrate`).
 
-## Fonte di verita'
+## Source of truth
 
-Leggere in quest'ordine:
+Read in this order:
 
-1. `README.md` - panoramica, setup e workflow (vetrina, in inglese).
-2. `docs/ARCHITECTURE.md` - principi, pipeline, dati e integrazioni.
-3. `docs/API.md` - endpoint correnti.
-4. `docs/ROADMAP.md` - stato, naming, backlog e prossimi passi (fonte di verita' di stato).
-5. `PROGRESS.md` - diario cronologico per riprendere il lavoro.
-6. `docs/PRODUCT.md` - prodotto, utenti, job-to-be-done e principi.
-7. `docs/DESIGN.md` - design system "editorial archive".
+1. `README.md` - overview, setup and workflow (showcase, in English).
+2. `docs/ARCHITECTURE.md` - principles, pipeline, data and integrations.
+3. `docs/API.md` - current endpoints.
+4. `docs/ROADMAP.md` - status, naming, backlog and next steps (state source of truth).
+5. `PROGRESS.md` - chronological diary to resume work.
+6. `docs/DESIGN.md` - product context and the "editorial archive" design system.
+7. `docs/DEPENDENCIES.md` - dependencies and external services reference.
 
-## Regole non negoziabili
+## Non-negotiable rules
 
-1. **Separare motore deterministico e AI.** Import, normalizzazione, deduplica,
-   scoring, ruoli, gap analysis, discovery ranking e validazione sono codice
-   deterministico. Narrativa, interpretazione prompt e spiegazioni sono AI.
-2. **BPM/key vengono da Rekordbox.** Si importano dall'export XML della collezione
-   (`/api/rekordbox/import`); di default un dato già presente non si sovrascrive
-   (protegge le correzioni manuali), con `?overwrite=true` la ri-analisi Rekordbox
-   vince. Cratory non stima né inventa BPM/key. `energy` è un dato derivato
-   deterministico (da BPM+genere).
-3. **Lo streaming non fornisce feature di mixing.** Spotify da identita' traccia,
-   metadata editoriali, cover, durata, ISRC, URL e playlist.
-4. **L'AI non riceve mai l'intera libreria.** Riceve solo candidate filtrate dal
-   Candidate Engine, con cap 60.
-5. **Ogni output AI e' validato.** Usare schemi Pydantic e Validation Engine prima
-   di mostrare o salvare risultati.
-6. **L'AI non inventa dati fattuali.** Deve distinguere fonte esterna, inferenza
-   musicale e ipotesi creativa.
-7. **Rekordbox è la fonte di BPM/tonalità.** L'utente analizza in Rekordbox ed
-   esporta la collezione in XML; Cratory la importa per riempire BPM/key sulle
-   tracce possedute. Beatgrid/cue restano fuori scope.
-8. **La libreria è il disco.** Il possesso (`has_local_file`) viene dall'indicizzazione
-   di `LIBRARY_ROOT` (riaggancio per `audio_hash`); le playlist streaming sono lead.
-   Cratory legge i file ma non li muta mai: i tag li scrive solo Sortory.
+1. **Separate the deterministic engine and the AI.** Import, normalization, de-duplication,
+   scoring, roles, gap analysis, discovery ranking and validation are deterministic code.
+   Narrative, prompt interpretation and explanations are AI.
+2. **BPM/key come from Rekordbox.** The user analyzes their library in Rekordbox and exports
+   the collection as XML; Cratory imports it (`/api/rekordbox/import`) to fill in BPM/key on
+   owned tracks. By default an already-present value is not overwritten (it protects manual
+   corrections); with `?overwrite=true` the Rekordbox re-analysis wins. Cratory never
+   estimates or invents BPM/key. `energy` is a deterministic derived value (from BPM+genre).
+   Beatgrid/cue stay out of scope; there is no live integration with the Rekordbox app.
+3. **Streaming does not provide mixing features.** Spotify gives track identity, editorial
+   metadata, covers, duration, ISRC, URLs and playlists.
+4. **The AI never receives the whole library.** It only receives candidates filtered by the
+   Candidate Engine, with a cap of 60.
+5. **Every AI output is validated.** Use Pydantic schemas and the Validation Engine before
+   showing or saving results.
+6. **The AI does not invent factual data.** It must distinguish external source, musical
+   inference and creative hypothesis.
+7. **The library is the disk.** Ownership (`has_local_file`) comes from indexing
+   `LIBRARY_ROOT` (re-linking by `audio_hash`); streaming playlists are leads. Cratory reads
+   the files but never mutates them: tags are written only by Sortory.
 
-## Stack e layout
+## Stack and layout
 
-Backend Python + FastAPI, SQLAlchemy su SQLite, Pydantic. Frontend Next.js 16 con App
-Router, React e Tailwind/design system. Integrazioni esterne dietro interfacce in
-`backend/app/integrations/`, con cache e gestione errori/rate limit dove serve.
+Backend Python + FastAPI, SQLAlchemy over SQLite, Pydantic. Frontend Next.js 16 with the App
+Router, React and Tailwind/design system. External integrations behind interfaces in
+`backend/app/integrations/`, with caching and error/rate-limit handling where needed.
 
-Layer backend:
+Backend layers:
 
 ```text
 backend/app/
   routers/       HTTP only: playlists, tracks, transitions, sets, spotify,
                  rekordbox, ai, discovery, services, labels, dj_sets,
                  downloads, files, pipeline
-  services/      logica deterministica e orchestrazione
+  services/      deterministic logic and orchestration
   repositories.py
   models.py
-  db.py          sessione/engine, ensure_schema e migrazioni idempotenti
+  db.py          session/engine, ensure_schema and idempotent migrations
   schemas.py
   serializers.py
   integrations/
   core/
 ```
 
-Nessuna catena di enrichment: BPM/key da Rekordbox, metadati testuali da Sortory.
-I provider esterni rimasti servono **solo la Discovery**: Last.fm (similarita'),
-Discogs (dig "Scava"), Spotify (resolver).
+No enrichment chain: BPM/key from Rekordbox, text metadata from Sortory. The remaining
+external providers serve **Discovery only**: Last.fm (similarity), Discogs (dig "Scava"),
+Spotify (resolver).
 
-Discovery lavora per gusto, non per compatibilita' tecnica (quella resta al Set Builder):
-l'espansione playlist e' Last.fm-centric (similarita') con Spotify resolver via `/search`;
-il dig "Scava" usa Discogs per genere/etichetta. Spotify `/recommendations` non va usato:
-per app nuove o in development mode restituisce 403/404.
+Discovery works by taste, not by technical compatibility (that stays with the Set Builder):
+playlist expansion is Last.fm-centric (similarity) with a Spotify resolver via `/search`; the
+dig "Scava" uses Discogs by genre/label. Spotify `/recommendations` must not be used: for new
+apps or in development mode it returns 403/404.
 
-## Identita' tracce
+## Track identity
 
-- Identita' streaming: `platform`, `platform_track_id`, `isrc`, `url`.
-- Deduplica: `ISRC -> platform_track_id -> artist+title+duration -> fuzzy artist+title`.
-- Stati traccia: `imported | ready_for_set` (ready = BPM+key presenti).
+- Streaming identity: `platform`, `platform_track_id`, `isrc`, `url`.
+- De-duplication: `ISRC -> platform_track_id -> artist+title+duration -> fuzzy artist+title`.
+- Track states: `imported | ready_for_set` (ready = BPM+key present).
 
-## Comandi
+## Commands
 
 Backend:
 
@@ -123,5 +120,5 @@ npm run build
 
 ## Frontend
 
-Next.js 16 ha breaking changes rispetto alle versioni note: nel frontend leggere
-sempre `frontend/CLAUDE.md` prima di modificare pagine o routing.
+Next.js 16 has breaking changes compared to the known versions: in the frontend always read
+`frontend/CLAUDE.md` before modifying pages or routing.
