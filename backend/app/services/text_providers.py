@@ -2,6 +2,7 @@
 (riempie label/genere mancanti). Ritorna solo i campi risolti, genere normalizzato.
 I provider sono iniettabili → test senza rete; in produzione li costruisce il router."""
 
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.integrations.discogs_meta import DiscogsMetaClient
@@ -15,16 +16,26 @@ def _year(value) -> int | None:
     return None
 
 
-def lookup_with_conf(file, *, mb=None, discogs=None) -> dict[str, tuple[Any, str]]:
-    """Come lookup() ma ogni campo porta la confidenza con cui è stato ottenuto:
-    'high' = match MusicBrainz esatto (MBID/ISRC, confidence >= 95), 'text' =
-    match testuale MusicBrainz o qualunque campo da Discogs (che cerca per testo)."""
+@dataclass
+class ResolvedText:
+    fields: dict[str, tuple[Any, str]] = field(default_factory=dict)
+    release_mbids: list[str] = field(default_factory=list)
+    confidence: str | None = None
+
+
+def resolve(file, *, mb=None, discogs=None) -> ResolvedText:
+    """Come lookup_with_conf, ma espone anche i release-MBID e la confidenza MB
+    complessiva (per la ricerca cover). fields ha lo stesso contenuto di prima."""
     out: dict[str, tuple[Any, str]] = {}
+    release_mbids: list[str] = []
+    overall: str | None = None
     mb_res = mb.lookup(title=file.title, artist=file.artist,
                        isrc=(file.isrc.strip() or None) if file.isrc else None,
                        mbid=getattr(file, "mbid", None)) if mb else None
     if mb_res:
         conf = "high" if (mb_res.get("confidence") or 0) >= 95 else "text"
+        overall = conf
+        release_mbids = mb_res.get("release_mbids") or []
         if mb_res.get("canonical_artist"):
             out["artist"] = (mb_res["canonical_artist"], conf)
         if mb_res.get("canonical_title"):
@@ -50,7 +61,14 @@ def lookup_with_conf(file, *, mb=None, discogs=None) -> dict[str, tuple[Any, str
                 out["genre"] = (g, "text")
             if "year" not in out and (y := _year(dg_res.get("release_date"))) is not None:
                 out["year"] = (y, "text")
-    return out
+    return ResolvedText(fields=out, release_mbids=release_mbids, confidence=overall)
+
+
+def lookup_with_conf(file, *, mb=None, discogs=None) -> dict[str, tuple[Any, str]]:
+    """Come lookup() ma ogni campo porta la confidenza con cui è stato ottenuto:
+    'high' = match MusicBrainz esatto (MBID/ISRC, confidence >= 95), 'text' =
+    match testuale MusicBrainz o qualunque campo da Discogs (che cerca per testo)."""
+    return resolve(file, mb=mb, discogs=discogs).fields
 
 
 def lookup(file, *, mb=None, discogs=None) -> dict[str, Any]:
