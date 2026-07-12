@@ -137,17 +137,24 @@ Downloads, restored on mount — live-verified); B10 (Spotify import auto-loads 
 and covers); B6 (Enter submits TrackEditModal via real form semantics); B18 (Transitions page:
 loading/error/zero-results states, errors no longer swallowed); B28 (shared `DownloadOutcome`,
 `DownloadItem.track_id` number|null per backend truth, `ButtonLink` replaces nested
-`<Link><Button>` in playlists/sets/shazam). All 2026-07-12, TDD on the backend + live browser
-checks for the UI items.
+`<Link><Button>` in playlists/sets/shazam); A14 ("add this track" in the set editor:
+`POST /api/sets/{id}/tracks` with owned-only guarantee + search modal, live-verified); A2+B13
+(per-track library cross-match with OWNED/IN LIBRARY badges + save-as-lead, detail polling while
+identifying, list shows just-started sets); A20 (byte-progress stall detection: STALL 60s /
+HARD 1800s replace the flat 180s wall); E11 (shared raise_for_status/get_json in `_http.py` +
+`ClosableHttpClient` on all 4 clients); E12-Shazam (loop+client reused across segments,
+30s recognize timeout); B17 (preset applied-values summary line, live-verified); B23 (lazy
+covers + 50-row pagination in the playlist detail); B25 (`cn()` with tailwind-merge — caller
+classNames now reliably override component defaults). All 2026-07-12, Sonnet subagents + Fable
+integration pass (full suite, lint/tsc/build, live checks).
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
 - **Discovery** — *(Last.fm tags as a 2nd dig source: parked, see above.)*
-- **Set → console / editor** — A14 "add this track" in the editor (only delete/move/replace);
-  ⚠️ B12 reorder is now optimistic but still arrow-buttons, no drag-and-drop; ⚠️ B17 preset is
-  highlighted but with no summary of the applied values (they live in a collapsed "Advanced
-  options" panel); (new, from A22) `replace_track` still leaves the *neighbors'* notes and the
-  slot's `transition_note` stale — same class, small follow-up.
+- **Set → console / editor** — ⚠️ B12 reorder is now optimistic but still arrow-buttons, no
+  drag-and-drop; (new, from A22) `replace_track` still leaves the *neighbors'* notes and the
+  slot's `transition_note` stale — same class, small follow-up; (new, from A14) the add-track
+  search filters by title only (no artist-side search on /api/tracks).
 - **Scoring** — dead code `bpm/key/mood_compatibility_score` (tests-only) + `POST
   /api/transitions/score` (never called): remove or document as a block; (new, from A23) the
   generator's `_candidate_score` counts energy twice — via the energy-aware `score_transition`
@@ -156,15 +163,13 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   `classify_transition` bpm_close ≤5, `mixing_tip`/`mixing_overview` text bands, `validation.py`
   >8 jump check); (new, from A21) with ≥8 tracks the P25/P75 design makes `missing_openers`
   nearly never fire — acceptable by design, revisit only if the signal is missed.
-- **Shazam** — ⚠️ A2 set→playlist import done, but per-track library cross-match
-  (IN LIBRARY/OWNED/NEW) + per-track save-lead still missing; B13 detail UX (no polling while
-  running, h1 off-system, just-started set absent from the list, native confirm).
+- **Shazam** — (new, from A2) after "save as lead" the row badge updates only on the next
+  poll/refetch — cosmetic.
 - **Soulseek/download** — ⚠️ A7 manual grab does not mark ownership (file in inbox, counts
-  "downloaded") — now an intentional flow (Sortory catalogs), confirm as a decision; A20 fixed
-  180s DOWNLOAD_TIMEOUT wall (needs byte-progress stall detection; only a queue-patience guard
-  exists); E6 slskd (no cancel of transfers/searches, filename-only match, basename+mtime
-  resolution, ~45s synchronous on /candidates); ⚠️ B11 issue counters now navigable, but grab
-  has no per-candidate state and LinkLocalFileModal search does not auto-start.
+  "downloaded") — now an intentional flow (Sortory catalogs), confirm as a decision; E6 slskd
+  (no cancel of transfers/searches, filename-only match, basename+mtime resolution, ~45s
+  synchronous on /candidates); ⚠️ B11 issue counters now navigable, but grab has no
+  per-candidate state and LinkLocalFileModal search does not auto-start.
 - **Streaming import/sync (Spotify + SoundCloud)** — A10 import/sync synchronous in the request
   (thousands of liked = minutes with no progress): job+polling. NB: SoundCloud import (yt-dlp)
   exists too — A10 applies to it as well (the flat extraction is sequential/slow); A11 dedup and
@@ -174,20 +179,18 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
 - **Frontend technical** — ⚠️ B19 settings poller removed, but shazam is not exposed by the
   provider and set-builder still self-polls; B20 zero AbortController/sequence guards (stale
   responses); B21 `api.ts` monolith (~1000 lines): split; B22 no `ApiError` with status, `err()`
-  duplicated in ~16 files; ⚠️ B23 cover fallback centralized, but zero lazy-load and playlist
-  detail without pagination/virtualization; B25 `cn()` without tailwind-merge; (new residuals)
-  nested `<Link><Button>` still in playlists/[id] (out of B28's scope); downloads page has a
-  local `Outcome` subset type that could be `Exclude<DownloadOutcome,"downloaded">`;
-  link-local-file-modal and the sets rename modal still use onKeyDown Enter hacks instead of
-  form semantics (same class as B6).
+  duplicated in ~16 files; (new residuals) nested `<Link><Button>` still in playlists/[id] (out
+  of B28's scope); downloads page has a local `Outcome` subset type that could be
+  `Exclude<DownloadOutcome,"downloaded">`; link-local-file-modal and the sets rename modal still
+  use onKeyDown Enter hacks instead of form semantics (same class as B6).
 - **Backend robustness** — E10 (residual): `file_search` materializes the tree per keystroke,
   generate-async/mix_identify return untyped dicts, Discovery `_explain` without Pydantic (the
   one spot outside rule 5), no TTL cache on the pipeline walk; serializers.py and routers/sets.py
   still trigger classify_transition's internal recompute (1 extra score per setlist track);
-  ⚠️ E11 only transport retry centralized, 429/UA/retry still duplicated across the 4 clients +
-  httpx clients never closed; E12 (residual): Shazam new event loop+session per segment, no
-  timeout; (new, from E2) the pass-2 archive-branch `stat()` is still unguarded (a vanish there
-  aborts the run but keeps committed progress).
+  (new, from E11) clients now expose `close()`/context-manager but the routers/services never
+  call it — wiring follow-up; (new, from E12) `mix_identify_job` never calls `recognizer.close()`
+  explicitly (GC finalizer covers it); (new, from E2) the pass-2 archive-branch `stat()` is still
+  unguarded (a vanish there aborts the run but keeps committed progress).
 - **Tests** — E13 gaps: `mix_identify_job` zero coverage, job double-start guard untested,
   Spotify OAuth callback (anti-CSRF state) untested, transitions/discovery routers with no HTTP
   coverage; E14 tautological `or True` assert in test_set_editing, engine/overrides setup copied
