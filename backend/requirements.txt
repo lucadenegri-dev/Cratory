@@ -13,3 +13,8 @@ shazamio>=0.5
 mutagen>=1.47
 # XML security
 defusedxml
+# Analisi BPM/key in-app (pagina Analisi). Pin ESATTO: Essentia pubblica solo
+# build rolling (2.1b6.devN) con copertura wheel a macchia di leopardo; questa
+# e' l'ultima con wheel cp311 macosx-arm64. Licenza AGPL-3.0 (ok per uso
+# personale self-hosted, nessuna distribuzione).
+essentia==2.1b6.dev1389
