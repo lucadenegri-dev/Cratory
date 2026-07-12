@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Download as DownloadIcon, EyeOff, Link2, Search } from "lucide-react";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, Badge, Button, Card, EmptyState, Input, Loading, Select } from "@/components/ui";
@@ -29,7 +30,7 @@ const OUTCOME_TONE: Record<Outcome, "warning" | "danger" | "neutral"> = {
   failed: "danger",
 };
 
-export default function DownloadsPage() {
+function DownloadsInner() {
   const t = useT();
   const OUTCOME_LABEL: Record<Outcome, string> = {
     not_found: t.downloads.outcomeNotFound,
@@ -47,8 +48,19 @@ export default function DownloadsPage() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selected, setSelected] = useState("");
   const [pending, setPending] = useState<Track[] | null>(null);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [query, setQuery] = useState("");
+  // Filtro e ricerca persistiti nella query string: lo stato iniziale viene dall'URL
+  // (tornando da un dettaglio traccia non si perde nulla) e ogni modifica viene
+  // riflessa con router.replace. I default ("all", query vuota) restano fuori dall'URL.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const filterParam = searchParams.get("filter");
+  const [filter, setFilter] = useState<Filter>(
+    filterParam === "needs_review" || filterParam === "not_found" || filterParam === "failed"
+      ? filterParam
+      : "all",
+  );
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [results, setResults] = useState<DownloadCandidate[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [review, setReview] = useState<ReviewTarget | null>(null);
@@ -72,6 +84,20 @@ export default function DownloadsPage() {
 
   // Il work-list cambia man mano che il job produce esiti.
   useEffect(() => { refreshPending(); }, [refreshPending, status?.status, status?.processed]);
+
+  // Stato -> URL: replace (non push, niente cronologia inquinata) con un debounce
+  // leggero per non riscrivere l'URL a ogni tasto nell'input di ricerca.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filter !== "all") params.set("filter", filter);
+    if (query) params.set("q", query);
+    const next = params.toString();
+    if (next === searchParams.toString()) return;
+    const timer = setTimeout(() => {
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filter, query, pathname, router, searchParams]);
 
   const available = status?.available ?? true;
   const running = status?.status === "running";
@@ -264,4 +290,10 @@ export default function DownloadsPage() {
       />
     </PageLayout>
   );
+}
+
+// useSearchParams richiede un boundary Suspense sulle pagine statiche (Next 16),
+// stesso pattern di library/set-builder/discovery.
+export default function DownloadsPage() {
+  return <Suspense><DownloadsInner /></Suspense>;
 }

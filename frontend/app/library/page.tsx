@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, List, LayoutGrid } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
 import { Input, Select, Checkbox, Alert, Loading } from "@/components/ui";
@@ -25,32 +25,79 @@ function LibraryInner() {
   const [items, setItems] = useState<Track[] | null>(null);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [offset, setOffset] = useState(0);
   const PAGE_SIZE = 50;
 
-  const [artist, setArtist] = useState("");
-  const [title, setTitle] = useState("");
-  // Filtro genere pre-impostato via query param (es. link "Generi" dalla dashboard).
-  // useSearchParams() è coerente fra SSR e client (niente hydration mismatch) e resta
-  // reattivo se il param cambia mentre si è già sulla pagina.
-  const genreParam = useSearchParams().get("genre") ?? "";
+  // Filtri/sort/paginazione persistiti nella query string: lo stato iniziale viene
+  // dall'URL (così tornando da un dettaglio non si perde nulla) e ogni modifica viene
+  // riflessa nell'URL con router.replace (vedi effect più sotto). I default restano
+  // fuori dall'URL per tenerlo pulito. useSearchParams() è coerente fra SSR e client
+  // (niente hydration mismatch) e resta reattivo se il param cambia da fuori.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [offset, setOffset] = useState(() => Math.max(0, Number(searchParams.get("offset")) || 0));
+  const [artist, setArtist] = useState(searchParams.get("artist") ?? "");
+  const [title, setTitle] = useState(searchParams.get("title") ?? "");
+  // Filtro genere pre-impostato via query param (es. link "Generi" dalla dashboard):
+  // se il param cambia mentre si è già sulla pagina, il filtro si aggiorna e la
+  // paginazione riparte. Il ref evita di azzerare l'offset al mount (o quando è il
+  // nostro stesso replace a riscrivere l'URL con lo stesso valore).
+  const genreParam = searchParams.get("genre") ?? "";
   const [genre, setGenre] = useState(genreParam);
-  useEffect(() => { setGenre(genreParam); setOffset(0); }, [genreParam]);
-  const [source, setSource] = useState("");
-  const [status, setStatus] = useState("");
-  const [bpmMin, setBpmMin] = useState("");
-  const [bpmMax, setBpmMax] = useState("");
-  const [key, setKey] = useState("");
-  const [incomplete, setIncomplete] = useState(false);
-  const [owned, setOwned] = useState(""); // "" = tutte | "true" = possedute | "false" = wishlist
-  const [sort, setSort] = useState("");
-  const [order, setOrder] = useState<Order>("asc");
+  const genreParamSeen = useRef(genreParam);
+  useEffect(() => {
+    if (genreParam === genreParamSeen.current) return;
+    genreParamSeen.current = genreParam;
+    setGenre(genreParam);
+    setOffset(0);
+  }, [genreParam]);
+  const [source, setSource] = useState(searchParams.get("source") ?? "");
+  const [status, setStatus] = useState(searchParams.get("status") ?? "");
+  const [bpmMin, setBpmMin] = useState(searchParams.get("bpm_min") ?? "");
+  const [bpmMax, setBpmMax] = useState(searchParams.get("bpm_max") ?? "");
+  const [key, setKey] = useState(searchParams.get("key") ?? "");
+  const [incomplete, setIncomplete] = useState(searchParams.get("incomplete") === "1");
+  const [owned, setOwned] = useState(searchParams.get("owned") ?? ""); // "" = tutte | "true" = possedute | "false" = wishlist
+  const [sort, setSort] = useState(searchParams.get("sort") ?? "");
+  const [order, setOrder] = useState<Order>(searchParams.get("order") === "desc" ? "desc" : "asc");
   const [editing, setEditing] = useState<Track | null>(null);
   const [view, setView] = useState<"list" | "grid">("list");
   // Griglia: nessuna paginazione, si caricano tutte le tracce (limit=0 = "tutte" lato API).
   const limit = view === "grid" ? 0 : PAGE_SIZE;
-  // Cambio vista: riparti da capo (in griglia l'offset non è usato).
-  useEffect(() => { setOffset(0); }, [view]);
+  // Cambio vista: riparti da capo (in griglia l'offset non è usato). Il ref salta il
+  // primo run al mount per non azzerare l'offset appena ripristinato dall'URL.
+  const viewMounted = useRef(false);
+  useEffect(() => {
+    if (!viewMounted.current) { viewMounted.current = true; return; }
+    setOffset(0);
+  }, [view]);
+
+  // Stato -> URL: replace (non push, niente cronologia inquinata) con un debounce
+  // leggero per non riscrivere l'URL a ogni tasto negli input di testo.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (artist) params.set("artist", artist);
+    if (title) params.set("title", title);
+    if (genre) params.set("genre", genre);
+    if (source) params.set("source", source);
+    if (status) params.set("status", status);
+    if (owned) params.set("owned", owned);
+    if (bpmMin) params.set("bpm_min", bpmMin);
+    if (bpmMax) params.set("bpm_max", bpmMax);
+    if (key) params.set("key", key);
+    if (incomplete) params.set("incomplete", "1");
+    if (sort) {
+      params.set("sort", sort);
+      if (order !== "asc") params.set("order", order);
+    }
+    if (offset > 0) params.set("offset", String(offset));
+    const next = params.toString();
+    if (next === searchParams.toString()) return;
+    const timer = setTimeout(() => {
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [artist, title, genre, source, status, owned, bpmMin, bpmMax, key, incomplete, sort, order, offset, pathname, router, searchParams]);
   // Persistenza: letta solo lato client (mai in render/SSR) per non rompere l'hydration.
   useEffect(() => {
     const saved = localStorage.getItem("cratory:library:view");
