@@ -26,6 +26,29 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-12 - Quick-wins: correttezza silenziosa + igiene Discovery
+
+Primo blocco post-ri-triage sul branch `fix/quick-wins-correttezza-discovery` (5 item, TDD sul
+backend, verifica live nel browser per il frontend; suite backend 591 verde, lint/build FE ok).
+
+- **E8** — `~` nei path di config (`library_root`/`archive_root`/`slskd_download_dir`) ora
+  espanso via `field_validator`: prima un `~/Music` non risolveva e indicizzazione/download
+  fallivano in silenzio.
+- **E9** — helper `ci_equals` in `repositories.py`: `ilike(value)` grezzo trattava `%`/`_` del
+  valore come wildcard. Cablato nei match esatti di `manual_import`, `playlist_import` (fallback
+  per nome) e `library_index` (match fuzzy).
+- **A11** — `_find_existing` ripiega ora anche su artista+titolo(+durata) per i lead senza
+  identità forte (`_find_by_name`, guardia durata ±5s): una traccia importata a mano e poi da
+  Spotify non diventa più un doppione. Rimosso il fallback per-nome duplicato in
+  `import_single_track`.
+- **A16** — `_drop_in_library` (expand) riusa `_dedup_key` del dig: possedere
+  "Strobe (Original Mix)" scarta anche il candidato "Strobe"/"Strobe (Radio Edit)".
+- **A27** — pulsante "Scava questa etichetta" nella pagina Label → `/discovery?seed=label&value=`
+  (la Discovery accettava già il seed); i18n IT/EN. Verificato live: il dig parte sull'etichetta.
+- **A15 scartata** dopo analisi: l'etichetta rientra via il ciclo possesso→Sortory→index;
+  scriverla in Cratory confliggerebbe con la proprietà del campo di Sortory (indicizzazione:
+  `label = label or tag`, non sovrascrive).
+
 ## Milestone 2026-07-12 - Audit backlog re-triaged against the code
 
 The 2026-07-05 audit backlog had drifted from the code (several "still to do" items were

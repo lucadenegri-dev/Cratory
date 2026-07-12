@@ -92,15 +92,19 @@ distinct), A8 (needs_review path persisted + retry/review flow), B5 (path to the
 `/sets/[id]`), the dig's per-release tracklists (`get_release_detail`), B16 (label backfill
 removed — Sortory's job), E12-TLS (`tls12_context` is opt-in/unused, not forced).
 
+**Fixed on branch `fix/quick-wins-correttezza-discovery`** (2026-07-12): E8 (`~` expanded in
+config paths), E9 (`ci_equals` — exact case-insensitive match with %/_ escaping, wired into
+manual/playlist/index matching), A11 (dedup by artist+title+duration in `import_playlist`, so
+manual-then-Spotify no longer duplicates), A16 (expand dedups owned variants via the dig's
+`_dedup_key`), A27 (Labels→Discovery "dig this label" link). A15 was dropped after review: the
+label returns via the own→Sortory→index loop, and writing it in Cratory would fight Sortory's
+ownership of that field.
+
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
-- **Discovery** — A15 dig lead save drops label/style/year (so `label_affinity` never grows
-  from its own saves); A16 expand does not dedup owned variants (reuse the dig's `_dedup_key`);
-  A17 dig fetches a single Discogs page + swallows errors (429/missing token → "zero results",
-  no 502); A27 Labels→Discovery link ("dig this label" — the discovery side already accepts
-  `seed=label`, only the outbound link is missing); Last.fm tags as a 2nd dig source (today
-  Discogs-only); E12-cache: no discovery cache (every expand refetches) + Last.fm client with no
-  User-Agent (ToS).
+- **Discovery** — A17 dig fetches a single Discogs page + swallows errors (429/missing token →
+  "zero results", no 502); Last.fm tags as a 2nd dig source (today Discogs-only); E12-cache: no
+  discovery cache (every expand refetches) + Last.fm client with no User-Agent (ToS).
 - **Set → console / editor** — A14 "add this track" in the editor (only delete/move/replace);
   ⚠️ A22 after move/remove the AI roles and `ai_reason`/notes stay stale (transitions *are*
   recomputed); ⚠️ B12 reorder is now optimistic but still arrow-buttons, no drag-and-drop;
@@ -125,19 +129,15 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   navigable, but grab has no per-candidate state and LinkLocalFileModal search does not
   auto-start; A28 "Search on Soulseek" from the wishlist track detail.
 - **Spotify import/sync** — A10 import/sync synchronous in the request (thousands of liked =
-  minutes with no progress): job+polling; A11 dedup with no artist+title+duration level in
-  `import_playlist` (manual then Spotify = duplicates); A12 sync unlinks Discovery-added tracks
-  (no `added_by` provenance column exists); A25 sync does not refresh playlist name/cover from
-  Spotify.
+  minutes with no progress): job+polling; A12 sync unlinks Discovery-added tracks (no `added_by`
+  provenance column exists); A25 sync does not refresh playlist name/cover from Spotify.
 - **Library/index** — A6-UI library gaps not shown in the dashboard (reintroduce the
   `libraryGaps` client); ⚠️ B2 per-row ownership badge present, but the ownership *filter* in the
   playlist table is missing; B1 filters/sort/pagination lost on back-nav (serialize into the
   querystring: /library, /downloads); B10 Spotify import ("Carica" only on click, no filter, no
   artwork); B15 Library table (no overflow-x, headers not a11y, KeyBadge unused, misleading empty
   state with active filters); ⚠️ E7 duplicate-ownership guard done, but `attach_local_file` still
-  saves no mtime/size (re-hash on reindex) and one fuzzy `ilike` branch is unguarded; E8 config
-  paths with `~` not expanded (`expanduser` absent from config.py → silent download failures);
-  E9 `ilike` used as exact match without escaping %/_ (shared `ci_equals` helper).
+  saves no mtime/size (re-hash on reindex) and one fuzzy `ilike` branch is unguarded.
 - **Frontend technical** — B6 Modal has no Enter-to-submit in TrackEditModal (saves only via
   button); B9 native `window.confirm` in 6 places → ConfirmModal; B14 job-bar errors vanish
   after 4s (persist + dismiss); ⚠️ B18 loading/empty/error states: Labels ok, Transitions still
