@@ -15,7 +15,9 @@ router = APIRouter(prefix="/api/transitions", tags=["transitions"])
 
 def _score_out(from_track: Track, to_track: Track, lang: str = "it") -> TransitionScoreOut:
     ts = score_transition(from_track, to_track, lang)
-    cls = classify_transition(from_track, to_track, lang)
+    # Score gia' calcolato: classify_transition lo riusa invece di ricomputarlo
+    # (il ranking chiama _score_out per OGNI traccia della libreria).
+    cls = classify_transition(from_track, to_track, lang, score=ts.score)
     return TransitionScoreOut(
         score=ts.score, technical_reasons=ts.technical_reasons, warnings=ts.warnings,
         classification=cls.label, classification_reason=cls.reason,

@@ -23,6 +23,7 @@ from app.services.scoring import (
     TransitionScore,
     energy_progression_score,
     genre_similarity_score,
+    risk_from_score,
     score_transition,
 )
 
@@ -106,14 +107,6 @@ def _is_novel(prev: Track, cand: Track) -> bool:
 
 class SetGenerationError(Exception):
     pass
-
-
-def _risk_level(score: int) -> str:
-    if score >= 70:
-        return "low"
-    if score >= 45:
-        return "medium"
-    return "high"
 
 
 def assign_roles(n: int) -> list[str]:
@@ -417,7 +410,8 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
             role=roles[position - 1],
             transition_score=float(ts.score) if ts else None,
             transition_reason="; ".join(ts.technical_reasons) if ts else "traccia di apertura",
-            risk_level=_risk_level(ts.score) if ts else "low",
+            # risk_from_score(None) = "low": la traccia di apertura non ha transizione.
+            risk_level=risk_from_score(ts.score if ts else None),
         ))
     db.add(setlist)
     db.commit()

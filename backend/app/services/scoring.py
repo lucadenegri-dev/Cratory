@@ -159,7 +159,8 @@ class TransitionClassification:
     reason: str
 
 
-def classify_transition(from_track: Track, to_track: Track, lang: str = "it") -> TransitionClassification:
+def classify_transition(from_track: Track, to_track: Track, lang: str = "it",
+                        score: int | None = None) -> TransitionClassification:
     """Classifica una transizione in technically_safe | creative_risk | good_reset.
 
     - technically_safe: BPM/key compatibili (score tecnico alto), rischio basso.
@@ -168,9 +169,13 @@ def classify_transition(from_track: Track, to_track: Track, lang: str = "it") ->
     - creative_risk: salto di BPM/tonalità deliberato ma azzardato.
 
     `lang` ("it" | "en") sceglie la lingua di `reason`; `label` resta il codice enum,
-    tradotto in etichetta leggibile lato frontend.
+    tradotto in etichetta leggibile lato frontend. `score` opzionale: lo score
+    tecnico gia' calcolato dal chiamante (es. il router transizioni), per non
+    ricomputare score_transition sulla stessa coppia; None = calcolo interno.
+    Il numero non dipende da `lang`, quindi il riuso e' sempre equivalente.
     """
-    score = score_transition(from_track, to_track).score
+    if score is None:
+        score = score_transition(from_track, to_track).score
     level, _ = camelot_compatibility(from_track.camelot_key, to_track.camelot_key)
     harmonic_ok = level in ("same", "compatible")
     # "Sicura" richiede ANCHE l'armonia: un BPM perfetto con key stonata non è un mix sicuro.
