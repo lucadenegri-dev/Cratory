@@ -235,6 +235,18 @@ function SetBuilderInner() {
                   );
                 })}
               </div>
+              {activePreset && (
+                <p className="mt-2 text-xs text-muted">
+                  {t.setBuilder.presetSummaryLabel(
+                    t.setBuilder.strategies[STRATEGY_DEFS.find((s) => s.value === strategy)?.key ?? "smooth"].label,
+                    duration,
+                    startBpm,
+                    endBpm,
+                    startEnergy,
+                    endEnergy,
+                  )}
+                </p>
+              )}
             </Section>
 
             <Section icon={<Cpu size={13} className="text-faint" />} title={t.setBuilder.sectionEngine}>
