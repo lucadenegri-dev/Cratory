@@ -115,24 +115,31 @@ User-Agent per ToS + 300s in-memory TTL cache on the client — errors never cac
 in the composite transition score: centered ±7.5/−4.5 correction only when both tracks have
 energy, bit-identical scores otherwise); B9 (shared ConfirmModal replaces all 6 native
 `window.confirm`); B24 (relative `/api` paths + Next rewrite to `BACKEND_URL` — the app now works
-from any LAN device, verified live via network IP). All 2026-07-12, TDD on the backend + live
-browser checks for the UI items.
+from any LAN device, verified live via network IP); A22 (roles reassigned via the generator's
+`assign_roles` + `ai_reason`/`transition_note` cleared for the touched positions after
+move/remove); A4 (BPM bands now percentage-based 1.6%/4%/6.5%, anchored to preserve ~128 BPM
+behavior, applied on the folded half/double grid too); B26 (Set Builder reads `?playlist=` via
+`useSearchParams` + Suspense, live-verified); B14+B27 (job-bar error outcomes persist with a
+dismiss ✕, success keeps the 4s; the 2s poller pauses on hidden tabs and catches up on return).
+All 2026-07-12, TDD on the backend + live browser checks for the UI items.
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
 - **Discovery** — *(Last.fm tags as a 2nd dig source: parked, see above.)*
 - **Set → console / editor** — A14 "add this track" in the editor (only delete/move/replace);
-  ⚠️ A22 after move/remove the AI roles and `ai_reason`/notes stay stale (transitions *are*
-  recomputed); ⚠️ B12 reorder is now optimistic but still arrow-buttons, no drag-and-drop;
-  ⚠️ B17 preset is highlighted but with no summary of the applied values (they live in a
-  collapsed "Advanced options" panel).
-- **Scoring** — ⚠️ A4 half/double-time is implemented but thresholds are still absolute
-  (±2/±5/±8), not %; ⚠️ A5 stratified sampling done but degenerates without a BPM constraint
+  ⚠️ B12 reorder is now optimistic but still arrow-buttons, no drag-and-drop; ⚠️ B17 preset is
+  highlighted but with no summary of the applied values (they live in a collapsed "Advanced
+  options" panel); (new, from A22) `replace_track` still leaves the *neighbors'* notes and the
+  slot's `transition_note` stale — same class, small follow-up.
+- **Scoring** — ⚠️ A5 stratified sampling done but degenerates without a BPM constraint
   (still picks the 60 lowest-BPM tracks); A21 gap thresholds still fixed/house-centric (derive
   from percentiles); dead code `bpm/key/mood_compatibility_score` (tests-only) + `POST
   /api/transitions/score` (never called): remove or document as a block; (new, from A23) the
   generator's `_candidate_score` now counts energy twice — via the energy-aware
-  `score_transition` AND its own `_feature_fit` term — mild, tests pass, but worth deduplicating.
+  `score_transition` AND its own `_feature_fit` term — mild, tests pass, but worth deduplicating;
+  (new, from A4) other BPM consumers still use absolute thresholds (`bpm_compatibility_score`
+  2/5/8, `classify_transition` bpm_close ≤5, `mixing_tip`/`mixing_overview` text bands,
+  `validation.py` >8 jump check) — extend the % bands if desired.
 - **Shazam** — ⚠️ A2 set→playlist import done, but per-track library cross-match
   (IN LIBRARY/OWNED/NEW) + per-track save-lead still missing; B13 detail UX (no polling while
   running, h1 off-system, just-started set absent from the list, native confirm).
@@ -155,15 +162,12 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   state with active filters); ⚠️ E7 duplicate-ownership guard done, but `attach_local_file` still
   saves no mtime/size (re-hash on reindex) and one fuzzy `ilike` branch is unguarded.
 - **Frontend technical** — B6 Modal has no Enter-to-submit in TrackEditModal (saves only via
-  button); B14 job-bar errors vanish after 4s (persist + dismiss); ⚠️ B18 loading/empty/error
-  states: Labels ok, Transitions still weak (swallows errors); ⚠️ B19 settings poller removed,
-  but shazam is not exposed by the provider and set-builder still self-polls; B20 zero
-  AbortController/sequence guards (stale responses); B21 `api.ts` monolith (965 lines, 131
-  exports): split; B22 no `ApiError` with status, `err()` duplicated in ~16 files; ⚠️ B23 cover
-  fallback centralized, but zero lazy-load and playlist detail without pagination/virtualization;
-  B25 `cn()` without tailwind-merge; B26 Set Builder reads `?playlist=` from `window.location` →
-  useSearchParams;
-  B27 poller always active even on a hidden tab → visibilitychange; B28 types
+  button); ⚠️ B18 loading/empty/error states: Labels ok, Transitions still weak (swallows
+  errors); ⚠️ B19 settings poller removed, but shazam is not exposed by the provider and
+  set-builder still self-polls; B20 zero AbortController/sequence guards (stale responses); B21
+  `api.ts` monolith (965 lines, 131 exports): split; B22 no `ApiError` with status, `err()`
+  duplicated in ~16 files; ⚠️ B23 cover fallback centralized, but zero lazy-load and playlist
+  detail without pagination/virtualization; B25 `cn()` without tailwind-merge; B28 types
   (`DownloadOutcome` not shared, `track_id` nullability inconsistent, nested `<Link><Button>` →
   ButtonLink).
 - **Backend robustness** — E1c migrations `additions` dict still manual (the drop is already
