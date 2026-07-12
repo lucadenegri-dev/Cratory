@@ -630,6 +630,11 @@ export const it: Dictionary = {
       identifiedTracksHeading: "Tracce identificate",
       identifiedTracksSubtitle: "Riconosciute via Shazam",
       noTracksMessage: (failed: boolean) => `Nessuna traccia riconosciuta ${failed ? "(identificazione fallita)" : "in questo set"}.`,
+      ownedBadge: "POSSEDUTA",
+      inLibraryBadge: "IN LIBRERIA",
+      viewInLibraryTitle: "Apri in libreria",
+      saveAsLeadButton: "Salva come lead",
+      savedAsLeadDone: "Salvata",
     },
   },
   setBuilder: {
@@ -646,6 +651,8 @@ export const it: Dictionary = {
       progressive: "Progressivo",
       closing: "Closing",
     },
+    presetSummaryLabel: (strategyLabel: string, duration: number, startBpm: string, endBpm: string, startEnergy: string, endEnergy: string) =>
+      `${strategyLabel} · ${duration} min · BPM ${startBpm}→${endBpm} · energia ${startEnergy}→${endEnergy}`,
     sectionEngine: "Motore",
     engineGroupAria: "Motore di generazione",
     algorithmLabel: "Algoritmo",
@@ -842,6 +849,11 @@ export const it: Dictionary = {
     durationLabel: "Durata",
     originLabel: "Origine",
     alternativesModalTitle: "Alternative",
+    addTrackButton: "Aggiungi traccia",
+    addTrackModalTitle: "Aggiungi traccia",
+    addTrackSearchPlaceholder: "Cerca per titolo…",
+    addTrackNoResults: "Nessuna traccia trovata.",
+    addTrackAddButton: "Aggiungi",
     modes: {
       safer: "Più sicura",
       softer: "Più morbida",

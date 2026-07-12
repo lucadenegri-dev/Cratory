@@ -2,11 +2,65 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { ArrowLeft, Radar, Music4, ExternalLink, Clock, ListPlus } from "lucide-react";
-import { getDjSet, importDjSetAsPlaylist, fmtDuration, fmtDate, type DjSetDetail } from "@/lib/api";
+import { ArrowLeft, Radar, Music4, ExternalLink, Clock, ListPlus, Check } from "lucide-react";
+import {
+  getDjSet, importDjSetAsPlaylist, discoverySaveForLater, fmtDuration, fmtDate,
+  type DjSetDetail, type DjSetTrack,
+} from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useT } from "@/lib/i18n";
+
+// Polling mentre l'identificazione del set e' in corso: la Jobs bar globale non
+// espone lo stato raw per-set, quindi il dettaglio fa polling diretto dell'endpoint
+// finche' lo status non e' piu' "identifying".
+const POLL_MS = 3000;
+
+function TrackLibraryAction({ track }: { track: DjSetTrack }) {
+  const t = useT();
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (track.library_status && track.library_track_id != null) {
+    const owned = track.library_status === "owned";
+    return (
+      <Link href={`/tracks/${track.library_track_id}`} title={t.shazam.detail.viewInLibraryTitle} className="shrink-0">
+        <Badge tone={owned ? "success" : "info"}>
+          {owned ? t.shazam.detail.ownedBadge : t.shazam.detail.inLibraryBadge}
+        </Badge>
+      </Link>
+    );
+  }
+
+  if (!track.artist || !track.title) return null;
+
+  const saveAsLead = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await discoverySaveForLater({ artist: track.artist!, title: track.title! });
+      setSaved(true);
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Button
+      size="sm"
+      variant={saved ? "ghost" : "outline"}
+      className="shrink-0"
+      onClick={saveAsLead}
+      disabled={saving || saved}
+      title={error ?? undefined}
+    >
+      {saved ? <><Check size={14} /> {t.shazam.detail.savedAsLeadDone}</> : saving ? <Spinner /> : t.shazam.detail.saveAsLeadButton}
+    </Button>
+  );
+}
 
 export default function DjSetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const t = useT();
@@ -19,6 +73,20 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     getDjSet(Number(id)).then(setSet).catch((e) => setError(String(e.message ?? e)));
   }, [id]);
+
+  // Il job di identificazione e' in background: mentre questo set e' "identifying"
+  // rinfresca il dettaglio a intervalli, cosi' l'utente vede l'esito senza ricaricare.
+  useEffect(() => {
+    if (!set || set.status !== "identifying") return;
+    const iv = setInterval(() => {
+      getDjSet(Number(id)).then(setSet).catch(() => {});
+    }, POLL_MS);
+    return () => clearInterval(iv);
+    // Solo id/status in dep: includere l'intero `set` riavvierebbe l'intervallo a ogni
+    // poll (il fetch cambia l'oggetto). Lo status e' l'unico campo che deve far
+    // ripartire/fermare il polling.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, set?.status]);
 
   const doImport = async () => {
     setImporting(true);
@@ -108,6 +176,7 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
                   <span className="text-muted"> — {trk.title ?? "?"}</span>
                 </span>
                 {trk.isrc && <Badge tone="neutral" className="tnum shrink-0">{trk.isrc}</Badge>}
+                <TrackLibraryAction track={trk} />
               </li>
             ))}
           </ol>

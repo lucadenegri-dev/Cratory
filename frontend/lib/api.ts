@@ -492,6 +492,11 @@ export async function exportSet(setId: number, format: "text" | "csv" | "markdow
   return res.text();
 }
 
+/** Aggiunge una traccia al set (A14): position 1-based, assente = append in coda. */
+export function addTrackToSet(setId: number, trackId: number, position?: number) {
+  return apiPost<Setlist>(`/api/sets/${setId}/tracks`, { track_id: trackId, position });
+}
+
 // --- Playlist (nuovo flusso) ------------------------------------------------
 
 export function listSpotifyPlaylists() {
@@ -735,6 +740,8 @@ export interface DjSetTrack {
   title: string | null;
   isrc: string | null;
   confidence: number | null;
+  library_track_id: number | null;
+  library_status: "owned" | "in_library" | null;
 }
 
 export interface DjSet {

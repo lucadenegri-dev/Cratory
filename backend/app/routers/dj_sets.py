@@ -10,17 +10,67 @@ import importlib.util
 import logging
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.http_errors import api_error
 from app.db import get_db
-from app.repositories import delete_dj_set, get_dj_set, list_dj_sets
+from app.models import DjSetTrack, Track
+from app.repositories import ci_equals, delete_dj_set, get_dj_set, list_dj_sets
 from app.schemas import DjSetCreateIn, DjSetOut, DjSetSummaryOut, PlaylistImportReport
 from app.services import mix_identify_job
 from app.services.manual_import import import_track_pairs
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/shazam", tags=["shazam"])
+
+
+def _match_library_tracks(db: Session, tracks: list[DjSetTrack]) -> dict[int, Track]:
+    """Cross-match deterministico delle tracce Shazam con la libreria: ISRC
+    anzitutto, poi artista+titolo esatto (case-insensitive). Una traccia senza
+    ISRC ne' artista/titolo non puo' matchare nulla."""
+    isrcs = {t.isrc for t in tracks if t.isrc}
+    by_isrc: dict[str, Track] = {}
+    if isrcs:
+        for tr in db.scalars(select(Track).where(Track.isrc.in_(isrcs))).all():
+            if tr.isrc and tr.isrc not in by_isrc:
+                by_isrc[tr.isrc] = tr
+
+    matches: dict[int, Track] = {}
+    for dst in tracks:
+        track = by_isrc.get(dst.isrc) if dst.isrc else None
+        if track is None and dst.artist and dst.title:
+            track = db.scalar(
+                select(Track).where(ci_equals(Track.artist, dst.artist), ci_equals(Track.title, dst.title))
+            )
+        if track is not None:
+            matches[dst.id] = track
+    return matches
+
+
+def _dj_set_detail_out(db: Session, dj_set) -> dict:
+    """Serializza un DjSet includendo, per ogni traccia, il cross-match libreria."""
+    out = DjSetSummaryOut.model_validate(dj_set).model_dump()
+    matches = _match_library_tracks(db, dj_set.tracks)
+    track_rows = []
+    for t in dj_set.tracks:
+        row = {
+            "position": t.position,
+            "start_offset_seconds": t.start_offset_seconds,
+            "artist": t.artist,
+            "title": t.title,
+            "isrc": t.isrc,
+            "confidence": t.confidence,
+            "library_track_id": None,
+            "library_status": None,
+        }
+        match = matches.get(t.id)
+        if match is not None:
+            row["library_track_id"] = match.id
+            row["library_status"] = "owned" if match.has_local_file else "in_library"
+        track_rows.append(row)
+    out["tracks"] = track_rows
+    return out
 
 
 def _deps_available() -> bool:
@@ -65,7 +115,7 @@ def get_set(dj_set_id: int, db: Session = Depends(get_db)):
     dj_set = get_dj_set(db, dj_set_id)
     if dj_set is None:
         raise api_error(404, "set_not_found", "Set not found")
-    return dj_set
+    return _dj_set_detail_out(db, dj_set)
 
 
 @router.post("/sets/{dj_set_id}/import-playlist", response_model=PlaylistImportReport, status_code=201)

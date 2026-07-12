@@ -628,6 +628,11 @@ export const en = {
       identifiedTracksHeading: "Identified tracks",
       identifiedTracksSubtitle: "Recognized via Shazam",
       noTracksMessage: (failed: boolean) => `No tracks recognized ${failed ? "(identification failed)" : "in this set"}.`,
+      ownedBadge: "OWNED",
+      inLibraryBadge: "IN LIBRARY",
+      viewInLibraryTitle: "Open in library",
+      saveAsLeadButton: "Save as lead",
+      savedAsLeadDone: "Saved",
     },
   },
   setBuilder: {
@@ -644,6 +649,8 @@ export const en = {
       progressive: "Progressive",
       closing: "Closing",
     },
+    presetSummaryLabel: (strategyLabel: string, duration: number, startBpm: string, endBpm: string, startEnergy: string, endEnergy: string) =>
+      `${strategyLabel} · ${duration} min · BPM ${startBpm}→${endBpm} · energy ${startEnergy}→${endEnergy}`,
     sectionEngine: "Engine",
     engineGroupAria: "Generation engine",
     algorithmLabel: "Algorithm",
@@ -840,6 +847,11 @@ export const en = {
     durationLabel: "Duration",
     originLabel: "Source",
     alternativesModalTitle: "Alternatives",
+    addTrackButton: "Add track",
+    addTrackModalTitle: "Add track",
+    addTrackSearchPlaceholder: "Search by title…",
+    addTrackNoResults: "No tracks found.",
+    addTrackAddButton: "Add",
     modes: {
       safer: "Safer",
       softer: "Softer",

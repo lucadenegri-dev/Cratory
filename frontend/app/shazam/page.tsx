@@ -76,8 +76,10 @@ export default function ShazamPage() {
       const s = await identifyMix(u);
       setJob(s);
       setUrl("");
-      if (s.cached || s.status === "done") reload();
-      else { startPolling(); jobs.refresh(); }
+      // Il DjSet e' creato in DB subito (status "identifying"): la lista va aggiornata
+      // già ora, non solo a job finito, altrimenti il set appena avviato resta invisibile.
+      reload();
+      if (!s.cached && s.status !== "done") { startPolling(); jobs.refresh(); }
     } catch (e) {
       setError(err(e));
     } finally {
