@@ -310,3 +310,105 @@ def test_start_track_autopick_job_builds_correct_items(monkeypatch):
     job.start_track_autopick_job(42)
     assert captured["items"] == [(42, None)]
     assert captured["playlist_id"] is None
+
+
+def test_chosen_transfer_failed_sets_reason(patch_job, monkeypatch):
+    TestSession, fake = patch_job
+
+    class _Errored(_FakeClient):
+        def transfer_state(self, username, filename):
+            return {"state": "Completed, Errored"}
+
+    client = _Errored("bob\\Da Funk.flac")
+    monkeypatch.setattr(job, "get_slskd_client", lambda: client)
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="rf1", source_type="spotify",
+              title="Da Funk", artist="Daft Punk")
+    db.add(t); db.commit(); track_id = t.id; db.close()
+
+    chosen = client.search("Daft Punk", "Da Funk")[0]
+    job._run([(track_id, chosen)], None)
+
+    db = TestSession(); t2 = db.get(Track, track_id)
+    assert t2.last_download_outcome == "failed"
+    assert t2.last_download_reason == "transfer_failed"
+    db.close()
+
+
+def test_enqueue_exception_sets_reason(patch_job, monkeypatch):
+    TestSession, fake = patch_job
+
+    class _NoEnqueue(_FakeClient):
+        def enqueue_download(self, file):
+            raise RuntimeError("boom")
+
+    client = _NoEnqueue("bob\\Da Funk.flac")
+    monkeypatch.setattr(job, "get_slskd_client", lambda: client)
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="rf2", source_type="spotify",
+              title="Da Funk", artist="Daft Punk")
+    db.add(t); db.commit(); track_id = t.id; db.close()
+
+    chosen = client.search("Daft Punk", "Da Funk")[0]
+    job._run([(track_id, chosen)], None)
+
+    db = TestSession(); t2 = db.get(Track, track_id)
+    assert t2.last_download_outcome == "failed"
+    assert t2.last_download_reason == "enqueue_rejected"
+    db.close()
+
+
+def test_queue_timeout_sets_reason(patch_job, monkeypatch):
+    TestSession, fake = patch_job
+    monkeypatch.setattr(job, "QUEUE_PATIENCE", 0.0)  # pazienza esaurita subito
+
+    class _Queued(_FakeClient):
+        def transfer_state(self, username, filename):
+            return {"state": "Queued, Remotely"}
+
+    client = _Queued("bob\\Da Funk.flac")
+    monkeypatch.setattr(job, "get_slskd_client", lambda: client)
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="rf3", source_type="spotify",
+              title="Da Funk", artist="Daft Punk")
+    db.add(t); db.commit(); track_id = t.id; db.close()
+
+    chosen = client.search("Daft Punk", "Da Funk")[0]
+    job._run([(track_id, chosen)], None)
+
+    db = TestSession(); t2 = db.get(Track, track_id)
+    assert t2.last_download_reason == "queue_timeout"
+    db.close()
+
+
+def test_cascade_all_failed_surfaces_specific_reason(patch_job, monkeypatch):
+    TestSession, _ = patch_job
+
+    class _AllErrored:
+        def __init__(self): self.enqueued = []
+        def search(self, artist, title, **kw):
+            return [
+                SlskdFile(username="u1", filename="u1\\Da Funk.flac", size=10,
+                          bitrate=None, length=None, has_free_slot=True, queue_length=0),
+                SlskdFile(username="u2", filename="u2\\Da Funk.flac", size=10,
+                          bitrate=None, length=None, has_free_slot=True, queue_length=0),
+            ]
+        def enqueue_download(self, file): self.enqueued.append(file.username)
+        def transfer_state(self, username, filename):
+            return {"state": "Completed, Errored"}
+
+    client = _AllErrored()
+    monkeypatch.setattr(job, "get_slskd_client", lambda: client)
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="rf4", source_type="spotify",
+              title="Da Funk", artist="Daft Punk")
+    db.add(t); db.commit(); track_id = t.id; db.close()
+
+    job._run([(track_id, None)], None)  # None -> cascata via search
+
+    db = TestSession(); t2 = db.get(Track, track_id)
+    assert t2.last_download_outcome == "failed"
+    # La cascata riporta il motivo specifico dell'ultimo tentativo (piu' utile del
+    # generico "all_candidates_failed", che resta come fallback per reason None).
+    assert t2.last_download_reason == "transfer_failed"
+    db.close()

@@ -75,8 +75,8 @@ def _resolve_local_path(download_dir: str, filename: str) -> str | None:
     return str(max(matches, key=lambda p: p.stat().st_mtime).resolve())
 
 
-def _wait_for_download(client, file: SlskdFile) -> str:
-    """Attende l'esito di un transfer.
+def _wait_for_download(client, file: SlskdFile) -> tuple[str, str | None]:
+    """Attende l'esito di un transfer. Ritorna (esito, motivo).
 
     Se il transfer sta scaricando ("InProgress") si concede fino a DOWNLOAD_TIMEOUT;
     se invece resta solo in coda (Queued/Requested) oltre QUEUE_PATIENCE ci si arrende,
@@ -87,29 +87,38 @@ def _wait_for_download(client, file: SlskdFile) -> str:
     while waited < DOWNLOAD_TIMEOUT:
         state = (client.transfer_state(file.username, file.filename) or {}).get("state", "")
         cls = classify_transfer_state(state)
-        if cls in ("completed", "failed"):
-            return cls
+        if cls == "completed":
+            return "completed", None
+        if cls == "failed":
+            return "failed", "transfer_failed"
         if "inprogress" in state.lower():
             queued = 0.0
         else:
             queued += POLL_INTERVAL
             if queued >= QUEUE_PATIENCE:
-                return "failed"
+                return "failed", "queue_timeout"
         time.sleep(POLL_INTERVAL)
         waited += POLL_INTERVAL
-    return "failed"
+    return "failed", "download_timeout"
 
 
-def _download_candidate(client, download_dir, file: SlskdFile) -> str | None:
-    """Accoda un candidato, attende l'esito e risolve il path locale. None se fallisce."""
+def _download_candidate(client, download_dir, file: SlskdFile) -> tuple[str | None, str | None]:
+    """Accoda un candidato, attende l'esito e risolve il path locale.
+
+    Ritorna (path, motivo): (path, None) se ok, (None, <code>) se fallisce.
+    """
     try:
         client.enqueue_download(file)
     except Exception:  # noqa: BLE001 — un candidato che non parte non ferma il fallback
         logger.exception("enqueue fallito user=%s", file.username)
-        return None
-    if _wait_for_download(client, file) != "completed":
-        return None
-    return _resolve_local_path(download_dir, file.filename)
+        return None, "enqueue_rejected"
+    outcome, reason = _wait_for_download(client, file)
+    if outcome != "completed":
+        return None, reason
+    path = _resolve_local_path(download_dir, file.filename)
+    if not path:
+        return None, "file_missing"
+    return path, None
 
 
 def _attempt_download(db, client, download_dir, track, file: SlskdFile,
@@ -121,9 +130,9 @@ def _attempt_download(db, client, download_dir, track, file: SlskdFile,
     resta in inbox per revisione, il suo path viene restituito e la Track NON viene
     marcata posseduta.
     """
-    path = _download_candidate(client, download_dir, file)
+    path, reason = _download_candidate(client, download_dir, file)
     if not path:
-        return "failed", None, None
+        return "failed", reason, None
     real = read_tags(path).get("duration_seconds")
     if expected_duration and real and abs(real - expected_duration) > 20:
         return "needs_review", (
@@ -139,7 +148,7 @@ def _process_manual(client, download_dir, file: SlskdFile) -> str:
     """Ricerca manuale: scarica il file sul disco (inbox slskd). NON lo cataloga in
     Cratory: entra in libreria via Sortory (sposta i file in LIBRARY_ROOT) +
     indicizzazione, come un qualsiasi file posseduto. Niente playlist 'Soulseek'."""
-    path = _download_candidate(client, download_dir, file)
+    path, _ = _download_candidate(client, download_dir, file)
     return "downloaded" if path else "failed"
 
 
@@ -159,6 +168,7 @@ def _process_item(db, client, download_dir, track,
         return "needs_review", "confidenza sotto soglia per l'auto-pick", None
     # Fallback: prova i migliori candidati, un utente diverso alla volta, finche' uno riesce.
     tried: set[str] = set()
+    last_reason: str | None = None
     for cand in ranked:
         if len(tried) >= MAX_ATTEMPTS:
             break
@@ -169,7 +179,8 @@ def _process_item(db, client, download_dir, track,
                                                   cand.file, expected)
         if outcome != "failed":
             return outcome, reason, path
-    return "failed", None, None
+        last_reason = reason
+    return "failed", last_reason or "all_candidates_failed", None
 
 
 def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> None:
@@ -207,6 +218,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                     except Exception:  # noqa: BLE001 — un fallimento non ferma il job
                         logger.exception("Download Soulseek fallito per track_id=%s", track_id)
                         outcome = "failed"
+                        reason = "error"
                 title = getattr(track, "title", None)
             _state[outcome] = _state.get(outcome, 0) + 1
             if track is not None:
