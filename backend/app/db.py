@@ -38,77 +38,8 @@ def ensure_schema(eng=None) -> None:
     with eng.begin() as conn:
         _recover_legacy_tracks_leftover(conn)
     Base.metadata.create_all(eng)
-    inspector = inspect(eng)
-    # tabella -> {colonna: ddl} per colonne aggiunte dopo la creazione iniziale
-    additions = {
-        "tracks": {
-            # MVP 2 (Spotify)
-            "album_art_url": "TEXT",
-            # Pivot playlist->set: identita' streaming, playlist di provenienza, stato
-            "platform": "VARCHAR",
-            "platform_track_id": "VARCHAR",
-            "isrc": "VARCHAR",
-            "url": "TEXT",
-            "local_path": "TEXT",
-            "added_at": "DATETIME",
-            "playlist_id": "INTEGER",
-            "playlist_name": "VARCHAR",
-            "status": "VARCHAR DEFAULT 'imported'",
-            # Metadata editoriali + feature di mixing (provider esterni/manuale)
-            "label": "VARCHAR",
-            "camelot_key": "VARCHAR",
-            "energy": "INTEGER",
-            # Energia calcolata dai file audio (PR4): feature grezza + provenienza
-            "energy_raw": "FLOAT",
-            "energy_source": "VARCHAR",
-            # Ownership file locale (Soulseek download / import locale)
-            "has_local_file": "BOOLEAN DEFAULT 0",
-            "local_format": "VARCHAR",
-            "local_bitrate": "INTEGER",
-            "audio_hash": "VARCHAR",
-            # Scansione incrementale (Lotto A)
-            "local_mtime": "FLOAT",
-            "local_size": "INTEGER",
-            # Scartate (Lotto B)
-            "archived": "BOOLEAN DEFAULT 0",
-            # Esiti download persistiti (sezione "da sistemare")
-            "last_download_outcome": "VARCHAR",
-            "last_download_reason": "VARCHAR",
-            "last_download_path": "TEXT",
-            # Pagina Analisi: provenienza bpm/key + risultati analisi in-app
-            "bpm_source": "VARCHAR",
-            "key_source": "VARCHAR",
-            "analysis_bpm": "FLOAT",
-            "analysis_camelot": "VARCHAR",
-            "analyzed_at": "DATETIME",
-            "analysis_error": "VARCHAR",
-        },
-        "setlists": {
-            "generated_by": "VARCHAR DEFAULT 'algorithmic'",
-            "validation": "JSON",
-            # Disk-first: i set pre-migrazione non hanno la garanzia "solo posseduti"
-            "owned_only": "BOOLEAN DEFAULT 0",
-        },
-        "setlist_tracks": {
-            "role": "VARCHAR",
-            "transition_note": "TEXT",
-        },
-        "dj_sets": {
-            "imported_playlist_id": "INTEGER",
-        },
-        "playlist_tracks": {
-            # Provenienza membership (A12): NULL = import piattaforma (backfill
-            # corretto per le righe esistenti), 'cratory' = aggiunta da Cratory
-            # (es. Discovery), protetta dal prune del sync.
-            "added_by": "VARCHAR",
-        },
-    }
     with eng.begin() as conn:
-        for table, cols in additions.items():
-            existing = {c["name"] for c in inspector.get_columns(table)}
-            for col, ddl in cols.items():
-                if col not in existing:
-                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+        _migrate_add_model_columns(conn, eng.dialect)
         for table in Base.metadata.tables.values():
             existing_cols = {c["name"] for c in inspect(conn).get_columns(table.name)}
             for idx in table.indexes:
@@ -121,6 +52,61 @@ def ensure_schema(eng=None) -> None:
         _migrate_playlist_memberships(conn)
         _migrate_rename_liked_spotify(conn)
         _migrate_backfill_bpm_key_sources(conn)
+
+
+def _migrate_add_model_columns(conn, dialect) -> None:
+    """Additions derivate dal modello: ogni colonna presente in `Base.metadata`
+    ma assente dal DB live (PRAGMA table_info) viene aggiunta con
+    `ALTER TABLE ... ADD COLUMN`. E' il duale di `_migrate_drop_legacy`
+    (drop model-derived): niente dict manuale da tenere allineato quando un
+    modello guadagna una colonna. Tipo e default arrivano dalla Column stessa
+    (vedi `_column_add_ddl`).
+
+    Limiti SQLite rispettati:
+    - NOT NULL e' legale in ADD COLUMN solo insieme a un DEFAULT non-NULL: i
+      NOT NULL con default Python callable (utcnow, dict) si aggiungono
+      nullable — il default ORM continua a valorizzare le righe nuove, quelle
+      pre-esistenti restano NULL come col vecchio dict;
+    - niente clausola REFERENCES: le colonne legacy con FK (Track.playlist_id,
+      non droppabile, vedi `_DEAD_LEAD_COLS`) si ri-aggiungono come colonne
+      semplici, esattamente come faceva il vecchio dict ("playlist_id": "INTEGER");
+    - le colonne PK non sono aggiungibili con ADD COLUMN: si saltano (in
+      pratica non capita mai, ogni tabella live ha la sua PK).
+
+    Idempotente: aggiunge solo cio' che manca; su un DB fresco e' un no-op.
+    """
+    for table in Base.metadata.sorted_tables:
+        live = {r[1] for r in conn.execute(
+            text(f'PRAGMA table_info("{table.name}")')
+        ).fetchall()}
+        if not live:
+            continue  # difensivo: create_all ha appena creato le tabelle mancanti
+        for col in table.columns:
+            if col.name in live or col.primary_key:
+                continue
+            conn.execute(text(
+                f'ALTER TABLE "{table.name}" ADD COLUMN {_column_add_ddl(col, dialect)}'
+            ))
+
+
+def _column_add_ddl(col, dialect) -> str:
+    """Frammento DDL `"nome" TIPO [DEFAULT x] [NOT NULL]` per l'ADD COLUMN,
+    derivato dalla Column del modello: l'equivalente di cio' che il vecchio
+    dict `additions` codificava a mano (es. "VARCHAR DEFAULT 'imported'")."""
+    parts = [f'"{col.name}"', col.type.compile(dialect)]
+    # server_default del modello (es. has_local_file="0"), reso come in create_all.
+    default_sql = dialect.ddl_compiler(dialect, None).get_column_default_string(col)
+    if default_sql is None and col.default is not None and col.default.is_scalar:
+        # Default scalare solo lato Python (es. status='imported'): promosso a
+        # DDL cosi' le righe pre-esistenti ricevono il valore atteso invece di NULL.
+        processor = col.type.literal_processor(dialect)
+        if processor is not None:
+            default_sql = processor(col.default.arg)
+    if default_sql is not None:
+        parts.append(f"DEFAULT {default_sql}")
+        if not col.nullable:
+            parts.append("NOT NULL")  # SQLite lo accetta in ADD COLUMN solo col DEFAULT
+    return " ".join(parts)
 
 
 # Tabelle dell'era Rekordbox/MVP1 rimosse dopo il pivot a playlist->set.
@@ -166,8 +152,8 @@ def _migrate_drop_legacy(conn) -> None:
 
     La colonna `camelot_key` va preservata via `UPDATE ... COALESCE` (da `tonality`)
     PRIMA del drop, perche' il drop e' distruttivo. Le colonne del modello corrente
-    (incl. `camelot_key`) esistono gia' a questo punto: il loop `additions` di
-    `ensure_schema` (ALTER ADD) gira prima di questa funzione.
+    (incl. `camelot_key`) esistono gia' a questo punto: `_migrate_add_model_columns`
+    (ALTER ADD model-derived) gira prima di questa funzione in `ensure_schema`.
 
     Robusta agli interrupt: ogni DROP COLUMN e' atomico, quindi una run successiva
     droppa solo cio' che resta (idempotente). Il caso di un rebuild vecchio-stile
@@ -307,11 +293,11 @@ def _migrate_backfill_bpm_key_sources(conn) -> None:
     mano si ri-etichetta 'manual' alla prossima modifica. Idempotente: la WHERE
     su source NULL rende no-op le esecuzioni successive.
 
-    Difensivo su `bpm`/`camelot_key`: alcuni test (e potenziali DB legacy) simulano
-    una `tracks` ridotta alle sole colonne minime, dove `bpm` non e' ancora stata
-    aggiunta (a differenza di `camelot_key`, presente in `additions` e quindi gia'
-    creata dal loop ALTER ADD di `ensure_schema` a questo punto). Senza il check
-    l'UPDATE fallirebbe con "no such column" invece di essere un no-op sicuro.
+    Difensivo su `bpm`/`camelot_key`: con le additions model-derived
+    (`_migrate_add_model_columns`, che gira prima in `ensure_schema`) entrambe le
+    colonne esistono sempre a questo punto; il check resta come guardia se la
+    funzione viene chiamata fuori da quel flusso, dove l'UPDATE fallirebbe con
+    "no such column" invece di essere un no-op sicuro.
     """
     cols = {r[1] for r in conn.execute(text("PRAGMA table_info(tracks)")).fetchall()}
     if "bpm" in cols:
