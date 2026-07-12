@@ -18,6 +18,7 @@ import { TrackCover } from "@/components/track-cover";
 import { PlaylistCover } from "@/components/playlist-cover";
 import { useJobs } from "@/components/jobs-provider";
 import { TrackEditModal } from "@/components/track-edit-modal";
+import { ConfirmModal } from "@/components/confirm-modal";
 import { KeyBadge } from "@/components/key-badge";
 import { TrackStateIcons } from "@/components/track-state-icons";
 import { useT } from "@/lib/i18n";
@@ -47,6 +48,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const [gaps, setGaps] = useState<GapAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState<Track | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
@@ -131,7 +133,6 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
 
   const doDelete = async () => {
     if (!playlist) return;
-    if (!window.confirm(t.playlists.detailDeleteConfirm(playlist.name))) return;
     setDeleting(true);
     try {
       await deletePlaylist(pid);
@@ -217,7 +218,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
         ? <Link href={likedImportHref} className="block"><Button size="sm" variant="outline" className="w-full"><Heart size={14} /> {t.playlists.addMoreLiked}</Button></Link>
         : canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} {t.playlists.syncFromButton(platformName)}</Button>}
       {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> {platformName}</Button></a>}
-      <Button size="sm" variant="danger" className="w-full" onClick={doDelete} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} {t.playlists.removeButton}</Button>
+      <Button size="sm" variant="danger" className="w-full" onClick={() => setConfirmDelete(true)} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} {t.playlists.removeButton}</Button>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
         <div className="flex justify-between gap-2"><span className="text-muted">{t.playlists.statTracksLabel}</span><span className="tnum text-fg">{playlist.track_count}</span></div>
         <div className="flex justify-between gap-2"><span className="text-muted">{t.playlists.statReadyLabel}</span><span className="tnum text-fg">{ready}</span></div>
@@ -334,6 +335,16 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
         open={editing !== null}
         onClose={() => setEditing(null)}
         onSaved={(tr) => setTracks((cur) => cur.map((x) => (x.id === tr.id ? tr : x)))}
+      />
+
+      <ConfirmModal
+        open={confirmDelete}
+        title={t.common.delete}
+        message={t.playlists.detailDeleteConfirm(playlist.name)}
+        tone="danger"
+        confirmLabel={t.common.delete}
+        onConfirm={() => { setConfirmDelete(false); doDelete(); }}
+        onClose={() => setConfirmDelete(false)}
       />
     </PageLayout>
   );

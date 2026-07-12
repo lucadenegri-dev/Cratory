@@ -11,6 +11,7 @@ import { useJobs } from "@/components/jobs-provider";
 import { RekordboxImportCard } from "@/components/analysis/rekordbox-import-card";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, Badge, Button, Card, EqMeter, Select } from "@/components/ui";
+import { ConfirmModal } from "@/components/confirm-modal";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -26,6 +27,7 @@ export default function AnalysisPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<"force" | "selected" | null>(null);
 
   const compatLabel = {
     same: t.analysis.compatSame, compatible: t.analysis.compatCompatible,
@@ -86,10 +88,7 @@ export default function AnalysisPage() {
     }
   };
 
-  const onForceAll = async () => {
-    if (!window.confirm(t.analysis.forceConfirm)) return;
-    await onApply({ mode: "all", force: true });
-  };
+  const onForceAll = () => setConfirmAction("force");
 
   // Apply selected sovrascrive la provenienza attuale con 'cratory'. Contiamo,
   // fra le righe selezionate, quante calpesterebbero un valore manuale o
@@ -105,8 +104,15 @@ export default function AnalysisPage() {
   const onApplySelected = async () => {
     // Le correzioni manuali sono la massima autorità: conferma esplicita prima
     // di sovrascriverle in blocco (il force-all ha già la sua conferma a parte).
-    if (manualCount > 0 && !window.confirm(t.analysis.applySelectedConfirm(manualCount))) return;
+    if (manualCount > 0) { setConfirmAction("selected"); return; }
     await onApply({ track_ids: [...selected] });
+  };
+
+  const onConfirmAction = async () => {
+    const action = confirmAction;
+    setConfirmAction(null);
+    if (action === "force") await onApply({ mode: "all", force: true });
+    else if (action === "selected") await onApply({ track_ids: [...selected] });
   };
 
   const toggle = (id: number) =>
@@ -303,6 +309,16 @@ export default function AnalysisPage() {
           )}
         </Card>
       </div>
+
+      <ConfirmModal
+        open={confirmAction !== null}
+        message={confirmAction === "selected"
+          ? t.analysis.applySelectedConfirm(manualCount)
+          : t.analysis.forceConfirm}
+        tone="danger"
+        onConfirm={onConfirmAction}
+        onClose={() => setConfirmAction(null)}
+      />
     </PageLayout>
   );
 }

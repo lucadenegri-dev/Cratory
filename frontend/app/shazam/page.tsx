@@ -8,6 +8,7 @@ import {
   type DjSet, type ShazamIdentifyState,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Input, Loading } from "@/components/ui";
+import { ConfirmModal } from "@/components/confirm-modal";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
@@ -24,6 +25,7 @@ export default function ShazamPage() {
   const [job, setJob] = useState<ShazamIdentifyState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<DjSet | null>(null);
   const jobs = useJobs();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -83,7 +85,6 @@ export default function ShazamPage() {
   };
 
   const doDelete = async (s: DjSet) => {
-    if (!window.confirm(t.shazam.deleteConfirm(s.title ?? s.source_url))) return;
     try { await deleteDjSet(s.id); reload(); } catch (e) { setError(err(e)); }
   };
 
@@ -153,13 +154,27 @@ export default function ShazamPage() {
                 </div>
                 <div className="flex shrink-0 gap-1.5">
                   <Link href={`/shazam/${s.id}`}><Button size="sm" variant="outline"><Eye size={15} /> {t.shazam.openButton}</Button></Link>
-                  <Button size="sm" variant="danger" onClick={() => doDelete(s)}><Trash2 size={15} /></Button>
+                  <Button size="sm" variant="danger" onClick={() => setConfirmDelete(s)}><Trash2 size={15} /></Button>
                 </div>
               </div>
             </Card>
           );
         })}
       </div>
+
+      <ConfirmModal
+        open={confirmDelete !== null}
+        title={t.common.delete}
+        message={confirmDelete ? t.shazam.deleteConfirm(confirmDelete.title ?? confirmDelete.source_url) : ""}
+        tone="danger"
+        confirmLabel={t.common.delete}
+        onConfirm={() => {
+          const s = confirmDelete;
+          setConfirmDelete(null);
+          if (s) doDelete(s);
+        }}
+        onClose={() => setConfirmDelete(null)}
+      />
     </PageLayout>
   );
 }

@@ -10,6 +10,7 @@ import {
   type Playlist,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Loading } from "@/components/ui";
+import { ConfirmModal } from "@/components/confirm-modal";
 import { PageLayout } from "@/components/page-layout";
 import { PlaylistCover } from "@/components/playlist-cover";
 import { useT } from "@/lib/i18n";
@@ -24,6 +25,7 @@ export default function PlaylistsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Playlist | null>(null);
 
   const reload = useCallback(() => {
     listImportedPlaylists().then(setImported).catch((e) => setError(err(e)));
@@ -34,7 +36,6 @@ export default function PlaylistsPage() {
   }, [reload]);
 
   const doDelete = async (p: Playlist) => {
-    if (!window.confirm(t.playlists.deleteConfirm(p.name))) return;
     setError(null);
     setNotice(null);
     setBusy(`del-${p.id}`);
@@ -110,7 +111,7 @@ export default function PlaylistsPage() {
                 <Link href={`/playlists/${p.id}`}>
                   <Button size="sm" variant="outline"><Eye size={15} /> {t.playlists.openButton}</Button>
                 </Link>
-                <Button size="sm" variant="danger" onClick={() => doDelete(p)} disabled={busy !== null}>
+                <Button size="sm" variant="danger" onClick={() => setConfirmDelete(p)} disabled={busy !== null}>
                   {busy === `del-${p.id}` ? <Spinner /> : <Trash2 size={15} />}
                 </Button>
               </div>
@@ -118,6 +119,20 @@ export default function PlaylistsPage() {
           </Card>
         ))}
       </div>
+
+      <ConfirmModal
+        open={confirmDelete !== null}
+        title={t.common.delete}
+        message={confirmDelete ? t.playlists.deleteConfirm(confirmDelete.name) : ""}
+        tone="danger"
+        confirmLabel={t.common.delete}
+        onConfirm={() => {
+          const p = confirmDelete;
+          setConfirmDelete(null);
+          if (p) doDelete(p);
+        }}
+        onClose={() => setConfirmDelete(null)}
+      />
     </PageLayout>
   );
 }

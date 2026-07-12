@@ -8,6 +8,7 @@ import { useJobs } from "@/components/jobs-provider";
 import { DownloadReviewModal, type ReviewTarget } from "@/components/download-review-modal";
 import { LinkLocalFileModal, type LinkTarget } from "@/components/link-local-file-modal";
 import { AutoLinkModal } from "@/components/auto-link-modal";
+import { ConfirmModal } from "@/components/confirm-modal";
 import {
   downloadManual, downloadPending, ignoreDownload, listImportedPlaylists,
   retryPending, searchDownloads, startPlaylistDownload, trackLabel,
@@ -53,6 +54,7 @@ export default function DownloadsPage() {
   const [review, setReview] = useState<ReviewTarget | null>(null);
   const [linking, setLinking] = useState<LinkTarget | null>(null);
   const [autoLink, setAutoLink] = useState(false);
+  const [confirmIgnore, setConfirmIgnore] = useState<Track | null>(null);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
 
@@ -103,7 +105,6 @@ export default function DownloadsPage() {
     catch (e) { setError(err(e)); }
   };
   const ignore = async (tr: Track) => {
-    if (!window.confirm(t.downloads.ignoreConfirm(trackLabel(tr)))) return;
     setError(null);
     try { await ignoreDownload(tr.id); refreshPending(); }
     catch (e) { setError(err(e)); }
@@ -223,7 +224,7 @@ export default function DownloadsPage() {
                         <Button size="sm" variant="outline" onClick={() => setLinking({ id: tr.id, artist: tr.artist, title: tr.title })}>
                           <Link2 size={13} /> {t.downloads.linkFileButton}
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => ignore(tr)}>
+                        <Button size="sm" variant="ghost" onClick={() => setConfirmIgnore(tr)}>
                           <EyeOff size={13} /> {t.downloads.ignoreButton}
                         </Button>
                       </span>
@@ -250,6 +251,16 @@ export default function DownloadsPage() {
         open={autoLink}
         onClose={() => setAutoLink(false)}
         onLinked={refreshPending}
+      />
+      <ConfirmModal
+        open={confirmIgnore !== null}
+        message={confirmIgnore ? t.downloads.ignoreConfirm(trackLabel(confirmIgnore)) : ""}
+        onConfirm={() => {
+          const tr = confirmIgnore;
+          setConfirmIgnore(null);
+          if (tr) ignore(tr);
+        }}
+        onClose={() => setConfirmIgnore(null)}
       />
     </PageLayout>
   );
