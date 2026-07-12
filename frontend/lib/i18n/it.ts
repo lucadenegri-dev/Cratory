@@ -136,7 +136,7 @@ export const it: Dictionary = {
     stageAcquireSub: (active: boolean, pending: number) => (active ? `download attivi · ${pending} in coda` : "in wishlist"),
     stageOrganize: "Organizza ⤴",
     stageOrganizeSub: "Organizza le tracce che possiedi e i loro tag in Sortory",
-    stageAnalyze: "Analizza ⤴",
+    stageAnalyze: "Analizza",
     stageAnalyzeSub: "Analizza BPM & KEY o importa da Rekordbox",
     stagePlay: "Suona",
     stagePlaySub: "pronte per un set",

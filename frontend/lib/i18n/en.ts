@@ -134,7 +134,7 @@ export const en = {
     stageAcquireSub: (active: boolean, pending: number) => (active ? `downloads active · ${pending} queued` : "in wishlist"),
     stageOrganize: "Organize ⤴",
     stageOrganizeSub: "Organize your tracks and their tags in Sortory",
-    stageAnalyze: "Analyze ⤴",
+    stageAnalyze: "Analyze",
     stageAnalyzeSub: "Analyze BPM & KEY or import from Rekordbox",
     stagePlay: "Play",
     stagePlaySub: "ready for a set",
