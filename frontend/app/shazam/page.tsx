@@ -8,6 +8,7 @@ import {
   type DjSet, type ShazamIdentifyState,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Input, Loading } from "@/components/ui";
+import { ButtonLink } from "@/components/button-link";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
@@ -153,7 +154,7 @@ export default function ShazamPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-1.5">
-                  <Link href={`/shazam/${s.id}`}><Button size="sm" variant="outline"><Eye size={15} /> {t.shazam.openButton}</Button></Link>
+                  <ButtonLink href={`/shazam/${s.id}`} size="sm" variant="outline"><Eye size={15} /> {t.shazam.openButton}</ButtonLink>
                   <Button size="sm" variant="danger" onClick={() => setConfirmDelete(s)}><Trash2 size={15} /></Button>
                 </div>
               </div>

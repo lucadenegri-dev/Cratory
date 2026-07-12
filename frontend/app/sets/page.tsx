@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Sparkles, ListMusic, Clock, ChevronRight } from "lucide-react";
 import { apiGet, fmtDuration, type SetlistSummary } from "@/lib/api";
-import { Card, Badge, Alert, EmptyState, Button, Loading } from "@/components/ui";
+import { Card, Badge, Alert, EmptyState, Loading } from "@/components/ui";
+import { ButtonLink } from "@/components/button-link";
 import { PageLayout } from "@/components/page-layout";
 import { useT } from "@/lib/i18n";
 
@@ -23,7 +24,7 @@ export default function SetsPage() {
 
   const marginalia = (
     <div className="space-y-3">
-      <Link href="/set-builder" className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> {t.sets.newSetButton}</Button></Link>
+      <ButtonLink href="/set-builder" size="sm" block><Sparkles size={15} /> {t.sets.newSetButton}</ButtonLink>
       <div className="border-t border-border pt-4 text-xs">
         <div className="flex justify-between gap-2"><span className="text-muted">{t.sets.savedSetsLabel}</span><span className="tnum text-fg">{sets?.length ?? 0}</span></div>
       </div>

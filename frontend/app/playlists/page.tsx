@@ -10,6 +10,7 @@ import {
   type Playlist,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Loading } from "@/components/ui";
+import { ButtonLink } from "@/components/button-link";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { PageLayout } from "@/components/page-layout";
 import { PlaylistCover } from "@/components/playlist-cover";
@@ -58,9 +59,9 @@ export default function PlaylistsPage() {
 
   const marginalia = (
     <div className="space-y-3">
-      <Link href="/playlists/import-spotify" className="block"><Button size="sm" className="w-full"><Download size={15} /> {t.playlists.importSpotifyButton}</Button></Link>
-      <Link href="/playlists/import-soundcloud" className="block"><Button size="sm" className="w-full"><CloudDownload size={15} /> {t.playlists.importSoundcloudButton}</Button></Link>
-      <Link href="/playlists/import-manual" className="block"><Button size="sm" variant="outline" className="w-full"><ClipboardList size={15} /> {t.playlists.importManualButton}</Button></Link>
+      <ButtonLink href="/playlists/import-spotify" size="sm" block><Download size={15} /> {t.playlists.importSpotifyButton}</ButtonLink>
+      <ButtonLink href="/playlists/import-soundcloud" size="sm" block><CloudDownload size={15} /> {t.playlists.importSoundcloudButton}</ButtonLink>
+      <ButtonLink href="/playlists/import-manual" size="sm" variant="outline" block><ClipboardList size={15} /> {t.playlists.importManualButton}</ButtonLink>
       {imported && imported.length > 0 && (
         <div className="space-y-2 border-t border-border pt-4 text-xs">
           <div className="flex justify-between gap-2"><span className="text-muted">{t.playlists.statsPlaylists}</span><span className="tnum text-fg">{imported.length}</span></div>
@@ -108,9 +109,9 @@ export default function PlaylistsPage() {
                 </div>
               </div>
               <div className="flex shrink-0 gap-1.5">
-                <Link href={`/playlists/${p.id}`}>
-                  <Button size="sm" variant="outline"><Eye size={15} /> {t.playlists.openButton}</Button>
-                </Link>
+                <ButtonLink href={`/playlists/${p.id}`} size="sm" variant="outline">
+                  <Eye size={15} /> {t.playlists.openButton}
+                </ButtonLink>
                 <Button size="sm" variant="danger" onClick={() => setConfirmDelete(p)} disabled={busy !== null}>
                   {busy === `del-${p.id}` ? <Spinner /> : <Trash2 size={15} />}
                 </Button>

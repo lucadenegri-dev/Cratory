@@ -829,11 +829,15 @@ export type DownloadCandidate = {
   confidence: number;
 };
 
+/** Esito di un singolo download Soulseek (stessi valori di Track.last_download_outcome). */
+export type DownloadOutcome = "downloaded" | "needs_review" | "not_found" | "failed";
+
 export type DownloadItem = {
-  track_id: number;
+  // null per i download da ricerca manuale (nessuna traccia collegata).
+  track_id: number | null;
   artist: string | null;
   title: string | null;
-  outcome: "downloaded" | "needs_review" | "not_found" | "failed";
+  outcome: DownloadOutcome;
   // Motivo dell'esito (es. durata incoerente per needs_review).
   reason: string | null;
 };
