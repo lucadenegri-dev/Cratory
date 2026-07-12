@@ -55,6 +55,7 @@ class AudioFile(Base):
     isrc: Mapped[str | None] = mapped_column(String)
     mbid: Mapped[str | None] = mapped_column(String, index=True)
     has_cover: Mapped[bool] = mapped_column(Boolean, default=False)
+    has_rating: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String, default="present", index=True)
     scan_error: Mapped[str | None] = mapped_column(Text)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

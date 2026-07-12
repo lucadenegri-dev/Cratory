@@ -189,6 +189,7 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
                 db.commit()
                 soft_skipped += 1
                 continue
+            f.has_rating = False   # allinea il flag al disco: niente op fantasma
             o.status = "applied"
             db.commit()
             _progress()
