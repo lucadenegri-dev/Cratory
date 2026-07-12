@@ -201,6 +201,67 @@ export function libraryIndexStatus() {
   return apiGet<LibraryIndexJob>("/api/library/index/status");
 }
 
+export interface AnalysisJobStatus {
+  status: "idle" | "running" | "done" | "error";
+  processed: number;
+  total: number;
+  analyzed: number;
+  failed: number;
+  applied: number;
+  current_label: string | null;
+  error: string | null;
+}
+
+export interface AnalysisOverview {
+  owned: number;
+  ready_for_set: number;
+  missing_bpm: number;
+  missing_key: number;
+  bpm_by_source: Record<string, number>;
+  key_by_source: Record<string, number>;
+  analyzed: number;
+  divergent: number;
+  rekordbox_pending: number;
+}
+
+export interface AnalysisDivergence {
+  track_id: number;
+  artist: string | null;
+  title: string | null;
+  bpm: number | null;
+  bpm_source: string | null;
+  analysis_bpm: number | null;
+  bpm_delta: number | null;
+  camelot_key: string | null;
+  key_source: string | null;
+  analysis_camelot: string | null;
+  key_compatibility: "same" | "compatible" | "weak" | "unknown";
+}
+
+export async function analysisOverview() {
+  return apiGet<AnalysisOverview>("/api/analysis/overview");
+}
+
+export async function startAnalysis(scope: "missing" | "all", trackIds?: number[]) {
+  return apiPost<AnalysisJobStatus>("/api/analysis/start", {
+    scope, track_ids: trackIds ?? null,
+  });
+}
+
+export async function analysisStatus() {
+  return apiGet<AnalysisJobStatus>("/api/analysis/status");
+}
+
+export async function analysisDivergences() {
+  return apiGet<AnalysisDivergence[]>("/api/analysis/divergences");
+}
+
+export async function applyAnalysis(body: {
+  track_ids?: number[]; mode?: "divergent" | "all"; force?: boolean;
+}) {
+  return apiPost<{ applied: number; skipped: number }>("/api/analysis/apply", body);
+}
+
 /** Snapshot della pipeline di orientamento (dashboard). Campi disco null = non configurato. */
 export interface PipelineStatus {
   playlists: number;
