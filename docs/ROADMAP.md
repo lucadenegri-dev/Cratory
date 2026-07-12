@@ -104,7 +104,9 @@ ownership of that field.
 **Fixed on master (incremental, post-triage):** A25 (playlist sync now refreshes name/cover/owner
 from the source — Spotify via `get_playlist_meta`, SoundCloud via the fetched `title`/thumbnails;
 2026-07-12); A18 (mix with no yt-dlp duration: `probe_duration` ffprobe fallback in
-`identify_set`, real duration backfilled into the set meta; 2026-07-12).
+`identify_set`, real duration backfilled into the set meta; 2026-07-12); E5
+(`_retry_after_seconds` — Retry-After parsed per RFC 7231, delta-seconds or HTTP-date, never an
+exception; 2026-07-12).
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
@@ -161,8 +163,7 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
 - **Backend robustness** — E1c migrations `additions` dict still manual (the drop is already
   model-derived); E1e N+1 on `Track.playlists` in setlist/transitions/download-pending → 3
   selectinload; ⚠️ E2 job-state copy done, but `index_library` is still one transaction + an
-  unguarded per-file `stat()`; E5 `Retry-After` parsed without a guard (a legal HTTP-date raises
-  ValueError); E10 (residual): transitions recompute each score twice, `file_search`
+  unguarded per-file `stat()`; E10 (residual): transitions recompute each score twice, `file_search`
   materializes the tree per keystroke, generate-async/mix_identify return untyped dicts,
   Discovery `_explain` without Pydantic (the one spot outside rule 5), duplicate risk thresholds
   scoring/generator (pipeline reduced to 1 walk, still no TTL cache); ⚠️ E11 only transport

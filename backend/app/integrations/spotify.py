@@ -12,6 +12,7 @@ import logging
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -30,6 +31,24 @@ SCOPES = (
     "playlist-read-private playlist-read-collaborative user-library-read"
 )
 MAX_RETRY_WAIT = 30  # oltre questa attesa (s) su 429 si abortisce invece di dormire
+
+
+def _retry_after_seconds(value: str | None, default: int = 2) -> int:
+    """Secondi da attendere da un header Retry-After (RFC 7231: delta-seconds O
+    data HTTP). Valore assente/malformato -> default, mai un'eccezione."""
+    if not value:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        dt = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return default
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return max(0, int((dt - datetime.now(timezone.utc)).total_seconds()))
 
 
 class SpotifyError(Exception):
@@ -158,7 +177,7 @@ class SpotifyWebClient(SpotifyClient):
             except httpx.HTTPError as exc:
                 raise SpotifyError(f"Spotify non raggiungibile ({method} {path}): {exc}") from exc
             if r.status_code == 429:
-                wait = int(r.headers.get("Retry-After", "2")) + 1
+                wait = _retry_after_seconds(r.headers.get("Retry-After")) + 1
                 if wait > MAX_RETRY_WAIT:
                     # Spotify puo' rispondere con Retry-After di ore: non bloccare,
                     # riporta un errore chiaro con il tempo di attesa.
