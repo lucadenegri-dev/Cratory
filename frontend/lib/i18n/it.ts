@@ -484,6 +484,8 @@ export const it: Dictionary = {
       loadButton: "Carica",
       pressLoadHint: "Premi “Carica” per elencare le tue playlist.",
       noPlaylistsFound: "Nessuna playlist trovata.",
+      filterPlaceholder: "Filtra per nome",
+      filterNoMatch: "Nessuna playlist corrisponde al filtro.",
       alreadyImportedSuffix: "importata",
       updateButton: "Aggiorna",
       importButton: "Importa",
@@ -866,7 +868,7 @@ export const it: Dictionary = {
     pageTitle: "Transizioni",
     legendTitle: "Legenda",
     scoreHeading: "Score 0–100",
-    scoreExplanation: "Compatibilità tecnica: BPM (max 50) + tonalità (40) + durata (10). L'energia non entra nello score.",
+    scoreExplanation: "Compatibilità tecnica: BPM (max 50) + tonalità (40) + durata (10), più una piccola correzione di coerenza energetica (±7) quando entrambe le tracce hanno l'energia.",
     classesHeading: "Classi",
     classSafeLabel: "Sicura",
     classSafeDesc: ": BPM e chiave compatibili.",
@@ -888,6 +890,7 @@ export const it: Dictionary = {
     },
     noResultsMessage: (filtered: boolean) =>
       filtered ? "Nessuna transizione di questa classe per questa traccia." : "Nessuna transizione per questa traccia.",
+    loadingResults: "Ricerca transizioni…",
     hasFileBadge: "FILE",
   },
   transitionLabels: {
