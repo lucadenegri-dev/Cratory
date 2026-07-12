@@ -11,11 +11,12 @@ from app.services.set_editor import (
     SetEditError,
     delete_set,
     move_track,
+    move_track_to,
     remove_track,
     rename_set,
     replace_track,
 )
-from app.services.set_generator import generate_set
+from app.services.set_generator import assign_roles, generate_set
 
 
 def _make_set(db, seed_fn, **kw):
@@ -87,6 +88,77 @@ def test_move_track_at_edge_is_noop(db, seed_tracks):
     assert [st.track_id for st in sorted(out.tracks, key=lambda st: st.position)] == first_order
 
 
+# --- move_track_to (B12: drag-and-drop, posizione arbitraria in un passo) -------
+
+
+def test_move_track_to_position_moves_and_renumbers(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+    ordered = sorted(s.tracks, key=lambda st: st.position)
+    moved_id = ordered[2].track_id  # posizione 3 (1-based)
+
+    out = move_track_to(db, s.id, 3, 6)
+    new_ordered = sorted(out.tracks, key=lambda st: st.position)
+    assert new_ordered[5].track_id == moved_id  # ora in posizione 6
+    assert _positions(out) == list(range(1, len(out.tracks) + 1))  # contiguo, nessun buco
+
+
+def test_move_track_to_position_backwards(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+    ordered = sorted(s.tracks, key=lambda st: st.position)
+    moved_id = ordered[5].track_id  # posizione 6
+
+    out = move_track_to(db, s.id, 6, 2)
+    new_ordered = sorted(out.tracks, key=lambda st: st.position)
+    assert new_ordered[1].track_id == moved_id  # ora in posizione 2
+    assert _positions(out) == list(range(1, len(out.tracks) + 1))
+
+
+def test_move_track_to_position_preserves_relative_order_of_others(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+    ordered_ids = [st.track_id for st in sorted(s.tracks, key=lambda st: st.position)]
+    moved_id = ordered_ids[2]
+    expected_rest = [tid for tid in ordered_ids if tid != moved_id]
+
+    out = move_track_to(db, s.id, 3, 6)
+    new_ids = [st.track_id for st in sorted(out.tracks, key=lambda st: st.position)]
+    new_rest = [tid for tid in new_ids if tid != moved_id]
+    assert new_rest == expected_rest
+
+
+def test_move_track_to_position_recomputes_transitions(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+    out = move_track_to(db, s.id, 3, 6)
+    ordered = sorted(out.tracks, key=lambda st: st.position)
+    assert ordered[0].transition_score is None  # apertura invariata
+    assert all(st.transition_score is not None for st in ordered[1:])
+
+
+def test_move_track_to_position_reassigns_roles(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+    out = move_track_to(db, s.id, 3, 6)
+    roles = [st.role for st in sorted(out.tracks, key=lambda st: st.position)]
+    assert roles == assign_roles(len(roles))
+
+
+def test_move_track_to_position_noop_when_same_position(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+    first_order = [st.track_id for st in sorted(s.tracks, key=lambda st: st.position)]
+    out = move_track_to(db, s.id, 3, 3)
+    assert [st.track_id for st in sorted(out.tracks, key=lambda st: st.position)] == first_order
+
+
+def test_move_track_to_position_invalid_source(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+    with pytest.raises(SetEditError):
+        move_track_to(db, s.id, 999, 1)
+
+
+def test_move_track_to_position_invalid_target(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+    with pytest.raises(SetEditError):
+        move_track_to(db, s.id, 1, 999)
+
+
 def test_replace_track(db, seed_tracks):
     s = _make_set(db, seed_tracks)
     present = {st.track_id for st in s.tracks}
@@ -106,6 +178,30 @@ def test_replace_track_rejects_duplicate(db, seed_tracks):
     existing_other = ordered[1].track_id
     with pytest.raises(SetEditError):
         replace_track(db, s.id, 1, existing_other)
+
+
+def test_replace_track_clears_own_and_neighbors_notes(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+    n = len(s.tracks)
+    assert n >= 5, "servono abbastanza tracce per avere posizioni non toccate"
+    for st in s.tracks:
+        st.ai_reason = f"reason-{st.position}"
+        st.transition_note = f"note-{st.position}"
+    db.commit()
+    present = {st.track_id for st in s.tracks}
+    from app.repositories import all_playable_tracks
+    spare = next(t for t in all_playable_tracks(db) if t.id not in present)
+
+    out = replace_track(db, s.id, 3, spare.id)
+    by_pos = {st.position: st for st in out.tracks}
+    # lo slot sostituito e i vicini (posizioni 2 e 4) hanno note stantie azzerate
+    for pos in (2, 3, 4):
+        assert by_pos[pos].ai_reason is None, f"ai_reason stantia in posizione {pos}"
+        assert by_pos[pos].transition_note is None, f"transition_note stantia in posizione {pos}"
+    # le posizioni non toccate conservano le loro note
+    for pos in list(range(1, 2)) + list(range(5, n + 1)):
+        assert by_pos[pos].ai_reason == f"reason-{pos}"
+        assert by_pos[pos].transition_note == f"note-{pos}"
 
 
 # --- Alternative (F9) --------------------------------------------------------
@@ -165,7 +261,10 @@ def test_alternatives_same_artist(db, seed_tracks):
                 artist = st.track.artist.lower()
                 assert all((a.track.artist or "").lower() == artist for a in alts)
                 break
-    assert target_pos is not None or True
+    # Con 5 artisti su 40 tracce ci deve essere almeno una posizione con alternative
+    # same_artist: se target_pos resta None il ramo di assert sopra non e' mai girato
+    # e il test non avrebbe verificato nulla (tautologia precedente: `or True`).
+    assert target_pos is not None, "nessuna posizione ha prodotto alternative same_artist"
 
 
 def test_alternatives_surprising_avoids_bad_scores(db, seed_tracks):

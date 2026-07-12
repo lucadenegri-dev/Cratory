@@ -33,6 +33,7 @@ from app.services.set_editor import (
     add_track,
     delete_set,
     move_track,
+    move_track_to,
     remove_track,
     rename_set,
     replace_track,
@@ -298,7 +299,11 @@ def add(setlist_id: int, req: AddTrackRequest, db: Session = Depends(get_db)):
 @router.post("/{setlist_id}/tracks/{position}/move", response_model=SetlistOut)
 def move(setlist_id: int, position: int, req: MoveTrackRequest, db: Session = Depends(get_db)):
     try:
-        return setlist_out(move_track(db, setlist_id, position, req.direction), get_language(db))
+        if req.to is not None:
+            setlist = move_track_to(db, setlist_id, position, req.to)
+        else:
+            setlist = move_track(db, setlist_id, position, req.direction)
+        return setlist_out(setlist, get_language(db))
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 

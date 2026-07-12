@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { use, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Sparkles, Download, Lightbulb, SlidersHorizontal,
-  ArrowUp, ArrowDown, Trash2, Replace, Pencil, Check, ChevronDown, Plus,
+  ArrowUp, ArrowDown, Trash2, Replace, Pencil, Check, ChevronDown, Plus, GripVertical,
 } from "lucide-react";
 import {
   apiGet, apiPost, apiPatch, apiDelete, addTrackToSet, exportSet, fmtDuration, trackLabel,
@@ -34,6 +34,19 @@ function dropTrack(s: Setlist, pos: number): Setlist {
   const tracks = s.tracks
     .filter((tr) => tr.position !== pos)
     .map((tr) => (tr.position > pos ? { ...tr, position: tr.position - 1 } : tr));
+  return { ...s, tracks };
+}
+/* Drag-and-drop: sposta la traccia da `from` a `to` (1-based) in un passo, tutte le
+   tracce intermedie si riallineano. Ottimistico come swapTracks/dropTrack: il server
+   poi restituisce la verità (ruoli/score/note ricalcolati). */
+function reorderTrack(s: Setlist, from: number, to: number): Setlist {
+  if (from === to) return s;
+  const ordered = [...s.tracks].sort((a, b) => a.position - b.position);
+  const idx = ordered.findIndex((tr) => tr.position === from);
+  if (idx === -1) return s;
+  const [item] = ordered.splice(idx, 1);
+  ordered.splice(to - 1, 0, item);
+  const tracks = ordered.map((tr, i) => ({ ...tr, position: i + 1 }));
   return { ...s, tracks };
 }
 function slugName(name: string) {
@@ -85,12 +98,26 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
     if (!addOpen) return;
     const timer = setTimeout(() => {
       setAddLoading(true);
-      apiGet<{ total: number; items: Track[] }>("/api/tracks", {
-        title: addQuery || undefined,
-        has_local_file: setlist?.owned_only ? "true" : undefined,
-        limit: 10,
-      })
-        .then((r) => setAddResults(r.items))
+      const q = addQuery.trim() || undefined;
+      const hasLocalFile = setlist?.owned_only ? "true" : undefined;
+      // L'API filtra per titolo O artista separatamente (nessun parametro "q" generico):
+      // interroghiamo entrambi e uniamo/dedup lato client per una ricerca titolo-o-artista.
+      Promise.all([
+        apiGet<{ total: number; items: Track[] }>("/api/tracks", { title: q, has_local_file: hasLocalFile, limit: 10 }),
+        q
+          ? apiGet<{ total: number; items: Track[] }>("/api/tracks", { artist: q, has_local_file: hasLocalFile, limit: 10 })
+          : Promise.resolve({ total: 0, items: [] as Track[] }),
+      ])
+        .then(([byTitle, byArtist]) => {
+          const seen = new Set<number>();
+          const merged: Track[] = [];
+          for (const tr of [...byTitle.items, ...byArtist.items]) {
+            if (seen.has(tr.id)) continue;
+            seen.add(tr.id);
+            merged.push(tr);
+          }
+          setAddResults(merged);
+        })
         .catch(() => setAddResults([]))
         .finally(() => setAddLoading(false));
     }, 300);
@@ -130,12 +157,23 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
   // Guard leggero: ignoro nuove mutazioni finché la precedente non risponde (niente disabilitazione globale).
   const mutating = useRef(false);
 
+  // Drag-and-drop (B12): posizione trascinata + posizione sorvolata (per l'highlight).
+  const [dragPos, setDragPos] = useState<number | null>(null);
+  const [overPos, setOverPos] = useState<number | null>(null);
+
   function move(pos: number, dir: "up" | "down") {
     const target = dir === "up" ? pos - 1 : pos + 1;
     if (mutating.current || !setlist || target < 1 || target > setlist.tracks.length) return;
     mutating.current = true;
     setSetlist((cur) => (cur ? swapTracks(cur, pos, target) : cur)); // ottimistico
     reload(apiPost<Setlist>(`/api/sets/${id}/tracks/${pos}/move`, { direction: dir }), { silent: true })
+      .finally(() => { mutating.current = false; });
+  }
+  function moveToPosition(from: number, to: number) {
+    if (mutating.current || !setlist || from === to || from < 1 || to < 1 || to > setlist.tracks.length) return;
+    mutating.current = true;
+    setSetlist((cur) => (cur ? reorderTrack(cur, from, to) : cur)); // ottimistico
+    reload(apiPost<Setlist>(`/api/sets/${id}/tracks/${from}/move`, { to }), { silent: true })
       .finally(() => { mutating.current = false; });
   }
   function remove(pos: number) {
@@ -306,7 +344,34 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
 
           <ol className="space-y-1.5">
             {setlist.tracks.map((st) => (
-              <li key={st.position} className="flex items-center gap-3 rounded-none border border-border bg-bg p-3">
+              <li
+                key={st.position}
+                onDragOver={(e) => {
+                  if (dragPos == null) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (overPos !== st.position) setOverPos(st.position);
+                }}
+                onDragLeave={() => setOverPos((p) => (p === st.position ? null : p))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragPos != null) moveToPosition(dragPos, st.position);
+                  setDragPos(null);
+                  setOverPos(null);
+                }}
+                className={cn(
+                  "flex items-center gap-3 rounded-none border border-border bg-bg p-3 transition-colors",
+                  overPos === st.position && dragPos !== null && dragPos !== st.position && "border-fg-strong bg-elevated",
+                  dragPos === st.position && "opacity-50",
+                )}
+              >
+                <span
+                  draggable
+                  onDragStart={(e) => { setDragPos(st.position); e.dataTransfer.effectAllowed = "move"; }}
+                  onDragEnd={() => { setDragPos(null); setOverPos(null); }}
+                  title={t.sets.dragHandleTitle}
+                  className="cursor-grab touch-none text-faint hover:text-fg active:cursor-grabbing"
+                ><GripVertical size={15} /></span>
                 <span className="tnum w-5 text-right text-sm text-faint">{st.position}</span>
                 <TrackCover track={st.track} className="h-10 w-10" iconSize={16} />
                 <div className="min-w-0 flex-1">
@@ -340,9 +405,18 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
 
       {/* Rinomina */}
       <Modal open={renameOpen} onClose={() => setRenameOpen(false)} title={t.sets.renameModalTitle}
-        footer={<><Button variant="ghost" size="sm" onClick={() => setRenameOpen(false)}>{t.common.cancel}</Button><Button size="sm" onClick={doRename}><Check size={15} /> {t.common.save}</Button></>}>
-        <Input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") doRename(); }} placeholder={t.sets.setNamePlaceholder} />
+        footer={
+          <>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setRenameOpen(false)}>{t.common.cancel}</Button>
+            {/* Fuori dal <form> (il footer della Modal è un fratello del body):
+                l'attributo form= lo associa comunque come submit button. */}
+            <Button type="submit" form="set-rename-form" size="sm"><Check size={15} /> {t.common.save}</Button>
+          </>
+        }>
+        <form id="set-rename-form" onSubmit={(e) => { e.preventDefault(); void doRename(); }}>
+          <Input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
+            placeholder={t.sets.setNamePlaceholder} />
+        </form>
       </Modal>
 
       {/* Conferma eliminazione */}

@@ -244,3 +244,53 @@ def test_endpoint_add_track_422_owned_only(client_db):
 
     resp = client.post(f"/api/sets/{s.id}/tracks", json={"track_id": lead.id})
     assert resp.status_code == 422
+
+
+# --- Router: move endpoint, contratto "direction" vs "to" (B12) ----------------
+
+
+def test_endpoint_move_with_to_moves_to_arbitrary_position(client_db):
+    client, db = client_db
+    s = _seed_and_generate(db)
+    ordered_ids = [st.track_id for st in sorted(s.tracks, key=lambda st: st.position)]
+    moved_id = ordered_ids[2]  # posizione 3
+
+    resp = client.post(f"/api/sets/{s.id}/tracks/3/move", json={"to": 6})
+    assert resp.status_code == 200
+    body = resp.json()
+    ordered = sorted(body["tracks"], key=lambda st: st["position"])
+    assert ordered[5]["track"]["id"] == moved_id
+
+
+def test_endpoint_move_with_direction_still_works(client_db):
+    client, db = client_db
+    s = _seed_and_generate(db)
+    ordered_ids = [st.track_id for st in sorted(s.tracks, key=lambda st: st.position)]
+
+    resp = client.post(f"/api/sets/{s.id}/tracks/2/move", json={"direction": "up"})
+    assert resp.status_code == 200
+    body = resp.json()
+    ordered = sorted(body["tracks"], key=lambda st: st["position"])
+    assert ordered[0]["track"]["id"] == ordered_ids[1]
+    assert ordered[1]["track"]["id"] == ordered_ids[0]
+
+
+def test_endpoint_move_rejects_both_direction_and_to(client_db):
+    client, db = client_db
+    s = _seed_and_generate(db)
+    resp = client.post(f"/api/sets/{s.id}/tracks/1/move", json={"direction": "up", "to": 3})
+    assert resp.status_code == 422
+
+
+def test_endpoint_move_rejects_neither_direction_nor_to(client_db):
+    client, db = client_db
+    s = _seed_and_generate(db)
+    resp = client.post(f"/api/sets/{s.id}/tracks/1/move", json={})
+    assert resp.status_code == 422
+
+
+def test_endpoint_move_with_to_invalid_target_422(client_db):
+    client, db = client_db
+    s = _seed_and_generate(db)
+    resp = client.post(f"/api/sets/{s.id}/tracks/1/move", json={"to": 999})
+    assert resp.status_code == 422

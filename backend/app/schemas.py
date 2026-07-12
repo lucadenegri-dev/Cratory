@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class TrackPlaylistRef(BaseModel):
@@ -211,7 +211,18 @@ class SetRenameRequest(BaseModel):
 
 
 class MoveTrackRequest(BaseModel):
-    direction: Literal["up", "down"]
+    """Sposta una traccia: passo singolo (`direction`, per le frecce/tastiera) oppure
+    posizione arbitraria (`to`, 1-based, per il drag-and-drop). Esattamente uno dei due.
+    """
+
+    direction: Literal["up", "down"] | None = None
+    to: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> "MoveTrackRequest":
+        if (self.direction is None) == (self.to is None):
+            raise ValueError("Specificare esattamente uno tra 'direction' e 'to'")
+        return self
 
 
 class ReplaceTrackRequest(BaseModel):

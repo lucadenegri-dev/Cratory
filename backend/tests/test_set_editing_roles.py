@@ -5,7 +5,7 @@ non toccate conservano le loro. DB in memoria + tracce sintetiche, niente AI/ret
 """
 
 from app.schemas import SetGenerationRequest
-from app.services.set_editor import move_track, remove_track
+from app.services.set_editor import move_track, move_track_to, remove_track
 from app.services.set_generator import assign_roles, generate_set
 
 
@@ -97,6 +97,56 @@ def test_move_track_at_edge_keeps_ai_notes(db, seed_tracks):
     _seed_ai_notes(db, s)
 
     out = move_track(db, s.id, 1, "up")  # no-op silenzioso
+    for st in _ordered(out):
+        assert st.ai_reason == f"reason-{st.position}"
+        assert st.transition_note == f"note-{st.position}"
+
+
+# --- move_track_to (B12: drag-and-drop) ---------------------------------------
+
+
+def test_move_track_to_position_clears_only_boundary_ai_notes(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+    n = len(s.tracks)
+    assert n >= 8, "servono abbastanza tracce per avere coppie interne non toccate"
+    _seed_ai_notes(db, s)
+
+    # sposta la posizione 3 in posizione 6: come nello swap adiacente di move_track,
+    # si azzerano solo i bordi del segmento spostato (lo-1, lo, hi, hi+1), non tutto
+    # il segmento intermedio — le tracce interne (posizioni 4 e 5) mantengono lo
+    # stesso vicino di prima (solo la numerazione cambia) quindi la nota resta valida.
+    out = move_track_to(db, s.id, 3, 6)
+    by_pos = {st.position: st for st in _ordered(out)}
+    for pos in (2, 3, 6, 7):
+        assert by_pos[pos].ai_reason is None, f"ai_reason stantia in posizione {pos}"
+        assert by_pos[pos].transition_note is None, f"transition_note stantia in posizione {pos}"
+    # posizione 1: mai toccata dallo spostamento
+    assert by_pos[1].ai_reason == "reason-1"
+    assert by_pos[1].transition_note == "note-1"
+    # posizioni 4 e 5: tracce interne scalate di una posizione (erano 5 e 6), stesso
+    # vicino di prima quindi nota conservata (col contenuto della vecchia posizione)
+    for pos in (4, 5):
+        assert by_pos[pos].ai_reason == f"reason-{pos + 1}", f"nota persa in posizione {pos}"
+        assert by_pos[pos].transition_note == f"note-{pos + 1}"
+    # posizioni dopo il segmento spostato: mai toccate dallo spostamento
+    for pos in range(8, n + 1):
+        assert by_pos[pos].ai_reason == f"reason-{pos}"
+        assert by_pos[pos].transition_note == f"note-{pos}"
+
+
+def test_move_track_to_position_reassigns_roles(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+
+    out = move_track_to(db, s.id, 3, 6)
+    roles = [st.role for st in _ordered(out)]
+    assert roles == assign_roles(len(roles))
+
+
+def test_move_track_to_position_noop_keeps_ai_notes(db, seed_tracks):
+    s = _make_set(db, seed_tracks)
+    _seed_ai_notes(db, s)
+
+    out = move_track_to(db, s.id, 3, 3)  # no-op silenzioso
     for st in _ordered(out):
         assert st.ai_reason == f"reason-{st.position}"
         assert st.transition_note == f"note-{st.position}"

@@ -126,6 +126,40 @@ def move_track(db: Session, setlist_id: int, position: int, direction: str) -> S
     return setlist
 
 
+def move_track_to(db: Session, setlist_id: int, position: int, to: int) -> Setlist:
+    """Variante generale di move_track: sposta la traccia in `position` fino alla
+    posizione arbitraria `to` (1-based) in un solo passo, spostando di conseguenza
+    le tracce intermedie. Usata dal drag-and-drop (move_track resta il fallback a
+    passo singolo per le frecce/tastiera).
+
+    I vicini interessati sono solo ai due bordi del segmento spostato: le tracce
+    intermedie mantengono i loro vicini relativi (solo la numerazione cambia), quindi
+    si azzerano le note AI di {bordo prima, mossa/bordo, bordo, bordo dopo} come in
+    move_track, generalizzando lo stesso pattern a uno spostamento multi-posizione.
+    """
+    setlist = _require(db, setlist_id)
+    ordered = _ordered(setlist)
+    n = len(ordered)
+    if not 1 <= position <= n:
+        raise SetEditError("Posizione non valida")
+    if not 1 <= to <= n:
+        raise SetEditError("Posizione di destinazione non valida")
+    if to == position:  # no-op silenzioso, come ai bordi in move_track
+        return setlist
+    moved = ordered[position - 1]
+    remaining = [st for st in ordered if st is not moved]
+    remaining.insert(to - 1, moved)
+    for i, st in enumerate(remaining, start=1):
+        st.position = i
+    lo, hi = min(position, to), max(position, to)
+    _clear_ai_notes(setlist, {p for p in (lo - 1, lo, hi, hi + 1) if 1 <= p <= n})
+    _reassign_roles(setlist)
+    recompute_transitions(setlist)
+    db.commit()
+    db.refresh(setlist)
+    return setlist
+
+
 def add_track(db: Session, setlist_id: int, track_id: int, position: int | None = None) -> Setlist:
     """Inserisce una traccia nel set. position e' 1-based; default = append in coda.
 
@@ -181,7 +215,11 @@ def replace_track(db: Session, setlist_id: int, position: int, new_track_id: int
     slot = ordered[position - 1]
     slot.track_id = new_track.id
     slot.track = new_track
-    slot.ai_reason = None  # la motivazione AI riguardava la traccia precedente
+    n = len(ordered)
+    # la sostituzione non sposta posizioni (niente riassegnazione ruoli), ma cambia il
+    # contenuto dello slot: la motivazione AI/nota di transizione dello slot e delle
+    # tracce adiacenti (il cui contesto di transizione e' cambiato) sono stantie.
+    _clear_ai_notes(setlist, {p for p in (position - 1, position, position + 1) if 1 <= p <= n})
     recompute_transitions(setlist)
     db.commit()
     db.refresh(setlist)
