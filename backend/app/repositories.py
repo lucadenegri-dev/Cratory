@@ -165,7 +165,7 @@ def all_playable_tracks(db: Session, *, owned_only: bool = False) -> list[Track]
     Con ``owned_only`` restringe alle tracce possedute (file su disco): e' il
     pool dell'editor quando il set e' nato "solo brani posseduti".
     """
-    stmt = select(Track).where(Track.bpm.is_not(None))
+    stmt = select(Track).options(selectinload(Track.playlists)).where(Track.bpm.is_not(None))
     if owned_only:
         stmt = stmt.where(Track.has_local_file.is_(True))
     return list(db.scalars(stmt).all())
@@ -290,7 +290,13 @@ def library_stats(db: Session) -> dict:
     }
 
 
-_SETLIST_TRACKS = selectinload(Setlist.tracks).selectinload(SetlistTrack.track)
+# Catena eager per il dettaglio set: la serializzazione delle tracce tocca
+# Track.playlists, quindi la carichiamo in batch (niente N+1).
+_SETLIST_TRACKS = (
+    selectinload(Setlist.tracks)
+    .selectinload(SetlistTrack.track)
+    .selectinload(Track.playlists)
+)
 
 
 def get_setlist(db: Session, setlist_id: int) -> Setlist | None:
@@ -360,6 +366,7 @@ def tracks_download_pending(db: Session) -> list[Track]:
     """Wishlist con esito download da sistemare (da rivedere/non trovata/fallita)."""
     return list(db.scalars(
         select(Track)
+        .options(selectinload(Track.playlists))
         .where((Track.has_local_file.is_(False)) | (Track.has_local_file.is_(None)))
         .where(Track.archived.is_not(True))
         .where(Track.last_download_outcome.in_(["needs_review", "not_found", "failed"]))
