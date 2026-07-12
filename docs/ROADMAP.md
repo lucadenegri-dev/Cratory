@@ -126,8 +126,19 @@ unlinks 'cratory' memberships, e.g. Discovery adds whose Spotify write-back fail
 (`attach_local_file` persists mtime/size so the next incremental index skips the file; the exact
 name-match branch no longer steals a file from an owned track); B2 (ownership filter in the
 playlist detail table, reusing the Library i18n keys); B15 (Library table: overflow-x wrapper,
-sortable headers as real buttons with `aria-sort`, KeyBadge, honest filtered empty state). All
-2026-07-12, TDD on the backend + live browser checks for the UI items.
+sortable headers as real buttons with `aria-sort`, KeyBadge, honest filtered empty state); A5
+(candidate anchor = pool median BPM when no BPM constraint — no more 60-slowest degeneracy); E2
+(incremental commits every 50 files + guarded per-file `stat()` in `index_library`); A21 (gap
+opener/peak thresholds from the playlist's P25/P75, absolute fallback under 8 tracks); E1c
+(column ADDs derived from `Base.metadata` — no more hand-maintained dict); E10-partial
+(transitions endpoint computes each score once; generator risk thresholds deduplicated into
+`risk_from_score`); B1 (filters/sort/offset serialized in the querystring on Library and
+Downloads, restored on mount — live-verified); B10 (Spotify import auto-loads with name filter
+and covers); B6 (Enter submits TrackEditModal via real form semantics); B18 (Transitions page:
+loading/error/zero-results states, errors no longer swallowed); B28 (shared `DownloadOutcome`,
+`DownloadItem.track_id` number|null per backend truth, `ButtonLink` replaces nested
+`<Link><Button>` in playlists/sets/shazam). All 2026-07-12, TDD on the backend + live browser
+checks for the UI items.
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
@@ -137,15 +148,14 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   highlighted but with no summary of the applied values (they live in a collapsed "Advanced
   options" panel); (new, from A22) `replace_track` still leaves the *neighbors'* notes and the
   slot's `transition_note` stale — same class, small follow-up.
-- **Scoring** — ⚠️ A5 stratified sampling done but degenerates without a BPM constraint
-  (still picks the 60 lowest-BPM tracks); A21 gap thresholds still fixed/house-centric (derive
-  from percentiles); dead code `bpm/key/mood_compatibility_score` (tests-only) + `POST
+- **Scoring** — dead code `bpm/key/mood_compatibility_score` (tests-only) + `POST
   /api/transitions/score` (never called): remove or document as a block; (new, from A23) the
-  generator's `_candidate_score` now counts energy twice — via the energy-aware
-  `score_transition` AND its own `_feature_fit` term — mild, tests pass, but worth deduplicating;
-  (new, from A4) other BPM consumers still use absolute thresholds (`bpm_compatibility_score`
-  2/5/8, `classify_transition` bpm_close ≤5, `mixing_tip`/`mixing_overview` text bands,
-  `validation.py` >8 jump check) — extend the % bands if desired.
+  generator's `_candidate_score` counts energy twice — via the energy-aware `score_transition`
+  AND its own `_feature_fit` term — mild, tests pass, but worth deduplicating; (new, from A4)
+  other BPM consumers still use absolute thresholds (`bpm_compatibility_score` 2/5/8,
+  `classify_transition` bpm_close ≤5, `mixing_tip`/`mixing_overview` text bands, `validation.py`
+  >8 jump check); (new, from A21) with ≥8 tracks the P25/P75 design makes `missing_openers`
+  nearly never fire — acceptable by design, revisit only if the signal is missed.
 - **Shazam** — ⚠️ A2 set→playlist import done, but per-track library cross-match
   (IN LIBRARY/OWNED/NEW) + per-track save-lead still missing; B13 detail UX (no polling while
   running, h1 off-system, just-started set absent from the list, native confirm).
@@ -160,26 +170,24 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   exists too — A10 applies to it as well (the flat extraction is sequential/slow); A11 dedup and
   A25 name/cover refresh are already platform-agnostic (both covered for Spotify + SoundCloud).
 - **Library/index** — A6-UI library gaps not shown in the dashboard (reintroduce the
-  `libraryGaps` client); B1 filters/sort/pagination lost on back-nav (serialize into the
-  querystring: /library, /downloads); B10 Spotify import ("Carica" only on click, no filter, no
-  artwork).
-- **Frontend technical** — B6 Modal has no Enter-to-submit in TrackEditModal (saves only via
-  button); ⚠️ B18 loading/empty/error states: Labels ok, Transitions still weak (swallows
-  errors); ⚠️ B19 settings poller removed, but shazam is not exposed by the provider and
-  set-builder still self-polls; B20 zero AbortController/sequence guards (stale responses); B21
-  `api.ts` monolith (965 lines, 131 exports): split; B22 no `ApiError` with status, `err()`
+  `libraryGaps` client).
+- **Frontend technical** — ⚠️ B19 settings poller removed, but shazam is not exposed by the
+  provider and set-builder still self-polls; B20 zero AbortController/sequence guards (stale
+  responses); B21 `api.ts` monolith (~1000 lines): split; B22 no `ApiError` with status, `err()`
   duplicated in ~16 files; ⚠️ B23 cover fallback centralized, but zero lazy-load and playlist
-  detail without pagination/virtualization; B25 `cn()` without tailwind-merge; B28 types
-  (`DownloadOutcome` not shared, `track_id` nullability inconsistent, nested `<Link><Button>` →
-  ButtonLink).
-- **Backend robustness** — E1c migrations `additions` dict still manual (the drop is already
-  model-derived); ⚠️ E2 job-state copy done, but `index_library` is still one transaction + an
-  unguarded per-file `stat()`; E10 (residual): transitions recompute each score twice, `file_search`
-  materializes the tree per keystroke, generate-async/mix_identify return untyped dicts,
-  Discovery `_explain` without Pydantic (the one spot outside rule 5), duplicate risk thresholds
-  scoring/generator (pipeline reduced to 1 walk, still no TTL cache); ⚠️ E11 only transport
-  retry centralized, 429/UA/retry still duplicated across the 4 clients + httpx clients never
-  closed; E12 (residual): Shazam new event loop+session per segment, no timeout.
+  detail without pagination/virtualization; B25 `cn()` without tailwind-merge; (new residuals)
+  nested `<Link><Button>` still in playlists/[id] (out of B28's scope); downloads page has a
+  local `Outcome` subset type that could be `Exclude<DownloadOutcome,"downloaded">`;
+  link-local-file-modal and the sets rename modal still use onKeyDown Enter hacks instead of
+  form semantics (same class as B6).
+- **Backend robustness** — E10 (residual): `file_search` materializes the tree per keystroke,
+  generate-async/mix_identify return untyped dicts, Discovery `_explain` without Pydantic (the
+  one spot outside rule 5), no TTL cache on the pipeline walk; serializers.py and routers/sets.py
+  still trigger classify_transition's internal recompute (1 extra score per setlist track);
+  ⚠️ E11 only transport retry centralized, 429/UA/retry still duplicated across the 4 clients +
+  httpx clients never closed; E12 (residual): Shazam new event loop+session per segment, no
+  timeout; (new, from E2) the pass-2 archive-branch `stat()` is still unguarded (a vanish there
+  aborts the run but keeps committed progress).
 - **Tests** — E13 gaps: `mix_identify_job` zero coverage, job double-start guard untested,
   Spotify OAuth callback (anti-CSRF state) untested, transitions/discovery routers with no HTTP
   coverage; E14 tautological `or True` assert in test_set_editing, engine/overrides setup copied
