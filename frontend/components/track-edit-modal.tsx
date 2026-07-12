@@ -95,8 +95,10 @@ function EditForm({ track, onClose, onSaved }: { track: Track; onClose: () => vo
       title={t.tracks.editValues}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>{t.common.cancel}</Button>
-          <Button onClick={save} disabled={busy || camelotInvalid}>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>{t.common.cancel}</Button>
+          {/* Fuori dal <form> (il footer della Modal è un fratello del body):
+              l'attributo form= lo associa comunque come submit button. */}
+          <Button type="submit" form="track-edit-form" disabled={busy || camelotInvalid}>
             {busy ? <Spinner /> : <Save size={15} />} {t.common.save}
           </Button>
         </>
@@ -120,7 +122,11 @@ function EditForm({ track, onClose, onSaved }: { track: Track; onClose: () => vo
         {CAMELOT_KEYS.map((k) => <option key={k} value={k} />)}
       </datalist>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <form
+        id="track-edit-form"
+        className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+        onSubmit={(e) => { e.preventDefault(); void save(); }}
+      >
         {FIELDS.map((f) => (
           <Field
             key={f.key}
@@ -141,7 +147,7 @@ function EditForm({ track, onClose, onSaved }: { track: Track; onClose: () => vo
             />
           </Field>
         ))}
-      </div>
+      </form>
     </Modal>
   );
 }
