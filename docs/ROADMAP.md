@@ -46,9 +46,10 @@ value is product quality, not scale.
 In the agreed order (operational detail in [PROGRESS.md](../PROGRESS.md)):
 
 1. **Discovery improvement.** The taste + explanations slice of the dig is **DONE** (taste
-   signals on a selectable reference + reason-code chips). Still in the technical backlog:
-   the dig's extra sources (Last.fm tags, per-release tracklists); the expand/dig unification
-   is superseded (Discovery is DIG-only, expand lives in the Playlist context on purpose).
+   signals on a selectable reference + reason-code chips). Per-release tracklists are also
+   **DONE** (2026-07-12, `get_release_detail`). Still in the technical backlog: Last.fm tags as
+   a 2nd dig source; the expand/dig unification is superseded (Discovery is DIG-only, expand
+   lives in the Playlist context on purpose).
 2. **Light audit + quick wins** — the main quick wins are DONE (SSRF, `library_stats`, dead
    endpoint, dependencies); robustness confirmed solid. Small threat model (no public users),
    no SaaS-style authz.
@@ -75,55 +76,103 @@ In the agreed order (operational detail in [PROGRESS.md](../PROGRESS.md)):
 
 ## Technical backlog (non-blocking)
 
-- **Discovery: enrich the dig.** Per-release tracklists (expand a release into its tracks)
-  and Last.fm tags as a 2nd source. (Genre + Label already unified; Playlist stays
-  Spotify-resolved on purpose, a different goal.)
+- **Discovery: enrich the dig.** Last.fm tags as a 2nd source. (Per-release tracklists DONE
+  2026-07-12; Genre + Label already unified; Playlist stays Spotify-resolved on purpose, a
+  different goal.)
 - **Shazam phase 2.** `DjSetTrack` as a corpus for co-occurrence suggestions.
 - **PostgreSQL.** Low priority: SQLite is enough for personal use (only needed for an
   eventual multi-user setup).
 
-### Audit backlog (post-pivot triage — per-ID detail in [docs/AUDIT-2026-07-05.md](AUDIT-2026-07-05.md))
+### Audit backlog (re-verified against the code on 2026-07-12 — per-ID detail in [docs/AUDIT-2026-07-05.md](AUDIT-2026-07-05.md))
 
-~70 still-valid items from the 2026-07-05 multi-agent audit, re-triaged on 2026-07-06 after
-the pivot (9 already resolved, ~12 obsolete, 4 migrated to Sortory). By theme, in indicative
-order of value:
+Re-triage of the 2026-07-05 audit backlog against the **actual current code** (not the docs,
+which had drifted). **Closed since the audit** (removed from the backlog): A1 (set export
+M3U/CSV/markdown + real Blob download), A3 (the 7 Set Builder strategies are now genuinely
+distinct), A8 (needs_review path persisted + retry/review flow), B5 (path to the editable set
+`/sets/[id]`), the dig's per-release tracklists (`get_release_detail`), B16 (label backfill
+removed — Sortory's job), E12-TLS (`tls12_context` is opt-in/unused, not forced).
 
-- **Close the set → console flow** — A1 M3U/CSV export with `local_path` (even more sensible
-  post-pivot: real BPM/key), A14 "add track" in the editor, B4/B5 set generation in the job
-  bar + path to the set, A22 stale roles/notes, B12 drag-and-drop reordering, B17 presets with
-  a summary.
-- **Shazam** — A2 phase 2 "lite" (library badge + save lead), A18 ffprobe fallback, B13 detail
-  UX, E13 test coverage for `mix_identify_job`.
-- **Soulseek/download** — A7 ownership not marked on ISRC dedup, A8 needs_review without a path
-  + retry loop, A19 auto-pick by confidence, A20 stall detection, E6 (cancel transfer, historic
-  match log, synchronous waits), B11 per-candidate feedback.
-- **Spotify import/sync** — A10 job+polling, A11 level-3 dedup, A12 Discovery membership
-  protection, A25 name/cover, E13 OAuth/integration tests.
-- **Discovery** — A15 leads that drop label/style/year, A16 variant dedup in expand, A17 Discogs
-  pagination + explicit errors, A27 Labels→Scava link, E12 expand/dig cache, E10 `_explain` with
-  Pydantic.
-- **Set Builder/scoring** — A3 no-op strategies, A4 half/double-time + % thresholds, A5 AI
-  candidate ranking, A21 gap thresholds from percentiles, A23 energy in the score (now that it is
-  derived from real BPM), the kept C items (scores used only by the tests + dead
-  `mood_coherence_score`: decide as a block).
-- **Library/index** — E7 fuzzy-steal + mtime/size on attach, A28 "Search on Soulseek" from the
-  detail, A6-UI gaps in the dashboard, B1 filters in the querystring, B2 per-row ownership badge,
-  B15 table (overflow/a11y/empty), B8 unified status labels.
-- **Backend robustness** — E2 `index_library` (incremental commit, per-file guards, job state
-  copy), E8 `expanduser` on config paths, E9 ilike escaping, E10 (transitions double compute,
-  pipeline 2 FS walks with a TTL cache, `file_search`, `backfill_labels` that does not converge),
-  E5-residual Retry-After, E1c/E1e (additions from the model, selectinload N+1).
-- **Frontend technical** — B24 relative API URL (prerequisite for LAN use), B19/B27 pollers
-  (shazam in the provider, visibilitychange), B20 AbortController, B21/B22 split api.ts +
-  ApiError, B23 images/virtualization, B25/B26/B28, B9/B10/B14/B16/B18 minor UX, E15 Playwright
-  smoke.
-- **Cleanup** — legacy columns `Track.playlist_id`/`playlist_name`: **not droppable** on SQLite
-  (FK baked into `playlist_id` → would require a rebuild of `tracks`, which the project avoids);
-  they stay in the schema but dead and empty. `Track.release_date` dropped (2026-07-08), dead
-  exports `rekordboxPending`/`libraryGaps` in api.ts removed (2026-07-08). Remaining: stale
-  worktree `compassionate-montalcini` to remove, trim the redundancy of CLAUDE.md rules 2/7, stale
-  comments in `local_files.py`/`scoring.py`. **Reversal note:** `python-multipart` is now needed
-  (rekordbox.xml upload) — do not remove.
+Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
+
+- **Discovery** — A15 dig lead save drops label/style/year (so `label_affinity` never grows
+  from its own saves); A16 expand does not dedup owned variants (reuse the dig's `_dedup_key`);
+  A17 dig fetches a single Discogs page + swallows errors (429/missing token → "zero results",
+  no 502); A27 Labels→Discovery link ("dig this label" — the discovery side already accepts
+  `seed=label`, only the outbound link is missing); Last.fm tags as a 2nd dig source (today
+  Discogs-only); E12-cache: no discovery cache (every expand refetches) + Last.fm client with no
+  User-Agent (ToS).
+- **Set → console / editor** — A14 "add this track" in the editor (only delete/move/replace);
+  ⚠️ A22 after move/remove the AI roles and `ai_reason`/notes stay stale (transitions *are*
+  recomputed); ⚠️ B12 reorder is now optimistic but still arrow-buttons, no drag-and-drop;
+  ⚠️ B17 preset is highlighted but with no summary of the applied values (they live in a
+  collapsed "Advanced options" panel).
+- **Scoring** — ⚠️ A4 half/double-time is implemented but thresholds are still absolute
+  (±2/±5/±8), not %; ⚠️ A5 stratified sampling done but degenerates without a BPM constraint
+  (still picks the 60 lowest-BPM tracks); A21 gap thresholds still fixed/house-centric (derive
+  from percentiles); A23 energy excluded from the composite transition score (used only by the
+  generator); dead code `bpm/key/mood_compatibility_score` (tests-only) + `POST
+  /api/transitions/score` (never called): remove or document as a block.
+- **Shazam** — ⚠️ A2 set→playlist import done, but per-track library cross-match
+  (IN LIBRARY/OWNED/NEW) + per-track save-lead still missing; A18 mix with no yt-dlp duration →
+  1-track "done" tracklist (needs ffprobe fallback); B13 detail UX (no polling while running,
+  h1 off-system, just-started set absent from the list, native confirm).
+- **Soulseek/download** — ⚠️ A7 manual grab does not mark ownership (file in inbox, counts
+  "downloaded") — now an intentional flow (Sortory catalogs), confirm as a decision; A19
+  auto-pick evaluates confidence only on the top-by-score candidate (filter by confidence first,
+  then order); A20 fixed 180s DOWNLOAD_TIMEOUT wall (needs byte-progress stall detection; only a
+  queue-patience guard exists); E6 slskd (no cancel of transfers/searches, filename-only match,
+  basename+mtime resolution, ~45s synchronous on /candidates); ⚠️ B11 issue counters now
+  navigable, but grab has no per-candidate state and LinkLocalFileModal search does not
+  auto-start; A28 "Search on Soulseek" from the wishlist track detail.
+- **Spotify import/sync** — A10 import/sync synchronous in the request (thousands of liked =
+  minutes with no progress): job+polling; A11 dedup with no artist+title+duration level in
+  `import_playlist` (manual then Spotify = duplicates); A12 sync unlinks Discovery-added tracks
+  (no `added_by` provenance column exists); A25 sync does not refresh playlist name/cover from
+  Spotify.
+- **Library/index** — A6-UI library gaps not shown in the dashboard (reintroduce the
+  `libraryGaps` client); ⚠️ B2 per-row ownership badge present, but the ownership *filter* in the
+  playlist table is missing; B1 filters/sort/pagination lost on back-nav (serialize into the
+  querystring: /library, /downloads); B10 Spotify import ("Carica" only on click, no filter, no
+  artwork); B15 Library table (no overflow-x, headers not a11y, KeyBadge unused, misleading empty
+  state with active filters); ⚠️ E7 duplicate-ownership guard done, but `attach_local_file` still
+  saves no mtime/size (re-hash on reindex) and one fuzzy `ilike` branch is unguarded; E8 config
+  paths with `~` not expanded (`expanduser` absent from config.py → silent download failures);
+  E9 `ilike` used as exact match without escaping %/_ (shared `ci_equals` helper).
+- **Frontend technical** — B6 Modal has no Enter-to-submit in TrackEditModal (saves only via
+  button); B9 native `window.confirm` in 6 places → ConfirmModal; B14 job-bar errors vanish
+  after 4s (persist + dismiss); ⚠️ B18 loading/empty/error states: Labels ok, Transitions still
+  weak (swallows errors); ⚠️ B19 settings poller removed, but shazam is not exposed by the
+  provider and set-builder still self-polls; B20 zero AbortController/sequence guards (stale
+  responses); B21 `api.ts` monolith (965 lines, 131 exports): split; B22 no `ApiError` with
+  status, `err()` duplicated in ~16 files; ⚠️ B23 cover fallback centralized, but zero lazy-load
+  and playlist detail without pagination/virtualization; B24 API URL default hardcoded
+  `localhost:8000` (relative paths + rewrites, prerequisite for LAN use); B25 `cn()` without
+  tailwind-merge; B26 Set Builder reads `?playlist=` from `window.location` → useSearchParams;
+  B27 poller always active even on a hidden tab → visibilitychange; B28 types
+  (`DownloadOutcome` not shared, `track_id` nullability inconsistent, nested `<Link><Button>` →
+  ButtonLink).
+- **Backend robustness** — E1c migrations `additions` dict still manual (the drop is already
+  model-derived); E1e N+1 on `Track.playlists` in setlist/transitions/download-pending → 3
+  selectinload; ⚠️ E2 job-state copy done, but `index_library` is still one transaction + an
+  unguarded per-file `stat()`; E5 `Retry-After` parsed without a guard (a legal HTTP-date raises
+  ValueError); E10 (residual): transitions recompute each score twice, `file_search`
+  materializes the tree per keystroke, generate-async/mix_identify return untyped dicts,
+  Discovery `_explain` without Pydantic (the one spot outside rule 5), duplicate risk thresholds
+  scoring/generator (pipeline reduced to 1 walk, still no TTL cache); ⚠️ E11 only transport
+  retry centralized, 429/UA/retry still duplicated across the 4 clients + httpx clients never
+  closed; E12 (residual): Shazam new event loop+session per segment, no timeout.
+- **Tests** — E13 gaps: `mix_identify_job` zero coverage, job double-start guard untested,
+  Spotify OAuth callback (anti-CSRF state) untested, transitions/discovery routers with no HTTP
+  coverage; E14 tautological `or True` assert in test_set_editing, engine/overrides setup copied
+  in ~20 files → shared fixture, module-global job state never reset; E15 frontend has no tests
+  (minimum = Playwright smoke + a jobs-provider merge unit).
+- **Cleanup** — stale worktree `.claude/worktrees/compassionate-montalcini-c29d1a` (2 files, one
+  is the removed `enrichment_job.py`) → 1-min inspection + `git worktree remove --force`; trim
+  the redundancy of CLAUDE.md rules 2/7; stale comments in `local_files.py`/`scoring.py`. Legacy
+  columns `Track.playlist_id`/`playlist_name`: **not droppable** on SQLite (FK baked into
+  `playlist_id`) — they stay empty in the schema, not an actionable TODO. `Track.release_date`
+  and the dead `rekordboxPending`/`libraryGaps` api.ts exports were already removed (2026-07-08).
+  **Reversal note:** `python-multipart` is needed (rekordbox.xml upload) — do not remove.
 
 ## Risks
 

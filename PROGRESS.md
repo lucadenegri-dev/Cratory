@@ -26,6 +26,26 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-12 - Audit backlog re-triaged against the code
+
+The 2026-07-05 audit backlog had drifted from the code (several "still to do" items were
+actually done). Re-verified item-by-item against the real code with a parallel multi-agent
+pass (6 agents by theme: Discovery, Set→console/scoring, Shazam/Soulseek, Spotify/Library,
+frontend technical, backend robustness/tests). New reality vs the old "~70 still valid": **~7
+closed, ~20 partial, ~40 open**.
+
+- **Closed since the audit** (removed from the backlog): A1 (set export M3U/CSV/markdown + real
+  Blob download), A3 (the 7 Set Builder strategies now genuinely distinct), A8 (needs_review
+  path persisted + retry/review flow), B5 (path to the editable set `/sets/[id]`), the dig's
+  per-release tracklists (`get_release_detail`), B16 (label backfill removed — Sortory's job),
+  E12-TLS (`tls12_context` opt-in/unused, not forced).
+- **Docs aligned**: `docs/ROADMAP.md` audit-backlog section rewritten with per-theme OPEN/⚠️
+  verdicts and evidence; "Next steps"/"Technical backlog" updated (per-release tracklists done).
+  `docs/API.md` gained the two Discovery routes that already existed but were undocumented
+  (`GET /api/discovery/release/{discogs_id}`, `POST /api/discovery/save-for-later`).
+- No production code changed in this pass — verification + documentation only. Per-ID detail in
+  `docs/AUDIT-2026-07-05.md` (dated re-verification header in ROADMAP).
+
 ## Milestone 2026-07-12 - Analysis page: BPM/key provenance + in-app analysis via Essentia
 
 Spec and plan in `docs/superpowers/specs/2026-07-12-analysis-page-design.md` and

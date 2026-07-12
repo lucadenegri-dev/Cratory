@@ -328,7 +328,9 @@ GET  /api/discovery/status
 POST /api/discovery/expand
 GET  /api/discovery/genres
 POST /api/discovery/dig
+GET  /api/discovery/release/{discogs_id}
 POST /api/discovery/add
+POST /api/discovery/save-for-later
 ```
 
 `expand` expands an imported playlist, suggesting tracks of **affine taste** to add
@@ -354,9 +356,14 @@ library-wide**. Each lead carries deterministic `reasons[]` (`{code, data}`) to
 explain why (e.g. `rare_wanted`, `deep_cut`, `label_followed`, `artist_collected`,
 `style_match`, `recent`); the chip text is composed by the UI.
 
+`release/{discogs_id}` expands a Discogs release from the dig into its **real
+tracklist** (fetched lazily when the release is opened): each row is a candidate track
+with its position, title and duration; Discogs errors surface as an explicit `502`.
+
 `add` imports a candidate into the app's library idempotently. It does not write to
 Spotify. The AI, if configured and requested, adds explanations but does not choose
-the candidates.
+the candidates. `save-for-later` persists a lead without attaching it to a playlist
+(same idempotent import).
 
 The old Discovery mode based on playlist gaps has been removed: Discovery expands
 playlists, while Gap Analysis stays a separate read-only endpoint.
