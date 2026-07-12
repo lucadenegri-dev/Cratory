@@ -198,8 +198,13 @@ def _collect(
 def _drop_in_library(
     candidates: dict[tuple[str, str], DiscoveryCandidate], library: list[Track]
 ) -> list[DiscoveryCandidate]:
-    owned = {_key(t.artist or "", t.title or "") for t in library if t.artist and t.title}
-    return [c for k, c in candidates.items() if k not in owned]
+    # Dedup per-variante (riusa la chiave del dig): possedere "Strobe (Original Mix)"
+    # scarta anche il candidato "Strobe" o "Strobe (Radio Edit)". Import locale perché
+    # discovery_dig dipende già da questo modulo (evita il ciclo a import-time).
+    from app.services.discovery_dig import _dedup_key
+
+    owned = {_dedup_key(t.artist or "", t.title or "") for t in library if t.artist and t.title}
+    return [c for c in candidates.values() if _dedup_key(c.artist, c.title) not in owned]
 
 
 def _resolve_all(

@@ -162,7 +162,8 @@ def test_pipeline_wishlist_esclude_scartate(db, monkeypatch):
 
 
 def test_discovery_non_ripropone_scartate(db):
-    from app.services.discovery import _drop_in_library, _key
+    from app.services.discovery import DiscoveryCandidate, _drop_in_library, _key
     t = _mk(db, 1, archived=True)
-    candidates = {_key(t.artist, t.title): object()}
+    cand = DiscoveryCandidate(artist=t.artist, title=t.title, match=0.9, source="similar_artist")
+    candidates = {_key(t.artist, t.title): cand}
     assert _drop_in_library(candidates, [t]) == []
