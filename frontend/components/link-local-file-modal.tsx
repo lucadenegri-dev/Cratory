@@ -86,20 +86,20 @@ function LinkDialog({ target, onClose, onLinked }: {
         <p className="text-sm text-muted">{target.artist ?? "?"} — {target.title ?? "?"}</p>
         {error && <Alert tone="danger">⚠ {error}</Alert>}
 
-        <div className="flex items-center gap-2">
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => { e.preventDefault(); runSearch(); }}
+        >
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") runSearch();
-            }}
             placeholder={t.tracks.searchByNamePlaceholder}
           />
-          <Button variant="outline" onClick={runSearch}
+          <Button type="submit" variant="outline"
             disabled={searching || query.trim().length < 2}>
             <Search size={14} /> {t.common.search}
           </Button>
-        </div>
+        </form>
         {searching && <Loading label={t.tracks.searchingDiskShort} />}
         {hits && hits.length === 0 && !searching && (
           <p className="text-sm text-faint">
@@ -119,7 +119,7 @@ function LinkDialog({ target, onClose, onLinked }: {
                     {h.size ? ` · ${fmtSize(h.size)}` : ""}
                   </div>
                 </div>
-                <Button size="sm" onClick={() => link(h.path)} disabled={linking}>
+                <Button type="button" size="sm" onClick={() => link(h.path)} disabled={linking}>
                   {linking ? <Spinner /> : <Link2 size={13} />} {t.tracks.linkAction}
                 </Button>
               </li>
@@ -127,7 +127,10 @@ function LinkDialog({ target, onClose, onLinked }: {
           </ul>
         )}
 
-        <div className="border-t border-border pt-3">
+        <form
+          className="border-t border-border pt-3"
+          onSubmit={(e) => { e.preventDefault(); link(manualPath.trim()); }}
+        >
           <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted">
             {t.tracks.exactPathLabel}
           </div>
@@ -137,12 +140,12 @@ function LinkDialog({ target, onClose, onLinked }: {
               onChange={(e) => setManualPath(e.target.value)}
               placeholder={t.tracks.exactPathPlaceholder}
             />
-            <Button variant="outline" onClick={() => link(manualPath.trim())}
+            <Button type="submit" variant="outline"
               disabled={linking || !manualPath.trim()}>
               <Link2 size={14} /> {t.tracks.linkAction}
             </Button>
           </div>
-        </div>
+        </form>
       </div>
     </Modal>
   );

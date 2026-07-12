@@ -13,7 +13,7 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import {
   downloadManual, downloadPending, ignoreDownload, listImportedPlaylists,
   retryPending, searchDownloads, startPlaylistDownload, trackLabel,
-  type DownloadCandidate, type Playlist, type Track,
+  type DownloadCandidate, type DownloadOutcome, type Playlist, type Track,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 
@@ -21,7 +21,7 @@ function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
 
-type Outcome = "not_found" | "needs_review" | "failed";
+type Outcome = Exclude<DownloadOutcome, "downloaded">;
 type Filter = "all" | Outcome;
 
 const OUTCOME_TONE: Record<Outcome, "warning" | "danger" | "neutral"> = {

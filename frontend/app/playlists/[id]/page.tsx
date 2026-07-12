@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, Spinner, Input, Select, Checkbox, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { ButtonLink } from "@/components/button-link";
 import { TrackCover } from "@/components/track-cover";
 import { PlaylistCover } from "@/components/playlist-cover";
 import { useJobs } from "@/components/jobs-provider";
@@ -223,15 +224,15 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
 
   const marginalia = (
     <div className="space-y-3">
-      <Link href={`/set-builder?playlist=${pid}`} className="block"><Button size="sm" className="w-full"><Sparkles size={15} /> {t.playlists.buildSetButton}</Button></Link>
-      <Link href={`/playlists/${pid}/expand`} className="block"><Button size="sm" variant="outline" className="w-full"><Compass size={15} /> {t.playlists.discoverSimilarButton}</Button></Link>
+      <ButtonLink href={`/set-builder?playlist=${pid}`} size="sm" block><Sparkles size={15} /> {t.playlists.buildSetButton}</ButtonLink>
+      <ButtonLink href={`/playlists/${pid}/expand`} size="sm" variant="outline" block><Compass size={15} /> {t.playlists.discoverSimilarButton}</ButtonLink>
       {missing > 0 && (
         <Button size="sm" variant="outline" className="w-full" onClick={doDownloadMissing} disabled={downloading}>
           {downloading ? <Spinner /> : <Download size={15} />} {t.playlists.downloadMissingButton(missing)}
         </Button>
       )}
       {playlist.kind === "liked"
-        ? <Link href={likedImportHref} className="block"><Button size="sm" variant="outline" className="w-full"><Heart size={14} /> {t.playlists.addMoreLiked}</Button></Link>
+        ? <ButtonLink href={likedImportHref} size="sm" variant="outline" block><Heart size={14} /> {t.playlists.addMoreLiked}</ButtonLink>
         : canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} {t.playlists.syncFromButton(platformName)}</Button>}
       {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> {platformName}</Button></a>}
       <Button size="sm" variant="danger" className="w-full" onClick={() => setConfirmDelete(true)} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} {t.playlists.removeButton}</Button>

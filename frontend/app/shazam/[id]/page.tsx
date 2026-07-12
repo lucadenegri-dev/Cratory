@@ -5,7 +5,7 @@ import { use, useEffect, useState } from "react";
 import { ArrowLeft, Radar, Music4, ExternalLink, Clock, ListPlus, Check } from "lucide-react";
 import {
   getDjSet, importDjSetAsPlaylist, discoverySaveForLater, fmtDuration, fmtDate,
-  type DjSetDetail, type DjSetTrack,
+  type DjSetDetail, type DjSetTrack, type Track,
 } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -16,7 +16,7 @@ import { useT } from "@/lib/i18n";
 // finche' lo status non e' piu' "identifying".
 const POLL_MS = 3000;
 
-function TrackLibraryAction({ track }: { track: DjSetTrack }) {
+function TrackLibraryAction({ track, onSaved }: { track: DjSetTrack; onSaved: (track: Track) => void }) {
   const t = useT();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -39,8 +39,9 @@ function TrackLibraryAction({ track }: { track: DjSetTrack }) {
     setSaving(true);
     setError(null);
     try {
-      await discoverySaveForLater({ artist: track.artist!, title: track.title! });
+      const res = await discoverySaveForLater({ artist: track.artist!, title: track.title! });
       setSaved(true);
+      onSaved(res.track);
     } catch (e) {
       setError(String((e as Error).message ?? e));
     } finally {
@@ -87,6 +88,18 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
     // ripartire/fermare il polling.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, set?.status]);
+
+  // "Save as lead" crea la Track lato server ma il polling del set (POLL_MS) non
+  // è garantito a rincorrere subito: aggiorna otticamente la riga corrispondente
+  // cosi' il badge passa a in_library/owned senza aspettare il prossimo poll.
+  const patchTrackSaved = (position: number, track: Track) => {
+    setSet((cur) => cur && {
+      ...cur,
+      tracks: cur.tracks.map((trk) => trk.position === position
+        ? { ...trk, library_track_id: track.id, library_status: track.has_local_file ? "owned" : "in_library" }
+        : trk),
+    });
+  };
 
   const doImport = async () => {
     setImporting(true);
@@ -176,7 +189,7 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
                   <span className="text-muted"> — {trk.title ?? "?"}</span>
                 </span>
                 {trk.isrc && <Badge tone="neutral" className="tnum shrink-0">{trk.isrc}</Badge>}
-                <TrackLibraryAction track={trk} />
+                <TrackLibraryAction track={trk} onSaved={(track) => patchTrackSaved(trk.position, track)} />
               </li>
             ))}
           </ol>
