@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  downloadStatus, libraryIndexStatus, shazamIdentifyStatus,
+  analysisStatus, downloadStatus, libraryIndexStatus, shazamIdentifyStatus,
   type DownloadStatus, type LibraryIndexJob,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -106,8 +106,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const [s, d, li] = await Promise.allSettled([
-      shazamIdentifyStatus(), downloadStatus(), libraryIndexStatus(),
+    const [s, d, li, an] = await Promise.allSettled([
+      shazamIdentifyStatus(), downloadStatus(), libraryIndexStatus(), analysisStatus(),
     ]);
 
     if (s.status === "fulfilled") {
@@ -134,6 +134,13 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       track(v.status, {
         key: "library-index", label: t.jobs.libraryIndex,
         processed: v.processed, total: v.total, href: "/settings",
+      }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
+    }
+    if (an.status === "fulfilled") {
+      const v = an.value;
+      track(v.status, {
+        key: "analysis", label: t.jobs.audioAnalysis, detail: v.current_label ?? undefined,
+        processed: v.processed, total: v.total, href: "/analysis",
       }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
     }
     wasRunning.current = nowRunning;
