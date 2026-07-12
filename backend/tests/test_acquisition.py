@@ -51,6 +51,40 @@ def test_attach_salva_audio_hash(db, monkeypatch):
     assert out.has_local_file is True
 
 
+def test_attach_salva_mtime_e_size(db, tmp_path, monkeypatch):
+    """Il collegamento memorizza la firma del file (mtime+size): senza, il prossimo
+    indice incrementale non puo' skipparlo e lo ri-hasha (decodifica ffmpeg)."""
+    from app.services import acquisition
+
+    monkeypatch.setattr(acquisition, "audio_hash", lambda p: "HMS")
+    f = tmp_path / "song.mp3"
+    f.write_bytes(b"finto audio")
+    t = Track(source_type="spotify")
+    db.add(t); db.commit()
+
+    out = acquisition.attach_local_file(db, t, path=str(f), fmt="mp3", bitrate=320)
+
+    stat = f.stat()
+    assert out.local_mtime == stat.st_mtime
+    assert out.local_size == stat.st_size
+
+
+def test_attach_stat_fallito_non_blocca(db, monkeypatch):
+    """File non stat-abile (path sparito tra download e attach): il possesso resta,
+    la firma incrementale semplicemente non c'e'."""
+    from app.services import acquisition
+
+    monkeypatch.setattr(acquisition, "audio_hash", lambda p: "HNS")
+    t = Track(source_type="spotify")
+    db.add(t); db.commit()
+
+    out = acquisition.attach_local_file(db, t, path="/non/esiste/y.mp3", fmt="mp3")
+
+    assert out.has_local_file is True
+    assert out.local_mtime is None
+    assert out.local_size is None
+
+
 def test_attach_hash_fallito_non_blocca(db, monkeypatch):
     from app.integrations.local_files import LocalFilesError
     from app.models import Track

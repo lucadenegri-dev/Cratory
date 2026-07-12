@@ -95,6 +95,52 @@ def test_duplicato_di_file_invariato_rilevato(db, fake_audio):
     assert report["duplicates"] == 1
 
 
+def test_file_agganciato_via_attach_niente_rehash(db, fake_audio, monkeypatch):
+    """Un file collegato con attach_local_file (download/link manuale) deve avere
+    la firma mtime+size: il primo indice incrementale successivo lo salta."""
+    from app.models import Track
+    from app.services import acquisition
+    from app.services import library_index as li
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    p = make("Techno/A/A - T1.mp3", digest="H1", artist="A", title="T1")
+    monkeypatch.setattr(acquisition, "audio_hash", lambda _: "H1")
+    t = Track(source_type="spotify", title="T1", artist="A")
+    db.add(t); db.commit()
+    acquisition.attach_local_file(db, t, path=str(p.resolve()), fmt="mp3", bitrate=320)
+
+    calls: list[str] = []
+    original = li.audio_hash
+    monkeypatch.setattr(li, "audio_hash", lambda x: calls.append(str(x)) or original(x))
+    report = index_library(db, root=root)
+
+    assert calls == []             # nessun ri-hash: la firma era gia' salvata
+    assert report["unchanged"] == 1
+    assert report["matched"] == 0
+
+
+def test_file_omonimo_non_ruba_a_traccia_posseduta(db, fake_audio):
+    """Il match esatto artista+titolo non deve riassegnare il file a una traccia
+    che ne possiede gia' un altro (il riaggancio legittimo passa da hash/ISRC):
+    il nuovo file omonimo diventa una traccia nuova."""
+    from app.models import Track
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    make("Techno/A/A - T1.mp3", digest="H_NUOVO", artist="A", title="T1")
+    suo = make("Techno/B/A - T1.mp3", digest="H_SUO", artist="A", title="T1")
+    t = Track(source_type="spotify", title="T1", artist="A",
+              has_local_file=True, local_path=str(suo.resolve()), audio_hash="H_SUO")
+    db.add(t); db.commit()
+
+    report = index_library(db, root=root)
+    db.refresh(t)
+
+    assert t.local_path == str(suo.resolve())  # non rubato dal file omonimo
+    assert report["created"] == 1              # il file omonimo e' una traccia nuova
+
+
 def test_archivio_non_matchato_niente_rehash(db, fake_audio, monkeypatch):
     """Un file nell'archivio che non corrisponde ad alcuna traccia NON deve essere
     ri-hashato a ogni run: era la causa dell'indicizzazione lenta a libreria ferma."""

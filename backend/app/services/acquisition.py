@@ -32,6 +32,14 @@ def attach_local_file(db: Session, track: Track, *, path: str,
     except LocalFilesError as exc:
         # L'hash e' il riaggancio futuro, non un requisito del possesso: non bloccare.
         logger.warning("Audio-hash non calcolabile per %s: %s", path, exc)
+    try:
+        # Firma incrementale (stessa che scrive l'indice): senza, il prossimo
+        # index_library non puo' skippare il file e lo ri-hasha (decodifica ffmpeg).
+        stat = Path(path).stat()
+        track.local_mtime = stat.st_mtime
+        track.local_size = stat.st_size
+    except OSError as exc:
+        logger.warning("stat() non riuscita per %s: %s", path, exc)
     db.flush()  # rende visibili hash/path per la ricerca dei doppioni
     # Se un'altra traccia possiede gia' lo stesso file (es. gia' indicizzata come
     # local_files), la fonde qui dentro: niente doppione dopo il collegamento.

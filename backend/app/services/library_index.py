@@ -74,8 +74,12 @@ def _find_track(db: Session, *, digest: str, tags: dict) -> tuple[Track | None, 
             return hit, "isrc"
     artist, title = tags.get("artist"), tags.get("title")
     if artist and title:
+        # Solo tracce senza file: come il ramo normalizzato piu' sotto, il match
+        # per nome non deve rubare il file a una posseduta (il riaggancio
+        # legittimo dello stesso contenuto passa dai rami hash/ISRC sopra).
         hit = db.scalar(select(Track).where(
-            ci_equals(Track.artist, artist), ci_equals(Track.title, title)))
+            ci_equals(Track.artist, artist), ci_equals(Track.title, title),
+            Track.has_local_file.is_not(True)))
         if hit:
             return hit, "fuzzy"
         # Fuzzy normalizzato: titoli con suffissi diversi ma stesso brano. Solo su
