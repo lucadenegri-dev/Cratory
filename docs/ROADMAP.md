@@ -110,13 +110,17 @@ exception; 2026-07-12); E1e (selectinload on `Track.playlists` in setlist/transi
 download-pending); A19 (Soulseek auto-pick filters by confidence first, then score —
 `auto_pick_candidates`); A17 (dig: Discogs pagination up to 3 pages + explicit 502
 `discovery_provider_error` instead of silent empty results); A28 ("Search on Soulseek" button on
-the wishlist track detail, wired to the existing per-track auto-pick endpoint). All 2026-07-12,
-verified with TDD + live browser check for A28.
+the wishlist track detail, wired to the existing per-track auto-pick endpoint); E12 (Last.fm
+User-Agent per ToS + 300s in-memory TTL cache on the client — errors never cached); A23 (energy
+in the composite transition score: centered ±7.5/−4.5 correction only when both tracks have
+energy, bit-identical scores otherwise); B9 (shared ConfirmModal replaces all 6 native
+`window.confirm`); B24 (relative `/api` paths + Next rewrite to `BACKEND_URL` — the app now works
+from any LAN device, verified live via network IP). All 2026-07-12, TDD on the backend + live
+browser checks for the UI items.
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
-- **Discovery** — E12-cache: no discovery cache (every expand refetches) + Last.fm client with
-  no User-Agent (ToS). *(Last.fm tags as a 2nd dig source: parked, see above.)*
+- **Discovery** — *(Last.fm tags as a 2nd dig source: parked, see above.)*
 - **Set → console / editor** — A14 "add this track" in the editor (only delete/move/replace);
   ⚠️ A22 after move/remove the AI roles and `ai_reason`/notes stay stale (transitions *are*
   recomputed); ⚠️ B12 reorder is now optimistic but still arrow-buttons, no drag-and-drop;
@@ -125,9 +129,10 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
 - **Scoring** — ⚠️ A4 half/double-time is implemented but thresholds are still absolute
   (±2/±5/±8), not %; ⚠️ A5 stratified sampling done but degenerates without a BPM constraint
   (still picks the 60 lowest-BPM tracks); A21 gap thresholds still fixed/house-centric (derive
-  from percentiles); A23 energy excluded from the composite transition score (used only by the
-  generator); dead code `bpm/key/mood_compatibility_score` (tests-only) + `POST
-  /api/transitions/score` (never called): remove or document as a block.
+  from percentiles); dead code `bpm/key/mood_compatibility_score` (tests-only) + `POST
+  /api/transitions/score` (never called): remove or document as a block; (new, from A23) the
+  generator's `_candidate_score` now counts energy twice — via the energy-aware
+  `score_transition` AND its own `_feature_fit` term — mild, tests pass, but worth deduplicating.
 - **Shazam** — ⚠️ A2 set→playlist import done, but per-track library cross-match
   (IN LIBRARY/OWNED/NEW) + per-track save-lead still missing; B13 detail UX (no polling while
   running, h1 off-system, just-started set absent from the list, native confirm).
@@ -150,15 +155,14 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   state with active filters); ⚠️ E7 duplicate-ownership guard done, but `attach_local_file` still
   saves no mtime/size (re-hash on reindex) and one fuzzy `ilike` branch is unguarded.
 - **Frontend technical** — B6 Modal has no Enter-to-submit in TrackEditModal (saves only via
-  button); B9 native `window.confirm` in 6 places → ConfirmModal; B14 job-bar errors vanish
-  after 4s (persist + dismiss); ⚠️ B18 loading/empty/error states: Labels ok, Transitions still
-  weak (swallows errors); ⚠️ B19 settings poller removed, but shazam is not exposed by the
-  provider and set-builder still self-polls; B20 zero AbortController/sequence guards (stale
-  responses); B21 `api.ts` monolith (965 lines, 131 exports): split; B22 no `ApiError` with
-  status, `err()` duplicated in ~16 files; ⚠️ B23 cover fallback centralized, but zero lazy-load
-  and playlist detail without pagination/virtualization; B24 API URL default hardcoded
-  `localhost:8000` (relative paths + rewrites, prerequisite for LAN use); B25 `cn()` without
-  tailwind-merge; B26 Set Builder reads `?playlist=` from `window.location` → useSearchParams;
+  button); B14 job-bar errors vanish after 4s (persist + dismiss); ⚠️ B18 loading/empty/error
+  states: Labels ok, Transitions still weak (swallows errors); ⚠️ B19 settings poller removed,
+  but shazam is not exposed by the provider and set-builder still self-polls; B20 zero
+  AbortController/sequence guards (stale responses); B21 `api.ts` monolith (965 lines, 131
+  exports): split; B22 no `ApiError` with status, `err()` duplicated in ~16 files; ⚠️ B23 cover
+  fallback centralized, but zero lazy-load and playlist detail without pagination/virtualization;
+  B25 `cn()` without tailwind-merge; B26 Set Builder reads `?playlist=` from `window.location` →
+  useSearchParams;
   B27 poller always active even on a hidden tab → visibilitychange; B28 types
   (`DownloadOutcome` not shared, `track_id` nullability inconsistent, nested `<Link><Button>` →
   ButtonLink).
