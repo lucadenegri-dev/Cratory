@@ -103,7 +103,8 @@ ownership of that field.
 
 **Fixed on master (incremental, post-triage):** A25 (playlist sync now refreshes name/cover/owner
 from the source — Spotify via `get_playlist_meta`, SoundCloud via the fetched `title`/thumbnails;
-2026-07-12).
+2026-07-12); A18 (mix with no yt-dlp duration: `probe_duration` ffprobe fallback in
+`identify_set`, real duration backfilled into the set meta; 2026-07-12).
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
@@ -122,9 +123,8 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   generator); dead code `bpm/key/mood_compatibility_score` (tests-only) + `POST
   /api/transitions/score` (never called): remove or document as a block.
 - **Shazam** — ⚠️ A2 set→playlist import done, but per-track library cross-match
-  (IN LIBRARY/OWNED/NEW) + per-track save-lead still missing; A18 mix with no yt-dlp duration →
-  1-track "done" tracklist (needs ffprobe fallback); B13 detail UX (no polling while running,
-  h1 off-system, just-started set absent from the list, native confirm).
+  (IN LIBRARY/OWNED/NEW) + per-track save-lead still missing; B13 detail UX (no polling while
+  running, h1 off-system, just-started set absent from the list, native confirm).
 - **Soulseek/download** — ⚠️ A7 manual grab does not mark ownership (file in inbox, counts
   "downloaded") — now an intentional flow (Sortory catalogs), confirm as a decision; A19
   auto-pick evaluates confidence only on the top-by-score candidate (filter by confidence first,

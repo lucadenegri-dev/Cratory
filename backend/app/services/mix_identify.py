@@ -171,6 +171,23 @@ def download_audio(url: str, workdir: str) -> tuple[str, SetMeta]:
     return path, meta
 
 
+def probe_duration(audio_path: str) -> int | None:
+    """Durata in secondi del file audio via ffprobe. None se non determinabile.
+
+    Fallback per i mix di cui yt-dlp non espone la durata (A18): senza, il
+    campionamento vedrebbe durata 0 -> un solo segmento -> tracklist di 1 brano.
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", audio_path],
+            capture_output=True, text=True, check=True, timeout=30,
+        ).stdout.strip()
+        return int(float(out)) if out else None
+    except (subprocess.SubprocessError, ValueError, OSError):
+        return None
+
+
 def extract_segment(audio_path: str, offset: int, out_path: str, length: int = SEGMENT_LENGTH) -> None:
     """Estrae un segmento WAV mono 16kHz a partire da `offset` (per il recognizer)."""
     subprocess.run(
@@ -191,6 +208,10 @@ def identify_set(
     with tempfile.TemporaryDirectory(prefix="djmix_") as workdir:
         audio_path, meta = download_audio(url, workdir)
         duration = meta.duration_seconds or 0
+        if not duration:
+            # yt-dlp senza durata (alcuni extractor/live): ffprobe sul file scaricato.
+            duration = probe_duration(audio_path) or 0
+            meta.duration_seconds = duration or None
 
         def recognize_at(offset: int) -> dict[str, Any] | None:
             seg = os.path.join(workdir, f"seg_{offset}.wav")
