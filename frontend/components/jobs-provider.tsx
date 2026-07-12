@@ -4,7 +4,7 @@ import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   analysisStatus, downloadStatus, libraryIndexStatus, shazamIdentifyStatus,
-  type DownloadStatus, type LibraryIndexJob,
+  type AnalysisJobStatus, type DownloadStatus, type LibraryIndexJob,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
@@ -41,11 +41,13 @@ type JobsApi = {
   download: DownloadStatus | null;
   /** Stato raw dell'indicizzazione libreria per la pagina settings. */
   libraryIndex: LibraryIndexJob | null;
+  /** Stato raw dell'analisi audio per la pagina /analysis. */
+  analysis: AnalysisJobStatus | null;
 };
 
 const JobsCtx = createContext<JobsApi>({
   refresh: () => {}, startClientJob: () => {}, updateClientJob: () => {},
-  endClientJob: () => {}, download: null, libraryIndex: null,
+  endClientJob: () => {}, download: null, libraryIndex: null, analysis: null,
 });
 
 export function useJobs() {
@@ -77,6 +79,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [clientJobs, setClientJobs] = useState<Record<string, { label: string } & ClientJobPatch>>({});
   const [download, setDownload] = useState<DownloadStatus | null>(null);
   const [libraryIndex, setLibraryIndex] = useState<LibraryIndexJob | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisJobStatus | null>(null);
   const alive = useRef(true);
   const wasRunning = useRef<Set<string>>(new Set());
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -138,6 +141,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     }
     if (an.status === "fulfilled") {
       const v = an.value;
+      if (alive.current) setAnalysis(v);
       track(v.status, {
         key: "analysis", label: t.jobs.audioAnalysis, detail: v.current_label ?? undefined,
         processed: v.processed, total: v.total, href: "/analysis",
@@ -175,8 +179,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   }, [pollOnce]);
 
   const api = useMemo<JobsApi>(
-    () => ({ refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex }),
-    [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex],
+    () => ({ refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, analysis }),
+    [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, analysis],
   );
 
   // Dedup per chiave: un job che riparte entro OUTCOME_MS può comparire sia in

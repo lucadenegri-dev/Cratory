@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   analysisDivergences, analysisOverview, applyAnalysis, startAnalysis,
   type AnalysisDivergence, type AnalysisOverview,
@@ -47,6 +47,17 @@ export default function AnalysisPage() {
     const timer = setTimeout(() => reload(), 0); // deferred: niente setState sincrono nell'effect
     return () => clearTimeout(timer);
   }, [reload]);
+
+  // Il job di analisi gira in background (barra job globale): quando finisce
+  // (running -> done) i dati mostrati qui sono stantii, ricarica in automatico.
+  const prevAnalysisStatus = useRef<string | null>(null);
+  useEffect(() => {
+    const status = jobs.analysis?.status ?? null;
+    if (prevAnalysisStatus.current === "running" && status === "done") {
+      reload();
+    }
+    prevAnalysisStatus.current = status;
+  }, [jobs.analysis?.status, reload]);
 
   const onStart = async () => {
     setBusy(true); setError(null); setNotice(null);
