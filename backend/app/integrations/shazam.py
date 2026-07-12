@@ -4,15 +4,25 @@ ABC `AudioRecognizer` + implementazione concreta su `shazamio` (endpoint pubblic
 Shazam, senza API key). Dietro un'interfaccia iniettabile: `services/mix_identify`
 e i test usano un recognizer finto, senza rete ne' audio.
 
-Nota: shazamio e' async; qui lo incapsuliamo in un'API sincrona (`recognize_file`)
-eseguendo il coroutine con asyncio.run nel thread del worker.
+Nota: shazamio e' async; qui lo incapsuliamo in un'API sincrona (`recognize_file`).
+`ShazamioRecognizer` viene istanziato una volta per job (vedi
+`services/mix_identify_job`) e `recognize_file` e' chiamato in serie per ogni
+segmento del mix: loop asyncio e client Shazam vengono creati alla prima chiamata
+e riusati per tutte le successive, invece di ricrearli (e riaprire una connessione)
+ad ogni segmento. `close()` libera il loop; se il chiamante non lo invoca (caso
+attuale di `mix_identify_job`), un finalizer lo chiude comunque alla garbage
+collection dell'istanza.
 """
 
+import asyncio
 import logging
+import weakref
 from abc import ABC, abstractmethod
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+RECOGNIZE_TIMEOUT = 30  # secondi: oltre, un segmento bloccato non deve impallare tutto il job
 
 
 class RecognizerError(Exception):
@@ -54,21 +64,50 @@ def parse_shazam(result: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+def _close_event_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Callback del finalizer: non deve referenziare l'istanza, solo il loop."""
+    if loop is not None and not loop.is_closed():
+        try:
+            loop.close()
+        except Exception:  # noqa: BLE001 - cleanup best-effort, spesso a interprete in chiusura
+            pass
+
+
 class ShazamioRecognizer(AudioRecognizer):
     name = "shazamio"
 
-    def recognize_file(self, path: str) -> dict[str, Any] | None:
-        import asyncio
+    def __init__(self) -> None:
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._shazam: Any = None
 
-        from shazamio import Shazam
+    def _ensure_client(self) -> tuple[asyncio.AbstractEventLoop, Any]:
+        """Crea loop+client alla prima chiamata, poi li riusa per i segmenti successivi."""
+        if self._loop is None or self._loop.is_closed():
+            from shazamio import Shazam
+
+            self._loop = asyncio.new_event_loop()
+            self._shazam = Shazam()
+            # Rete di sicurezza se close() non viene mai chiamato dal chiamante
+            # (es. mix_identify_job crea un ShazamioRecognizer per job e non lo chiude).
+            weakref.finalize(self, _close_event_loop, self._loop)
+        return self._loop, self._shazam
+
+    def recognize_file(self, path: str) -> dict[str, Any] | None:
+        loop, shazam = self._ensure_client()
+        recognize = getattr(shazam, "recognize", None) or getattr(shazam, "recognize_song")
 
         async def _go() -> dict[str, Any] | None:
-            shazam = Shazam()
-            recognize = getattr(shazam, "recognize", None) or getattr(shazam, "recognize_song")
-            return await recognize(path)
+            return await asyncio.wait_for(recognize(path), timeout=RECOGNIZE_TIMEOUT)
 
         try:
-            raw = asyncio.run(_go())
-        except Exception as exc:  # noqa: BLE001 - rete/decodifica: il chiamante gestisce come "nessun match"
+            raw = loop.run_until_complete(_go())
+        except Exception as exc:  # noqa: BLE001 - rete/decodifica/timeout: il chiamante gestisce come "nessun match"
             raise RecognizerError(str(exc)) from exc
         return parse_shazam(raw)
+
+    def close(self) -> None:
+        """Chiude il loop riusato. Idempotente; da chiamare a fine job se possibile."""
+        if self._loop is not None and not self._loop.is_closed():
+            self._loop.close()
+        self._loop = None
+        self._shazam = None
