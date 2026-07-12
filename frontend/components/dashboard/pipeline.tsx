@@ -33,7 +33,7 @@ function StageCell({ s }: { s: StageDef }) {
   );
 }
 
-export function PipelineStrip({ p }: { p: PipelineStatus; onRefresh: () => void }) {
+export function PipelineStrip({ p }: { p: PipelineStatus }) {
   const t = useT();
   const [organizeOpen, setOrganizeOpen] = useState(false);
 

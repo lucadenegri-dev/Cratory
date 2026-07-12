@@ -118,7 +118,7 @@ export default function Dashboard() {
       {/* Striscia di orientamento: le sei fasi del ciclo con contatori vivi */}
       {!empty && pipeline && (
         <div className="mb-6">
-          <PipelineStrip p={pipeline} onRefresh={load} />
+          <PipelineStrip p={pipeline} />
         </div>
       )}
 
