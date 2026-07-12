@@ -214,6 +214,8 @@ export const en = {
     colStatus: "Status",
     untitledTrack: "untitled",
     emptyStatePrefix: "No tracks match these filters.",
+    emptyStateFiltered: "No tracks match the active filters.",
+    emptyStateNoTracks: "The library is empty.",
     emptyStateSuffix: "to get started.",
     paginationOf: "of",
     prevPage: "Prev",

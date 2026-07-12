@@ -216,6 +216,8 @@ export const it: Dictionary = {
     colStatus: "Stato",
     untitledTrack: "senza titolo",
     emptyStatePrefix: "Nessuna traccia con questi filtri.",
+    emptyStateFiltered: "Nessuna traccia corrisponde ai filtri attivi.",
+    emptyStateNoTracks: "La libreria è vuota.",
     emptyStateSuffix: "per iniziare.",
     paginationOf: "di",
     prevPage: "Prec",

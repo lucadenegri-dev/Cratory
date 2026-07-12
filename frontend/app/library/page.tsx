@@ -10,6 +10,7 @@ import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { TrackCover } from "@/components/track-cover";
 import { TrackStateIcons } from "@/components/track-state-icons";
+import { KeyBadge } from "@/components/key-badge";
 import { LibraryTrackGrid } from "@/components/library-track-grid";
 import { useT } from "@/lib/i18n";
 
@@ -85,17 +86,25 @@ function LibraryInner() {
     const active = sort === col;
     return (
       <th
-        onClick={() => toggleSort(col)}
-        title={t.library.sortColumnHint}
-        className={`${cell} ${numeric ? "tnum " : ""}cursor-pointer select-none whitespace-nowrap transition-colors hover:text-fg ${active ? "text-fg" : ""}`}
+        aria-sort={active ? (order === "asc" ? "ascending" : "descending") : undefined}
+        className={`${numeric ? "tnum " : ""}whitespace-nowrap ${active ? "text-fg" : ""}`}
       >
-        <span className="inline-flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => toggleSort(col)}
+          title={t.library.sortColumnHint}
+          className={`${cell} flex w-full cursor-pointer select-none items-center gap-1 text-left uppercase tracking-wide transition-colors hover:text-fg`}
+        >
           {label}
           {active && (order === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
-        </span>
+        </button>
       </th>
     );
   };
+
+  const hasActiveFilters = Boolean(
+    artist || title || genre || source || status || bpmMin || bpmMax || key || incomplete || owned
+  );
 
   const filters = (
     <div className="space-y-2">
@@ -155,16 +164,18 @@ function LibraryInner() {
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
       {items === null && <Loading />}
-      {items?.length === 0 && (
+      {items?.length === 0 && (hasActiveFilters ? (
+        <div className="py-10 text-center text-sm text-muted">{t.library.emptyStateFiltered}</div>
+      ) : (
         <div className="py-10 text-center text-sm text-muted">
-          {t.library.emptyStatePrefix}{" "}
+          {t.library.emptyStateNoTracks}{" "}
           <Link href="/playlists" className="text-fg underline-offset-4 hover:underline">{t.dashboard.importPlaylist}</Link>{" "}
           {t.library.emptyStateSuffix}
         </div>
-      )}
+      ))}
 
       {items && items.length > 0 && (view === "list" ? (
-      <div className="border border-border">
+      <div className="overflow-x-auto border border-border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-faint">
@@ -192,7 +203,7 @@ function LibraryInner() {
                 </td>
                 <td className={`${cell} text-muted`}>{tr.artist ?? <span className="text-faint">—</span>}</td>
                 <td className={`${cell} tnum`}>{tr.bpm?.toFixed(0) ?? "—"}</td>
-                <td className={`${cell} tnum text-muted`}>{tr.camelot_key ?? "—"}</td>
+                <td className={`${cell} tnum`}><KeyBadge camelot={tr.camelot_key} /></td>
                 <td className={`${cell} tnum text-muted`}>{tr.energy ?? "—"}</td>
                 <td className={`${cell} max-w-[10rem] truncate text-muted`}>{tr.genre ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
