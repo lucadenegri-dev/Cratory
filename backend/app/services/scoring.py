@@ -1,7 +1,7 @@
 """Scoring tecnico deterministico delle transizioni tra due tracce.
 
-Composizione score (0-100), tutta basata su dati ottenuti dall'enrichment esterno
-(lo streaming non da' BPM/key): cue/beatgrid/play_count Rekordbox non esistono piu'.
+Composizione score (0-100), basata su BPM/key da Rekordbox o dall'analisi in-app
+(lo streaming non da' feature di mixing); cue/beatgrid restano fuori scope.
 - BPM:    max 50  (fasce percentuali del tempo medio: <=1.6% ottimo,
   <=4% buono, <=6.5% rischioso, oltre difficile)
 - Camelot: max 40  (stessa key / compatibile / debole)
@@ -296,7 +296,7 @@ def opening_track_label(lang: str = "it") -> str:
 def mixing_tip(from_track: Track, to_track: Track, lang: str = "it") -> str:
     """Istruzione concisa e DETERMINISTICA su come mixare due brani consecutivi.
 
-    Tutto dai dati di enrichment (BPM, Camelot, energia): niente AI, niente id.
+    Tutto dai dati canonici della traccia (BPM, Camelot, energia): niente AI.
     Pensata per il DJ: cosa fare in pratica per passare dal brano precedente a questo.
     `lang` ("it" | "en") sceglie la lingua del testo.
     """

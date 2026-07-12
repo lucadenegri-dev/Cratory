@@ -4,8 +4,9 @@ Modulo puro (nessun DB): legge i tag con mutagen e calcola un hash dello stream
 audio decodificato con ffmpeg (già richiesto dal modulo Shazam). L'hash ignora i
 tag, quindi è stabile a rinomine/spostamenti e a correzioni dei metadati.
 
-L'app NON conserva l'audio: qui si legge soltanto. Le feature di mixing (BPM/key)
-NON si derivano dall'audio, restano alla catena di enrichment esterna.
+L'app NON conserva l'audio: qui si legge soltanto. BPM/key NON si leggono qui:
+arrivano dall'import Rekordbox o dall'analisi in-app (pagina Analisi); i metadati
+testuali/tag sono competenza di Sortory.
 """
 
 import hashlib

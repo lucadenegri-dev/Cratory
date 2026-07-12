@@ -33,17 +33,12 @@ Read in this order:
 1. **Separate the deterministic engine and the AI.** Import, normalization, de-duplication,
    scoring, roles, gap analysis, discovery ranking and validation are deterministic code.
    Narrative, prompt interpretation and explanations are AI.
-2. **BPM/key: Rekordbox è la fonte primaria, l'analisi in-app è l'alternativa
-   deterministica.** Il flusso principale resta l'export XML da Rekordbox
-   (`/api/rekordbox/import`). In più la pagina Analisi può calcolare BPM/key
-   in-app (Essentia, deterministico) sulle tracce possedute. Ogni valore ha una
-   provenienza esplicita (`bpm_source`/`key_source`: manual > rekordbox >
-   cratory): l'import Rekordbox di default sovrascrive i valori `cratory` e
-   protegge quelli `manual` (con `?overwrite=true` vince su tutto); l'analisi
-   in-app scrive i campi `analysis_*` e tocca i canonici solo via apply (i vuoti
-   in automatico, il resto su azione esplicita, la riscrittura totale con
-   force). Cratory non chiede MAI BPM/key a un'AI né a provider streaming.
-   `energy` è un derivato deterministico (da BPM+genere o dai file audio).
+2. **BPM/key: Rekordbox è la fonte primaria, l'analisi in-app (Essentia, pagina
+   Analisi) è l'alternativa deterministica.** Ogni valore ha una provenienza
+   esplicita (`bpm_source`/`key_source`: manual > rekordbox > cratory); il
+   dettaglio delle regole di sovrascrittura e dell'apply è in `docs/API.md`
+   (sezioni rekordbox e analysis). Cratory non chiede MAI BPM/key a un'AI
+   (per lo streaming vedi regola 3). `energy` è un derivato deterministico.
    Beatgrid/cue restano fuori scope; nessuna integrazione live con Rekordbox.
 3. **Streaming does not provide mixing features.** Spotify gives track identity, editorial
    metadata, covers, duration, ISRC, URLs and playlists.
