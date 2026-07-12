@@ -10,6 +10,7 @@ from app.db import ensure_schema
 from app.services import library_index_job
 from app.routers import (
     ai,
+    analysis,
     discovery,
     dj_sets,
     downloads,
@@ -82,6 +83,7 @@ app.include_router(downloads.router)
 app.include_router(files.router)
 app.include_router(pipeline.router)
 app.include_router(rekordbox.router)
+app.include_router(analysis.router)
 app.include_router(soundcloud.router)
 app.include_router(settings_router.router)
 

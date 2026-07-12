@@ -572,6 +572,75 @@ class LibraryIndexJobStatus(BaseModel):
     finished_at: str | None = None
 
 
+class AnalysisJobStatus(BaseModel):
+    """Stato del job di analisi BPM/key in-app (pagina Analisi)."""
+
+    status: str
+    processed: int = 0
+    total: int = 0
+    analyzed: int = 0
+    failed: int = 0
+    applied: int = 0
+    current_label: str | None = None
+    error: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+class AnalysisStartIn(BaseModel):
+    """Avvio del job: scope 'missing' (default) | 'all', o track_ids espliciti."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["missing", "all"] = "missing"
+    track_ids: list[int] | None = None
+
+
+class AnalysisOverviewOut(BaseModel):
+    """Copertura BPM/key della libreria posseduta, per la pagina Analisi."""
+
+    owned: int
+    ready_for_set: int
+    missing_bpm: int
+    missing_key: int
+    bpm_by_source: dict[str, int]
+    key_by_source: dict[str, int]
+    analyzed: int
+    divergent: int
+    rekordbox_pending: int
+
+
+class AnalysisDivergenceOut(BaseModel):
+    """Riga della tabella divergenze: canonico vs analisi in-app."""
+
+    track_id: int
+    artist: str | None = None
+    title: str | None = None
+    bpm: float | None = None
+    bpm_source: str | None = None
+    analysis_bpm: float | None = None
+    bpm_delta: float | None = None
+    camelot_key: str | None = None
+    key_source: str | None = None
+    analysis_camelot: str | None = None
+    key_compatibility: str  # same | compatible | weak | unknown
+
+
+class AnalysisApplyIn(BaseModel):
+    """Apply dei valori analizzati: per id, per modo, o riscrittura totale (force)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    track_ids: list[int] | None = None
+    mode: Literal["divergent", "all"] | None = None
+    force: bool = False
+
+
+class AnalysisApplyOut(BaseModel):
+    applied: int
+    skipped: int
+
+
 class LibraryStatsOut(BaseModel):
     total_tracks: int
     playlists: int = 0
