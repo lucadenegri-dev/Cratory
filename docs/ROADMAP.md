@@ -120,8 +120,14 @@ from any LAN device, verified live via network IP); A22 (roles reassigned via th
 move/remove); A4 (BPM bands now percentage-based 1.6%/4%/6.5%, anchored to preserve ~128 BPM
 behavior, applied on the folded half/double grid too); B26 (Set Builder reads `?playlist=` via
 `useSearchParams` + Suspense, live-verified); B14+B27 (job-bar error outcomes persist with a
-dismiss ✕, success keeps the 4s; the 2s poller pauses on hidden tabs and catches up on return).
-All 2026-07-12, TDD on the backend + live browser checks for the UI items.
+dismiss ✕, success keeps the 4s; the 2s poller pauses on hidden tabs and catches up on return);
+A12 (`added_by` provenance on `playlist_tracks` + idempotent migration — the sync prune never
+unlinks 'cratory' memberships, e.g. Discovery adds whose Spotify write-back failed); E7-residual
+(`attach_local_file` persists mtime/size so the next incremental index skips the file; the exact
+name-match branch no longer steals a file from an owned track); B2 (ownership filter in the
+playlist detail table, reusing the Library i18n keys); B15 (Library table: overflow-x wrapper,
+sortable headers as real buttons with `aria-sort`, KeyBadge, honest filtered empty state). All
+2026-07-12, TDD on the backend + live browser checks for the UI items.
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
@@ -150,17 +156,13 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   resolution, ~45s synchronous on /candidates); ⚠️ B11 issue counters now navigable, but grab
   has no per-candidate state and LinkLocalFileModal search does not auto-start.
 - **Streaming import/sync (Spotify + SoundCloud)** — A10 import/sync synchronous in the request
-  (thousands of liked = minutes with no progress): job+polling; A12 sync unlinks Discovery-added
-  tracks (no `added_by` provenance column exists). NB: SoundCloud import (yt-dlp) now exists too —
-  A10 applies to it as well (the flat extraction is sequential/slow); A11 dedup and A25 name/cover
-  refresh are already platform-agnostic (both covered for Spotify + SoundCloud).
+  (thousands of liked = minutes with no progress): job+polling. NB: SoundCloud import (yt-dlp)
+  exists too — A10 applies to it as well (the flat extraction is sequential/slow); A11 dedup and
+  A25 name/cover refresh are already platform-agnostic (both covered for Spotify + SoundCloud).
 - **Library/index** — A6-UI library gaps not shown in the dashboard (reintroduce the
-  `libraryGaps` client); ⚠️ B2 per-row ownership badge present, but the ownership *filter* in the
-  playlist table is missing; B1 filters/sort/pagination lost on back-nav (serialize into the
+  `libraryGaps` client); B1 filters/sort/pagination lost on back-nav (serialize into the
   querystring: /library, /downloads); B10 Spotify import ("Carica" only on click, no filter, no
-  artwork); B15 Library table (no overflow-x, headers not a11y, KeyBadge unused, misleading empty
-  state with active filters); ⚠️ E7 duplicate-ownership guard done, but `attach_local_file` still
-  saves no mtime/size (re-hash on reindex) and one fuzzy `ilike` branch is unguarded.
+  artwork).
 - **Frontend technical** — B6 Modal has no Enter-to-submit in TrackEditModal (saves only via
   button); ⚠️ B18 loading/empty/error states: Labels ok, Transitions still weak (swallows
   errors); ⚠️ B19 settings poller removed, but shazam is not exposed by the provider and
