@@ -2,7 +2,8 @@
 
 Composizione score (0-100), tutta basata su dati ottenuti dall'enrichment esterno
 (lo streaming non da' BPM/key): cue/beatgrid/play_count Rekordbox non esistono piu'.
-- BPM:    max 50  (0-2 ottimo, 2-5 buono, 5-8 rischioso, >8 difficile)
+- BPM:    max 50  (fasce percentuali del tempo medio: <=1.6% ottimo,
+  <=4% buono, <=6.5% rischioso, oltre difficile)
 - Camelot: max 40  (stessa key / compatibile / debole)
 - Durata: max 10  (penalita' per tracce molto corte)
 - Energia: correttivo +/-7.5 SOLO se entrambe le tracce hanno `energy`
@@ -413,19 +414,47 @@ def effective_bpm_diff(a: float, b: float) -> tuple[float, bool]:
     return (folded, True) if folded < direct else (direct, False)
 
 
+# A4: fasce BPM PERCENTUALI. Le vecchie soglie assolute ±2/±5/±8 BPM erano di
+# fatto tarate sul "club sweet spot" ~128 BPM (2/128 ~= 1.56%, 5/128 ~= 3.9%,
+# 8/128 ~= 6.25%) ma, essendo assolute, scalavano male con il tempo: 5 BPM a
+# 85 e' un salto del 5.9%, a 170 solo del 2.9%. Le fasce diventano percentuali
+# del tempo di riferimento, arrotondate a 1.6% / 4% / 6.5% proprio per
+# preservare il comportamento di oggi intorno a 128 BPM; i punti per fascia
+# restano invariati (50/38/20/5, e 40/30 sul fold half/double).
+# NB: la fascia ottima e' arrotondata per ECCESSO (1.6%, non 1.5%): il salto di
+# esattamente 2 BPM — il piu' comune in cabina — vale 1.55% a media 129 e con
+# 1.5% uscirebbe dalla fascia ottima proprio nel sweet spot che vogliamo
+# preservare. 4% e 6.5% invece coprono gia' i vecchi bordi 5 e 8 a ~128.
+BPM_GREAT_PCT = 1.6
+BPM_GOOD_PCT = 4.0
+BPM_RISKY_PCT = 6.5
+
+
 def _bpm_points(from_bpm: float | None, to_bpm: float | None, lang: str = "it") -> tuple[float, str, str | None]:
     if not from_bpm or not to_bpm:
         return 25.0, _txt("bpm_pts_missing_reason", lang), _txt("bpm_pts_missing_warn", lang)
     diff, folded = effective_bpm_diff(from_bpm, to_bpm)
-    if folded and diff <= 5:
-        pts = 40.0 if diff <= 2 else 30.0
-        return pts, _txt("bpm_pts_halftime_reason", lang, diff=diff), _txt("bpm_pts_halftime_warn", lang)
+    if folded:
+        # Il fold di effective_bpm_diff raddoppia il tempo della traccia lenta
+        # per portarla sulla griglia della veloce: il riferimento percentuale
+        # va quindi calcolato sui due tempi GIA' allineati a quella griglia
+        # (la media dei BPM grezzi starebbe a meta' strada tra due griglie e
+        # non corrisponderebbe al tempo a cui si mixa davvero). La media dei
+        # tempi allineati e' simmetrica e stabile in entrambi i rami.
+        ref = (max(from_bpm, to_bpm) + 2 * min(from_bpm, to_bpm)) / 2
+        if diff <= ref * BPM_GOOD_PCT / 100:
+            pts = 40.0 if diff <= ref * BPM_GREAT_PCT / 100 else 30.0
+            return pts, _txt("bpm_pts_halftime_reason", lang, diff=diff), _txt("bpm_pts_halftime_warn", lang)
     diff = abs(from_bpm - to_bpm)
-    if diff <= 2:
+    # Riferimento: media dei due BPM. Simmetrica (l'ordine delle tracce non
+    # cambia la fascia) e piu' stabile del solo tempo lento: un errore di
+    # rilevazione su una traccia sposta il riferimento della meta'.
+    ref = (from_bpm + to_bpm) / 2
+    if diff <= ref * BPM_GREAT_PCT / 100:
         return 50.0, _txt("bpm_pts_great", lang, diff=diff), None
-    if diff <= 5:
+    if diff <= ref * BPM_GOOD_PCT / 100:
         return 38.0, _txt("bpm_pts_good", lang, diff=diff), None
-    if diff <= 8:
+    if diff <= ref * BPM_RISKY_PCT / 100:
         return 20.0, _txt("bpm_pts_risky_reason", lang, diff=diff), _txt("bpm_pts_risky_warn", lang, diff=diff)
     return 5.0, _txt("bpm_pts_hard_reason", lang, diff=diff), _txt("bpm_pts_hard_warn", lang, diff=diff)
 
