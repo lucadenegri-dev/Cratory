@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Radar, Music4, Eye, Trash2, AudioLines } from "lucide-react";
 import {
-  shazamStatus, identifyMix, shazamIdentifyStatus, listDjSets, deleteDjSet, fmtDate,
-  type DjSet, type ShazamIdentifyState,
+  shazamStatus, identifyMix, listDjSets, deleteDjSet, fmtDate,
+  type DjSet,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Input, Loading } from "@/components/ui";
 import { ButtonLink } from "@/components/button-link";
@@ -23,12 +23,10 @@ export default function ShazamPage() {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [sets, setSets] = useState<DjSet[] | null>(null);
   const [url, setUrl] = useState("");
-  const [job, setJob] = useState<ShazamIdentifyState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<DjSet | null>(null);
   const jobs = useJobs();
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const STATUS: Record<DjSet["status"], { tone: "success" | "info" | "danger" | "neutral"; label: string }> = {
     done: { tone: "success", label: t.shazam.statusDone },
@@ -41,31 +39,25 @@ export default function ShazamPage() {
     listDjSets().then(setSets).catch((e) => setError(err(e)));
   }, []);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-  }, []);
-
-  const startPolling = useCallback(() => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const s = await shazamIdentifyStatus();
-        setJob(s);
-        if (s.status === "done") { stopPolling(); reload(); }
-        else if (s.status === "idle") stopPolling();
-        else if (s.status === "error") { stopPolling(); setError(s.error ?? t.shazam.identifyFailed); }
-      } catch (e) { stopPolling(); setError(err(e)); }
-    }, 1500);
-  }, [reload, stopPolling, t]);
-
   useEffect(() => {
     shazamStatus().then((s) => setAvailable(s.available)).catch(() => setAvailable(false));
     reload();
-    shazamIdentifyStatus()
-      .then((s) => { setJob(s); if (s.status === "running") startPolling(); })
-      .catch(() => {});
-    return stopPolling;
-  }, [reload, startPolling, stopPolling]);
+  }, [reload]);
+
+  // Il job di identificazione gira nel poller globale (barra job): quando finisce
+  // (running -> done) la lista è stantia, ricarica in automatico; su errore lo mostra qui
+  // (stesso effetto che prima produceva il polling locale).
+  const prevIdentifyStatus = useRef<string | null>(null);
+  useEffect(() => {
+    const status = jobs.shazamIdentify?.status ?? null;
+    if (prevIdentifyStatus.current === "running" && status === "done") {
+      reload();
+    } else if (prevIdentifyStatus.current === "running" && status === "error") {
+      setError(jobs.shazamIdentify?.error ?? t.shazam.identifyFailed);
+    }
+    prevIdentifyStatus.current = status;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs.shazamIdentify?.status]);
 
   const identify = async () => {
     const u = url.trim();
@@ -74,12 +66,11 @@ export default function ShazamPage() {
     setError(null);
     try {
       const s = await identifyMix(u);
-      setJob(s);
       setUrl("");
       // Il DjSet e' creato in DB subito (status "identifying"): la lista va aggiornata
       // già ora, non solo a job finito, altrimenti il set appena avviato resta invisibile.
       reload();
-      if (!s.cached && s.status !== "done") { startPolling(); jobs.refresh(); }
+      if (!s.cached && s.status !== "done") jobs.refresh();
     } catch (e) {
       setError(err(e));
     } finally {
@@ -91,7 +82,7 @@ export default function ShazamPage() {
     try { await deleteDjSet(s.id); reload(); } catch (e) { setError(err(e)); }
   };
 
-  const running = job?.status === "running";
+  const running = jobs.shazamIdentify?.status === "running";
 
   const marginalia = (
     <p className="text-xs leading-relaxed text-muted">

@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  analysisStatus, downloadStatus, libraryIndexStatus, shazamIdentifyStatus,
-  type AnalysisJobStatus, type DownloadStatus, type LibraryIndexJob,
+  analysisStatus, downloadStatus, generateStatus, libraryIndexStatus, shazamIdentifyStatus,
+  type AnalysisJobStatus, type DownloadStatus, type GenStatus, type LibraryIndexJob, type ShazamIdentifyState,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
@@ -43,11 +43,16 @@ type JobsApi = {
   libraryIndex: LibraryIndexJob | null;
   /** Stato raw dell'analisi audio per la pagina /analysis. */
   analysis: AnalysisJobStatus | null;
+  /** Stato raw dell'identificazione mix Shazam per la pagina /shazam. */
+  shazamIdentify: ShazamIdentifyState | null;
+  /** Stato raw della generazione set per /set-builder. */
+  generation: GenStatus | null;
 };
 
 const JobsCtx = createContext<JobsApi>({
   refresh: () => {}, startClientJob: () => {}, updateClientJob: () => {},
   endClientJob: () => {}, download: null, libraryIndex: null, analysis: null,
+  shazamIdentify: null, generation: null,
 });
 
 export function useJobs() {
@@ -67,7 +72,7 @@ const MAX_ROWS = 3;
  * dettaglio (downloads, settings) leggono gli stati raw da qui.
  *
  * - Job con status endpoint (download Soulseek, identificazione Shazam,
- *   indicizzazione libreria): rilevati via polling.
+ *   indicizzazione libreria, generazione set): rilevati via polling.
  * - Job sincroni senza status endpoint (backfill etichette, DIG): registrati
  *   dalla pagina con startClientJob/updateClientJob/endClientJob.
  * - Alla transizione running -> done la riga resta OUTCOME_MS con l'esito,
@@ -83,6 +88,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [download, setDownload] = useState<DownloadStatus | null>(null);
   const [libraryIndex, setLibraryIndex] = useState<LibraryIndexJob | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisJobStatus | null>(null);
+  const [shazamIdentify, setShazamIdentify] = useState<ShazamIdentifyState | null>(null);
+  const [generation, setGeneration] = useState<GenStatus | null>(null);
   const alive = useRef(true);
   const wasRunning = useRef<Set<string>>(new Set());
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -121,12 +128,13 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const [s, d, li, an] = await Promise.allSettled([
-      shazamIdentifyStatus(), downloadStatus(), libraryIndexStatus(), analysisStatus(),
+    const [s, d, li, an, gen] = await Promise.allSettled([
+      shazamIdentifyStatus(), downloadStatus(), libraryIndexStatus(), analysisStatus(), generateStatus(),
     ]);
 
     if (s.status === "fulfilled") {
       const v = s.value;
+      if (alive.current) setShazamIdentify(v);
       track(v.status, {
         key: "shazam", label: t.jobs.shazamIdentify, detail: v.phase ?? undefined,
         processed: v.processed, total: v.total, href: "/shazam",
@@ -157,6 +165,15 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       track(v.status, {
         key: "analysis", label: t.jobs.audioAnalysis, detail: v.current_label ?? undefined,
         processed: v.processed, total: v.total, href: "/analysis",
+      }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
+    }
+    if (gen.status === "fulfilled") {
+      const v = gen.value;
+      if (alive.current) setGeneration(v);
+      // Nessun processed/total lato backend (solo fase): riga sempre indeterminata.
+      track(v.status, {
+        key: "set-generation", label: t.jobs.setGeneration, detail: v.phase ?? undefined,
+        processed: 0, total: 0, href: "/set-builder",
       }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
     }
     wasRunning.current = nowRunning;
@@ -211,8 +228,11 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   }, [pollOnce]);
 
   const api = useMemo<JobsApi>(
-    () => ({ refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, analysis }),
-    [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, analysis],
+    () => ({
+      refresh, startClientJob, updateClientJob, endClientJob,
+      download, libraryIndex, analysis, shazamIdentify, generation,
+    }),
+    [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, analysis, shazamIdentify, generation],
   );
 
   // Dedup per chiave: un job che riparte entro OUTCOME_MS può comparire sia in

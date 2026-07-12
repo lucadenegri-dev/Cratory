@@ -390,6 +390,11 @@ export interface GenStatus {
   error: string | null;
 }
 
+/** Stato della generazione set in background: unico poller in JobsProvider. */
+export function generateStatus() {
+  return apiGet<GenStatus>("/api/sets/generate-status");
+}
+
 export interface BpmBin {
   from: number;
   to: number;
@@ -629,6 +634,10 @@ export function servicesStatus() {
 
 export function playlistGaps(id: number) {
   return apiGet<GapAnalysis>(`/api/playlists/${id}/gaps`);
+}
+
+export function libraryGaps() {
+  return apiGet<GapAnalysis>("/api/playlists/library/gaps");
 }
 
 // --- Discovery (Fase F) -----------------------------------------------------

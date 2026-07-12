@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { Card, Button, Input, Textarea, Select, Field, Checkbox, EqMeter, Alert, EmptyState } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useJobs } from "@/components/jobs-provider";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 
@@ -85,36 +86,49 @@ function SetBuilderInner() {
   const [selGenres, setSelGenres] = useState<string[]>([]);
   const [activePreset, setActivePreset] = useState<string | null>(null);
 
-  const [job, setJob] = useState<GenStatus | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const stopAll = useCallback(() => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    if (timerRef.current) clearInterval(timerRef.current);
-    pollRef.current = timerRef.current = null;
-  }, []);
+  // Unico poller (JobsProvider): la generazione gira anche nella barra job globale.
+  // Il riaggancio a una generazione già in corso al mount (es. AI avviata prima di
+  // navigare via) è automatico: `busy` legge lo stato del provider.
+  const jobs = useJobs();
+  const generation = jobs.generation;
+  const busy = generation?.status === "running";
 
   useEffect(() => {
     // Il default è il motore deterministico: l'AI si sceglie esplicitamente.
     apiGet<AiStatus>("/api/ai/status").then(setAiStatus).catch(() => setAiStatus({ configured: false, model: null }));
     apiGet<Playlist[]>("/api/playlists").then(setPlaylists).catch(() => {});
     apiGet<{ genre: string; count: number }[]>("/api/library/genres").then(setGenres).catch(() => {});
-    // Se una generazione è già in corso sul server (es. AI avviata prima di navigare
-    // via), la pagina si riaggancia: busy veritiero, niente richieste inghiottite.
-    apiGet<GenStatus>("/api/sets/generate-status").then((s) => {
-      if (s.status === "running") {
-        setJob(s);
-        startPolling();
-      }
-    }).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stopAll]);
+  }, []);
 
-  const busy = job?.status === "running";
+  // Cronometro "elapsed": riparte da 0 ogni volta che una generazione diventa attiva
+  // (avviata qui o già in corso al mount), si ferma (senza azzerarsi) a fine job.
+  // Il primo giro è schedulato (non un setState sincrono nel corpo dell'effect).
+  useEffect(() => {
+    if (!busy) return;
+    const t0 = Date.now();
+    const tick = () => setElapsed(Math.floor((Date.now() - t0) / 1000));
+    const immediate = setTimeout(tick, 0);
+    const id = setInterval(tick, 1000);
+    return () => { clearTimeout(immediate); clearInterval(id); };
+  }, [busy]);
+
+  // Alla transizione running -> done/error (vista dal provider) la pagina naviga al
+  // workbench o mostra l'errore, esattamente come faceva il poller locale prima.
+  const prevGenStatus = useRef<string | null>(null);
+  useEffect(() => {
+    const status = generation?.status ?? null;
+    if (prevGenStatus.current === "running" && status === "done" && generation?.setlist_id != null) {
+      // Il set nasce nel workbench: si apre lì per riordinare, sostituire tracce e vederne l'arco.
+      router.push(`/sets/${generation.setlist_id}`);
+    } else if (prevGenStatus.current === "running" && status === "error") {
+      setError(generation?.error ?? t.setBuilder.generationFailed);
+    }
+    prevGenStatus.current = status;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generation?.status]);
 
   function toggleSource(s: string) {
     setSources((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
@@ -136,35 +150,11 @@ function SetBuilderInner() {
   // Un preset imposta arco + strategia + durata: appena uno di quei campi cambia a mano, il preset non è più "attivo".
   const clearPreset = () => setActivePreset(null);
 
-  function startPolling() {
-    stopAll();
-    const t0 = Date.now();
-    timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 1000);
-    pollRef.current = setInterval(async () => {
-      try {
-        const s = await apiGet<GenStatus>("/api/sets/generate-status");
-        setJob(s);
-        if (s.status === "done" && s.setlist_id != null) {
-          stopAll();
-          // Il set nasce nel workbench: si apre lì per riordinare, sostituire tracce e vederne l'arco.
-          router.push(`/sets/${s.setlist_id}`);
-        } else if (s.status === "error") {
-          stopAll();
-          setError(s.error ?? t.setBuilder.generationFailed);
-        }
-      } catch (e) {
-        stopAll();
-        setError(String((e as Error).message ?? e));
-      }
-    }, 1500);
-  }
-
   const generate = useCallback(async () => {
     if (busy) return;
     setError(null);
-    setElapsed(0);
     try {
-      const started = await apiPost<GenStatus>("/api/sets/generate-async", {
+      await apiPost<GenStatus>("/api/sets/generate-async", {
         playlist_id: playlistId ? Number(playlistId) : null,
         target_duration_minutes: duration,
         start_bpm: startBpm ? Number(startBpm) : null,
@@ -182,13 +172,12 @@ function SetBuilderInner() {
         use_ai: useAi,
         mode,
       });
-      setJob(started);
-      startPolling();
+      // La barra job globale aggancia subito la generazione (stessa griglia degli altri job).
+      jobs.refresh();
     } catch (e) {
       setError(String((e as Error).message ?? e));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, playlistId, duration, startBpm, endBpm, startEnergy, endEnergy, selGenres, seedArtists, strategy, maxPerArtist, sources, avoidShort, ownedOnly, prompt, useAi, mode]);
+  }, [busy, playlistId, duration, startBpm, endBpm, startEnergy, endEnergy, selGenres, seedArtists, strategy, maxPerArtist, sources, avoidShort, ownedOnly, prompt, useAi, mode, jobs]);
 
   const aiReady = !!aiStatus?.configured;
 
@@ -403,8 +392,8 @@ function SetBuilderInner() {
         <Card className="mb-6">
           <div className="p-5">
             <div className="mb-2 flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 font-medium"><Sparkles size={15} className="text-muted" /> {job?.phase ?? t.setBuilder.startingPhase}</span>
-              <span className="tnum text-muted">{elapsed}s{job?.using_ai && elapsed > 8 ? t.setBuilder.usuallyTakesHint : ""}</span>
+              <span className="flex items-center gap-2 font-medium"><Sparkles size={15} className="text-muted" /> {generation?.phase ?? t.setBuilder.startingPhase}</span>
+              <span className="tnum text-muted">{elapsed}s{generation?.using_ai && elapsed > 8 ? t.setBuilder.usuallyTakesHint : ""}</span>
             </div>
             <EqMeter value={null} className="h-6 w-full" />
             <p className="mt-2 text-xs text-faint">{t.setBuilder.readyOpensWorkbench}</p>
