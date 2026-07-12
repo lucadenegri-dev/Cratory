@@ -35,6 +35,12 @@ logger = logging.getLogger(__name__)
 
 PLATFORM = "local_files"
 
+# Commit incrementale nella scansione: ogni N file elaborati il lavoro viene
+# persistito, così un crash a metà run non butta via tutto (stesso principio
+# del job di analisi, che committa per traccia). Vale solo per il loop
+# per-file: la riconciliazione finale (lost/orfani) resta un blocco unico.
+COMMIT_EVERY = 50
+
 
 def _norm_key(s: str | None) -> str:
     """Chiave di confronto per artista/titolo: senza diacritici, minuscola, senza
@@ -200,7 +206,18 @@ def index_library(db: Session, *, root: str | Path,
     for path, in_archive in ([(p, False) for p in files]
                              + [(p, True) for p in archive_files]):
         resolved = str(path.resolve())
-        stat = path.stat()
+        try:
+            stat = path.stat()
+        except OSError as exc:
+            # File sparito tra la scansione e lo stat() (o illeggibile): si
+            # salta e si conta, senza far morire l'intero run.
+            report["failed"] += 1
+            report["errors"].append({"path": str(path), "error": str(exc)})
+            logger.warning("File saltato %s: %s", path, exc)
+            done += 1
+            if on_progress is not None:
+                on_progress(done, total)
+            continue
         known = db.scalar(select(Track).where(Track.local_path == resolved))
         if (known is not None and known.local_mtime == stat.st_mtime
                 and known.local_size == stat.st_size):
@@ -223,7 +240,11 @@ def index_library(db: Session, *, root: str | Path,
 
     # Passata 2 — flusso completo per i soli file nuovi o modificati.
     # La Libreria viene prima dell'archivio: a parita' di audio il possesso vince.
-    for path, in_archive in pending:
+    for n_pending, (path, in_archive) in enumerate(pending):
+        # Commit incrementale a inizio giro (così i `continue` non lo saltano):
+        # persiste il blocco precedente prima di attaccare il file successivo.
+        if n_pending and n_pending % COMMIT_EVERY == 0:
+            db.commit()
         done += 1
         i = done
         try:
