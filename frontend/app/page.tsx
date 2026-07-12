@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Music, Gauge, ArrowRight, Tags, KeyRound, Disc3,
+  Music, Gauge, ArrowRight, Tags, KeyRound, Disc3, AlertTriangle,
 } from "lucide-react";
 import {
-  apiGet, getLabels, getPipeline, listImportedPlaylists, fmtDate,
-  type LibraryStats, type LabelStats, type SetlistSummary, type Playlist, type PipelineStatus,
+  apiGet, getLabels, getPipeline, listImportedPlaylists, libraryGaps, fmtDate,
+  type LibraryStats, type LabelStats, type SetlistSummary, type Playlist, type PipelineStatus, type GapAnalysis,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
@@ -17,6 +17,7 @@ import { Figure } from "@/components/dashboard/figure";
 import { Histogram } from "@/components/dashboard/histogram";
 import { MiniBars, type MiniBarRow } from "@/components/dashboard/mini-bars";
 import { RecentList, type RecentItem } from "@/components/dashboard/recent-list";
+import { GapsList } from "@/components/dashboard/gaps-list";
 
 /* ----------------------------------------------------- helper di sezione */
 
@@ -41,6 +42,7 @@ export default function Dashboard() {
   const [sets, setSets] = useState<SetlistSummary[] | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
+  const [gaps, setGaps] = useState<GapAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -49,6 +51,7 @@ export default function Dashboard() {
     getLabels().then(setLabels).catch(() => {});
     apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch(() => setSets([]));
     listImportedPlaylists().then(setPlaylists).catch(() => setPlaylists([]));
+    libraryGaps().then(setGaps).catch(() => setGaps(null));
   }, []);
   useEffect(load, [load]);
 
@@ -167,6 +170,13 @@ export default function Dashboard() {
                 <Link href="/labels" className="text-[10px] uppercase tracking-wider text-muted hover:text-fg">{t.dashboard.viewAllFeminine}</Link>
               </div>
               <MiniBars rows={labelRows} />
+
+              {gaps && (
+                <>
+                  <SubLabel icon={<AlertTriangle size={12} />}>{t.dashboard.libraryGaps}</SubLabel>
+                  <GapsList gaps={gaps.gaps} empty={t.dashboard.noStructuralGaps} />
+                </>
+              )}
             </section>
           </div>
         </>
