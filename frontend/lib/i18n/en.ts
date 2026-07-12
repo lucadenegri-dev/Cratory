@@ -354,6 +354,8 @@ export const en = {
     exactPathLabel: "Exact path",
     exactPathPlaceholder: "/absolute/path/to/file.mp3",
     linkAction: "Link",
+    searchSoulseek: "Search on Soulseek",
+    soulseekQueued: "Search started",
   },
   playlists: {
     pageTitle: "Playlist",

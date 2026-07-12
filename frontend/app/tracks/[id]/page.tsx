@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, Link2, ArrowRightLeft, Pencil } from "lucide-react";
-import { apiGet, fmtDuration, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
-import { Card, CardHeader, Badge, Alert, Button, Loading } from "@/components/ui";
+import { ArrowLeft, Check, Download, ExternalLink, Link2, ArrowRightLeft, Pencil } from "lucide-react";
+import { apiGet, downloadTrackAuto, fmtDuration, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
+import { Card, CardHeader, Badge, Alert, Button, Loading, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { TrackCover } from "@/components/track-cover";
@@ -38,6 +38,8 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [dlState, setDlState] = useState<"idle" | "running" | "queued">("idle");
+  const [dlError, setDlError] = useState<string | null>(null);
 
   useEffect(() => {
     apiGet<TrackDetail>(`/api/tracks/${id}`).then(setTrack).catch((e) => setError(String(e.message ?? e)));
@@ -47,6 +49,19 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
 
   if (error) return <PageLayout title={t.tracks.pageTitle}><Alert tone="danger">⚠ {error}</Alert></PageLayout>;
   if (!track) return <PageLayout title={t.tracks.pageTitle}><Loading /></PageLayout>;
+
+  const searchSoulseek = async () => {
+    setDlState("running");
+    setDlError(null);
+    try {
+      await downloadTrackAuto(track.id);
+      // Il job bar globale (jobs provider) aggancia il progresso da solo.
+      setDlState("queued");
+    } catch (e) {
+      setDlError(String((e as { message?: string })?.message ?? e));
+      setDlState("idle");
+    }
+  };
 
   const rows: Array<[string, React.ReactNode]> = [
     ["Album", track.album ?? "—"], [t.tracks.rowGenre, track.genre ?? "—"], [t.tracks.rowYear, track.year ?? "—"],
@@ -106,11 +121,21 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
           <CardHeader
             title={t.tracks.diskCardTitle}
             action={
-              <Button size="sm" variant="outline" onClick={() => setLinking(true)}>
-                <Link2 size={14} /> {track.has_local_file ? t.tracks.replaceFile : t.tracks.linkFile}
-              </Button>
+              <div className="flex items-center gap-2">
+                {!track.has_local_file && (
+                  <Button size="sm" variant={dlState === "queued" ? "ghost" : "outline"} onClick={searchSoulseek} disabled={dlState !== "idle"}>
+                    {dlState === "queued" ? <><Check size={14} /> {t.tracks.soulseekQueued}</>
+                      : dlState === "running" ? <Spinner />
+                      : <><Download size={14} /> {t.tracks.searchSoulseek}</>}
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" onClick={() => setLinking(true)}>
+                  <Link2 size={14} /> {track.has_local_file ? t.tracks.replaceFile : t.tracks.linkFile}
+                </Button>
+              </div>
             }
           />
+          {dlError && <p className="border-b border-border/50 px-4 py-2 text-xs text-danger">⚠ {dlError}</p>}
           <table className="w-full text-sm">
             <tbody>
               <tr className="border-b border-border/50 last:border-0">

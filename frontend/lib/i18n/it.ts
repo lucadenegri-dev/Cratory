@@ -356,6 +356,8 @@ export const it: Dictionary = {
     exactPathLabel: "Percorso esatto",
     exactPathPlaceholder: "/percorso/assoluto/del/file.mp3",
     linkAction: "Collega",
+    searchSoulseek: "Cerca su Soulseek",
+    soulseekQueued: "Ricerca avviata",
   },
   playlists: {
     pageTitle: "Playlist",
