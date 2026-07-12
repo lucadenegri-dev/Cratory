@@ -367,6 +367,22 @@ def test_dig_endpoint_honors_taste_playlist_id(db, monkeypatch):
     assert {"label_followed", "artist_collected", "style_match"} <= codes
 
 
+def test_dig_endpoint_502_on_discogs_error(db, monkeypatch):
+    """Rate limit o token mancante NON devono sembrare 'zero risultati': il dig
+    traduce DiscogsError in un 502 esplicito (stesso codice di get_release_detail,
+    gia' tradotto dal frontend)."""
+    from fastapi import HTTPException
+
+    def _raise(self, **kw):
+        raise DiscogsError("Discogs: rate limit (riprova piu' tardi o imposta DISCOGS_TOKEN).")
+
+    monkeypatch.setattr(DiscogsClient, "search_releases", _raise)
+    with pytest.raises(HTTPException) as exc_info:
+        dig_endpoint(DiscoveryDigRequest(seed_type="genre", value="Acid House"), db)
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail["code"] == "discovery_provider_error"
+
+
 # --- Task 3: GET /api/discovery/release/{discogs_id} — tracklist reale -------
 
 _RELEASE_DETAIL = {

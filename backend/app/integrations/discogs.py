@@ -28,6 +28,10 @@ BASE = "https://api.discogs.com"
 # Discogs richiede uno User-Agent identificativo (come MusicBrainz), altrimenti 403.
 _USER_AGENT = "Cratory/0.1 (+http://localhost)"
 SEARCH_PER_PAGE = 100  # max consentito da Discogs: massimizza il volume per chiamata
+# Paginazione limitata: piu' volume per il dig (fino a 300 release per seme) senza
+# bruciare il rate limit Discogs (~60 req/min col token, ~25 senza). 3 pagine sono
+# il compromesso: un dig consuma al massimo 3 richieste, non l'intero budget.
+SEARCH_MAX_PAGES = 3
 
 
 class DiscogsError(Exception):
@@ -60,7 +64,14 @@ class DiscogsClient:
         """Release da `/database/search` filtrate per stile/genere/etichetta.
 
         Una forma unica e coerente (titolo "Artista - Titolo", stili, etichette,
-        community) per tutti i semi del dig. Errore -> lista vuota (mai eccezione al router).
+        community) per tutti i semi del dig. Pagina fino a SEARCH_MAX_PAGES e
+        concatena i risultati; si ferma prima se una pagina e' corta o
+        `pagination.pages` dice che non ce ne sono altre.
+
+        Errori: la PRIMA pagina che fallisce SOLLEVA DiscogsError (rate limit o
+        token mancante non devono sembrare 'zero risultati': il router li traduce
+        in 502 esplicito); una pagina successiva in errore degrada ai risultati
+        gia' raccolti (best-effort, con warning nel log).
         """
         params: dict[str, Any] = {"type": "release", "per_page": per_page}
         if style:
@@ -73,19 +84,32 @@ class DiscogsClient:
             params["q"] = query
         if not (style or genre or label or query):
             return []
-        try:
-            data = self._get("/database/search", params=params)
-        except DiscogsError as exc:
-            logger.warning("Discogs search_releases(%s) fallito: %s", params, exc)
-            return []
-        return data.get("results") or []
+        results: list[dict[str, Any]] = []
+        for page in range(1, SEARCH_MAX_PAGES + 1):
+            try:
+                data = self._get("/database/search", params={**params, "page": page})
+            except DiscogsError as exc:
+                if page == 1:
+                    raise
+                logger.warning(
+                    "Discogs search_releases(%s) pagina %d fallita: %s — "
+                    "ritorno i %d risultati gia' raccolti",
+                    params, page, exc, len(results),
+                )
+                break
+            page_results = data.get("results") or []
+            results.extend(page_results)
+            total_pages = (data.get("pagination") or {}).get("pages")
+            # pagina corta o ultima pagina dichiarata -> niente chiamate extra
+            if len(page_results) < per_page or (total_pages is not None and page >= total_pages):
+                break
+        return results
 
     def get_release(self, release_id: int) -> dict[str, Any]:
         """Dettaglio di una release, inclusa la tracklist reale.
 
-        A differenza di search_releases (che degrada a lista vuota su errore:
-        una ricerca fallita non deve rompere il dig), qui l'errore Discogs
-        SOLLEVA DiscogsError: il chiamante (l'endpoint del Task 3) deve poterlo
-        distinguere e mostrarlo, mai propagarlo come 500 grezzo.
+        Come search_releases, l'errore Discogs SOLLEVA DiscogsError: il chiamante
+        (l'endpoint del dettaglio) deve poterlo distinguere e mostrarlo come 502
+        esplicito, mai propagarlo come 500 grezzo.
         """
         return self._get(f"/releases/{release_id}")

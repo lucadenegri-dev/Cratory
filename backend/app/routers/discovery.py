@@ -210,12 +210,17 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
     if req.taste_playlist_id is not None:
         taste_tracks = tracks_for_playlist(db, req.taste_playlist_id)
     client = DiscogsClient()
-    result = dig(
-        db, seed_type=req.seed_type, value=req.value,
-        search_releases=lambda **kw: client.search_releases(**kw),
-        taste_tracks=taste_tracks,
-        adventurousness=req.adventurousness, limit=req.limit,
-    )
+    try:
+        result = dig(
+            db, seed_type=req.seed_type, value=req.value,
+            search_releases=lambda **kw: client.search_releases(**kw),
+            taste_tracks=taste_tracks,
+            adventurousness=req.adventurousness, limit=req.limit,
+        )
+    except DiscogsError as exc:
+        # Rate limit / token mancante: 502 esplicito, mai uno "zero risultati" muto.
+        raise api_error(502, "discovery_provider_error", f"Discovery provider error: {exc}",
+                         reason=str(exc)) from exc
     return DiscoveryDigResponse(
         seed_type=result.seed_type, value=result.value,
         leads=[_lead_out(lead) for lead in result.leads],
