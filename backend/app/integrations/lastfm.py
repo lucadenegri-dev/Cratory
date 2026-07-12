@@ -19,7 +19,7 @@ import httpx
 
 from app.core.config import settings
 from app.integrations import SimilarityClient
-from app.integrations._http import get_with_retries
+from app.integrations._http import ClosableHttpClient, get_json
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def _match(value: Any) -> float:
         return 0.0
 
 
-class LastFMClient(SimilarityClient):
+class LastFMClient(SimilarityClient, ClosableHttpClient):
     name = "lastfm"
 
     def __init__(self, api_key: str, http: httpx.Client | None = None):
@@ -93,15 +93,11 @@ class LastFMClient(SimilarityClient):
             if _now() < expires_at:
                 return cached
             del _cache[cache_key]  # scaduta: rimuovi e ricadi sulla rete
-        r = get_with_retries(self.http, API, params=query, error_cls=LastFMError)
-        if r.status_code == 429:
-            raise LastFMError("Last.fm: rate limit (riprova piu' tardi).")
-        if r.status_code >= 400:
-            raise LastFMError(f"Last.fm {r.status_code} su {method}: {r.text[:80]}")
-        try:
-            data = r.json()
-        except ValueError as exc:
-            raise LastFMError("Last.fm: risposta non JSON") from exc
+        data = get_json(
+            self.http, API, params=query, error_cls=LastFMError, name="Last.fm",
+            rate_limit_message="Last.fm: rate limit (riprova piu' tardi).",
+            text_preview=80, context=f" su {method}",
+        )
         if isinstance(data, dict) and data.get("error"):
             raise LastFMError(f"Last.fm errore {data.get('error')}: {data.get('message')}")
         # Solo i successi finiscono in cache: gli errori (raise sopra) si

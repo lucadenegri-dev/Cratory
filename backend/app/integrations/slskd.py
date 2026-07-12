@@ -13,7 +13,7 @@ from pathlib import Path
 import httpx
 
 from app.core.config import settings
-from app.integrations._http import get_with_retries
+from app.integrations._http import ClosableHttpClient, get_with_retries, raise_for_status
 
 BASE = "/api/v0"
 
@@ -45,7 +45,7 @@ class SlskdFile:
         return Path(self.filename.replace("\\", "/")).suffix.lower().lstrip(".")
 
 
-class SlskdClient:
+class SlskdClient(ClosableHttpClient):
     def __init__(self, url: str | None = None, api_key: str | None = None,
                  http: httpx.Client | None = None):
         self.url = (url if url is not None else settings.slskd_url).rstrip("/")
@@ -60,8 +60,12 @@ class SlskdClient:
     def _get(self, path: str, params: dict | None = None):
         r = get_with_retries(self.http, f"{self.url}{BASE}{path}",
                              error_cls=SlskdError, params=params)
-        if r.status_code >= 400:
-            raise SlskdError(f"slskd {r.status_code}: {r.text[:160]}")
+        # Niente rate_limit_message: slskd non ha mai distinto 429 da un
+        # generico 4xx/5xx, a differenza di lastfm/discogs (comportamento
+        # preesistente, invariato). r.json() non e' avvolto in un errore
+        # tipizzato: idem, il ValueError grezzo su risposta non-JSON e'
+        # comportamento preesistente.
+        raise_for_status(r, SlskdError, name="slskd")
         return r.json()
 
     def _post(self, path: str, json=None):

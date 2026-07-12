@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.integrations import SpotifyClient
+from app.integrations._http import ClosableHttpClient, raise_for_status
 from app.models import SpotifyToken
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ def make_state() -> str:
     return secrets.token_urlsafe(24)
 
 
-class SpotifyWebClient(SpotifyClient):
+class SpotifyWebClient(SpotifyClient, ClosableHttpClient):
     def __init__(self, db: Session):
         self.db = db
         self.http = httpx.Client(timeout=20)
@@ -203,8 +204,11 @@ class SpotifyWebClient(SpotifyClient):
                     self.db.query(SpotifyToken).filter_by(kind=kind).delete()
                 self.db.commit()
                 continue
-            if r.status_code >= 400:
-                raise SpotifyError(f"Spotify API {r.status_code} su {path}: {r.text[:80]}")
+            # Token-aware loop (attesa 429, refresh su 401) non generalizzabile
+            # nell'helper condiviso: resta qui. Il solo status->errore generico
+            # riusa `raise_for_status` (stesso formato di prima: nome+status+" su
+            # path"+testo troncato a 80 char).
+            raise_for_status(r, SpotifyError, name="Spotify API", text_preview=80, context=f" su {path}")
             return r.json()
         raise SpotifyError(f"Spotify API: troppi tentativi su {path}")
 

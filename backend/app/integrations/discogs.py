@@ -20,7 +20,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
-from app.integrations._http import get_with_retries
+from app.integrations._http import ClosableHttpClient, get_json
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class DiscogsError(Exception):
     pass
 
 
-class DiscogsClient:
+class DiscogsClient(ClosableHttpClient):
     def __init__(self, token: str | None = None, http: httpx.Client | None = None):
         self.token = token if token is not None else (settings.discogs_token or None)
         headers = {"User-Agent": _USER_AGENT}
@@ -47,15 +47,10 @@ class DiscogsClient:
         self.http = http or httpx.Client(timeout=15, follow_redirects=True, headers=headers)
 
     def _get(self, path: str, params: dict | None = None) -> dict[str, Any]:
-        r = get_with_retries(self.http, f"{BASE}{path}", error_cls=DiscogsError, params=params)
-        if r.status_code == 429:
-            raise DiscogsError("Discogs: rate limit (riprova piu' tardi o imposta DISCOGS_TOKEN).")
-        if r.status_code >= 400:
-            raise DiscogsError(f"Discogs {r.status_code}: {r.text[:160]}")
-        try:
-            return r.json()
-        except ValueError as exc:
-            raise DiscogsError("Discogs: risposta non JSON") from exc
+        return get_json(
+            self.http, f"{BASE}{path}", params=params, error_cls=DiscogsError, name="Discogs",
+            rate_limit_message="Discogs: rate limit (riprova piu' tardi o imposta DISCOGS_TOKEN).",
+        )
 
     def search_releases(
         self, *, style: str | None = None, genre: str | None = None,
