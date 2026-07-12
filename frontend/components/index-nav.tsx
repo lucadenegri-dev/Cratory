@@ -24,7 +24,6 @@ const navGroups = (t: Dictionary): { title: string | null; items: { href: string
     title: t.nav.groupCollect,
     items: [
       { href: "/library", label: t.nav.library },
-      { href: "/analysis", label: t.nav.analysis },
       { href: "/playlists", label: t.nav.playlists },
       { href: "/labels", label: t.nav.labels },
       { href: "/downloads", label: t.nav.downloads },
@@ -35,6 +34,7 @@ const navGroups = (t: Dictionary): { title: string | null; items: { href: string
     items: [
       { href: "/sets", label: t.nav.sets },
       { href: "/transitions", label: t.nav.transitions },
+      { href: "/analysis", label: t.nav.analysis },
     ],
   },
 ];
