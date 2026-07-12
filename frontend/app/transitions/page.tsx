@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
 import { apiGet, trackLabel, type Track, type TransitionCandidate } from "@/lib/api";
-import { Card, Input, Badge } from "@/components/ui";
+import { Alert, Card, Input, Badge, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackCover } from "@/components/track-cover";
 import { cn } from "@/lib/cn";
@@ -25,7 +25,13 @@ export default function TransitionFinder() {
   const [selected, setSelected] = useState<Track | null>(null);
   const [direction, setDirection] = useState<"after" | "before">("after");
   const [lens, setLens] = useState<Lens>("all");
-  const [results, setResults] = useState<TransitionCandidate[]>([]);
+  // Risposta taggata con la chiave della richiesta che l'ha prodotta: lo stato
+  // si aggiorna solo nei callback async (niente setState sincrono nell'effect)
+  // e i risultati stantii di una richiesta precedente vengono ignorati.
+  const [response, setResponse] = useState<
+    { key: string; results: TransitionCandidate[] | null; error: string | null } | null
+  >(null);
+  const requestKey = selected ? `${direction}:${selected.id}:${lens}` : null;
 
   useEffect(() => {
     if (!query) return;
@@ -42,12 +48,21 @@ export default function TransitionFinder() {
   }, [query]);
 
   useEffect(() => {
-    if (!selected) return;
+    if (!selected || !requestKey) return;
+    let active = true;
     apiGet<TransitionCandidate[]>(`/api/transitions/${direction}/${selected.id}`, {
       limit: 25,
       ...(lens !== "all" ? { lens } : {}),
-    }).then(setResults).catch(() => setResults([]));
-  }, [selected, direction, lens]);
+    })
+      .then((data) => { if (active) setResponse({ key: requestKey, results: data, error: null }); })
+      .catch((e) => { if (active) setResponse({ key: requestKey, results: null, error: String(e.message ?? e) }); });
+    return () => { active = false; };
+  }, [selected, direction, lens, requestKey]);
+
+  const current = response && response.key === requestKey ? response : null;
+  const loading = selected !== null && current === null;
+  const results = current?.results ?? null;
+  const error = current?.error ?? null;
 
   const marginalia = (
     <div className="space-y-3 text-xs leading-relaxed text-muted">
@@ -137,6 +152,11 @@ export default function TransitionFinder() {
             ))}
           </div>
 
+          {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
+
+          {loading && <Loading label={t.transitions.loadingResults} />}
+
+          {!loading && !error && results && (
           <div className="overflow-hidden border border-border">
             {results.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-muted">
@@ -166,6 +186,7 @@ export default function TransitionFinder() {
               </ul>
             )}
           </div>
+          )}
         </>
       )}
     </PageLayout>
