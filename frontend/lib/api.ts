@@ -1,6 +1,10 @@
 import { translateApiError } from "@/lib/i18n/runtime";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Base API vuota = stesso host della pagina: le chiamate /api/* passano dal
+// rewrite di next.config.ts verso il backend, quindi l'app funziona anche
+// aperta da un altro dispositivo in LAN. NEXT_PUBLIC_API_URL resta come
+// override opzionale solo per setup particolari (backend su origin diverso).
+const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export interface Track {
   id: number;
@@ -437,11 +441,16 @@ async function handle<T>(res: Response): Promise<T> {
 }
 
 export async function apiGet<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
-  const url = new URL(API + path);
+  // Niente `new URL(...)`: con base relativa (API vuota) lancerebbe. La query
+  // string viene costruita a mano, così l'URL resta relativo allo stesso host.
+  let url = API + path;
   if (params) {
+    const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== "") url.searchParams.set(k, String(v));
+      if (v !== undefined && v !== "") qs.set(k, String(v));
     }
+    const s = qs.toString();
+    if (s) url += (url.includes("?") ? "&" : "?") + s;
   }
   return handle<T>(await fetch(url));
 }
