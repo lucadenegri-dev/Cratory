@@ -12,11 +12,15 @@ from dataclasses import asdict, dataclass
 
 from app.models import Track
 
-# Soglie BPM per i bucket (electronic-oriented, ma generiche).
+# Soglie BPM assolute di fallback (house-centric): usate solo quando la
+# playlist ha poche tracce con BPM e i percentili sarebbero rumorosi.
 _OPENER_BPM_MAX = 120.0
 _PEAK_BPM_MIN = 126.0
 _MIN_OPENERS = 2
 _MIN_PEAK = 3
+# Sotto questa soglia di tracce con BPM i percentili collassano sul campione
+# (ogni traccia sposta la soglia di interi BPM): meglio i default assoluti.
+_MIN_BPM_TRACKS_FOR_PERCENTILES = 8
 _UNIFORM_ENERGY_STD = 8.0   # sotto: energia troppo piatta
 _MAX_GENRE_SHARE = 0.6      # un genere oltre il 60% -> poco vario; molti generi -> dispersiva
 _MAX_DISTINCT_GENRES = 8
@@ -38,6 +42,34 @@ def _energies(tracks: list[Track]) -> list[int]:
     return [t.energy for t in tracks if t.energy is not None]
 
 
+def _percentile(sorted_values: list[float], q: float) -> float:
+    """Percentile su lista gia' ordinata, interpolazione lineare (no numpy)."""
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    pos = (len(sorted_values) - 1) * q
+    lo = int(pos)
+    if lo + 1 >= len(sorted_values):
+        return sorted_values[-1]
+    return sorted_values[lo] + (sorted_values[lo + 1] - sorted_values[lo]) * (pos - lo)
+
+
+def _bpm_thresholds(tracks: list[Track]) -> tuple[float, float]:
+    """Soglie (opener_max, peak_min) derivate dalla distribuzione BPM.
+
+    Le soglie assolute 120/126 sono house-centric: per una playlist
+    drum&bass a 170+ BPM "nessuna apertura sotto 120" e' un falso positivo
+    sistematico. Con abbastanza tracce usiamo il 25o/75o percentile dei BPM
+    della playlist stessa: il quarto piu' lento e' l'apertura relativa, il
+    quarto piu' veloce e' il peak, qualunque sia il genere. Con meno di
+    _MIN_BPM_TRACKS_FOR_PERCENTILES tracce con BPM si torna ai default
+    assoluti (vedi commento sulla costante).
+    """
+    bpms = _bpms(tracks)
+    if len(bpms) < _MIN_BPM_TRACKS_FOR_PERCENTILES:
+        return _OPENER_BPM_MAX, _PEAK_BPM_MIN
+    return _percentile(bpms, 0.25), _percentile(bpms, 0.75)
+
+
 def _std(values: list[float]) -> float:
     if len(values) < 2:
         return 0.0
@@ -46,22 +78,24 @@ def _std(values: list[float]) -> float:
 
 
 def _check_openers(tracks: list[Track]) -> Gap | None:
-    openers = [t for t in tracks if t.bpm and t.bpm <= _OPENER_BPM_MAX]
+    opener_max, _ = _bpm_thresholds(tracks)
+    openers = [t for t in tracks if t.bpm and t.bpm <= opener_max]
     if len(openers) < _MIN_OPENERS:
         return Gap(
             "missing_openers", "warning",
-            f"Solo {len(openers)} tracce sotto {_OPENER_BPM_MAX:.0f} BPM adatte all'apertura.",
+            f"Solo {len(openers)} tracce sotto {opener_max:.0f} BPM adatte all'apertura.",
             "Aggiungi qualche brano piu' lento/atmosferico per costruire un'intro.",
         )
     return None
 
 
 def _check_peak(tracks: list[Track]) -> Gap | None:
-    peak = [t for t in tracks if t.bpm and t.bpm >= _PEAK_BPM_MIN]
+    _, peak_min = _bpm_thresholds(tracks)
+    peak = [t for t in tracks if t.bpm and t.bpm >= peak_min]
     if len(peak) < _MIN_PEAK:
         return Gap(
             "few_peak_tracks", "warning",
-            f"Solo {len(peak)} tracce sopra {_PEAK_BPM_MIN:.0f} BPM adatte al peak.",
+            f"Solo {len(peak)} tracce sopra {peak_min:.0f} BPM adatte al peak.",
             "Servono piu' brani energici per sostenere il momento clou del set.",
         )
     return None
