@@ -47,8 +47,9 @@ In the agreed order (operational detail in [PROGRESS.md](../PROGRESS.md)):
 
 1. **Discovery improvement.** The taste + explanations slice of the dig is **DONE** (taste
    signals on a selectable reference + reason-code chips). Per-release tracklists are also
-   **DONE** (2026-07-12, `get_release_detail`). Still in the technical backlog: Last.fm tags as
-   a 2nd dig source; the expand/dig unification is superseded (Discovery is DIG-only, expand
+   **DONE** (2026-07-12, `get_release_detail`). Last.fm tags as a 2nd dig source is **parked**
+   (deprioritized on 2026-07-12, not planned for now); the expand/dig unification is superseded
+   (Discovery is DIG-only, expand
    lives in the Playlist context on purpose).
 2. **Light audit + quick wins** — the main quick wins are DONE (SSRF, `library_stats`, dead
    endpoint, dependencies); robustness confirmed solid. Small threat model (no public users),
@@ -76,9 +77,9 @@ In the agreed order (operational detail in [PROGRESS.md](../PROGRESS.md)):
 
 ## Technical backlog (non-blocking)
 
-- **Discovery: enrich the dig.** Last.fm tags as a 2nd source. (Per-release tracklists DONE
-  2026-07-12; Genre + Label already unified; Playlist stays Spotify-resolved on purpose, a
-  different goal.)
+- **Discovery: enrich the dig.** Last.fm tags as a 2nd source is **parked** (deprioritized
+  2026-07-12, not planned for now). (Per-release tracklists DONE 2026-07-12; Genre + Label
+  already unified; Playlist stays Spotify-resolved on purpose, a different goal.)
 - **Shazam phase 2.** `DjSetTrack` as a corpus for co-occurrence suggestions.
 - **PostgreSQL.** Low priority: SQLite is enough for personal use (only needed for an
   eventual multi-user setup).
@@ -103,8 +104,8 @@ ownership of that field.
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
 - **Discovery** — A17 dig fetches a single Discogs page + swallows errors (429/missing token →
-  "zero results", no 502); Last.fm tags as a 2nd dig source (today Discogs-only); E12-cache: no
-  discovery cache (every expand refetches) + Last.fm client with no User-Agent (ToS).
+  "zero results", no 502); E12-cache: no discovery cache (every expand refetches) + Last.fm
+  client with no User-Agent (ToS). *(Last.fm tags as a 2nd dig source: parked, see above.)*
 - **Set → console / editor** — A14 "add this track" in the editor (only delete/move/replace);
   ⚠️ A22 after move/remove the AI roles and `ai_reason`/notes stay stale (transitions *are*
   recomputed); ⚠️ B12 reorder is now optimistic but still arrow-buttons, no drag-and-drop;
@@ -128,9 +129,12 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   basename+mtime resolution, ~45s synchronous on /candidates); ⚠️ B11 issue counters now
   navigable, but grab has no per-candidate state and LinkLocalFileModal search does not
   auto-start; A28 "Search on Soulseek" from the wishlist track detail.
-- **Spotify import/sync** — A10 import/sync synchronous in the request (thousands of liked =
-  minutes with no progress): job+polling; A12 sync unlinks Discovery-added tracks (no `added_by`
-  provenance column exists); A25 sync does not refresh playlist name/cover from Spotify.
+- **Streaming import/sync (Spotify + SoundCloud)** — A10 import/sync synchronous in the request
+  (thousands of liked = minutes with no progress): job+polling; A12 sync unlinks Discovery-added
+  tracks (no `added_by` provenance column exists); A25 sync does not refresh playlist name/cover
+  from the source. NB: SoundCloud import (yt-dlp) now exists too — A10 applies to it as well (the
+  flat extraction is sequential/slow), A11 dedup is already platform-agnostic, and A25/name-cover
+  should cover SoundCloud sync too where the source exposes them.
 - **Library/index** — A6-UI library gaps not shown in the dashboard (reintroduce the
   `libraryGaps` client); ⚠️ B2 per-row ownership badge present, but the ownership *filter* in the
   playlist table is missing; B1 filters/sort/pagination lost on back-nav (serialize into the
