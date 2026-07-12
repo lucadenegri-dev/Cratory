@@ -96,6 +96,12 @@ def ensure_schema(eng=None) -> None:
         "dj_sets": {
             "imported_playlist_id": "INTEGER",
         },
+        "playlist_tracks": {
+            # Provenienza membership (A12): NULL = import piattaforma (backfill
+            # corretto per le righe esistenti), 'cratory' = aggiunta da Cratory
+            # (es. Discovery), protetta dal prune del sync.
+            "added_by": "VARCHAR",
+        },
     }
     with eng.begin() as conn:
         for table, cols in additions.items():

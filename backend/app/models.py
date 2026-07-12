@@ -19,12 +19,16 @@ def utcnow() -> datetime:
 
 # Associazione M2M brano<->playlist. `added_at` e' per-playlist (quando il brano e'
 # stato aggiunto a QUELLA playlist). PK composta: una membership per coppia.
+# `added_by`: provenienza della membership — NULL = import dalla piattaforma,
+# 'cratory' = aggiunta da una feature Cratory (es. Discovery). Il prune del sync
+# non tocca mai le membership 'cratory' (il write-back Spotify puo' fallire).
 playlist_tracks = Table(
     "playlist_tracks",
     Base.metadata,
     Column("playlist_id", ForeignKey("playlists.id"), primary_key=True, index=True),
     Column("track_id", ForeignKey("tracks.id"), primary_key=True, index=True),
     Column("added_at", DateTime, nullable=True),
+    Column("added_by", String, nullable=True),
 )
 
 

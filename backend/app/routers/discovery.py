@@ -287,7 +287,8 @@ def save_for_later(req: DiscoverySaveForLaterRequest, db: Session = Depends(get_
         duration_seconds=req.duration_seconds, url=req.url, artwork_url=req.album_art_url,
     )
     playlist = get_or_create_discovery_playlist(db)
-    add_track_to_playlist(db, track, playlist)
+    # 'Scoperte' non si sincronizza mai, ma la provenienza Cratory resta coerente.
+    add_track_to_playlist(db, track, playlist, added_by="cratory")
     db.commit()
     db.refresh(track)
     return DiscoverySaveForLaterResponse(created=created, track=track_out(track))

@@ -315,7 +315,9 @@ def add_discovered_track(playlist_id: int, req: PlaylistAddTrackRequest, db: Ses
         title=req.title, artist=req.artist, isrc=req.isrc,
         duration_seconds=req.duration_seconds, url=req.url, artwork_url=req.album_art_url,
     )
-    add_track_to_playlist(db, track, playlist)
+    # added_by='cratory': il prune del sync non deve mai scollegarla (il
+    # write-back Spotify qui sotto e' best-effort e puo' fallire).
+    add_track_to_playlist(db, track, playlist, added_by="cratory")
     recount_playlist(db, playlist)
     db.commit()
 

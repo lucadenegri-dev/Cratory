@@ -21,7 +21,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Playlist, Track
-from app.repositories import add_track_to_playlist, ci_equals, recount_playlist, remove_track_from_playlist, tracks_for_playlist
+from app.repositories import (
+    add_track_to_playlist,
+    ci_equals,
+    cratory_added_track_ids,
+    recount_playlist,
+    remove_track_from_playlist,
+    tracks_for_playlist,
+)
 from app.services.track_status import refresh_status
 
 logger = logging.getLogger(__name__)
@@ -358,7 +365,13 @@ def import_playlist(
 
     removed = 0
     if prune:
+        # Le membership aggiunte da Cratory (added_by='cratory', es. Discovery) non
+        # si potano MAI: il write-back verso Spotify e' best-effort e puo' fallire,
+        # quindi l'assenza dallo snapshot piattaforma non significa "rimossa".
+        protected = cratory_added_track_ids(db, playlist.id)
         for track in tracks_for_playlist(db, playlist.id):
+            if track.id in protected:
+                continue
             still_present = (
                 (track.isrc is not None and track.isrc in present_isrcs)
                 or (track.platform_track_id is not None

@@ -322,8 +322,14 @@ def get_playlist(db: Session, playlist_id: int) -> Playlist | None:
     return db.scalar(select(Playlist).where(Playlist.id == playlist_id))
 
 
-def add_track_to_playlist(db: Session, track: Track, playlist: Playlist, *, added_at=None) -> None:
-    """Crea la membership brano<->playlist se non esiste (idempotente). Non committa."""
+def add_track_to_playlist(db: Session, track: Track, playlist: Playlist, *,
+                          added_at=None, added_by: str | None = None) -> None:
+    """Crea la membership brano<->playlist se non esiste (idempotente). Non committa.
+
+    `added_by` marca la provenienza della membership: NULL = import dalla
+    piattaforma, 'cratory' = aggiunta da una feature Cratory (es. Discovery).
+    Se la membership esiste gia' non viene toccata (nemmeno la provenienza).
+    """
     exists = db.execute(
         select(playlist_tracks.c.track_id).where(
             playlist_tracks.c.playlist_id == playlist.id,
@@ -333,7 +339,7 @@ def add_track_to_playlist(db: Session, track: Track, playlist: Playlist, *, adde
     if exists:
         return
     db.execute(playlist_tracks.insert().values(
-        playlist_id=playlist.id, track_id=track.id, added_at=added_at,
+        playlist_id=playlist.id, track_id=track.id, added_at=added_at, added_by=added_by,
     ))
 
 
@@ -350,6 +356,17 @@ def recount_playlist(db: Session, playlist: Playlist) -> None:
         .where(playlist_tracks.c.playlist_id == playlist.id)
     )
     playlist.track_count = n or 0
+
+
+def cratory_added_track_ids(db: Session, playlist_id: int) -> set[int]:
+    """Id delle tracce con membership creata da Cratory (added_by='cratory',
+    es. Discovery) in questa playlist: il prune del sync non le tocca mai."""
+    return set(db.scalars(
+        select(playlist_tracks.c.track_id).where(
+            playlist_tracks.c.playlist_id == playlist_id,
+            playlist_tracks.c.added_by == "cratory",
+        )
+    ).all())
 
 
 def tracks_for_playlist(db: Session, playlist_id: int) -> list[Track]:
