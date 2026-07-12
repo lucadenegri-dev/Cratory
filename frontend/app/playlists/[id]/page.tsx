@@ -5,7 +5,7 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
-  RefreshCw, ChevronUp, ChevronDown, Download, Heart,
+  RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart,
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, fmtDuration,
@@ -66,6 +66,8 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const [incomplete, setIncomplete] = useState(false);
   const [sort, setSort] = useState("");
   const [order, setOrder] = useState<Order>("asc");
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(0);
 
   const reload = useCallback(() => {
     playlistTracks(pid).then(setTracks).catch(() => {});
@@ -128,9 +130,21 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     return rows;
   }, [tracks, artist, title, genre, source, status, owned, key, bpmMin, bpmMax, incomplete, sort, order, insertionRank]);
 
+  // Paginazione lato client sull'insieme già filtrato/ordinato: si riparte da pagina 0
+  // ogni volta che cambia un filtro (stesso pattern della libreria).
+  useEffect(() => {
+    setPage(0);
+  }, [artist, title, genre, source, status, owned, key, bpmMin, bpmMax, incomplete]);
+
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  // Clamp difensivo: se la lista si accorcia (sync, edit) sotto la pagina corrente.
+  const safePage = Math.min(page, pageCount - 1);
+  const pageTracks = visible.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
   const toggleSort = (col: string) => {
     if (sort === col) setOrder(order === "asc" ? "desc" : "asc");
     else { setSort(col); setOrder("asc"); }
+    setPage(0);
   };
 
   const doDelete = async () => {
@@ -311,7 +325,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
             </tr>
           </thead>
           <tbody>
-            {visible.map((tr) => (
+            {pageTracks.map((tr) => (
               <tr key={tr.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
                 <td className={`${cell} tnum text-faint`}>{insertionRank.get(tr.id) ?? "—"}</td>
                 <td className={cell}>
@@ -336,6 +350,20 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
           </tbody>
         </table>
       </div>
+
+      {visible.length > 0 && (
+        <div className="mt-4 flex items-center justify-between text-sm">
+          <span className="text-muted">
+            {`${safePage * PAGE_SIZE + 1}–${Math.min((safePage + 1) * PAGE_SIZE, visible.length)}`} {t.library.paginationOf} {visible.length}
+          </span>
+          <div className="flex gap-2">
+            <button disabled={safePage === 0} onClick={() => setPage(Math.max(0, safePage - 1))}
+              className="inline-flex h-8 items-center gap-1 rounded-none border border-border-strong px-3 hover:bg-elevated disabled:opacity-40"><ChevronLeft size={15} /> {t.library.prevPage}</button>
+            <button disabled={safePage + 1 >= pageCount} onClick={() => setPage(safePage + 1)}
+              className="inline-flex h-8 items-center gap-1 rounded-none border border-border-strong px-3 hover:bg-elevated disabled:opacity-40">{t.library.nextPage} <ChevronRight size={15} /></button>
+          </div>
+        </div>
+      )}
 
       <TrackEditModal
         track={editing}

@@ -27,8 +27,16 @@ export function PlaylistCover({
   const fallback = kind === "liked" ? LIKED_COVER[platform ?? ""] ?? null : null;
   const src = artworkUrl ?? fallback;
   if (src) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt="" className={`${className} rounded-none object-cover`} />;
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className={`${className} rounded-none object-cover`}
+      />
+    );
   }
   return (
     <span className={`grid place-items-center rounded-none text-faint ${placeholderClassName} ${className}`}>

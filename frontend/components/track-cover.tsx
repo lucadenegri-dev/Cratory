@@ -29,6 +29,8 @@ export function TrackCover({
     <img
       src={src}
       alt=""
+      loading="lazy"
+      decoding="async"
       onError={() => setFailed(true)}
       className={`shrink-0 rounded-none object-cover ${className}`}
     />
