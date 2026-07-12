@@ -1,3 +1,4 @@
+import copy
 import sys
 from pathlib import Path
 
@@ -10,6 +11,9 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from app.db import Base  # noqa: E402
 import app.models  # noqa: E402,F401 — registra tutte le tabelle su Base.metadata prima di create_all
+from app.services import (  # noqa: E402
+    audio_analysis_job, library_index_job, mix_identify_job, soulseek_download_job,
+)
 
 CAMELOT_KEYS = [
     "1A", "2A", "3A", "4A", "5A", "6A", "7A", "8A", "9A", "10A", "11A", "12A",
@@ -62,3 +66,40 @@ def _no_real_llm(monkeypatch):
     I test dell'AI monkeypatchano suggest_genre/il client esplicitamente."""
     from app.core.config import settings
     monkeypatch.setattr(settings, "ai_api_key", "")
+
+
+@pytest.fixture(autouse=True)
+def _no_real_library_scan(monkeypatch):
+    """Un test che istanzia TestClient(app) fa scattare il lifespan di app/main.py
+    (ensure_schema +, se LIBRARY_ROOT e' configurato nel .env reale dello
+    sviluppatore, library_index_job.start_job_if_due): senza questo guard un test
+    HTTP-level innescherebbe una scansione VERA della libreria musicale sul disco
+    e scriverebbe sul DB reale (data/djassistant.db) invece che sul DB isolato del
+    test — lento (minuti su una libreria grande) e non isolato tra i test."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "library_root", "")
+
+
+# I 4 job in background (analisi BPM/key, indicizzazione libreria, download
+# Soulseek, identificazione mix Shazam) tengono lo stato in un dict globale di
+# modulo (app locale mono-utente, niente sessione HTTP per il polling). Un test
+# che lascia lo stato a "running" (es. i test della guardia doppio-avvio in
+# test_job_double_start.py) contaminerebbe qualsiasi test successivo che legge
+# job_state() o chiama start_job() aspettandosi lo stato iniziale "idle".
+_JOB_STATE_MODULES = [audio_analysis_job, library_index_job, mix_identify_job, soulseek_download_job]
+_PRISTINE_JOB_STATES = [copy.deepcopy(m._state) for m in _JOB_STATE_MODULES]
+
+
+@pytest.fixture(autouse=True)
+def _reset_job_states():
+    """Ripristina lo stato pristino di ogni job PRIMA e DOPO ogni test: prima, in
+    caso un test precedente l'abbia lasciato sporco senza passare da qui (ordine
+    di esecuzione non garantito); dopo, per non contaminare il test successivo."""
+    def _reset():
+        for module, pristine in zip(_JOB_STATE_MODULES, _PRISTINE_JOB_STATES):
+            module._state.clear()
+            module._state.update(copy.deepcopy(pristine))
+
+    _reset()
+    yield
+    _reset()
