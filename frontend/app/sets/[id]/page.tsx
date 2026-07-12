@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { use, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Sparkles, Download, Lightbulb, SlidersHorizontal,
-  ArrowUp, ArrowDown, Trash2, Replace, Pencil, Check, ChevronDown,
+  ArrowUp, ArrowDown, Trash2, Replace, Pencil, Check, ChevronDown, Plus,
 } from "lucide-react";
 import {
-  apiGet, apiPost, apiPatch, apiDelete, exportSet, fmtDuration, trackLabel,
-  type Setlist, type Alternative, type AlternativeMode, type AlternativesResponse,
+  apiGet, apiPost, apiPatch, apiDelete, addTrackToSet, exportSet, fmtDuration, trackLabel,
+  type Setlist, type Track, type Alternative, type AlternativeMode, type AlternativesResponse,
 } from "@/lib/api";
 import { Card, CardHeader, Button, Input, Badge, Alert, Modal, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -71,9 +71,31 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
   const [altItems, setAltItems] = useState<Alternative[] | null>(null);
   const [altLoading, setAltLoading] = useState(false);
 
+  // aggiungi traccia (A14): ricerca debounced + risultati nel modal
+  const [addOpen, setAddOpen] = useState(false);
+  const [addQuery, setAddQuery] = useState("");
+  const [addResults, setAddResults] = useState<Track[] | null>(null);
+  const [addLoading, setAddLoading] = useState(false);
+
   useEffect(() => {
     apiGet<Setlist>(`/api/sets/${id}`).then(setSetlist).catch((e) => setError(String(e.message ?? e)));
   }, [id]);
+
+  useEffect(() => {
+    if (!addOpen) return;
+    const timer = setTimeout(() => {
+      setAddLoading(true);
+      apiGet<{ total: number; items: Track[] }>("/api/tracks", {
+        title: addQuery || undefined,
+        has_local_file: setlist?.owned_only ? "true" : undefined,
+        limit: 10,
+      })
+        .then((r) => setAddResults(r.items))
+        .catch(() => setAddResults([]))
+        .finally(() => setAddLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [addOpen, addQuery, setlist?.owned_only]);
 
   async function reload(p: Promise<Setlist>, opts?: { silent?: boolean }) {
     if (!opts?.silent) setBusy(true);
@@ -143,6 +165,12 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
     await reload(apiPost<Setlist>(`/api/sets/${id}/tracks/${pos}/replace`, { track_id: alt.track.id }));
   }
 
+  async function addTrack(tr: Track) {
+    if (mutating.current || !setlist) return;
+    mutating.current = true;
+    await reload(addTrackToSet(setlist.id, tr.id)).finally(() => { mutating.current = false; });
+  }
+
   async function doExport(format: "text" | "csv" | "markdown" | "m3u8") {
     if (!setlist) return;
     try {
@@ -184,9 +212,14 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
   const improvements = v.missing_library_suggestions ?? [];
   const attention = [...(v.critical_points ?? []), ...(v.warnings ?? [])];
   const altTrack = altPos != null ? setlist.tracks.find((st) => st.position === altPos) : null;
+  const presentTrackIds = new Set(setlist.tracks.map((st) => st.track.id));
+  const addResultsFiltered = addResults?.filter((tr) => !presentTrackIds.has(tr.id)) ?? null;
 
   const marginalia = (
     <div className="space-y-3">
+      <Button variant="outline" size="sm" className="w-full" onClick={() => { setAddQuery(""); setAddResults(null); setAddLoading(true); setAddOpen(true); }}>
+        <Plus size={15} /> {t.sets.addTrackButton}
+      </Button>
       <div className="grid grid-cols-3 gap-2">
         <Button variant="outline" size="sm" onClick={() => doExport("text")}><Download size={14} /> TXT</Button>
         <Button variant="outline" size="sm" onClick={() => doExport("csv")}>CSV</Button>
@@ -351,6 +384,35 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                   </p>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => substitute(a)}><Check size={14} /> {t.sets.useAlternativeButton}</Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Modal>
+
+      {/* Aggiungi traccia (A14) */}
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} size="lg"
+        title={<span className="flex items-center gap-2"><Plus size={16} className="text-muted" /> {t.sets.addTrackModalTitle}</span>}>
+        <Input autoFocus className="mb-3" value={addQuery} onChange={(e) => setAddQuery(e.target.value)}
+          placeholder={t.sets.addTrackSearchPlaceholder} />
+
+        {addLoading && <div className="flex items-center gap-2 py-6 text-sm text-muted"><Spinner /> {t.common.loading}</div>}
+        {!addLoading && addResultsFiltered && addResultsFiltered.length === 0 && (
+          <p className="py-6 text-center text-sm text-muted">{t.sets.addTrackNoResults}</p>
+        )}
+        {!addLoading && addResultsFiltered && addResultsFiltered.length > 0 && (
+          <ul className="space-y-1.5">
+            {addResultsFiltered.map((tr) => (
+              <li key={tr.id} className="flex items-center gap-3 rounded-none border border-border bg-bg p-2.5">
+                <TrackCover track={tr} className="h-9 w-9" iconSize={15} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2">
+                    <span className="truncate text-sm font-medium">{trackLabel(tr)}</span>
+                    <span className="tnum shrink-0 text-xs text-fg">{tr.bpm?.toFixed(0) ?? "—"} · {tr.camelot_key ?? "?"}</span>
+                    {tr.has_local_file && <Badge tone="success">{t.transitions.hasFileBadge}</Badge>}
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => addTrack(tr)}><Plus size={14} /> {t.sets.addTrackAddButton}</Button>
               </li>
             ))}
           </ul>

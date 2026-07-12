@@ -218,6 +218,11 @@ class ReplaceTrackRequest(BaseModel):
     track_id: int
 
 
+class AddTrackRequest(BaseModel):
+    track_id: int
+    position: int | None = Field(default=None, ge=1)
+
+
 # --- Alternative per traccia (F9) --------------------------------------------
 
 
@@ -692,6 +697,11 @@ class DjSetTrackOut(BaseModel):
     title: str | None = None
     isrc: str | None = None
     confidence: int | None = None
+    # Cross-match deterministico con la libreria (ISRC poi artista+titolo esatto):
+    # None/None se nessuna Track corrisponde. "owned" = file su disco, "in_library"
+    # = presente in libreria/lead ma senza file locale.
+    library_track_id: int | None = None
+    library_status: Literal["owned", "in_library"] | None = None
 
 
 class DjSetSummaryOut(BaseModel):

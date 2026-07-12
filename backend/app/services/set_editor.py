@@ -126,6 +126,43 @@ def move_track(db: Session, setlist_id: int, position: int, direction: str) -> S
     return setlist
 
 
+def add_track(db: Session, setlist_id: int, track_id: int, position: int | None = None) -> Setlist:
+    """Inserisce una traccia nel set. position e' 1-based; default = append in coda.
+
+    Rispetta la garanzia "solo posseduti" come replace_track: un set owned_only
+    non puo' accogliere un lead (traccia senza file locale).
+    """
+    setlist = _require(db, setlist_id)
+    ordered = _ordered(setlist)
+    track = get_track(db, track_id)
+    if track is None:
+        raise SetEditError("Traccia non trovata")
+    if any(st.track_id == track_id for st in ordered):
+        raise SetEditError("La traccia e' gia' presente nel set")
+    if setlist.owned_only and not track.has_local_file:
+        raise SetEditError(
+            "Il set e' nato \"solo brani posseduti\": la traccia da aggiungere "
+            "non ha un file locale. Scarica il brano o scegline uno posseduto."
+        )
+    n = len(ordered)
+    pos = position if position is not None else n + 1
+    if not 1 <= pos <= n + 1:
+        raise SetEditError("Posizione non valida")
+    for st in ordered:
+        if st.position >= pos:
+            st.position += 1
+    setlist.tracks.append(SetlistTrack(track_id=track.id, track=track, position=pos))
+    _renumber(setlist.tracks)
+    total = len(setlist.tracks)
+    # i vicini della posizione inserita (nella nuova numerazione) hanno il contesto cambiato
+    _clear_ai_notes(setlist, {p for p in (pos - 1, pos, pos + 1) if 1 <= p <= total})
+    _reassign_roles(setlist)
+    recompute_transitions(setlist)
+    db.commit()
+    db.refresh(setlist)
+    return setlist
+
+
 def replace_track(db: Session, setlist_id: int, position: int, new_track_id: int) -> Setlist:
     setlist = _require(db, setlist_id)
     ordered = _ordered(setlist)

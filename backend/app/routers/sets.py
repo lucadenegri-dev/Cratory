@@ -14,6 +14,7 @@ from app.db import SessionLocal, get_db
 from app.integrations.llm import LLMError, LLMNotConfigured, get_llm_client, llm_configured
 from app.repositories import get_setlist, list_setlists
 from app.schemas import (
+    AddTrackRequest,
     AlternativesRequest,
     AlternativesResponse,
     MoveTrackRequest,
@@ -29,6 +30,7 @@ from app.services.alternatives import AlternativesError, find_alternatives
 from app.services.app_state import get_language
 from app.services.set_editor import (
     SetEditError,
+    add_track,
     delete_set,
     move_track,
     remove_track,
@@ -251,7 +253,13 @@ def export(
 
 
 def _edit_error(exc: SetEditError) -> HTTPException:
-    status = 404 if "non trovato" in str(exc).lower() else 422
+    msg = str(exc).lower()
+    if "non trovato" in msg or "non trovata" in msg:
+        status = 404
+    elif "gia'" in msg or "già" in msg:
+        status = 409
+    else:
+        status = 422
     return api_error(status, "set_edit_error", f"Set edit error: {exc}", reason=str(exc))
 
 
@@ -275,6 +283,14 @@ def delete(setlist_id: int, db: Session = Depends(get_db)):
 def delete_track(setlist_id: int, position: int, db: Session = Depends(get_db)):
     try:
         return setlist_out(remove_track(db, setlist_id, position), get_language(db))
+    except SetEditError as exc:
+        raise _edit_error(exc) from exc
+
+
+@router.post("/{setlist_id}/tracks", response_model=SetlistOut)
+def add(setlist_id: int, req: AddTrackRequest, db: Session = Depends(get_db)):
+    try:
+        return setlist_out(add_track(db, setlist_id, req.track_id, req.position), get_language(db))
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
