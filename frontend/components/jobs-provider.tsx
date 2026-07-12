@@ -8,7 +8,7 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
-import { EqMeter } from "./ui";
+import { EqMeter, Equalizer } from "./ui";
 
 type Outcome = "done" | "error";
 
@@ -202,6 +202,13 @@ function GlobalProgress({ jobs }: { jobs: Job[] }) {
   const visible = jobs.slice(0, MAX_ROWS);
   const extra = jobs.length - visible.length;
 
+  // Annuncio screen-reader: solo gli esiti terminali (non le percentuali, che
+  // spammerebbero). Cambia una volta quando un job finisce -> letto una volta.
+  const announce = jobs
+    .filter((j) => j.outcome)
+    .map((j) => `${j.label}: ${j.outcome === "done" ? t.jobs.completed : t.common.error}`)
+    .join(". ");
+
   // Spacer in flusso alto quanto la barra fissa: il fondo pagina resta leggibile.
   useEffect(() => {
     setPadH(barRef.current?.offsetHeight ?? 0);
@@ -210,7 +217,13 @@ function GlobalProgress({ jobs }: { jobs: Job[] }) {
   return (
     <>
       <div aria-hidden style={{ height: padH }} />
-      <div ref={barRef} className="fixed inset-x-0 bottom-0 z-40 border-t border-border-strong bg-surface">
+      <p className="sr-only" role="status" aria-live="polite">{announce}</p>
+      <div
+        ref={barRef}
+        role="region"
+        aria-label={t.jobs.regionLabel}
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border-strong bg-surface"
+      >
         <div className="mx-auto max-w-5xl px-4">
           {visible.map((j, i) => <JobRow key={j.key} job={j} first={i === 0} />)}
           {extra > 0 && (
@@ -252,7 +265,7 @@ function JobRow({ job, first }: { job: Job; first: boolean }) {
             )}
           </>
         ) : (
-          <span className="block text-[15px] leading-tight text-faint">···</span>
+          <span aria-hidden className="flex justify-end text-faint"><Equalizer className="h-4 w-8" /></span>
         )}
       </span>
     </div>

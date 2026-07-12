@@ -84,6 +84,7 @@ export const en = {
     libraryIndex: "Library indexing",
     dig: "Crate digging",
     completed: "Completed",
+    regionLabel: "Background jobs",
     downloadSummary: (downloaded: number, pending: number) =>
       `${downloaded} downloaded${pending > 0 ? ` · ${pending} to review` : ""}`,
     moreJobs: (n: number) => (n === 1 ? "+1 more job" : `+${n} more jobs`),

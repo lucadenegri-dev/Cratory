@@ -86,6 +86,7 @@ export const it: Dictionary = {
     libraryIndex: "Indicizzazione libreria",
     dig: "Scava crate",
     completed: "Completata",
+    regionLabel: "Attività in background",
     downloadSummary: (downloaded: number, pending: number) =>
       `${downloaded} scaricate${pending > 0 ? ` · ${pending} da sistemare` : ""}`,
     moreJobs: (n: number) => (n === 1 ? "+1 altro job" : `+${n} altri job`),

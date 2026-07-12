@@ -11,7 +11,7 @@ import {
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
-import { Card, Alert, Progress, Loading } from "@/components/ui";
+import { Card, Alert, EqMeter, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { Figure } from "@/components/dashboard/figure";
 import { Histogram } from "@/components/dashboard/histogram";
@@ -37,7 +37,7 @@ function Coverage({ label, n, total }: { label: string; n: number; total: number
   return (
     <div>
       <div className="mb-1 flex justify-between text-xs"><span className="text-muted">{label}</span><span className="tnum text-muted">{n}/{total} · {pct}%</span></div>
-      <Progress value={pct} />
+      <EqMeter value={pct} calm className="h-4 w-full" />
     </div>
   );
 }
