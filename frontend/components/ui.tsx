@@ -207,9 +207,16 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: {
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Focus del pannello SOLO all'apertura. Non dipende da onClose: le pagine
+  // con poller (es. /downloads) passano una onClose inline che cambia identità
+  // a ogni render; se il focus fosse qui insieme a onClose, ogni poll ruberebbe
+  // il focus a un input mentre l'utente scrive (il campo sembra "non editabile").
+  useEffect(() => {
+    if (open) panelRef.current?.focus();
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    panelRef.current?.focus();
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
