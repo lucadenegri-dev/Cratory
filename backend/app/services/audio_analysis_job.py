@@ -61,7 +61,7 @@ def _run_job(scope: str, track_ids: list[int] | None) -> None:
             _state.update(processed=i,
                           current_label=f"{t.artist or '?'} — {t.title or '?'}")
             try:
-                res = essentia_engine.analyze(t.local_path)
+                res = essentia_engine.analyze_subprocess(t.local_path)
                 t.analysis_bpm, t.analysis_camelot = res.bpm, res.camelot
                 t.analysis_error = None
                 analyzed += 1

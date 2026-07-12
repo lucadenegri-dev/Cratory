@@ -20,7 +20,7 @@ def sync_job(monkeypatch):
     S = sessionmaker(bind=e, expire_on_commit=False)
     monkeypatch.setattr(aj, "SessionLocal", S)
     monkeypatch.setattr(aj, "_spawn", lambda fn: fn())  # sincrono nei test
-    monkeypatch.setattr(aj.essentia_engine, "analyze",
+    monkeypatch.setattr(aj.essentia_engine, "analyze_subprocess",
                         lambda path: AnalysisResult(bpm=128.0, camelot="8A"))
     return aj, S
 
@@ -70,7 +70,7 @@ def test_errore_per_traccia_non_ferma_il_batch(sync_job, monkeypatch):
 
     def _boom(path):
         raise RuntimeError("file corrotto")
-    monkeypatch.setattr(aj.essentia_engine, "analyze", _boom)
+    monkeypatch.setattr(aj.essentia_engine, "analyze_subprocess", _boom)
     aj.start_job(scope="all")
     st = aj.job_state()
     assert st["status"] == "done" and st["failed"] == 2

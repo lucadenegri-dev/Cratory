@@ -40,3 +40,21 @@ def test_analyze_click_track(tmp_path):
     res = eng.analyze(str(p))
     assert res.bpm is not None and abs(res.bpm - 120.0) < 2.0
     # La key di un click track non e' significativa: basta che non crashi.
+
+
+@pytest.mark.skipif(not eng.is_available(), reason="Essentia non installata")
+def test_analyze_subprocess_click_track(tmp_path):
+    """analyze_subprocess deve dare lo stesso BPM di analyze, ma isolando Essentia
+    in un processo separato (non trattiene il GIL del web server)."""
+    p = tmp_path / "click120.wav"
+    _click_track_wav(p, bpm=120.0)
+    res = eng.analyze_subprocess(str(p))
+    assert res.bpm is not None and abs(res.bpm - 120.0) < 2.0
+
+
+def test_analyze_subprocess_raises_on_bad_file(tmp_path):
+    """File inesistente: il worker esce con codice != 0 e analyze_subprocess
+    solleva — così il job registra analysis_error e prosegue il batch. Vale a
+    prescindere da Essentia (assente -> import error nel worker -> rc != 0)."""
+    with pytest.raises(Exception):
+        eng.analyze_subprocess(str(tmp_path / "non-esiste.wav"))

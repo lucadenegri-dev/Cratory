@@ -255,7 +255,12 @@ owned tracks: local BPM/key extraction via Essentia, without leaving Cratory.
   `RhythmExtractor2013` (method `multifeature`) for BPM and `KeyExtractor` (profile
   `edma`, tuned for electronic music) for key, converting the result to the
   project's canonical Camelot notation. Pinned to `essentia==2.1b6.dev1389`
-  (AGPL-3.0) — see `docs/DEPENDENCIES.md`.
+  (AGPL-3.0) — see `docs/DEPENDENCIES.md`. `analyze_subprocess(path)` runs the same
+  analysis in a short-lived child process (`essentia_worker.py`): Essentia is C++
+  and holds the GIL for seconds per real track, so running it in the job thread of
+  the single-worker server would freeze every concurrent request — the subprocess
+  isolates that CPU-bound work (same rationale as ffmpeg in the library index), and
+  the job calls this variant, not `analyze`.
 - **`services/audio_analysis.py`**: the only bridge from `analysis_*` to the
   canonical `bpm`/`camelot_key`. `diverges(track)` flags a mismatch (BPM compared
   at 1-decimal precision, key exact match). `apply_analysis` copies the analyzed
@@ -265,7 +270,7 @@ owned tracks: local BPM/key extraction via Essentia, without leaving Cratory.
 - **`services/audio_analysis_job.py`**: background job (same in-memory
   single-job-with-lock pattern as `library_index_job`). Selects owned tracks with a
   local file (`scope="missing"` = without BPM or key, `scope="all"` or explicit
-  `track_ids` = every candidate), analyzes each with `essentia_engine.analyze`,
+  `track_ids` = every candidate), analyzes each with `essentia_engine.analyze_subprocess`,
   writes `analysis_bpm`/`analysis_camelot`/`analyzed_at` (or `analysis_error` on a
   decode failure, without stopping the batch), then calls `auto_apply_missing`.
   Commits per track so progress survives an interruption.
