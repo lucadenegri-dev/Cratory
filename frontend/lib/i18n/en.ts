@@ -178,6 +178,9 @@ export const en = {
     compatUnknown: "—",
     applyRow: "Apply",
     applySelected: (n: number) => `Apply selected (${n})`,
+    applySelectedProtected: (n: number) => `${n} would overwrite manual/Rekordbox values`,
+    applySelectedConfirm: (n: number) =>
+      `${n} selected ${n === 1 ? "row has a manual correction" : "rows have manual corrections"} that will be overwritten. Continue?`,
     forceApplyAll: "Force apply all",
     forceConfirm: "Overwrite BPM/key of ALL analyzed tracks (including manual and Rekordbox values)? This cannot be undone.",
     appliedSummary: (applied: number, skipped: number) => `${applied} applied · ${skipped} unchanged`,

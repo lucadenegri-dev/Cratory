@@ -180,6 +180,9 @@ export const it: Dictionary = {
     compatUnknown: "—",
     applyRow: "Applica",
     applySelected: (n: number) => `Applica selezionate (${n})`,
+    applySelectedProtected: (n: number) => `${n} sovrascriveranno valori manuali/Rekordbox`,
+    applySelectedConfirm: (n: number) =>
+      `${n} ${n === 1 ? "riga selezionata ha una correzione manuale" : "righe selezionate hanno correzioni manuali"} che verranno sovrascritte. Continuare?`,
     forceApplyAll: "Forza su tutte",
     forceConfirm: "Sovrascrivere BPM/key di TUTTE le tracce analizzate (compresi valori manuali e Rekordbox)? L'operazione non è annullabile.",
     appliedSummary: (applied: number, skipped: number) => `${applied} applicate · ${skipped} invariate`,

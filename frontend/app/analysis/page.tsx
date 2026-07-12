@@ -90,6 +90,24 @@ export default function AnalysisPage() {
     await onApply({ mode: "all", force: true });
   };
 
+  // Apply selected sovrascrive la provenienza attuale con 'cratory'. Contiamo,
+  // fra le righe selezionate, quante calpesterebbero un valore manuale o
+  // Rekordbox (per l'avviso) e quante specificamente manuale (per la conferma).
+  const selectedRows = rows.filter((r) => selected.has(r.track_id));
+  const isProtected = (r: AnalysisDivergence) =>
+    r.bpm_source === "manual" || r.bpm_source === "rekordbox" ||
+    r.key_source === "manual" || r.key_source === "rekordbox";
+  const protectedCount = selectedRows.filter(isProtected).length;
+  const manualCount = selectedRows.filter(
+    (r) => r.bpm_source === "manual" || r.key_source === "manual").length;
+
+  const onApplySelected = async () => {
+    // Le correzioni manuali sono la massima autorità: conferma esplicita prima
+    // di sovrascriverle in blocco (il force-all ha già la sua conferma a parte).
+    if (manualCount > 0 && !window.confirm(t.analysis.applySelectedConfirm(manualCount))) return;
+    await onApply({ track_ids: [...selected] });
+  };
+
   const toggle = (id: number) =>
     setSelected((s) => {
       const n = new Set(s);
@@ -170,21 +188,26 @@ export default function AnalysisPage() {
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">
               {t.analysis.divergencesHeading}
             </h2>
-            <div className="flex gap-2">
-              <Button
-                size="sm" variant="outline"
-                disabled={busy || selected.size === 0}
-                onClick={() => onApply({ track_ids: [...selected] })}
-              >
-                {t.analysis.applySelected(selected.size)}
-              </Button>
-              <Button
-                size="sm" variant="danger"
-                disabled={busy || (overview?.analyzed ?? 0) === 0}
-                onClick={onForceAll}
-              >
-                {t.analysis.forceApplyAll}
-              </Button>
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex gap-2">
+                <Button
+                  size="sm" variant="outline"
+                  disabled={busy || selected.size === 0}
+                  onClick={onApplySelected}
+                >
+                  {t.analysis.applySelected(selected.size)}
+                </Button>
+                <Button
+                  size="sm" variant="danger"
+                  disabled={busy || (overview?.analyzed ?? 0) === 0}
+                  onClick={onForceAll}
+                >
+                  {t.analysis.forceApplyAll}
+                </Button>
+              </div>
+              {protectedCount > 0 && (
+                <Badge tone="warning">{t.analysis.applySelectedProtected(protectedCount)}</Badge>
+              )}
             </div>
           </div>
           {rows.length === 0 ? (
