@@ -190,12 +190,16 @@ def sync_playlist(playlist_id: int, db: Session = Depends(get_db)):
                 raise api_error(422, "soundcloud_invalid_url", str(exc), reason=str(exc)) from exc
             raise api_error(502, "soundcloud_error", str(exc), reason=str(exc)) from exc
         # Additivo (prune=False): su SoundCloud un takedown non significa
-        # "non mi interessa più" — il lead resta collegato.
+        # "non mi interessa più" — il lead resta collegato. Titolo/uploader/copertina
+        # riletti dalla sorgente (A25), con fallback ai valori attuali.
+        thumbnails = info.get("thumbnails") or []
         report = import_playlist(
-            db, platform="soundcloud", name=playlist.name, items=info["entries"],
+            db, platform="soundcloud",
+            name=info.get("title") or playlist.name, items=info["entries"],
             normalize=normalize_soundcloud_item,
             platform_playlist_id=playlist.platform_playlist_id,
-            owner=playlist.owner, url=playlist.url, artwork_url=playlist.artwork_url,
+            owner=info.get("uploader") or playlist.owner, url=playlist.url,
+            artwork_url=(thumbnails[-1].get("url") if thumbnails else playlist.artwork_url),
             kind=playlist.kind, prune=False,
         )
         return PlaylistImportReport(**report)
@@ -209,18 +213,27 @@ def sync_playlist(playlist_id: int, db: Session = Depends(get_db)):
         raise api_error(409, "playlist_not_syncable", "This playlist can't be synced from Spotify.")
 
     client = SpotifyWebClient(db)
+    # I liked non hanno meta: nome di sistema fisso. Le playlist vere rileggono
+    # nome/owner/url/copertina dalla sorgente (A25), con fallback ai valori attuali.
+    name, owner, url, artwork = playlist.name, playlist.owner, playlist.url, playlist.artwork_url
     try:
         if playlist.kind == "liked":
             items = client.get_liked_tracks()
         else:
+            meta = client.get_playlist_meta(playlist.platform_playlist_id)
             items = client.get_playlist_tracks(playlist.platform_playlist_id)
+            images = meta.get("images") or []
+            name = meta.get("name") or name
+            owner = (meta.get("owner") or {}).get("display_name") or owner
+            url = (meta.get("external_urls") or {}).get("spotify") or url
+            artwork = images[0]["url"] if images else artwork
     except SpotifyError as exc:
         raise _http_error(exc) from exc
 
     report = import_playlist(
-        db, platform="spotify", name=playlist.name, items=items,
+        db, platform="spotify", name=name, items=items,
         platform_playlist_id=playlist.platform_playlist_id,
-        owner=playlist.owner, url=playlist.url, artwork_url=playlist.artwork_url,
+        owner=owner, url=url, artwork_url=artwork,
         kind=playlist.kind, prune=True,
     )
     # Enrichment non piu' avviato qui: e' ora responsabilita' di Sortory.

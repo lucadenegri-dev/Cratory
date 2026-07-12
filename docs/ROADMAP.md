@@ -101,6 +101,10 @@ manual-then-Spotify no longer duplicates), A16 (expand dedups owned variants via
 label returns via the own→Sortory→index loop, and writing it in Cratory would fight Sortory's
 ownership of that field.
 
+**Fixed on master (incremental, post-triage):** A25 (playlist sync now refreshes name/cover/owner
+from the source — Spotify via `get_playlist_meta`, SoundCloud via the fetched `title`/thumbnails;
+2026-07-12).
+
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
 - **Discovery** — A17 dig fetches a single Discogs page + swallows errors (429/missing token →
@@ -131,10 +135,9 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   auto-start; A28 "Search on Soulseek" from the wishlist track detail.
 - **Streaming import/sync (Spotify + SoundCloud)** — A10 import/sync synchronous in the request
   (thousands of liked = minutes with no progress): job+polling; A12 sync unlinks Discovery-added
-  tracks (no `added_by` provenance column exists); A25 sync does not refresh playlist name/cover
-  from the source. NB: SoundCloud import (yt-dlp) now exists too — A10 applies to it as well (the
-  flat extraction is sequential/slow), A11 dedup is already platform-agnostic, and A25/name-cover
-  should cover SoundCloud sync too where the source exposes them.
+  tracks (no `added_by` provenance column exists). NB: SoundCloud import (yt-dlp) now exists too —
+  A10 applies to it as well (the flat extraction is sequential/slow); A11 dedup and A25 name/cover
+  refresh are already platform-agnostic (both covered for Spotify + SoundCloud).
 - **Library/index** — A6-UI library gaps not shown in the dashboard (reintroduce the
   `libraryGaps` client); ⚠️ B2 per-row ownership badge present, but the ownership *filter* in the
   playlist table is missing; B1 filters/sort/pagination lost on back-nav (serialize into the

@@ -168,6 +168,25 @@ def test_sync_soundcloud_additivo_senza_prune(api_db, monkeypatch):
     assert pl.track_count == 3
 
 
+def test_sync_soundcloud_refreshes_name_and_cover(api_db, monkeypatch):
+    # A25 (gemello SoundCloud): il sync rilegge titolo/copertina dalla sorgente.
+    monkeypatch.setattr(sc_router, "fetch_playlist", lambda url: _info([_entry(1)]))
+    body = client.post("/api/soundcloud/import",
+                       json={"url": "https://soundcloud.com/digger/sets/deep-crate"}).json()
+
+    import app.routers.playlists as pl_router
+    renamed = {"id": "12345", "title": "Deep Crate Vol.2", "uploader": "digger",
+               "webpage_url": "https://soundcloud.com/digger/sets/deep-crate",
+               "thumbnails": [{"url": "http://sc/cover-v2.jpg"}], "entries": [_entry(1)]}
+    monkeypatch.setattr(pl_router, "sc_fetch_playlist", lambda url: renamed)
+    r = client.post(f"/api/playlists/{body['playlist_id']}/sync")
+    assert r.status_code == 200
+
+    pl = api_db.get(Playlist, body["playlist_id"])
+    assert pl.name == "Deep Crate Vol.2"
+    assert pl.artwork_url == "http://sc/cover-v2.jpg"
+
+
 def test_sync_liked_soundcloud_409(api_db, monkeypatch):
     client.put("/api/soundcloud/config", json={"username": "luca"})
     monkeypatch.setattr(sc_router, "fetch_likes", lambda username, limit=100: _info([_entry(1)]))

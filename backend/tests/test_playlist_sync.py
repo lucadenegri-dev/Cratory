@@ -115,6 +115,9 @@ class _FakeSpotify:
     def get_liked_tracks(self):
         return self._items
 
+    def get_playlist_meta(self, playlist_id):
+        return {}  # default innocuo: nessun refresh di nome/cover
+
 
 def test_sync_endpoint_reports_added_and_removed(db, monkeypatch):
     import_playlist(db, platform="spotify", name="PL", items=[
@@ -135,6 +138,52 @@ def test_sync_endpoint_reports_added_and_removed(db, monkeypatch):
     assert report.total == 2
     pl = db.query(Playlist).filter(Playlist.platform_playlist_id == "PL1").one()
     assert db.query(Track).filter(Track.isrc == "ISRC0000002").one() not in tracks_for_playlist(db, pl.id)
+
+
+def test_sync_refreshes_name_and_cover_from_spotify(db, monkeypatch):
+    # A25: il sync deve rileggere nome/copertina dalla sorgente, non riusare i vecchi.
+    import_playlist(db, platform="spotify", name="Vecchio Nome", items=[
+        _spotify_item("t1", name="One", artist="A", isrc="ISRC0000001"),
+    ], platform_playlist_id="PL1", artwork_url="http://old/cover.jpg")
+    playlist = db.query(Playlist).filter(Playlist.platform_playlist_id == "PL1").one()
+
+    class _FakeWithMeta(_FakeSpotify):
+        def get_playlist_meta(self, playlist_id):
+            return {
+                "name": "Nuovo Nome",
+                "owner": {"display_name": "DJ Owner"},
+                "external_urls": {"spotify": "https://open.spotify.com/playlist/PL1"},
+                "images": [{"url": "http://new/cover.jpg"}],
+            }
+
+    fake = _FakeWithMeta([_spotify_item("t1", name="One", artist="A", isrc="ISRC0000001")])
+    monkeypatch.setattr(playlists_router, "SpotifyWebClient", lambda _db: fake)
+
+    playlists_router.sync_playlist(playlist.id, db)
+
+    pl = db.query(Playlist).filter(Playlist.platform_playlist_id == "PL1").one()
+    assert pl.name == "Nuovo Nome"
+    assert pl.artwork_url == "http://new/cover.jpg"
+
+
+def test_sync_liked_does_not_refresh_name(db, monkeypatch):
+    # I liked non hanno meta: il nome resta quello di sistema, niente chiamata a get_playlist_meta.
+    from app.services.playlist_import import LIKED_PLAYLIST_NAME
+    import_playlist(db, platform="spotify", name=LIKED_PLAYLIST_NAME, items=[
+        _spotify_item("t1", name="One", artist="A", isrc="ISRC0000001"),
+    ], kind="liked")
+    playlist = db.query(Playlist).filter(Playlist.kind == "liked").one()
+
+    class _NoMeta(_FakeSpotify):
+        def get_playlist_meta(self, playlist_id):
+            raise AssertionError("get_playlist_meta non va chiamato per i liked")
+
+    monkeypatch.setattr(playlists_router, "SpotifyWebClient",
+                        lambda _db: _NoMeta([_spotify_item("t1", name="One", artist="A", isrc="ISRC0000001")]))
+    playlists_router.sync_playlist(playlist.id, db)
+
+    pl = db.query(Playlist).filter(Playlist.kind == "liked").one()
+    assert pl.name == LIKED_PLAYLIST_NAME
 
 
 def test_sync_endpoint_rejects_manual_playlist(db):
