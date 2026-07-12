@@ -26,8 +26,9 @@ from app.services.soulseek_select import auto_pick_candidates, search_candidates
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL = 2.0
-DOWNLOAD_TIMEOUT = 180.0       # tetto per un transfer che sta effettivamente scaricando
+STALL_TIMEOUT = 60.0           # transfer InProgress ma bytesTransferred fermo da tanto: ci si arrende
 QUEUE_PATIENCE = 45.0          # oltre questo, se resta solo in coda, si prova un altro utente
+HARD_TIMEOUT = 1800.0          # tetto assoluto anche se il progresso avanza (lossless da peer lenti)
 MAX_ATTEMPTS = 4               # quanti candidati (utenti diversi) provare per traccia
 
 _lock = threading.Lock()
@@ -78,14 +79,20 @@ def _resolve_local_path(download_dir: str, filename: str) -> str | None:
 def _wait_for_download(client, file: SlskdFile) -> tuple[str, str | None]:
     """Attende l'esito di un transfer. Ritorna (esito, motivo).
 
-    Se il transfer sta scaricando ("InProgress") si concede fino a DOWNLOAD_TIMEOUT;
-    se invece resta solo in coda (Queued/Requested) oltre QUEUE_PATIENCE ci si arrende,
-    cosi' il chiamante puo' provare un altro utente col fallback.
+    Se il transfer sta scaricando ("InProgress") si guarda `bytesTransferred`: finche'
+    avanza si continua ad attendere anche oltre un tetto fisso (un file lossless da un
+    peer lento puo' metterci parecchio), fino al tetto assoluto HARD_TIMEOUT. Se i byte
+    restano fermi per STALL_TIMEOUT si conclude che il transfer e' bloccato e si desiste.
+    Se invece resta solo in coda (Queued/Requested) oltre QUEUE_PATIENCE ci si arrende
+    subito, cosi' il chiamante puo' provare un altro utente col fallback.
     """
     waited = 0.0
     queued = 0.0
-    while waited < DOWNLOAD_TIMEOUT:
-        state = (client.transfer_state(file.username, file.filename) or {}).get("state", "")
+    stalled = 0.0
+    last_bytes: float | None = None
+    while waited < HARD_TIMEOUT:
+        info = client.transfer_state(file.username, file.filename) or {}
+        state = info.get("state", "")
         cls = classify_transfer_state(state)
         if cls == "completed":
             return "completed", None
@@ -93,6 +100,17 @@ def _wait_for_download(client, file: SlskdFile) -> tuple[str, str | None]:
             return "failed", "transfer_failed"
         if "inprogress" in state.lower():
             queued = 0.0
+            transferred = info.get("bytesTransferred")
+            if isinstance(transferred, (int, float)):
+                if last_bytes is not None and transferred <= last_bytes:
+                    stalled += POLL_INTERVAL
+                    if stalled >= STALL_TIMEOUT:
+                        return "failed", "download_timeout"
+                else:
+                    stalled = 0.0
+                last_bytes = transferred
+            # bytesTransferred non esposto: nessun dato per rilevare lo stallo,
+            # si prosegue affidandosi solo al tetto assoluto HARD_TIMEOUT.
         else:
             queued += POLL_INTERVAL
             if queued >= QUEUE_PATIENCE:

@@ -53,7 +53,8 @@ def patch_job(monkeypatch, tmp_path):
     monkeypatch.setattr(job, "SessionLocal", TestSession)
     monkeypatch.setattr(job.settings, "slskd_download_dir", str(download_dir))
     monkeypatch.setattr(job, "POLL_INTERVAL", 0.0)
-    monkeypatch.setattr(job, "DOWNLOAD_TIMEOUT", 1.0)
+    monkeypatch.setattr(job, "STALL_TIMEOUT", 1.0)
+    monkeypatch.setattr(job, "HARD_TIMEOUT", 1.0)
     fake = _FakeClient("bob\\Da Funk.flac")
     monkeypatch.setattr(job, "get_slskd_client", lambda: fake)
     # reset stato globale (contatori e items sono cumulativi tra una chiamata
@@ -447,6 +448,77 @@ def test_queue_timeout_sets_reason(patch_job, monkeypatch):
     db = TestSession(); t2 = db.get(Track, track_id)
     assert t2.last_download_reason == "queue_timeout"
     db.close()
+
+
+# --- A20: stall-detection su byte trasferiti invece del vecchio tetto fisso ---
+
+
+class _ProgressClient:
+    """Transfer InProgress con bytesTransferred crescente ad ogni poll, poi completa."""
+
+    def __init__(self, completes_after: int):
+        self.completes_after = completes_after
+        self.calls = 0
+
+    def transfer_state(self, username, filename):
+        self.calls += 1
+        if self.calls >= self.completes_after:
+            return {"state": "Completed, Succeeded", "bytesTransferred": self.calls * 10}
+        return {"state": "InProgress", "bytesTransferred": self.calls * 10}
+
+
+class _StalledClient:
+    """Transfer InProgress con bytesTransferred fermo: non completa mai."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def transfer_state(self, username, filename):
+        self.calls += 1
+        return {"state": "InProgress", "bytesTransferred": 500}
+
+
+def _slskd_file():
+    return SlskdFile(username="bob", filename="bob\\x.flac", size=10, bitrate=None,
+                     length=None, has_free_slot=True, queue_length=0)
+
+
+def test_wait_for_download_progresso_oltre_il_vecchio_tetto_180s(monkeypatch):
+    # Transfer che scarica attivamente per ~200s (oltre il vecchio DOWNLOAD_TIMEOUT
+    # fisso di 180s = 90 poll da 2s): con bytesTransferred crescente ad ogni poll
+    # NON deve essere ucciso, deve arrivare a completamento.
+    monkeypatch.setattr(job.time, "sleep", lambda s: None)  # niente attesa reale
+    client = _ProgressClient(completes_after=100)  # 100 * POLL_INTERVAL(2.0) = 200s
+    outcome, reason = job._wait_for_download(client, _slskd_file())
+    assert outcome == "completed"
+    assert reason is None
+    assert client.calls == 100
+
+
+def test_wait_for_download_stallo_senza_avanzamento_byte_va_in_timeout(monkeypatch):
+    # bytesTransferred fermo per STALL_TIMEOUT: stesso esito di prima (timeout),
+    # ma si arrende molto prima del tetto assoluto invece di aspettare inutilmente.
+    monkeypatch.setattr(job.time, "sleep", lambda s: None)
+    monkeypatch.setattr(job, "STALL_TIMEOUT", 4.0)  # 2 poll da 2.0s
+    client = _StalledClient()
+    outcome, reason = job._wait_for_download(client, _slskd_file())
+    assert outcome == "failed"
+    assert reason == "download_timeout"
+    # si e' arreso dopo lo stallo, non ha macinato poll fino al tetto assoluto
+    assert client.calls <= 3
+
+
+def test_wait_for_download_rispetta_il_tetto_assoluto(monkeypatch):
+    # Anche con byte sempre crescenti (mai in stallo), un tetto assoluto HARD_TIMEOUT
+    # deve comunque far desistere prima o poi (lossless da peer lentissimi).
+    monkeypatch.setattr(job.time, "sleep", lambda s: None)
+    monkeypatch.setattr(job, "HARD_TIMEOUT", 6.0)  # 3 poll da 2.0s
+    monkeypatch.setattr(job, "STALL_TIMEOUT", 3600.0)  # non deve essere lo stallo a scattare
+    client = _ProgressClient(completes_after=10_000)  # non completa mai entro il tetto
+    outcome, reason = job._wait_for_download(client, _slskd_file())
+    assert outcome == "failed"
+    assert reason == "download_timeout"
+    assert client.calls == 3
 
 
 def test_cascade_all_failed_surfaces_specific_reason(patch_job, monkeypatch):
