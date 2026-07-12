@@ -353,7 +353,7 @@ def add_discovered_track(playlist_id: int, req: PlaylistAddTrackRequest, db: Ses
 @router.get("/library/gaps", response_model=GapAnalysisResponse)
 def library_gaps(db: Session = Depends(get_db)):
     tracks = all_playable_tracks(db)
-    gaps = analyze_gaps(tracks)
+    gaps = analyze_gaps(tracks, scope="library")
     return GapAnalysisResponse(
         scope="library", track_count=len(tracks),
         gaps=[GapOut(**g) for g in gaps],

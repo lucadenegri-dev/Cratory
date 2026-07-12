@@ -125,7 +125,7 @@ def _check_energy_uniform(tracks: list[Track]) -> Gap | None:
     if len(energies) >= 5 and _std([float(e) for e in energies]) < _UNIFORM_ENERGY_STD:
         return Gap(
             "uniform_energy", "info",
-            "Energia molto piatta lungo la playlist: poca dinamica per un set.",
+            "Energia molto piatta: poca dinamica per un set.",
             "Aggiungi brani piu' calmi e altri piu' intensi per creare una progressione.",
         )
     return None
@@ -172,10 +172,20 @@ _CHECKS = (
     _check_genre_spread,
 )
 
+# A livello di LIBRERIA i controlli di coerenza genere non hanno senso: una
+# collezione che spazia su molti generi e' sana (crate digging), non un difetto.
+# Restano validi per le playlist, che sono la fonte di un singolo set.
+_LIBRARY_SKIP = {_check_genre_spread}
 
-def analyze_gaps(tracks: list[Track]) -> list[dict]:
-    """Ritorna la lista dei findings (dizionari pronti per la response)."""
+
+def analyze_gaps(tracks: list[Track], scope: str = "playlist") -> list[dict]:
+    """Ritorna la lista dei findings (dizionari pronti per la response).
+
+    `scope`: "playlist" (default) o "library" — la libreria salta i controlli
+    pensati per la coerenza di una singola playlist (vedi _LIBRARY_SKIP).
+    """
     if not tracks:
         return []
-    findings = [check(tracks) for check in _CHECKS]
+    checks = [c for c in _CHECKS if scope != "library" or c not in _LIBRARY_SKIP]
+    findings = [check(tracks) for check in checks]
     return [asdict(g) for g in findings if g is not None]

@@ -171,7 +171,8 @@ export default function Dashboard() {
               </div>
               <MiniBars rows={labelRows} />
 
-              {gaps && (
+              {/* Card visibile solo se ci sono lacune: niente testo segnaposto in dashboard. */}
+              {gaps && gaps.gaps.length > 0 && (
                 <>
                   <SubLabel icon={<AlertTriangle size={12} />}>{t.dashboard.libraryGaps}</SubLabel>
                   <GapsList gaps={gaps.gaps} empty={t.dashboard.noStructuralGaps} />
