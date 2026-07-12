@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     ai_thinking: str = "adaptive"  # adaptive | disabled
     ai_timeout_seconds: float = 120.0
 
+    @field_validator("library_root", "archive_root", "slskd_download_dir")
+    @classmethod
+    def expand_user_paths(cls, value: str) -> str:
+        """`~` va espanso: un LIBRARY_ROOT='~/Music' altrimenti non risolve e
+        indicizzazione/download falliscono in silenzio. Vuoto = feature disattiva."""
+        return str(Path(value).expanduser()) if value else ""
+
     @field_validator("database_url")
     @classmethod
     def normalize_database_url(cls, value: str) -> str:
