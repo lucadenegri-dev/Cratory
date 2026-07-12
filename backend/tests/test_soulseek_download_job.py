@@ -301,6 +301,74 @@ def test_slskd_giu_ferma_il_job_con_errore_chiaro(patch_job, monkeypatch):
     assert st["processed"] < 2  # si e' fermato alla prima, niente accanimento
 
 
+# --- Auto-pick: confidenza valutata su tutti i candidati, non solo il primo ----
+
+
+def _cand(username, *, score, confidence):
+    from app.services.soulseek_select import ScoredCandidate
+    f = SlskdFile(username=username, filename=f"{username}\\Da Funk.flac", size=10,
+                  bitrate=None, length=None, has_free_slot=True, queue_length=0)
+    return ScoredCandidate(file=f, name_score=0.5, quality_tier=3,
+                           score=score, confidence=confidence)
+
+
+def _make_track(TestSession, spotify_id):
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id=spotify_id, source_type="spotify",
+              title="Da Funk", artist="Daft Punk")
+    db.add(t); db.commit(); track_id = t.id; db.close()
+    return track_id
+
+
+def test_auto_pick_preferisce_candidato_confidente_a_score_inferiore(patch_job, monkeypatch):
+    # Il primo per score e' incerto (confidence sotto soglia) ma piu' in basso
+    # c'e' un candidato affidabile: l'auto-pick deve scegliere QUELLO, non
+    # arrendersi a needs_review guardando solo ranked[0].
+    TestSession, fake = patch_job
+    ranked = [_cand("topuser", score=150, confidence=0.5),
+              _cand("gooduser", score=120, confidence=0.9)]
+    monkeypatch.setattr(job, "search_candidates", lambda *a, **kw: ranked)
+    track_id = _make_track(TestSession, "conf1")
+
+    job._run([(track_id, None)], None)
+
+    st = job.job_state()
+    assert st["downloaded"] == 1
+    assert st["needs_review"] == 0
+    assert [f.username for f in fake.enqueued] == ["gooduser"]
+
+
+def test_auto_pick_nessun_confidente_va_in_needs_review(patch_job, monkeypatch):
+    # Nessun candidato sopra soglia: needs_review come prima, stesso motivo.
+    TestSession, fake = patch_job
+    ranked = [_cand("topuser", score=150, confidence=0.5),
+              _cand("other", score=120, confidence=0.6)]
+    monkeypatch.setattr(job, "search_candidates", lambda *a, **kw: ranked)
+    track_id = _make_track(TestSession, "conf2")
+
+    job._run([(track_id, None)], None)
+
+    st = job.job_state()
+    assert st["needs_review"] == 1
+    assert st["items"][0]["reason"] == "confidenza sotto soglia per l'auto-pick"
+    assert fake.enqueued == []
+
+
+def test_auto_pick_primo_confidente_resta_scelto(patch_job, monkeypatch):
+    # Il primo per score e' anche confidente: si sceglie lui (nessun cambio).
+    TestSession, fake = patch_job
+    ranked = [_cand("topuser", score=150, confidence=0.9),
+              _cand("other", score=120, confidence=0.8)]
+    monkeypatch.setattr(job, "search_candidates", lambda *a, **kw: ranked)
+    track_id = _make_track(TestSession, "conf3")
+
+    job._run([(track_id, None)], None)
+
+    st = job.job_state()
+    assert st["downloaded"] == 1
+    assert [f.username for f in fake.enqueued] == ["topuser"]
+
+
 def test_start_track_autopick_job_builds_correct_items(monkeypatch):
     captured = {}
     monkeypatch.setattr(

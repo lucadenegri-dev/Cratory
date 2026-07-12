@@ -21,7 +21,7 @@ from app.integrations.slskd import (
 )
 from app.repositories import get_track, tracks_without_local_file
 from app.services.acquisition import attach_local_file
-from app.services.soulseek_select import AUTO_PICK_MIN_CONFIDENCE, search_candidates
+from app.services.soulseek_select import auto_pick_candidates, search_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -164,12 +164,15 @@ def _process_item(db, client, download_dir, track,
                                title=track.title or "", expected_duration=expected)
     if not ranked:
         return "not_found", None, None
-    if ranked[0].confidence < AUTO_PICK_MIN_CONFIDENCE:
+    # La confidenza si valuta su tutti i candidati: un primo posto incerto non
+    # deve oscurare un candidato affidabile piu' in basso nella classifica.
+    eligible = auto_pick_candidates(ranked)
+    if not eligible:
         return "needs_review", "confidenza sotto soglia per l'auto-pick", None
     # Fallback: prova i migliori candidati, un utente diverso alla volta, finche' uno riesce.
     tried: set[str] = set()
     last_reason: str | None = None
-    for cand in ranked:
+    for cand in eligible:
         if len(tried) >= MAX_ATTEMPTS:
             break
         if cand.file.username in tried:

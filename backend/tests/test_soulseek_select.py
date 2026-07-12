@@ -1,7 +1,7 @@
 from app.integrations.slskd import SlskdFile
 from app.services.soulseek_select import (
-    QualityPreference, best_for_auto, query_variants, rank_candidates,
-    search_candidates,
+    QualityPreference, ScoredCandidate, auto_pick_candidates, best_for_auto,
+    query_variants, rank_candidates, search_candidates,
 )
 
 
@@ -136,6 +136,31 @@ def test_original_mix_equivale_a_nessuna_versione():
     files = [_f("Artist - Song (Original Mix).flac")]
     ranked = rank_candidates(files, artist="Artist", title="Song")
     assert len(ranked) == 1
+
+
+# --- Auto-pick: la confidenza si valuta su OGNI candidato -----------------------
+
+
+def _sc(score, confidence):
+    return ScoredCandidate(file=_f("Artist - Song.flac"), name_score=0.5,
+                           quality_tier=3, score=score, confidence=confidence)
+
+
+def test_auto_pick_candidates_filtra_per_confidenza():
+    # Il primo per score e' incerto: non deve oscurare il candidato confidente
+    # piu' in basso (prima si guardava solo ranked[0] → needs_review a torto).
+    ranked = [_sc(150, 0.5), _sc(120, 0.9), _sc(100, 0.3)]
+    eligible = auto_pick_candidates(ranked)
+    assert [c.score for c in eligible] == [120]
+
+
+def test_auto_pick_candidates_vuota_se_tutti_sotto_soglia():
+    assert auto_pick_candidates([_sc(150, 0.69), _sc(120, 0.4)]) == []
+
+
+def test_auto_pick_candidates_preserva_ordine_per_score():
+    ranked = [_sc(150, 0.9), _sc(120, 0.8)]
+    assert [c.score for c in auto_pick_candidates(ranked)] == [150, 120]
 
 
 # --- uploadSpeed ---------------------------------------------------------------

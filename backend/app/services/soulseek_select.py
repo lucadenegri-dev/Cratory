@@ -197,14 +197,26 @@ def rank_candidates(files, *, artist: str, title: str,
     return scored
 
 
+def auto_pick_candidates(ranked: list[ScoredCandidate]) -> list[ScoredCandidate]:
+    """Candidati eleggibili all'auto-pick: confidenza sopra soglia, ordine per
+    score preservato.
+
+    La confidenza si valuta su OGNI candidato, non solo sul primo per score:
+    lo score premia anche disponibilita'/velocita', quindi un candidato piu'
+    in basso ma affidabile non deve essere oscurato da un primo posto incerto.
+    Lista vuota = nessun candidato affidabile → needs_review a carico del
+    chiamante.
+    """
+    return [c for c in ranked if c.confidence >= AUTO_PICK_MIN_CONFIDENCE]
+
+
 def best_for_auto(files, *, artist: str, title: str,
                   pref: QualityPreference = QualityPreference(),
                   expected_duration: int | None = None) -> ScoredCandidate | None:
     ranked = rank_candidates(files, artist=artist, title=title, pref=pref,
                              expected_duration=expected_duration)
-    if ranked and ranked[0].confidence >= AUTO_PICK_MIN_CONFIDENCE:
-        return ranked[0]
-    return None
+    eligible = auto_pick_candidates(ranked)
+    return eligible[0] if eligible else None
 
 
 def _clean_title(title: str) -> str:
