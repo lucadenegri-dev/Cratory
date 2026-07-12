@@ -138,7 +138,10 @@ def build_plan(files, accepted_issues, removals, settings_snapshot,
         if issue.type != "stray_rating" or not issue.suggested_fix_json:
             continue
         f = files_by_id.get(issue.file_id)
-        if f is None or f.id in removals:
+        # has_rating è il filtro no-op del RATING (come has_cover per la COVER):
+        # la stray_rating resta 'accepted' per sempre, senza questo controllo
+        # rigenererebbe un clear su file già puliti a ogni ricostruzione del piano.
+        if f is None or f.id in removals or not f.has_rating:
             continue
         rating_ops.append(PlanOpComputed(
             "RATING", f.id, {"rating": "present"}, {"action": "clear"}))

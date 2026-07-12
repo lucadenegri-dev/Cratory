@@ -51,6 +51,10 @@ def ensure_schema(eng=None) -> None:
         if "mbid" not in cols:
             with eng.begin() as conn:
                 conn.execute(text("ALTER TABLE audio_file ADD COLUMN mbid VARCHAR"))
+        if "has_rating" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE audio_file ADD COLUMN has_rating BOOLEAN DEFAULT 0"))
         with eng.begin() as conn:
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS ix_audio_file_mbid ON audio_file (mbid)"

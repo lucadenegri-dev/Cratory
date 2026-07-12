@@ -59,6 +59,10 @@ def detect_ratings(db: Session) -> dict:
             token = tagio.read_rating(f.path)
         except tagio.TagReadError:
             continue
+        # has_rating riflette lo stato reale sul disco: consente al planner di
+        # non rigenerare op RATING fantasma sui file già ripuliti (simmetrico a
+        # has_cover). Va mantenuto anche quando il rating è assente.
+        f.has_rating = bool(token)
         if not token:
             continue
         found += 1

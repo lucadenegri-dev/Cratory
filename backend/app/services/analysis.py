@@ -14,8 +14,19 @@ from app.services.inspector import inspect
 
 def _merge_issues(db: Session, computed) -> None:
     existing = {(i.file_id, i.type, i.field): i for i in db.scalars(select(Issue)).all()}
+    # Campi (file, field) su cui un provider ha autorità: il provider_override è
+    # synthetic (persiste anche da accepted) e fa da marcatore di provenienza.
+    # Il provider vince sul case → l'Inspector non deve ri-proporre
+    # 'inconsistent_casing' su quel campo, altrimenti provider (es. 'ivanovo
+    # night luxe') e Inspector ('Ivanovo Night Luxe') oscillano all'infinito.
+    # Non aggiungendo la key a 'seen', una eventuale casing già accettata viene
+    # anche rimossa in coda (non è synthetic), togliendo il RETAG opposto.
+    provider_owned = {(i.file_id, i.field) for i in existing.values()
+                      if i.type == "provider_override"}
     seen: set = set()
     for c in computed:
+        if c.type == "inconsistent_casing" and (c.file_id, c.field) in provider_owned:
+            continue
         key = (c.file_id, c.type, c.field)
         seen.add(key)
         row = existing.get(key)
