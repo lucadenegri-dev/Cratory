@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Gauge } from "lucide-react";
 import {
   analysisDivergences, analysisOverview, applyAnalysis, startAnalysis,
   type AnalysisDivergence, type AnalysisOverview,
@@ -9,7 +10,7 @@ import { useT } from "@/lib/i18n";
 import { useJobs } from "@/components/jobs-provider";
 import { RekordboxImportCard } from "@/components/analysis/rekordbox-import-card";
 import { PageLayout } from "@/components/page-layout";
-import { Alert, Badge, Button, Card, Select } from "@/components/ui";
+import { Alert, Badge, Button, Card, EqMeter, Select } from "@/components/ui";
 
 function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
@@ -115,6 +116,11 @@ export default function AnalysisPage() {
       return n;
     });
 
+  // Copertura BPM+key sulle tracce possedute (ready = entrambi presenti),
+  // coerente con le tile qui sopra (non il catalogo intero come in dashboard).
+  const coveragePct = overview && overview.owned
+    ? Math.round((overview.ready_for_set / overview.owned) * 100) : 0;
+
   const tiles: [string, number][] = overview ? [
     [t.analysis.tileOwned, overview.owned],
     [t.analysis.tileReady, overview.ready_for_set],
@@ -149,6 +155,23 @@ export default function AnalysisPage() {
               {t.analysis.bySourceKey(overview.key_by_source.manual ?? 0,
                 overview.key_by_source.rekordbox ?? 0, overview.key_by_source.cratory ?? 0)}
             </p>
+          </Card>
+        )}
+
+        {overview && (
+          <Card>
+            <div className="px-4 py-3">
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted">
+                <Gauge size={12} className="text-faint" /> {t.dashboard.bpmKeyCoverage}
+              </div>
+              <div className="mb-1 flex justify-between text-xs">
+                <span className="text-muted">{t.dashboard.bpmKeyLabel}</span>
+                <span className="tnum text-muted">
+                  {overview.ready_for_set}/{overview.owned} · {coveragePct}%
+                </span>
+              </div>
+              <EqMeter value={coveragePct} calm className="h-4 w-full" />
+            </div>
           </Card>
         )}
 

@@ -90,7 +90,7 @@ export function IndexNav() {
             className={cn("flex shrink-0 gap-4 lg:block", gi > 0 && "border-l border-border pl-4 lg:border-l-0 lg:pl-0")}
           >
             {g.title && (
-              <div className="hidden lg:mb-1 lg:mt-4 lg:block text-[9px] font-semibold uppercase tracking-[0.14em] text-faint">
+              <div className="hidden lg:mb-1 lg:mt-4 lg:block text-[9px] font-semibold uppercase tracking-[0.14em] text-fg-strong">
                 {g.title}
               </div>
             )}

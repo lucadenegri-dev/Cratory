@@ -11,7 +11,7 @@ import {
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
-import { Card, Alert, EqMeter, Loading } from "@/components/ui";
+import { Card, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { Figure } from "@/components/dashboard/figure";
 import { Histogram } from "@/components/dashboard/histogram";
@@ -28,16 +28,6 @@ function SubLabel({ icon, children }: { icon?: React.ReactNode; children: React.
   return (
     <div className="mb-2 mt-4 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted first:mt-0">
       {icon && <span className="text-faint">{icon}</span>}{children}
-    </div>
-  );
-}
-
-function Coverage({ label, n, total }: { label: string; n: number; total: number }) {
-  const pct = total ? Math.round((n / total) * 100) : 0;
-  return (
-    <div>
-      <div className="mb-1 flex justify-between text-xs"><span className="text-muted">{label}</span><span className="tnum text-muted">{n}/{total} · {pct}%</span></div>
-      <EqMeter value={pct} calm className="h-4 w-full" />
     </div>
   );
 }
@@ -170,10 +160,6 @@ export default function Dashboard() {
 
             <section className="p-5">
               <ColHead>{t.dashboard.catalog}</ColHead>
-              <SubLabel icon={<Gauge size={12} />}>{t.dashboard.bpmKeyCoverage}</SubLabel>
-              <div className="space-y-2.5">
-                <Coverage label={t.dashboard.bpmKeyLabel} n={stats.with_key} total={stats.total_tracks} />
-              </div>
               <SubLabel icon={<Disc3 size={12} />}>{t.dashboard.topGenres}</SubLabel>
               <MiniBars rows={genreRows} />
               <div className="mb-2 mt-5 flex items-center justify-between">
