@@ -13,8 +13,9 @@ import {
   type SpotifyPlaylistRef,
   type SpotifyStatus,
 } from "@/lib/api";
-import { Card, CardHeader, Button, Alert, Spinner } from "@/components/ui";
+import { Card, CardHeader, Button, Alert, Spinner, Input, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { PlaylistCover } from "@/components/playlist-cover";
 import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
@@ -29,6 +30,7 @@ export default function ImportSpotifyPage() {
   const [imported, setImported] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
 
   useEffect(() => {
     apiGet<SpotifyStatus>("/api/spotify/status").then(setSpotify).catch((e) => setError(err(e)));
@@ -67,6 +69,16 @@ export default function ImportSpotifyPage() {
 
   const connected = spotify?.configured && spotify?.user_connected;
   const isf = t.playlists.importSpotify;
+
+  // Carica automaticamente l'elenco appena lo stato Spotify risulta connesso.
+  useEffect(() => {
+    if (!connected) return;
+    listSpotifyPlaylists()
+      .then(setAvailable)
+      .catch((e) => setError(err(e)));
+  }, [connected]);
+
+  const filtered = available?.filter((p) => p.name.toLowerCase().includes(filter.trim().toLowerCase()));
 
   const marginalia = (
     <div className="space-y-2 text-xs leading-relaxed text-muted">
@@ -116,17 +128,34 @@ export default function ImportSpotifyPage() {
             }
           />
           <div className="px-5 py-4">
-            {!available && <p className="text-sm text-muted">{isf.pressLoadHint}</p>}
+            {!available && !error && <Loading />}
+            {!available && error && <p className="text-sm text-muted">{isf.pressLoadHint}</p>}
             {available && available.length === 0 && <p className="text-sm text-muted">{isf.noPlaylistsFound}</p>}
+            {available && available.length > 0 && (
+              <div className="mb-3">
+                <Input
+                  className="h-9"
+                  placeholder={isf.filterPlaceholder}
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                />
+              </div>
+            )}
+            {available && available.length > 0 && filtered?.length === 0 && (
+              <p className="text-sm text-muted">{isf.filterNoMatch}</p>
+            )}
             <div className="grid gap-2">
-              {available?.map((p) => {
+              {filtered?.map((p) => {
                 const alreadyImported = imported.has(p.platform_playlist_id);
                 return (
                   <div key={p.platform_playlist_id} className="flex items-center justify-between gap-3 rounded-none border border-border px-3 py-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{p.name}</div>
-                      <div className="text-xs text-faint">
-                        {t.playlists.trackCount(p.track_count)}{p.owner ? ` · ${p.owner}` : ""}{alreadyImported ? ` · ${isf.alreadyImportedSuffix}` : ""}
+                    <div className="flex min-w-0 items-center gap-3">
+                      <PlaylistCover artworkUrl={p.artwork_url} platform="spotify" className="h-9 w-9 shrink-0" iconSize={15} placeholderClassName="bg-elevated" />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{p.name}</div>
+                        <div className="text-xs text-faint">
+                          {t.playlists.trackCount(p.track_count)}{p.owner ? ` · ${p.owner}` : ""}{alreadyImported ? ` · ${isf.alreadyImportedSuffix}` : ""}
+                        </div>
                       </div>
                     </div>
                     <Button
