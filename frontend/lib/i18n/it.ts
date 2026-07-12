@@ -245,6 +245,7 @@ export const it: Dictionary = {
       genresHeading: "Generi",
       colDuration: "Dur",
       colStatus: "Stato",
+      digThisLabel: "Scava questa etichetta",
     },
   },
   downloads: {

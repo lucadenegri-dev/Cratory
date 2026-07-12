@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, Shovel } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
 import { Alert, Input } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -72,7 +72,15 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
 
   return (
     <PageLayout title={t.labels.detail.pageTitle} meta={label} marginaliaTitle={t.labels.detail.marginaliaTitle} marginalia={marginalia}>
-      <Link href="/labels" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.labels.detail.backLink}</Link>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Link href="/labels" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.labels.detail.backLink}</Link>
+        <Link
+          href={`/discovery?seed=label&value=${encodeURIComponent(label)}`}
+          className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 text-sm text-muted transition-colors hover:border-fg/40 hover:text-fg"
+        >
+          <Shovel size={14} /> {t.labels.detail.digThisLabel}
+        </Link>
+      </div>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 

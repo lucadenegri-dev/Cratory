@@ -243,6 +243,7 @@ export const en = {
       genresHeading: "Genres",
       colDuration: "Dur",
       colStatus: "Status",
+      digThisLabel: "Dig this label",
     },
   },
   downloads: {
