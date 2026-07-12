@@ -145,16 +145,22 @@ HARD 1800s replace the flat 180s wall); E11 (shared raise_for_status/get_json in
 `ClosableHttpClient` on all 4 clients); E12-Shazam (loop+client reused across segments,
 30s recognize timeout); B17 (preset applied-values summary line, live-verified); B23 (lazy
 covers + 50-row pagination in the playlist detail); B25 (`cn()` with tailwind-merge — caller
-classNames now reliably override component defaults). All 2026-07-12, Sonnet subagents + Fable
-integration pass (full suite, lint/tsc/build, live checks).
+classNames now reliably override component defaults); B12 (drag-and-drop reorder with
+move-to-position endpoint, arrows kept as keyboard fallback + replace_track note cleanup +
+rename-modal form semantics + add-track artist search); B4+B19 (set generation in the global
+job bar, shazam state exposed by the provider — no page-local pollers left); A6-UI (library
+gaps card on the dashboard, live-verified); E13+E14 (mix_identify_job 10 tests, double-start
+guards, OAuth state anti-CSRF, transitions/discovery HTTP coverage, tautological assert fixed,
+autouse job-state reset + real-library-scan guard in conftest); backend residuals (archive
+stat guard, client close() wiring in discovery/playlists/spotify routers + soulseek job, mix
+job state under lock); frontend residuals (instant lead badge, Outcome via Exclude, form
+semantics in link-local-file-modal, ButtonLink in playlist detail). All 2026-07-12, Sonnet
+subagents + Fable integration pass (full suite, lint/tsc/build, live checks).
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
 - **Discovery** — *(Last.fm tags as a 2nd dig source: parked, see above.)*
-- **Set → console / editor** — ⚠️ B12 reorder is now optimistic but still arrow-buttons, no
-  drag-and-drop; (new, from A22) `replace_track` still leaves the *neighbors'* notes and the
-  slot's `transition_note` stale — same class, small follow-up; (new, from A14) the add-track
-  search filters by title only (no artist-side search on /api/tracks).
+- **Set → console / editor** — (nothing open).
 - **Scoring** — dead code `bpm/key/mood_compatibility_score` (tests-only) + `POST
   /api/transitions/score` (never called): remove or document as a block; (new, from A23) the
   generator's `_candidate_score` counts energy twice — via the energy-aware `score_transition`
@@ -163,8 +169,7 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   `classify_transition` bpm_close ≤5, `mixing_tip`/`mixing_overview` text bands, `validation.py`
   >8 jump check); (new, from A21) with ≥8 tracks the P25/P75 design makes `missing_openers`
   nearly never fire — acceptable by design, revisit only if the signal is missed.
-- **Shazam** — (new, from A2) after "save as lead" the row badge updates only on the next
-  poll/refetch — cosmetic.
+- **Shazam** — (nothing open).
 - **Soulseek/download** — ⚠️ A7 manual grab does not mark ownership (file in inbox, counts
   "downloaded") — now an intentional flow (Sortory catalogs), confirm as a decision; E6 slskd
   (no cancel of transfers/searches, filename-only match, basename+mtime resolution, ~45s
@@ -174,34 +179,25 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   (thousands of liked = minutes with no progress): job+polling. NB: SoundCloud import (yt-dlp)
   exists too — A10 applies to it as well (the flat extraction is sequential/slow); A11 dedup and
   A25 name/cover refresh are already platform-agnostic (both covered for Spotify + SoundCloud).
-- **Library/index** — A6-UI library gaps not shown in the dashboard (reintroduce the
-  `libraryGaps` client).
-- **Frontend technical** — ⚠️ B19 settings poller removed, but shazam is not exposed by the
-  provider and set-builder still self-polls; B20 zero AbortController/sequence guards (stale
-  responses); B21 `api.ts` monolith (~1000 lines): split; B22 no `ApiError` with status, `err()`
-  duplicated in ~16 files; (new residuals) nested `<Link><Button>` still in playlists/[id] (out
-  of B28's scope); downloads page has a local `Outcome` subset type that could be
-  `Exclude<DownloadOutcome,"downloaded">`; link-local-file-modal and the sets rename modal still
-  use onKeyDown Enter hacks instead of form semantics (same class as B6).
+- **Library/index** — (nothing open).
+- **Frontend technical** — B20 zero AbortController/sequence guards (stale responses); B21
+  `api.ts` monolith (~1000 lines): split; B22 no `ApiError` with status, `err()` duplicated in
+  ~16 files. (B20+B21+B22 are one coherent solo pass on api.ts + pages.)
 - **Backend robustness** — E10 (residual): `file_search` materializes the tree per keystroke,
   generate-async/mix_identify return untyped dicts, Discovery `_explain` without Pydantic (the
   one spot outside rule 5), no TTL cache on the pipeline walk; serializers.py and routers/sets.py
   still trigger classify_transition's internal recompute (1 extra score per setlist track);
-  (new, from E11) clients now expose `close()`/context-manager but the routers/services never
-  call it — wiring follow-up; (new, from E12) `mix_identify_job` never calls `recognizer.close()`
-  explicitly (GC finalizer covers it); (new, from E2) the pass-2 archive-branch `stat()` is still
-  unguarded (a vanish there aborts the run but keeps committed progress).
-- **Tests** — E13 gaps: `mix_identify_job` zero coverage, job double-start guard untested,
-  Spotify OAuth callback (anti-CSRF state) untested, transitions/discovery routers with no HTTP
-  coverage; E14 tautological `or True` assert in test_set_editing, engine/overrides setup copied
-  in ~20 files → shared fixture, module-global job state never reset; E15 frontend has no tests
-  (minimum = Playwright smoke + a jobs-provider merge unit).
-- **Cleanup** — stale worktree `.claude/worktrees/compassionate-montalcini-c29d1a` (2 files, one
-  is the removed `enrichment_job.py`) → 1-min inspection + `git worktree remove --force`; trim
-  the redundancy of CLAUDE.md rules 2/7; stale comments in `local_files.py`/`scoring.py`. Legacy
-  columns `Track.playlist_id`/`playlist_name`: **not droppable** on SQLite (FK baked into
-  `playlist_id`) — they stay empty in the schema, not an actionable TODO. `Track.release_date`
-  and the dead `rekordboxPending`/`libraryGaps` api.ts exports were already removed (2026-07-08).
+  (from E11) `close()` wiring still missing in routers/services.py and downloads.py (the rest is
+  wired); real bug found by E13 (xfail strict in test_spotify_oauth_state.py): the OAuth callback
+  redirect Location is malformed when FRONTEND_ORIGIN holds multiple comma-separated origins.
+- **Tests** — E14 (residual): engine/overrides setup copied in ~20 test files → shared fixture
+  (deliberately deferred: invasive, low value); E15 frontend has no tests (minimum = Playwright
+  smoke + a jobs-provider merge unit).
+- **Cleanup** — DONE (2026-07-12): stale worktree removed (its only salvageable idea — the lock
+  on the mix job state — was implemented for real), stale comments in
+  `local_files.py`/`scoring.py` updated to the current paradigm, CLAUDE.md rule 2 slimmed
+  (mechanics now pointed at docs/API.md). Legacy columns `Track.playlist_id`/`playlist_name`:
+  **not droppable** on SQLite (FK baked into `playlist_id`) — not an actionable TODO.
   **Reversal note:** `python-multipart` is needed (rekordbox.xml upload) — do not remove.
 
 ## Risks
