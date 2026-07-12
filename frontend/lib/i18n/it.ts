@@ -88,6 +88,7 @@ export const it: Dictionary = {
     audioAnalysis: "Analisi BPM/key",
     dig: "Scava crate",
     completed: "Completata",
+    dismissError: "Chiudi",
     regionLabel: "Attività in background",
     downloadSummary: (downloaded: number, pending: number) =>
       `${downloaded} scaricate${pending > 0 ? ` · ${pending} da sistemare` : ""}`,

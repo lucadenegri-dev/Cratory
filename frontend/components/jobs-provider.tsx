@@ -55,7 +55,8 @@ export function useJobs() {
 }
 
 const POLL_MS = 2000;
-/** Quanto resta visibile l'esito di un job appena concluso. */
+/** Quanto resta visibile l'esito di un job concluso con successo (gli errori
+ * restano finché l'utente non li chiude). */
 const OUTCOME_MS = 4000;
 const MAX_ROWS = 3;
 
@@ -69,8 +70,10 @@ const MAX_ROWS = 3;
  *   indicizzazione libreria): rilevati via polling.
  * - Job sincroni senza status endpoint (backfill etichette, DIG): registrati
  *   dalla pagina con startClientJob/updateClientJob/endClientJob.
- * - Alla transizione running -> done/error la riga resta OUTCOME_MS con
- *   l'esito, poi scompare.
+ * - Alla transizione running -> done la riga resta OUTCOME_MS con l'esito,
+ *   poi scompare; su error resta finché l'utente non la chiude con la ✕.
+ * - Con la tab nascosta il polling di rete è in pausa (visibilitychange);
+ *   al ritorno in foreground parte subito un poll e riprende l'intervallo.
  */
 export function JobsProvider({ children }: { children: ReactNode }) {
   const t = useT();
@@ -88,10 +91,19 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     if (!alive.current) return;
     setTransient((t) => [...t.filter((x) => x.key !== job.key), job]);
     clearTimeout(timers.current[job.key]);
+    delete timers.current[job.key];
+    // Gli errori restano finché l'utente non li chiude: niente auto-remove.
+    if (job.outcome === "error") return;
     timers.current[job.key] = setTimeout(() => {
       setTransient((t) => t.filter((x) => x.key !== job.key));
       delete timers.current[job.key];
     }, OUTCOME_MS);
+  }, []);
+
+  const dismissOutcome = useCallback((key: string) => {
+    clearTimeout(timers.current[key]);
+    delete timers.current[key];
+    setTransient((t) => t.filter((x) => x.key !== key));
   }, []);
 
   const pollOnce = useCallback(async () => {
@@ -168,12 +180,32 @@ export function JobsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     alive.current = true;
-    pollOnce();
-    const id = setInterval(pollOnce, POLL_MS);
+    let id: ReturnType<typeof setInterval> | null = null;
+    // Con la tab nascosta il polling di rete si ferma (i job client e i timer
+    // degli esiti non vengono toccati); al ritorno visibile parte subito un
+    // poll per riallineare la barra e l'intervallo riprende.
+    const start = () => {
+      if (id != null) return;
+      pollOnce();
+      id = setInterval(pollOnce, POLL_MS);
+    };
+    const stop = () => {
+      if (id != null) {
+        clearInterval(id);
+        id = null;
+      }
+    };
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else start();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    if (!document.hidden) start();
     const t = timers.current;
     return () => {
       alive.current = false;
-      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibility);
+      stop();
       Object.values(t).forEach(clearTimeout);
     };
   }, [pollOnce]);
@@ -201,12 +233,12 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   return (
     <JobsCtx.Provider value={api}>
       {children}
-      {jobs.length > 0 && <GlobalProgress jobs={jobs} />}
+      {jobs.length > 0 && <GlobalProgress jobs={jobs} onDismiss={dismissOutcome} />}
     </JobsCtx.Provider>
   );
 }
 
-function GlobalProgress({ jobs }: { jobs: Job[] }) {
+function GlobalProgress({ jobs, onDismiss }: { jobs: Job[]; onDismiss: (key: string) => void }) {
   const t = useT();
   const barRef = useRef<HTMLDivElement>(null);
   const [padH, setPadH] = useState(0);
@@ -236,7 +268,7 @@ function GlobalProgress({ jobs }: { jobs: Job[] }) {
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border-strong bg-surface"
       >
         <div className="mx-auto max-w-5xl px-4">
-          {visible.map((j, i) => <JobRow key={j.key} job={j} first={i === 0} />)}
+          {visible.map((j, i) => <JobRow key={j.key} job={j} first={i === 0} onDismiss={onDismiss} />)}
           {extra > 0 && (
             <p className="border-t border-border py-1 text-center text-[10px] uppercase tracking-wider text-faint">
               {t.jobs.moreJobs(extra)}
@@ -248,14 +280,15 @@ function GlobalProgress({ jobs }: { jobs: Job[] }) {
   );
 }
 
-function JobRow({ job, first }: { job: Job; first: boolean }) {
+function JobRow({ job, first, onDismiss }: { job: Job; first: boolean; onDismiss: (key: string) => void }) {
+  const t = useT();
   const done = job.outcome === "done";
   const error = job.outcome === "error";
   const pct = done ? 100
     : job.indeterminate ? null
     : job.total > 0 ? Math.round((job.processed / job.total) * 100) : null;
   const body = (
-    <div className={cn("flex items-center gap-4 py-2", !first && "border-t border-border")}>
+    <div className={cn("flex items-center gap-4 py-2", !first && !error && "border-t border-border")}>
       <span className="w-36 flex-none sm:w-52">
         <span className="block truncate text-[10px] font-medium uppercase tracking-wider text-muted">
           {job.label}
@@ -281,10 +314,26 @@ function JobRow({ job, first }: { job: Job; first: boolean }) {
       </span>
     </div>
   );
-  if (!job.href) return body;
-  return (
+  const inner = job.href ? (
     <Link href={job.href} className="block outline-none hover:bg-elevated/40 focus-visible:bg-elevated/40">
       {body}
     </Link>
+  ) : body;
+  if (!error) return inner;
+  // Riga errore: persiste finché non viene chiusa; la ✕ è fuori dal Link per
+  // non annidare un bottone dentro un'ancora.
+  return (
+    <div className={cn("flex items-center", !first && "border-t border-border")}>
+      <div className="min-w-0 flex-1">{inner}</div>
+      <button
+        type="button"
+        aria-label={t.jobs.dismissError}
+        title={t.jobs.dismissError}
+        onClick={() => onDismiss(job.key)}
+        className="ml-2 flex-none px-2 py-2 text-[13px] leading-none text-danger outline-none hover:text-fg-strong focus-visible:bg-elevated/40"
+      >
+        <span aria-hidden>✕</span>
+      </button>
+    </div>
   );
 }

@@ -86,6 +86,7 @@ export const en = {
     audioAnalysis: "BPM/key analysis",
     dig: "Crate digging",
     completed: "Completed",
+    dismissError: "Dismiss",
     regionLabel: "Background jobs",
     downloadSummary: (downloaded: number, pending: number) =>
       `${downloaded} downloaded${pending > 0 ? ` · ${pending} to review` : ""}`,
