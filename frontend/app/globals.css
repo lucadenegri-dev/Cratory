@@ -115,8 +115,12 @@ body {
 /* Cursore terminale: blocco che lampeggia nello slot dopo l'ultimo pieno */
 .eqm-cursor { position: absolute; top: 0; bottom: 0; left: var(--w); width: 8px;
   background: var(--c-danger); animation: eqmBlink 1.1s steps(1) infinite; }
+/* Lo snap al passo di 11px serve ad allineare il cursore dei job vivi ai
+   bordi dei blocchi. Le barre statiche (.eqm-calm, es. copertura) non hanno
+   cursore: lasciarle a larghezza esatta evita che a 100% l'ultimo slot resti
+   scoperto (il "quadratino mancante"). */
 @supports (width: round(down, 10%, 11px)) {
-  .eqm-fill { width: round(down, var(--w), 11px); }
+  .eqm:not(.eqm-calm) .eqm-fill { width: round(down, var(--w), 11px); }
   .eqm-cursor { left: round(down, var(--w), 11px); }
 }
 /* Indeterminato: treno di blocchi che avanza a scatti (steps = feel flip-dot) */
