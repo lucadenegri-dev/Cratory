@@ -110,8 +110,12 @@ body {
 .eqm-fill { position: absolute; top: 0; bottom: 0; left: 0; width: var(--w);
   background: repeating-linear-gradient(to right, var(--c-danger) 0 8px, transparent 8px 11px); }
 /* Rapporti statici (calm, es. copertura in dashboard): niente arancio,
-   blocchi neutri in fg — il colore "attivo" resta solo sui job vivi. */
-.eqm-calm .eqm-fill { background: repeating-linear-gradient(to right, var(--c-fg) 0 8px, transparent 8px 11px); }
+   blocchi neutri in fg — il colore "attivo" resta solo sui job vivi.
+   I blocchi piastrellano DA DESTRA (to left): così un blocco pieno e' sempre
+   a filo del bordo destro del riempimento, a qualsiasi valore. A 100% l'ultimo
+   quadrato e' pieno (non un gap sul dither); l'eventuale mezzo blocco cade
+   all'inizio, dove si nota meno. */
+.eqm-calm .eqm-fill { background: repeating-linear-gradient(to left, var(--c-fg) 0 8px, transparent 8px 11px); }
 /* Cursore terminale: blocco che lampeggia nello slot dopo l'ultimo pieno */
 .eqm-cursor { position: absolute; top: 0; bottom: 0; left: var(--w); width: 8px;
   background: var(--c-danger); animation: eqmBlink 1.1s steps(1) infinite; }
