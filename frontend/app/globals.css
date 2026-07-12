@@ -49,10 +49,10 @@ html[data-theme="paper"] {
   --c-surface: #f1eee6;
   --c-surface-2: #eae6dc;
   --c-elevated: #e2ddd0;
-  --c-border: #cdc7b8;
-  --c-border-strong: #b2ab99;
-  --c-muted: #86806f;
-  --c-faint: #a79f8d;
+  --c-border: #a99e86;
+  --c-border-strong: #7d735c;
+  --c-muted: #6b6555;
+  --c-faint: #847d68;
   --c-fg: #2a2823;
   --c-fg-strong: #15140f;
   --c-danger: #a83a22;
