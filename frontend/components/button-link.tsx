@@ -11,7 +11,9 @@ import type { ComponentProps } from "react";
 type Variant = "primary" | "outline" | "ghost" | "danger";
 type Size = "sm" | "md";
 
-// Come BTN_BASE di ui.tsx, senza la classe display (gestita via prop `block`)
+// Come BTN_BASE di ui.tsx, senza la classe display: qui è una prop tipizzata
+// `block` invece di una classe passata in className (ora che cn fa il merge
+// via twMerge non è più un workaround, resta una scelta di API più esplicita)
 // e senza gli stati disabled (un link non è disabilitabile).
 const BTN_BASE =
   "items-center justify-center gap-2 font-medium uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg";
