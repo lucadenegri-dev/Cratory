@@ -127,6 +127,8 @@ def update_track(db: Session, track: Track, data: dict) -> Track:
     `energy`, che non e' modificabile a mano: e' sempre derivata da bpm/genere
     (services/energy) e viene ricalcolata qui quando il patch tocca bpm o
     genere e la traccia ha un bpm. Aggiorna lo stato.
+
+    Imposta bpm_source/key_source='manual' quando il patch tocca bpm/camelot_key.
     """
     from app.services.energy import apply_estimated_energy
     from app.services.track_status import refresh_status
@@ -135,6 +137,12 @@ def update_track(db: Session, track: Track, data: dict) -> Track:
         if isinstance(value, str):
             value = value.strip() or None
         setattr(track, field, value)
+    # Provenienza: l'inserimento a mano e' la massima autorita' (manual >
+    # rekordbox > cratory). Azzerare il valore azzera anche la source.
+    if "bpm" in data:
+        track.bpm_source = "manual" if track.bpm is not None else None
+    if "camelot_key" in data:
+        track.key_source = "manual" if track.camelot_key else None
     if "bpm" in data or "genre" in data:
         apply_estimated_energy(track)
     refresh_status(track)
