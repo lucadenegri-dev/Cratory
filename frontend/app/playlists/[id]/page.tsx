@@ -62,6 +62,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const [bpmMin, setBpmMin] = useState("");
   const [bpmMax, setBpmMax] = useState("");
   const [key, setKey] = useState("");
+  const [owned, setOwned] = useState(""); // "" = tutte | "true" = possedute | "false" = wishlist
   const [incomplete, setIncomplete] = useState(false);
   const [sort, setSort] = useState("");
   const [order, setOrder] = useState<Order>("asc");
@@ -100,6 +101,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
       if (genre && !inc(tr.genre, genre)) return false;
       if (source && tr.source_type !== source) return false;
       if (status && tr.status !== status) return false;
+      if (owned && tr.has_local_file !== (owned === "true")) return false;
       if (key && !inc(tr.camelot_key, key)) return false;
       if (bpmMin && (tr.bpm ?? -Infinity) < Number(bpmMin)) return false;
       if (bpmMax && (tr.bpm ?? Infinity) > Number(bpmMax)) return false;
@@ -124,7 +126,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
       rows = [...rows].sort((a, b) => (insertionRank.get(a.id) ?? 0) - (insertionRank.get(b.id) ?? 0));
     }
     return rows;
-  }, [tracks, artist, title, genre, source, status, key, bpmMin, bpmMax, incomplete, sort, order, insertionRank]);
+  }, [tracks, artist, title, genre, source, status, owned, key, bpmMin, bpmMax, incomplete, sort, order, insertionRank]);
 
   const toggleSort = (col: string) => {
     if (sort === col) setOrder(order === "asc" ? "desc" : "asc");
@@ -280,6 +282,11 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
             <Select className="h-9" value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">{t.library.statusAllOption}</option>
               {STATUS_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </Select>
+            <Select className="h-9" value={owned} onChange={(e) => setOwned(e.target.value)}>
+              <option value="">{t.library.ownedAllOption}</option>
+              <option value="true">{t.library.ownedTrueOption}</option>
+              <option value="false">{t.library.ownedFalseOption}</option>
             </Select>
             <Input className="h-9" type="number" placeholder={t.library.bpmMinPlaceholder} value={bpmMin} onChange={(e) => setBpmMin(e.target.value)} />
             <Input className="h-9" type="number" placeholder={t.library.bpmMaxPlaceholder} value={bpmMax} onChange={(e) => setBpmMax(e.target.value)} />
