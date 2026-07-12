@@ -20,7 +20,7 @@
 
   --radius: 0px;
 
-  --font-ui: var(--font-ibm-plex-mono), ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  --font-ui: var(--font-mono-ui), ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
   --font-sans: var(--font-ui);
   --font-mono: var(--font-ui);
 }

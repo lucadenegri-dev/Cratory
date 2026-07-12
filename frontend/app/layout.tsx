@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono } from "next/font/google";
+import { DM_Mono } from "next/font/google";
 import "./globals.css";
 import { EditorialShell } from "@/components/editorial-shell";
 import { I18nProvider } from "@/lib/i18n";
 
-const ibmPlexMono = IBM_Plex_Mono({
+// Font di sistema: DM Mono (peso massimo 500; il grassetto 600 viene
+// sintetizzato dal browser). Il nome della variabile resta neutro.
+const monoUi = DM_Mono({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-ibm-plex-mono",
+  weight: ["400", "500"],
+  variable: "--font-mono-ui",
   display: "swap",
 });
 
@@ -20,7 +22,7 @@ const NO_FOUC = `(function(){try{var t=localStorage.getItem('djorganizer-theme')
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`h-full ${ibmPlexMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`h-full ${monoUi.variable}`} suppressHydrationWarning>
       <body className="h-full">
         <script dangerouslySetInnerHTML={{ __html: NO_FOUC }} />
         <I18nProvider>
