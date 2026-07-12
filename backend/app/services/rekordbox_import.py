@@ -102,10 +102,11 @@ def _match(r, by_path, by_hash, by_at, owned_basenames):
 
 
 def apply_collection(db: Session, xml_bytes: bytes, overwrite: bool = False) -> dict:
-    """Applica BPM/key dell'XML alle tracce possedute. Di default riempie solo i
-    campi vuoti (protegge le correzioni manuali); con overwrite=True la ri-analisi
-    Rekordbox vince sui valori esistenti, ma un dato assente nell'XML non azzera
-    mai quello in libreria."""
+    """Applica BPM/key dell'XML alle tracce possedute. Di default riempie i campi
+    vuoti e sovrascrive i valori 'cratory' (analisi in-app); protegge le
+    correzioni manuali; con overwrite=True la ri-analisi Rekordbox vince sui
+    valori esistenti, ma un dato assente nell'XML non azzera mai quello in
+    libreria."""
     rows = parse_collection(xml_bytes)
     owned = list(db.scalars(select(Track).where(Track.has_local_file.is_(True))).all())
     by_path = {_norm_path(t.local_path): t for t in owned if t.local_path}
@@ -124,11 +125,19 @@ def apply_collection(db: Session, xml_bytes: bytes, overwrite: bool = False) -> 
             continue  # riga duplicata su una traccia gia' matchata: non e' un mancato match
         seen.add(t.id)
         matched += 1
-        if r.bpm is not None and (overwrite or t.bpm is None) and t.bpm != r.bpm:
+        # Source-aware (manual > rekordbox > cratory): di default Rekordbox
+        # riempie i vuoti e riprende i valori 'cratory' (l'analisi in-app e'
+        # fallback); non tocca le correzioni manuali. overwrite=True vince su
+        # tutto (intento esplicito). Ogni scrittura marca la fonte.
+        bpm_writable = overwrite or t.bpm is None or t.bpm_source == "cratory"
+        if r.bpm is not None and bpm_writable and t.bpm != r.bpm:
             t.bpm = r.bpm
+            t.bpm_source = "rekordbox"
             bpm_set += 1
-        if r.camelot and (overwrite or not t.camelot_key) and t.camelot_key != r.camelot:
+        key_writable = overwrite or not t.camelot_key or t.key_source == "cratory"
+        if r.camelot and key_writable and t.camelot_key != r.camelot:
             t.camelot_key = r.camelot
+            t.key_source = "rekordbox"
             key_set += 1
         if apply_estimated_energy(t):
             energy_set += 1

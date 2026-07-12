@@ -31,3 +31,52 @@ def test_patch_altri_campi_non_tocca_le_source(db):
     db.add(t); db.commit()
     update_track(db, t, {"title": "Nuovo"})
     assert t.bpm_source == "rekordbox"
+
+
+# ---- Import Rekordbox source-aware (services/rekordbox_import) ----
+
+def _xml(bpm="130.00", tonality="9A", path="/x/a.mp3"):
+    loc = f"file://localhost{path}"
+    return (f'<DJ_PLAYLISTS><COLLECTION><TRACK Location="{loc}" '
+            f'AverageBpm="{bpm}" Tonality="{tonality}" Artist="A" Name="T"/>'
+            f"</COLLECTION></DJ_PLAYLISTS>").encode()
+
+
+def _owned(db, **kw):
+    from app.models import Track
+    t = Track(source_type="spotify", has_local_file=True, local_path="/x/a.mp3",
+              artist="A", title="T", **kw)
+    db.add(t); db.commit()
+    return t
+
+
+def test_rekordbox_sovrascrive_cratory_di_default(db):
+    from app.services.rekordbox_import import apply_collection
+    t = _owned(db, bpm=127.5, bpm_source="cratory", camelot_key="8A", key_source="cratory")
+    apply_collection(db, _xml())
+    assert t.bpm == 130.0 and t.bpm_source == "rekordbox"
+    assert t.camelot_key == "9A" and t.key_source == "rekordbox"
+
+
+def test_rekordbox_protegge_manual_di_default(db):
+    from app.services.rekordbox_import import apply_collection
+    t = _owned(db, bpm=127.5, bpm_source="manual", camelot_key="8A", key_source="manual")
+    apply_collection(db, _xml())
+    assert t.bpm == 127.5 and t.bpm_source == "manual"
+    assert t.camelot_key == "8A" and t.key_source == "manual"
+
+
+def test_rekordbox_overwrite_vince_anche_su_manual(db):
+    from app.services.rekordbox_import import apply_collection
+    t = _owned(db, bpm=127.5, bpm_source="manual", camelot_key="8A", key_source="manual")
+    apply_collection(db, _xml(), overwrite=True)
+    assert t.bpm == 130.0 and t.bpm_source == "rekordbox"
+    assert t.camelot_key == "9A" and t.key_source == "rekordbox"
+
+
+def test_rekordbox_riempie_campi_vuoti_con_source(db):
+    from app.services.rekordbox_import import apply_collection
+    t = _owned(db)
+    apply_collection(db, _xml())
+    assert t.bpm == 130.0 and t.bpm_source == "rekordbox"
+    assert t.camelot_key == "9A" and t.key_source == "rekordbox"
