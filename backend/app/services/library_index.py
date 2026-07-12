@@ -24,7 +24,7 @@ from app.integrations.local_files import (
     read_tags,
 )
 from app.models import ArchiveSeen, Track
-from app.repositories import unreferenced_track_ids
+from app.repositories import ci_equals, unreferenced_track_ids
 from app.services.audio_energy import analyze_file, recompute_energy
 from app.services.genre_norm import normalize_genre
 from app.services.manual_import import parse_line
@@ -75,7 +75,7 @@ def _find_track(db: Session, *, digest: str, tags: dict) -> tuple[Track | None, 
     artist, title = tags.get("artist"), tags.get("title")
     if artist and title:
         hit = db.scalar(select(Track).where(
-            Track.artist.ilike(artist), Track.title.ilike(title)))
+            ci_equals(Track.artist, artist), ci_equals(Track.title, title)))
         if hit:
             return hit, "fuzzy"
         # Fuzzy normalizzato: titoli con suffissi diversi ma stesso brano. Solo su

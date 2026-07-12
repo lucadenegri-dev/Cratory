@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Playlist, Track
-from app.repositories import add_track_to_playlist, recount_playlist
+from app.repositories import add_track_to_playlist, ci_equals, recount_playlist
 from app.services.track_status import refresh_status
 
 logger = logging.getLogger(__name__)
@@ -48,8 +48,8 @@ def parse_line(line: str) -> tuple[str | None, str | None] | None:
 
 
 def _find_by_name(db: Session, artist: str | None, title: str) -> Track | None:
-    stmt = select(Track).where(Track.title.ilike(title))  # ilike senza % = match esatto case-insensitive
-    stmt = stmt.where(Track.artist.ilike(artist)) if artist else stmt.where(Track.artist.is_(None))
+    stmt = select(Track).where(ci_equals(Track.title, title))  # match esatto case-insensitive (%/_ escapati)
+    stmt = stmt.where(ci_equals(Track.artist, artist)) if artist else stmt.where(Track.artist.is_(None))
     return db.scalar(stmt)
 
 

@@ -7,6 +7,14 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import DjSet, DjSetTrack, Playlist, Setlist, SetlistTrack, Track, playlist_tracks
 
+
+def ci_equals(column, value: str):
+    """Match case-insensitive ESATTO. `ilike(value)` grezzo tratterebbe `%`/`_`
+    del valore come wildcard LIKE: qui li escapiamo e fissiamo l'escape char, così
+    un titolo tipo 'Track_01' o '50%' matcha solo se stesso."""
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return column.ilike(escaped, escape="\\")
+
 # Colonne ordinabili dalla libreria (header cliccabili nel frontend).
 _SORT_COLUMNS = {
     "title": Track.title,

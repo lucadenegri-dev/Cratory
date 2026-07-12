@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Playlist, Track
-from app.repositories import add_track_to_playlist, recount_playlist, remove_track_from_playlist, tracks_for_playlist
+from app.repositories import add_track_to_playlist, ci_equals, recount_playlist, remove_track_from_playlist, tracks_for_playlist
 from app.services.track_status import refresh_status
 
 logger = logging.getLogger(__name__)
@@ -166,8 +166,34 @@ def identity_normalize(item: NormalizedTrack) -> NormalizedTrack:
     return item
 
 
+# Tolleranza (secondi) per il match per nome+durata: assorbe gli arrotondamenti tra
+# sorgenti diverse ma tiene distinti radio edit vs extended dello stesso brano.
+_NAME_MATCH_DURATION_TOL = 5
+
+
+def _find_by_name(db: Session, artist: str | None, title: str | None, duration: int | None) -> Track | None:
+    """Match esatto case-insensitive artista+titolo. Se entrambe le durate sono note
+    devono coincidere entro tolleranza, così due brani diversi con lo stesso
+    artista+titolo (es. intro vs extended) non vengono fusi."""
+    if not title:
+        return None
+    stmt = select(Track).where(ci_equals(Track.title, title))
+    stmt = stmt.where(ci_equals(Track.artist, artist)) if artist else stmt.where(Track.artist.is_(None))
+    for hit in db.scalars(stmt).all():
+        # Solo lead senza identità forte: una traccia che ha già un platform_track_id
+        # o un ISRC è un brano distinto (es. due brani omonimi su SoundCloud), non un
+        # doppione da fondere per nome.
+        if hit.platform_track_id or hit.isrc:
+            continue
+        if duration and hit.duration_seconds and abs(hit.duration_seconds - duration) > _NAME_MATCH_DURATION_TOL:
+            continue
+        return hit
+    return None
+
+
 def _find_existing(db: Session, norm: NormalizedTrack) -> Track | None:
-    # Priorita' matching: ISRC -> platform_track_id (vedi nuovo_progetto.md sez. 3)
+    # Priorita' matching: ISRC -> platform_track_id -> artista+titolo(+durata)
+    # (catena d'identità di CLAUDE.md sez. "Track identity").
     if norm.isrc:
         hit = db.scalar(select(Track).where(Track.isrc == norm.isrc))
         if hit:
@@ -182,8 +208,10 @@ def _find_existing(db: Session, norm: NormalizedTrack) -> Track | None:
         if hit:
             return hit
         if norm.platform == "spotify":
-            return db.scalar(select(Track).where(Track.spotify_id == norm.platform_track_id))
-    return None
+            hit = db.scalar(select(Track).where(Track.spotify_id == norm.platform_track_id))
+            if hit:
+                return hit
+    return _find_by_name(db, norm.artist, norm.title, norm.duration_seconds)
 
 
 def _apply_fields(track: Track, norm: NormalizedTrack) -> None:
@@ -241,13 +269,9 @@ def import_single_track(
         album=None, duration_seconds=duration_seconds, url=url, artwork_url=artwork_url,
         isrc=isrc, added_at=None,
     )
+    # _find_existing ripiega ora anche sul match artista+titolo(+durata): un secondo
+    # "Aggiungi" o un import Spotify di una traccia già presente a mano non duplica.
     existing = _find_existing(db, norm)
-    # Candidato non risolto (niente ISRC/platform_track_id): ripiega sul match per nome
-    # cosi' un secondo "Aggiungi" non duplica la traccia.
-    if existing is None and not isrc and not platform_track_id and title:
-        stmt = select(Track).where(Track.title.ilike(title))
-        stmt = stmt.where(Track.artist.ilike(artist)) if artist else stmt.where(Track.artist.is_(None))
-        existing = db.scalar(stmt)
     target = existing if existing is not None else Track(source_type=platform)
     if existing is None:
         db.add(target)
