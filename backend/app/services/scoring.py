@@ -5,6 +5,8 @@ Composizione score (0-100), tutta basata su dati ottenuti dall'enrichment estern
 - BPM:    max 50  (0-2 ottimo, 2-5 buono, 5-8 rischioso, >8 difficile)
 - Camelot: max 40  (stessa key / compatibile / debole)
 - Durata: max 10  (penalita' per tracce molto corte)
+- Energia: correttivo +/-7.5 SOLO se entrambe le tracce hanno `energy`
+  (centrato sul neutro: se manca, lo score resta identico a prima)
 """
 
 import re
@@ -14,6 +16,14 @@ from app.models import Track
 from app.services.camelot import camelot_compatibility, camelot_score, parse_camelot
 
 SHORT_TRACK_SECONDS = 90
+
+# A23: peso del correttivo energia nel composito (span totale 15 punti, ~15%
+# dell'influenza quando presente). Centrato sul valore neutro 50 di
+# energy_progression_score: energia coerente vale al massimo +7.5, il crollo
+# peggiore -4.5 (il floor della funzione e' 20). Cosi' BPM (50) e key (40)
+# restano nettamente dominanti e l'energia non puo' ne' salvare un salto
+# brusco ne' affossare da sola un match perfetto sotto la fascia "low".
+ENERGY_CORRECTION_WEIGHT = 15.0
 
 
 @dataclass
@@ -463,6 +473,16 @@ def score_transition(from_track: Track, to_track: Track, lang: str = "it") -> Tr
         structure -= 8.0
         warnings.append(_txt("short_incoming_warn", lang, duration=duration))
     total += max(structure, 0.0)
+
+    # Energia (A23): correttivo SOLO quando entrambe le tracce hanno `energy`.
+    # Si riusa energy_progression_score (funzione gia' per coppia: premia
+    # energie vicine, penalizza i crolli piu' delle salite — semantica valida
+    # anche per la singola transizione) sottraendo il suo neutro (50): con
+    # energia mancante il termine si salta e lo score resta ESATTAMENTE quello
+    # di prima (nessuna deriva per le librerie senza energia).
+    fe, te = from_track.energy, to_track.energy
+    if fe is not None and te is not None:
+        total += (energy_progression_score(fe, te) - 50) / 100.0 * ENERGY_CORRECTION_WEIGHT
 
     return TransitionScore(
         score=max(0, min(100, round(total))),
