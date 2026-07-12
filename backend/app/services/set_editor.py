@@ -3,8 +3,11 @@
 Rinomina, elimina, rimuove/sposta/sostituisce tracce. Dopo ogni modifica alla
 sequenza ricalcola gli score di transizione con il motore deterministico
 (scoring.py): l'ordine cambia, quindi prev/next cambiano e gli score vanno
-ricomputati. Le motivazioni AI (ai_reason) restano invariate, tranne sulla
-traccia sostituita (che non ha piu' senso conservare).
+ricomputati. Quando le posizioni cambiano (rimozione/spostamento) i ruoli
+vengono riassegnati con la stessa logica della generazione (assign_roles) e
+le note AI (ai_reason/transition_note) delle tracce con vicini cambiati
+vengono azzerate: una nota azzerata e' onesta, una stantia mente. Le coppie
+non toccate conservano le loro.
 """
 
 import logging
@@ -14,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.models import Setlist, SetlistTrack
 from app.repositories import get_setlist, get_track
 from app.services.scoring import risk_from_score, score_transition
+from app.services.set_generator import assign_roles
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +33,21 @@ def _ordered(setlist: Setlist) -> list[SetlistTrack]:
 def _renumber(tracks: list[SetlistTrack]) -> None:
     for i, st in enumerate(sorted(tracks, key=lambda s: s.position), start=1):
         st.position = i
+
+
+def _reassign_roles(setlist: Setlist) -> None:
+    """Riassegna i ruoli posizionali con la stessa logica della generazione."""
+    ordered = _ordered(setlist)
+    for st, role in zip(ordered, assign_roles(len(ordered))):
+        st.role = role
+
+
+def _clear_ai_notes(setlist: Setlist, positions: set[int]) -> None:
+    """Azzera ai_reason/transition_note delle tracce nelle posizioni indicate."""
+    for st in setlist.tracks:
+        if st.position in positions:
+            st.ai_reason = None
+            st.transition_note = None
 
 
 def recompute_transitions(setlist: Setlist) -> None:
@@ -77,6 +96,10 @@ def remove_track(db: Session, setlist_id: int, position: int) -> Setlist:
         raise SetEditError("Il set deve contenere almeno una traccia")
     setlist.tracks.remove(ordered[position - 1])  # cascade delete-orphan
     _renumber(setlist.tracks)
+    n = len(setlist.tracks)
+    # i vicini della rimozione (nelle nuove posizioni) hanno il contesto cambiato
+    _clear_ai_notes(setlist, {p for p in (position - 1, position) if 1 <= p <= n})
+    _reassign_roles(setlist)
     recompute_transitions(setlist)
     db.commit()
     db.refresh(setlist)
@@ -93,6 +116,10 @@ def move_track(db: Session, setlist_id: int, position: int, direction: str) -> S
     j = i - 1 if direction == "up" else i + 1
     if 0 <= j < n:  # ai bordi e' un no-op silenzioso
         ordered[i].position, ordered[j].position = ordered[j].position, ordered[i].position
+        # traccia mossa + vicini della vecchia e della nuova posizione (1-based)
+        lo, hi = min(i, j) + 1, max(i, j) + 1
+        _clear_ai_notes(setlist, {p for p in (lo - 1, lo, hi, hi + 1) if 1 <= p <= n})
+        _reassign_roles(setlist)
         recompute_transitions(setlist)
         db.commit()
         db.refresh(setlist)
