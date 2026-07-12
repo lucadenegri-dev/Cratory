@@ -206,6 +206,7 @@ def _process_item(db, client, download_dir, track,
 
 def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> None:
     db = SessionLocal()
+    client = None
     try:
         client = get_slskd_client()
         download_dir = settings.slskd_download_dir
@@ -266,6 +267,8 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
     finally:
         _state["current_label"] = None
         _state["finished_at"] = datetime.now(timezone.utc).isoformat()
+        if client is not None:
+            client.close()
         db.close()
 
 

@@ -96,11 +96,13 @@ def _spotify_configured() -> bool:
 
 
 def _resolver(db: Session):
-    """Resolver Spotify (solo metadata, client_credentials): None se Spotify non configurato."""
+    """Resolver Spotify (solo metadata, client_credentials): (client, resolve_fn).
+    Entrambi None se Spotify non e' configurato. Il chiamante possiede il client
+    (lo passa al resolver via closure) e deve chiuderlo quando ha finito."""
     if not _spotify_configured():
-        return None
+        return None, None
     client = SpotifyWebClient(db)
-    return lambda artist, title: client.search_track(artist, title)
+    return client, (lambda artist, title: client.search_track(artist, title))
 
 
 def _maybe_llm(use_ai: bool | None):
@@ -157,14 +159,18 @@ def expand(req: DiscoveryExpandRequest, db: Session = Depends(get_db)):
     # Segnale-etichetta: se Spotify e' configurato, annota i candidati con la loro
     # etichetta e fa salire chi e' su un'etichetta che gia' collezioni.
     album_label_fn = owned = None
+    label_client = None
     if _spotify_configured():
-        client = SpotifyWebClient(db)
-        album_label_fn = lambda aid: album_label(client, aid)  # noqa: E731
+        label_client = SpotifyWebClient(db)
+        album_label_fn = lambda aid: album_label(label_client, aid)  # noqa: E731
         owned = _owned_labels(db)
+    resolver_client, resolve_fn = _resolver(db)
+    lastfm_client = None
     try:
+        lastfm_client = get_lastfm_client()
         result = discover_for_playlist(
             db, req.playlist_id,
-            similarity=get_lastfm_client(), resolve=_resolver(db),
+            similarity=lastfm_client, resolve=resolve_fn,
             llm=_maybe_llm(req.use_ai),
             album_label_fn=album_label_fn, owned_labels=owned, limit=req.limit,
         )
@@ -174,6 +180,13 @@ def expand(req: DiscoveryExpandRequest, db: Session = Depends(get_db)):
     except LastFMError as exc:
         raise api_error(502, "discovery_provider_error", f"Discovery provider error: {exc}",
                          reason=str(exc)) from exc
+    finally:
+        if lastfm_client is not None:
+            lastfm_client.close()
+        if label_client is not None:
+            label_client.close()
+        if resolver_client is not None:
+            resolver_client.close()
     return _response(result)
 
 
@@ -221,6 +234,8 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
         # Rate limit / token mancante: 502 esplicito, mai uno "zero risultati" muto.
         raise api_error(502, "discovery_provider_error", f"Discovery provider error: {exc}",
                          reason=str(exc)) from exc
+    finally:
+        client.close()
     return DiscoveryDigResponse(
         seed_type=result.seed_type, value=result.value,
         leads=[_lead_out(lead) for lead in result.leads],
@@ -237,6 +252,8 @@ def get_release_detail(discogs_id: int):
     except DiscogsError as exc:
         raise api_error(502, "discovery_provider_error", f"Discovery provider error: {exc}",
                          reason=str(exc)) from exc
+    finally:
+        client.close()
 
     names = [a.get("name", "") for a in (payload.get("artists") or []) if a.get("name")]
     artist = _clean_artist_name(", ".join(names)) if names else "Sconosciuto"

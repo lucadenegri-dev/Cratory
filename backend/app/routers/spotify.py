@@ -55,9 +55,16 @@ def _http_error(exc: SpotifyError) -> HTTPException:
 @router.get("/status")
 def status(db: Session = Depends(get_db)):
     configured = bool(settings.spotify_client_id and settings.spotify_client_secret)
+    user_connected = False
+    if configured:
+        client = SpotifyWebClient(db)
+        try:
+            user_connected = client.user_connected()
+        finally:
+            client.close()
     return {
         "configured": configured,
-        "user_connected": SpotifyWebClient(db).user_connected() if configured else False,
+        "user_connected": user_connected,
         # mostrato in UI: deve combaciare ESATTAMENTE col Redirect URI nel dashboard Spotify
         "redirect_uri": settings.spotify_redirect_uri,
     }
@@ -85,11 +92,14 @@ def callback(
         return RedirectResponse(f"{frontend}?spotify=error&detail={error or 'no_code'}")
     if not _consume_state(state):
         return RedirectResponse(f"{frontend}?spotify=error&detail=invalid_state")
+    client = SpotifyWebClient(db)
     try:
-        SpotifyWebClient(db).exchange_code(code)
+        client.exchange_code(code)
     except SpotifyError as exc:
         logger.error("OAuth Spotify fallito: %s", exc)
         return RedirectResponse(f"{frontend}?spotify=error&detail=token_exchange")
+    finally:
+        client.close()
     return RedirectResponse(f"{frontend}?spotify=connected")
 
 
@@ -106,9 +116,12 @@ def create_playlist(req: CreatePlaylistRequest, db: Session = Depends(get_db)):
     track_ids = [st.track.spotify_id for st in setlist.tracks if st.track.spotify_id]
     if not track_ids:
         raise api_error(422, "set_no_spotify_tracks", "The set has no Spotify tracks")
+    client = SpotifyWebClient(db)
     try:
-        url = SpotifyWebClient(db).create_playlist(req.name or setlist.name, track_ids)
+        url = client.create_playlist(req.name or setlist.name, track_ids)
     except SpotifyError as exc:
         raise _http_error(exc) from exc
+    finally:
+        client.close()
     skipped = len(setlist.tracks) - len(track_ids)
     return {"playlist_url": url, "tracks_added": len(track_ids), "tracks_skipped": skipped}

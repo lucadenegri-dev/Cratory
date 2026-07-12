@@ -276,7 +276,17 @@ def index_library(db: Session, *, root: str | Path,
                 seen_paths.add(str(path.resolve()))
             else:
                 # Senza traccia: ricorda la firma per non ri-hasharlo al prossimo run.
-                stat = path.stat()
+                try:
+                    stat = path.stat()
+                except OSError as exc:
+                    # File sparito/illeggibile tra l'hash e lo stat(): si salta e
+                    # si conta, senza far morire l'intero run (come in passata 1).
+                    report["failed"] += 1
+                    report["errors"].append({"path": str(path), "error": str(exc)})
+                    logger.warning("File saltato %s: %s", path, exc)
+                    if on_progress is not None:
+                        on_progress(i, total)
+                    continue
                 db.merge(ArchiveSeen(path=str(path.resolve()), mtime=stat.st_mtime, size=stat.st_size))
             if on_progress is not None:
                 on_progress(i, total)

@@ -40,6 +40,9 @@ class _FakeClient:
     def transfer_state(self, username, filename):
         return {"filename": filename, "state": "Completed, Succeeded"}
 
+    def close(self):
+        pass
+
 
 @pytest.fixture()
 def patch_job(monkeypatch, tmp_path):
@@ -123,6 +126,9 @@ class _FallbackClient:
     def transfer_state(self, username, filename):
         state = "Completed, Errored" if username == "baduser" else "Completed, Succeeded"
         return {"state": state}
+
+    def close(self):
+        pass
 
 
 def test_fallback_tries_next_user_when_first_fails(patch_job, monkeypatch):
@@ -282,6 +288,9 @@ def test_slskd_giu_ferma_il_job_con_errore_chiaro(patch_job, monkeypatch):
     class DownClient:
         def search(self, artist, title, **kw):
             raise SlskdError('slskd 409: "must be connected (currently: Disconnected)"')
+
+        def close(self):
+            pass
 
     TestSession, _ = patch_job
     monkeypatch.setattr(job, "get_slskd_client", lambda: DownClient())
@@ -536,6 +545,7 @@ def test_cascade_all_failed_surfaces_specific_reason(patch_job, monkeypatch):
         def enqueue_download(self, file): self.enqueued.append(file.username)
         def transfer_state(self, username, filename):
             return {"state": "Completed, Errored"}
+        def close(self): pass
 
     client = _AllErrored()
     monkeypatch.setattr(job, "get_slskd_client", lambda: client)

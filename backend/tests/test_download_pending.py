@@ -1,4 +1,6 @@
 """Esiti download persistiti sulla Track + sezione "da sistemare"."""
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -27,7 +29,9 @@ def test_job_persiste_esito_sulla_traccia(monkeypatch):
     db.add(t); db.commit()
 
     monkeypatch.setattr(job, "SessionLocal", factory)
-    monkeypatch.setattr(job, "get_slskd_client", lambda: object())
+    # _process_item e' monkeypatchato sotto e non tocca il client: basta un
+    # oggetto con close() (chiamato da _run nel finally di fine job).
+    monkeypatch.setattr(job, "get_slskd_client", lambda: SimpleNamespace(close=lambda: None))
     monkeypatch.setattr(job, "_process_item",
                         lambda *a, **k: ("needs_review", "confidenza sotto soglia", None))
     job._run([(t.id, None)], None)

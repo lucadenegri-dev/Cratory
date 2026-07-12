@@ -92,6 +92,8 @@ def spotify_available(db: Session = Depends(get_db)):
         me_id = client.current_user_id()
     except SpotifyError as exc:
         raise _http_error(exc) from exc
+    finally:
+        client.close()
     out: list[SpotifyPlaylistRef] = []
     for p in raw:
         if not p:
@@ -137,6 +139,8 @@ def import_from_spotify(req: PlaylistImportRequest, db: Session = Depends(get_db
             )
     except SpotifyError as exc:
         raise _http_error(exc) from exc
+    finally:
+        client.close()
     # Enrichment non piu' avviato qui: e' ora responsabilita' di Sortory.
     return PlaylistImportReport(**report)
 
@@ -152,6 +156,8 @@ def liked_preview(db: Session = Depends(get_db)):
         items = client.get_liked_tracks()
     except SpotifyError as exc:
         raise _http_error(exc) from exc
+    finally:
+        client.close()
     return [LikedTrackPreview(**p) for p in preview_liked_tracks(db, items)]
 
 
@@ -163,6 +169,8 @@ def import_liked_selected(req: LikedSelectedImportRequest, db: Session = Depends
         items = client.get_liked_tracks()
     except SpotifyError as exc:
         raise _http_error(exc) from exc
+    finally:
+        client.close()
     report = import_selected_liked_tracks(db, items, req.spotify_ids)
     return PlaylistImportReport(**report)
 
@@ -229,6 +237,8 @@ def sync_playlist(playlist_id: int, db: Session = Depends(get_db)):
             artwork = images[0]["url"] if images else artwork
     except SpotifyError as exc:
         raise _http_error(exc) from exc
+    finally:
+        client.close()
 
     report = import_playlist(
         db, platform="spotify", name=name, items=items,
@@ -324,12 +334,15 @@ def add_discovered_track(playlist_id: int, req: PlaylistAddTrackRequest, db: Ses
     spotify_added = False
     spotify_error: str | None = None
     if req.spotify_id and playlist.platform == "spotify" and playlist.platform_playlist_id:
+        wb_client = SpotifyWebClient(db)
         try:
-            SpotifyWebClient(db).add_tracks(playlist.platform_playlist_id, [req.spotify_id])
+            wb_client.add_tracks(playlist.platform_playlist_id, [req.spotify_id])
             spotify_added = True
         except SpotifyError as exc:
             spotify_error = str(exc)
             logger.warning("Write-back Spotify fallito per playlist %s: %s", playlist_id, exc)
+        finally:
+            wb_client.close()
 
     return PlaylistAddTrackResponse(
         created=created, track=track_out(track),

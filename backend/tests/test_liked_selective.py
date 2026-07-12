@@ -34,6 +34,9 @@ class _FakeSpotify:
     def get_liked_tracks(self):
         return self._items
 
+    def close(self):
+        pass
+
 
 def _liked_playlist(db) -> Playlist:
     return db.query(Playlist).filter(Playlist.kind == "liked").one()

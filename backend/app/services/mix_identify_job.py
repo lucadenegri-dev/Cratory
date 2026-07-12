@@ -29,12 +29,21 @@ _state: dict = {
 }
 
 
-def job_state() -> dict:
+def _state_snapshot() -> dict:
+    """Copia di `_state` senza acquisire `_lock`: solo per uso interno da un
+    chiamante che lo tiene gia' (vedi `start_job`) — `threading.Lock` non e'
+    rientrante, un secondo acquire dallo stesso thread si bloccherebbe."""
     return dict(_state)
 
 
+def job_state() -> dict:
+    with _lock:
+        return _state_snapshot()
+
+
 def is_running() -> bool:
-    return _state["status"] == "running"
+    with _lock:
+        return _state["status"] == "running"
 
 
 def _run_job(dj_set_id: int, url: str) -> None:
@@ -42,6 +51,7 @@ def _run_job(dj_set_id: int, url: str) -> None:
     from app.services.mix_identify import identify_set
 
     db = SessionLocal()
+    recognizer = ShazamioRecognizer()
 
     def on_progress(processed: int, total: int) -> None:
         _state.update(processed=processed, total=total, phase=f"Riconosco i brani… ({processed}/{total})")
@@ -49,7 +59,7 @@ def _run_job(dj_set_id: int, url: str) -> None:
     try:
         dj_set = db.get(DjSet, dj_set_id)
         _state.update(phase="Scarico l'audio del mix…")
-        meta, tracks = identify_set(url, recognizer=ShazamioRecognizer(), on_progress=on_progress)
+        meta, tracks = identify_set(url, recognizer=recognizer, on_progress=on_progress)
 
         dj_set.title = meta.title
         dj_set.dj_name = meta.dj_name
@@ -80,6 +90,7 @@ def _run_job(dj_set_id: int, url: str) -> None:
         _state.update(status="error", error=str(exc), phase=None)
     finally:
         _state["finished_at"] = datetime.now(timezone.utc).isoformat()
+        recognizer.close()
         db.close()
 
 
@@ -97,7 +108,9 @@ def start_job(url: str) -> dict:
             return {**job_state(), "dj_set_id": existing.id, "cached": True}
         with _lock:
             if _state["status"] == "running":
-                return {**job_state(), "cached": False}
+                # _state_snapshot(), non job_state(): il lock e' gia' tenuto qui
+                # (Lock non e' rientrante, un secondo acquire si bloccherebbe).
+                return {**_state_snapshot(), "cached": False}
             if existing:
                 dj_set = db.get(DjSet, existing.id)
                 # ripulisci un eventuale tentativo precedente fallito

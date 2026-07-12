@@ -118,6 +118,9 @@ class _FakeSpotify:
     def get_playlist_meta(self, playlist_id):
         return {}  # default innocuo: nessun refresh di nome/cover
 
+    def close(self):
+        pass
+
 
 def test_sync_endpoint_reports_added_and_removed(db, monkeypatch):
     import_playlist(db, platform="spotify", name="PL", items=[
