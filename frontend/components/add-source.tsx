@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { addSource } from "@/lib/api";
-import { Button, Input } from "./ui";
+import { Button, Input, Spinner } from "./ui";
 import { useT } from "@/lib/i18n";
 
 export function AddSource({ onAdded }: { onAdded: () => void }) {
@@ -46,7 +46,7 @@ export function AddSource({ onAdded }: { onAdded: () => void }) {
           placeholder={t.sources.labelPlaceholder}
           className="sm:w-40"
         />
-        <Button onClick={submit} disabled={busy || !path.trim()}>{t.sources.addButton}</Button>
+        <Button onClick={submit} disabled={busy || !path.trim()}>{busy ? <Spinner /> : t.sources.addButton}</Button>
       </div>
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
     </div>

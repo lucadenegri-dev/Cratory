@@ -8,7 +8,7 @@ import {
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { FilesTable } from "@/components/files-table";
-import { Alert, EmptyState, Input, Select } from "@/components/ui";
+import { Alert, EmptyState, Input, Loading, Select } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 const LIMIT = 500;
@@ -47,6 +47,7 @@ export default function FilesPage() {
   const t = useT();
   const { scan } = useJobs();
   const [rows, setRows] = useState<FileRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [stats, setStats] = useState<LibraryStats | null>(null);
   const [roots, setRoots] = useState<ScanRoot[]>([]);
   const [offline, setOffline] = useState(false);
@@ -82,7 +83,8 @@ export default function FilesPage() {
     };
     listFiles(query)
       .then((r) => { setRows(r); setOffline(false); })
-      .catch(() => setOffline(true));
+      .catch(() => setOffline(true))
+      .finally(() => setLoaded(true));
     libraryStats().then(setStats).catch(() => setStats(null));
   }, [rootId, onlyIssues, sort, q, tag]);
 
@@ -143,7 +145,9 @@ export default function FilesPage() {
           )}
         </div>
 
-        {rows.length === 0 && !offline ? (
+        {!loaded ? (
+          <Loading />
+        ) : rows.length === 0 && !offline ? (
           <EmptyState title={t.files.emptyTitle}>{t.files.emptyBody}</EmptyState>
         ) : (
           <FilesTable rows={rows} />

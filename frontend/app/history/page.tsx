@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { listHistory, undoRun, fmtDate, type HistoryItem } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
-import { Alert, EmptyState } from "@/components/ui";
+import { Alert, EmptyState, Loading } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 
@@ -12,6 +12,7 @@ export default function HistoryPage() {
   const t = useT();
   const { apply } = useJobs();
   const [runs, setRuns] = useState<HistoryItem[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [offline, setOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -19,7 +20,8 @@ export default function HistoryPage() {
   const load = useCallback(() => {
     listHistory()
       .then((r) => { setRuns(r); setOffline(false); })
-      .catch(() => setOffline(true));
+      .catch(() => setOffline(true))
+      .finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load]);
   // a fine apply compare una nuova run
@@ -59,7 +61,9 @@ export default function HistoryPage() {
         {offline && <Alert>{t.common.backendOffline}</Alert>}
         {error && <Alert>{error}</Alert>}
 
-        {runs.length === 0 && !offline ? (
+        {!loaded ? (
+          <Loading />
+        ) : runs.length === 0 && !offline ? (
           <EmptyState title={t.history.emptyTitle}>{t.history.emptyBody}</EmptyState>
         ) : (
           <div className="overflow-x-auto border border-border">

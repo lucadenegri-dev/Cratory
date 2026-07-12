@@ -6,7 +6,7 @@ import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { PlanOps } from "@/components/plan-ops";
 import { ApplyModal } from "@/components/apply-modal";
-import { Alert, Button, EmptyState, EqMeter } from "@/components/ui";
+import { Alert, Button, EmptyState, EqMeter, Loading, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 export default function PlanPage() {
@@ -78,7 +78,7 @@ export default function PlanPage() {
 
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={rebuild} disabled={building || applying}>
-            ↻ {plan ? t.plan.rebuildLabel : t.plan.buildLabel}{t.plan.buildPlanSuffix}
+            {building ? <Spinner /> : "↻"} {plan ? t.plan.rebuildLabel : t.plan.buildLabel}{t.plan.buildPlanSuffix}
           </Button>
           {building && <span className="text-xs text-muted">{t.plan.computing}</span>}
         </div>
@@ -109,7 +109,7 @@ export default function PlanPage() {
           </div>
         )}
 
-        {!loaded ? null
+        {!loaded ? <Loading />
           : plan && nOps > 0 ? <PlanOps ops={plan.ops} />
           : plan && nOps === 0 ? <EmptyState title={t.plan.emptyNothingTitle}>{t.plan.emptyNothingBody}</EmptyState>
           : !applying && !result ? <EmptyState title={t.plan.emptyNoPlanTitle}>{t.plan.emptyNoPlanBody}</EmptyState>

@@ -6,7 +6,7 @@ import {
   type Settings, type RootTarget, type FingerprintResult, type ProviderInfo,
 } from "@/lib/api";
 import { PageLayout } from "@/components/page-layout";
-import { Alert, Button } from "@/components/ui";
+import { Alert, Button, Loading, Spinner } from "@/components/ui";
 import { useI18n, useT } from "@/lib/i18n";
 
 // Valori d'esempio per l'anteprima client-side (approssimata: la resa reale con
@@ -34,6 +34,7 @@ function renderDest(targetRoot: string, folder: string, naming: string, sameFold
 export default function SettingsPage() {
   const { lang, setLang, t } = useI18n();
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [offline, setOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [naming, setNaming] = useState("");
@@ -48,7 +49,8 @@ export default function SettingsPage() {
         setSettings(s); setNaming(s.naming_template); setFolder(s.folder_template);
         setOffline(false);
       })
-      .catch(() => setOffline(true));
+      .catch(() => setOffline(true))
+      .finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { listProviders().then(setProviders).catch(() => {}); }, []);
@@ -97,6 +99,8 @@ export default function SettingsPage() {
 
         {offline && <Alert>{t.common.backendOffline}</Alert>}
         {error && <Alert>{error}</Alert>}
+
+        {!loaded && !offline && <Loading />}
 
         {settings && (
           <>
@@ -251,7 +255,7 @@ function RootRow({ root, folder, naming, onSave }: {
             value={target} onChange={(e) => setTarget(e.target.value)}
             placeholder={t.settings.targetPlaceholder}
           />
-          <Button variant="outline" size="sm" disabled={busy} onClick={save}>{t.settings.save}</Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={save}>{busy ? <Spinner /> : t.settings.save}</Button>
         </div>
       </div>
 

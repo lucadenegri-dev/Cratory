@@ -5,20 +5,22 @@ import { listDuplicates, setKeeper, dismissDuplicate, type DupGroup } from "@/li
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { DupGroupCard } from "@/components/dup-group";
-import { Alert, EmptyState } from "@/components/ui";
+import { Alert, EmptyState, Loading } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 export default function DuplicatesPage() {
   const t = useT();
   const { scan } = useJobs();
   const [groups, setGroups] = useState<DupGroup[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [offline, setOffline] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     listDuplicates()
       .then((g) => { setGroups(g); setOffline(false); })
-      .catch(() => setOffline(true));
+      .catch(() => setOffline(true))
+      .finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (scan.status === "done") load(); }, [scan.status, load]);
@@ -55,7 +57,9 @@ export default function DuplicatesPage() {
         {offline && <Alert>{t.common.backendOffline}</Alert>}
         {actionError && <Alert>{actionError}</Alert>}
 
-        {groups.length === 0 && !offline ? (
+        {!loaded ? (
+          <Loading />
+        ) : groups.length === 0 && !offline ? (
           <EmptyState title={t.duplicates.emptyTitle}>{t.duplicates.emptyBody}</EmptyState>
         ) : (
           ordered.map((g) => (

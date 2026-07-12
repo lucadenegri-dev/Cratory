@@ -3,7 +3,7 @@
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 /* ---------------------------------------------------------------- Card */
 
@@ -147,49 +147,42 @@ export function Equalizer({ className }: { className?: string }) {
 /* Alias di compatibilita': i consumer che importano Spinner restano invariati. */
 export const Spinner = Equalizer;
 
-/* Pseudo-waveform deterministica (no Math.random: stessa forma su server e client). */
-const WAVE: number[] = Array.from({ length: 112 }, (_, i) => {
-  const x = i / 112;
-  const a =
-    0.30 +
-    0.32 * Math.abs(Math.sin(x * Math.PI * 7)) +
-    0.22 * Math.abs(Math.sin(x * Math.PI * 23 + 1)) +
-    0.16 * Math.abs(Math.sin(x * Math.PI * 3 + 0.5));
-  return Math.max(0.16, Math.min(1, a));
-});
+/** Trattamento standard del caricamento pagina: Equalizer + testo muted. */
+export function Loading({ label }: { label?: string }) {
+  const t = useT();
+  return (
+    <p className="flex items-center gap-2 py-8 text-sm text-muted" role="status">
+      <Equalizer /> {label ?? t.common.loading}
+    </p>
+  );
+}
 
-/* Meter a waveform "rekordbox": value numerico -> riempimento sx->dx con testina;
-   value null -> indeterminato con scan che spazza. */
-export function EqMeter({ value, className }: { value: number | null; className?: string }) {
+/* Meter "terminale": blocchi █ in danger su dither ░ chiaro. value numerico ->
+   riempimento a blocchi con cursore lampeggiante nello slot successivo;
+   value null -> indeterminato con treno di blocchi che avanza a scatti.
+   calm: rapporti statici (es. copertura) -> niente cursore, tutto fermo. */
+export function EqMeter({ value, className, calm = false }: { value: number | null; className?: string; calm?: boolean }) {
   const t = useT();
   const indeterminate = value == null;
   const v = indeterminate ? 0 : Math.min(100, Math.max(0, value));
-  const lit = indeterminate ? 0 : Math.round((WAVE.length * v) / 100);
+  const w = { "--w": `${v}%` } as CSSProperties;
   return (
     <div
-      className={cn("eqm", className ?? "h-6 w-full")}
+      className={cn("eqm", calm && "eqm-calm", className ?? "h-6 w-full")}
       role={indeterminate ? "status" : "progressbar"}
       aria-label={indeterminate ? t.common.inProgress : undefined}
       aria-valuenow={indeterminate ? undefined : Math.round(v)}
       aria-valuemin={indeterminate ? undefined : 0}
       aria-valuemax={indeterminate ? undefined : 100}
     >
-      <div className="eqm-wave">
-        {WAVE.map((a, i) => {
-          const on = !indeterminate && i < lit;
-          return (
-            <span
-              key={i}
-              className={cn("eqm-bar", on ? "eqm-on" : "eqm-off")}
-              style={{ height: `${(a * 100).toFixed(1)}%`, animationDelay: on ? `${(-((i * 0.09) % 1.7)).toFixed(2)}s` : undefined }}
-            />
-          );
-        })}
-      </div>
+      <span className="eqm-rest" />
       {indeterminate ? (
         <span className="eqm-scan" />
       ) : (
-        <span className="eqm-ph" style={{ left: `${v}%` }} />
+        <>
+          <span className="eqm-fill" style={w} />
+          {!calm && v < 100 && <span className="eqm-cursor" style={w} />}
+        </>
       )}
     </div>
   );

@@ -6,13 +6,14 @@ import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { AddSource } from "@/components/add-source";
 import { SourcesTable } from "@/components/sources-table";
-import { Alert, EmptyState } from "@/components/ui";
+import { Alert, EmptyState, Loading } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 export default function SourcesPage() {
   const t = useT();
   const { scan, startScan, refresh } = useJobs();
   const [roots, setRoots] = useState<ScanRoot[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [offline, setOffline] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -20,7 +21,8 @@ export default function SourcesPage() {
   const load = useCallback(() => {
     listSources()
       .then((r) => { setRoots(r); setOffline(false); })
-      .catch(() => setOffline(true));
+      .catch(() => setOffline(true))
+      .finally(() => setLoaded(true));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -80,7 +82,9 @@ export default function SourcesPage() {
         {offline && <Alert>{t.sources.offline(process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8010")}</Alert>}
         {actionError && <Alert>{actionError}</Alert>}
         <AddSource onAdded={load} />
-        {roots.length === 0 && !offline ? (
+        {!loaded ? (
+          <Loading />
+        ) : roots.length === 0 && !offline ? (
           <EmptyState title={t.sources.emptyTitle}>{t.sources.emptyBody}</EmptyState>
         ) : (
           <SourcesTable roots={roots} onScan={onScan} onDelete={onDelete} deletingId={deletingId} />

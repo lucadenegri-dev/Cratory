@@ -9,7 +9,7 @@ import {
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { IssuesTable, type GroupBy } from "@/components/issues-table";
-import { Alert, Button, Checkbox, EmptyState, Input, Modal, Select } from "@/components/ui";
+import { Alert, Button, Checkbox, EmptyState, Input, Loading, Modal, Select, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 
@@ -17,6 +17,7 @@ export default function IssuesPage() {
   const t = useT();
   const { scan, rescan, startRescan } = useJobs();
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [roots, setRoots] = useState<ScanRoot[]>([]);
   const [offline, setOffline] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -49,7 +50,8 @@ export default function IssuesPage() {
   const load = useCallback(() => {
     listIssues()
       .then((r) => { setIssues(r); setOffline(false); })
-      .catch(() => setOffline(true));
+      .catch(() => setOffline(true))
+      .finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { listSources().then(setRoots).catch(() => {}); }, []);
@@ -312,7 +314,7 @@ export default function IssuesPage() {
                 <Button
                   variant="primary" size="sm" onClick={s.onClick} disabled={s.busy}
                   className="w-full shrink-0 justify-start sm:w-64"
-                >{s.label}</Button>
+                >{s.busy && <Spinner />}{s.label}</Button>
                 <p className="text-[11px] leading-relaxed text-fg">
                   {s.desc}
                   <span className="ml-1.5 border border-border px-1 py-0.5 align-middle text-[9px] uppercase tracking-wider text-muted">{s.tag}</span>
@@ -359,7 +361,7 @@ export default function IssuesPage() {
                     </label>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => setRescanModal(true)} disabled={rescanRunning}>
-                    {rescanRunning ? t.issues.providerImportBusy : t.issues.providerRescanBtn}
+                    {rescanRunning && <Spinner />}{rescanRunning ? t.issues.providerImportBusy : t.issues.providerRescanBtn}
                   </Button>
                 </div>
                 <p className="mt-2.5 text-[11px] leading-relaxed text-muted">{t.issues.rewriteReviewNote}</p>
@@ -431,7 +433,9 @@ export default function IssuesPage() {
           </div>
         </div>
 
-        {filtered.length === 0 && !offline ? (
+        {!loaded ? (
+          <Loading />
+        ) : filtered.length === 0 && !offline ? (
           <EmptyState title={t.issues.emptyTitle}>
             {issues.length === 0 ? t.issues.emptyClean : t.issues.emptyFiltered}
           </EmptyState>
