@@ -85,6 +85,17 @@ class Track(Base):
     # Feature audio grezza (0..1) e provenienza dell'energia: computed | estimated.
     energy_raw: Mapped[float | None] = mapped_column(Float)
     energy_source: Mapped[str | None] = mapped_column(String)
+    # Provenienza di bpm/camelot_key: manual | rekordbox | cratory (null se il
+    # valore e' null). Gerarchia: manual > rekordbox > cratory; l'import
+    # Rekordbox sovrascrive di default solo i valori 'cratory'.
+    bpm_source: Mapped[str | None] = mapped_column(String)
+    key_source: Mapped[str | None] = mapped_column(String)
+    # Analisi BPM/key in-app (Essentia). Il job scrive SOLO questi campi: i
+    # canonici bpm/camelot_key cambiano solo via apply (vedi services/audio_analysis).
+    analysis_bpm: Mapped[float | None] = mapped_column(Float)
+    analysis_camelot: Mapped[str | None] = mapped_column(String)
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    analysis_error: Mapped[str | None] = mapped_column(String)
     # Stato traccia: imported | ready_for_set
     status: Mapped[str] = mapped_column(String, default="imported", index=True)
     album_art_url: Mapped[str | None] = mapped_column(Text)  # artwork_url (cover album)

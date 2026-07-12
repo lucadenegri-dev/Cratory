@@ -75,6 +75,13 @@ def ensure_schema(eng=None) -> None:
             "last_download_outcome": "VARCHAR",
             "last_download_reason": "VARCHAR",
             "last_download_path": "TEXT",
+            # Pagina Analisi: provenienza bpm/key + risultati analisi in-app
+            "bpm_source": "VARCHAR",
+            "key_source": "VARCHAR",
+            "analysis_bpm": "FLOAT",
+            "analysis_camelot": "VARCHAR",
+            "analyzed_at": "DATETIME",
+            "analysis_error": "VARCHAR",
         },
         "setlists": {
             "generated_by": "VARCHAR DEFAULT 'algorithmic'",
@@ -107,6 +114,7 @@ def ensure_schema(eng=None) -> None:
         _migrate_drop_enrichment_cols(conn)
         _migrate_playlist_memberships(conn)
         _migrate_rename_liked_spotify(conn)
+        _migrate_backfill_bpm_key_sources(conn)
 
 
 # Tabelle dell'era Rekordbox/MVP1 rimosse dopo il pivot a playlist->set.
@@ -285,6 +293,29 @@ def _migrate_rename_liked_spotify(conn) -> None:
         "UPDATE playlists SET name = 'Spotify Likes' "
         "WHERE kind = 'liked' AND platform = 'spotify' AND name = 'Liked Spotify'"
     ))
+
+
+def _migrate_backfill_bpm_key_sources(conn) -> None:
+    """Backfill provenienza bpm/key: i valori esistenti arrivavano dall'import
+    Rekordbox (unica fonte storica di scrittura); un valore in realta' corretto a
+    mano si ri-etichetta 'manual' alla prossima modifica. Idempotente: la WHERE
+    su source NULL rende no-op le esecuzioni successive.
+
+    Difensivo su `bpm`/`camelot_key`: alcuni test (e potenziali DB legacy) simulano
+    una `tracks` ridotta alle sole colonne minime, dove `bpm` non e' ancora stata
+    aggiunta (a differenza di `camelot_key`, presente in `additions` e quindi gia'
+    creata dal loop ALTER ADD di `ensure_schema` a questo punto). Senza il check
+    l'UPDATE fallirebbe con "no such column" invece di essere un no-op sicuro.
+    """
+    cols = {r[1] for r in conn.execute(text("PRAGMA table_info(tracks)")).fetchall()}
+    if "bpm" in cols:
+        conn.execute(text(
+            "UPDATE tracks SET bpm_source = 'rekordbox' "
+            "WHERE bpm IS NOT NULL AND bpm_source IS NULL"))
+    if "camelot_key" in cols:
+        conn.execute(text(
+            "UPDATE tracks SET key_source = 'rekordbox' "
+            "WHERE camelot_key IS NOT NULL AND camelot_key != '' AND key_source IS NULL"))
 
 
 # `release_date`: colonna lead senza writer nel flusso attuale (metadati editoriali
