@@ -12,6 +12,7 @@ Regole del progetto:
 """
 
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -23,6 +24,29 @@ from app.integrations._http import get_with_retries
 logger = logging.getLogger(__name__)
 
 API = "https://ws.audioscrobbler.com/2.0/"
+# Le ToS Last.fm richiedono uno User-Agent identificativo (stessa convenzione
+# di Discogs/MusicBrainz): senza, l'app e' indistinguibile da uno scraper.
+_USER_AGENT = "Cratory/0.1 (+http://localhost)"
+
+# Cache in-memory con TTL: gli expand del Discovery richiamano gli stessi
+# artisti/tag a distanza di secondi (varianti, refresh UI) e il budget
+# rate-limit di Last.fm e' limitato — 5 minuti coprono la sessione di expand
+# senza servire dati stantii.
+CACHE_TTL_SECONDS = 300
+# Guardia dumb sulla dimensione: oltre la soglia si svuota tutto. Niente LRU:
+# la cache e' piccola, ricostruirla costa una manciata di richieste.
+CACHE_MAX_ENTRIES = 500
+
+# {chiave: (scadenza monotonic, risposta)} — condivisa tra le istanze del client.
+_cache: dict[tuple, tuple[float, dict[str, Any]]] = {}
+
+# Clock iniettabile: i test lo monkeypatchano per simulare lo scadere del TTL.
+_now = time.monotonic
+
+
+def clear_cache() -> None:
+    """Svuota la cache (helper per i test)."""
+    _cache.clear()
 
 
 class LastFMError(Exception):
@@ -54,12 +78,21 @@ class LastFMClient(SimilarityClient):
 
     def __init__(self, api_key: str, http: httpx.Client | None = None):
         self.api_key = api_key
-        self.http = http or httpx.Client(timeout=15)
+        self.http = http or httpx.Client(timeout=15, headers={"User-Agent": _USER_AGENT})
 
     # ---- HTTP -----------------------------------------------------------
 
     def _get(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         query = {**params, "method": method, "api_key": self.api_key, "format": "json"}
+        # Chiave: metodo + parametri completi (api_key inclusa). Le chiavi del
+        # dict sono uniche, quindi sorted() non confronta mai i valori.
+        cache_key = (method, tuple(sorted(query.items())))
+        hit = _cache.get(cache_key)
+        if hit is not None:
+            expires_at, cached = hit
+            if _now() < expires_at:
+                return cached
+            del _cache[cache_key]  # scaduta: rimuovi e ricadi sulla rete
         r = get_with_retries(self.http, API, params=query, error_cls=LastFMError)
         if r.status_code == 429:
             raise LastFMError("Last.fm: rate limit (riprova piu' tardi).")
@@ -71,6 +104,11 @@ class LastFMClient(SimilarityClient):
             raise LastFMError("Last.fm: risposta non JSON") from exc
         if isinstance(data, dict) and data.get("error"):
             raise LastFMError(f"Last.fm errore {data.get('error')}: {data.get('message')}")
+        # Solo i successi finiscono in cache: gli errori (raise sopra) si
+        # ritentano subito alla prossima chiamata.
+        if len(_cache) >= CACHE_MAX_ENTRIES:
+            _cache.clear()
+        _cache[cache_key] = (_now() + CACHE_TTL_SECONDS, data)
         return data
 
     # ---- SimilarityClient ------------------------------------------------
