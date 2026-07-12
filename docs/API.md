@@ -47,13 +47,69 @@ without BPM or without Camelot key. Response: `{pending}`.
 `POST /api/rekordbox/import` (multipart, `file` field) imports the XML exported from
 Rekordbox (`File > Export Collection in xml format`). For each track in the XML it
 looks for the matching owned `Track` in this order: NFC-normalized path ->
-`audio_hash` fallback (gated on the basename) -> fuzzy artist+title. By default it
-fills `bpm`/`camelot_key` **only if absent** (it protects manual corrections); with
-`?overwrite=true` the Rekordbox re-analysis wins over existing values, but a value
-absent in the XML never clears the one in the library. It recomputes `energy` when
-the BPM changes. The `bpm_set`/`key_set` counters count only the values that actually
-changed. Response: `{in_file, matched, unmatched, bpm_set, key_set, energy_set}`.
-`400` on an empty file or invalid/unsafe XML.
+`audio_hash` fallback (gated on the basename) -> fuzzy artist+title. **Source-aware
+default** (`bpm_source`/`key_source`: `manual` > `rekordbox` > `cratory`): it fills
+empty `bpm`/`camelot_key` and reclaims values currently sourced from the in-app
+analysis (`cratory`), but protects `manual` corrections; with `?overwrite=true` the
+Rekordbox re-analysis wins over every existing value regardless of source, but a
+value absent in the XML never clears the one in the library. Every write marks the
+source `rekordbox`. It recomputes `energy` when the BPM changes. The
+`bpm_set`/`key_set` counters count only the values that actually changed. Response:
+`{in_file, matched, unmatched, bpm_set, key_set, energy_set}`. `400` on an empty file
+or invalid/unsafe XML.
+
+## Analysis (in-app BPM/key)
+
+```text
+GET  /api/analysis/overview
+POST /api/analysis/start
+GET  /api/analysis/status
+GET  /api/analysis/divergences
+POST /api/analysis/apply
+```
+
+Deterministic BPM/key analysis on owned tracks, the alternative source to the
+Rekordbox import above: a local Essentia adapter
+(`backend/app/integrations/essentia_engine.py`, lazy import, pinned
+`essentia==2.1b6.dev1389`, AGPL-3.0). Cratory never asks an AI for BPM/key. The
+background job never touches the canonical `bpm`/`camelot_key` directly: it only
+writes `analysis_bpm`/`analysis_camelot`/`analyzed_at`/`analysis_error`; the bridge
+to the canonical fields is the explicit apply step (source becomes `cratory`).
+
+`GET /api/analysis/overview` returns `AnalysisOverviewOut`: `owned`,
+`ready_for_set`, `missing_bpm`, `missing_key`, `bpm_by_source`/`key_by_source`
+(counts by `manual`/`rekordbox`/`cratory`), `analyzed` (tracks with `analyzed_at`
+set), `divergent` (in-app analysis differs from the canonical value) and
+`rekordbox_pending` (same count as `GET /api/rekordbox/pending`).
+
+`POST /api/analysis/start` (`202`) starts the background job. Body
+`{scope: "missing"|"all" = "missing", track_ids?: number[]}`: `missing` analyzes
+only owned tracks without BPM or key, `all` (or explicit `track_ids`) re-analyzes
+regardless of current values. `503` (`analysis_engine_unavailable`) if Essentia is
+not installed; `409` (`analysis_already_running`) if a job is already running. The
+job writes only `analysis_*` fields, auto-applies to the canonical fields only where
+they are empty (no conflict possible), and marks per-track decode failures with
+`analysis_error="analysis_decode_failed"` without stopping the batch (commit per
+track, so progress survives an interruption).
+
+`GET /api/analysis/status` returns `AnalysisJobStatus`: `status`
+(`idle|running|done|error`), `processed`, `total`, `analyzed`, `failed`, `applied`,
+`current_label`, `error`, `started_at`, `finished_at`.
+
+`GET /api/analysis/divergences` lists owned tracks where the in-app analysis
+differs from the canonical value (`AnalysisDivergenceOut[]`): `track_id`, `artist`,
+`title`, `bpm`, `bpm_source`, `analysis_bpm`, `bpm_delta`, `camelot_key`,
+`key_source`, `analysis_camelot`, `key_compatibility` (`same|compatible|weak|
+unknown`, the same Camelot-wheel compatibility used by transitions).
+
+`POST /api/analysis/apply` copies `analysis_*` into the canonical fields (source
+becomes `cratory`) for a selection. Body `{track_ids?: number[], mode?:
+"divergent"|"all", force?: boolean}`: explicit `track_ids` or `mode="divergent"`
+apply only the picked/divergent rows; `mode="all"` rewrites every analyzed track
+regardless of source (including `manual`) and requires `force=true` as
+confirmation. `422` (`analysis_force_required`) if `mode="all"` without `force`;
+`422` (`analysis_apply_empty`) if neither `track_ids` nor `mode` is given. Response
+`AnalysisApplyOut`: `{applied, skipped}`.
 
 ## Playlists
 

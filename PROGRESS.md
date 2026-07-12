@@ -16,12 +16,63 @@ paths (`djassistant.db`, log path) stay unchanged until a rename migration is pl
 **Phase:** streaming-first core complete; **disk-first complete** (the library is the
 disk, streaming playlists = leads); **disk-first + Rekordbox paradigm pivot complete**
 (internal enrichment engine and AcoustID fingerprinting retired toward Sortory, BPM/key
-now only from a Rekordbox XML import, `energy` derived); Discovery operational (Last.fm
-expand + Discogs dig, now taste-only); technical/creative Set Builder with an "owned-only"
-guarantee; dashboard with a five-stage pipeline (Index moved to a nav button) and
-documentation realigned to the new paradigm; mix identification via Shazam integrated
-(phase 1; co-occurrence in backlog); SoundCloud import (playlists/secret links + selective
-likes) via yt-dlp; the app is now bilingual IT/EN (language toggle in Settings).
+now only from a Rekordbox XML import, `energy` derived); **Analysis page complete**
+(BPM/key gained a second deterministic source, in-app analysis via Essentia, alongside
+Rekordbox import — explicit per-value provenance, `bpm_source`/`key_source`: manual >
+rekordbox > cratory); Discovery operational (Last.fm expand + Discogs dig, now
+taste-only); technical/creative Set Builder with an "owned-only" guarantee; dashboard
+with a five-stage pipeline (Index moved to a nav button) and documentation realigned to
+the new paradigm; mix identification via Shazam integrated (phase 1; co-occurrence in
+backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
+app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-07-12 - Analysis page: BPM/key provenance + in-app analysis via Essentia
+
+Spec and plan in `docs/superpowers/specs/2026-07-12-analysis-page-design.md` and
+`docs/superpowers/plans/2026-07-12-analysis-page.md`. BPM/key gain a second deterministic
+source (in-app analysis) alongside the Rekordbox import, with explicit per-value
+provenance so the two sources and manual corrections never silently overwrite each
+other. Cratory still never asks an AI for BPM/key.
+
+- **Schema.** `Track.bpm_source`/`key_source` (`manual|rekordbox|cratory`, null if the
+  value itself is null) with an idempotent backfill migration (existing BPM/key marked
+  `rekordbox` if present, since that was the only prior source); staging columns
+  `analysis_bpm`, `analysis_camelot`, `analyzed_at`, `analysis_error`, written only by
+  the analysis job and read by nobody else until an explicit apply.
+- **Manual edit is source-aware.** `PATCH /api/tracks/{id}` now sets
+  `bpm_source`/`key_source = "manual"` when the payload touches `bpm`/`camelot_key`
+  (`repositories.update_track`), so a manual correction outranks both Rekordbox and the
+  in-app analysis until the user re-imports with `?overwrite=true`.
+- **Rekordbox import made source-aware** (`services/rekordbox_import.py`). Default
+  behavior changed: it still fills empty values, but now also reclaims values sourced
+  from the in-app analysis (`cratory`) — since a Rekordbox re-analysis is more
+  authoritative than the in-app one — while continuing to protect `manual` corrections.
+  `?overwrite=true` still wins over everything. Every write is marked `source=
+  "rekordbox"`.
+- **Essentia adapter** (`integrations/essentia_engine.py`, lazy import, `is_available()`
+  guard): `RhythmExtractor2013` (`multifeature`) for BPM, `KeyExtractor` (`edma` profile,
+  tuned for electronic music) for key, converted to the project's canonical Camelot
+  notation. Pinned `essentia==2.1b6.dev1389` (AGPL-3.0, last release with a cp311
+  macosx-arm64 wheel — Essentia only publishes rolling `2.1b6.devN` builds with patchy
+  wheel coverage); documented in `docs/DEPENDENCIES.md`.
+- **Apply/divergence service** (`services/audio_analysis.py`): `diverges` (BPM at
+  1-decimal precision, key exact), `apply_analysis` (unconditional copy, source
+  `cratory`), `auto_apply_missing` (only into empty canonical fields, used by the job —
+  no conflict possible), `divergence_row` (canonical vs analyzed + Camelot-wheel
+  compatibility for the divergence table).
+- **Background job** (`services/audio_analysis_job.py`): same in-memory
+  single-job-with-lock pattern as `library_index_job`. `scope="missing"` (default) or
+  `"all"`/explicit `track_ids`; writes only `analysis_*`, calls `auto_apply_missing` per
+  track, commits per track (survives interruption), a per-track decode failure
+  (`analysis_error="analysis_decode_failed"`) does not stop the batch.
+- **Router `/api/analysis/*`** (`overview`, `start` [202/409/503], `status`,
+  `divergences`, `apply` [with `force`]) — full contract in `docs/API.md`.
+- **Frontend.** New page `/analysis` (coverage by source, inline Rekordbox XML upload,
+  start-analysis action, divergence table with per-row/bulk apply); nav entry; the
+  dashboard's "Analyze" pipeline stage now links to it; the analysis job joins the
+  global job-progress bar poller (same pattern as indexing/downloads/Shazam). API
+  client + IT/EN i18n strings added.
+- Verification: 579 backend tests green, frontend lint/build clean.
 
 ## Milestone 2026-07-12 - Bilingual IT/EN (i18n)
 

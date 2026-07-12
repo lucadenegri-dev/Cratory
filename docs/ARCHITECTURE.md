@@ -8,10 +8,17 @@ discovery and a corpus of identified mixes.
 
 - The deterministic engine handles facts, scores, de-duplication, roles, ranking and validation.
 - The AI handles language, narrative, prompt interpretation and explanations.
-- **BPM and Camelot/key come only from the Rekordbox XML import**: Cratory does not estimate
-  or invent them. An already-present value is never overwritten by the import.
-- **`energy` is always derived** (deterministic, from BPM+genre): it is not a provider datum
-  nor a manually editable field.
+- **BPM and Camelot/key have two deterministic sources**: the Rekordbox XML import
+  (primary) and in-app analysis via Essentia (`services/audio_analysis`,
+  `integrations/essentia_engine`), the deterministic alternative. Cratory never
+  estimates, invents or asks an AI for BPM/key. Every value carries an explicit
+  source (`bpm_source`/`key_source`: `manual` > `rekordbox` > `cratory`): Rekordbox
+  import fills empty values and reclaims `cratory` ones by default (protects
+  `manual`), `?overwrite=true` wins over everything; in-app analysis writes
+  `analysis_*` and reaches the canonical fields only through an explicit apply
+  (auto-apply fills only the empty ones).
+- **`energy` is always derived** (deterministic, from BPM+genre or computed from the
+  audio file): it is not a provider datum nor a manually editable field.
 - **Cratory reads audio files but never writes them.** Tags, renaming and on-disk
   organization remain Sortory's job; the textual enrichment of metadata
   (title/artist/album/label/genre) is also Sortory's.
@@ -206,27 +213,67 @@ mutates them** — tags, renaming and organization remain Sortory's exclusive jo
   (alternatives, track replacement — 422 if the replacement is not owned and the set
   was born "owned only").
 
-## Rekordbox import (BPM/key source)
+## BPM/key sources: Rekordbox import + in-app analysis
 
-Cratory does not estimate or invent BPM/key: the user analyzes the library in
-Rekordbox (outside Cratory) and exports the collection (`File > Export Collection in
-xml format`); Cratory imports that XML to fill in BPM/Camelot on the tracks already
-owned on disk. Beatgrid, cue and other Rekordbox fields stay out of scope.
+Cratory does not estimate or invent BPM/key, and never asks an AI for them: the two
+deterministic sources are the Rekordbox XML export (primary) and an in-app Essentia
+analysis (alternative, for tracks the user has not yet analyzed in Rekordbox). Every
+value on `Track` carries an explicit provenance, `bpm_source`/`key_source` (`manual`
+> `rekordbox` > `cratory`), so the two sources and manual corrections never silently
+clobber each other. Beatgrid, cue and other Rekordbox fields stay out of scope.
+
+### Rekordbox import
 
 - **`POST /api/rekordbox/import`** (multipart, field `file`): parses the XML
   (`defusedxml`, anti-XXE) and for each `TRACK` looks for the matching owned
   `Track` in the order: **NFC-normalized path** (macOS/Rekordbox can
   decode `Location` in NFD) -> fallback **`audio_hash`**, gated on the
   path basename to avoid an expensive ffmpeg decode on rows not ours ->
-  **fuzzy artist+title**. On a match, it fills `bpm`/`camelot_key` **only if absent**
-  (an already-present value stays authoritative, is never overwritten), recomputes
-  `energy` deterministically when the BPM is set, and updates the track
-  state. Responds with the counts (`in_file`, `matched`, `unmatched`, `bpm_set`,
-  `key_set`, `energy_set`). `400` on an empty file or invalid/unsafe XML.
+  **fuzzy artist+title**. On a match, it is **source-aware**: by default it fills
+  empty `bpm`/`camelot_key` and reclaims values currently sourced from the in-app
+  analysis (`cratory`), but protects `manual` corrections; `?overwrite=true` wins
+  over every existing value regardless of source (a value absent in the XML never
+  clears the one already in the library). Every write is marked `bpm_source`/
+  `key_source = "rekordbox"`. It recomputes `energy` deterministically when the BPM
+  is set, and updates the track state. Responds with the counts (`in_file`,
+  `matched`, `unmatched`, `bpm_set`, `key_set`, `energy_set`). `400` on an empty file
+  or invalid/unsafe XML. Implementation: `backend/app/services/rekordbox_import.py`
+  (pure parser + `apply_collection`), router `backend/app/routers/rekordbox.py`.
 - **`GET /api/rekordbox/pending`**: counts the owned tracks (`has_local_file`)
   still without BPM or without key — the number the user still has to "analyze in
   Rekordbox and import". Also exposed in `GET /api/pipeline` as
   `analyze_pending`.
+
+### In-app analysis (Essentia)
+
+The Analysis page (`/analysis`) offers a deterministic alternative to Rekordbox for
+owned tracks: local BPM/key extraction via Essentia, without leaving Cratory.
+
+- **`integrations/essentia_engine.py`**: thin, lazily-imported adapter (the app
+  starts and runs fine without the dependency installed; `is_available()` gates the
+  router's `503`). `analyze(path)` decodes the file (`MonoLoader`), runs
+  `RhythmExtractor2013` (method `multifeature`) for BPM and `KeyExtractor` (profile
+  `edma`, tuned for electronic music) for key, converting the result to the
+  project's canonical Camelot notation. Pinned to `essentia==2.1b6.dev1389`
+  (AGPL-3.0) — see `docs/DEPENDENCIES.md`.
+- **`services/audio_analysis.py`**: the only bridge from `analysis_*` to the
+  canonical `bpm`/`camelot_key`. `diverges(track)` flags a mismatch (BPM compared
+  at 1-decimal precision, key exact match). `apply_analysis` copies the analyzed
+  values unconditionally (source becomes `cratory`); `auto_apply_missing` copies
+  only into empty canonical fields (no conflict possible, used by the job). Also
+  recomputes `energy` and refreshes track status on any write.
+- **`services/audio_analysis_job.py`**: background job (same in-memory
+  single-job-with-lock pattern as `library_index_job`). Selects owned tracks with a
+  local file (`scope="missing"` = without BPM or key, `scope="all"` or explicit
+  `track_ids` = every candidate), analyzes each with `essentia_engine.analyze`,
+  writes `analysis_bpm`/`analysis_camelot`/`analyzed_at` (or `analysis_error` on a
+  decode failure, without stopping the batch), then calls `auto_apply_missing`.
+  Commits per track so progress survives an interruption.
+- **`routers/analysis.py`** (`/api/analysis/*`): `overview` (coverage by source),
+  `start` (202, `503` if Essentia missing, `409` if already running), `status`,
+  `divergences` (canonical vs analyzed, with Camelot-wheel compatibility), `apply`
+  (writes the selection into the canonical fields; `mode="all"` requires
+  `force=true`). Full contract in `docs/API.md`.
 
 ## Backend layers
 
@@ -253,7 +300,8 @@ Responsibilities:
 
 - playlist import and manual import;
 - de-duplication with priority `ISRC -> platform_track_id -> artist+title+duration -> fuzzy`;
-- Rekordbox import (BPM/key, never overwritten) and recomputation of derived `energy`;
+- Rekordbox import (BPM/key, source-aware overwrite) and in-app Essentia analysis
+  (BPM/key alternative, apply bridge), and recomputation of derived `energy`;
 - track state (`imported`, `ready_for_set`);
 - BPM, Camelot, energy, genre and duration scores (the contract also includes a mood
   coherence score, today always neutral: `Track` no longer has a mood field since
@@ -333,7 +381,13 @@ Main entities:
 
 - `Playlist`: playlist imported from Spotify or manual import.
 - `Track`: library track, with streaming identity, editorial metadata,
-  BPM/Camelot (from Rekordbox import), derived `energy` and state. Local file
+  BPM/Camelot (from Rekordbox import or in-app Essentia analysis), derived
+  `energy` and state. Provenance of BPM/key: `bpm_source`/`key_source`
+  (`manual`/`rekordbox`/`cratory`, null if the value itself is null), hierarchy
+  `manual` > `rekordbox` > `cratory` (see "BPM/key sources"). In-app analysis
+  staging fields, written only by the analysis job and never read by the rest of
+  the app: `analysis_bpm`, `analysis_camelot`, `analyzed_at`, `analysis_error`
+  (reach the canonical fields only via the apply step). Local file
   ownership (`LIBRARY_ROOT` indexing, Soulseek acquisition or manual
   link-file): `has_local_file`, `local_path`, `local_format`,
   `local_bitrate`, `audio_hash` (see "Disk-first"). Other fields: `archived` (file
@@ -372,6 +426,7 @@ droppable on SQLite due to a baked-in FK on `playlist_id` — but are dead and e
 | Shazam | active if dependencies present | ffmpeg, yt-dlp, shazamio; fingerprinting of external mixes, not of the library |
 | slskd (Soulseek) | active if configured | download via REST API; `SLSKD_URL`/`SLSKD_API_KEY`/`SLSKD_DOWNLOAD_DIR` |
 | Rekordbox | manual (via XML export) | BPM/key source: `POST /api/rekordbox/import`; no external API/dependency, only file parsing |
+| Essentia (`integrations/essentia_engine`) | active if installed | in-app deterministic BPM/key analysis for owned tracks (`/api/analysis/*`); lazy import (app runs without it, `is_available()` gates the `503`), pinned `essentia==2.1b6.dev1389` (cp311 macosx-arm64 wheel), AGPL-3.0 (ok for personal self-hosted use, no redistribution) |
 | SoundCloud | active if dependencies present | yt-dlp (metadata only, never audio) for playlists/secret links and likes: flat like preview (fast), import/sync with full per-track extraction (uploader/duration/artwork, ~1s per track); no ISRC (not exposed), dedup on `platform_track_id`; sync always additive (never prune, unlike Spotify) |
 | PostgreSQL | backlog | SQLite is enough for single-user |
 

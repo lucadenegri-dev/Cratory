@@ -21,7 +21,11 @@ explicit migration.
 Core streaming-first is complete; **disk-first is complete** (the library is the disk,
 streaming playlists = leads); the **disk-first + Rekordbox pivot is complete** (the internal
 enrichment engine and AcoustID fingerprinting were retired toward Sortory, BPM/key now come
-only from a Rekordbox XML import, `energy` is derived deterministically). Discovery is
+only from a Rekordbox XML import, `energy` is derived deterministically). **The Analysis
+page is complete**: BPM/key now have two deterministic sources — Rekordbox import
+(primary, source-aware overwrite) and in-app analysis via Essentia (alternative,
+`/analysis`) — with explicit per-value provenance (`bpm_source`/`key_source`: manual >
+rekordbox > cratory) and an explicit apply bridge to the canonical fields. Discovery is
 operational (Last.fm expand + Discogs dig, now taste-only). The Set Builder
 (technical/creative) guarantees owned-only. The dashboard shows a five-stage pipeline (Index
 moved to a nav button). Mix identification via Shazam is integrated (phase 1; co-occurrence
@@ -53,6 +57,13 @@ In the agreed order (operational detail in [PROGRESS.md](../PROGRESS.md)):
 
 ## Suspended / revised
 
+- **Pagina Analisi (import Rekordbox + analisi in-app)** — DONE (2026-07-12). BPM/key data on
+  owned tracks now has two deterministic sources with explicit provenance
+  (`bpm_source`/`key_source`: manual > rekordbox > cratory): the Rekordbox XML import (now
+  source-aware, reclaims `cratory` values, protects `manual`) and a new in-app analysis via
+  Essentia (`/api/analysis/*`, page `/analysis`), which writes staging `analysis_*` fields and
+  reaches the canonical fields only through an explicit apply. Cratory still never asks an AI
+  for BPM/key. (See "Settled decisions" and PROGRESS.)
 - **Copy + multi-language (IT/EN)** — DONE (2026-07-12). The app is bilingual with a persistent
   language toggle: UI dictionary, backend error codes, deterministic phrases and AI output are
   all localized. (See "Settled decisions" and PROGRESS.)
@@ -132,6 +143,10 @@ order of value:
 - Rekordbox is back in the project (2026-07 pivot) but only as a source for BPM/key import via
   XML export — the old scope does not return (beatgrid/cue stay out, no live integration with
   the Rekordbox app).
+- BPM/key (2026-07-12): Rekordbox import is the primary source, in-app analysis via Essentia
+  (`/analysis`) is the deterministic alternative — never an AI. Every value carries an explicit
+  source (`bpm_source`/`key_source`: manual > rekordbox > cratory) so the two sources and
+  manual corrections never silently overwrite each other.
 - Spotify is a source of identity/metadata, not of mixing features.
 - Discovery: genre/label depth from Discogs (open); Spotify stays only an identity resolver
   (at save time).

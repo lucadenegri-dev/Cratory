@@ -40,6 +40,15 @@ and `frontend/package.json` — those manifests are authoritative; this document
 **XML security**
 - `defusedxml` — hardened XML parsing for the Rekordbox collection import.
 
+**Analysis (in-app BPM/key)**
+- `essentia==2.1b6.dev1389` — deterministic BPM/key extraction for the Analysis page
+  (`/api/analysis/*`), used only by `backend/app/integrations/essentia_engine.py`
+  (lazy import: the app runs without it, the router returns `503` if missing). Pin is
+  exact and load-bearing: Essentia only publishes rolling `2.1b6.devN` builds with
+  patchy wheel coverage, and `2.1b6.dev1389` is the last one with a `cp311
+  macosx-arm64` wheel. License **AGPL-3.0** — acceptable for personal, self-hosted,
+  non-redistributed use; do not bundle/distribute a build containing it.
+
 **Testing**
 - `pytest>=8.3` — backend test suite.
 
