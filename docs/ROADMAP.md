@@ -106,13 +106,17 @@ from the source — Spotify via `get_playlist_meta`, SoundCloud via the fetched 
 2026-07-12); A18 (mix with no yt-dlp duration: `probe_duration` ffprobe fallback in
 `identify_set`, real duration backfilled into the set meta; 2026-07-12); E5
 (`_retry_after_seconds` — Retry-After parsed per RFC 7231, delta-seconds or HTTP-date, never an
-exception; 2026-07-12).
+exception; 2026-07-12); E1e (selectinload on `Track.playlists` in setlist/transitions/
+download-pending); A19 (Soulseek auto-pick filters by confidence first, then score —
+`auto_pick_candidates`); A17 (dig: Discogs pagination up to 3 pages + explicit 502
+`discovery_provider_error` instead of silent empty results); A28 ("Search on Soulseek" button on
+the wishlist track detail, wired to the existing per-track auto-pick endpoint). All 2026-07-12,
+verified with TDD + live browser check for A28.
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
-- **Discovery** — A17 dig fetches a single Discogs page + swallows errors (429/missing token →
-  "zero results", no 502); E12-cache: no discovery cache (every expand refetches) + Last.fm
-  client with no User-Agent (ToS). *(Last.fm tags as a 2nd dig source: parked, see above.)*
+- **Discovery** — E12-cache: no discovery cache (every expand refetches) + Last.fm client with
+  no User-Agent (ToS). *(Last.fm tags as a 2nd dig source: parked, see above.)*
 - **Set → console / editor** — A14 "add this track" in the editor (only delete/move/replace);
   ⚠️ A22 after move/remove the AI roles and `ai_reason`/notes stay stale (transitions *are*
   recomputed); ⚠️ B12 reorder is now optimistic but still arrow-buttons, no drag-and-drop;
@@ -128,13 +132,11 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   (IN LIBRARY/OWNED/NEW) + per-track save-lead still missing; B13 detail UX (no polling while
   running, h1 off-system, just-started set absent from the list, native confirm).
 - **Soulseek/download** — ⚠️ A7 manual grab does not mark ownership (file in inbox, counts
-  "downloaded") — now an intentional flow (Sortory catalogs), confirm as a decision; A19
-  auto-pick evaluates confidence only on the top-by-score candidate (filter by confidence first,
-  then order); A20 fixed 180s DOWNLOAD_TIMEOUT wall (needs byte-progress stall detection; only a
-  queue-patience guard exists); E6 slskd (no cancel of transfers/searches, filename-only match,
-  basename+mtime resolution, ~45s synchronous on /candidates); ⚠️ B11 issue counters now
-  navigable, but grab has no per-candidate state and LinkLocalFileModal search does not
-  auto-start; A28 "Search on Soulseek" from the wishlist track detail.
+  "downloaded") — now an intentional flow (Sortory catalogs), confirm as a decision; A20 fixed
+  180s DOWNLOAD_TIMEOUT wall (needs byte-progress stall detection; only a queue-patience guard
+  exists); E6 slskd (no cancel of transfers/searches, filename-only match, basename+mtime
+  resolution, ~45s synchronous on /candidates); ⚠️ B11 issue counters now navigable, but grab
+  has no per-candidate state and LinkLocalFileModal search does not auto-start.
 - **Streaming import/sync (Spotify + SoundCloud)** — A10 import/sync synchronous in the request
   (thousands of liked = minutes with no progress): job+polling; A12 sync unlinks Discovery-added
   tracks (no `added_by` provenance column exists). NB: SoundCloud import (yt-dlp) now exists too —
@@ -161,8 +163,7 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   (`DownloadOutcome` not shared, `track_id` nullability inconsistent, nested `<Link><Button>` →
   ButtonLink).
 - **Backend robustness** — E1c migrations `additions` dict still manual (the drop is already
-  model-derived); E1e N+1 on `Track.playlists` in setlist/transitions/download-pending → 3
-  selectinload; ⚠️ E2 job-state copy done, but `index_library` is still one transaction + an
+  model-derived); ⚠️ E2 job-state copy done, but `index_library` is still one transaction + an
   unguarded per-file `stat()`; E10 (residual): transitions recompute each score twice, `file_search`
   materializes the tree per keystroke, generate-async/mix_identify return untyped dicts,
   Discovery `_explain` without Pydantic (the one spot outside rule 5), duplicate risk thresholds
