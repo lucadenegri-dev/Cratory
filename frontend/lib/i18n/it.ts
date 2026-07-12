@@ -175,6 +175,8 @@ export const it: Dictionary = {
     prevPage: "Prec",
     nextPage: "Succ",
     editValuesTitle: "Modifica valori a mano",
+    viewListLabel: "Lista",
+    viewGridLabel: "Griglia",
   },
   labels: {
     pageTitle: "Etichette",
@@ -220,6 +222,18 @@ export const it: Dictionary = {
     outcomeNotFound: "non trovata",
     outcomeNeedsReview: "da rivedere",
     outcomeFailed: "fallita",
+    failedReason: (code: string | null): string => {
+      switch (code) {
+        case "transfer_failed": return "Trasferimento interrotto dall'utente remoto.";
+        case "queue_timeout": return "Rimasto troppo a lungo in coda (utente lento o offline).";
+        case "download_timeout": return "Trasferimento troppo lento: superato il tempo massimo.";
+        case "enqueue_rejected": return "Richiesta di download rifiutata dall'utente remoto.";
+        case "file_missing": return "Download completato ma file non trovato su disco.";
+        case "all_candidates_failed": return "Nessun candidato ha completato il download.";
+        case "error": return "Errore imprevisto durante il download.";
+        default: return "Download non riuscito.";
+      }
+    },
     linkAllButton: "Collega tutte",
     retryAllButton: "Riprova tutte",
     emptyTitle: "Niente da sistemare",

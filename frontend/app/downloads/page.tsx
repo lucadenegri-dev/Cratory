@@ -206,11 +206,14 @@ export default function DownloadsPage() {
                 {rows.map((tr) => {
                   const outcome = tr.last_download_outcome as Outcome;
                   const hasFile = outcome === "needs_review" && !!tr.last_download_path;
+                  const detail = outcome === "failed"
+                    ? t.downloads.failedReason(tr.last_download_reason)
+                    : tr.last_download_reason;
                   return (
                     <li key={tr.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
                       <div className="min-w-0 flex-1">
                         <a href={`/tracks/${tr.id}`} className="block truncate hover:text-fg-strong">{trackLabel(tr)}</a>
-                        {tr.last_download_reason && <div className="text-xs text-muted">{tr.last_download_reason}</div>}
+                        {detail && <div className="text-xs text-muted">{detail}</div>}
                       </div>
                       <span className="flex shrink-0 flex-wrap items-center gap-2">
                         <Badge tone={OUTCOME_TONE[outcome] ?? "neutral"}>{OUTCOME_LABEL[outcome] ?? outcome}</Badge>

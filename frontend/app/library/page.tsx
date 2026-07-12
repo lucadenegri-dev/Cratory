@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, List, LayoutGrid } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
 import { Input, Select, Checkbox, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { TrackCover } from "@/components/track-cover";
 import { TrackStateIcons } from "@/components/track-state-icons";
+import { LibraryTrackGrid } from "@/components/library-track-grid";
 import { useT } from "@/lib/i18n";
 
 type Order = "asc" | "desc";
@@ -44,6 +45,15 @@ function LibraryInner() {
   const [sort, setSort] = useState("");
   const [order, setOrder] = useState<Order>("asc");
   const [editing, setEditing] = useState<Track | null>(null);
+  const [view, setView] = useState<"list" | "grid">("list");
+  // Persistenza: letta solo lato client (mai in render/SSR) per non rompere l'hydration.
+  useEffect(() => {
+    const saved = localStorage.getItem("cratory:library:view");
+    if (saved === "grid" || saved === "list") setView(saved);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem("cratory:library:view", view);
+  }, [view]);
 
   const load = useCallback(() => {
     apiGet<{ total: number; items: Track[] }>("/api/tracks", {
@@ -117,6 +127,39 @@ function LibraryInner() {
     <PageLayout title={t.library.title} meta={t.library.tracksMeta(total)} marginaliaTitle={t.library.filtersTitle} marginalia={filters}>
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
+      <div className="mb-3 flex items-center justify-end">
+        <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
+          <button
+            type="button"
+            onClick={() => setView("list")}
+            aria-pressed={view === "list"}
+            title={t.library.viewListLabel}
+            className={`rounded-none px-2.5 py-1 transition-colors ${view === "list" ? "bg-elevated text-fg" : "text-muted hover:text-fg"}`}
+          >
+            <List size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("grid")}
+            aria-pressed={view === "grid"}
+            title={t.library.viewGridLabel}
+            className={`rounded-none px-2.5 py-1 transition-colors ${view === "grid" ? "bg-elevated text-fg" : "text-muted hover:text-fg"}`}
+          >
+            <LayoutGrid size={15} />
+          </button>
+        </div>
+      </div>
+
+      {items === null && <Loading />}
+      {items?.length === 0 && (
+        <div className="py-10 text-center text-sm text-muted">
+          {t.library.emptyStatePrefix}{" "}
+          <Link href="/playlists" className="text-fg underline-offset-4 hover:underline">{t.dashboard.importPlaylist}</Link>{" "}
+          {t.library.emptyStateSuffix}
+        </div>
+      )}
+
+      {items && items.length > 0 && (view === "list" ? (
       <div className="border border-border">
         <table className="w-full text-sm">
           <thead>
@@ -157,15 +200,12 @@ function LibraryInner() {
                 </td>
               </tr>
             ))}
-            {items === null && (
-              <tr><td colSpan={10} className="px-3"><Loading /></td></tr>
-            )}
-            {items?.length === 0 && (
-              <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix} <Link href="/playlists" className="text-fg underline-offset-4 hover:underline">{t.dashboard.importPlaylist}</Link> {t.library.emptyStateSuffix}</td></tr>
-            )}
           </tbody>
         </table>
       </div>
+      ) : (
+        <LibraryTrackGrid tracks={items} onEdit={setEditing} />
+      ))}
 
       <div className="mt-4 flex items-center justify-between text-sm">
         <span className="text-muted">{total === 0 ? "0" : `${offset + 1}–${Math.min(offset + limit, total)}`} {t.library.paginationOf} {total}</span>

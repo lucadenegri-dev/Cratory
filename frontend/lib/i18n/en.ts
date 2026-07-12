@@ -173,6 +173,8 @@ export const en = {
     prevPage: "Prev",
     nextPage: "Next",
     editValuesTitle: "Edit values manually",
+    viewListLabel: "List",
+    viewGridLabel: "Grid",
   },
   labels: {
     pageTitle: "Labels",
@@ -218,6 +220,18 @@ export const en = {
     outcomeNotFound: "not found",
     outcomeNeedsReview: "needs review",
     outcomeFailed: "failed",
+    failedReason: (code: string | null): string => {
+      switch (code) {
+        case "transfer_failed": return "Transfer interrupted by the remote peer.";
+        case "queue_timeout": return "Stuck in the queue too long (peer slow or offline).";
+        case "download_timeout": return "Transfer too slow: exceeded the time limit.";
+        case "enqueue_rejected": return "Download request rejected by the remote peer.";
+        case "file_missing": return "Download completed but the file wasn't found on disk.";
+        case "all_candidates_failed": return "No candidate completed the download.";
+        case "error": return "Unexpected error during the download.";
+        default: return "Download failed.";
+      }
+    },
     linkAllButton: "Link all",
     retryAllButton: "Retry all",
     emptyTitle: "Nothing to fix",
