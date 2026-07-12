@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   Sparkles, Wand2, ListMusic, Music4, Cpu, HelpCircle,
   TrendingUp, SlidersHorizontal, ArrowRight, Sunrise, Flame, Sunset, ChevronDown,
@@ -58,10 +58,11 @@ function ArcField({ label, hint, from, to }: { label: string; hint?: string; fro
   );
 }
 
-export default function SetBuilder() {
+function SetBuilderInner() {
   const t = useT();
   const SOURCES = SOURCE_VALUES.map((value) => ({ value, label: value === "spotify" ? "Spotify" : t.setBuilder.sourceManual }));
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [duration, setDuration] = useState(45);
   const [startBpm, setStartBpm] = useState("");
   const [endBpm, setEndBpm] = useState("");
@@ -77,9 +78,7 @@ export default function SetBuilder() {
   const [mode, setMode] = useState<"technical" | "creative">("technical");
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   // Pre-selezione da ?playlist=… letta una sola volta all'inizializzazione (no setState in effect).
-  const [playlistId, setPlaylistId] = useState(() =>
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("playlist") ?? "" : "",
-  );
+  const [playlistId, setPlaylistId] = useState(() => searchParams.get("playlist") ?? "");
   const [startEnergy, setStartEnergy] = useState("");
   const [endEnergy, setEndEnergy] = useState("");
   const [genres, setGenres] = useState<{ genre: string; count: number }[]>([]);
@@ -409,5 +408,15 @@ export default function SetBuilder() {
         </EmptyState>
       )}
     </PageLayout>
+  );
+}
+
+export default function SetBuilder() {
+  // useSearchParams su pagina prerenderizzata richiede un boundary Suspense
+  // (stesso pattern di app/discovery/page.tsx), altrimenti la build fallisce.
+  return (
+    <Suspense>
+      <SetBuilderInner />
+    </Suspense>
   );
 }
