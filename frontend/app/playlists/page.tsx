@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, Music4, CloudDownload } from "lucide-react";
+import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, CloudDownload } from "lucide-react";
 import {
   listImportedPlaylists,
   deletePlaylist,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { PlaylistCover } from "@/components/playlist-cover";
 import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
@@ -57,7 +58,7 @@ export default function PlaylistsPage() {
   const marginalia = (
     <div className="space-y-3">
       <Link href="/playlists/import-spotify" className="block"><Button size="sm" className="w-full"><Download size={15} /> {t.playlists.importSpotifyButton}</Button></Link>
-      <Link href="/playlists/import-soundcloud" className="block"><Button size="sm" variant="outline" className="w-full"><CloudDownload size={15} /> {t.playlists.importSoundcloudButton}</Button></Link>
+      <Link href="/playlists/import-soundcloud" className="block"><Button size="sm" className="w-full"><CloudDownload size={15} /> {t.playlists.importSoundcloudButton}</Button></Link>
       <Link href="/playlists/import-manual" className="block"><Button size="sm" variant="outline" className="w-full"><ClipboardList size={15} /> {t.playlists.importManualButton}</Button></Link>
       {imported && imported.length > 0 && (
         <div className="space-y-2 border-t border-border pt-4 text-xs">
@@ -91,9 +92,7 @@ export default function PlaylistsPage() {
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <span className="tnum text-xs text-faint">{String(i + 1).padStart(2, "0")}</span>
-                {p.artwork_url
-                  ? <img src={p.artwork_url} alt="" className="h-11 w-11 shrink-0 rounded-none object-cover" />
-                  : <span className="grid h-11 w-11 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={18} /></span>}
+                <PlaylistCover artworkUrl={p.artwork_url} platform={p.platform} kind={p.kind} className="h-11 w-11 shrink-0" iconSize={18} placeholderClassName="bg-elevated" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <Link href={`/playlists/${p.id}`} className="truncate font-medium hover:text-fg-strong">{p.name}</Link>

@@ -450,7 +450,7 @@ export function previewLikedTracks() {
   return apiGet<LikedTrackPreview[]>("/api/playlists/spotify/liked/preview");
 }
 
-/** Importa nella playlist "Liked Spotify" solo i brani selezionati (additivo). */
+/** Importa nella playlist "Spotify Likes" solo i brani selezionati (additivo). */
 export function importSelectedLikedTracks(spotifyIds: string[]) {
   return apiPost<PlaylistImportReport>("/api/playlists/import/liked/selected", {
     spotify_ids: spotifyIds,
@@ -490,14 +490,14 @@ export interface SoundCloudLikedTrackPreview {
   already_imported: boolean;
 }
 
-/** Anteprima dei like SoundCloud recenti: non importa nulla. */
-export function previewSoundcloudLikes(limit = 100) {
-  return apiGet<SoundCloudLikedTrackPreview[]>("/api/soundcloud/likes/preview", { limit });
+/** Anteprima di TUTTI i like SoundCloud: non importa nulla (nessun cap). */
+export function previewSoundcloudLikes() {
+  return apiGet<SoundCloudLikedTrackPreview[]>("/api/soundcloud/likes/preview");
 }
 
 /** Importa nella playlist "SoundCloud Likes" solo i brani selezionati (additivo). */
-export function importSelectedSoundcloudLikes(trackIds: string[], limit = 100) {
-  return apiPost<PlaylistImportReport>("/api/soundcloud/import/likes", { track_ids: trackIds, limit });
+export function importSelectedSoundcloudLikes(trackIds: string[]) {
+  return apiPost<PlaylistImportReport>("/api/soundcloud/import/likes", { track_ids: trackIds });
 }
 
 export function listImportedPlaylists() {

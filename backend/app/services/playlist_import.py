@@ -362,7 +362,7 @@ def import_playlist(
 
 # --- Liked selettivi ---------------------------------------------------------
 
-LIKED_PLAYLIST_NAME = "Liked Spotify"
+LIKED_PLAYLIST_NAME = "Spotify Likes"
 
 
 def _liked_playlist(db: Session, platform: str = "spotify") -> Playlist | None:

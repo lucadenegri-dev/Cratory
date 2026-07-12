@@ -18,7 +18,6 @@ import importlib.util
 import re
 from urllib.parse import urlparse
 
-DEFAULT_LIKES_LIMIT = 100
 _SOCKET_TIMEOUT = 20
 _ALLOWED_HOSTS = {"soundcloud.com", "www.soundcloud.com", "m.soundcloud.com", "on.soundcloud.com"}
 
@@ -126,11 +125,14 @@ def fetch_playlist(url: str) -> dict:
     return _materialized(_extract(_validate_url(url), flat=False))
 
 
-def fetch_likes(username: str, limit: int = DEFAULT_LIKES_LIMIT) -> dict:
+def fetch_likes(username: str, limit: int | None = None) -> dict:
     """Like pubblici dell'utente -> info dict con `entries` in lista (più recenti prima).
 
     Estrazione flat (veloce, per la preview): titolo/URL ma niente uploader né
     durata. I metadati pieni arrivano con `fetch_track` sulle tracce selezionate.
+
+    ``limit=None`` (default) scarica TUTTI i like; un intero positivo li limita ai
+    più recenti (``playlistend``).
     """
     username = (username or "").strip().lstrip("@")
     if not username:

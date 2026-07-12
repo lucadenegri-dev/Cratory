@@ -55,6 +55,7 @@ from app.serializers import track_out
 from app.services.gap_analysis import analyze_gaps
 from app.services.manual_import import import_manual_playlist
 from app.services.playlist_import import (
+    LIKED_PLAYLIST_NAME,
     import_playlist,
     import_selected_liked_tracks,
     import_single_track,
@@ -118,7 +119,7 @@ def import_from_spotify(req: PlaylistImportRequest, db: Session = Depends(get_db
         if req.playlist_id == "liked":
             items = client.get_liked_tracks()
             report = import_playlist(
-                db, platform="spotify", name="Liked Spotify",
+                db, platform="spotify", name=LIKED_PLAYLIST_NAME,
                 items=items, kind="liked",
             )
         else:

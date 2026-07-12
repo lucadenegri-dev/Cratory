@@ -54,7 +54,7 @@ def get_tracks(  # noqa: PLR0913
         pattern="^(title|artist|source|bpm|key|energy|genre|duration|year|status)$",
     ),
     order: str = Query(default="asc", pattern="^(asc|desc)$"),
-    limit: int = Query(default=100, le=500),
+    limit: int = Query(default=100, ge=0, le=500),  # 0 = tutte (nessuna paginazione)
     offset: int = Query(default=0, ge=0),
 ):
     total, rows = list_tracks(

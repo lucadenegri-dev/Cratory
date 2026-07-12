@@ -106,6 +106,7 @@ def ensure_schema(eng=None) -> None:
         _migrate_drop_legacy(conn)
         _migrate_drop_enrichment_cols(conn)
         _migrate_playlist_memberships(conn)
+        _migrate_rename_liked_spotify(conn)
 
 
 # Tabelle dell'era Rekordbox/MVP1 rimosse dopo il pivot a playlist->set.
@@ -270,6 +271,19 @@ def _migrate_playlist_memberships(conn) -> None:
     ))
     conn.execute(text(
         "UPDATE tracks SET playlist_id = NULL, playlist_name = NULL WHERE playlist_id IS NOT NULL"
+    ))
+
+
+def _migrate_rename_liked_spotify(conn) -> None:
+    """Rinomina la playlist dei liked Spotify da 'Liked Spotify' a 'Spotify Likes'.
+
+    Idempotente: la WHERE sul vecchio nome rende no-op le esecuzioni successive.
+    """
+    if not _table_exists(conn, "playlists"):
+        return
+    conn.execute(text(
+        "UPDATE playlists SET name = 'Spotify Likes' "
+        "WHERE kind = 'liked' AND platform = 'spotify' AND name = 'Liked Spotify'"
     ))
 
 

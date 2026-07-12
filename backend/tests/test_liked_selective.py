@@ -48,7 +48,7 @@ def test_import_selected_imports_only_chosen(db):
     report = import_selected_liked_tracks(db, items, ["t1", "t3"])
 
     assert report["created"] == 2
-    assert report["name"] == "Liked Spotify"
+    assert report["name"] == "Spotify Likes"
     pl = _liked_playlist(db)
     titles = {t.title for t in tracks_for_playlist(db, pl.id)}
     assert titles == {"One", "Three"}

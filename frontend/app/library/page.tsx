@@ -25,7 +25,7 @@ function LibraryInner() {
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
-  const limit = 50;
+  const PAGE_SIZE = 50;
 
   const [artist, setArtist] = useState("");
   const [title, setTitle] = useState("");
@@ -46,6 +46,10 @@ function LibraryInner() {
   const [order, setOrder] = useState<Order>("asc");
   const [editing, setEditing] = useState<Track | null>(null);
   const [view, setView] = useState<"list" | "grid">("list");
+  // Griglia: nessuna paginazione, si caricano tutte le tracce (limit=0 = "tutte" lato API).
+  const limit = view === "grid" ? 0 : PAGE_SIZE;
+  // Cambio vista: riparti da capo (in griglia l'offset non è usato).
+  useEffect(() => { setOffset(0); }, [view]);
   // Persistenza: letta solo lato client (mai in render/SSR) per non rompere l'hydration.
   useEffect(() => {
     const saved = localStorage.getItem("cratory:library:view");
@@ -65,7 +69,7 @@ function LibraryInner() {
     })
       .then((r) => { setItems(r.items); setTotal(r.total); setError(null); })
       .catch((e) => setError(String(e.message ?? e)));
-  }, [artist, title, genre, source, status, bpmMin, bpmMax, key, incomplete, owned, sort, order, offset]);
+  }, [artist, title, genre, source, status, bpmMin, bpmMax, key, incomplete, owned, sort, order, offset, view]);
 
   useEffect(() => { const timer = setTimeout(load, 250); return () => clearTimeout(timer); }, [load]);
 
@@ -123,32 +127,32 @@ function LibraryInner() {
     </div>
   );
 
-  return (
-    <PageLayout title={t.library.title} meta={t.library.tracksMeta(total)} marginaliaTitle={t.library.filtersTitle} marginalia={filters}>
-      {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
+  const viewToggle = (
+    <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
+      <button
+        type="button"
+        onClick={() => setView("list")}
+        aria-pressed={view === "list"}
+        title={t.library.viewListLabel}
+        className={`rounded-none px-2.5 py-1 transition-colors ${view === "list" ? "bg-elevated text-fg" : "text-muted hover:text-fg"}`}
+      >
+        <List size={15} />
+      </button>
+      <button
+        type="button"
+        onClick={() => setView("grid")}
+        aria-pressed={view === "grid"}
+        title={t.library.viewGridLabel}
+        className={`rounded-none px-2.5 py-1 transition-colors ${view === "grid" ? "bg-elevated text-fg" : "text-muted hover:text-fg"}`}
+      >
+        <LayoutGrid size={15} />
+      </button>
+    </div>
+  );
 
-      <div className="mb-3 flex items-center justify-end">
-        <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
-          <button
-            type="button"
-            onClick={() => setView("list")}
-            aria-pressed={view === "list"}
-            title={t.library.viewListLabel}
-            className={`rounded-none px-2.5 py-1 transition-colors ${view === "list" ? "bg-elevated text-fg" : "text-muted hover:text-fg"}`}
-          >
-            <List size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("grid")}
-            aria-pressed={view === "grid"}
-            title={t.library.viewGridLabel}
-            className={`rounded-none px-2.5 py-1 transition-colors ${view === "grid" ? "bg-elevated text-fg" : "text-muted hover:text-fg"}`}
-          >
-            <LayoutGrid size={15} />
-          </button>
-        </div>
-      </div>
+  return (
+    <PageLayout title={t.library.title} meta={t.library.tracksMeta(total)} action={viewToggle} marginaliaTitle={t.library.filtersTitle} marginalia={filters}>
+      {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
       {items === null && <Loading />}
       {items?.length === 0 && (
@@ -207,15 +211,17 @@ function LibraryInner() {
         <LibraryTrackGrid tracks={items} onEdit={setEditing} />
       ))}
 
-      <div className="mt-4 flex items-center justify-between text-sm">
-        <span className="text-muted">{total === 0 ? "0" : `${offset + 1}–${Math.min(offset + limit, total)}`} {t.library.paginationOf} {total}</span>
-        <div className="flex gap-2">
-          <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}
-            className="inline-flex h-8 items-center gap-1 rounded-none border border-border-strong px-3 hover:bg-elevated disabled:opacity-40"><ChevronLeft size={15} /> {t.library.prevPage}</button>
-          <button disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)}
-            className="inline-flex h-8 items-center gap-1 rounded-none border border-border-strong px-3 hover:bg-elevated disabled:opacity-40">{t.library.nextPage} <ChevronRight size={15} /></button>
+      {view === "list" && (
+        <div className="mt-4 flex items-center justify-between text-sm">
+          <span className="text-muted">{total === 0 ? "0" : `${offset + 1}–${Math.min(offset + limit, total)}`} {t.library.paginationOf} {total}</span>
+          <div className="flex gap-2">
+            <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}
+              className="inline-flex h-8 items-center gap-1 rounded-none border border-border-strong px-3 hover:bg-elevated disabled:opacity-40"><ChevronLeft size={15} /> {t.library.prevPage}</button>
+            <button disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)}
+              className="inline-flex h-8 items-center gap-1 rounded-none border border-border-strong px-3 hover:bg-elevated disabled:opacity-40">{t.library.nextPage} <ChevronRight size={15} /></button>
+          </div>
         </div>
-      </div>
+      )}
 
       <TrackEditModal
         track={editing}

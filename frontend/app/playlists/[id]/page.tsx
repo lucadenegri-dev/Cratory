@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Music4, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
+  ArrowLeft, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
   RefreshCw, ChevronUp, ChevronDown, Download, Heart,
 } from "lucide-react";
 import {
@@ -15,6 +15,7 @@ import {
 import { Card, Badge, Alert, Button, Spinner, Input, Select, Checkbox, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackCover } from "@/components/track-cover";
+import { PlaylistCover } from "@/components/playlist-cover";
 import { useJobs } from "@/components/jobs-provider";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { KeyBadge } from "@/components/key-badge";
@@ -231,9 +232,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
       <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.playlists.backLink}</Link>
 
       <div className="mb-6 flex flex-wrap items-start gap-4">
-        {playlist.artwork_url
-          ? <img src={playlist.artwork_url} alt="" className="h-24 w-24 rounded-none object-cover" />
-          : <span className="grid h-24 w-24 place-items-center rounded-none bg-surface-2 text-faint"><Music4 size={30} /></span>}
+        <PlaylistCover artworkUrl={playlist.artwork_url} platform={playlist.platform} kind={playlist.kind} className="h-24 w-24" iconSize={30} placeholderClassName="bg-surface-2" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{playlist.name}</h1>

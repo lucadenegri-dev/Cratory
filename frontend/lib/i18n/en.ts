@@ -437,10 +437,10 @@ export const en = {
       importButton: "Import",
       importFailed: (label: string, msg: string) => `Import of ${label} failed: ${msg}`,
       liked: {
-        pageTitle: "Import — Liked Spotify",
+        pageTitle: "Import — Spotify Likes",
         backLink: "Import Spotify",
         noteCuratedPrefix: "The",
-        noteCuratedTerm: "Liked Spotify",
+        noteCuratedTerm: "Spotify Likes",
         noteCuratedSuffix: "playlist is a curated subset: it only grows with the tracks you select.",
         noteAdditive: "Already imported tracks appear checked and disabled. Import is additive: it removes nothing.",
         cardTitle: "Your saved tracks",
@@ -452,8 +452,6 @@ export const en = {
         deselectButton: "Deselect",
         noSavedTracks: "No tracks saved on Spotify.",
         noMatchFilter: "No tracks match this filter.",
-        shownOfHint: (shown: number, total: number, hidden: number) =>
-          `Showing ${shown} of ${total} · refine the search to see the other ${hidden}.`,
         importFailed: (msg: string) => `Import failed: ${msg}`,
       },
     },

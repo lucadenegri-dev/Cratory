@@ -439,10 +439,10 @@ export const it: Dictionary = {
       importButton: "Importa",
       importFailed: (label: string, msg: string) => `Import di ${label} fallito: ${msg}`,
       liked: {
-        pageTitle: "Import — Liked Spotify",
+        pageTitle: "Import — Spotify Likes",
         backLink: "Import Spotify",
         noteCuratedPrefix: "La playlist",
-        noteCuratedTerm: "Liked Spotify",
+        noteCuratedTerm: "Spotify Likes",
         noteCuratedSuffix: "è un sottoinsieme curato: cresce solo con i brani che selezioni.",
         noteAdditive: "I brani già importati appaiono spuntati e disabilitati. L'import è additivo: non rimuove nulla.",
         cardTitle: "I tuoi brani salvati",
@@ -454,8 +454,6 @@ export const it: Dictionary = {
         deselectButton: "Deseleziona",
         noSavedTracks: "Nessun brano salvato su Spotify.",
         noMatchFilter: "Nessun brano con questo filtro.",
-        shownOfHint: (shown: number, total: number, hidden: number) =>
-          `Mostrati ${shown} di ${total} · affina la ricerca per vedere gli altri ${hidden}.`,
         importFailed: (msg: string) => `Import fallito: ${msg}`,
       },
     },

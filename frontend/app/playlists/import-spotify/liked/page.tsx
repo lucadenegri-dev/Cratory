@@ -18,9 +18,6 @@ function err(e: unknown): string {
   return String((e as { message?: string })?.message ?? e);
 }
 
-// Cap di righe montate nel DOM: con migliaia di liked, si affina con la ricerca.
-const CAP = 300;
-
 export default function ImportLikedPage() {
   const t = useT();
   const router = useRouter();
@@ -52,9 +49,6 @@ export default function ImportLikedPage() {
     );
   }, [preview, q]);
 
-  const shown = filtered.slice(0, CAP);
-  const hidden = filtered.length - shown.length;
-
   const toggle = (id: string) =>
     setSelected((cur) => {
       const next = new Set(cur);
@@ -66,7 +60,7 @@ export default function ImportLikedPage() {
   const selectVisible = () =>
     setSelected((cur) => {
       const next = new Set(cur);
-      for (const tr of shown) if (!tr.already_imported) next.add(tr.spotify_id);
+      for (const tr of filtered) if (!tr.already_imported) next.add(tr.spotify_id);
       return next;
     });
 
@@ -134,7 +128,7 @@ export default function ImportLikedPage() {
 
             <div className="max-h-[32rem] overflow-y-auto">
               <div className="grid gap-1">
-                {shown.map((tr) => {
+                {filtered.map((tr) => {
                   const checked = tr.already_imported || selected.has(tr.spotify_id);
                   return (
                     <label
@@ -158,11 +152,6 @@ export default function ImportLikedPage() {
                 })}
               </div>
             </div>
-            {hidden > 0 && (
-              <p className="mt-3 text-xs text-faint">
-                {liked.shownOfHint(shown.length, filtered.length, hidden)}
-              </p>
-            )}
           </div>
         </Card>
       )}

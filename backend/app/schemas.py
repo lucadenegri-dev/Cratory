@@ -345,7 +345,10 @@ class SoundCloudLikedTrackPreview(BaseModel):
 
 class SoundCloudLikedSelectedRequest(BaseModel):
     track_ids: list[str] = Field(default_factory=list)
-    limit: int = 100  # quanti like recenti rifetchare per filtrare i selezionati
+    # Quanti like rifetchare per filtrare i selezionati. None = tutti: deve
+    # coprire almeno la stessa finestra della preview, altrimenti una traccia
+    # selezionata oltre il limite non verrebbe ritrovata all'import.
+    limit: int | None = None
 
 
 # --- Import locale -----------------------------------------------------------

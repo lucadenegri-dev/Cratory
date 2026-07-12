@@ -106,7 +106,8 @@ def list_tracks(
         order_by = (Track.artist.is_(None), Track.artist, Track.title)
 
     rows = db.scalars(
-        stmt.options(selectinload(Track.playlists)).order_by(*order_by).limit(limit).offset(offset)
+        # limit=0 -> None: nessun limite (tutte le tracce, per la vista griglia).
+        stmt.options(selectinload(Track.playlists)).order_by(*order_by).limit(limit or None).offset(offset)
     ).all()
     return total or 0, rows
 

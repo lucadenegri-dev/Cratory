@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from app.core.http_errors import api_error
 from app.db import get_db
 from app.integrations.soundcloud import (
-    DEFAULT_LIKES_LIMIT,
     SoundCloudError,
     SoundCloudInvalidUrl,
     fetch_likes,
@@ -94,8 +93,8 @@ def import_from_url(req: SoundCloudImportRequest, db: Session = Depends(get_db))
 
 
 @router.get("/likes/preview", response_model=list[SoundCloudLikedTrackPreview])
-def likes_preview(limit: int = DEFAULT_LIKES_LIMIT, db: Session = Depends(get_db)):
-    """Anteprima dei like recenti, selezionabili. Non importa nulla."""
+def likes_preview(limit: int | None = None, db: Session = Depends(get_db)):
+    """Anteprima dei like, selezionabili. Non importa nulla. Senza `limit`: tutti."""
     username = _username_or_409(db)
     try:
         info = fetch_likes(username, limit=limit)
