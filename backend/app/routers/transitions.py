@@ -34,10 +34,14 @@ def _ranked(db: Session, track_id: int, *, limit: int,
     for other in all_playable_tracks(db):
         if other.id == anchor.id:
             continue
-        # Direzione ininfluente: lo score e' sostanzialmente simmetrico (BPM +
-        # tonalita' dominano), quindi si calcola una sola volta anchor->other
-        # invece di produrre due liste (prima/dopo) quasi identiche.
-        out = _score_out(anchor, other, lang)
+        # Lista unica "compatibili" (niente prima/dopo separati). Lo score NON e'
+        # simmetrico (energia e penalita' traccia-corta dipendono dal verso),
+        # quindi si valutano entrambe le direzioni e si tiene la migliore: un
+        # brano ottimo da mettere PRIMA dell'ancora non deve sparire solo perche'
+        # nel verso ancora->altro perde qualche punto di energia.
+        fwd = _score_out(anchor, other, lang)
+        bwd = _score_out(other, anchor, lang)
+        out = fwd if fwd.score >= bwd.score else bwd
         # La lente ordina DENTRO una classe (sicura/reset/azzardo): così i reset e gli
         # azzardi — che hanno score più basso — emergono invece di restare sepolti.
         if lens and out.classification != lens:
@@ -53,9 +57,8 @@ _LENSES = {"technically_safe", "good_reset", "creative_risk"}
 @router.get("/{track_id}", response_model=list[TransitionCandidateOut])
 def transitions_compatible(track_id: int, limit: int = Query(default=20, le=100),
                             lens: str | None = Query(default=None), db: Session = Depends(get_db)):
-    """Tracce compatibili con questa (funzionano sia prima che dopo: niente
-    distinzione prima/dopo, lo score e' direzione-agnostico). `lens`
-    opzionale: filtra per classe."""
+    """Tracce compatibili con questa (funzionano sia prima che dopo: si tiene il
+    migliore dei due versi, vedi _ranked). `lens` opzionale: filtra per classe."""
     return _ranked(db, track_id, limit=limit, lens=lens if lens in _LENSES else None)
 
 

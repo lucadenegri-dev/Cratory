@@ -38,6 +38,7 @@ from app.services.playlist_import import (
     import_selected_liked_tracks,
     import_selected_soundcloud_likes,
     normalize_soundcloud_item,
+    _soundcloud_page_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,12 +55,20 @@ _state: dict = {
 }
 
 
-def job_state() -> dict:
+def _state_snapshot() -> dict:
+    """Copia di `_state` senza acquisire `_lock`: solo per un chiamante che lo
+    tiene gia' (vedi `start_job`) — `threading.Lock` non e' rientrante."""
     return dict(_state)
 
 
+def job_state() -> dict:
+    with _lock:
+        return _state_snapshot()
+
+
 def is_running() -> bool:
-    return _state["status"] == "running"
+    with _lock:
+        return _state["status"] == "running"
 
 
 def _spawn(fn) -> None:
@@ -225,7 +234,13 @@ def _run_soundcloud_likes_selected(db, params: dict) -> dict:
     selected = [e for e in info["entries"] if e and str(e.get("id")) in wanted]
     full: list[dict] = []
     for entry in selected:
-        track_url = entry.get("url") or entry.get("webpage_url")
+        # In flat mode entry["url"] e' spesso lo stream CDN temporaneo (host
+        # media-streaming.soundcloud.cloud): passato a fetch_track verrebbe
+        # rifiutato da _validate_url e si ripiegherebbe sull'entry flat. Si
+        # preferisce la pagina pubblica (stessa guardia di normalize_soundcloud_item).
+        track_url = _soundcloud_page_url(
+            entry.get("webpage_url"), entry.get("permalink_url"), entry.get("url"),
+        )
         try:
             full.append(fetch_track(track_url) if track_url else entry)
         except SoundCloudError:
@@ -283,7 +298,7 @@ def start_job(kind: str, **params) -> dict:
     e' responsabile del 409 esplicito quando is_running() e' gia' vero."""
     with _lock:
         if _state["status"] == "running":
-            return job_state()
+            return _state_snapshot()
         _state.update(status="running", kind=kind, phase="fetching",
                       processed=0, total=0, result=None, error=None, error_code=None,
                       started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)

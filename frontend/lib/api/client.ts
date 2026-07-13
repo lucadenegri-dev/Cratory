@@ -37,8 +37,12 @@ async function handle<T>(res: Response): Promise<T> {
       if (d && typeof d === "object" && !Array.isArray(d) && typeof d.code === "string") {
         detail = translateApiError(d.code, d.params ?? {}, d.message ?? res.statusText);
         code = d.code;
-      } else {
-        detail = typeof d === "string" ? d : JSON.stringify(d);
+      } else if (typeof d === "string") {
+        detail = d;
+      } else if (d != null) {
+        // Body d'errore JSON senza `detail` stringa: non perdere il fallback
+        // statusText (JSON.stringify(undefined) === undefined lo azzererebbe).
+        detail = JSON.stringify(d);
       }
     } catch {
       /* keep statusText */

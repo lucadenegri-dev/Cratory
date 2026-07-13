@@ -155,12 +155,16 @@ class SlskdClient(ClosableHttpClient):
         Senza cancellazione dei transfer abbandonati (`remove=false` di default,
         vedi `cancel_download`) lo storico di un utente puo' contenere piu' voci
         con lo stesso filename (un vecchio tentativo cancellato + uno nuovo appena
-        accodato). Si preferisce l'ULTIMA corrispondenza (la piu' recente, che
-        slskd accoda in fondo) e, se il payload espone anche uno username per-file
-        (alcune versioni lo fanno), lo si rispetta come filtro aggiuntivo.
+        accodato). Si preferisce una voce ATTIVA (in corso) se presente — così un
+        transfer live non viene mascherato da una vecchia voce terminale
+        (cancelled/failed/completed), a prescindere dall'ordine con cui slskd le
+        restituisce; in assenza di voci attive si tiene l'ultima corrispondenza.
+        Se il payload espone anche uno username per-file (alcune versioni lo
+        fanno), lo si rispetta come filtro aggiuntivo.
         """
         data = self._get(f"/transfers/downloads/{username}")
         match = None
+        active = None
         for directory in data.get("directories") or []:
             for f in directory.get("files") or []:
                 if f.get("filename") != filename:
@@ -169,7 +173,9 @@ class SlskdClient(ClosableHttpClient):
                 if file_username is not None and file_username != username:
                     continue
                 match = f
-        return match
+                if classify_transfer_state(f.get("state") or "") == "in_progress":
+                    active = f
+        return active or match
 
     def cancel_download(self, username: str, transfer_id: str, *, remove: bool = False) -> None:
         """Annulla un transfer nel daemon (best-effort lato chiamante).

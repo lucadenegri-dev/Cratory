@@ -8,7 +8,7 @@ import {
   TrendingUp, SlidersHorizontal, ArrowRight, Sunrise, Flame, Sunset, ChevronDown,
 } from "lucide-react";
 import {
-  apiGet, apiPost,
+  apiGet, apiPost, errText,
   type AiStatus, type GenStatus, type Playlist,
 } from "@/lib/api";
 import { Card, Button, Input, Textarea, Select, Field, Checkbox, EqMeter, Alert, EmptyState } from "@/components/ui";
@@ -118,6 +118,9 @@ function SetBuilderInner() {
   // Alla transizione running -> done/error (vista dal provider) la pagina naviga al
   // workbench o mostra l'errore, esattamente come faceva il poller locale prima.
   const prevGenStatus = useRef<string | null>(null);
+  // Guardia anti-doppio-invio sincrona: `busy` deriva dal provider e si aggiorna
+  // solo alla poll successiva, quindi due click ravvicinati la superano entrambi.
+  const submittingRef = useRef(false);
   useEffect(() => {
     const status = generation?.status ?? null;
     if (prevGenStatus.current === "running" && status === "done" && generation?.setlist_id != null) {
@@ -151,10 +154,11 @@ function SetBuilderInner() {
   const clearPreset = () => setActivePreset(null);
 
   const generate = useCallback(async () => {
-    if (busy) return;
+    if (busy || submittingRef.current) return;
+    submittingRef.current = true;
     setError(null);
     try {
-      await apiPost<GenStatus>("/api/sets/generate-async", {
+      const started = await apiPost<GenStatus>("/api/sets/generate-async", {
         playlist_id: playlistId ? Number(playlistId) : null,
         target_duration_minutes: duration,
         start_bpm: startBpm ? Number(startBpm) : null,
@@ -172,10 +176,19 @@ function SetBuilderInner() {
         use_ai: useAi,
         mode,
       });
+      // Seed del guard di redirect: se la generazione è velocissima la prima poll
+      // del provider potrebbe vedere già "done" senza mai passare da "running", e
+      // il redirect al workbench (che richiede prevGenStatus === "running") non
+      // scatterebbe. La risposta del POST è "running": la registriamo qui.
+      if (started?.status === "running" || started?.status === "done") {
+        prevGenStatus.current = "running";
+      }
       // La barra job globale aggancia subito la generazione (stessa griglia degli altri job).
       jobs.refresh();
     } catch (e) {
-      setError(String((e as Error).message ?? e));
+      setError(errText(e));
+    } finally {
+      submittingRef.current = false;
     }
   }, [busy, playlistId, duration, startBpm, endBpm, startEnergy, endEnergy, selGenres, seedArtists, strategy, maxPerArtist, sources, avoidShort, ownedOnly, prompt, useAi, mode, jobs]);
 

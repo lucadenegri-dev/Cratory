@@ -37,8 +37,11 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
   // proviene (param `from`, impostato da library/page.tsx sui link verso il
   // dettaglio), cosi' non si perde il filtro attivo tornando indietro (vedi B1).
   const searchParams = useSearchParams();
+  // `from` è già decodificato una volta da useSearchParams: è la query string
+  // pronta (es. "artist=Simon+%26+Garfunkel"). NON ri-decodificare, altrimenti
+  // valori con &/%/# vengono corrotti e i filtri ripristinati saltano.
   const from = searchParams.get("from");
-  const libraryHref = from ? `/library?${decodeURIComponent(from)}` : "/library";
+  const libraryHref = from ? `/library?${from}` : "/library";
   const [track, setTrack] = useState<TrackDetail | null>(null);
   const [compatible, setCompatible] = useState<TransitionCandidate[]>([]);
   const [error, setError] = useState<string | null>(null);

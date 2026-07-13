@@ -17,7 +17,11 @@ from app.models import Track
 _OPENER_BPM_MAX = 120.0
 _PEAK_BPM_MIN = 126.0
 _MIN_OPENERS = 2
-_MIN_PEAK = 3
+# Allineato a _MIN_OPENERS: in modalita' percentile il quarto piu' veloce vale
+# per costruzione ~25% delle tracce, che a 8-11 tracce con BPM sono spesso solo
+# 2. Con la soglia a 3 scattava un "pochi peak" spurio anche su distribuzioni
+# perfettamente bilanciate (il lato opener, gia' a 2, non aveva il problema).
+_MIN_PEAK = 2
 # Sotto questa soglia di tracce con BPM i percentili collassano sul campione
 # (ogni traccia sposta la soglia di interi BPM): meglio i default assoluti.
 _MIN_BPM_TRACKS_FOR_PERCENTILES = 8
