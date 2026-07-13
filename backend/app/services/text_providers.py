@@ -8,6 +8,7 @@ from typing import Any
 from app.integrations.discogs_meta import DiscogsMetaClient
 from app.integrations.musicbrainz import MusicBrainzProvider
 from app.services.genre_norm import normalize_genre
+from app.services.match_distance import grade_confidence
 
 
 def _year(value) -> int | None:
@@ -33,7 +34,8 @@ def resolve(file, *, mb=None, discogs=None) -> ResolvedText:
                        isrc=(file.isrc.strip() or None) if file.isrc else None,
                        mbid=getattr(file, "mbid", None)) if mb else None
     if mb_res:
-        conf = "high" if (mb_res.get("confidence") or 0) >= 95 else "text"
+        conf = grade_confidence(
+            file, mb_res, exact=(mb_res.get("confidence") or 0) >= 95)
         overall = conf
         release_mbids = mb_res.get("release_mbids") or []
         if mb_res.get("canonical_artist"):
@@ -49,18 +51,19 @@ def resolve(file, *, mb=None, discogs=None) -> ResolvedText:
         if (y := _year(mb_res.get("release_date"))) is not None:
             out["year"] = (y, conf)
 
-    # Discogs riempie SOLO i buchi (MusicBrainz ha precedenza) ed è sempre 'text'.
+    # Discogs riempie SOLO i buchi (MusicBrainz ha precedenza) ed è sempre 'weak'
+    # (gap-fill testuale senza candidato scorabile).
     needs = "label" not in out or "genre" not in out
     if discogs and needs:
         dg_res = discogs.lookup(artist=file.artist, title=file.title)
         if dg_res:
             if "label" not in out and dg_res.get("label"):
-                out["label"] = (dg_res["label"], "text")
+                out["label"] = (dg_res["label"], "weak")
             if "genre" not in out and dg_res.get("genre_primary") \
                     and (g := normalize_genre(dg_res["genre_primary"])) is not None:
-                out["genre"] = (g, "text")
+                out["genre"] = (g, "weak")
             if "year" not in out and (y := _year(dg_res.get("release_date"))) is not None:
-                out["year"] = (y, "text")
+                out["year"] = (y, "weak")
     return ResolvedText(fields=out, release_mbids=release_mbids, confidence=overall)
 
 
