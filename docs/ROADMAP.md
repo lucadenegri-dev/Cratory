@@ -164,7 +164,12 @@ Pydantic responses for generate-async and mix-identify start/status, Discovery `
 validated via Pydantic — rule-5 violation closed); gap texts bilingual (codes+params, `gaps`
 i18n namespace, backend description as fallback); A10 (streaming import/sync as a background
 job: 202 + `GET /api/playlists/import/status`, one shared slot, per-item progress in the global
-job bar, provider errors in the job state — 12 tests converted, 24 new). All 2026-07-12.
+job bar, provider errors in the job state — 12 tests converted, 24 new); E10 final tail
+(serializer + CSV export reuse the persisted `transition_score` instead of recomputing);
+B20+B21+B22 (lib/api.ts → 13-line barrel over lib/api/ modules with zero page-import churn;
+`ApiError {status, code}` + shared `errText` replacing 16 duplicated `err()` helpers;
+AbortController + stale-response guards on library/downloads/playlist-detail/transitions).
+All 2026-07-12.
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
@@ -185,11 +190,8 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   search does not auto-start.
 - **Streaming import/sync (Spotify + SoundCloud)** — (nothing open).
 - **Library/index** — (nothing open).
-- **Frontend technical** — B20 zero AbortController/sequence guards (stale responses); B21
-  `api.ts` monolith (~1000 lines): split; B22 no `ApiError` with status, `err()` duplicated in
-  ~16 files. (B20+B21+B22 are one coherent solo pass on api.ts + pages.)
-- **Backend robustness** — (residual, from E10) serializers.py and routers/sets.py still trigger
-  classify_transition's internal recompute (1 extra score per setlist track).
+- **Frontend technical** — (nothing open).
+- **Backend robustness** — (nothing open).
 - **Tests** — E14 (residual): engine/overrides setup copied in ~20 test files → shared fixture
   (deliberately deferred: invasive, low value); E15 frontend has no tests (minimum = Playwright
   smoke + a jobs-provider merge unit).
