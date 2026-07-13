@@ -72,3 +72,18 @@ def test_only_present_files(db):
     db.commit()
     res = run_integrity(db, checker=_ok)
     assert res["checked"] == 0
+
+
+def test_corrupt_file_becomes_issue_after_recompute(db):
+    # Il job fa: run_integrity (marca) POI analysis.recompute (materializza
+    # le issue). Senza il recompute i file corrotti non diventano issue.
+    from app.models import Issue
+    from app.services import analysis
+    _mkfile(db, "/bad.flac", "h1")
+    db.commit()
+    run_integrity(db, checker=_bad)
+    analysis.recompute(db)
+    iss = db.query(Issue).filter_by(type="corrupt_file").all()
+    assert len(iss) == 1
+    assert iss[0].severity == "error"
+    assert iss[0].suggested_fix_json == {"action": "quarantine"}

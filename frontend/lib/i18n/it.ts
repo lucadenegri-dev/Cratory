@@ -45,6 +45,7 @@ export const it: Dictionary = {
     scan: "Scansione",
     apply: "Applicazione",
     providerLookup: "Ricerca provider",
+    integrity: "Controllo integrità",
   },
   nav: {
     tagline: "file → rekordbox",

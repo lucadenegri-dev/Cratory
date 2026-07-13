@@ -7,7 +7,7 @@ import threading
 from app.db import SessionLocal
 from app.integrations.integrity import ffmpeg_available
 from app.models import utcnow
-from app.services import integrity
+from app.services import analysis, integrity
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,11 @@ def _run(force: bool) -> None:
 
     try:
         result = integrity.run_integrity(db, force=force, on_progress=on_progress)
+        # Rigenera le issue dall'Inspector: è qui che i file marcati corrupt
+        # diventano issue 'corrupt_file' visibili (come lo scan fa dopo lo scan).
+        with _lock:
+            _state.update(phase="analyzing")
+        analysis.recompute(db)
         with _lock:
             _state.update(status="done", phase=None, result=result,
                           finished_at=utcnow().isoformat())

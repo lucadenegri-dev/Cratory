@@ -49,6 +49,7 @@ export const en = {
     scan: "Scan",
     apply: "Apply",
     providerLookup: "Provider lookup",
+    integrity: "Integrity check",
   },
   nav: {
     tagline: "file → rekordbox",

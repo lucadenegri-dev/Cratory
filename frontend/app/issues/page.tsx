@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, aiSuggestGenres,
   providerSuggest, acceptStrongOverrides, detectRatings,
-  integrityCheck, integrityStatus,
   type Issue, type ScanRoot,
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
@@ -16,7 +15,7 @@ import { useT } from "@/lib/i18n";
 
 export default function IssuesPage() {
   const t = useT();
-  const { scan, rescan, startRescan } = useJobs();
+  const { scan, rescan, startRescan, integrity, startIntegrity } = useJobs();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [roots, setRoots] = useState<ScanRoot[]>([]);
@@ -26,7 +25,6 @@ export default function IssuesPage() {
   const [genreBusy, setGenreBusy] = useState(false);
   const [providerBusy, setProviderBusy] = useState(false);
   const [ratingBusy, setRatingBusy] = useState(false);
-  const [integrityBusy, setIntegrityBusy] = useState(false);
   const [enrichMode, setEnrichMode] = useState<"enrich" | "maintenance">("enrich");
   const [aiNote, setAiNote] = useState<string | null>(null);
 
@@ -170,32 +168,16 @@ export default function IssuesPage() {
     }
   };
 
-  // Controllo integrità: lancia il job ffmpeg e fa polling finché finisce.
-  // I file corrotti diventano issue corrupt_file (→ quarantena nel PLAN).
+  // Controllo integrità: lancia il job globale (barra in basso come scan/rescan).
+  // Al termine, l'effetto running→done ricarica le issue e mostra il riepilogo.
   const onIntegrityCheck = async () => {
     setActionError(null);
     setAiNote(null);
-    setIntegrityBusy(true);
     try {
-      let s = await integrityCheck(false);
-      if (!s.available) {
-        setActionError(t.issues.integrityUnavailable);
-        return;
-      }
-      while (s.status === "running") {
-        await new Promise((r) => setTimeout(r, 1000));
-        s = await integrityStatus();
-      }
-      if (s.status === "error") {
-        setActionError(s.error || t.issues.integrityUnavailable);
-        return;
-      }
-      load();
-      if (s.result) setAiNote(t.issues.integrityNote(s.result.corrupt, s.result.checked));
+      const s = await startIntegrity();
+      if (!s.available) setActionError(t.issues.integrityUnavailable);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t.common.error);
-    } finally {
-      setIntegrityBusy(false);
     }
   };
 
@@ -232,6 +214,20 @@ export default function IssuesPage() {
     }
     prevRescan.current = rescan.status;
   }, [rescan.status, rescan.result, rescan.error, load, t]);
+
+  // Controllo integrità: stesso pattern del rescan (running→done ricarica).
+  const prevIntegrity = useRef(integrity.status);
+  useEffect(() => {
+    if (prevIntegrity.current === "running" && integrity.status === "done") {
+      load();
+      const g = integrity.result;
+      if (g) setAiNote(t.issues.integrityNote(g.corrupt, g.checked));
+    }
+    if (prevIntegrity.current === "running" && integrity.status === "error") {
+      setActionError(integrity.error || t.issues.integrityUnavailable);
+    }
+    prevIntegrity.current = integrity.status;
+  }, [integrity.status, integrity.result, integrity.error, load, t]);
 
   const types = useMemo(() => [...new Set(issues.map((i) => i.type))].sort(), [issues]);
   const fields = useMemo(
@@ -282,8 +278,8 @@ export default function IssuesPage() {
     { group: "maintenance", onClick: onDetectRatings, busy: ratingBusy,
       label: ratingBusy ? t.issues.aiBusy : t.issues.detectRatingsBtn,
       desc: t.issues.detectRatingsDesc, tag: t.issues.enrichLocal },
-    { group: "maintenance", onClick: onIntegrityCheck, busy: integrityBusy,
-      label: integrityBusy ? t.issues.providerImportBusy : t.issues.integrityBtn,
+    { group: "maintenance", onClick: onIntegrityCheck, busy: integrity.status === "running",
+      label: integrity.status === "running" ? t.issues.providerImportBusy : t.issues.integrityBtn,
       desc: t.issues.integrityDesc, tag: t.issues.integrityTag },
   ];
 
