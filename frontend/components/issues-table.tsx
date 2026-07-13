@@ -22,13 +22,21 @@ function SevMark({ sev }: { sev: string }) {
 
 function ConfBadge({ conf }: { conf: unknown }) {
   const t = useT();
-  if (conf !== "high" && conf !== "text") return null;
-  const high = conf === "high";
+  // normalizza il legacy: high->strong, text->weak
+  const g = conf === "high" ? "strong" : conf === "text" ? "weak" : conf;
+  if (g !== "strong" && g !== "medium" && g !== "weak") return null;
+  const cls =
+    g === "strong" ? "border-ok text-ok"
+    : g === "medium" ? "border-warning text-warning"
+    : "border-border text-faint";
+  const label =
+    g === "strong" ? t.issues.confStrong
+    : g === "medium" ? t.issues.confMedium
+    : t.issues.confWeak;
   return (
     <span className={cn(
-      "border px-1 py-0.5 text-[9px] uppercase tracking-wider",
-      high ? "border-ok text-ok" : "border-warning text-warning")}>
-      {high ? t.issues.confHigh : t.issues.confText}
+      "border px-1 py-0.5 text-[9px] uppercase tracking-wider", cls)}>
+      {label}
     </span>
   );
 }

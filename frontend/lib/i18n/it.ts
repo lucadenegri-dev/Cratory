@@ -207,7 +207,7 @@ export const it: Dictionary = {
     guide2dismiss: "✕ ignora",
     guide2post: ".",
     guide3label: "Conf.",
-    guide3post: ": alta = match certo (fingerprint), testuale = da rivedere.",
+    guide3post: ": alta = match sicuro (ID o tag vicini), media = da rivedere, bassa = incerta.",
     aiNotConfigured: "Imposta ANTHROPIC_API_KEY nel backend per usare l'AI.",
     providerNotConfigured: "Configura le chiavi provider (MusicBrainz/Discogs) nel backend.",
     aiTagsNote: (suggested, unresolved) =>
@@ -217,8 +217,8 @@ export const it: Dictionary = {
     providerNote: (suggested, covers, fingerprinted, unresolved, acoustid) =>
       `${suggested} suggerimenti da provider${covers > 0 ? `, ${covers} copertine trovate` : ""}${fingerprinted > 0 ? ` (${fingerprinted} via fingerprint)` : ""}${unresolved > 0 ? `, ${unresolved} non trovati` : ""}${acoustid ? "" : " — fingerprint off, solo match testuale"} — rivedi e accetta col ✓.`,
     acceptHighNote: (updated) => `${updated} proposte ad alta confidenza accettate → andranno nel PLAN.`,
-    rescanNote: (high, text, scanned, acoustid, covers) =>
-      `Rescan: ${high} proposte alta confidenza, ${text} testuali${covers > 0 ? `, ${covers} copertine` : ""} su ${scanned} tracce${acoustid ? "" : " (fingerprint off: nessuna alta confidenza)"}.`,
+    rescanNote: (strong, medium, weak, scanned, acoustid, covers) =>
+      `Rescan: ${strong} alta, ${medium} media, ${weak} bassa${covers > 0 ? `, ${covers} copertine` : ""} su ${scanned} tracce${acoustid ? "" : " (fingerprint off: nessuna alta via ID)"}.`,
     rescanDone: "Rescan completato.",
     rescanFailed: "Rescan fallito",
     sevAll: "severità: tutte",
@@ -293,8 +293,9 @@ export const it: Dictionary = {
     byType: "per tipo",
     acceptedLabel: "accettate",
     acceptedNote: (n) => `${n} → andranno nel PLAN`,
-    confHigh: "alta",
-    confText: "testuale",
+    confStrong: "alta",
+    confMedium: "media",
+    confWeak: "bassa",
     coverNotApplied: "copertina · non applicata",
     zoomTitle: "ingrandisci",
     writeField: (field) => `scrivi ${field}…`,

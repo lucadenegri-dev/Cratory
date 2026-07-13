@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, aiSuggestGenres,
-  providerSuggest, acceptHighOverrides, detectRatings,
+  providerSuggest, acceptStrongOverrides, detectRatings,
   type Issue, type ScanRoot,
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
@@ -178,7 +178,7 @@ export default function IssuesPage() {
 
   const onAcceptHigh = () =>
     act(async () => {
-      const r = await acceptHighOverrides();
+      const r = await acceptStrongOverrides();
       setAiNote(t.issues.acceptHighNote(r.updated));
     });
 
@@ -191,7 +191,7 @@ export default function IssuesPage() {
       const r = rescan.result;
       setAiNote(
         r
-          ? t.issues.rescanNote(r.proposed_high, r.proposed_text, r.scanned, r.acoustid_available, r.covers)
+          ? t.issues.rescanNote(r.proposed_strong, r.proposed_medium, r.proposed_weak, r.scanned, r.acoustid_available, r.covers)
           : t.issues.rescanDone,
       );
     }

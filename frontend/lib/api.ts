@@ -282,8 +282,9 @@ export interface ProviderRescanResult {
   fingerprinted: number;
   matched: number;
   no_match: number;
-  proposed_high: number;
-  proposed_text: number;
+  proposed_strong: number;
+  proposed_medium: number;
+  proposed_weak: number;
   covers: number;
 }
 export interface ProviderRescanJobState {
@@ -302,8 +303,8 @@ export function providerRescan(body: ProviderRescanBody) {
 export function providerRescanStatus() {
   return apiGet<ProviderRescanJobState>("/api/issues/provider-rescan/status");
 }
-export function acceptHighOverrides() {
-  return apiSend<{ updated: number }>("POST", "/api/issues/provider-override/accept-high");
+export function acceptStrongOverrides() {
+  return apiSend<{ updated: number }>("POST", "/api/issues/provider-override/accept-strong");
 }
 
 // --- DUPLICATES -------------------------------------------------------------
