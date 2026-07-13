@@ -122,7 +122,22 @@ class _FakeSpotify:
         pass
 
 
-def test_sync_endpoint_reports_added_and_removed(db, monkeypatch):
+@pytest.fixture()
+def sync_job(db, monkeypatch):
+    """Il sync gira ora nel job streaming_import_job: lega la sua SessionLocal
+    alla stessa sessione/engine del test e rende lo spawn sincrono, cosi'
+    sync_playlist(...) ritorna gia' lo stato finale (mirror di sync_job in
+    test_audio_analysis_job.py)."""
+    from sqlalchemy.orm import sessionmaker
+
+    from app.services import streaming_import_job as sij
+
+    monkeypatch.setattr(sij, "SessionLocal", sessionmaker(bind=db.get_bind(), expire_on_commit=False))
+    monkeypatch.setattr(sij, "_spawn", lambda fn: fn())
+    return sij
+
+
+def test_sync_endpoint_reports_added_and_removed(db, sync_job, monkeypatch):
     import_playlist(db, platform="spotify", name="PL", items=[
         _spotify_item("t1", name="One", artist="A", isrc="ISRC0000001"),
         _spotify_item("t2", name="Two", artist="B", isrc="ISRC0000002"),
@@ -133,17 +148,19 @@ def test_sync_endpoint_reports_added_and_removed(db, monkeypatch):
         _spotify_item("t1", name="One", artist="A", isrc="ISRC0000001"),
         _spotify_item("t9", name="Nine", artist="Z", isrc="ISRC0000009"),
     ])
-    monkeypatch.setattr(playlists_router, "SpotifyWebClient", lambda _db: fake)
+    monkeypatch.setattr(sync_job, "SpotifyWebClient", lambda _db: fake)
 
-    report = playlists_router.sync_playlist(playlist.id, db)
-    assert report.created == 1
-    assert report.removed == 1
-    assert report.total == 2
+    state = playlists_router.sync_playlist(playlist.id, db)
+    assert state["status"] == "done"
+    report = state["result"]
+    assert report["created"] == 1
+    assert report["removed"] == 1
+    assert report["total"] == 2
     pl = db.query(Playlist).filter(Playlist.platform_playlist_id == "PL1").one()
     assert db.query(Track).filter(Track.isrc == "ISRC0000002").one() not in tracks_for_playlist(db, pl.id)
 
 
-def test_sync_refreshes_name_and_cover_from_spotify(db, monkeypatch):
+def test_sync_refreshes_name_and_cover_from_spotify(db, sync_job, monkeypatch):
     # A25: il sync deve rileggere nome/copertina dalla sorgente, non riusare i vecchi.
     import_playlist(db, platform="spotify", name="Vecchio Nome", items=[
         _spotify_item("t1", name="One", artist="A", isrc="ISRC0000001"),
@@ -160,16 +177,20 @@ def test_sync_refreshes_name_and_cover_from_spotify(db, monkeypatch):
             }
 
     fake = _FakeWithMeta([_spotify_item("t1", name="One", artist="A", isrc="ISRC0000001")])
-    monkeypatch.setattr(playlists_router, "SpotifyWebClient", lambda _db: fake)
+    monkeypatch.setattr(sync_job, "SpotifyWebClient", lambda _db: fake)
 
-    playlists_router.sync_playlist(playlist.id, db)
+    state = playlists_router.sync_playlist(playlist.id, db)
+    assert state["status"] == "done"
+    # Il job scrive con una sessione separata (mirror del thread reale): la
+    # identity map di `db` va invalidata per rivedere i valori aggiornati.
+    db.expire_all()
 
     pl = db.query(Playlist).filter(Playlist.platform_playlist_id == "PL1").one()
     assert pl.name == "Nuovo Nome"
     assert pl.artwork_url == "http://new/cover.jpg"
 
 
-def test_sync_liked_does_not_refresh_name(db, monkeypatch):
+def test_sync_liked_does_not_refresh_name(db, sync_job, monkeypatch):
     # I liked non hanno meta: il nome resta quello di sistema, niente chiamata a get_playlist_meta.
     from app.services.playlist_import import LIKED_PLAYLIST_NAME
     import_playlist(db, platform="spotify", name=LIKED_PLAYLIST_NAME, items=[
@@ -181,9 +202,11 @@ def test_sync_liked_does_not_refresh_name(db, monkeypatch):
         def get_playlist_meta(self, playlist_id):
             raise AssertionError("get_playlist_meta non va chiamato per i liked")
 
-    monkeypatch.setattr(playlists_router, "SpotifyWebClient",
+    monkeypatch.setattr(sync_job, "SpotifyWebClient",
                         lambda _db: _NoMeta([_spotify_item("t1", name="One", artist="A", isrc="ISRC0000001")]))
-    playlists_router.sync_playlist(playlist.id, db)
+    state = playlists_router.sync_playlist(playlist.id, db)
+    assert state["status"] == "done"
+    db.expire_all()
 
     pl = db.query(Playlist).filter(Playlist.kind == "liked").one()
     assert pl.name == LIKED_PLAYLIST_NAME

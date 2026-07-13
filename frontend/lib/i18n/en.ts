@@ -85,6 +85,10 @@ export const en = {
     libraryIndex: "Library indexing",
     audioAnalysis: "BPM/key analysis",
     setGeneration: "Set generation",
+    streamingImport: "Playlist import",
+    streamingImportPhaseFetching: "Fetching",
+    streamingImportPhaseImporting: "Importing",
+    streamingImportSummary: (name: string, created: number) => `${name} — ${created} new`,
     dig: "Crate digging",
     completed: "Completed",
     dismissError: "Dismiss",
@@ -395,6 +399,7 @@ export const en = {
     downloadNotStarted: (msg: string) => `Download not started: ${msg}`,
     addMoreLiked: "Add more liked",
     syncFromButton: (platform: string) => `Sync from ${platform}`,
+    syncStartedNote: "Sync started: progress in the bottom bar.",
     syncedPrefix: "Synced: ",
     syncSummary: (created: number, removed: number, total: number) =>
       `${created} new · ${removed} removed (stay in library) · ${total} total`,

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, CloudDownload } from "lucide-react";
 import {
   listImportedPlaylists,
@@ -14,6 +14,7 @@ import { ButtonLink } from "@/components/button-link";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { PageLayout } from "@/components/page-layout";
 import { PlaylistCover } from "@/components/playlist-cover";
+import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
@@ -22,6 +23,7 @@ function err(e: unknown): string {
 
 export default function PlaylistsPage() {
   const t = useT();
+  const jobs = useJobs();
   const [imported, setImported] = useState<Playlist[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +37,18 @@ export default function PlaylistsPage() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // Import/sync streaming girano in background (barra job globale): quando
+  // finiscono (running -> done) l'elenco qui e' stantio, ricarica in automatico
+  // (stesso pattern di /analysis con jobs.analysis).
+  const prevStreamingImportStatus = useRef<string | null>(null);
+  useEffect(() => {
+    const status = jobs.streamingImport?.status ?? null;
+    if (prevStreamingImportStatus.current === "running" && status === "done") {
+      reload();
+    }
+    prevStreamingImportStatus.current = status;
+  }, [jobs.streamingImport?.status, reload]);
 
   const doDelete = async (p: Playlist) => {
     setError(null);

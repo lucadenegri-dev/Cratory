@@ -87,6 +87,10 @@ export const it: Dictionary = {
     libraryIndex: "Indicizzazione libreria",
     audioAnalysis: "Analisi BPM/key",
     setGeneration: "Generazione set",
+    streamingImport: "Import playlist",
+    streamingImportPhaseFetching: "Scarico",
+    streamingImportPhaseImporting: "Importo",
+    streamingImportSummary: (name: string, created: number) => `${name} — ${created} nuove`,
     dig: "Scava crate",
     completed: "Completata",
     dismissError: "Chiudi",
@@ -397,6 +401,7 @@ export const it: Dictionary = {
     downloadNotStarted: (msg: string) => `Download non avviato: ${msg}`,
     addMoreLiked: "Aggiungi altri liked",
     syncFromButton: (platform: string) => `Aggiorna da ${platform}`,
+    syncStartedNote: "Sincronizzazione avviata: progresso nella barra in basso.",
     syncedPrefix: "Sincronizzato: ",
     syncSummary: (created: number, removed: number, total: number) =>
       `${created} nuove · ${removed} rimosse (restano in libreria) · ${total} totali`,

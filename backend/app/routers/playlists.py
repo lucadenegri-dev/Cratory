@@ -15,11 +15,6 @@ from sqlalchemy.orm import Session
 from app.core.http_errors import api_error
 from app.db import get_db
 from app.models import Playlist, Track
-from app.integrations.soundcloud import (
-    SoundCloudError,
-    SoundCloudInvalidUrl,
-    fetch_playlist as sc_fetch_playlist,
-)
 from app.integrations.spotify import (
     SpotifyError,
     SpotifyNotConfigured,
@@ -49,17 +44,15 @@ from app.schemas import (
     PlaylistImportRequest,
     PlaylistOut,
     SpotifyPlaylistRef,
+    StreamingImportJobStatus,
     TrackOut,
 )
 from app.serializers import track_out
+from app.services import streaming_import_job
 from app.services.gap_analysis import analyze_gaps
 from app.services.manual_import import import_manual_playlist
 from app.services.playlist_import import (
-    LIKED_PLAYLIST_NAME,
-    import_playlist,
-    import_selected_liked_tracks,
     import_single_track,
-    normalize_soundcloud_item,
     preview_liked_tracks,
 )
 
@@ -114,35 +107,23 @@ def spotify_available(db: Session = Depends(get_db)):
     return out
 
 
-@router.post("/import", response_model=PlaylistImportReport)
+def _streaming_job_or_409() -> None:
+    if streaming_import_job.is_running():
+        raise api_error(
+            409, "streaming_import_already_running",
+            "A streaming import/sync is already running: wait for it to finish and try again.",
+        )
+
+
+@router.post("/import", response_model=StreamingImportJobStatus, status_code=202)
 def import_from_spotify(req: PlaylistImportRequest, db: Session = Depends(get_db)):
-    client = SpotifyWebClient(db)
-    try:
-        if req.playlist_id == "liked":
-            items = client.get_liked_tracks()
-            report = import_playlist(
-                db, platform="spotify", name=LIKED_PLAYLIST_NAME,
-                items=items, kind="liked",
-            )
-        else:
-            playlist_meta = client.get_playlist_meta(req.playlist_id)
-            items = client.get_playlist_tracks(req.playlist_id)
-            images = playlist_meta.get("images") or []
-            report = import_playlist(
-                db, platform="spotify",
-                name=playlist_meta.get("name") or "Playlist Spotify",
-                items=items,
-                platform_playlist_id=req.playlist_id,
-                owner=(playlist_meta.get("owner") or {}).get("display_name"),
-                url=(playlist_meta.get("external_urls") or {}).get("spotify"),
-                artwork_url=images[0]["url"] if images else None,
-            )
-    except SpotifyError as exc:
-        raise _http_error(exc) from exc
-    finally:
-        client.close()
-    # Enrichment non piu' avviato qui: e' ora responsabilita' di Sortory.
-    return PlaylistImportReport(**report)
+    """Avvia in background l'import (playlist o liked) da Spotify. Segui lo stato
+    con GET /api/playlists/import/status. Il fetch, potenzialmente lento su
+    librerie di migliaia di brani, avviene dentro il job."""
+    _streaming_job_or_409()
+    if req.playlist_id == "liked":
+        return streaming_import_job.start_job("spotify_liked")
+    return streaming_import_job.start_job("spotify_playlist", playlist_id=req.playlist_id)
 
 
 @router.get("/spotify/liked/preview", response_model=list[LikedTrackPreview])
@@ -161,93 +142,32 @@ def liked_preview(db: Session = Depends(get_db)):
     return [LikedTrackPreview(**p) for p in preview_liked_tracks(db, items)]
 
 
-@router.post("/import/liked/selected", response_model=PlaylistImportReport)
+@router.post("/import/liked/selected", response_model=StreamingImportJobStatus, status_code=202)
 def import_liked_selected(req: LikedSelectedImportRequest, db: Session = Depends(get_db)):
-    """Importa nella playlist Liked solo i brani selezionati. Additivo (niente prune)."""
-    client = SpotifyWebClient(db)
-    try:
-        items = client.get_liked_tracks()
-    except SpotifyError as exc:
-        raise _http_error(exc) from exc
-    finally:
-        client.close()
-    report = import_selected_liked_tracks(db, items, req.spotify_ids)
-    return PlaylistImportReport(**report)
+    """Avvia in background l'import nella playlist Liked dei soli brani selezionati
+    (additivo, niente prune). Segui lo stato con GET /api/playlists/import/status."""
+    _streaming_job_or_409()
+    return streaming_import_job.start_job("spotify_liked_selected", spotify_ids=req.spotify_ids)
 
 
-@router.post("/{playlist_id}/sync", response_model=PlaylistImportReport)
+@router.post("/{playlist_id}/sync", response_model=StreamingImportJobStatus, status_code=202)
 def sync_playlist(playlist_id: int, db: Session = Depends(get_db)):
-    """Riallinea la playlist con la piattaforma d'origine: Spotify con prune,
-    SoundCloud solo additivo.
-    """
+    """Avvia in background il riallineamento della playlist con la piattaforma
+    d'origine: Spotify con prune, SoundCloud solo additivo. Segui lo stato con
+    GET /api/playlists/import/status."""
     playlist = get_playlist(db, playlist_id)
     if playlist is None:
         raise api_error(404, "playlist_not_found", "Playlist not found")
+    err = streaming_import_job.sync_error_for(playlist)
+    if err:
+        raise api_error(409, err[0], err[1])
+    _streaming_job_or_409()
+    return streaming_import_job.start_job("playlist_sync", playlist_id=playlist_id)
 
-    if playlist.platform == "soundcloud":
-        # I liked SoundCloud crescono solo via flusso selettivo: niente sync totale.
-        if playlist.kind == "liked" or not playlist.url:
-            raise api_error(
-                409, "soundcloud_playlist_not_syncable",
-                "SoundCloud playlists can't be synced: use the selective likes flow or re-import the URL.",
-            )
-        try:
-            info = sc_fetch_playlist(playlist.url)
-        except SoundCloudError as exc:
-            if isinstance(exc, SoundCloudInvalidUrl):
-                raise api_error(422, "soundcloud_invalid_url", str(exc), reason=str(exc)) from exc
-            raise api_error(502, "soundcloud_error", str(exc), reason=str(exc)) from exc
-        # Additivo (prune=False): su SoundCloud un takedown non significa
-        # "non mi interessa più" — il lead resta collegato. Titolo/uploader/copertina
-        # riletti dalla sorgente (A25), con fallback ai valori attuali.
-        thumbnails = info.get("thumbnails") or []
-        report = import_playlist(
-            db, platform="soundcloud",
-            name=info.get("title") or playlist.name, items=info["entries"],
-            normalize=normalize_soundcloud_item,
-            platform_playlist_id=playlist.platform_playlist_id,
-            owner=info.get("uploader") or playlist.owner, url=playlist.url,
-            artwork_url=(thumbnails[-1].get("url") if thumbnails else playlist.artwork_url),
-            kind=playlist.kind, prune=False,
-        )
-        return PlaylistImportReport(**report)
 
-    if playlist.platform != "spotify":
-        raise api_error(
-            409, "playlist_platform_not_syncable",
-            "Only Spotify and SoundCloud playlists can be synced.",
-        )
-    if playlist.kind != "liked" and not playlist.platform_playlist_id:
-        raise api_error(409, "playlist_not_syncable", "This playlist can't be synced from Spotify.")
-
-    client = SpotifyWebClient(db)
-    # I liked non hanno meta: nome di sistema fisso. Le playlist vere rileggono
-    # nome/owner/url/copertina dalla sorgente (A25), con fallback ai valori attuali.
-    name, owner, url, artwork = playlist.name, playlist.owner, playlist.url, playlist.artwork_url
-    try:
-        if playlist.kind == "liked":
-            items = client.get_liked_tracks()
-        else:
-            meta = client.get_playlist_meta(playlist.platform_playlist_id)
-            items = client.get_playlist_tracks(playlist.platform_playlist_id)
-            images = meta.get("images") or []
-            name = meta.get("name") or name
-            owner = (meta.get("owner") or {}).get("display_name") or owner
-            url = (meta.get("external_urls") or {}).get("spotify") or url
-            artwork = images[0]["url"] if images else artwork
-    except SpotifyError as exc:
-        raise _http_error(exc) from exc
-    finally:
-        client.close()
-
-    report = import_playlist(
-        db, platform="spotify", name=name, items=items,
-        platform_playlist_id=playlist.platform_playlist_id,
-        owner=owner, url=url, artwork_url=artwork,
-        kind=playlist.kind, prune=True,
-    )
-    # Enrichment non piu' avviato qui: e' ora responsabilita' di Sortory.
-    return PlaylistImportReport(**report)
+@router.get("/import/status", response_model=StreamingImportJobStatus)
+def import_status():
+    return streaming_import_job.job_state()
 
 
 @router.post("/import-manual", response_model=PlaylistImportReport)

@@ -157,3 +157,52 @@ def test_mix_identify_double_start_is_noop_at_job_level(monkeypatch):
     assert result["dj_set_id"] == 42  # stato precedente intatto
 
     mij._state.update(status="idle", dj_set_id=None, phase=None)
+
+
+# --- import/sync streaming: guardia nel router (409 esplicito), come analysis -
+
+
+def test_streaming_import_double_start_refused_via_router(monkeypatch):
+    from app.services import streaming_import_job as sij
+
+    monkeypatch.setattr(sij, "is_running", lambda: True)
+    started = {"n": 0}
+    monkeypatch.setattr(sij, "start_job", lambda kind, **kw: started.update(n=started["n"] + 1))
+
+    r = client.post("/api/playlists/import", json={"playlist_id": "liked"})
+
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "streaming_import_already_running"
+    assert started["n"] == 0
+
+
+def test_streaming_import_double_start_refused_via_soundcloud_router(monkeypatch):
+    from app.services import streaming_import_job as sij
+
+    monkeypatch.setattr(sij, "is_running", lambda: True)
+    started = {"n": 0}
+    monkeypatch.setattr(sij, "start_job", lambda kind, **kw: started.update(n=started["n"] + 1))
+
+    r = client.post("/api/soundcloud/import", json={"url": "https://soundcloud.com/a/sets/b"})
+
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "streaming_import_already_running"
+    assert started["n"] == 0
+
+
+def test_streaming_import_start_job_is_noop_at_job_level_when_running(monkeypatch):
+    """Difesa in profondita' come library index/mix identify: anche a monte del
+    router, start_job() non deve rilanciare un thread se lo stato e' gia' 'running'."""
+    from app.services import streaming_import_job as sij
+
+    monkeypatch.setattr(sij, "_spawn",
+                        lambda fn: (_ for _ in ()).throw(AssertionError("non deve rilanciare il job")))
+    sij._state.update(status="running", kind="spotify_liked", processed=3, total=10)
+
+    result = sij.start_job("soundcloud_playlist", url="https://soundcloud.com/x")
+
+    assert result["status"] == "running"
+    assert result["kind"] == "spotify_liked"  # stato precedente intatto, non sovrascritto
+    assert result["processed"] == 3
+
+    sij._state.update(status="idle", kind=None, processed=0, total=0)

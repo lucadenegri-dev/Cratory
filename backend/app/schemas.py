@@ -337,6 +337,22 @@ class PlaylistImportReport(BaseModel):
     total: int = 0
 
 
+class StreamingImportJobStatus(BaseModel):
+    """Stato del job unico di import/sync streaming (Spotify/SoundCloud): import
+    playlist/liked, import selettivo dei liked, sync. Un solo job alla volta."""
+
+    status: str
+    kind: str | None = None
+    phase: str | None = None  # fetching | importing
+    processed: int = 0
+    total: int = 0
+    result: PlaylistImportReport | None = None
+    error: str | None = None
+    error_code: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
 class ManualImportRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     text: str = Field(min_length=1)  # righe "Artista - Titolo" o CSV "artista,titolo"

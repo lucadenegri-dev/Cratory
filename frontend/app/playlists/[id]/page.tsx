@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
@@ -163,17 +163,38 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const doSync = async () => {
     setSyncing(true);
     setSyncMsg(null);
+    setError(null);
     try {
-      const r = await syncPlaylist(pid);
-      setSyncMsg(t.playlists.syncSummary(r.created, r.removed, r.total));
-      getPlaylist(pid).then(setPlaylist).catch(() => {});
-      reload();
+      await syncPlaylist(pid);
+      // Il sync gira in background (barra job globale): l'esito arriva
+      // nell'effect sotto quando il job passa running -> done.
+      jobs.refresh();
+      setSyncMsg(t.playlists.syncStartedNote);
     } catch (e) {
       setError(String((e as Error).message ?? e));
     } finally {
       setSyncing(false);
     }
   };
+
+  // Sync streaming in background: quando il job finisce (running -> done) i
+  // dati di questa playlist sono stantii, ricarica in automatico (stesso
+  // pattern di /analysis con jobs.analysis).
+  const prevSyncStatus = useRef<string | null>(null);
+  useEffect(() => {
+    const status = jobs.streamingImport?.status ?? null;
+    if (prevSyncStatus.current === "running") {
+      if (status === "done") {
+        const result = jobs.streamingImport?.result;
+        setSyncMsg(result ? t.playlists.syncSummary(result.created, result.removed, result.total) : null);
+        getPlaylist(pid).then(setPlaylist).catch(() => {});
+        reload();
+      } else if (status === "error") {
+        setError(jobs.streamingImport?.error ?? null);
+      }
+    }
+    prevSyncStatus.current = status;
+  }, [jobs.streamingImport?.status, jobs.streamingImport?.result, jobs.streamingImport?.error, pid, reload, t]);
 
   if (error) return (
     <PageLayout title={t.playlists.pageTitle}>

@@ -60,3 +60,25 @@ def test_spotify_resta_default(db):
     }
     report = import_playlist(db, platform="spotify", name="P", items=[item])
     assert report["created"] == 1
+
+
+def test_on_progress_default_none_nessuna_chiamata(db):
+    # Comportamento invariato senza on_progress: nessun crash, nessuna chiamata implicita.
+    items = [_norm(platform_track_id="h1", title="A", artist="X", local_path="/m/a.flac")]
+    report = import_playlist(db, platform="local_files", name="C", items=items, normalize=identity_normalize)
+    assert report["created"] == 1
+
+
+def test_on_progress_chiamato_con_avanzamento_e_totale_finale(db):
+    items = [
+        _norm(platform_track_id=f"h{i}", title=f"T{i}", artist="X", local_path=f"/m/{i}.flac")
+        for i in range(3)
+    ]
+    calls: list[tuple[int, int]] = []
+    import_playlist(
+        db, platform="local_files", name="C", items=items, normalize=identity_normalize,
+        on_progress=lambda done, total: calls.append((done, total)),
+    )
+    assert calls[0] == (0, 3)  # chiamata iniziale: nessun item ancora processato
+    assert calls[-1] == (3, 3)  # chiamata finale: tutti processati
+    assert all(total == 3 for _, total in calls)

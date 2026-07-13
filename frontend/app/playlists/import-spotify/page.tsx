@@ -16,6 +16,7 @@ import {
 import { Card, CardHeader, Button, Alert, Spinner, Input, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { PlaylistCover } from "@/components/playlist-cover";
+import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
@@ -25,6 +26,7 @@ function err(e: unknown): string {
 export default function ImportSpotifyPage() {
   const t = useT();
   const router = useRouter();
+  const jobs = useJobs();
   const [spotify, setSpotify] = useState<SpotifyStatus | null>(null);
   const [available, setAvailable] = useState<SpotifyPlaylistRef[] | null>(null);
   const [imported, setImported] = useState<Set<string>>(new Set());
@@ -58,8 +60,9 @@ export default function ImportSpotifyPage() {
     setBusy(playlistId);
     try {
       await importPlaylist(playlistId);
-      // L'arricchimento parte da solo lato backend: torniamo all'elenco dove
-      // viene mostrato l'avanzamento.
+      // L'import gira in background (barra job globale): torniamo all'elenco
+      // dove viene mostrato l'avanzamento.
+      jobs.refresh();
       router.push("/playlists");
     } catch (e) {
       setError(t.playlists.importSpotify.importFailed(label, err(e)));

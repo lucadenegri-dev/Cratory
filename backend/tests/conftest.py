@@ -13,6 +13,7 @@ from app.db import Base  # noqa: E402
 import app.models  # noqa: E402,F401 — registra tutte le tabelle su Base.metadata prima di create_all
 from app.services import (  # noqa: E402
     audio_analysis_job, library_index_job, mix_identify_job, soulseek_download_job,
+    streaming_import_job,
 )
 
 CAMELOT_KEYS = [
@@ -80,13 +81,17 @@ def _no_real_library_scan(monkeypatch):
     monkeypatch.setattr(settings, "library_root", "")
 
 
-# I 4 job in background (analisi BPM/key, indicizzazione libreria, download
-# Soulseek, identificazione mix Shazam) tengono lo stato in un dict globale di
-# modulo (app locale mono-utente, niente sessione HTTP per il polling). Un test
-# che lascia lo stato a "running" (es. i test della guardia doppio-avvio in
-# test_job_double_start.py) contaminerebbe qualsiasi test successivo che legge
-# job_state() o chiama start_job() aspettandosi lo stato iniziale "idle".
-_JOB_STATE_MODULES = [audio_analysis_job, library_index_job, mix_identify_job, soulseek_download_job]
+# I 5 job in background (analisi BPM/key, indicizzazione libreria, download
+# Soulseek, identificazione mix Shazam, import/sync streaming) tengono lo stato
+# in un dict globale di modulo (app locale mono-utente, niente sessione HTTP per
+# il polling). Un test che lascia lo stato a "running" (es. i test della guardia
+# doppio-avvio in test_job_double_start.py) contaminerebbe qualsiasi test
+# successivo che legge job_state() o chiama start_job() aspettandosi lo stato
+# iniziale "idle".
+_JOB_STATE_MODULES = [
+    audio_analysis_job, library_index_job, mix_identify_job, soulseek_download_job,
+    streaming_import_job,
+]
 _PRISTINE_JOB_STATES = [copy.deepcopy(m._state) for m in _JOB_STATE_MODULES]
 
 

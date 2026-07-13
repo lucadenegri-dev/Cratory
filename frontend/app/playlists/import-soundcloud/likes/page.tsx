@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Spinner, Input, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
@@ -21,6 +22,7 @@ function err(e: unknown): string {
 export default function ImportSoundcloudLikesPage() {
   const t = useT();
   const router = useRouter();
+  const jobs = useJobs();
   const [preview, setPreview] = useState<SoundCloudLikedTrackPreview[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -71,6 +73,7 @@ export default function ImportSoundcloudLikesPage() {
     setImporting(true);
     try {
       await importSelectedSoundcloudLikes([...selected]);
+      jobs.refresh();
       router.push("/playlists");
     } catch (e) {
       setError(likes.importFailed(err(e)));

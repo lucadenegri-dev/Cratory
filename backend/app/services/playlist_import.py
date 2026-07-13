@@ -289,6 +289,12 @@ def import_single_track(
     return target, existing is None
 
 
+#  Ogni quanti item chiamare on_progress durante il loop principale (import
+# lungo, es. migliaia di liked): abbastanza granulare per una barra fluida,
+# senza il costo di un update ad ogni singolo item.
+_PROGRESS_EVERY = 10
+
+
 def import_playlist(
     db: Session,
     *,
@@ -302,12 +308,17 @@ def import_playlist(
     artwork_url: str | None = None,
     kind: str = "playlist",
     prune: bool = False,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> dict:
     """Importa/aggiorna una playlist e le sue tracce. Idempotente. Ritorna un report.
 
     Con ``prune=True`` (sync da Spotify) le tracce ancora collegate a questa playlist
     ma non piu' presenti nel set importato vengono SCOLLEGATE: la membership su
     playlist_tracks viene rimossa; la traccia resta in libreria e in ogni altra playlist.
+
+    ``on_progress(done, total)``, se passato, viene richiamato periodicamente durante
+    il loop sugli item (usato dal job in background per riportare l'avanzamento;
+    default None = nessuna chiamata, comportamento invariato).
     """
     playlist = None
     if platform_playlist_id:
@@ -344,24 +355,29 @@ def import_playlist(
     created = updated = skipped = 0
     present_isrcs: set[str] = set()
     present_platform_ids: set[str] = set()
-    for item in items:
+    total_items = len(items)
+    if on_progress:
+        on_progress(0, total_items)
+    for i, item in enumerate(items, start=1):
         norm = normalize(item)
         if norm is None:
             skipped += 1
-            continue
-        if norm.isrc:
-            present_isrcs.add(norm.isrc)
-        if norm.platform_track_id:
-            present_platform_ids.add(norm.platform_track_id)
-        existing = _find_existing(db, norm)
-        if existing is None:
-            track = Track(source_type=platform)
-            db.add(track)
-            _apply(db, track, norm, playlist)
-            created += 1
         else:
-            _apply(db, existing, norm, playlist)
-            updated += 1
+            if norm.isrc:
+                present_isrcs.add(norm.isrc)
+            if norm.platform_track_id:
+                present_platform_ids.add(norm.platform_track_id)
+            existing = _find_existing(db, norm)
+            if existing is None:
+                track = Track(source_type=platform)
+                db.add(track)
+                _apply(db, track, norm, playlist)
+                created += 1
+            else:
+                _apply(db, existing, norm, playlist)
+                updated += 1
+        if on_progress and (i % _PROGRESS_EVERY == 0 or i == total_items):
+            on_progress(i, total_items)
 
     removed = 0
     if prune:
@@ -469,7 +485,10 @@ def preview_liked_tracks(db: Session, items: list) -> list[dict]:
     return out
 
 
-def import_selected_liked_tracks(db: Session, items: list, spotify_ids: list[str]) -> dict:
+def import_selected_liked_tracks(
+    db: Session, items: list, spotify_ids: list[str],
+    on_progress: Callable[[int, int], None] | None = None,
+) -> dict:
     """Importa nella playlist Liked SOLO gli item selezionati. Additivo (niente prune)."""
     wanted = set(spotify_ids)
     selected = [
@@ -478,7 +497,7 @@ def import_selected_liked_tracks(db: Session, items: list, spotify_ids: list[str
     ]
     return import_playlist(
         db, platform="spotify", name=LIKED_PLAYLIST_NAME,
-        items=selected, kind="liked", prune=False,
+        items=selected, kind="liked", prune=False, on_progress=on_progress,
     )
 
 
@@ -519,12 +538,15 @@ def preview_soundcloud_likes(db: Session, entries: list) -> list[dict]:
     return out
 
 
-def import_selected_soundcloud_likes(db: Session, entries: list, track_ids: list[str]) -> dict:
+def import_selected_soundcloud_likes(
+    db: Session, entries: list, track_ids: list[str],
+    on_progress: Callable[[int, int], None] | None = None,
+) -> dict:
     """Importa nella playlist liked SoundCloud SOLO le entry selezionate. Additivo."""
     wanted = {str(t) for t in track_ids}
     selected = [e for e in entries if e and str(e.get("id")) in wanted]
     return import_playlist(
         db, platform="soundcloud", name=SC_LIKED_PLAYLIST_NAME,
         items=selected, normalize=normalize_soundcloud_item,
-        kind="liked", prune=False,
+        kind="liked", prune=False, on_progress=on_progress,
     )

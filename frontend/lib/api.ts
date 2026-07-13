@@ -509,8 +509,27 @@ export function listSpotifyPlaylists() {
   return apiGet<SpotifyPlaylistRef[]>("/api/playlists/spotify/available");
 }
 
+/** Stato del job unico di import/sync streaming (Spotify/SoundCloud): il fetch
+ *  dalla piattaforma, potenzialmente lento su librerie di migliaia di brani,
+ *  gira in background. Un solo job alla volta (poller in JobsProvider). */
+export interface StreamingImportJobStatus {
+  status: "idle" | "running" | "done" | "error";
+  kind: string | null;
+  phase: "fetching" | "importing" | null;
+  processed: number;
+  total: number;
+  result: PlaylistImportReport | null;
+  error: string | null;
+  error_code: string | null;
+}
+
+export function streamingImportStatus() {
+  return apiGet<StreamingImportJobStatus>("/api/playlists/import/status");
+}
+
+/** Avvia in background l'import di una playlist (o dei liked) da Spotify. */
 export function importPlaylist(playlistId: string) {
-  return apiPost<PlaylistImportReport>("/api/playlists/import", {
+  return apiPost<StreamingImportJobStatus>("/api/playlists/import", {
     platform: "spotify",
     playlist_id: playlistId,
   });
@@ -531,9 +550,10 @@ export function previewLikedTracks() {
   return apiGet<LikedTrackPreview[]>("/api/playlists/spotify/liked/preview");
 }
 
-/** Importa nella playlist "Spotify Likes" solo i brani selezionati (additivo). */
+/** Avvia in background l'import nella playlist "Spotify Likes" dei soli brani
+ *  selezionati (additivo). */
 export function importSelectedLikedTracks(spotifyIds: string[]) {
-  return apiPost<PlaylistImportReport>("/api/playlists/import/liked/selected", {
+  return apiPost<StreamingImportJobStatus>("/api/playlists/import/liked/selected", {
     spotify_ids: spotifyIds,
   });
 }
@@ -554,9 +574,10 @@ export function setSoundcloudUsername(username: string) {
   return apiPut<SoundCloudStatus>("/api/soundcloud/config", { username });
 }
 
-/** Importa una playlist SoundCloud da URL (pubblica o secret link). Solo metadati. */
+/** Avvia in background l'import di una playlist SoundCloud da URL (pubblica o
+ *  secret link). Solo metadati. */
 export function importSoundcloudPlaylist(url: string) {
-  return apiPost<PlaylistImportReport>("/api/soundcloud/import", { url });
+  return apiPost<StreamingImportJobStatus>("/api/soundcloud/import", { url });
 }
 
 export interface SoundCloudLikedTrackPreview {
@@ -576,9 +597,10 @@ export function previewSoundcloudLikes() {
   return apiGet<SoundCloudLikedTrackPreview[]>("/api/soundcloud/likes/preview");
 }
 
-/** Importa nella playlist "SoundCloud Likes" solo i brani selezionati (additivo). */
+/** Avvia in background l'import nella playlist "SoundCloud Likes" dei soli
+ *  brani selezionati (additivo). */
 export function importSelectedSoundcloudLikes(trackIds: string[]) {
-  return apiPost<PlaylistImportReport>("/api/soundcloud/import/likes", { track_ids: trackIds });
+  return apiPost<StreamingImportJobStatus>("/api/soundcloud/import/likes", { track_ids: trackIds });
 }
 
 export function listImportedPlaylists() {
@@ -611,8 +633,10 @@ export function playlistTracks(id: number) {
   return apiGet<Track[]>(`/api/playlists/${id}/tracks`);
 }
 
+/** Avvia in background il riallineamento della playlist con la piattaforma
+ *  d'origine (Spotify con prune, SoundCloud solo additivo). */
 export function syncPlaylist(id: number) {
-  return apiPost<PlaylistImportReport>(`/api/playlists/${id}/sync`);
+  return apiPost<StreamingImportJobStatus>(`/api/playlists/${id}/sync`);
 }
 
 export interface LabelStats {

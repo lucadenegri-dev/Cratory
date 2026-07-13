@@ -103,15 +103,27 @@ def test_preview_endpoint(db, monkeypatch):
 
 
 def test_import_selected_endpoint(db, monkeypatch):
+    # L'import selettivo gira ora in streaming_import_job: lega la sua
+    # SessionLocal alla stessa sessione/engine del test e rende lo spawn
+    # sincrono (mirror di sync_job in test_audio_analysis_job.py).
+    from sqlalchemy.orm import sessionmaker
+
+    from app.services import streaming_import_job as sij
+
     items = [
         _liked_item("t1", name="One", artist="A", isrc="ISRC0000001"),
         _liked_item("t2", name="Two", artist="B", isrc="ISRC0000002"),
     ]
-    monkeypatch.setattr(playlists_router, "SpotifyWebClient", lambda _db: _FakeSpotify(items))
-    report = playlists_router.import_liked_selected(
+    monkeypatch.setattr(sij, "SpotifyWebClient", lambda _db: _FakeSpotify(items))
+    monkeypatch.setattr(sij, "SessionLocal", sessionmaker(bind=db.get_bind(), expire_on_commit=False))
+    monkeypatch.setattr(sij, "_spawn", lambda fn: fn())
+
+    state = playlists_router.import_liked_selected(
         LikedSelectedImportRequest(spotify_ids=["t2"]), db
     )
-    assert report.created == 1
+    assert state["status"] == "done"
+    assert state["result"]["created"] == 1
+    db.expire_all()
     pl = _liked_playlist(db)
     assert {t.title for t in tracks_for_playlist(db, pl.id)} == {"Two"}
     assert db.query(Track).count() == 1

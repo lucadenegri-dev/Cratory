@@ -117,6 +117,7 @@ confirmation. `422` (`analysis_force_required`) if `mode="all"` without `force`;
 GET    /api/playlists/spotify/available
 POST   /api/playlists/import
 POST   /api/playlists/{playlist_id}/sync
+GET    /api/playlists/import/status
 POST   /api/playlists/import-manual
 POST   /api/playlists/create-from-tracks
 GET    /api/playlists
@@ -130,12 +131,18 @@ GET    /api/playlists/library/gaps
 
 `GET /api/playlists/spotify/available` lists only the playlists **owned** by the
 connected user (the ones by others that they follow are not importable in dev mode).
-`POST /api/playlists/import` imports a Spotify playlist or the liked tracks.
-`POST /api/playlists/{playlist_id}/sync` realigns an already-imported playlist with
-the source platform. Spotify: imports the new tracks and unlinks the removed ones
-(which stay in the library). SoundCloud (see dedicated section): always additive,
-never prune; only for playlists imported from URL (not the "likes"). Responds `409`
-for a "like"-type SoundCloud playlist or one without a saved `url`.
+`POST /api/playlists/import` starts a **background job** (`202`, status via
+`GET /api/playlists/import/status`) importing a Spotify playlist or the liked tracks:
+the platform fetch — potentially minutes on thousands of liked tracks — happens inside
+the job, with per-item progress in the global job bar. One shared job slot covers every
+streaming import/sync operation (`409 streaming_import_already_running` if busy).
+`POST /api/playlists/{playlist_id}/sync` (also `202` + the same status endpoint)
+realigns an already-imported playlist with the source platform. Spotify: imports the
+new tracks and unlinks the removed ones (which stay in the library; memberships added
+by Cratory, `added_by='cratory'`, are never pruned). SoundCloud (see dedicated
+section): always additive, never prune; only for playlists imported from URL (not the
+"likes"). Responds `409` for a "like"-type SoundCloud playlist or one without a saved
+`url`; provider errors surface in the job state (`error`/`error_code`).
 `DELETE /api/playlists/{playlist_id}` removes the playlist and its "orphan leads":
 tracks without a local file that are in no other playlist nor in a saved set (tracks
 on disk, or present in another playlist/set, stay). Responds `200` with

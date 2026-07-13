@@ -4,7 +4,9 @@ import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   analysisStatus, downloadStatus, generateStatus, libraryIndexStatus, shazamIdentifyStatus,
+  streamingImportStatus,
   type AnalysisJobStatus, type DownloadStatus, type GenStatus, type LibraryIndexJob, type ShazamIdentifyState,
+  type StreamingImportJobStatus,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
@@ -47,12 +49,14 @@ type JobsApi = {
   shazamIdentify: ShazamIdentifyState | null;
   /** Stato raw della generazione set per /set-builder. */
   generation: GenStatus | null;
+  /** Stato raw dell'import/sync streaming per le pagine playlist. */
+  streamingImport: StreamingImportJobStatus | null;
 };
 
 const JobsCtx = createContext<JobsApi>({
   refresh: () => {}, startClientJob: () => {}, updateClientJob: () => {},
   endClientJob: () => {}, download: null, libraryIndex: null, analysis: null,
-  shazamIdentify: null, generation: null,
+  shazamIdentify: null, generation: null, streamingImport: null,
 });
 
 export function useJobs() {
@@ -90,6 +94,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [analysis, setAnalysis] = useState<AnalysisJobStatus | null>(null);
   const [shazamIdentify, setShazamIdentify] = useState<ShazamIdentifyState | null>(null);
   const [generation, setGeneration] = useState<GenStatus | null>(null);
+  const [streamingImport, setStreamingImport] = useState<StreamingImportJobStatus | null>(null);
   const alive = useRef(true);
   const wasRunning = useRef<Set<string>>(new Set());
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -128,8 +133,9 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const [s, d, li, an, gen] = await Promise.allSettled([
+    const [s, d, li, an, gen, si] = await Promise.allSettled([
       shazamIdentifyStatus(), downloadStatus(), libraryIndexStatus(), analysisStatus(), generateStatus(),
+      streamingImportStatus(),
     ]);
 
     if (s.status === "fulfilled") {
@@ -175,6 +181,19 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         key: "set-generation", label: t.jobs.setGeneration, detail: v.phase ?? undefined,
         processed: 0, total: 0, href: "/set-builder",
       }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
+    }
+    if (si.status === "fulfilled") {
+      const v = si.value;
+      if (alive.current) setStreamingImport(v);
+      const phaseDetail = v.phase === "fetching" ? t.jobs.streamingImportPhaseFetching
+        : v.phase === "importing" ? t.jobs.streamingImportPhaseImporting
+        : undefined;
+      track(v.status, {
+        key: "streaming-import", label: t.jobs.streamingImport, detail: phaseDetail,
+        processed: v.processed, total: v.total, href: "/playlists",
+      }, v.status === "error"
+        ? (v.error ?? t.common.error)
+        : v.result ? t.jobs.streamingImportSummary(v.result.name, v.result.created) : t.jobs.completed);
     }
     wasRunning.current = nowRunning;
     if (alive.current) setPolled(next);
@@ -230,9 +249,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const api = useMemo<JobsApi>(
     () => ({
       refresh, startClientJob, updateClientJob, endClientJob,
-      download, libraryIndex, analysis, shazamIdentify, generation,
+      download, libraryIndex, analysis, shazamIdentify, generation, streamingImport,
     }),
-    [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, analysis, shazamIdentify, generation],
+    [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, analysis, shazamIdentify,
+      generation, streamingImport],
   );
 
   // Dedup per chiave: un job che riparte entro OUTCOME_MS può comparire sia in

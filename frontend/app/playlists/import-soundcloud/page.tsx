@@ -7,6 +7,7 @@ import { ArrowLeft, Download, Heart, Settings } from "lucide-react";
 import { importSoundcloudPlaylist, soundcloudStatus, type SoundCloudStatus } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Spinner, Input, Field } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
 
 function err(e: unknown): string {
@@ -16,6 +17,7 @@ function err(e: unknown): string {
 export default function ImportSoundcloudPage() {
   const t = useT();
   const router = useRouter();
+  const jobs = useJobs();
   const [status, setStatus] = useState<SoundCloudStatus | null>(null);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,6 +34,7 @@ export default function ImportSoundcloudPage() {
     setBusy(true);
     try {
       await importSoundcloudPlaylist(url.trim());
+      jobs.refresh();
       router.push("/playlists");
     } catch (e) {
       setError(isc.importFailed(err(e)));
