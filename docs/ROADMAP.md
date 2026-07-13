@@ -43,19 +43,11 @@ value is product quality, not scale.
 
 ## Next steps
 
-In the agreed order (operational detail in [PROGRESS.md](../PROGRESS.md)):
-
-1. **Discovery improvement.** The taste + explanations slice of the dig is **DONE** (taste
-   signals on a selectable reference + reason-code chips). Per-release tracklists are also
-   **DONE** (2026-07-12, `get_release_detail`). Last.fm tags as a 2nd dig source is **parked**
-   (deprioritized on 2026-07-12, not planned for now); the expand/dig unification is superseded
-   (Discovery is DIG-only, expand
-   lives in the Playlist context on purpose).
-2. **Light audit + quick wins** — the main quick wins are DONE (SSRF, `library_stats`, dead
-   endpoint, dependencies); robustness confirmed solid. Small threat model (no public users),
-   no SaaS-style authz.
-
-(The documentation rework, the third agreed step, is complete.)
+**The agreed plan is complete** (2026-07-12): Discovery improvement done (taste +
+explanations, per-release tracklists; Last.fm tags as a 2nd dig source parked), audit + quick
+wins done, documentation rework done, and the whole 2026-07-05 audit backlog cleared (see the
+historical section below). No committed next step: new work starts from fresh product ideas,
+not from this backlog.
 
 ## Suspended / revised
 
@@ -84,7 +76,17 @@ In the agreed order (operational detail in [PROGRESS.md](../PROGRESS.md)):
 - **PostgreSQL.** Low priority: SQLite is enough for personal use (only needed for an
   eventual multi-user setup).
 
-### Audit backlog (re-verified against the code on 2026-07-12 — per-ID detail in [docs/AUDIT-2026-07-05.md](AUDIT-2026-07-05.md))
+### Audit backlog — **CLEARED 2026-07-12** (historical; per-ID detail in [docs/AUDIT-2026-07-05.md](AUDIT-2026-07-05.md))
+
+**The 2026-07-05 audit backlog is done.** Every actionable item was either implemented (all
+verified: TDD on the backend, live browser checks on the UI), resolved by decision (A7
+confirmed as-is; dead scores + `POST /transitions/score` removed), consciously parked (Last.fm
+tags as a 2nd dig source; the E14 test-fixture dedup — invasive, low value), or noted as a
+minor non-planned residual inside the theme bullets below. E2E presidio added (Playwright
+smoke + jobs-provider unit). Final state: backend 842 tests green, frontend 12 e2e + 4 unit
+green, lint/tsc/build clean.
+
+What follows is the historical record of the sweep.
 
 Re-triage of the 2026-07-05 audit backlog against the **actual current code** (not the docs,
 which had drifted). **Closed since the audit** (removed from the backlog): A1 (set export
@@ -191,9 +193,11 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
 - **Library/index** — (nothing open).
 - **Frontend technical** — (nothing open).
 - **Backend robustness** — (nothing open).
-- **Tests** — E14 (residual): engine/overrides setup copied in ~20 test files → shared fixture
-  (deliberately deferred: invasive, low value); E15 frontend has no tests (minimum = Playwright
-  smoke + a jobs-provider merge unit).
+- **Tests** — E15 DONE (2026-07-12): Playwright smoke on 12 routes (dedicated servers
+  8211/3211, throwaway e2e DB, `NEXT_DIST_DIR=.next-e2e` to dodge next dev's single-instance
+  lock) + 4 Vitest units on the real JobsProvider (`npm run test:e2e` / `test:unit`). E14
+  residual (engine/overrides setup copied in ~20 test files → shared fixture) deliberately
+  parked: invasive, low value.
 - **Cleanup** — DONE (2026-07-12): stale worktree removed (its only salvageable idea — the lock
   on the mix job state — was implemented for real), stale comments in
   `local_files.py`/`scoring.py` updated to the current paradigm, CLAUDE.md rule 2 slimmed

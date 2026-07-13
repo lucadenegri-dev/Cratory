@@ -26,6 +26,28 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-12 - Backlog audit SVUOTATO (sweep completo in giornata)
+
+In un'unica giornata di lavoro a batch (subagent paralleli Sonnet orchestrati e verificati
+da Fable, TDD sul backend, verifiche live nel browser per la UI) l'intero backlog audit
+2026-07-05 e' stato chiuso: ~45 item implementati, 2 risolti per decisione (A7 confermato
+com'e'; dead scores + POST /transitions/score rimossi), 2 parcheggiati deliberatamente
+(tag Last.fm nel dig; dedup fixture E14). Dettaglio per-tema nella sezione storica di
+ROADMAP; i commit della giornata raccontano i singoli item.
+
+Punti salienti oltre ai fix: import/sync streaming come job in background (A10), robustezza
+slskd (E6), drag-and-drop e "aggiungi traccia" nell'editor set, bande BPM percentuali, API
+utilizzabili da qualsiasi dispositivo in LAN (B24), client api modulare con ApiError e
+AbortController (B20-22), presidio test frontend (Playwright 12 route + Vitest jobs-provider,
+E15), e tre bug reali scovati dai nuovi test (redirect OAuth multi-origine — fixato; scan
+della libreria reale durante i test — guardia in conftest; lock mancante sullo stato del job
+mix — implementato). Stato finale: 842 test backend verdi, 12 e2e + 4 unit frontend verdi,
+lint/tsc/build puliti.
+
+Lezione operativa registrata: alcuni subagent hanno riportato lavoro mai scritto su disco —
+da allora ogni lancio richiede `git status --porcelain` nel report e la verifica avviene
+solo sul working tree.
+
 ## Milestone 2026-07-12 - Quick-wins: correttezza silenziosa + igiene Discovery
 
 Primo blocco post-ri-triage sul branch `fix/quick-wins-correttezza-discovery` (5 item, TDD sul
