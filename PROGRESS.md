@@ -26,6 +26,30 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-13 - Bug d'uso reale (note dell'utente) + una scelta di design
+
+Sei osservazioni segnate dall'utente usando l'app, verificate una a una nel codice e nel DB
+reale, poi risolte a batch (5 subagent Sonnet paralleli, verifica integrata + live di Fable):
+
+- **Grab manuale → "da rivedere" (bug):** `_attempt_download` applicava la guardia
+  durata-diversa anche ai candidati scelti a mano; ora `enforce_duration` è attivo solo in
+  auto-pick.
+- **URL SoundCloud rotto (bug):** `normalize_soundcloud_item` salvava lo stream temporaneo
+  (`playback.media-streaming.soundcloud.cloud`) invece della pagina; ora preferisce
+  `webpage_url`/host `soundcloud.com`, `_apply_fields` ripara al re-sync, migrazione che
+  azzera gli URL-stream esistenti (0 residui verificati).
+- **Link Sortory rotto + copy (bug):** `ORGANIZER_URL` senza schema → link relativo; validator
+  che antepone `http://`. Testo inbox riscritto senza il riferimento a DJPlayer.
+- **Filtri persi tornando dal dettaglio (bug):** i link traccia portano `?from=<filtri>`, il
+  "← Library" del dettaglio ci ritorna (useSearchParams + Suspense). Verificato live.
+- **Transizioni prima/dopo identiche (design):** lo score è simmetrico → una sola lista
+  "Tracce compatibili", endpoint unico `GET /api/transitions/{id}` (via `/after` e `/before`).
+- **"Duplicati" Spotify+Disco:** verificato NON essere un bug — sono due file fisici (FLAC +
+  MP3) della stessa canzone; lasciato invariato su decisione dell'utente.
+
+Rifiniture di integrazione: eslint ora ignora `.next-e2e` (cache degli e2e che sporcava il
+lint). Stato: 853 test backend verdi, 12 e2e + 4 unit frontend verdi, lint/tsc/build puliti.
+
 ## Milestone 2026-07-12 - Backlog audit SVUOTATO (sweep completo in giornata)
 
 In un'unica giornata di lavoro a batch (subagent paralleli Sonnet orchestrati e verificati
