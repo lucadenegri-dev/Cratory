@@ -64,6 +64,16 @@ class Settings(BaseSettings):
         indicizzazione/download falliscono in silenzio. Vuoto = feature disattiva."""
         return str(Path(value).expanduser()) if value else ""
 
+    @field_validator("organizer_url")
+    @classmethod
+    def add_default_scheme(cls, value: str) -> str:
+        """Un ORGANIZER_URL='localhost:3010' senza schema viene reso relativo
+        dal browser (href='localhost:3010'): il link "Apri Sortory" si rompe.
+        Vuoto = link disattivo."""
+        if value and "://" not in value:
+            return f"http://{value}"
+        return value
+
     @field_validator("database_url")
     @classmethod
     def normalize_database_url(cls, value: str) -> str:

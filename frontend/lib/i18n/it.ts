@@ -150,7 +150,7 @@ export const it: Dictionary = {
     stagePlaySub: "pronte per un set",
     inboxNotConfigured: "Inbox non configurata: imposta SLSKD_DOWNLOAD_DIR nel .env del backend.",
     inboxWaiting: (n: number) =>
-      `${n} file audio in inbox aspettano il triage (DJPlayer), l'enrich testuale + tag e l'organizzazione (Sortory); poi torna qui e indicizza.`,
+      `${n} file audio in inbox in attesa di tagging e riorganizzazione (Sortory); poi torna qui e indicizza.`,
     openSortory: "Apri Sortory",
   },
   analysis: {
@@ -336,8 +336,7 @@ export const it: Dictionary = {
     badgeNoFile: "Senza file",
     rowFormat: "Formato",
     transitionsHeading: "Transizioni",
-    beforeHeading: "Cosa mettere prima",
-    afterHeading: "Cosa mettere dopo",
+    compatibleHeading: "Tracce compatibili",
     noTransitions: "Nessuna traccia.",
     fieldKeyLabel: "Tonalità (Camelot)",
     fieldKeyHint: "es. 8A, 12B",
@@ -898,10 +897,8 @@ export const it: Dictionary = {
     classRiskLabel: "Azzardo",
     classRiskDesc: ": BPM o tonalità in contrasto, da gestire.",
     deterministicNote: "Score e classi sono deterministici, mai inventati.",
-    intro: "Scegli una traccia e scopri cosa ci sta bene prima o dopo, con uno score tecnico.",
+    intro: "Scegli una traccia e scopri cosa ci sta bene, con uno score tecnico.",
     searchPlaceholder: "Cerca per titolo o artista…",
-    afterLabel: "Dopo",
-    beforeLabel: "Prima",
     lensLabel: "Lente",
     lenses: {
       all: "Tutte",

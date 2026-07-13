@@ -148,7 +148,7 @@ export const en = {
     stagePlaySub: "ready for a set",
     inboxNotConfigured: "Inbox not configured: set SLSKD_DOWNLOAD_DIR in the backend .env.",
     inboxWaiting: (n: number) =>
-      `${n} ${n === 1 ? "audio file" : "audio files"} in inbox are waiting for triage (DJPlayer), text enrichment + tagging, and organization (Sortory); then come back here and index.`,
+      `${n} ${n === 1 ? "audio file" : "audio files"} in inbox are waiting for tagging and reorganization (Sortory); then come back here and index.`,
     openSortory: "Open Sortory",
   },
   analysis: {
@@ -334,8 +334,7 @@ export const en = {
     badgeNoFile: "No file",
     rowFormat: "Format",
     transitionsHeading: "Transitions",
-    beforeHeading: "What to play before",
-    afterHeading: "What to play after",
+    compatibleHeading: "Compatible tracks",
     noTransitions: "No tracks.",
     fieldKeyLabel: "Key (Camelot)",
     fieldKeyHint: "e.g. 8A, 12B",
@@ -896,10 +895,8 @@ export const en = {
     classRiskLabel: "Risk",
     classRiskDesc: ": BPM or key clash, needs handling.",
     deterministicNote: "Scores and classes are deterministic, never invented.",
-    intro: "Pick a track and find out what works well before or after it, with a technical score.",
+    intro: "Pick a track and find out what works well with it, with a technical score.",
     searchPlaceholder: "Search by title or artist…",
-    afterLabel: "After",
-    beforeLabel: "Before",
     lensLabel: "Lens",
     lenses: {
       all: "All",
