@@ -220,6 +220,26 @@ def test_search_candidates_cascata_si_ferma_alla_prima_utile():
     assert ranked[0].name_score > 0.4
 
 
+def test_search_candidates_usa_un_budget_di_attesa_ridotto():
+    # /api/downloads/candidates attendeva fino a ~45s (3 varianti x 15s di
+    # max_wait): il budget per variante deve restare basso cosi' il totale
+    # nel caso peggiore si aggira sui 15s.
+    from app.services import soulseek_select as select_mod
+
+    class FakeClient:
+        def __init__(self):
+            self.kwargs = []
+
+        def search(self, artist, title, **kw):
+            self.kwargs.append(kw)
+            return [_f("Daft Punk - Da Funk.flac")]
+
+    client = FakeClient()
+    search_candidates(client, artist="Daft Punk", title="Da Funk")
+    assert client.kwargs[0].get("max_wait") == select_mod.CANDIDATE_SEARCH_MAX_WAIT
+    assert select_mod.CANDIDATE_SEARCH_MAX_WAIT <= 5.0
+
+
 def test_search_candidates_esaurisce_le_varianti_a_vuoto():
     class EmptyClient:
         def search(self, artist, title, **kw):

@@ -136,13 +136,16 @@ def candidates(req: CandidatesIn):
     if not slskd_configured():
         raise api_error(409, "slskd_not_configured",
                         "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
+    client = get_slskd_client()
     try:
         # Cascata di varianti di query: la letterale spesso esclude file validi.
-        ranked = search_candidates(get_slskd_client(), artist=req.artist,
+        ranked = search_candidates(client, artist=req.artist,
                                    title=req.title,
                                    expected_duration=req.duration_seconds)
     except SlskdError as exc:
         raise api_error(502, "slskd_error", f"slskd error: {exc}", reason=str(exc)) from exc
+    finally:
+        client.close()
     return [_candidate_out(c) for c in ranked]
 
 
@@ -199,10 +202,13 @@ def search(req: SearchIn):
     query = req.query.strip()
     if not query:
         return []
+    client = get_slskd_client()
     try:
-        files = get_slskd_client().search(query, "")
+        files = client.search(query, "")
     except SlskdError as exc:
         raise api_error(502, "slskd_error", f"slskd error: {exc}", reason=str(exc)) from exc
+    finally:
+        client.close()
     # Ricerca libera: slskd ha gia' filtrato per query, l'utente sceglie a vista.
     ranked = rank_candidates(files, artist="", title=query, min_name_score=0.0)
     return [_candidate_out(c) for c in ranked]

@@ -28,6 +28,10 @@ class _FakeHttp:
         self.calls.append(("POST", url, json))
         return _Resp(self._match(url))
 
+    def delete(self, url, params=None):
+        self.calls.append(("DELETE", url, params))
+        return _Resp(self._match(url))
+
 
 def _file():
     return SlskdFile(username="bob", filename="Bob\\x.flac", size=10, bitrate=None,
@@ -51,6 +55,54 @@ def test_transfer_state_finds_file():
     c = SlskdClient(url="http://h", api_key="k", http=_FakeHttp(routes))
     st = c.transfer_state("bob", "Bob\\x.flac")
     assert st["state"] == "Completed, Succeeded"
+
+
+def test_transfer_state_prefers_most_recent_match_on_duplicate_filename():
+    # Senza cancellazione (remove=false) un vecchio tentativo con lo stesso
+    # filename puo' restare nello storico: il match deve preferire l'ultimo
+    # (quello del transfer appena accodato), non il primo trovato.
+    routes = {"/transfers/downloads/bob": {
+        "directories": [{"files": [
+            {"filename": "Bob\\x.flac", "state": "Cancelled", "id": "old-1"},
+            {"filename": "Bob\\x.flac", "state": "InProgress", "id": "new-1"},
+        ]}]
+    }}
+    c = SlskdClient(url="http://h", api_key="k", http=_FakeHttp(routes))
+    st = c.transfer_state("bob", "Bob\\x.flac")
+    assert st["id"] == "new-1"
+
+
+def test_transfer_state_filters_by_per_file_username_when_present():
+    # Se il payload espone anche lo username per-file, va rispettato: non
+    # basta il filename per identificare il transfer giusto.
+    routes = {"/transfers/downloads/bob": {
+        "directories": [{"files": [
+            {"filename": "Bob\\x.flac", "state": "InProgress", "id": "other-user-1",
+             "username": "someoneelse"},
+            {"filename": "Bob\\x.flac", "state": "InProgress", "id": "bob-1",
+             "username": "bob"},
+        ]}]
+    }}
+    c = SlskdClient(url="http://h", api_key="k", http=_FakeHttp(routes))
+    st = c.transfer_state("bob", "Bob\\x.flac")
+    assert st["id"] == "bob-1"
+
+
+def test_cancel_download_issues_delete_with_remove_false_by_default():
+    http = _FakeHttp({"/transfers/downloads/bob/tid-1": {}})
+    c = SlskdClient(url="http://h", api_key="k", http=http)
+    c.cancel_download("bob", "tid-1")
+    delete = next(call for call in http.calls if call[0] == "DELETE")
+    assert delete[1].endswith("/transfers/downloads/bob/tid-1")
+    assert delete[2] == {"remove": False}
+
+
+def test_cancel_download_can_request_remove():
+    http = _FakeHttp({"/transfers/downloads/bob/tid-1": {}})
+    c = SlskdClient(url="http://h", api_key="k", http=http)
+    c.cancel_download("bob", "tid-1", remove=True)
+    delete = next(call for call in http.calls if call[0] == "DELETE")
+    assert delete[2] == {"remove": True}
 
 
 def test_classify_transfer_state():

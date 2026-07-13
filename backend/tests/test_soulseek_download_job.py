@@ -530,6 +530,117 @@ def test_wait_for_download_rispetta_il_tetto_assoluto(monkeypatch):
     assert client.calls == 3
 
 
+# --- E6: annullamento best-effort dei transfer abbandonati nel daemon ---
+
+
+class _StalledCancelClient:
+    """InProgress fermo: mai completa. Espone id + cancel_download per verificare
+    che l'abbandono lato job pulisca anche il transfer sul daemon slskd."""
+
+    def __init__(self):
+        self.calls = 0
+        self.cancelled = []
+
+    def transfer_state(self, username, filename):
+        self.calls += 1
+        return {"state": "InProgress", "bytesTransferred": 500, "id": "tid-stall"}
+
+    def cancel_download(self, username, transfer_id):
+        self.cancelled.append((username, transfer_id))
+
+
+def test_stall_timeout_cancella_il_transfer_nel_daemon(monkeypatch):
+    monkeypatch.setattr(job.time, "sleep", lambda s: None)
+    monkeypatch.setattr(job, "STALL_TIMEOUT", 4.0)
+    client = _StalledCancelClient()
+    outcome, reason = job._wait_for_download(client, _slskd_file())
+    assert outcome == "failed"
+    assert reason == "download_timeout"
+    assert client.cancelled == [("bob", "tid-stall")]
+
+
+class _QueuedCancelClient:
+    """Resta in coda oltre QUEUE_PATIENCE: mai in download attivo."""
+
+    def __init__(self):
+        self.cancelled = []
+
+    def transfer_state(self, username, filename):
+        return {"state": "Queued, Remotely", "id": "tid-queue"}
+
+    def cancel_download(self, username, transfer_id):
+        self.cancelled.append((username, transfer_id))
+
+
+def test_queue_timeout_cancella_il_transfer_nel_daemon(monkeypatch):
+    monkeypatch.setattr(job.time, "sleep", lambda s: None)
+    monkeypatch.setattr(job, "QUEUE_PATIENCE", 2.0)
+    client = _QueuedCancelClient()
+    outcome, reason = job._wait_for_download(client, _slskd_file())
+    assert outcome == "failed"
+    assert reason == "queue_timeout"
+    assert client.cancelled == [("bob", "tid-queue")]
+
+
+class _HardTimeoutCancelClient:
+    """bytesTransferred sempre crescente (mai in stallo): scade solo per HARD_TIMEOUT."""
+
+    def __init__(self):
+        self.calls = 0
+        self.cancelled = []
+
+    def transfer_state(self, username, filename):
+        self.calls += 1
+        return {"state": "InProgress", "bytesTransferred": self.calls * 10, "id": "tid-hard"}
+
+    def cancel_download(self, username, transfer_id):
+        self.cancelled.append((username, transfer_id))
+
+
+def test_hard_timeout_cancella_il_transfer_nel_daemon(monkeypatch):
+    monkeypatch.setattr(job.time, "sleep", lambda s: None)
+    monkeypatch.setattr(job, "HARD_TIMEOUT", 6.0)
+    monkeypatch.setattr(job, "STALL_TIMEOUT", 3600.0)
+    client = _HardTimeoutCancelClient()
+    outcome, reason = job._wait_for_download(client, _slskd_file())
+    assert outcome == "failed"
+    assert reason == "download_timeout"
+    assert client.cancelled == [("bob", "tid-hard")]
+
+
+def test_cancel_fallito_e_best_effort_non_ferma_il_job(monkeypatch):
+    # Se il DELETE verso il daemon fallisce, l'esito timeout va comunque
+    # restituito: la cancellazione e' un tentativo, non un requisito.
+    monkeypatch.setattr(job.time, "sleep", lambda s: None)
+    monkeypatch.setattr(job, "STALL_TIMEOUT", 4.0)
+
+    class _CancelRaises(_StalledCancelClient):
+        def cancel_download(self, username, transfer_id):
+            raise RuntimeError("daemon irraggiungibile")
+
+    client = _CancelRaises()
+    outcome, reason = job._wait_for_download(client, _slskd_file())
+    assert outcome == "failed"
+    assert reason == "download_timeout"
+
+
+def test_completed_transfer_non_viene_cancellato(monkeypatch):
+    # Esito positivo: nessuna cancellazione, il transfer resta cosi' com'e'.
+    class _Completes(_ProgressClient):
+        def __init__(self):
+            super().__init__(completes_after=2)
+            self.cancelled = []
+
+        def cancel_download(self, username, transfer_id):
+            self.cancelled.append((username, transfer_id))
+
+    monkeypatch.setattr(job.time, "sleep", lambda s: None)
+    client = _Completes()
+    outcome, reason = job._wait_for_download(client, _slskd_file())
+    assert outcome == "completed"
+    assert client.cancelled == []
+
+
 def test_cascade_all_failed_surfaces_specific_reason(patch_job, monkeypatch):
     TestSession, _ = patch_job
 

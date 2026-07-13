@@ -18,6 +18,13 @@ LOSSY_EXTS = {"mp3", "m4a", "aac", "ogg", "opus", "wma"}
 AUTO_PICK_MIN_CONFIDENCE = 0.7
 _MIN_NAME_SCORE = 0.45
 
+# Budget di attesa per variante di query nella cascata di search_candidates.
+# query_variants() produce al massimo 3 varianti: con il default di SlskdClient
+# (max_wait=15.0) il caso peggiore per /api/downloads/candidates (sincrono
+# sulla request HTTP) arrivava a ~45s. Configurabile (monkeypatchabile nei
+# test); il default riporta il totale nel caso peggiore a ~15s.
+CANDIDATE_SEARCH_MAX_WAIT = 5.0
+
 # Token di versione: per un DJ il radio edit al posto dell'extended e' un fallimento
 # silenzioso, quindi si confrontano esplicitamente. "original" e "mix" sono esclusi
 # di proposito: "Original Mix" e' la versione di default (= nessun token).
@@ -255,7 +262,7 @@ def search_candidates(client, *, artist: str, title: str,
     """Cerca su slskd provando le varianti di query in cascata: si ferma alla
     prima che produce almeno un candidato valido (post-filtro)."""
     for query in query_variants(artist, title):
-        files = client.search(query, "")
+        files = client.search(query, "", max_wait=CANDIDATE_SEARCH_MAX_WAIT)
         ranked = rank_candidates(files, artist=artist, title=title, pref=pref,
                                  min_name_score=min_name_score,
                                  expected_duration=expected_duration)

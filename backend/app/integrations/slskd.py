@@ -6,6 +6,7 @@ lo Swagger del proprio slskd (<SLSKD_URL>/swagger).
 """
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,8 @@ import httpx
 
 from app.core.config import settings
 from app.integrations._http import ClosableHttpClient, get_with_retries, raise_for_status
+
+logger = logging.getLogger(__name__)
 
 BASE = "/api/v0"
 
@@ -77,6 +80,15 @@ class SlskdClient(ClosableHttpClient):
             raise SlskdError(f"slskd {r.status_code}: {r.text[:160]}")
         return r.json() if r.content else {}
 
+    def _delete(self, path: str, params: dict | None = None):
+        try:
+            r = self.http.delete(f"{self.url}{BASE}{path}", params=params)
+        except httpx.HTTPError as exc:
+            raise SlskdError(f"slskd DELETE {path} fallita: {exc}") from exc
+        if r.status_code >= 400:
+            raise SlskdError(f"slskd {r.status_code}: {r.text[:160]}")
+        return r.json() if r.content else {}
+
     def search(self, artist: str, title: str, *, response_limit: int = 30,
                search_timeout_ms: int = 6000, max_wait: float = 15.0,
                poll_interval: float = 0.5) -> list[SlskdFile]:
@@ -89,6 +101,14 @@ class SlskdClient(ClosableHttpClient):
         (backstop per quelle rare/assenti). Si attende `isComplete` con tetto `max_wait`
         (> search_timeout, margine di rete). Un tetto troppo basso o l'attesa del solo
         numero di risposte restituiscono liste vuote anche quando i file esistono.
+
+        Uscita anticipata: se `responseCount` smette di crescere per due poll
+        consecutivi (ed e' gia' > 0) si esce senza attendere `isComplete` ne'
+        il tetto `max_wait` — le ricerche popolari si stabilizzano ben prima
+        di essere marcate complete, e attendere oltre e' solo latenza persa
+        per il chiamante (es. l'endpoint /candidates, sincrono sulla request).
+        Al termine la ricerca viene cancellata sul daemon (best-effort): senza
+        pulizia le ricerche si accumulano indefinitamente.
         """
         text = f"{artist} {title}".strip()
         if not text:
@@ -102,26 +122,66 @@ class SlskdClient(ClosableHttpClient):
         if not search_id:
             raise SlskdError("slskd: ricerca senza id.")
         waited = 0.0
+        prev_count: int | None = None
+        stable_polls = 0
         while waited < max_wait:
             state = self._get(f"/searches/{search_id}")
             if state.get("isComplete") or "completed" in str(state.get("state", "")).lower():
                 break
+            count = state.get("responseCount")
+            if isinstance(count, int):
+                if prev_count is not None and count == prev_count:
+                    stable_polls += 1
+                    if count > 0 and stable_polls >= 2:
+                        break
+                else:
+                    stable_polls = 0
+                prev_count = count
             time.sleep(poll_interval)
             waited += poll_interval
         responses = self._get(f"/searches/{search_id}/responses")
-        return self._flatten_responses(responses)
+        files = self._flatten_responses(responses)
+        try:
+            self._delete(f"/searches/{search_id}")
+        except SlskdError as exc:
+            logger.warning("Cancellazione ricerca slskd %s fallita: %s", search_id, exc)
+        return files
 
     def enqueue_download(self, file: "SlskdFile") -> None:
         self._post(f"/transfers/downloads/{file.username}",
                    json=[{"filename": file.filename, "size": file.size or 0}])
 
     def transfer_state(self, username: str, filename: str) -> dict | None:
+        """Stato del transfer per (username, filename).
+
+        Senza cancellazione dei transfer abbandonati (`remove=false` di default,
+        vedi `cancel_download`) lo storico di un utente puo' contenere piu' voci
+        con lo stesso filename (un vecchio tentativo cancellato + uno nuovo appena
+        accodato). Si preferisce l'ULTIMA corrispondenza (la piu' recente, che
+        slskd accoda in fondo) e, se il payload espone anche uno username per-file
+        (alcune versioni lo fanno), lo si rispetta come filtro aggiuntivo.
+        """
         data = self._get(f"/transfers/downloads/{username}")
+        match = None
         for directory in data.get("directories") or []:
             for f in directory.get("files") or []:
-                if f.get("filename") == filename:
-                    return f
-        return None
+                if f.get("filename") != filename:
+                    continue
+                file_username = f.get("username")
+                if file_username is not None and file_username != username:
+                    continue
+                match = f
+        return match
+
+    def cancel_download(self, username: str, transfer_id: str, *, remove: bool = False) -> None:
+        """Annulla un transfer nel daemon (best-effort lato chiamante).
+
+        `remove=False` di default: annulla ma lascia la voce nello storico
+        (coerente con lo stile del client, che non forza la rimozione a meno
+        che non sia esplicitamente richiesta).
+        """
+        self._delete(f"/transfers/downloads/{username}/{transfer_id}",
+                     params={"remove": remove})
 
     @staticmethod
     def _flatten_responses(responses) -> list[SlskdFile]:

@@ -39,6 +39,9 @@ def test_candidates_returns_ranked(monkeypatch):
             return [SlskdFile(username="u", filename="A - B.flac", size=1, bitrate=None,
                               length=None, has_free_slot=True, queue_length=0)]
 
+        def close(self):
+            pass
+
     monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
     monkeypatch.setattr(downloads_router, "get_slskd_client", lambda: _C())
     r = client.post("/api/downloads/candidates", json={"artist": "A", "title": "B"})
@@ -46,6 +49,34 @@ def test_candidates_returns_ranked(monkeypatch):
     body = r.json()
     assert body and body[0]["format"] == "flac"
     assert "confidence" in body[0]
+
+
+def test_candidates_closes_the_slskd_client(monkeypatch):
+    from app.integrations.slskd import SlskdFile
+
+    created = {}
+
+    class _C:
+        def __init__(self):
+            self.closed = False
+
+        def search(self, a, t, **k):
+            return [SlskdFile(username="u", filename="A - B.flac", size=1, bitrate=None,
+                              length=None, has_free_slot=True, queue_length=0)]
+
+        def close(self):
+            self.closed = True
+
+    def _make():
+        c = _C()
+        created["client"] = c
+        return c
+
+    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
+    monkeypatch.setattr(downloads_router, "get_slskd_client", _make)
+    r = client.post("/api/downloads/candidates", json={"artist": "A", "title": "B"})
+    assert r.status_code == 200
+    assert created["client"].closed is True
 
 
 def test_search_409_when_not_configured(monkeypatch):
@@ -62,12 +93,43 @@ def test_search_returns_candidates(monkeypatch):
             return [SlskdFile(username="u", filename="Aphex Twin - Xtal.flac", size=1,
                               bitrate=None, length=None, has_free_slot=True, queue_length=0)]
 
+        def close(self):
+            pass
+
     monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
     monkeypatch.setattr(downloads_router, "get_slskd_client", lambda: _C())
     r = client.post("/api/downloads/search", json={"query": "Aphex Twin Xtal"})
     assert r.status_code == 200
     body = r.json()
     assert body and body[0]["format"] == "flac"
+
+
+def test_search_closes_the_slskd_client(monkeypatch):
+    from app.integrations.slskd import SlskdFile
+
+    created = {}
+
+    class _C:
+        def __init__(self):
+            self.closed = False
+
+        def search(self, a, t, **k):
+            return [SlskdFile(username="u", filename="Aphex Twin - Xtal.flac", size=1,
+                              bitrate=None, length=None, has_free_slot=True, queue_length=0)]
+
+        def close(self):
+            self.closed = True
+
+    def _make():
+        c = _C()
+        created["client"] = c
+        return c
+
+    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
+    monkeypatch.setattr(downloads_router, "get_slskd_client", _make)
+    r = client.post("/api/downloads/search", json={"query": "Aphex Twin Xtal"})
+    assert r.status_code == 200
+    assert created["client"].closed is True
 
 
 def test_manual_409_when_not_configured(monkeypatch):
@@ -107,6 +169,9 @@ def test_candidates_usa_durata_attesa(monkeypatch):
                 SlskdFile(username="u2", filename="A - B.mp3", size=1, bitrate=320,
                           length=300, has_free_slot=True, queue_length=0),
             ]
+
+        def close(self):
+            pass
 
     monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
     monkeypatch.setattr(downloads_router, "get_slskd_client", lambda: _C())

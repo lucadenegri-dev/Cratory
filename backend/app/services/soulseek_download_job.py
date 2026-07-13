@@ -76,6 +76,22 @@ def _resolve_local_path(download_dir: str, filename: str) -> str | None:
     return str(max(matches, key=lambda p: p.stat().st_mtime).resolve())
 
 
+def _cancel_abandoned_transfer(client, username: str, info: dict) -> None:
+    """Annulla nel daemon un transfer che il job sta abbandonando (timeout/stallo).
+
+    Best-effort: se il daemon non risponde o l'id manca, si logga e si prosegue
+    — l'esito del download non deve dipendere dalla riuscita della cancellazione.
+    """
+    transfer_id = (info or {}).get("id")
+    if not transfer_id:
+        return
+    try:
+        client.cancel_download(username, transfer_id)
+    except Exception:  # noqa: BLE001 — pulizia best-effort, non deve propagare
+        logger.warning("Cancellazione transfer abbandonato fallita user=%s id=%s",
+                       username, transfer_id, exc_info=True)
+
+
 def _wait_for_download(client, file: SlskdFile) -> tuple[str, str | None]:
     """Attende l'esito di un transfer. Ritorna (esito, motivo).
 
@@ -85,11 +101,16 @@ def _wait_for_download(client, file: SlskdFile) -> tuple[str, str | None]:
     restano fermi per STALL_TIMEOUT si conclude che il transfer e' bloccato e si desiste.
     Se invece resta solo in coda (Queued/Requested) oltre QUEUE_PATIENCE ci si arrende
     subito, cosi' il chiamante puo' provare un altro utente col fallback.
+
+    Quando si desiste (stallo, coda o tetto assoluto) il transfer resta comunque
+    attivo nel daemon se non lo si annulla esplicitamente: lo si cancella qui,
+    best-effort, per non lasciarlo scaricare a vuoto in slskd.
     """
     waited = 0.0
     queued = 0.0
     stalled = 0.0
     last_bytes: float | None = None
+    info: dict = {}
     while waited < HARD_TIMEOUT:
         info = client.transfer_state(file.username, file.filename) or {}
         state = info.get("state", "")
@@ -105,6 +126,7 @@ def _wait_for_download(client, file: SlskdFile) -> tuple[str, str | None]:
                 if last_bytes is not None and transferred <= last_bytes:
                     stalled += POLL_INTERVAL
                     if stalled >= STALL_TIMEOUT:
+                        _cancel_abandoned_transfer(client, file.username, info)
                         return "failed", "download_timeout"
                 else:
                     stalled = 0.0
@@ -114,9 +136,11 @@ def _wait_for_download(client, file: SlskdFile) -> tuple[str, str | None]:
         else:
             queued += POLL_INTERVAL
             if queued >= QUEUE_PATIENCE:
+                _cancel_abandoned_transfer(client, file.username, info)
                 return "failed", "queue_timeout"
         time.sleep(POLL_INTERVAL)
         waited += POLL_INTERVAL
+    _cancel_abandoned_transfer(client, file.username, info)
     return "failed", "download_timeout"
 
 
