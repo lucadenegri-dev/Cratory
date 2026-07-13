@@ -57,3 +57,59 @@ def test_radici_non_configurate_o_inesistenti(monkeypatch):
     r = TestClient(app).get("/api/files/search", params={"q": "qualcosa"})
     assert r.status_code == 200
     assert r.json() == []
+
+
+# --- TTL cache della lista file (no rglob ad ogni tasto premuto) --------------
+
+
+class _FakeClock:
+    """Clock monotono controllabile a mano: niente time.sleep nei test."""
+
+    def __init__(self, start: float = 0.0):
+        self.now = start
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def test_cache_non_rivede_il_disco_entro_il_ttl(tmp_path):
+    _mk(tmp_path, "Deep Cut.mp3")
+    clock = _FakeClock()
+    roots = [("library", str(tmp_path))]
+
+    first = search_audio_files("deep cut", roots=roots, clock=clock)
+    assert len(first) == 1
+
+    # Nuovo file creato dopo la prima lettura: entro il TTL non deve comparire
+    # (la cache non deve rifare il giro sul disco).
+    _mk(tmp_path, "Deep Cut (edit).mp3")
+    clock.advance(5)
+    second = search_audio_files("deep cut", roots=roots, clock=clock)
+    assert len(second) == 1
+
+
+def test_cache_scade_dopo_il_ttl(tmp_path):
+    _mk(tmp_path, "Deep Cut.mp3")
+    clock = _FakeClock()
+    roots = [("library", str(tmp_path))]
+
+    search_audio_files("deep cut", roots=roots, clock=clock)
+
+    _mk(tmp_path, "Deep Cut (edit).mp3")
+    clock.advance(31)  # oltre il TTL di default (~30s)
+    refreshed = search_audio_files("deep cut", roots=roots, clock=clock)
+    assert len(refreshed) == 2
+
+
+def test_cache_e_per_radice(tmp_path):
+    """Radici diverse hanno voci di cache indipendenti: non si mescolano."""
+    _mk(tmp_path / "lib", "Only Library.mp3")
+    _mk(tmp_path / "dl", "Only Downloads.mp3")
+    clock = _FakeClock()
+    roots = [("library", str(tmp_path / "lib")), ("downloads", str(tmp_path / "dl"))]
+
+    hits = search_audio_files("only", roots=roots, clock=clock)
+    assert {h["name"] for h in hits} == {"Only Library.mp3", "Only Downloads.mp3"}

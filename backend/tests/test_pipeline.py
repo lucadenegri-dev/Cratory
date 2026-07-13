@@ -62,3 +62,41 @@ def test_analyze_pending_counts_owned_without_features(db):
     db.add(Track(source_type="spotify", has_local_file=False))
     db.commit()
     assert pipeline_snapshot(db)["analyze_pending"] == 1
+
+
+# --- TTL cache del conteggio inbox (la striscia fa polling ogni 2s) -----------
+
+
+class _FakeClock:
+    def __init__(self, start: float = 0.0):
+        self.now = start
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def test_inbox_count_non_rilegge_il_disco_entro_il_ttl(db, tmp_path, monkeypatch):
+    (tmp_path / "a.mp3").write_bytes(b"x")
+    monkeypatch.setattr(settings, "slskd_download_dir", str(tmp_path))
+    clock = _FakeClock()
+
+    assert pipeline_snapshot(db, clock=clock)["inbox_files"] == 1
+
+    (tmp_path / "b.mp3").write_bytes(b"x")
+    clock.advance(5)  # entro il TTL di default (~10s)
+    assert pipeline_snapshot(db, clock=clock)["inbox_files"] == 1
+
+
+def test_inbox_count_scade_dopo_il_ttl(db, tmp_path, monkeypatch):
+    (tmp_path / "a.mp3").write_bytes(b"x")
+    monkeypatch.setattr(settings, "slskd_download_dir", str(tmp_path))
+    clock = _FakeClock()
+
+    pipeline_snapshot(db, clock=clock)
+
+    (tmp_path / "b.mp3").write_bytes(b"x")
+    clock.advance(11)  # oltre il TTL
+    assert pipeline_snapshot(db, clock=clock)["inbox_files"] == 2

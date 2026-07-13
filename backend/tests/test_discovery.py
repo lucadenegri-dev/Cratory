@@ -206,6 +206,97 @@ def test_ai_explanations_merged(db):
     assert llm.last_payload["playlist_profile"]["track_count"] == 1
 
 
+# --- _explain: output AI validato con Pydantic (non piu' dict.get() a mano) ---
+# Con FakeSimilarity + questa playlist escono sempre 2 candidati, ordinati
+# Fresh Cut (match 0.9, indice 0) poi Deep Groove (match 0.7, indice 1) — vedi
+# test_expand_collects_and_ranks.
+
+
+class FakeLLMNumericStringIndex:
+    """L'AI a volte restituisce l'indice come stringa numerica invece di intero:
+    la vecchia guardia manuale (`isinstance(idx, int)`) lo scartava perdendo
+    una spiegazione valida; la validazione Pydantic lo accetta (coercizione)."""
+
+    def complete_json(self, system_prompt, payload, schema):
+        return {"explanations": [{"index": "0", "text": "spiegazione da indice stringa"}]}
+
+
+def test_ai_explanations_accetta_indice_come_stringa_numerica(db):
+    pid = _make_playlist(db, [{"artist": "Artist 0", "title": "Song A"}])
+    result = discover_for_playlist(
+        db, pid, similarity=FakeSimilarity(), llm=FakeLLMNumericStringIndex(), limit=10,
+    )
+    assert result.candidates[0].explanation == "spiegazione da indice stringa"
+    assert result.candidates[1].explanation is None
+
+
+class FakeLLMPartialInvalid:
+    """Una entry valida (indice 0) + una malformata (manca 'index', required):
+    quella rotta va scartata senza perdere la spiegazione buona."""
+
+    def complete_json(self, system_prompt, payload, schema):
+        return {"explanations": [
+            {"index": 0, "text": "buona spiegazione"},
+            {"text": "manca l'indice: va scartata"},
+        ]}
+
+
+def test_ai_explanations_entry_malformata_non_blocca_le_altre(db):
+    pid = _make_playlist(db, [{"artist": "Artist 0", "title": "Song A"}])
+    result = discover_for_playlist(
+        db, pid, similarity=FakeSimilarity(), llm=FakeLLMPartialInvalid(), limit=10,
+    )
+    assert result.candidates[0].explanation == "buona spiegazione"
+    assert result.candidates[1].explanation is None
+
+
+class FakeLLMExtraKeys:
+    """Chiavi extra non previste dallo schema (es. 'confidence'): devono essere ignorate."""
+
+    def complete_json(self, system_prompt, payload, schema):
+        return {"explanations": [
+            {"index": 0, "text": "ok", "confidence": 0.97, "model_note": "rumore"},
+        ]}
+
+
+def test_ai_explanations_tollera_chiavi_extra(db):
+    pid = _make_playlist(db, [{"artist": "Artist 0", "title": "Song A"}])
+    result = discover_for_playlist(
+        db, pid, similarity=FakeSimilarity(), llm=FakeLLMExtraKeys(), limit=10,
+    )
+    assert result.candidates[0].explanation == "ok"
+    assert result.candidates[1].explanation is None
+
+
+class FakeLLMOutOfRangeIndex:
+    def complete_json(self, system_prompt, payload, schema):
+        return {"explanations": [{"index": 99, "text": "indice fuori range"}]}
+
+
+def test_ai_explanations_indice_fuori_range_non_esplode(db):
+    pid = _make_playlist(db, [{"artist": "Artist 0", "title": "Song A"}])
+    result = discover_for_playlist(
+        db, pid, similarity=FakeSimilarity(), llm=FakeLLMOutOfRangeIndex(), limit=10,
+    )
+    assert all(c.explanation is None for c in result.candidates)
+
+
+class FakeLLMMalformedEnvelope:
+    """Payload completamente fuori schema (niente 'explanations'): best-effort,
+    non deve mai far fallire il discovery."""
+
+    def complete_json(self, system_prompt, payload, schema):
+        return {"unexpected": "shape"}
+
+
+def test_ai_explanations_envelope_malformato_non_esplode(db):
+    pid = _make_playlist(db, [{"artist": "Artist 0", "title": "Song A"}])
+    result = discover_for_playlist(
+        db, pid, similarity=FakeSimilarity(), llm=FakeLLMMalformedEnvelope(), limit=10,
+    )
+    assert all(c.explanation is None for c in result.candidates)
+
+
 def test_add_discovered_track_to_library(db):
     from app.models import Track
     from app.services.playlist_import import import_single_track

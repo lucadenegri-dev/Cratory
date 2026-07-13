@@ -17,6 +17,8 @@ from app.schemas import (
     AddTrackRequest,
     AlternativesRequest,
     AlternativesResponse,
+    GenerateAsyncStartOut,
+    GenerateStatusOut,
     MoveTrackRequest,
     ReplaceTrackRequest,
     SetGenerationRequest,
@@ -104,7 +106,7 @@ def _run_generation(req: SetGenerationRequest, use_ai: bool) -> None:
         db.close()
 
 
-@router.post("/generate-async")
+@router.post("/generate-async", response_model=GenerateAsyncStartOut)
 def generate_async(req: SetGenerationRequest):
     """Avvia la generazione in background e ritorna subito. Seguire /generate-status."""
     use_ai = _should_use_ai(req)
@@ -125,7 +127,7 @@ def generate_async(req: SetGenerationRequest):
     return {"status": "running", "phase": None, "using_ai": use_ai}
 
 
-@router.get("/generate-status")
+@router.get("/generate-status", response_model=GenerateStatusOut)
 def generate_status():
     return dict(_gen_state)
 

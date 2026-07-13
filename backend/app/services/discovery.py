@@ -27,10 +27,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Protocol
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Track
+from app.schemas import DiscoveryExplainEntry
 from app.services.labels import _clean_label
 
 logger = logging.getLogger(__name__)
@@ -278,10 +280,18 @@ def _explain(
     except Exception as exc:  # noqa: BLE001 - la spiegazione AI e' best-effort, non deve far fallire il discovery
         logger.warning("Discovery: spiegazioni AI non disponibili: %s", exc)
         return
-    for entry in raw.get("explanations") or []:
-        idx = entry.get("index")
-        if isinstance(idx, int) and 0 <= idx < len(candidates):
-            candidates[idx].explanation = entry.get("text") or None
+    items = raw.get("explanations") if isinstance(raw, dict) else None
+    for item in items or []:
+        # Ogni voce e' validata con Pydantic (rule 5: nessun output AI passa come
+        # dict grezzo). Una voce malformata (indice mancante/non intero, ecc.) si
+        # scarta da sola: non deve far perdere le spiegazioni delle altre.
+        try:
+            entry = DiscoveryExplainEntry.model_validate(item)
+        except ValidationError as exc:
+            logger.warning("Discovery: spiegazione AI scartata (formato invalido): %s", exc)
+            continue
+        if 0 <= entry.index < len(candidates):
+            candidates[entry.index].explanation = entry.text or None
 
 
 # --- segnale-etichetta sulla similarita' (Part 3.3) --------------------------

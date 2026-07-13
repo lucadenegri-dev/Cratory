@@ -17,7 +17,14 @@ from app.core.http_errors import api_error
 from app.db import get_db
 from app.models import DjSetTrack, Track
 from app.repositories import ci_equals, delete_dj_set, get_dj_set, list_dj_sets
-from app.schemas import DjSetCreateIn, DjSetOut, DjSetSummaryOut, PlaylistImportReport
+from app.schemas import (
+    DjSetCreateIn,
+    DjSetOut,
+    DjSetSummaryOut,
+    MixIdentifyStartOut,
+    MixIdentifyStatusOut,
+    PlaylistImportReport,
+)
 from app.services import mix_identify_job
 from app.services.manual_import import import_track_pairs
 
@@ -89,7 +96,7 @@ def status():
     return {"available": _deps_available()}
 
 
-@router.post("/identify")
+@router.post("/identify", response_model=MixIdentifyStartOut)
 def identify(req: DjSetCreateIn):
     """Avvia l'identificazione di un mix (o riusa un set gia' analizzato)."""
     if not _deps_available():
@@ -100,7 +107,7 @@ def identify(req: DjSetCreateIn):
     return mix_identify_job.start_job(req.url)
 
 
-@router.get("/identify-status")
+@router.get("/identify-status", response_model=MixIdentifyStatusOut)
 def identify_status():
     return mix_identify_job.job_state()
 

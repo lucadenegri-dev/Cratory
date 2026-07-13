@@ -156,6 +156,16 @@ class AISetResponse(BaseModel):
     missing_library_suggestions: list[str] = []
 
 
+class DiscoveryExplainEntry(BaseModel):
+    """Una spiegazione AI per il candidato Discovery all'indice `index` (vedi
+    services/discovery._explain). Validata voce per voce: un elemento malformato
+    viene scartato senza invalidare le altre spiegazioni (l'AI qui e' best-effort,
+    spiega ma non sceglie i candidati — vedi services/discovery.py)."""
+
+    index: int
+    text: str = ""
+
+
 class SetlistTrackOut(BaseModel):
     position: int
     role: str | None = None
@@ -395,6 +405,9 @@ class GapOut(BaseModel):
     severity: str  # info | warning
     description: str
     suggestion: str
+    # Numeri/stringhe delle f-string di description/suggestion, per la traduzione
+    # frontend (namespace i18n `gaps`, vedi lib/i18n/runtime.ts::translateGap).
+    params: dict[str, Any] = {}
 
 
 class GapAnalysisResponse(BaseModel):
@@ -680,6 +693,27 @@ class GenreCountOut(BaseModel):
     count: int
 
 
+class GenerateAsyncStartOut(BaseModel):
+    """Risposta immediata di POST /api/sets/generate-async: il job e' partito
+    in background, seguire /generate-status per l'esito."""
+
+    status: str
+    phase: str | None = None
+    using_ai: bool
+
+
+class GenerateStatusOut(BaseModel):
+    """Stato del job di generazione asincrona (GET /api/sets/generate-status)."""
+
+    status: str
+    phase: str | None = None
+    using_ai: bool = False
+    setlist_id: int | None = None
+    error: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
 class PipelineOut(BaseModel):
     """Snapshot della pipeline di orientamento (dashboard). Campi disco None = non configurato."""
     playlists: int
@@ -734,6 +768,26 @@ class DjSetSummaryOut(BaseModel):
 
 class DjSetOut(DjSetSummaryOut):
     tracks: list[DjSetTrackOut] = []
+
+
+class MixIdentifyStatusOut(BaseModel):
+    """Stato del job di identificazione mix (GET /api/shazam/identify-status)."""
+
+    status: str
+    phase: str | None = None
+    processed: int = 0
+    total: int = 0
+    dj_set_id: int | None = None
+    error: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+class MixIdentifyStartOut(MixIdentifyStatusOut):
+    """Risposta di POST /api/shazam/identify: come lo stato, piu' `cached`
+    (True se l'URL era gia' stato identificato con successo in precedenza)."""
+
+    cached: bool = False
 
 
 class DjSetCreateIn(BaseModel):
