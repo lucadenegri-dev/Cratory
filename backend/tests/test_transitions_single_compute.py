@@ -67,3 +67,47 @@ def test_generator_uses_risk_from_score():
     assert scoring.risk_from_score(45) == "medium"
     assert scoring.risk_from_score(44) == "high"
     assert scoring.risk_from_score(None) == "low"  # traccia di apertura
+
+
+def test_setlist_out_riusa_lo_score_persistito(db, monkeypatch):
+    """serializers.setlist_out non deve ricomputare score_transition: lo score
+    tecnico e' gia' persistito su SetlistTrack.transition_score."""
+    from app.models import Setlist, SetlistTrack
+    from app import serializers
+
+    calls = _count_score_calls(monkeypatch)
+    a = make_track(bpm=128, key="8A", energy=60, genre="techno")
+    b = make_track(bpm=129, key="9A", energy=62, genre="techno")
+    db.add_all([a, b]); db.flush()
+    sl = Setlist(name="S", target_duration_minutes=60)
+    db.add(sl); db.flush()
+    db.add_all([
+        SetlistTrack(setlist_id=sl.id, track_id=a.id, position=1),
+        SetlistTrack(setlist_id=sl.id, track_id=b.id, position=2, transition_score=88),
+    ])
+    db.commit(); db.refresh(sl)
+
+    serializers.setlist_out(sl, "it")
+
+    assert calls["n"] == 0, "score persistito presente: nessun ricalcolo"
+
+
+def test_setlist_out_ricalcola_solo_se_score_assente(db, monkeypatch):
+    from app.models import Setlist, SetlistTrack
+    from app import serializers
+
+    calls = _count_score_calls(monkeypatch)
+    a = make_track(bpm=128, key="8A")
+    b = make_track(bpm=129, key="9A")
+    db.add_all([a, b]); db.flush()
+    sl = Setlist(name="S2", target_duration_minutes=60)
+    db.add(sl); db.flush()
+    db.add_all([
+        SetlistTrack(setlist_id=sl.id, track_id=a.id, position=1),
+        SetlistTrack(setlist_id=sl.id, track_id=b.id, position=2, transition_score=None),
+    ])
+    db.commit(); db.refresh(sl)
+
+    serializers.setlist_out(sl, "it")
+
+    assert calls["n"] == 1, "senza score persistito il fallback interno resta"

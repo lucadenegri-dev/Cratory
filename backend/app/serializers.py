@@ -62,7 +62,10 @@ def setlist_out(setlist: Setlist, lang: str = "it") -> SetlistOut:
     items = []
     prev = None
     for st in setlist.tracks:
-        cls = classify_transition(prev, st.track, lang) if prev is not None else None
+        # score=transition_score persistito: evita di ricomputare score_transition
+        # per ogni riga del set (None su set storici -> fallback interno).
+        cls = (classify_transition(prev, st.track, lang, score=st.transition_score)
+               if prev is not None else None)
         items.append(SetlistTrackOut(
             position=st.position,
             role=st.role,
