@@ -13,6 +13,7 @@ provider services (all optional, all degrade cleanly).
 | npm     | bundled with Node    | Manages the frontend (`package-lock.json` committed). |
 | SQLite  | via Python stdlib    | Local file DB, no server. |
 | fpcalc / Chromaprint | any recent | **External binary**, optional. `brew install chromaprint`. Needed only for acoustic fingerprinting. |
+| ffmpeg  | any recent           | **External binary**, optional. `brew install ffmpeg`. Needed only for the file-integrity check (`integrations/integrity.py`): decodes each file to find corrupt/truncated ones. Without it the check is inactive. |
 
 ## Backend — Python (`backend/requirements.txt`)
 
