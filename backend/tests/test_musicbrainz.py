@@ -89,3 +89,29 @@ def test_parse_exposes_release_mbids_non_va_first():
     }
     out = mb._parse_recording(rec, isrc=None, exact=True)
     assert out["release_mbids"] == ["SINGLE", "VA"]  # non-VA prima
+
+
+def test_album_prefers_studio_album_over_single():
+    """Caso Chemical Brothers: la stessa registrazione è su un Single ('Got to
+    Keep On') e sull'album in studio ('No Geography'). L'album da proporre è
+    quello in studio, non il singolo — anche se MB elenca il singolo per primo."""
+    p = MusicBrainzProvider(user_agent="test/0.1")
+    rec = {
+        "id": "mbid-cb", "title": "Got to Keep On",
+        "artist-credit": [{"name": "The Chemical Brothers"}],
+        "releases": [
+            {"id": "rel-single", "date": "2019-02-01", "title": "Got to Keep On",
+             "release-group": {"primary-type": "Single", "secondary-types": ["Remix"]},
+             "label-info": [{"label": {"name": "Single Label"}}]},
+            {"id": "rel-album", "date": "2019-04-12", "title": "No Geography",
+             "release-group": {"primary-type": "Album", "secondary-types": []},
+             "label-info": [{"label": {"name": "Virgin"}}]},
+        ],
+        "tags": [{"name": "big beat", "count": 4}],
+    }
+    out = p._parse_recording(rec, isrc=None, exact=False)
+    assert out["canonical_album"] == "No Geography"      # album in studio, non il singolo
+    assert out["label"] == "Virgin"                      # label dall'album
+    assert out["release_date"].startswith("2019")
+    # il release-MBID dell'album viene prima del singolo
+    assert out["release_mbids"][0] == "rel-album"

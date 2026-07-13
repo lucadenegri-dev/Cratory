@@ -101,8 +101,34 @@ class MusicBrainzProvider:
         return max(recordings, key=score, default=None)
 
     @staticmethod
+    def _is_studio_album(rel):
+        """True se la release è un album in studio (non singolo/EP, non
+        compilation/DJ-mix/remix). È da preferire come fonte di album/label/anno:
+        una registrazione vive su molte release e MB le elenca in ordine
+        arbitrario (a volte il singolo prima dell'album)."""
+        rg = rel.get("release-group") or {}
+        if (rg.get("primary-type") or "") != "Album":
+            return False
+        secondary = {s.lower() for s in (rg.get("secondary-types") or [])}
+        return not (secondary & {"compilation", "dj-mix", "remix", "live"})
+
+    @staticmethod
+    def _release_rank(rel):
+        # 0 = album in studio, 1 = altra release non-VA-comp, 2 = VA-comp.
+        if MusicBrainzProvider._is_va_comp(rel):
+            return 2
+        return 0 if MusicBrainzProvider._is_studio_album(rel) else 1
+
+    @staticmethod
+    def _prioritized_releases(rec):
+        """Release ordinate per preferenza (studio album prima). Sort stabile:
+        a parità di rango resta l'ordine di MB."""
+        return sorted(rec.get("releases") or [],
+                      key=MusicBrainzProvider._release_rank)
+
+    @staticmethod
     def _release_date(rec):
-        for rel in rec.get("releases") or []:
+        for rel in MusicBrainzProvider._prioritized_releases(rec):
             date = rel.get("date") or (rel.get("release-group") or {}).get("first-release-date")
             if date:
                 return date
@@ -125,7 +151,7 @@ class MusicBrainzProvider:
 
     @staticmethod
     def _label(rec):
-        for rel in rec.get("releases") or []:
+        for rel in MusicBrainzProvider._prioritized_releases(rec):
             if MusicBrainzProvider._is_va_comp(rel):
                 continue
             for li in rel.get("label-info") or []:
@@ -136,7 +162,7 @@ class MusicBrainzProvider:
 
     @staticmethod
     def _album(rec):
-        for rel in rec.get("releases") or []:
+        for rel in MusicBrainzProvider._prioritized_releases(rec):
             if MusicBrainzProvider._is_va_comp(rel):
                 continue
             title = rel.get("title")
@@ -151,13 +177,8 @@ class MusicBrainzProvider:
 
     @staticmethod
     def _release_mbids(rec):
-        prio, rest = [], []
-        for rel in rec.get("releases") or []:
-            rid = rel.get("id")
-            if not rid:
-                continue
-            (rest if MusicBrainzProvider._is_va_comp(rel) else prio).append(rid)
-        return prio + rest
+        return [rel["id"] for rel in MusicBrainzProvider._prioritized_releases(rec)
+                if rel.get("id")]
 
     @staticmethod
     def _artist_credit(rec):
