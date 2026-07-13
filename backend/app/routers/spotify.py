@@ -87,7 +87,11 @@ def callback(
     error: str | None = None,
     db: Session = Depends(get_db),
 ):
-    frontend = f"{settings.frontend_origin}/settings"
+    # frontend_origin puo' essere una lista CSV (dev 3000, preview 3001): per il
+    # redirect serve UNA origine — la prima e' la canonica; l'intera stringa
+    # produrrebbe un Location invalido (la virgola finisce dentro l'host).
+    first_origin = settings.frontend_origin.split(",")[0].strip()
+    frontend = f"{first_origin}/settings"
     if error or not code:
         return RedirectResponse(f"{frontend}?spotify=error&detail={error or 'no_code'}")
     if not _consume_state(state):

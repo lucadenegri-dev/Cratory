@@ -173,25 +173,11 @@ def test_callback_token_exchange_fallito_dopo_state_valido(client, monkeypatch):
     assert "detail=token_exchange" in _location(r)
 
 
-# --- bug reale trovato scrivendo questi test (non e' compito di questo file
-# correggere backend/app/**): il callback costruisce il redirect verso il
-# frontend con `f"{settings.frontend_origin}/settings"`. FRONTEND_ORIGIN pero'
-# e' documentato e usato altrove (CORS in app/main.py) come lista di origini
-# separate da virgola — ed e' proprio COSI' nel default di app/core/config.py
-# ("http://localhost:3000,http://localhost:3001"). Con quel default, ogni
-# redirect del callback Spotify (successo, errore o state non valido) produce
-# un Location header non valido come URL (la virgola finisce dentro l'host:
-# "http://localhost:3000,http://localhost:3001/settings?..."), che un browser
-# reale non naviga correttamente (httpx stesso solleva RemoteProtocolError nel
-# tentativo di seguirlo: e' cosi' che e' saltato fuori scrivendo gli altri test
-# di questo file). xfail(strict=True) invece di silenziare: se qualcuno ripara
-# routers/spotify.py (es. prendendo solo la prima origine da FRONTEND_ORIGIN),
-# questo test deve girare a XPASS e segnalare di togliere il marker.
-@pytest.mark.xfail(
-    strict=True, reason="routers/spotify.py:callback usa l'intero FRONTEND_ORIGIN "
-    "(lista CSV) nel redirect invece di una singola origine: con il default "
-    "multi-origine il Location header non e' un URL valido.",
-)
+# FRONTEND_ORIGIN e' una lista CSV di origini (CORS in app/main.py, default
+# multi-origine in config.py): il callback deve redirigere alla PRIMA origine,
+# non all'intera lista (la virgola dentro l'host rende il Location invalido —
+# httpx solleva RemoteProtocolError seguendolo). Bug scovato da questi test
+# (xfail strict) e corretto in routers/spotify.py il 2026-07-12.
 def test_callback_redirect_url_valido_con_piu_origini_frontend(client, monkeypatch):
     from urllib.parse import urlsplit
 

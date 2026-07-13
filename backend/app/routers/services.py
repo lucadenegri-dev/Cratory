@@ -18,7 +18,13 @@ router = APIRouter(prefix="/api/services", tags=["services"])
 @router.get("/status")
 def services_status(db: Session = Depends(get_db)):
     spotify_configured = bool(settings.spotify_client_id and settings.spotify_client_secret)
-    user_connected = SpotifyWebClient(db).user_connected() if spotify_configured else False
+    user_connected = False
+    if spotify_configured:
+        client = SpotifyWebClient(db)
+        try:
+            user_connected = client.user_connected()
+        finally:
+            client.close()
     return {
         "services": [
             {
