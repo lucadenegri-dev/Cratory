@@ -116,27 +116,5 @@ def test_after_lens_sconosciuto_ignorato(client):
     assert len(r.json()) == 2  # nessun filtro applicato
 
 
-def test_score_200_shape(client):
-    c, S = client
-    _seed(S)
-    r = c.post("/api/transitions/score", json={"from_track_id": 1, "to_track_id": 2})
-    assert r.status_code == 200
-    body = r.json()
-    assert 0 <= body["score"] <= 100
-    assert body["classification"] in {"technically_safe", "creative_risk", "good_reset"}
-
-
-def test_score_404_from_track_mancante(client):
-    c, S = client
-    _seed(S)
-    r = c.post("/api/transitions/score", json={"from_track_id": 999, "to_track_id": 2})
-    assert r.status_code == 404
-    assert r.json()["detail"]["code"] == "track_not_found"
-
-
-def test_score_404_to_track_mancante(client):
-    c, S = client
-    _seed(S)
-    r = c.post("/api/transitions/score", json={"from_track_id": 1, "to_track_id": 999})
-    assert r.status_code == 404
-    assert r.json()["detail"]["code"] == "track_not_found"
+# I test di POST /score sono stati rimossi con l'endpoint (2026-07-12):
+# documentato ma mai chiamato da UI o script, il ranking copre il caso d'uso.

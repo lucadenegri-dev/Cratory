@@ -6,7 +6,6 @@ from app.services.playlist_import import import_playlist, normalize_spotify_item
 from app.services.scoring import (
     energy_progression_score,
     genre_similarity_score,
-    mood_coherence_score,
 )
 from app.services.set_generator import assign_roles
 from app.services.track_status import compute_status
@@ -155,14 +154,12 @@ def test_assign_roles_arc():
 
 def test_feature_scores_neutral_when_missing():
     assert energy_progression_score(None, 50) == 50
-    assert mood_coherence_score("dark", None) == 50
     assert genre_similarity_score(None, None) == 50
 
 
 def test_feature_scores_values():
     assert energy_progression_score(50, 55) == 100  # leggera salita
     assert energy_progression_score(80, 40) < 60     # crollo
-    assert mood_coherence_score("Dark", "dark") == 100
     assert genre_similarity_score("deep house", "tech house") > 50
 
 

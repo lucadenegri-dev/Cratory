@@ -525,32 +525,9 @@ def score_transition(from_track: Track, to_track: Track, lang: str = "it") -> Tr
     )
 
 
-# --- I sei score deterministici (nuovo_progetto.md sez. 5) -------------------
-# Tutti 0-100, standalone. `score_transition` (sopra) resta il composito pesato
-# usato per il ranking; queste funzioni espongono i singoli score per traccia in
-# modo confrontabile. In assenza del dato ritornano un valore neutro (50).
-
-
-def bpm_compatibility_score(from_bpm: float | None, to_bpm: float | None) -> int:
-    """Compatibilita' di tempo (0-100), consapevole di mezzo/doppio tempo."""
-    if not from_bpm or not to_bpm:
-        return 50
-    diff, folded = effective_bpm_diff(from_bpm, to_bpm)
-    if folded and diff <= 5:
-        return 100 if diff <= 2 else 75
-    diff = abs(from_bpm - to_bpm)
-    if diff <= 2:
-        return 100
-    if diff <= 5:
-        return 75
-    if diff <= 8:
-        return 40
-    return max(10, 40 - round((diff - 8) * 4))
-
-
-def key_compatibility_score(from_key: str | None, to_key: str | None) -> int:
-    """Compatibilita' armonica Camelot (0-100), graduata sulla distanza della ruota."""
-    return camelot_score(from_key, to_key)
+# Score standalone (0-100, neutro 50 se il dato manca) usati dal composito e
+# dal generatore. I vecchi bpm/key/mood_compatibility_score "da spec" sono stati
+# rimossi (2026-07-12): mai chiamati dall'app, la loro logica vive nel composito.
 
 
 def energy_progression_score(from_energy: int | None, to_energy: int | None) -> int:
@@ -563,12 +540,6 @@ def energy_progression_score(from_energy: int | None, to_energy: int | None) -> 
     if delta > 12:
         return max(40, 100 - (delta - 12) * 3)  # salita troppo brusca
     return max(20, 100 + delta * 2)  # crollo di energia
-
-
-def mood_coherence_score(from_mood: str | None, to_mood: str | None) -> int:
-    if not from_mood or not to_mood:
-        return 50
-    return 100 if from_mood.strip().lower() == to_mood.strip().lower() else 60
 
 
 # Famiglie di genere: stesso "mondo sonoro" anche senza token in comune

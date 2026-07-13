@@ -5,7 +5,7 @@ from app.core.http_errors import api_error
 from app.db import get_db
 from app.models import Track
 from app.repositories import all_playable_tracks, get_track
-from app.schemas import TransitionCandidateOut, TransitionScoreOut, TransitionScoreRequest
+from app.schemas import TransitionCandidateOut, TransitionScoreOut
 from app.serializers import track_out
 from app.services.app_state import get_language
 from app.services.scoring import classify_transition, score_transition
@@ -63,10 +63,5 @@ def transitions_before(track_id: int, limit: int = Query(default=20, le=100),
                    lens=lens if lens in _LENSES else None)
 
 
-@router.post("/score", response_model=TransitionScoreOut)
-def score(req: TransitionScoreRequest, db: Session = Depends(get_db)):
-    from_track = get_track(db, req.from_track_id)
-    to_track = get_track(db, req.to_track_id)
-    if from_track is None or to_track is None:
-        raise api_error(404, "track_not_found", "Track not found")
-    return _score_out(from_track, to_track, get_language(db))
+# POST /score rimosso (2026-07-12): documentato ma mai chiamato dalla UI ne'
+# da script; il ranking sopra copre il caso d'uso reale.

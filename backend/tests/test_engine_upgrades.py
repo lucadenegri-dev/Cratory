@@ -30,14 +30,6 @@ def test_camelot_score_graded_ordering():
     assert camelot_score("8A", "2A") <= 15
 
 
-def test_key_compatibility_score_uses_graded_distance():
-    from app.services.scoring import key_compatibility_score
-    # regressione sui contratti esistenti, ma ora graduato all'interno di "weak"
-    assert key_compatibility_score("7A", "7A") == 100
-    assert key_compatibility_score("7A", None) == 50
-    assert key_compatibility_score("7A", "8A") > key_compatibility_score("7A", "10A") > key_compatibility_score("7A", "1A")
-
-
 # --- B) BPM mezzo/doppio tempo ----------------------------------------------
 
 def test_halftime_transition_is_mixable():
@@ -53,11 +45,6 @@ def test_doubletime_transition_is_mixable():
     base = make_track(bpm=87, key="7A")
     double = score_transition(base, make_track(bpm=174, key="7A")).score     # 174 = 87*2
     assert double >= 40  # non è un salto "difficile" da 5 punti
-
-
-def test_bpm_compatibility_score_halftime_aware():
-    from app.services.scoring import bpm_compatibility_score
-    assert bpm_compatibility_score(140, 70) > bpm_compatibility_score(140, 110)
 
 
 def test_mixing_tip_mentions_halftime():

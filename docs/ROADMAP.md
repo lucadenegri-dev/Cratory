@@ -175,19 +175,18 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
 
 - **Discovery** — *(Last.fm tags as a 2nd dig source: parked, see above.)*
 - **Set → console / editor** — (nothing open).
-- **Scoring** — dead code `bpm/key/mood_compatibility_score` (tests-only) + `POST
-  /api/transitions/score` (never called): remove or document as a block; (new, from A23) the
-  generator's `_candidate_score` counts energy twice — via the energy-aware `score_transition`
-  AND its own `_feature_fit` term — mild, tests pass, but worth deduplicating; (new, from A4)
-  other BPM consumers still use absolute thresholds (`bpm_compatibility_score` 2/5/8,
-  `classify_transition` bpm_close ≤5, `mixing_tip`/`mixing_overview` text bands, `validation.py`
-  >8 jump check); (new, from A21) with ≥8 tracks the P25/P75 design makes `missing_openers`
-  nearly never fire — acceptable by design, revisit only if the signal is missed.
+- **Scoring** — **DECIDED (2026-07-12): dead scores removed** (`bpm/key/mood_compatibility_score`
+  + `POST /api/transitions/score` deleted with their tests — never called by the app; the
+  composite `score_transition` carries the logic). Minor notes, not planned: the generator's
+  `_candidate_score` counts energy twice (mild, tests pass); a few text-only consumers still use
+  absolute BPM bands (`classify_transition` bpm_close ≤5, `mixing_tip`/`mixing_overview`,
+  `validation.py` >8); with ≥8 tracks the P25/P75 gap design makes `missing_openers` nearly
+  never fire (by design).
 - **Shazam** — (nothing open).
-- **Soulseek/download** — ⚠️ A7 manual grab does not mark ownership (file in inbox, counts
-  "downloaded") — now an intentional flow (Sortory catalogs), confirm as a decision; ⚠️ B11
-  issue counters now navigable, but grab has no per-candidate state and LinkLocalFileModal
-  search does not auto-start.
+- **Soulseek/download** — **DECIDED (2026-07-12): A7 confirmed as-is** — the manual grab leaves
+  the file in the inbox without marking ownership: cataloging is Sortory's job, ownership comes
+  from indexing. ⚠️ B11 issue counters now navigable, but grab has no per-candidate state and
+  LinkLocalFileModal search does not auto-start (minor, not planned).
 - **Streaming import/sync (Spotify + SoundCloud)** — (nothing open).
 - **Library/index** — (nothing open).
 - **Frontend technical** — (nothing open).

@@ -96,11 +96,6 @@ class TransitionScoreOut(BaseModel):
     classification_reason: str | None = None
 
 
-class TransitionScoreRequest(BaseModel):
-    from_track_id: int
-    to_track_id: int
-
-
 class TransitionCandidateOut(BaseModel):
     track: TrackOut
     score: TransitionScoreOut

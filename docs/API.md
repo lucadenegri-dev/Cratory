@@ -270,7 +270,6 @@ top. Alternatively, Spotify playlist creation via the Spotify endpoint.
 ```text
 GET  /api/transitions/after/{track_id}
 GET  /api/transitions/before/{track_id}
-POST /api/transitions/score
 ```
 
 Transitions expose a technical score and a deterministic classification:
