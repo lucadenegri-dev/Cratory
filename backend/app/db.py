@@ -52,6 +52,7 @@ def ensure_schema(eng=None) -> None:
         _migrate_playlist_memberships(conn)
         _migrate_rename_liked_spotify(conn)
         _migrate_backfill_bpm_key_sources(conn)
+        _migrate_null_soundcloud_stream_urls(conn)
 
 
 def _migrate_add_model_columns(conn, dialect) -> None:
@@ -284,6 +285,23 @@ def _migrate_rename_liked_spotify(conn) -> None:
     conn.execute(text(
         "UPDATE playlists SET name = 'Spotify Likes' "
         "WHERE kind = 'liked' AND platform = 'spotify' AND name = 'Liked Spotify'"
+    ))
+
+
+def _migrate_null_soundcloud_stream_urls(conn) -> None:
+    """NULLa gli `url` salvati per errore come stream CDN temporaneo
+    (`media-streaming.soundcloud.cloud`) invece della pagina pubblica
+    soundcloud.com: bug storico di `normalize_soundcloud_item` (priorita'
+    url/webpage_url invertita, fix in services/playlist_import.py). Lo stream
+    non e' reversibile in una pagina: nessun link e' meglio di uno rotto/scaduto;
+    un ri-sync successivo lo ripara via `_apply_fields`.
+
+    Idempotente: la WHERE su LIKE colpisce solo le righe ancora sporche.
+    """
+    if not _table_exists(conn, "tracks"):
+        return
+    conn.execute(text(
+        "UPDATE tracks SET url = NULL WHERE url LIKE '%media-streaming.soundcloud.cloud%'"
     ))
 
 

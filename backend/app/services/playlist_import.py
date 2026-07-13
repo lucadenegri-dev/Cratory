@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -144,6 +145,28 @@ def split_artist_title(raw_title: str | None, uploader: str | None) -> tuple[str
     return uploader, (raw_title or None)
 
 
+def _is_soundcloud_page_host(url: str | None) -> bool:
+    """True se l'host e' soundcloud.com (o un suo sottodominio): esclude lo
+    stream CDN temporaneo `media-streaming.soundcloud.cloud` (TLD diverso,
+    inutile come link pagina: e' un URL di streaming che scade) e qualunque
+    altro host non-SoundCloud. Stesso spirito dell'allowlist host in
+    integrations/soundcloud.py (_validate_url), qui applicato in lettura ai
+    campi url/webpage_url/permalink_url delle entry yt-dlp."""
+    if not url:
+        return False
+    host = (urlparse(url).netloc or "").lower()
+    return host == "soundcloud.com" or host.endswith(".soundcloud.com")
+
+
+def _soundcloud_page_url(*candidates: str | None) -> str | None:
+    """Primo candidato che e' davvero una pagina pubblica soundcloud.com, altrimenti None
+    (meglio nessun link che uno stream temporaneo/rotto)."""
+    for candidate in candidates:
+        if _is_soundcloud_page_host(candidate):
+            return candidate
+    return None
+
+
 def normalize_soundcloud_item(entry: dict | None) -> NormalizedTrack | None:
     """Entry flat yt-dlp -> NormalizedTrack. Niente ISRC: SoundCloud non lo espone."""
     if not entry:
@@ -161,7 +184,12 @@ def normalize_soundcloud_item(entry: dict | None) -> NormalizedTrack | None:
         artist=artist,
         album=None,
         duration_seconds=int(duration) if duration else None,
-        url=entry.get("url") or entry.get("webpage_url"),
+        # In flat extraction entry["url"] e' spesso lo stream CDN temporaneo, non la
+        # pagina pubblica: webpage_url/permalink_url vanno preferiti, con guardia
+        # host per non accettare comunque il CDN se fosse l'unico candidato "buono".
+        url=_soundcloud_page_url(
+            entry.get("webpage_url"), entry.get("permalink_url"), entry.get("url"),
+        ),
         artwork_url=(thumbnails[-1].get("url") if thumbnails else None),
         isrc=None,
         added_at=None,  # non disponibile in flat mode
@@ -237,7 +265,19 @@ def _apply_fields(track: Track, norm: NormalizedTrack) -> None:
     track.album = track.album or norm.album
     track.year = track.year or norm.year
     track.duration_seconds = track.duration_seconds or norm.duration_seconds
-    track.url = track.url or norm.url
+    if (
+        norm.platform == "soundcloud"
+        and _is_soundcloud_page_host(norm.url)
+        and track.url
+        and not _is_soundcloud_page_host(track.url)
+    ):
+        # Ripara un url salvato in precedenza come stream CDN (bug storico di
+        # normalize_soundcloud_item, vedi _soundcloud_page_url): un ri-sync lo
+        # sostituisce con la pagina pubblica. Scoped a soundcloud: per le altre
+        # piattaforme resta il fill-if-empty sotto.
+        track.url = norm.url
+    else:
+        track.url = track.url or norm.url
     track.album_art_url = track.album_art_url or norm.artwork_url
     track.isrc = track.isrc or norm.isrc
     track.added_at = track.added_at or norm.added_at

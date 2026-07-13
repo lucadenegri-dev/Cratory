@@ -221,6 +221,27 @@ def test_normalize_campi_mancanti():
     assert norm.artwork_url is None
 
 
+def test_normalize_preferisce_pagina_pubblica_allo_stream_cdn():
+    """entry['url'] dalla flat extraction e' spesso lo stream CDN temporaneo
+    (media-streaming.soundcloud.cloud), non la pagina pubblica: webpage_url va
+    preferito quando presente."""
+    norm = normalize_soundcloud_item(_entry(
+        1,
+        url="https://playback.media-streaming.soundcloud.cloud/59BCuNpfI0",
+        webpage_url="https://soundcloud.com/digger/cool-track",
+    ))
+    assert norm.url == "https://soundcloud.com/digger/cool-track"
+
+
+def test_normalize_url_none_se_resta_solo_lo_stream_cdn():
+    """Nessun candidato punta a una pagina soundcloud.com: meglio nessun link
+    che uno stream temporaneo/rotto."""
+    norm = normalize_soundcloud_item(_entry(
+        1, url="https://playback.media-streaming.soundcloud.cloud/59BCuNpfI0",
+    ))
+    assert norm.url is None
+
+
 # --- like: preview selettiva e import dei selezionati ---------------------------
 
 from app.models import Playlist
