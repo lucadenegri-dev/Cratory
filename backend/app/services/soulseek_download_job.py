@@ -164,19 +164,22 @@ def _download_candidate(client, download_dir, file: SlskdFile) -> tuple[str | No
 
 
 def _attempt_download(db, client, download_dir, track, file: SlskdFile,
-                      expected_duration: int | None = None) -> tuple[str, str | None, str | None]:
+                      expected_duration: int | None = None,
+                      enforce_duration: bool = True) -> tuple[str, str | None, str | None]:
     """Scarica un candidato e lo collega a una Track. Ritorna (esito, motivo, path_dubbio).
 
-    Verifica post-download: se la durata reale del file non e' coerente con quella
-    attesa (>20s di scarto) e' quasi certamente la versione sbagliata → il file
-    resta in inbox per revisione, il suo path viene restituito e la Track NON viene
-    marcata posseduta.
+    Verifica post-download (solo se `enforce_duration`): se la durata reale del
+    file non e' coerente con quella attesa (>20s di scarto) e' quasi certamente
+    la versione sbagliata → il file resta in inbox per revisione, il suo path
+    viene restituito e la Track NON viene marcata posseduta. Il guard e' pensato
+    per l'auto-pick, che non ha supervisione umana: quando l'utente ha scelto lui
+    il candidato (review modal), la sua scelta va rispettata e il guard va saltato.
     """
     path, reason = _download_candidate(client, download_dir, file)
     if not path:
         return "failed", reason, None
     real = read_tags(path).get("duration_seconds")
-    if expected_duration and real and abs(real - expected_duration) > 20:
+    if enforce_duration and expected_duration and real and abs(real - expected_duration) > 20:
         return "needs_review", (
             f"durata non corrisponde (attesa {expected_duration}s, file {real}s)"
         ), path
@@ -198,8 +201,11 @@ def _process_item(db, client, download_dir, track,
                   chosen: SlskdFile | None) -> tuple[str, str | None, str | None]:
     expected = track.duration_seconds
     # Discovery/singola: candidato gia' scelto dall'utente, un solo tentativo.
+    # La scelta esplicita dell'utente prevale sul guard di coerenza durata
+    # (pensato per proteggere l'auto-pick, senza supervisione umana).
     if chosen is not None:
-        return _attempt_download(db, client, download_dir, track, chosen, expected)
+        return _attempt_download(db, client, download_dir, track, chosen, expected,
+                                 enforce_duration=False)
 
     # Cascata di varianti di query (la letterale spesso esclude file validi).
     ranked = search_candidates(client, artist=track.artist or "",

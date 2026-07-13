@@ -201,10 +201,13 @@ def test_durata_incoerente_va_in_needs_review(patch_job):
     db.close()
 
 
-def test_chosen_in_sottocartella_persiste_il_path(patch_job):
-    # Scenario reale (track 127): candidato scelto dall'utente (chosen != None),
-    # file in una sottocartella dell'inbox, durata incoerente → needs_review.
-    # Il path del file dubbio DEVE essere persistito per la revisione.
+def test_chosen_in_sottocartella_con_mismatch_durata_viene_comunque_collegato(patch_job):
+    # Scenario reale (track 127), rivisto: candidato scelto ESPLICITAMENTE
+    # dall'utente (chosen != None), file in una sottocartella dell'inbox,
+    # durata incoerente rispetto all'attesa. Il guard di coerenza durata e'
+    # pensato per l'auto-pick (nessuna supervisione umana): quando l'utente ha
+    # scelto lui il file, la sua scelta va rispettata e il file va collegato
+    # come posseduto, non parcheggiato in needs_review.
     from pathlib import Path
 
     TestSession, fake = patch_job
@@ -223,11 +226,92 @@ def test_chosen_in_sottocartella_persiste_il_path(patch_job):
     chosen = fake.search("Luke Slater", "Loved")[0]
     job._run([(track_id, chosen)], None)  # chosen != None: percorso di start_track_job
     st = job.job_state()
-    assert st["needs_review"] == 1
+    assert st["downloaded"] == 1
+    assert st["needs_review"] == 0
     db = TestSession()
     t2 = db.get(Track, track_id)
-    assert t2.last_download_path is not None, "path NON persistito (bug)"
-    assert t2.last_download_path.endswith("02. Love (Loved).wav")
+    assert t2.has_local_file is True
+    assert t2.last_download_path is None  # collegato, nessun residuo da rivedere
+    db.close()
+
+
+def test_chosen_manuale_con_mismatch_durata_non_va_in_needs_review(patch_job):
+    # Stesso principio della precedente ma sul path piatto (senza sottocartella):
+    # la scelta esplicita dell'utente in review modal deve sempre prevalere sul
+    # guard di durata, che serve solo a proteggere l'auto-pick senza supervisione.
+    from pathlib import Path
+
+    TestSession, fake = patch_job
+    fake._filename = "bob\\Da Funk.wav"
+    _write_wav(Path(job.settings.slskd_download_dir) / "Da Funk.wav", secs=2)
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="chosen-mismatch", source_type="spotify",
+              title="Da Funk", artist="Daft Punk", duration_seconds=300)  # 300 vs ~2s reali
+    db.add(t)
+    db.commit()
+    track_id = t.id
+    db.close()
+
+    chosen = fake.search("Daft Punk", "Da Funk")[0]
+    job._run([(track_id, chosen)], None)
+    st = job.job_state()
+    assert st["downloaded"] == 1
+    assert st["needs_review"] == 0
+    db = TestSession()
+    t2 = db.get(Track, track_id)
+    assert t2.has_local_file is True
+    db.close()
+
+
+def test_autopick_con_mismatch_durata_resta_needs_review(patch_job):
+    # Regressione: senza una scelta esplicita dell'utente (chosen None, cascata
+    # di auto-pick) il guard di coerenza durata deve continuare a valere.
+    from pathlib import Path
+
+    TestSession, fake = patch_job
+    fake._filename = "bob\\Da Funk.wav"
+    _write_wav(Path(job.settings.slskd_download_dir) / "Da Funk.wav", secs=2)
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="autopick-mismatch", source_type="spotify",
+              title="Da Funk", artist="Daft Punk", duration_seconds=300)
+    db.add(t)
+    db.commit()
+    track_id = t.id
+    db.close()
+
+    job._run([(track_id, None)], None)  # chosen None: auto-pick via search
+    st = job.job_state()
+    assert st["needs_review"] == 1
+    assert st["downloaded"] == 0
+    db = TestSession()
+    t2 = db.get(Track, track_id)
+    assert t2.has_local_file is False
+    db.close()
+
+
+def test_chosen_manuale_con_durata_coerente_viene_collegato(patch_job):
+    # Caso invariato: scelta esplicita dell'utente e durata coerente -> collegato,
+    # come prima del fix (enforce_duration=False non cambia l'esito positivo).
+    from pathlib import Path
+
+    TestSession, fake = patch_job
+    fake._filename = "bob\\Da Funk.wav"
+    _write_wav(Path(job.settings.slskd_download_dir) / "Da Funk.wav", secs=2)
+    db = TestSession()
+    t = Track(platform="spotify", spotify_id="chosen-match", source_type="spotify",
+              title="Da Funk", artist="Daft Punk", duration_seconds=2)
+    db.add(t)
+    db.commit()
+    track_id = t.id
+    db.close()
+
+    chosen = fake.search("Daft Punk", "Da Funk")[0]
+    job._run([(track_id, chosen)], None)
+    st = job.job_state()
+    assert st["downloaded"] == 1
+    db = TestSession()
+    t2 = db.get(Track, track_id)
+    assert t2.has_local_file is True
     db.close()
 
 
