@@ -154,8 +154,17 @@ guards, OAuth state anti-CSRF, transitions/discovery HTTP coverage, tautological
 autouse job-state reset + real-library-scan guard in conftest); backend residuals (archive
 stat guard, client close() wiring in discovery/playlists/spotify routers + soulseek job, mix
 job state under lock); frontend residuals (instant lead badge, Outcome via Exclude, form
-semantics in link-local-file-modal, ButtonLink in playlist detail). All 2026-07-12, Sonnet
-subagents + Fable integration pass (full suite, lint/tsc/build, live checks).
+semantics in link-local-file-modal, ButtonLink in playlist detail); E6 (slskd robustness:
+best-effort cancel of abandoned transfers and harvested searches, freshest-entry+username
+transfer matching, /candidates worst-case ~15s with early-exit on stable results, close() in the
+downloads router); OAuth multi-origin bug fixed for real (callback redirects to the FIRST
+origin of the FRONTEND_ORIGIN CSV; the strict xfail is now a green test) + close() in
+services_status; E10 residuals (file_search 30s TTL cache, pipeline inbox 10s TTL cache, typed
+Pydantic responses for generate-async and mix-identify start/status, Discovery `_explain`
+validated via Pydantic — rule-5 violation closed); gap texts bilingual (codes+params, `gaps`
+i18n namespace, backend description as fallback); A10 (streaming import/sync as a background
+job: 202 + `GET /api/playlists/import/status`, one shared slot, per-item progress in the global
+job bar, provider errors in the job state — 12 tests converted, 24 new). All 2026-07-12.
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
@@ -171,25 +180,16 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   nearly never fire — acceptable by design, revisit only if the signal is missed.
 - **Shazam** — (nothing open).
 - **Soulseek/download** — ⚠️ A7 manual grab does not mark ownership (file in inbox, counts
-  "downloaded") — now an intentional flow (Sortory catalogs), confirm as a decision; E6 slskd
-  (no cancel of transfers/searches, filename-only match, basename+mtime resolution, ~45s
-  synchronous on /candidates); ⚠️ B11 issue counters now navigable, but grab has no
-  per-candidate state and LinkLocalFileModal search does not auto-start.
-- **Streaming import/sync (Spotify + SoundCloud)** — A10 import/sync synchronous in the request
-  (thousands of liked = minutes with no progress): job+polling. NB: SoundCloud import (yt-dlp)
-  exists too — A10 applies to it as well (the flat extraction is sequential/slow); A11 dedup and
-  A25 name/cover refresh are already platform-agnostic (both covered for Spotify + SoundCloud).
+  "downloaded") — now an intentional flow (Sortory catalogs), confirm as a decision; ⚠️ B11
+  issue counters now navigable, but grab has no per-candidate state and LinkLocalFileModal
+  search does not auto-start.
+- **Streaming import/sync (Spotify + SoundCloud)** — (nothing open).
 - **Library/index** — (nothing open).
 - **Frontend technical** — B20 zero AbortController/sequence guards (stale responses); B21
   `api.ts` monolith (~1000 lines): split; B22 no `ApiError` with status, `err()` duplicated in
   ~16 files. (B20+B21+B22 are one coherent solo pass on api.ts + pages.)
-- **Backend robustness** — E10 (residual): `file_search` materializes the tree per keystroke,
-  generate-async/mix_identify return untyped dicts, Discovery `_explain` without Pydantic (the
-  one spot outside rule 5), no TTL cache on the pipeline walk; serializers.py and routers/sets.py
-  still trigger classify_transition's internal recompute (1 extra score per setlist track);
-  (from E11) `close()` wiring still missing in routers/services.py and downloads.py (the rest is
-  wired); real bug found by E13 (xfail strict in test_spotify_oauth_state.py): the OAuth callback
-  redirect Location is malformed when FRONTEND_ORIGIN holds multiple comma-separated origins.
+- **Backend robustness** — (residual, from E10) serializers.py and routers/sets.py still trigger
+  classify_transition's internal recompute (1 extra score per setlist track).
 - **Tests** — E14 (residual): engine/overrides setup copied in ~20 test files → shared fixture
   (deliberately deferred: invasive, low value); E15 frontend has no tests (minimum = Playwright
   smoke + a jobs-provider merge unit).
