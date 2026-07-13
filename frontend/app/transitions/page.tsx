@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
-import { apiGet, errText, trackLabel, type Track, type TransitionCandidate } from "@/lib/api";
+import { errText, transitions as fetchTransitions, apiGet, trackLabel, type Track, type TransitionCandidate } from "@/lib/api";
 import { Alert, Card, Input, Badge, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackCover } from "@/components/track-cover";
@@ -23,7 +23,6 @@ export default function TransitionFinder() {
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<Track[]>([]);
   const [selected, setSelected] = useState<Track | null>(null);
-  const [direction, setDirection] = useState<"after" | "before">("after");
   const [lens, setLens] = useState<Lens>("all");
   // Risposta taggata con la chiave della richiesta che l'ha prodotta: lo stato
   // si aggiorna solo nei callback async (niente setState sincrono nell'effect)
@@ -31,7 +30,7 @@ export default function TransitionFinder() {
   const [response, setResponse] = useState<
     { key: string; results: TransitionCandidate[] | null; error: string | null } | null
   >(null);
-  const requestKey = selected ? `${direction}:${selected.id}:${lens}` : null;
+  const requestKey = selected ? `${selected.id}:${lens}` : null;
 
   useEffect(() => {
     if (!query) return;
@@ -51,14 +50,15 @@ export default function TransitionFinder() {
   useEffect(() => {
     if (!selected || !requestKey) return;
     const ac = new AbortController();
-    apiGet<TransitionCandidate[]>(`/api/transitions/${direction}/${selected.id}`, {
+    fetchTransitions(selected.id, {
       limit: 25,
       ...(lens !== "all" ? { lens } : {}),
-    }, { signal: ac.signal })
+      signal: ac.signal,
+    })
       .then((data) => setResponse({ key: requestKey, results: data, error: null }))
       .catch((e) => { if (e?.name !== "AbortError") setResponse({ key: requestKey, results: null, error: errText(e) }); });
     return () => ac.abort();
-  }, [selected, direction, lens, requestKey]);
+  }, [selected, lens, requestKey]);
 
   const current = response && response.key === requestKey ? response : null;
   const loading = selected !== null && current === null;
@@ -123,13 +123,6 @@ export default function TransitionFinder() {
               <span className="text-sm font-medium">{trackLabel(selected)}</span>
               <span className="tnum text-xs text-faint">{selected.bpm?.toFixed(0)} · {selected.camelot_key ?? "?"}</span>
               <button onClick={() => setSelected(null)} className="ml-1 text-faint hover:text-fg"><X size={15} /></button>
-            </div>
-            <div className="ml-auto inline-flex overflow-hidden rounded-none border border-border-strong text-sm">
-              {(["after", "before"] as const).map((d) => (
-                <button key={d} onClick={() => setDirection(d)} className={cn("px-3 py-1.5", direction === d ? "bg-fg-strong text-bg font-medium" : "text-muted hover:bg-elevated")}>
-                  {d === "after" ? t.transitions.afterLabel : t.transitions.beforeLabel}
-                </button>
-              ))}
             </div>
           </div>
 

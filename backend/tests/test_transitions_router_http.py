@@ -1,7 +1,12 @@
-"""Copertura HTTP (TestClient) del router /api/transitions: after/{id}, before/{id},
-score. Prima di questo file la logica era testata solo a livello di funzione
-(test_transitions_single_compute.py chiama transitions._score_out direttamente):
-qui si verifica lo shape JSON e i 404, come test_analysis_router.py."""
+"""Copertura HTTP (TestClient) del router /api/transitions: endpoint unico
+GET /api/transitions/{track_id}. Prima di questo file la logica era testata
+solo a livello di funzione (test_transitions_single_compute.py chiama
+transitions._score_out direttamente): qui si verifica lo shape JSON e i 404,
+come test_analysis_router.py.
+
+Il prima/dopo e' stato rimosso (2026-07-13): lo score e' sostanzialmente
+simmetrico (BPM + tonalita' dominano, la direzione conta poco), quindi
+esiste una sola lista di "tracce compatibili"."""
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -45,10 +50,10 @@ def _seed(S):
         s.commit()
 
 
-def test_after_200_shape(client):
+def test_200_shape(client):
     c, S = client
     _seed(S)
-    r = c.get("/api/transitions/after/1")
+    r = c.get("/api/transitions/1")
     assert r.status_code == 200
     body = r.json()
     assert isinstance(body, list)
@@ -60,58 +65,41 @@ def test_after_200_shape(client):
     assert 0 <= row["score"]["score"] <= 100
 
 
-def test_after_404_track_non_esistente(client):
+def test_404_track_non_esistente(client):
     c, S = client
     _seed(S)
-    r = c.get("/api/transitions/after/999")
+    r = c.get("/api/transitions/999")
     assert r.status_code == 404
     assert r.json()["detail"]["code"] == "track_not_found"
 
 
-def test_before_200_shape(client):
+def test_limit_param(client):
     c, S = client
     _seed(S)
-    r = c.get("/api/transitions/before/1")
-    assert r.status_code == 200
-    ids = {row["track"]["id"] for row in r.json()}
-    assert ids == {2, 3}
-
-
-def test_before_404_track_non_esistente(client):
-    c, S = client
-    _seed(S)
-    r = c.get("/api/transitions/before/999")
-    assert r.status_code == 404
-    assert r.json()["detail"]["code"] == "track_not_found"
-
-
-def test_after_limit_param(client):
-    c, S = client
-    _seed(S)
-    r = c.get("/api/transitions/after/1", params={"limit": 1})
+    r = c.get("/api/transitions/1", params={"limit": 1})
     assert r.status_code == 200
     assert len(r.json()) == 1
 
 
-def test_after_lens_filtra_per_classificazione(client):
+def test_lens_filtra_per_classificazione(client):
     c, S = client
     _seed(S)
     # senza lens: entrambe le candidate
-    all_rows = c.get("/api/transitions/after/1").json()
+    all_rows = c.get("/api/transitions/1").json()
     classes = {row["score"]["classification"] for row in all_rows}
     # con un lens valido preso da uno dei risultati, il set filtrato e' un sottoinsieme
     lens = next(iter(classes))
-    filtered = c.get("/api/transitions/after/1", params={"lens": lens}).json()
+    filtered = c.get("/api/transitions/1", params={"lens": lens}).json()
     assert filtered  # almeno una riga (il lens scelto viene da un risultato reale)
     assert all(row["score"]["classification"] == lens for row in filtered)
 
 
-def test_after_lens_sconosciuto_ignorato(client):
+def test_lens_sconosciuto_ignorato(client):
     """Un lens fuori dall'insieme valido (_LENSES) viene ignorato, non genera 422:
     il router lo scarta silenziosamente (`lens if lens in _LENSES else None`)."""
     c, S = client
     _seed(S)
-    r = c.get("/api/transitions/after/1", params={"lens": "not_a_real_lens"})
+    r = c.get("/api/transitions/1", params={"lens": "not_a_real_lens"})
     assert r.status_code == 200
     assert len(r.json()) == 2  # nessun filtro applicato
 

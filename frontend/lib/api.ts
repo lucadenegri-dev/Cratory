@@ -11,3 +11,4 @@ export * from "./api/downloads";
 export * from "./api/shazam";
 export * from "./api/analysis";
 export * from "./api/misc";
+export * from "./api/transitions";

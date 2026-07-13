@@ -237,9 +237,9 @@ def test_transitions_lens_filters_by_class(db):
     db.add_all([anchor, safe, reset])
     db.commit()
 
-    only_reset = _ranked(db, anchor.id, incoming=False, limit=25, lens="good_reset")
+    only_reset = _ranked(db, anchor.id, limit=25, lens="good_reset")
     titles = {c.track.title for c in only_reset}
     assert "reset" in titles and "safe" not in titles
 
-    unfiltered = _ranked(db, anchor.id, incoming=False, limit=25)
+    unfiltered = _ranked(db, anchor.id, limit=25)
     assert {c.track.title for c in unfiltered} >= {"safe", "reset"}

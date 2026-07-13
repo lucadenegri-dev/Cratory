@@ -268,15 +268,20 @@ top. Alternatively, Spotify playlist creation via the Spotify endpoint.
 ## Transitions
 
 ```text
-GET  /api/transitions/after/{track_id}
-GET  /api/transitions/before/{track_id}
+GET  /api/transitions/{track_id}
 ```
 
-Transitions expose a technical score and a deterministic classification:
+Returns the tracks **compatible** with the given one (query: `limit`, optional `lens`).
+There is no before/after split: the technical score is essentially symmetric (BPM + key
+dominate), so a compatible track works on either side — the set intent is the DJ's call.
+Each candidate carries a technical score and a deterministic classification:
 
 ```text
 technically_safe | creative_risk | good_reset
 ```
+
+`lens` (one of the three classes) ranks within that class, so deliberate resets and creative
+risks surface instead of staying buried under the safe picks.
 
 ## Spotify
 

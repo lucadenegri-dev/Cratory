@@ -24,7 +24,7 @@ def _score_out(from_track: Track, to_track: Track, lang: str = "it") -> Transiti
     )
 
 
-def _ranked(db: Session, track_id: int, *, incoming: bool, limit: int,
+def _ranked(db: Session, track_id: int, *, limit: int,
             lens: str | None = None) -> list[TransitionCandidateOut]:
     anchor = get_track(db, track_id)
     if anchor is None:
@@ -34,7 +34,10 @@ def _ranked(db: Session, track_id: int, *, incoming: bool, limit: int,
     for other in all_playable_tracks(db):
         if other.id == anchor.id:
             continue
-        out = _score_out(other, anchor, lang) if incoming else _score_out(anchor, other, lang)
+        # Direzione ininfluente: lo score e' sostanzialmente simmetrico (BPM +
+        # tonalita' dominano), quindi si calcola una sola volta anchor->other
+        # invece di produrre due liste (prima/dopo) quasi identiche.
+        out = _score_out(anchor, other, lang)
         # La lente ordina DENTRO una classe (sicura/reset/azzardo): così i reset e gli
         # azzardi — che hanno score più basso — emergono invece di restare sepolti.
         if lens and out.classification != lens:
@@ -47,21 +50,16 @@ def _ranked(db: Session, track_id: int, *, incoming: bool, limit: int,
 _LENSES = {"technically_safe", "good_reset", "creative_risk"}
 
 
-@router.get("/after/{track_id}", response_model=list[TransitionCandidateOut])
-def transitions_after(track_id: int, limit: int = Query(default=20, le=100),
-                      lens: str | None = Query(default=None), db: Session = Depends(get_db)):
-    """Cosa posso mettere dopo questa traccia. `lens` opzionale: filtra per classe."""
-    return _ranked(db, track_id, incoming=False, limit=limit,
-                   lens=lens if lens in _LENSES else None)
-
-
-@router.get("/before/{track_id}", response_model=list[TransitionCandidateOut])
-def transitions_before(track_id: int, limit: int = Query(default=20, le=100),
-                       lens: str | None = Query(default=None), db: Session = Depends(get_db)):
-    """Cosa posso mettere prima di questa traccia. `lens` opzionale: filtra per classe."""
-    return _ranked(db, track_id, incoming=True, limit=limit,
-                   lens=lens if lens in _LENSES else None)
+@router.get("/{track_id}", response_model=list[TransitionCandidateOut])
+def transitions_compatible(track_id: int, limit: int = Query(default=20, le=100),
+                            lens: str | None = Query(default=None), db: Session = Depends(get_db)):
+    """Tracce compatibili con questa (funzionano sia prima che dopo: niente
+    distinzione prima/dopo, lo score e' direzione-agnostico). `lens`
+    opzionale: filtra per classe."""
+    return _ranked(db, track_id, limit=limit, lens=lens if lens in _LENSES else None)
 
 
 # POST /score rimosso (2026-07-12): documentato ma mai chiamato dalla UI ne'
 # da script; il ranking sopra copre il caso d'uso reale.
+# /after/{id} e /before/{id} rimossi (2026-07-13): sostituiti da un endpoint
+# unico, vedi commento su _ranked.
