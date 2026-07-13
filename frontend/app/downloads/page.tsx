@@ -11,15 +11,11 @@ import { LinkLocalFileModal, type LinkTarget } from "@/components/link-local-fil
 import { AutoLinkModal } from "@/components/auto-link-modal";
 import { ConfirmModal } from "@/components/confirm-modal";
 import {
-  downloadManual, downloadPending, ignoreDownload, listImportedPlaylists,
+  downloadManual, downloadPending, errText, ignoreDownload, listImportedPlaylists,
   retryPending, searchDownloads, startPlaylistDownload, trackLabel,
   type DownloadCandidate, type DownloadOutcome, type Playlist, type Track,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 type Outcome = Exclude<DownloadOutcome, "downloaded">;
 type Filter = "all" | Outcome;
@@ -70,10 +66,13 @@ function DownloadsInner() {
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
 
-  const refreshPending = useCallback(() => {
-    downloadPending()
-      .then((rows) => alive.current && setPending(rows))
-      .catch(() => alive.current && setPending([]));
+  const refreshPending = useCallback((signal?: AbortSignal) => {
+    return downloadPending({ signal })
+      .then((rows) => { if (alive.current) setPending(rows); })
+      .catch((e) => {
+        if (e?.name === "AbortError") return;
+        if (alive.current) setPending([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -82,8 +81,14 @@ function DownloadsInner() {
     return () => { alive.current = false; };
   }, []);
 
-  // Il work-list cambia man mano che il job produce esiti.
-  useEffect(() => { refreshPending(); }, [refreshPending, status?.status, status?.processed]);
+  // Il work-list cambia man mano che il job produce esiti: guardia con
+  // AbortController contro le risposte sorpassate (processed cambia spesso
+  // durante un job in corso).
+  useEffect(() => {
+    const ac = new AbortController();
+    refreshPending(ac.signal);
+    return () => ac.abort();
+  }, [refreshPending, status?.status, status?.processed]);
 
   // Stato -> URL: replace (non push, niente cronologia inquinata) con un debounce
   // leggero per non riscrivere l'URL a ogni tasto nell'input di ricerca.
@@ -110,30 +115,30 @@ function DownloadsInner() {
     if (!selected) return;
     setError(null);
     try { await startPlaylistDownload(Number(selected)); refresh(); }
-    catch (e) { setError(err(e)); }
+    catch (e) { setError(errText(e)); }
   };
   const retryAll = async () => {
     setError(null);
     try { await retryPending(); refresh(); }
-    catch (e) { setError(err(e)); }
+    catch (e) { setError(errText(e)); }
   };
   const runSearch = async () => {
     const q = query.trim();
     if (!q) return;
     setSearching(true); setError(null); setResults(null);
     try { setResults(await searchDownloads(q)); }
-    catch (e) { setError(err(e)); }
+    catch (e) { setError(errText(e)); }
     finally { setSearching(false); }
   };
   const grab = async (c: DownloadCandidate) => {
     setError(null);
     try { await downloadManual(c); refresh(); }
-    catch (e) { setError(err(e)); }
+    catch (e) { setError(errText(e)); }
   };
   const ignore = async (tr: Track) => {
     setError(null);
     try { await ignoreDownload(tr.id); refreshPending(); }
-    catch (e) { setError(err(e)); }
+    catch (e) { setError(errText(e)); }
   };
 
   return (

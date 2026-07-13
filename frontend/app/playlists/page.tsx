@@ -6,6 +6,7 @@ import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, CloudDownload }
 import {
   listImportedPlaylists,
   deletePlaylist,
+  errText,
   fmtDate,
   type Playlist,
 } from "@/lib/api";
@@ -17,10 +18,6 @@ import { PlaylistCover } from "@/components/playlist-cover";
 import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
 
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
-
 export default function PlaylistsPage() {
   const t = useT();
   const jobs = useJobs();
@@ -31,7 +28,7 @@ export default function PlaylistsPage() {
   const [confirmDelete, setConfirmDelete] = useState<Playlist | null>(null);
 
   const reload = useCallback(() => {
-    listImportedPlaylists().then(setImported).catch((e) => setError(err(e)));
+    listImportedPlaylists().then(setImported).catch((e) => setError(errText(e)));
   }, []);
 
   useEffect(() => {
@@ -63,7 +60,7 @@ export default function PlaylistsPage() {
       );
       reload();
     } catch (e) {
-      setError(t.playlists.deleteFailed(err(e)));
+      setError(t.playlists.deleteFailed(errText(e)));
     } finally {
       setBusy(null);
     }

@@ -4,15 +4,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, Heart, Settings } from "lucide-react";
-import { importSoundcloudPlaylist, soundcloudStatus, type SoundCloudStatus } from "@/lib/api";
+import { errText, importSoundcloudPlaylist, soundcloudStatus, type SoundCloudStatus } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Spinner, Input, Field } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 export default function ImportSoundcloudPage() {
   const t = useT();
@@ -37,7 +33,7 @@ export default function ImportSoundcloudPage() {
       jobs.refresh();
       router.push("/playlists");
     } catch (e) {
-      setError(isc.importFailed(err(e)));
+      setError(isc.importFailed(errText(e)));
       setBusy(false);
     }
   };

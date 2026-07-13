@@ -4,16 +4,13 @@ import { useState } from "react";
 import { ExternalLink, Plus, Check, Compass, Music2 } from "lucide-react";
 import {
   addDiscoveredTrackToPlaylist,
+  errText,
   fmtDuration,
   type DiscoveryResponse,
   type DiscoveryCandidate,
 } from "@/lib/api";
 import { Card, Badge, Button, EmptyState, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 export function ExpandResults({ result, playlistId }: { result: DiscoveryResponse; playlistId: number }) {
   const t = useT();
@@ -59,7 +56,7 @@ function CandidateRow({ c, playlistId }: { c: DiscoveryCandidate; playlistId: nu
       setAdded(true);
       setOnSpotify(res.spotify_added);
     } catch (e) {
-      setAddError(err(e));
+      setAddError(errText(e));
     } finally {
       setAdding(false);
     }

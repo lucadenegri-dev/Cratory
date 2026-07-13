@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, List, LayoutGrid } from "lucide-react";
-import { apiGet, fmtDuration, type Track } from "@/lib/api";
+import { apiGet, errText, fmtDuration, type Track } from "@/lib/api";
 import { Input, Select, Checkbox, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
@@ -107,19 +107,24 @@ function LibraryInner() {
     localStorage.setItem("cratory:library:view", view);
   }, [view]);
 
-  const load = useCallback(() => {
-    apiGet<{ total: number; items: Track[] }>("/api/tracks", {
+  const load = useCallback((signal?: AbortSignal) => {
+    return apiGet<{ total: number; items: Track[] }>("/api/tracks", {
       artist, title, genre, source, status, bpm_min: bpmMin, bpm_max: bpmMax, key,
       incomplete_metadata: incomplete ? true : undefined,
       has_local_file: owned || undefined,
       sort: sort || undefined, order: sort ? order : undefined,
       limit, offset,
-    })
-      .then((r) => { setItems(r.items); setTotal(r.total); setError(null); })
-      .catch((e) => setError(String(e.message ?? e)));
+    }, { signal })
+      .then((r) => { setItems(r.items); setTotal(r.total); setError(null); });
   }, [artist, title, genre, source, status, bpmMin, bpmMax, key, incomplete, owned, sort, order, offset, view]);
 
-  useEffect(() => { const timer = setTimeout(load, 250); return () => clearTimeout(timer); }, [load]);
+  useEffect(() => {
+    const ac = new AbortController();
+    const timer = setTimeout(() => {
+      load(ac.signal).catch((e) => { if (e?.name !== "AbortError") setError(errText(e)); });
+    }, 250);
+    return () => { clearTimeout(timer); ac.abort(); };
+  }, [load]);
 
   const cell = "px-3 py-2.5";
 

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Gauge } from "lucide-react";
 import {
-  analysisDivergences, analysisOverview, applyAnalysis, startAnalysis,
+  analysisDivergences, analysisOverview, applyAnalysis, errText, startAnalysis,
   type AnalysisDivergence, type AnalysisOverview,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -12,10 +12,6 @@ import { RekordboxImportCard } from "@/components/analysis/rekordbox-import-card
 import { PageLayout } from "@/components/page-layout";
 import { Alert, Badge, Button, Card, EqMeter, Select } from "@/components/ui";
 import { ConfirmModal } from "@/components/confirm-modal";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 export default function AnalysisPage() {
   const t = useT();
@@ -42,7 +38,7 @@ export default function AnalysisPage() {
       setSelected(new Set());
       setError(null);
     } catch (e) {
-      setError(err(e));
+      setError(errText(e));
     }
   }, []);
 
@@ -69,7 +65,7 @@ export default function AnalysisPage() {
       jobs.refresh(); // la barra globale aggancia subito il job
       setNotice(t.analysis.startedNote);
     } catch (e) {
-      setError(err(e));
+      setError(errText(e));
     } finally {
       setBusy(false);
     }
@@ -82,7 +78,7 @@ export default function AnalysisPage() {
       setNotice(t.analysis.appliedSummary(r.applied, r.skipped));
       await reload();
     } catch (e) {
-      setError(err(e));
+      setError(errText(e));
     } finally {
       setBusy(false);
     }

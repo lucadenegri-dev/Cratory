@@ -7,6 +7,7 @@ import { ArrowLeft, Download, Search } from "lucide-react";
 import {
   previewLikedTracks,
   importSelectedLikedTracks,
+  errText,
   fmtDuration,
   type LikedTrackPreview,
 } from "@/lib/api";
@@ -14,10 +15,6 @@ import { Card, CardHeader, Button, Alert, Spinner, Input, Loading } from "@/comp
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 export default function ImportLikedPage() {
   const t = useT();
@@ -32,7 +29,7 @@ export default function ImportLikedPage() {
   useEffect(() => {
     previewLikedTracks()
       .then(setPreview)
-      .catch((e) => setError(err(e)));
+      .catch((e) => setError(errText(e)));
   }, []);
 
   const alreadyCount = useMemo(
@@ -78,7 +75,7 @@ export default function ImportLikedPage() {
       jobs.refresh();
       router.push("/playlists");
     } catch (e) {
-      setError(liked.importFailed(err(e)));
+      setError(liked.importFailed(errText(e)));
       setImporting(false);
     }
   };

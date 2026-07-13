@@ -7,6 +7,7 @@ import { ArrowLeft, Download, Search } from "lucide-react";
 import {
   previewSoundcloudLikes,
   importSelectedSoundcloudLikes,
+  errText,
   fmtDuration,
   type SoundCloudLikedTrackPreview,
 } from "@/lib/api";
@@ -14,10 +15,6 @@ import { Card, CardHeader, Button, Alert, Spinner, Input, Loading } from "@/comp
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 export default function ImportSoundcloudLikesPage() {
   const t = useT();
@@ -32,7 +29,7 @@ export default function ImportSoundcloudLikesPage() {
   useEffect(() => {
     previewSoundcloudLikes()
       .then(setPreview)
-      .catch((e) => setError(err(e)));
+      .catch((e) => setError(errText(e)));
   }, []);
 
   const alreadyCount = useMemo(
@@ -76,7 +73,7 @@ export default function ImportSoundcloudLikesPage() {
       jobs.refresh();
       router.push("/playlists");
     } catch (e) {
-      setError(likes.importFailed(err(e)));
+      setError(likes.importFailed(errText(e)));
       setImporting(false);
     }
   };

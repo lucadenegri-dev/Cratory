@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Radar, Music4, Eye, Trash2, AudioLines } from "lucide-react";
 import {
-  shazamStatus, identifyMix, listDjSets, deleteDjSet, fmtDate,
+  shazamStatus, identifyMix, listDjSets, deleteDjSet, errText, fmtDate,
   type DjSet,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Input, Loading } from "@/components/ui";
@@ -13,10 +13,6 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 export default function ShazamPage() {
   const t = useT();
@@ -36,7 +32,7 @@ export default function ShazamPage() {
   };
 
   const reload = useCallback(() => {
-    listDjSets().then(setSets).catch((e) => setError(err(e)));
+    listDjSets().then(setSets).catch((e) => setError(errText(e)));
   }, []);
 
   useEffect(() => {
@@ -72,14 +68,14 @@ export default function ShazamPage() {
       reload();
       if (!s.cached && s.status !== "done") jobs.refresh();
     } catch (e) {
-      setError(err(e));
+      setError(errText(e));
     } finally {
       setBusy(false);
     }
   };
 
   const doDelete = async (s: DjSet) => {
-    try { await deleteDjSet(s.id); reload(); } catch (e) { setError(err(e)); }
+    try { await deleteDjSet(s.id); reload(); } catch (e) { setError(errText(e)); }
   };
 
   const running = jobs.shazamIdentify?.status === "running";

@@ -4,16 +4,12 @@ import { useState } from "react";
 import { FolderOpen, Link2, Search } from "lucide-react";
 import { Alert, Button, Input, Loading, Modal, Spinner } from "@/components/ui";
 import {
-  linkLocalFile, searchLocalFiles,
+  errText, linkLocalFile, searchLocalFiles,
   type LocalFileHit, type TrackDetail,
 } from "@/lib/api";
 import { useT, type Dictionary } from "@/lib/i18n";
 
 export type LinkTarget = { id: number; artist: string | null; title: string | null };
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 function fmtSize(bytes: number | null): string {
   if (!bytes) return "";
@@ -59,7 +55,7 @@ function LinkDialog({ target, onClose, onLinked }: {
     try {
       setHits(await searchLocalFiles(q));
     } catch (e) {
-      setError(err(e));
+      setError(errText(e));
     } finally {
       setSearching(false);
     }
@@ -74,7 +70,7 @@ function LinkDialog({ target, onClose, onLinked }: {
       onClose();
     } catch (e) {
       // 400 tipico: file inesistente o estensione non audio.
-      setError(err(e));
+      setError(errText(e));
     } finally {
       setLinking(false);
     }

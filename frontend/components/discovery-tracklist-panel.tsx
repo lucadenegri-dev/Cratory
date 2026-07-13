@@ -3,15 +3,11 @@
 import { useEffect, useState } from "react";
 import { Check, Disc3, Download, ExternalLink } from "lucide-react";
 import {
-  discoveryImportTrack, discoverySaveForLater, downloadTrackAuto, fmtDuration, getDiscogsRelease,
+  discoveryImportTrack, discoverySaveForLater, downloadTrackAuto, errText, fmtDuration, getDiscogsRelease,
   type DiscogsRelease, type DiscoveryLead,
 } from "@/lib/api";
 import { Alert, Button, Modal, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 type PanelTrack = { position: string; title: string; duration_seconds: number | null };
 
@@ -46,7 +42,7 @@ function PanelBody({ lead }: { lead: DiscoveryLead }) {
   useEffect(() => {
     getDiscogsRelease(lead.discogs_id!)
       .then(setRelease)
-      .catch((e) => setError(err(e)))
+      .catch((e) => setError(errText(e)))
       .finally(() => setLoading(false));
     // Runs once per mount: the parent keys PanelBody on lead.discogs_id, so a fresh
     // mount (and fresh state) already happens whenever the disc changes.
@@ -125,7 +121,7 @@ function SaveAllButton({ release, tracks }: { release: DiscogsRelease; tracks: P
       }
       setDone(true);
     } catch (e) {
-      setSaveError(err(e));
+      setSaveError(errText(e));
     } finally {
       setSaving(false);
     }
@@ -161,7 +157,7 @@ function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTra
       await discoverySaveForLater(input);
       setSaved(true);
     } catch (e) {
-      setRowError(err(e));
+      setRowError(errText(e));
     } finally {
       setSaving(false);
     }
@@ -175,7 +171,7 @@ function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTra
       await downloadTrackAuto(imported.id);
       setDownloaded(true);
     } catch (e) {
-      setRowError(err(e));
+      setRowError(errText(e));
     } finally {
       setDownloading(false);
     }

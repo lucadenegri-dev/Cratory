@@ -4,14 +4,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ClipboardList, Library, Plus, X, ChevronUp, ChevronDown } from "lucide-react";
-import { apiGet, createPlaylistFromTracks, importManualPlaylist, trackLabel, type Track } from "@/lib/api";
+import { apiGet, createPlaylistFromTracks, errText, importManualPlaylist, trackLabel, type Track } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Spinner, Input, Textarea, Field, Checkbox, Badge } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useT } from "@/lib/i18n";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 export default function ImportManualPage() {
   const t = useT();
@@ -49,7 +45,7 @@ export default function ImportManualPage() {
       await importManualPlaylist(name.trim() || t.playlists.importManual.defaultPlaylistName, text);
       router.push("/playlists");
     } catch (e) {
-      setError(t.playlists.importManual.importFailed(err(e)));
+      setError(t.playlists.importManual.importFailed(errText(e)));
       setBusy(false);
     }
   };
@@ -61,7 +57,7 @@ export default function ImportManualPage() {
       await createPlaylistFromTracks(name.trim() || t.playlists.importManual.defaultPlaylistName, picked.map((tr) => tr.id));
       router.push("/playlists");
     } catch (e) {
-      setError(t.playlists.importManual.createFailed(err(e)));
+      setError(t.playlists.importManual.createFailed(errText(e)));
       setBusy(false);
     }
   };

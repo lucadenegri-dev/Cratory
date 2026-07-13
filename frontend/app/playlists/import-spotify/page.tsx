@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, RefreshCw, Heart } from "lucide-react";
 import {
   apiGet,
+  errText,
   importPlaylist,
   listSpotifyPlaylists,
   listImportedPlaylists,
@@ -19,10 +20,6 @@ import { PlaylistCover } from "@/components/playlist-cover";
 import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
 
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
-
 export default function ImportSpotifyPage() {
   const t = useT();
   const router = useRouter();
@@ -35,7 +32,7 @@ export default function ImportSpotifyPage() {
   const [filter, setFilter] = useState("");
 
   useEffect(() => {
-    apiGet<SpotifyStatus>("/api/spotify/status").then(setSpotify).catch((e) => setError(err(e)));
+    apiGet<SpotifyStatus>("/api/spotify/status").then(setSpotify).catch((e) => setError(errText(e)));
     listImportedPlaylists()
       .then((pls) =>
         setImported(new Set(pls.filter((p) => p.platform_playlist_id).map((p) => p.platform_playlist_id!))),
@@ -49,7 +46,7 @@ export default function ImportSpotifyPage() {
     try {
       setAvailable(await listSpotifyPlaylists());
     } catch (e) {
-      setError(err(e));
+      setError(errText(e));
     } finally {
       setBusy(null);
     }
@@ -65,7 +62,7 @@ export default function ImportSpotifyPage() {
       jobs.refresh();
       router.push("/playlists");
     } catch (e) {
-      setError(t.playlists.importSpotify.importFailed(label, err(e)));
+      setError(t.playlists.importSpotify.importFailed(label, errText(e)));
       setBusy(null);
     }
   };
@@ -78,7 +75,7 @@ export default function ImportSpotifyPage() {
     if (!connected) return;
     listSpotifyPlaylists()
       .then(setAvailable)
-      .catch((e) => setError(err(e)));
+      .catch((e) => setError(errText(e)));
   }, [connected]);
 
   const filtered = available?.filter((p) => p.name.toLowerCase().includes(filter.trim().toLowerCase()));

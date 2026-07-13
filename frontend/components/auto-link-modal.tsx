@@ -3,12 +3,8 @@
 import { useEffect, useState } from "react";
 import { FolderOpen, Link2 } from "lucide-react";
 import { Alert, Button, Loading, Modal, Spinner } from "@/components/ui";
-import { autoLinkPreview, linkLocalFile, type AutoLinkProposal } from "@/lib/api";
+import { autoLinkPreview, errText, linkLocalFile, type AutoLinkProposal } from "@/lib/api";
 import { useT, type Dictionary } from "@/lib/i18n";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 function fmtSize(bytes: number | null): string {
   if (!bytes) return "";
@@ -48,7 +44,7 @@ function Dialog({ onClose, onLinked }: { onClose: () => void; onLinked: () => vo
         setProposals(p);
         setSelected(new Set(p.filter((x) => x.hit).map((x) => x.track_id)));
       })
-      .catch((e) => { if (alive) { setError(err(e)); setProposals([]); } });
+      .catch((e) => { if (alive) { setError(errText(e)); setProposals([]); } });
     return () => { alive = false; };
   }, []);
 
@@ -70,7 +66,7 @@ function Dialog({ onClose, onLinked }: { onClose: () => void; onLinked: () => vo
         await linkLocalFile(p.track_id, p.hit!.path);
         ok += 1; setDone(ok);
       } catch (e) {
-        setError(err(e));  // un fallimento non ferma le altre
+        setError(errText(e));  // un fallimento non ferma le altre
       }
     }
     setLinking(false);

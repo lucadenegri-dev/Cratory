@@ -1,0 +1,54 @@
+import { apiGet, apiPost } from "./client";
+import type {
+  DiscogsRelease,
+  DiscoveryAddResponse,
+  DiscoveryDigResponse,
+  DiscoveryGenres,
+  DiscoveryImportInput,
+  DiscoveryResponse,
+  DiscoveryStatus,
+} from "./types";
+
+// --- Discovery (Fase F) -----------------------------------------------------
+
+export function discoveryStatus() {
+  return apiGet<DiscoveryStatus>("/api/discovery/status");
+}
+
+export function discoverExpand(playlistId: number, opts?: { limit?: number; use_ai?: boolean }) {
+  return apiPost<DiscoveryResponse>("/api/discovery/expand", {
+    playlist_id: playlistId,
+    limit: opts?.limit,
+    use_ai: opts?.use_ai,
+  });
+}
+
+export function getDiscoveryGenres() {
+  return apiGet<DiscoveryGenres>("/api/discovery/genres");
+}
+
+export function discoveryDig(
+  seedType: "genre" | "label",
+  value: string,
+  opts?: { adventurousness?: number; limit?: number; tastePlaylistId?: number | null },
+) {
+  return apiPost<DiscoveryDigResponse>("/api/discovery/dig", {
+    seed_type: seedType,
+    value,
+    adventurousness: opts?.adventurousness,
+    limit: opts?.limit,
+    taste_playlist_id: opts?.tastePlaylistId ?? null,
+  });
+}
+
+export function getDiscogsRelease(discogsId: number) {
+  return apiGet<DiscogsRelease>(`/api/discovery/release/${discogsId}`);
+}
+
+export function discoveryImportTrack(input: DiscoveryImportInput) {
+  return apiPost<DiscoveryAddResponse>("/api/discovery/add", input);
+}
+
+export function discoverySaveForLater(input: DiscoveryImportInput) {
+  return apiPost<DiscoveryAddResponse>("/api/discovery/save-for-later", input);
+}

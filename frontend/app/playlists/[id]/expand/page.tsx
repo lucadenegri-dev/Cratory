@@ -4,17 +4,13 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Wand2, Compass } from "lucide-react";
 import {
-  getPlaylist, discoverExpand, discoveryStatus,
+  getPlaylist, discoverExpand, discoveryStatus, errText,
   type Playlist, type DiscoveryResponse, type DiscoveryStatus,
 } from "@/lib/api";
 import { Alert, Button, Checkbox, EmptyState, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { ExpandResults } from "@/components/expand-results";
 import { useT } from "@/lib/i18n";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 export default function ExpandPlaylistPage({ params }: { params: Promise<{ id: string }> }) {
   const t = useT();
@@ -36,14 +32,14 @@ export default function ExpandPlaylistPage({ params }: { params: Promise<{ id: s
     try {
       setResult(await discoverExpand(pid, { use_ai: withAi }));
     } catch (e) {
-      setError(err(e));
+      setError(errText(e));
     } finally {
       setBusy(false);
     }
   }, [pid]);
 
   useEffect(() => {
-    getPlaylist(pid).then(setPlaylist).catch((e) => setError(err(e)));
+    getPlaylist(pid).then(setPlaylist).catch((e) => setError(errText(e)));
     discoveryStatus().then(setStatus).catch(() => setStatus(null));
     const timer = setTimeout(() => run(false), 0); // autorun senza AI (deferred: niente setState sincrono nell'effect)
     return () => clearTimeout(timer);

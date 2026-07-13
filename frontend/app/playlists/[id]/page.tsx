@@ -8,7 +8,7 @@ import {
   RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart,
 } from "lucide-react";
 import {
-  getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, fmtDuration,
+  getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDuration,
   startPlaylistDownload,
   type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
@@ -70,14 +70,17 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(0);
 
-  const reload = useCallback(() => {
-    playlistTracks(pid).then(setTracks).catch(() => {});
-    playlistGaps(pid).then(setGaps).catch(() => {});
+  const reload = useCallback((signal?: AbortSignal) => {
+    playlistTracks(pid, { signal }).then(setTracks).catch(() => {});
+    playlistGaps(pid, { signal }).then(setGaps).catch(() => {});
   }, [pid]);
 
   useEffect(() => {
-    getPlaylist(pid).then(setPlaylist).catch((e) => setError(String(e.message ?? e)));
-    reload();
+    const ac = new AbortController();
+    getPlaylist(pid, { signal: ac.signal }).then(setPlaylist)
+      .catch((e) => { if (e?.name !== "AbortError") setError(errText(e)); });
+    reload(ac.signal);
+    return () => ac.abort();
   }, [pid, reload]);
 
   // Rank di inserimento STABILE: posizione cronologica per added_at crescente

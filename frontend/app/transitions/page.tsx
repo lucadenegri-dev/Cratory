@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
-import { apiGet, trackLabel, type Track, type TransitionCandidate } from "@/lib/api";
+import { apiGet, errText, trackLabel, type Track, type TransitionCandidate } from "@/lib/api";
 import { Alert, Card, Input, Badge, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackCover } from "@/components/track-cover";
@@ -35,28 +35,29 @@ export default function TransitionFinder() {
 
   useEffect(() => {
     if (!query) return;
+    const ac = new AbortController();
     const timer = setTimeout(() => {
       Promise.all([
-        apiGet<{ items: Track[] }>("/api/tracks", { title: query, limit: 8 }),
-        apiGet<{ items: Track[] }>("/api/tracks", { artist: query, limit: 8 }),
+        apiGet<{ items: Track[] }>("/api/tracks", { title: query, limit: 8 }, { signal: ac.signal }),
+        apiGet<{ items: Track[] }>("/api/tracks", { artist: query, limit: 8 }, { signal: ac.signal }),
       ]).then(([a, b]) => {
         const seen = new Set<number>();
         setMatches([...a.items, ...b.items].filter((tr) => (seen.has(tr.id) ? false : (seen.add(tr.id), true))).slice(0, 10));
-      }).catch(() => setMatches([]));
+      }).catch((e) => { if (e?.name !== "AbortError") setMatches([]); });
     }, 250);
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); ac.abort(); };
   }, [query]);
 
   useEffect(() => {
     if (!selected || !requestKey) return;
-    let active = true;
+    const ac = new AbortController();
     apiGet<TransitionCandidate[]>(`/api/transitions/${direction}/${selected.id}`, {
       limit: 25,
       ...(lens !== "all" ? { lens } : {}),
-    })
-      .then((data) => { if (active) setResponse({ key: requestKey, results: data, error: null }); })
-      .catch((e) => { if (active) setResponse({ key: requestKey, results: null, error: String(e.message ?? e) }); });
-    return () => { active = false; };
+    }, { signal: ac.signal })
+      .then((data) => setResponse({ key: requestKey, results: data, error: null }))
+      .catch((e) => { if (e?.name !== "AbortError") setResponse({ key: requestKey, results: null, error: errText(e) }); });
+    return () => ac.abort();
   }, [selected, direction, lens, requestKey]);
 
   const current = response && response.key === requestKey ? response : null;

@@ -4,16 +4,12 @@ import { useEffect, useState } from "react";
 import { Check, Download as DownloadIcon, Trash2 } from "lucide-react";
 import { Alert, Button, Loading, Modal, Spinner } from "@/components/ui";
 import {
-  discardReview, downloadCandidates, downloadReview, downloadTrack, fmtDuration,
+  discardReview, downloadCandidates, downloadReview, downloadTrack, errText, fmtDuration,
   keepReview, type DownloadCandidate, type DownloadReview,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 
 export type ReviewTarget = { track_id: number; artist: string | null; title: string | null };
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 function fmtSize(bytes: number | null): string {
   if (!bytes) return "";
@@ -57,7 +53,7 @@ function ReviewDialog({ target, onClose, onPicked }: {
         setCandidates(found);
       } catch (e) {
         if (!alive) return;
-        setError(err(e));
+        setError(errText(e));
         setCandidates([]);
       }
     })();
@@ -72,7 +68,7 @@ function ReviewDialog({ target, onClose, onPicked }: {
       onPicked();
     } catch (e) {
       // 409 tipico: "Un download e' gia' in corso" — riprova a job finito.
-      setError(err(e));
+      setError(errText(e));
     } finally {
       setBusy(false);
     }

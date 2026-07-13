@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Disc3, Shovel, Tags } from "lucide-react";
 import {
   discoveryDig,
+  errText,
   getDiscoveryGenres,
   listImportedPlaylists,
   getLabels,
@@ -19,10 +20,6 @@ import { useJobs } from "@/components/jobs-provider";
 import { cn } from "@/lib/cn";
 import { DiscoveryLeadGrid } from "@/components/discovery-lead-grid";
 import { useT } from "@/lib/i18n";
-
-function err(e: unknown): string {
-  return String((e as { message?: string })?.message ?? e);
-}
 
 type DigSeed = "genre" | "label";
 const CHIP_CAP = 12;
@@ -69,7 +66,7 @@ function DiscoveryInner() {
   useEffect(() => {
     listImportedPlaylists()
       .then(setPlaylists)
-      .catch((e) => setError(err(e)));
+      .catch((e) => setError(errText(e)));
     getDiscoveryGenres()
       .then((g) => {
         setGenres(g);
@@ -101,7 +98,7 @@ function DiscoveryInner() {
       try {
         setDig(await discoveryDig(seed, value, { adventurousness: adv, tastePlaylistId: taste }));
       } catch (e) {
-        setError(err(e));
+        setError(errText(e));
       } finally {
         setBusy(false);
         jobs.endClientJob("dig");
