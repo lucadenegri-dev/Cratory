@@ -73,6 +73,10 @@ def _inputs(db):
     accepted = db.scalars(select(Issue).where(Issue.status == "accepted")).all()
     removals = {m.file_id for m in db.scalars(
         select(DupMember).where(DupMember.action == "remove")).all()}
+    # I file corrotti accettati vanno in quarantena come removal (op DELETE).
+    removals |= {i.file_id for i in accepted
+                 if i.type == "corrupt_file"
+                 and (i.suggested_fix_json or {}).get("action") == "quarantine"}
     s = get_settings(db)
     snapshot = {"naming_template": s.naming_template, "folder_template": s.folder_template}
     return files, accepted, removals, snapshot, root_targets(db)
