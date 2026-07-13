@@ -76,8 +76,7 @@ class SlskdClient(ClosableHttpClient):
             r = self.http.post(f"{self.url}{BASE}{path}", json=json)
         except httpx.HTTPError as exc:
             raise SlskdError(f"slskd POST {path} fallita: {exc}") from exc
-        if r.status_code >= 400:
-            raise SlskdError(f"slskd {r.status_code}: {r.text[:160]}")
+        raise_for_status(r, SlskdError, name="slskd")
         return r.json() if r.content else {}
 
     def _delete(self, path: str, params: dict | None = None):
@@ -85,8 +84,7 @@ class SlskdClient(ClosableHttpClient):
             r = self.http.delete(f"{self.url}{BASE}{path}", params=params)
         except httpx.HTTPError as exc:
             raise SlskdError(f"slskd DELETE {path} fallita: {exc}") from exc
-        if r.status_code >= 400:
-            raise SlskdError(f"slskd {r.status_code}: {r.text[:160]}")
+        raise_for_status(r, SlskdError, name="slskd")
         return r.json() if r.content else {}
 
     def search(self, artist: str, title: str, *, response_limit: int = 30,

@@ -3,15 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Sparkles, ListMusic, Clock, ChevronRight } from "lucide-react";
-import { apiGet, fmtDuration, type SetlistSummary } from "@/lib/api";
+import { apiGet, errText, fmtDate, fmtDuration, type SetlistSummary } from "@/lib/api";
 import { Card, Badge, Alert, EmptyState, Loading } from "@/components/ui";
 import { ButtonLink } from "@/components/button-link";
 import { PageLayout } from "@/components/page-layout";
 import { useT } from "@/lib/i18n";
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
-}
 
 export default function SetsPage() {
   const t = useT();
@@ -19,7 +15,7 @@ export default function SetsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch((e) => setError(String(e.message ?? e)));
+    apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch((e) => setError(errText(e)));
   }, []);
 
   const marginalia = (

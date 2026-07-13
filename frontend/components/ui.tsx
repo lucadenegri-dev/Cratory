@@ -30,18 +30,20 @@ export function CardHeader({ title, subtitle, action }: { title: ReactNode; subt
 
 /* -------------------------------------------------------------- Button */
 
-type Variant = "primary" | "outline" | "ghost" | "danger";
-type Size = "sm" | "md";
+// Esportati per ButtonLink (components/button-link.tsx), che riusa le stesse
+// varianti/dimensioni ma con un BTN_BASE proprio (niente display/disabled).
+export type Variant = "primary" | "outline" | "ghost" | "danger";
+export type Size = "sm" | "md";
 
 const BTN_BASE =
   "inline-flex items-center justify-center gap-2 font-medium uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg";
-const BTN_VARIANT: Record<Variant, string> = {
+export const BTN_VARIANT: Record<Variant, string> = {
   primary: "bg-fg-strong text-bg hover:bg-fg",
   outline: "border border-border-strong bg-transparent text-fg hover:bg-elevated",
   ghost: "bg-transparent text-muted hover:bg-elevated hover:text-fg",
   danger: "border border-danger bg-transparent text-danger hover:bg-danger hover:text-bg",
 };
-const BTN_SIZE: Record<Size, string> = {
+export const BTN_SIZE: Record<Size, string> = {
   sm: "h-8 px-3 text-xs",
   md: "h-10 px-4 text-xs",
 };
