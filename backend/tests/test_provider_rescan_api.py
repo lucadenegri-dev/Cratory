@@ -45,17 +45,21 @@ def test_status_endpoint_returns_state():
     assert set(r.json()) >= {"status", "phase", "processed", "total", "result"}
 
 
-def test_accept_high_only_accepts_high(db):
+def test_accept_strong_accepts_strong_and_legacy_high(db):
     f = _file(db)
-    _override(db, f.id, "high")
+    _override(db, f.id, "strong")
     f2 = AudioFile(root_id=f.root_id, path="/m/b.mp3", ext="mp3", size_bytes=1,
                    hash_method="file", status="present", genre="y")
     db.add(f2); db.flush()
-    _override(db, f2.id, "text")
+    _override(db, f2.id, "weak")
+    f3 = AudioFile(root_id=f.root_id, path="/m/c.mp3", ext="mp3", size_bytes=1,
+                   hash_method="file", status="present", genre="z")
+    db.add(f3); db.flush()
+    _override(db, f3.id, "high")  # legacy, non ancora ri-scansionato
     db.commit()
 
-    r = client.post("/api/issues/provider-override/accept-high")
-    assert r.status_code == 200 and r.json()["updated"] == 1
-    highs = db.query(Issue).filter_by(type="provider_override").all()
-    by_conf = {i.suggested_fix_json["confidence"]: i.status for i in highs}
-    assert by_conf == {"high": "accepted", "text": "open"}
+    r = client.post("/api/issues/provider-override/accept-strong")
+    assert r.status_code == 200 and r.json()["updated"] == 2
+    rows = db.query(Issue).filter_by(type="provider_override").all()
+    by_conf = {i.suggested_fix_json["confidence"]: i.status for i in rows}
+    assert by_conf == {"strong": "accepted", "high": "accepted", "weak": "open"}

@@ -35,8 +35,8 @@ def test_proposes_override_when_genre_differs(db):
     assert iss.field == "genre" and iss.status == "open"
     assert iss.suggested_fix_json == {"field": "genre", "action": "retag",
                                       "to": "House", "source": "provider",
-                                      "confidence": "high"}
-    assert res["proposed_high"] == 1 and res["proposed_text"] == 0
+                                      "confidence": "strong"}
+    assert res["proposed_strong"] == 1 and res["proposed_weak"] == 0
 
 
 def test_no_override_when_genre_equal(db):
@@ -122,8 +122,8 @@ def test_include_accepted_reopens_when_differs(db):
                                  include_accepted=True)
     iss = db.query(Issue).filter_by(type="provider_override").one()
     assert iss.status == "open" and iss.suggested_fix_json["to"] == "House"
-    assert iss.suggested_fix_json["confidence"] == "high"
-    assert res["proposed_high"] == 1
+    assert iss.suggested_fix_json["confidence"] == "strong"
+    assert res["proposed_strong"] == 1
 
 
 def test_include_dismissed_reopens_when_differs(db):
@@ -176,7 +176,7 @@ def test_proposes_artist_title_override(db):
     assert set(overrides) == {"artist", "title"}
     assert overrides["artist"].suggested_fix_json["to"] == "New A"
     assert overrides["title"].suggested_fix_json["to"] == "New T"
-    assert res["proposed_high"] == 2
+    assert res["proposed_strong"] == 2
 
 
 def test_covers_fetched_for_files_without_cover(db):

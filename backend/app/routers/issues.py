@@ -346,13 +346,14 @@ def provider_rescan_status():
     return provider_rescan_job.job_state()
 
 
-@router.post("/provider-override/accept-high", response_model=dict)
-def accept_high_overrides(db: Session = Depends(get_db)):
+@router.post("/provider-override/accept-strong", response_model=dict)
+def accept_strong_overrides(db: Session = Depends(get_db)):
     rows = db.scalars(select(Issue).where(
         Issue.type == "provider_override", Issue.status == "open")).all()
     updated = 0
     for issue in rows:
-        if (issue.suggested_fix_json or {}).get("confidence") == "high":
+        # tollera il legacy "high" nei dati non ancora ri-scansionati
+        if (issue.suggested_fix_json or {}).get("confidence") in ("strong", "high"):
             issue.status = "accepted"
             issue.updated_at = utcnow()
             updated += 1
