@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, aiSuggestGenres,
   providerSuggest, acceptStrongOverrides, detectRatings,
+  integrityCheck, integrityStatus,
   type Issue, type ScanRoot,
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
@@ -25,6 +26,8 @@ export default function IssuesPage() {
   const [genreBusy, setGenreBusy] = useState(false);
   const [providerBusy, setProviderBusy] = useState(false);
   const [ratingBusy, setRatingBusy] = useState(false);
+  const [integrityBusy, setIntegrityBusy] = useState(false);
+  const [enrichMode, setEnrichMode] = useState<"enrich" | "maintenance">("enrich");
   const [aiNote, setAiNote] = useState<string | null>(null);
 
   const [rescanFolder, setRescanFolder] = useState("");
@@ -167,6 +170,35 @@ export default function IssuesPage() {
     }
   };
 
+  // Controllo integrità: lancia il job ffmpeg e fa polling finché finisce.
+  // I file corrotti diventano issue corrupt_file (→ quarantena nel PLAN).
+  const onIntegrityCheck = async () => {
+    setActionError(null);
+    setAiNote(null);
+    setIntegrityBusy(true);
+    try {
+      let s = await integrityCheck(false);
+      if (!s.available) {
+        setActionError(t.issues.integrityUnavailable);
+        return;
+      }
+      while (s.status === "running") {
+        await new Promise((r) => setTimeout(r, 1000));
+        s = await integrityStatus();
+      }
+      if (s.status === "error") {
+        setActionError(s.error || t.issues.integrityUnavailable);
+        return;
+      }
+      load();
+      if (s.result) setAiNote(t.issues.integrityNote(s.result.corrupt, s.result.checked));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : t.common.error);
+    } finally {
+      setIntegrityBusy(false);
+    }
+  };
+
   // Cerca la copertina da provider per TUTTI i file che non ne hanno (non solo
   // quelli con tag da sistemare): rescan cover-only su tutta la libreria.
   const onFetchAllCovers = () => {
@@ -232,23 +264,27 @@ export default function IssuesPage() {
     if (i.type === "missing_cover" && i.status === "open") openCovers++;
   }
 
-  // Le tre sorgenti che riempiono le proposte vuote: bottone + spiegazione.
+  // Sorgenti di proposte, divise per modalità: "enrich" riempie i buchi,
+  // "maintenance" fa pulizia/verifica/riscrittura.
   const enrichSources = [
-    { onClick: onAiSuggest, busy: aiBusy,
+    { group: "enrich", onClick: onAiSuggest, busy: aiBusy,
       label: aiBusy ? t.issues.aiBusy : t.issues.aiTagsBtn,
       desc: t.issues.enrichAiTagsDesc, tag: t.issues.enrichAi },
-    { onClick: onAiGenres, busy: genreBusy,
+    { group: "enrich", onClick: onAiGenres, busy: genreBusy,
       label: genreBusy ? t.issues.aiBusy : t.issues.aiGenresBtn,
       desc: t.issues.enrichAiGenresDesc, tag: t.issues.enrichAi },
-    { onClick: onProviderSuggest, busy: providerBusy,
+    { group: "enrich", onClick: onProviderSuggest, busy: providerBusy,
       label: providerBusy ? t.issues.providerImportBusy : t.issues.providerSuggestBtn,
       desc: t.issues.enrichProviderDesc, tag: t.issues.enrichProviderTag },
-    { onClick: onFetchAllCovers, busy: rescanRunning,
+    { group: "maintenance", onClick: onFetchAllCovers, busy: rescanRunning,
       label: rescanRunning ? t.issues.providerImportBusy : t.issues.fetchCoversBtn,
       desc: t.issues.fetchCoversDesc, tag: t.issues.enrichProviderTag },
-    { onClick: onDetectRatings, busy: ratingBusy,
+    { group: "maintenance", onClick: onDetectRatings, busy: ratingBusy,
       label: ratingBusy ? t.issues.aiBusy : t.issues.detectRatingsBtn,
       desc: t.issues.detectRatingsDesc, tag: t.issues.enrichLocal },
+    { group: "maintenance", onClick: onIntegrityCheck, busy: integrityBusy,
+      label: integrityBusy ? t.issues.providerImportBusy : t.issues.integrityBtn,
+      desc: t.issues.integrityDesc, tag: t.issues.integrityTag },
   ];
 
   return (
@@ -308,8 +344,17 @@ export default function IssuesPage() {
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted">{t.issues.enrichTitle}</span>
             <span className="text-[10px] text-muted">{t.issues.enrichHint}</span>
           </div>
+          <div className="flex gap-1 border-b border-border px-3 py-2 text-[10px] uppercase tracking-wider">
+            {(["enrich", "maintenance"] as const).map((m) => (
+              <button
+                key={m} type="button" onClick={() => setEnrichMode(m)}
+                className={cn("border px-2 py-0.5 transition-colors",
+                  enrichMode === m ? "border-fg text-fg" : "border-border text-faint hover:text-fg")}
+              >{m === "enrich" ? t.issues.modeEnrich : t.issues.modeMaintenance}</button>
+            ))}
+          </div>
           <ul className="divide-y divide-border">
-            {enrichSources.map((s, i) => (
+            {enrichSources.filter((s) => s.group === enrichMode).map((s, i) => (
               <li key={i} className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3">
                 <Button
                   variant="primary" size="sm" onClick={s.onClick} disabled={s.busy}
@@ -322,6 +367,8 @@ export default function IssuesPage() {
               </li>
             ))}
           </ul>
+          {/* La ricerca forzata provider vive solo in Manutenzione. */}
+          {enrichMode === "maintenance" && (
           <div className="border-t border-border">
             <button
               type="button"
@@ -368,6 +415,7 @@ export default function IssuesPage() {
               </div>
             )}
           </div>
+          )}
         </section>
 
         <Modal

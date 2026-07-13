@@ -307,6 +307,22 @@ export function acceptStrongOverrides() {
   return apiSend<{ updated: number }>("POST", "/api/issues/provider-override/accept-strong");
 }
 
+export interface IntegrityResult {
+  scanned: number; checked: number; skipped: number; corrupt: number;
+}
+export interface IntegrityJobState {
+  status: "idle" | "running" | "done" | "error";
+  phase: string | null; processed: number; total: number;
+  result: IntegrityResult | null; error: string | null; available: boolean;
+  started_at: string | null; finished_at: string | null;
+}
+export function integrityCheck(force = false) {
+  return apiSend<IntegrityJobState>("POST", "/api/issues/integrity-check", { force });
+}
+export function integrityStatus() {
+  return apiGet<IntegrityJobState>("/api/issues/integrity-check/status");
+}
+
 // --- DUPLICATES -------------------------------------------------------------
 export interface DupMember {
   file_id: number;
