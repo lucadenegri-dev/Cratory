@@ -914,6 +914,44 @@ export const it: Dictionary = {
     creative_risk: "Azzardo creativo",
     good_reset: "Reset voluto",
   },
+  // Gap analysis (dashboard + dettaglio playlist): il backend manda gap_type + params
+  // (i numeri usati nei testi), la traduzione la fa il frontend — vedi
+  // lib/i18n/runtime.ts::translateGap. Se il gap_type non è tra questi, si
+  // ricade sui testi description/suggestion mandati dal backend.
+  gaps: {
+    missing_openers: (p: Record<string, unknown>) => ({
+      description: `Solo ${p.count} tracce sotto ${Math.round(Number(p.opener_max))} BPM adatte all'apertura.`,
+      suggestion: "Aggiungi qualche brano più lento/atmosferico per costruire un'intro.",
+    }),
+    few_peak_tracks: (p: Record<string, unknown>) => ({
+      description: `Solo ${p.count} tracce sopra ${Math.round(Number(p.peak_min))} BPM adatte al peak.`,
+      suggestion: "Servono più brani energici per sostenere il momento clou del set.",
+    }),
+    missing_bpm_bridge: (p: Record<string, unknown>) => {
+      const lo = Math.round(Number(p.lo));
+      const hi = Math.round(Number(p.hi));
+      return {
+        description: `Salto di ${Math.round(Number(p.gap))} BPM tra ${lo} e ${hi}: poche tracce ponte in mezzo.`,
+        suggestion: `Cerca brani tra ${lo} e ${hi} BPM per rendere più naturale la crescita.`,
+      };
+    },
+    uniform_energy: () => ({
+      description: "Energia molto piatta: poca dinamica per un set.",
+      suggestion: "Aggiungi brani più calmi e altri più intensi per creare una progressione.",
+    }),
+    missing_harmonic_data: (p: Record<string, unknown>) => ({
+      description: `Solo ${p.with_key}/${p.total} tracce hanno una tonalità (Camelot).`,
+      suggestion: "Arricchisci le tracce (key/BPM) per abilitare il mixing armonico.",
+    }),
+    low_genre_variety: (p: Record<string, unknown>) => ({
+      description: `Un solo genere domina (~${p.pct}% delle tracce).`,
+      suggestion: "Per un set più interessante valuta qualche brano di generi affini.",
+    }),
+    scattered_genres: (p: Record<string, unknown>) => ({
+      description: `Playlist molto dispersiva: ${p.count} generi diversi.`,
+      suggestion: "Restringi attorno a 2-3 generi coerenti per un set più fluido.",
+    }),
+  } as Record<string, (p: Record<string, unknown>) => { description: string; suggestion: string }>,
   errors: {
     playlist_not_found: "Playlist non trovata",
     soundcloud_playlist_not_syncable:

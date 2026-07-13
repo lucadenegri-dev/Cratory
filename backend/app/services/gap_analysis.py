@@ -8,7 +8,7 @@ Ogni finding: {gap_type, severity (info|warning), description, suggestion}.
 """
 
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 from app.models import Track
 
@@ -32,6 +32,11 @@ class Gap:
     severity: str
     description: str
     suggestion: str
+    # I numeri/stringhe usati nelle f-string di description/suggestion: permette
+    # al frontend di tradurre il testo (i18n) invece di ricevere solo l'italiano
+    # hardcoded dal backend. description/suggestion restano per compatibilita'
+    # (fallback se il frontend non conosce `gap_type`).
+    params: dict = field(default_factory=dict)
 
 
 def _bpms(tracks: list[Track]) -> list[float]:
@@ -85,6 +90,7 @@ def _check_openers(tracks: list[Track]) -> Gap | None:
             "missing_openers", "warning",
             f"Solo {len(openers)} tracce sotto {opener_max:.0f} BPM adatte all'apertura.",
             "Aggiungi qualche brano piu' lento/atmosferico per costruire un'intro.",
+            params={"count": len(openers), "opener_max": opener_max},
         )
     return None
 
@@ -97,6 +103,7 @@ def _check_peak(tracks: list[Track]) -> Gap | None:
             "few_peak_tracks", "warning",
             f"Solo {len(peak)} tracce sopra {peak_min:.0f} BPM adatte al peak.",
             "Servono piu' brani energici per sostenere il momento clou del set.",
+            params={"count": len(peak), "peak_min": peak_min},
         )
     return None
 
@@ -116,6 +123,7 @@ def _check_bpm_bridges(tracks: list[Track]) -> Gap | None:
             "missing_bpm_bridge", "warning",
             f"Salto di {gap:.0f} BPM tra {lo:.0f} e {hi:.0f}: poche tracce ponte in mezzo.",
             f"Cerca brani tra {lo:.0f} e {hi:.0f} BPM per rendere piu' naturale la crescita.",
+            params={"gap": gap, "lo": lo, "hi": hi},
         )
     return None
 
@@ -138,6 +146,7 @@ def _check_harmonic(tracks: list[Track]) -> Gap | None:
             "missing_harmonic_data", "warning",
             f"Solo {len(with_key)}/{len(tracks)} tracce hanno una tonalita' (Camelot).",
             "Arricchisci le tracce (key/BPM) per abilitare il mixing armonico.",
+            params={"with_key": len(with_key), "total": len(tracks)},
         )
     return None
 
@@ -153,12 +162,14 @@ def _check_genre_spread(tracks: list[Track]) -> Gap | None:
             "low_genre_variety", "info",
             f"Un solo genere domina (~{top_share * 100:.0f}% delle tracce).",
             "Per un set piu' interessante valuta qualche brano di generi affini.",
+            params={"pct": round(top_share * 100)},
         )
     if len(genres) > _MAX_DISTINCT_GENRES:
         return Gap(
             "scattered_genres", "info",
             f"Playlist molto dispersiva: {len(genres)} generi diversi.",
             "Restringi attorno a 2-3 generi coerenti per un set piu' fluido.",
+            params={"count": len(genres)},
         )
     return None
 

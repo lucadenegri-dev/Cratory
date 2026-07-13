@@ -22,7 +22,7 @@ import { TrackEditModal } from "@/components/track-edit-modal";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { KeyBadge } from "@/components/key-badge";
 import { TrackStateIcons } from "@/components/track-state-icons";
-import { useT } from "@/lib/i18n";
+import { useT, translateGap } from "@/lib/i18n";
 
 type Order = "asc" | "desc";
 
@@ -270,14 +270,17 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
             <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
           </summary>
           <div className="grid gap-2 border-t border-border p-4">
-            {gaps.gaps.map((g) => (
-              <div key={g.gap_type} className="flex gap-2 text-sm">
-                {g.severity === "warning"
-                  ? <AlertTriangle size={15} className="mt-0.5 shrink-0 text-muted" />
-                  : <Info size={15} className="mt-0.5 shrink-0 text-muted" />}
-                <div><span className="text-fg">{g.description}</span> <span className="text-muted">{g.suggestion}</span></div>
-              </div>
-            ))}
+            {gaps.gaps.map((g) => {
+              const { description, suggestion } = translateGap(g.gap_type, g.params, g);
+              return (
+                <div key={g.gap_type} className="flex gap-2 text-sm">
+                  {g.severity === "warning"
+                    ? <AlertTriangle size={15} className="mt-0.5 shrink-0 text-muted" />
+                    : <Info size={15} className="mt-0.5 shrink-0 text-muted" />}
+                  <div><span className="text-fg">{description}</span> <span className="text-muted">{suggestion}</span></div>
+                </div>
+              );
+            })}
           </div>
         </details>
       )}

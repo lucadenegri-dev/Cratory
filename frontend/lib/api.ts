@@ -76,6 +76,7 @@ export interface Gap {
   severity: "info" | "warning";
   description: string;
   suggestion: string;
+  params: Record<string, unknown>;
 }
 
 export interface GapAnalysis {

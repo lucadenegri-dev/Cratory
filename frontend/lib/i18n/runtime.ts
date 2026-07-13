@@ -30,3 +30,15 @@ export function translateApiError(
   if (typeof entry === "function") return entry(params);
   return fallback;
 }
+
+/** Traduce un finding della gap analysis (gap_type + params) nella lingua attiva;
+ * ricade su description/suggestion mandati dal backend se il gap_type e' ignoto. */
+export function translateGap(
+  gapType: string,
+  params: Record<string, unknown>,
+  fallback: { description: string; suggestion: string },
+): { description: string; suggestion: string } {
+  const entry = DICTIONARIES[currentLanguage].gaps[gapType];
+  if (typeof entry === "function") return entry(params);
+  return fallback;
+}

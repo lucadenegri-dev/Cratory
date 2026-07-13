@@ -914,6 +914,44 @@ export const en = {
     creative_risk: "Creative risk",
     good_reset: "Good reset",
   },
+  // Gap analysis (dashboard + playlist detail): the backend sends gap_type + params
+  // (the numbers used in the texts), translation happens on the frontend — see
+  // lib/i18n/runtime.ts::translateGap. If gap_type is unknown, fall back to the
+  // backend's description/suggestion text.
+  gaps: {
+    missing_openers: (p: Record<string, unknown>) => ({
+      description: `Only ${p.count} tracks under ${Math.round(Number(p.opener_max))} BPM suitable for opening.`,
+      suggestion: "Add a few slower/atmospheric tracks to build an intro.",
+    }),
+    few_peak_tracks: (p: Record<string, unknown>) => ({
+      description: `Only ${p.count} tracks above ${Math.round(Number(p.peak_min))} BPM suitable for the peak.`,
+      suggestion: "You need more energetic tracks to sustain the set's peak moment.",
+    }),
+    missing_bpm_bridge: (p: Record<string, unknown>) => {
+      const lo = Math.round(Number(p.lo));
+      const hi = Math.round(Number(p.hi));
+      return {
+        description: `A ${Math.round(Number(p.gap))} BPM jump between ${lo} and ${hi}: few bridge tracks in between.`,
+        suggestion: `Look for tracks between ${lo} and ${hi} BPM to make the build more natural.`,
+      };
+    },
+    uniform_energy: () => ({
+      description: "Energy is very flat: not much dynamics for a set.",
+      suggestion: "Add some calmer tracks and some more intense ones to create a progression.",
+    }),
+    missing_harmonic_data: (p: Record<string, unknown>) => ({
+      description: `Only ${p.with_key}/${p.total} tracks have a key (Camelot).`,
+      suggestion: "Enrich the tracks (key/BPM) to enable harmonic mixing.",
+    }),
+    low_genre_variety: (p: Record<string, unknown>) => ({
+      description: `A single genre dominates (~${p.pct}% of the tracks).`,
+      suggestion: "For a more interesting set, consider some tracks from related genres.",
+    }),
+    scattered_genres: (p: Record<string, unknown>) => ({
+      description: `Very scattered playlist: ${p.count} different genres.`,
+      suggestion: "Narrow it down to 2-3 coherent genres for a smoother set.",
+    }),
+  } as Record<string, (p: Record<string, unknown>) => { description: string; suggestion: string }>,
   errors: {
     playlist_not_found: "Playlist not found",
     soundcloud_playlist_not_syncable:
