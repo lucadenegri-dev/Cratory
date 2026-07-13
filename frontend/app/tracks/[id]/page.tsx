@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { Suspense, use, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Check, Download, ExternalLink, Link2, ArrowRightLeft, Pencil } from "lucide-react";
-import { apiGet, downloadTrackAuto, fmtDuration, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
+import { apiGet, downloadTrackAuto, fmtDuration, transitions, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Loading, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
@@ -29,12 +30,17 @@ function TransitionList({ title, items, emptyLabel }: { title: string; items: Tr
   );
 }
 
-export default function TrackPage({ params }: { params: Promise<{ id: string }> }) {
+function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
   const t = useT();
   const { id } = use(params);
+  // Il link "Torna alla libreria" porta con sé i filtri/sort/paginazione da cui si
+  // proviene (param `from`, impostato da library/page.tsx sui link verso il
+  // dettaglio), cosi' non si perde il filtro attivo tornando indietro (vedi B1).
+  const searchParams = useSearchParams();
+  const from = searchParams.get("from");
+  const libraryHref = from ? `/library?${decodeURIComponent(from)}` : "/library";
   const [track, setTrack] = useState<TrackDetail | null>(null);
-  const [after, setAfter] = useState<TransitionCandidate[]>([]);
-  const [before, setBefore] = useState<TransitionCandidate[]>([]);
+  const [compatible, setCompatible] = useState<TransitionCandidate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [linking, setLinking] = useState(false);
@@ -43,8 +49,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
 
   useEffect(() => {
     apiGet<TrackDetail>(`/api/tracks/${id}`).then(setTrack).catch((e) => setError(String(e.message ?? e)));
-    apiGet<TransitionCandidate[]>(`/api/transitions/after/${id}`, { limit: 8 }).then(setAfter).catch(() => {});
-    apiGet<TransitionCandidate[]>(`/api/transitions/before/${id}`, { limit: 8 }).then(setBefore).catch(() => {});
+    transitions(id, { limit: 8 }).then(setCompatible).catch(() => {});
   }, [id]);
 
   if (error) return <PageLayout title={t.tracks.pageTitle}><Alert tone="danger">⚠ {error}</Alert></PageLayout>;
@@ -86,7 +91,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
 
   return (
     <PageLayout title={t.tracks.pageTitle} meta={track.artist ?? undefined} marginaliaTitle={t.tracks.detailsTitle} marginalia={marginalia}>
-      <Link href="/library" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.nav.library}</Link>
+      <Link href={libraryHref} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.nav.library}</Link>
 
       <div className="mb-6 flex items-center gap-4">
         <TrackCover track={track} className="h-20 w-20" iconSize={28} />
@@ -166,10 +171,7 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
       </div>
 
       <h2 className="mb-3 mt-8 flex items-center gap-2 text-lg font-semibold tracking-tight"><ArrowRightLeft size={18} className="text-muted" /> {t.tracks.transitionsHeading}</h2>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <TransitionList title={t.tracks.beforeHeading} items={before} emptyLabel={t.tracks.noTransitions} />
-        <TransitionList title={t.tracks.afterHeading} items={after} emptyLabel={t.tracks.noTransitions} />
-      </div>
+      <TransitionList title={t.tracks.compatibleHeading} items={compatible} emptyLabel={t.tracks.noTransitions} />
 
       <TrackEditModal
         track={track}
@@ -185,4 +187,8 @@ export default function TrackPage({ params }: { params: Promise<{ id: string }> 
       />
     </PageLayout>
   );
+}
+
+export default function TrackPage(props: { params: Promise<{ id: string }> }) {
+  return <Suspense><TrackPageInner {...props} /></Suspense>;
 }

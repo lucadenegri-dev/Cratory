@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, List, LayoutGrid } from "lucide-react";
 import { apiGet, errText, fmtDuration, type Track } from "@/lib/api";
@@ -72,9 +72,11 @@ function LibraryInner() {
     setOffset(0);
   }, [view]);
 
-  // Stato -> URL: replace (non push, niente cronologia inquinata) con un debounce
-  // leggero per non riscrivere l'URL a ogni tasto negli input di testo.
-  useEffect(() => {
+  // Querystring corrente derivata dallo stato dei filtri/sort/paginazione: unica
+  // fonte sia per la sincronizzazione dell'URL (sotto) sia per il param `from` che
+  // i link verso il dettaglio traccia portano con sé, cosi il back-link dal
+  // dettaglio puo' ricostruire la stessa vista filtrata (vedi tracks/[id]/page.tsx).
+  const queryString = useMemo(() => {
     const params = new URLSearchParams();
     if (artist) params.set("artist", artist);
     if (title) params.set("title", title);
@@ -91,13 +93,21 @@ function LibraryInner() {
       if (order !== "asc") params.set("order", order);
     }
     if (offset > 0) params.set("offset", String(offset));
-    const next = params.toString();
-    if (next === searchParams.toString()) return;
+    return params.toString();
+  }, [artist, title, genre, source, status, owned, bpmMin, bpmMax, key, incomplete, sort, order, offset]);
+  // Il suffisso da appendere ai link verso il dettaglio traccia: solo se c'e'
+  // almeno un filtro/sort/offset attivo, altrimenti niente `from` nell'URL.
+  const trackLinkQuery = queryString ? `?from=${encodeURIComponent(queryString)}` : "";
+
+  // Stato -> URL: replace (non push, niente cronologia inquinata) con un debounce
+  // leggero per non riscrivere l'URL a ogni tasto negli input di testo.
+  useEffect(() => {
+    if (queryString === searchParams.toString()) return;
     const timer = setTimeout(() => {
-      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+      router.replace(queryString ? `${pathname}?${queryString}` : pathname, { scroll: false });
     }, 300);
     return () => clearTimeout(timer);
-  }, [artist, title, genre, source, status, owned, bpmMin, bpmMax, key, incomplete, sort, order, offset, pathname, router, searchParams]);
+  }, [queryString, pathname, router, searchParams]);
   // Persistenza: letta solo lato client (mai in render/SSR) per non rompere l'hydration.
   useEffect(() => {
     const saved = localStorage.getItem("cratory:library:view");
@@ -248,7 +258,7 @@ function LibraryInner() {
               <tr key={tr.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
                 <td className={`${cell} tnum text-faint`}>{String(offset + i + 1).padStart(2, "0")}</td>
                 <td className={cell}>
-                  <Link href={`/tracks/${tr.id}`} className="flex items-center gap-2.5">
+                  <Link href={`/tracks/${tr.id}${trackLinkQuery}`} className="flex items-center gap-2.5">
                     <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
                     <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
                   </Link>
@@ -271,7 +281,7 @@ function LibraryInner() {
         </table>
       </div>
       ) : (
-        <LibraryTrackGrid tracks={items} onEdit={setEditing} />
+        <LibraryTrackGrid tracks={items} onEdit={setEditing} trackLinkQuery={trackLinkQuery} />
       ))}
 
       {view === "list" && (
