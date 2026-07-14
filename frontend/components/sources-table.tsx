@@ -2,7 +2,7 @@
 
 import { fmtDate, type ScanRoot } from "@/lib/api";
 import { useJobs } from "./jobs-provider";
-import { Button, EqMeter } from "./ui";
+import { Button, Spinner } from "./ui";
 import { useT } from "@/lib/i18n";
 
 export function SourcesTable({
@@ -16,7 +16,6 @@ export function SourcesTable({
   const t = useT();
   const { scan } = useJobs();
   const running = scan.status === "running";
-  const pct = scan.total > 0 ? Math.round((scan.processed / scan.total) * 100) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -57,24 +56,16 @@ export function SourcesTable({
         </table>
       </div>
 
-      {running ? (
-        <div className="flex flex-col gap-2 border border-border bg-surface px-4 py-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-wider text-fg-strong">
-              {t.sources.scanning}{scan.phase ? ` · ${scan.phase}` : ""}
-            </span>
-            <span className="tnum text-xs text-fg-strong">{scan.processed} / {scan.total || "?"}</span>
-          </div>
-          <EqMeter value={pct} className="h-6 w-full" />
-        </div>
-      ) : (
-        <div>
-          <Button onClick={onScan} disabled={roots.length === 0}>{t.sources.scanButton}</Button>
-          {scan.status === "error" && (
-            <p className="mt-2 text-xs text-danger">{t.sources.scanFailed(scan.error ?? "")}</p>
-          )}
-        </div>
-      )}
+      {/* Il progresso dello scan è nella barra globale in basso (jobs-provider):
+          qui solo il bottone (disabilitato mentre gira), niente meter doppio. */}
+      <div>
+        <Button onClick={onScan} disabled={running || roots.length === 0}>
+          {running && <Spinner />}{running ? t.sources.scanning : t.sources.scanButton}
+        </Button>
+        {scan.status === "error" && (
+          <p className="mt-2 text-xs text-danger">{t.sources.scanFailed(scan.error ?? "")}</p>
+        )}
+      </div>
     </div>
   );
 }
