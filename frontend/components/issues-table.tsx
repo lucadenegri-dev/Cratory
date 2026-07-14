@@ -143,11 +143,11 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
       <td className="whitespace-nowrap px-3 py-2 align-top text-right">
         {issue.status === "open" ? (
           <span className="flex justify-end gap-1">
-            {isCover || isClear ? (
+            {isCover || isClear || isQuarantine ? (
               <button disabled={busy}
                 onClick={() => run(() => onAccept(issue.id))}
                 className="border border-border px-2 py-0.5 text-[10px] text-ok hover:bg-elevated disabled:opacity-40"
-              >{isClear ? t.issues.emptyShort : t.issues.acceptShort}</button>
+              >{isClear ? t.issues.emptyShort : isQuarantine ? t.issues.quarantineShort : t.issues.acceptShort}</button>
             ) : fixable && (
               <button
                 disabled={busy || !value.trim()}
