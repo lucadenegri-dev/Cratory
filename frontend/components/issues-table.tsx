@@ -22,13 +22,21 @@ function SevMark({ sev }: { sev: string }) {
 
 function ConfBadge({ conf }: { conf: unknown }) {
   const t = useT();
-  if (conf !== "high" && conf !== "text") return null;
-  const high = conf === "high";
+  // normalizza il legacy: high->strong, text->weak
+  const g = conf === "high" ? "strong" : conf === "text" ? "weak" : conf;
+  if (g !== "strong" && g !== "medium" && g !== "weak") return null;
+  const cls =
+    g === "strong" ? "border-ok text-ok"
+    : g === "medium" ? "border-warning text-warning"
+    : "border-border text-faint";
+  const label =
+    g === "strong" ? t.issues.confStrong
+    : g === "medium" ? t.issues.confMedium
+    : t.issues.confWeak;
   return (
     <span className={cn(
-      "border px-1 py-0.5 text-[9px] uppercase tracking-wider",
-      high ? "border-ok text-ok" : "border-warning text-warning")}>
-      {high ? t.issues.confHigh : t.issues.confText}
+      "border px-1 py-0.5 text-[9px] uppercase tracking-wider", cls)}>
+      {label}
     </span>
   );
 }
@@ -72,6 +80,8 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
   // Proposta di svuotamento (es. commento/titolo spazzatura): non c'è un valore
   // da digitare, si accetta "a vuoto".
   const isClear = issue.suggested_fix_json?.action === "clear";
+  // File corrotto: la "fix" è mandarlo in quarantena, non ritaggarlo.
+  const isQuarantine = issue.suggested_fix_json?.action === "quarantine";
   const suggested = typeof issue.suggested_fix_json?.to === "string"
     ? (issue.suggested_fix_json.to as string) : "";
   const conf = issue.suggested_fix_json?.confidence;
@@ -95,7 +105,9 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
         {isCover ? (
           <Cover fileId={issue.file_id} dismissed={issue.status === "dismissed"} />
         ) : issue.status === "open" ? (
-          isClear ? (
+          isQuarantine ? (
+            <span className="text-warning">{t.issues.fixQuarantine}</span>
+          ) : isClear ? (
             <div className="flex items-center gap-1.5 text-[10px]">
               {issue.current_value && <span className="max-w-[200px] truncate text-faint line-through" title={issue.current_value}>{issue.current_value}</span>}
               <span className="text-faint">→</span>
@@ -120,7 +132,7 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
             </div>
           )
         ) : issue.status === "accepted" ? (
-          <span className="text-fg">{suggested || t.common.empty}</span>
+          <span className="text-fg">{isQuarantine ? t.issues.fixQuarantine : (suggested || t.common.empty)}</span>
         ) : (
           <span className="text-faint" title={t.issues.dismissedTagUnchanged}>
             {issue.current_value ? `${issue.current_value} ${t.issues.unchangedSuffix}` : t.common.empty}

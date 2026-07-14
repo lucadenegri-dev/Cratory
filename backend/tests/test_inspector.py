@@ -103,3 +103,21 @@ def test_missing_genre_still_missing_not_dirty():
     issues = inspect([f])
     assert ("missing_metadata", "genre") in _types(issues)
     assert ("dirty_genre", "genre") not in _types(issues)
+
+
+def test_corrupt_file_emits_error_issue():
+    f = make_audio_file(1, artist="A", title="T", genre="House", year=2020, label="L",
+                        duration_s=200.0, bitrate=320000, path="/music/A - T.flac",
+                        integrity_ok=False, integrity_detail="Invalid data found")
+    issues = inspect([f])
+    corrupt = [i for i in issues if i.type == "corrupt_file"]
+    assert len(corrupt) == 1
+    assert corrupt[0].severity == "error"
+    assert corrupt[0].suggested_fix == {"action": "quarantine"}
+
+
+def test_unchecked_file_emits_no_corrupt_issue():
+    f = make_audio_file(1, artist="A", title="T", genre="House", year=2020, label="L",
+                        duration_s=200.0, bitrate=320000, path="/music/A - T.flac")
+    issues = inspect([f])
+    assert not [i for i in issues if i.type == "corrupt_file"]

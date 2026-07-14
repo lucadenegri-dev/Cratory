@@ -107,3 +107,14 @@ def test_load_plan_flags_disk_occupied_dest(db, tmp_path):
     p = planning.create_plan(db)
     assert any("su disco" in c.detail for c in p.conflicts)
     assert p.stats.n_skipped == 1 and p.stats.blocking is True
+
+
+def test_accepted_corrupt_file_enters_removals(db):
+    db.add(ScanRoot(id=1, path="/lib"))
+    f = _file(db, 1)
+    db.add(Issue(file_id=f.id, type="corrupt_file", field=None, severity="error",
+                 detail="corrotto", suggested_fix_json={"action": "quarantine"},
+                 status="accepted"))
+    db.commit()
+    _files, _accepted, removals, _snap, _targets = planning._inputs(db)
+    assert f.id in removals

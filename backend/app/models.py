@@ -58,6 +58,9 @@ class AudioFile(Base):
     has_rating: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String, default="present", index=True)
     scan_error: Mapped[str | None] = mapped_column(Text)
+    integrity_ok: Mapped[bool | None] = mapped_column(Boolean)
+    integrity_checked_hash: Mapped[str | None] = mapped_column(String)
+    integrity_detail: Mapped[str | None] = mapped_column(Text)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_scanned_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

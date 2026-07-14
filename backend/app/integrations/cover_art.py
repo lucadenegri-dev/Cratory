@@ -78,9 +78,10 @@ class CoverResult:
 
 def lookup_cover(*, release_mbids, confidence, artist, title,
                  caa=None, discogs=None, fetch=None) -> CoverResult | None:
-    """CAA (release-MBID) su match 'high'; Discogs cover come fallback (sempre 'text').
-    Ritorna None se nessuna immagine trovata o scaricabile."""
-    if confidence == "high" and caa is not None:
+    """CAA (release-MBID) su match forte; Discogs cover come fallback (sempre 'text').
+    Ritorna None se nessuna immagine trovata o scaricabile. La confidenza del
+    match e' graduata (strong/medium/weak); si tollera il legacy 'high'."""
+    if confidence in ("strong", "high") and caa is not None:
         for mbid in release_mbids or []:
             thumb = caa.front_thumb(mbid)
             if thumb:

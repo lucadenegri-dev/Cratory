@@ -124,4 +124,10 @@ def _inspect_one(f: AudioFile) -> list[IssueComputed]:
                                      or f.duration_s > settings.duration_max_s):
         out.append(IssueComputed(f.id, "suspicious_duration", None, "info",
                                  f"durata sospetta ({f.duration_s}s)", None))
+
+    # File corrotto (rilevato dal controllo integrità): si propone la quarantena.
+    if getattr(f, "integrity_ok", None) is False:
+        out.append(IssueComputed(f.id, "corrupt_file", None, "error",
+                                 f.integrity_detail or "file corrotto",
+                                 {"action": "quarantine"}))
     return out

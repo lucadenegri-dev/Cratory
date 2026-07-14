@@ -4,7 +4,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import {
   scanJobStatus, startScan as apiStartScan, applyStatus, startApply as apiStartApply,
   providerRescanStatus, providerRescan as apiProviderRescan,
+  integrityStatus, integrityCheck as apiIntegrityCheck,
   type ScanJobState, type ApplyJobState, type ProviderRescanJobState, type ProviderRescanBody,
+  type IntegrityJobState,
 } from "@/lib/api";
 import { EqMeter } from "./ui";
 import { useT } from "@/lib/i18n";
@@ -20,15 +22,18 @@ type JobsApi = {
   scan: ScanJobState;
   apply: ApplyJobState;
   rescan: ProviderRescanJobState;
+  integrity: IntegrityJobState;
   startScan: (rootIds?: number[]) => Promise<void>;
   startApply: () => Promise<void>;
   startRescan: (body: ProviderRescanBody) => Promise<void>;
+  startIntegrity: () => Promise<IntegrityJobState>;
   refresh: () => void;
 };
 
 const JobsCtx = createContext<JobsApi>({
-  scan: IDLE, apply: IDLE, rescan: IDLE,
-  startScan: async () => {}, startApply: async () => {}, startRescan: async () => {}, refresh: () => {},
+  scan: IDLE, apply: IDLE, rescan: IDLE, integrity: { ...IDLE, available: true },
+  startScan: async () => {}, startApply: async () => {}, startRescan: async () => {},
+  startIntegrity: async () => ({ ...IDLE, available: true }), refresh: () => {},
 });
 
 export function useJobs() {
@@ -45,6 +50,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [scan, setScan] = useState<ScanJobState>(IDLE);
   const [apply, setApply] = useState<ApplyJobState>(IDLE);
   const [rescan, setRescan] = useState<ProviderRescanJobState>(IDLE);
+  const [integrity, setIntegrity] = useState<IntegrityJobState>({ ...IDLE, available: true });
   const alive = useRef(true);
 
   const pollOnce = useCallback(async () => {
@@ -59,6 +65,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     try {
       const r = await providerRescanStatus();
       if (alive.current) setRescan(r);
+    } catch { /* backend offline */ }
+    try {
+      const g = await integrityStatus();
+      if (alive.current) setIntegrity(g);
     } catch { /* backend offline */ }
   }, []);
 
@@ -76,6 +86,11 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     const r = await apiProviderRescan(body);
     setRescan(r);
   }, []);
+  const startIntegrity = useCallback(async () => {
+    const g = await apiIntegrityCheck(false);
+    setIntegrity(g);
+    return g;
+  }, []);
 
   useEffect(() => {
     alive.current = true;
@@ -86,8 +101,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   }, [pollOnce]);
 
   const api = useMemo<JobsApi>(
-    () => ({ scan, apply, rescan, startScan, startApply, startRescan, refresh }),
-    [scan, apply, rescan, startScan, startApply, startRescan, refresh],
+    () => ({ scan, apply, rescan, integrity, startScan, startApply, startRescan, startIntegrity, refresh }),
+    [scan, apply, rescan, integrity, startScan, startApply, startRescan, startIntegrity, refresh],
   );
 
   const active: { label: string; job: ProgressJob } | null = scan.status === "running"
@@ -96,6 +111,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     ? { label: t.jobs.apply, job: apply }
     : rescan.status === "running"
     ? { label: t.jobs.providerLookup, job: rescan }
+    : integrity.status === "running"
+    ? { label: t.jobs.integrity, job: integrity }
     : null;
 
   return (

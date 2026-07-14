@@ -12,9 +12,9 @@ from app.core.http_errors import api_error
 from app.db import get_db
 from app.integrations import acoustid, cover_art
 from app.models import AudioFile, Issue, utcnow
-from app.schemas import (IssueBulkBody, IssueFixBody, IssueRead, IssueStatusBody,
-                         ProviderRescanBody, ProviderSuggestBody)
-from app.services import ai_tags, apply_job, cover_cache, covers as cover_svc, provider_rescan_job, ratings, scan_job, text_providers
+from app.schemas import (IntegrityCheckBody, IssueBulkBody, IssueFixBody, IssueRead,
+                         IssueStatusBody, ProviderRescanBody, ProviderSuggestBody)
+from app.services import ai_tags, apply_job, cover_cache, covers as cover_svc, integrity_job, provider_rescan_job, ratings, scan_job, text_providers
 
 router = APIRouter(prefix="/api/issues", tags=["issues"])
 _VALID = {"open", "accepted", "dismissed"}
@@ -346,13 +346,27 @@ def provider_rescan_status():
     return provider_rescan_job.job_state()
 
 
-@router.post("/provider-override/accept-high", response_model=dict)
-def accept_high_overrides(db: Session = Depends(get_db)):
+@router.post("/integrity-check", response_model=dict)
+def integrity_check_start(body: IntegrityCheckBody | None = None):
+    if scan_job.is_running() or apply_job.is_running():
+        raise api_error(409, "scan_or_apply_running", "Scan or apply in progress")
+    force = bool(body.force) if body else False
+    return integrity_job.start_job(force=force)
+
+
+@router.get("/integrity-check/status", response_model=dict)
+def integrity_check_status():
+    return integrity_job.job_state()
+
+
+@router.post("/provider-override/accept-strong", response_model=dict)
+def accept_strong_overrides(db: Session = Depends(get_db)):
     rows = db.scalars(select(Issue).where(
         Issue.type == "provider_override", Issue.status == "open")).all()
     updated = 0
     for issue in rows:
-        if (issue.suggested_fix_json or {}).get("confidence") == "high":
+        # tollera il legacy "high" nei dati non ancora ri-scansionati
+        if (issue.suggested_fix_json or {}).get("confidence") in ("strong", "high"):
             issue.status = "accepted"
             issue.updated_at = utcnow()
             updated += 1

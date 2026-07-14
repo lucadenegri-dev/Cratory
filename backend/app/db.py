@@ -55,6 +55,15 @@ def ensure_schema(eng=None) -> None:
             with eng.begin() as conn:
                 conn.execute(text(
                     "ALTER TABLE audio_file ADD COLUMN has_rating BOOLEAN DEFAULT 0"))
+        if "integrity_ok" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text("ALTER TABLE audio_file ADD COLUMN integrity_ok BOOLEAN"))
+        if "integrity_checked_hash" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text("ALTER TABLE audio_file ADD COLUMN integrity_checked_hash VARCHAR"))
+        if "integrity_detail" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text("ALTER TABLE audio_file ADD COLUMN integrity_detail TEXT"))
         with eng.begin() as conn:
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS ix_audio_file_mbid ON audio_file (mbid)"

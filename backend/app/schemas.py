@@ -80,6 +80,10 @@ class ProviderSuggestBody(BaseModel):
     covers: bool = True
 
 
+class IntegrityCheckBody(BaseModel):
+    force: bool = False
+
+
 class ProviderRescanBody(BaseModel):
     folder: str | None = None
     genre: str | None = None

@@ -97,7 +97,8 @@ def rescan(db: Session, *, folder: str | None = None, genre: str | None = None,
     total = len(files)
     res = {"configured": True, "acoustid_available": ac_client is not None,
            "scanned": total, "fingerprinted": 0, "matched": 0, "no_match": 0,
-           "proposed_high": 0, "proposed_text": 0, "covers": 0}
+           "proposed_strong": 0, "proposed_medium": 0, "proposed_weak": 0,
+           "covers": 0}
 
     for idx, f in enumerate(files):
         if on_progress is not None:
@@ -122,7 +123,9 @@ def rescan(db: Session, *, folder: str | None = None, genre: str | None = None,
             if upsert_override(db, f.id, field, value, conf,
                                include_accepted=include_accepted,
                                include_dismissed=include_dismissed):
-                res["proposed_high" if conf == "high" else "proposed_text"] += 1
+                key = f"proposed_{conf}" if conf in ("strong", "medium", "weak") \
+                    else "proposed_weak"
+                res[key] += 1
         if covers and cover_svc.fetch_cover(db, f, resolved, caa=caa, discogs=discogs):
             res["covers"] += 1
         db.commit()

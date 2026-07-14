@@ -49,6 +49,7 @@ export const en = {
     scan: "Scan",
     apply: "Apply",
     providerLookup: "Provider lookup",
+    integrity: "Integrity check",
   },
   nav: {
     tagline: "file → rekordbox",
@@ -211,7 +212,7 @@ export const en = {
     guide2dismiss: "✕ dismiss",
     guide2post: ".",
     guide3label: "Conf.",
-    guide3post: ": high = certain match (fingerprint), textual = to review.",
+    guide3post: ": strong = safe match (ID or close tags), medium = review, weak = uncertain.",
     aiNotConfigured: "Set ANTHROPIC_API_KEY in the backend to use AI.",
     providerNotConfigured: "Configure the provider keys (MusicBrainz/Discogs) in the backend.",
     aiTagsNote: (suggested: number, unresolved: number) =>
@@ -221,8 +222,8 @@ export const en = {
     providerNote: (suggested: number, covers: number, fingerprinted: number, unresolved: number, acoustid: boolean) =>
       `${suggested} suggestions from providers${covers > 0 ? `, ${covers} covers found` : ""}${fingerprinted > 0 ? ` (${fingerprinted} via fingerprint)` : ""}${unresolved > 0 ? `, ${unresolved} not found` : ""}${acoustid ? "" : " — fingerprint off, text match only"} — review and accept with ✓.`,
     acceptHighNote: (updated: number) => `${updated} high-confidence proposals accepted → they'll go into the PLAN.`,
-    rescanNote: (high: number, text: number, scanned: number, acoustid: boolean, covers: number) =>
-      `Rescan: ${high} high-confidence proposals, ${text} textual${covers > 0 ? `, ${covers} covers` : ""} over ${scanned} tracks${acoustid ? "" : " (fingerprint off: no high confidence)"}.`,
+    rescanNote: (strong: number, medium: number, weak: number, scanned: number, acoustid: boolean, covers: number) =>
+      `Rescan: ${strong} strong, ${medium} medium, ${weak} weak${covers > 0 ? `, ${covers} covers` : ""} over ${scanned} tracks${acoustid ? "" : " (fingerprint off: no strong via ID)"}.`,
     rescanDone: "Rescan complete.",
     rescanFailed: "Rescan failed",
     sevAll: "severity: all",
@@ -298,8 +299,18 @@ export const en = {
     byType: "by type",
     acceptedLabel: "accepted",
     acceptedNote: (n: number) => `${n} → will go into the PLAN`,
-    confHigh: "high",
-    confText: "textual",
+    confStrong: "strong",
+    confMedium: "medium",
+    confWeak: "weak",
+    modeEnrich: "Enrich",
+    modeMaintenance: "Maintenance",
+    integrityBtn: "CHECK INTEGRITY",
+    integrityDesc: "Decode every file with ffmpeg to find corrupt/truncated ones — corrupt files are proposed for quarantine.",
+    integrityTag: "FFMPEG",
+    integrityUnavailable: "ffmpeg not found — install it to enable this check.",
+    integrityNote: (corrupt: number, checked: number) =>
+      `Integrity: ${corrupt} corrupt over ${checked} checked.`,
+    fixQuarantine: "→ quarantine",
     coverNotApplied: "cover · not applied",
     zoomTitle: "enlarge",
     writeField: (field: string) => `write ${field}…`,
