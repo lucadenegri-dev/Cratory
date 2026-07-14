@@ -319,6 +319,7 @@ export const en = {
     unchangedSuffix: "· unchanged",
     acceptShort: "✓ accept",
     emptyShort: "✓ empty",
+    quarantineShort: "✓ quarantine",
     emptyValueMark: "(empty)",
     dismissShort: "✕ dismiss",
     badgeAccepted: "accepted",

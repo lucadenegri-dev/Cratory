@@ -6,7 +6,7 @@ import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { PlanOps } from "@/components/plan-ops";
 import { ApplyModal } from "@/components/apply-modal";
-import { Alert, Button, EmptyState, EqMeter, Loading, Spinner } from "@/components/ui";
+import { Alert, Button, EmptyState, Loading, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 export default function PlanPage() {
@@ -83,15 +83,8 @@ export default function PlanPage() {
           {building && <span className="text-xs text-muted">{t.plan.computing}</span>}
         </div>
 
-        {applying && (
-          <div className="flex flex-col gap-2 border border-border bg-surface px-4 py-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-wider text-fg-strong">{t.plan.applyingLabel}{apply.phase ? ` · ${apply.phase}` : ""}</span>
-              <span className="tnum text-xs text-fg-strong">{apply.processed} / {apply.total || "?"}</span>
-            </div>
-            <EqMeter value={apply.total > 0 ? Math.round((apply.processed / apply.total) * 100) : null} className="h-6 w-full" />
-          </div>
-        )}
+        {/* Il progresso dell'apply è mostrato dalla barra globale fissa in basso
+            (jobs-provider), non più qui: evita il doppio loader. */}
 
         {result && <ApplyResultBanner result={result} />}
 

@@ -314,6 +314,7 @@ export const it: Dictionary = {
     unchangedSuffix: "· invariato",
     acceptShort: "✓ accetta",
     emptyShort: "✓ svuota",
+    quarantineShort: "✓ quarantena",
     emptyValueMark: "(vuoto)",
     dismissShort: "✕ ignora",
     badgeAccepted: "accettata",

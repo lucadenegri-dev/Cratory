@@ -6,9 +6,17 @@ from dataclasses import dataclass
 
 from mutagen import File as MutagenFile
 from mutagen import MutagenError
+from mutagen.easymp4 import EasyMP4Tags
 from mutagen.flac import FLAC, Picture
 from mutagen.id3 import ID3, APIC, COMM, POPM, TALB, TCON, TDRC, TIT2, TPE1, TPE2, TPUB, TRCK
 from mutagen.mp4 import MP4, MP4Cover
+
+# EasyMP4 non conosce la chiave 'organization' (label): senza registrarla, la
+# scrittura della label sui .m4a viene saltata in silenzio e il RETAG label si
+# ripropone a ogni PLAN. La mappiamo sull'atom freeform ----:com.apple.iTunes:
+# LABEL (convenzione Picard), così read/write in modalità easy la gestiscono.
+if "organization" not in EasyMP4Tags.List:
+    EasyMP4Tags.RegisterFreeformKey("organization", "LABEL")
 
 
 class TagReadError(Exception):

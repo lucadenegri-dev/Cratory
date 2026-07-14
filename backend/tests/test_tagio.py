@@ -62,3 +62,14 @@ def test_read_isrc_mp3(copy_fixture, tmp_path):
 def test_missing_isrc_is_none(copy_fixture, tmp_path):
     f = copy_fixture("flac", tmp_path / "a.flac")
     assert tagio.read_tags(f).isrc is None
+
+
+def test_label_roundtrip_m4a(copy_fixture, tmp_path):
+    # m4a: la label va scritta come atom freeform MP4 (----:com.apple.iTunes:
+    # LABEL), non come chiave easy 'organization' che EasyMP4 non conosce.
+    # Senza il fix la scrittura è un no-op e il RETAG label si ripropone a ogni
+    # PLAN (il valore non attecchisce mai).
+    from app.integrations import tagio
+    f = copy_fixture("m4a", tmp_path / "a.m4a")
+    tagio.write_tags(f, {"label": "Mute"})
+    assert tagio.read_tags(f).label == "Mute"
