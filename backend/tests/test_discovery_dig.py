@@ -4,7 +4,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.discovery_dig import _clean_artist, _lead_from_release, _window, dig
+from app.services.discovery_dig import (
+    _clean_artist,
+    _is_owned,
+    _lead_from_release,
+    _owned_index,
+    _title_candidates,
+    _window,
+    dig,
+)
 
 
 def _release(title, *, year=2020, label="Lbl", style="Acid House", have=100, want=10,
@@ -17,13 +25,14 @@ def _release(title, *, year=2020, label="Lbl", style="Acid House", have=100, wan
 
 
 def _lib(*items):
-    """Track finte. Ogni item: (artist, title) o (artist, title, {"label":..., "genre":...})."""
+    """Track finte. Ogni item: (artist, title) o (artist, title, {"label":..., "genre":..., "album":...})."""
     out = []
     for it in items:
         extra = it[2] if len(it) > 2 else {}
         out.append(SimpleNamespace(
             artist=it[0], title=it[1],
             label=extra.get("label"), genre=extra.get("genre"),
+            album=extra.get("album"),
         ))
     return out
 
@@ -83,6 +92,41 @@ def test_lead_carries_clean_artist_and_all_styles():
     assert lead.artist == "Tyree"
     assert lead.artist_keys == ["tyree"]
     assert lead.styles == ["Acid House", "Chicago House"]
+
+
+# --- Task 5: il possesso — release contro tracce -----------------------------
+
+
+def test_title_candidates_covers_format_suffix_and_splits():
+    assert "Piercing Love" in _title_candidates("Piercing Love EP")
+    assert "Sentipede" in _title_candidates("Sentipede / 808 Rhythm Traxx 3")
+    assert "Acid Trax" in _title_candidates("Acid Trax (Original Mix)")
+
+
+def test_owned_via_discogs_cruft_artist():
+    # regressione: possiedi Tyree, Discogs lo chiama Tyree* -> te lo riproponeva
+    tracks, albums = _owned_index(_lib(("Tyree", "Acid Crash")))
+    lead = _lead_from_release(_release("Tyree* - Acid Crash", rid=1), "x")
+    assert _is_owned(lead, tracks, albums) is True
+
+
+def test_owned_via_album_when_release_is_an_ep():
+    tracks, albums = _owned_index(_lib(("Fabien D'Estival", "Some Track",
+                                        {"album": "Piercing Love EP"})))
+    lead = _lead_from_release(_release("Fabien D'Estival - Piercing Love EP", rid=1), "x")
+    assert _is_owned(lead, tracks, albums) is True
+
+
+def test_owned_via_one_side_of_a_split_title():
+    tracks, albums = _owned_index(_lib(("Nail", "Sentipede")))
+    lead = _lead_from_release(_release("Nail* / Einzelkind - Sentipede / 808 Rhythm Traxx 3", rid=1), "x")
+    assert _is_owned(lead, tracks, albums) is True
+
+
+def test_not_owned_stays_not_owned():
+    tracks, albums = _owned_index(_lib(("Tyree", "Acid Crash")))
+    lead = _lead_from_release(_release("Armando - Land Of Confusion", rid=1), "x")
+    assert _is_owned(lead, tracks, albums) is False
 
 
 def test_dig_dedup_vs_library_and_pressings():

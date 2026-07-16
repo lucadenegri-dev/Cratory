@@ -73,6 +73,11 @@ _DISCOGS_CRUFT_RE = re.compile(r"\*|\s*\(\d+\)")
 # per intero se ce l'hai.
 _ARTIST_SPLIT_RE = re.compile(r"\s+(?:/|feat\.?|vs\.?)\s+", re.IGNORECASE)
 
+# Suffisso di FORMATO: il titolo di una release Discogs e' spesso il nome di un EP/LP,
+# mentre Track.title e' il titolo di una TRACCIA. Senza toglierlo, 'Piercing Love EP'
+# non riconosce la traccia 'Piercing Love' che possiedi.
+_FORMAT_SUFFIX_RE = re.compile(r"\s+(?:ep|lp|12\"|single)\s*$", re.IGNORECASE)
+
 
 def _clean_artist(raw: str) -> tuple[str, list[str]]:
     """(stringa da mostrare, chiavi normalizzate per il match).
@@ -190,6 +195,54 @@ def _dedup_title(title: str) -> str:
 
 def _dedup_key(artist: str, title: str) -> tuple[str, str]:
     return _norm(artist), _norm(_dedup_title(title))
+
+
+def _title_candidates(title: str) -> list[str]:
+    """Tutti i titoli sotto cui una release puo' essere gia' in libreria.
+
+    Il titolo di una release non e' il titolo di una traccia: puo' essere un EP
+    ('Piercing Love EP') o due lati in un campo ('Sentipede / 808 Rhythm Traxx 3').
+    """
+    sides = [s.strip() for s in title.split(" / ")] if " / " in title else []
+    out: list[str] = []
+    for raw in [title, *sides]:
+        t = _dedup_title(raw)
+        out.append(t)
+        stripped = _FORMAT_SUFFIX_RE.sub("", t).strip()
+        if stripped:
+            out.append(stripped)
+    return [x for x in dict.fromkeys(out) if x]
+
+
+def _owned_index(library: list) -> tuple[set[tuple[str, str]], set[tuple[str, str]]]:
+    """Due indici del posseduto: per titolo di traccia e per album.
+
+    Gli artisti della libreria vengono da tag/streaming: niente grammatica Discogs
+    da ripulire, `_norm` basta.
+    """
+    tracks: set[tuple[str, str]] = set()
+    albums: set[tuple[str, str]] = set()
+    for t in library or []:
+        a = _norm(getattr(t, "artist", None))
+        if not a:
+            continue
+        if getattr(t, "title", None):
+            tracks.add((a, _norm(_dedup_title(t.title))))
+        if getattr(t, "album", None):
+            albums.add((a, _norm(_dedup_title(t.album))))
+    return tracks, albums
+
+
+def _is_owned(lead: DiscoveryLead, owned_tracks: set, owned_albums: set) -> bool:
+    """Un falso positivo costa un lead in meno; un falso negativo mostra all'utente
+    un disco che ha gia'. Il secondo e' l'errore che si vede: si preferisce escludere.
+    """
+    for a in lead.artist_keys:
+        for t in _title_candidates(lead.title):
+            k = (a, _norm(t))
+            if k in owned_tracks or k in owned_albums:
+                return True
+    return False
 
 
 def _style_tokens(value: Any) -> set[str]:
@@ -380,7 +433,7 @@ def dig(
     """
     if library is None:
         library = _library_tracks(db)
-    owned_keys = {_dedup_key(t.artist or "", t.title or "") for t in library if t.artist and t.title}
+    owned_tracks, owned_albums = _owned_index(library)
     profile = TasteProfile.from_tracks(library if taste_tracks is None else taste_tracks)
 
     if seed_type == "genre":
@@ -396,8 +449,8 @@ def dig(
         lead = _lead_from_release(item, value)
         if lead is None:
             continue
-        k = _dedup_key(lead.artist, lead.title)  # collassa varianti e pressature
-        if k in owned_keys or k in seen:
+        k = _dedup_key(lead.artist_keys[0], lead.title)  # collassa varianti e pressature
+        if k in seen or _is_owned(lead, owned_tracks, owned_albums):
             continue
         seen.add(k)
         leads.append(lead)
