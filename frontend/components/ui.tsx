@@ -163,24 +163,15 @@ export function Combobox({ value, onChange, onSelect, options, placeholder, disa
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
-  // Specchio locale del testo digitato: la prop `value` è controllata dal
-  // chiamante (che può resettarla dopo una scelta), ma il filtro deve
-  // reagire ad ogni tasto anche se il chiamante non ha uno stato React reale
-  // a monte (es. in test). Risincronizzato in render (non in un effect, che
-  // causerebbe un render a cascata) quando `value` cambia dall'esterno —
-  // pattern "adjusting state during render" dei React docs.
-  const [query, setQuery] = useState(value);
-  const [prevValue, setPrevValue] = useState(value);
-  if (value !== prevValue) {
-    setPrevValue(value);
-    setQuery(value);
-  }
 
+  // Pienamente controllato: `value` è l'unica fonte di verità sia per il testo
+  // mostrato sia per il filtro. Nessuno stato ombra: se il chiamante normalizza
+  // o rifiuta quel che si digita, il campo mostra solo ciò che ha approvato.
   const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = value.trim().toLowerCase();
     const hit = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
     return hit.slice(0, cap);
-  }, [query, options, cap]);
+  }, [value, options, cap]);
 
   const choose = (o: ComboOption) => {
     onSelect(o);
@@ -213,11 +204,11 @@ export function Combobox({ value, onChange, onSelect, options, placeholder, disa
         aria-controls="combobox-list"
         aria-activedescendant={active >= 0 ? `combobox-opt-${active}` : undefined}
         autoComplete="off"
-        value={query}
+        value={value}
         disabled={disabled}
         placeholder={placeholder}
         onFocus={() => setOpen(true)}
-        onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); setActive(-1); }}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); setActive(-1); }}
         onKeyDown={onKeyDown}
         onBlur={() => window.setTimeout(() => setOpen(false), 120)}
       />

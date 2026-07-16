@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
+import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Chip, Combobox, SegmentedControl, type ComboOption } from "@/components/ui";
 
@@ -45,10 +46,33 @@ describe("Combobox", () => {
     { value: "Trax Records", label: "Trax Records", group: "etichetta" },
   ];
 
-  function setup(value = "") {
+  // Il Combobox è pienamente controllato: il testo lo detiene il chiamante.
+  // L'harness fornisce lo stato React reale che in produzione sta nella pagina,
+  // così `fireEvent.change` -> onChange -> setValue -> nuovo `value` in prop.
+  // Testare un componente controllato con un onChange inerte proverebbe solo
+  // che React fa il suo mestiere.
+  function Harness({ onSelect, onChange, options = OPTS, cap }: {
+    onSelect?: (o: ComboOption) => void;
+    onChange?: (v: string) => void;
+    options?: ComboOption[];
+    cap?: number;
+  }) {
+    const [value, setValue] = useState("");
+    return (
+      <Combobox
+        value={value}
+        onChange={(v) => { onChange?.(v); setValue(v); }}
+        onSelect={onSelect ?? (() => {})}
+        options={options}
+        cap={cap}
+      />
+    );
+  }
+
+  function setup() {
     const onSelect = vi.fn();
     const onChange = vi.fn();
-    render(<Combobox value={value} onChange={onChange} onSelect={onSelect} options={OPTS} />);
+    render(<Harness onSelect={onSelect} onChange={onChange} />);
     return { onSelect, onChange };
   }
 
@@ -98,7 +122,7 @@ describe("Combobox", () => {
     const many: ComboOption[] = Array.from({ length: 30 }, (_, i) => ({
       value: `g${i}`, label: `g${i}`, group: "genere",
     }));
-    render(<Combobox value="" onChange={() => {}} onSelect={() => {}} options={many} cap={12} />);
+    render(<Harness options={many} cap={12} />);
     fireEvent.focus(screen.getByRole("combobox"));
     expect(screen.getAllByRole("option").length).toBe(12);
   });
