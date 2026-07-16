@@ -7,14 +7,12 @@ afterEach(cleanup);
 const OPTIONS = {
   genres: { library: ["Acid House"], styles: [] },
   labels: ["Trax Records"],
-  playlists: [{ id: 1, name: "Warmup" }],
 };
 
 function setup(over: Partial<React.ComponentProps<typeof DiscoveryDigBar>> = {}) {
   const props = {
     subject: "", onSubjectChange: vi.fn(),
     depth: 0, onDepthChange: vi.fn(),
-    tasteRef: null, onTasteRefChange: vi.fn(),
     options: OPTIONS, pilePages: null as number | null,
     busy: false, ready: true, onSubmit: vi.fn(),
     ...over,
@@ -23,10 +21,10 @@ function setup(over: Partial<React.ComponentProps<typeof DiscoveryDigBar>> = {})
   return props;
 }
 
-// Il campo soggetto e il <select> nativo del gusto condividono entrambi il
-// ruolo ARIA "combobox" (implicito su <select> senza multiple): con le
-// playlist di default presenti, getByRole("combobox") e' ambiguo. Il campo
-// soggetto e' sempre il primo nell'ordine del DOM (zona 1 della riga).
+// Storicamente il campo soggetto e il <select> del gusto condividevano il ruolo
+// ARIA "combobox" e serviva disambiguare col [0]; il selettore del gusto e' stato
+// rimosso (vedi test piu' sotto), ma lo helper resta come punto unico da cui i test
+// prendono il campo soggetto — che e' comunque il primo nell'ordine del DOM.
 function subjectInput() {
   return screen.getAllByRole("combobox")[0];
 }
@@ -87,16 +85,16 @@ describe("DiscoveryDigBar", () => {
     expect(screen.queryByText("pila corta: tutta qui")).toBeNull();
   });
 
-  it("il gusto sparisce se non ci sono playlist", () => {
-    setup({ options: { ...OPTIONS, playlists: [] } });
-    expect(screen.queryByText("Gusto")).toBeNull();
-    // l'hint di onesta' e' agganciato allo stesso controllo: sparisce con lui
-    expect(screen.queryByText(/Non filtra/)).toBeNull();
-  });
-
-  it("l'hint del gusto dichiara che non filtra, quando il gusto c'e'", () => {
+  it("il selettore del gusto non esiste piu'", () => {
+    // Riscrittura SEMANTICA dei due test sul gusto: la manopola azzerava
+    // l'ordinamento in silenzio su 7 playlist su 10 (profilo quasi vuoto: etichette
+    // e generi vengono dai tag dei file, che le playlist di lead non hanno). Il
+    // gusto resta acceso sulla libreria, senza controllo — quindi niente <select>
+    // (che avrebbe ruolo "combobox") e niente hint.
     setup();
-    expect(screen.getByText(/Non filtra/)).toBeTruthy();
+    expect(screen.getAllByRole("combobox").length).toBe(1);   // solo il soggetto
+    expect(screen.queryByText("Gusto")).toBeNull();
+    expect(screen.queryByText(/Non filtra/)).toBeNull();
   });
 
   it("Scava e' disabilitato finche' manca il soggetto", () => {

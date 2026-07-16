@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Disc3, Shovel, Tags } from "lucide-react";
 
-import { Button, Combobox, SegmentedControl, Select, Spinner, type ComboOption } from "@/components/ui";
+import { Button, Combobox, SegmentedControl, Spinner, type ComboOption } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 /** DOVE si pesca nella pila ordinata per domanda. Non e' un mix di ordinamento:
@@ -17,19 +17,19 @@ export const DEPTHS = [
 export type SeedType = "genre" | "label";
 
 export function DiscoveryDigBar({
-  subject, onSubjectChange, depth, onDepthChange, tasteRef, onTasteRefChange,
+  subject, onSubjectChange, depth, onDepthChange,
   options, pilePages, busy, ready, onSubmit,
 }: {
   subject: string;
   onSubjectChange: (value: string, seed: SeedType) => void;
   depth: number;
   onDepthChange: (v: number) => void;
-  tasteRef: number | null;
-  onTasteRefChange: (v: number | null) => void;
+  // Niente selettore del gusto: la manopola azzerava l'ordinamento in silenzio su
+  // 7 playlist su 10 (profilo quasi vuoto — etichette e generi vengono dai tag dei
+  // file, che le playlist di lead non hanno). Il gusto resta acceso sulla libreria.
   options: {
     genres: { library: string[]; styles: string[] };
     labels: string[];
-    playlists: { id: number; name: string }[];
   };
   pilePages: number | null;
   busy: boolean;
@@ -112,22 +112,6 @@ export function DiscoveryDigBar({
           />
         </div>
 
-        {options.playlists.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-muted">{t.discovery.affinityLabel}</span>
-            <div className="w-[220px]">
-              <Select
-                value={tasteRef ?? ""}
-                disabled={busy}
-                onChange={(e) => onTasteRefChange(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">{t.discovery.wholeLibraryOption}</option>
-                {options.playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
-            </div>
-          </div>
-        )}
-
         <Button type="submit" disabled={busy || !ready} className="w-full sm:w-auto">
           {busy ? <Spinner /> : <Shovel size={15} />} {t.discovery.dig}
         </Button>
@@ -136,13 +120,6 @@ export function DiscoveryDigBar({
       <p className="mt-2 text-xs text-muted">
         {emptyPile ? t.discovery.emptyPile : shortPile ? t.discovery.shortPile : depthDesc}
       </p>
-      {options.playlists.length > 0 && (
-        // Onestà del microcopy (spec): il gusto non filtra, sceglie solo il riferimento
-        // per l'affinità — i dischi gia' posseduti restano esclusi comunque. Sotto il
-        // controllo, come il microcopy della profondità: non c'e' spazio in riga per
-        // una frase intera senza rompere la riga singola su desktop.
-        <p className="mt-1 text-xs text-muted">{t.discovery.affinityHint}</p>
-      )}
     </form>
   );
 }
