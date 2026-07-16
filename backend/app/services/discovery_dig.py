@@ -1,15 +1,19 @@
 """Discovery v2 — "crate digging": lista-dig a volume da Discogs.
 
 A differenza dell'espansione playlist (Last.fm -> resolver Spotify, ~20 candidati
-risolti), il dig produce TANTI lead leggeri NON risolti dai semi Genere/Etichetta,
-ordinati per profondita' + novita' (deep cut). L'identita' Spotify si risolve solo al
-salvataggio (riusa l'import idempotente). Sorgente: Discogs (vedi integrations/discogs).
+risolti), il dig produce TANTI lead leggeri NON risolti dai semi Genere/Etichetta. La
+pila di release del seme e' ordinata da Discogs per DOMANDA (want desc): `depth`
+sceglie IN CHE PUNTO pescarci dentro (0 = i classici del seme, 1 = il fondo della
+cassa), il gusto (`TasteProfile`) ordina SEMPRE dentro la finestra scelta.
+L'identita' Spotify si risolve solo al salvataggio (riusa l'import idempotente).
+Sorgente: Discogs (vedi integrations/discogs).
 
 De-noise: distingue la gemma rara dal rumore self-released con la DOMANDA (want vs
-have), scarta formati off-target (compilation/DJ mix) e self-released morti, deduplica
-le varianti ("(Original Mix)") e limita quante voci per artista.
+have) come FILTRO — non piu' come ordinamento, quello lo decide il gusto dentro la
+finestra —, scarta formati off-target (compilation/DJ mix) e self-released morti,
+deduplica le varianti ("(Original Mix)") e limita quante voci per artista.
 
-Deterministico e testabile: la funzione di ricerca Discogs e' iniettata.
+Deterministico e testabile: le funzioni di ricerca e conteggio Discogs sono iniettate.
 """
 
 import logging
@@ -21,7 +25,12 @@ from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
-from app.integrations.discogs import DISCOGS_MAX_PAGES, SEARCH_PER_PAGE
+from app.integrations.discogs import (
+    DISCOGS_MAX_PAGES,
+    SEARCH_PER_PAGE,
+    SORT_DESC,
+    SORT_WANT,
+)
 from app.services.discovery import _library_tracks, _norm
 
 logger = logging.getLogger(__name__)
@@ -133,6 +142,7 @@ REASON_STYLE_MATCH_MIN = 0.5    # soglia sulla Jaccard: un token condiviso non b
 REASON_RECENT_MIN = 0.8         # recency alta (ultimi ~3 anni su span 15)
 
 SearchReleases = Callable[..., list[dict[str, Any]]]
+CountReleases = Callable[..., int]
 
 
 @dataclass
@@ -168,6 +178,7 @@ class DigResult:
     seed_type: str
     value: str
     leads: list[DiscoveryLead] = field(default_factory=list)
+    pile_pages: int = 0
 
 
 def _parse_year(value: Any) -> int | None:
@@ -433,7 +444,7 @@ def _select(leads: list[DiscoveryLead], limit: int) -> list[DiscoveryLead]:
     out: list[DiscoveryLead] = []
     per_artist: dict[str, int] = {}
     for lead in sorted(leads, key=lambda x: x.score, reverse=True):
-        a = _norm(lead.artist)
+        a = lead.artist_keys[0]
         if per_artist.get(a, 0) >= _MAX_PER_ARTIST:
             continue
         per_artist[a] = per_artist.get(a, 0) + 1
@@ -449,27 +460,50 @@ def dig(
     seed_type: str,
     value: str,
     search_releases: SearchReleases,
+    count_releases: CountReleases,
     library: list | None = None,
     taste_tracks: list | None = None,
-    adventurousness: float = 0.4,
+    depth: float = 0.0,
     limit: int = DEFAULT_DIG_LIMIT,
 ) -> DigResult:
-    """Lead non posseduti dal seme dato (genere|etichetta), de-noised e ordinati per gusto.
+    """Lead non posseduti dal seme dato (genere|etichetta), ordinati per gusto.
+
+    Due assi separati: `depth` sceglie DOVE pescare nella pila ordinata per domanda
+    (0 = i classici del seme, 1 = il fondo); il gusto ordina SEMPRE dentro la finestra.
 
     Dedup sempre su tutta la `library`; l'affinita' di gusto usa `taste_tracks`
     (default: la libreria stessa), che puo' essere una playlist specifica.
+
+    Costo di rete: una sonda `count_releases` PRIMA di scegliere la finestra (serve
+    `pagination.items` per sapere quanto e' alta la pila), piu' una seconda sonda se il
+    seme e' `genre` e lo `style` (il livello fine) non ha risultati e si ripiega sul
+    `genre` (il livello grosso) — Discogs li distingue. Totale 4-5 richieste per dig.
     """
     if library is None:
         library = _library_tracks(db)
     owned_tracks, owned_albums = _owned_index(library)
     profile = TasteProfile.from_tracks(library if taste_tracks is None else taste_tracks)
 
-    if seed_type == "genre":
-        items = search_releases(style=value) or search_releases(genre=value)
-    elif seed_type == "label":
-        items = search_releases(label=value)
+    if seed_type == "label":
+        filters: dict[str, Any] = {"label": value}
+    elif seed_type == "genre":
+        # Discogs distingue `style` (fine: 'Deep House') da `genre` (grosso:
+        # 'Electronic'): si prova il piu' specifico e si ripiega.
+        filters = {"style": value}
     else:
-        items = []
+        return DigResult(seed_type=seed_type, value=value, pile_pages=0)
+
+    total = count_releases(**filters)
+    if total == 0 and seed_type == "genre":
+        filters = {"genre": value}
+        total = count_releases(**filters)
+
+    usable = min(math.ceil(total / SEARCH_PER_PAGE), DISCOGS_MAX_PAGES) if total > 0 else 0
+    pages = _window(depth, total)
+    if not pages:
+        return DigResult(seed_type=seed_type, value=value, pile_pages=0)
+
+    items = search_releases(**filters, pages=pages, sort=SORT_WANT, sort_order=SORT_DESC)
 
     leads: list[DiscoveryLead] = []
     seen: set[tuple[str, str]] = set()
@@ -483,13 +517,13 @@ def dig(
         seen.add(k)
         leads.append(lead)
 
-    adv = max(0.0, min(1.0, adventurousness))
+    weights = _weights(seed_type)
     current_year = datetime.now(timezone.utc).year
-    weights = _weights(seed_type)  # minimo indispensabile qui: la finestra/adv le sistema il Task 8
     for lead in leads:
         lead.score = _score(lead, profile, weights)
         lead.reasons = _reasons(lead, profile, seed_type, current_year)
     selected = _select(leads, limit)
 
-    logger.info("Discovery dig %s=%r: %s lead (adv=%.2f)", seed_type, value, len(selected), adv)
-    return DigResult(seed_type=seed_type, value=value, leads=selected)
+    logger.info("Discovery dig %s=%r: %s lead (depth=%.2f, pagine %s di %s)",
+                seed_type, value, len(selected), depth, pages, usable)
+    return DigResult(seed_type=seed_type, value=value, leads=selected, pile_pages=usable)
