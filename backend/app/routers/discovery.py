@@ -270,6 +270,7 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
         seed_type=result.seed_type, value=result.value,
         leads=[_lead_out(lead) for lead in result.leads],
         pile_pages=result.pile_pages,
+        seed_resolution=result.seed_resolution, pile_total=result.pile_total,
     )
 
 

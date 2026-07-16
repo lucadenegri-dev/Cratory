@@ -308,3 +308,18 @@ def test_dig_endpoint_ignores_legacy_limit_field(client, monkeypatch):
                json={"seed_type": "genre", "value": "Acid House", "limit": 5})
     assert r.status_code == 200
     assert len(r.json()["leads"]) > 5   # nessun troncamento: il campo e' ignorato
+
+
+def test_dig_endpoint_exposes_seed_resolution_and_pile_total(client, monkeypatch):
+    from app.integrations.discogs import DiscogsClient
+
+    c, _ = client
+    monkeypatch.setattr(DiscogsClient, "search_releases", lambda self, **kw: [])
+    monkeypatch.setattr(
+        DiscogsClient, "count_releases",
+        lambda self, **kw: 0 if "style" in kw else 4_960_093,
+    )
+    r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "Electronic"})
+    assert r.status_code == 200
+    assert r.json()["seed_resolution"] == "genre"
+    assert r.json()["pile_total"] == 4_960_093

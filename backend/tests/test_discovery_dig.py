@@ -748,3 +748,43 @@ def test_score_ignores_demand_which_the_window_already_encodes():
     grail = _lead_from_release(_release("Wanted - Grail", rid=2, have=1, want=80), "x")
     # want 0 vs 80: prima decideva l'ordine, ora i due pareggiano (gusto identico)
     assert _score(untraded, profile, w) == _score(grail, profile, w) == pytest.approx(0.5 / 3)
+
+
+# --- seed_resolution + pile_total: il fallback sullo scaffale smette di essere muto ---
+
+
+def test_dig_reports_style_resolution():
+    res = dig(None, seed_type="genre", value="Acid House",
+              search_releases=lambda **kw: [], count_releases=lambda **kw: 43345,
+              library=[], depth=0.0)
+    assert res.seed_resolution == "style"
+    assert res.pile_total == 43345
+
+
+def test_dig_reports_genre_fallback_resolution():
+    # 'Electronic' non e' uno style: la sonda su style= torna 0 e si ripiega su
+    # genre= — lo scaffale (~15 categorie enormi). Il contratto lo dice, cosi' la UI
+    # puo' avvertire che si vede solo la cima di 4,9M release.
+    def count(**kw):
+        return 0 if "style" in kw else 4_960_093
+
+    res = dig(None, seed_type="genre", value="Electronic",
+              search_releases=lambda **kw: [], count_releases=count,
+              library=[], depth=0.0)
+    assert res.seed_resolution == "genre"
+    assert res.pile_total == 4_960_093    # il conteggio del filtro che ha VINTO
+
+
+def test_dig_reports_label_resolution():
+    res = dig(None, seed_type="label", value="Trax Records",
+              search_releases=lambda **kw: [], count_releases=lambda **kw: 10096,
+              library=[], depth=0.0)
+    assert res.seed_resolution == "label"
+
+
+def test_dead_seed_has_no_resolution():
+    res = dig(None, seed_type="genre", value="Inesistente",
+              search_releases=lambda **kw: [], count_releases=lambda **kw: 0,
+              library=[], depth=0.0)
+    assert res.seed_resolution is None
+    assert res.pile_pages == 0

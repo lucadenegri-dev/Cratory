@@ -178,6 +178,12 @@ class DigResult:
     value: str
     leads: list[DiscoveryLead] = field(default_factory=list)
     pile_pages: int = 0
+    # Com'e' stato risolto il seme: "style" | "genre" | "label" | None (pila vuota).
+    # "genre" = il fallback sullo scaffale Discogs (~15 categorie enormi): la UI deve
+    # poterlo dire, perche' pile_pages e' cappato a 100 e non distingue 43k da 4,9M.
+    seed_resolution: str | None = None
+    # Conteggio grezzo della sonda (pagination.items) del filtro che ha vinto.
+    pile_total: int = 0
 
 
 def _parse_year(value: Any) -> int | None:
@@ -496,16 +502,20 @@ def dig(
 
     if seed_type == "label":
         filters: dict[str, Any] = {"label": value}
+        resolution = "label"
     elif seed_type == "genre":
         # Discogs distingue `style` (fine: 'Deep House') da `genre` (grosso:
         # 'Electronic'): si prova il piu' specifico e si ripiega.
         filters = {"style": value}
+        resolution = "style"
     else:
         return DigResult(seed_type=seed_type, value=value, pile_pages=0)
 
     total = count_releases(**filters)
     if total == 0 and seed_type == "genre":
+        # Fallback sullo scaffale: 'Electronic' non e' uno style ma un genre.
         filters = {"genre": value}
+        resolution = "genre"
         total = count_releases(**filters)
 
     usable = min(math.ceil(total / SEARCH_PER_PAGE), DISCOGS_MAX_PAGES) if total > 0 else 0
@@ -536,4 +546,5 @@ def dig(
 
     logger.info("Discovery dig %s=%r: %s lead (depth=%.2f, pagine %s di %s)",
                 seed_type, value, len(selected), depth, pages, usable)
-    return DigResult(seed_type=seed_type, value=value, leads=selected, pile_pages=usable)
+    return DigResult(seed_type=seed_type, value=value, leads=selected, pile_pages=usable,
+                     seed_resolution=resolution, pile_total=total)

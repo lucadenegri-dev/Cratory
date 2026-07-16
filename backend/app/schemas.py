@@ -539,6 +539,12 @@ class DiscoveryDigResponse(BaseModel):
     # Quante pagine utili ha la pila del seme. Se <= 3 la finestra e' l'intera pila e
     # `depth` non ha effetto: la UI deve poterlo dire invece di offrire un controllo inerte.
     pile_pages: int = 0
+    # Com'e' stato risolto il seme ("style" | "genre" | "label" | null). "genre" =
+    # scaffale Discogs (~15 categorie enormi): la UI avverte che si vede solo la cima.
+    seed_resolution: str | None = None
+    # Conteggio grezzo della sonda: serve al messaggio ("4.960.093 dischi") — pile_pages
+    # e' cappato a 100 e non distingue 43k da 4,9M.
+    pile_total: int = 0
 
 
 class DiscoveryGenresOut(BaseModel):
