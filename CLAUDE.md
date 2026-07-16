@@ -14,7 +14,10 @@ The project does not play audio. The Shazam module downloads audio only temporar
 fingerprinting and saves a separate corpus of identified tracklists. An explicit exception
 to "does not keep audio files" (the "does not play" still holds): persistent acquisition via
 Soulseek/slskd, which links a file to the existing `Track` in the library
-(`has_local_file`/`local_path`/`local_format`/`local_bitrate`).
+(`has_local_file`/`local_path`/`local_format`/`local_bitrate`). Eccezione ulteriore, a scope
+ristretto: il dig di Discovery riproduce una **preview effimera di terzi** (clip iTunes
+30s o, in fallback, il video YouTube associato alla release da Discogs) per valutare un
+lead prima di acquisirlo; nulla viene scaricato o conservato.
 
 ## Source of truth
 

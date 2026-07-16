@@ -32,6 +32,10 @@ discovery and a corpus of identified mixes.
   (`has_local_file`/`local_path`/`local_format`/`local_bitrate`). This stays distinct from the
   Shazam module, which downloads audio only temporarily for fingerprinting and
   does not keep it.
+- An additional, narrowly-scoped exception: the Discovery dig plays an **ephemeral
+  third-party preview** to evaluate a lead before acquiring it — a 30s iTunes clip or,
+  as a fallback, the YouTube video Discogs associates with the release. Nothing is
+  downloaded or kept; the audio is streamed from iTunes/YouTube and discarded.
 
 ## Main flow
 

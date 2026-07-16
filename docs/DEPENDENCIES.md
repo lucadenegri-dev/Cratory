@@ -73,12 +73,18 @@ Not Python/Node packages, but required for the corresponding feature to work:
 | Spotify Web API | Track identity, editorial metadata, covers, ISRC, playlist import/export | Required for Spotify import |
 | Last.fm API | Discovery (playlist expand, similarity) | Optional (Discovery) |
 | Discogs API | Discovery "Scava" (crate-dig by genre/label) | Optional (token only raises rate limit) |
+| iTunes Search API | Discovery preview (30s audio clip for dig leads) | Optional (Discovery), public — no auth/token |
 | slskd daemon | File acquisition via Soulseek | Optional, runs separately |
 | Rekordbox | BPM/Camelot key via `collection.xml` export | Required for BPM/key (no package dep — just a file upload) |
 | Sortory (sibling app) | Text metadata enrichment + on-disk tagging | Optional, separate app |
 
 None of Last.fm/Discogs/Spotify feed BPM/key/genre — those providers serve **Discovery
 only**. BPM/key come from Rekordbox; text metadata/tagging come from Sortory.
+
+The Discovery preview's fallback embeds the YouTube video Discogs already associates
+with a release (`GET https://itunes.apple.com/search` is tried first, no key required).
+That embed can surface ads and sits in a ToS grey area for this kind of use; accepted
+here given Cratory's personal, self-hosted, single-user scope (no redistribution).
 
 ## History
 

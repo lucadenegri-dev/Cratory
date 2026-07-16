@@ -340,6 +340,7 @@ POST /api/discovery/expand
 GET  /api/discovery/genres
 POST /api/discovery/dig
 GET  /api/discovery/release/{discogs_id}
+GET  /api/discovery/preview
 POST /api/discovery/add
 POST /api/discovery/save-for-later
 ```
@@ -369,7 +370,17 @@ explain why (e.g. `rare_wanted`, `deep_cut`, `label_followed`, `artist_collected
 
 `release/{discogs_id}` expands a Discogs release from the dig into its **real
 tracklist** (fetched lazily when the release is opened): each row is a candidate track
-with its position, title and duration; Discogs errors surface as an explicit `502`.
+with its position, title and duration; Discogs errors surface as an explicit `502`. The
+response now also carries `videos: [{ youtube_video_id, title, duration_seconds }]`, the
+YouTube videos Discogs already associates with the release.
+
+`preview` resolves an **ephemeral audio preview** for a lead, so it can be evaluated
+before acquiring it: query params `artist`, `title`, optional `discogs_id` and `level`
+(`release`|`track`, default `track`). It responds `DiscoveryPreviewOut { kind:
+"itunes"|"youtube"|"none", audio_url, youtube_video_id, source_url, matched_title }`.
+iTunes Search is the primary source (30s clip); if there is no match, it falls back to
+the YouTube video Discogs associates with the release. Provider errors resolve to
+`kind: "none"` with `HTTP 200`, never an error status. Nothing is persisted.
 
 `add` imports a candidate into the app's library idempotently. It does not write to
 Spotify. The AI, if configured and requested, adds explanations but does not choose
