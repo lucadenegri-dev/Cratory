@@ -74,11 +74,11 @@ export function SourceMenu({
               <li key={r.id} className="border-t border-surface-2">
                 <div
                   className={cn(
-                    "flex items-center gap-2 px-3 py-2 text-xs",
+                    "flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-elevated",
                     selectedId === r.id && "bg-surface-2",
                   )}
                 >
-                  <button onClick={() => select(r.id)} className="min-w-0 flex-1 text-left">
+                  <button onClick={() => select(r.id)} className="min-w-0 flex-1 cursor-pointer text-left">
                     <span className="block truncate text-fg-strong">{r.label || r.path}</span>
                     <span className="block text-[10px] text-faint">
                       {r.file_count} · {fmtDate(r.last_scanned_at)}
