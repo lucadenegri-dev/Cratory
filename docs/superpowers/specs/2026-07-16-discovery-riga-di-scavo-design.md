@@ -1,23 +1,21 @@
 # Discovery — la riga di scavo
 
 Data: 2026-07-16
-Stato: **da rivedere** — superata in parte da `2026-07-16-discovery-dig-motore-design.md`,
-che va implementata prima.
+Stato: design approvato (rev. 2), pronto per il piano di implementazione.
+Da implementare **insieme** a `2026-07-16-discovery-dig-motore-design.md`, che è il
+presupposto: questa spec espone i controlli di quel motore.
 
-> L'analisi funzionale del motore (spec "il motore: pescare dove c'è pesce") ha mostrato
-> che «Profondità» **non** è una label bugiarda da rinominare: lo diventa onesta, perché
-> il motore cambia. Decadono da questa spec: le rinomine "Ordina per" / "Il mio gusto ·
-> Bilanciato · Rarità"; il popover con "Gusto misurato su" annidato (col gusto sempre
-> attivo torna un pari grado sulla riga); il fix della soglia `deep_cut`, che migra nella
-> spec del motore. **Regge invariato** tutto il resto: il combobox unificato
-> genere+etichetta, il blocco a due righe, le primitive `Popover`/`Combobox`/
-> `SegmentedControl`/`Chip`.
+> **Rev. 2** — riconciliata con la spec del motore. L'analisi funzionale ha mostrato che
+> «Profondità» non è una label bugiarda da rinominare: diventa onesta, perché cambia il
+> motore. Rispetto alla rev. 1 decadono le rinomine "Ordina per" / "Il mio gusto ·
+> Bilanciato · Rarità" e il popover con "Gusto misurato su" annidato; il fix della soglia
+> `deep_cut` migra nella spec del motore. Regge invariato il resto.
 
 ## Obiettivo
 
 Ridisegnare i controlli del dig in Discovery (`frontend/app/discovery/page.tsx`), oggi
-percepiti come antiestetici e confusionari. L'intervento è prevalentemente frontend, con
-una singola correzione deterministica al backend (soglia del reason `deep_cut`).
+percepiti come antiestetici e confusionari. L'intervento è **interamente frontend**: le
+correzioni al backend stanno nella spec del motore, che va implementata insieme a questa.
 
 ## Motivazione
 
@@ -56,6 +54,12 @@ nulla. La UI attuale li presenta come due righe fratelli. Sono padre e figlio.
 
 Nessun riallineamento tipografico avrebbe risolto questo.
 
+**La spec del motore risolve la causa, non il sintomo.** `depth` sceglie il bacino (dove
+pescare nella pila ordinata per domanda) e il gusto ordina **sempre**. Quindi:
+«Profondità» torna a descrivere letteralmente il meccanismo, e «Gusto misurato su» conta
+sempre — torna a essere davvero un pari grado. Questa spec espone quel modello; non deve
+più compensare in UI una confusione che sta nel motore.
+
 ### 3. Asimmetria genere/etichetta
 
 Il genere ha un campo di testo libero **più** le chip, che fanno la stessa cosa.
@@ -76,8 +80,10 @@ copia-incollati: due pannelli che galleggiano uno sull'altro.
 - **L'URL resta la source of truth** per lo stato del dig (comportamento attuale,
   `page.tsx:111-137`). Il deep link `?seed=label&value=<label>` dalla pagina Etichette
   (`app/labels/[label]/page.tsx:77-82`) deve continuare a funzionare invariato.
-- Nessun cambiamento al contratto API `POST /api/discovery/dig`: `seed_type`, `value`,
-  `adventurousness`, `taste_playlist_id`, `limit` restano quelli.
+- Il contratto API `POST /api/discovery/dig` cambia — ma il cambiamento è **definito
+  dalla spec del motore**, non da questa: `adventurousness` → `depth` (semantica nuova),
+  più `pile_pages` in risposta. Questa spec consuma quel contratto, non lo negozia.
+  `seed_type`, `value`, `taste_playlist_id`, `limit` restano quelli.
 - Nessuna nuova chiamata di rete: i suggerimenti del campo soggetto usano gli endpoint
   già chiamati oggi (`GET /api/discovery/genres`, `GET /api/labels`).
 - Next.js 16: leggere `frontend/CLAUDE.md` e `node_modules/next/dist/docs/` prima di
@@ -91,8 +97,8 @@ Un unico blocco con filetto, diviso da un filetto orizzontale. Sopra la domanda,
 la risposta.
 
 ```
- SCAVA  [ ⌗ Trax Records              ]  ORDINA PER  [ BILANCIATO ▾ ]      (SCAVA)
- ─────────────────────────────────────────────────────────────────────────────────
+ SCAVA [ ⌗ Trax Records      ]  PROFONDITÀ ▪superficie ▹metà ▹fondo  GUSTO [ Tutta la libreria ▾ ]  (SCAVA)
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────
  42 LEAD    FORMATO  ▪tutti ▹LP ▹EP ▹12"    ORDINE  ▪rilevanza ▹recenti
 ```
 
@@ -139,58 +145,74 @@ Se `GET /api/labels` torna vuoto (nessuna etichetta in libreria), il combobox mo
 generi — nessun empty state dedicato, nessun ramo condizionale in più. Sostituisce
 `t.discovery.noLabels`, che diventa inutile.
 
-### Il criterio: il figlio annidato sotto il padre
+### I modificatori: due pari grado, entrambi visibili
 
-Un `Popover` in cui il sotto-parametro sta **dentro** il suo genitore. Questa è la
-correzione strutturale del problema 2:
+Nella rev. 1 il criterio era un `Popover` che si portava dentro il gusto come figlio.
+Col motore nuovo quella gerarchia non esiste più: sono due assi indipendenti, e stanno
+entrambi sulla riga, scoperti.
 
-```
-┌────────────────────────────────────────┐
-│ ORDINA PER                             │
-│  ▸ Il mio gusto                        │
-│    artisti ed etichette che già hai    │
-│  ▪ Bilanciato                          │
-│  ▹ Rarità                              │
-│    pochi lo hanno, in molti lo cercano │
-│ ───────────────────────────────────────│
-│ GUSTO MISURATO SU                      │
-│  [ Tutta la libreria               ▾ ] │
-│  Conta poco se ordini per rarità.      │
-└────────────────────────────────────────┘
-```
+**Profondità** — un `SegmentedControl` a tre voci. È il controllo creativo del dig e
+merita di essere visibile, non sepolto in un cassetto:
 
-I valori di `adventurousness` restano quelli di oggi (0.15 / 0.45 / 0.85): cambia il
-nome, non il motore.
+| voce | `depth` | cosa fa |
+|---|---|---|
+| Superficie | 0.0 | i classici del seme (che non hai) |
+| A metà | 0.5 | `want` ~190: oscuri, ancora cercati |
+| In fondo | 1.0 | `want` ~89: il fondo della cassa |
 
-La sezione "Gusto misurato su" è visibile solo se esiste almeno una playlist importata
-(condizione attuale, `page.tsx:283`). Non viene nascosta in base al criterio scelto: a
-"Rarità" pesa poco ma non zero (15%), e nasconderla la renderebbe saltellante.
+Il registro è quello del crate digging, che è ciò che `DESIGN.md` chiede a Discovery
+("Experimental energy. Discovery should feel like digging through crates of records").
+Sotto il controllo, una riga `text-xs text-muted` descrive la voce attiva — come oggi
+(`page.tsx:279`), ma ora dicendo il vero.
+
+Microcopy della voce attiva:
+
+- Superficie → "I dischi più cercati del seme, meno quelli che hai già."
+- A metà → "Più a fondo: meno noti, ancora molto cercati."
+- In fondo → "Il fondo della cassa: oscuri, ma qualcuno li cerca ancora."
+
+**Gusto** — un `Select`, invariato nella sostanza rispetto a oggi: "Tutta la libreria"
+(default, `null`) o una playlist importata. Visibile solo se esiste almeno una playlist
+(condizione attuale, `page.tsx:283`). Non è più un sotto-parametro: col gusto sempre
+attivo conta sempre, a qualunque profondità.
+
+Hint: "Rispetto a cosa misurare l'affinità. Non filtra: i dischi che hai già restano
+esclusi comunque."
+
+**Profondità inefficace sui semi piccoli.** Se la pila del seme è più corta della
+finestra (`usable <= PAGES_PER_DIG`, cfr. spec motore), `depth` non ha effetto: non c'è
+profondità da scegliere. Il backend lo sa e la UI no — e non deve saperlo prima del dig.
+Va detto **dopo**, nella riga della risposta: se `DigResult` indica una pila corta, la
+riga mostra "pila corta: tutta qui" accanto al conteggio, e il `SegmentedControl` della
+profondità va in `disabled` fino al prossimo cambio di seme. Questo richiede un campo in
+più nel DTO — **`pile_pages: int`** in `DiscoveryDigResponse` — che va aggiunto alla spec
+del motore in fase di piano.
 
 ### Rinomine (i18n, `it.ts` + `en.ts`)
 
 | Oggi | Nuovo | Perché |
 |---|---|---|
-| `depthLabel` "Profondità" | "Ordina per" | non cambia la profondità della ricerca, cambia l'ordine |
-| preset "Familiare" | "Il mio gusto" | nomina il polo dell'ordinamento, non il carattere dell'utente |
-| preset "Bilanciato" | "Bilanciato" | invariato |
-| preset "Avventuroso" | "Rarità" | idem |
-| `affinityLabel` "Gusto di riferimento" | "Gusto misurato su" | dice che è un riferimento di misura, non una preferenza |
+| `depthLabel` "Profondità" | **invariato** | col motore nuovo descrive il meccanismo alla lettera |
+| preset "Familiare" | "Superficie" | nomina il punto della pila, non il carattere dell'utente |
+| preset "Bilanciato" | "A metà" | idem |
+| preset "Avventuroso" | "In fondo" | idem |
+| `affinityLabel` "Gusto di riferimento" | "Gusto" | è un pari grado, non un riferimento subordinato |
 | `startFromLabel` "Scava per" | "Scava" | il seed non si sceglie più |
 | `seedGenre` / `seedLabel` | rimossi | il toggle non esiste più |
 | `noLabels` | rimosso | nessun empty state dedicato |
 | `showMore` / `showLess` | rimossi | sostituiti dallo scroll del combobox |
 
-Nuove stringhe: tag "genere" / "etichetta" nel combobox, descrizioni dei tre poli, hint
-"Non cambia cosa cerchiamo su Discogs — cambia l'ordine dei risultati.", "Conta poco se
-ordini per rarità.", conteggio "{n} LEAD".
+Nuove stringhe: tag "genere" / "etichetta" nel combobox, le tre descrizioni di profondità,
+l'hint del gusto, "pila corta: tutta qui", conteggio "{n} LEAD".
 
 Il microcopy deve restare onesto su tre punti verificati nel motore:
 
-1. `adventurousness` non allarga la ricerca né sblocca dischi nuovi — riordina soltanto.
+1. `depth` sceglie **dove** si pesca nella pila ordinata per domanda, non quanto si cerca:
+   il numero di release scaricate è sempre lo stesso.
 2. `taste_playlist_id` non filtra mai nulla; i dischi già posseduti restano esclusi
    comunque, e l'esclusione usa sempre tutta la libreria, mai la playlist
    (`discovery_dig.py:311,328`).
-3. I `reasons` sono badge a soglia calcolati post-hoc, non i fattori dello score
+3. I `reasons` sono badge a soglia calcolati post-hoc, non i fattori del punteggio
    (`discovery_dig.py:259-275`). Il microcopy non deve dire che "spiegano" la posizione.
 
 ## Componenti
@@ -207,6 +229,9 @@ oltre il contrasto, `DESIGN.md` §Accessibility).
 
 - Interfaccia: `{ trigger, children, open?, onOpenChange?, align? }`.
 - Dipendenze: nessuna nuova — solo React + `cn`.
+- Nella rev. 2 serve **solo** come base del `Combobox` (il popover del criterio è
+  decaduto). Resta comunque una primitiva a sé: il `Combobox` ne ha bisogno e il DS non
+  ne ha una.
 
 **`Combobox`** — `Input` + `Popover` di opzioni raggruppate, navigazione da tastiera
 (`↑`/`↓`/`Enter`/`Escape`), `aria-expanded`/`aria-activedescendant`, filtro per
@@ -234,9 +259,14 @@ regola esplicita del design system.
 La riga di scavo, estratta da `page.tsx`. Riceve lo stato e lo notifica in su; non
 conosce l'URL né chiama l'API.
 
-- Props: `{ subject, onSubjectChange, criterion, onCriterionChange, tasteRef, onTasteRefChange, options: {genres, labels, playlists}, busy, ready, onSubmit }`.
+- Props: `{ subject, onSubjectChange, depth, onDepthChange, tasteRef, onTasteRefChange, options: {genres, labels, playlists}, pilePages, busy, ready, onSubmit }`.
 - Resta un `<form>`: Invio nel campo lancia il dig (comportamento attuale, `page.tsx:165`).
 - Il bottone "Scava" resta `disabled={busy || !ready}`.
+- `pilePages` (dall'ultimo `DigResult`, `null` prima del primo dig) disabilita il controllo
+  di profondità quando la pila è più corta della finestra.
+- Su schermi stretti la riga va a capo (`flex-wrap`): tre zone più il bottone non stanno
+  su una riga sotto il breakpoint `sm`. Il bottone resta full-width su mobile, come oggi
+  (`page.tsx:307`).
 
 ### `frontend/components/discovery-lead-grid.tsx` (modificato)
 
@@ -256,33 +286,30 @@ inline che diventano `DiscoveryDigBar`.
 ottenuti, non parametri del dig. Metterli nell'URL rilancerebbe il `useEffect` su
 `paramsKey` e rifarebbe la chiamata a Discogs.
 
-### `backend/app/services/discovery_dig.py` (modificato)
+### Backend
 
-Unica correzione al motore. Oggi (`:70-74`, `:262-274`) il reason `deep_cut` scatta su
-`have <= 50` **senza alcun segnale di domanda**: un disco che nessuno possiede *e*
-nessuno cerca prende lo stesso badge di una vera rarità. Il badge dice "pochi lo hanno",
-la UI lo fa leggere come "è una gemma".
+Nessuna modifica da questa spec. Il fix della soglia `deep_cut`, che nella rev. 1 stava
+qui, è migrato nella spec del motore insieme al resto delle correzioni ai reason.
 
-Fix: `deep_cut` richiede anche `want >= 5`. Sotto quella soglia non c'è segnale di
-domanda misurabile. Il caso forte resta coperto da `rare_wanted` (`want >= 10` e
-`want/(have+want) >= 0.5`), che è indipendente.
-
-- Nuova costante `REASON_DEEP_CUT_MIN_WANT = 5`, accanto a `REASON_DEEP_CUT_MAX_HAVE`
-  (già esistente, `:70-74`), nel blocco "Soglie per i reason code".
-- **Nessun effetto sullo score**: i reason sono calcolati a parte, il ranking non cambia.
+L'unico contratto che questa spec **richiede** al motore è `pile_pages` in
+`DiscoveryDigResponse` (vedi "Profondità inefficace sui semi piccoli"), già recepito
+dalla spec del motore.
 
 ## Flusso dati
 
 ```
-URL (?seed=&value=&adv=&taste=)   ← source of truth, invariata
-        │
+URL (?seed=&value=&depth=&taste=)   ← source of truth
+        │                  ▲
+        │                  └─ `adv` rinominato `depth` (cfr. spec motore)
         ▼
-   page.tsx  ──stato──▶  DiscoveryDigBar   (soggetto, criterio, gusto)
+   page.tsx  ──stato──▶  DiscoveryDigBar   (soggetto, profondità, gusto)
         │                      │
         │                      └─ onSubmit ─▶ runDig() ─▶ router.push
         │
-        ├─ useEffect(paramsKey) ─▶ POST /api/discovery/dig ─▶ dig
-        │
+        ├─ useEffect(paramsKey) ─▶ POST /api/discovery/dig ─▶ dig {leads, pile_pages}
+        │                                                          │
+        │                              pile_pages ────────────────▶┘ (torna in barra:
+        │                                                             profondità inerte?)
         ├─ stato locale (format, sort) ─┐
         ▼                               ▼
    DiscoveryLeadGrid ◀──── dig + format + sort
@@ -290,6 +317,13 @@ URL (?seed=&value=&adv=&taste=)   ← source of truth, invariata
 
 Derivazione del `seed_type`, invariata a valle: voce scelta dal gruppo "etichetta" →
 `"label"`; qualunque altro caso (genere scelto o testo libero) → `"genre"`.
+
+Il parametro d'URL `adv` diventa **`depth`**: è un cambio di semantica, non solo di nome
+(cfr. spec motore). I vecchi deep link con `?adv=` non vanno tradotti — `adv=0.85`
+significava "ordina per rarità", `depth=0.85` significa "pesca in fondo alla pila": non
+sono la stessa cosa e fingere che lo siano sarebbe peggio che ignorare il parametro. Un
+`adv` non riconosciuto viene semplicemente ignorato e `depth` cade sul default 0.0. È uno
+strumento personale: non ci sono link salvati da preservare se non i propri.
 
 ## Gestione errori
 
@@ -316,25 +350,23 @@ Esistono già `npm run test:unit` e `npm run test:e2e` nel frontend.
 
 - voce del gruppo "etichetta" → `seed_type: "label"`; genere o testo libero → `"genre"`.
 
+- profondità inerte: con `pile_pages <= 3` il `SegmentedControl` è `disabled` e la riga
+  della risposta mostra "pila corta: tutta qui".
+
 **E2E** — `frontend/e2e/smoke.spec.ts:23` copre già `/discovery`: va aggiornato ai nuovi
 selettori. Aggiungere: il deep link `?seed=label&value=<label>` precompila il combobox
 con l'etichetta giusta.
 
-**Backend (nuovo)** — `deep_cut`:
-
-- `have=10, want=0` → nessun `deep_cut` (regressione che stiamo correggendo).
-- `have=10, want=5` → `deep_cut`.
-- `have=200, want=50` → nessun `deep_cut`.
-- lo score è identico prima e dopo il fix a parità di input.
+I test del backend (soglie dei reason incluso `deep_cut`, `_window`, normalizzazione,
+possesso, punteggio) stanno nella spec del motore.
 
 ## Fuori scope
 
 - Unificazione expand/dig (già nel backlog tecnico, cfr. spec 2026-06-28).
 - Esporre `limit` in UI: il client lo supporta (`lib/api/discovery.ts:34,40`) ma la
-  pagina non lo passa mai. Con `_MAX_PER_ARTIST = 2` e un budget di 300 release grezze a
-  monte, il default 80 non viene quasi mai raggiunto — un controllo che non cambierebbe
-  nulla nel 90% dei dig.
-- Il disallineamento del default `adventurousness` (frontend 0.45, backend 0.4,
-  `schemas.py:530`): irrilevante finché la UI invia sempre il valore.
+  pagina non lo passa mai. Con `_MAX_PER_ARTIST = 2` e un budget di 300 release a monte,
+  il default 80 non viene quasi mai raggiunto — un controllo che non cambierebbe nulla
+  nel 90% dei dig.
+- Tradurre i vecchi deep link `?adv=` in `?depth=`: semantiche diverse (vedi Flusso dati).
 - Migrazione degli altri consumatori di `SegmentedControl`/`Chip` fuori da Discovery: le
   primitive vengono create qui, l'adozione altrove è un refactoring separato.

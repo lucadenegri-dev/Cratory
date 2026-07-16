@@ -348,6 +348,13 @@ punteggio: il microcopy non deve dire che spiegano la posizione.
 - Tutto il resto invariato: `seed_type`, `value`, `taste_playlist_id`, `limit`.
 - `DiscoveryLeadOut` invariato (`styles` resta interno; il DTO espone `style` singolo).
 
+`DiscoveryDigResponse` guadagna **`pile_pages: int`** — quante pagine utili ha la pila del
+seme (`usable` in `_window`). Serve alla UI: se `pile_pages <= PAGES_PER_DIG` la finestra
+è l'intera pila e `depth` **non ha effetto**, e l'utente deve poterlo sapere invece di
+armeggiare con un controllo inerte. È l'unico modo che ha il frontend per accorgersene, e
+solo **dopo** il dig: la lunghezza della pila si conosce dalla sonda, non prima. `DigResult`
+lo trasporta dal servizio al router.
+
 Il frontend passa oggi sempre il valore (`page.tsx:116`): il disallineamento del default
 frontend/backend segnalato nella spec UI si estingue da sé.
 
