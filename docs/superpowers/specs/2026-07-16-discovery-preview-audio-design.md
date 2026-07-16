@@ -40,7 +40,13 @@ lascerebbe muta la maggioranza delle tracce; l'unione recupera i tre quarti.
 
 - **iTunes è primario, YouTube è fallback.** Per una traccia si tenta prima iTunes
   (pulito); solo se manca si cerca un video YouTube nella release.
-- **Player differenziato per sorgente** (risolve il problema pubblicità):
+- **Player unico ancorato in basso a destra.** Non ci sono mini-player inline nelle
+  card/righe: c'è **un solo player floating**, `position: fixed` in basso a destra
+  della pagina Scava (come il player video di discogs.com). I pulsanti play su card e
+  tracklist si limitano a impostare l'item attivo; il player docked lo riproduce.
+  Mostra titolo/artista dell'item corrente ed è chiudibile.
+- **Player differenziato per sorgente** (risolve il problema pubblicità), sempre
+  dentro il riquadro docked in basso a destra:
   - iTunes → **barra audio nostra** (`<audio>` nativo, play/pausa + progress 30s).
   - YouTube → **mini-player video visibile** (iframe compatto ~16:9, appare solo al
     play) così l'eventuale annuncio è **saltabile**. Niente player audio-only
@@ -135,17 +141,22 @@ DiscoveryPreviewOut {
 
 ## Frontend
 
-- **`components/preview-player.tsx`** — componente/hook condiviso a livello pagina
-  Scava, gestisce l'**unico player attivo**. Due rese secondo `kind`:
+- **`components/preview-player.tsx`** — **player docked** unico, `position: fixed` in
+  basso a destra della pagina Scava. Stato dell'item attivo tenuto in un context/store
+  a livello pagina; impostare un nuovo item ferma e sostituisce il precedente
+  (garantisce "uno alla volta"). Header con titolo/artista dell'item e pulsante
+  chiudi. Due rese secondo `kind`:
   - `itunes`: `<audio>` nativo + barra compatta (play/pausa, progress 30s), stile
     design system.
   - `youtube`: iframe YouTube compatto ~16:9 che appare solo al play (annuncio
     saltabile). Un solo iframe montato alla volta.
-  - Stato per-item: `idle | loading | playing | unavailable`.
+  - Stato: `idle | loading | playing | unavailable`. In `idle` il riquadro è nascosto.
 - **`components/discovery-lead-grid.tsx`** (`LeadCell`): pulsante play in overlay sulla
-  thumb → `discoveryPreview(artist, titolo release, discogs_id)`.
+  thumb → imposta l'item attivo (`artist`, titolo release, `discogs_id`, `level=release`),
+  che il player docked risolve via `discoveryPreview(...)`.
 - **`components/discovery-tracklist-panel.tsx`** (`TrackRow`): pulsante play accanto a
-  "per dopo"/"scarica" → `discoveryPreview(artist, titolo traccia, discogs_id)`.
+  "per dopo"/"scarica" → imposta l'item attivo (`artist`, titolo traccia, `discogs_id`,
+  `level=track`).
 - **Client API**: nuova `discoveryPreview(...)` accanto a `discoveryDig`.
 - Stati UI: spinner in `loading`; play/pausa in `playing`; icona disabilitata +
   tooltip "nessuna anteprima" in `unavailable` (`kind:"none"`). i18n IT/EN per le
