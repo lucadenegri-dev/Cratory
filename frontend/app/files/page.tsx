@@ -97,6 +97,9 @@ export default function FilesPage() {
     setDeletingId(id);
     try {
       await deleteSource(id);
+      // se la sorgente eliminata era quella filtrata, azzera il filtro:
+      // altrimenti la query resterebbe legata a un root_id fantasma
+      if (rootId && Number(rootId) === id) setRootId("");
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t.sources.rootRemoveFailed);
     } finally {
