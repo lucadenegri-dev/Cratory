@@ -5,7 +5,7 @@ import { DiscoveryDigBar } from "@/components/discovery-dig-bar";
 afterEach(cleanup);
 
 const OPTIONS = {
-  genres: ["Acid House"],
+  genres: { library: ["Acid House"], styles: [] },
   labels: ["Trax Records"],
   playlists: [{ id: 1, name: "Warmup" }],
 };
@@ -79,10 +79,45 @@ describe("DiscoveryDigBar", () => {
   it("il gusto sparisce se non ci sono playlist", () => {
     setup({ options: { ...OPTIONS, playlists: [] } });
     expect(screen.queryByText("Gusto")).toBeNull();
+    // l'hint di onesta' e' agganciato allo stesso controllo: sparisce con lui
+    expect(screen.queryByText(/Non filtra/)).toBeNull();
+  });
+
+  it("l'hint del gusto dichiara che non filtra, quando il gusto c'e'", () => {
+    setup();
+    expect(screen.getByText(/Non filtra/)).toBeTruthy();
   });
 
   it("Scava e' disabilitato finche' manca il soggetto", () => {
     setup({ ready: false });
     expect(screen.getByText("Scava").closest("button")?.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("suggerisce anche gli style curati, dopo le etichette", () => {
+    setup({
+      options: {
+        ...OPTIONS,
+        genres: { library: ["Acid House"], styles: ["Deep House", "Jungle"] },
+      },
+    });
+    fireEvent.focus(subjectInput());
+    const opts = screen.getAllByRole("option").map((o) => o.textContent ?? "");
+    // libreria, poi etichette, poi style curati
+    expect(opts[0]).toContain("Acid House");
+    expect(opts[1]).toContain("Trax Records");
+    expect(opts[2]).toContain("Deep House");
+    expect(opts[3]).toContain("Jungle");
+  });
+
+  it("non duplica un genere presente sia in libreria sia negli style curati", () => {
+    setup({
+      options: {
+        ...OPTIONS,
+        genres: { library: ["Acid House"], styles: ["Acid House", "Jungle"] },
+      },
+    });
+    fireEvent.focus(subjectInput());
+    const opts = screen.getAllByRole("option").map((o) => o.textContent ?? "");
+    expect(opts.filter((o) => o.includes("Acid House"))).toHaveLength(1);
   });
 });

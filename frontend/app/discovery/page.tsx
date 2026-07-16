@@ -118,7 +118,12 @@ function DiscoveryInner() {
   };
 
   const digReady = !!subject.trim();
-  const pilePages = dig?.pile_pages ?? null;
+  // Invalida a ogni cambio di seme (soggetto o tipo): senza questo controllo `pilePages`
+  // resta legato all'ULTIMA risposta, non al soggetto corrente digitato — il controllo
+  // di profondita' restava disabilitato (pila corta di prima) finche' non si rilanciava
+  // il dig, contro la spec ("disabled fino al prossimo cambio di seme").
+  const pilePages =
+    dig && dig.seed_type === seedType && dig.value === subject.trim() ? dig.pile_pages : null;
 
   return (
     <PageLayout title="Discovery">
@@ -137,7 +142,7 @@ function DiscoveryInner() {
         tasteRef={tasteRef}
         onTasteRefChange={setTasteRef}
         options={{
-          genres: genres?.library.length ? genres.library : genres?.styles ?? [],
+          genres: genres ?? { library: [], styles: [] },
           labels: labels?.map((l) => l.label) ?? [],
           playlists: playlists?.map((p) => ({ id: p.id, name: p.name })) ?? [],
         }}
@@ -180,9 +185,7 @@ function DiscoveryInner() {
         <DiscoveryLeadGrid
           dig={dig}
           format={format}
-          onFormatChange={setFormat}
           sort={sort}
-          onSortChange={setSort}
         />
       )}
       {!busy && !dig && (

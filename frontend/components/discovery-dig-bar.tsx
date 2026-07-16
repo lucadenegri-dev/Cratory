@@ -26,7 +26,11 @@ export function DiscoveryDigBar({
   onDepthChange: (v: number) => void;
   tasteRef: number | null;
   onTasteRefChange: (v: number | null) => void;
-  options: { genres: string[]; labels: string[]; playlists: { id: number; name: string }[] };
+  options: {
+    genres: { library: string[]; styles: string[] };
+    labels: string[];
+    playlists: { id: number; name: string }[];
+  };
   pilePages: number | null;
   busy: boolean;
   ready: boolean;
@@ -34,15 +38,30 @@ export function DiscoveryDigBar({
 }) {
   const t = useT();
 
-  // Generi prima, etichette poi: il Combobox non riordina, riceve gia' l'ordine giusto.
-  const comboOptions: ComboOption[] = useMemo(() => [
-    ...options.genres.map((g) => ({
-      value: g, label: g, group: t.discovery.groupGenre, icon: <Disc3 size={13} />,
-    })),
-    ...options.labels.map((l) => ({
-      value: l, label: l, group: t.discovery.groupLabel, icon: <Tags size={13} />,
-    })),
-  ], [options.genres, options.labels, t]);
+  // Ordine a campo vuoto voluto dalla spec: generi di libreria, poi etichette, poi gli
+  // style curati (il "resto" che la libreria non ha — il mestiere di Discovery). Un
+  // genere puo' comparire sia in `library` sia in `styles`: dedup globale case-insensitive,
+  // la libreria vince (mantiene la grafia che l'utente si e' scelto). Il Combobox non
+  // riordina, riceve gia' l'ordine giusto.
+  const comboOptions: ComboOption[] = useMemo(() => {
+    const seen = new Set<string>();
+    const asGenreOptions = (list: string[]) =>
+      list
+        .filter((g) => {
+          const key = g.trim().toLowerCase();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map((g) => ({ value: g, label: g, group: t.discovery.groupGenre, icon: <Disc3 size={13} /> }));
+    return [
+      ...asGenreOptions(options.genres.library),
+      ...options.labels.map((l) => ({
+        value: l, label: l, group: t.discovery.groupLabel, icon: <Tags size={13} />,
+      })),
+      ...asGenreOptions(options.genres.styles),
+    ];
+  }, [options.genres, options.labels, t]);
 
   const depthOptions = DEPTHS.map((d) => ({
     value: String(d.value),
@@ -112,6 +131,13 @@ export function DiscoveryDigBar({
       <p className="mt-2 text-xs text-muted">
         {shortPile ? t.discovery.shortPile : depthDesc}
       </p>
+      {options.playlists.length > 0 && (
+        // Onestà del microcopy (spec): il gusto non filtra, sceglie solo il riferimento
+        // per l'affinità — i dischi gia' posseduti restano esclusi comunque. Sotto il
+        // controllo, come il microcopy della profondità: non c'e' spazio in riga per
+        // una frase intera senza rompere la riga singola su desktop.
+        <p className="mt-1 text-xs text-muted">{t.discovery.affinityHint}</p>
+      )}
     </form>
   );
 }

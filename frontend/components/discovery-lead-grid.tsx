@@ -33,9 +33,7 @@ type SortMode = "score" | "recent";
 export function DiscoveryLeadGrid({ dig, format, sort }: {
   dig: DiscoveryDigResponse;
   format: string | null;
-  onFormatChange: (f: string | null) => void;
   sort: SortMode;
-  onSortChange: (s: SortMode) => void;
 }) {
   const t = useT();
   const [openLead, setOpenLead] = useState<DiscoveryLead | null>(null);
