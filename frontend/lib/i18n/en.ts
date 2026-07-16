@@ -52,7 +52,7 @@ export const en = {
     integrity: "Integrity check",
   },
   nav: {
-    tagline: "file → rekordbox",
+    tagline: "Organize your music",
     sources: "Sources",
     files: "Files",
     issues: "Issues",

@@ -48,7 +48,7 @@ export const it: Dictionary = {
     integrity: "Controllo integrità",
   },
   nav: {
-    tagline: "file → rekordbox",
+    tagline: "Organizza la tua musica",
     sources: "Sources",
     files: "Files",
     issues: "Issues",
