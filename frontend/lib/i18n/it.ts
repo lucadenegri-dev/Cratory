@@ -603,6 +603,10 @@ export const it: Dictionary = {
     forLater: "Per dopo",
     queued: "In coda",
     downloadNow: "Scarica ora",
+    playPreview: "Anteprima",
+    previewLoading: "Carico l'anteprima…",
+    noPreview: "Nessuna anteprima",
+    closePreview: "Chiudi anteprima",
   },
   shazam: {
     intro: "Identifica le tracce di un set DJ da un URL (SoundCloud, Mixcloud, YouTube).",

@@ -601,6 +601,10 @@ export const en = {
     forLater: "For later",
     queued: "Queued",
     downloadNow: "Download now",
+    playPreview: "Preview",
+    previewLoading: "Loading preview…",
+    noPreview: "No preview",
+    closePreview: "Close preview",
   },
   shazam: {
     intro: "Identify a DJ set's tracks from a URL (SoundCloud, Mixcloud, YouTube).",
