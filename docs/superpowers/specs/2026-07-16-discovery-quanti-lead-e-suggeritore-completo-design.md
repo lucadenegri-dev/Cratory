@@ -1,4 +1,4 @@
-# Discovery — quanti lead vedere, suggeritore completo, gusto senza manopola
+# Discovery — quanti lead vedere, suggeritore completo, gusto senza manopola, scaffale dichiarato
 
 Data: 2026-07-16
 Stato: design approvato, pronto per il piano di implementazione.
@@ -7,13 +7,18 @@ già implementate sul branch `feat/discovery-dig-riprogettato`.
 
 ## Obiettivo
 
-Tre correzioni emerse **usando** il dig ridisegnato, tutte misurate:
+Quattro correzioni emerse **usando** il dig ridisegnato, tutte misurate:
 
 1. Vedi sempre e solo 80 lead su 240 e non lo sai.
 2. Il suggeritore si ferma a 12 voci su 319.
 3. Il selettore del gusto azzera l'ordinamento in silenzio su 7 playlist su 10.
+4. Un seme che ripiega sullo scaffale Discogs (`genre=`) non lo dice: scavi
+   «Electronic» convinto di scavare il tuo genere, e stai pescando in 4,96 milioni
+   di release di cui la paginazione raggiunge lo 0,2%.
 
-Ognuna **toglie** un parametro o un tetto invece di aggiungere una manopola.
+Le prime tre **tolgono** un parametro o un tetto invece di aggiungere una manopola;
+la quarta aggiunge un messaggio onesto, sullo stesso pattern di «pila corta» e
+«seme sconosciuto».
 
 ## 1. Quanti lead vedere
 
@@ -175,6 +180,51 @@ playlist su 10 e sulle altre mente; se lo si rimette, va rimesso con un avviso q
 profilo è troppo magro per ordinare — cioè come **feature progettata**, non come manopola
 che tace.
 
+## 4. Il seme che ripiega sullo scaffale lo dice
+
+### La diagnosi
+
+Discogs ha due livelli: `genre` (lo scaffale — ~15 valori chiusi: Electronic, Rock,
+Jazz…) e `style` (il cassetto — migliaia: Acid House, Jungle…). Il dig prova
+`style=value` e ripiega su `genre=value` se la sonda torna 0. Il fallback è muto: nessuna
+traccia nel contratto, niente in UI.
+
+Il caso reale: «Electronic» è il secondo tag più frequente della libreria (51 tracce) e
+**non è uno style**. Sceglierlo produce `style=Electronic` → 0 → `genre=Electronic` →
+**4.960.093 release**, di cui la paginazione Discogs raggiunge 10.000: lo 0,2%. Il dig
+"funziona" (pila da 100 pagine, lead ordinati per domanda e gusto), ma non è più «il tuo
+genere»: è tutto lo scaffale elettronico, e nulla lo dice. `pile_pages` non può
+distinguerlo: vale 100 sia per `style=Acid House` (43k release) sia per
+`genre=Electronic` (4,9M).
+
+### Il design
+
+**Il motore espone come ha risolto il seme.** Sa già tutto: il fallback è un ramo
+esplicito in `dig()`, e la sonda restituisce già il conteggio grezzo.
+
+- `DigResult` e `DiscoveryDigResponse` guadagnano due campi:
+  - `seed_resolution: "style" | "genre" | "label" | None` — com'è stato risolto il seme.
+    `None` solo quando la pila è vuota (seme morto, già gestito).
+  - `pile_total: int` — il conteggio grezzo della sonda (`pagination.items`). Serve al
+    messaggio («scaffale da 4,9M»): `pile_pages` è cappato a 100 e non distingue.
+- Nessuna richiesta in più: entrambi i valori esistono già dentro `dig()`.
+
+**La UI lo riferisce solo quando è uno scaffale.** Nella riga della risposta, accanto al
+conteggio, visibile solo con `seed_resolution === "genre"`:
+
+```
+ 80 di 240 · seme ampio: scaffale Discogs da 4.960.093 release — la pila si ferma alle 10.000 più cercate
+```
+
+- i18n: `broadSeed: (total: string) => ...` in `it.ts`/`en.ts`; il numero formattato con
+  `toLocaleString` e `.tnum` (The Tabular Rule).
+- Niente per `style` e `label`: il caso normale non merita rumore.
+- Coesiste con «N di M»; il caso `pile_pages === 0` (seme morto) ha la precedenza ed è
+  già gestito.
+- **Non si blocca niente**: le 10.000 più cercate di uno scaffale ordinate per domanda
+  sono comunque roba vera (Daft Punk, Aphex Twin, Boards of Canada), e il gusto ordina
+  dentro la finestra. Si avverte, non si vieta.
+
 ## Fuori scope
 
 - **L'artista come terzo seme** (`seed_type="artist"`). Verificato che Discogs lo supporta
@@ -189,12 +239,23 @@ che tace.
     costruito.
 - `style_match`/`W_STYLE` costanti sul seme `genre` (follow-up di punta già registrato).
 - `Combobox`: id DOM cablati (`useId()`), già nei follow-up.
+- **Marcare gli scaffali nei suggerimenti** (i ~15 `genre` Discogs sono un vocabolario
+  chiuso: una costante nel backend basterebbe a marcarli «ampio» nel combobox). Proposto
+  e **rimandato dal committente**: per ora basta il messaggio a valle (sezione 4).
+- **Drill-down dallo scaffale ai cassetti**: i risultati portano già i loro `style`; un
+  dig su «Electronic» potrebbe dire quali cassetti dominano i lead (Ambient 61, IDM 38…)
+  e offrirli come re-dig. Trasforma il difetto in una funzione, ma è una feature vera:
+  da progettare a parte.
 
 ## Test
 
 **Backend**
 - `_select(leads)` non tronca: 240 candidati → 240 lead. Il cap per artista resta.
 - `dig()` non accetta più `limit` né `taste_tracks`; il profilo viene da `library`.
+- `seed_resolution`: seme risolto come style → `"style"`; fallback → `"genre"`;
+  etichetta → `"label"`; seme morto → `None` con `pile_pages == 0`.
+- `pile_total` riporta il conteggio grezzo della sonda **del filtro che ha vinto**
+  (per «Electronic»: quello di `genre=`, non lo 0 di `style=`).
 - `DiscoveryDigRequest` rifiuta `limit` e `taste_playlist_id` (campi sconosciuti) — oppure
   li ignora, a seconda della config Pydantic del progetto: **verificare il comportamento
   reale e testare quello**, non quello atteso.
@@ -211,3 +272,5 @@ che tace.
   conta i lead **dopo** il filtro.
 - `DiscoveryDigBar`: il controllo del gusto non esiste più (test di regressione: la
   presenza di playlist non fa comparire nulla).
+- Messaggio «seme ampio»: compare con `seed_resolution === "genre"`, **non** compare con
+  `"style"` né `"label"`; il seme morto (`pile_pages === 0`) ha la precedenza.
