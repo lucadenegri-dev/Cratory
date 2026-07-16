@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
@@ -162,6 +162,14 @@ export function Combobox({ value, onChange, onSelect, options, placeholder, disa
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
+  // Id per-istanza (useId): un primitivo del DS deve reggere piu' istanze sulla
+  // stessa pagina — con id cablati, due Combobox avrebbero id duplicati e
+  // aria-controls/aria-activedescendant che risolvono all'elemento sbagliato.
+  const listId = useId();
+  // 9 (igiene): il timer del blur va spento allo smontaggio — non e' un leak (timer
+  // singolo), ma un setOpen su componente smontato e' comunque lavoro sprecato.
+  const blurTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (blurTimer.current != null) window.clearTimeout(blurTimer.current); }, []);
 
   // Pienamente controllato: `value` è l'unica fonte di verità sia per il testo
   // mostrato sia per il filtro. Nessuno stato ombra: se il chiamante normalizza
@@ -193,7 +201,7 @@ export function Combobox({ value, onChange, onSelect, options, placeholder, disa
       // sotto il cursore sarebbe peggio del difetto che questo cura (senza scroll,
       // con centinaia di voci l'evidenziazione esce dall'area visibile e la
       // navigazione diventa cieca).
-      document.getElementById(`combobox-opt-${next}`)?.scrollIntoView({ block: "nearest" });
+      document.getElementById(`${listId}-opt-${next}`)?.scrollIntoView({ block: "nearest" });
       return;
     }
     if (e.key === "Enter" && open && active >= 0 && matches[active]) {
@@ -207,8 +215,8 @@ export function Combobox({ value, onChange, onSelect, options, placeholder, disa
       <Input
         role="combobox"
         aria-expanded={open}
-        aria-controls="combobox-list"
-        aria-activedescendant={active >= 0 ? `combobox-opt-${active}` : undefined}
+        aria-controls={listId}
+        aria-activedescendant={active >= 0 ? `${listId}-opt-${active}` : undefined}
         autoComplete="off"
         value={value}
         disabled={disabled}
@@ -216,18 +224,18 @@ export function Combobox({ value, onChange, onSelect, options, placeholder, disa
         onFocus={() => setOpen(true)}
         onChange={(e) => { onChange(e.target.value); setOpen(true); setActive(-1); }}
         onKeyDown={onKeyDown}
-        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        onBlur={() => { blurTimer.current = window.setTimeout(() => setOpen(false), 120); }}
       />
       {open && matches.length > 0 && (
         <ul
-          id="combobox-list"
+          id={listId}
           role="listbox"
           className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto border border-border-strong bg-surface"
         >
           {matches.map((o, i) => (
             <li
               key={`${o.group}-${o.value}`}
-              id={`combobox-opt-${i}`}
+              id={`${listId}-opt-${i}`}
               role="option"
               aria-selected={i === active}
               onMouseDown={(e) => { e.preventDefault(); choose(o); }}

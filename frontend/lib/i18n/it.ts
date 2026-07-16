@@ -594,6 +594,8 @@ export const it: Dictionary = {
     reasonStyleMatch: "stile che ascolti",
     reasonRecent: (year?: string | number) => `recente${year ? ` · ${year}` : ""}`,
     nothingToDigTitle: "Niente da scavare",
+    nothingToDigShortPile: (value: string) =>
+      `Nessun brano nuovo per “${value}”: la pila è corta e possiedi già tutto quello che c'è.`,
     nothingToDigBody: (value: string, seedType: string) =>
       `Nessun brano nuovo per “${value}”. Prova un altro ${seedType} o vai più a fondo nella pila.`,
     // Seme inesistente: distinto da "niente di nuovo". Li' la pila c'e' e i dischi sono

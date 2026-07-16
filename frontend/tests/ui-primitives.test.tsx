@@ -163,3 +163,74 @@ describe("Combobox", () => {
     spy.mockRestore();
   });
 });
+
+describe("Combobox — confini della tastiera e submit", () => {
+  const FIVE: ComboOption[] = Array.from({ length: 5 }, (_, i) => ({
+    value: `g${i}`, label: `g${i}`, group: "genere",
+  }));
+
+  function Plain() {
+    const [value, setValue] = useState("");
+    return <Combobox value={value} onChange={setValue} onSelect={() => {}} options={FIVE} />;
+  }
+
+  function HarnessInForm({ onSubmit }: { onSubmit: () => void }) {
+    const [value, setValue] = useState("");
+    return (
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
+        <Combobox value={value} onChange={setValue} onSelect={() => {}} options={FIVE} />
+      </form>
+    );
+  }
+
+  it("ArrowUp sul primo elemento resta sul primo (nessun wrap, nessun crash)", () => {
+    render(<Plain />);
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: "ArrowDown" });   // active = 0
+    fireEvent.keyDown(input, { key: "ArrowUp" });     // clamp: resta 0
+    expect(screen.getAllByRole("option")[0].getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("ArrowDown sull'ultimo elemento resta sull'ultimo", () => {
+    render(<Plain />);
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    for (let i = 0; i < 10; i++) fireEvent.keyDown(input, { key: "ArrowDown" });
+    const opts = screen.getAllByRole("option");
+    expect(opts[opts.length - 1].getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("Enter SENZA riga evidenziata fa partire il submit del form — e' voluto", () => {
+    // La spec dice "Invio nel campo lancia il dig": senza selezione attiva il
+    // Combobox NON fa preventDefault e lascia salire il submit. Questo test pinna
+    // il comportamento perche' nessuno lo "aggiusti" scambiandolo per un difetto.
+    const onSubmit = vi.fn();
+    render(<HarnessInForm onSubmit={onSubmit} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.submit(input.closest("form")!);
+    expect(onSubmit).toHaveBeenCalled();
+  });
+
+  it("Enter CON riga evidenziata sceglie e NON fa submit", () => {
+    const onSubmit = vi.fn();
+    const onSelect = vi.fn();
+    function H() {
+      const [value, setValue] = useState("");
+      return (
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
+          <Combobox value={value} onChange={setValue} onSelect={onSelect} options={FIVE} />
+        </form>
+      );
+    }
+    render(<H />);
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ value: "g0" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});

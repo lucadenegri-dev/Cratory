@@ -67,9 +67,15 @@ export function DiscoveryLeadGrid({ dig, leads }: {
   }
 
   if (dig.leads.length === 0) {
+    // Su una pila CORTA (1-3 pagine: la finestra e' l'intera pila) "vai piu' a fondo"
+    // e' un consiglio inerte — la profondita' e' disabilitata proprio per quella pila.
+    // Se possiedi gia' tutto quello che c'e', va detto cosi'.
+    const shortPile = dig.pile_pages <= 3;
     return (
       <EmptyState icon={<Disc3 size={28} />} title={t.discovery.nothingToDigTitle}>
-        {t.discovery.nothingToDigBody(dig.value, dig.seed_type === "label" ? t.discovery.seedTypeValue : t.discovery.seedTypeStyle)}
+        {shortPile
+          ? t.discovery.nothingToDigShortPile(dig.value)
+          : t.discovery.nothingToDigBody(dig.value, dig.seed_type === "label" ? t.discovery.seedTypeValue : t.discovery.seedTypeStyle)}
       </EmptyState>
     );
   }

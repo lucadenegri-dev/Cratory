@@ -592,6 +592,8 @@ export const en = {
     reasonStyleMatch: "style you listen to",
     reasonRecent: (year?: string | number) => `recent${year ? ` · ${year}` : ""}`,
     nothingToDigTitle: "Nothing to dig",
+    nothingToDigShortPile: (value: string) =>
+      `No new tracks for “${value}”: the pile is short and you already own everything in it.`,
     nothingToDigBody: (value: string, seedType: string) =>
       `No new tracks for “${value}”. Try another ${seedType} or dig deeper into the pile.`,
     // Dead seed: distinct from "nothing new". There the pile exists and the records were

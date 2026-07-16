@@ -18,10 +18,13 @@ import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { applyLens, DiscoveryLeadGrid, FORMAT_VALUES, type SortMode } from "@/components/discovery-lead-grid";
 import { DiscoveryDigBar, type SeedType } from "@/components/discovery-dig-bar";
-import { useT } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 
 function DiscoveryInner() {
-  const t = useT();
+  // `lang` serve al formato dei numeri: toLocaleString() senza argomento segue il
+  // locale del BROWSER, non la lingua scelta in-app — "4,960,096" dentro una frase
+  // italiana. Coi tag "it"/"en" i separatori seguono la lingua dell'interfaccia.
+  const { t, lang } = useI18n();
   const jobs = useJobs();
 
   const router = useRouter();
@@ -188,8 +191,8 @@ function DiscoveryInner() {
             // sul totale evita di dire "ne vedi solo N" quando la pila e' tutta li'.
             <span className="tnum text-muted">
               {t.discovery.broadSeed(
-                dig.pile_total.toLocaleString(),
-                (dig.pile_pages * DISCOGS_PAGE_SIZE).toLocaleString(),
+                dig.pile_total.toLocaleString(lang),
+                (dig.pile_pages * DISCOGS_PAGE_SIZE).toLocaleString(lang),
               )}
             </span>
           )}
