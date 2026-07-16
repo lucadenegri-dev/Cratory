@@ -907,6 +907,15 @@ def _score(lead: DiscoveryLead, profile: TasteProfile, weights: Weights) -> floa
 
 `_demand` e `_recency` **restano**: le usa ancora `_reasons` (Task 7).
 
+**Due test preesistenti codificano il modello che questo task rimuove** e vanno riscritti
+semanticamente, non rinominati: `test_dig_adventurous_surfaces_deep_cuts` e
+`test_dig_demand_beats_anonymous_rarity`. Asseriscono che rarità e domanda decidono
+l'ordine dei lead — cosa che ora fa la **finestra** (`_window`), non il punteggio. Con
+gusto piatto i loro lead pareggiano a 0.0 e lo stable sort conserva l'ordine della pila,
+cioè l'opposto di quanto asseriscono. Attenzione: finché `_reasons` non è sistemato
+(Task 7) questi due falliscono per il crash su `.style` e **sembrano** parte dei
+fallimenti attesi — il difetto semantico è mascherato.
+
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
