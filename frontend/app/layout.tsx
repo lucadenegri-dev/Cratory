@@ -3,6 +3,8 @@ import { DM_Mono } from "next/font/google";
 import "./globals.css";
 import { EditorialShell } from "@/components/editorial-shell";
 import { I18nProvider } from "@/lib/i18n";
+import { DockedPlayer } from "@/components/docked-player";
+import { PlayerProvider } from "@/lib/player";
 
 // Font di sistema: DM Mono (peso massimo 500; il grassetto 600 viene
 // sintetizzato dal browser). Il nome della variabile resta neutro.
@@ -26,7 +28,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="h-full">
         <script dangerouslySetInnerHTML={{ __html: NO_FOUC }} />
         <I18nProvider>
-          <EditorialShell>{children}</EditorialShell>
+          <PlayerProvider>
+            <EditorialShell>{children}</EditorialShell>
+            <DockedPlayer />
+          </PlayerProvider>
         </I18nProvider>
       </body>
     </html>
