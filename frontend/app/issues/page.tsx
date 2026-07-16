@@ -8,7 +8,7 @@ import {
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
-import { IssuesTable, type GroupBy } from "@/components/issues-table";
+import { IssuesTable, issueIsFixable, issueIsStrong, type GroupBy } from "@/components/issues-table";
 import { Alert, Button, Checkbox, EmptyState, Input, Loading, Modal, Select, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
@@ -253,11 +253,21 @@ export default function IssuesPage() {
   const byType: Record<string, number> = {};
   let accepted = 0;
   let openCovers = 0;
+  // quante issue APERTE alimentano ciascuna azione di massa: se 0, il bottone
+  // relativo non ha nulla da fare e resta nascosto (barra più pulita).
+  let openStrong = 0;
+  let openFixable = 0;
+  let openInfo = 0;
   for (const i of issues) {
     bySev[i.severity] = (bySev[i.severity] ?? 0) + 1;
     byType[i.type] = (byType[i.type] ?? 0) + 1;
     if (i.status === "accepted") accepted++;
-    if (i.type === "missing_cover" && i.status === "open") openCovers++;
+    if (i.status === "open") {
+      if (i.type === "missing_cover") openCovers++;
+      if (i.severity === "info") openInfo++;
+      if (issueIsFixable(i)) openFixable++;
+      if (issueIsStrong(i)) openStrong++;
+    }
   }
 
   // Sorgenti di proposte, divise per modalità: "enrich" riempie i buchi,
@@ -442,9 +452,15 @@ export default function IssuesPage() {
         {/* barra sopra la lista: azioni di massa a sinistra, raggruppamento a destra */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
-            <Button variant="outline" size="sm" onClick={onAcceptHigh}>{t.issues.acceptHighBtn}</Button>
-            <Button variant="outline" size="sm" onClick={acceptAllFixable}>{t.issues.acceptFixableBtn}</Button>
-            <Button variant="outline" size="sm" onClick={dismissAllInfo}>{t.issues.dismissInfoBtn}</Button>
+            {openStrong > 0 && (
+              <Button variant="outline" size="sm" onClick={onAcceptHigh}>{t.issues.acceptHighBtn}</Button>
+            )}
+            {openFixable > 0 && (
+              <Button variant="outline" size="sm" onClick={acceptAllFixable}>{t.issues.acceptFixableBtn}</Button>
+            )}
+            {openInfo > 0 && (
+              <Button variant="outline" size="sm" onClick={dismissAllInfo}>{t.issues.dismissInfoBtn}</Button>
+            )}
             {openCovers > 0 && (
               <Button variant="outline" size="sm" onClick={onAcceptCovers}>{t.issues.acceptCoversBtn}</Button>
             )}

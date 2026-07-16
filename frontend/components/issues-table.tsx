@@ -12,6 +12,20 @@ const RETAGGABLE = new Set([
   "artist", "title", "album", "album_artist", "genre", "year", "label", "track_no", "comment",
 ]);
 
+// Un'issue è "fixable" se ha un'azione applicabile: quarantena, svuotamento,
+// o un campo retaggabile. Stessa logica usata nella riga (vedi IssueRow).
+export function issueIsFixable(i: Issue): boolean {
+  const action = i.suggested_fix_json?.action;
+  if (action === "clear" || action === "quarantine") return true;
+  return i.field != null && RETAGGABLE.has(i.field);
+}
+
+// Override "forte" (match sicuro da provider): la ConfBadge mappa high→strong.
+export function issueIsStrong(i: Issue): boolean {
+  const c = i.suggested_fix_json?.confidence;
+  return c === "high" || c === "strong";
+}
+
 const SEV_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
 
 function SevMark({ sev }: { sev: string }) {

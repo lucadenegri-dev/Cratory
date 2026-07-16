@@ -16,7 +16,6 @@ const NAV = [
   { href: "/duplicates", label: "Duplicates" },
   { href: "/plan", label: "Plan" },
   { href: "/history", label: "History" },
-  { href: "/settings", label: "Settings" },
 ] as const;
 
 function sumIssues(s: LibraryStats | null): number {
@@ -46,7 +45,6 @@ export function IndexNav() {
     "/duplicates": stats ? String(stats.dup_groups) : "—",
     "/plan": "—",
     "/history": "—",
-    "/settings": "",
   };
 
   const isActive = (href: string) => pathname.startsWith(href);
@@ -85,9 +83,24 @@ export function IndexNav() {
         })}
       </ul>
 
-      <div className="hidden items-center justify-between gap-2 border-t border-border px-4 py-3 text-[10px] lg:flex">
-        <Clock />
-        <ThemeToggle />
+      {/* Settings in fondo (come Cratory), sopra l'orario */}
+      <div className="hidden flex-col lg:flex">
+        <Link
+          href="/settings"
+          aria-current={isActive("/settings") ? "page" : undefined}
+          className={cn(
+            "flex items-center px-2 py-1.5 text-xs uppercase tracking-wider transition-colors",
+            isActive("/settings")
+              ? "border-l-2 border-danger bg-surface-2 text-fg-strong"
+              : "border-l-2 border-transparent text-muted hover:text-fg",
+          )}
+        >
+          Settings
+        </Link>
+        <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3 text-[10px]">
+          <Clock />
+          <ThemeToggle />
+        </div>
       </div>
     </nav>
   );
