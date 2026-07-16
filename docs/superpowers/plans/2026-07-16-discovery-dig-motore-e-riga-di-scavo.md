@@ -1680,11 +1680,34 @@ const OPTS: ComboOption[] = [
   { value: "Trax Records", label: "Trax Records", group: "etichetta" },
 ];
 
-function setup(value = "") {
+// Il Combobox e' CONTROLLATO: con `onChange={vi.fn()}` il campo non si aggiorna mai —
+// e' React che funziona, non un bug. Un componente controllato si prova avvolgendolo
+// in un harness con stato vero. Senza, si finisce per aggiungere uno stato ombra al
+// componente per compiacere il banco di prova: due fonti di verita' per lo stesso
+// testo, e un "controllato" che puo' ignorare il proprio controllore.
+function Harness({ onSelect = vi.fn(), onChangeSpy, ...rest }: {
+  onSelect?: (o: ComboOption) => void;
+  onChangeSpy?: (v: string) => void;
+  options?: ComboOption[];
+  cap?: number;
+}) {
+  const [value, setValue] = useState("");
+  return (
+    <Combobox
+      value={value}
+      onChange={(v) => { onChangeSpy?.(v); setValue(v); }}
+      onSelect={onSelect}
+      options={rest.options ?? OPTS}
+      cap={rest.cap}
+    />
+  );
+}
+
+function setup() {
   const onSelect = vi.fn();
-  const onChange = vi.fn();
-  render(<Combobox value={value} onChange={onChange} onSelect={onSelect} options={OPTS} />);
-  return { onSelect, onChange };
+  const onChangeSpy = vi.fn();
+  render(<Harness onSelect={onSelect} onChangeSpy={onChangeSpy} />);
+  return { onSelect, onChange: onChangeSpy };
 }
 
 describe("Combobox", () => {
@@ -1734,8 +1757,8 @@ describe("Combobox", () => {
     const many: ComboOption[] = Array.from({ length: 30 }, (_, i) => ({
       value: `g${i}`, label: `g${i}`, group: "genere",
     }));
-    render(<Combobox value="" onChange={() => {}} onSelect={() => {}} options={many} cap={12} />);
-    fireEvent.focus(screen.getAllByRole("combobox")[0]);
+    render(<Harness options={many} cap={12} />);
+    fireEvent.focus(screen.getByRole("combobox"));
     expect(screen.getAllByRole("option").length).toBe(12);
   });
 });
