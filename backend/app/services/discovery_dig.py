@@ -206,13 +206,15 @@ class TasteProfile:
     """
     artist_counts: dict[str, int] = field(default_factory=dict)
     owned_labels: set[str] = field(default_factory=set)
-    genre_tokens: set[str] = field(default_factory=set)
+    # Un set di token PER GENERE DISTINTO, non un'unione: contro un sacco unico
+    # bastava 'house' per valere 1.0 su qualunque release house.
+    genre_sets: list[set[str]] = field(default_factory=list)
 
     @classmethod
     def from_tracks(cls, tracks: list) -> "TasteProfile":
         artist_counts: dict[str, int] = {}
         owned_labels: set[str] = set()
-        genre_tokens: set[str] = set()
+        genres: set[str] = set()
         for t in tracks or []:
             a = _norm(getattr(t, "artist", None))
             if a:
@@ -220,20 +222,32 @@ class TasteProfile:
             lbl = _norm(getattr(t, "label", None))
             if lbl:
                 owned_labels.add(lbl)
-            genre_tokens |= _style_tokens(getattr(t, "genre", None))
-        return cls(artist_counts, owned_labels, genre_tokens)
+            g = _norm(getattr(t, "genre", None))
+            if g:
+                genres.add(g)
+        genre_sets = [toks for toks in map(_style_tokens, genres) if toks]
+        return cls(artist_counts, owned_labels, genre_sets)
 
-    def artist_count(self, artist: str) -> int:
-        return self.artist_counts.get(_norm(artist), 0)
+    def artist_count(self, artist_keys: list[str]) -> int:
+        return max((self.artist_counts.get(k, 0) for k in artist_keys), default=0)
 
-    def familiarity(self, artist: str) -> float:
-        return min(self.artist_count(artist) / FAMILIARITY_FULL_AT, 1.0)
+    def familiarity(self, artist_keys: list[str]) -> float:
+        return min(self.artist_count(artist_keys) / FAMILIARITY_FULL_AT, 1.0)
 
     def label_affinity(self, label: str | None) -> float:
         return 1.0 if label and _norm(label) in self.owned_labels else 0.0
 
-    def style_affinity(self, style: str | None) -> float:
-        return 1.0 if _style_tokens(style) & self.genre_tokens else 0.0
+    def style_affinity(self, styles: list[str]) -> float:
+        """Jaccard massima tra gli style della release e i generi della libreria.
+
+        'Deep House' vs libreria con 'Deep House' -> 1.0; vs sola 'Acid House' -> 0.33
+        ({house} / {deep, house, acid}); vs sola 'Drum n Bass' -> 0.0.
+        """
+        best = 0.0
+        for s in (toks for toks in map(_style_tokens, styles or []) if toks):
+            for g in self.genre_sets:
+                best = max(best, len(s & g) / len(s | g))
+        return best
 
 
 def _lead_from_release(item: dict[str, Any], seed: str) -> DiscoveryLead | None:

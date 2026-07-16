@@ -2,6 +2,8 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from app.services.discovery_dig import _clean_artist, _lead_from_release, _window, dig
 
 
@@ -223,9 +225,10 @@ def test_taste_profile_from_tracks_aggregates():
         ("Aphex Twin", "Ageispolis", {"label": "Warp", "genre": "IDM"}),
         ("Boards Of Canada", "Roygbiv", {"label": "Warp", "genre": "Downtempo"}),
     ))
-    assert p.artist_count("aphex twin") == 2
+    assert p.artist_count(["aphex twin"]) == 2
     assert p.owned_labels == {"warp"}
-    assert {"idm", "downtempo"} <= p.genre_tokens
+    assert {"idm"} in p.genre_sets
+    assert {"downtempo"} in p.genre_sets
 
 
 def test_taste_profile_familiarity_is_graduated():
@@ -233,9 +236,9 @@ def test_taste_profile_familiarity_is_graduated():
         ("Solo", "A"),
         ("Trio", "A"), ("Trio", "B"), ("Trio", "C"),
     ))
-    assert p.familiarity("Solo") == 1 / FAMILIARITY_FULL_AT
-    assert p.familiarity("Trio") == 1.0          # 3 release: piena
-    assert p.familiarity("Unknown") == 0.0
+    assert p.familiarity(["solo"]) == 1 / FAMILIARITY_FULL_AT
+    assert p.familiarity(["trio"]) == 1.0          # 3 release: piena
+    assert p.familiarity(["unknown"]) == 0.0
 
 
 def test_taste_profile_affinities():
@@ -244,9 +247,47 @@ def test_taste_profile_affinities():
     assert p.label_affinity("warp") == 1.0
     assert p.label_affinity("Other") == 0.0
     assert p.label_affinity(None) == 0.0
-    assert p.style_affinity("Acid House") == 1.0     # token in comune
-    assert p.style_affinity("Techno") == 0.0
+    assert p.style_affinity(["Acid House"]) == 1.0     # token in comune
+    assert p.style_affinity(["Techno"]) == 0.0
     assert p.style_affinity(None) == 0.0
+
+
+# --- Task 4: affinita' di stile graduata (Jaccard per genere) ----------------
+
+
+def test_style_affinity_is_graduated_not_binary():
+    p = TasteProfile.from_tracks(_lib(("A", "T", {"genre": "Deep House"})))
+    assert p.style_affinity(["Deep House"]) == 1.0
+    # {house} / {deep, house, acid} — un token condiviso NON vale 1.0
+    assert p.style_affinity(["Acid House"]) == pytest.approx(1 / 3)
+    assert p.style_affinity(["Drum n Bass"]) == 0.0
+
+
+def test_style_affinity_uses_all_release_styles():
+    p = TasteProfile.from_tracks(_lib(("A", "T", {"genre": "Chicago House"})))
+    assert p.style_affinity(["Acid House", "Chicago House"]) == 1.0
+
+
+def test_style_affinity_compares_per_genre_not_against_a_single_bag():
+    # regressione: con l'unione dei token, 'house' bastava a valere 1.0 su tutto
+    p = TasteProfile.from_tracks(_lib(
+        ("A", "T1", {"genre": "Deep House"}),
+        ("B", "T2", {"genre": "Drum n Bass"}),
+    ))
+    assert p.style_affinity(["Acid House"]) < 1.0
+
+
+def test_familiarity_is_max_across_split_artists():
+    p = TasteProfile.from_tracks(_lib(("Einzelkind", "T1"), ("Einzelkind", "T2"),
+                                      ("Einzelkind", "T3")))
+    _, keys = _clean_artist("Nail* / Einzelkind")
+    assert p.familiarity(keys) == 1.0        # 3 tracce = familiarita' piena
+    assert p.familiarity(["sconosciuto"]) == 0.0
+
+
+def test_familiarity_is_graduated():
+    p = TasteProfile.from_tracks(_lib(("Tyree", "T1")))
+    assert p.familiarity(["tyree"]) == pytest.approx(1 / 3)
 
 
 # --- Task 2: scoring esteso con i segnali di gusto ---------------------------
