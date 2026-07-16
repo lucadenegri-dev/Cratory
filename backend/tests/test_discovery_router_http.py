@@ -307,7 +307,9 @@ def test_dig_endpoint_ignores_legacy_limit_field(client, monkeypatch):
     r = c.post("/api/discovery/dig",
                json={"seed_type": "genre", "value": "Acid House", "limit": 5})
     assert r.status_code == 200
-    assert len(r.json()["leads"]) > 5   # nessun troncamento: il campo e' ignorato
+    # Asserzione ESATTA, non `> 5`: coglie sia il troncamento a 5 (campo legacy
+    # rispettato) sia la reintroduzione di QUALUNQUE tetto a valle (es. 80).
+    assert len(r.json()["leads"]) == 150
 
 
 def test_dig_endpoint_exposes_seed_resolution_and_pile_total(client, monkeypatch):

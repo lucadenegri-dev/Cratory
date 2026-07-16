@@ -39,6 +39,16 @@ logger = logging.getLogger(__name__)
 PAGES_PER_DIG = 3  # quante pagine scarica un dig: 3 richieste di contenuto
 
 
+def _usable_pages(total_items: int) -> int:
+    """Quante pagine utili ha la pila (il tetto Discogs e' 100: pagina 101 -> 404).
+
+    Unica fonte della formula: la usano sia `_window` (per piazzare la finestra) sia
+    `dig()` (per `pile_pages` nel contratto). Due copie che devono restare d'accordo
+    per sempre sono un futuro bug di coerenza.
+    """
+    return min(math.ceil(total_items / SEARCH_PER_PAGE), DISCOGS_MAX_PAGES)
+
+
 def _window(depth: float, total_items: int) -> list[int]:
     """Le pagine da scaricare dalla pila ordinata per domanda.
 
@@ -49,7 +59,7 @@ def _window(depth: float, total_items: int) -> list[int]:
     Su una pila piu' corta della finestra, `depth` non ha effetto: non c'e' profondita'
     da scegliere. Il chiamante lo segnala alla UI via `pile_pages`.
     """
-    usable = min(math.ceil(total_items / SEARCH_PER_PAGE), DISCOGS_MAX_PAGES)
+    usable = _usable_pages(total_items)
     if usable <= 0:
         return []
     start = 1 + round(max(0.0, min(1.0, depth)) * max(0, usable - PAGES_PER_DIG))
@@ -518,7 +528,7 @@ def dig(
         resolution = "genre"
         total = count_releases(**filters)
 
-    usable = min(math.ceil(total / SEARCH_PER_PAGE), DISCOGS_MAX_PAGES) if total > 0 else 0
+    usable = _usable_pages(total) if total > 0 else 0
     pages = _window(depth, total)
     if not pages:
         return DigResult(seed_type=seed_type, value=value, pile_pages=0)

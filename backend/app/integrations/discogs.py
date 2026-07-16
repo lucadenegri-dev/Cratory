@@ -107,8 +107,12 @@ class DiscogsClient(ClosableHttpClient):
         if sort_order:
             params["sort_order"] = sort_order
 
+        # `pages=None` -> default pagina 1; `pages=[]` ESPLICITO -> zero richieste.
+        # `pages or [1]` non distingueva i due casi e una lista vuota scaricava
+        # comunque la pagina 1: scostamento muto dal contratto "le pagine che il
+        # chiamante chiede".
         results: list[dict[str, Any]] = []
-        for i, page in enumerate(pages or [1]):
+        for i, page in enumerate([1] if pages is None else pages):
             try:
                 data = self._get("/database/search", params={**params, "page": page})
             except DiscogsError as exc:

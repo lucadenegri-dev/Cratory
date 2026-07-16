@@ -242,3 +242,16 @@ def test_search_releases_later_page_error_stops_and_keeps_collected():
     assert len(client.search_releases(style="x", pages=[1, 2, 3])) == 1
     # la 3 non viene mai tentata (la 2 compare piu' volte: retry di trasporto)
     assert 3 not in calls
+
+
+def test_search_releases_explicit_empty_pages_makes_no_request():
+    # pages=[] esplicito = "nessuna pagina": zero richieste, non la pagina 1.
+    calls = []
+
+    def handler(url, params=None, **kw):
+        calls.append(params)
+        return _resp({"pagination": {"items": 10, "pages": 1}, "results": []})
+
+    client = DiscogsClient(token=None, http=_FakeHttp(handler))
+    assert client.search_releases(style="x", pages=[]) == []
+    assert calls == []

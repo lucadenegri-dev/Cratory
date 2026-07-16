@@ -191,7 +191,10 @@ def test_dig_label_seed_uses_label_filter():
 # nella sezione Task 6, come `test_flat_taste_keeps_the_pile_order`.
 
 
-def test_dig_familiar_first_when_safe():
+def test_dig_familiarity_orders_within_the_window():
+    # ("when_safe" nel vecchio nome presupponeva un asse sicuro/avventuroso che non
+    # esiste piu': il gusto ordina SEMPRE dentro la finestra, depth sceglie solo dove
+    # pescare — e qui e' irrilevante, quindi non si passa.)
     def search(**kw):
         return [
             _release("Stranger - Tune", rid=1, have=20),
@@ -200,7 +203,7 @@ def test_dig_familiar_first_when_safe():
 
     res = dig(None, seed_type="genre", value="x", search_releases=search,
               count_releases=lambda **kw: 300,
-              library=_lib(("Known", "Something Else")), depth=0.1)
+              library=_lib(("Known", "Something Else")))
     assert res.leads[0].artist == "Known"
 
 
@@ -381,8 +384,7 @@ def test_dig_label_boost_changes_order():
     # sceglie solo la finestra da cui pescare, non l'ordine dentro la finestra.
     res = dig(None, seed_type="genre", value="x", search_releases=search,
               count_releases=lambda **kw: 300,
-              library=_lib(("Whoever", "Whatever", {"label": "Warp"})),
-              depth=0.1)
+              library=_lib(("Whoever", "Whatever", {"label": "Warp"})))
     assert res.leads[0].label == "Warp"
 
 
@@ -395,8 +397,7 @@ def test_dig_style_affinity_changes_order():
 
     res = dig(None, seed_type="genre", value="x", search_releases=search,
               count_releases=lambda **kw: 300,
-              library=_lib(("Whoever", "Whatever", {"genre": "Acid House"})),
-              depth=0.1)
+              library=_lib(("Whoever", "Whatever", {"genre": "Acid House"})))
     # `DiscoveryLead.style` (singolare) e' diventato `.styles` (Task 3): il test era
     # rimasto mascherato dal crash di `_reasons`, non aggiornato al rename.
     assert res.leads[0].styles == ["Acid House"]
@@ -415,8 +416,7 @@ def test_dig_graduated_familiarity_prefers_more_collected():
               library=_lib(
                   ("Once", "a"),
                   ("Thrice", "a"), ("Thrice", "b"), ("Thrice", "c"),
-              ),
-              depth=0.1)
+              ))
     assert res.leads[0].artist == "Thrice"
 
 
@@ -512,8 +512,27 @@ def test_deep_cut_requires_demand():
     p = TasteProfile.from_tracks([])
     # nessuno lo ha E nessuno lo cerca: non e' una gemma, e' rumore
     assert "deep_cut" not in _reason_codes(_lead_from_release(_release("A - T", have=10, want=0, rid=1), "x"), p)
-    assert "deep_cut" in _reason_codes(_lead_from_release(_release("A - T", have=10, want=5, rid=2), "x"), p)
-    assert "deep_cut" not in _reason_codes(_lead_from_release(_release("A - T", have=200, want=50, rid=3), "x"), p)
+    # il confine ESATTO della soglia want (REASON_DEEP_CUT_MIN_WANT = 5):
+    # 4 e' sotto, 5 e' dentro. (Sostituisce l'asserzione have=200/want=50, ridondante:
+    # gia' coperta da have > REASON_DEEP_CUT_MAX_HAVE da sola, non esercitava want.)
+    assert "deep_cut" not in _reason_codes(_lead_from_release(_release("A - T", have=10, want=4, rid=2), "x"), p)
+    assert "deep_cut" in _reason_codes(_lead_from_release(_release("A - T", have=10, want=5, rid=3), "x"), p)
+    # e il confine della soglia have (REASON_DEEP_CUT_MAX_HAVE = 50): 50 dentro, 51 fuori
+    assert "deep_cut" in _reason_codes(_lead_from_release(_release("A - T", have=50, want=5, rid=4), "x"), p)
+    assert "deep_cut" not in _reason_codes(_lead_from_release(_release("A - T", have=51, want=5, rid=5), "x"), p)
+
+
+def test_style_match_fires_exactly_at_the_jaccard_threshold():
+    # REASON_STYLE_MATCH_MIN = 0.5, e la soglia e' >=: il confine esatto deve scattare.
+    # Libreria con genere 'House' ({house}), release 'Deep House' ({deep, house}):
+    # jaccard = |{house}| / |{deep, house}| = 1/2 = 0.5 -> badge SI.
+    p = TasteProfile.from_tracks(_lib(("A", "T", {"genre": "House"})))
+    at_threshold = _lead_from_release(_release("B - X", style="Deep House", rid=1), "x")
+    assert "style_match" in _reason_codes(at_threshold, p)
+    # Appena sotto (1/3): 'Acid House' vs libreria 'Deep House' -> niente badge.
+    p2 = TasteProfile.from_tracks(_lib(("A", "T", {"genre": "Deep House"})))
+    below = _lead_from_release(_release("B - Y", style="Acid House", rid=2), "x")
+    assert "style_match" not in _reason_codes(below, p2)
 
 
 def test_label_followed_not_emitted_on_a_label_dig():
