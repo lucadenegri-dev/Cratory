@@ -210,14 +210,20 @@ esplicito in `dig()`, e la sonda restituisce già il conteggio grezzo.
 - Nessuna richiesta in più: entrambi i valori esistono già dentro `dig()`.
 
 **La UI lo riferisce solo quando è uno scaffale.** Nella riga della risposta, accanto al
-conteggio, visibile solo con `seed_resolution === "genre"`:
+conteggio, visibile solo con `seed_resolution === "genre"`. Microcopy scelta dal
+committente — linguaggio piano, il fatto e il consiglio, niente metafore:
 
 ```
- 80 di 240 · seme ampio: scaffale Discogs da 4.960.093 release — la pila si ferma alle 10.000 più cercate
+ 80 di 240 · Genere molto generico: 4.960.093 dischi su Discogs, ne vedi solo i 10.000 più cercati. Un sottogenere più preciso scava meglio.
 ```
+
+EN: `Very broad genre: 4,960,093 records on Discogs, you only see the 10,000 most
+wanted. A more specific subgenre digs better.`
 
 - i18n: `broadSeed: (total: string) => ...` in `it.ts`/`en.ts`; il numero formattato con
-  `toLocaleString` e `.tnum` (The Tabular Rule).
+  `toLocaleString` e `.tnum` (The Tabular Rule). I «10.000» sono
+  `DISCOGS_MAX_PAGES × SEARCH_PER_PAGE`: se il tetto cambia, il testo deve seguirlo —
+  passare anche questo come parametro, non cablarlo nella stringa.
 - Niente per `style` e `label`: il caso normale non merita rumore.
 - Coesiste con «N di M»; il caso `pile_pages === 0` (seme morto) ha la precedenza ed è
   già gestito.
