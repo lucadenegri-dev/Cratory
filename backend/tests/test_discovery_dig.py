@@ -177,16 +177,9 @@ def test_dig_label_seed_uses_label_filter():
     assert seen.get("label") == "Warp"
 
 
-def test_dig_adventurous_surfaces_deep_cuts():
-    def search(**kw):
-        return [
-            _release("Pop Star - Hit", rid=1, have=9000),         # mainstream (molto posseduto)
-            _release("Obscure One - Deep Cut", rid=2, have=20),   # raro
-        ]
-
-    res = dig(None, seed_type="genre", value="x", search_releases=search,
-              library=[], adventurousness=0.9)
-    assert (res.leads[0].artist, res.leads[0].title) == ("Obscure One", "Deep Cut")
+# NB: `test_dig_adventurous_surfaces_deep_cuts` stava qui. Il Task 6 lo ha reso falso per
+# progetto (la rarita' non entra piu' nel punteggio): riscritto semanticamente in fondo,
+# nella sezione Task 6, come `test_flat_taste_keeps_the_pile_order`.
 
 
 def test_dig_familiar_first_when_safe():
@@ -260,16 +253,10 @@ def test_dig_caps_per_artist():
     assert len(res.leads) == 2  # max 2 per artista
 
 
-def test_dig_demand_beats_anonymous_rarity():
-    def search(**kw):
-        return [
-            _release("Anon - Untraded", rid=1, have=1, want=0),    # raro ma nessuno lo cerca
-            _release("Wanted - Grail", rid=2, have=1, want=80),    # raro E molto cercato
-        ]
-
-    res = dig(None, seed_type="genre", value="x", search_releases=search,
-              library=[], adventurousness=0.9)
-    assert res.leads[0].artist == "Wanted"  # la gemma richiesta in cima
+# NB: `test_dig_demand_beats_anonymous_rarity` stava qui. La domanda non ordina piu' i lead
+# nel punteggio (la codifica la finestra): riscritto semanticamente in fondo, nella sezione
+# Task 6, come `test_score_ignores_demand_which_the_window_already_encodes`. La domanda come
+# FILTRO resta comunque coperta qui sopra da `test_dig_filters_dead_self_released_but_keeps_wanted`.
 
 
 # --- Task 1: TasteProfile + tokenizzazione stile -----------------------------
@@ -514,7 +501,7 @@ def test_window_empty_pile():
 
 # --- Task 6: il punteggio e' solo gusto ---------------------------------------
 
-from app.services.discovery_dig import _score, _weights
+from app.services.discovery_dig import _score, _select, _weights
 
 
 def test_weights_drop_the_label_signal_on_a_label_dig():
@@ -540,3 +527,48 @@ def test_score_ignores_year():
     old = _lead_from_release(_release("Tyree - A", year=1988, rid=1), "x")
     new = _lead_from_release(_release("Tyree - B", year=2026, rid=2), "x")
     assert _score(old, profile, _weights("genre")) == _score(new, profile, _weights("genre"))
+
+
+def test_flat_taste_keeps_the_pile_order():
+    """Sostituisce `test_dig_adventurous_surfaces_deep_cuts`.
+
+    Quel test asseriva che con `adventurousness` alta il deep cut (have basso)
+    scavalcasse il mainstream (have=9000). Col Task 6 e' FALSO PER PROGETTO, non per
+    svista: la rarita' (`novelty`) e' uscita dal punteggio, e `adventurousness` non
+    ordina piu' nulla. Far emergere i deep cut e' compito della FINESTRA (`_window`):
+    la profondita' sceglie il bacino, il gusto ordina dentro il bacino.
+
+    Il comportamento vero, che qui si fissa: a gusto piatto i lead pareggiano e lo
+    stable sort di `_select` conserva l'ordine della pila (l'ordine per domanda con cui
+    Discogs risponde). E' il fallback VOLUTO quando il gusto non discrimina.
+    """
+    profile = TasteProfile.from_tracks([])          # riferimento vuoto: nessun segnale aggancia
+    w = _weights("genre")
+    mainstream = _lead_from_release(_release("Pop Star - Hit", rid=1, have=9000), "x")
+    deep_cut = _lead_from_release(_release("Obscure One - Deep Cut", rid=2, have=20), "x")
+    # have 9000 vs 20: prima ribaltava l'ordine, ora non entra proprio nel punteggio
+    assert _score(mainstream, profile, w) == _score(deep_cut, profile, w) == 0.0
+    for lead in (mainstream, deep_cut):
+        lead.score = _score(lead, profile, w)
+    assert [l.artist for l in _select([mainstream, deep_cut], 50)] == ["Pop Star", "Obscure One"]
+
+
+def test_score_ignores_demand_which_the_window_already_encodes():
+    """Sostituisce `test_dig_demand_beats_anonymous_rarity`.
+
+    La domanda non batte piu' niente NEL PUNTEGGIO: ordina il BACINO, non i lead dentro
+    il bacino. Dentro una finestra il `want` e' ~costante (pagina 30: mediana 287,
+    minimo 284) — non ha potere discriminante. Quale finestra si guardi lo decide `depth`
+    (`_window`), non lo score.
+
+    `_demand` resta viva e usata: la legge `_reasons` per il codice `rare_wanted`, e resta
+    un FILTRO anti-rumore in `_lead_from_release` (self-released morti). Non e' scomparsa
+    dal motore, e' scomparsa dall'ORDINAMENTO.
+    """
+    # stesso gusto per entrambi (una release a testa nel riferimento) -> pari merito
+    profile = TasteProfile.from_tracks(_lib(("Anon", "Older"), ("Wanted", "Older")))
+    w = _weights("genre")
+    untraded = _lead_from_release(_release("Anon - Untraded", rid=1, have=1, want=0), "x")
+    grail = _lead_from_release(_release("Wanted - Grail", rid=2, have=1, want=80), "x")
+    # want 0 vs 80: prima decideva l'ordine, ora i due pareggiano (gusto identico)
+    assert _score(untraded, profile, w) == _score(grail, profile, w) == pytest.approx(0.5 / 3)

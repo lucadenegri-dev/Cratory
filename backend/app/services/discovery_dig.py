@@ -414,7 +414,16 @@ def _reasons(lead: DiscoveryLead, profile: TasteProfile, current_year: int) -> l
 
 
 def _select(leads: list[DiscoveryLead], limit: int) -> list[DiscoveryLead]:
-    """Ordina per score e applica il cap per artista (no monopolio), poi tronca a limit."""
+    """Ordina per score e applica il cap per artista (no monopolio), poi tronca a limit.
+
+    Il sort DEVE restare stabile — `sorted` lo garantisce, ed e' su questa garanzia che
+    poggia il fallback a gusto piatto: quando il riferimento e' vuoto (o nessun segnale
+    aggancia) i lead pareggiano tutti, e l'ordine che sopravvive e' quello in cui sono
+    entrati, cioe' l'ordine per domanda con cui Discogs ha risposto dentro la finestra.
+    E' l'unico ordine sensato che resta quando il gusto non discrimina, ed e' voluto:
+    sostituire `sorted` con un ordinamento instabile lo romperebbe in silenzio (nessun
+    errore, solo lead in ordine arbitrario).
+    """
     out: list[DiscoveryLead] = []
     per_artist: dict[str, int] = {}
     for lead in sorted(leads, key=lambda x: x.score, reverse=True):
