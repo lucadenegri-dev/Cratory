@@ -146,6 +146,58 @@ export function Popover({ trigger, children, open, onOpenChange, align = "start"
   );
 }
 
+/* ------------------------------------------------- SegmentedControl / Chip */
+
+export function SegmentedControl<T extends string>({ value, onChange, options, disabled }: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: ReactNode; icon?: ReactNode; title?: string }[];
+  disabled?: boolean;
+}) {
+  return (
+    <div className="inline-flex border border-border bg-surface p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          aria-pressed={value === o.value}
+          disabled={disabled}
+          title={o.title}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium transition-colors",
+            value === o.value ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+            disabled && "cursor-not-allowed opacity-50",
+          )}
+        >
+          {o.icon}
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Chip({ on, onClick, disabled, children }: {
+  on?: boolean; onClick?: () => void; disabled?: boolean; children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      disabled={disabled}
+      className={cn(
+        "border px-2.5 py-1 text-xs transition-colors",
+        on ? "border-border-strong bg-elevated text-fg" : "border-border text-muted hover:text-fg",
+        disabled && "cursor-not-allowed opacity-50",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function Checkbox({ label, checked, onChange, disabled }: {
   label: ReactNode; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean;
 }) {
