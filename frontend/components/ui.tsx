@@ -152,14 +152,13 @@ export function Chip({ on, onClick, disabled, children }: {
 
 export type ComboOption = { value: string; label: string; group: string; icon?: ReactNode };
 
-export function Combobox({ value, onChange, onSelect, options, placeholder, disabled, cap = 12 }: {
+export function Combobox({ value, onChange, onSelect, options, placeholder, disabled }: {
   value: string;
   onChange: (v: string) => void;
   onSelect: (o: ComboOption) => void;
   options: ComboOption[];
   placeholder?: string;
   disabled?: boolean;
-  cap?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -167,11 +166,13 @@ export function Combobox({ value, onChange, onSelect, options, placeholder, disa
   // Pienamente controllato: `value` è l'unica fonte di verità sia per il testo
   // mostrato sia per il filtro. Nessuno stato ombra: se il chiamante normalizza
   // o rifiuta quel che si digita, il campo mostra solo ciò che ha approvato.
+  // Nessun cap sulle voci: la lista scorre gia' (max-h + overflow-y-auto), e il
+  // vecchio taglio a 12 era un residuo delle chip "+N altre" — con 319 voci reali
+  // (generi + etichette + stili curati) era un blocco, non una protezione.
   const matches = useMemo(() => {
     const q = value.trim().toLowerCase();
-    const hit = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
-    return hit.slice(0, cap);
-  }, [value, options, cap]);
+    return q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+  }, [value, options]);
 
   const choose = (o: ComboOption) => {
     onSelect(o);
@@ -184,10 +185,15 @@ export function Combobox({ value, onChange, onSelect, options, placeholder, disa
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       setOpen(true);
-      setActive((i) => {
-        const next = e.key === "ArrowDown" ? i + 1 : i - 1;
-        return Math.max(0, Math.min(matches.length - 1, next));
-      });
+      const next = Math.max(0, Math.min(matches.length - 1,
+        e.key === "ArrowDown" ? active + 1 : active - 1));
+      setActive(next);
+      // Porta in vista SOLO da tastiera: onMouseEnter cambia `active` ma li'
+      // l'utente sta gia' guardando l'opzione che tocca — farle saltare la lista
+      // sotto il cursore sarebbe peggio del difetto che questo cura (senza scroll,
+      // con centinaia di voci l'evidenziazione esce dall'area visibile e la
+      // navigazione diventa cieca).
+      document.getElementById(`combobox-opt-${next}`)?.scrollIntoView({ block: "nearest" });
       return;
     }
     if (e.key === "Enter" && open && active >= 0 && matches[active]) {

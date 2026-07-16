@@ -1,9 +1,14 @@
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Chip, Combobox, SegmentedControl, type ComboOption } from "@/components/ui";
 
 afterEach(cleanup);
+
+beforeAll(() => {
+  // jsdom non implementa scrollIntoView: senza stub, il Combobox lancerebbe.
+  Element.prototype.scrollIntoView = vi.fn();
+});
 
 describe("SegmentedControl", () => {
   const opts = [
@@ -51,11 +56,10 @@ describe("Combobox", () => {
   // così `fireEvent.change` -> onChange -> setValue -> nuovo `value` in prop.
   // Testare un componente controllato con un onChange inerte proverebbe solo
   // che React fa il suo mestiere.
-  function Harness({ onSelect, onChange, options = OPTS, cap }: {
+  function Harness({ onSelect, onChange, options = OPTS }: {
     onSelect?: (o: ComboOption) => void;
     onChange?: (v: string) => void;
     options?: ComboOption[];
-    cap?: number;
   }) {
     const [value, setValue] = useState("");
     return (
@@ -64,7 +68,6 @@ describe("Combobox", () => {
         onChange={(v) => { onChange?.(v); setValue(v); }}
         onSelect={onSelect ?? (() => {})}
         options={options}
-        cap={cap}
       />
     );
   }
@@ -118,12 +121,45 @@ describe("Combobox", () => {
     expect(onChange).toHaveBeenCalledWith("Genere Inventato");
   });
 
-  it("cappa le voci visibili", () => {
-    const many: ComboOption[] = Array.from({ length: 30 }, (_, i) => ({
+  // Riscrittura SEMANTICA di "cappa le voci visibili": il cap era un residuo delle
+  // chip (+N altre) e contraddiceva la lista, che gia' scorre (max-h + overflow).
+  // Le voci reali sono 319 (66 generi + 228 etichette + 25 stili curati): si vedono
+  // tutte, tagliarle a 12 era un blocco, non una protezione.
+  it("rende tutte le opzioni, nessun cap", () => {
+    const many: ComboOption[] = Array.from({ length: 319 }, (_, i) => ({
       value: `g${i}`, label: `g${i}`, group: "genere",
     }));
-    render(<Harness options={many} cap={12} />);
+    render(<Harness options={many} />);
     fireEvent.focus(screen.getByRole("combobox"));
-    expect(screen.getAllByRole("option").length).toBe(12);
+    expect(screen.getAllByRole("option").length).toBe(319);
+  });
+
+  it("ArrowDown porta l'opzione attiva in vista", () => {
+    // Obbligatorio insieme alla rimozione del cap: gia' con 12 voci in una box da
+    // 256px se ne vedono ~7, con 319 la navigazione da tastiera sarebbe cieca.
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView");
+    const many: ComboOption[] = Array.from({ length: 319 }, (_, i) => ({
+      value: `g${i}`, label: `g${i}`, group: "genere",
+    }));
+    render(<Harness options={many} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(spy).toHaveBeenCalledWith({ block: "nearest" });
+    spy.mockRestore();
+  });
+
+  it("il mouse NON fa scrollare la lista", () => {
+    // onMouseEnter cambia l'opzione attiva, ma l'utente sta gia' guardando quella
+    // che tocca: farle saltare la lista sotto il cursore e' peggio del difetto curato.
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView");
+    const many: ComboOption[] = Array.from({ length: 319 }, (_, i) => ({
+      value: `g${i}`, label: `g${i}`, group: "genere",
+    }));
+    render(<Harness options={many} />);
+    fireEvent.focus(screen.getByRole("combobox"));
+    fireEvent.mouseEnter(screen.getAllByRole("option")[3]);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
