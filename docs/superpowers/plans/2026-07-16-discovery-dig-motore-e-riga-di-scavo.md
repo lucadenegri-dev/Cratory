@@ -119,7 +119,7 @@ def test_search_releases_sends_sort_params():
     assert captured["sort_order"] == "desc"
 
 
-def test_search_releases_first_page_error_raises_but_later_page_degrades():
+def test_search_releases_stops_at_the_first_failed_later_page():
     def handler(url, params=None, **kw):
         if params["page"] == 2:
             raise httpx.HTTPError("boom")
@@ -127,8 +127,10 @@ def test_search_releases_first_page_error_raises_but_later_page_degrades():
                       "results": [{"id": params["page"], "title": "A - B"}]})
 
     client = DiscogsClient(token=None, http=_FakeHttp(handler))
-    # pagina successiva in errore: best-effort, tiene ciò che ha
-    assert len(client.search_releases(style="x", pages=[1, 2, 3])) == 2
+    # Ci si FERMA, non si salta la pagina rotta: il modo di fallire dominante su
+    # Discogs e' il rate limit (~25 req/min senza token), e allora anche la pagina
+    # successiva fallirebbe. Tiene le pagine raccolte fino a li': solo la 1.
+    assert len(client.search_releases(style="x", pages=[1, 2, 3])) == 1
 ```
 
 Se `_resp` / `_FakeHttp` non esistono già in quel file, riusa lo helper HTTP finto già presente (leggi il file prima: la forma va imitata, non reinventata). Aggiungi in cima gli import mancanti: `import httpx` e `from app.integrations.discogs import DiscogsClient, SORT_WANT, SORT_DESC`.
