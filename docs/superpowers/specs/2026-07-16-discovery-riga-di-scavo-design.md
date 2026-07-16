@@ -1,7 +1,17 @@
 # Discovery — la riga di scavo
 
 Data: 2026-07-16
-Stato: design approvato, pronto per il piano di implementazione.
+Stato: **da rivedere** — superata in parte da `2026-07-16-discovery-dig-motore-design.md`,
+che va implementata prima.
+
+> L'analisi funzionale del motore (spec "il motore: pescare dove c'è pesce") ha mostrato
+> che «Profondità» **non** è una label bugiarda da rinominare: lo diventa onesta, perché
+> il motore cambia. Decadono da questa spec: le rinomine "Ordina per" / "Il mio gusto ·
+> Bilanciato · Rarità"; il popover con "Gusto misurato su" annidato (col gusto sempre
+> attivo torna un pari grado sulla riga); il fix della soglia `deep_cut`, che migra nella
+> spec del motore. **Regge invariato** tutto il resto: il combobox unificato
+> genere+etichetta, il blocco a due righe, le primitive `Popover`/`Combobox`/
+> `SegmentedControl`/`Chip`.
 
 ## Obiettivo
 
