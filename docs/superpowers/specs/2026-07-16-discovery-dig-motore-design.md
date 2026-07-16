@@ -230,9 +230,15 @@ def _weights(seed_type: str) -> Weights:
     return Weights(artist=W_ARTIST, label=W_LABEL, style=W_STYLE)
 ```
 
-Il seme `genre` **non** viene trattato allo stesso modo: Discogs restituisce più `style`
-per release, quindi lo style del seme non è l'unico e `style_affinity` conserva potere
-discriminante (vedi sotto).
+Il seme `genre` **non** viene trattato allo stesso modo — ma non perché lo style del
+seme non sia l'unico sulla release. `style_affinity` è una Jaccard **massima** su (style
+della release × generi della libreria, vedi sotto), e ogni release del dig contiene lo
+style del seme per costruzione (è il filtro `style=value` della ricerca Discogs): il
+seme impone quindi un **pavimento uguale per tutti i lead**, e gli altri style possono
+solo alzare quel max, mai abbassare il pavimento. Se la libreria ha alla lettera il
+genere del seme, il pavimento è 1.0 e `style_affinity` è una costante esatta — la stessa
+malattia che qui sopra si cura per `label`. **Caso noto, non ancora deciso**: è una scelta
+di prodotto da misurare, non un bug silenzioso da correggere qui.
 
 Coerentemente, il reason `label_followed` non viene emesso su un dig per etichetta.
 

@@ -386,8 +386,16 @@ def _weights(seed_type: str) -> Weights:
 
     Su un dig per etichetta ogni lead ha l'etichetta del seme: `label_affinity` vale
     1.0 per tutti. E' una costante additiva — non ordina, e dilava gli altri segnali.
-    Su un dig per genere invece Discogs restituisce PIU' style per release, quindi lo
-    style del seme non e' l'unico e `style_affinity` conserva potere discriminante.
+
+    Il seme `genre` NON riceve lo stesso trattamento, ma non per la ragione che si
+    potrebbe pensare guardando `style_affinity` (Jaccard massima tra gli style della
+    release e i generi della libreria): ogni release del dig contiene lo style del seme
+    per costruzione (e' il filtro `style=value` della ricerca Discogs), quindi il seme
+    impone un PAVIMENTO uguale per tutti i lead — gli altri style possono solo alzare
+    quel max, mai abbassarlo. Se la libreria ha alla lettera il genere del seme, il
+    pavimento e' 1.0 e `style_affinity` e' una costante esatta: la stessa malattia che
+    qui sopra cura `label`. Caso noto, non ancora deciso: si tocca solo la doc, non il
+    comportamento (e' una scelta di prodotto da misurare, non un bug silenzioso).
     """
     if seed_type == "label":
         rest = W_ARTIST + W_STYLE

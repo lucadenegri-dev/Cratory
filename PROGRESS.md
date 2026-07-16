@@ -33,8 +33,8 @@ Il dig cercava dischi su Discogs **senza chiedere alcun ordinamento**: scaricava
 300 release di un seme che poteva averne 43.345 — un campione arbitrario dello 0,69% in cui
 non c'era nemmeno un disco con più di mille possessori e il 46% ne aveva meno di cinque.
 Sopra quel campione applicava poi un punteggio raffinato, che non poteva rimediare a un
-ingresso già sbagliato in partenza. Ridisegnato da zero, TDD, sul branch
-`feat/discovery-dig-riprogettato` (31 commit):
+ingresso già sbagliato in partenza. Ridisegnato da zero, TDD, in una serie di commit sul
+branch `feat/discovery-dig-riprogettato`:
 
 - **Motore (`backend/app/services/discovery_dig.py`):** la pila di release del seme si
   ordina ora per domanda (`sort=want` desc, via `DiscogsClient.search_releases`);
