@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Disc3, Download, ExternalLink } from "lucide-react";
+import { Check, Disc3, Download, ExternalLink, Play } from "lucide-react";
 import {
   discoveryImportTrack, discoverySaveForLater, downloadTrackAuto, errText, fmtDuration, getDiscogsRelease,
   type DiscogsRelease, type DiscoveryLead,
 } from "@/lib/api";
 import { Alert, Button, Modal, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { usePreviewPlayer } from "@/lib/preview-player";
 
 type PanelTrack = { position: string; title: string; duration_seconds: number | null };
 
@@ -139,6 +140,7 @@ function SaveAllButton({ release, tracks }: { release: DiscogsRelease; tracks: P
 
 function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTrack }) {
   const t = useT();
+  const player = usePreviewPlayer();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -188,6 +190,23 @@ function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTra
         {rowError && <p className="mt-0.5 text-xs text-danger">⚠ {rowError}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          aria-label={t.discovery.playPreview}
+          onClick={() =>
+            player.play({
+              key: `t:${release.discogs_id}:${track.position}:${track.title}`,
+              artist: release.artist,
+              title: track.title,
+              discogsId: release.discogs_id,
+              level: "track",
+              label: track.title,
+            })
+          }
+        >
+          <Play size={13} />
+        </Button>
         <Button size="sm" variant={saved ? "ghost" : "outline"} onClick={saveForLater} disabled={saving || saved}>
           {saved ? <Check size={14} /> : saving ? <Spinner /> : t.discovery.forLater}
         </Button>

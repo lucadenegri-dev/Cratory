@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Disc3 } from "lucide-react";
+import { Disc3, Play } from "lucide-react";
 import { type DiscoveryDigResponse, type DiscoveryLead, type Reason } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/ui";
 import { DiscoveryTracklistPanel } from "@/components/discovery-tracklist-panel";
 import { useT, type Dictionary } from "@/lib/i18n";
+import { usePreviewPlayer } from "@/lib/preview-player";
 
 function reasonLabel(r: Reason, t: Dictionary): string {
   switch (r.code) {
@@ -113,11 +114,19 @@ export function DiscoveryLeadGrid({ dig }: { dig: DiscoveryDigResponse }) {
 
 function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void }) {
   const t = useT();
+  const player = usePreviewPlayer();
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
-      className="group relative flex flex-col gap-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-fg"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="group relative flex cursor-pointer flex-col gap-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-fg"
     >
       <div className="relative aspect-square w-full overflow-hidden border border-border bg-elevated">
         {lead.thumb_url ? (
@@ -133,6 +142,24 @@ function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void })
             {lead.format_badge}
           </span>
         )}
+        <button
+          type="button"
+          aria-label={t.discovery.playPreview}
+          className="absolute bottom-1 right-1 rounded-full bg-black/60 p-1.5 text-white opacity-0 transition group-hover:opacity-100"
+          onClick={(e) => {
+            e.stopPropagation();
+            player.play({
+              key: `r:${lead.discogs_id ?? "x"}`,
+              artist: lead.artist,
+              title: lead.title,
+              discogsId: lead.discogs_id,
+              level: "release",
+              label: lead.title,
+            });
+          }}
+        >
+          <Play size={14} />
+        </button>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-full bg-bg/95 px-1.5 py-1 text-[10px] leading-tight text-muted opacity-0 transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
           {lead.label && <div className="truncate">{lead.label}</div>}
           {lead.year != null && <div>{lead.year}</div>}
@@ -143,6 +170,6 @@ function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void })
         <div className="truncate text-xs font-medium text-fg">{lead.title}</div>
         <div className="truncate text-[11px] text-faint">{lead.artist}</div>
       </div>
-    </button>
+    </div>
   );
 }

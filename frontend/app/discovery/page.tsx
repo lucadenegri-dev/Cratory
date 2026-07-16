@@ -19,7 +19,9 @@ import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { cn } from "@/lib/cn";
 import { DiscoveryLeadGrid } from "@/components/discovery-lead-grid";
+import { DockedPreviewPlayer } from "@/components/docked-preview-player";
 import { useT } from "@/lib/i18n";
+import { PreviewPlayerProvider } from "@/lib/preview-player";
 
 type DigSeed = "genre" | "label";
 const CHIP_CAP = 12;
@@ -151,177 +153,180 @@ function DiscoveryInner() {
   const digReady = digSeed === "genre" ? !!genre.trim() : !!selectedLabel;
 
   return (
-    <PageLayout title="Discovery">
-      <p className="mb-4 text-sm text-muted">{t.discovery.intro}</p>
+    <PreviewPlayerProvider>
+      <PageLayout title="Discovery">
+        <p className="mb-4 text-sm text-muted">{t.discovery.intro}</p>
 
-      {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
+        {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
-      {/*
-        DIG (Discogs: genere o etichetta) — pannello a tre zone che si legge come
-        una frase: COSA scavare (soggetto) → COME scavarlo (modificatori) → AZIONE.
-        L'azione vive in fondo, dopo la scelta; su mobile è full-width (niente
-        bottone orfano). È un <form> così Invio nel campo genere lancia il dig.
-      */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          runDig();
-        }}
-        className="mb-6 border border-border p-4"
-      >
-        {/* COSA — il soggetto: seed + picker */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-wider text-muted">{t.discovery.startFromLabel}</span>
-          <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
-            {([
-              ["genre", t.discovery.seedGenre, <Disc3 key="i" size={13} />],
-              ["label", t.discovery.seedLabel, <Tags key="i" size={13} />],
-            ] as const).map(([s, label, icon]) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => switchSeed(s)}
-                aria-pressed={digSeed === s}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-none px-2.5 py-1 text-xs font-medium transition-colors",
-                  digSeed === s ? "bg-elevated text-fg" : "text-muted hover:text-fg",
-                )}
-              >
-                {icon} {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* picker: genere */}
-        {digSeed === "genre" && (
-          <div className="mt-3">
-            <Input
-              list="genre-suggestions"
-              value={genre}
-              onChange={(e) => setGenre(e.target.value)}
-              disabled={busy}
-              placeholder={t.discovery.genrePlaceholder}
-            />
-            <datalist id="genre-suggestions">
-              {genres?.library.map((g) => <option key={`l-${g}`} value={g} />)}
-              {genres?.styles.map((g) => <option key={`s-${g}`} value={g} />)}
-            </datalist>
-            {genreChips.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {visibleGenres.map((g) => (
-                  <Chip key={g} on={genre === g} onClick={() => setGenre(g)} disabled={busy}>{g}</Chip>
-                ))}
-                {(hiddenGenreCount > 0 || showAllGenres) && genreChips.length > CHIP_CAP && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllGenres((v) => !v)}
-                    className="rounded-none px-2.5 py-1 text-xs text-muted underline underline-offset-4 transition-colors hover:text-fg"
-                  >
-                    {showAllGenres ? t.discovery.showLess : t.discovery.showMore(hiddenGenreCount)}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* picker: etichetta */}
-        {digSeed === "label" && (
-          <div className="mt-3">
-            {noLabels ? (
-              <p className="text-sm text-muted">
-                {t.discovery.noLabels}
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {visibleLabels.map((l) => (
-                  <Chip key={l.label} on={selectedLabel === l.label} onClick={() => setSelectedLabel(l.label)} disabled={busy}>
-                    {l.label}
-                  </Chip>
-                ))}
-                {(hiddenLabelCount > 0 || showAllLabels) && (labels?.length ?? 0) > CHIP_CAP && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllLabels((v) => !v)}
-                    className="rounded-none px-2.5 py-1 text-xs text-muted underline underline-offset-4 transition-colors hover:text-fg"
-                  >
-                    {showAllLabels ? t.discovery.showLess : t.discovery.showMore(hiddenLabelCount)}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* COME — i modificatori (secondari): profondità + affinità */}
-        <div className="mt-4 space-y-3 border-t border-border pt-4">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="text-[10px] uppercase tracking-wider text-muted">{t.discovery.depthLabel}</span>
+        {/*
+          DIG (Discogs: genere o etichetta) — pannello a tre zone che si legge come
+          una frase: COSA scavare (soggetto) → COME scavarlo (modificatori) → AZIONE.
+          L'azione vive in fondo, dopo la scelta; su mobile è full-width (niente
+          bottone orfano). È un <form> così Invio nel campo genere lancia il dig.
+        */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            runDig();
+          }}
+          className="mb-6 border border-border p-4"
+        >
+          {/* COSA — il soggetto: seed + picker */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-muted">{t.discovery.startFromLabel}</span>
             <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
-              {PRESETS.map((p) => (
+              {([
+                ["genre", t.discovery.seedGenre, <Disc3 key="i" size={13} />],
+                ["label", t.discovery.seedLabel, <Tags key="i" size={13} />],
+              ] as const).map(([s, label, icon]) => (
                 <button
-                  key={p.key}
+                  key={s}
                   type="button"
-                  onClick={() => setAdventurousness(p.value)}
-                  aria-pressed={activePreset.key === p.key}
-                  disabled={busy}
-                  title={p.desc}
+                  onClick={() => switchSeed(s)}
+                  aria-pressed={digSeed === s}
                   className={cn(
-                    "rounded-none px-2.5 py-1 text-xs font-medium transition-colors",
-                    activePreset.key === p.key ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                    "inline-flex items-center gap-1.5 rounded-none px-2.5 py-1 text-xs font-medium transition-colors",
+                    digSeed === s ? "bg-elevated text-fg" : "text-muted hover:text-fg",
                   )}
                 >
-                  {p.label}
+                  {icon} {label}
                 </button>
               ))}
             </div>
-            <span className="text-xs text-muted">{activePreset.desc}</span>
           </div>
 
-          {/* riferimento di gusto: rispetto a cosa misurare l'affinità */}
-          {(playlists?.length ?? 0) > 0 && (
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] uppercase tracking-wider text-muted">{t.discovery.affinityLabel}</span>
-                <div className="w-full max-w-[260px]">
-                  <Select
-                    value={tasteRef ?? ""}
-                    onChange={(e) => setTasteRef(e.target.value ? Number(e.target.value) : null)}
-                    disabled={busy}
-                  >
-                    <option value="">{t.discovery.wholeLibraryOption}</option>
-                    {playlists?.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </Select>
+          {/* picker: genere */}
+          {digSeed === "genre" && (
+            <div className="mt-3">
+              <Input
+                list="genre-suggestions"
+                value={genre}
+                onChange={(e) => setGenre(e.target.value)}
+                disabled={busy}
+                placeholder={t.discovery.genrePlaceholder}
+              />
+              <datalist id="genre-suggestions">
+                {genres?.library.map((g) => <option key={`l-${g}`} value={g} />)}
+                {genres?.styles.map((g) => <option key={`s-${g}`} value={g} />)}
+              </datalist>
+              {genreChips.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {visibleGenres.map((g) => (
+                    <Chip key={g} on={genre === g} onClick={() => setGenre(g)} disabled={busy}>{g}</Chip>
+                  ))}
+                  {(hiddenGenreCount > 0 || showAllGenres) && genreChips.length > CHIP_CAP && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllGenres((v) => !v)}
+                      className="rounded-none px-2.5 py-1 text-xs text-muted underline underline-offset-4 transition-colors hover:text-fg"
+                    >
+                      {showAllGenres ? t.discovery.showLess : t.discovery.showMore(hiddenGenreCount)}
+                    </button>
+                  )}
                 </div>
-              </div>
-              <p className="text-xs text-muted">{t.discovery.affinityHint}</p>
+              )}
             </div>
           )}
-        </div>
 
-        {/* AZIONE — il dig, dopo la scelta; full-width su mobile */}
-        <div className="mt-4 flex border-t border-border pt-4 sm:justify-end">
-          <Button type="submit" disabled={busy || !digReady} className="w-full sm:w-auto">
-            {busy ? <Spinner /> : <Shovel size={15} />} {t.discovery.dig}
-          </Button>
-        </div>
-      </form>
+          {/* picker: etichetta */}
+          {digSeed === "label" && (
+            <div className="mt-3">
+              {noLabels ? (
+                <p className="text-sm text-muted">
+                  {t.discovery.noLabels}
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {visibleLabels.map((l) => (
+                    <Chip key={l.label} on={selectedLabel === l.label} onClick={() => setSelectedLabel(l.label)} disabled={busy}>
+                      {l.label}
+                    </Chip>
+                  ))}
+                  {(hiddenLabelCount > 0 || showAllLabels) && (labels?.length ?? 0) > CHIP_CAP && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllLabels((v) => !v)}
+                      className="rounded-none px-2.5 py-1 text-xs text-muted underline underline-offset-4 transition-colors hover:text-fg"
+                    >
+                      {showAllLabels ? t.discovery.showLess : t.discovery.showMore(hiddenLabelCount)}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-      {busy && !dig && (
-        <Loading label={t.discovery.digInProgress} />
-      )}
-      {dig && <DiscoveryLeadGrid dig={dig} />}
-      {!busy && !dig && (
-        <EmptyState icon={<Disc3 size={28} />} title={t.discovery.readyTitle}>
-          {digReady
-            ? t.discovery.readyBodyReady
-            : t.discovery.readyBodyNotReady}
-        </EmptyState>
-      )}
-    </PageLayout>
+          {/* COME — i modificatori (secondari): profondità + affinità */}
+          <div className="mt-4 space-y-3 border-t border-border pt-4">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="text-[10px] uppercase tracking-wider text-muted">{t.discovery.depthLabel}</span>
+              <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => setAdventurousness(p.value)}
+                    aria-pressed={activePreset.key === p.key}
+                    disabled={busy}
+                    title={p.desc}
+                    className={cn(
+                      "rounded-none px-2.5 py-1 text-xs font-medium transition-colors",
+                      activePreset.key === p.key ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-muted">{activePreset.desc}</span>
+            </div>
+
+            {/* riferimento di gusto: rispetto a cosa misurare l'affinità */}
+            {(playlists?.length ?? 0) > 0 && (
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-wider text-muted">{t.discovery.affinityLabel}</span>
+                  <div className="w-full max-w-[260px]">
+                    <Select
+                      value={tasteRef ?? ""}
+                      onChange={(e) => setTasteRef(e.target.value ? Number(e.target.value) : null)}
+                      disabled={busy}
+                    >
+                      <option value="">{t.discovery.wholeLibraryOption}</option>
+                      {playlists?.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
+                <p className="text-xs text-muted">{t.discovery.affinityHint}</p>
+              </div>
+            )}
+          </div>
+
+          {/* AZIONE — il dig, dopo la scelta; full-width su mobile */}
+          <div className="mt-4 flex border-t border-border pt-4 sm:justify-end">
+            <Button type="submit" disabled={busy || !digReady} className="w-full sm:w-auto">
+              {busy ? <Spinner /> : <Shovel size={15} />} {t.discovery.dig}
+            </Button>
+          </div>
+        </form>
+
+        {busy && !dig && (
+          <Loading label={t.discovery.digInProgress} />
+        )}
+        {dig && <DiscoveryLeadGrid dig={dig} />}
+        {!busy && !dig && (
+          <EmptyState icon={<Disc3 size={28} />} title={t.discovery.readyTitle}>
+            {digReady
+              ? t.discovery.readyBodyReady
+              : t.discovery.readyBodyNotReady}
+          </EmptyState>
+        )}
+      </PageLayout>
+      <DockedPreviewPlayer />
+    </PreviewPlayerProvider>
   );
 }
 
