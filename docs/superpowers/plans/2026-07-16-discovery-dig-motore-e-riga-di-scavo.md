@@ -690,16 +690,32 @@ def test_owned_via_album_when_release_is_an_ep():
     assert _is_owned(lead, tracks, albums) is True
 
 
+def test_owned_via_track_when_release_title_carries_the_format_suffix():
+    # Lo scenario CARDINE del task (9% dei titoli sono nomi di EP): possiedi la traccia
+    # 'Piercing Love', Discogs chiama la release 'Piercing Love EP'. Questo passa da
+    # owned_tracks + strip del suffisso — il test sull'album sopra NON lo prova, perche'
+    # li' album e titolo della release combaciano gia' lettera per lettera.
+    tracks, albums = _owned_index(_lib(("Fabien D'Estival", "Piercing Love")))
+    lead = _lead_from_release(_release("Fabien D'Estival - Piercing Love EP", rid=1), "x")
+    assert _is_owned(lead, tracks, albums) is True
+
+
 def test_owned_via_one_side_of_a_split_title():
     tracks, albums = _owned_index(_lib(("Nail", "Sentipede")))
     lead = _lead_from_release(_release("Nail* / Einzelkind - Sentipede / 808 Rhythm Traxx 3", rid=1), "x")
     assert _is_owned(lead, tracks, albums) is True
 
 
-def test_not_owned_stays_not_owned():
+def test_not_owned_requires_both_artist_and_title_to_match():
+    # La coppia va provata COME coppia: con artista e titolo entrambi diversi
+    # passerebbe anche una semantica "OR" rotta (match se combacia solo uno dei due).
     tracks, albums = _owned_index(_lib(("Tyree", "Acid Crash")))
-    lead = _lead_from_release(_release("Armando - Land Of Confusion", rid=1), "x")
-    assert _is_owned(lead, tracks, albums) is False
+    same_artist = _lead_from_release(_release("Tyree* - Other Track", rid=1), "x")
+    assert _is_owned(same_artist, tracks, albums) is False
+    same_title = _lead_from_release(_release("Armando - Acid Crash", rid=2), "x")
+    assert _is_owned(same_title, tracks, albums) is False
+    unrelated = _lead_from_release(_release("Armando - Land Of Confusion", rid=3), "x")
+    assert _is_owned(unrelated, tracks, albums) is False
 ```
 
 Estendi l'import con `_is_owned, _owned_index, _title_candidates`.
