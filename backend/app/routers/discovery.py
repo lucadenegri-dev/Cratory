@@ -31,6 +31,7 @@ from app.repositories import add_track_to_playlist
 from app.schemas import (
     DiscogsReleaseOut,
     DiscogsTrackOut,
+    DiscogsVideoOut,
     DiscoveryAddRequest,
     DiscoveryAddResponse,
     DiscoveryCandidateOut,
@@ -53,6 +54,7 @@ from app.services.discovery import (
 from app.services.discovery_dig import DiscoveryLead, dig
 from app.services.labels import _clean_label, album_label, labels_overview
 from app.services.playlist_import import get_or_create_discovery_playlist, import_single_track
+from app.services.preview import extract_youtube_videos
 
 # Stili Discogs curati per il drill-down "Generi" (oltre ai generi gia' in libreria).
 _CURATED_STYLES = [
@@ -280,6 +282,7 @@ def get_release_detail(discogs_id: int):
         year=payload.get("year"),
         label=labels[0].get("name") if labels else None,
         tracks=tracks,
+        videos=[DiscogsVideoOut(**v) for v in extract_youtube_videos(payload)],
     )
 
 

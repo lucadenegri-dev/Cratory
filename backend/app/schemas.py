@@ -549,6 +549,12 @@ class DiscogsTrackOut(BaseModel):
     duration_seconds: int | None = None
 
 
+class DiscogsVideoOut(BaseModel):
+    youtube_video_id: str
+    title: str
+    duration_seconds: int | None = None
+
+
 class DiscogsReleaseOut(BaseModel):
     discogs_id: int
     title: str
@@ -558,6 +564,7 @@ class DiscogsReleaseOut(BaseModel):
     year: int | None = None
     label: str | None = None
     tracks: list[DiscogsTrackOut] = []
+    videos: list[DiscogsVideoOut] = []
 
 
 class DiscoverySaveForLaterRequest(BaseModel):
@@ -573,6 +580,14 @@ class DiscoverySaveForLaterRequest(BaseModel):
 class DiscoverySaveForLaterResponse(BaseModel):
     created: bool
     track: TrackOut
+
+
+class DiscoveryPreviewOut(BaseModel):
+    kind: str  # "itunes" | "youtube" | "none"
+    audio_url: str | None = None
+    youtube_video_id: str | None = None
+    source_url: str | None = None
+    matched_title: str | None = None
 
 
 class BpmBin(BaseModel):

@@ -209,3 +209,31 @@ def test_expand_200_via_http(client, monkeypatch):
     assert body["scope"] == "Seed Playlist"
     titles = {cand["title"] for cand in body["candidates"]}
     assert "Fresh Cut" in titles
+
+
+def test_release_detail_exposes_youtube_videos(client, monkeypatch):
+    from app.integrations.discogs import DiscogsClient
+
+    c, _ = client
+    payload = {
+        "id": 42,
+        "title": "Artist - EP",
+        "artists": [{"name": "Artist"}],
+        "labels": [{"name": "Lbl"}],
+        "images": [],
+        "uri": "/release/42",
+        "year": 2001,
+        "tracklist": [{"type_": "track", "position": "A", "title": "Acid Trip", "duration": "5:00"}],
+        "videos": [
+            {"uri": "https://www.youtube.com/watch?v=abcdefghijk", "title": "Artist - Acid Trip", "duration": 300},
+            {"uri": "https://vimeo.com/1", "title": "nope", "duration": 1},
+        ],
+    }
+    monkeypatch.setattr(DiscogsClient, "get_release", lambda self, rid: payload)
+
+    r = c.get("/api/discovery/release/42")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["videos"] == [
+        {"youtube_video_id": "abcdefghijk", "title": "Artist - Acid Trip", "duration_seconds": 300}
+    ]
