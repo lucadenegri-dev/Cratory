@@ -28,10 +28,14 @@ BASE = "https://api.discogs.com"
 # Discogs richiede uno User-Agent identificativo (come MusicBrainz), altrimenti 403.
 _USER_AGENT = "Cratory/0.1 (+http://localhost)"
 SEARCH_PER_PAGE = 100  # max consentito da Discogs: massimizza il volume per chiamata
-# Paginazione limitata: piu' volume per il dig (fino a 300 release per seme) senza
-# bruciare il rate limit Discogs (~60 req/min col token, ~25 senza). 3 pagine sono
-# il compromesso: un dig consuma al massimo 3 richieste, non l'intero budget.
-SEARCH_MAX_PAGES = 3
+# Ordinamento del bacino: per DOMANDA. Senza `sort`, Discogs restituisce un ordine
+# arbitrario: su style=Acid House (43k release) le prime 300 non contengono NEMMENO UNA
+# release con have>1000 e il 46% ne ha meno di 5. Con sort=want la prima pagina e' il
+# canone (Phuture, Underground Resistance). Misurato, non supposto.
+SORT_WANT = "want"
+SORT_DESC = "desc"
+# Tetto duro di Discogs: pagina 101 -> 404. Con per_page=100 sono 10.000 release.
+DISCOGS_MAX_PAGES = 100
 
 
 class DiscogsError(Exception):
@@ -52,23 +56,10 @@ class DiscogsClient(ClosableHttpClient):
             rate_limit_message="Discogs: rate limit (riprova piu' tardi o imposta DISCOGS_TOKEN).",
         )
 
-    def search_releases(
-        self, *, style: str | None = None, genre: str | None = None,
-        label: str | None = None, query: str | None = None, per_page: int = SEARCH_PER_PAGE,
-    ) -> list[dict[str, Any]]:
-        """Release da `/database/search` filtrate per stile/genere/etichetta.
-
-        Una forma unica e coerente (titolo "Artista - Titolo", stili, etichette,
-        community) per tutti i semi del dig. Pagina fino a SEARCH_MAX_PAGES e
-        concatena i risultati; si ferma prima se una pagina e' corta o
-        `pagination.pages` dice che non ce ne sono altre.
-
-        Errori: la PRIMA pagina che fallisce SOLLEVA DiscogsError (rate limit o
-        token mancante non devono sembrare 'zero risultati': il router li traduce
-        in 502 esplicito); una pagina successiva in errore degrada ai risultati
-        gia' raccolti (best-effort, con warning nel log).
-        """
-        params: dict[str, Any] = {"type": "release", "per_page": per_page}
+    def _filters(
+        self, style: str | None, genre: str | None, label: str | None, query: str | None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"type": "release"}
         if style:
             params["style"] = style
         if genre:
@@ -77,27 +68,60 @@ class DiscogsClient(ClosableHttpClient):
             params["label"] = label
         if query:
             params["q"] = query
-        if not (style or genre or label or query):
+        return params
+
+    def count_releases(
+        self, *, style: str | None = None, genre: str | None = None,
+        label: str | None = None, query: str | None = None,
+    ) -> int:
+        """Quante release ha il seme. Sonda economica (per_page=1): serve a sapere
+        quanto e' alta la pila PRIMA di scegliere in che punto pescare."""
+        params = self._filters(style, genre, label, query)
+        if len(params) == 1:  # solo `type`: nessun filtro
+            return 0
+        data = self._get("/database/search", params={**params, "per_page": 1, "page": 1})
+        return int((data.get("pagination") or {}).get("items") or 0)
+
+    def search_releases(
+        self, *, style: str | None = None, genre: str | None = None,
+        label: str | None = None, query: str | None = None,
+        pages: list[int] | None = None, sort: str | None = None,
+        sort_order: str | None = None, per_page: int = SEARCH_PER_PAGE,
+    ) -> list[dict[str, Any]]:
+        """Release da `/database/search`, per le PAGINE richieste dal chiamante.
+
+        Il motore decide quali pagine (la finestra scelta da `depth`); il client le
+        scarica e basta.
+
+        Errori: la PRIMA pagina richiesta che fallisce SOLLEVA DiscogsError (rate limit o
+        token mancante non devono sembrare 'zero risultati': il router li traduce in 502
+        esplicito); una pagina successiva in errore degrada (viene saltata, con warning
+        nel log) ma il giro prosegue sulle pagine successive gia' richieste — best-effort,
+        non si butta via cio' che il chiamante ha esplicitamente chiesto dopo quella corta.
+        """
+        params = self._filters(style, genre, label, query)
+        if len(params) == 1:
             return []
+        params["per_page"] = per_page
+        if sort:
+            params["sort"] = sort
+        if sort_order:
+            params["sort_order"] = sort_order
+
         results: list[dict[str, Any]] = []
-        for page in range(1, SEARCH_MAX_PAGES + 1):
+        for i, page in enumerate(pages or [1]):
             try:
                 data = self._get("/database/search", params={**params, "page": page})
             except DiscogsError as exc:
-                if page == 1:
+                if i == 0:
                     raise
                 logger.warning(
                     "Discogs search_releases(%s) pagina %d fallita: %s — "
-                    "ritorno i %d risultati gia' raccolti",
+                    "salto e proseguo con le pagine successive richieste (%d risultati finora)",
                     params, page, exc, len(results),
                 )
-                break
-            page_results = data.get("results") or []
-            results.extend(page_results)
-            total_pages = (data.get("pagination") or {}).get("pages")
-            # pagina corta o ultima pagina dichiarata -> niente chiamate extra
-            if len(page_results) < per_page or (total_pages is not None and page >= total_pages):
-                break
+                continue
+            results.extend(data.get("results") or [])
         return results
 
     def get_release(self, release_id: int) -> dict[str, Any]:
