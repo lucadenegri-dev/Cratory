@@ -13,6 +13,7 @@ Deterministico e testabile: la funzione di ricerca Discogs e' iniettata.
 """
 
 import logging
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -20,11 +21,35 @@ from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
+from app.integrations.discogs import DISCOGS_MAX_PAGES, SEARCH_PER_PAGE
 from app.services.discovery import _library_tracks, _norm
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_DIG_LIMIT = 80
+
+PAGES_PER_DIG = 3  # quante pagine scarica un dig: 3 richieste di contenuto
+
+
+def _window(depth: float, total_items: int) -> list[int]:
+    """Le pagine da scaricare dalla pila ordinata per domanda.
+
+    depth 0 = il canone del seme, depth 1 = il fondo della pila. La pila regge per
+    tutta la sua lunghezza: a rango 9901-10000 il `want` mediano e' ancora 89, e a
+    NESSUNA profondita' esiste un disco con want<5 (misurato su style=Acid House).
+
+    Su una pila piu' corta della finestra, `depth` non ha effetto: non c'e' profondita'
+    da scegliere. Il chiamante lo segnala alla UI via `pile_pages`.
+    """
+    usable = min(math.ceil(total_items / SEARCH_PER_PAGE), DISCOGS_MAX_PAGES)
+    if usable <= 0:
+        return []
+    start = 1 + round(max(0.0, min(1.0, depth)) * max(0, usable - PAGES_PER_DIG))
+    # il `- 1` non e' cosmetico: senza, la finestra e' di 4 pagine e ogni dig
+    # spende una richiesta di troppo.
+    return list(range(start, min(start + PAGES_PER_DIG - 1, usable) + 1))
+
+
 # Sopra questo numero di "have" un disco e' molto diffuso: novita' ~0 (non un deep cut).
 _HAVE_CAP = 5000
 _MAX_PER_ARTIST = 2  # un artista non deve monopolizzare la lista

@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from app.services.discovery_dig import _lead_from_release, dig
+from app.services.discovery_dig import _lead_from_release, _window, dig
 
 
 def _release(title, *, year=2020, label="Lbl", style="Acid House", have=100, want=10,
@@ -313,3 +313,41 @@ def test_dig_emits_recent_reason():
 
     res = dig(None, seed_type="genre", value="x", search_releases=search, library=[])
     assert "recent" in _codes(res.leads[0])
+
+
+# --- Task 2: _window — profondita' della pila ordinata per domanda -----------
+
+
+def test_window_depth_zero_is_the_canon():
+    assert _window(0.0, 43345) == [1, 2, 3]
+
+
+def test_window_depth_one_is_the_bottom_of_the_pile():
+    # 43345 release -> 434 pagine, ma Discogs si ferma a 100 (pagina 101 -> 404)
+    assert _window(1.0, 43345) == [98, 99, 100]
+
+
+def test_window_is_always_three_pages():
+    # regressione: una finestra di 4 pagine costa una richiesta di troppo a ogni dig
+    for depth in (0.0, 0.15, 0.5, 0.85, 1.0):
+        assert len(_window(depth, 43345)) == 3
+
+
+def test_window_is_monotonic_in_depth():
+    starts = [_window(d, 43345)[0] for d in (0.0, 0.15, 0.5, 0.85, 1.0)]
+    assert starts == sorted(starts)
+    assert starts == [1, 16, 49, 83, 98]
+
+
+def test_window_short_pile_ignores_depth():
+    # 150 release = 2 pagine: non c'e' profondita' da scegliere
+    assert _window(0.0, 150) == [1, 2]
+    assert _window(1.0, 150) == [1, 2]
+
+
+def test_window_tiny_pile():
+    assert _window(0.5, 40) == [1]
+
+
+def test_window_empty_pile():
+    assert _window(0.5, 0) == []
