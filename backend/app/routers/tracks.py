@@ -1,10 +1,12 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.http_errors import api_error
+from app.services.file_search import path_within_roots, search_roots
 from app.db import get_db
 from app.integrations.local_files import read_cover
 from app.repositories import genres_overview, get_track, library_stats, list_tracks, update_track
@@ -94,6 +96,36 @@ def get_track_cover(track_id: int, db: Session = Depends(get_db)):
         raise api_error(404, "track_no_embedded_cover", "No cover embedded in the file")
     data, mime = cover
     return Response(content=data, media_type=mime, headers={"Cache-Control": "max-age=3600"})
+
+
+# Content-Type per estensione: `mimetypes` non conosce bene .flac/.aiff, quindi
+# mappiamo esplicitamente i formati audio comuni; fallback binario generico.
+_AUDIO_MIME = {
+    ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".mp4": "audio/mp4", ".aac": "audio/aac",
+    ".flac": "audio/flac", ".wav": "audio/wav", ".aif": "audio/aiff", ".aiff": "audio/aiff",
+    ".ogg": "audio/ogg", ".opus": "audio/ogg",
+}
+
+
+@router.get("/tracks/{track_id}/audio")
+def get_track_audio(track_id: int, db: Session = Depends(get_db)):
+    """Streaming del file locale di una traccia posseduta, per audizione rapida.
+    Sola lettura: il file non viene MAI modificato. `FileResponse` gestisce le
+    Range request (seek) e risponde 206 al `Range`. 404 se la traccia non esiste,
+    non è posseduta, il file risolve fuori dalle cartelle consentite o è mancante."""
+    track = get_track(db, track_id)
+    if track is None:
+        raise api_error(404, "track_not_found", "Track not found")
+    if not track.has_local_file or not track.local_path:
+        raise api_error(404, "track_no_local_file", "Track has no local file")
+    path = Path(track.local_path)
+    roots = [root for _, root in search_roots()]
+    if not path_within_roots(path, roots):
+        raise api_error(404, "track_file_not_allowed", "File outside allowed roots")
+    if not path.exists():
+        raise api_error(404, "track_file_missing", "File not found")
+    media_type = _AUDIO_MIME.get(path.suffix.lower(), "application/octet-stream")
+    return FileResponse(path, media_type=media_type)
 
 
 @router.patch("/tracks/{track_id}", response_model=TrackDetailOut)
