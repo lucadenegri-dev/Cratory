@@ -368,17 +368,32 @@ The `expand` candidates are annotated with their **label**: one on a label you
 already collect gets a small boost and is marked `label_owned`.
 
 `dig` ("Scava") does crate digging via **Discogs** by genre or label: it finds
-releases/tracks not yet owned, with ranking by depth/novelty (want/have demand) and
-Familiar/Balanced/Adventurous presets. `genres` lists the genres and styles available
-as a dig seed.
+releases/tracks not yet owned. Discogs sorts the seed's whole pile by **demand**
+(`sort=want` desc); `depth` (`0.0`-`1.0`, replaces the old `adventurousness`) picks
+**where in that pile to fetch from** — `0.0` is the seed's classics, `1.0` is the
+bottom of the crate. The pile holds up along its whole length (median `want` still
+~89 at rank 10,000 in measurements), so `depth` never runs dry. `depth` chooses the
+*window*, not the ranking: inside one window `want` is roughly constant and does not
+discriminate leads. `genres` lists the genres and styles available as a dig seed.
 
-The dig ranking combines discovery (novelty+demand) with **taste**: graduated
-familiarity on the artist, owned label and style affinity with your genres. The
+Taste always ranks inside the chosen window — not a mode, not optional. The score is
+**taste-only**: graduated familiarity on the artist, owned label and style affinity
+with your genres. Novelty, demand and recency are **not** score inputs any more —
+demand only gates which window `depth` reads (above), it does not order within it. The
 affinity is measured against a reference selectable via the optional
 `taste_playlist_id` field (default: the whole library); the **dedup stays always
 library-wide**. Each lead carries deterministic `reasons[]` (`{code, data}`) to
 explain why (e.g. `rare_wanted`, `deep_cut`, `label_followed`, `artist_collected`,
-`style_match`, `recent`); the chip text is composed by the UI.
+`style_match`, `recent`); the chip text is composed by the UI — these are display
+badges, not the score's factors.
+
+Network cost: **4-5 Discogs requests per dig** — one `count_releases` probe to size
+the pile (needed to place `depth`'s window) plus 3 content pages, plus one extra probe
+when a `genre` seed's fine-grained `style=` filter returns nothing and falls back to
+the coarser `genre=` filter. The response carries `pile_pages`: how many pages the
+pile actually has. When `pile_pages <= 3` the whole pile already fits in one window and
+`depth` has no effect — the UI disables the depth control and shows a note instead of
+offering an inert one.
 
 `release/{discogs_id}` expands a Discogs release from the dig into its **real
 tracklist** (fetched lazily when the release is opened): each row is a candidate track

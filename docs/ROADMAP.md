@@ -26,7 +26,11 @@ page is complete**: BPM/key now have two deterministic sources — Rekordbox imp
 (primary, source-aware overwrite) and in-app analysis via Essentia (alternative,
 `/analysis`) — with explicit per-value provenance (`bpm_source`/`key_source`: manual >
 rekordbox > cratory) and an explicit apply bridge to the canonical fields. Discovery is
-operational (Last.fm expand + Discogs dig, now taste-only). The Set Builder
+operational (Last.fm expand + Discogs dig). **The dig's engine was redesigned
+(2026-07-16):** the Discogs pile for a seed is sorted by demand (`sort=want`) and
+`depth` picks where to fetch a window from it (0.0 = the seed's classics, 1.0 = the
+bottom of the crate) — taste always ranks inside that window, it is no longer a mode.
+The Set Builder
 (technical/creative) guarantees owned-only. The dashboard shows a five-stage pipeline (Index
 moved to a nav button). Mix identification via Shazam is integrated (phase 1; co-occurrence
 in backlog). SoundCloud import (playlists/secret links + selective likes) works via yt-dlp.
@@ -70,6 +74,14 @@ not from this backlog.
 - **Pitch** — to be reframed around the product's real nature (not a "Spotify SaaS").
 - **Name change** — DONE (Cratory). Only `cratory.com` remains to be confirmed with a
   registrar.
+- **Discovery dig engine redesign** — DONE (2026-07-16). The dig used to fetch Discogs
+  results with no sort at all: the first 300 releases of a seed with, say, 43,345 total
+  — an arbitrary 0.69% sample with not a single release above 1,000 owners and 46%
+  under five. Now the pile is sorted by demand (`sort=want`) and `depth` picks the
+  window to fetch from it; `novelty`/`demand`/`recency` left the score (inside one
+  window `want` is roughly constant, so they could not discriminate leads anyway) and
+  taste ranks inside the window unconditionally, not as a mode. Cost: 4-5 Discogs
+  requests per dig. See `docs/API.md` (Discovery) and PROGRESS.md for detail.
 
 ## Technical backlog (non-blocking)
 

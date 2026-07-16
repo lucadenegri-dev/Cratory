@@ -78,3 +78,17 @@ for (const { path, title } of ROUTES) {
     expect(errors, `console errors on ${path}:\n${errors.join("\n")}`).toEqual([]);
   });
 }
+
+// Deep link del dig (E17): "Warp Records" e' un'etichetta reale della libreria
+// (verificata via GET /api/labels), non inventata — "Trax Records" del brief
+// originale non esiste nella libreria corrente.
+//
+// Trappola: il <select> del gusto (affinita') e il Combobox del soggetto hanno
+// ENTRAMBI ruolo ARIA "combobox" (un <select> nativo lo espone implicitamente).
+// Quando ci sono playlist importate il Select renderizza e getByRole("combobox")
+// e' ambiguo: il Combobox del soggetto e' pero' sempre il primo in ordine di riga
+// (vedi components/discovery-dig-bar.tsx), quindi .first() lo disambigua.
+test("deep link per etichetta precompila il soggetto", async ({ page }) => {
+  await page.goto("/discovery?seed=label&value=Warp%20Records");
+  await expect(page.getByRole("combobox").first()).toHaveValue("Warp Records");
+});

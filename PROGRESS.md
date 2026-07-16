@@ -19,12 +19,54 @@ disk, streaming playlists = leads); **disk-first + Rekordbox paradigm pivot comp
 now only from a Rekordbox XML import, `energy` derived); **Analysis page complete**
 (BPM/key gained a second deterministic source, in-app analysis via Essentia, alongside
 Rekordbox import — explicit per-value provenance, `bpm_source`/`key_source`: manual >
-rekordbox > cratory); Discovery operational (Last.fm expand + Discogs dig, now
-taste-only); technical/creative Set Builder with an "owned-only" guarantee; dashboard
+rekordbox > cratory); Discovery operational (Last.fm expand + Discogs dig — the pile
+is sorted by demand, `depth` picks the window to fetch from it, taste always ranks
+inside that window); technical/creative Set Builder with an "owned-only" guarantee; dashboard
 with a five-stage pipeline (Index moved to a nav button) and documentation realigned to
 the new paradigm; mix identification via Shazam integrated (phase 1; co-occurrence in
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-07-16 - Discovery: il dig pesca nella pila ordinata per domanda, non più in un campione arbitrario
+
+Il dig cercava dischi su Discogs **senza chiedere alcun ordinamento**: scaricava le prime
+300 release di un seme che poteva averne 43.345 — un campione arbitrario dello 0,69% in cui
+non c'era nemmeno un disco con più di mille possessori e il 46% ne aveva meno di cinque.
+Sopra quel campione applicava poi un punteggio raffinato, che non poteva rimediare a un
+ingresso già sbagliato in partenza. Ridisegnato da zero, TDD, sul branch
+`feat/discovery-dig-riprogettato` (31 commit):
+
+- **Motore (`backend/app/services/discovery_dig.py`):** la pila di release del seme si
+  ordina ora per domanda (`sort=want` desc, via `DiscogsClient.search_releases`);
+  `_window(depth, total)` sceglie IN CHE PUNTO pescarci dentro — 0.0 = i classici del
+  seme, 1.0 = il fondo della cassa (la pila regge per tutta la sua lunghezza: `want`
+  mediano ancora ~89 a rango 10.000, misurato su `style=Acid House`). Il punteggio
+  (`_score`) è ora **solo gusto** — familiarità graduata sull'artista, affinità di
+  etichetta e di stile: `novelty`/`demand`/`recency` sono usciti dal punteggio (dentro una
+  finestra il `want` è ~costante, non discriminava). Costo di rete: 4-5 richieste Discogs
+  per dig (una sonda `count_releases` per l'altezza della pila + 3 pagine; +1 sonda se il
+  seme `genre` ripiega da `style=` a `genre=`). Normalizzata anche la grammatica Discogs
+  sugli artisti (suffissi `*`/`(N)`, split solo su separatori non ambigui) e il possesso è
+  ora verificato pure sul titolo di release/EP, non solo di traccia.
+- **API (`app/routers/discovery.py`, `app/schemas.py`):** `DiscoveryDigRequest.depth`
+  (0.0-1.0) sostituisce `adventurousness`; `DiscoveryDigResponse.pile_pages` dice alla UI
+  se la pila è più corta della finestra scelta (allora `depth` non ha effetto).
+- **Design system frontend:** `Combobox` (un campo che suggerisce generi **ed** etichette,
+  raggruppati), `SegmentedControl` e `Chip` estratti da tre copie duplicate dello stesso
+  pattern; un `Popover` introdotto e poi rimosso (zero consumatori dopo il Combobox, YAGNI).
+- **UI (`DiscoveryDigBar`):** una riga sola — Combobox unificato per il soggetto (il
+  `seed_type` è dedotto da quale gruppo dell'autocomplete è stato scelto), profondità
+  (Surface/Mid/Deep) e gusto (playlist di riferimento) pari grado; via il vecchio toggle
+  "Scava per"/"Dig by". I filtri sui lead (formato, ordinamento) sono ora nell'intestazione
+  dei risultati, non più nel form del dig.
+- **E2E:** `frontend/e2e/smoke.spec.ts` aggiornato ai selettori nuovi (niente più toggle) +
+  nuovo test per il deep link `?seed=label&value=...` che precompila il soggetto (trappola:
+  `<select>` del gusto e `Combobox` del soggetto condividono il ruolo ARIA `combobox`,
+  disambiguato prendendo il primo in ordine di riga).
+
+Stato finale verificato (2026-07-16): backend 933 test verdi (anche a rete bloccata);
+frontend 30 test unit su 5 file verdi, 13 e2e verdi (incluso il deep link), lint 0 errori
+(4 warning preesistenti non correlati), `tsc --noEmit` e `next build` puliti.
 
 ## Milestone 2026-07-16 - Player delle tracce possedute (audizione rapida, read-only)
 

@@ -86,10 +86,10 @@ Crate digging (Scava), an alternative source via Discogs (no Last.fm/Spotify):
 
 ```text
 seed: genre or label
-  -> Discogs search (releases by genre/style or by label)
+  -> Discogs pile sorted by demand (want desc); `depth` picks WHERE in the pile
+     to fetch a 3-page window (0.0 = the seed's classics, 1.0 = bottom of the crate)
   -> unowned leads, dedup vs library + variant dedup
-  -> ranking by demand (want/have), depth and novelty
-  -> Familiar/Balanced/Adventurous presets, per-artist cap
+  -> taste-only ranking inside the window (familiarity + label + style), per-artist cap
   -> add to library
 ```
 
