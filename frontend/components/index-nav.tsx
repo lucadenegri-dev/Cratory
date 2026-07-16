@@ -95,7 +95,7 @@ export function IndexNav() {
               : "border-l-2 border-transparent text-muted hover:text-fg",
           )}
         >
-          <span aria-hidden>⚙</span>
+          <span aria-hidden className="text-sm leading-none">⚙</span>
           Settings
         </Link>
         <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3 text-[10px]">
