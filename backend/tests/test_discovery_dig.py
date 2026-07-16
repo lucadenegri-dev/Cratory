@@ -62,11 +62,17 @@ def test_clean_artist_splits_multi_artist_fields():
     assert keys == ["nail / einzelkind", "nail", "einzelkind"]
 
 
-def test_clean_artist_keeps_ampersand_names_matchable_whole():
-    # 'Above & Beyond' e' UN artista: la chiave intera deve esserci per prima
-    display, keys = _clean_artist("Above & Beyond")
-    assert display == "Above & Beyond"
-    assert keys[0] == "above & beyond"
+def test_clean_artist_keeps_split_names_matchable_whole_too():
+    # Split VERO a tre parti ('/'): la chiave intera resta comunque la prima, cosi'
+    # 'A / B / C' come collab accreditata cosi' resta abbinabile per intero anche
+    # quando il campo viene poi spezzato nelle parti singole. (La versione precedente
+    # di questo test verificava la stessa proprieta' su '&', che pero' non spezza mai
+    # — vedi `test_clean_artist_does_not_split_band_names_with_ampersand_or_comma` — e
+    # con `keys` a un solo elemento l'asserzione su `keys[0]` non poteva fallire.)
+    display, keys = _clean_artist("A / B / C")
+    assert display == "A / B / C"
+    assert keys[0] == "a / b / c"
+    assert keys[1:] == ["a", "b", "c"]
 
 
 def test_clean_artist_does_not_split_on_comma_and_ampersand():
@@ -605,16 +611,23 @@ def test_flat_taste_keeps_the_pile_order():
     Il comportamento vero, che qui si fissa: a gusto piatto i lead pareggiano e lo
     stable sort di `_select` conserva l'ordine della pila (l'ordine per domanda con cui
     Discogs risponde). E' il fallback VOLUTO quando il gusto non discrimina.
+
+    L'ordine di INSERIMENTO nella pila e' deliberatamente il CONTRARIO dell'ordine per
+    `have` decrescente ('Obscure One', have=20, entra prima di 'Pop Star', have=9000):
+    se i due ordini coincidessero (come nella versione precedente di questo test), una
+    mutazione che rimettesse `have` come tiebreaker in `_select` passerebbe comunque.
+    Con l'ordine invertito, l'atteso qui sotto morde solo se `_select` e' davvero uno
+    stable sort che non guarda `have`.
     """
     profile = TasteProfile.from_tracks([])          # riferimento vuoto: nessun segnale aggancia
     w = _weights("genre")
-    mainstream = _lead_from_release(_release("Pop Star - Hit", rid=1, have=9000), "x")
-    deep_cut = _lead_from_release(_release("Obscure One - Deep Cut", rid=2, have=20), "x")
-    # have 9000 vs 20: prima ribaltava l'ordine, ora non entra proprio nel punteggio
-    assert _score(mainstream, profile, w) == _score(deep_cut, profile, w) == 0.0
-    for lead in (mainstream, deep_cut):
+    deep_cut = _lead_from_release(_release("Obscure One - Deep Cut", rid=1, have=20), "x")
+    mainstream = _lead_from_release(_release("Pop Star - Hit", rid=2, have=9000), "x")
+    # have 20 vs 9000: prima ribaltava l'ordine, ora non entra proprio nel punteggio
+    assert _score(deep_cut, profile, w) == _score(mainstream, profile, w) == 0.0
+    for lead in (deep_cut, mainstream):
         lead.score = _score(lead, profile, w)
-    assert [l.artist for l in _select([mainstream, deep_cut], 50)] == ["Pop Star", "Obscure One"]
+    assert [l.artist for l in _select([deep_cut, mainstream], 50)] == ["Obscure One", "Pop Star"]
 
 
 def test_dig_picks_the_window_from_depth():
@@ -701,9 +714,11 @@ def test_score_ignores_demand_which_the_window_already_encodes():
     minimo 284) — non ha potere discriminante. Quale finestra si guardi lo decide `depth`
     (`_window`), non lo score.
 
-    `_demand` resta viva e usata: la legge `_reasons` per il codice `rare_wanted`, e resta
-    un FILTRO anti-rumore in `_lead_from_release` (self-released morti). Non e' scomparsa
-    dal motore, e' scomparsa dall'ORDINAMENTO.
+    `_demand` resta viva e usata: la legge `_reasons` per il codice `rare_wanted` (unica
+    chiamata nel modulo). Il filtro anti-rumore in `_lead_from_release` (self-released
+    morti) e' un confronto diretto `have == 0 and want == 0`, non passa da `_demand` —
+    ma il CONCETTO di domanda come filtro (non come fattore d'ordine) resta lo stesso.
+    Non e' scomparsa dal motore, e' scomparsa dall'ORDINAMENTO.
     """
     # stesso gusto per entrambi (una release a testa nel riferimento) -> pari merito
     profile = TasteProfile.from_tracks(_lib(("Anon", "Older"), ("Wanted", "Older")))
