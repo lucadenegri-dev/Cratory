@@ -83,18 +83,19 @@ export function IndexNav() {
         })}
       </ul>
 
-      {/* Settings in fondo (come Cratory), sopra l'orario */}
-      <div className="hidden flex-col lg:flex">
+      {/* Settings in fondo (come Cratory): barra di separazione sopra + icona rotellina */}
+      <div className="hidden flex-col border-t border-border lg:flex">
         <Link
           href="/settings"
           aria-current={isActive("/settings") ? "page" : undefined}
           className={cn(
-            "flex items-center px-2 py-1.5 text-xs uppercase tracking-wider transition-colors",
+            "flex items-center gap-1.5 px-2 py-1.5 text-xs uppercase tracking-wider transition-colors",
             isActive("/settings")
               ? "border-l-2 border-danger bg-surface-2 text-fg-strong"
               : "border-l-2 border-transparent text-muted hover:text-fg",
           )}
         >
+          <span aria-hidden>⚙</span>
           Settings
         </Link>
         <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3 text-[10px]">
