@@ -530,7 +530,6 @@ class DiscoveryDigRequest(BaseModel):
     # DOVE pescare nella pila ordinata per domanda: 0 = i classici del seme,
     # 1 = il fondo della cassa. Non e' un mix di ordinamento: sceglie il bacino.
     depth: float = Field(default=0.0, ge=0.0, le=1.0)
-    taste_playlist_id: int | None = None  # riferimento di gusto; None = tutta la libreria
 
 
 class DiscoveryDigResponse(BaseModel):

@@ -446,16 +446,17 @@ def test_dig_endpoint_exposes_discogs_id_and_format_badge(db, monkeypatch):
     assert lead.format_badge == "EP"
 
 
-def test_dig_endpoint_honors_taste_playlist_id(db, monkeypatch):
-    from app.repositories import add_track_to_playlist
-    pl = Playlist(platform="spotify", name="Peak Time")
-    db.add(pl)
-    db.flush()
+def test_dig_endpoint_ignores_legacy_taste_field_profile_is_library(db, monkeypatch):
+    """Riscrittura SEMANTICA di `test_dig_endpoint_honors_taste_playlist_id`: la
+    manopola del gusto e' stata rimossa (su 7 playlist su 10 azzerava l'ordinamento
+    in silenzio — profilo quasi vuoto, perche' etichette e generi vengono dai tag dei
+    file che i lead da streaming non hanno). Il campo legacy viene ignorato da
+    Pydantic (nessun extra="forbid" su DiscoveryDigRequest) e il profilo arriva
+    dalla LIBRERIA: la traccia in db aggancia i reason anche senza playlist.
+    """
     t = Track(source_type="spotify", artist="Followed", title="Older",
               label="Warp", genre="Acid House")
     db.add(t)
-    db.flush()
-    add_track_to_playlist(db, t, pl)
     db.commit()
 
     monkeypatch.setattr(
@@ -464,7 +465,9 @@ def test_dig_endpoint_honors_taste_playlist_id(db, monkeypatch):
     )
     _stub_pile(monkeypatch)
     resp = dig_endpoint(
-        DiscoveryDigRequest(seed_type="genre", value="Acid House", taste_playlist_id=pl.id),
+        DiscoveryDigRequest.model_validate(
+            {"seed_type": "genre", "value": "Acid House", "taste_playlist_id": 999}
+        ),
         db,
     )
     codes = {r.code for r in resp.leads[0].reasons}

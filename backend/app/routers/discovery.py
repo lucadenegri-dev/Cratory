@@ -252,18 +252,12 @@ def discovery_genres(db: Session = Depends(get_db)):
 @router.post("/dig", response_model=DiscoveryDigResponse)
 def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
     """Lista-dig a volume da Discogs per genere/stile o etichetta (lead non risolti)."""
-    from app.repositories import tracks_for_playlist
-
-    taste_tracks = None
-    if req.taste_playlist_id is not None:
-        taste_tracks = tracks_for_playlist(db, req.taste_playlist_id)
     client = DiscogsClient()
     try:
         result = dig(
             db, seed_type=req.seed_type, value=req.value,
             search_releases=lambda **kw: client.search_releases(**kw),
             count_releases=lambda **kw: client.count_releases(**kw),
-            taste_tracks=taste_tracks,
             depth=req.depth,
         )
     except DiscogsError as exc:

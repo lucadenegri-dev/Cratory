@@ -471,7 +471,6 @@ def dig(
     search_releases: SearchReleases,
     count_releases: CountReleases,
     library: list | None = None,
-    taste_tracks: list | None = None,
     depth: float = 0.0,
 ) -> DigResult:
     """Lead non posseduti dal seme dato (genere|etichetta), ordinati per gusto.
@@ -479,8 +478,11 @@ def dig(
     Due assi separati: `depth` sceglie DOVE pescare nella pila ordinata per domanda
     (0 = i classici del seme, 1 = il fondo); il gusto ordina SEMPRE dentro la finestra.
 
-    Dedup sempre su tutta la `library`; l'affinita' di gusto usa `taste_tracks`
-    (default: la libreria stessa), che puo' essere una playlist specifica.
+    Il profilo di gusto e la dedup del posseduto usano la STESSA `library`, per
+    scelta: il riferimento per-playlist e' stato rimosso perche' su una playlist
+    magra (etichette e generi vengono dai tag dei file, che i lead da streaming
+    non hanno) il gusto si azzerava in silenzio e la lista ricadeva sull'ordine
+    della pila senza che nulla lo dicesse.
 
     Costo di rete: una sonda `count_releases` PRIMA di scegliere la finestra (serve
     `pagination.items` per sapere quanto e' alta la pila), piu' una seconda sonda se il
@@ -490,7 +492,7 @@ def dig(
     if library is None:
         library = _library_tracks(db)
     owned_tracks, owned_albums = _owned_index(library)
-    profile = TasteProfile.from_tracks(library if taste_tracks is None else taste_tracks)
+    profile = TasteProfile.from_tracks(library)
 
     if seed_type == "label":
         filters: dict[str, Any] = {"label": value}

@@ -381,7 +381,7 @@ def test_dig_label_boost_changes_order():
     # sceglie solo la finestra da cui pescare, non l'ordine dentro la finestra.
     res = dig(None, seed_type="genre", value="x", search_releases=search,
               count_releases=lambda **kw: 300,
-              library=[], taste_tracks=_lib(("Whoever", "Whatever", {"label": "Warp"})),
+              library=_lib(("Whoever", "Whatever", {"label": "Warp"})),
               depth=0.1)
     assert res.leads[0].label == "Warp"
 
@@ -395,7 +395,7 @@ def test_dig_style_affinity_changes_order():
 
     res = dig(None, seed_type="genre", value="x", search_releases=search,
               count_releases=lambda **kw: 300,
-              library=[], taste_tracks=_lib(("Whoever", "Whatever", {"genre": "Acid House"})),
+              library=_lib(("Whoever", "Whatever", {"genre": "Acid House"})),
               depth=0.1)
     # `DiscoveryLead.style` (singolare) e' diventato `.styles` (Task 3): il test era
     # rimasto mascherato dal crash di `_reasons`, non aggiornato al rename.
@@ -412,8 +412,7 @@ def test_dig_graduated_familiarity_prefers_more_collected():
     # 'Thrice' lo possiedo 3 volte (familiarita' piena), 'Once' una volta sola.
     res = dig(None, seed_type="genre", value="x", search_releases=search,
               count_releases=lambda **kw: 300,
-              library=[],
-              taste_tracks=_lib(
+              library=_lib(
                   ("Once", "a"),
                   ("Thrice", "a"), ("Thrice", "b"), ("Thrice", "c"),
               ),
@@ -421,17 +420,20 @@ def test_dig_graduated_familiarity_prefers_more_collected():
     assert res.leads[0].artist == "Thrice"
 
 
-def test_dig_dedup_is_library_wide_even_with_playlist_taste():
+def test_dig_profile_always_comes_from_library():
+    # Riscrittura SEMANTICA di `test_dig_dedup_is_library_wide_even_with_playlist_taste`:
+    # la distinzione riferimento-di-gusto vs libreria NON ESISTE PIU'. La manopola della
+    # playlist e' stata rimossa perche' su 7 playlist su 10 azzerava l'ordinamento in
+    # silenzio (profilo quasi vuoto: etichette e generi arrivano dai tag dei file, che
+    # le playlist di lead non hanno). Il profilo e' sempre la libreria — la stessa che
+    # esclude il posseduto.
     def search(**kw):
-        return [_release("Owned Elsewhere - Track", rid=1)]
+        return [_release("Sconosciuto - X", rid=1), _release("Tyree* - Y", rid=2)]
 
-    # Il riferimento di gusto e' una playlist che NON contiene il brano,
-    # ma il brano e' gia' in libreria: deve restare scartato (dedup library-wide).
-    res = dig(None, seed_type="genre", value="x", search_releases=search,
-              count_releases=lambda **kw: 300,
-              library=_lib(("Owned Elsewhere", "Track")),
-              taste_tracks=_lib(("Other", "Thing")))
-    assert res.leads == []
+    lib = _lib(("Tyree", "T1"), ("Tyree", "T2"), ("Tyree", "T3"))
+    res = dig(None, seed_type="genre", value="Acid House", search_releases=search,
+              count_releases=lambda **kw: 300, library=lib, depth=0.0)
+    assert res.leads[0].artist == "Tyree"      # la familiarita' della LIBRERIA ordina
 
 
 # --- Task 3: reason codes (spiegazioni deterministiche) ----------------------
@@ -472,8 +474,8 @@ def test_dig_emits_taste_reason_codes():
         return [_release("Followed - Track", rid=1, label="Warp", style="Acid House", have=20)]
 
     res = dig(None, seed_type="genre", value="x", search_releases=search,
-              count_releases=lambda **kw: 300, library=[],
-              taste_tracks=_lib(("Followed", "Older", {"label": "Warp", "genre": "Acid House"})))
+              count_releases=lambda **kw: 300,
+              library=_lib(("Followed", "Older", {"label": "Warp", "genre": "Acid House"})))
     lead = res.leads[0]
     codes = _codes(lead)
     assert {"label_followed", "artist_collected", "style_match"} <= codes
