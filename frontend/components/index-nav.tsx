@@ -11,7 +11,6 @@ import { ThemeToggle } from "./theme-toggle";
 import { useT } from "@/lib/i18n";
 
 const NAV = [
-  { href: "/sources", label: "Sources" },
   { href: "/files", label: "Files" },
   { href: "/issues", label: "Issues" },
   { href: "/duplicates", label: "Duplicates" },
@@ -42,7 +41,6 @@ export function IndexNav() {
   }, [scan.status, load]);
 
   const counts: Record<string, string> = {
-    "/sources": stats ? String(stats.sources) : "—",
     "/files": stats ? String(stats.files_total) : "—",
     "/issues": stats ? String(sumIssues(stats)) : "—",
     "/duplicates": stats ? String(stats.dup_groups) : "—",
@@ -56,7 +54,7 @@ export function IndexNav() {
   return (
     <nav className="flex h-full flex-col">
       <div className="px-4 py-4">
-        <Link href="/sources" className="block text-sm font-semibold tracking-[0.12em] text-fg-strong">
+        <Link href="/files" className="block text-sm font-semibold tracking-[0.12em] text-fg-strong">
           SORTORY
         </Link>
         <p className="mt-1 text-[9px] uppercase tracking-wider text-faint">{t.nav.tagline}</p>

@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  listFiles, libraryStats, listSources, libraryFacets,
+  listFiles, libraryStats, listSources, libraryFacets, deleteSource,
   type FileRow, type LibraryStats, type LibraryFacets, type ScanRoot, type FileQuery,
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { FilesTable } from "@/components/files-table";
-import { Alert, EmptyState, Input, Loading, Select } from "@/components/ui";
+import { SourceMenu } from "@/components/source-menu";
+import { Alert, Button, EmptyState, Input, Loading, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 const LIMIT = 500;
@@ -45,7 +46,7 @@ function FacetInput({ facet, placeholder, value, options, onChange }: {
 
 export default function FilesPage() {
   const t = useT();
-  const { scan } = useJobs();
+  const { scan, startScan, refresh } = useJobs();
   const [rows, setRows] = useState<FileRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [stats, setStats] = useState<LibraryStats | null>(null);
@@ -61,6 +62,51 @@ export default function FilesPage() {
     genre: "", artist: "", album: "", label: "", ext: "", year: "",
   });
   const setTagField = (k: string, v: string) => setTag((prev) => ({ ...prev, [k]: v }));
+
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const loadRoots = useCallback(() => {
+    listSources().then(setRoots).catch(() => {});
+  }, []);
+
+  const selectedRoot = rootId ? roots.find((r) => r.id === Number(rootId)) ?? null : null;
+  const running = scan.status === "running";
+
+  const onScan = async () => {
+    setActionError(null);
+    try {
+      await startScan(rootId ? [Number(rootId)] : undefined);
+      refresh();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : t.sources.scanStartFailed);
+    }
+  };
+  const onScanRoot = async (id: number) => {
+    setActionError(null);
+    try {
+      await startScan([id]);
+      refresh();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : t.sources.scanStartFailed);
+    }
+  };
+  const onDeleteRoot = async (id: number) => {
+    if (deletingId !== null) return;
+    setActionError(null);
+    setDeletingId(id);
+    try {
+      await deleteSource(id);
+      // se la sorgente eliminata era quella filtrata, azzera il filtro:
+      // altrimenti la query resterebbe legata a un root_id fantasma
+      if (rootId && Number(rootId) === id) setRootId("");
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : t.sources.rootRemoveFailed);
+    } finally {
+      setDeletingId(null);
+      loadRoots();
+    }
+  };
 
   const facetPlaceholder: Record<string, string> = {
     genre: t.files.facetGenre, artist: t.files.facetArtist, album: t.files.facetAlbum,
@@ -88,7 +134,7 @@ export default function FilesPage() {
     libraryStats().then(setStats).catch(() => setStats(null));
   }, [rootId, onlyIssues, sort, q, tag]);
 
-  useEffect(() => { listSources().then(setRoots).catch(() => {}); }, []);
+  useEffect(() => { loadRoots(); }, [loadRoots]);
   useEffect(() => { libraryFacets().then(setFacets).catch(() => {}); }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -102,19 +148,33 @@ export default function FilesPage() {
       marginaliaTitle={t.files.library}
       marginalia={<Marginalia stats={stats} />}
       guide={<>
-        <p>{t.files.guide1}</p>
+        <p>{t.sources.guideFolders}</p>
         <p>{t.files.guide2}</p>
         <p>{t.files.guide3}</p>
       </>}
     >
       <div className="flex flex-col gap-4">
         {offline && <Alert>{t.common.backendOffline}</Alert>}
+        {actionError && <Alert>{actionError}</Alert>}
 
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={rootId} onChange={(e) => setRootId(e.target.value)} className="w-auto">
-            <option value="">{t.files.allRoots}</option>
-            {roots.map((r) => <option key={r.id} value={r.id}>{r.label || r.path}</option>)}
-          </Select>
+          <SourceMenu
+            roots={roots}
+            selectedId={rootId ? Number(rootId) : null}
+            onSelect={(id) => setRootId(id === null ? "" : String(id))}
+            onScanRoot={onScanRoot}
+            onDelete={onDeleteRoot}
+            onAdded={loadRoots}
+            deletingId={deletingId}
+          />
+          <Button onClick={onScan} disabled={running || roots.length === 0}>
+            {running && <Spinner />}
+            {running
+              ? t.sources.scanning
+              : selectedRoot
+                ? t.files.scanOne(selectedRoot.label || selectedRoot.path)
+                : t.files.scanAll}
+          </Button>
           <Select value={onlyIssues ? "issues" : "all"} onChange={(e) => setOnlyIssues(e.target.value === "issues")} className="w-auto">
             <option value="all">{t.files.filterAll}</option>
             <option value="issues">{t.files.filterIssues}</option>
@@ -144,6 +204,17 @@ export default function FilesPage() {
             >{t.files.clearFilters}</button>
           )}
         </div>
+
+        {scan.result && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 border border-border px-3 py-2 text-[11px]">
+            <ScanStat k={t.sources.statFound} v={scan.result.found} />
+            <ScanStat k={t.sources.statNew} v={`+${scan.result.inserted}`} />
+            <ScanStat k={t.sources.statUpdated} v={scan.result.updated} />
+            <ScanStat k={t.sources.statMoved} v={scan.result.moved} />
+            <ScanStat k={t.sources.statMissing} v={scan.result.missing} />
+            <ScanStat k={t.sources.statErrors} v={scan.result.errors} danger={scan.result.errors > 0} />
+          </div>
+        )}
 
         {!loaded ? (
           <Loading />
@@ -195,5 +266,14 @@ function Stat({ v, k }: { v: number; k: string }) {
       <div className="tnum text-2xl leading-none text-fg-strong">{v}</div>
       <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{k}</div>
     </div>
+  );
+}
+
+function ScanStat({ k, v, danger }: { k: string; v: string | number; danger?: boolean }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span className="text-muted">{k}</span>
+      <span className={`tnum ${danger ? "text-danger" : "text-fg"}`}>{v}</span>
+    </span>
   );
 }
