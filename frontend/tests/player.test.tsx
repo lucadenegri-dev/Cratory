@@ -6,17 +6,17 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { discoveryPreview } from "@/lib/api";
-import { DockedPreviewPlayer } from "@/components/docked-preview-player";
-import { PreviewPlayerProvider, usePreviewPlayer } from "@/lib/preview-player";
+import { DockedPlayer } from "@/components/docked-player";
+import { PlayerProvider, usePlayer } from "@/lib/player";
 
 function Harness() {
-  const p = usePreviewPlayer();
+  const p = usePlayer();
   return (
     <div>
-      <button onClick={() => p.play({ key: "a", artist: "Artist", title: "Acid Trip", discogsId: 42, level: "track", label: "Acid Trip" })}>
+      <button onClick={() => p.play({ kind: "discovery-preview", item: { key: "a", artist: "Artist", title: "Acid Trip", discogsId: 42, level: "track", label: "Acid Trip" } })}>
         play-a
       </button>
-      <button onClick={() => p.play({ key: "b", artist: "Artist", title: "Other", discogsId: 42, level: "track", label: "Other" })}>
+      <button onClick={() => p.play({ kind: "discovery-preview", item: { key: "b", artist: "Artist", title: "Other", discogsId: 42, level: "track", label: "Other" } })}>
         play-b
       </button>
       <span data-testid="status">{p.status}</span>
@@ -26,10 +26,10 @@ function Harness() {
 
 function renderAll() {
   return render(
-    <PreviewPlayerProvider>
+    <PlayerProvider>
       <Harness />
-      <DockedPreviewPlayer />
-    </PreviewPlayerProvider>,
+      <DockedPlayer />
+    </PlayerProvider>,
   );
 }
 

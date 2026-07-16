@@ -606,6 +606,12 @@ export const en = {
     noPreview: "No preview",
     closePreview: "Close preview",
   },
+  player: {
+    play: "Play",
+    stop: "Stop",
+    close: "Close player",
+    unsupportedFormat: "Format not playable in the browser",
+  },
   shazam: {
     intro: "Identify a DJ set's tracks from a URL (SoundCloud, Mixcloud, YouTube).",
     notesTitle: "Notes",

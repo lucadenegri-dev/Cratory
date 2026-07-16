@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/ui";
 import { DiscoveryTracklistPanel } from "@/components/discovery-tracklist-panel";
 import { useT, type Dictionary } from "@/lib/i18n";
-import { usePreviewPlayer } from "@/lib/preview-player";
+import { usePlayer } from "@/lib/player";
 
 function reasonLabel(r: Reason, t: Dictionary): string {
   switch (r.code) {
@@ -114,7 +114,7 @@ export function DiscoveryLeadGrid({ dig }: { dig: DiscoveryDigResponse }) {
 
 function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void }) {
   const t = useT();
-  const player = usePreviewPlayer();
+  const player = usePlayer();
   return (
     <div
       role="button"
@@ -149,12 +149,15 @@ function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void })
           onClick={(e) => {
             e.stopPropagation();
             player.play({
-              key: `r:${lead.discogs_id ?? "x"}`,
-              artist: lead.artist,
-              title: lead.title,
-              discogsId: lead.discogs_id,
-              level: "release",
-              label: lead.title,
+              kind: "discovery-preview",
+              item: {
+                key: `r:${lead.discogs_id ?? "x"}`,
+                artist: lead.artist,
+                title: lead.title,
+                discogsId: lead.discogs_id,
+                level: "release",
+                label: lead.title,
+              },
             });
           }}
         >

@@ -8,7 +8,7 @@ import {
 } from "@/lib/api";
 import { Alert, Button, Modal, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
-import { usePreviewPlayer } from "@/lib/preview-player";
+import { usePlayer } from "@/lib/player";
 
 type PanelTrack = { position: string; title: string; duration_seconds: number | null };
 
@@ -140,7 +140,7 @@ function SaveAllButton({ release, tracks }: { release: DiscogsRelease; tracks: P
 
 function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTrack }) {
   const t = useT();
-  const player = usePreviewPlayer();
+  const player = usePlayer();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -196,12 +196,15 @@ function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTra
           aria-label={t.discovery.playPreview}
           onClick={() =>
             player.play({
-              key: `t:${release.discogs_id}:${track.position}:${track.title}`,
-              artist: release.artist,
-              title: track.title,
-              discogsId: release.discogs_id,
-              level: "track",
-              label: track.title,
+              kind: "discovery-preview",
+              item: {
+                key: `t:${release.discogs_id}:${track.position}:${track.title}`,
+                artist: release.artist,
+                title: track.title,
+                discogsId: release.discogs_id,
+                level: "track",
+                label: track.title,
+              },
             })
           }
         >

@@ -19,9 +19,9 @@ import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { cn } from "@/lib/cn";
 import { DiscoveryLeadGrid } from "@/components/discovery-lead-grid";
-import { DockedPreviewPlayer } from "@/components/docked-preview-player";
+import { DockedPlayer } from "@/components/docked-player";
 import { useT } from "@/lib/i18n";
-import { PreviewPlayerProvider } from "@/lib/preview-player";
+import { PlayerProvider } from "@/lib/player";
 
 type DigSeed = "genre" | "label";
 const CHIP_CAP = 12;
@@ -153,7 +153,7 @@ function DiscoveryInner() {
   const digReady = digSeed === "genre" ? !!genre.trim() : !!selectedLabel;
 
   return (
-    <PreviewPlayerProvider>
+    <PlayerProvider>
       <PageLayout title="Discovery">
         <p className="mb-4 text-sm text-muted">{t.discovery.intro}</p>
 
@@ -325,8 +325,8 @@ function DiscoveryInner() {
           </EmptyState>
         )}
       </PageLayout>
-      <DockedPreviewPlayer />
-    </PreviewPlayerProvider>
+      <DockedPlayer />
+    </PlayerProvider>
   );
 }
 

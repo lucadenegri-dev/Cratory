@@ -608,6 +608,12 @@ export const it: Dictionary = {
     noPreview: "Nessuna anteprima",
     closePreview: "Chiudi anteprima",
   },
+  player: {
+    play: "Ascolta",
+    stop: "Ferma",
+    close: "Chiudi player",
+    unsupportedFormat: "Formato non riproducibile nel browser",
+  },
   shazam: {
     intro: "Identifica le tracce di un set DJ da un URL (SoundCloud, Mixcloud, YouTube).",
     notesTitle: "Note",

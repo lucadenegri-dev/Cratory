@@ -13,29 +13,45 @@ export type PreviewItem = {
   label: string;
 };
 
+export type LocalTrack = {
+  id: number;
+  title: string;
+  artist: string;
+};
+
+export type PlaybackSource =
+  | { kind: "discovery-preview"; item: PreviewItem }
+  | { kind: "local-track"; track: LocalTrack };
+
 type Status = "idle" | "loading" | "playing" | "unavailable";
 
 type Ctx = {
-  active: PreviewItem | null;
+  active: PlaybackSource | null;
   status: Status;
   data: DiscoveryPreview | null;
-  play: (item: PreviewItem) => void;
+  play: (source: PlaybackSource) => void;
   stop: () => void;
 };
 
-const PreviewCtx = createContext<Ctx | null>(null);
+const PlayerCtx = createContext<Ctx | null>(null);
 
-export function PreviewPlayerProvider({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = useState<PreviewItem | null>(null);
+export function PlayerProvider({ children }: { children: React.ReactNode }) {
+  const [active, setActive] = useState<PlaybackSource | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [data, setData] = useState<DiscoveryPreview | null>(null);
   const reqId = useRef(0);
 
-  const play = useCallback((item: PreviewItem) => {
-    const id = ++reqId.current;
-    setActive(item);
-    setStatus("loading");
+  const play = useCallback((source: PlaybackSource) => {
+    const id = ++reqId.current; // invalida qualunque risoluzione preview in volo
+    setActive(source);
     setData(null);
+    if (source.kind === "local-track") {
+      setStatus("playing"); // stream diretto: nessuna risoluzione async
+      return;
+    }
+    // discovery-preview: risoluzione async della sorgente di terzi (iTunes/YouTube)
+    setStatus("loading");
+    const item = source.item;
     discoveryPreview({ artist: item.artist, title: item.title, discogsId: item.discogsId, level: item.level })
       .then((res) => {
         if (id !== reqId.current) return; // richiesta superata da un nuovo play
@@ -55,11 +71,11 @@ export function PreviewPlayerProvider({ children }: { children: React.ReactNode 
     setData(null);
   }, []);
 
-  return <PreviewCtx.Provider value={{ active, status, data, play, stop }}>{children}</PreviewCtx.Provider>;
+  return <PlayerCtx.Provider value={{ active, status, data, play, stop }}>{children}</PlayerCtx.Provider>;
 }
 
-export function usePreviewPlayer(): Ctx {
-  const ctx = useContext(PreviewCtx);
-  if (!ctx) throw new Error("usePreviewPlayer must be used within PreviewPlayerProvider");
+export function usePlayer(): Ctx {
+  const ctx = useContext(PlayerCtx);
+  if (!ctx) throw new Error("usePlayer must be used within PlayerProvider");
   return ctx;
 }

@@ -24,3 +24,8 @@ export function trackCoverSrc(
   if (t.has_local_file) return `${API}/api/tracks/${t.id}/cover`;
   return null;
 }
+
+/** URL di streaming del file locale di una traccia posseduta (audizione rapida). */
+export function trackAudioUrl(id: number): string {
+  return `${API}/api/tracks/${id}/audio`;
+}
