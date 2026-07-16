@@ -222,18 +222,16 @@ Il microcopy deve restare onesto su tre punti verificati nel motore:
 Sono la ragione per cui quel pannello è finito così: mancavano, e ogni pagina se le è
 ricostruite a mano.
 
-**`Popover`** — contenitore ancorato con filetto, `radius: 0`, niente ombra (The Hairline
-Rule), superficie `surface` sul floor `bg`. Chiusura su click esterno, `Escape`, e blur
-fuori dal contenuto. Focus trap non necessario (strumento personale, nessun requisito
-oltre il contrasto, `DESIGN.md` §Accessibility).
+> **`Popover` — decaduto (rev. 2).** La rev. 1 lo prevedeva per il popover del criterio;
+> quando la rev. 2 lo ha eliminato, il testo continuava a giustificarlo come «base del
+> `Combobox`». **Falso**: il `Combobox` si costruisce la propria lista di suggerimenti.
+> Non è nemmeno adattabile — un `Popover` avvolge il trigger in un `onClick` che fa
+> toggle, quindi con l'`Input` come trigger cliccare nel campo per scrivere chiuderebbe i
+> suggerimenti. Un primitivo del design system senza consumatori è codice morto: YAGNI.
+> Costruito e rimosso durante l'esecuzione (`eb03075` → `eac5efc`). Se un giorno servirà
+> un popover, si farà quando ci sarà un consumatore vero.
 
-- Interfaccia: `{ trigger, children, open?, onOpenChange?, align? }`.
-- Dipendenze: nessuna nuova — solo React + `cn`.
-- Nella rev. 2 serve **solo** come base del `Combobox` (il popover del criterio è
-  decaduto). Resta comunque una primitiva a sé: il `Combobox` ne ha bisogno e il DS non
-  ne ha una.
-
-**`Combobox`** — `Input` + `Popover` di opzioni raggruppate, navigazione da tastiera
+**`Combobox`** — `Input` + lista di opzioni raggruppate, navigazione da tastiera
 (`↑`/`↓`/`Enter`/`Escape`), `aria-expanded`/`aria-activedescendant`, filtro per
 sottostringa. Accetta testo libero.
 

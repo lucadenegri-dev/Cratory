@@ -1379,7 +1379,7 @@ git commit -m "feat(api): dig accetta depth e restituisce pile_pages"
 
 ---
 
-### Task 10: `Popover` nel design system
+### Task 10: `Popover` nel design system — **DECADUTO, non eseguire**
 
 Le primitive mancanti sono la ragione per cui il pannello di Discovery è finito com'è: ogni pagina se le è ricostruite a mano.
 
@@ -1665,7 +1665,6 @@ Sostituisce il toggle seed + `Input`/`datalist` + chip + "+N altre". Il `seed_ty
 - Test: `frontend/tests/ui-primitives.test.tsx`
 
 **Interfaces:**
-- Consumes: `Popover` (Task 10).
 - Produces:
   - `type ComboOption = { value: string; label: string; group: string; icon?: ReactNode }`
   - `Combobox({ value, onChange, onSelect, options, placeholder, disabled, cap }: { value: string; onChange: (v: string) => void; onSelect: (o: ComboOption) => void; options: ComboOption[]; placeholder?: string; disabled?: boolean; cap?: number })`
