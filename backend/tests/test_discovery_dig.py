@@ -505,7 +505,9 @@ def test_dig_emits_recent_reason():
 
 
 def _reason_codes(lead, profile, seed_type="genre", year=2026):
-    return {r.code for r in _reasons(lead, profile, seed_type, year)}
+    # Qui non c'e' un seme: si passano gli style pieni. L'esclusione del seme
+    # (`_styles_beyond_seed`) e' cablata in dig() e ha i suoi test dedicati.
+    return {r.code for r in _reasons(lead, profile, seed_type, year, lead.styles)}
 
 
 def test_deep_cut_requires_demand():
@@ -615,14 +617,14 @@ def test_score_is_taste_only():
     other = _lead_from_release(_release("Sconosciuto - Rare One", have=1, want=999, year=2026, rid=2), "x")
     w = _weights("genre")
     # have/want/anno non entrano piu' nel punteggio: solo il gusto ordina
-    assert _score(mine, profile, w) > _score(other, profile, w)
+    assert _score(mine, profile, w, mine.styles) > _score(other, profile, w, other.styles)
 
 
 def test_score_ignores_year():
     profile = TasteProfile.from_tracks(_lib(("Tyree", "T1")))
     old = _lead_from_release(_release("Tyree - A", year=1988, rid=1), "x")
     new = _lead_from_release(_release("Tyree - B", year=2026, rid=2), "x")
-    assert _score(old, profile, _weights("genre")) == _score(new, profile, _weights("genre"))
+    assert _score(old, profile, _weights("genre"), old.styles) == _score(new, profile, _weights("genre"), new.styles)
 
 
 def test_flat_taste_keeps_the_pile_order():
@@ -650,9 +652,9 @@ def test_flat_taste_keeps_the_pile_order():
     deep_cut = _lead_from_release(_release("Obscure One - Deep Cut", rid=1, have=20), "x")
     mainstream = _lead_from_release(_release("Pop Star - Hit", rid=2, have=9000), "x")
     # have 20 vs 9000: prima ribaltava l'ordine, ora non entra proprio nel punteggio
-    assert _score(deep_cut, profile, w) == _score(mainstream, profile, w) == 0.0
+    assert _score(deep_cut, profile, w, deep_cut.styles) == _score(mainstream, profile, w, mainstream.styles) == 0.0
     for lead in (deep_cut, mainstream):
-        lead.score = _score(lead, profile, w)
+        lead.score = _score(lead, profile, w, lead.styles)
     assert [l.artist for l in _select([deep_cut, mainstream])] == ["Obscure One", "Pop Star"]
 
 
@@ -766,7 +768,7 @@ def test_score_ignores_demand_which_the_window_already_encodes():
     untraded = _lead_from_release(_release("Anon - Untraded", rid=1, have=1, want=0), "x")
     grail = _lead_from_release(_release("Wanted - Grail", rid=2, have=1, want=80), "x")
     # want 0 vs 80: prima decideva l'ordine, ora i due pareggiano (gusto identico)
-    assert _score(untraded, profile, w) == _score(grail, profile, w) == pytest.approx(0.5 / 3)
+    assert _score(untraded, profile, w, untraded.styles) == _score(grail, profile, w, grail.styles) == pytest.approx(0.5 / 3)
 
 
 # --- seed_resolution + pile_total: il fallback sullo scaffale smette di essere muto ---
@@ -807,3 +809,54 @@ def test_dead_seed_has_no_resolution():
               library=[], depth=0.0)
     assert res.seed_resolution is None
     assert res.pile_pages == 0
+
+
+# --- opzione 3: lo stile del seme esce dal segnale (resta solo l'affinita' EXTRA) ---
+
+
+def test_style_signal_measures_only_beyond_the_seed():
+    # Su un dig per genere OGNI release contiene lo style del seme per costruzione:
+    # e' cio' che abbiamo chiesto a Discogs. La sua somiglianza con la libreria e' un
+    # PAVIMENTO comune a tutti i lead (1.0 se possiedi il genere alla lettera — il
+    # caso dominante: si scava il genere che si ha), non un segnale. Il segnale vero
+    # sono gli style EXTRA: 'Tech House' che collezioni deve battere una release col
+    # solo style del seme.
+    def search(**kw):
+        return [
+            _release("Only Seed - X", rid=1),
+            {**_release("Extra Style - Y", rid=2), "style": ["Acid House", "Tech House"]},
+        ]
+
+    lib = _lib(("A", "T1", {"genre": "Acid House"}), ("B", "T2", {"genre": "Tech House"}))
+    res = dig(None, seed_type="genre", value="Acid House", search_releases=search,
+              count_releases=lambda **kw: 300, library=lib)
+    assert res.leads[0].artist == "Extra Style"
+
+
+def test_style_match_badge_needs_an_extra_style():
+    # Il badge «stile che ascolti» non scatta piu' su ogni card solo perche' la
+    # release porta lo style chiesto: senza style oltre il seme, niente badge.
+    def search(**kw):
+        return [
+            _release("Only Seed - X", rid=1),
+            {**_release("Extra Style - Y", rid=2), "style": ["Acid House", "Tech House"]},
+        ]
+
+    lib = _lib(("A", "T1", {"genre": "Acid House"}), ("B", "T2", {"genre": "Tech House"}))
+    res = dig(None, seed_type="genre", value="Acid House", search_releases=search,
+              count_releases=lambda **kw: 300, library=lib)
+    by_artist = {l.artist: {r.code for r in l.reasons} for l in res.leads}
+    assert "style_match" not in by_artist["Only Seed"]
+    assert "style_match" in by_artist["Extra Style"]
+
+
+def test_label_dig_style_signal_is_untouched():
+    # Sul dig per etichetta il seme e' un'etichetta: nessuno style da escludere
+    # (nessuno style si chiama come l'etichetta), il segnale resta pieno.
+    def search(**kw):
+        return [_release("A - B", rid=1, label="Warp", style="Acid House")]
+
+    lib = _lib(("X", "T", {"genre": "Acid House"}))
+    res = dig(None, seed_type="label", value="Warp", search_releases=search,
+              count_releases=lambda **kw: 300, library=lib)
+    assert "style_match" in {r.code for r in res.leads[0].reasons}

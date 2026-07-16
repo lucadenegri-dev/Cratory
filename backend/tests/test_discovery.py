@@ -471,7 +471,12 @@ def test_dig_endpoint_ignores_legacy_taste_field_profile_is_library(db, monkeypa
         db,
     )
     codes = {r.code for r in resp.leads[0].reasons}
-    assert {"label_followed", "artist_collected", "style_match"} <= codes
+    # style_match non e' piu' atteso: la release porta SOLO lo style del seme
+    # ("Acid House" su un dig per "Acid House"), e il badge ora richiede affinita'
+    # OLTRE il seme (_styles_beyond_seed). label_followed + artist_collected bastano
+    # a provare cio' che questo test fissa: il profilo viene dalla libreria.
+    assert {"label_followed", "artist_collected"} <= codes
+    assert "style_match" not in codes
 
 
 def test_dig_endpoint_502_on_discogs_error(db, monkeypatch):

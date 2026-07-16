@@ -408,9 +408,10 @@ def _weights(seed_type: str) -> Weights:
     per costruzione (e' il filtro `style=value` della ricerca Discogs), quindi il seme
     impone un PAVIMENTO uguale per tutti i lead — gli altri style possono solo alzare
     quel max, mai abbassarlo. Se la libreria ha alla lettera il genere del seme, il
-    pavimento e' 1.0 e `style_affinity` e' una costante esatta: la stessa malattia che
-    qui sopra cura `label`. Caso noto, non ancora deciso: si tocca solo la doc, non il
-    comportamento (e' una scelta di prodotto da misurare, non un bug silenzioso).
+    pavimento e' 1.0 e `style_affinity` sarebbe una costante esatta: la stessa
+    malattia che qui sopra cura `label`. La cura pero' NON e' azzerare il peso (si
+    butterebbe anche il segnale buono): e' `_styles_beyond_seed`, che esclude il seme
+    dal calcolo — resta solo l'affinita' EXTRA, che discrimina davvero.
     """
     if seed_type == "label":
         rest = W_ARTIST + W_STYLE
@@ -418,7 +419,22 @@ def _weights(seed_type: str) -> Weights:
     return Weights(artist=W_ARTIST, label=W_LABEL, style=W_STYLE)
 
 
-def _score(lead: DiscoveryLead, profile: TasteProfile, weights: Weights) -> float:
+def _styles_beyond_seed(styles: list[str], seed_norm: str) -> list[str]:
+    """Gli style della release OLTRE il seme del dig.
+
+    Su un dig per genere ogni release contiene lo style del seme per costruzione
+    (e' il filtro `style=value` della ricerca): la sua somiglianza con la libreria
+    e' un PAVIMENTO comune a tutti i lead — se possiedi il genere alla lettera vale
+    1.0, e `style_affinity` diventa una costante che non ordina e accende il badge
+    su ogni card. Escludere il seme misura solo l'affinita' EXTRA, che e'
+    l'informazione vera (una release taggata anche 'Tech House' che collezioni).
+    Sui dig per etichetta e' un no-op: nessuno style si chiama come l'etichetta.
+    """
+    return [s for s in styles if _norm(s) != seed_norm]
+
+
+def _score(lead: DiscoveryLead, profile: TasteProfile, weights: Weights,
+           styles_beyond_seed: list[str]) -> float:
     """Solo gusto. La domanda l'ha gia' codificata la finestra (`_window`): dentro una
     finestra il `want` e' ~costante, quindi non ordina. La profondita' sceglie il
     bacino, il gusto ordina — sempre, non come modalita'.
@@ -426,12 +442,12 @@ def _score(lead: DiscoveryLead, profile: TasteProfile, weights: Weights) -> floa
     return (
         weights.artist * profile.familiarity(lead.artist_keys)
         + weights.label * profile.label_affinity(lead.label)
-        + weights.style * profile.style_affinity(lead.styles)
+        + weights.style * profile.style_affinity(styles_beyond_seed)
     )
 
 
 def _reasons(lead: DiscoveryLead, profile: TasteProfile, seed_type: str,
-             current_year: int) -> list[Reason]:
+             current_year: int, styles_beyond_seed: list[str]) -> list[Reason]:
     """Badge a soglia, deterministici. NON sono i fattori del punteggio: sono calcolati
     a parte e non spiegano la posizione del lead in lista.
     """
@@ -446,8 +462,8 @@ def _reasons(lead: DiscoveryLead, profile: TasteProfile, seed_type: str,
     count = profile.artist_count(lead.artist_keys)
     if count > 0:
         out.append(Reason("artist_collected", {"artist": lead.artist, "count": count}))
-    if profile.style_affinity(lead.styles) >= REASON_STYLE_MATCH_MIN:
-        out.append(Reason("style_match", {"style": lead.styles[0] if lead.styles else None}))
+    if profile.style_affinity(styles_beyond_seed) >= REASON_STYLE_MATCH_MIN:
+        out.append(Reason("style_match", {"style": styles_beyond_seed[0] if styles_beyond_seed else None}))
     if _recency(lead.year, current_year) >= REASON_RECENT_MIN:
         out.append(Reason("recent", {"year": lead.year}))
     return out
@@ -549,9 +565,11 @@ def dig(
 
     weights = _weights(seed_type)
     current_year = datetime.now(timezone.utc).year
+    seed_norm = _norm(value)
     for lead in leads:
-        lead.score = _score(lead, profile, weights)
-        lead.reasons = _reasons(lead, profile, seed_type, current_year)
+        extra_styles = _styles_beyond_seed(lead.styles, seed_norm)
+        lead.score = _score(lead, profile, weights, extra_styles)
+        lead.reasons = _reasons(lead, profile, seed_type, current_year, extra_styles)
     selected = _select(leads)
 
     logger.info("Discovery dig %s=%r: %s lead (depth=%.2f, pagine %s di %s)",

@@ -100,6 +100,17 @@ Stato finale verificato (2026-07-16, sera): backend 941 test verdi; frontend 40 
 6 file, 13 e2e, lint 0 errori, `tsc` pulito; verifica a browser su dati reali (Electronic
 → avviso scaffale; Dub Techno → nessun avviso; «Mostra tutti» → conteggio pieno).
 
+**Chiusura dell'ultimo follow-up (stessa sera): lo stile del seme esce dal segnale.**
+Su un dig per genere ogni release contiene lo style del seme per costruzione: la sua
+somiglianza con la libreria era un pavimento comune a tutti i lead (1.0 se possiedi il
+genere alla lettera — il caso dominante), che rendeva `W_STYLE` una costante e accendeva
+il badge «stile che ascolti» su ogni card. Ora `_styles_beyond_seed` esclude il seme dal
+calcolo: resta solo l'affinità EXTRA, che discrimina davvero. Misurato prima/dopo su un
+dig reale (`Acid House`, 240 lead): badge 100% → 93%, top-15 invariata — su questa
+libreria l'effetto è modesto perché i generi ombrello (House/Techno/Acid) agganciano
+legittimamente gli style extra, ma il badge ora dice il vero e il meccanismo non può più
+gonfiarsi da solo. Sul dig per etichetta è un no-op.
+
 ## Milestone 2026-07-16 - Player delle tracce possedute (audizione rapida, read-only)
 
 Nuova capacità deliberata che rivede la regola non-negoziabile "non riproduce audio":
