@@ -293,9 +293,22 @@ function GlobalProgress({ jobs, onDismiss }: { jobs: Job[]; onDismiss: (key: str
     .join(". ");
 
   // Spacer in flusso alto quanto la barra fissa: il fondo pagina resta leggibile.
+  // Pubblica anche l'altezza in una CSS var globale, così elementi fixed esterni
+  // (il player docked) possono posizionarsi SOPRA la barra invece di coprirla.
   useEffect(() => {
-    setPadH(barRef.current?.offsetHeight ?? 0);
+    const h = barRef.current?.offsetHeight ?? 0;
+    setPadH(h);
+    document.documentElement.style.setProperty("--jobs-bar-height", `${h}px`);
   }, [jobs]);
+
+  // Quando la barra si smonta (nessun job attivo) azzera la var: il dock torna
+  // al suo posto in basso.
+  useEffect(
+    () => () => {
+      document.documentElement.style.setProperty("--jobs-bar-height", "0px");
+    },
+    [],
+  );
 
   return (
     <>

@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 
-import { discoveryPreview, type DiscoveryPreview } from "@/lib/api";
+import { discoveryPreview, type DiscoveryImportInput, type DiscoveryPreview } from "@/lib/api";
 
 export type PreviewItem = {
   key: string;
@@ -11,6 +11,8 @@ export type PreviewItem = {
   discogsId: number | null;
   level: "release" | "track";
   label: string;
+  /** Payload per l'azione "ADD" (salva il lead in libreria) dal player docked. */
+  addInput?: DiscoveryImportInput;
 };
 
 export type LocalTrack = {

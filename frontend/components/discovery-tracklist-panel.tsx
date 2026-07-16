@@ -131,7 +131,7 @@ function SaveAllButton({ release, tracks }: { release: DiscogsRelease; tracks: P
   return (
     <div className="shrink-0 text-right">
       <Button size="sm" variant={done ? "ghost" : "outline"} onClick={saveAll} disabled={saving || done}>
-        {done ? <><Check size={14} /> {t.discovery.allSaved}</> : saving ? <Spinner /> : t.discovery.allForLater}
+        {done ? <><Check size={14} /> {t.discovery.allSaved}</> : saving ? <Spinner /> : t.discovery.addAll}
       </Button>
       {saveError && <p className="mt-1 text-xs text-danger">⚠ {saveError}</p>}
     </div>
@@ -204,6 +204,7 @@ function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTra
                 discogsId: release.discogs_id,
                 level: "track",
                 label: track.title,
+                addInput: input,
               },
             })
           }
@@ -211,7 +212,7 @@ function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTra
           <Play size={13} />
         </Button>
         <Button size="sm" variant={saved ? "ghost" : "outline"} onClick={saveForLater} disabled={saving || saved}>
-          {saved ? <Check size={14} /> : saving ? <Spinner /> : t.discovery.forLater}
+          {saved ? <Check size={14} /> : saving ? <Spinner /> : t.discovery.add}
         </Button>
         <Button size="sm" variant={downloaded ? "ghost" : "outline"} onClick={downloadNow} disabled={downloading || downloaded}>
           {downloaded ? <><Check size={14} /> {t.discovery.queued}</> : downloading ? <Spinner /> : <><Download size={13} /> {t.discovery.downloadNow}</>}

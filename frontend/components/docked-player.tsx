@@ -1,26 +1,36 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
 
-import { trackAudioUrl } from "@/lib/api";
+import { discoverySaveForLater, trackAudioUrl } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
 
 export function DockedPlayer() {
   const { active, status, data, stop } = usePlayer();
   const t = useT();
-  // Errore di riproduzione del file locale (formato non supportato dal browser
-  // o file sparito): stato locale, si azzera quando cambia la traccia attiva.
-  // Niente useEffect: l'azzeramento avviene "durante il render" (pattern
-  // React consigliato per derivare stato da un prop che cambia), evitando
-  // il render extra/cascata di un setState sincrono dentro un effect.
+  // Stati effimeri del dock: errore di riproduzione locale (formato non
+  // supportato / file sparito) e stato dell'azione ADD per la preview discovery.
+  // Niente useEffect: l'azzeramento al cambio sorgente avviene "durante il
+  // render" (pattern React consigliato per derivare stato da un prop che
+  // cambia), evitando il render extra di un setState sincrono dentro un effect.
   const [localError, setLocalError] = useState(false);
+  const [savingAdd, setSavingAdd] = useState(false);
+  const [addedKey, setAddedKey] = useState<string | null>(null);
+
   const activeLocalId = active?.kind === "local-track" ? active.track.id : null;
-  const [prevLocalId, setPrevLocalId] = useState(activeLocalId);
-  if (activeLocalId !== prevLocalId) {
-    setPrevLocalId(activeLocalId);
+  const activePreviewKey = active?.kind === "discovery-preview" ? active.item.key : null;
+  const activeKey = active
+    ? active.kind === "local-track"
+      ? `l:${activeLocalId}`
+      : `p:${activePreviewKey}`
+    : null;
+  const [prevKey, setPrevKey] = useState(activeKey);
+  if (activeKey !== prevKey) {
+    setPrevKey(activeKey);
     setLocalError(false);
+    setSavingAdd(false);
   }
 
   if (!active || status === "idle") return null;
@@ -28,16 +38,51 @@ export function DockedPlayer() {
   const title = active.kind === "local-track" ? active.track.title : active.item.title;
   const artist = active.kind === "local-track" ? active.track.artist : active.item.artist;
 
+  const addInput = active.kind === "discovery-preview" ? active.item.addInput : undefined;
+  const isAdded = addedKey != null && addedKey === activePreviewKey;
+  const onAdd = async () => {
+    if (!addInput || !activePreviewKey || savingAdd || isAdded) return;
+    setSavingAdd(true);
+    try {
+      await discoverySaveForLater(addInput);
+      setAddedKey(activePreviewKey);
+    } catch {
+      // Silenzioso: l'utente può ritentare (l'errore non blocca l'ascolto).
+    } finally {
+      setSavingAdd(false);
+    }
+  };
+
   return (
-    <div className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)] rounded-none border border-border-strong bg-surface p-3">
+    // `bottom` dinamico: se la barra job globale è visibile pubblica la sua
+    // altezza in `--jobs-bar-height`, così il dock sale sopra di essa invece di
+    // sovrapporsi; senza barra il fallback 0px lo lascia a 1rem dal fondo.
+    <div
+      style={{ bottom: "calc(var(--jobs-bar-height, 0px) + 1rem)" }}
+      className="fixed right-4 z-[60] w-80 max-w-[calc(100vw-2rem)] rounded-none border border-border-strong bg-surface p-3"
+    >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-sm text-fg">{title}</div>
           <div className="truncate text-xs text-faint">{artist}</div>
         </div>
-        <button aria-label={t.player.close} onClick={stop} className="shrink-0 text-faint hover:text-fg">
-          <X size={16} />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {addInput && (
+            <button
+              type="button"
+              onClick={onAdd}
+              disabled={savingAdd || isAdded}
+              aria-label={t.discovery.add}
+              className="flex items-center gap-1 border border-border-strong px-1.5 py-0.5 text-[11px] uppercase tracking-wider text-faint transition-colors hover:text-fg disabled:opacity-60"
+            >
+              {isAdded ? <Check size={13} /> : <Plus size={12} />}
+              {t.discovery.add}
+            </button>
+          )}
+          <button aria-label={t.player.close} onClick={stop} className="text-faint hover:text-fg">
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       {active.kind === "local-track" &&

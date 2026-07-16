@@ -157,6 +157,12 @@ function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void })
                 discogsId: lead.discogs_id,
                 level: "release",
                 label: lead.title,
+                addInput: {
+                  artist: lead.artist,
+                  title: lead.title,
+                  album_art_url: lead.thumb_url,
+                  url: lead.discogs_url,
+                },
               },
             });
           }}
