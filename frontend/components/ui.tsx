@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
@@ -93,6 +93,56 @@ export function Field({ label, hint, children }: { label: ReactNode; hint?: Reac
       {children}
       {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
     </label>
+  );
+}
+
+/* ---------------------------------------------------------------- Popover */
+
+export function Popover({ trigger, children, open, onOpenChange, align = "start" }: {
+  trigger: ReactNode;
+  children: ReactNode;
+  open?: boolean;
+  onOpenChange?: (v: boolean) => void;
+  align?: "start" | "end";
+}) {
+  const [uncontrolled, setUncontrolled] = useState(false);
+  const isOpen = open ?? uncontrolled;
+  const ref = useRef<HTMLDivElement>(null);
+
+  const set = useCallback((v: boolean) => {
+    if (open === undefined) setUncontrolled(v);
+    onOpenChange?.(v);
+  }, [open, onOpenChange]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") set(false); };
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) set(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [isOpen, set]);
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <div onClick={() => set(!isOpen)}>{trigger}</div>
+      {isOpen && (
+        <div
+          className={cn(
+            // The Hairline Rule: filetto, niente ombra, niente radius.
+            "absolute top-full z-30 mt-1 min-w-full border border-border-strong bg-surface",
+            align === "end" ? "right-0" : "left-0",
+          )}
+        >
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
 
