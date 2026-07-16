@@ -92,6 +92,17 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     return g;
   }, []);
 
+  // Auto-scan dopo un Apply andato a buon fine: rileva il fronte running→done
+  // e riscansiona (tutte le sorgenti) solo se sono state applicate operazioni.
+  const prevApplyStatus = useRef<ApplyJobState["status"]>(apply.status);
+  useEffect(() => {
+    const was = prevApplyStatus.current;
+    prevApplyStatus.current = apply.status;
+    if (was === "running" && apply.status === "done" && (apply.result?.applied_ops ?? 0) > 0) {
+      startScan().catch(() => { /* backend offline o scan già in corso (409) */ });
+    }
+  }, [apply.status, apply.result, startScan]);
+
   useEffect(() => {
     alive.current = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect
