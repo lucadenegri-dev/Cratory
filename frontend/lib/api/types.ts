@@ -431,6 +431,12 @@ export interface DiscogsTrack {
   duration_seconds: number | null;
 }
 
+export type DiscogsVideo = {
+  youtube_video_id: string;
+  title: string;
+  duration_seconds: number | null;
+};
+
 export interface DiscogsRelease {
   discogs_id: number;
   title: string;
@@ -440,7 +446,16 @@ export interface DiscogsRelease {
   year: number | null;
   label: string | null;
   tracks: DiscogsTrack[];
+  videos: DiscogsVideo[];
 }
+
+export type DiscoveryPreview = {
+  kind: "itunes" | "youtube" | "none";
+  audio_url: string | null;
+  youtube_video_id: string | null;
+  source_url: string | null;
+  matched_title: string | null;
+};
 
 export interface DiscoveryImportInput {
   artist: string;

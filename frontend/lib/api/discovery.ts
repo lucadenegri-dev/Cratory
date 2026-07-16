@@ -5,6 +5,7 @@ import type {
   DiscoveryDigResponse,
   DiscoveryGenres,
   DiscoveryImportInput,
+  DiscoveryPreview,
   DiscoveryResponse,
   DiscoveryStatus,
 } from "./types";
@@ -43,6 +44,20 @@ export function discoveryDig(
 
 export function getDiscogsRelease(discogsId: number) {
   return apiGet<DiscogsRelease>(`/api/discovery/release/${discogsId}`);
+}
+
+export function discoveryPreview(input: {
+  artist: string;
+  title: string;
+  discogsId?: number | null;
+  level?: "release" | "track";
+}) {
+  return apiGet<DiscoveryPreview>("/api/discovery/preview", {
+    artist: input.artist,
+    title: input.title,
+    discogs_id: input.discogsId ?? undefined,
+    level: input.level ?? "track",
+  });
 }
 
 export function discoveryImportTrack(input: DiscoveryImportInput) {
