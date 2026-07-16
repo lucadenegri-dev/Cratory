@@ -1,17 +1,17 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Upload } from "lucide-react";
 import { importRekordbox, type RekordboxImportReport } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Alert, Spinner } from "@/components/ui";
+import { Alert, Badge, Checkbox, Field, Spinner } from "@/components/ui";
 
-/** Card upload rekordbox.xml: riempie BPM/key mancanti e ricalcola l'energia.
- *  Di default non sovrascrive valori già presenti; il toggle "sovrascrivi" fa
- *  vincere la ri-analisi Rekordbox (il comportamento lo imposta il backend).
- *  Estratta da components/dashboard/pipeline.tsx (RekordboxImportPanel):
- *  stesso comportamento, stesse chiavi i18n t.dashboard.* (nessuna migrazione). */
-export function RekordboxImportCard({ pending, onImported }: { pending: number; onImported: () => void }) {
+/** Sezione "import rekordbox.xml": riempie BPM/key mancanti e ricalcola l'energia.
+ *  È la sorgente PRIMARIA (regola 2 di CLAUDE.md), quindi vive in cima alla card
+ *  Sorgenti, non come card di pari rango accanto all'analisi in-app.
+ *  Di default non sovrascrive i valori manuali; sui valori 'cratory' vince sempre
+ *  (backend: rekordbox_import.py:132), quindi l'analisi in-app non blocca Rekordbox.
+ *  Il toggle "sovrascrivi" estende la vittoria anche a manuali e rekordbox. */
+export function RekordboxImportCard({ onImported }: { onImported: () => void }) {
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -27,7 +27,7 @@ export function RekordboxImportCard({ pending, onImported }: { pending: number; 
     try {
       const r = await importRekordbox(file, overwrite);
       setReport(r);
-      onImported(); // aggiorna analyze_pending e copertura BPM/key/energia dopo l'import
+      onImported(); // aggiorna copertura e conteggi dopo l'import
     } catch (e) {
       setError(String((e as Error).message ?? e));
     } finally {
@@ -36,47 +36,70 @@ export function RekordboxImportCard({ pending, onImported }: { pending: number; 
     }
   };
 
+  const reportRows: [string, number][] = report ? [
+    [t.analysis.reportInFile, report.in_file],
+    [t.analysis.reportMatched, report.matched],
+    [t.analysis.reportUnmatched, report.unmatched],
+    [t.analysis.reportBpmSet, report.bpm_set],
+    [t.analysis.reportKeySet, report.key_set],
+    [t.analysis.reportEnergySet, report.energy_set],
+  ] : [];
+
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted">
-      <div className="min-w-[16rem] flex-1">
-        <p className="mb-2">
-          {t.dashboard.rekordboxIntroPrefix}<code className="text-fg">rekordbox.xml</code>{t.dashboard.rekordboxIntroSuffix}
-          {t.dashboard.pendingTracks(pending)}
-        </p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".xml"
-          disabled={busy}
-          onChange={(e) => onFile(e.target.files?.[0])}
-          className="block w-full max-w-sm text-xs text-muted file:mr-3 file:border file:border-border-strong file:bg-transparent file:px-3 file:py-1.5 file:text-xs file:font-medium file:uppercase file:tracking-wider file:text-fg hover:file:bg-elevated disabled:opacity-50"
-        />
-        <label className="mt-2 flex w-fit cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            checked={overwrite}
-            disabled={busy}
-            onChange={(e) => setOverwrite(e.target.checked)}
-            className="accent-fg-strong"
-          />
-          <span>
-            {t.dashboard.overwriteLabel}
-          </span>
-        </label>
-        {busy && <p className="mt-2 flex items-center gap-2"><Spinner /> {t.dashboard.importing}</p>}
-        {error && <div className="mt-2"><Alert tone="danger">⚠ {error}</Alert></div>}
-        {report && (
-          <div className="mt-2 grid max-w-sm grid-cols-2 gap-x-4 gap-y-1">
-            <span>{t.dashboard.reportInFile}</span><span className="tnum text-fg">{report.in_file}</span>
-            <span>{t.dashboard.reportMatched}</span><span className="tnum text-fg">{report.matched}</span>
-            <span>{t.dashboard.reportUnmatched}</span><span className="tnum text-fg">{report.unmatched}</span>
-            <span>{t.dashboard.reportBpmSet}</span><span className="tnum text-fg">{report.bpm_set}</span>
-            <span>{t.dashboard.reportKeySet}</span><span className="tnum text-fg">{report.key_set}</span>
-            <span>{t.dashboard.reportEnergySet}</span><span className="tnum text-fg">{report.energy_set}</span>
-          </div>
-        )}
+    <section className="px-5 py-4">
+      <div className="mb-2 flex items-center gap-2">
+        <h4 className="text-sm font-semibold uppercase tracking-wider text-fg-strong">
+          {t.analysis.rekordboxHeading}
+        </h4>
+        <Badge tone="primary">{t.analysis.rekordboxPrimaryTag}</Badge>
       </div>
-      <Upload size={16} className="mt-0.5 shrink-0 text-faint" aria-hidden />
-    </div>
+
+      {/* Niente conteggio "in attesa" qui: rekordbox_pending è calcolato come
+          `bpm is None or not camelot_key`, cioè esattamente le tracce non pronte
+          già annunciate dal lede. Stesso numero, stesse tracce, due nomi. */}
+      <p className="mb-3 max-w-[60ch] text-sm text-muted">
+        {t.analysis.rekordboxIntroPrefix}<code className="text-fg">rekordbox.xml</code>{t.analysis.rekordboxIntroSuffix}
+      </p>
+
+      <div className="max-w-sm">
+        {/* Field avvolge in <label>: dà il nome accessibile che l'input file non aveva. */}
+        <Field label={t.analysis.fileInputLabel}>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".xml"
+            disabled={busy}
+            onChange={(e) => onFile(e.target.files?.[0])}
+            className="block w-full text-xs text-muted file:mr-3 file:border file:border-border-strong file:bg-transparent file:px-3 file:py-1.5 file:text-xs file:font-medium file:uppercase file:tracking-wider file:text-fg hover:file:bg-elevated disabled:opacity-50"
+          />
+        </Field>
+      </div>
+
+      <div className="mt-3">
+        <Checkbox
+          label={<span className="text-xs">{t.analysis.overwriteLabel}</span>}
+          checked={overwrite}
+          disabled={busy}
+          onChange={setOverwrite}
+        />
+      </div>
+
+      {busy && (
+        <p className="mt-3 flex items-center gap-2 text-xs text-muted" role="status">
+          <Spinner /> {t.analysis.importing}
+        </p>
+      )}
+      {error && <div className="mt-3"><Alert tone="danger">⚠ {error}</Alert></div>}
+      {report && (
+        <dl className="mt-3 grid max-w-sm grid-cols-2 gap-x-4 gap-y-1 text-xs">
+          {reportRows.map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="text-muted">{label}</dt>
+              <dd className="tnum text-fg">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </section>
   );
 }

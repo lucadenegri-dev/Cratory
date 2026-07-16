@@ -416,10 +416,15 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: {
 export function Alert({ tone = "danger", children }: { tone?: "danger" | "warning" | "info" | "success"; children: ReactNode }) {
   const isDanger = tone === "danger";
   return (
-    <div className={cn(
-      "border px-4 py-3 text-sm",
-      isDanger ? "border-danger text-danger" : "border-border text-fg",
-    )}>
+    // Gli Alert compaiono in risposta a un'azione (import, analisi, errori di rete):
+    // senza un ruolo live lo screen reader non li annuncia mai.
+    <div
+      role={isDanger ? "alert" : "status"}
+      className={cn(
+        "border px-4 py-3 text-sm",
+        isDanger ? "border-danger text-danger" : "border-border text-fg",
+      )}
+    >
       {children}
     </div>
   );

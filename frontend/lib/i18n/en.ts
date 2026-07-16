@@ -117,25 +117,12 @@ export const en = {
     recentPlaylistsHeading: "Recently imported playlists",
     noPlaylistsYet: "No playlists yet.",
     catalog: "Catalog",
-    bpmKeyCoverage: "BPM/key coverage",
-    bpmKeyLabel: "BPM and key",
     topGenres: "Most common genres",
     topLabels: "Top labels",
     libraryGaps: "Library gaps",
     noStructuralGaps: "No structural gaps",
     tracksAbbrev: (n: number) => `${n} tracks`,
     trackCount: (n: number) => (n === 1 ? "1 track" : `${n} tracks`),
-    rekordboxIntroPrefix: "Analyze your tracks in Rekordbox (beatgrid/key), then import the collection's ",
-    rekordboxIntroSuffix: " file here to complete BPM and key. ",
-    pendingTracks: (n: number) => (n > 0 ? (n === 1 ? "1 track pending." : `${n} tracks pending.`) : "No tracks pending."),
-    overwriteLabel: "Overwrite existing BPM/key (the new Rekordbox analysis wins; manual corrections are realigned)",
-    importing: "Importing…",
-    reportInFile: "In file",
-    reportMatched: "Matched",
-    reportUnmatched: "Unmatched",
-    reportBpmSet: "BPM set",
-    reportKeySet: "Key set",
-    reportEnergySet: "Energy recalculated",
     stageDiscover: "Discover",
     stageDiscoverSub: "playlists imported",
     stageAcquire: "Acquire",
@@ -153,28 +140,69 @@ export const en = {
   },
   analysis: {
     pageTitle: "Analysis",
-    intro: "BPM and key of owned tracks: Rekordbox import and in-app analysis (Essentia).",
-    tileOwned: "Owned",
-    tileReady: "Ready for set",
-    tileMissingBpm: "Missing BPM",
-    tileMissingKey: "Missing key",
-    tileAnalyzed: "Analyzed",
-    tileDivergent: "Divergent",
+
+    // Lede: the answer to "what do I do next?"
+    ledeAllReady: (n: number) => `${n} owned tracks, all ready for set.`,
+    ledeNotReady: (n: number) =>
+      n === 1 ? "1 owned track is not ready for set." : `${n} owned tracks are not ready for set.`,
+    ledeNotReadyCta: "Show it in Library",
+    ledeNotReadyCtaPlural: "Show them in Library",
+    ledeHint: "Ready means it has both BPM and key: without them the Set Builder cannot work out its transitions.",
+
+    // Sources card: the hierarchy, stated instead of implied (CLAUDE.md rule 2)
+    sourcesHeading: "BPM / Key sources",
+    sourcesSubtitle: "Rekordbox is the primary source; in-app analysis covers what it left out.",
+    precedenceLabel: "Precedence",
+    precedenceValue: "manual > rekordbox > cratory",
     sourceManual: "manual",
     sourceRekordbox: "rekordbox",
     sourceCratory: "cratory",
-    bySourceBpm: (m: number, r: number, c: number) => `BPM: ${m} manual · ${r} rekordbox · ${c} cratory`,
-    bySourceKey: (m: number, r: number, c: number) => `Key: ${m} manual · ${r} rekordbox · ${c} cratory`,
+
+    // Rekordbox import (primary) — migrated from t.dashboard.*
     rekordboxHeading: "Rekordbox import",
+    rekordboxPrimaryTag: "Primary",
+    rekordboxIntroPrefix: "Analyze your tracks in Rekordbox (beatgrid/key), then import the collection's ",
+    rekordboxIntroSuffix: " file here to complete BPM and key.",
+    fileInputLabel: "rekordbox.xml file",
+    overwriteLabel: "Overwrite existing BPM/key (the new Rekordbox analysis wins; manual corrections are realigned)",
+    importing: "Importing…",
+    reportInFile: "In file",
+    reportMatched: "Matched",
+    reportUnmatched: "Unmatched",
+    reportBpmSet: "BPM set",
+    reportKeySet: "Key set",
+    reportEnergySet: "Energy recalculated",
+
+    // In-app analysis (alternative)
     analysisHeading: "In-app analysis",
     engineUnavailable: "Essentia is not installed in the backend: install the pinned version from backend/requirements.txt and restart.",
     scopeLabel: "Scope",
+    // Le due voci non fanno la stessa cosa e l'hint deve dirlo. In entrambi i
+    // casi i valori presenti restano, ma cambia cosa viene analizzato — e con
+    // scope=missing una divergenza può comunque nascere sul campo già pieno.
+    scopeHintMissing: (n: number) =>
+      n === 1
+        ? "Analyzes the 1 track missing BPM or key, and fills only what is empty."
+        : `Analyzes the ${n} tracks missing BPM or key, and fills only what is empty.`,
+    // Solo quando esistono tracce a cui manca UN campo su due: il job scrive
+    // sempre entrambi i valori analizzati, quindi il campo già presente può
+    // essere contraddetto anche con scope=missing. Senza quelle tracce la
+    // divergenza è impossibile e la frase sarebbe rumore.
+    scopeHintMissingHalf: (n: number) =>
+      n === 1
+        ? " 1 of them already has the other field: if the analysis contradicts it, the difference shows up under Divergences."
+        : ` ${n} of them already have the other field: if the analysis contradicts it, the difference shows up under Divergences.`,
+    scopeHintAll: (n: number) =>
+      `Re-analyzes all ${n} owned tracks, including the complete ones. Nothing already there is overwritten: every difference shows up under Divergences, for you to decide.`,
     scopeMissing: "Only tracks missing BPM/key",
     scopeAll: "All owned tracks",
     startButton: "Start analysis",
     startedNote: "Analysis started: progress in the bottom bar. Empty fields are filled automatically; conflicts appear below.",
+
+    // Divergences: armed only when there is something to reconcile
     divergencesHeading: "Divergences",
     divergencesEmpty: "No divergences: in-app analysis matches the current values.",
+    divergencesCount: (n: number) => (n === 1 ? "1 conflict to reconcile" : `${n} conflicts to reconcile`),
     colTrack: "Track",
     colCurrent: "Current",
     colAnalysis: "Cratory",
@@ -184,14 +212,29 @@ export const en = {
     compatCompatible: "compatible",
     compatWeak: "divergent",
     compatUnknown: "—",
+    selectAll: "Select all",
     applyRow: "Apply",
+    applyAllDivergent: (n: number) => `Apply all divergent (${n})`,
     applySelected: (n: number) => `Apply selected (${n})`,
-    applySelectedProtected: (n: number) => `${n} would overwrite manual/Rekordbox values`,
+    applySelectedProtected: (n: number) =>
+      n === 1 ? "1 selected row would overwrite a manual/Rekordbox value" : `${n} selected rows would overwrite manual/Rekordbox values`,
     applySelectedConfirm: (n: number) =>
       `${n} selected ${n === 1 ? "row has a manual correction" : "rows have manual corrections"} that will be overwritten. Continue?`,
     forceApplyAll: "Force apply all",
     forceConfirm: "Overwrite BPM/key of ALL analyzed tracks (including manual and Rekordbox values)? This cannot be undone.",
     appliedSummary: (applied: number, skipped: number) => `${applied} applied · ${skipped} unchanged`,
+
+    // Marginalia: the numbers, out of the main flow
+    statsTitle: "Stats",
+    statOwned: "Owned",
+    statReady: "Ready for set",
+    statNotReady: "Not ready",
+    statAnalyzed: "Analyzed",
+    statAnalyzedHint: "Run through Essentia",
+    bySourceBpmTitle: "BPM by source",
+    bySourceKeyTitle: "Key by source",
+    bySourceRow: (m: number, r: number, c: number) => `${m} manual · ${r} rekordbox · ${c} cratory`,
+    coverageMeta: (ready: number, owned: number, pct: number) => `${ready}/${owned} · ${pct}%`,
   },
   library: {
     title: "Library",
