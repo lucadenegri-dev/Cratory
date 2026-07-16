@@ -27,15 +27,20 @@ discovery and a corpus of identified mixes.
   for taste and similarity, not the feature pipeline.
 - The AI never receives the whole library: the Candidate Engine passes it at most 60 candidates.
 - Every AI output goes through a Pydantic schema and the Validation Engine.
-- The app does not play audio. It does not keep audio files, with one declared exception:
-  persistent acquisition via Soulseek/slskd, linked to an existing `Track`
+- The app is not a DJ deck (no waveform/cue/queue — that stays with the Set Builder/
+  Rekordbox) and does not transcode or persist third-party audio. "The app does not play
+  audio" no longer holds in absolute terms: Cratory plays its **own owned library**,
+  read-only, for quick audition — see "Playback (quick audition)" below. It does not keep
+  *other* audio files, with one declared exception: persistent acquisition via
+  Soulseek/slskd, linked to an existing `Track`
   (`has_local_file`/`local_path`/`local_format`/`local_bitrate`). This stays distinct from the
   Shazam module, which downloads audio only temporarily for fingerprinting and
   does not keep it.
 - An additional, narrowly-scoped exception: the Discovery dig plays an **ephemeral
   third-party preview** to evaluate a lead before acquiring it — a 30s iTunes clip or,
   as a fallback, the YouTube video Discogs associates with the release. Nothing is
-  downloaded or kept; the audio is streamed from iTunes/YouTube and discarded.
+  downloaded or kept; the audio is streamed from iTunes/YouTube and discarded. The same
+  shared docked player also plays owned tracks (see below).
 
 ## Main flow
 
@@ -187,6 +192,16 @@ mutates them** — tags, renaming and organization remain Sortory's exclusive jo
   covers FLAC/OGG, ID3 APIC, MP4 `covr`). The Spotify cover (`album_art_url`) takes
   precedence when present; the frontend falls back to the endpoint only for owned tracks
   without a streaming cover.
+- **Playback (quick audition):** an owned track's audio is streamed read-only, on-demand,
+  via `GET /api/tracks/{id}/audio` (`FileResponse`, HTTP Range/seek supported, `404` if not
+  found/owned/allowed/present — see `docs/API.md`). Same path-safety guard as the rest of
+  disk-first: the resolved path must sit inside `search_roots()` (`LIBRARY_ROOT` + the slskd
+  download dir), checked via `path_within_roots`. Frontend: a single shared docked player
+  (one track at a time, no queue) generalized from the Discovery preview player, so it plays
+  either a third-party Discovery preview or an owned local track; `TrackPlayButton` is the
+  reusable play control on track rows, mounted app-wide. No transcoding (unsupported
+  browser formats just fail to play) and no DJ-deck features (waveform/cue/queue stay with
+  the Set Builder/Rekordbox).
 - **Orphan leads and cleanup.** An "orphan lead" is a track without a file on disk that
   belongs to no playlist nor a saved set: it has no more reason to
   exist. They are removed in two places, with the shared helper `delete_orphan_leads`

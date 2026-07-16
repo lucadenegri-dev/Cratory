@@ -10,14 +10,20 @@ on owned tracks (BPM/key from Rekordbox), analyze library gaps, do discovery, an
 mix tracklists. **Metadata enrichment (title/artist/album/label/genre) and tagging are
 Sortory's job.**
 
-The project does not play audio. The Shazam module downloads audio only temporarily for
-fingerprinting and saves a separate corpus of identified tracklists. An explicit exception
-to "does not keep audio files" (the "does not play" still holds): persistent acquisition via
+The project does not act as a DJ deck (no waveform/cue/queue — that stays with the Set
+Builder/Rekordbox) and does not transcode or persist third-party audio. "Does not play
+audio" no longer holds in absolute terms: Cratory now plays its **own owned library**,
+read-only, for quick audition — `GET /api/tracks/{id}/audio` streams a track's local file
+(`has_local_file`) through a single shared docked player, one track at a time, and never
+mutates the file (tags remain Sortory's job). The Shazam module downloads audio only
+temporarily for fingerprinting and saves a separate corpus of identified tracklists. An
+explicit exception to "does not keep audio files": persistent acquisition via
 Soulseek/slskd, which links a file to the existing `Track` in the library
 (`has_local_file`/`local_path`/`local_format`/`local_bitrate`). Eccezione ulteriore, a scope
 ristretto: il dig di Discovery riproduce una **preview effimera di terzi** (clip iTunes
 30s o, in fallback, il video YouTube associato alla release da Discogs) per valutare un
-lead prima di acquisirlo; nulla viene scaricato o conservato.
+lead prima di acquisirlo; nulla viene scaricato o conservato. Lo stesso player docked
+condiviso riproduce sia questa preview sia le tracce possedute.
 
 ## Source of truth
 
@@ -53,7 +59,9 @@ Read in this order:
    inference and creative hypothesis.
 7. **The library is the disk.** Ownership (`has_local_file`) comes from indexing
    `LIBRARY_ROOT` (re-linking by `audio_hash`); streaming playlists are leads. Cratory reads
-   the files but never mutates them: tags are written only by Sortory.
+   the files but never mutates them: tags are written only by Sortory. Owned files are also
+   **playable, read-only** (`GET /api/tracks/{id}/audio`, one track at a time via the shared
+   docked player, for quick audition) — playback never touches the file or its tags.
 
 ## Stack and layout
 

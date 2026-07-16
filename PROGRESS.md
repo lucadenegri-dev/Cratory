@@ -6,7 +6,7 @@
 
 ## Current state
 
-**Last updated:** 2026-07-12
+**Last updated:** 2026-07-16
 
 **Product name:** **Cratory** (rename done on 2026-06-25 across UI, code, docs and
 icon). "SetArc" and "DJ Assistant" remain only as historical names; legacy technical
@@ -25,6 +25,27 @@ with a five-stage pipeline (Index moved to a nav button) and documentation reali
 the new paradigm; mix identification via Shazam integrated (phase 1; co-occurrence in
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-07-16 - Player delle tracce possedute (audizione rapida, read-only)
+
+Nuova capacità deliberata che rivede la regola non-negoziabile "non riproduce audio":
+Cratory ora riproduce in sola lettura i file delle tracce possedute (`has_local_file`),
+per audizione rapida — non è un deck DJ, i file non vengono mai modificati (i tag restano
+di Sortory).
+
+- **Endpoint `GET /api/tracks/{id}/audio`:** streaming del file locale via `FileResponse`
+  (supporto Range/seek). Sicurezza: il path risolto deve stare dentro le radici consentite
+  da `file_search.search_roots()` (`LIBRARY_ROOT` + cartella download slskd), verificato con
+  `path_within_roots`. Errori 404: `track_not_found`, `track_no_local_file`,
+  `track_file_not_allowed`, `track_file_missing`.
+- **Player docked unico condiviso:** generalizzato dal player di preview di Discovery, ora
+  riproduce sia la preview effimera di terzi sia una traccia posseduta, una alla volta
+  (niente coda). Componente riusabile `TrackPlayButton` sulle righe traccia; player montato
+  a livello di app shell.
+- Nessuna feature da DJ deck (waveform/cue restano al Set Builder/Rekordbox), nessuna
+  transcodifica (stream raw; formati non supportati dal browser mostrano un messaggio).
+- **Documentazione allineata** al cambio di rotta: `CLAUDE.md` (paragrafo Project + regola 7),
+  `docs/API.md` (endpoint), `docs/ARCHITECTURE.md` e `docs/ROADMAP.md` (capacità e scope).
 
 ## Milestone 2026-07-13 - Bug d'uso reale (note dell'utente) + una scelta di design
 

@@ -169,6 +169,7 @@ it on Spotify too (best-effort write-back). Response: `created`, `track`,
 GET   /api/tracks
 GET   /api/tracks/{track_id}
 GET   /api/tracks/{track_id}/cover
+GET   /api/tracks/{track_id}/audio
 PATCH /api/tracks/{track_id}
 POST  /api/tracks/{track_id}/link-file
 GET   /api/files/search
@@ -189,6 +190,17 @@ owned track, read on-demand from disk (not saved in the DB). Responds with the i
 bytes (`Cache-Control: max-age=3600`); `404` if the track does not exist, is not owned
 (`has_local_file`), the file is missing or contains no cover. The frontend uses
 `album_art_url` (Spotify) when present and falls back to this endpoint otherwise.
+
+`GET /api/tracks/{track_id}/audio` streams the **owned local file** of a track for quick
+audition, read-only: `FileResponse` with HTTP Range/seek support (a `Range` request gets a
+`206` partial response). Path safety: the track's `local_path` must resolve inside one of
+the allowed roots from `search_roots()` (`LIBRARY_ROOT` + the slskd download dir), checked
+via `path_within_roots` (defense against traversal/symlinks pointing outside). `404` with
+`track_not_found` (no such track), `track_no_local_file` (not owned), `track_file_not_allowed`
+(resolved path outside the allowed roots) or `track_file_missing` (path inside the roots but
+the file is gone). No transcoding: an unsupported browser format simply fails to play
+client-side. One track at a time via the shared docked player (the same one used for the
+Discovery ephemeral preview).
 
 `POST /api/library/index` (202) indexes the canonical `LIBRARY_ROOT` library
 (disk-first: the disk IS the library) — scan + re-link by audio-hash + ownership

@@ -30,6 +30,10 @@ operational (Last.fm expand + Discogs dig, now taste-only). The Set Builder
 (technical/creative) guarantees owned-only. The dashboard shows a five-stage pipeline (Index
 moved to a nav button). Mix identification via Shazam is integrated (phase 1; co-occurrence
 in backlog). SoundCloud import (playlists/secret links + selective likes) works via yt-dlp.
+**Owned tracks are now playable, read-only, for quick audition** (`GET /api/tracks/{id}/audio`,
+single shared docked player also used for the Discovery preview, `TrackPlayButton` on track
+rows) — one track at a time, no transcoding, no DJ-deck features (waveform/cue/queue stay
+with the Set Builder/Rekordbox).
 
 Full chronological history lives in [PROGRESS.md](../PROGRESS.md).
 
@@ -243,6 +247,10 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
 - Disk-first: the library is the disk (`LIBRARY_ROOT`), not the streaming playlists (which stay
   leads). Cratory reads the files to index them but never writes them: tagging and organization
   stay Sortory's competence.
+- Owned files are now playable, read-only, for quick audition (`GET /api/tracks/{id}/audio`,
+  single shared docked player, one track at a time): "Cratory does not play audio" no longer
+  holds in absolute terms. Still true: no transcoding, no queue/waveform/cue (Set
+  Builder/Rekordbox keep those), and the file is never mutated.
 - Bilingual IT/EN app (2026-07): language as a persistent setting (default `it`), no per-locale
   routing. UI via a typed TypeScript dictionary; backend errors as stable codes translated by
   the frontend; deterministic phrases and AI output produced in the selected language. `en.ts`
