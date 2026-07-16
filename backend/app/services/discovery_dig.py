@@ -63,8 +63,15 @@ _SELF_RELEASED_RE = re.compile(r"not on label|self[- ]released", re.IGNORECASE)
 # 'Gravity Zero (4)'. Non sono parte del nome: senza toglierli, il 17% dei lead non
 # aggancia la libreria (misurato su style=Acid House).
 _DISCOGS_CRUFT_RE = re.compile(r"\*|\s*\(\d+\)")
-# Piu' artisti in un campo: 'Nail / Einzelkind', 'OPTML, Gravity Zero & RADD'.
-_ARTIST_SPLIT_RE = re.compile(r"\s+(?:/|&|feat\.?|vs\.?)\s+|,\s+", re.IGNORECASE)
+# Piu' artisti in un campo: 'Nail / Einzelkind'. Si spezza SOLO sui separatori non
+# ambigui: '/' con spazi attorno e' la convenzione Discogs per le split release.
+# '&' e ',' sono ESCLUSI apposta: separano artisti ('Yen Sung & Photonz') ma compaiono
+# anche dentro i nomi di band ('Earth, Wind & Fire') e non c'e' modo di distinguerli.
+# Decide l'asimmetria del danno: un match MANCATO lascia un lead non valorizzato (finisce
+# piu' in basso in lista), un match SBAGLIATO mette in cima un disco che non c'entra.
+# Si preferisce mancare. La chiave intera resta comunque prima: 'Above & Beyond' matcha
+# per intero se ce l'hai.
+_ARTIST_SPLIT_RE = re.compile(r"\s+(?:/|feat\.?|vs\.?)\s+", re.IGNORECASE)
 
 
 def _clean_artist(raw: str) -> tuple[str, list[str]]:

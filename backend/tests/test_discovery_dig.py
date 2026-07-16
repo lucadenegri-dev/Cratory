@@ -57,9 +57,21 @@ def test_clean_artist_keeps_ampersand_names_matchable_whole():
     assert keys[0] == "above & beyond"
 
 
-def test_clean_artist_handles_comma_and_ampersand_together():
-    _, keys = _clean_artist("OPTML, Gravity Zero (4) & RADD (3)")
-    assert "optml" in keys and "gravity zero" in keys and "radd" in keys
+def test_clean_artist_does_not_split_on_comma_and_ampersand():
+    # '&' e ',' non sono separatori affidabili: si accetta di PERDERE il credito sullo
+    # split vero ('OPTML, Gravity Zero & RADD' e' davvero tre artisti) pur di non
+    # rischiare l'aggancio falso su un nome di band. Resta la chiave intera, coi
+    # suffissi Discogs comunque ripuliti.
+    display, keys = _clean_artist("OPTML, Gravity Zero (4) & RADD (3)")
+    assert display == "OPTML, Gravity Zero & RADD"
+    assert keys == ["optml, gravity zero & radd"]
+
+
+def test_clean_artist_does_not_split_band_names_with_ampersand_or_comma():
+    # 'Earth, Wind & Fire' e' UN artista: spezzarlo darebbe chiavi generiche
+    # ('fire', 'wind') che agganciano la libreria per sbaglio.
+    assert _clean_artist("Earth, Wind & Fire")[1] == ["earth, wind & fire"]
+    assert _clean_artist("Above & Beyond")[1] == ["above & beyond"]
 
 
 def test_lead_carries_clean_artist_and_all_styles():
