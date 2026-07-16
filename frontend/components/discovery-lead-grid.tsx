@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { Disc3, Play } from "lucide-react";
 import { type DiscoveryDigResponse, type DiscoveryLead, type Reason } from "@/lib/api";
-import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/ui";
 import { DiscoveryTracklistPanel } from "@/components/discovery-tracklist-panel";
 import { useT, type Dictionary } from "@/lib/i18n";
@@ -28,21 +27,18 @@ function reasonLabel(r: Reason, t: Dictionary): string {
   }
 }
 
-const FORMAT_VALUES = ["LP", "EP", "12\"", "Album", "Single"] as const;
-type FormatFilter = (typeof FORMAT_VALUES)[number] | null;
+export const FORMAT_VALUES = ["LP", "EP", "12\"", "Album", "Single"] as const;
 type SortMode = "score" | "recent";
 
-export function DiscoveryLeadGrid({ dig }: { dig: DiscoveryDigResponse }) {
+export function DiscoveryLeadGrid({ dig, format, sort }: {
+  dig: DiscoveryDigResponse;
+  format: string | null;
+  onFormatChange: (f: string | null) => void;
+  sort: SortMode;
+  onSortChange: (s: SortMode) => void;
+}) {
   const t = useT();
-  const [format, setFormat] = useState<FormatFilter>(null);
-  const [sort, setSort] = useState<SortMode>("score");
   const [openLead, setOpenLead] = useState<DiscoveryLead | null>(null);
-
-  const formatOptions: [string, FormatFilter][] = [
-    [t.discovery.formatAllOption, null],
-    ...FORMAT_VALUES.map((f): [string, FormatFilter] => [f, f]),
-  ];
-  const SORT_OPTIONS: [SortMode, string][] = [["score", t.discovery.sortScore], ["recent", t.discovery.sortRecent]];
 
   const filtered = useMemo(() => {
     const base = format === null ? dig.leads : dig.leads.filter((l) => l.format_badge === format);
@@ -60,43 +56,6 @@ export function DiscoveryLeadGrid({ dig }: { dig: DiscoveryDigResponse }) {
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1.5">
-          {formatOptions.map(([label, f]) => (
-            <button
-              key={f ?? "all"}
-              type="button"
-              onClick={() => setFormat(f)}
-              aria-pressed={format === f}
-              className={cn(
-                "rounded-none border px-2.5 py-1 text-xs transition-colors",
-                format === f
-                  ? "border-border-strong bg-elevated text-fg"
-                  : "border-border bg-surface text-muted hover:border-border-strong hover:text-fg",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="inline-flex rounded-none border border-border bg-surface p-0.5">
-          {SORT_OPTIONS.map(([s, label]) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSort(s)}
-              aria-pressed={sort === s}
-              className={cn(
-                "rounded-none px-2.5 py-1 text-xs font-medium transition-colors",
-                sort === s ? "bg-elevated text-fg" : "text-muted hover:text-fg",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {filtered.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted">{t.discovery.noFormatMatch}</p>
       ) : (
