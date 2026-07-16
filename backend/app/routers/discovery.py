@@ -60,9 +60,24 @@ from app.services.playlist_import import get_or_create_discovery_playlist, impor
 from app.services.preview import extract_youtube_videos, resolve_preview
 
 # Stili Discogs curati per il drill-down "Generi" (oltre ai generi gia' in libreria).
+#
+# Ogni voce deve essere uno `style` ESISTENTE nel vocabolario Discogs: il dig interroga
+# `search_releases(style=...)`, quindi un nome che Discogs non conosce e' un seme morto
+# (zero lead, per sempre). Collaudate una per una contro l'API reale il 2026-07-16.
+#
+# Rimossa "Detroit Techno": non esiste ne' come `style` ne' come `genre` (entrambi 0
+# release; come testo libero `q=` ne trova 6.079, ma il dig non usa `q`). Il Detroit
+# techno su Discogs sta sotto lo style "Techno" — che e' gia' qui, come Minimal Techno
+# e Dub Techno: non serve un sostituto.
+#
+# La lista e' scritta a mano e Discogs non espone un endpoint per enumerare gli style,
+# quindi non e' derivabile dai dati: marcira' ancora. La difesa non e' un test (girerebbe
+# in rete, andrebbe escluso dalla suite e non lo eseguirebbe nessuno) ma la UI: un seme
+# senza pila lo dice (`pile_pages == 0`), invece di far credere che il problema sia la
+# libreria dell'utente.
 _CURATED_STYLES = [
     "House", "Deep House", "Tech House", "Acid House", "Techno", "Minimal Techno",
-    "Detroit Techno", "Dub Techno", "Electro", "Trance", "Progressive House",
+    "Dub Techno", "Electro", "Trance", "Progressive House",
     "Drum n Bass", "Jungle", "Breakbeat", "UK Garage", "Disco", "Italo-Disco",
     "Nu-Disco", "Ambient", "Downtempo", "Trip Hop", "IDM", "Dubstep", "Hip Hop",
     "Funk / Soul", "Afrobeat",
