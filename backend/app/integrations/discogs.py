@@ -95,9 +95,8 @@ class DiscogsClient(ClosableHttpClient):
 
         Errori: la PRIMA pagina richiesta che fallisce SOLLEVA DiscogsError (rate limit o
         token mancante non devono sembrare 'zero risultati': il router li traduce in 502
-        esplicito); una pagina successiva in errore degrada (viene saltata, con warning
-        nel log) ma il giro prosegue sulle pagine successive gia' richieste — best-effort,
-        non si butta via cio' che il chiamante ha esplicitamente chiesto dopo quella corta.
+        esplicito); una pagina successiva in errore degrada ai risultati gia' raccolti
+        (best-effort, con warning nel log).
         """
         params = self._filters(style, genre, label, query)
         if len(params) == 1:
@@ -117,10 +116,15 @@ class DiscogsClient(ClosableHttpClient):
                     raise
                 logger.warning(
                     "Discogs search_releases(%s) pagina %d fallita: %s — "
-                    "salto e proseguo con le pagine successive richieste (%d risultati finora)",
+                    "ritorno i %d risultati gia' raccolti",
                     params, page, exc, len(results),
                 )
-                continue
+                # Ci si FERMA, non si salta la pagina: il modo di fallire dominante e' il
+                # rate limit (~25 req/min senza token, ~60 col token). Se la pagina N
+                # fallisce la quota e' quasi sempre esaurita, quindi anche le successive
+                # fallirebbero: insistere spende richieste gia' condannate e fa aspettare
+                # l'utente per niente.
+                break
             results.extend(data.get("results") or [])
         return results
 

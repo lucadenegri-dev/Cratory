@@ -140,10 +140,9 @@ def test_search_releases_short_page_does_not_stop_early():
 
 
 def test_search_releases_later_page_error_returns_partial():
-    """Prima pagina ok, seconda in errore -> quella pagina degrada (viene
-    saltata) ma il giro prosegue sulle pagine successive gia' richieste:
-    best-effort, nessuna eccezione (solo il fallimento della PRIMA pagina
-    richiesta e' un errore duro)."""
+    """Prima pagina ok, seconda in errore -> best-effort: si ritorna il raccolto,
+    nessuna eccezione (solo il fallimento della PRIMA pagina e' un errore duro).
+    Ci si ferma alla pagina fallita: la 3 non viene tentata (rate limit)."""
     http = _PagedHttp([
         _Resp(_page(100, pages=3)),
         _Resp({"error": "boom"}, status=500),
@@ -151,8 +150,8 @@ def test_search_releases_later_page_error_returns_partial():
     ])
     c = DiscogsClient(token=None, http=http)
     out = c.search_releases(style="Techno", pages=[1, 2, 3])
-    assert len(out) == 150
-    assert len(http.calls) == 3
+    assert len(out) == 100
+    assert len(http.calls) == 2
 
 
 def test_token_sets_auth_header():
@@ -225,13 +224,21 @@ def test_search_releases_sends_sort_params():
     assert captured["sort_order"] == "desc"
 
 
-def test_search_releases_first_page_error_raises_but_later_page_degrades():
+def test_search_releases_later_page_error_stops_and_keeps_collected():
+    calls = []
+
     def handler(url, params=None, **kw):
+        calls.append(params["page"])
         if params["page"] == 2:
             raise httpx.HTTPError("boom")
         return _resp({"pagination": {"items": 500, "pages": 5},
                       "results": [{"id": params["page"], "title": "A - B"}]})
 
     client = DiscogsClient(token=None, http=_FakeHttp(handler))
-    # pagina successiva in errore: best-effort, tiene ciò che ha
-    assert len(client.search_releases(style="x", pages=[1, 2, 3])) == 2
+    # Pagina successiva in errore: best-effort, tiene cio' che ha e SI FERMA — non salta
+    # alla 3. Il fallimento dominante e' il rate limit: se la 2 e' andata in errore la
+    # quota e' esaurita e la 3 fallirebbe comunque, quindi non la si tenta nemmeno.
+    # Solo la pagina 1 e' stata raccolta -> 1 risultato, e la 3 non viene mai chiamata.
+    assert len(client.search_releases(style="x", pages=[1, 2, 3])) == 1
+    # la 3 non viene mai tentata (la 2 compare piu' volte: retry di trasporto)
+    assert 3 not in calls
