@@ -10,6 +10,7 @@ aggiunge la spiegazione di ogni suggerimento.
 
 import logging
 import re
+import time
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -19,6 +20,7 @@ from app.core.config import settings
 from app.core.http_errors import api_error
 from app.db import get_db
 from app.integrations.discogs import DiscogsClient, DiscogsError
+from app.integrations.itunes import ItunesClient
 from app.integrations.lastfm import (
     LastFMError,
     get_lastfm_client,
@@ -40,6 +42,7 @@ from app.schemas import (
     DiscoveryExpandRequest,
     DiscoveryGenresOut,
     DiscoveryLeadOut,
+    DiscoveryPreviewOut,
     DiscoveryResponse,
     DiscoverySaveForLaterRequest,
     DiscoverySaveForLaterResponse,
@@ -54,7 +57,7 @@ from app.services.discovery import (
 from app.services.discovery_dig import DiscoveryLead, dig
 from app.services.labels import _clean_label, album_label, labels_overview
 from app.services.playlist_import import get_or_create_discovery_playlist, import_single_track
-from app.services.preview import extract_youtube_videos
+from app.services.preview import extract_youtube_videos, resolve_preview
 
 # Stili Discogs curati per il drill-down "Generi" (oltre ai generi gia' in libreria).
 _CURATED_STYLES = [
@@ -91,6 +94,21 @@ def _parse_duration(value: str | None) -> int | None:
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/discovery", tags=["discovery"])
+
+# Cache TTL in-memory del get_release: lo stesso disco viene interrogato più volte
+# (preview della card + di più tracce). Evita chiamate Discogs ripetute.
+_RELEASE_TTL_S = 600
+_release_cache: dict[int, tuple[float, dict]] = {}
+
+
+def _cached_get_release(client: DiscogsClient, discogs_id: int) -> dict:
+    now = time.monotonic()
+    cached = _release_cache.get(discogs_id)
+    if cached and now - cached[0] < _RELEASE_TTL_S:
+        return cached[1]
+    payload = client.get_release(discogs_id)
+    _release_cache[discogs_id] = (now, payload)
+    return payload
 
 
 def _spotify_configured() -> bool:
@@ -283,6 +301,42 @@ def get_release_detail(discogs_id: int):
         label=labels[0].get("name") if labels else None,
         tracks=tracks,
         videos=[DiscogsVideoOut(**v) for v in extract_youtube_videos(payload)],
+    )
+
+
+@router.get("/preview", response_model=DiscoveryPreviewOut)
+def get_preview(
+    artist: str,
+    title: str,
+    discogs_id: int | None = None,
+    level: str = "track",
+):
+    """Preview audio di un lead: iTunes (30s pulita) o fallback video YouTube della
+    release Discogs. Risoluzione lazy, effimera: nessuna persistenza. Gli errori dei
+    provider degradano a kind="none" (una preview mancante non è un errore)."""
+    itunes = ItunesClient()
+    discogs = DiscogsClient() if discogs_id is not None else None
+    try:
+        get_release = None
+        if discogs is not None:
+            get_release = lambda rid: _cached_get_release(discogs, rid)  # noqa: E731
+        result = resolve_preview(
+            artist, title,
+            itunes_search=lambda term: itunes.search(term),
+            get_release=get_release,
+            discogs_id=discogs_id,
+            level=level,
+        )
+    finally:
+        itunes.close()
+        if discogs is not None:
+            discogs.close()
+    return DiscoveryPreviewOut(
+        kind=result.kind,
+        audio_url=result.audio_url,
+        youtube_video_id=result.youtube_video_id,
+        source_url=result.source_url,
+        matched_title=result.matched_title,
     )
 
 
