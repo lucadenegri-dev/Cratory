@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { Chip, SegmentedControl } from "@/components/ui";
+import { Chip, Combobox, SegmentedControl, type ComboOption } from "@/components/ui";
 
 afterEach(cleanup);
 
@@ -35,5 +35,71 @@ describe("Chip", () => {
   it("riflette lo stato attivo", () => {
     render(<Chip on onClick={() => {}}>Acid House</Chip>);
     expect(screen.getByText("Acid House").getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("Combobox", () => {
+  const OPTS: ComboOption[] = [
+    { value: "Acid House", label: "Acid House", group: "genere" },
+    { value: "Acid Techno", label: "Acid Techno", group: "genere" },
+    { value: "Trax Records", label: "Trax Records", group: "etichetta" },
+  ];
+
+  function setup(value = "") {
+    const onSelect = vi.fn();
+    const onChange = vi.fn();
+    render(<Combobox value={value} onChange={onChange} onSelect={onSelect} options={OPTS} />);
+    return { onSelect, onChange };
+  }
+
+  it("filtra per sottostringa, case-insensitive", () => {
+    setup();
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "trax" } });
+    expect(screen.getByText("Trax Records")).toBeTruthy();
+    expect(screen.queryByText("Acid House")).toBeNull();
+  });
+
+  it("mostra generi ed etichette insieme, generi prima", () => {
+    setup();
+    fireEvent.focus(screen.getByRole("combobox"));
+    const labels = screen.getAllByRole("option").map((o) => o.textContent ?? "");
+    expect(labels[0]).toContain("Acid House");
+    expect(labels[labels.length - 1]).toContain("Trax Records");
+  });
+
+  it("Enter sceglie l'opzione evidenziata e riporta il gruppo", () => {
+    const { onSelect } = setup();
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ value: "Acid Techno", group: "genere" }));
+  });
+
+  it("Escape chiude senza selezionare", () => {
+    const { onSelect } = setup();
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("option")).toBeNull();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("accetta testo libero non presente tra i suggerimenti", () => {
+    const { onChange } = setup();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Genere Inventato" } });
+    expect(onChange).toHaveBeenCalledWith("Genere Inventato");
+  });
+
+  it("cappa le voci visibili", () => {
+    const many: ComboOption[] = Array.from({ length: 30 }, (_, i) => ({
+      value: `g${i}`, label: `g${i}`, group: "genere",
+    }));
+    render(<Combobox value="" onChange={() => {}} onSelect={() => {}} options={many} cap={12} />);
+    fireEvent.focus(screen.getByRole("combobox"));
+    expect(screen.getAllByRole("option").length).toBe(12);
   });
 });

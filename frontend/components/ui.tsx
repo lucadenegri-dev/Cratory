@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
@@ -145,6 +145,108 @@ export function Chip({ on, onClick, disabled, children }: {
     >
       {children}
     </button>
+  );
+}
+
+/* ---------------------------------------------------------------- Combobox */
+
+export type ComboOption = { value: string; label: string; group: string; icon?: ReactNode };
+
+export function Combobox({ value, onChange, onSelect, options, placeholder, disabled, cap = 12 }: {
+  value: string;
+  onChange: (v: string) => void;
+  onSelect: (o: ComboOption) => void;
+  options: ComboOption[];
+  placeholder?: string;
+  disabled?: boolean;
+  cap?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  // Specchio locale del testo digitato: la prop `value` è controllata dal
+  // chiamante (che può resettarla dopo una scelta), ma il filtro deve
+  // reagire ad ogni tasto anche se il chiamante non ha uno stato React reale
+  // a monte (es. in test). Risincronizzato in render (non in un effect, che
+  // causerebbe un render a cascata) quando `value` cambia dall'esterno —
+  // pattern "adjusting state during render" dei React docs.
+  const [query, setQuery] = useState(value);
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setQuery(value);
+  }
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const hit = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+    return hit.slice(0, cap);
+  }, [query, options, cap]);
+
+  const choose = (o: ComboOption) => {
+    onSelect(o);
+    setOpen(false);
+    setActive(-1);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") { setOpen(false); setActive(-1); return; }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setOpen(true);
+      setActive((i) => {
+        const next = e.key === "ArrowDown" ? i + 1 : i - 1;
+        return Math.max(0, Math.min(matches.length - 1, next));
+      });
+      return;
+    }
+    if (e.key === "Enter" && open && active >= 0 && matches[active]) {
+      e.preventDefault();   // non fa partire il submit del form: prima si sceglie
+      choose(matches[active]);
+    }
+  };
+
+  return (
+    <div className="relative w-full">
+      <Input
+        role="combobox"
+        aria-expanded={open}
+        aria-controls="combobox-list"
+        aria-activedescendant={active >= 0 ? `combobox-opt-${active}` : undefined}
+        autoComplete="off"
+        value={query}
+        disabled={disabled}
+        placeholder={placeholder}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); setActive(-1); }}
+        onKeyDown={onKeyDown}
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+      />
+      {open && matches.length > 0 && (
+        <ul
+          id="combobox-list"
+          role="listbox"
+          className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto border border-border-strong bg-surface"
+        >
+          {matches.map((o, i) => (
+            <li
+              key={`${o.group}-${o.value}`}
+              id={`combobox-opt-${i}`}
+              role="option"
+              aria-selected={i === active}
+              onMouseDown={(e) => { e.preventDefault(); choose(o); }}
+              onMouseEnter={() => setActive(i)}
+              className={cn(
+                "flex cursor-pointer items-center justify-between gap-3 px-3 py-1.5 text-sm",
+                i === active ? "bg-elevated text-fg" : "text-muted",
+              )}
+            >
+              <span className="flex items-center gap-2 truncate">{o.icon}{o.label}</span>
+              <span className="shrink-0 text-[10px] uppercase tracking-wider text-faint">{o.group}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
