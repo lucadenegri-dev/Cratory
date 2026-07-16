@@ -188,6 +188,28 @@ profondità va in `disabled` fino al prossimo cambio di seme. Questo richiede un
 più nel DTO — **`pile_pages: int`** in `DiscoveryDigResponse` — che va aggiunto alla spec
 del motore in fase di piano.
 
+**Pila vuota ≠ pila corta** (aggiunto dopo l'implementazione). `pile_pages == 0` non è il
+caso di sopra: significa che **Discogs non conosce il seme**, e trattarlo come pila corta
+fa dire alla UI "tutta qui" su un nome che non ha mai avuto un disco. È successo davvero:
+`_CURATED_STYLES` conteneva "Detroit Techno", che su Discogs non esiste né come `style` né
+come `genre` — chi lo sceglieva otteneva zero lead e due messaggi falsi ("pila corta:
+tutta qui" nella barra, "prova a scavare più a fondo" nell'empty state: un consiglio
+impossibile, perché fondo non ce n'è).
+
+I tre esiti vanno distinti perché la cura è diversa:
+
+| `pile_pages` | lead | significato | cosa dire |
+|---|---|---|---|
+| 0 | 0 | Discogs non conosce il seme | non è la tua libreria, e la profondità non aiuta |
+| 1–3 | ≥0 | pila vera ma corta | "tutta qui": non c'è profondità da scegliere |
+| >3 | 0 | pila vera, tutto filtrato (lo possiedi già) | "prova più a fondo" — qui il consiglio funziona |
+
+Questa distinzione è anche **la difesa strutturale** di `_CURATED_STYLES`: la lista è
+scritta a mano, Discogs non espone un endpoint per enumerare gli style (quindi non è
+derivabile dai dati) e marcirà ancora. Un test di rete andrebbe escluso dalla suite e non
+lo eseguirebbe nessuno. Rendere il fallimento leggibile è ciò che rende la marcescenza
+innocua — e vale anche per un genere digitato a mano che non esiste.
+
 ### Rinomine (i18n, `it.ts` + `en.ts`)
 
 | Oggi | Nuovo | Perché |
@@ -350,6 +372,9 @@ Esistono già `npm run test:unit` e `npm run test:e2e` nel frontend.
 
 - profondità inerte: con `pile_pages <= 3` il `SegmentedControl` è `disabled` e la riga
   della risposta mostra "pila corta: tutta qui".
+- **pila vuota ≠ pila corta**: con `pile_pages == 0` la profondità è comunque inerte, ma
+  il messaggio dice che il seme è sconosciuto a Discogs — non "tutta qui". Il test deve
+  mordere la confusione dei due casi, non solo l'assenza del messaggio.
 
 **E2E** — `frontend/e2e/smoke.spec.ts:23` copre già `/discovery`: va aggiornato ai nuovi
 selettori. Aggiungere: il deep link `?seed=label&value=<label>` precompila il combobox

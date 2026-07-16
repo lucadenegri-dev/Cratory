@@ -571,6 +571,7 @@ export const it: Dictionary = {
     depthMidDesc: "Più a fondo: meno noti, ancora molto cercati.",
     depthDeepDesc: "Il fondo della cassa: oscuri, ma qualcuno li cerca ancora.",
     shortPile: "pila corta: tutta qui",
+    emptyPile: "nessuna pila: Discogs non conosce questo seme",
     affinityLabel: "Gusto",
     wholeLibraryOption: "Tutta la libreria",
     affinityHint: "Rispetto a cosa misurare l'affinità. Non filtra: i dischi che hai già restano esclusi comunque.",
@@ -593,6 +594,13 @@ export const it: Dictionary = {
     nothingToDigTitle: "Niente da scavare",
     nothingToDigBody: (value: string, seedType: string) =>
       `Nessun brano nuovo per “${value}”. Prova un altro ${seedType} o vai più a fondo nella pila.`,
+    // Seme inesistente: distinto da "niente di nuovo". Li' la pila c'e' e i dischi sono
+    // stati filtrati (li possiedi gia'), quindi "vai piu' a fondo" e' un consiglio che
+    // puo' funzionare. Qui la pila non esiste: non e' un problema della tua libreria e
+    // nessuna profondita' aiuta.
+    deadSeedTitle: "Seme sconosciuto a Discogs",
+    deadSeedBody: (value: string) =>
+      `Discogs non ha nessun disco catalogato come “${value}”: quel nome non esiste nel suo vocabolario. Non c'entra la tua libreria, e cambiare profondità non aiuta. Scegli una voce dai suggerimenti del campo.`,
     seedTypeValue: "valore",
     seedTypeStyle: "stile",
     noFormatMatch: "Nessun disco con questo formato.",

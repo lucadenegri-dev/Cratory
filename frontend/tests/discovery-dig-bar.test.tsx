@@ -69,11 +69,22 @@ describe("DiscoveryDigBar", () => {
   it("su pila corta la profondita' e' inerte", () => {
     setup({ pilePages: 2 });
     expect(screen.getByText("Superficie").closest("button")?.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("pila corta: tutta qui")).toBeTruthy();
   });
 
   it("su pila lunga la profondita' e' attiva", () => {
     setup({ pilePages: 100 });
     expect(screen.getByText("Superficie").closest("button")?.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("pila VUOTA e pila CORTA dicono cose diverse", () => {
+    // Confonderli fa dire "tutta qui" su un seme che non ha mai avuto niente: la pila
+    // corta e' un seme vero con pochi dischi, la pila vuota e' un seme che Discogs non
+    // conosce. In entrambi i casi la profondita' e' inerte, ma il motivo cambia.
+    setup({ pilePages: 0 });
+    expect(screen.getByText("Superficie").closest("button")?.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("nessuna pila: Discogs non conosce questo seme")).toBeTruthy();
+    expect(screen.queryByText("pila corta: tutta qui")).toBeNull();
   });
 
   it("il gusto sparisce se non ci sono playlist", () => {

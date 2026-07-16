@@ -44,6 +44,19 @@ export function DiscoveryLeadGrid({ dig, format, sort }: {
     return [...base].sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
   }, [dig.leads, format, sort]);
 
+  // Zero lead ha due cause diverse, e dirle uguali mente. Se la pila non esiste
+  // (`pile_pages === 0`) il seme e' sconosciuto a Discogs: la libreria non c'entra e
+  // "vai piu' a fondo" e' un consiglio che non puo' funzionare, perche' non c'e' fondo.
+  // Se invece la pila c'e', i dischi sono stati filtrati (li possiedi gia') e scavare
+  // piu' a fondo e' esattamente la mossa giusta.
+  if (dig.pile_pages === 0) {
+    return (
+      <EmptyState icon={<Disc3 size={28} />} title={t.discovery.deadSeedTitle}>
+        {t.discovery.deadSeedBody(dig.value)}
+      </EmptyState>
+    );
+  }
+
   if (dig.leads.length === 0) {
     return (
       <EmptyState icon={<Disc3 size={28} />} title={t.discovery.nothingToDigTitle}>

@@ -569,6 +569,7 @@ export const en = {
     depthMidDesc: "Deeper: less known, still much wanted.",
     depthDeepDesc: "The bottom of the crate: obscure, but someone still wants them.",
     shortPile: "short pile: this is all of it",
+    emptyPile: "no pile: Discogs doesn't know this seed",
     affinityLabel: "Taste",
     wholeLibraryOption: "Whole library",
     affinityHint: "What to measure affinity against. It filters nothing: records you own stay excluded anyway.",
@@ -591,6 +592,12 @@ export const en = {
     nothingToDigTitle: "Nothing to dig",
     nothingToDigBody: (value: string, seedType: string) =>
       `No new tracks for “${value}”. Try another ${seedType} or dig deeper into the pile.`,
+    // Dead seed: distinct from "nothing new". There the pile exists and the records were
+    // filtered out (you already own them), so "dig deeper" is advice that can work. Here
+    // the pile doesn't exist: it's not your library's fault and no depth helps.
+    deadSeedTitle: "Seed unknown to Discogs",
+    deadSeedBody: (value: string) =>
+      `Discogs has no records catalogued as “${value}”: that name isn't in its vocabulary. It's not your library, and changing depth won't help. Pick an entry from the field's suggestions.`,
     seedTypeValue: "value",
     seedTypeStyle: "style",
     noFormatMatch: "No record with this format.",

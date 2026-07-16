@@ -74,8 +74,13 @@ export function DiscoveryDigBar({
       : activeDepth.key === "mid" ? "depthMidDesc" : "depthDeepDesc"
   ];
 
-  // pila piu' corta della finestra: `depth` non ha effetto, non offrire un controllo inerte
-  const shortPile = pilePages !== null && pilePages <= 3;
+  // Due casi diversi, non uno. La pila NON ESISTE (seme che Discogs non conosce) e' altra
+  // cosa da una pila CORTA (seme vero ma con pochi dischi): confonderli fa dire alla UI
+  // "tutta qui" su un seme che non ha mai avuto niente. In entrambi i casi `depth` non ha
+  // effetto e il controllo va spento, ma il motivo va detto giusto.
+  const emptyPile = pilePages === 0;
+  const shortPile = pilePages !== null && pilePages > 0 && pilePages <= 3;
+  const depthInert = emptyPile || shortPile;
 
   return (
     <form
@@ -103,7 +108,7 @@ export function DiscoveryDigBar({
             value={String(activeDepth.value)}
             onChange={(v) => onDepthChange(Number(v))}
             options={depthOptions}
-            disabled={busy || shortPile}
+            disabled={busy || depthInert}
           />
         </div>
 
@@ -129,7 +134,7 @@ export function DiscoveryDigBar({
       </div>
 
       <p className="mt-2 text-xs text-muted">
-        {shortPile ? t.discovery.shortPile : depthDesc}
+        {emptyPile ? t.discovery.emptyPile : shortPile ? t.discovery.shortPile : depthDesc}
       </p>
       {options.playlists.length > 0 && (
         // Onestà del microcopy (spec): il gusto non filtra, sceglie solo il riferimento
