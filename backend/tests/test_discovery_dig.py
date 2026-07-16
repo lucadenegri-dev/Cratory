@@ -117,6 +117,14 @@ def test_owned_via_album_when_release_is_an_ep():
     assert _is_owned(lead, tracks, albums) is True
 
 
+def test_owned_via_track_when_release_title_carries_the_format_suffix():
+    # Lo scenario cardine: possiedi la traccia 'Piercing Love', Discogs chiama la
+    # release 'Piercing Love EP'. Passa da owned_tracks + strip del suffisso.
+    tracks, albums = _owned_index(_lib(("Fabien D'Estival", "Piercing Love")))
+    lead = _lead_from_release(_release("Fabien D'Estival - Piercing Love EP", rid=1), "x")
+    assert _is_owned(lead, tracks, albums) is True
+
+
 def test_owned_via_one_side_of_a_split_title():
     tracks, albums = _owned_index(_lib(("Nail", "Sentipede")))
     lead = _lead_from_release(_release("Nail* / Einzelkind - Sentipede / 808 Rhythm Traxx 3", rid=1), "x")
@@ -127,6 +135,19 @@ def test_not_owned_stays_not_owned():
     tracks, albums = _owned_index(_lib(("Tyree", "Acid Crash")))
     lead = _lead_from_release(_release("Armando - Land Of Confusion", rid=1), "x")
     assert _is_owned(lead, tracks, albums) is False
+
+
+def test_not_owned_requires_both_artist_and_title_to_match():
+    # Il possesso e' la COPPIA (artista, titolo): un match su un solo lato non basta.
+    # Senza questo, una semantica 'OR' rotta passerebbe il test qui sopra (che cambia
+    # entrambi i lati) e scarterebbe lead buoni per un'omonimia di titolo.
+    tracks, albums = _owned_index(_lib(("Tyree", "Acid Crash")))
+    # stesso artista, altro titolo -> non posseduto
+    same_artist = _lead_from_release(_release("Tyree* - Other Track", rid=1), "x")
+    assert _is_owned(same_artist, tracks, albums) is False
+    # stesso titolo, altro artista -> non posseduto
+    same_title = _lead_from_release(_release("Armando - Acid Crash", rid=2), "x")
+    assert _is_owned(same_title, tracks, albums) is False
 
 
 def test_dig_dedup_vs_library_and_pressings():
