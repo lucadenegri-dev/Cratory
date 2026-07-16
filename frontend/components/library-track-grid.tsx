@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Pencil } from "lucide-react";
 import { type Track } from "@/lib/api";
 import { TrackCover } from "@/components/track-cover";
+import { TrackPlayButton } from "@/components/track-play-button";
 import { useT } from "@/lib/i18n";
 
 /** Vista a griglia della libreria: card cover-centriche sul modello dei
@@ -48,6 +49,12 @@ function LibraryTrackCard({ track, onEdit, trackLinkQuery }: { track: Track; onE
           </span>
         )}
       </Link>
+      {/* Play in alto a sinistra sulla cover, fuori dal Link (niente <button>
+          dentro <a>): compare su hover, solo per le tracce possedute. */}
+      <TrackPlayButton
+        track={track}
+        className="absolute left-1 top-1 rounded-full bg-black/60 p-1.5 text-white opacity-0 transition hover:bg-black/80 focus-visible:opacity-100 group-hover:opacity-100"
+      />
       {/* Pencil fuori dal Link (niente <button> dentro <a>): overlay su hover. */}
       <button
         type="button"
