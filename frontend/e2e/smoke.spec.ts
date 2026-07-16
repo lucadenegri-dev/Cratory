@@ -83,11 +83,10 @@ for (const { path, title } of ROUTES) {
 // (verificata via GET /api/labels), non inventata — "Trax Records" del brief
 // originale non esiste nella libreria corrente.
 //
-// Trappola: il <select> del gusto (affinita') e il Combobox del soggetto hanno
-// ENTRAMBI ruolo ARIA "combobox" (un <select> nativo lo espone implicitamente).
-// Quando ci sono playlist importate il Select renderizza e getByRole("combobox")
-// e' ambiguo: il Combobox del soggetto e' pero' sempre il primo in ordine di riga
-// (vedi components/discovery-dig-bar.tsx), quindi .first() lo disambigua.
+// Storicamente il <select> del gusto condivideva il ruolo ARIA "combobox" col campo
+// soggetto e serviva .first() per disambiguare; il selettore del gusto e' stato
+// rimosso (la manopola azzerava l'ordinamento in silenzio sulle playlist magre), ma
+// .first() resta innocuo e tiene il selettore stabile se un altro combobox comparisse.
 test("deep link per etichetta precompila il soggetto", async ({ page }) => {
   await page.goto("/discovery?seed=label&value=Warp%20Records");
   await expect(page.getByRole("combobox").first()).toHaveValue("Warp Records");

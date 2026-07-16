@@ -68,6 +68,38 @@ Stato finale verificato (2026-07-16): backend 933 test verdi (anche a rete blocc
 frontend 30 test unit su 5 file verdi, 13 e2e verdi (incluso il deep link), lint 0 errori
 (4 warning preesistenti non correlati), `tsc --noEmit` e `next build` puliti.
 
+**Rifiniture dallo stesso giorno, usando il dig sul campo** (stesso branch):
+
+- **Seme morto e pila vuota ≠ pila corta:** rimossa "Detroit Techno" dalla lista curata
+  (non esiste nel vocabolario Discogs, né come `style` né come `genre`: zero lead per
+  sempre); e con `pile_pages == 0` la UI ora dice «Discogs non conosce questo seme»
+  invece di mentire con «pila corta: tutta qui» e consigliare di scavare in un fondo che
+  non esiste.
+- **Via il tetto degli 80 lead:** misurato sull'imbuto reale (`style=Acid House`), dei
+  ~240 candidati validi il vecchio `limit=80` ne nascondeva 160 a ogni dig senza che
+  nulla lo dicesse — e l'API non poteva nemmeno restituirli tutti (`le=200`). `limit` è
+  uscito dal contratto; il motore non tronca più (resta il cap anti-monopolio di 2 per
+  artista); quanti mostrarne è una lente client-side «Mostra 40/80/tutti» nella riga
+  della risposta, col conteggio onesto «N di M» (`applyLens`, pura e testata: lista e
+  conteggio escono dallo stesso calcolo).
+- **Via la manopola del gusto:** misurato sulle 10 playlist reali, su 7 il riferimento
+  azzerava l'ordinamento in silenzio (profilo quasi vuoto: etichette e generi vengono
+  dai tag dei file, che le playlist di lead non hanno — es. "Wallis b2b Blawan": 80 lead
+  su 80 a punteggio 0). `taste_playlist_id` rimosso: il profilo è sempre la libreria,
+  dove è misurato che ordina.
+- **Il suggeritore scorre tutto:** via il `cap=12` dal `Combobox` (le voci reali sono
+  319 e la lista scorreva già); aggiunto lo `scrollIntoView` da tastiera che mancava —
+  senza, la freccia giù portava l'evidenziazione fuori schermo già con 12 voci.
+- **Lo scaffale si dichiara:** `seed_resolution` + `pile_total` nel contratto; quando un
+  seme ripiega su `genre=` (es. «Electronic»: 4,96M release, raggiungibili solo le
+  10.000 più cercate) la riga della risposta lo dice — «Genere molto generico… un
+  sottogenere più preciso scava meglio» — invece di far passare uno scaffale per un dig
+  fine.
+
+Stato finale verificato (2026-07-16, sera): backend 941 test verdi; frontend 40 unit su
+6 file, 13 e2e, lint 0 errori, `tsc` pulito; verifica a browser su dati reali (Electronic
+→ avviso scaffale; Dub Techno → nessun avviso; «Mostra tutti» → conteggio pieno).
+
 ## Milestone 2026-07-16 - Player delle tracce possedute (audizione rapida, read-only)
 
 Nuova capacità deliberata che rivede la regola non-negoziabile "non riproduce audio":

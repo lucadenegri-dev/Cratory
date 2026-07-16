@@ -380,12 +380,18 @@ Taste always ranks inside the chosen window — not a mode, not optional. The sc
 **taste-only**: graduated familiarity on the artist, owned label and style affinity
 with your genres. Novelty, demand and recency are **not** score inputs any more —
 demand only gates which window `depth` reads (above), it does not order within it. The
-affinity is measured against a reference selectable via the optional
-`taste_playlist_id` field (default: the whole library); the **dedup stays always
-library-wide**. Each lead carries deterministic `reasons[]` (`{code, data}`) to
+taste profile is always built from the **whole library** (the former
+`taste_playlist_id` reference was removed: on lead-only playlists — which carry no
+file tags, hence no labels or genres — it silently zeroed the ranking); the dedup is
+library-wide as well. Each lead carries deterministic `reasons[]` (`{code, data}`) to
 explain why (e.g. `rare_wanted`, `deep_cut`, `label_followed`, `artist_collected`,
 `style_match`, `recent`); the chip text is composed by the UI — these are display
 badges, not the score's factors.
+
+The response is **never truncated**: the window's ~300 raw releases are the natural
+limit (the former `limit` field was removed — measured against the demand-sorted pile
+it silently hid ~160 valid leads on every dig). How many to *show* is a client-side
+lens in the UI, together with format and ordering.
 
 Network cost: **4-5 Discogs requests per dig** — one `count_releases` probe to size
 the pile (needed to place `depth`'s window) plus 3 content pages, plus one extra probe
@@ -394,6 +400,14 @@ the coarser `genre=` filter. The response carries `pile_pages`: how many pages t
 pile actually has. When `pile_pages <= 3` the whole pile already fits in one window and
 `depth` has no effect — the UI disables the depth control and shows a note instead of
 offering an inert one.
+
+The response also says **how the seed resolved**: `seed_resolution`
+(`"style" | "genre" | "label" | null`) and `pile_total` (the probe's raw item count —
+`pile_pages` is capped at 100 and cannot tell 43k from 4.9M). `"genre"` means the seed
+fell back to a Discogs top-level genre (~15 huge shelves like `Electronic`, 4.9M
+releases): only the ~10,000 most wanted are reachable through pagination, and the UI
+says so instead of letting a shelf pass for a fine-grained dig. A dead seed (unknown to
+Discogs on both levels) has `pile_pages: 0` and `seed_resolution: null`.
 
 `release/{discogs_id}` expands a Discogs release from the dig into its **real
 tracklist** (fetched lazily when the release is opened): each row is a candidate track
