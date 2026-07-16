@@ -16,6 +16,9 @@ function Harness() {
       <button onClick={() => p.play({ key: "a", artist: "Artist", title: "Acid Trip", discogsId: 42, level: "track", label: "Acid Trip" })}>
         play-a
       </button>
+      <button onClick={() => p.play({ key: "b", artist: "Artist", title: "Other", discogsId: 42, level: "track", label: "Other" })}>
+        play-b
+      </button>
       <span data-testid="status">{p.status}</span>
     </div>
   );
@@ -72,5 +75,35 @@ describe("preview player", () => {
     expect(screen.getByTestId("preview-iframe").getAttribute("src")).toContain(
       "youtube.com/embed/abcdefghijk",
     );
+  });
+
+  it("a newer play supersedes a slower older in-flight resolution", async () => {
+    let resolveA: (v: unknown) => void = () => {};
+    const pending = new Promise((r) => {
+      resolveA = r as (v: unknown) => void;
+    });
+    (discoveryPreview as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce(pending) // play-a: stays pending
+      .mockResolvedValueOnce({
+        kind: "youtube", audio_url: null, youtube_video_id: "bbbbbbbbbbb", source_url: "http://y", matched_title: "Other",
+      }); // play-b: resolves immediately
+
+    renderAll();
+    await act(async () => {
+      screen.getByText("play-a").click();
+    });
+    await act(async () => {
+      screen.getByText("play-b").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("preview-iframe")).toBeTruthy());
+
+    // Now resolve the older (play-a) request LATE — it must NOT override play-b's youtube state.
+    await act(async () => {
+      resolveA({ kind: "itunes", audio_url: "http://p", youtube_video_id: null, source_url: "http://v", matched_title: "Acid Trip" });
+    });
+
+    expect(screen.getByTestId("preview-iframe")).toBeTruthy();
+    expect(screen.queryByTestId("preview-audio")).toBeNull();
+    expect(screen.getByTestId("status").textContent).toBe("playing");
   });
 });
