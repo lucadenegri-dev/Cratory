@@ -58,6 +58,28 @@ _VARIOUS = {"various", "various artists", "va", "unknown artist"}
 _BAD_FORMATS = {"compilation", "dj mix", "mixed", "mixtape"}
 # Etichetta "non etichetta": segnale di autoproduzione.
 _SELF_RELEASED_RE = re.compile(r"not on label|self[- ]released", re.IGNORECASE)
+
+# Grammatica di Discogs: gli omonimi sono disambiguati con '*' o '(N)' — 'Tyree*',
+# 'Gravity Zero (4)'. Non sono parte del nome: senza toglierli, il 17% dei lead non
+# aggancia la libreria (misurato su style=Acid House).
+_DISCOGS_CRUFT_RE = re.compile(r"\*|\s*\(\d+\)")
+# Piu' artisti in un campo: 'Nail / Einzelkind', 'OPTML, Gravity Zero & RADD'.
+_ARTIST_SPLIT_RE = re.compile(r"\s+(?:/|&|feat\.?|vs\.?)\s+|,\s+", re.IGNORECASE)
+
+
+def _clean_artist(raw: str) -> tuple[str, list[str]]:
+    """(stringa da mostrare, chiavi normalizzate per il match).
+
+    La chiave INTERA viene per prima: 'Above & Beyond' e' un artista solo e deve
+    poter matchare per intero. Le parti seguono, per gli split veri
+    ('Nail / Einzelkind': se collezioni Einzelkind, il lead e' rilevante).
+    """
+    display = _DISCOGS_CRUFT_RE.sub("", raw or "").strip()
+    parts = [p.strip() for p in _ARTIST_SPLIT_RE.split(display) if p.strip()]
+    keys = [_norm(display), *(_norm(p) for p in parts)]
+    return display, [k for k in dict.fromkeys(keys) if k]
+
+
 # Suffisso finale tra parentesi che indica una variante (mix/edit/version/...): per la dedup.
 _VARIANT_RE = re.compile(
     r"\s*[\(\[][^\)\]]*\b(mix|edit|version|remaster|remastered|dub|instrumental|rework|vip|re-?edit)\b[^\)\]]*[\)\]]\s*$",
@@ -114,7 +136,8 @@ class DiscoveryLead:
     title: str
     year: int | None = None
     label: str | None = None
-    style: str | None = None
+    styles: list[str] = field(default_factory=list)   # TUTTI gli style della release
+    artist_keys: list[str] = field(default_factory=list)  # interno: match, non DTO
     source: str = "discogs"
     seed: str | None = None
     discogs_id: int | None = None
@@ -215,9 +238,12 @@ def _lead_from_release(item: dict[str, Any], seed: str) -> DiscoveryLead | None:
     title = item.get("title") or ""
     if " - " not in title:
         return None
-    artist, _, track_title = title.partition(" - ")
-    artist, track_title = artist.strip(), track_title.strip()
-    if not artist or not track_title or artist.lower() in _VARIOUS:
+    artist_raw, _, track_title = title.partition(" - ")
+    artist_raw, track_title = artist_raw.strip(), track_title.strip()
+    if not artist_raw or not track_title or artist_raw.lower() in _VARIOUS:
+        return None
+    artist, artist_keys = _clean_artist(artist_raw)
+    if not artist or not artist_keys:
         return None
     formats = {str(f).lower() for f in (item.get("format") or [])}
     if formats & _BAD_FORMATS:
@@ -231,10 +257,10 @@ def _lead_from_release(item: dict[str, Any], seed: str) -> DiscoveryLead | None:
         return None
     uri = item.get("uri") or ""
     return DiscoveryLead(
-        artist=artist, title=track_title,
+        artist=artist, artist_keys=artist_keys, title=track_title,
         year=_parse_year(item.get("year")),
         label=_first(labels),
-        style=_first(item.get("style")),
+        styles=[str(s) for s in (item.get("style") or [])],
         source="discogs", seed=seed,
         discogs_id=item.get("id"),
         discogs_url=f"https://www.discogs.com{uri}" if uri.startswith("/") else (uri or None),

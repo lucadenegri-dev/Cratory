@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from app.services.discovery_dig import _lead_from_release, _window, dig
+from app.services.discovery_dig import _clean_artist, _lead_from_release, _window, dig
 
 
 def _release(title, *, year=2020, label="Lbl", style="Acid House", have=100, want=10,
@@ -29,10 +29,46 @@ def _lib(*items):
 def test_lead_parsing_and_various_skipped():
     lead = _lead_from_release(_release("Aphex Twin - Xtal", year=1992, rid=1), "Acid House")
     assert lead.artist == "Aphex Twin" and lead.title == "Xtal"
-    assert lead.year == 1992 and lead.label == "Lbl" and lead.style == "Acid House"
+    assert lead.year == 1992 and lead.label == "Lbl" and lead.styles == ["Acid House"]
     assert lead.discogs_url == "https://www.discogs.com/release/1"
     assert _lead_from_release(_release("Various - Comp"), "x") is None
     assert _lead_from_release({"title": "no separator"}, "x") is None
+
+
+# --- Task 3: grammatica Discogs — normalizzazione artisti ---------------------
+
+
+def test_clean_artist_strips_discogs_disambiguation():
+    # Discogs marca gli omonimi: Tyree* non e' un artista diverso da Tyree
+    assert _clean_artist("Tyree*") == ("Tyree", ["tyree"])
+    assert _clean_artist("Gravity Zero (4)") == ("Gravity Zero", ["gravity zero"])
+
+
+def test_clean_artist_splits_multi_artist_fields():
+    display, keys = _clean_artist("Nail* / Einzelkind")
+    assert display == "Nail / Einzelkind"          # niente cruft nella UI
+    assert keys == ["nail / einzelkind", "nail", "einzelkind"]
+
+
+def test_clean_artist_keeps_ampersand_names_matchable_whole():
+    # 'Above & Beyond' e' UN artista: la chiave intera deve esserci per prima
+    display, keys = _clean_artist("Above & Beyond")
+    assert display == "Above & Beyond"
+    assert keys[0] == "above & beyond"
+
+
+def test_clean_artist_handles_comma_and_ampersand_together():
+    _, keys = _clean_artist("OPTML, Gravity Zero (4) & RADD (3)")
+    assert "optml" in keys and "gravity zero" in keys and "radd" in keys
+
+
+def test_lead_carries_clean_artist_and_all_styles():
+    item = _release("Tyree* - Acid Crash", rid=7)
+    item["style"] = ["Acid House", "Chicago House"]
+    lead = _lead_from_release(item, "Acid House")
+    assert lead.artist == "Tyree"
+    assert lead.artist_keys == ["tyree"]
+    assert lead.styles == ["Acid House", "Chicago House"]
 
 
 def test_dig_dedup_vs_library_and_pressings():
