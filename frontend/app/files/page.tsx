@@ -9,7 +9,7 @@ import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { FilesTable } from "@/components/files-table";
 import { SourceMenu } from "@/components/source-menu";
-import { Alert, Button, EmptyState, Input, Loading, Select, Spinner } from "@/components/ui";
+import { Alert, Button, EmptyState, Input, Loading, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 const LIMIT = 500;
@@ -55,7 +55,8 @@ export default function FilesPage() {
 
   const [rootId, setRootId] = useState<string>("");
   const [onlyIssues, setOnlyIssues] = useState(false);
-  const [sort, setSort] = useState<FileQuery["sort"]>("path");
+  const [sort, setSort] = useState<NonNullable<FileQuery["sort"]>>("path");
+  const [dir, setDir] = useState<NonNullable<FileQuery["dir"]>>("asc");
   const [q, setQ] = useState("");
   const [facets, setFacets] = useState<LibraryFacets | null>(null);
   const [tag, setTag] = useState<Record<string, string>>({
@@ -72,6 +73,12 @@ export default function FilesPage() {
 
   const selectedRoot = rootId ? roots.find((r) => r.id === Number(rootId)) ?? null : null;
   const running = scan.status === "running";
+
+  // click su una colonna: se già attiva inverte la direzione, altrimenti ordina asc
+  const onSort = (col: NonNullable<FileQuery["sort"]>) => {
+    if (sort === col) setDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSort(col); setDir("asc"); }
+  };
 
   const onScan = async () => {
     setActionError(null);
@@ -118,6 +125,7 @@ export default function FilesPage() {
       root_id: rootId ? Number(rootId) : undefined,
       has_issues: onlyIssues ? true : undefined,
       sort,
+      dir,
       q: q.trim() || undefined,
       genre: tag.genre || undefined,
       artist: tag.artist || undefined,
@@ -132,7 +140,7 @@ export default function FilesPage() {
       .catch(() => setOffline(true))
       .finally(() => setLoaded(true));
     libraryStats().then(setStats).catch(() => setStats(null));
-  }, [rootId, onlyIssues, sort, q, tag]);
+  }, [rootId, onlyIssues, sort, dir, q, tag]);
 
   useEffect(() => { loadRoots(); }, [loadRoots]);
   useEffect(() => { libraryFacets().then(setFacets).catch(() => {}); }, []);
@@ -175,34 +183,6 @@ export default function FilesPage() {
                 ? t.files.scanOne(selectedRoot.label || selectedRoot.path)
                 : t.files.scanAll}
           </Button>
-          <Select value={onlyIssues ? "issues" : "all"} onChange={(e) => setOnlyIssues(e.target.value === "issues")} className="w-auto">
-            <option value="all">{t.files.filterAll}</option>
-            <option value="issues">{t.files.filterIssues}</option>
-          </Select>
-          <Select value={sort} onChange={(e) => setSort(e.target.value as FileQuery["sort"])} className="w-auto">
-            <option value="path">{t.files.sortPath}</option>
-            <option value="artist">{t.files.sortArtist}</option>
-            <option value="title">{t.files.sortTitle}</option>
-            <option value="bitrate">{t.files.sortBitrate}</option>
-            <option value="duration">{t.files.sortDuration}</option>
-          </Select>
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.files.searchPlaceholder} className="w-48" />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {FACET_KEYS.map((key) => (
-            <FacetInput
-              key={key} facet={key} placeholder={facetPlaceholder[key]} value={tag[key]}
-              options={facetOptions(facets, key)}
-              onChange={(v) => setTagField(key, v)}
-            />
-          ))}
-          {Object.values(tag).some(Boolean) && (
-            <button
-              onClick={() => setTag({ genre: "", artist: "", album: "", label: "", ext: "", year: "" })}
-              className="border border-border px-2 py-1 text-[11px] text-muted hover:bg-elevated"
-            >{t.files.clearFilters}</button>
-          )}
         </div>
 
         {scan.result && (
@@ -216,12 +196,37 @@ export default function FilesPage() {
           </div>
         )}
 
+        <div className="flex flex-wrap items-center gap-2">
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.files.searchPlaceholder} className="w-48" />
+          {FACET_KEYS.map((key) => (
+            <FacetInput
+              key={key} facet={key} placeholder={facetPlaceholder[key]} value={tag[key]}
+              options={facetOptions(facets, key)}
+              onChange={(v) => setTagField(key, v)}
+            />
+          ))}
+          <label className="flex items-center gap-1.5 border border-border px-2 py-1 text-[11px] text-muted">
+            <input
+              type="checkbox" checked={onlyIssues}
+              onChange={(e) => setOnlyIssues(e.target.checked)}
+              className="accent-danger"
+            />
+            {t.files.filterIssues}
+          </label>
+          {(Object.values(tag).some(Boolean) || onlyIssues) && (
+            <button
+              onClick={() => { setTag({ genre: "", artist: "", album: "", label: "", ext: "", year: "" }); setOnlyIssues(false); }}
+              className="border border-border px-2 py-1 text-[11px] text-muted hover:bg-elevated"
+            >{t.files.clearFilters}</button>
+          )}
+        </div>
+
         {!loaded ? (
           <Loading />
         ) : rows.length === 0 && !offline ? (
           <EmptyState title={t.files.emptyTitle}>{t.files.emptyBody}</EmptyState>
         ) : (
-          <FilesTable rows={rows} />
+          <FilesTable rows={rows} sort={sort} dir={dir} onSort={onSort} />
         )}
       </div>
     </PageLayout>

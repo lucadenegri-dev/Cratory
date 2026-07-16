@@ -52,6 +52,7 @@ _SORT_COLS = {
     "path": AudioFile.path,
     "artist": AudioFile.artist,
     "title": AudioFile.title,
+    "ext": AudioFile.ext,
     "bitrate": AudioFile.bitrate,
     "duration": AudioFile.duration_s,
 }
@@ -93,6 +94,7 @@ def list_files(
     ext: str | None = None,
     year: int | None = None,
     sort: str = "path",
+    dir: str = "asc",
     limit: int = Query(500, ge=1, le=5000),
     offset: int = Query(0, ge=0),
 ):
@@ -136,7 +138,10 @@ def list_files(
             or_(AudioFile.path.ilike(like), AudioFile.artist.ilike(like),
                 AudioFile.title.ilike(like))
         )
-    stmt = stmt.order_by(_SORT_COLS.get(sort, AudioFile.path)).limit(limit).offset(offset)
+    col = _SORT_COLS.get(sort, AudioFile.path)
+    ordering = col.desc() if dir == "desc" else col.asc()
+    # id come tiebreaker: ordinamento deterministico e paginazione stabile
+    stmt = stmt.order_by(ordering, AudioFile.id).limit(limit).offset(offset)
 
     rows = []
     for f, n_issues, rank, dup_n in db.execute(stmt).all():

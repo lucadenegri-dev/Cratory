@@ -89,7 +89,8 @@ export interface FileQuery {
   label?: string;
   ext?: string;
   year?: number;
-  sort?: "path" | "artist" | "title" | "bitrate" | "duration";
+  sort?: "path" | "artist" | "title" | "ext" | "bitrate" | "duration";
+  dir?: "asc" | "desc";
   limit?: number;
   offset?: number;
   [key: string]: string | number | boolean | undefined;

@@ -54,7 +54,7 @@ export function SourceMenu({
       </button>
 
       {open && (
-        <div className="absolute left-0 z-20 mt-1 w-80 border border-border bg-bg shadow-lg">
+        <div className="absolute left-0 z-20 mt-1 w-[36rem] max-w-[calc(100vw-3rem)] border border-border bg-bg shadow-lg">
           <ul className="max-h-72 overflow-y-auto">
             <li>
               <button
