@@ -247,7 +247,7 @@ def test_taste_profile_affinities():
     assert p.label_affinity("warp") == 1.0
     assert p.label_affinity("Other") == 0.0
     assert p.label_affinity(None) == 0.0
-    assert p.style_affinity(["Acid House"]) == 1.0     # token in comune
+    assert p.style_affinity(["Acid House"]) == 1.0     # match esatto: {acid,house} su se stesso
     assert p.style_affinity(["Techno"]) == 0.0
     assert p.style_affinity(None) == 0.0
 
@@ -269,12 +269,17 @@ def test_style_affinity_uses_all_release_styles():
 
 
 def test_style_affinity_compares_per_genre_not_against_a_single_bag():
-    # regressione: con l'unione dei token, 'house' bastava a valere 1.0 su tutto
+    # Regressione, e il valore puntuale e' il punto: la Jaccard va calcolata contro
+    # OGNI genere separatamente, non contro l'unione dei token della libreria.
+    # Per-genere: max({house}/{acid,deep,house}, 0) = 1/3 <- atteso.
+    # Sacco unico: {house}/{acid,deep,house,drum,n,bass} = 1/6. Un '< 1.0' non
+    # distinguerebbe i due (1/6 lo soddisfa): morderebbe solo il ritorno al match
+    # binario, non il ritorno all'unione.
     p = TasteProfile.from_tracks(_lib(
         ("A", "T1", {"genre": "Deep House"}),
         ("B", "T2", {"genre": "Drum n Bass"}),
     ))
-    assert p.style_affinity(["Acid House"]) < 1.0
+    assert p.style_affinity(["Acid House"]) == pytest.approx(1 / 3)
 
 
 def test_familiarity_is_max_across_split_artists():
