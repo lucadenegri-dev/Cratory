@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 
 import { discoverySaveForLater, trackAudioUrl } from "@/lib/api";
+import { TrackCover } from "@/components/track-cover";
 import { useT } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
 
@@ -38,6 +39,15 @@ export function DockedPlayer() {
   const title = active.kind === "local-track" ? active.track.title : active.item.title;
   const artist = active.kind === "local-track" ? active.track.artist : active.item.artist;
 
+  // Miniatura: per la traccia posseduta l'artwork Spotify o la cover embedded
+  // (via TrackCover); per la preview discovery la thumb del lead. `key` sul
+  // dock (più sotto) rimonta TrackCover al cambio sorgente, azzerando il suo
+  // stato di fallback.
+  const coverArt =
+    active.kind === "local-track"
+      ? { id: active.track.id, album_art_url: active.track.albumArtUrl ?? null, has_local_file: true }
+      : { id: 0, album_art_url: active.item.addInput?.album_art_url ?? null, has_local_file: false };
+
   const addInput = active.kind === "discovery-preview" ? active.item.addInput : undefined;
   const isAdded = addedKey != null && addedKey === activePreviewKey;
   const onAdd = async () => {
@@ -62,9 +72,12 @@ export function DockedPlayer() {
       className="fixed right-4 z-[60] w-80 max-w-[calc(100vw-2rem)] rounded-none border border-border-strong bg-surface p-3"
     >
       <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-sm text-fg">{title}</div>
-          <div className="truncate text-xs text-faint">{artist}</div>
+        <div className="flex min-w-0 items-center gap-2">
+          <TrackCover key={activeKey ?? "x"} track={coverArt} className="h-10 w-10" iconSize={16} />
+          <div className="min-w-0">
+            <div className="truncate text-sm text-fg">{title}</div>
+            <div className="truncate text-xs text-faint">{artist}</div>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {addInput && (

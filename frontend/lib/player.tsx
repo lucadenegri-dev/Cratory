@@ -19,6 +19,8 @@ export type LocalTrack = {
   id: number;
   title: string;
   artist: string;
+  /** Artwork Spotify se presente; il dock ripiega su cover embedded/placeholder. */
+  albumArtUrl?: string | null;
 };
 
 export type PlaybackSource =

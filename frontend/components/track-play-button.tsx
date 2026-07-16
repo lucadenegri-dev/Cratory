@@ -6,7 +6,13 @@ import { useT } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
 
 type Props = {
-  track: { id: number; title: string | null; artist: string | null; has_local_file?: boolean | null };
+  track: {
+    id: number;
+    title: string | null;
+    artist: string | null;
+    has_local_file?: boolean | null;
+    album_art_url?: string | null;
+  };
   className?: string;
 };
 
@@ -26,7 +32,12 @@ export function TrackPlayButton({ track, className }: Props) {
     } else {
       player.play({
         kind: "local-track",
-        track: { id: track.id, title: track.title ?? "", artist: track.artist ?? "" },
+        track: {
+          id: track.id,
+          title: track.title ?? "",
+          artist: track.artist ?? "",
+          albumArtUrl: track.album_art_url ?? null,
+        },
       });
     }
   };

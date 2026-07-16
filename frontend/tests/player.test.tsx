@@ -3,6 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/api", () => ({
   discoveryPreview: vi.fn(),
+  // Il dock renderizza sempre una miniatura (TrackCover→trackCoverSrc) e, per le
+  // tracce locali, un <audio src={trackAudioUrl}>; l'ADD chiama save-for-later.
+  trackCoverSrc: () => null,
+  trackAudioUrl: (id: number) => `/api/tracks/${id}/audio`,
+  discoverySaveForLater: vi.fn(),
 }));
 
 import { discoveryPreview } from "@/lib/api";
