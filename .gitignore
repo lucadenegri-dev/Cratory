@@ -35,3 +35,6 @@ next-env.d.ts
 
 # Claude Code — settings locali (non la launch.json condivisa)
 .claude/settings.local.json
+
+# beets clonato per studio/confronto — non fa parte del progetto
+/beets/
