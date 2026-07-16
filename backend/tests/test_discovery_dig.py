@@ -9,6 +9,7 @@ from app.services.discovery_dig import (
     _is_owned,
     _lead_from_release,
     _owned_index,
+    _reasons,
     _title_candidates,
     _window,
     dig,
@@ -374,7 +375,9 @@ def test_dig_style_affinity_changes_order():
     res = dig(None, seed_type="genre", value="x", search_releases=search,
               library=[], taste_tracks=_lib(("Whoever", "Whatever", {"genre": "Acid House"})),
               adventurousness=0.1)
-    assert res.leads[0].style == "Acid House"
+    # `DiscoveryLead.style` (singolare) e' diventato `.styles` (Task 3): il test era
+    # rimasto mascherato dal crash di `_reasons`, non aggiornato al rename.
+    assert res.leads[0].styles == ["Acid House"]
 
 
 def test_dig_graduated_familiarity_prefers_more_collected():
@@ -459,6 +462,50 @@ def test_dig_emits_recent_reason():
 
     res = dig(None, seed_type="genre", value="x", search_releases=search, library=[])
     assert "recent" in _codes(res.leads[0])
+
+
+# --- Task 7: i reason diventano selettivi (non scattano su tutto) ------------
+#
+# NB: helper rinominato `_reason_codes` (nel piano era `_codes`) perche' nel modulo
+# esiste gia' un `_codes(lead)` (sopra) che legge `lead.reasons` dal risultato di
+# `dig()`. Un secondo `def _codes` con arita' diversa avrebbe sovrascritto il primo
+# nel namespace del modulo e rotto in silenzio i quattro test precedenti (TypeError
+# per argomento mancante) — non e' una libera scelta di stile, e' per non spezzare
+# i test esistenti che chiamano `_codes(lead)` con un solo argomento.
+
+
+def _reason_codes(lead, profile, seed_type="genre", year=2026):
+    return {r.code for r in _reasons(lead, profile, seed_type, year)}
+
+
+def test_deep_cut_requires_demand():
+    p = TasteProfile.from_tracks([])
+    # nessuno lo ha E nessuno lo cerca: non e' una gemma, e' rumore
+    assert "deep_cut" not in _reason_codes(_lead_from_release(_release("A - T", have=10, want=0, rid=1), "x"), p)
+    assert "deep_cut" in _reason_codes(_lead_from_release(_release("A - T", have=10, want=5, rid=2), "x"), p)
+    assert "deep_cut" not in _reason_codes(_lead_from_release(_release("A - T", have=200, want=50, rid=3), "x"), p)
+
+
+def test_label_followed_not_emitted_on_a_label_dig():
+    p = TasteProfile.from_tracks(_lib(("X", "Y", {"label": "Lbl"})))
+    lead = _lead_from_release(_release("A - T", label="Lbl", rid=1), "Lbl")
+    assert "label_followed" in _reason_codes(lead, p, seed_type="genre")
+    # su un dig per etichetta ce l'hanno TUTTI: informa zero
+    assert "label_followed" not in _reason_codes(lead, p, seed_type="label")
+
+
+def test_style_match_needs_more_than_one_shared_token():
+    p = TasteProfile.from_tracks(_lib(("A", "T", {"genre": "Deep House"})))
+    exact = _lead_from_release(_release("A - T", style="Deep House", rid=1), "x")
+    loose = _lead_from_release(_release("A - T", style="Acid House", rid=2), "x")
+    assert "style_match" in _reason_codes(exact, p)
+    assert "style_match" not in _reason_codes(loose, p)   # 0.33 < soglia 0.5
+
+
+def test_recent_badge_survives_even_though_year_left_the_score():
+    p = TasteProfile.from_tracks([])
+    assert "recent" in _reason_codes(_lead_from_release(_release("A - T", year=2025, rid=1), "x"), p, year=2026)
+    assert "recent" not in _reason_codes(_lead_from_release(_release("A - T", year=1988, rid=2), "x"), p, year=2026)
 
 
 # --- Task 2: _window — profondita' della pila ordinata per domanda -----------

@@ -128,6 +128,8 @@ FAMILIARITY_FULL_AT = 3
 REASON_RARE_MIN_WANT = 10       # almeno 10 persone lo cercano
 REASON_RARE_MIN_DEMAND = 0.5    # want/(have+want) >= 0.5
 REASON_DEEP_CUT_MAX_HAVE = 50   # pochissimi lo possiedono
+REASON_DEEP_CUT_MIN_WANT = 5    # sotto, non c'e' domanda misurabile: rumore, non gemma
+REASON_STYLE_MATCH_MIN = 0.5    # soglia sulla Jaccard: un token condiviso non basta
 REASON_RECENT_MIN = 0.8         # recency alta (ultimi ~3 anni su span 15)
 
 SearchReleases = Callable[..., list[dict[str, Any]]]
@@ -394,20 +396,24 @@ def _score(lead: DiscoveryLead, profile: TasteProfile, weights: Weights) -> floa
     )
 
 
-def _reasons(lead: DiscoveryLead, profile: TasteProfile, current_year: int) -> list[Reason]:
-    """Emette i reason code attivi per un lead, secondo soglie deterministiche."""
+def _reasons(lead: DiscoveryLead, profile: TasteProfile, seed_type: str,
+             current_year: int) -> list[Reason]:
+    """Badge a soglia, deterministici. NON sono i fattori del punteggio: sono calcolati
+    a parte e non spiegano la posizione del lead in lista.
+    """
     out: list[Reason] = []
     if lead.want >= REASON_RARE_MIN_WANT and _demand(lead.have, lead.want) >= REASON_RARE_MIN_DEMAND:
         out.append(Reason("rare_wanted", {"have": lead.have, "want": lead.want}))
-    if lead.have <= REASON_DEEP_CUT_MAX_HAVE:
+    if lead.have <= REASON_DEEP_CUT_MAX_HAVE and lead.want >= REASON_DEEP_CUT_MIN_WANT:
         out.append(Reason("deep_cut", {"have": lead.have}))
-    if profile.label_affinity(lead.label) > 0:
+    # su un dig per etichetta il badge ce l'avrebbero tutti: non emesso
+    if seed_type != "label" and profile.label_affinity(lead.label) > 0:
         out.append(Reason("label_followed", {"label": lead.label}))
-    count = profile.artist_count(lead.artist)
+    count = profile.artist_count(lead.artist_keys)
     if count > 0:
         out.append(Reason("artist_collected", {"artist": lead.artist, "count": count}))
-    if profile.style_affinity(lead.style) > 0:
-        out.append(Reason("style_match", {"style": lead.style}))
+    if profile.style_affinity(lead.styles) >= REASON_STYLE_MATCH_MIN:
+        out.append(Reason("style_match", {"style": lead.styles[0] if lead.styles else None}))
     if _recency(lead.year, current_year) >= REASON_RECENT_MIN:
         out.append(Reason("recent", {"year": lead.year}))
     return out
@@ -482,7 +488,7 @@ def dig(
     weights = _weights(seed_type)  # minimo indispensabile qui: la finestra/adv le sistema il Task 8
     for lead in leads:
         lead.score = _score(lead, profile, weights)
-        lead.reasons = _reasons(lead, profile, current_year)
+        lead.reasons = _reasons(lead, profile, seed_type, current_year)
     selected = _select(leads, limit)
 
     logger.info("Discovery dig %s=%r: %s lead (adv=%.2f)", seed_type, value, len(selected), adv)
