@@ -386,10 +386,14 @@ possesso, punteggio) stanno nella spec del motore.
 ## Fuori scope
 
 - Unificazione expand/dig (già nel backlog tecnico, cfr. spec 2026-06-28).
-- Esporre `limit` in UI: il client lo supporta (`lib/api/discovery.ts:34,40`) ma la
+- ~~Esporre `limit` in UI: il client lo supporta (`lib/api/discovery.ts:34,40`) ma la
   pagina non lo passa mai. Con `_MAX_PER_ARTIST = 2` e un budget di 300 release a monte,
   il default 80 non viene quasi mai raggiunto — un controllo che non cambierebbe nulla
-  nel 90% dei dig.
+  nel 90% dei dig.~~
+  **Sbagliato, e misurato**: sul bacino nuovo sopravvivono 244 candidati su 300 e il tetto
+  morde a **ogni** dig, nascondendo 160 lead. Il ragionamento veniva dal bacino vecchio,
+  dove il rumore ne lasciava 30-60. `limit` viene **rimosso**, non esposto — vedi
+  `2026-07-16-discovery-quanti-lead-e-suggeritore-completo-design.md`.
 - Tradurre i vecchi deep link `?adv=` in `?depth=`: semantiche diverse (vedi Flusso dati).
 - Migrazione degli altri consumatori di `SegmentedControl`/`Chip` fuori da Discovery: le
   primitive vengono create qui, l'adozione altrove è un refactoring separato.

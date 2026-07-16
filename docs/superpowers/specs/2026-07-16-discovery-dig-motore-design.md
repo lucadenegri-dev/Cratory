@@ -423,7 +423,12 @@ finestre diverse; stessa `depth`, libreria diversa → ordine diverso.
 - Unificazione expand/dig (backlog, cfr. spec 2026-06-28).
 - `_norm` del flusso expand: la pulizia Discogs sta all'ingestione del dig, l'expand non
   la vede.
-- Esporre `limit` in UI (cfr. spec UI).
+- ~~Esporre `limit` in UI (cfr. spec UI).~~ **Superato**: `limit` viene *rimosso*, non
+  esposto — vedi `2026-07-16-discovery-quanti-lead-e-suggeritore-completo-design.md`. La
+  giustificazione data qui e nella spec UI («il default 80 non viene quasi mai raggiunto»)
+  era vera del bacino **vecchio**, dove il rumore lasciava 30-60 candidati. Col bacino
+  ordinato per domanda ne sopravvivono 244 su 300 e **il tetto morde a ogni dig**: aggiustare
+  il bacino ha reso vincolante un tetto che questa spec dichiarava irrilevante.
 - Cache dei risultati Discogs: 4 richieste per dig restano dentro il budget.
 - Usare `q` (ricerca testuale) per portare il gusto dentro la query — es. cercare gli
   artisti che collezioni. È la naturale evoluzione ("il gusto sceglie il bacino, non solo
