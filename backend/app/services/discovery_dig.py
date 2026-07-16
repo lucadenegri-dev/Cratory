@@ -35,7 +35,6 @@ from app.services.discovery import _library_tracks, _norm
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DIG_LIMIT = 80
 
 PAGES_PER_DIG = 3  # quante pagine scarica un dig: 3 richieste di contenuto
 
@@ -438,8 +437,12 @@ def _reasons(lead: DiscoveryLead, profile: TasteProfile, seed_type: str,
     return out
 
 
-def _select(leads: list[DiscoveryLead], limit: int) -> list[DiscoveryLead]:
-    """Ordina per score e applica il cap per artista (no monopolio), poi tronca a limit.
+def _select(leads: list[DiscoveryLead]) -> list[DiscoveryLead]:
+    """Ordina per score e applica il cap per artista (no monopolio). NON tronca:
+    la finestra di 3 pagine e' gia' il limite naturale (~300 release grezze), e il
+    vecchio tetto di 80 nascondeva 160 lead a ogni dig senza che nulla lo dicesse
+    (misurato su style=Acid House: 244 candidati validi su 300). Quanti mostrarne
+    e' una lente della UI, non un parametro del motore.
 
     Il sort DEVE restare stabile — `sorted` lo garantisce, ed e' su questa garanzia che
     poggia il fallback a gusto piatto: quando il riferimento e' vuoto (o nessun segnale
@@ -457,8 +460,6 @@ def _select(leads: list[DiscoveryLead], limit: int) -> list[DiscoveryLead]:
             continue
         per_artist[a] = per_artist.get(a, 0) + 1
         out.append(lead)
-        if len(out) >= limit:
-            break
     return out
 
 
@@ -472,7 +473,6 @@ def dig(
     library: list | None = None,
     taste_tracks: list | None = None,
     depth: float = 0.0,
-    limit: int = DEFAULT_DIG_LIMIT,
 ) -> DigResult:
     """Lead non posseduti dal seme dato (genere|etichetta), ordinati per gusto.
 
@@ -530,7 +530,7 @@ def dig(
     for lead in leads:
         lead.score = _score(lead, profile, weights)
         lead.reasons = _reasons(lead, profile, seed_type, current_year)
-    selected = _select(leads, limit)
+    selected = _select(leads)
 
     logger.info("Discovery dig %s=%r: %s lead (depth=%.2f, pagine %s di %s)",
                 seed_type, value, len(selected), depth, pages, usable)

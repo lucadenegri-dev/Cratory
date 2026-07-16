@@ -287,3 +287,24 @@ def test_release_detail_exposes_youtube_videos(client, monkeypatch):
     assert body["videos"] == [
         {"youtube_video_id": "abcdefghijk", "title": "Artist - Acid Trip", "duration_seconds": 300}
     ]
+
+
+def test_dig_endpoint_ignores_legacy_limit_field(client, monkeypatch):
+    """Il campo `limit` non esiste piu' nel contratto (il tetto nascondeva 160 lead a
+    ogni dig). DiscoveryDigRequest non ha extra="forbid", quindi Pydantic IGNORA i campi
+    sconosciuti (verificato sulla config reale): una richiesta vecchia non si rompe e,
+    soprattutto, non tronca piu' nulla.
+    """
+    from app.integrations.discogs import DiscogsClient
+
+    c, _ = client
+    monkeypatch.setattr(
+        DiscogsClient, "search_releases",
+        lambda self, **kw: [_fake_release(title=f"Artist{i} - T{i}") for i in range(150)],
+    )
+    monkeypatch.setattr(DiscogsClient, "count_releases", lambda self, **kw: 43345)
+
+    r = c.post("/api/discovery/dig",
+               json={"seed_type": "genre", "value": "Acid House", "limit": 5})
+    assert r.status_code == 200
+    assert len(r.json()["leads"]) > 5   # nessun troncamento: il campo e' ignorato

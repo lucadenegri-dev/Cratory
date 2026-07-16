@@ -264,7 +264,7 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
             search_releases=lambda **kw: client.search_releases(**kw),
             count_releases=lambda **kw: client.count_releases(**kw),
             taste_tracks=taste_tracks,
-            depth=req.depth, limit=req.limit,
+            depth=req.depth,
         )
     except DiscogsError as exc:
         # Rate limit / token mancante: 502 esplicito, mai uno "zero risultati" muto.

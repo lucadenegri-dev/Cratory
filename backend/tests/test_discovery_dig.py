@@ -167,7 +167,7 @@ def test_dig_dedup_vs_library_and_pressings():
 
     res = dig(None, seed_type="genre", value="Acid House", search_releases=search,
               count_releases=lambda **kw: 300,
-              library=_lib(("Owned Artist", "Owned Track")), limit=50)
+              library=_lib(("Owned Artist", "Owned Track")))
     pairs = [(l.artist, l.title) for l in res.leads]
     assert ("Owned Artist", "Owned Track") not in pairs       # gia' posseduto
     assert pairs.count(("New Artist", "New Track")) == 1       # pressature collassate
@@ -182,7 +182,7 @@ def test_dig_label_seed_uses_label_filter():
         return [_release("A - B", rid=9)]
 
     dig(None, seed_type="label", value="Warp", search_releases=search,
-        count_releases=lambda **kw: 300, library=[], limit=10)
+        count_releases=lambda **kw: 300, library=[])
     assert seen.get("label") == "Warp"
 
 
@@ -204,13 +204,18 @@ def test_dig_familiar_first_when_safe():
     assert res.leads[0].artist == "Known"
 
 
-def test_dig_truncates_to_limit():
+def test_dig_does_not_truncate():
+    # Riscrittura SEMANTICA di `test_dig_truncates_to_limit`: il tetto e' stato rimosso,
+    # non spostato. Sul bacino ordinato per domanda sopravvivono ~240 candidati su 300
+    # (misurato su style=Acid House) e il vecchio limit=80 ne nascondeva 160 a ogni dig.
+    # La finestra di 3 pagine e' gia' il limite naturale; quanti mostrarne e' una lente
+    # della UI, non un parametro del motore.
     def search(**kw):
-        return [_release(f"A{i} - T{i}", rid=i) for i in range(50)]
+        return [_release(f"A{i} - T{i}", rid=i) for i in range(150)]
 
     res = dig(None, seed_type="genre", value="x", search_releases=search,
-              count_releases=lambda **kw: 300, library=[], limit=10)
-    assert len(res.leads) == 10
+              count_releases=lambda **kw: 300, library=[])
+    assert len(res.leads) == 150
 
 
 # --- de-noise: filtri, dedup varianti, cap artista, domanda ------------------
@@ -225,7 +230,7 @@ def test_dig_filters_offtarget_formats():
         ]
 
     res = dig(None, seed_type="genre", value="x", search_releases=search,
-              count_releases=lambda **kw: 300, library=[], limit=50)
+              count_releases=lambda **kw: 300, library=[])
     pairs = [(l.artist, l.title) for l in res.leads]
     assert pairs == [("Real Artist", "Real Track")]  # comp e DJ mix scartati
 
@@ -240,7 +245,7 @@ def test_dig_filters_dead_self_released_but_keeps_wanted():
         ]
 
     res = dig(None, seed_type="genre", value="x", search_releases=search,
-              count_releases=lambda **kw: 300, library=[], limit=50)
+              count_releases=lambda **kw: 300, library=[])
     pairs = [(l.artist, l.title) for l in res.leads]
     assert ("Nobody", "Bedroom Demo") not in pairs        # self-released morto: scartato
     assert ("Cult Hero", "Sought Gem") in pairs           # self-released ma RICHIESTO: tenuto
@@ -255,7 +260,7 @@ def test_dig_dedup_variant_titles():
         ]
 
     res = dig(None, seed_type="genre", value="x", search_releases=search,
-              count_releases=lambda **kw: 300, library=[], limit=50)
+              count_releases=lambda **kw: 300, library=[])
     assert len(res.leads) == 1  # varianti collassate
 
 
@@ -264,7 +269,7 @@ def test_dig_caps_per_artist():
         return [_release(f"Prolific - Track {i}", rid=i) for i in range(6)]
 
     res = dig(None, seed_type="genre", value="x", search_releases=search,
-              count_releases=lambda **kw: 300, library=[], limit=50)
+              count_releases=lambda **kw: 300, library=[])
     assert len(res.leads) == 2  # max 2 per artista
 
 
@@ -425,7 +430,7 @@ def test_dig_dedup_is_library_wide_even_with_playlist_taste():
     res = dig(None, seed_type="genre", value="x", search_releases=search,
               count_releases=lambda **kw: 300,
               library=_lib(("Owned Elsewhere", "Track")),
-              taste_tracks=_lib(("Other", "Thing")), limit=50)
+              taste_tracks=_lib(("Other", "Thing")))
     assert res.leads == []
 
 
@@ -627,7 +632,21 @@ def test_flat_taste_keeps_the_pile_order():
     assert _score(deep_cut, profile, w) == _score(mainstream, profile, w) == 0.0
     for lead in (deep_cut, mainstream):
         lead.score = _score(lead, profile, w)
-    assert [l.artist for l in _select([deep_cut, mainstream], 50)] == ["Obscure One", "Pop Star"]
+    assert [l.artist for l in _select([deep_cut, mainstream])] == ["Obscure One", "Pop Star"]
+
+
+def test_select_does_not_truncate():
+    # 240 candidati -> 240 lead. Il tetto di 80 nascondeva 160 lead a OGNI dig
+    # (misurato su style=Acid House: la finestra ordinata per domanda e' pulita,
+    # ne sopravvivono 244 su 300). La finestra e' gia' il limite naturale.
+    leads = [_lead_from_release(_release(f"Artist{i} - T{i}", rid=i), "x") for i in range(240)]
+    assert len(_select(leads)) == 240
+
+
+def test_select_still_caps_per_artist():
+    # Il cap anti-monopolio resta: e' l'unico taglio che _select deve ancora fare.
+    leads = [_lead_from_release(_release(f"Same Artist - T{i}", rid=i), "x") for i in range(5)]
+    assert len(_select(leads)) == 2
 
 
 def test_dig_picks_the_window_from_depth():
