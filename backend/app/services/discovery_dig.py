@@ -50,8 +50,6 @@ def _window(depth: float, total_items: int) -> list[int]:
     return list(range(start, min(start + PAGES_PER_DIG - 1, usable) + 1))
 
 
-# Sopra questo numero di "have" un disco e' molto diffuso: novita' ~0 (non un deep cut).
-_HAVE_CAP = 5000
 _MAX_PER_ARTIST = 2  # un artista non deve monopolizzare la lista
 _VARIOUS = {"various", "various artists", "va", "unknown artist"}
 # Formati che un DJ NON vuole tra i lead (vuole release singole, non mix gia' fatti).
@@ -363,22 +361,37 @@ def _demand(have: int, want: int) -> float:
     return want / (have + want)
 
 
-def _score(lead: DiscoveryLead, profile: TasteProfile, adventurousness: float, current_year: int) -> float:
-    """Scoperta (novita'+domanda) vs gusto (familiarita'+etichetta+stile), pesate da adventurousness.
+@dataclass(frozen=True)
+class Weights:
+    artist: float
+    label: float
+    style: float
 
-    Il termine 'gusto' combina tre segnali deterministici dal riferimento scelto:
-    quanto collezioni l'artista (graduato), se segui l'etichetta, se lo stile e' nei tuoi generi.
+
+def _weights(seed_type: str) -> Weights:
+    """I segnali costanti per costruzione escono, e il peso si redistribuisce.
+
+    Su un dig per etichetta ogni lead ha l'etichetta del seme: `label_affinity` vale
+    1.0 per tutti. E' una costante additiva — non ordina, e dilava gli altri segnali.
+    Su un dig per genere invece Discogs restituisce PIU' style per release, quindi lo
+    style del seme non e' l'unico e `style_affinity` conserva potere discriminante.
     """
-    novelty = 1.0 - min(lead.have, _HAVE_CAP) / _HAVE_CAP
-    demand = _demand(lead.have, lead.want)
-    discovery = 0.5 * novelty + 0.5 * demand
-    taste = (
-        W_ARTIST * profile.familiarity(lead.artist)
-        + W_LABEL * profile.label_affinity(lead.label)
-        + W_STYLE * profile.style_affinity(lead.style)
+    if seed_type == "label":
+        rest = W_ARTIST + W_STYLE
+        return Weights(artist=W_ARTIST / rest, label=0.0, style=W_STYLE / rest)
+    return Weights(artist=W_ARTIST, label=W_LABEL, style=W_STYLE)
+
+
+def _score(lead: DiscoveryLead, profile: TasteProfile, weights: Weights) -> float:
+    """Solo gusto. La domanda l'ha gia' codificata la finestra (`_window`): dentro una
+    finestra il `want` e' ~costante, quindi non ordina. La profondita' sceglie il
+    bacino, il gusto ordina — sempre, non come modalita'.
+    """
+    return (
+        weights.artist * profile.familiarity(lead.artist_keys)
+        + weights.label * profile.label_affinity(lead.label)
+        + weights.style * profile.style_affinity(lead.styles)
     )
-    recency = _recency(lead.year, current_year)
-    return adventurousness * discovery + (1.0 - adventurousness) * taste + 0.2 * recency
 
 
 def _reasons(lead: DiscoveryLead, profile: TasteProfile, current_year: int) -> list[Reason]:
@@ -457,8 +470,9 @@ def dig(
 
     adv = max(0.0, min(1.0, adventurousness))
     current_year = datetime.now(timezone.utc).year
+    weights = _weights(seed_type)  # minimo indispensabile qui: la finestra/adv le sistema il Task 8
     for lead in leads:
-        lead.score = _score(lead, profile, adv, current_year)
+        lead.score = _score(lead, profile, weights)
         lead.reasons = _reasons(lead, profile, current_year)
     selected = _select(leads, limit)
 

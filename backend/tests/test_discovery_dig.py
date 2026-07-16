@@ -510,3 +510,33 @@ def test_window_tiny_pile():
 
 def test_window_empty_pile():
     assert _window(0.5, 0) == []
+
+
+# --- Task 6: il punteggio e' solo gusto ---------------------------------------
+
+from app.services.discovery_dig import _score, _weights
+
+
+def test_weights_drop_the_label_signal_on_a_label_dig():
+    # su un dig per etichetta TUTTI i lead hanno l'etichetta del seme: costante, non ordina
+    w = _weights("label")
+    assert w.label == 0.0
+    assert w.artist + w.style == pytest.approx(1.0)   # il peso si redistribuisce
+    g = _weights("genre")
+    assert (g.artist, g.label, g.style) == (0.5, 0.3, 0.2)
+
+
+def test_score_is_taste_only():
+    profile = TasteProfile.from_tracks(_lib(("Tyree", "T1"), ("Tyree", "T2"), ("Tyree", "T3")))
+    mine = _lead_from_release(_release("Tyree - New One", have=9999, want=0, year=1990, rid=1), "x")
+    other = _lead_from_release(_release("Sconosciuto - Rare One", have=1, want=999, year=2026, rid=2), "x")
+    w = _weights("genre")
+    # have/want/anno non entrano piu' nel punteggio: solo il gusto ordina
+    assert _score(mine, profile, w) > _score(other, profile, w)
+
+
+def test_score_ignores_year():
+    profile = TasteProfile.from_tracks(_lib(("Tyree", "T1")))
+    old = _lead_from_release(_release("Tyree - A", year=1988, rid=1), "x")
+    new = _lead_from_release(_release("Tyree - B", year=2026, rid=2), "x")
+    assert _score(old, profile, _weights("genre")) == _score(new, profile, _weights("genre"))
