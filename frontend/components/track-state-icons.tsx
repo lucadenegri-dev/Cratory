@@ -3,6 +3,7 @@
 import { CircleCheck, HardDrive, Archive } from "lucide-react";
 import { SpotifyGlyph } from "./spotify-glyph";
 import { SoundcloudGlyph } from "./soundcloud-glyph";
+import { TrackPlayButton } from "./track-play-button";
 import type { Track } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 
@@ -13,6 +14,7 @@ export function TrackStateIcons({ track }: { track: Track }) {
   const t = useT();
   return (
     <div className="flex items-center gap-2 text-faint">
+      <TrackPlayButton track={track} />
       {track.status === "ready_for_set" && (
         <span title={t.tracks.readyTooltip}>
           <CircleCheck size={14} className="text-fg-strong" />

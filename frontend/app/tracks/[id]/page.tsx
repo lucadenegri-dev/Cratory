@@ -10,6 +10,7 @@ import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { TrackCover } from "@/components/track-cover";
 import { LinkLocalFileModal } from "@/components/link-local-file-modal";
+import { TrackPlayButton } from "@/components/track-play-button";
 import { useT } from "@/lib/i18n";
 
 function TransitionList({ title, items, emptyLabel }: { title: string; items: TransitionCandidate[]; emptyLabel: string }) {
@@ -149,9 +150,12 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
               <tr className="border-b border-border/50 last:border-0">
                 <td className="px-4 py-2 text-muted">{t.tracks.rowStatus}</td>
                 <td className="px-4 py-2 text-right">
-                  {track.has_local_file ? <Badge tone="success">{t.tracks.badgeOwned}</Badge>
-                    : track.archived ? <Badge tone="warning">{t.tracks.badgeArchived}</Badge>
-                    : <Badge tone="neutral">{t.tracks.badgeNoFile}</Badge>}
+                  <div className="inline-flex items-center gap-2">
+                    <TrackPlayButton track={track} />
+                    {track.has_local_file ? <Badge tone="success">{t.tracks.badgeOwned}</Badge>
+                      : track.archived ? <Badge tone="warning">{t.tracks.badgeArchived}</Badge>
+                      : <Badge tone="neutral">{t.tracks.badgeNoFile}</Badge>}
+                  </div>
                 </td>
               </tr>
               {track.local_path && (
