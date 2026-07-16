@@ -138,14 +138,14 @@ function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void })
           </div>
         )}
         {lead.format_badge && (
-          <span className="absolute left-1 top-1 border border-border-strong bg-bg px-1 text-[9px] uppercase tracking-wide text-muted">
+          <span className="absolute right-1 top-1 border border-border-strong bg-bg px-1 text-[9px] uppercase tracking-wide text-muted">
             {lead.format_badge}
           </span>
         )}
         <button
           type="button"
           aria-label={t.discovery.playPreview}
-          className="absolute bottom-1 right-1 rounded-full bg-black/60 p-1.5 text-white opacity-0 transition group-hover:opacity-100"
+          className="absolute left-1 top-1 rounded-full bg-black/60 p-1.5 text-white opacity-0 transition group-hover:opacity-100"
           onClick={(e) => {
             e.stopPropagation();
             player.play({
