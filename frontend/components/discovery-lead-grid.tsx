@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Disc3, Play } from "lucide-react";
 import { type DiscoveryDigResponse, type DiscoveryLead, type Reason } from "@/lib/api";
 import { EmptyState } from "@/components/ui";
@@ -28,21 +28,30 @@ function reasonLabel(r: Reason, t: Dictionary): string {
 }
 
 export const FORMAT_VALUES = ["LP", "EP", "12\"", "Album", "Single"] as const;
-type SortMode = "score" | "recent";
+export type SortMode = "score" | "recent";
 
-export function DiscoveryLeadGrid({ dig, format, sort }: {
+// La lente sui risultati gia' scaricati: formato -> ordinamento -> taglio.
+// Il taglio viene DOPO il formato, cosi' "40 di 240" conta cio' che il filtro ha
+// lasciato e i numeri non mentono. Pura e testabile: page.tsx la usa per la lista
+// E per il conteggio, quindi i due non possono divergere.
+export function applyLens(
+  leads: DiscoveryLead[],
+  opts: { format: string | null; sort: SortMode; show: number | "all" },
+): { visible: DiscoveryLead[]; total: number } {
+  const base = opts.format === null ? leads : leads.filter((l) => l.format_badge === opts.format);
+  const sorted = opts.sort === "score" ? base : [...base].sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+  return { visible: opts.show === "all" ? sorted : sorted.slice(0, opts.show), total: base.length };
+}
+
+export function DiscoveryLeadGrid({ dig, leads }: {
   dig: DiscoveryDigResponse;
-  format: string | null;
-  sort: SortMode;
+  // La lista GIA' passata dalla lente (formato+ordinamento+taglio, in page.tsx):
+  // la griglia rende cio' che riceve, non filtra — cosi' il conteggio "N di M"
+  // nella riga della risposta e le card mostrate escono dallo stesso calcolo.
+  leads: DiscoveryLead[];
 }) {
   const t = useT();
   const [openLead, setOpenLead] = useState<DiscoveryLead | null>(null);
-
-  const filtered = useMemo(() => {
-    const base = format === null ? dig.leads : dig.leads.filter((l) => l.format_badge === format);
-    if (sort === "score") return base;
-    return [...base].sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
-  }, [dig.leads, format, sort]);
 
   // Zero lead ha due cause diverse, e dirle uguali mente. Se la pila non esiste
   // (`pile_pages === 0`) il seme e' sconosciuto a Discogs: la libreria non c'entra e
@@ -67,11 +76,11 @@ export function DiscoveryLeadGrid({ dig, format, sort }: {
 
   return (
     <div>
-      {filtered.length === 0 ? (
+      {leads.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted">{t.discovery.noFormatMatch}</p>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3">
-          {filtered.map((l, i) => (
+          {leads.map((l, i) => (
             <LeadCell key={`${l.discogs_id ?? l.artist}-${l.title}-${i}`} lead={l} onOpen={() => setOpenLead(l)} />
           ))}
         </div>
