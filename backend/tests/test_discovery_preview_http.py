@@ -8,6 +8,14 @@ from app.db import Base, get_db
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def _clear_release_cache():
+    from app.routers import discovery
+    discovery._release_cache.clear()
+    yield
+    discovery._release_cache.clear()
+
+
 @pytest.fixture()
 def client():
     e = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
@@ -63,5 +71,19 @@ def test_preview_none(client, monkeypatch):
 
     monkeypatch.setattr(ItunesClient, "search", lambda self, term, limit=5: [])
     r = client.get("/api/discovery/preview", params={"artist": "X", "title": "Y"})
+    assert r.status_code == 200
+    assert r.json()["kind"] == "none"
+
+
+def test_preview_provider_exceptions_degrade_to_none(client, monkeypatch):
+    from app.integrations.discogs import DiscogsClient
+    from app.integrations.itunes import ItunesClient
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr(ItunesClient, "search", _boom)
+    monkeypatch.setattr(DiscogsClient, "get_release", _boom)
+    r = client.get("/api/discovery/preview", params={"artist": "X", "title": "Y", "discogs_id": 42})
     assert r.status_code == 200
     assert r.json()["kind"] == "none"
