@@ -37,6 +37,24 @@ def search_roots() -> list[tuple[str, str]]:
     return roots
 
 
+def path_within_roots(path: Path, roots: list[str]) -> bool:
+    """True se `path`, risolto, è contenuto in una delle `roots` (anch'esse risolte).
+    Difesa contro traversal/symlink verso file fuori dalle cartelle consentite.
+    Segue i symlink (resolve): un link dentro root ma che punta fuori è rifiutato.
+    Con `roots` vuota ritorna sempre False."""
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    for root in roots:
+        try:
+            resolved.relative_to(Path(root).resolve())
+            return True
+        except ValueError:
+            continue
+    return False
+
+
 def _scan_audio_files(root: str) -> list[Path]:
     return sorted(
         p for p in Path(root).rglob("*")
