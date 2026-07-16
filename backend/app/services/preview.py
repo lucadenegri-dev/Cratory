@@ -6,6 +6,7 @@ service è testabile senza rete. Vedi docs/superpowers/specs/2026-07-16-discover
 """
 
 import logging
+import math
 import re
 from dataclasses import dataclass
 from typing import Callable
@@ -19,6 +20,10 @@ GetRelease = Callable[[int], dict]
 _NOISE = re.compile(r"\b(?:feat\.?|featuring|remix|edit|version|original|mix)\b", re.IGNORECASE)
 _PARENS = re.compile(r"\(.*?\)|\[.*?\]")
 _NONWORD = re.compile(r"[^a-z0-9 ]")
+_STOPWORDS = frozenset({
+    "the", "a", "an", "of", "in", "on", "to", "and", "or", "for",
+    "you", "your", "my", "me", "is", "it", "at", "by", "with",
+})
 
 
 @dataclass
@@ -35,13 +40,13 @@ def norm_tokens(s: str) -> set[str]:
     s = _PARENS.sub(" ", s)
     s = _NOISE.sub(" ", s)
     s = _NONWORD.sub(" ", s)
-    return {t for t in s.split() if len(t) > 1}
+    return {t for t in s.split() if len(t) > 1 and t not in _STOPWORDS}
 
 
 def _matches(want: set[str], got: set[str]) -> bool:
     if not want:
         return False
-    return len(want & got) >= max(1, len(want) // 2)
+    return len(want & got) >= math.ceil(len(want) / 2)
 
 
 def parse_youtube_id(uri: str) -> str | None:

@@ -37,7 +37,7 @@ export function DockedPreviewPlayer() {
           <iframe
             data-testid="preview-iframe"
             className="h-full w-full"
-            src={`https://www.youtube.com/embed/${data.youtube_video_id}?autoplay=1`}
+            src={`https://www.youtube-nocookie.com/embed/${data.youtube_video_id}?autoplay=1`}
             title={active.title}
             allow="autoplay; encrypted-media"
             allowFullScreen

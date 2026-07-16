@@ -70,6 +70,12 @@ def test_pick_video_none_when_empty():
     assert pick_video([{"youtube_video_id": "v", "title": "zzz"}], "abc", level="track") is None
 
 
+def test_pick_video_rejects_wrong_track_sharing_only_stopword():
+    videos = [{"youtube_video_id": "v1", "title": "Artist - The Return", "duration_seconds": 200}]
+    # "The Journey" and "The Return" share only the stopword "the" -> no match
+    assert pick_video(videos, "The Journey", level="track") is None
+
+
 def test_resolve_preview_itunes_first():
     def fake_itunes(term):
         return [{"trackName": "Acid Trip", "artistName": "Artist", "previewUrl": "http://p", "trackViewUrl": "http://v"}]

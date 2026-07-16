@@ -73,7 +73,7 @@ describe("preview player", () => {
     });
     await waitFor(() => expect(screen.getByTestId("preview-iframe")).toBeTruthy());
     expect(screen.getByTestId("preview-iframe").getAttribute("src")).toContain(
-      "youtube.com/embed/abcdefghijk",
+      "youtube-nocookie.com/embed/abcdefghijk",
     );
   });
 
