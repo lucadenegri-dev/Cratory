@@ -389,9 +389,14 @@ def test_clean_artist_keeps_ampersand_names_matchable_whole():
     assert keys[0] == "above & beyond"
 
 
-def test_clean_artist_handles_comma_and_ampersand_together():
+def test_clean_artist_does_not_split_band_names():
+    # 'Earth, Wind & Fire' e' UN artista: spezzarlo darebbe chiavi generiche
+    # ('fire', 'wind') che agganciano la libreria per sbaglio. Si spezza solo sui
+    # separatori non ambigui; su '&' e ',' si accetta di perdere il credito dello
+    # split vero pur di non rischiare l'aggancio falso.
+    assert _clean_artist("Earth, Wind & Fire")[1] == ["earth, wind & fire"]
     _, keys = _clean_artist("OPTML, Gravity Zero (4) & RADD (3)")
-    assert "optml" in keys and "gravity zero" in keys and "radd" in keys
+    assert keys == ["optml, gravity zero & radd"]   # suffissi puliti, nessuno split
 
 
 def test_lead_carries_clean_artist_and_all_styles():
@@ -423,8 +428,13 @@ In `discovery_dig.py`, accanto agli altri regex:
 # 'Gravity Zero (4)'. Non sono parte del nome: senza toglierli, il 17% dei lead non
 # aggancia la libreria (misurato su style=Acid House).
 _DISCOGS_CRUFT_RE = re.compile(r"\*|\s*\(\d+\)")
-# Piu' artisti in un campo: 'Nail / Einzelkind', 'OPTML, Gravity Zero & RADD'.
-_ARTIST_SPLIT_RE = re.compile(r"\s+(?:/|&|feat\.?|vs\.?)\s+|,\s+", re.IGNORECASE)
+# Piu' artisti in un campo: 'Nail / Einzelkind'. SOLO separatori non ambigui: '/' con
+# spazi attorno e' la convenzione Discogs per gli split. '&' e ',' sono esclusi apposta:
+# separano artisti ('Yen Sung & Photonz') ma stanno anche dentro i nomi di band
+# ('Earth, Wind & Fire') e non c'e' modo di distinguerli. Meglio mancare un match (il
+# lead resta piu' in basso) che agganciare per sbaglio (un disco che non c'entra va in
+# cima): il secondo e' l'errore che l'utente vede. La chiave intera viene comunque prima.
+_ARTIST_SPLIT_RE = re.compile(r"\s+(?:/|feat\.?|vs\.?)\s+", re.IGNORECASE)
 
 
 def _clean_artist(raw: str) -> tuple[str, list[str]]:
