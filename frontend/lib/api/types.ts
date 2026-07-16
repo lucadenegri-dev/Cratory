@@ -144,6 +144,8 @@ export interface DiscoveryDigResponse {
   seed_type: string;
   value: string;
   leads: DiscoveryLead[];
+  /** Quante pagine utili ha la pila del seme. <= 3 => `depth` non ha effetto. */
+  pile_pages: number;
 }
 
 export interface DiscoveryGenres {

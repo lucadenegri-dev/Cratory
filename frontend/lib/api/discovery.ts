@@ -31,12 +31,12 @@ export function getDiscoveryGenres() {
 export function discoveryDig(
   seedType: "genre" | "label",
   value: string,
-  opts?: { adventurousness?: number; limit?: number; tastePlaylistId?: number | null },
+  opts?: { depth?: number; limit?: number; tastePlaylistId?: number | null },
 ) {
   return apiPost<DiscoveryDigResponse>("/api/discovery/dig", {
     seed_type: seedType,
     value,
-    adventurousness: opts?.adventurousness,
+    depth: opts?.depth,
     limit: opts?.limit,
     taste_playlist_id: opts?.tastePlaylistId ?? null,
   });
