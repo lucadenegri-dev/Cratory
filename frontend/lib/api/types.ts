@@ -146,6 +146,10 @@ export interface DiscoveryDigResponse {
   leads: DiscoveryLead[];
   /** Quante pagine utili ha la pila del seme. <= 3 => `depth` non ha effetto. */
   pile_pages: number;
+  /** Com'è stato risolto il seme. "genre" = scaffale Discogs: la UI avverte. */
+  seed_resolution: "style" | "genre" | "label" | null;
+  /** Conteggio grezzo della sonda: pile_pages è cappato a 100 e non distingue 43k da 4,9M. */
+  pile_total: number;
 }
 
 export interface DiscoveryGenres {

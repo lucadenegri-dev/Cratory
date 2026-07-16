@@ -28,17 +28,20 @@ export function getDiscoveryGenres() {
   return apiGet<DiscoveryGenres>("/api/discovery/genres");
 }
 
+// Rispecchia SEARCH_PER_PAGE del backend (il massimo per pagina di Discogs).
+// Serve alla UI per calcolare quante release sono raggiungibili
+// (pile_pages × DISCOGS_PAGE_SIZE) senza cablare "10.000" nel testo.
+export const DISCOGS_PAGE_SIZE = 100;
+
 export function discoveryDig(
   seedType: "genre" | "label",
   value: string,
-  opts?: { depth?: number; limit?: number; tastePlaylistId?: number | null },
+  opts?: { depth?: number },
 ) {
   return apiPost<DiscoveryDigResponse>("/api/discovery/dig", {
     seed_type: seedType,
     value,
     depth: opts?.depth,
-    limit: opts?.limit,
-    taste_playlist_id: opts?.tastePlaylistId ?? null,
   });
 }
 
