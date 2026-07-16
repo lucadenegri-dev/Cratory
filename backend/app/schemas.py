@@ -527,7 +527,9 @@ class DiscoveryLeadOut(BaseModel):
 class DiscoveryDigRequest(BaseModel):
     seed_type: Literal["genre", "label"]
     value: str = Field(min_length=1)
-    adventurousness: float = Field(default=0.4, ge=0.0, le=1.0)
+    # DOVE pescare nella pila ordinata per domanda: 0 = i classici del seme,
+    # 1 = il fondo della cassa. Non e' un mix di ordinamento: sceglie il bacino.
+    depth: float = Field(default=0.0, ge=0.0, le=1.0)
     limit: int = Field(default=80, ge=1, le=200)
     taste_playlist_id: int | None = None  # riferimento di gusto; None = tutta la libreria
 
@@ -536,6 +538,9 @@ class DiscoveryDigResponse(BaseModel):
     seed_type: str
     value: str
     leads: list[DiscoveryLeadOut] = []
+    # Quante pagine utili ha la pila del seme. Se <= 3 la finestra e' l'intera pila e
+    # `depth` non ha effetto: la UI deve poterlo dire invece di offrire un controllo inerte.
+    pile_pages: int = 0
 
 
 class DiscoveryGenresOut(BaseModel):

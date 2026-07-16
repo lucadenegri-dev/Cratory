@@ -112,6 +112,49 @@ def test_dig_422_seed_type_non_valido(client):
     assert r.status_code == 422  # Literal["genre", "label"] non rispettato
 
 
+def test_dig_endpoint_accepts_depth_and_returns_pile_pages(client, monkeypatch):
+    from app.integrations.discogs import DiscogsClient
+
+    c, _ = client
+    captured = {}
+
+    def _fake_search(self, **kw):
+        captured.update(kw)
+        return []
+
+    monkeypatch.setattr(DiscogsClient, "search_releases", _fake_search)
+    monkeypatch.setattr(DiscogsClient, "count_releases", lambda self, **kw: 43345)
+
+    r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "Acid House", "depth": 1.0})
+    assert r.status_code == 200
+    assert r.json()["pile_pages"] == 100
+    assert captured["pages"] == [98, 99, 100]
+
+
+def test_dig_endpoint_depth_defaults_to_the_canon(client, monkeypatch):
+    from app.integrations.discogs import DiscogsClient
+
+    c, _ = client
+    captured = {}
+
+    def _fake_search(self, **kw):
+        captured.update(kw)
+        return []
+
+    monkeypatch.setattr(DiscogsClient, "search_releases", _fake_search)
+    monkeypatch.setattr(DiscogsClient, "count_releases", lambda self, **kw: 43345)
+
+    r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "Acid House"})
+    assert r.status_code == 200
+    assert captured["pages"] == [1, 2, 3]  # default depth=0.0: i classici
+
+
+def test_dig_endpoint_rejects_out_of_range_depth(client):
+    c, _ = client
+    r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "x", "depth": 1.5})
+    assert r.status_code == 422
+
+
 # --- /expand ----------------------------------------------------------------------
 
 

@@ -216,7 +216,7 @@ def expand(req: DiscoveryExpandRequest, db: Session = Depends(get_db)):
 def _lead_out(lead: DiscoveryLead) -> DiscoveryLeadOut:
     return DiscoveryLeadOut(
         artist=lead.artist, title=lead.title, year=lead.year, label=lead.label,
-        style=lead.style, source=lead.source, seed=lead.seed,
+        style=lead.styles[0] if lead.styles else None, source=lead.source, seed=lead.seed,
         discogs_url=lead.discogs_url, thumb_url=lead.thumb_url,
         have=lead.have, want=lead.want,
         reasons=[ReasonOut(code=r.code, data=r.data) for r in lead.reasons],
@@ -247,8 +247,9 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
         result = dig(
             db, seed_type=req.seed_type, value=req.value,
             search_releases=lambda **kw: client.search_releases(**kw),
+            count_releases=lambda **kw: client.count_releases(**kw),
             taste_tracks=taste_tracks,
-            adventurousness=req.adventurousness, limit=req.limit,
+            depth=req.depth, limit=req.limit,
         )
     except DiscogsError as exc:
         # Rate limit / token mancante: 502 esplicito, mai uno "zero risultati" muto.
@@ -259,6 +260,7 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
     return DiscoveryDigResponse(
         seed_type=result.seed_type, value=result.value,
         leads=[_lead_out(lead) for lead in result.leads],
+        pile_pages=result.pile_pages,
     )
 
 
