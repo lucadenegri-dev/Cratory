@@ -1,8 +1,37 @@
 "use client";
 
-import { fmtDuration, type FileRow } from "@/lib/api";
+import { fmtDuration, type FileRow, type FileQuery } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
+
+type SortKey = NonNullable<FileQuery["sort"]>;
+type SortDir = NonNullable<FileQuery["dir"]>;
+
+// intestazione ordinabile: click imposta la colonna (asc) o inverte se già attiva
+function SortHead({
+  label, col, sort, dir, onSort, align = "left",
+}: {
+  label: string;
+  col: SortKey;
+  sort: SortKey;
+  dir: SortDir;
+  onSort: (col: SortKey) => void;
+  align?: "left" | "right" | "center";
+}) {
+  const active = sort === col;
+  const justify = align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+  return (
+    <th className={cn("px-3 py-2 font-normal", align === "right" && "text-right", align === "center" && "text-center")}>
+      <button
+        onClick={() => onSort(col)}
+        className={cn("inline-flex items-center gap-1 uppercase tracking-wider hover:text-fg", justify, active ? "text-fg" : "text-faint")}
+      >
+        <span>{label}</span>
+        <span className="text-[8px]">{active ? (dir === "desc" ? "▼" : "▲") : ""}</span>
+      </button>
+    </th>
+  );
+}
 
 function Indicator({ row }: { row: FileRow }) {
   const t = useT();
@@ -26,19 +55,27 @@ function Indicator({ row }: { row: FileRow }) {
   );
 }
 
-export function FilesTable({ rows }: { rows: FileRow[] }) {
+export function FilesTable({
+  rows, sort, dir, onSort,
+}: {
+  rows: FileRow[];
+  sort: SortKey;
+  dir: SortDir;
+  onSort: (col: SortKey) => void;
+}) {
+  const headProps = { sort, dir, onSort };
   return (
     <div className="overflow-x-auto border border-border">
       <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="border-b border-border text-left text-[9px] uppercase tracking-wider text-faint">
-            <th className="px-3 py-2 font-normal">Path</th>
-            <th className="px-3 py-2 font-normal">Artist</th>
-            <th className="px-3 py-2 font-normal">Title</th>
-            <th className="px-3 py-2 font-normal">Fmt</th>
-            <th className="px-3 py-2 text-right font-normal">Kbps</th>
-            <th className="px-3 py-2 text-right font-normal">Dur</th>
-            <th className="px-3 py-2 text-center font-normal">!</th>
+          <tr className="border-b border-border text-left text-[9px]">
+            <SortHead label="Path" col="path" {...headProps} />
+            <SortHead label="Artist" col="artist" {...headProps} />
+            <SortHead label="Title" col="title" {...headProps} />
+            <SortHead label="Fmt" col="ext" {...headProps} />
+            <SortHead label="Kbps" col="bitrate" align="right" {...headProps} />
+            <SortHead label="Dur" col="duration" align="right" {...headProps} />
+            <th className="px-3 py-2 text-center font-normal text-[9px] uppercase tracking-wider text-faint">!</th>
           </tr>
         </thead>
         <tbody>

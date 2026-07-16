@@ -50,6 +50,20 @@ def test_filerow_exposes_tag_fields(db):
     assert row["year"] == 2023 and row["label"] == "Diynamic"
 
 
+def test_files_sort_by_title_asc_and_desc(db):
+    _seed(db)
+    asc = [r["title"] for r in client.get("/api/files", params={"sort": "title", "dir": "asc"}).json()]
+    desc = [r["title"] for r in client.get("/api/files", params={"sort": "title", "dir": "desc"}).json()]
+    assert asc == ["A", "B", "C"]
+    assert desc == ["C", "B", "A"]
+
+
+def test_files_sort_by_ext(db):
+    _seed(db)
+    exts = [r["ext"] for r in client.get("/api/files", params={"sort": "ext", "dir": "asc"}).json()]
+    assert exts == ["mp3", "mp3", "wav"]
+
+
 def test_library_facets_distinct_sorted(db):
     _seed(db)
     f = client.get("/api/library/facets").json()

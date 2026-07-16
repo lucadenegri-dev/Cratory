@@ -31,22 +31,25 @@ export function AddSource({ onAdded }: { onAdded: () => void }) {
   return (
     <div>
       <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.sources.addRoot}</div>
-      <div className="flex flex-col gap-2 sm:flex-row">
+      {/* path su riga propria a piena larghezza: dev'essere leggibile per intero */}
+      <div className="flex flex-col gap-2">
         <Input
           value={path}
           onChange={(e) => setPath(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
           placeholder={t.sources.pathPlaceholder}
-          className="sm:flex-1"
+          className="w-full"
         />
-        <Input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder={t.sources.labelPlaceholder}
-          className="sm:w-40"
-        />
-        <Button onClick={submit} disabled={busy || !path.trim()}>{busy ? <Spinner /> : t.sources.addButton}</Button>
+        <div className="flex gap-2">
+          <Input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder={t.sources.labelPlaceholder}
+            className="flex-1"
+          />
+          <Button onClick={submit} disabled={busy || !path.trim()}>{busy ? <Spinner /> : t.sources.addButton}</Button>
+        </div>
       </div>
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
     </div>
