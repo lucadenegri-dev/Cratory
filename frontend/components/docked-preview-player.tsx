@@ -11,7 +11,7 @@ export function DockedPreviewPlayer() {
   if (!active || status === "idle") return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-none border border-border-strong bg-surface p-3">
+    <div className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)] rounded-none border border-border-strong bg-surface p-3">
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-sm text-fg">{active.title}</div>
