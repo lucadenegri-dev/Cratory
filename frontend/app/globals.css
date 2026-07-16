@@ -31,7 +31,15 @@
   --c-elevated: #222222;
   --c-border: #2b2b2b;
   --c-border-strong: #3d3d3d;
-  --c-muted: #787878;
+  /* muted regge il testo secondario leggibile, quindi deve passare 4.5:1 su
+     TUTTA la pila neutra, non solo su bg: compare su surface (card), su
+     surface-2 (strisce) e su elevated (Badge neutral). #787878 falliva ovunque
+     (bg 4.40, surface 4.10, surface-2 3.86, elevated 3.60); #898989 e' il primo
+     grigio che passa sul fondo peggiore (elevated 4.55) e lascia intatta la
+     gerarchia muted 5.56 < fg 11.14 < fg-strong 16.60 su bg. */
+  --c-muted: #898989;
+  /* faint e' decorativo (icone, filetti, placeholder): non regge testo
+     leggibile — vedi il Don't di DESIGN.md. */
   --c-faint: #555555;
   --c-fg: #c4c4c4;
   --c-fg-strong: #ededed;
@@ -48,7 +56,9 @@ html[data-theme="paper"] {
   --c-elevated: #e2ddd0;
   --c-border: #a99e86;
   --c-border-strong: #7d735c;
-  --c-muted: #6b6555;
+  /* Stessa regola del dark: #6b6555 passava su bg/surface/surface-2 ma non su
+     elevated (4.28). Scurito del 4% conservando la tinta -> elevated 4.54. */
+  --c-muted: #676152;
   --c-faint: #847d68;
   --c-fg: #2a2823;
   --c-fg-strong: #15140f;

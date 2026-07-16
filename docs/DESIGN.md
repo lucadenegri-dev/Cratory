@@ -9,7 +9,7 @@ themes:
     elevated: "#222222"
     border: "#2b2b2b"
     border-strong: "#3d3d3d"
-    muted: "#787878"
+    muted: "#898989"
     faint: "#555555"
     fg: "#c4c4c4"
     fg-strong: "#ededed"
@@ -19,10 +19,10 @@ themes:
     surface: "#f1eee6"
     surface-2: "#eae6dc"
     elevated: "#e2ddd0"
-    border: "#cdc7b8"
-    border-strong: "#b2ab99"
-    muted: "#86806f"
-    faint: "#a79f8d"
+    border: "#a99e86"
+    border-strong: "#7d735c"
+    muted: "#676152"
+    faint: "#847d68"
     fg: "#2a2823"
     fg-strong: "#15140f"
     danger: "#a83a22"
@@ -243,10 +243,25 @@ This system explicitly rejects: consumer-music-app warmth (soft pastels, oversiz
 Two monochromatic themes share the same token names, swapped at runtime via `html[data-theme="paper"]`. The dark theme is the default (`:root`).
 
 ### Dark (default)
-A neutral near-black field with light-gray ink. `bg #0d0d0d`, `surface #161616`, `elevated #222222`, hairline `border #2b2b2b` / `border-strong #3d3d3d`, `muted #787878`, `faint #555555`, body `fg #c4c4c4`, emphasis `fg-strong #ededed`.
+A neutral near-black field with light-gray ink. `bg #0d0d0d`, `surface #161616`, `elevated #222222`, hairline `border #2b2b2b` / `border-strong #3d3d3d`, `muted #898989`, `faint #555555`, body `fg #c4c4c4`, emphasis `fg-strong #ededed`.
 
 ### Paper (toggle)
-A warm cream field with near-black ink. `bg #e9e5db`, `surface #f1eee6`, `elevated #e2ddd0`, hairline `border #cdc7b8` / `border-strong #b2ab99`, `muted #86806f`, `faint #a79f8d`, body `fg #2a2823`, emphasis `fg-strong #15140f`.
+A warm cream field with near-black ink. `bg #e9e5db`, `surface #f1eee6`, `elevated #e2ddd0`, hairline `border #a99e86` / `border-strong #7d735c`, `muted #676152`, `faint #847d68`, body `fg #2a2823`, emphasis `fg-strong #15140f`.
+
+### The contrast floor on `muted`
+
+`muted` carries readable secondary text, so it must clear **4.5:1 on the whole neutral
+stack** — not just on `bg`. It appears on `surface` (cards), on `surface-2` (strips) and on
+`elevated` (the neutral `Badge`), and `elevated` is always the worst case: it is the
+backdrop closest in luminance to the text.
+
+Both themes are pinned to that floor. Dark `muted` was `#787878`, which failed everywhere
+(`bg` 4.40, `surface` 4.10, `surface-2` 3.86, `elevated` 3.60); `#898989` is the first gray
+that clears `elevated` (4.55) and leaves the ramp intact — `muted` 5.56 < `fg` 11.14 <
+`fg-strong` 16.60 on `bg`. Paper `muted` was `#6b6555`, which cleared `bg`/`surface` but not
+`elevated` (4.28); `#676152` is the same hue 4% darker and clears it (4.54).
+
+**When you change a neutral, re-check `muted` against `elevated`, not against `bg`.**
 
 ### The one color
 **Danger red** — `#d8593f` (dark) / `#a83a22` (paper). The *only* hue in the system. Used for error messages, destructive actions (delete), and invalid input (e.g. malformed Camelot notation). The one decorative exception: the EQ/waveform loaders (`Equalizer`, `EqMeter`) use danger as a warm accent — peak notch, "hot" trail behind the playhead, playhead and scan border. Outside the loaders, red stays exclusively error/destruction, never a status or quality indicator.
