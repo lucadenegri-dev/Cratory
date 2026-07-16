@@ -115,3 +115,19 @@ def test_resolve_preview_none_when_get_release_raises():
         get_release=boom, discogs_id=123, level="track",
     )
     assert res.kind == "none"
+
+
+def test_resolve_preview_none_when_itunes_raises():
+    def boom(term):
+        raise RuntimeError("itunes down")
+    res = resolve_preview("Artist", "Acid Trip", itunes_search=boom)
+    assert res.kind == "none"
+
+
+def test_resolve_preview_builds_search_term():
+    seen = {}
+    def spy(term):
+        seen["term"] = term
+        return []
+    resolve_preview("Rick Astley", "Never Gonna Give You Up", itunes_search=spy)
+    assert seen["term"] == "Rick Astley Never Gonna Give You Up"

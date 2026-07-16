@@ -2,7 +2,7 @@
 
 Catena deterministica: iTunes (clip 30s pulita) -> video YouTube della release
 Discogs -> nessuna. Le dipendenze di rete sono INIETTATE come callable, così il
-service è testabile senza rete. Vedi docs/superpowers/specs/2026-07-16-...
+service è testabile senza rete. Vedi docs/superpowers/specs/2026-07-16-discovery-preview-audio-design.md
 """
 
 import logging
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 ItunesSearch = Callable[[str], list[dict]]
 GetRelease = Callable[[int], dict]
 
-_NOISE = re.compile(r"feat\.?|featuring|remix|edit|version|original|mix", re.IGNORECASE)
+_NOISE = re.compile(r"\b(?:feat\.?|featuring|remix|edit|version|original|mix)\b", re.IGNORECASE)
 _PARENS = re.compile(r"\(.*?\)|\[.*?\]")
 _NONWORD = re.compile(r"[^a-z0-9 ]")
 
