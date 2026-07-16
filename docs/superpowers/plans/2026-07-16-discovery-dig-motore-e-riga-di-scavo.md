@@ -527,12 +527,15 @@ def test_style_affinity_uses_all_release_styles():
 
 
 def test_style_affinity_compares_per_genre_not_against_a_single_bag():
-    # regressione: con l'unione dei token, 'house' bastava a valere 1.0 su tutto
+    # Regressione col valore PUNTUALE, non `< 1.0`: per-genere la Jaccard massima e'
+    # contro 'Deep House' -> {house}/{acid,deep,house} = 1/3. Col sacco unico
+    # {deep,house,drum,n,bass} sarebbe {house}/{acid,deep,house,drum,n,bass} = 1/6 —
+    # che passerebbe `< 1.0`. Un test di regressione deve distinguere i due.
     p = TasteProfile.from_tracks(_lib(
         ("A", "T1", {"genre": "Deep House"}),
         ("B", "T2", {"genre": "Drum n Bass"}),
     ))
-    assert p.style_affinity(["Acid House"]) < 1.0
+    assert p.style_affinity(["Acid House"]) == pytest.approx(1 / 3)
 
 
 def test_familiarity_is_max_across_split_artists():
