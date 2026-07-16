@@ -95,6 +95,13 @@ def test_dig_200_via_http(client, monkeypatch):
 
     c, _ = client
     monkeypatch.setattr(DiscogsClient, "search_releases", lambda self, **kw: [_fake_release()])
+    # La sonda va mockata come la search: il dig la chiama SEMPRE, e senza mock
+    # questo test farebbe una richiesta VERA a Discogs (test senza rete: vedi il
+    # docstring di app/integrations/discogs.py). 100 = una pagina sola: pila corta,
+    # la finestra e' l'intera pila e `depth` non c'entra con cio' che qui si dimostra
+    # (la shape JSON del lead). Deve comunque essere > 0, o il dig si ferma prima
+    # della search e non ci sarebbero lead da verificare.
+    monkeypatch.setattr(DiscogsClient, "count_releases", lambda self, **kw: 100)
 
     r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "Acid House"})
     assert r.status_code == 200

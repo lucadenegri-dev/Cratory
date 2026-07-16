@@ -393,11 +393,22 @@ def _fake_release(title, *, label="Lbl", style="Acid House", have=3, want=120):
     }
 
 
+def _stub_pile(monkeypatch, items=100):
+    """Mocka la sonda `count_releases`, che il dig chiama SEMPRE prima della search.
+    Senza, questi test farebbero una richiesta VERA a Discogs (test senza rete: vedi
+    il docstring di app/integrations/discogs.py). Default 100 = una pagina sola: pila
+    corta, la finestra e' l'intera pila e `depth` non entra in cio' che questi test
+    dimostrano (reason, badge, gusto). Deve essere > 0, o il dig si ferma prima della
+    search e non ci sarebbero lead."""
+    monkeypatch.setattr(DiscogsClient, "count_releases", lambda self, **kw: items)
+
+
 def test_dig_endpoint_returns_reasons(db, monkeypatch):
     monkeypatch.setattr(
         DiscogsClient, "search_releases",
         lambda self, **kw: [_fake_release("Cult - Grail")],
     )
+    _stub_pile(monkeypatch)
     resp = dig_endpoint(DiscoveryDigRequest(seed_type="genre", value="Acid House"), db)
     assert resp.leads, "atteso almeno un lead"
     codes = {r.code for r in resp.leads[0].reasons}
@@ -428,6 +439,7 @@ def test_dig_endpoint_exposes_discogs_id_and_format_badge(db, monkeypatch):
         DiscogsClient, "search_releases",
         lambda self, **kw: [release],
     )
+    _stub_pile(monkeypatch)
     resp = dig_endpoint(DiscoveryDigRequest(seed_type="genre", value="Acid House"), db)
     lead = resp.leads[0]
     assert lead.discogs_id == 42
@@ -450,6 +462,7 @@ def test_dig_endpoint_honors_taste_playlist_id(db, monkeypatch):
         DiscogsClient, "search_releases",
         lambda self, **kw: [_fake_release("Followed - New", label="Warp", style="Acid House")],
     )
+    _stub_pile(monkeypatch)
     resp = dig_endpoint(
         DiscoveryDigRequest(seed_type="genre", value="Acid House", taste_playlist_id=pl.id),
         db,
@@ -468,6 +481,10 @@ def test_dig_endpoint_502_on_discogs_error(db, monkeypatch):
         raise DiscogsError("Discogs: rate limit (riprova piu' tardi o imposta DISCOGS_TOKEN).")
 
     monkeypatch.setattr(DiscogsClient, "search_releases", _raise)
+    # La sonda deve RIUSCIRE: l'errore sotto test e' quello della search. Senza mock
+    # la sonda fa una richiesta vera e, a rete assente, e' lei a sollevare DiscogsError:
+    # il test passerebbe senza mai arrivare alla search, cioe' per il motivo sbagliato.
+    _stub_pile(monkeypatch)
     with pytest.raises(HTTPException) as exc_info:
         dig_endpoint(DiscoveryDigRequest(seed_type="genre", value="Acid House"), db)
     assert exc_info.value.status_code == 502
