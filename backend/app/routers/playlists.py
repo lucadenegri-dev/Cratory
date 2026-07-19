@@ -8,7 +8,8 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -25,6 +26,7 @@ from app.repositories import (
     add_track_to_playlist,
     all_playable_tracks,
     delete_playlist,
+    delete_playlist_track,
     get_playlist,
     list_playlists,
     recount_playlist,
@@ -218,6 +220,43 @@ def remove_playlist(playlist_id: int, db: Session = Depends(get_db)):
     if removed is None:
         raise api_error(404, "playlist_not_found", "Playlist not found")
     return PlaylistDeleteResult(deleted_tracks=removed)
+
+
+@router.delete("/{playlist_id}/tracks/{track_id}", response_model=PlaylistDeleteResult)
+def remove_playlist_track(playlist_id: int, track_id: int, db: Session = Depends(get_db)):
+    """Toglie una singola traccia dalla playlist. Se la traccia diventa un lead orfano
+    (non su disco, non in altre playlist, non in alcun set salvato) viene rimossa; il
+    conteggio orfani torna nel risultato. 404 se la playlist o la membership non esistono."""
+    removed = delete_playlist_track(db, playlist_id, track_id)
+    if removed is None:
+        raise api_error(404, "playlist_track_not_found", "Track not in playlist")
+    return PlaylistDeleteResult(deleted_tracks=removed)
+
+
+@router.post("/{playlist_id}/export", response_class=PlainTextResponse)
+def export_playlist(
+    playlist_id: int,
+    format: str = Query(default="m3u8", pattern="^m3u8$"),
+    db: Session = Depends(get_db),
+):
+    """Export M3U8 della playlist, importabile in Rekordbox (stessa logica dell'export
+    set). Punta ai file locali in libreria: le tracce senza file su disco non possono
+    stare in una playlist Rekordbox, quindi le escludiamo e ne segnaliamo il conteggio
+    con un commento. Ordine di inserimento (added_at), come nel dettaglio playlist."""
+    playlist = get_playlist(db, playlist_id)
+    if playlist is None:
+        raise api_error(404, "playlist_not_found", "Playlist not found")
+    tracks = tracks_for_playlist(db, playlist_id)  # già ordinate per added_at
+    owned = [t for t in tracks if t.local_path]
+    skipped = len(tracks) - len(owned)
+    m3u = ["#EXTM3U"]
+    if skipped:
+        m3u.append(f"# {skipped} tracce senza file locale non incluse")
+    for t in owned:
+        secs = int(t.duration_seconds) if t.duration_seconds else -1
+        m3u.append(f"#EXTINF:{secs},{t.artist or '?'} — {t.title or t.spotify_id or '?'}")
+        m3u.append(t.local_path)
+    return PlainTextResponse("\n".join(m3u), media_type="audio/x-mpegurl")
 
 
 @router.get("/{playlist_id}/tracks", response_model=list[TrackOut])

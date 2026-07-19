@@ -10,6 +10,7 @@ from app.models import Playlist, Track
 from app.repositories import (
     add_track_to_playlist,
     delete_playlist,
+    delete_playlist_track,
     recount_playlist,
     remove_track_from_playlist,
     tracks_for_playlist,
@@ -137,6 +138,59 @@ def test_delete_playlist_keeps_lead_used_in_setlist(db):
 
 def test_delete_playlist_missing_returns_none(db):
     assert delete_playlist(db, 9999) is None
+
+
+def test_delete_playlist_track_keeps_shared_track(db):
+    """Traccia in due playlist: tolta da una, resta nell'altra e in libreria."""
+    a, b, t = _pl(db, "A"), _pl(db, "B"), _tr(db, "T")
+    add_track_to_playlist(db, t, a)
+    add_track_to_playlist(db, t, b)
+    db.commit()
+    assert delete_playlist_track(db, a.id, t.id) == 0   # in un'altra playlist: non orfano
+    assert t not in tracks_for_playlist(db, a.id)
+    assert t in tracks_for_playlist(db, b.id)
+    assert db.query(Track).count() == 1
+
+
+def test_delete_playlist_track_removes_orphan_lead(db):
+    """Lead senza file, solo in questa playlist e in nessun set: viene cancellato."""
+    a, t = _pl(db, "A"), _tr(db, "solo")
+    add_track_to_playlist(db, t, a)
+    db.commit()
+    assert delete_playlist_track(db, a.id, t.id) == 1
+    assert db.query(Track).count() == 0
+
+
+def test_delete_playlist_track_keeps_owned_track(db):
+    """Traccia su disco: resta in libreria anche se orfana dalle playlist."""
+    a, t = _pl(db, "A"), _tr(db, "owned")
+    t.has_local_file = True
+    add_track_to_playlist(db, t, a)
+    db.commit()
+    assert delete_playlist_track(db, a.id, t.id) == 0
+    assert db.query(Track).count() == 1
+
+
+def test_delete_playlist_track_recounts(db):
+    a, t1, t2 = _pl(db, "A"), _tr(db, "T1"), _tr(db, "T2")
+    t1.has_local_file = t2.has_local_file = True  # non orfane: restano
+    add_track_to_playlist(db, t1, a)
+    add_track_to_playlist(db, t2, a)
+    recount_playlist(db, a)
+    db.commit()
+    assert a.track_count == 2
+    delete_playlist_track(db, a.id, t1.id)
+    assert a.track_count == 1
+
+
+def test_delete_playlist_track_missing_membership_returns_none(db):
+    a, t = _pl(db, "A"), _tr(db, "loose")  # traccia esiste ma non in playlist
+    db.commit()
+    assert delete_playlist_track(db, a.id, t.id) is None
+
+
+def test_delete_playlist_track_missing_playlist_returns_none(db):
+    assert delete_playlist_track(db, 9999, 1) is None
 
 
 def test_recount_playlist(db):

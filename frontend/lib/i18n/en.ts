@@ -445,6 +445,14 @@ export const en = {
     syncSummary: (created: number, removed: number, total: number) =>
       `${created} new · ${removed} removed (stay in library) · ${total} total`,
     removeButton: "Remove",
+    exportRekordboxButton: "Export for Rekordbox (M3U8)",
+    exportFailed: (msg: string) => `Export failed: ${msg}`,
+    removeTrackTitle: "Remove from playlist",
+    removeTrackConfirm: (title: string) =>
+      `Remove "${title}" from this playlist? If it's a lead with no local file, not in other playlists or a set, it will be deleted.`,
+    trackRemoved: (title: string) => `"${title}" removed from the playlist.`,
+    trackRemovedWithLead: (title: string) => `"${title}" removed from the playlist and deleted as an orphan lead.`,
+    removeTrackFailed: (msg: string) => `Track removal failed: ${msg}`,
     statTracksLabel: "Tracks",
     statReadyLabel: "Ready",
     statDurationLabel: "Duration",

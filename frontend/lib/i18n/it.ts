@@ -447,6 +447,14 @@ export const it: Dictionary = {
     syncSummary: (created: number, removed: number, total: number) =>
       `${created} nuove · ${removed} rimosse (restano in libreria) · ${total} totali`,
     removeButton: "Rimuovi",
+    exportRekordboxButton: "Esporta per Rekordbox (M3U8)",
+    exportFailed: (msg: string) => `Export fallito: ${msg}`,
+    removeTrackTitle: "Togli dalla playlist",
+    removeTrackConfirm: (title: string) =>
+      `Togliere "${title}" da questa playlist? Se è un lead senza file su disco, non in altre playlist né in un set, verrà cancellato.`,
+    trackRemoved: (title: string) => `"${title}" tolta dalla playlist.`,
+    trackRemovedWithLead: (title: string) => `"${title}" tolta dalla playlist e rimossa come lead orfano.`,
+    removeTrackFailed: (msg: string) => `Rimozione traccia fallita: ${msg}`,
     statTracksLabel: "Tracce",
     statReadyLabel: "Pronte",
     statDurationLabel: "Durata",

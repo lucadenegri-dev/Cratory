@@ -228,7 +228,7 @@ def test_release_detail_tolerates_image_and_label_without_keys(monkeypatch):
     assert [t.title for t in out.tracks] == ["T"]
 
 
-# --- Task 4: playlist di sistema "Scoperte" -----------------------------------
+# --- Task 4: playlist di sistema "Discovery" ----------------------------------
 
 
 def test_get_or_create_discovery_playlist_is_idempotent(db):
@@ -238,7 +238,7 @@ def test_get_or_create_discovery_playlist_is_idempotent(db):
     db.commit()
     p2 = get_or_create_discovery_playlist(db)
     assert p1.id == p2.id
-    assert p1.name == "Scoperte"
+    assert p1.name == "Discovery"
     assert p1.kind == "discovery"
     assert p1.platform == "manual"
 

@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDuration,
-  startPlaylistDownload,
+  startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist,
   type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, Spinner, Input, Select, Checkbox, Loading } from "@/components/ui";
@@ -25,6 +25,10 @@ import { TrackStateIcons } from "@/components/track-state-icons";
 import { useT, translateGap } from "@/lib/i18n";
 
 type Order = "asc" | "desc";
+
+function slugName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "playlist";
+}
 
 // Ordinamento Camelot: prima il numero (1..12), poi la lettera (A prima di B).
 function camelotRank(key: string | null): number {
@@ -53,6 +57,11 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const [editing, setEditing] = useState<Track | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmRemoveTrack, setConfirmRemoveTrack] = useState<Track | null>(null);
+  const [removingTrackId, setRemovingTrackId] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   // Filtri (come in libreria) — applicati lato client sulla playlist (insieme limitato).
   const [artist, setArtist] = useState("");
@@ -246,6 +255,42 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
     }
   };
 
+  const doRemoveTrack = async (tr: Track) => {
+    setActionError(null);
+    setNotice(null);
+    setRemovingTrackId(tr.id);
+    const label = tr.title ?? tr.artist ?? String(tr.id);
+    try {
+      const { deleted_tracks } = await removeTrackFromPlaylist(pid, tr.id);
+      setTracks((cur) => cur.filter((x) => x.id !== tr.id));
+      setPlaylist((p) => (p ? { ...p, track_count: Math.max(0, p.track_count - 1) } : p));
+      setNotice(deleted_tracks > 0 ? t.playlists.trackRemovedWithLead(label) : t.playlists.trackRemoved(label));
+    } catch (e) {
+      setActionError(t.playlists.removeTrackFailed(errText(e)));
+    } finally {
+      setRemovingTrackId(null);
+    }
+  };
+
+  const doExport = async () => {
+    if (!playlist) return;
+    setActionError(null);
+    setExporting(true);
+    try {
+      const body = await exportPlaylist(pid);
+      const url = URL.createObjectURL(new Blob([body], { type: "audio/x-mpegurl" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${slugName(playlist.name)}.m3u8`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setActionError(t.playlists.exportFailed(errText(e)));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const marginalia = (
     <div className="space-y-3">
       <ButtonLink href={`/set-builder?playlist=${pid}`} size="sm" block><Sparkles size={15} /> {t.playlists.buildSetButton}</ButtonLink>
@@ -258,6 +303,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
         ? <ButtonLink href={likedImportHref} size="sm" variant="outline" block><Heart size={14} /> {t.playlists.addMoreLiked}</ButtonLink>
         : canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} {t.playlists.syncFromButton(platformName)}</Button>}
       {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> {platformName}</Button></a>}
+      <Button size="sm" variant="outline" className="w-full" onClick={doExport} disabled={exporting}>{exporting ? <Spinner /> : <Download size={15} />} {t.playlists.exportRekordboxButton}</Button>
       <Button size="sm" variant="danger" className="w-full" onClick={() => setConfirmDelete(true)} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} {t.playlists.removeButton}</Button>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
         <div className="flex justify-between gap-2"><span className="text-muted">{t.playlists.statTracksLabel}</span><span className="tnum text-fg">{playlist.track_count}</span></div>
@@ -285,6 +331,8 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
       </div>
 
       {syncMsg && <div className="mb-4"><Alert tone="info">{t.playlists.syncedPrefix}{syncMsg}</Alert></div>}
+      {notice && <div className="mb-4"><Alert tone="info">{notice}</Alert></div>}
+      {actionError && <div className="mb-4"><Alert tone="danger">⚠ {actionError}</Alert></div>}
 
       {gaps && gaps.gaps.length > 0 && (
         <details className="group mb-4 border border-border">
@@ -369,6 +417,9 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => setEditing(tr)} title={t.library.editValuesTitle} className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
+                    <button onClick={() => setConfirmRemoveTrack(tr)} disabled={removingTrackId !== null} title={t.playlists.removeTrackTitle} className="text-faint transition-colors hover:text-danger disabled:opacity-40">
+                      {removingTrackId === tr.id ? <Spinner /> : <Trash2 size={14} />}
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -407,6 +458,20 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
         confirmLabel={t.common.delete}
         onConfirm={() => { setConfirmDelete(false); doDelete(); }}
         onClose={() => setConfirmDelete(false)}
+      />
+
+      <ConfirmModal
+        open={confirmRemoveTrack !== null}
+        title={t.playlists.removeTrackTitle}
+        message={confirmRemoveTrack ? t.playlists.removeTrackConfirm(confirmRemoveTrack.title ?? confirmRemoveTrack.artist ?? String(confirmRemoveTrack.id)) : ""}
+        tone="danger"
+        confirmLabel={t.common.delete}
+        onConfirm={() => {
+          const tr = confirmRemoveTrack;
+          setConfirmRemoveTrack(null);
+          if (tr) doRemoveTrack(tr);
+        }}
+        onClose={() => setConfirmRemoveTrack(null)}
       />
     </PageLayout>
   );

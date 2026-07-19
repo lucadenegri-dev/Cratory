@@ -51,6 +51,7 @@ def ensure_schema(eng=None) -> None:
         _migrate_drop_enrichment_cols(conn)
         _migrate_playlist_memberships(conn)
         _migrate_rename_liked_spotify(conn)
+        _migrate_rename_discovery_playlist(conn)
         _migrate_backfill_bpm_key_sources(conn)
         _migrate_null_soundcloud_stream_urls(conn)
 
@@ -285,6 +286,19 @@ def _migrate_rename_liked_spotify(conn) -> None:
     conn.execute(text(
         "UPDATE playlists SET name = 'Spotify Likes' "
         "WHERE kind = 'liked' AND platform = 'spotify' AND name = 'Liked Spotify'"
+    ))
+
+
+def _migrate_rename_discovery_playlist(conn) -> None:
+    """Rinomina la playlist di sistema Discovery da 'Scoperte' a 'Discovery'.
+
+    Idempotente: la WHERE sul vecchio nome rende no-op le esecuzioni successive.
+    """
+    if not _table_exists(conn, "playlists"):
+        return
+    conn.execute(text(
+        "UPDATE playlists SET name = 'Discovery' "
+        "WHERE kind = 'discovery' AND platform = 'manual' AND name = 'Scoperte'"
     ))
 
 

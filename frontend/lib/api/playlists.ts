@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost } from "./client";
+import { API, apiDelete, apiGet, apiPost } from "./client";
 import type {
   GapAnalysis,
   LikedTrackPreview,
@@ -55,6 +55,19 @@ export function deletePlaylist(id: number) {
 
 export function playlistTracks(id: number, opts?: { signal?: AbortSignal }) {
   return apiGet<Track[]>(`/api/playlists/${id}/tracks`, undefined, opts);
+}
+
+/** Toglie una singola traccia dalla playlist. Se diventa un lead orfano viene
+ *  rimossa: `deleted_tracks` = 1 in quel caso, 0 se resta in libreria. */
+export function removeTrackFromPlaylist(playlistId: number, trackId: number) {
+  return apiDelete<PlaylistDeleteResult>(`/api/playlists/${playlistId}/tracks/${trackId}`);
+}
+
+/** Export M3U8 della playlist (importabile in Rekordbox), come per i set. */
+export async function exportPlaylist(id: number): Promise<string> {
+  const res = await fetch(`${API}/api/playlists/${id}/export?format=m3u8`, { method: "POST" });
+  if (!res.ok) throw new Error(res.statusText);
+  return res.text();
 }
 
 /** Avvia in background il riallineamento della playlist con la piattaforma

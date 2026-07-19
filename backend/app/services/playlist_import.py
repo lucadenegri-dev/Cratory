@@ -465,7 +465,8 @@ def _liked_playlist(db: Session, platform: str = "spotify") -> Playlist | None:
     )
 
 
-DISCOVERY_PLAYLIST_NAME = "Scoperte"
+# "Discovery" è identico in IT ed EN: un solo nome salvato copre entrambe le lingue.
+DISCOVERY_PLAYLIST_NAME = "Discovery"
 
 
 def get_or_create_discovery_playlist(db: Session) -> Playlist:
@@ -473,7 +474,7 @@ def get_or_create_discovery_playlist(db: Session) -> Playlist:
 
     Ne esiste al più una (kind='discovery'), creata al primo uso — stesso
     pattern di _liked_playlist, ma qui va anche creata se assente (i liked
-    nascono dall'import Spotify, 'Scoperte' nasce dal primo 'per dopo').
+    nascono dall'import Spotify, 'Discovery' nasce dal primo 'per dopo').
     """
     playlist = db.scalar(
         select(Playlist).where(Playlist.platform == "manual", Playlist.kind == "discovery")

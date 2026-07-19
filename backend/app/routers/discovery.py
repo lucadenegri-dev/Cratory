@@ -243,13 +243,13 @@ def add_to_library(req: DiscoveryAddRequest, db: Session = Depends(get_db)):
 @router.post("/save-for-later", response_model=DiscoverySaveForLaterResponse)
 def save_for_later(req: DiscoverySaveForLaterRequest, db: Session = Depends(get_db)):
     """Importa una traccia della tracklist e la mette nella playlist di sistema
-    'Scoperte'. Nessun download: solo per-dopo."""
+    'Discovery'. Nessun download: solo per-dopo."""
     track, created = import_single_track(
         db, platform="manual", title=req.title, artist=req.artist,
         duration_seconds=req.duration_seconds, url=req.url, artwork_url=req.album_art_url,
     )
     playlist = get_or_create_discovery_playlist(db)
-    # 'Scoperte' non si sincronizza mai, ma la provenienza Cratory resta coerente.
+    # 'Discovery' non si sincronizza mai, ma la provenienza Cratory resta coerente.
     add_track_to_playlist(db, track, playlist, added_by="cratory")
     db.commit()
     db.refresh(track)
