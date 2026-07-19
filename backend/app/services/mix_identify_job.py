@@ -51,7 +51,12 @@ def _run_job(dj_set_id: int, url: str) -> None:
     from app.services.mix_identify import identify_set
 
     db = SessionLocal()
-    recognizer = ShazamioRecognizer()
+
+    def on_backoff(wait: int, reason: str) -> None:
+        # Senza questo, minuti di backoff verso un endpoint saturo sembrano un blocco.
+        _state.update(phase=f"Shazam non risponde ({reason}): riprovo tra {wait}s…")
+
+    recognizer = ShazamioRecognizer(on_backoff=on_backoff)
 
     def on_progress(processed: int, total: int) -> None:
         _state.update(processed=processed, total=total, phase=f"Riconosco i brani… ({processed}/{total})")

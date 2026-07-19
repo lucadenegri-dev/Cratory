@@ -27,7 +27,11 @@ def patch_job(monkeypatch):
 
 class _FakeRecognizer:
     """Finto AudioRecognizer: _run_job chiama .close() nel finally (cleanup delle
-    risorse di rete/processo di ShazamioRecognizer), un semplice object() non basta."""
+    risorse di rete/processo di ShazamioRecognizer), un semplice object() non basta.
+    Accetta i kwargs del vero costruttore (on_backoff)."""
+
+    def __init__(self, *a, **kw):
+        pass
 
     def close(self) -> None:
         pass

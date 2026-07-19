@@ -145,7 +145,24 @@ def test_library_index_double_start_via_router_is_also_noop(monkeypatch):
 
 
 def test_mix_identify_double_start_is_noop_at_job_level(monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.db import Base
     from app.services import mix_identify_job as mij
+
+    # A differenza degli altri job, start_job consulta il DB (cache per URL)
+    # PRIMA della guardia sul lock: senza questo monkeypatch il test dipende
+    # dal DB reale del progetto (backend/data/djassistant.db) — su un checkout
+    # o worktree vergine la tabella dj_sets non esiste ancora al primo run
+    # della suite (la crea, per effetto collaterale, un test successivo che
+    # esegue la lifespan) e start_job esplode con "no such table: dj_sets".
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
+                           poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(mij, "SessionLocal",
+                        sessionmaker(bind=engine, expire_on_commit=False))
 
     monkeypatch.setattr(mij.threading, "Thread", _ThreadNotExpected)
     mij._state.update(status="running", dj_set_id=42, phase="Riconosco i brani…")

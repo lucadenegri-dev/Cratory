@@ -30,8 +30,8 @@ MAX_SEGMENTS = 200       # tetto ai segmenti (= chiamate al recognizer) per mix:
                          # passo e' ~39s, cosi' quasi ogni traccia raccoglie 2+ campioni
                          # e il voto di conferma separa le vere dai falsi positivi
 MAX_CONSECUTIVE_ERRORS = 3  # errori di fila oltre cui interrompe: basso perche' ogni
-                            # errore ha gia' assorbito il pacing+backoff del recognizer
-                            # (fino a ~185s), quindi 3 = ~10 min di endpoint giu', non di piu'
+                            # errore ha gia' assorbito il backoff del recognizer (~220s di
+                            # attesa vera, senza richieste), quindi 3 = ~11 min di endpoint giu'
 MERGE_WINDOW_SECONDS = 240  # stessa chiave che ricompare entro questa distanza = stessa esecuzione
 CONFIDENCE_CONFIRMED = 90  # 2+ campioni concordi
 CONFIDENCE_DUBIOUS = 45    # campione singolo mai verificato (i verificati e smentiti si scartano)
