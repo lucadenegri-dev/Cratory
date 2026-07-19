@@ -112,9 +112,13 @@ source").
   `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`,
   `docs/ARCHITECTURE.md` and PROGRESS.md for detail.
 - **Wishlist redesign** — DONE (2026-07-19). `/downloads` → `/wishlist`: every non-owned
-  track with its download outcome, playlist provenance, buy links (Bandcamp/Beatport/Juno/
+  track with its download outcome, playlist provenance, buy links (Bandcamp/Beatport/
   Discogs) and reversible archiving via `PATCH /api/tracks/{id}` (`archived`). See
   `docs/API.md` and PROGRESS.md for detail.
+- **Dig refactor** — DONE (2026-07-19). Navigazione: la voce Discovery è rinominata "Dig"
+  (route `/discovery` invariata) e la Wishlist passa nel gruppo "Discover" (Dig · Shazam ·
+  Wishlist). La ricerca Soulseek libera è in testa alla pagina Wishlist. Rimosso Juno
+  Download dai buy-link (negozio non più funzionante). Solo frontend, nessun cambio API.
 
 ## Technical backlog (non-blocking)
 

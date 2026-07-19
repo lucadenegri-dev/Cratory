@@ -30,6 +30,25 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-19 - Dig: rinomina, Wishlist in "Discover", FreeDownload in testa
+
+Ritocchi di navigazione e wishlist richiesti dall'utente. Solo frontend, nessun
+cambio API/route.
+
+- **Discovery → "Dig".** Rinominata la sola etichetta della voce/pagina
+  (`nav.discovery` in `it.ts`/`en.ts` e `title` di `discovery/page.tsx`; resa maiuscola
+  via CSS come le altre voci). Route `/discovery` e titolo della sezione
+  "Discover"/"Scopri" invariati.
+- **Wishlist nel gruppo "Discover".** In `index-nav.tsx` la voce `/wishlist` esce da
+  "Collect" ed entra in "Discover": ordine **Dig · Shazam · Wishlist**. Badge conteggio
+  pending invariato (legato a `href === "/wishlist"`).
+- **Ricerca Soulseek libera ("FreeDownload") in testa.** In `wishlist/page.tsx` la
+  sezione di ricerca libera è spostata in cima (prima delle azioni di gruppo), resta
+  collassabile e chiusa di default.
+- **Rimosso Juno Download.** Negozio non più funzionante: tolto da `store-links.ts`
+  (`StoreKey`/`STORES`) e dal test `store-links.test.ts` (ora Bandcamp · Beatport ·
+  Discogs). `wishlist-row.tsx` consuma `STORES` in modo generico, nessuna modifica.
+
 ## Milestone 2026-07-19 - Set Builder: residui della tappa 2 chiusi
 
 Giro di pulizia dopo la review finale della tappa 2.

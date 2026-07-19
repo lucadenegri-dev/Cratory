@@ -123,7 +123,7 @@ function DiscoveryInner() {
   );
 
   return (
-    <PageLayout title="Discovery">
+    <PageLayout title="Dig">
       <p className="mb-4 text-sm text-muted">{t.discovery.intro}</p>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
