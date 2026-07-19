@@ -28,6 +28,44 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-19 - Rifacimento Wishlist: `/downloads` diventa `/wishlist`
+
+La vecchia pagina "Download" mostrava solo la coda dei download attivi/da rivedere;
+il resto delle tracce non possedute (mai tentate, archiviate) non aveva una casa. Spec
+approvata a voce in
+`docs/superpowers/specs/2026-07-19-wishlist-redesign-design.md`, piano in 7 task in
+`docs/superpowers/plans/2026-07-19-wishlist-redesign.md`, implementati TDD in una
+serie di commit sullo stesso branch (`claude/wishlist-download-redesign-2ac774`):
+
+- **`backend/app/models.py`/`schemas.py`/`routers/tracks.py`:** campo `Track.archived`
+  (bool NOT NULL, default `false`) e supporto nel `PATCH /api/tracks/{id}`: `archived`
+  segue la stessa semantica "`null` = invariato" degli altri campi del patch, ma
+  l'indicizzazione libreria continua a vincere (possesso su disco → `archived=false`).
+  Filtro `archived` su `GET /api/tracks` (default esclude le archiviate).
+- **`frontend/lib/wishlist-status.ts` (nuovo):** stato derivato dall'esito download
+  (`never | review | not_found | failed`) e mapping verso il tab (`statusTab`).
+- **`frontend/components/wishlist-row.tsx` (nuovo):** riga con provenienza playlist,
+  badge esito, azione contestuale (Scarica/Riprova/Rivedi/Archivia) e menu "Compra"
+  (Bandcamp/Beatport/Juno/Discogs, link diretti costruiti da artista+titolo).
+  `frontend/lib/store-links.ts` (nuovo) genera gli URL di ricerca dei negozi.
+- **`frontend/app/wishlist/page.tsx` (nuovo, ex `app/downloads/page.tsx` rimossa):**
+  tutte le non possedute con tab di stato (Tutte/Mai tentate/In review/Non
+  trovate/Fallite), filtro playlist e testo, toggle "Mostra archiviate", azioni di
+  gruppo (scarica playlist, riprova tutte, collega tutte) e ricerca Soulseek libera
+  come sezione secondaria collassata.
+- **Routing:** `/downloads` è ora solo un redirect 307 verso `/wishlist` (la vecchia
+  pagina è rimossa); la nav e i link interni puntano al percorso canonico
+  `/wishlist`. Il router `/api/downloads/*` non cambia.
+- **`frontend/e2e/wishlist.spec.ts` (nuovo):** montaggio con heading "Wishlist" + tab
+  di stato visibili, e redirect `/downloads` → `/wishlist`, su DB vuoto.
+
+Stato finale verificato (2026-07-19): backend pytest e frontend lint/test:unit/
+build/test:e2e tutti verdi (vedi report task 7 in `.superpowers/sdd/task-7-report.md`
+per i conteggi esatti).
+
+**Come riprendere:** il rifacimento è completo, nessun tappa 2 pianificata. Prossimo
+lavoro parte da idee di prodotto nuove, non da questo backlog.
+
 ## Milestone 2026-07-19 - Set Builder: il generatore pianifica prima, riempie dopo (tappa 1 del piano a due fasi)
 
 Il generatore deterministico (`set_generator.generate_set`) costruiva la scaletta con un

@@ -205,6 +205,11 @@ from BPM+genre and is recomputed automatically when the patch touches `bpm` or
 `genre`; a payload that includes `energy` is rejected with `422` (schema
 `extra="forbid"`).
 
+- `archived` (bool, opzionale): archivia/ripristina la traccia dalla wishlist.
+  A differenza degli altri campi, `null` NON azzera: vale come "invariato"
+  (bool NOT NULL). L'indicizzazione libreria continua a vincere: il possesso
+  su disco riporta `archived=false`.
+
 `POST /api/tracks/{track_id}/link-file` manually links a file on disk to the track
 (ownership without download): it validates existence and audio extension, sets
 `has_local_file`/`local_path`/`local_format`/`local_bitrate` + best-effort audio-hash
