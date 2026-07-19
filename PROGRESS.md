@@ -22,11 +22,81 @@ Rekordbox import — explicit per-value provenance, `bpm_source`/`key_source`: m
 rekordbox > cratory); Discovery is now the dig alone (**playlist expansion removed
 2026-07-19**) — Discogs crate digging, whose pile is sorted by demand, `depth` picks
 the window to fetch from it, taste always ranks inside that window; technical/creative
-Set Builder with an "owned-only" guarantee; dashboard
+Set Builder with an "owned-only" guarantee, a two-phase deterministic generator (skeleton then
+fill) and an optional AI curation stage (intent compilation, mood-fit, anchor hints — the AI
+never sequences tracks); dashboard
 with a five-stage pipeline (Index moved to a nav button) and documentation realigned to
 the new paradigm; mix identification via Shazam integrated (phase 1; co-occurrence in
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-07-19 - Set Builder: l'AI cura il pool, il motore sequenzia (tappa 2 del piano a due fasi)
+
+Seguito diretto della milestone precedente (tappa 1, sotto): il percorso `generate_ai_set()`
+("l'AI ordina la scaletta") viene ritirato del tutto e sostituito da una curatela AI che legge
+il pool prima del generatore deterministico, senza mai scegliere l'ordine delle tracce. Spec e
+piano in `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`
+(tappa 2), implementati TDD sullo stesso branch:
+
+- **`backend/app/services/ai_curation.py` (nuovo):** quattro chiamate LLM indipendenti, ognuna
+  degradabile a warning (mai a errore). `compile_intent`: traduce il prompt libero in vincoli
+  strutturati SOLO per i campi che l'utente ha lasciato vuoti nel form — il discriminante è
+  `req.model_fields_set`, non un default uguale al valore compilato; `owned_only`/`sources`
+  restano scelte esplicite dell'utente, mai compilabili. Il merge fallisce in modo sicuro (torna
+  ai vincoli originali) se i valori compilati escono dai bounds Pydantic. `score_mood_fit`: pool
+  fino a `POOL_CAP=200` (campionamento stratificato su `CORRIDOR_BANDS=6` fasce BPM se il pool
+  filtrato eccede il tetto, sempre includendo i seed), lotti da `MOOD_BATCH_SIZE=50` (mai oltre
+  `PER_CALL_CAP=60` per chiamata), punteggio 0-100 + fino a 3 tag per candidata; le candidate
+  senza giudizio (lotto fallito o dimenticate dal modello) valgono 50 (neutro). `suggest_anchors`:
+  sulle top `PER_CALL_CAP` candidate per mood-fit, propone fino a 3 id per ruolo
+  (opening/peak/closing) — mai vincolante, solo bonus in elezione. `narrate`: titolo, spiegazione
+  globale, 0-3 suggerimenti sulla libreria, SULLA scaletta già costruita dal motore (non decide
+  nulla sulla selezione). `run_curated_generation`: orchestra le cinque fasi (intent → mood →
+  anchors → building → narrating, con callback `on_phase` per il polling), accumula i warning,
+  imposta `generated_by="algorithmic+ai_curation"` solo se almeno un contributo AI è arrivato
+  (altrimenti resta `"algorithmic"`), scrive `Setlist.curation`
+  (`{intent_summary, compiled, warnings}`) e `SetlistTrack.mood_tags` per traccia.
+- **Motore (`set_generator.py`/`set_skeleton.py`):** due input opzionali (`mood_scores`,
+  `anchor_hints`) come kwargs semplici, nessun import inverso verso `ai_curation`. Il mood-fit
+  entra in `_candidate_score()` con peso `_MOOD_WEIGHT=0.30` (50 = neutro se assente);
+  nell'elezione degli anchor pesa `_ELECTION_MOOD_WEIGHT=0.2` più un bonus fisso
+  `_ANCHOR_HINT_BONUS=12.0` se la candidata è tra gli hint AI per quel ruolo. Il percorso senza
+  AI (`mood_scores`/`anchor_hints` a `None`) resta bit-per-bit invariato.
+- **Ritiro:** `ai_agent.py`, `validation.py` (`validate_ai_set`), gli schemi `AITrackChoice`/
+  `AISetResponse` e il percorso "AI ordina la scaletta" sono stati cancellati. Con loro sparisce
+  anche il vecchio Validation Engine dedicato ai set AI: i suoi warning tecnici (chiave debole,
+  salto BPM, traccia troppo corta, durata) non esistono più perché il motore li previene per
+  costruzione — l'explanation deterministica copre già chiavi deboli e durata.
+- **Persistenza:** due colonne JSON auto-migrate, `Setlist.curation` (`{}` per un set non
+  curato) e `SetlistTrack.mood_tags` (`null`/`[]` se la curatela non è girata o non ha prodotto
+  tag utili). `Setlist.validation` per i set curati diventa `{warnings, missing_library_suggestions}`.
+  `generated_by`: `"algorithmic"` | `"algorithmic+ai_curation"` (i set storici restano leggibili
+  con il vecchio valore `"ai"`).
+- **`use_ai`:** `true` = curatela AI attiva; `false` = puro deterministico, nessuna chiamata LLM;
+  assente = auto (AI se configurata e c'è un prompt, come prima). Endpoint invariati
+  (`POST /api/sets/generate[-async]`).
+- **Frontend:** il toggle "Algoritmo vs AI" diventa "Curatela AI on/off" (il motore è sempre
+  uno); paragrafo "Come ti ho capito" quando `curation.intent_summary` è valorizzato; chip mood
+  per traccia da `SetlistTrack.mood_tags`; badge di provenienza AI ora testa `includes("ai")` su
+  `generated_by` (copre sia il nuovo `algorithmic+ai_curation` sia lo storico `ai`).
+- **Precisazione di dominio (emersa in review):** gli `start_bpm`/`end_bpm`/`start_energy`/
+  `end_energy` che l'intento compila sono preferenze d'arco del SET (campi della request), non
+  BPM/key di una traccia — la regola 2 di CLAUDE.md (mai chiedere BPM/key di una traccia a
+  un'AI) resta intatta; CLAUDE.md e ARCHITECTURE.md ora lo chiariscono esplicitamente.
+
+Stato finale verificato (2026-07-19): backend 961 test verdi (`python -m pytest tests -q`,
+il conteggio scende rispetto ai 977 di tappa 1 per la rimozione di `test_ai_agent.py` e
+l'introduzione mirata di `tests/test_curated_generation.py` e affini); frontend
+`npm run lint` pulito (solo warning preesistenti non collegati a questo lavoro) e `npm run
+build` verde (21 route, nessun errore TypeScript).
+
+**Come riprendere:** nessun lavoro pianificato aperto su questa feature. Possibili follow-up,
+non pianificati: tuning dei pesi (impatto 0.7/0.3, convergenza 0.35, mood-fit 0.30/0.2, bonus
+anchor 12, penalità bomba 25) sono dichiarati costanti nominate proprio perché ipotesi iniziali
+da tarare con set reali; `lru_cache` su `genre_families_of` (oggi ricalcolata ad ogni
+candidata, mai profilata come collo di bottiglia); percentili con tie medi nel calcolo
+dell'impact score (oggi il tie-break è per id, deterministico ma arbitrario in caso di BPM/energia
+identici tra più candidate).
 
 ## Milestone 2026-07-19 - Set Builder: il generatore pianifica prima, riempie dopo (tappa 1 del piano a due fasi)
 
@@ -74,9 +144,8 @@ Stato finale verificato (2026-07-19): backend 977 test verdi.
 
 **Come riprendere:** tappa 2 (l'AI cura il pool — intento compilato da prompt libero,
 mood-fit a lotti, anchor suggeriti — mentre il motore deterministico resta l'unico a
-sequenziare; ritiro del percorso "AI ordina la scaletta" e di `validate_ai_set`) è
-pianificata ma non implementata: piano completo nella stessa spec, sezione "Tappa 2".
-`use_ai`/`generate_ai_set` restano invariati fino ad allora.
+sequenziare; ritiro del percorso "AI ordina la scaletta" e di `validate_ai_set`) è stata
+implementata lo stesso giorno: vedi la milestone in testa a questo diario.
 
 ## Milestone 2026-07-19 - Rimozione completa del flusso Discovery expand (Last.fm)
 

@@ -59,41 +59,6 @@ def test_explanation_on_target_is_quiet_about_duration():
     assert "in chiave" in exp  # armonia OK dichiarata
 
 
-# --- Fix 3) warning aggregati, durata come primo -----------------------------
-
-def _ai_response(n):
-    from app.schemas import AISetResponse, AITrackChoice
-    return AISetResponse(
-        set_title="X", global_explanation="g", missing_library_suggestions=[],
-        tracks=[AITrackChoice(position=i, track_id=i, reason="r", transition_note="n", risk_level="low")
-                for i in range(1, n + 1)],
-    )
-
-
-def test_validation_aggregates_repetitive_key_warnings():
-    from app.services.validation import validate_ai_set
-    cands = {1: mk(128, "8A", artist="A"), 2: mk(128, "2B", artist="B"),
-             3: mk(128, "8A", artist="C"), 4: mk(128, "2B", artist="D")}
-    for tid, t in cands.items():
-        t.id = tid
-    req = SetGenerationRequest(target_duration_minutes=20)  # 4x5min = 20, a target
-    result = validate_ai_set(_ai_response(4), cands, req)
-    key_warnings = [w for w in result.warnings if "chiave" in w.lower()]
-    assert len(key_warnings) == 1                 # UN warning aggregato, non 3
-    assert "2, 3, 4" in key_warnings[0]           # elenca le posizioni
-
-
-def test_validation_duration_warning_comes_first():
-    from app.services.validation import validate_ai_set
-    cands = {1: mk(128, "8A", artist="A"), 2: mk(128, "9A", artist="B")}  # armonico
-    for tid, t in cands.items():
-        t.id = tid
-    req = SetGenerationRequest(target_duration_minutes=60)  # 2x5min=10, ben sotto
-    result = validate_ai_set(_ai_response(2), cands, req)
-    assert result.warnings
-    assert "durata" in result.warnings[0].lower()  # la durata è il warning primario
-
-
 # --- Fix 6) export accurato + dedup ------------------------------------------
 
 def _owned_set(db, specs):

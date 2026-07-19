@@ -91,17 +91,24 @@ source").
   window `want` is roughly constant, so they could not discriminate leads anyway) and
   taste ranks inside the window unconditionally, not as a mode. Cost: 4-5 Discogs
   requests per dig. See `docs/API.md` (Discovery) and PROGRESS.md for detail.
-- **Set Builder: two-phase generator** — Phase 1 DONE (2026-07-19). `generate_set()` now plans
-  a skeleton first (opening/peak/closing/reset anchors elected per strategy, a bomb reserve —
-  top 15% by impact score — freed only in the peak window, a genre plan with a principal family
-  at peak and a calmer one elsewhere) and then fills it with beam search per segment, instead of
-  one flat beam search over the whole set. Falls back to the previous single-phase flow for
-  short expected sets (< 6 tracks) or small pools (< 8 candidates). Fully deterministic, same
-  API. Phase 2 (AI curation — interpreting intent, curating the pool, retiring the "AI orders
-  the tracklist" path) is planned, not yet implemented: see
-  `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`. `use_ai` and
-  `generate_ai_set()` stay unchanged until then. See `docs/ARCHITECTURE.md` and PROGRESS.md for
-  detail.
+- **Set Builder: two-phase generator + AI curation** — DONE (2026-07-19), both phases.
+  Phase 1: `generate_set()` plans a skeleton first (opening/peak/closing/reset anchors elected
+  per strategy, a bomb reserve — top 15% by impact score — freed only in the peak window, a
+  genre plan with a principal family at peak and a calmer one elsewhere) and then fills it with
+  beam search per segment, instead of one flat beam search over the whole set. Falls back to
+  the previous single-phase flow for short expected sets (< 6 tracks) or small pools
+  (< 8 candidates). Phase 2: the "AI orders the tracklist" path (`generate_ai_set()`,
+  `services/ai_agent.py`, `services/validation.py`'s `validate_ai_set()`) is retired; a new
+  `services/ai_curation.py` reads the pool instead of ordering it — intent compilation from the
+  free prompt (only for fields the user left open), mood-fit judged in batches of 50 (pool cap
+  200, per-call cap 60) feeding the generator as a non-binding scoring term, anchor hints
+  (opening/peak/closing) feeding the anchor election as a bonus, and a narrative pass over the
+  finished set. Any AI call that fails degrades to the deterministic default with a warning,
+  never an error. `use_ai` semantics: `true` = AI curation on, `false` = purely deterministic,
+  absent = auto. `generated_by` is now `algorithmic` | `algorithmic+ai_curation` (historical
+  sets may read `ai`). Fully deterministic sequencing throughout, same external API. See
+  `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`,
+  `docs/ARCHITECTURE.md` and PROGRESS.md for detail.
 
 ## Technical backlog (non-blocking)
 
@@ -251,7 +258,7 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
 |---|---|
 | Tracks without BPM/key | the track status stays `imported` (unusable by the Set Builder) until a Rekordbox import arrives; no automatic estimation |
 | Rate limits or network errors (Discovery providers) | retry/backoff, async jobs |
-| Invented AI output | candidate cap, Pydantic schema, Validation Engine |
+| Invented AI output | pool/per-call caps, JSON-schema-constrained calls, foreign ids and out-of-bounds values discarded with a warning |
 | Spotify recommendation unavailable | Discovery based on Discogs crate digging |
 | Spotify dev-mode limits depth (5 users, `label:` search cap 10) | genre/label depth from Discogs (open); Spotify only as a resolver |
 | Product rename breaks data paths | legacy paths kept, migration only if explicit |

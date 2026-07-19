@@ -11,11 +11,12 @@ from sqlalchemy import create_engine, inspect, text
 from app import models  # noqa: F401 - importa i modelli per registrarli
 from app.db import Base, ensure_schema
 from app.integrations import LLMClient
+from app.integrations.llm import LLMError
 from app.models import Track
 from app.repositories import all_playable_tracks, get_setlist
 from app.schemas import SetGenerationRequest
 from app.serializers import setlist_out
-from app.services.ai_agent import generate_ai_set
+from app.services.ai_curation import run_curated_generation
 from app.services.alternatives import find_alternatives
 from app.services.set_editor import SetEditError, replace_track
 from app.services.set_generator import generate_set
@@ -68,26 +69,17 @@ def test_generate_set_persiste_owned_only(db):
 
 
 class _FakeLLM(LLMClient):
-    """Sceglie le prime 4 candidate in ordine (niente rete/chiave)."""
+    """Fallisce sempre (niente rete/chiave): la pipeline curata degrada al motore
+    algoritmico, ma il set nasce comunque e owned_only resta persistito."""
 
     def complete_json(self, system_prompt, payload, schema):
-        ids = [c["id"] for c in payload["candidate_tracks"][:4]]
-        return {
-            "set_title": "Set AI",
-            "global_explanation": "spiegazione di prova",
-            "tracks": [
-                {"position": i + 1, "track_id": tid, "reason": "scelta",
-                 "transition_note": "mix", "risk_level": "low"}
-                for i, tid in enumerate(ids)
-            ],
-            "missing_library_suggestions": [],
-        }
+        raise LLMError("niente rete nei test")
 
 
 def test_ai_set_persiste_owned_only(db):
     _seed_owned(db)
     req = SetGenerationRequest(target_duration_minutes=20, prompt="set di prova", use_ai=True)
-    s = generate_ai_set(db, req, _FakeLLM())
+    s = run_curated_generation(db, req, _FakeLLM())
     assert get_setlist(db, s.id).owned_only is True
 
 

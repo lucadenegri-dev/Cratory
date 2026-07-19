@@ -132,25 +132,6 @@ class SetGenerationRequest(BaseModel):
     mode: Literal["technical", "creative"] = "technical"
 
 
-class AITrackChoice(BaseModel):
-    """Una traccia scelta dall'AI Set Agent (output validato con Pydantic)."""
-
-    position: int
-    track_id: int
-    reason: str = ""
-    transition_note: str = ""
-    risk_level: str = "medium"  # low | medium | high
-
-
-class AISetResponse(BaseModel):
-    """Output dell'AI Set Agent prima della validazione deterministica."""
-
-    set_title: str = ""
-    global_explanation: str = ""
-    tracks: list[AITrackChoice] = []
-    missing_library_suggestions: list[str] = []
-
-
 class SetlistTrackOut(BaseModel):
     position: int
     role: str | None = None
@@ -160,6 +141,7 @@ class SetlistTrackOut(BaseModel):
     transition_note: str | None = None
     ai_reason: str | None = None
     risk_level: str | None = None
+    mood_tags: list[str] = []
     # F10: classificazione semantica della transizione dal brano precedente
     transition_class: str | None = None
     transition_class_reason: str | None = None
@@ -180,6 +162,7 @@ class SetlistOut(BaseModel):
     # Disk-first: il set e' nato "solo brani posseduti" (l'editor lo fa rispettare)
     owned_only: bool = False
     validation: dict = {}
+    curation: dict = {}
     # Piano di mixaggio deterministico del set (come legare i brani, dove i salti).
     mixing_overview: list[str] = []
     total_duration_seconds: int = 0

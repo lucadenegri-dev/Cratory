@@ -255,11 +255,37 @@ Generation:
 
 - `generate` returns the set immediately.
 - `generate-async` starts a job and the UI reads `generate-status`.
-- `mode=technical|creative` selects the AI behavior when available.
+- `mode=technical|creative`: today its only effect is model selection (`AI_MODEL_CREATIVE`
+  if set, see `_model_for` in `routers/sets.py`) — the curation/narrative prompts are single
+  and shared regardless of `mode`. Wiring per-mode prompts is a possible follow-up.
 - Disk-first: `owned_only` (default `true`) generates the set from owned tracks only.
   The flag stays on the saved set (exposed in `SetlistOut.owned_only`) and editing
   respects it: `alternatives` excludes leads from the pool and `replace` with a track
   without a local file responds 422.
+
+`use_ai` (request, `bool | null`): `true` = AI curation on (intent compilation from the free
+prompt, mood-fit and anchor hints feeding the deterministic generator, narrative afterwards);
+`false` = purely deterministic, no LLM call; `null`/absent = auto (AI curation runs if an LLM
+is configured and `prompt` is non-empty). In every case the deterministic two-phase generator
+is the only thing that sequences tracks — the AI never orders or picks the tracklist, and any
+AI call that fails degrades silently to the deterministic default with a warning, never a 4xx/5xx.
+
+`SetlistOut` (AI curation fields):
+
+- `generated_by`: `algorithmic` (no AI contribution reached the set) | `algorithmic+ai_curation`
+  (at least one of intent/mood-fit/anchors/narrative was used). Sets generated before this
+  redesign may still read the historical value `ai`.
+- `curation` (`{}` when no curation ran): `intent_summary` (free string, "here is how I
+  understood your request", empty if intent compilation did not run or produced nothing),
+  `compiled` (the `SetGenerationRequest` fields the AI filled in — only fields the user left
+  unset in the form are ever compiled; `owned_only`/`sources` are never compilable), `warnings`
+  (list of AI-degradation messages, e.g. intent/mood/anchors/narrative unavailable).
+- `validation` (`{}` for a purely deterministic set): `warnings` (same AI warnings as
+  `curation.warnings`) and `missing_library_suggestions` (0-3 strings from the narrative call
+  suggesting what type of track to add to the library — never a track id or an invented title).
+- `SetlistTrackOut.mood_tags`: up to 3 short tags from the mood-fit judgement for that track
+  (`[]` when curation did not run or did not produce a usable judgement for it). Transient
+  per generation, not written back onto `Track`.
 
 Export (`POST /api/sets/{setlist_id}/export?format=`): `text` | `csv` | `markdown` |
 `m3u8`. The CSV includes the `local_path` column (empty string if the track has no

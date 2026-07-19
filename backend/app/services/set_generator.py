@@ -53,6 +53,7 @@ RESET_WINDOW = 0.1     # ampiezza (frazione di set) attorno a un reset point
 _CONVERGE_WEIGHT = 0.35   # attrazione verso l'anchor in arrivo (cresce col ramp)
 _GENRE_PLAN_WEIGHT = 0.20  # aderenza alla famiglia assegnata al segmento
 _RESERVE_PENALTY = 25.0   # bomba spesa fuori dalla finestra del peak
+_MOOD_WEIGHT = 0.30       # peso del giudizio mood AI nel ranking dei filler (50 = neutro)
 
 
 def _near_reset(progress: float, points: tuple[float, ...]) -> bool:
@@ -153,6 +154,7 @@ def _candidate_score(
     converge_to: Track | None = None, converge_ramp: float = 0.0,
     plan_family: str | None = None, reserved_ids: frozenset[int] = frozenset(),
     peak_window: tuple[float, float] | None = None,
+    mood_scores: dict[int, int] | None = None,
 ) -> tuple[float, TransitionScore]:
     ts = score_transition(prev, cand)
     transition_pts = float(ts.score)
@@ -203,6 +205,9 @@ def _candidate_score(
     if cand.id in reserved_ids and not (
             peak_window and peak_window[0] <= progress <= peak_window[1]):
         total -= _RESERVE_PENALTY
+    # Mood-fit della curatela AI: giudizio semantico per traccia (50 = neutro).
+    if mood_scores is not None:
+        total += float(mood_scores.get(cand.id, 50)) * _MOOD_WEIGHT
     return total, ts
 
 
@@ -279,6 +284,7 @@ def _beam_search_span(
     used: set[int] | None = None, artist_counts: dict[str, int] | None = None,
     plan_family: str | None = None, reserved_ids: frozenset[int] = frozenset(),
     peak_window: tuple[float, float] | None = None,
+    mood_scores: dict[int, int] | None = None,
 ) -> list[tuple[Track, TransitionScore]]:
     """Riempe uno span di set col beam search; ritorna i soli filler (opener escluso).
 
@@ -317,7 +323,8 @@ def _beam_search_span(
             ((_candidate_score(b["prev"], t, desired, req, b["arts"], profile, progress,
                                desired_energy, converge_to=converge_to,
                                converge_ramp=ramp, plan_family=plan_family,
-                               reserved_ids=reserved_ids, peak_window=peak_window), t)
+                               reserved_ids=reserved_ids, peak_window=peak_window,
+                               mood_scores=mood_scores), t)
              for t in eligible),
             key=lambda it: (it[0][0], it[1].id), reverse=True,
         )[:BEAM_EXPANSIONS]
@@ -356,7 +363,9 @@ def _beam_search_span(
     return best["chosen"]
 
 
-def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
+def generate_set(db: Session, req: SetGenerationRequest, *,
+                 mood_scores: dict[int, int] | None = None,
+                 anchor_hints: dict[str, list[int]] | None = None) -> Setlist:
     candidates = select_candidates(db, req)
     if len(candidates) < 3:
         if req.owned_only:
@@ -376,14 +385,16 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
 
     target_seconds = req.target_duration_minutes * 60
     profile = strategy_profile(req.strategy)
-    skeleton = build_skeleton(candidates, req, profile, start_bpm, end_bpm, target_seconds)
+    skeleton = build_skeleton(candidates, req, profile, start_bpm, end_bpm, target_seconds,
+                              mood_scores=mood_scores, anchor_hints=anchor_hints)
     peak_at: int | None = None
     if skeleton is None:
         first = _pick_first(candidates, req, start_bpm)
         chosen = [(first, None)] + _beam_search_span(
             first, candidates, req, profile, start_bpm, end_bpm, target_seconds,
             elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds,
-            artist_counts={first.artist.lower(): 1} if first.artist else None)
+            artist_counts={first.artist.lower(): 1} if first.artist else None,
+            mood_scores=mood_scores)
     else:
         # Fase 2: riempi i segmenti tra un anchor e il successivo. Gli anchor
         # contano da subito in used/artist_counts, cosi' i filler non li rubano
@@ -404,7 +415,7 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
                 fill_until_secs=seg.fill_until_secs,
                 converge_to=seg.end_anchor.track, used=used, artist_counts=arts,
                 plan_family=seg.family, reserved_ids=skeleton.reserved_ids,
-                peak_window=skeleton.peak_window)
+                peak_window=skeleton.peak_window, mood_scores=mood_scores)
             for t, _ in fillers:
                 used.add(t.id)
                 if t.artist:

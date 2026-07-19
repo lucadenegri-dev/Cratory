@@ -270,7 +270,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
       <div className="space-y-2 border-t border-border pt-4 text-xs">
         <div className="flex justify-between gap-2"><span className="text-muted">{t.sets.tracksLabel}</span><span className="tnum text-fg">{n}</span></div>
         <div className="flex justify-between gap-2"><span className="text-muted">{t.sets.durationLabel}</span><span className="tnum text-fg">{fmtDuration(setlist.total_duration_seconds)}</span></div>
-        <div className="flex justify-between gap-2"><span className="text-muted">{t.sets.originLabel}</span><span className="text-fg">{setlist.generated_by === "ai" ? "AI" : t.sets.algorithmicBadge}</span></div>
+        <div className="flex justify-between gap-2"><span className="text-muted">{t.sets.originLabel}</span><span className="text-fg">{setlist.generated_by.includes("ai") ? t.sets.curatedBadge : t.sets.algorithmicBadge}</span></div>
       </div>
     </div>
   );
@@ -284,8 +284,8 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
           title={
             <span className="flex items-center gap-2">
               {setlist.name}
-              <Badge tone={setlist.generated_by === "ai" ? "primary" : "neutral"}>
-                {setlist.generated_by === "ai" ? <><Sparkles size={11} /> AI</> : t.sets.algorithmicBadge}
+              <Badge tone={setlist.generated_by.includes("ai") ? "primary" : "neutral"}>
+                {setlist.generated_by.includes("ai") ? <><Sparkles size={11} /> {t.sets.curatedBadge}</> : t.sets.algorithmicBadge}
               </Badge>
               {setlist.owned_only && <Badge tone="success">{t.sets.ownedOnlyBadge}</Badge>}
               <button
@@ -306,6 +306,12 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
 
           {setlist.global_explanation && (
             <p className="text-sm leading-relaxed text-fg">{setlist.global_explanation}</p>
+          )}
+
+          {setlist.curation?.intent_summary && (
+            <p className="text-sm leading-relaxed text-fg">
+              <strong>{t.sets.compiledIntentTitle}</strong>: {setlist.curation.intent_summary}
+            </p>
           )}
 
           {attention.length > 0 && (
@@ -387,6 +393,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                         </span>
                       </Badge>
                     )}
+                    {(st.mood_tags ?? []).map((tag) => <Badge key={tag} tone="info">{tag}</Badge>)}
                   </div>
                   {st.mix_tip
                     ? <p className="mt-1 flex gap-1.5 text-xs text-fg"><span className="shrink-0 text-faint">↪</span>{st.mix_tip}</p>

@@ -45,8 +45,8 @@ export default function SetsPage() {
             <Card className="h-full p-4 transition-colors hover:border-border-strong">
               <div className="mb-3 flex items-start justify-between gap-2">
                 <h3 className="truncate font-medium leading-snug group-hover:text-fg-strong">{s.name}</h3>
-                <Badge tone={s.generated_by === "ai" ? "primary" : "neutral"}>
-                  {s.generated_by === "ai" ? <><Sparkles size={11} /> AI</> : t.sets.algoBadge}
+                <Badge tone={s.generated_by.includes("ai") ? "primary" : "neutral"}>
+                  {s.generated_by.includes("ai") ? <><Sparkles size={11} /> {t.sets.curatedBadge}</> : t.sets.algoBadge}
                 </Badge>
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">

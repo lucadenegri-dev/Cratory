@@ -166,3 +166,31 @@ def test_segment_families_none_for_single_family_pool():
     sk = _build(_pool())  # tutto techno: piano degenerato
     assert all(s.family is None for s in sk.segments)
     assert sk.peak_window is not None
+
+
+def test_anchor_hint_bonus_tips_the_election():
+    # Tre tracce di punta quasi gemelle (stesso BPM/energia, id diversi): senza
+    # hint vince la 51 (tie-break sui percentili per id); l'hint AI sulla 50
+    # vale +12, piu' del gap di impatto (~3.5 punti), e ribalta l'elezione.
+    pool = _pool()
+    twin_a = make_track(id=50, title="TA", artist="ZA", bpm=136.0, energy=90, genre="Techno")
+    twin_b = make_track(id=51, title="TB", artist="ZB", bpm=136.0, energy=90, genre="Techno")
+    req = SetGenerationRequest(target_duration_minutes=70)
+    sk_plain = build_skeleton(pool + [twin_a, twin_b], req, strategy_profile("smooth"),
+                              125.0, 125.0, 70 * 60)
+    assert next(a for a in sk_plain.anchors if a.role == "peak").track.id == 51
+    sk_hint = build_skeleton(pool + [twin_a, twin_b], req, strategy_profile("smooth"),
+                             125.0, 125.0, 70 * 60, anchor_hints={"peak": [50]})
+    assert next(a for a in sk_hint.anchors if a.role == "peak").track.id == 50
+
+
+def test_mood_scores_influence_election():
+    # Mood 100 sulla traccia 14 e 0 sulle due sopra di lei: il termine mood in
+    # elezione (x0.2, max 20 punti) supera il gap di impatto verso la 16
+    # (~0.6*100*(1.0-0.867) ~ 8 punti) e il peak va alla 14.
+    pool = _pool()
+    req = SetGenerationRequest(target_duration_minutes=70)
+    mood = {16: 0, 15: 0, 14: 100, **{t.id: 50 for t in pool if t.id <= 13}}
+    sk = build_skeleton(pool, req, strategy_profile("smooth"), 125.0, 125.0,
+                        70 * 60, mood_scores=mood)
+    assert next(a for a in sk.anchors if a.role == "peak").track.id == 14

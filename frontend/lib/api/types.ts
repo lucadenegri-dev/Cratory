@@ -250,6 +250,7 @@ export interface SetlistTrack {
   transition_class: TransitionClass | null;
   transition_class_reason: string | null;
   mix_tip: string | null;
+  mood_tags: string[];
 }
 
 export interface SetlistValidation {
@@ -274,6 +275,11 @@ export interface Setlist {
   total_duration_seconds: number;
   created_at: string;
   tracks: SetlistTrack[];
+  curation: {
+    intent_summary?: string;
+    compiled?: Record<string, unknown>;
+    warnings?: string[];
+  };
 }
 
 export interface SetlistSummary {

@@ -41,7 +41,9 @@ Read in this order:
 
 1. **Separate the deterministic engine and the AI.** Import, normalization, de-duplication,
    scoring, roles, gap analysis, discovery ranking and validation are deterministic code.
-   Narrative, prompt interpretation and explanations are AI.
+   The AI's job is intent interpretation, pool curation (mood-fit, anchor hints) and
+   narrative/explanations — never sequencing: the deterministic engine always builds the
+   tracklist.
 2. **BPM/key: Rekordbox è la fonte primaria, l'analisi in-app (Essentia, pagina
    Analisi) è l'alternativa deterministica.** Ogni valore ha una provenienza
    esplicita (`bpm_source`/`key_source`: manual > rekordbox > cratory); il
@@ -52,9 +54,10 @@ Read in this order:
 3. **Streaming does not provide mixing features.** Spotify gives track identity, editorial
    metadata, covers, duration, ISRC, URLs and playlists.
 4. **The AI never receives the whole library.** It only receives candidates filtered by the
-   Candidate Engine, with a cap of 60.
-5. **Every AI output is validated.** Use Pydantic schemas and the Validation Engine before
-   showing or saving results.
+   Candidate Engine: pool cap 200, seen by any single call in batches of at most 60.
+5. **Every AI output is validated.** Use Pydantic schemas and deterministic checks
+   (schema-constrained outputs, foreign ids and out-of-bounds values discarded with
+   warnings) before showing or saving results.
 6. **The AI does not invent factual data.** It must distinguish external source, musical
    inference and creative hypothesis.
 7. **The library is the disk.** Ownership (`has_local_file`) comes from indexing

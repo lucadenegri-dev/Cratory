@@ -194,3 +194,14 @@ def test_short_sets_keep_single_phase_behavior(db):
     ordered = sorted(setlist.tracks, key=lambda st: st.position)
     assert len(ordered) >= 3
     assert ordered[0].role == "intro" and ordered[-1].role == "closing"
+
+
+def test_mood_scores_shift_candidate_ranking():
+    prev = make_track(id=1, bpm=126.0, camelot_key="8A")
+    cand = make_track(id=2, bpm=126.0, camelot_key="8A")
+    base = _score(prev, cand)
+    assert _score(prev, cand, mood_scores={2: 100}) == pytest.approx(base + 100 * 0.30)
+    assert _score(prev, cand, mood_scores={2: 0}) == pytest.approx(base)
+    # id assente dal giudizio -> neutro 50
+    assert _score(prev, cand, mood_scores={99: 100}) == pytest.approx(base + 50 * 0.30)
+    assert _score(prev, cand, mood_scores=None) == base
