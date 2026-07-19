@@ -203,7 +203,10 @@ year and related fields. Manual values take precedence over imported data. `422`
 key not in valid Camelot notation. `energy` is **not accepted**: it is always derived
 from BPM+genre and is recomputed automatically when the patch touches `bpm` or
 `genre`; a payload that includes `energy` is rejected with `422` (schema
-`extra="forbid"`).
+`extra="forbid"`). It also accepts `archived` (bool, optional) to archive or restore a
+track out of the wishlist; unlike the other fields, `null` does NOT clear it and is
+treated as "unchanged" (the column is a NOT NULL bool). Library indexing still wins:
+owning the file on disk sets `archived` back to `false`.
 
 `POST /api/tracks/{track_id}/link-file` manually links a file on disk to the track
 (ownership without download): it validates existence and audio extension, sets

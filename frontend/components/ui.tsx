@@ -431,3 +431,81 @@ export function Alert({ tone = "danger", children }: { tone?: "danger" | "warnin
     </div>
   );
 }
+
+/* ------------------------------------------------------------ DropdownMenu */
+
+export type MenuItem = {
+  key: string;
+  label: ReactNode;
+  onSelect?: () => void;
+  href?: string;          // alternativa a onSelect: link esterno in nuova tab
+  disabled?: boolean;
+};
+
+export function DropdownMenu({ label, items, disabled, size = "sm", variant = "outline", ariaLabel }: {
+  label: ReactNode;
+  items: MenuItem[];
+  disabled?: boolean;
+  size?: Size;
+  variant?: Variant;
+  ariaLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+
+  // Chiusura su click fuori ed Escape: listener globali solo quando aperto.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const itemClass = "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-muted hover:bg-elevated hover:text-fg disabled:opacity-50";
+
+  return (
+    <div ref={rootRef} className="relative inline-block">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={menuId}
+        aria-label={ariaLabel}
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(BTN_BASE, BTN_VARIANT[variant], BTN_SIZE[size])}
+      >
+        {label}
+      </button>
+      {open && (
+        <div id={menuId} role="menu"
+          className="absolute right-0 top-full z-30 mt-1 min-w-40 border border-border-strong bg-surface py-1">
+          {items.map((it) =>
+            it.href ? (
+              <a key={it.key} role="menuitem" href={it.href} target="_blank" rel="noopener noreferrer"
+                aria-disabled={it.disabled}
+                className={cn(itemClass, it.disabled && "pointer-events-none opacity-50")}
+                onClick={(e) => { if (it.disabled) { e.preventDefault(); return; } setOpen(false); }}>
+                {it.label}
+              </a>
+            ) : (
+              <button key={it.key} type="button" role="menuitem" disabled={it.disabled}
+                className={itemClass}
+                onClick={() => { setOpen(false); it.onSelect?.(); }}>
+                {it.label}
+              </button>
+            ),
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

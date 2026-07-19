@@ -111,6 +111,10 @@ source").
   sets may read `ai`). Fully deterministic sequencing throughout, same external API. See
   `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`,
   `docs/ARCHITECTURE.md` and PROGRESS.md for detail.
+- **Wishlist redesign** — DONE (2026-07-19). `/downloads` → `/wishlist`: every non-owned
+  track with its download outcome, playlist provenance, buy links (Bandcamp/Beatport/Juno/
+  Discogs) and reversible archiving via `PATCH /api/tracks/{id}` (`archived`). See
+  `docs/API.md` and PROGRESS.md for detail.
 
 ## Technical backlog (non-blocking)
 

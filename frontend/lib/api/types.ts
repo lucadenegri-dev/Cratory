@@ -141,6 +141,7 @@ export interface TrackUpdate {
   bpm?: number | null;
   camelot_key?: string | null;
   label?: string | null;
+  archived?: boolean;
 }
 
 export interface LibraryIndexJob {

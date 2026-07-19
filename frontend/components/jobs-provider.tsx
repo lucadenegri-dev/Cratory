@@ -152,7 +152,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       const pending = v.needs_review + v.not_found + v.failed;
       track(v.status, {
         key: "download", label: t.jobs.soulseekDownload, detail: v.current_label ?? undefined,
-        processed: v.processed, total: v.total, href: "/downloads",
+        processed: v.processed, total: v.total, href: "/wishlist",
       }, v.status === "error"
         ? (v.error ?? t.common.error)
         : t.jobs.downloadSummary(v.downloaded, pending));

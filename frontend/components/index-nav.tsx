@@ -26,7 +26,7 @@ const navGroups = (t: Dictionary): { title: string | null; items: { href: string
       { href: "/library", label: t.nav.library },
       { href: "/playlists", label: t.nav.playlists },
       { href: "/labels", label: t.nav.labels },
-      { href: "/downloads", label: t.nav.downloads },
+      { href: "/wishlist", label: t.nav.downloads },
     ],
   },
   {
@@ -106,7 +106,7 @@ export function IndexNav() {
                     )}
                   >
                     {label}
-                    {href === "/downloads" && pendingCount > 0 && (
+                    {href === "/wishlist" && pendingCount > 0 && (
                       <span className="tnum text-[10px] text-faint">({pendingCount})</span>
                     )}
                   </Link>

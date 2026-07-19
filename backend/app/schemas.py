@@ -79,6 +79,9 @@ class TrackUpdateIn(BaseModel):
     bpm: float | None = Field(default=None, gt=0, le=400)
     camelot_key: str | None = None
     label: str | None = None
+    # Archivia/ripristina dalla wishlist. Bool NOT NULL: null = invariato
+    # (il "null azzera" degli altri campi non si applica, vedi patch_track).
+    archived: bool | None = None
 
 
 class TrackLinkFileIn(BaseModel):
