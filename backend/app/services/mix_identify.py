@@ -3,7 +3,8 @@
 Pipeline DETERMINISTICA:
 1. download dell'audio dall'URL (yt-dlp);
 2. campionamento a segmenti sovrapposti (ffmpeg) lungo la durata;
-3. riconoscimento di ogni segmento con retry sui buchi (AudioRecognizer, iniettato);
+3. riconoscimento di ogni segmento con retry sui buchi e compensazione del pitch
+   del DJ (AudioRecognizer, iniettato);
 4. fusione temporale delle serie concordi, conferma a due lati dei match singoli e
    scarto degli smentiti (gestisce transizioni e falsi positivi del DJ mixing).
 
@@ -35,7 +36,13 @@ MAX_CONSECUTIVE_ERRORS = 3  # errori di fila oltre cui interrompe: basso perche'
 MERGE_WINDOW_SECONDS = 240  # stessa chiave che ricompare entro questa distanza = stessa esecuzione
 CONFIDENCE_CONFIRMED = 90  # 2+ campioni concordi
 CONFIDENCE_DUBIOUS = 45    # campione singolo mai verificato (i verificati e smentiti si scartano)
-MAX_EXTRA_CALLS = 50     # budget per retry sui buchi + conferme dei singoli (per mix)
+MAX_EXTRA_CALLS = 50     # budget per retry sui buchi, tentativi pitch e conferme (per mix)
+PITCH_RATES = (0.96, 1.04, 0.92, 1.08)  # moltiplicatori di compensazione del pitch del DJ:
+                                        # oltre ~2% di pitch l'impronta Shazam non matcha piu';
+                                        # +-4% poi +-8% coprono l'escursione classica dei deck
+PITCH_PROBE_HOLES = 3    # buchi sondati a scala completa prima di abbandonare l'ipotesi
+                         # pitch (mix non pitchato / brani fuori catalogo): senza tetto,
+                         # un mix pieno di brani introvabili brucerebbe il budget in pitch
 
 
 @dataclass
@@ -171,13 +178,17 @@ def identify_from_recognizer(
 ) -> tuple[list[IdentifiedTrack], int | None]:
     """Campiona gli offset, riconosce, conferma, fonde e scarta il rumore.
 
-    `recognize_at(offset)->match|None` isola l'I/O: i test passano una funzione
-    finta. Robustezza (tutto entro `max_extra_calls` chiamate oltre la griglia):
-    un buco viene ritentato una volta a offset spostato; le serie con un solo
-    campione ricevono fino a due campioni di conferma a +-_confirm_delta —
-    concorde = confermata, smentita = scartata (rumore da transizione), mai
-    verificata (budget/recognizer/audio corto) = resta in lista come dubbia.
-    Il campione di un retry riuscito resta registrato all'offset pianificato.
+    `recognize_at(offset, rate)->match|None` isola l'I/O: i test passano una
+    funzione finta (`rate` e' il moltiplicatore di compensazione pitch, 1.0 =
+    audio com'e'). Robustezza (tutto entro `max_extra_calls` chiamate oltre la
+    griglia): un buco viene ritentato una volta a offset spostato, poi con la
+    scala pitch-compensata (vedi `PITCH_RATES`: il primo rate che matcha diventa
+    quello preferito per i buchi successivi e per le conferme del run — il pitch
+    di un set e' perlopiu' globale); le serie con un solo campione ricevono fino
+    a due campioni di conferma a +-_confirm_delta — concorde = confermata,
+    smentita = scartata (rumore da transizione), mai verificata
+    (budget/recognizer/audio corto) = resta in lista come dubbia. Il campione di
+    un retry riuscito resta registrato all'offset pianificato.
 
     Ritorna `(tracks, aborted_at)`: `aborted_at` e' l'offset a cui la griglia si
     e' interrotta per errori consecutivi (endpoint giu'), None a completamento."""
@@ -186,20 +197,50 @@ def identify_from_recognizer(
     budget = max_extra_calls
     consecutive_errors = 0
     aborted_at: int | None = None
+    pitch_rate: float | None = None      # rate prevalente scoperto (sticky per il mix)
+    pitch_probes_left = PITCH_PROBE_HOLES
+    rate_by_offset: dict[int, float] = {}  # offset del campione -> rate che l'ha risolto
 
-    def try_recognize(offset: int) -> tuple[dict[str, Any] | None, bool]:
+    def try_recognize(offset: int, rate: float = 1.0) -> tuple[dict[str, Any] | None, bool]:
         """Ritorna (match, errored). `errored` distingue il guasto del recognizer
         (endpoint giu', gia' passato per pacing+backoff) da un buco genuino: solo
         il buco merita il retry sul buco e vale come tentativo di verifica."""
         nonlocal consecutive_errors
         try:
-            match = recognize_at(offset)
+            match = recognize_at(offset, rate)
             consecutive_errors = 0
             return match, False
         except RecognizerError as exc:
-            logger.warning("Riconoscimento fallito a %ss: %s", offset, exc)
+            logger.warning("Riconoscimento fallito a %ss (rate %s): %s", offset, rate, exc)
             consecutive_errors += 1
             return None, True
+
+    def try_pitch(offset: int) -> dict[str, Any] | None:
+        """Scala pitch-compensata su un buco rimasto tale dopo il retry spostato.
+
+        Col rate preferito gia' scoperto prova solo quello (un miss = brano fuori
+        catalogo, non un pitch diverso); senza, sonda l'intera scala ma solo sui
+        primi PITCH_PROBE_HOLES buchi, poi l'ipotesi pitch decade per il mix."""
+        nonlocal pitch_rate, pitch_probes_left, budget
+        if pitch_rate is not None:
+            rates: tuple[float, ...] = (pitch_rate,)
+        elif pitch_probes_left > 0:
+            pitch_probes_left -= 1
+            rates = PITCH_RATES
+        else:
+            return None
+        for rate in rates:
+            if budget <= 0 or consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                return None
+            budget -= 1
+            match, errored = try_recognize(offset, rate)
+            if errored:
+                return None  # endpoint giu': inutile insistere sulla scala
+            if match is not None:
+                pitch_rate = rate
+                rate_by_offset[offset] = rate
+                return match
+        return None
 
     samples: list[tuple[int, dict[str, Any] | None]] = []
     for i, offset in enumerate(offsets, start=1):
@@ -212,7 +253,9 @@ def identify_from_recognizer(
                 retry_at = min(retry_at, max(0, duration_seconds - SEGMENT_LENGTH))
             if retry_at > offset:
                 budget -= 1
-                match, _ = try_recognize(retry_at)
+                match, errored = try_recognize(retry_at)
+        if match is None and not errored and budget > 0 and consecutive_errors < MAX_CONSECUTIVE_ERRORS:
+            match = try_pitch(offset)
         samples.append((offset, match))
         if on_progress:
             on_progress(i, len(offsets))
@@ -230,6 +273,9 @@ def identify_from_recognizer(
     for run in to_confirm:
         if budget <= 0 or consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
             break  # nessuna verifica possibile: i singoli non verificati restano dubbi
+        # Un run nato da un match pitch-compensato va confermato allo stesso rate:
+        # a rate naturale la conferma tornerebbe muta e smentirebbe una traccia vera.
+        run_rate = rate_by_offset.get(run.offset, 1.0)
         for confirm_at in (run.offset + delta, run.offset - delta):
             if confirm_at == run.offset or confirm_at < 0:
                 continue
@@ -238,7 +284,7 @@ def identify_from_recognizer(
             if budget <= 0 or consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                 break
             budget -= 1
-            match, errored = try_recognize(confirm_at)
+            match, errored = try_recognize(confirm_at, run_rate)
             if errored:
                 continue  # endpoint giu': non e' una verifica, la voce resta dubbia
             run.confirm_attempted = True
@@ -314,12 +360,24 @@ def probe_duration(audio_path: str) -> int | None:
         return None
 
 
-def extract_segment(audio_path: str, offset: int, out_path: str, length: int = SEGMENT_LENGTH) -> None:
-    """Estrae un segmento WAV mono 16kHz a partire da `offset` (per il recognizer)."""
+def _pitch_filter(rate: float) -> list[str]:
+    """Argomenti ffmpeg per la compensazione pitch: normalizza a 16k, "rietichetta"
+    il sample rate (shift di pitch E tempo insieme, come un pitch fader senza
+    keylock), poi torna a 16k. A rate 1.0 nessun filtro."""
+    if rate == 1.0:
+        return []
+    return ["-af", f"aresample=16000,asetrate={round(16000 * rate)},aresample=16000"]
+
+
+def extract_segment(audio_path: str, offset: int, out_path: str,
+                    length: int = SEGMENT_LENGTH, rate: float = 1.0) -> None:
+    """Estrae un segmento WAV mono 16kHz a partire da `offset` (per il recognizer).
+
+    `rate` != 1.0 applica la compensazione pitch (vedi `_pitch_filter`)."""
     subprocess.run(
         ["ffmpeg", "-nostdin", "-y", "-loglevel", "error",
          "-ss", str(offset), "-t", str(length), "-i", audio_path,
-         "-ac", "1", "-ar", "16000", "-vn", "-f", "wav", out_path],
+         "-ac", "1", "-ar", "16000", *_pitch_filter(rate), "-vn", "-f", "wav", out_path],
         check=True,
     )
 
@@ -342,10 +400,10 @@ def identify_set(
             duration = probe_duration(audio_path) or 0
             meta.duration_seconds = duration or None
 
-        def recognize_at(offset: int) -> dict[str, Any] | None:
+        def recognize_at(offset: int, rate: float = 1.0) -> dict[str, Any] | None:
             seg = os.path.join(workdir, f"seg_{offset}.wav")
             try:
-                extract_segment(audio_path, offset, seg)
+                extract_segment(audio_path, offset, seg, rate=rate)
                 return recognizer.recognize_file(seg)
             finally:
                 if os.path.exists(seg):

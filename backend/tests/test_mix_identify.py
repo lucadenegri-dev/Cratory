@@ -9,6 +9,9 @@ from app.integrations.shazam import RecognizerError, parse_shazam
 from app.services.mix_identify import (
     CONFIDENCE_CONFIRMED,
     CONFIDENCE_DUBIOUS,
+    PITCH_PROBE_HOLES,
+    PITCH_RATES,
+    _pitch_filter,
     build_tracks,
     group_samples,
     identify_from_recognizer,
@@ -114,11 +117,15 @@ def test_build_tracks_confidence_from_hits():
 
 
 def _tracker(table):
-    calls: list[int] = []
+    """Fake di recognize_at(offset, rate): registra `offset` per le chiamate a
+    rate naturale e `(offset, rate)` per quelle pitch-compensate; la table usa
+    le stesse chiavi (int per rate 1.0, tupla per i match solo-compensati)."""
+    calls: list = []
 
-    def recognize_at(offset: int):
-        calls.append(offset)
-        return table.get(offset)
+    def recognize_at(offset: int, rate: float = 1.0):
+        key = offset if rate == 1.0 else (offset, rate)
+        calls.append(key)
+        return table.get(key)
 
     return calls, recognize_at
 
@@ -129,8 +136,13 @@ def test_identify_retry_fills_hole_and_drops_refuted_single():
     table = {0: _m("A", "One"), 18: _m("A", "One"), 24: _m("B", "Two")}
     calls, recognize_at = _tracker(table)
     out, aborted = identify_from_recognizer(60, recognize_at)
-    # 36 -> retry a 42; 48 -> il retry (54) sforerebbe la durata: clampato a 48, saltato
-    assert calls == [0, 12, 18, 24, 36, 42, 48, 30, 18]
+    # 36 -> retry a 42; 48 -> il retry (54) sforerebbe la durata: clampato a 48, saltato.
+    # I buchi rimasti tali dopo il retry ricevono la scala pitch-compensata completa
+    # (nessun rate scoperto: sonda tutta PITCH_RATES, qui sempre a vuoto).
+    assert calls == [0, 12, 18, 24,
+                     36, 42, (36, 0.96), (36, 1.04), (36, 0.92), (36, 1.08),
+                     48, (48, 0.96), (48, 1.04), (48, 0.92), (48, 1.08),
+                     30, 18]
     assert [(t.artist, t.title, t.confidence) for t in out] == [("A", "One", CONFIDENCE_CONFIRMED)]
     assert aborted is None
 
@@ -153,7 +165,10 @@ def test_identify_two_sided_confirmation_rescues_track_near_its_end():
              30: _m("C", "Three"), 18: _m("B", "Two")}
     calls, recognize_at = _tracker(table)
     out, _ = identify_from_recognizer(60, recognize_at)
-    assert calls == [0, 12, 24, 36, 42, 48, 30, 18]
+    assert calls == [0, 12, 24,
+                     36, 42, (36, 0.96), (36, 1.04), (36, 0.92), (36, 1.08),
+                     48, (48, 0.96), (48, 1.04), (48, 0.92), (48, 1.08),
+                     30, 18]
     assert [(t.artist, t.confidence) for t in out] == [
         ("A", CONFIDENCE_CONFIRMED), ("B", CONFIDENCE_CONFIRMED),
     ]
@@ -165,7 +180,10 @@ def test_identify_merges_over_refuted_interloper_end_to_end():
     table = {0: _m("D", "Eclipse"), 12: _m("T", "Titanium"), 24: _m("D", "Eclipse")}
     calls, recognize_at = _tracker(table)
     out, _ = identify_from_recognizer(60, recognize_at)
-    assert calls == [0, 12, 24, 36, 42, 48, 18, 6]
+    assert calls == [0, 12, 24,
+                     36, 42, (36, 0.96), (36, 1.04), (36, 0.92), (36, 1.08),
+                     48, (48, 0.96), (48, 1.04), (48, 0.92), (48, 1.08),
+                     18, 6]
     assert [(t.artist, t.confidence, t.start_offset_seconds) for t in out] == [
         ("D", CONFIDENCE_CONFIRMED, 0),
     ]
@@ -190,7 +208,7 @@ def test_identify_error_on_grid_gets_no_hole_retry_but_confirmation_can_rescue()
     table = {6: _m("A", "One"), 12: _m("A", "One")}
     calls: list[int] = []
 
-    def recognize_at(offset: int):
+    def recognize_at(offset: int, rate: float = 1.0):
         calls.append(offset)
         if offset == 0:
             raise RecognizerError("boom")
@@ -206,7 +224,7 @@ def test_identify_error_on_grid_gets_no_hole_retry_but_confirmation_can_rescue()
 def test_identify_stops_after_max_consecutive_errors_and_reports_abort():
     calls: list[int] = []
 
-    def recognize_at(offset: int):
+    def recognize_at(offset: int, rate: float = 1.0):
         calls.append(offset)
         raise RecognizerError("down")
 
@@ -223,7 +241,7 @@ def test_identify_errored_confirmation_is_not_a_verification():
     table = {0: _m("A", "One"), 12: _m("B", "Two")}
     calls: list[int] = []
 
-    def recognize_at(offset: int):
+    def recognize_at(offset: int, rate: float = 1.0):
         calls.append(offset)
         if offset not in table:
             raise RecognizerError("down")
@@ -254,7 +272,7 @@ def test_identify_confirm_loop_stops_when_recognizer_is_down():
     table = {0: _m("A", "One"), 72: _m("B", "Two")}
     calls: list[int] = []
 
-    def recognize_at(offset: int):
+    def recognize_at(offset: int, rate: float = 1.0):
         calls.append(offset)
         if offset in table:
             return table[offset]
@@ -290,6 +308,77 @@ def test_identify_budget_consumed_by_retry_leaves_singles_unconfirmed():
     assert [(t.artist, t.confidence) for t in out] == [
         ("A", CONFIDENCE_CONFIRMED), ("B", CONFIDENCE_DUBIOUS),
     ]
+
+
+# --- retry pitch-compensato ---------------------------------------------------
+# Un DJ che pitcha oltre ~2% rende la traccia invisibile a Shazam: i buchi
+# rimasti tali dopo il retry spostato vengono ritentati con il segmento
+# ricampionato (scala PITCH_RATES). Il primo rate che matcha diventa quello
+# preferito: i buchi successivi lo provano da solo (il pitch di un set e'
+# perlopiu' globale), le conferme del run lo riusano (altrimenti la conferma
+# tornerebbe muta e scarterebbe una traccia vera).
+
+
+def test_identify_pitch_retry_resolves_hole_and_remembers_rate():
+    # C suona pitchata a +8%: matcha solo col segmento compensato a 0.92.
+    # Primo buco: scala completa fino a 0.92; buchi successivi: subito 0.92.
+    table = {0: _m("A", "One"), 12: _m("A", "One"),
+             (24, 0.92): _m("C", "Pitched"), (36, 0.92): _m("C", "Pitched"),
+             (48, 0.92): _m("C", "Pitched")}
+    calls, recognize_at = _tracker(table)
+    out, aborted = identify_from_recognizer(60, recognize_at)
+    assert calls == [0, 12,
+                     24, 30, (24, 0.96), (24, 1.04), (24, 0.92),
+                     36, 42, (36, 0.92),
+                     48, (48, 0.92)]
+    assert [(t.artist, t.title, t.confidence) for t in out] == [
+        ("A", "One", CONFIDENCE_CONFIRMED), ("C", "Pitched", CONFIDENCE_CONFIRMED),
+    ]
+    assert out[1].start_offset_seconds == 24  # registrata all'offset pianificato
+    assert aborted is None
+
+
+def test_identify_pitch_confirmation_uses_discovered_rate():
+    # B matcha solo compensata (1.04): la conferma del singolo DEVE usare lo
+    # stesso rate, altrimenti tornerebbe muta e scarterebbe una traccia vera.
+    table = {0: _m("A", "One"), 12: _m("A", "One"),
+             (24, 1.04): _m("B", "Two"), (18, 1.04): _m("B", "Two")}
+    calls, recognize_at = _tracker(table)
+    out, _ = identify_from_recognizer(36, recognize_at)
+    assert (18, 1.04) in calls  # conferma pitch-compensata, non a rate naturale
+    assert [(t.artist, t.confidence) for t in out] == [
+        ("A", CONFIDENCE_CONFIRMED), ("B", CONFIDENCE_CONFIRMED),
+    ]
+
+
+def test_identify_pitch_probes_stop_after_first_holes():
+    # Mix non pitchato con molti brani fuori catalogo: la scala completa si
+    # sonda solo sui primi PITCH_PROBE_HOLES buchi, poi l'ipotesi pitch decade
+    # e i buchi restanti non spendono piu' chiamate compensate.
+    table = {0: _m("A", "One"), 18: _m("A", "One")}
+    calls, recognize_at = _tracker(table)
+    out, _ = identify_from_recognizer(72, recognize_at)  # offsets [0..60], buchi 24/36/48/60
+    pitched = [c for c in calls if isinstance(c, tuple)]
+    assert len(pitched) == PITCH_PROBE_HOLES * len(PITCH_RATES)
+    assert not [c for c in pitched if c[0] == 60]  # il quarto buco non sonda piu'
+    assert [(t.artist, t.confidence) for t in out] == [("A", CONFIDENCE_CONFIRMED)]
+
+
+def test_identify_pitch_stops_at_budget():
+    # il budget si esaurisce a meta' scala: i tentativi compensati si fermano li'
+    table = {0: _m("A", "One"), 12: _m("A", "One")}
+    calls, recognize_at = _tracker(table)
+    out, _ = identify_from_recognizer(36, recognize_at, max_extra_calls=2)
+    assert calls == [0, 12, 24, (24, 0.96), (24, 1.04)]
+    assert [(t.artist, t.confidence) for t in out] == [("A", CONFIDENCE_CONFIRMED)]
+
+
+def test_pitch_filter_args():
+    # rate naturale: nessun filtro; compensato: resample->asetrate->resample
+    # (il segmento va prima normalizzato a 16k, poi "rietichettato" per lo shift)
+    assert _pitch_filter(1.0) == []
+    assert _pitch_filter(0.96) == ["-af", "aresample=16000,asetrate=15360,aresample=16000"]
+    assert _pitch_filter(1.08) == ["-af", "aresample=16000,asetrate=17280,aresample=16000"]
 
 
 # --- parsing payload Shazam --------------------------------------------------
