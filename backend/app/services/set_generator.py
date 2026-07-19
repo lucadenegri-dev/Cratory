@@ -22,6 +22,7 @@ from app.services.scoring import (
     RESET_GENRE_SIMILARITY,
     TransitionScore,
     energy_progression_score,
+    genre_families_of,
     genre_similarity_score,
     risk_from_score,
     score_transition,
@@ -49,6 +50,9 @@ _KEY_PREF_BONUS = 8.0
 _SEED_BONUS = 15.0
 _SHARP_PENALTY = 40.0  # scoraggia i salti bruschi quando la strategia non li vuole
 RESET_WINDOW = 0.1     # ampiezza (frazione di set) attorno a un reset point
+_CONVERGE_WEIGHT = 0.35   # attrazione verso l'anchor in arrivo (cresce col ramp)
+_GENRE_PLAN_WEIGHT = 0.20  # aderenza alla famiglia assegnata al segmento
+_RESERVE_PENALTY = 25.0   # bomba spesa fuori dalla finestra del peak
 
 
 def _near_reset(progress: float, points: tuple[float, ...]) -> bool:
@@ -139,7 +143,10 @@ def _pick_first(candidates: list[Track], req: SetGenerationRequest, start_bpm: f
 def _candidate_score(
     prev: Track, cand: Track, desired_bpm: float, req: SetGenerationRequest,
     artist_counts: dict[str, int], profile: StrategyProfile, progress: float,
-    desired_energy: float | None = None,
+    desired_energy: float | None = None, *,
+    converge_to: Track | None = None, converge_ramp: float = 0.0,
+    plan_family: str | None = None, reserved_ids: frozenset[int] = frozenset(),
+    peak_window: tuple[float, float] | None = None,
 ) -> tuple[float, TransitionScore]:
     ts = score_transition(prev, cand)
     transition_pts = float(ts.score)
@@ -174,6 +181,22 @@ def _candidate_score(
         total += profile.reset_bonus
     if profile.novelty_bonus and _is_novel(prev, cand):
         total += profile.novelty_bonus
+    # Convergenza verso l'anchor in arrivo: la vicinanza (misurata come una
+    # transizione verso l'anchor) pesa sempre di piu' man mano che il segmento
+    # si consuma, cosi' al peak ci si arriva preparati, non per caso.
+    if converge_to is not None and converge_ramp > 0.0:
+        total += (float(score_transition(cand, converge_to).score)
+                  * _CONVERGE_WEIGHT * converge_ramp)
+    # Piano di genere del segmento: appartenere alla famiglia assegnata premia,
+    # genere ignoto resta neutro, famiglia diversa non guadagna nulla.
+    if plan_family is not None:
+        families = genre_families_of(cand.genre)
+        fit = 100.0 if plan_family in families else (50.0 if not families else 0.0)
+        total += fit * _GENRE_PLAN_WEIGHT * profile.genre_coherence
+    # Riserva delle bombe: spenderle lontano dal peak costa.
+    if cand.id in reserved_ids and not (
+            peak_window and peak_window[0] <= progress <= peak_window[1]):
+        total -= _RESERVE_PENALTY
     return total, ts
 
 
