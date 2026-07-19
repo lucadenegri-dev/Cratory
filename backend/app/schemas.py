@@ -132,25 +132,6 @@ class SetGenerationRequest(BaseModel):
     mode: Literal["technical", "creative"] = "technical"
 
 
-class AITrackChoice(BaseModel):
-    """Una traccia scelta dall'AI Set Agent (output validato con Pydantic)."""
-
-    position: int
-    track_id: int
-    reason: str = ""
-    transition_note: str = ""
-    risk_level: str = "medium"  # low | medium | high
-
-
-class AISetResponse(BaseModel):
-    """Output dell'AI Set Agent prima della validazione deterministica."""
-
-    set_title: str = ""
-    global_explanation: str = ""
-    tracks: list[AITrackChoice] = []
-    missing_library_suggestions: list[str] = []
-
-
 class SetlistTrackOut(BaseModel):
     position: int
     role: str | None = None

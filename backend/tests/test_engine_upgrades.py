@@ -209,7 +209,7 @@ def test_ai_candidates_cover_the_whole_corridor():
     # 80 tracce ammassate a 120 (start) + 20 verso 129 (end). Il vecchio ranking per
     # sola vicinanza allo start affamava il finale dell'arco: le 60 candidate erano
     # tutte a ~120. Il corridoio stratificato copre anche il fondo.
-    from app.services.ai_agent import _rank_candidates
+    from app.services.ai_curation import _rank_candidates
     cands = [_mk(i, 120.0 + (i % 3) * 0.2) for i in range(80)]
     cands += [_mk(100 + i, 129.0 + (i % 3) * 0.2) for i in range(20)]
     ranked = _rank_candidates(cands, _req(start_bpm=120, end_bpm=130), budget=60)
@@ -219,7 +219,7 @@ def test_ai_candidates_cover_the_whole_corridor():
 
 
 def test_ai_candidates_guarantee_seeds():
-    from app.services.ai_agent import _rank_candidates
+    from app.services.ai_curation import _rank_candidates
     cands = [_mk(i, 120.0) for i in range(80)]
     seed = _mk(999, 150.0, artist="Rare Seed")  # fuori corridoio
     cands.append(seed)

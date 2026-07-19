@@ -86,3 +86,25 @@ def test_phases_are_reported(db, seed_tracks):
     phases = []
     run_curated_generation(db, _req(), PipelineLLM(), on_phase=phases.append)
     assert len(phases) >= 4  # intento, mood, anchor, costruzione, narrativa
+
+
+def test_router_uses_curated_pipeline(db, seed_tracks, monkeypatch):
+    # Il ramo use_ai del router deve puntare alla pipeline curata (niente
+    # TestClient: conftest non ha una fixture client, si chiama la funzione
+    # del router direttamente col db della fixture).
+    import app.routers.sets as sets_router
+    from app.schemas import SetGenerationRequest
+    from app.services.set_generator import generate_set
+
+    called = {}
+
+    def fake_curated(db_, req_, llm_, on_phase=None):
+        called["yes"] = True
+        return generate_set(db_, req_)
+
+    monkeypatch.setattr(sets_router, "run_curated_generation", fake_curated)
+    monkeypatch.setattr(sets_router, "get_llm_client", lambda model=None: object())
+    seed_tracks(n=20)
+    out = sets_router.generate(
+        SetGenerationRequest(target_duration_minutes=30, use_ai=True, prompt="x"), db=db)
+    assert called.get("yes") and out.id

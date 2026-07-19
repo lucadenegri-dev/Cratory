@@ -27,7 +27,7 @@ from app.schemas import (
     SetRenameRequest,
 )
 from app.serializers import alternative_out, setlist_out, setlist_summary_out
-from app.services.ai_agent import AIAgentError, generate_ai_set
+from app.services.ai_curation import run_curated_generation
 from app.services.alternatives import AlternativesError, find_alternatives
 from app.services.app_state import get_language
 from app.services.set_editor import (
@@ -64,7 +64,7 @@ def _model_for(req: SetGenerationRequest) -> str | None:
 
 
 # Fase mostrata durante la generazione deterministica (non-AI); le fasi del
-# path AI sono già bilingui in ai_agent.py (_PHASES).
+# path AI sono già bilingui in ai_curation.py (_CURATION_PHASES).
 _BUILDING_SET_PHASE = {"it": "Costruisco il set", "en": "Building the set"}
 
 # --- Generazione asincrona (la generazione AI puo' richiedere ~1-3 min) -------
@@ -85,7 +85,7 @@ def _run_generation(req: SetGenerationRequest, use_ai: bool) -> None:
     db = SessionLocal()
     try:
         if use_ai:
-            setlist = generate_ai_set(
+            setlist = run_curated_generation(
                 db, req, get_llm_client(_model_for(req)),
                 on_phase=lambda p: _gen_state.update(phase=p),
             )
@@ -95,7 +95,7 @@ def _run_generation(req: SetGenerationRequest, use_ai: bool) -> None:
             setlist = generate_set(db, req)
         _gen_state.update(status="done", setlist_id=setlist.id, phase=None)
         logger.info("Job generazione completato: set %s (%s)", setlist.id, setlist.generated_by)
-    except (AIAgentError, LLMError, LLMNotConfigured, SetGenerationError) as exc:
+    except (LLMError, LLMNotConfigured, SetGenerationError) as exc:
         _gen_state.update(status="error", error=str(exc))
         logger.error("Job generazione fallito: %s", exc)
     except Exception as exc:  # noqa: BLE001
@@ -137,11 +137,11 @@ def generate(req: SetGenerationRequest, db: Session = Depends(get_db)):
     lang = get_language(db)
     if _should_use_ai(req):
         try:
-            setlist = generate_ai_set(db, req, get_llm_client(_model_for(req)))
+            setlist = run_curated_generation(db, req, get_llm_client(_model_for(req)))
         except LLMNotConfigured as exc:
             raise api_error(409, "ai_not_configured", f"AI not configured: {exc}",
                              reason=str(exc)) from exc
-        except (AIAgentError, LLMError) as exc:
+        except (LLMError, SetGenerationError) as exc:
             raise api_error(422, "set_ai_generation_failed", f"AI set generation failed: {exc}",
                              reason=str(exc)) from exc
         return setlist_out(setlist, lang)
