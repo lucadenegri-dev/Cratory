@@ -430,29 +430,6 @@ class GapAnalysisResponse(BaseModel):
 # --- Discovery mode (Fase F) -------------------------------------------------
 
 
-class DiscoveryCandidateOut(BaseModel):
-    artist: str
-    title: str
-    match: float
-    source: str  # similar_artist | similar_track | tag | label
-    seed: str | None = None
-    spotify_id: str | None = None
-    spotify_url: str | None = None
-    album_art_url: str | None = None
-    isrc: str | None = None
-    duration_seconds: int | None = None
-    label: str | None = None
-    label_owned: bool = False
-    explanation: str | None = None
-
-
-class DiscoveryResponse(BaseModel):
-    mode: str   # expand | labels
-    scope: str  # nome playlist o etichette
-    seed_count: int = 0
-    candidates: list[DiscoveryCandidateOut] = []
-
-
 class DiscoveryAddRequest(BaseModel):
     """Importa nella libreria dell'app una traccia scoperta dal Discovery."""
 
@@ -468,31 +445,6 @@ class DiscoveryAddRequest(BaseModel):
 class DiscoveryAddResponse(BaseModel):
     created: bool
     track: TrackOut
-
-
-class PlaylistAddTrackRequest(BaseModel):
-    """Aggiunge una traccia scoperta (expand) a una playlist specifica."""
-
-    artist: str
-    title: str
-    spotify_id: str | None = None
-    isrc: str | None = None
-    duration_seconds: int | None = None
-    album_art_url: str | None = None
-    url: str | None = None
-
-
-class PlaylistAddTrackResponse(BaseModel):
-    created: bool
-    track: TrackOut
-    spotify_added: bool = False
-    spotify_error: str | None = None
-
-
-class DiscoveryExpandRequest(BaseModel):
-    playlist_id: int
-    limit: int = Field(default=20, ge=1, le=50)
-    use_ai: bool | None = None  # None = auto (AI se configurata)
 
 
 # --- Discovery v2: dig (crate digging via Discogs) ---------------------------
