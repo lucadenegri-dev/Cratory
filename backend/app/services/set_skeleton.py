@@ -9,6 +9,7 @@ contrario.
 
 from dataclasses import dataclass
 
+from app.models import Track
 from app.schemas import SetGenerationRequest
 
 
@@ -79,3 +80,37 @@ def _desired_energy(req: SetGenerationRequest, progress: float,
         start, end = profile.energy_arc
         return start + (end - start) * progress
     return None
+
+
+# Impatto (0-1): quanto una traccia "spinge" rispetto al pool. Percentili
+# rank-based, tie-break per id (determinismo). Pesi tunabili.
+_IMPACT_ENERGY_SHARE = 0.7
+_IMPACT_BPM_SHARE = 0.3
+
+
+def _percentiles(values: dict[int, float]) -> dict[int, float]:
+    """id -> percentile 0-1 sul pool (rank-based, tie-break deterministico per id)."""
+    if not values:
+        return {}
+    if len(values) == 1:
+        return {tid: 0.5 for tid in values}
+    ordered = sorted(values.items(), key=lambda kv: (kv[1], kv[0]))
+    top = len(ordered) - 1
+    return {tid: idx / top for idx, (tid, _) in enumerate(ordered)}
+
+
+def impact_scores(candidates: list[Track]) -> dict[int, float]:
+    """Impatto 0-1 per candidata: energia (peso 0.7) + BPM (0.3), percentili sul pool.
+
+    Se l'energia manca sulla traccia conta solo il percentile BPM: nessuna
+    penalita' per le librerie non analizzate.
+    """
+    bpm_pct = _percentiles({t.id: float(t.bpm) for t in candidates if t.bpm})
+    energy_pct = _percentiles(
+        {t.id: float(t.energy) for t in candidates if t.energy is not None})
+    out: dict[int, float] = {}
+    for t in candidates:
+        b = bpm_pct.get(t.id, 0.5)
+        e = energy_pct.get(t.id)
+        out[t.id] = _IMPACT_ENERGY_SHARE * e + _IMPACT_BPM_SHARE * b if e is not None else b
+    return out
