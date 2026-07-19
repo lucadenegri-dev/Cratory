@@ -12,15 +12,14 @@ describe("storeQuery", () => {
 });
 
 describe("STORES", () => {
-  it("sono i 4 negozi della spec, nell'ordine", () => {
-    expect(STORES.map((s) => s.key)).toEqual(["bandcamp", "beatport", "juno", "discogs"]);
+  it("sono i 3 negozi della spec, nell'ordine", () => {
+    expect(STORES.map((s) => s.key)).toEqual(["bandcamp", "beatport", "discogs"]);
   });
   it("generano gli URL di ricerca della spec", () => {
     const q = storeQuery("A", "B");
     const urls = Object.fromEntries(STORES.map((s) => [s.key, s.url(q)]));
     expect(urls.bandcamp).toBe("https://bandcamp.com/search?q=A%20B");
     expect(urls.beatport).toBe("https://www.beatport.com/search?q=A%20B");
-    expect(urls.juno).toBe("https://www.junodownload.com/search/?q%5Ball%5D%5B%5D=A%20B");
     expect(urls.discogs).toBe("https://www.discogs.com/search/?q=A%20B&type=release");
   });
 });

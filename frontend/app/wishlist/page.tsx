@@ -49,7 +49,7 @@ function WishlistInner() {
   const [bulkPlaylist, setBulkPlaylist] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Ricerca Soulseek libera (sezione secondaria, collassata di default).
+  // Ricerca Soulseek libera ("FreeDownload"): in testa alla pagina, chiusa di default.
   const [slskOpen, setSlskOpen] = useState(false);
   const [slskQuery, setSlskQuery] = useState("");
   const [slskResults, setSlskResults] = useState<DownloadCandidate[] | null>(null);
@@ -151,6 +151,47 @@ function WishlistInner() {
         {!available && <Alert tone="info">{t.downloads.notConfigured}</Alert>}
         {error && <Alert tone="danger">⚠ {error}</Alert>}
 
+        {/* Ricerca Soulseek libera ("FreeDownload"): in testa, collassabile (chiusa di default) */}
+        <section>
+          <button type="button" onClick={() => setSlskOpen((v) => !v)}
+            className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted hover:text-fg">
+            {slskOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {t.wishlist.soulseekHeading}
+          </button>
+          {slskOpen && (
+            <div className="mt-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Input value={slskQuery} onChange={(e) => setSlskQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") runSlskSearch(); }}
+                  placeholder={t.downloads.searchPlaceholder} disabled={!available} />
+                <Button variant="outline" onClick={runSlskSearch} disabled={!available || slskSearching || !slskQuery.trim()}>
+                  <Search size={14} /> {t.downloads.searchButton}
+                </Button>
+              </div>
+              {slskSearching && <Loading label={t.downloads.searchingLabel} />}
+              {slskResults && slskResults.length === 0 && !slskSearching && (
+                <p className="mt-2 text-sm text-faint">{t.downloads.noSearchResults(slskQuery)}</p>
+              )}
+              {slskResults && slskResults.length > 0 && (
+                <ul className="mt-3 divide-y divide-border border border-border">
+                  {slskResults.slice(0, 40).map((c, i) => (
+                    <li key={`${c.username}-${i}`} className="flex items-center justify-between gap-3 px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm">{c.filename.split(/[\\/]/).pop()}</div>
+                        <div className="text-xs text-faint">
+                          {c.format?.toUpperCase()}{c.bitrate ? ` · ${c.bitrate}kbps` : ""} · {c.username}
+                        </div>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => grab(c)} disabled={running}>
+                        <DownloadIcon size={13} /> {t.downloads.downloadButton}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </section>
+
         {/* Azioni di gruppo */}
         <section>
           <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.wishlist.bulkHeading}</div>
@@ -232,47 +273,6 @@ function WishlistInner() {
                 ))}
               </ul>
             </Card>
-          )}
-        </section>
-
-        {/* Ricerca Soulseek libera (secondaria, collassata) */}
-        <section>
-          <button type="button" onClick={() => setSlskOpen((v) => !v)}
-            className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted hover:text-fg">
-            {slskOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {t.wishlist.soulseekHeading}
-          </button>
-          {slskOpen && (
-            <div className="mt-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Input value={slskQuery} onChange={(e) => setSlskQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") runSlskSearch(); }}
-                  placeholder={t.downloads.searchPlaceholder} disabled={!available} />
-                <Button variant="outline" onClick={runSlskSearch} disabled={!available || slskSearching || !slskQuery.trim()}>
-                  <Search size={14} /> {t.downloads.searchButton}
-                </Button>
-              </div>
-              {slskSearching && <Loading label={t.downloads.searchingLabel} />}
-              {slskResults && slskResults.length === 0 && !slskSearching && (
-                <p className="mt-2 text-sm text-faint">{t.downloads.noSearchResults(slskQuery)}</p>
-              )}
-              {slskResults && slskResults.length > 0 && (
-                <ul className="mt-3 divide-y divide-border border border-border">
-                  {slskResults.slice(0, 40).map((c, i) => (
-                    <li key={`${c.username}-${i}`} className="flex items-center justify-between gap-3 px-3 py-2">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm">{c.filename.split(/[\\/]/).pop()}</div>
-                        <div className="text-xs text-faint">
-                          {c.format?.toUpperCase()}{c.bitrate ? ` · ${c.bitrate}kbps` : ""} · {c.username}
-                        </div>
-                      </div>
-                      <Button size="sm" variant="outline" onClick={() => grab(c)} disabled={running}>
-                        <DownloadIcon size={13} /> {t.downloads.downloadButton}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
           )}
         </section>
       </div>
