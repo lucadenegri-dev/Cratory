@@ -7,10 +7,12 @@ i segmenti. Direzione delle dipendenze: set_generator importa da qui, mai il
 contrario.
 """
 
+import statistics
 from dataclasses import dataclass
 
 from app.models import Track
 from app.schemas import SetGenerationRequest
+from app.services.scoring import genre_families_of
 
 
 @dataclass(frozen=True)
@@ -114,3 +116,50 @@ def impact_scores(candidates: list[Track]) -> dict[int, float]:
         e = energy_pct.get(t.id)
         out[t.id] = _IMPACT_ENERGY_SHARE * e + _IMPACT_BPM_SHARE * b if e is not None else b
     return out
+
+
+# Piano di genere: soglie tunabili. Sopra DOMINANT il piano degenera (monogenere);
+# una famiglia "conta" solo se copre almeno MIN_SHARE del pool.
+_GENRE_DOMINANT_SHARE = 0.80
+_GENRE_MIN_SHARE = 0.15
+
+
+@dataclass(frozen=True)
+class GenrePlan:
+    """Famiglie assegnate ai segmenti: principal al peak, calm al resto."""
+    principal: str
+    calm: str
+
+
+def plan_genre_families(candidates: list[Track]) -> GenrePlan | None:
+    """Sceglie famiglia principale (peak) e famiglia calma (resto del set).
+
+    Ritorna None quando il piano non ha senso: pool monogenere (>=80%), nessuna
+    seconda famiglia con quota >=15%, o generi tutti ignoti. In quel caso il
+    generatore si comporta esattamente come oggi.
+    """
+    by_family: dict[str, list[Track]] = {}
+    for t in candidates:
+        for fam in genre_families_of(t.genre):
+            by_family.setdefault(fam, []).append(t)
+    if not by_family:
+        return None
+    total = len(candidates)
+    counts = {fam: len(ts) for fam, ts in by_family.items()}
+    principal = max(counts, key=lambda f: (counts[f], f))
+    if counts[principal] / total >= _GENRE_DOMINANT_SHARE:
+        return None
+    qualified = [f for f, c in counts.items()
+                 if f != principal and c / total >= _GENRE_MIN_SHARE]
+    if not qualified:
+        return None
+
+    def calm_key(fam: str) -> tuple:
+        tracks = by_family[fam]
+        energies = [t.energy for t in tracks if t.energy is not None]
+        if energies:
+            return (0, statistics.mean(energies), fam)
+        bpms = [t.bpm for t in tracks if t.bpm]
+        return (1, statistics.mean(bpms) if bpms else 999.0, fam)
+
+    return GenrePlan(principal=principal, calm=min(qualified, key=calm_key))
