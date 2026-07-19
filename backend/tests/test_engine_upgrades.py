@@ -212,7 +212,7 @@ def test_ai_candidates_cover_the_whole_corridor():
     from app.services.ai_agent import _rank_candidates
     cands = [_mk(i, 120.0 + (i % 3) * 0.2) for i in range(80)]
     cands += [_mk(100 + i, 129.0 + (i % 3) * 0.2) for i in range(20)]
-    ranked = _rank_candidates(cands, _req(start_bpm=120, end_bpm=130))
+    ranked = _rank_candidates(cands, _req(start_bpm=120, end_bpm=130), budget=60)
     assert len(ranked) <= 60
     assert any(t.bpm >= 128 for t in ranked)   # il finale dell'arco è rappresentato
     assert any(t.bpm <= 121 for t in ranked)   # e anche la partenza
