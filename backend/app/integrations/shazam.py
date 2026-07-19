@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 
 RECOGNIZE_TIMEOUT = 30  # secondi: oltre, un segmento bloccato non deve impallare tutto il job
 MIN_CALL_INTERVAL = 1.0  # secondi tra l'inizio di due riconoscimenti: non martellare l'endpoint
-BACKOFF_WAITS = (5, 15, 45)  # attese (s) dei retry interni su errore, prima di dichiararlo
+BACKOFF_WAITS = (10, 30, 60, 120)  # attese (s) dei retry su errore: col client one-shot sono
+                                   # silenzio vero verso l'endpoint, e un ban da 429 puo' scadere
 
 
 
@@ -68,6 +69,46 @@ def parse_shazam(result: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+class _OneShotHTTPClient:
+    """Client HTTP per shazamio: UNA richiesta per tentativo, status a galla.
+
+    Il client di default di shazamio (aiohttp_retry, 20 tentativi con attese
+    esponenziali su 429/5xx) sotto throttling continua a martellare l'endpoint
+    dentro la finestra del nostro timeout — rinnovando il ban invece di farlo
+    scadere — e il nostro `wait_for` lo cancella sempre a meta', riducendo ogni
+    guasto a un TimeoutError anonimo. Qui: nessun retry interno (il backoff con
+    attese lunghe e' di `recognize_file`) e `raise_for_status` cosi' il 429/5xx
+    arriva vero, con il suo status."""
+
+    async def request(self, method: str, url: str, *args: Any, **kwargs: Any) -> Any:
+        import aiohttp
+
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            async with session.request(method, url, **kwargs) as resp:
+                return await resp.json(content_type=None)
+
+
+def _error_label(exc: BaseException | None) -> str:
+    """Etichetta corta e parlante del guasto, per log, DB e fase del job."""
+    if exc is None:
+        return "errore sconosciuto"
+    status = getattr(exc, "status", None)
+    if status:
+        return f"HTTP {status}"
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
+        return "timeout"
+    return type(exc).__name__
+
+
+def _describe(exc: BaseException | None) -> str:
+    label = _error_label(exc)
+    try:
+        text = str(exc) if exc is not None else ""
+    except Exception:  # noqa: BLE001 - alcuni errori aiohttp non si stampano senza request_info
+        text = ""
+    return f"{label}: {text}" if text and text != label else label
+
+
 def _close_event_loop(loop: asyncio.AbstractEventLoop) -> None:
     """Callback del finalizer: non deve referenziare l'istanza, solo il loop."""
     if loop is not None and not loop.is_closed():
@@ -85,10 +126,14 @@ class ShazamioRecognizer(AudioRecognizer):
         *,
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
+        on_backoff: Callable[[int, str], None] | None = None,
     ) -> None:
-        # sleep/monotonic iniettabili: i test verificano pacing e backoff senza dormire
+        # sleep/monotonic iniettabili: i test verificano pacing e backoff senza dormire.
+        # on_backoff(attesa_s, motivo): il job la usa per raccontare l'attesa in UI,
+        # altrimenti minuti di backoff sembrano un blocco.
         self._sleep = sleep
         self._monotonic = monotonic
+        self._on_backoff = on_backoff
         self._last_call_at: float | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._shazam: Any = None
@@ -107,7 +152,7 @@ class ShazamioRecognizer(AudioRecognizer):
             from shazamio import Shazam
 
             self._loop = asyncio.new_event_loop()
-            self._shazam = Shazam()
+            self._shazam = Shazam(http_client=_OneShotHTTPClient())
             # Rete di sicurezza se close() non viene mai chiamato dal chiamante
             # (es. mix_identify_job crea un ShazamioRecognizer per job e non lo chiude).
             weakref.finalize(self, _close_event_loop, self._loop)
@@ -128,7 +173,9 @@ class ShazamioRecognizer(AudioRecognizer):
         last_exc: Exception | None = None
         for wait in (0, *BACKOFF_WAITS):
             if wait:
-                logger.warning("Riconoscimento fallito (%s): riprovo tra %ss", last_exc, wait)
+                logger.warning("Riconoscimento fallito (%s): riprovo tra %ss", _describe(last_exc), wait)
+                if self._on_backoff:
+                    self._on_backoff(wait, _error_label(last_exc))
                 self._sleep(wait)
             self._pace()
             try:
@@ -137,7 +184,7 @@ class ShazamioRecognizer(AudioRecognizer):
                 last_exc = exc
                 continue
             return parse_shazam(raw)
-        raise RecognizerError(str(last_exc)) from last_exc
+        raise RecognizerError(_describe(last_exc)) from last_exc
 
     def close(self) -> None:
         """Chiude il loop riusato. Idempotente; da chiamare a fine job se possibile."""

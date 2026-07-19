@@ -6,7 +6,7 @@
 
 ## Current state
 
-**Last updated:** 2026-07-19
+**Last updated:** 2026-07-20
 
 **Product name:** **Cratory** (rename done on 2026-06-25 across UI, code, docs and
 icon). "SetArc" and "DJ Assistant" remain only as historical names; legacy technical
@@ -29,6 +29,33 @@ with a five-stage pipeline (Index moved to a nav button) and documentation reali
 the new paradigm; mix identification via Shazam integrated (phase 1; co-occurrence in
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-07-20 - Shazam: fine del martellamento sotto 429, attese visibili
+
+Diagnosi del run parziale del 2026-07-19 (mix SoundCloud 2h08: abort a 57min,
+10 tracce, log muti "Riconoscimento fallito ()"). Causa: sotto throttling i tre
+strati di retry si sabotavano a vicenda — il client di default di shazamio
+ritenta internamente fino a 20 volte su 429/5xx (rinnovando il ban invece di
+lasciarlo scadere), il nostro `wait_for(30s)` lo cancellava sempre a meta'
+(mascherando lo status reale dietro un TimeoutError anonimo) e il backoff
+esterno (5/15/45s) rientrava nello stesso muro: ~185s a segmento senza alcun
+segnale in UI, poi abort della griglia dopo 3 segmenti.
+
+- **Client one-shot** (`_OneShotHTTPClient` in `integrations/shazam.py`): una
+  sola richiesta HTTP per tentativo, `raise_for_status` → il 429/5xx arriva
+  vero al backoff. Niente piu' richieste nascoste durante le attese.
+- **Backoff piu' lungo e onesto**: `BACKOFF_WAITS = (10, 30, 60, 120)` — ora le
+  attese sono silenzio reale verso l'endpoint, un ban puo' scadere. Tre errori
+  consecutivi ≈ 11 min di endpoint giu' prima dell'abort (parziale, come prima).
+- **Attese raccontate in UI**: nuovo callback `on_backoff(attesa, motivo)` sul
+  recognizer; `mix_identify_job` lo traduce in `phase` ("Shazam non risponde
+  (HTTP 429): riprovo tra 60s…") — la barra job non sembra piu' bloccata.
+- **Errori parlanti**: `RecognizerError` e log ora portano etichetta e testo
+  del guasto (`HTTP 429`, `timeout`, …) invece della stringa vuota; l'etichetta
+  finisce anche in `dj_sets.error` quando il job fallisce.
+- Test: nuovi casi su client one-shot (server locale 429: 1 sola richiesta,
+  status esposto), wiring `http_client`, `on_backoff` e messaggio d'errore;
+  smoke test reale riuscito (segmento owned riconosciuto in 0.7s).
 
 ## Milestone 2026-07-19 - Dig: rinomina, Wishlist in "Discover", FreeDownload in testa
 
