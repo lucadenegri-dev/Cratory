@@ -1,11 +1,8 @@
-"""Discovery mode (Fase F): scoperta di musica nuova compatibile.
+"""Discovery mode: crate digging via Discogs ("Scava").
 
-Endpoint principale:
-- POST /api/discovery/expand : espande una playlist importata con tracce affini.
-
-Sincrono (numero di lookup limitato dai cap in services/discovery). La fonte di
-similarita' e' Last.fm; Spotify risolve i nomi in tracce reali; l'AI (se configurata)
-aggiunge la spiegazione di ogni suggerimento.
+Endpoint dig: genera lead per genere/etichetta, ne apre la tracklist, offre una
+preview audio effimera e importa/salva-per-dopo i lead scelti. La sorgente e'
+Discogs (integrations/discogs); iTunes/YouTube servono solo la preview.
 """
 
 import logging
@@ -16,18 +13,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.http_errors import api_error
 from app.db import get_db
 from app.integrations.discogs import DiscogsClient, DiscogsError
 from app.integrations.itunes import ItunesClient
-from app.integrations.lastfm import (
-    LastFMError,
-    get_lastfm_client,
-    lastfm_configured,
-)
-from app.integrations.llm import get_llm_client, llm_configured
-from app.integrations.spotify import SpotifyWebClient
 from app.models import Track
 from app.repositories import add_track_to_playlist
 from app.schemas import (
@@ -36,26 +25,17 @@ from app.schemas import (
     DiscogsVideoOut,
     DiscoveryAddRequest,
     DiscoveryAddResponse,
-    DiscoveryCandidateOut,
     DiscoveryDigRequest,
     DiscoveryDigResponse,
-    DiscoveryExpandRequest,
     DiscoveryGenresOut,
     DiscoveryLeadOut,
     DiscoveryPreviewOut,
-    DiscoveryResponse,
     DiscoverySaveForLaterRequest,
     DiscoverySaveForLaterResponse,
     ReasonOut,
 )
 from app.serializers import track_out
-from app.services.discovery import (
-    DiscoveryCandidate,
-    DiscoveryResult,
-    discover_for_playlist,
-)
 from app.services.discovery_dig import DiscoveryLead, dig
-from app.services.labels import _clean_label, album_label, labels_overview
 from app.services.playlist_import import get_or_create_discovery_playlist, import_single_track
 from app.services.preview import extract_youtube_videos, resolve_preview
 
@@ -124,108 +104,6 @@ def _cached_get_release(client: DiscogsClient, discogs_id: int) -> dict:
     payload = client.get_release(discogs_id)
     _release_cache[discogs_id] = (now, payload)
     return payload
-
-
-def _spotify_configured() -> bool:
-    return bool(settings.spotify_client_id and settings.spotify_client_secret)
-
-
-def _resolver(db: Session):
-    """Resolver Spotify (solo metadata, client_credentials): (client, resolve_fn).
-    Entrambi None se Spotify non e' configurato. Il chiamante possiede il client
-    (lo passa al resolver via closure) e deve chiuderlo quando ha finito."""
-    if not _spotify_configured():
-        return None, None
-    client = SpotifyWebClient(db)
-    return client, (lambda artist, title: client.search_track(artist, title))
-
-
-def _maybe_llm(use_ai: bool | None):
-    if use_ai is False or not llm_configured():
-        return None
-    try:
-        return get_llm_client()
-    except Exception as exc:  # noqa: BLE001 - l'AI e' opzionale, non deve bloccare il discovery
-        logger.warning("Discovery: LLM non disponibile: %s", exc)
-        return None
-
-
-def _candidate_out(c: DiscoveryCandidate) -> DiscoveryCandidateOut:
-    return DiscoveryCandidateOut(
-        artist=c.artist, title=c.title, match=c.match, source=c.source, seed=c.seed,
-        spotify_id=c.spotify_id, spotify_url=c.spotify_url, album_art_url=c.album_art_url,
-        isrc=c.isrc, duration_seconds=c.duration_seconds,
-        label=c.label, label_owned=c.label_owned, explanation=c.explanation,
-    )
-
-
-def _owned_labels(db: Session) -> set[str]:
-    """Etichette (pulite, lowercase) gia' in libreria — per il segnale-etichetta su /expand."""
-    return {o["label"].lower() for o in labels_overview(db)}
-
-
-def _response(result: DiscoveryResult) -> DiscoveryResponse:
-    return DiscoveryResponse(
-        mode=result.mode, scope=result.scope, seed_count=result.seed_count,
-        candidates=[_candidate_out(c) for c in result.candidates],
-    )
-
-
-def _require_lastfm() -> None:
-    if not lastfm_configured():
-        raise api_error(
-            409, "lastfm_not_configured",
-            "Last.fm not configured: needed for Discovery (free key at last.fm/api).",
-        )
-
-
-@router.get("/status")
-def status():
-    return {
-        "configured": lastfm_configured(),
-        "spotify_resolver": _spotify_configured(),
-        "ai_explanations": llm_configured(),
-    }
-
-
-@router.post("/expand", response_model=DiscoveryResponse)
-def expand(req: DiscoveryExpandRequest, db: Session = Depends(get_db)):
-    _require_lastfm()
-    # Segnale-etichetta: se Spotify e' configurato, annota i candidati con la loro
-    # etichetta e fa salire chi e' su un'etichetta che gia' collezioni.
-    album_label_fn = owned = None
-    label_client = None
-    if _spotify_configured():
-        label_client = SpotifyWebClient(db)
-        album_label_fn = lambda aid: album_label(label_client, aid)  # noqa: E731
-        owned = _owned_labels(db)
-    resolver_client, resolve_fn = _resolver(db)
-    lastfm_client = None
-    try:
-        lastfm_client = get_lastfm_client()
-        result = discover_for_playlist(
-            db, req.playlist_id,
-            similarity=lastfm_client, resolve=resolve_fn,
-            llm=_maybe_llm(req.use_ai),
-            album_label_fn=album_label_fn, owned_labels=owned, limit=req.limit,
-        )
-    except ValueError as exc:
-        raise api_error(404, "discovery_not_found", f"Discovery not found: {exc}",
-                         reason=str(exc)) from exc
-    except LastFMError as exc:
-        raise api_error(502, "discovery_provider_error", f"Discovery provider error: {exc}",
-                         reason=str(exc)) from exc
-    finally:
-        if lastfm_client is not None:
-            lastfm_client.close()
-        if label_client is not None:
-            label_client.close()
-        if resolver_client is not None:
-            resolver_client.close()
-    return _response(result)
-
-
-# --- Discovery v2: dig (crate digging via Discogs) ---------------------------
 
 
 def _lead_out(lead: DiscoveryLead) -> DiscoveryLeadOut:
