@@ -226,7 +226,7 @@ class SpotifyWebClient(SpotifyClient, ClosableHttpClient):
     # ---- resolver Discovery (Fase F) ------------------------------------
 
     def search_track(self, artist: str, title: str) -> dict[str, Any] | None:
-        """Risolve 'artista + titolo' (es. da Last.fm) in una traccia Spotify reale.
+        """Risolve 'artista + titolo' (es. da un lead del dig) in una traccia Spotify reale.
 
         L'endpoint /search funziona anche in development mode (a differenza di
         /recommendations). Ritorna il dict traccia Spotify o None se nessun match.

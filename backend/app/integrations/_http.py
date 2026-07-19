@@ -149,7 +149,7 @@ class ClosableHttpClient:
     """Mixin per i client che possiedono un `httpx.Client` proprio.
 
     Le istanze di questi client sono create per-request (una per chiamata router/
-    job, mai un singleton condiviso: vedi `get_lastfm_client`, `DiscogsClient()`,
+    job, mai un singleton condiviso: vedi `DiscogsClient()`,
     `get_slskd_client()`, `SpotifyWebClient(db)`), quindi un cleanup automatico a
     livello di modulo (atexit) non calzerebbe — non c'e' un'istanza di lunga vita
     da richiudere allo shutdown. Questo mixin da' invece al chiamante gli

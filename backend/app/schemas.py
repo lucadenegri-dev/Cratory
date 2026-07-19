@@ -151,16 +151,6 @@ class AISetResponse(BaseModel):
     missing_library_suggestions: list[str] = []
 
 
-class DiscoveryExplainEntry(BaseModel):
-    """Una spiegazione AI per il candidato Discovery all'indice `index` (vedi
-    services/discovery._explain). Validata voce per voce: un elemento malformato
-    viene scartato senza invalidare le altre spiegazioni (l'AI qui e' best-effort,
-    spiega ma non sceglie i candidati — vedi services/discovery.py)."""
-
-    index: int
-    text: str = ""
-
-
 class SetlistTrackOut(BaseModel):
     position: int
     role: str | None = None
@@ -427,7 +417,7 @@ class GapAnalysisResponse(BaseModel):
     gaps: list[GapOut] = []
 
 
-# --- Discovery mode (Fase F) -------------------------------------------------
+# --- Discovery: import/salvataggio lead del dig -----------------------------
 
 
 class DiscoveryAddRequest(BaseModel):
