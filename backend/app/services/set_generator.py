@@ -54,6 +54,10 @@ _CONVERGE_WEIGHT = 0.35   # attrazione verso l'anchor in arrivo (cresce col ramp
 _GENRE_PLAN_WEIGHT = 0.20  # aderenza alla famiglia assegnata al segmento
 _RESERVE_PENALTY = 25.0   # bomba spesa fuori dalla finestra del peak
 _MOOD_WEIGHT = 0.30       # peso del giudizio mood AI nel ranking dei filler (50 = neutro)
+_REQUESTED_GENRE_BONUS = 45.0  # copertura "presence-only": spinge un genere RICHIESTO
+#   (req.genres) ancora assente dal set; cala come 1/(1+visti) e si spegne una volta
+#   rappresentato, cosi' ogni genere chiesto compare senza forzare quote ne' rovinare
+#   il mix. Match esatto sul genere: robusto anche per generi senza famiglia (es. Dub).
 
 
 def _near_reset(progress: float, points: tuple[float, ...]) -> bool:
@@ -155,6 +159,7 @@ def _candidate_score(
     plan_family: str | None = None, reserved_ids: frozenset[int] = frozenset(),
     peak_window: tuple[float, float] | None = None,
     mood_scores: dict[int, int] | None = None,
+    genre_counts: dict[str, int] | None = None,
 ) -> tuple[float, TransitionScore]:
     ts = score_transition(prev, cand)
     transition_pts = float(ts.score)
@@ -208,6 +213,15 @@ def _candidate_score(
     # Mood-fit della curatela AI: giudizio semantico per traccia (50 = neutro).
     if mood_scores is not None:
         total += float(mood_scores.get(cand.id, 50)) * _MOOD_WEIGHT
+    # Copertura dei generi richiesti (presence-only): quando ci sono generi espliciti
+    # (form o compilati dall'AI), spingi quelli ancora assenti dal set, con boost
+    # decrescente col numero di occorrenze gia' scelte. Senza req.genres e' inerte.
+    if req.genres and cand.genre:
+        wanted = {g.strip().lower() for g in req.genres if g and g.strip()}
+        cand_genre = cand.genre.strip().lower()
+        if cand_genre in wanted:
+            seen = (genre_counts or {}).get(cand_genre, 0)
+            total += _REQUESTED_GENRE_BONUS / (1 + seen)
     return total, ts
 
 
@@ -285,6 +299,7 @@ def _beam_search_span(
     plan_family: str | None = None, reserved_ids: frozenset[int] = frozenset(),
     peak_window: tuple[float, float] | None = None,
     mood_scores: dict[int, int] | None = None,
+    genre_counts: dict[str, int] | None = None,
 ) -> list[tuple[Track, TransitionScore]]:
     """Riempe uno span di set col beam search; ritorna i soli filler (opener escluso).
 
@@ -300,10 +315,12 @@ def _beam_search_span(
     span_len = max(1, fill_until_secs - span_start)
     base_used = set(used or ()) | {opener.id}
     base_arts = dict(artist_counts or {})
+    base_genres = dict(genre_counts or {})
 
     def new_beam() -> dict:
         return {"chosen": [], "prev": opener, "used": set(base_used),
-                "arts": dict(base_arts), "secs": elapsed_secs, "cum": 0.0,
+                "arts": dict(base_arts), "genres": dict(base_genres),
+                "secs": elapsed_secs, "cum": 0.0,
                 "done": elapsed_secs >= fill_until_secs}
 
     def expand(b: dict) -> list[dict]:
@@ -324,7 +341,7 @@ def _beam_search_span(
                                desired_energy, converge_to=converge_to,
                                converge_ramp=ramp, plan_family=plan_family,
                                reserved_ids=reserved_ids, peak_window=peak_window,
-                               mood_scores=mood_scores), t)
+                               mood_scores=mood_scores, genre_counts=b["genres"]), t)
              for t in eligible),
             key=lambda it: (it[0][0], it[1].id), reverse=True,
         )[:BEAM_EXPANSIONS]
@@ -333,10 +350,14 @@ def _beam_search_span(
             arts = dict(b["arts"])
             if t.artist:
                 arts[t.artist.lower()] = arts.get(t.artist.lower(), 0) + 1
+            genres = dict(b["genres"])
+            if t.genre:
+                gk = t.genre.strip().lower()
+                genres[gk] = genres.get(gk, 0) + 1
             secs = b["secs"] + (t.duration_seconds or 0)
             children.append({
                 "chosen": b["chosen"] + [(t, ts)], "prev": t,
-                "used": b["used"] | {t.id}, "arts": arts,
+                "used": b["used"] | {t.id}, "arts": arts, "genres": genres,
                 "secs": secs, "cum": b["cum"] + sc,
                 "done": secs >= fill_until_secs,
             })
@@ -398,6 +419,7 @@ def generate_set(db: Session, req: SetGenerationRequest, *,
             first, candidates, req, profile, start_bpm, end_bpm, target_seconds,
             elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds,
             artist_counts={first.artist.lower(): 1} if first.artist else None,
+            genre_counts={first.genre.strip().lower(): 1} if first.genre else None,
             mood_scores=mood_scores)
     else:
         # Fase 2: riempi i segmenti tra un anchor e il successivo. Gli anchor
@@ -407,10 +429,17 @@ def generate_set(db: Session, req: SetGenerationRequest, *,
         chosen = [(opening.track, None)]
         used = {a.track.id for a in skeleton.anchors}
         arts: dict[str, int] = {}
+        # Gli anchor (tutti, in anticipo come per arts) contano gia' nella copertura
+        # di genere: se un anchor porta un genere richiesto, i filler non devono
+        # forzarne altri. I filler poi si accumulano incrementalmente.
+        genres_seen: dict[str, int] = {}
         for a in skeleton.anchors:
             if a.track.artist:
                 key = a.track.artist.lower()
                 arts[key] = arts.get(key, 0) + 1
+            if a.track.genre:
+                gk = a.track.genre.strip().lower()
+                genres_seen[gk] = genres_seen.get(gk, 0) + 1
         secs = opening.track.duration_seconds or 0
         for seg in skeleton.segments:
             fillers = _beam_search_span(
@@ -419,12 +448,16 @@ def generate_set(db: Session, req: SetGenerationRequest, *,
                 fill_until_secs=seg.fill_until_secs,
                 converge_to=seg.end_anchor.track, used=used, artist_counts=arts,
                 plan_family=seg.family, reserved_ids=skeleton.reserved_ids,
-                peak_window=skeleton.peak_window, mood_scores=mood_scores)
+                peak_window=skeleton.peak_window, mood_scores=mood_scores,
+                genre_counts=genres_seen)
             for t, _ in fillers:
                 used.add(t.id)
                 if t.artist:
                     key = t.artist.lower()
                     arts[key] = arts.get(key, 0) + 1
+                if t.genre:
+                    gk = t.genre.strip().lower()
+                    genres_seen[gk] = genres_seen.get(gk, 0) + 1
                 secs += t.duration_seconds or 0
             chosen.extend(fillers)
             anchor_track = seg.end_anchor.track

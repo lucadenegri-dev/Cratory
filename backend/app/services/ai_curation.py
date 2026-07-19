@@ -152,18 +152,25 @@ def _safe_library_context(db: Session) -> dict:
 _STRATEGIES = ("smooth", "progressive", "contrast", "experimental",
                "peak_time", "warm_up", "closing")
 
+# I campi nullable usano anyOf, non `type: [X, "null"]`: gli structured outputs
+# Anthropic rifiutano un `type` union (specie unito a enum) con un 400. Il null
+# resta esprimibile (il modello lascia null i campi non implicati dal prompt).
+_NULLABLE_NUMBER = {"anyOf": [{"type": "number"}, {"type": "null"}]}
+_NULLABLE_INT = {"anyOf": [{"type": "integer"}, {"type": "null"}]}
+
 INTENT_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "properties": {
         "intent_summary": {"type": "string"},
-        "strategy": {"type": ["string", "null"], "enum": list(_STRATEGIES) + [None]},
-        "start_bpm": {"type": ["number", "null"]},
-        "end_bpm": {"type": ["number", "null"]},
-        "start_energy": {"type": ["integer", "null"]},
-        "end_energy": {"type": ["integer", "null"]},
+        "strategy": {"anyOf": [{"type": "string", "enum": list(_STRATEGIES)},
+                               {"type": "null"}]},
+        "start_bpm": _NULLABLE_NUMBER,
+        "end_bpm": _NULLABLE_NUMBER,
+        "start_energy": _NULLABLE_INT,
+        "end_energy": _NULLABLE_INT,
         "genres": {"type": "array", "items": {"type": "string"}},
         "seed_artists": {"type": "array", "items": {"type": "string"}},
-        "target_duration_minutes": {"type": ["integer", "null"]},
+        "target_duration_minutes": _NULLABLE_INT,
     },
     "required": ["intent_summary", "strategy", "start_bpm", "end_bpm", "start_energy",
                  "end_energy", "genres", "seed_artists", "target_duration_minutes"],
@@ -186,6 +193,19 @@ _INTENT_LANGUAGE = {
 _COMPILABLE = ("strategy", "start_bpm", "end_bpm", "start_energy", "end_energy",
                "genres", "seed_artists", "target_duration_minutes")
 
+
+def _field_is_open(req: SetGenerationRequest, field: str) -> bool:
+    """Un campo e' 'aperto' alla compilazione dal prompt se l'utente non lo ha
+    scelto DAVVERO. Il frontend invia sempre tutti i campi (anche vuoti), quindi
+    non basta `model_fields_set`: un valore vuoto (None/[]/"") va trattato come
+    non scelto, altrimenti il prompt (es. i generi) non viene mai interpretato.
+    Un valore concreto (strategy="peak_time", start_bpm=128) resta invece chiuso.
+    """
+    if field not in req.model_fields_set:
+        return True
+    value = getattr(req, field)
+    return value is None or value == [] or value == ""
+
 _WARN_INTENT_FAILED = {
     "it": "curatela AI: compilazione dell'intento non disponibile (il set usa i vincoli del form)",
     "en": "AI curation: intent compilation unavailable (the set uses the form constraints)",
@@ -206,7 +226,7 @@ def compile_intent(llm, req: SetGenerationRequest, lang: str,
     """
     if not (req.prompt and req.prompt.strip()):
         return req, {}, []
-    open_fields = [f for f in _COMPILABLE if f not in req.model_fields_set]
+    open_fields = [f for f in _COMPILABLE if _field_is_open(req, f)]
     if not open_fields:
         return req, {}, []
     payload = {
@@ -415,6 +435,10 @@ _WARN_NARRATIVE = {
     "it": "curatela AI: narrativa non disponibile (titolo e spiegazione deterministici)",
     "en": "AI curation: narrative unavailable (deterministic title and explanation)",
 }
+_WARN_PROMPT_IGNORED = {
+    "it": "curatela AI non disponibile: il prompt non è stato interpretato, il set usa solo i filtri del form",
+    "en": "AI curation unavailable: the prompt was not interpreted, the set uses only the form filters",
+}
 
 _CURATION_PHASES = {
     "intent": {"it": "Interpreto la richiesta", "en": "Interpreting the request"},
@@ -507,6 +531,11 @@ def run_curated_generation(db, req: SetGenerationRequest, llm, on_phase=None):
     compiled_applied = any(k != "intent_summary" for k in compiled)
     curated = bool(intent_summary or compiled_applied or mood_useful
                    or anchor_hints or narrative)
+    # C'era un prompt ma nessun contributo AI e' arrivato al set: avvisa esplicito,
+    # non lasciare l'utente coi soli warning generici delle singole fasi (che non
+    # dicono che la RICHIESTA e' stata ignorata).
+    if req.prompt and req.prompt.strip() and not curated:
+        warnings.append(_WARN_PROMPT_IGNORED[lang])
     if narrative:
         if not req.name and narrative.get("set_title"):
             setlist.name = narrative["set_title"]

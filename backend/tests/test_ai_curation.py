@@ -4,7 +4,28 @@ from app.integrations import LLMClient
 from app.integrations.llm import LLMError
 from app.models import Track
 from app.schemas import SetGenerationRequest
-from app.services.ai_curation import compile_intent, score_mood_fit, suggest_anchors
+from app.services.ai_curation import (ANCHOR_SCHEMA, INTENT_SCHEMA, MOOD_SCHEMA,
+                                      NARRATIVE_SCHEMA, compile_intent,
+                                      score_mood_fit, suggest_anchors)
+
+
+def _has_no_union_type_arrays(node) -> bool:
+    """True se nessun sotto-schema usa `type` come lista (union)."""
+    if isinstance(node, dict):
+        if isinstance(node.get("type"), list):
+            return False
+        return all(_has_no_union_type_arrays(v) for v in node.values())
+    if isinstance(node, list):
+        return all(_has_no_union_type_arrays(v) for v in node)
+    return True
+
+
+def test_schemas_avoid_union_type_arrays():
+    # Gli structured outputs Anthropic rifiutano `type` come lista unita a enum
+    # ("Enum value 'smooth' does not match declared type ['string','null']"):
+    # i campi nullable devono usare anyOf. Guardia su TUTTI gli schemi inviati.
+    for schema in (INTENT_SCHEMA, MOOD_SCHEMA, ANCHOR_SCHEMA, NARRATIVE_SCHEMA):
+        assert _has_no_union_type_arrays(schema), schema
 
 
 class ScriptedLLM(LLMClient):
@@ -40,6 +61,33 @@ def test_intent_fills_only_unset_fields():
     assert compiled["intent_summary"] == "warm-up deep in salita"
     assert "strategy" not in compiled              # non applicato -> non dichiarato
     assert warnings == []
+
+
+def test_intent_compiles_when_form_sends_empty_defaults():
+    # Il frontend invia SEMPRE tutti i campi (genres=[], seed_artists=[], energie
+    # None): finiscono in model_fields_set anche se l'utente non li ha toccati.
+    # Un valore vuoto NON deve chiudere il campo alla compilazione, altrimenti il
+    # prompt ("dub, breakbeat") non viene mai interpretato.
+    req = SetGenerationRequest(prompt="dub e breakbeat in salita", genres=[],
+                               seed_artists=[], start_energy=None, end_energy=None)
+    llm = ScriptedLLM([_intent(genres=["dub", "breakbeat"], start_energy=30,
+                               end_energy=70, strategy="progressive")])
+    merged, compiled, warnings = compile_intent(llm, req, "it")
+    assert llm.calls, "campi vuoti dal form devono restare aperti alla compilazione"
+    assert merged.genres == ["dub", "breakbeat"]
+    assert merged.start_energy == 30 and merged.end_energy == 70
+    assert warnings == []
+
+
+def test_intent_respects_non_empty_form_value():
+    # Un valore concreto messo dall'utente nel form (strategy) NON e' vuoto:
+    # resta chiuso, l'AI non lo sovrascrive.
+    req = SetGenerationRequest(prompt="qualcosa in salita", strategy="peak_time", genres=[])
+    llm = ScriptedLLM([_intent(strategy="progressive", genres=["techno"])])
+    merged, compiled, warnings = compile_intent(llm, req, "it")
+    assert merged.strategy == "peak_time"   # scelta esplicita non vuota: vince
+    assert merged.genres == ["techno"]      # vuoto: compilato
+    assert "strategy" not in compiled
 
 
 def test_intent_skipped_without_prompt():

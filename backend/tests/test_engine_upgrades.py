@@ -136,6 +136,63 @@ def test_progressive_orders_tracks_by_rising_energy(db):
     assert energies[-1] > energies[0]  # il set finisce più in alto di dove parte
 
 
+# --- C2) Copertura dei generi richiesti (presence-only) ----------------------
+
+def test_requested_absent_genre_gets_presence_boost():
+    # Un genere RICHIESTO ma ancora assente dal set batte un techno equivalente,
+    # nonostante la coerenza favorisca il techno (stesso genere del prev).
+    from app.services.set_generator import _candidate_score, strategy_profile
+    prev = make_track(bpm=128, key="8A", energy=70, genre="techno")
+    breakbeat = make_track(bpm=128, key="8A", energy=70, genre="breakbeat")
+    techno = make_track(bpm=128, key="8A", energy=70, genre="techno")
+    req = _req(genres=["dub", "breakbeat", "techno"])
+    sm = strategy_profile("smooth")
+    bb, _ = _candidate_score(prev, breakbeat, 128, req, {}, sm, 0.5, genre_counts={"techno": 3})
+    tk, _ = _candidate_score(prev, techno, 128, req, {}, sm, 0.5, genre_counts={"techno": 3})
+    assert bb > tk
+
+
+def test_presence_boost_tapers_once_genre_present():
+    # Il boost cala man mano che il genere richiesto compare: presence-only, non quota.
+    from app.services.set_generator import _candidate_score, strategy_profile
+    prev = make_track(bpm=128, key="8A", energy=70, genre="techno")
+    breakbeat = make_track(bpm=128, key="8A", energy=70, genre="breakbeat")
+    req = _req(genres=["breakbeat", "techno"])
+    sm = strategy_profile("smooth")
+    absent, _ = _candidate_score(prev, breakbeat, 128, req, {}, sm, 0.5, genre_counts={})
+    present, _ = _candidate_score(prev, breakbeat, 128, req, {}, sm, 0.5, genre_counts={"breakbeat": 2})
+    assert absent > present
+
+
+def test_no_requested_genres_leaves_score_unchanged():
+    # Senza req.genres il termine e' inerte: passare genre_counts non cambia nulla.
+    from app.services.set_generator import _candidate_score, strategy_profile
+    prev = make_track(bpm=128, key="8A", energy=70, genre="techno")
+    cand = make_track(bpm=128, key="8A", energy=70, genre="breakbeat")
+    sm = strategy_profile("smooth")
+    with_counts, _ = _candidate_score(prev, cand, 128, _req(), {}, sm, 0.5, genre_counts={"techno": 5})
+    without, _ = _candidate_score(prev, cand, 128, _req(), {}, sm, 0.5)
+    assert with_counts == without
+
+
+def test_generate_set_surfaces_each_requested_genre(db):
+    # Pool sbilanciato (techno dominante, come la libreria reale): il set deve
+    # comunque contenere almeno una traccia di OGNI genere richiesto.
+    from app.services.set_generator import generate_set
+    i = 0
+    for _ in range(24):
+        _lib_track(db, i, bpm=128.0, camelot_key="8A", energy=70, genre="Techno"); i += 1
+    for _ in range(4):
+        _lib_track(db, i, bpm=128.0, camelot_key="8A", energy=70, genre="Breakbeat"); i += 1
+    for _ in range(4):
+        _lib_track(db, i, bpm=128.0, camelot_key="8A", energy=70, genre="Dub"); i += 1
+    db.commit()
+    sl = generate_set(db, _req(genres=["dub", "breakbeat", "techno"], start_bpm=128,
+                               end_bpm=128, target_duration_minutes=30, max_tracks_per_artist=5))
+    genres = {(st.track.genre or "").lower() for st in sl.tracks}
+    assert {"dub", "breakbeat", "techno"} <= genres
+
+
 # --- D) Beam search ----------------------------------------------------------
 
 def _lib_track(db, i, **kw):

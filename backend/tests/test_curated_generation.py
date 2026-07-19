@@ -75,6 +75,24 @@ def test_all_ai_calls_fail_degrades_to_algorithmic(db, seed_tracks):
     assert setlist.global_explanation  # spiegazione deterministica conservata
 
 
+def test_prompt_not_interpreted_warns_explicitly(db, seed_tracks):
+    # C'e' un prompt ma nessun contributo AI e' arrivato al set: l'utente deve
+    # essere avvisato ESPLICITAMENTE che la sua richiesta non e' stata interpretata,
+    # non solo con i warning generici delle singole fasi.
+    seed_tracks(n=30)
+    setlist = run_curated_generation(db, _req(prompt="dub e breakbeat"), DeadLLM())
+    assert setlist.generated_by == "algorithmic"
+    assert any("non e' stato interpretato" in w or "non è stato interpretato" in w
+               for w in setlist.curation["warnings"])
+
+
+def test_no_prompt_ignored_warning_when_curated(db, seed_tracks):
+    # Se l'AI contribuisce, il warning di "prompt non interpretato" non deve comparire.
+    seed_tracks(n=30)
+    setlist = run_curated_generation(db, _req(prompt="dub e breakbeat"), PipelineLLM())
+    assert not any("non è stato interpretato" in w for w in setlist.curation["warnings"])
+
+
 def test_user_name_wins_over_ai_title(db, seed_tracks):
     seed_tracks(n=30)
     setlist = run_curated_generation(db, _req(name="Il mio set"), PipelineLLM())

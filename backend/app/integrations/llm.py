@@ -29,6 +29,33 @@ def _supports_effort(model: str) -> bool:
     return not any(tag in m for tag in _NO_EFFORT_TAGS)
 
 
+# Keyword di validazione (range/lunghezza/pattern) che gli structured outputs
+# Anthropic rifiutano con un 400 ("For 'integer' type, properties maximum,
+# minimum are not supported" / "For 'array' type, property 'maxItems' is not
+# supported"). Sono vincoli sul VALORE, non sulla forma: li rimuoviamo dallo
+# schema inviato e li garantiamo nel post-processing dei servizi. Le keyword
+# STRUTTURALI (type, properties, required, items, enum, additionalProperties,
+# anyOf/oneOf/allOf, $defs...) restano intatte.
+_UNSUPPORTED_SCHEMA_KEYS = frozenset({
+    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+    "minItems", "maxItems", "minLength", "maxLength", "pattern", "format",
+})
+
+
+def _sanitize_schema(node):
+    """Copia profonda dello schema senza le keyword non supportate dall'API.
+
+    Ricorsivo su dict e liste: pulisce `properties`, `items`, `anyOf`, `$defs`
+    e ogni altro sotto-schema annidato senza mutare l'input.
+    """
+    if isinstance(node, dict):
+        return {k: _sanitize_schema(v) for k, v in node.items()
+                if k not in _UNSUPPORTED_SCHEMA_KEYS}
+    if isinstance(node, list):
+        return [_sanitize_schema(v) for v in node]
+    return node
+
+
 class LLMError(Exception):
     pass
 
@@ -64,7 +91,9 @@ class AnthropicLLMClient(LLMClient):
         user_content = json.dumps(payload, ensure_ascii=False)
         # output_config/thinking dipendono dalle capacità del modello: i modelli
         # economici (Haiku 4.5) rifiutano `effort` e l'adaptive thinking con un 400.
-        output_config: dict[str, Any] = {"format": {"type": "json_schema", "schema": schema}}
+        output_config: dict[str, Any] = {
+            "format": {"type": "json_schema", "schema": _sanitize_schema(schema)}
+        }
         if _supports_effort(self.model):
             output_config["effort"] = self.effort  # senza questo alcuni modelli usano effort alto (lento)
             thinking = {"type": "adaptive"} if self.thinking == "adaptive" else {"type": "disabled"}
