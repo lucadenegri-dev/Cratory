@@ -229,3 +229,89 @@ def compile_intent(llm, req: SetGenerationRequest, lang: str,
         logger.warning("compile_intent: merge scartato dalla validazione", exc_info=True)
         return req, {}, [_WARN_INTENT_FAILED[lang]]
     return merged, {"intent_summary": summary, **updates}, []
+
+
+MOOD_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "properties": {
+                    "track_id": {"type": "integer"},
+                    "mood_fit": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "tags": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
+                },
+                "required": ["track_id", "mood_fit", "tags"],
+            },
+        },
+    },
+    "required": ["items"],
+}
+
+MOOD_SYSTEM = """Sei un DJ esperto con vasta conoscenza di artisti, etichette e scene.
+Ricevi l'intento del set (prompt e vincoli) e un lotto di tracce candidate.
+Per OGNI traccia del lotto esprimi mood_fit 0-100: quanto la traccia appartiene
+al mood/racconto richiesto (100 = perfetta, 50 = neutra/sconosciuta, 0 = fuori
+luogo), usando la tua conoscenza di brani e artisti oltre ai metadati. tags:
+1-3 aggettivi brevi sul carattere della traccia. Giudica la traccia, non
+inventare dati tecnici. Usa solo i track_id forniti."""
+
+MOOD_LANGUAGE = {"it": "Scrivi i tag in italiano.", "en": "Write tags in English."}
+
+_WARN_MOOD_BATCH = {
+    "it": "curatela AI: giudizio mood non disponibile per una parte delle candidate",
+    "en": "AI curation: mood judgement unavailable for part of the candidates",
+}
+_WARN_MOOD_FOREIGN = {
+    "it": "curatela AI: giudizi su tracce non candidate scartati",
+    "en": "AI curation: judgements on non-candidate tracks discarded",
+}
+
+
+def _mood_payload(req: SetGenerationRequest, batch: list[Track]) -> dict:
+    return {
+        "user_prompt": req.prompt or "",
+        "constraints": {"strategy": req.strategy, "genres": req.genres,
+                        "start_energy": req.start_energy, "end_energy": req.end_energy},
+        "candidate_tracks": [_candidate_payload(t) for t in batch],
+    }
+
+
+def score_mood_fit(llm, req: SetGenerationRequest, candidates: list[Track], lang: str,
+                   ) -> tuple[dict[int, int], dict[int, list[str]], list[str]]:
+    """Mood-fit per candidata, a lotti <= MOOD_BATCH_SIZE (mai oltre PER_CALL_CAP).
+
+    Le candidate senza giudizio (lotto fallito o dimenticate dal modello) valgono
+    50 (neutro): non vincono ne' perdono per assenza.
+    """
+    valid_ids = {t.id for t in candidates}
+    scores: dict[int, int] = {}
+    tags: dict[int, list[str]] = {}
+    warnings: list[str] = []
+    foreign = False
+    failed = False
+    system = MOOD_SYSTEM + "\n" + MOOD_LANGUAGE[lang]
+    for start in range(0, len(candidates), MOOD_BATCH_SIZE):
+        batch = candidates[start:start + MOOD_BATCH_SIZE]
+        try:
+            raw = llm.complete_json(system, _mood_payload(req, batch), MOOD_SCHEMA)
+        except LLMError:
+            logger.warning("score_mood_fit: lotto fallito", exc_info=True)
+            failed = True
+            continue
+        for item in raw.get("items", []):
+            tid = item.get("track_id")
+            if tid not in valid_ids:
+                foreign = True
+                continue
+            scores[tid] = int(item["mood_fit"])
+            tags[tid] = [s for s in item.get("tags", []) if s][:3]
+    for t in candidates:
+        scores.setdefault(t.id, 50)
+    if failed:
+        warnings.append(_WARN_MOOD_BATCH[lang])
+    if foreign:
+        warnings.append(_WARN_MOOD_FOREIGN[lang])
+    return scores, tags, warnings

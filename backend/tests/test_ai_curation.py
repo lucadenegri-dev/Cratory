@@ -2,8 +2,9 @@
 
 from app.integrations import LLMClient
 from app.integrations.llm import LLMError
+from app.models import Track
 from app.schemas import SetGenerationRequest
-from app.services.ai_curation import compile_intent
+from app.services.ai_curation import compile_intent, score_mood_fit
 
 
 class ScriptedLLM(LLMClient):
@@ -62,3 +63,45 @@ def test_intent_rejects_out_of_bounds_values():
     llm = ScriptedLLM([_intent(target_duration_minutes=5)])
     merged, compiled, warnings = compile_intent(llm, req, "it")
     assert merged is req and compiled == {} and len(warnings) == 1
+
+
+def _mk_track(i, genre="Techno"):
+    t = Track(source_type="spotify", title=f"T{i}", artist=f"A{i}",
+              duration_seconds=200, bpm=120.0 + i, camelot_key="8A", genre=genre)
+    t.id = i
+    return t
+
+
+def _mood_response(ids, score=80):
+    return {"items": [{"track_id": i, "mood_fit": score, "tags": ["deep"]} for i in ids]}
+
+
+def test_mood_batches_of_50_and_merges():
+    cands = [_mk_track(i) for i in range(1, 121)]  # 120 -> 3 lotti (50/50/20)
+    llm = ScriptedLLM([_mood_response(range(1, 51)), _mood_response(range(51, 101), score=30),
+                       _mood_response(range(101, 121))])
+    scores, tags, warnings = score_mood_fit(llm, SetGenerationRequest(prompt="p"), cands, "it")
+    assert len(llm.calls) == 3
+    assert all(len(c[1]["candidate_tracks"]) <= 60 for c in llm.calls)  # tetto per chiamata
+    assert scores[1] == 80 and scores[60] == 30 and scores[110] == 80
+    assert tags[1] == ["deep"]
+    assert warnings == []
+
+
+def test_mood_discards_foreign_ids_and_fills_neutral():
+    cands = [_mk_track(i) for i in range(1, 4)]
+    resp = {"items": [{"track_id": 1, "mood_fit": 90, "tags": ["dark"]},
+                      {"track_id": 999, "mood_fit": 10, "tags": ["x"]}]}
+    scores, tags, warnings = score_mood_fit(ScriptedLLM([resp]),
+                                            SetGenerationRequest(prompt="p"), cands, "it")
+    assert scores == {1: 90, 2: 50, 3: 50}
+    assert 999 not in scores and tags.get(2, []) == []
+    assert len(warnings) == 1  # id estranei scartati (aggregato)
+
+
+def test_mood_failed_batch_degrades_but_others_survive():
+    cands = [_mk_track(i) for i in range(1, 101)]  # 2 lotti
+    llm = ScriptedLLM([LLMError("boom"), _mood_response(range(51, 101), score=70)])
+    scores, tags, warnings = score_mood_fit(llm, SetGenerationRequest(prompt="p"), cands, "it")
+    assert scores[10] == 50 and scores[60] == 70
+    assert len(warnings) == 1
