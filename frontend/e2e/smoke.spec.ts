@@ -16,7 +16,7 @@ const ROUTES: { path: string; title: string | null }[] = [
   { path: "/library", title: null },
   { path: "/playlists", title: null },
   { path: "/labels", title: null },
-  { path: "/downloads", title: null },
+  { path: "/wishlist", title: "Wishlist" },
   { path: "/sets", title: null },
   { path: "/transitions", title: null },
   { path: "/analysis", title: null },

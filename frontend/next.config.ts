@@ -22,6 +22,13 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      // La sezione Download e' diventata Wishlist (spec 2026-07-19): i vecchi
+      // link/bookmark non si rompono. permanent:false — e' un rename interno.
+      { source: "/downloads", destination: "/wishlist", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;
