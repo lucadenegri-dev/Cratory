@@ -1144,7 +1144,8 @@ def assign_roles(n: int, peak_at: int | None = None) -> list[str]:
         first = _pick_first(candidates, req, start_bpm)
         chosen = [(first, None)] + _beam_search_span(
             first, candidates, req, profile, start_bpm, end_bpm, target_seconds,
-            elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds)
+            elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds,
+            artist_counts={first.artist.lower(): 1} if first.artist else None)
     else:
         # Fase 2: riempi i segmenti tra un anchor e il successivo. Gli anchor
         # contano da subito in used/artist_counts, cosi' i filler non li rubano
