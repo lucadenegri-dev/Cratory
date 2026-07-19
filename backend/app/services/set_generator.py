@@ -31,6 +31,7 @@ from app.services.set_skeleton import (  # noqa: F401 - re-export per compat tes
     _DEFAULT_PROFILE,
     _STRATEGY_PROFILES,
     StrategyProfile,
+    build_skeleton,
     _desired_bpm,
     _desired_energy,
     _trajectory_fit,
@@ -80,27 +81,33 @@ class SetGenerationError(Exception):
     pass
 
 
-def assign_roles(n: int) -> list[str]:
+def assign_roles(n: int, peak_at: int | None = None) -> list[str]:
     """Assegna un ruolo a ciascuna posizione lungo l'arco del set (deterministico).
 
     Ruoli (vedi nuovo_progetto.md sez. 4): intro, warmup, groove, transition,
-    peak, release, closing. Il peak e' collocato intorno al 70% del set.
+    peak, release, closing. peak_at (0-based) permette di allineare il ruolo
+    "peak" all'anchor eletto dallo scheletro; None = posizionale come sempre
+    (~70% del set). Sotto le 4 tracce il peak esplicito viene ignorato: non
+    c'e' spazio per la struttura.
     """
     if n <= 0:
         return []
     if n == 1:
         return ["intro"]
     roles: list[str] = []
-    peak_at = max(1, round((n - 1) * 0.7))
+    if peak_at is not None and n >= 4:
+        peak_pos = min(max(peak_at, 1), n - 2)
+    else:
+        peak_pos = max(1, round((n - 1) * 0.7))
     for i in range(n):
         frac = i / (n - 1)
         if i == 0:
             roles.append("intro")
         elif i == n - 1:
             roles.append("closing")
-        elif i == peak_at:
+        elif i == peak_pos:
             roles.append("peak")
-        elif i > peak_at:
+        elif i > peak_pos:
             roles.append("release")
         elif frac < 0.25:
             roles.append("warmup")
@@ -367,11 +374,48 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
 
     target_seconds = req.target_duration_minutes * 60
     profile = strategy_profile(req.strategy)
-    first = _pick_first(candidates, req, start_bpm)
-    chosen = [(first, None)] + _beam_search_span(
-        first, candidates, req, profile, start_bpm, end_bpm, target_seconds,
-        elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds,
-        artist_counts={first.artist.lower(): 1} if first.artist else None)
+    skeleton = build_skeleton(candidates, req, profile, start_bpm, end_bpm, target_seconds)
+    peak_at: int | None = None
+    if skeleton is None:
+        first = _pick_first(candidates, req, start_bpm)
+        chosen = [(first, None)] + _beam_search_span(
+            first, candidates, req, profile, start_bpm, end_bpm, target_seconds,
+            elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds,
+            artist_counts={first.artist.lower(): 1} if first.artist else None)
+    else:
+        # Fase 2: riempi i segmenti tra un anchor e il successivo. Gli anchor
+        # contano da subito in used/artist_counts, cosi' i filler non li rubano
+        # ne' sforano il limite per artista con un anchor futuro.
+        opening = skeleton.anchors[0]
+        chosen = [(opening.track, None)]
+        used = {a.track.id for a in skeleton.anchors}
+        arts: dict[str, int] = {}
+        for a in skeleton.anchors:
+            if a.track.artist:
+                key = a.track.artist.lower()
+                arts[key] = arts.get(key, 0) + 1
+        secs = opening.track.duration_seconds or 0
+        for seg in skeleton.segments:
+            fillers = _beam_search_span(
+                chosen[-1][0], candidates, req, profile, start_bpm, end_bpm,
+                target_seconds, elapsed_secs=secs,
+                fill_until_secs=seg.fill_until_secs,
+                converge_to=seg.end_anchor.track, used=used, artist_counts=arts,
+                plan_family=seg.family, reserved_ids=skeleton.reserved_ids,
+                peak_window=skeleton.peak_window)
+            for t, _ in fillers:
+                used.add(t.id)
+                if t.artist:
+                    key = t.artist.lower()
+                    arts[key] = arts.get(key, 0) + 1
+                secs += t.duration_seconds or 0
+            chosen.extend(fillers)
+            anchor_track = seg.end_anchor.track
+            chosen.append((anchor_track, score_transition(chosen[-1][0], anchor_track)))
+            secs += anchor_track.duration_seconds or 0
+        peak_ids = [a.track.id for a in skeleton.anchors if a.role == "peak"]
+        if peak_ids:
+            peak_at = next(i for i, (t, _) in enumerate(chosen) if t.id == peak_ids[0])
     total_seconds = sum((t.duration_seconds or 0) for t, _ in chosen)
 
     setlist = Setlist(
@@ -384,7 +428,7 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
         global_explanation=_explanation(chosen, req, total_seconds),
         owned_only=req.owned_only,
     )
-    roles = assign_roles(len(chosen))
+    roles = assign_roles(len(chosen), peak_at=peak_at)
     for position, (track, ts) in enumerate(chosen, start=1):
         setlist.tracks.append(SetlistTrack(
             track_id=track.id,

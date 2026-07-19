@@ -2,9 +2,16 @@
 
 import pytest
 
-from app.models import Track
+from app.models import Playlist, Track
+from app.repositories import add_track_to_playlist
 from app.schemas import SetGenerationRequest
-from app.services.set_generator import _DEFAULT_PROFILE, _beam_search_span, _candidate_score
+from app.services.set_generator import (
+    _DEFAULT_PROFILE,
+    _beam_search_span,
+    _candidate_score,
+    assign_roles,
+    generate_set,
+)
 from app.services.set_skeleton import strategy_profile
 
 
@@ -109,3 +116,81 @@ def test_span_empty_when_budget_already_filled():
         pool[0], pool, SetGenerationRequest(), strategy_profile("smooth"),
         125.0, 125.0, 3600, elapsed_secs=1200, fill_until_secs=1200)
     assert fillers == []
+
+
+# --- ruoli col peak esplicito --------------------------------------------------
+
+
+def test_assign_roles_with_explicit_peak():
+    roles = assign_roles(10, peak_at=3)
+    assert roles[3] == "peak"
+    assert roles.count("peak") == 1
+    assert roles[0] == "intro" and roles[-1] == "closing"
+    assert all(r == "release" for r in roles[4:-1])
+
+
+def test_assign_roles_default_unchanged():
+    assert assign_roles(10) == assign_roles(10, peak_at=None)
+    assert assign_roles(10)[round(9 * 0.7)] == "peak"
+
+
+def test_assign_roles_peak_clamped_for_tiny_sets():
+    # Sotto le 4 tracce il peak esplicito viene ignorato (niente indici assurdi).
+    assert assign_roles(3, peak_at=0) == assign_roles(3)
+
+
+# --- generazione a due fasi (integrazione) -------------------------------------
+
+
+def _seed_playlist(db, n: int = 16, minutes_each: int = 5):
+    pl = Playlist(platform="spotify", name="PL2F")
+    db.add(pl)
+    db.flush()
+    tracks = []
+    for i in range(1, n + 1):
+        t = Track(source_type="spotify", title=f"T{i}", artist=f"Art{i}",
+                  duration_seconds=minutes_each * 60, bpm=120.0 + i,
+                  camelot_key="8A", energy=10 + i * 5, genre="Techno",
+                  has_local_file=True)
+        db.add(t)
+        db.flush()
+        add_track_to_playlist(db, t, pl)
+        tracks.append(t)
+    db.commit()
+    return pl, tracks
+
+
+def test_two_phase_peak_lands_in_peak_zone(db):
+    pl, tracks = _seed_playlist(db)
+    setlist = generate_set(db, SetGenerationRequest(
+        playlist_id=pl.id, target_duration_minutes=70, max_tracks_per_artist=1))
+    ordered = sorted(setlist.tracks, key=lambda st: st.position)
+    n = len(ordered)
+    peak_positions = [i for i, st in enumerate(ordered) if st.role == "peak"]
+    assert len(peak_positions) == 1
+    assert 0.45 <= peak_positions[0] / (n - 1) <= 0.9
+    # Il ruolo peak sta sulla traccia eletta dallo scheletro (top impatto).
+    peak_track_id = ordered[peak_positions[0]].track_id
+    top_impact_ids = {t.id for t in sorted(tracks, key=lambda t: -(t.energy or 0))[:3]}
+    assert peak_track_id in top_impact_ids
+
+
+def test_two_phase_bombs_stay_out_of_the_first_third(db):
+    pl, tracks = _seed_playlist(db)
+    setlist = generate_set(db, SetGenerationRequest(
+        playlist_id=pl.id, target_duration_minutes=70, max_tracks_per_artist=1))
+    ordered = sorted(setlist.tracks, key=lambda st: st.position)
+    n = len(ordered)
+    reserved = {t.id for t in sorted(tracks, key=lambda t: -(t.energy or 0))[:2]}
+    early = {st.track_id for st in ordered[: max(1, n // 3)]}
+    assert not (reserved & early), "bomba spesa nel primo terzo del set"
+
+
+def test_short_sets_keep_single_phase_behavior(db):
+    # 13 minuti / 5 a traccia = ~3 tracce attese: niente scheletro, nessun errore.
+    pl, _ = _seed_playlist(db, n=10)
+    setlist = generate_set(db, SetGenerationRequest(
+        playlist_id=pl.id, target_duration_minutes=13, max_tracks_per_artist=1))
+    ordered = sorted(setlist.tracks, key=lambda st: st.position)
+    assert len(ordered) >= 3
+    assert ordered[0].role == "intro" and ordered[-1].role == "closing"
