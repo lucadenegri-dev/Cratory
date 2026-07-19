@@ -56,6 +56,15 @@ segnale in UI, poi abort della griglia dopo 3 segmenti.
 - Test: nuovi casi su client one-shot (server locale 429: 1 sola richiesta,
   status esposto), wiring `http_client`, `on_backoff` e messaggio d'errore;
   smoke test reale riuscito (segmento owned riconosciuto in 0.7s).
+- **Test "flaky" doppio-avvio mix: non era flaky.** Il fallimento sporadico di
+  `test_mix_identify_double_start_is_noop_at_job_level` era deterministico
+  rispetto allo stato del disco: unico test a chiamare `start_job` del mix
+  senza patchare `SessionLocal`, e `start_job` interroga il DB (cache per URL)
+  PRIMA della guardia sul lock → su un checkout/worktree vergine
+  `data/djassistant.db` non ha ancora la tabella `dj_sets` al primo run della
+  suite ("no such table") — dal secondo run in poi lo schema resta su disco e
+  il test passa. Fix: DB in-memory isolato nel test (pattern di
+  `test_job_response_schemas`). Riproduzione: `rm -rf backend/data` + suite.
 
 ## Milestone 2026-07-19 - Dig: rinomina, Wishlist in "Discover", FreeDownload in testa
 
