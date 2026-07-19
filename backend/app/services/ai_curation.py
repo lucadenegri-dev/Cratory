@@ -7,13 +7,17 @@ costruito. Il sequencing resta SEMPRE del motore deterministico
 con un errore. Regola: pool <= POOL_CAP, ogni chiamata vede <= PER_CALL_CAP.
 """
 
+import logging
 from collections import Counter
 
 from sqlalchemy.orm import Session
 
+from app.integrations.llm import LLMError
 from app.models import Track
 from app.repositories import library_stats
 from app.schemas import SetGenerationRequest
+
+logger = logging.getLogger(__name__)
 
 POOL_CAP = 200  # tetto massimo del pool di candidate portate in memoria per la curatela
 PER_CALL_CAP = 60  # tetto di tracce viste da una singola chiamata LLM (token budget / latenza)
@@ -140,3 +144,88 @@ def _safe_library_context(db: Session) -> dict:
         "bpm_max": stats["bpm_max"],
         "key_distribution": stats["key_distribution"],
     }
+
+
+_STRATEGIES = ("smooth", "progressive", "contrast", "experimental",
+               "peak_time", "warm_up", "closing")
+
+INTENT_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "intent_summary": {"type": "string"},
+        "strategy": {"type": ["string", "null"], "enum": list(_STRATEGIES) + [None]},
+        "start_bpm": {"type": ["number", "null"]},
+        "end_bpm": {"type": ["number", "null"]},
+        "start_energy": {"type": ["integer", "null"]},
+        "end_energy": {"type": ["integer", "null"]},
+        "genres": {"type": "array", "items": {"type": "string"}},
+        "seed_artists": {"type": "array", "items": {"type": "string"}},
+        "target_duration_minutes": {"type": ["integer", "null"]},
+    },
+    "required": ["intent_summary", "strategy", "start_bpm", "end_bpm", "start_energy",
+                 "end_energy", "genres", "seed_artists", "target_duration_minutes"],
+}
+
+INTENT_SYSTEM = """Sei l'interprete delle richieste di un DJ. Ricevi il prompt libero
+dell'utente e i vincoli gia' impostati nel form. Traduci il prompt in vincoli
+strutturati SOLO per i campi che il form ha lasciato vuoti (elencati in
+`fields_open`): per gli altri restituisci null/liste vuote. Non inventare: se il
+prompt non implica un campo, lascialo null. intent_summary: una frase in cui
+riformuli come hai capito la richiesta (mostrata all'utente)."""
+
+_INTENT_LANGUAGE = {
+    "it": "Scrivi intent_summary in italiano.",
+    "en": "Write intent_summary in English.",
+}
+
+# Campi della request che l'intento puo' compilare (mai quelli di sicurezza
+# come owned_only/sources: restano scelte esplicite dell'utente).
+_COMPILABLE = ("strategy", "start_bpm", "end_bpm", "start_energy", "end_energy",
+               "genres", "seed_artists", "target_duration_minutes")
+
+_WARN_INTENT_FAILED = {
+    "it": "curatela AI: compilazione dell'intento non disponibile (il set usa i vincoli del form)",
+    "en": "AI curation: intent compilation unavailable (the set uses the form constraints)",
+}
+
+
+def compile_intent(llm, req: SetGenerationRequest, lang: str,
+                   ) -> tuple[SetGenerationRequest, dict, list[str]]:
+    """Compila il prompt libero in vincoli, senza mai sovrascrivere l'utente.
+
+    Il discriminante e' req.model_fields_set: un campo passato esplicitamente
+    nel payload della request non viene MAI toccato, anche se uguale al default.
+    Qualsiasi fallimento (LLM o valori fuori bounds) degrada ai vincoli originali.
+    """
+    if not (req.prompt and req.prompt.strip()):
+        return req, {}, []
+    open_fields = [f for f in _COMPILABLE if f not in req.model_fields_set]
+    if not open_fields:
+        return req, {}, []
+    payload = {
+        "user_prompt": req.prompt,
+        "fields_open": open_fields,
+        "form_constraints": {f: getattr(req, f) for f in _COMPILABLE},
+    }
+    try:
+        raw = llm.complete_json(INTENT_SYSTEM + "\n" + _INTENT_LANGUAGE[lang],
+                                payload, INTENT_SCHEMA)
+    except LLMError:
+        logger.warning("compile_intent fallita", exc_info=True)
+        return req, {}, [_WARN_INTENT_FAILED[lang]]
+
+    updates = {}
+    for f in open_fields:
+        value = raw.get(f)
+        if value in (None, [], ""):
+            continue
+        updates[f] = value
+    summary = (raw.get("intent_summary") or "").strip()
+    if not updates:
+        return req, ({"intent_summary": summary} if summary else {}), []
+    try:
+        merged = SetGenerationRequest.model_validate({**req.model_dump(), **updates})
+    except Exception:  # valori compilati fuori bounds: fail-safe sui vincoli originali
+        logger.warning("compile_intent: merge scartato dalla validazione", exc_info=True)
+        return req, {}, [_WARN_INTENT_FAILED[lang]]
+    return merged, {"intent_summary": summary, **updates}, []
