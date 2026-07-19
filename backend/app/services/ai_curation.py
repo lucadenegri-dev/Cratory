@@ -270,6 +270,34 @@ _WARN_MOOD_FOREIGN = {
 }
 
 
+ANCHOR_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "opening": {"type": "array", "items": {"type": "integer"}, "maxItems": 3},
+        "peak": {"type": "array", "items": {"type": "integer"}, "maxItems": 3},
+        "closing": {"type": "array", "items": {"type": "integer"}, "maxItems": 3},
+        "reason": {"type": "string"},
+    },
+    "required": ["opening", "peak", "closing", "reason"],
+}
+
+ANCHOR_SYSTEM = """Sei un DJ esperto. Ricevi l'intento del set e le candidate migliori
+per mood. Proponi fino a 3 track_id per ciascun ruolo: opening (come deve
+iniziare), peak (il momento piu' alto), closing (come deve finire). Sono
+SUGGERIMENTI per un motore deterministico che elegge gli anchor con criteri
+tecnici: scegli per carattere musicale, non per BPM/tonalita'. Usa solo i
+track_id forniti. reason: una frase sull'arco che immagini."""
+
+_WARN_ANCHORS = {
+    "it": "curatela AI: suggerimenti anchor non disponibili",
+    "en": "AI curation: anchor suggestions unavailable",
+}
+_WARN_ANCHOR_FOREIGN = {
+    "it": "curatela AI: suggerimenti anchor su tracce non candidate scartati",
+    "en": "AI curation: anchor suggestions on non-candidate tracks discarded",
+}
+
+
 def _mood_payload(req: SetGenerationRequest, batch: list[Track]) -> dict:
     return {
         "user_prompt": req.prompt or "",
@@ -315,3 +343,30 @@ def score_mood_fit(llm, req: SetGenerationRequest, candidates: list[Track], lang
     if foreign:
         warnings.append(_WARN_MOOD_FOREIGN[lang])
     return scores, tags, warnings
+
+
+def suggest_anchors(llm, req: SetGenerationRequest, candidates: list[Track],
+                    mood_scores: dict[int, int], lang: str,
+                    ) -> tuple[dict[str, list[int]], list[str]]:
+    """Rosa di anchor suggeriti dall'AI (bonus in elezione, mai un vincolo)."""
+    top = sorted(candidates, key=lambda t: (-mood_scores.get(t.id, 50), t.id))[:PER_CALL_CAP]
+    payload = {
+        "user_prompt": req.prompt or "",
+        "constraints": {"strategy": req.strategy, "genres": req.genres},
+        "candidate_tracks": [_candidate_payload(t) for t in top],
+    }
+    try:
+        raw = llm.complete_json(ANCHOR_SYSTEM, payload, ANCHOR_SCHEMA)
+    except LLMError:
+        logger.warning("suggest_anchors fallita", exc_info=True)
+        return {}, [_WARN_ANCHORS[lang]]
+    sent_ids = {t.id for t in top}
+    hints: dict[str, list[int]] = {}
+    foreign = False
+    for role in ("opening", "peak", "closing"):
+        ids = [i for i in raw.get(role, []) if i in sent_ids]
+        if len(ids) != len(raw.get(role, [])):
+            foreign = True
+        if ids:
+            hints[role] = ids
+    return hints, ([_WARN_ANCHOR_FOREIGN[lang]] if foreign else [])

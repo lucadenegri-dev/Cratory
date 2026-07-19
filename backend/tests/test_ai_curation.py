@@ -4,7 +4,7 @@ from app.integrations import LLMClient
 from app.integrations.llm import LLMError
 from app.models import Track
 from app.schemas import SetGenerationRequest
-from app.services.ai_curation import compile_intent, score_mood_fit
+from app.services.ai_curation import compile_intent, score_mood_fit, suggest_anchors
 
 
 class ScriptedLLM(LLMClient):
@@ -105,3 +105,24 @@ def test_mood_failed_batch_degrades_but_others_survive():
     scores, tags, warnings = score_mood_fit(llm, SetGenerationRequest(prompt="p"), cands, "it")
     assert scores[10] == 50 and scores[60] == 70
     assert len(warnings) == 1
+
+
+def test_anchors_sees_top60_by_mood_and_validates_ids():
+    cands = [_mk_track(i) for i in range(1, 101)]
+    mood = {i: (90 if i <= 55 else 20) for i in range(1, 101)}
+    resp = {"opening": [3], "peak": [7, 999], "closing": [55], "reason": "arco"}
+    llm = ScriptedLLM([resp])
+    hints, warnings = suggest_anchors(llm, SetGenerationRequest(prompt="p"), cands, mood, "it")
+    sent_ids = {c["id"] for c in llm.calls[0][1]["candidate_tracks"]}
+    assert len(sent_ids) == 60 and all(mood[i] >= 20 for i in sent_ids)
+    assert set(range(1, 56)) <= sent_ids          # le top per mood ci sono tutte
+    assert hints == {"opening": [3], "peak": [7], "closing": [55]}  # 999 scartato
+    assert len(warnings) == 1
+
+
+def test_anchors_degrade_on_llm_error():
+    cands = [_mk_track(i) for i in range(1, 10)]
+    hints, warnings = suggest_anchors(ScriptedLLM([LLMError("boom")]),
+                                      SetGenerationRequest(prompt="p"), cands,
+                                      {t.id: 50 for t in cands}, "it")
+    assert hints == {} and len(warnings) == 1
