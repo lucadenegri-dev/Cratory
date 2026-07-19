@@ -32,7 +32,6 @@ class Settings(BaseSettings):
     spotify_client_secret: str = ""
     # Spotify accetta solo HTTPS o loopback 127.0.0.1 (non "localhost") come redirect
     spotify_redirect_uri: str = "http://127.0.0.1:8000/api/spotify/callback"
-    lastfm_api_key: str = ""
     # Discogs: sorgente di profondita' per Discovery (generi/stili, etichette, artisti).
     # Funziona anche senza token (rate ridotto a ~25/min); col token sale a ~60/min.
     discogs_token: str = ""

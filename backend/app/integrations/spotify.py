@@ -287,10 +287,3 @@ class SpotifyWebClient(SpotifyClient, ClosableHttpClient):
             self._call("POST", f"/playlists/{playlist['id']}/tracks", user=True,
                        json={"uris": uris[i:i + 100]})
         return playlist["external_urls"]["spotify"]
-
-    def add_tracks(self, playlist_id: str, track_ids: list[str]) -> None:
-        """Aggiunge tracce a una playlist esistente dell'utente (chunk da 100)."""
-        uris = [f"spotify:track:{tid}" for tid in track_ids]
-        for i in range(0, len(uris), 100):
-            self._call("POST", f"/playlists/{playlist_id}/tracks", user=True,
-                       json={"uris": uris[i:i + 100]})
