@@ -452,8 +452,10 @@ samples segments, recognizes the tracks and persists `DjSet`/`DjSetTrack`. The t
 do not enter the main library. This is the only audio fingerprinting in the project:
 it identifies the tracks of an external mix, not the library tracks.
 
-Sampling is resilient: an unrecognized segment is retried once at a nearby
-offset, and tracks recognized in a single sample get one confirmation sample
+Sampling is resilient: the grid is capped at 200 segments per mix (≈39s step
+on a 2-hour set, so most real tracks collect 2+ agreeing samples), an
+unrecognized segment is retried once at a nearby offset, and tracks recognized
+in a single sample get one confirmation sample
 (all within a budget of 50 extra calls per mix). `DjSetTrack.confidence`
 reflects the outcome: `90` = confirmed by 2+ agreeing samples, `45` = single
 unconfirmed sample (the UI marks these as uncertain; sets analyzed before this

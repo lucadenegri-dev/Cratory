@@ -24,7 +24,9 @@ from app.integrations.shazam import AudioRecognizer, RecognizerError
 logger = logging.getLogger(__name__)
 
 SEGMENT_LENGTH = 12      # secondi di audio per ogni tentativo di riconoscimento
-MAX_SEGMENTS = 100       # tetto ai segmenti (= chiamate al recognizer) per mix
+MAX_SEGMENTS = 200       # tetto ai segmenti (= chiamate al recognizer) per mix: su 2h il
+                         # passo e' ~39s, cosi' quasi ogni traccia raccoglie 2+ campioni
+                         # e il voto di conferma separa le vere dai falsi positivi
 MAX_CONSECUTIVE_ERRORS = 8  # oltre questo numero di errori di fila, interrompe
 MERGE_MAX_GAPS = 2       # buchi consecutivi oltre i quali la stessa traccia e' una voce nuova
 CONFIDENCE_CONFIRMED = 90  # 2+ campioni concordi

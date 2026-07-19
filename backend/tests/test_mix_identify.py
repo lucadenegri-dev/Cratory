@@ -36,6 +36,14 @@ def test_plan_offsets_zero_duration():
     assert plan_offsets(0) == [0]
 
 
+def test_plan_offsets_default_cap_keeps_tracks_visible_on_long_mixes():
+    # tetto di default 200: su 2h08m il passo scende a ~39s, cosi' una traccia
+    # da 2-3 minuti viene campionata piu' volte e puo' essere confermata
+    offsets = plan_offsets(7720)
+    assert len(offsets) <= 200
+    assert offsets[1] - offsets[0] == 39  # ceil(7720/200)
+
+
 # --- group_samples / build_tracks -------------------------------------------
 
 
@@ -188,8 +196,9 @@ def test_identify_confirm_loop_stops_when_recognizer_is_down():
         raise RecognizerError("down")
 
     out = identify_from_recognizer(7200, recognize_at)
-    # 2 match + 8 errori consecutivi (griglia+retry), poi zero chiamate di conferma
-    assert len(calls) == 10
+    # passo 36s: 2 match + 2 errori sul buco a 36 (griglia+retry, azzerati da B a 72)
+    # + 8 errori consecutivi dopo B, poi zero chiamate di conferma
+    assert len(calls) == 12
     assert [(t.artist, t.confidence) for t in out] == [
         ("A", CONFIDENCE_DUBIOUS), ("B", CONFIDENCE_DUBIOUS),
     ]
