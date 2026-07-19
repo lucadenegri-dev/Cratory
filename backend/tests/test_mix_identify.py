@@ -1,7 +1,8 @@
 """Identificazione mix DJ (Shazam) — cuore deterministico, senza rete ne' audio.
 
-Testa la parte pura (campionamento offset, raggruppamento con finestra sui buchi, orchestrazione
-con recognizer finto) e il parsing del payload Shazam. L'I/O (yt-dlp/ffmpeg) non e' qui.
+Testa la parte pura (campionamento offset, raggruppamento e fusione temporale,
+orchestrazione con recognizer finto) e il parsing del payload Shazam. L'I/O
+(yt-dlp/ffmpeg) non e' qui.
 """
 
 from app.integrations.shazam import RecognizerError, parse_shazam
@@ -11,6 +12,7 @@ from app.services.mix_identify import (
     build_tracks,
     group_samples,
     identify_from_recognizer,
+    merge_same_key_runs,
     plan_offsets,
 )
 
@@ -44,7 +46,7 @@ def test_plan_offsets_default_cap_keeps_tracks_visible_on_long_mixes():
     assert offsets[1] - offsets[0] == 39  # ceil(7720/200)
 
 
-# --- group_samples / build_tracks -------------------------------------------
+# --- group_samples / merge_same_key_runs / build_tracks ----------------------
 
 
 def _m(artist, title, isrc=None):
@@ -56,32 +58,14 @@ def test_group_collapses_consecutive_same_track_counting_hits():
         (0, _m("A", "One")),
         (12, _m("A", "One")),       # stesso brano campionato di nuovo -> stessa serie
         (24, _m("B", "Two")),
-        (36, None),                  # buco
+        (36, None),                  # buco: spezza la serie
         (48, _m("C", "Three")),
     ]
     runs = group_samples(samples)
     assert [(r.match["artist"], r.match["title"], r.hits) for r in runs] == [
         ("A", "One", 2), ("B", "Two", 1), ("C", "Three", 1),
     ]
-    assert runs[0].offset == 0  # tiene il primo offset della serie
-
-
-def test_group_merges_same_track_across_small_gaps():
-    # 1-2 buchi con la stessa traccia ai due lati: e' la stessa voce, non un doppione
-    samples = [(0, _m("A", "One")), (12, None), (24, None), (36, _m("A", "One"))]
-    runs = group_samples(samples)
-    assert len(runs) == 1
-    assert runs[0].hits == 2
-
-
-def test_group_three_gaps_break_the_window():
-    samples = [(0, _m("A", "One")), (12, None), (24, None), (36, None), (48, _m("A", "One"))]
-    assert len(group_samples(samples)) == 2  # 3+ buchi: il DJ l'ha rimessa davvero
-
-
-def test_group_other_track_between_breaks_the_window():
-    samples = [(0, _m("A", "One")), (12, _m("B", "Two")), (24, _m("A", "One"))]
-    assert len(group_samples(samples)) == 3  # A torna dopo B: voce nuova
+    assert runs[0].offset == 0 and runs[0].last_offset == 12
 
 
 def test_group_uses_isrc_when_present():
@@ -89,6 +73,30 @@ def test_group_uses_isrc_when_present():
     samples = [(0, _m("A", "One", isrc="X1")), (12, _m("A", "One (Extended)", isrc="X1"))]
     runs = group_samples(samples)
     assert len(runs) == 1 and runs[0].hits == 2
+
+
+def test_merge_rejoins_same_track_across_holes():
+    # buchi con la stessa traccia ai due lati, entro la finestra: stessa voce
+    runs = group_samples([(0, _m("A", "One")), (12, None), (24, None), (36, _m("A", "One"))])
+    merged = merge_same_key_runs(runs)
+    assert len(merged) == 1
+    assert merged[0].hits == 2 and merged[0].last_offset == 36
+
+
+def test_merge_rejoins_same_track_over_an_interloper():
+    # il caso Total Eclipse: la stessa traccia ai due lati di un match diverso
+    # (falso positivo o overlap) si ricuce; il match in mezzo resta una voce sua
+    runs = group_samples([(975, _m("Diva", "Total Eclipse")), (1014, _m("Guetta", "Titanium")),
+                          (1131, _m("Diva", "Total Eclipse"))])
+    merged = merge_same_key_runs(runs)
+    assert [(r.match["artist"], r.hits) for r in merged] == [("Diva", 2), ("Guetta", 1)]
+    assert merged[0].offset == 975 and merged[0].last_offset == 1131
+
+
+def test_merge_far_reappearance_is_a_new_entry():
+    # oltre la finestra temporale il DJ l'ha rimessa davvero: voce nuova
+    runs = group_samples([(0, _m("A", "One")), (150, None), (300, _m("A", "One"))])
+    assert len(merge_same_key_runs(runs)) == 2
 
 
 def test_build_tracks_confidence_from_hits():
@@ -101,7 +109,8 @@ def test_build_tracks_confidence_from_hits():
 
 
 # --- identify_from_recognizer (recognizer finto) -----------------------------
-# Con durata 60: offsets pianificati [0, 12, 24, 36, 48], passo 12, retry a +6s.
+# Con durata 60: offsets pianificati [0, 12, 24, 36, 48], passo 12,
+# retry sui buchi a +6s, conferma a due lati a +-6s.
 
 
 def _tracker(table):
@@ -114,39 +123,64 @@ def _tracker(table):
     return calls, recognize_at
 
 
-def test_identify_retry_fills_hole_and_confirms_singles():
+def test_identify_retry_fills_hole_and_drops_refuted_single():
     # buco a 12 -> il retry a 18 becca A (stessa serie di 0: hit 2, confermata);
-    # B ha un solo hit -> campione di conferma a 24+4=28 (buco: resta dubbia).
+    # B ha un solo hit -> conferme a 30 (buco) e 18 (traccia diversa): smentita, fuori.
     table = {0: _m("A", "One"), 18: _m("A", "One"), 24: _m("B", "Two")}
     calls, recognize_at = _tracker(table)
-    out = identify_from_recognizer(60, recognize_at)
+    out, aborted = identify_from_recognizer(60, recognize_at)
     # 36 -> retry a 42; 48 -> il retry (54) sforerebbe la durata: clampato a 48, saltato
-    assert calls == [0, 12, 18, 24, 36, 42, 48, 28]
-    assert [(t.artist, t.title, t.confidence) for t in out] == [
-        ("A", "One", CONFIDENCE_CONFIRMED), ("B", "Two", CONFIDENCE_DUBIOUS),
-    ]
+    assert calls == [0, 12, 18, 24, 36, 42, 48, 30, 18]
+    assert [(t.artist, t.title, t.confidence) for t in out] == [("A", "One", CONFIDENCE_CONFIRMED)]
+    assert aborted is None
 
 
-def test_identify_confirmation_promotes_single_to_confirmed():
-    # durata 36 -> offsets [0, 12, 24]. B singola a 12, la conferma a 16 concorda.
-    table = {0: _m("A", "One"), 12: _m("B", "Two"), 16: _m("B", "Two")}
+def test_identify_confirmation_promotes_single_and_drops_refuted():
+    # durata 36 -> offsets [0, 12, 24]. B singola a 12: la conferma a 18 concorda -> 90.
+    # A singola a 0: conferma a 6 muta, -6 fuori range -> smentita, fuori.
+    table = {0: _m("A", "One"), 12: _m("B", "Two"), 18: _m("B", "Two")}
     calls, recognize_at = _tracker(table)
-    out = identify_from_recognizer(36, recognize_at)
+    out, aborted = identify_from_recognizer(36, recognize_at)
+    assert [(t.artist, t.confidence) for t in out] == [("B", CONFIDENCE_CONFIRMED)]
+    assert 6 in calls and 18 in calls
+    assert aborted is None
+
+
+def test_identify_two_sided_confirmation_rescues_track_near_its_end():
+    # la conferma a +6 cade sulla traccia successiva (C), quella a -6 concorda:
+    # B e' vera, viene promossa; il match C della conferma non crea voci
+    table = {0: _m("A", "One"), 12: _m("A", "One"), 24: _m("B", "Two"),
+             30: _m("C", "Three"), 18: _m("B", "Two")}
+    calls, recognize_at = _tracker(table)
+    out, _ = identify_from_recognizer(60, recognize_at)
+    assert calls == [0, 12, 24, 36, 42, 48, 30, 18]
     assert [(t.artist, t.confidence) for t in out] == [
-        ("A", CONFIDENCE_DUBIOUS),      # conferma a 0+4=4: buco -> dubbia
-        ("B", CONFIDENCE_CONFIRMED),    # conferma a 16 concorde -> 90
+        ("A", CONFIDENCE_CONFIRMED), ("B", CONFIDENCE_CONFIRMED),
     ]
-    assert 4 in calls and 16 in calls
+
+
+def test_identify_merges_over_refuted_interloper_end_to_end():
+    # Total Eclipse in miniatura: D ai due lati di T. Le due D si fondono in una
+    # confermata senza spendere conferme; T smentita (18 e 6 muti) sparisce.
+    table = {0: _m("D", "Eclipse"), 12: _m("T", "Titanium"), 24: _m("D", "Eclipse")}
+    calls, recognize_at = _tracker(table)
+    out, _ = identify_from_recognizer(60, recognize_at)
+    assert calls == [0, 12, 24, 36, 42, 48, 18, 6]
+    assert [(t.artist, t.confidence, t.start_offset_seconds) for t in out] == [
+        ("D", CONFIDENCE_CONFIRMED, 0),
+    ]
 
 
 def test_identify_budget_zero_disables_retry_and_confirm():
     table = {0: _m("A", "One"), 12: _m("A", "One"), 24: _m("B", "Two")}
     calls, recognize_at = _tracker(table)
-    out = identify_from_recognizer(60, recognize_at, max_extra_calls=0)
+    out, aborted = identify_from_recognizer(60, recognize_at, max_extra_calls=0)
     assert calls == plan_offsets(60)  # solo la griglia pianificata
+    # B non e' mai stata verificata: resta dubbia (assenza di prove, non smentita)
     assert [(t.artist, t.confidence) for t in out] == [
         ("A", CONFIDENCE_CONFIRMED), ("B", CONFIDENCE_DUBIOUS),
     ]
+    assert aborted is None
 
 
 def test_identify_error_on_grid_recovered_by_retry():
@@ -158,20 +192,22 @@ def test_identify_error_on_grid_recovered_by_retry():
             raise RecognizerError("boom")
         return table.get(offset)
 
-    out = identify_from_recognizer(24, recognize_at)  # offsets [0, 12]
+    out, aborted = identify_from_recognizer(24, recognize_at)  # offsets [0, 12]
     assert [(t.artist, t.confidence) for t in out] == [("A", CONFIDENCE_CONFIRMED)]
+    assert aborted is None
 
 
-def test_identify_stops_after_max_consecutive_errors():
+def test_identify_stops_after_max_consecutive_errors_and_reports_abort():
     calls: list[int] = []
 
     def recognize_at(offset: int):
         calls.append(offset)
         raise RecognizerError("down")
 
-    out = identify_from_recognizer(7200, recognize_at)
+    out, aborted = identify_from_recognizer(7200, recognize_at)
     assert out == []
     assert len(calls) == 8  # MAX_CONSECUTIVE_ERRORS, retry compresi
+    assert aborted == 108  # passo 36: quarto offset di griglia, dove ci si e' fermati
 
 
 def test_identify_progress_extends_total_with_confirmations():
@@ -185,7 +221,7 @@ def test_identify_progress_extends_total_with_confirmations():
 
 def test_identify_confirm_loop_stops_when_recognizer_is_down():
     # il recognizer muore dopo due match singoli: la fase di conferma non deve
-    # martellare l'endpoint che la passata principale ha appena dichiarato giu'
+    # martellare l'endpoint; i singoli MAI verificati restano dubbi, non scartati
     table = {0: _m("A", "One"), 72: _m("B", "Two")}
     calls: list[int] = []
 
@@ -195,31 +231,32 @@ def test_identify_confirm_loop_stops_when_recognizer_is_down():
             return table[offset]
         raise RecognizerError("down")
 
-    out = identify_from_recognizer(7200, recognize_at)
+    out, aborted = identify_from_recognizer(7200, recognize_at)
     # passo 36s: 2 match + 2 errori sul buco a 36 (griglia+retry, azzerati da B a 72)
     # + 8 errori consecutivi dopo B, poi zero chiamate di conferma
     assert len(calls) == 12
     assert [(t.artist, t.confidence) for t in out] == [
         ("A", CONFIDENCE_DUBIOUS), ("B", CONFIDENCE_DUBIOUS),
     ]
+    assert aborted == 216
 
 
 def test_identify_no_self_confirmation_on_short_audio():
-    # audio cortissimo: il campione di conferma coinciderebbe con l'originale ->
-    # niente autoconferma, la voce resta dubbia e il budget non si consuma
+    # audio cortissimo: nessun campione di conferma indipendente possibile ->
+    # mai verificata, resta dubbia e il budget non si consuma
     table = {0: _m("A", "One")}
     calls, recognize_at = _tracker(table)
-    out = identify_from_recognizer(14, recognize_at)
+    out, _ = identify_from_recognizer(14, recognize_at)
     assert calls == [0]
     assert [(t.artist, t.confidence) for t in out] == [("A", CONFIDENCE_DUBIOUS)]
 
 
 def test_identify_budget_consumed_by_retry_leaves_singles_unconfirmed():
     # ordine di consumo: il retry sul buco brucia l'unico budget, la conferma
-    # di B non parte -> resta dubbia
+    # di B non parte -> mai verificata, resta dubbia
     table = {0: _m("A", "One"), 12: _m("A", "One"), 24: _m("B", "Two")}
     calls, recognize_at = _tracker(table)
-    out = identify_from_recognizer(60, recognize_at, max_extra_calls=1)
+    out, _ = identify_from_recognizer(60, recognize_at, max_extra_calls=1)
     assert calls == [0, 12, 24, 36, 42, 48]  # 42 = retry sul buco a 36; nessuna conferma
     assert [(t.artist, t.confidence) for t in out] == [
         ("A", CONFIDENCE_CONFIRMED), ("B", CONFIDENCE_DUBIOUS),

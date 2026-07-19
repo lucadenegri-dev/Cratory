@@ -55,7 +55,7 @@ def _fake_identify_set_ok(url, *, recognizer, on_progress=None):
         IdentifiedTrack(position=2, start_offset_seconds=180, artist="Artist B", title="Track B",
                         isrc=None, confidence=70),
     ]
-    return meta, tracks
+    return meta, tracks, None
 
 
 # --- happy path ---------------------------------------------------------------

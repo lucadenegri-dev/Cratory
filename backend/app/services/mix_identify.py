@@ -4,9 +4,11 @@ Pipeline DETERMINISTICA:
 1. download dell'audio dall'URL (yt-dlp);
 2. campionamento a segmenti sovrapposti (ffmpeg) lungo la durata;
 3. riconoscimento di ogni segmento con retry sui buchi (AudioRecognizer, iniettato);
-4. conferma dei match singoli e dedup con finestra sui buchi (gestisce le transizioni del DJ).
+4. fusione temporale delle serie concordi, conferma a due lati dei match singoli e
+   scarto degli smentiti (gestisce transizioni e falsi positivi del DJ mixing).
 
-Il cuore (`plan_offsets`, `group_samples`/`build_tracks`, `identify_from_recognizer`) e' puro e
+Il cuore (`plan_offsets`, `group_samples`/`merge_same_key_runs`/`build_tracks`,
+`identify_from_recognizer`) e' puro e
 testabile senza rete ne' audio: l'I/O (yt-dlp/ffmpeg) sta in funzioni separate e il
 recognizer e' iniettato. Le tracce identificate NON entrano in libreria.
 """
@@ -28,11 +30,10 @@ MAX_SEGMENTS = 200       # tetto ai segmenti (= chiamate al recognizer) per mix:
                          # passo e' ~39s, cosi' quasi ogni traccia raccoglie 2+ campioni
                          # e il voto di conferma separa le vere dai falsi positivi
 MAX_CONSECUTIVE_ERRORS = 8  # oltre questo numero di errori di fila, interrompe
-MERGE_MAX_GAPS = 2       # buchi consecutivi oltre i quali la stessa traccia e' una voce nuova
+MERGE_WINDOW_SECONDS = 240  # stessa chiave che ricompare entro questa distanza = stessa esecuzione
 CONFIDENCE_CONFIRMED = 90  # 2+ campioni concordi
-CONFIDENCE_DUBIOUS = 45    # campione singolo mai confermato
+CONFIDENCE_DUBIOUS = 45    # campione singolo mai verificato (i verificati e smentiti si scartano)
 MAX_EXTRA_CALLS = 50     # budget per retry sui buchi + conferme dei singoli (per mix)
-CONFIRM_DELTA = 4        # secondi di scarto del campione di conferma
 
 
 @dataclass
@@ -85,34 +86,56 @@ class MatchRun:
     offset: int  # offset del primo campione della serie
     match: dict[str, Any]
     hits: int = 1
+    last_offset: int = 0       # offset dell'ultimo campione concorde della serie
+    confirm_attempted: bool = False  # almeno un campione di conferma e' stato tentato
 
 
 def group_samples(samples: list[tuple[int, dict[str, Any] | None]]) -> list[MatchRun]:
-    """Raggruppa i campioni in serie per traccia, con finestra sui buchi.
+    """Collassa i campioni STRETTAMENTE consecutivi con la stessa chiave.
 
-    `samples` = [(offset, match|None), ...] in ordine di offset. Campioni consecutivi
-    con la stessa chiave si sommano (`hits`). La stessa chiave che ricompare dopo
-    soli buchi (fino a MERGE_MAX_GAPS consecutivi) si fonde con la serie precedente;
-    con piu' buchi, o un'altra traccia in mezzo, e' una serie nuova (il DJ l'ha
-    rimessa davvero)."""
+    `samples` = [(offset, match|None), ...] in ordine di offset. Un buco o un
+    match diverso spezzano la serie: le ricomparse ravvicinate le ricuce
+    `merge_same_key_runs` (finestra temporale)."""
     runs: list[MatchRun] = []
-    gap_count = 0
+    prev_matched = False
     for offset, match in samples:
         if not match:
-            gap_count += 1
+            prev_matched = False
             continue
         key = _match_key(match)
-        if runs and runs[-1].key == key and gap_count <= MERGE_MAX_GAPS:
+        if runs and prev_matched and runs[-1].key == key:
             runs[-1].hits += 1
+            runs[-1].last_offset = offset
         else:
-            runs.append(MatchRun(key=key, offset=offset, match=match))
-        gap_count = 0
+            runs.append(MatchRun(key=key, offset=offset, match=match, last_offset=offset))
+        prev_matched = True
     return runs
+
+
+def merge_same_key_runs(runs: list[MatchRun], *, window: int = MERGE_WINDOW_SECONDS) -> list[MatchRun]:
+    """Rifonde la stessa chiave che ricompare entro `window` secondi.
+
+    Anche sopra un match diverso in mezzo: e' il caso reale del falso positivo
+    dentro una traccia lunga o dell'overlap di mixaggio (il match in mezzo resta
+    una voce sua). Due campioni distanti e concordi valgono cosi' come conferma
+    (`hits` sommati). Oltre la finestra la ricomparsa e' una voce nuova (il DJ
+    l'ha rimessa davvero)."""
+    out: list[MatchRun] = []
+    last_by_key: dict[tuple, MatchRun] = {}
+    for run in runs:
+        prev = last_by_key.get(run.key)
+        if prev is not None and run.offset - prev.last_offset <= window:
+            prev.hits += run.hits
+            prev.last_offset = run.last_offset
+        else:
+            out.append(run)
+            last_by_key[run.key] = run
+    return out
 
 
 def build_tracks(runs: list[MatchRun]) -> list[IdentifiedTrack]:
     """Serie -> tracklist. La confidence deriva dai campioni concordi: 2+ =
-    confermata, 1 = dubbia (resta in lista, la UI la marca)."""
+    confermata, 1 = dubbia (mai verificata; la UI la marca)."""
     return [
         IdentifiedTrack(
             position=i,
@@ -135,25 +158,36 @@ def _retry_delta(step: int) -> int:
     return max(6, min(step // 2, 20))
 
 
+def _confirm_delta(step: int) -> int:
+    """Distanza del campione di conferma: mezzo passo, tra 6 e 30 secondi —
+    abbastanza lontano dalla transizione che ha generato un eventuale falso."""
+    return max(6, min(step // 2, 30))
+
+
 def identify_from_recognizer(
     duration_seconds: int,
     recognize_at: Callable[[int], dict[str, Any] | None],
     *,
     on_progress: ProgressFn | None = None,
     max_extra_calls: int = MAX_EXTRA_CALLS,
-) -> list[IdentifiedTrack]:
-    """Campiona gli offset, riconosce, conferma e deduplica.
+) -> tuple[list[IdentifiedTrack], int | None]:
+    """Campiona gli offset, riconosce, conferma, fonde e scarta il rumore.
 
     `recognize_at(offset)->match|None` isola l'I/O: i test passano una funzione
     finta. Robustezza (tutto entro `max_extra_calls` chiamate oltre la griglia):
-    un buco viene ritentato una volta a offset spostato (le transizioni sono la
-    causa principale); le serie con un solo campione ricevono un campione di
-    conferma a +-CONFIRM_DELTA, e restano in lista come dubbie se non confermate.
-    Il campione di un retry riuscito resta registrato all'offset pianificato."""
+    un buco viene ritentato una volta a offset spostato; le serie con un solo
+    campione ricevono fino a due campioni di conferma a +-_confirm_delta —
+    concorde = confermata, smentita = scartata (rumore da transizione), mai
+    verificata (budget/recognizer/audio corto) = resta in lista come dubbia.
+    Il campione di un retry riuscito resta registrato all'offset pianificato.
+
+    Ritorna `(tracks, aborted_at)`: `aborted_at` e' l'offset a cui la griglia si
+    e' interrotta per errori consecutivi (endpoint giu'), None a completamento."""
     offsets = plan_offsets(duration_seconds)
     step = offsets[1] - offsets[0] if len(offsets) > 1 else SEGMENT_LENGTH
     budget = max_extra_calls
     consecutive_errors = 0
+    aborted_at: int | None = None
 
     def try_recognize(offset: int) -> dict[str, Any] | None:
         nonlocal consecutive_errors
@@ -180,30 +214,40 @@ def identify_from_recognizer(
         if on_progress:
             on_progress(i, len(offsets))
         if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-            logger.error("Troppi errori di riconoscimento consecutivi: interrompo.")
+            logger.error("Troppi errori di riconoscimento consecutivi: interrompo a %ss.", offset)
+            aborted_at = offset
             break
 
-    runs = group_samples(samples)
+    runs = merge_same_key_runs(group_samples(samples))
 
     to_confirm = [r for r in runs if r.hits == 1]
     total = len(offsets) + len(to_confirm)
     done = len(offsets)
+    delta = _confirm_delta(step)
     for run in to_confirm:
         if budget <= 0 or consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-            break  # budget esaurito o recognizer giu': i singoli restano dubbi
-        confirm_at = run.offset + CONFIRM_DELTA
-        if duration_seconds > 0 and confirm_at + SEGMENT_LENGTH > duration_seconds:
-            confirm_at = max(0, run.offset - CONFIRM_DELTA)
-        if confirm_at != run.offset:  # se coincide, nessun campione indipendente: resta dubbia
+            break  # nessuna verifica possibile: i singoli non verificati restano dubbi
+        for confirm_at in (run.offset + delta, run.offset - delta):
+            if confirm_at == run.offset or confirm_at < 0:
+                continue
+            if duration_seconds > 0 and confirm_at + SEGMENT_LENGTH > duration_seconds:
+                continue
+            if budget <= 0 or consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                break
             budget -= 1
+            run.confirm_attempted = True
             match = try_recognize(confirm_at)
             if match is not None and _match_key(match) == run.key:
                 run.hits += 1
+                break
         done += 1
         if on_progress:
             on_progress(done, total)
 
-    return build_tracks(runs)
+    # Verificata e smentita = rumore da transizione: fuori dalla tracklist.
+    # Mai verificata = dubbia: assenza di prove, non prova contraria.
+    kept = [r for r in runs if r.hits >= 2 or not r.confirm_attempted]
+    return build_tracks(kept), aborted_at
 
 
 # ---- I/O: download (yt-dlp) + segmentazione (ffmpeg) -----------------------
@@ -280,8 +324,11 @@ def identify_set(
     *,
     recognizer: AudioRecognizer,
     on_progress: ProgressFn | None = None,
-) -> tuple[SetMeta, list[IdentifiedTrack]]:
-    """Scarica, campiona e identifica un mix. Usa una dir temporanea, pulita a fine."""
+) -> tuple[SetMeta, list[IdentifiedTrack], int | None]:
+    """Scarica, campiona e identifica un mix. Usa una dir temporanea, pulita a fine.
+
+    Il terzo elemento e' `aborted_at`: offset (secondi) a cui l'analisi si e'
+    interrotta per errori persistenti del recognizer, None se completata."""
     with tempfile.TemporaryDirectory(prefix="djmix_") as workdir:
         audio_path, meta = download_audio(url, workdir)
         duration = meta.duration_seconds or 0
@@ -299,5 +346,5 @@ def identify_set(
                 if os.path.exists(seg):
                     os.remove(seg)
 
-        tracks = identify_from_recognizer(duration, recognize_at, on_progress=on_progress)
-    return meta, tracks
+        tracks, aborted_at = identify_from_recognizer(duration, recognize_at, on_progress=on_progress)
+    return meta, tracks, aborted_at

@@ -59,7 +59,7 @@ def _run_job(dj_set_id: int, url: str) -> None:
     try:
         dj_set = db.get(DjSet, dj_set_id)
         _state.update(phase="Scarico l'audio del mix…")
-        meta, tracks = identify_set(url, recognizer=recognizer, on_progress=on_progress)
+        meta, tracks, aborted_at = identify_set(url, recognizer=recognizer, on_progress=on_progress)
 
         dj_set.title = meta.title
         dj_set.dj_name = meta.dj_name

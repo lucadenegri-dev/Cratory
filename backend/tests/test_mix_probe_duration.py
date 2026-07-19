@@ -42,11 +42,11 @@ def test_identify_set_falls_back_to_probe_when_no_duration(tmp_path, monkeypatch
 
     def fake_core(duration, recognize_at, on_progress=None):
         seen["duration"] = duration
-        return []
+        return [], None
 
     monkeypatch.setattr(mix_identify, "identify_from_recognizer", fake_core)
 
-    out_meta, _tracks = identify_set("https://x/mix", recognizer=object())
+    out_meta, _tracks, _aborted = identify_set("https://x/mix", recognizer=object())
 
     assert seen["duration"] == 600, \
         "senza durata yt-dlp deve campionare la durata da ffprobe, non 0"
