@@ -464,6 +464,8 @@ export interface DjSet {
   status: "pending" | "identifying" | "done" | "error";
   error: string | null;
   identified_count: number;
+  /** Analisi parziale: offset (s) a cui si è interrotta; null = completa. */
+  aborted_at_seconds: number | null;
   imported_playlist_id: number | null;
   created_at: string;
 }

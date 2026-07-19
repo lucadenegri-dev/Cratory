@@ -58,6 +58,30 @@ def _fake_identify_set_ok(url, *, recognizer, on_progress=None):
     return meta, tracks, None
 
 
+def _fake_identify_set_aborted(url, *, recognizer, on_progress=None):
+    """Analisi troncata: l'endpoint e' morto a meta' mix (aborted_at valorizzato)."""
+    meta = SetMeta(source_url=url, title="Set Troncato", dj_name="DJ Test",
+                   platform="soundcloud", duration_seconds=7200, artwork_url=None)
+    tracks = [IdentifiedTrack(position=1, start_offset_seconds=0, artist="A", title="One",
+                              isrc=None, confidence=90)]
+    return meta, tracks, 2769
+
+
+def test_run_job_persiste_l_interruzione_dell_analisi(patch_job, monkeypatch):
+    TestSession = patch_job
+    monkeypatch.setattr("app.services.mix_identify.identify_set", _fake_identify_set_aborted)
+    monkeypatch.setattr("app.integrations.shazam.ShazamioRecognizer", _FakeRecognizer)
+
+    dj_set_id = _make_dj_set(TestSession)
+    job._run_job(dj_set_id, "https://soundcloud.com/x/mix")
+
+    db = TestSession()
+    dj_set = db.get(DjSet, dj_set_id)
+    assert dj_set.status == "done"  # parziale, ma il lavoro fatto resta
+    assert dj_set.aborted_at_seconds == 2769  # ...e l'interruzione non e' silenziosa
+    db.close()
+
+
 # --- happy path ---------------------------------------------------------------
 
 
@@ -84,6 +108,7 @@ def test_run_job_happy_path_persiste_dj_set_e_tracce(patch_job, monkeypatch):
     assert dj_set.artwork_url == "http://img/art.jpg"
     assert dj_set.identified_count == 2
     assert dj_set.analyzed_at is not None
+    assert dj_set.aborted_at_seconds is None  # analisi completa: nessuna interruzione
     tracks = db.query(DjSetTrack).filter(DjSetTrack.dj_set_id == dj_set_id).order_by(DjSetTrack.position).all()
     assert [t.artist for t in tracks] == ["Artist A", "Artist B"]
     assert [t.title for t in tracks] == ["Track A", "Track B"]

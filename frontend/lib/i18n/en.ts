@@ -659,6 +659,9 @@ export const en = {
     emptyBodyPrefix: "Paste a mix's URL and press ",
     emptyBodySuffix: " to extract its tracklist.",
     statusDone: "identified",
+    partialBadge: "PARTIAL",
+    partialNote: (time: string) =>
+      `Analysis stopped at ${time}: the recognition service stopped responding. The tracklist covers only up to there — delete the set and retry for full coverage.`,
     statusIdentifying: "in progress…",
     statusError: "error",
     statusPending: "pending",

@@ -67,6 +67,7 @@ def _run_job(dj_set_id: int, url: str) -> None:
         dj_set.duration_seconds = meta.duration_seconds
         dj_set.artwork_url = meta.artwork_url
         dj_set.identified_count = len(tracks)
+        dj_set.aborted_at_seconds = aborted_at  # None = analisi completa
         dj_set.status = "done"
         dj_set.analyzed_at = datetime.now(timezone.utc)
         for t in tracks:
@@ -119,6 +120,7 @@ def start_job(url: str) -> dict:
                 dj_set.status = "identifying"
                 dj_set.error = None
                 dj_set.identified_count = 0
+                dj_set.aborted_at_seconds = None
             else:
                 dj_set = DjSet(source_url=url, status="identifying")
                 db.add(dj_set)

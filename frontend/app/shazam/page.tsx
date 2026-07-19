@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Radar, Music4, Eye, Trash2, AudioLines } from "lucide-react";
 import {
-  shazamStatus, identifyMix, listDjSets, deleteDjSet, errText, fmtDate,
+  shazamStatus, identifyMix, listDjSets, deleteDjSet, errText, fmtDate, fmtDuration,
   type DjSet,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Input, Loading } from "@/components/ui";
@@ -142,6 +142,11 @@ export default function ShazamPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <Link href={`/shazam/${s.id}`} className="truncate font-medium hover:text-fg-strong">{s.title ?? s.source_url}</Link>
                       <Badge tone={st.tone}>{st.label}</Badge>
+                      {s.status === "done" && s.aborted_at_seconds != null && (
+                        <span title={t.shazam.partialNote(fmtDuration(s.aborted_at_seconds))} className="shrink-0">
+                          <Badge tone="warning">{t.shazam.partialBadge}</Badge>
+                        </span>
+                      )}
                       {s.platform && <Badge tone="neutral">{s.platform}</Badge>}
                     </div>
                     <div className="mt-0.5 truncate text-xs text-faint">

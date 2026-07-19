@@ -162,11 +162,17 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{set.title ?? t.shazam.detail.untitledSet}</h1>
             {set.platform && <Badge tone="neutral">{set.platform}</Badge>}
+            {set.status === "done" && set.aborted_at_seconds != null && (
+              <Badge tone="warning">{t.shazam.partialBadge}</Badge>
+            )}
           </div>
           <p className="mt-1 text-sm text-muted">
             {set.dj_name ?? "—"} · {t.shazam.identifiedTracksCount(set.identified_count)}
             {set.duration_seconds ? ` · ${fmtDuration(set.duration_seconds)}` : ""} · {fmtDate(set.created_at)}
           </p>
+          {set.status === "done" && set.aborted_at_seconds != null && (
+            <p className="mt-1 text-xs text-muted">{t.shazam.partialNote(fmtDuration(set.aborted_at_seconds))}</p>
+          )}
         </div>
       </div>
 

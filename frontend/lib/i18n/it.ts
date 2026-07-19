@@ -662,6 +662,9 @@ export const it: Dictionary = {
     emptyBodyPrefix: "Incolla l'URL di un mix e premi ",
     emptyBodySuffix: " per estrarne la tracklist.",
     statusDone: "identificato",
+    partialBadge: "PARZIALE",
+    partialNote: (time: string) =>
+      `Analisi interrotta a ${time}: il servizio di riconoscimento ha smesso di rispondere. La tracklist copre solo fin lì — elimina il set e riprova per la copertura completa.`,
     statusIdentifying: "in corso…",
     statusError: "errore",
     statusPending: "in attesa",

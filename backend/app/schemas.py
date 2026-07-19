@@ -739,6 +739,7 @@ class DjSetSummaryOut(BaseModel):
     status: str
     error: str | None = None
     identified_count: int = 0
+    aborted_at_seconds: int | None = None  # analisi parziale: dove si e' fermata
     imported_playlist_id: int | None = None
     created_at: datetime
 

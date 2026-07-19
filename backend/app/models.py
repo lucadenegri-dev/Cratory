@@ -213,6 +213,9 @@ class DjSet(Base):
     error: Mapped[str | None] = mapped_column(Text)
     identified_count: Mapped[int] = mapped_column(Integer, default=0)
     segments_total: Mapped[int | None] = mapped_column(Integer)  # quanti segmenti analizzati
+    # Offset (s) a cui l'analisi si e' interrotta per errori persistenti del
+    # recognizer (endpoint giu'): il set e' "done" ma parziale. None = completa.
+    aborted_at_seconds: Mapped[int | None] = mapped_column(Integer)
     # Playlist creata da "Importa come playlist"; azzerata quando quella playlist
     # viene cancellata, così la re-import torna possibile.
     imported_playlist_id: Mapped[int | None] = mapped_column(Integer, index=True)
