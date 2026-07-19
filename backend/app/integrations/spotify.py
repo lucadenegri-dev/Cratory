@@ -226,7 +226,7 @@ class SpotifyWebClient(SpotifyClient, ClosableHttpClient):
     # ---- resolver Discovery (Fase F) ------------------------------------
 
     def search_track(self, artist: str, title: str) -> dict[str, Any] | None:
-        """Risolve 'artista + titolo' (es. da Last.fm) in una traccia Spotify reale.
+        """Risolve 'artista + titolo' (es. da un lead del dig) in una traccia Spotify reale.
 
         L'endpoint /search funziona anche in development mode (a differenza di
         /recommendations). Ritorna il dict traccia Spotify o None se nessun match.
@@ -287,10 +287,3 @@ class SpotifyWebClient(SpotifyClient, ClosableHttpClient):
             self._call("POST", f"/playlists/{playlist['id']}/tracks", user=True,
                        json={"uris": uris[i:i + 100]})
         return playlist["external_urls"]["spotify"]
-
-    def add_tracks(self, playlist_id: str, track_ids: list[str]) -> None:
-        """Aggiunge tracce a una playlist esistente dell'utente (chunk da 100)."""
-        uris = [f"spotify:track:{tid}" for tid in track_ids]
-        for i in range(0, len(uris), 100):
-            self._call("POST", f"/playlists/{playlist_id}/tracks", user=True,
-                       json={"uris": uris[i:i + 100]})

@@ -1,7 +1,7 @@
 """Discovery v2 — "crate digging": lista-dig a volume da Discogs.
 
-A differenza dell'espansione playlist (Last.fm -> resolver Spotify, ~20 candidati
-risolti), il dig produce TANTI lead leggeri NON risolti dai semi Genere/Etichetta. La
+Il dig produce TANTI lead leggeri NON risolti dai semi Genere/Etichetta (l'identita'
+Spotify si risolve solo al salvataggio). La
 pila di release del seme e' ordinata da Discogs per DOMANDA (want desc): `depth`
 sceglie IN CHE PUNTO pescarci dentro (0 = i classici del seme, 1 = il fondo della
 cassa), il gusto (`TasteProfile`) ordina SEMPRE dentro la finestra scelta.
@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.integrations.discogs import (
@@ -31,12 +32,20 @@ from app.integrations.discogs import (
     SORT_DESC,
     SORT_WANT,
 )
-from app.services.discovery import _library_tracks, _norm
+from app.models import Track
 
 logger = logging.getLogger(__name__)
 
 
 PAGES_PER_DIG = 3  # quante pagine scarica un dig: 3 richieste di contenuto
+
+
+def _norm(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def _library_tracks(db: Session) -> list[Track]:
+    return list(db.scalars(select(Track)).all())
 
 
 def _usable_pages(total_items: int) -> int:

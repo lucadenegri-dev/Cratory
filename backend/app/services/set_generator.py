@@ -9,7 +9,6 @@ da scoring.
 
 import logging
 import statistics
-from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
@@ -22,9 +21,20 @@ from app.services.scoring import (
     RESET_GENRE_SIMILARITY,
     TransitionScore,
     energy_progression_score,
+    genre_families_of,
     genre_similarity_score,
     risk_from_score,
     score_transition,
+)
+from app.services.set_skeleton import (  # noqa: F401 - re-export per compat test
+    _DEFAULT_PROFILE,
+    _STRATEGY_PROFILES,
+    StrategyProfile,
+    build_skeleton,
+    _desired_bpm,
+    _desired_energy,
+    _trajectory_fit,
+    strategy_profile,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,48 +50,9 @@ _KEY_PREF_BONUS = 8.0
 _SEED_BONUS = 15.0
 _SHARP_PENALTY = 40.0  # scoraggia i salti bruschi quando la strategia non li vuole
 RESET_WINDOW = 0.1     # ampiezza (frazione di set) attorno a un reset point
-
-
-@dataclass(frozen=True)
-class StrategyProfile:
-    """Parametri che danno un carattere distinto a ciascuna strategia.
-
-    - bpm_curve: esponente della traiettoria BPM (1=lineare, >1 sale piano, <1 sale in fretta).
-    - allow_sharp: ammette transizioni brusche senza la penalità -40.
-    - reset_points: frazioni del set (0-1) dove uno stacco "reset" è premiato invece che penalizzato.
-    - reset_bonus: entità del premio a una transizione di reset vicino a un reset point.
-    - novelty_bonus: premio al cambio di tonalità/genere (esplorazione voluta).
-    - energy_arc: (energia_iniziale, energia_finale) 0-100 imposta dalla strategia quando
-      l'utente non specifica un arco; None = nessun arco imposto. Ora che l'energia è reale
-      (dai file audio) questo distingue davvero progressive (in salita) da smooth (piatto).
-    - genre_coherence: moltiplicatore (0-1) del termine di coerenza di genere. 1 =
-      il set resta nello stesso mondo sonoro; ridotto per le strategie esplorative,
-      così il novelty_bonus non viene neutralizzato dalla coerenza.
-    """
-    bpm_curve: float
-    allow_sharp: bool
-    reset_points: tuple[float, ...]
-    reset_bonus: float
-    novelty_bonus: float
-    energy_arc: tuple[float, float] | None = None
-    genre_coherence: float = 1.0
-
-
-_DEFAULT_PROFILE = StrategyProfile(1.0, False, (), 0.0, 0.0)
-_STRATEGY_PROFILES: dict[str, StrategyProfile] = {
-    "smooth":       StrategyProfile(1.0, False, (), 0.0, 0.0, energy_arc=None),
-    "progressive":  StrategyProfile(1.0, False, (), 0.0, 0.0, energy_arc=(35, 85)),
-    "contrast":     StrategyProfile(1.0, True, (0.34, 0.67), 22.0, 0.0, energy_arc=None),
-    "experimental": StrategyProfile(1.0, True, (0.5,), 12.0, 12.0, energy_arc=None,
-                                    genre_coherence=0.5),
-    "peak_time":    StrategyProfile(0.6, False, (), 0.0, 0.0, energy_arc=(70, 92)),
-    "warm_up":      StrategyProfile(1.6, False, (), 0.0, 0.0, energy_arc=(25, 55)),
-    "closing":      StrategyProfile(1.0, False, (0.85,), 15.0, 0.0, energy_arc=(75, 40)),
-}
-
-
-def strategy_profile(strategy: str) -> StrategyProfile:
-    return _STRATEGY_PROFILES.get(strategy, _DEFAULT_PROFILE)
+_CONVERGE_WEIGHT = 0.35   # attrazione verso l'anchor in arrivo (cresce col ramp)
+_GENRE_PLAN_WEIGHT = 0.20  # aderenza alla famiglia assegnata al segmento
+_RESERVE_PENALTY = 25.0   # bomba spesa fuori dalla finestra del peak
 
 
 def _near_reset(progress: float, points: tuple[float, ...]) -> bool:
@@ -109,27 +80,33 @@ class SetGenerationError(Exception):
     pass
 
 
-def assign_roles(n: int) -> list[str]:
+def assign_roles(n: int, peak_at: int | None = None) -> list[str]:
     """Assegna un ruolo a ciascuna posizione lungo l'arco del set (deterministico).
 
     Ruoli (vedi nuovo_progetto.md sez. 4): intro, warmup, groove, transition,
-    peak, release, closing. Il peak e' collocato intorno al 70% del set.
+    peak, release, closing. peak_at (0-based) permette di allineare il ruolo
+    "peak" all'anchor eletto dallo scheletro; None = posizionale come sempre
+    (~70% del set). Sotto le 4 tracce il peak esplicito viene ignorato: non
+    c'e' spazio per la struttura.
     """
     if n <= 0:
         return []
     if n == 1:
         return ["intro"]
     roles: list[str] = []
-    peak_at = max(1, round((n - 1) * 0.7))
+    if peak_at is not None and n >= 4:
+        peak_pos = min(max(peak_at, 1), n - 2)
+    else:
+        peak_pos = max(1, round((n - 1) * 0.7))
     for i in range(n):
         frac = i / (n - 1)
         if i == 0:
             roles.append("intro")
         elif i == n - 1:
             roles.append("closing")
-        elif i == peak_at:
+        elif i == peak_pos:
             roles.append("peak")
-        elif i > peak_at:
+        elif i > peak_pos:
             roles.append("release")
         elif frac < 0.25:
             roles.append("warmup")
@@ -140,31 +117,6 @@ def assign_roles(n: int) -> list[str]:
     return roles
 
 
-def _desired_bpm(start: float, end: float, progress: float, curve: float) -> float:
-    return start + (end - start) * (progress ** curve)
-
-
-def _trajectory_fit(bpm: float | None, desired: float) -> float:
-    if not bpm:
-        return 40.0
-    return max(0.0, 100.0 - abs(bpm - desired) * 8.0)
-
-
-def _desired_energy(req: SetGenerationRequest, progress: float,
-                    profile: "StrategyProfile | None" = None) -> float | None:
-    """Energia target lungo il set (0-100), interpolata start->end.
-
-    L'energia esplicita dell'utente vince; altrimenti si usa l'arco della strategia
-    (energy_arc); se nessuno dei due, None (nessun vincolo di energia).
-    """
-    if req.start_energy is not None or req.end_energy is not None:
-        start = req.start_energy if req.start_energy is not None else req.end_energy
-        end = req.end_energy if req.end_energy is not None else req.start_energy
-        return start + (end - start) * progress
-    if profile is not None and profile.energy_arc is not None:
-        start, end = profile.energy_arc
-        return start + (end - start) * progress
-    return None
 
 
 def _feature_fit(prev: Track, cand: Track, req: SetGenerationRequest,
@@ -197,7 +149,10 @@ def _pick_first(candidates: list[Track], req: SetGenerationRequest, start_bpm: f
 def _candidate_score(
     prev: Track, cand: Track, desired_bpm: float, req: SetGenerationRequest,
     artist_counts: dict[str, int], profile: StrategyProfile, progress: float,
-    desired_energy: float | None = None,
+    desired_energy: float | None = None, *,
+    converge_to: Track | None = None, converge_ramp: float = 0.0,
+    plan_family: str | None = None, reserved_ids: frozenset[int] = frozenset(),
+    peak_window: tuple[float, float] | None = None,
 ) -> tuple[float, TransitionScore]:
     ts = score_transition(prev, cand)
     transition_pts = float(ts.score)
@@ -232,6 +187,22 @@ def _candidate_score(
         total += profile.reset_bonus
     if profile.novelty_bonus and _is_novel(prev, cand):
         total += profile.novelty_bonus
+    # Convergenza verso l'anchor in arrivo: la vicinanza (misurata come una
+    # transizione verso l'anchor) pesa sempre di piu' man mano che il segmento
+    # si consuma, cosi' al peak ci si arriva preparati, non per caso.
+    if converge_to is not None and converge_ramp > 0.0:
+        total += (float(score_transition(cand, converge_to).score)
+                  * _CONVERGE_WEIGHT * converge_ramp)
+    # Piano di genere del segmento: appartenere alla famiglia assegnata premia,
+    # genere ignoto resta neutro, famiglia diversa non guadagna nulla.
+    if plan_family is not None:
+        families = genre_families_of(cand.genre)
+        fit = 100.0 if plan_family in families else (50.0 if not families else 0.0)
+        total += fit * _GENRE_PLAN_WEIGHT * profile.genre_coherence
+    # Riserva delle bombe: spenderle lontano dal peak costa.
+    if cand.id in reserved_ids and not (
+            peak_window and peak_window[0] <= progress <= peak_window[1]):
+        total -= _RESERVE_PENALTY
     return total, ts
 
 
@@ -300,23 +271,38 @@ BEAM_WIDTH = 6
 BEAM_EXPANSIONS = 8
 
 
-def _beam_search(
+def _beam_search_span(
     opener: Track, candidates: list[Track], req: SetGenerationRequest,
-    profile: StrategyProfile, start_bpm: float, end_bpm: float, target_seconds: int,
-) -> list[tuple[Track, TransitionScore | None]]:
-    """Ritorna la sequenza [(track, transition_score|None), ...] con opener in testa."""
+    profile: StrategyProfile, start_bpm: float, end_bpm: float,
+    target_seconds: int, *, elapsed_secs: int, fill_until_secs: int,
+    converge_to: Track | None = None,
+    used: set[int] | None = None, artist_counts: dict[str, int] | None = None,
+    plan_family: str | None = None, reserved_ids: frozenset[int] = frozenset(),
+    peak_window: tuple[float, float] | None = None,
+) -> list[tuple[Track, TransitionScore]]:
+    """Riempe uno span di set col beam search; ritorna i soli filler (opener escluso).
+
+    elapsed_secs include gia' l'opener; ci si ferma a fill_until_secs. Il progress
+    passato allo scoring resta GLOBALE (secondi/target del set intero), cosi'
+    archi, reset point e finestra del peak parlano la stessa scala. Il ramp di
+    convergenza invece e' locale allo span: cresce da 0 a 1 verso l'anchor.
+
+    used viene arricchito con opener.id qui dentro; artist_counts NO: l'artista dell'opener
+    deve essere gia' contato dal chiamante (altrimenti il cap per artista sfora di uno).
+    """
+    span_start = elapsed_secs
+    span_len = max(1, fill_until_secs - span_start)
+    base_used = set(used or ()) | {opener.id}
+    base_arts = dict(artist_counts or {})
+
     def new_beam() -> dict:
-        arts: dict[str, int] = {}
-        if opener.artist:
-            arts[opener.artist.lower()] = 1
-        return {"chosen": [(opener, None)], "used": {opener.id}, "arts": arts,
-                "secs": opener.duration_seconds or 0, "cum": 0.0,
-                "done": (opener.duration_seconds or 0) >= target_seconds}
+        return {"chosen": [], "prev": opener, "used": set(base_used),
+                "arts": dict(base_arts), "secs": elapsed_secs, "cum": 0.0,
+                "done": elapsed_secs >= fill_until_secs}
 
     def expand(b: dict) -> list[dict]:
-        """Espande un beam nei suoi migliori BEAM_EXPANSIONS successori (o lo marca done)."""
-        prev = b["chosen"][-1][0]
         progress = min(1.0, b["secs"] / target_seconds)
+        ramp = min(1.0, (b["secs"] - span_start) / span_len)
         desired = _desired_bpm(start_bpm, end_bpm, progress, profile.bpm_curve)
         desired_energy = _desired_energy(req, progress, profile)
         eligible = [
@@ -328,7 +314,10 @@ def _beam_search(
             b["done"] = True
             return [b]
         scored = sorted(
-            ((_candidate_score(prev, t, desired, req, b["arts"], profile, progress, desired_energy), t)
+            ((_candidate_score(b["prev"], t, desired, req, b["arts"], profile, progress,
+                               desired_energy, converge_to=converge_to,
+                               converge_ramp=ramp, plan_family=plan_family,
+                               reserved_ids=reserved_ids, peak_window=peak_window), t)
              for t in eligible),
             key=lambda it: (it[0][0], it[1].id), reverse=True,
         )[:BEAM_EXPANSIONS]
@@ -339,9 +328,10 @@ def _beam_search(
                 arts[t.artist.lower()] = arts.get(t.artist.lower(), 0) + 1
             secs = b["secs"] + (t.duration_seconds or 0)
             children.append({
-                "chosen": b["chosen"] + [(t, ts)], "used": b["used"] | {t.id},
-                "arts": arts, "secs": secs, "cum": b["cum"] + sc,
-                "done": secs >= target_seconds,
+                "chosen": b["chosen"] + [(t, ts)], "prev": t,
+                "used": b["used"] | {t.id}, "arts": arts,
+                "secs": secs, "cum": b["cum"] + sc,
+                "done": secs >= fill_until_secs,
             })
         return children
 
@@ -350,20 +340,18 @@ def _beam_search(
         expanded: list[dict] = []
         for b in beams:
             expanded.extend([b] if b["done"] else expand(b))
-        # Prune ai migliori BEAM_WIDTH per punteggio cumulativo (tie-break deterministico).
         expanded.sort(key=lambda b: (b["cum"], [t.id for t, _ in b["chosen"]]), reverse=True)
         beams = expanded[:BEAM_WIDTH]
 
-    # Rete di sicurezza: il percorso puramente greedy (sempre il #1 successore) è
-    # sempre in gara nella scelta finale, così il beam non può fare peggio del greedy.
+    # Rete di sicurezza greedy, come prima: il percorso "sempre il migliore
+    # localmente" resta in gara, il beam non puo' fare peggio.
     greedy = new_beam()
     while not greedy["done"]:
         greedy = expand(greedy)[0]
 
-    # Fra i beam completi scegli il migliore per punteggio medio (evita il bias sulla lunghezza).
-    complete = [b for b in beams if b["secs"] >= target_seconds] or beams
+    complete = [b for b in beams if b["secs"] >= fill_until_secs] or beams
     complete.append(greedy)
-    best = max(complete, key=lambda b: (b["cum"] / max(1, len(b["chosen"]) - 1),
+    best = max(complete, key=lambda b: (b["cum"] / max(1, len(b["chosen"])),
                                         [t.id for t, _ in b["chosen"]]))
     return best["chosen"]
 
@@ -388,8 +376,48 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
 
     target_seconds = req.target_duration_minutes * 60
     profile = strategy_profile(req.strategy)
-    first = _pick_first(candidates, req, start_bpm)
-    chosen = _beam_search(first, candidates, req, profile, start_bpm, end_bpm, target_seconds)
+    skeleton = build_skeleton(candidates, req, profile, start_bpm, end_bpm, target_seconds)
+    peak_at: int | None = None
+    if skeleton is None:
+        first = _pick_first(candidates, req, start_bpm)
+        chosen = [(first, None)] + _beam_search_span(
+            first, candidates, req, profile, start_bpm, end_bpm, target_seconds,
+            elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds,
+            artist_counts={first.artist.lower(): 1} if first.artist else None)
+    else:
+        # Fase 2: riempi i segmenti tra un anchor e il successivo. Gli anchor
+        # contano da subito in used/artist_counts, cosi' i filler non li rubano
+        # ne' sforano il limite per artista con un anchor futuro.
+        opening = skeleton.anchors[0]
+        chosen = [(opening.track, None)]
+        used = {a.track.id for a in skeleton.anchors}
+        arts: dict[str, int] = {}
+        for a in skeleton.anchors:
+            if a.track.artist:
+                key = a.track.artist.lower()
+                arts[key] = arts.get(key, 0) + 1
+        secs = opening.track.duration_seconds or 0
+        for seg in skeleton.segments:
+            fillers = _beam_search_span(
+                chosen[-1][0], candidates, req, profile, start_bpm, end_bpm,
+                target_seconds, elapsed_secs=secs,
+                fill_until_secs=seg.fill_until_secs,
+                converge_to=seg.end_anchor.track, used=used, artist_counts=arts,
+                plan_family=seg.family, reserved_ids=skeleton.reserved_ids,
+                peak_window=skeleton.peak_window)
+            for t, _ in fillers:
+                used.add(t.id)
+                if t.artist:
+                    key = t.artist.lower()
+                    arts[key] = arts.get(key, 0) + 1
+                secs += t.duration_seconds or 0
+            chosen.extend(fillers)
+            anchor_track = seg.end_anchor.track
+            chosen.append((anchor_track, score_transition(chosen[-1][0], anchor_track)))
+            secs += anchor_track.duration_seconds or 0
+        peak_ids = [a.track.id for a in skeleton.anchors if a.role == "peak"]
+        if peak_ids:
+            peak_at = next(i for i, (t, _) in enumerate(chosen) if t.id == peak_ids[0])
     total_seconds = sum((t.duration_seconds or 0) for t, _ in chosen)
 
     setlist = Setlist(
@@ -402,7 +430,7 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
         global_explanation=_explanation(chosen, req, total_seconds),
         owned_only=req.owned_only,
     )
-    roles = assign_roles(len(chosen))
+    roles = assign_roles(len(chosen), peak_at=peak_at)
     for position, (track, ts) in enumerate(chosen, start=1):
         setlist.tracks.append(SetlistTrack(
             track_id=track.id,

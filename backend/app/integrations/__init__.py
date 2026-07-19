@@ -7,7 +7,7 @@ Regole comuni: cache persistente delle risposte, gestione rate limit, errori esp
 Separazione fonti dati DJ:
 - Spotify: identita' traccia + metadata editoriali (titolo, artista, cover,
   durata, isrc, url). NON fornisce BPM/key affidabili per il mixing.
-- Last.fm: similarita' (Discovery). Discogs: crate digging per genere/etichetta.
+- Discogs: crate digging per genere/etichetta (Discovery).
 """
 
 from abc import ABC, abstractmethod
@@ -48,30 +48,3 @@ class LLMClient(ABC):
     def complete_json(
         self, system_prompt: str, payload: dict[str, Any], schema: dict[str, Any]
     ) -> dict[str, Any]: ...
-
-
-class SimilarityClient(ABC):
-    """Scoperta di artisti/tracce simili (Discovery mode, Fase F).
-
-    Fonte di SIMILARITA' (es. Last.fm): dato un seed restituisce candidati affini.
-    NON fornisce BPM/key (arrivano dopo, dall'enrichment) ne' identita' di streaming
-    (quella la risolve Spotify). I metodi ritornano liste di dict normalizzati.
-    """
-
-    name: str = "similarity"
-
-    @abstractmethod
-    def similar_artists(self, artist: str, *, limit: int = 20) -> list[dict[str, Any]]:
-        """[{name, match(0-1)}] di artisti simili."""
-
-    @abstractmethod
-    def similar_tracks(self, artist: str, title: str, *, limit: int = 20) -> list[dict[str, Any]]:
-        """[{artist, title, match(0-1)}] di tracce simili a una traccia seed."""
-
-    @abstractmethod
-    def artist_top_tracks(self, artist: str, *, limit: int = 10) -> list[dict[str, Any]]:
-        """[{artist, title}] tracce piu' note di un artista (per concretizzare un artista simile)."""
-
-    @abstractmethod
-    def top_tracks_by_tag(self, tag: str, *, limit: int = 20) -> list[dict[str, Any]]:
-        """[{artist, title}] tracce top per un tag/genere."""

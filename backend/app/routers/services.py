@@ -42,13 +42,6 @@ def services_status(db: Session = Depends(get_db)):
                 "docs": "https://console.anthropic.com",
             },
             {
-                "key": "lastfm", "name": "Last.fm", "category": "Feature musicali",
-                "configured": bool(settings.lastfm_api_key), "connected": None,
-                "detail": "Genere e mood dai tag; motore di similarita' del Discovery.",
-                "env": ["LASTFM_API_KEY"],
-                "docs": "https://www.last.fm/api",
-            },
-            {
                 "key": "discogs", "name": "Discogs", "category": "Discovery",
                 # Usabile anche senza token (rate ridotto); il token alza il rate limit.
                 "configured": True,

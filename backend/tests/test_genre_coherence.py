@@ -11,7 +11,7 @@ Due comportamenti:
 from app.models import Playlist, Track
 from app.repositories import add_track_to_playlist
 from app.schemas import SetGenerationRequest
-from app.services.scoring import RESET_GENRE_SIMILARITY, genre_similarity_score
+from app.services.scoring import RESET_GENRE_SIMILARITY, genre_families_of, genre_similarity_score
 from app.services.set_generator import _DEFAULT_PROFILE, _candidate_score, generate_set
 
 
@@ -120,3 +120,16 @@ def test_generated_set_groups_genres(db):
         track_genres.append(track.genre)
     switches = sum(1 for a, b in zip(track_genres, track_genres[1:]) if a != b)
     assert switches == 1, f"generi alternati invece che raggruppati: {track_genres}"
+
+
+# --- Public helper: genre_families_of -----------------------------------------
+
+
+def test_genre_families_of_public_helper():
+    # Lookup pubblico delle famiglie: serve al piano di genere dello scheletro.
+    assert genre_families_of("Acid House") == frozenset({"techno", "house"})
+    assert genre_families_of("Techno") == frozenset({"techno"})
+    assert genre_families_of("Electronic") == frozenset()   # umbrella: nessuna famiglia
+    assert genre_families_of("Weirdcore") == frozenset()    # fuori mappa
+    assert genre_families_of(None) == frozenset()
+    assert genre_families_of("  ") == frozenset()

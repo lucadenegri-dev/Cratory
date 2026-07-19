@@ -10,12 +10,10 @@ from sqlalchemy import create_engine, inspect, select, text
 
 from app import models  # noqa: F401 - registra i modelli su Base.metadata
 from app.db import Base, ensure_schema
-from app.integrations.spotify import SpotifyWebClient
 from app.models import Playlist, Track, playlist_tracks
 from app.repositories import add_track_to_playlist, tracks_for_playlist
 from app.routers.discovery import save_for_later
-from app.routers.playlists import add_discovered_track
-from app.schemas import DiscoverySaveForLaterRequest, PlaylistAddTrackRequest
+from app.schemas import DiscoverySaveForLaterRequest
 from app.services.playlist_import import import_playlist
 
 
@@ -135,20 +133,6 @@ def test_added_by_su_db_esistente_senza_colonna():
 
 
 # --- endpoint -------------------------------------------------------------------
-
-
-def test_endpoint_discovered_tracks_marca_cratory(db, monkeypatch):
-    pl = Playlist(platform="spotify", platform_playlist_id="PLspot", name="Mine")
-    db.add(pl)
-    db.commit()
-    monkeypatch.setattr(SpotifyWebClient, "add_tracks", lambda self, pid, ids: None)
-
-    req = PlaylistAddTrackRequest(artist="A", title="B", spotify_id="sp1", isrc="ISRC1",
-                                  duration_seconds=200, url="http://u", album_art_url="http://img")
-    add_discovered_track(pl.id, req, db)
-
-    track = db.query(Track).filter(Track.spotify_id == "sp1").one()
-    assert _membership_added_by(db, pl.id, track.id) == "cratory"
 
 
 def test_save_for_later_marca_cratory(db):
