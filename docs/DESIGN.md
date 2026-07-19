@@ -109,7 +109,15 @@ components:
     rounded: "0px"
     textTransform: "uppercase"
     padding: "2px 8px"
-    note: "primary/info/warning/success all collapse to the neutral rendering (Monochrome Rule)"
+    note: "primary/info/success collapse to the neutral rendering (Monochrome Rule); warning has its own monochrome treatment (badge-warning)"
+  badge-warning:
+    backgroundColor: "transparent"
+    textColor: "{fg}"
+    border: "1px dashed {border-strong}"
+    rounded: "0px"
+    textTransform: "uppercase"
+    padding: "2px 8px"
+    note: "attention without hue: the dashed 'provisional' grammar of empty states. Urgency scale: neutral fill < dashed ink < danger red"
   badge-danger:
     backgroundColor: "transparent"
     textColor: "{danger}"
@@ -310,7 +318,8 @@ Flat by definition. Depth is conveyed entirely by **hairline borders and the neu
 
 ### Badges (`rounded: 0`, uppercase, tracked, `~10px`)
 - **Neutral:** `elevated` background, `muted`/`fg` text. This is the default and near-universal badge — platform tags, statuses, transition classes, risk levels all use it.
-- **Semantic tones** (`primary`/`info`/`warning`/`success`): the `Badge` component exposes these tones (used across pages, e.g. track status, download outcomes) but under the Monochrome Rule they all collapse to the neutral rendering — `elevated` + `text-fg` (primary) or `elevated` + `text-muted` (info/warning/success). No hue.
+- **Semantic tones** (`primary`/`info`/`success`): the `Badge` component exposes these tones but under the Monochrome Rule they collapse to the neutral rendering — `elevated` + `text-fg` (primary) or `elevated` + `text-muted` (info/success). No hue.
+- **Warning:** transparent with a **1px dashed `border-strong` hairline** and `fg` text — attention rendered without hue, borrowing the dashed "provisional" grammar of empty states. For entries that need a second look (an uncertain Shazam match, a download to review), not for plain states. The urgency scale is: neutral fill < dashed ink < danger red.
 - **Danger:** transparent with a `danger` border and text. The only colored badge/tone.
 
 ### Companion fields and states

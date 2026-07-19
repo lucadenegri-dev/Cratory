@@ -277,7 +277,9 @@ const BADGE_TONE: Record<Tone, string> = {
   neutral: "bg-elevated text-muted",
   primary: "bg-elevated text-fg",
   info: "bg-elevated text-muted",
-  warning: "bg-elevated text-muted",
+  /* Attenzione monocroma: hairline tratteggiata d'inchiostro, la grammatica del
+     "provvisorio" degli empty state. Scala di urgenza: neutro pieno < tratteggio < danger. */
+  warning: "border border-dashed border-border-strong text-fg",
   danger: "border border-danger text-danger",
   success: "bg-elevated text-muted",
 };

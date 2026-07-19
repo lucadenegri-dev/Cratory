@@ -153,7 +153,7 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
                   <div className="inline-flex items-center gap-2">
                     <TrackPlayButton track={track} />
                     {track.has_local_file ? <Badge tone="success">{t.tracks.badgeOwned}</Badge>
-                      : track.archived ? <Badge tone="warning">{t.tracks.badgeArchived}</Badge>
+                      : track.archived ? <Badge tone="neutral">{t.tracks.badgeArchived}</Badge>
                       : <Badge tone="neutral">{t.tracks.badgeNoFile}</Badge>}
                   </div>
                 </td>

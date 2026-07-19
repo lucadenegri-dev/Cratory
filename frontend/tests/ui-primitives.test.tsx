@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { Chip, Combobox, SegmentedControl, type ComboOption } from "@/components/ui";
+import { Badge, Chip, Combobox, SegmentedControl, type ComboOption } from "@/components/ui";
 
 afterEach(cleanup);
 
@@ -232,5 +232,22 @@ describe("Combobox — confini della tastiera e submit", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ value: "g0" }));
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe("Badge", () => {
+  it("il tone warning e' un'attenzione monocroma: tratteggio, niente riempimento ne' hue", () => {
+    render(<Badge tone="warning">DUBBIA</Badge>);
+    const el = screen.getByText("DUBBIA");
+    expect(el.className).toContain("border-dashed");
+    expect(el.className).toContain("border-border-strong");
+    expect(el.className).not.toContain("bg-elevated");
+    expect(el.className).not.toContain("danger");
+  });
+
+  it("neutral resta il timbro pieno e quieto, danger l'unico bordo rosso", () => {
+    render(<><Badge tone="neutral">STATO</Badge><Badge tone="danger">ERRORE</Badge></>);
+    expect(screen.getByText("STATO").className).toContain("bg-elevated");
+    expect(screen.getByText("ERRORE").className).toContain("border-danger");
   });
 });
