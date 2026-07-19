@@ -6,23 +6,9 @@ import type {
   DiscoveryGenres,
   DiscoveryImportInput,
   DiscoveryPreview,
-  DiscoveryResponse,
-  DiscoveryStatus,
 } from "./types";
 
 // --- Discovery (Fase F) -----------------------------------------------------
-
-export function discoveryStatus() {
-  return apiGet<DiscoveryStatus>("/api/discovery/status");
-}
-
-export function discoverExpand(playlistId: number, opts?: { limit?: number; use_ai?: boolean }) {
-  return apiPost<DiscoveryResponse>("/api/discovery/expand", {
-    playlist_id: playlistId,
-    limit: opts?.limit,
-    use_ai: opts?.use_ai,
-  });
-}
 
 export function getDiscoveryGenres() {
   return apiGet<DiscoveryGenres>("/api/discovery/genres");

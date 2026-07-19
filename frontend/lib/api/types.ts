@@ -83,35 +83,6 @@ export interface SpotifyStatus {
   redirect_uri: string;
 }
 
-export interface DiscoveryStatus {
-  configured: boolean;
-  spotify_resolver: boolean;
-  ai_explanations: boolean;
-}
-
-export interface DiscoveryCandidate {
-  artist: string;
-  title: string;
-  match: number;
-  source: "similar_artist" | "similar_track" | "tag" | "label";
-  seed: string | null;
-  spotify_id: string | null;
-  spotify_url: string | null;
-  album_art_url: string | null;
-  isrc: string | null;
-  duration_seconds: number | null;
-  label?: string | null;
-  label_owned?: boolean;
-  explanation: string | null;
-}
-
-export interface DiscoveryResponse {
-  mode: "expand" | "labels";
-  scope: string;
-  seed_count: number;
-  candidates: DiscoveryCandidate[];
-}
-
 export interface DiscoveryAddResponse {
   created: boolean;
   track: Track;
@@ -469,13 +440,6 @@ export interface DiscoveryImportInput {
   duration_seconds?: number | null;
   album_art_url?: string | null;
   url?: string | null;
-}
-
-export interface PlaylistAddTrackResult {
-  created: boolean;
-  track: Track;
-  spotify_added: boolean;
-  spotify_error: string | null;
 }
 
 export interface DjSetTrack {
