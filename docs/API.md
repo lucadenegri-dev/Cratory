@@ -431,14 +431,22 @@ samples segments, recognizes the tracks and persists `DjSet`/`DjSetTrack`. The t
 do not enter the main library. This is the only audio fingerprinting in the project:
 it identifies the tracks of an external mix, not the library tracks.
 
-Sampling is resilient: the grid is capped at 200 segments per mix (≈39s step
-on a 2-hour set, so most real tracks collect 2+ agreeing samples), an
-unrecognized segment is retried once at a nearby offset, and tracks recognized
-in a single sample get one confirmation sample
-(all within a budget of 50 extra calls per mix). `DjSetTrack.confidence`
-reflects the outcome: `90` = confirmed by 2+ agreeing samples, `45` = single
-unconfirmed sample (the UI marks these as uncertain; sets analyzed before this
-change keep the legacy fixed `80`).
+Sampling is resilient and paced: the grid is capped at 200 segments per mix
+(≈39s step on a 2-hour set, so most real tracks collect 2+ agreeing samples);
+recognizer calls are spaced ≥1s apart and internally retried with growing
+backoff (5/15/45s) before counting as errors, so a burst of throttling does
+not kill the analysis. An unrecognized segment is retried once at a nearby
+offset. Runs of the same track reappearing within 240s are merged — even
+across a different match in between (a transition false positive inside a long
+track), which also counts as confirmation. Tracks left with a single agreeing
+sample get up to two confirmation samples at ±(6-30)s: refuted singles are
+discarded as transition noise; never-verified ones (budget exhausted, service
+down) stay listed as uncertain. All extra calls share a budget of 50 per mix.
+`DjSetTrack.confidence`: `90` = 2+ agreeing samples, `45` = single unverified
+sample (the UI marks these; sets analyzed before keep the legacy fixed `80`).
+If the recognizer stops responding despite the backoff, the analysis is saved
+as **partial**: `DjSet.aborted_at_seconds` records where it stopped (exposed
+in `DjSetOut`; the UI shows a PARTIAL badge with the offset).
 
 `POST /api/shazam/sets/{id}/import-playlist` promotes the identified tracks to leads in
 a playlist with `source=shazam` (dedup on artist+title, ISRC kept for the disk-first

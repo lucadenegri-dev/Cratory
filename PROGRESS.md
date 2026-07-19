@@ -101,6 +101,19 @@ tags come 2a fonte del dig" (l'expand da cui sarebbe dipeso non esiste più), ag
 il diagramma architetturale (il box "DISCOVERY · EXPAND" è sparito, il box del dig ora
 occupa l'intera banda 03).
 
+## Milestone 2026-07-19 (bis) - Shazam robustezza v2: backoff, analisi parziale onesta, scarto del rumore
+
+Il test sul campo (set 2h08m) ha mostrato tre falle e le ha chiuse: (1) il
+throttling dell'endpoint troncava l'analisi in silenzio — ora le chiamate sono
+distanziate (>=1s) con backoff a ripresa (5/15/45s), e se il servizio muore
+davvero il set viene salvato come **parziale** (`aborted_at_seconds`, badge
+PARZIALE in UI); (2) i falsi positivi da transizione spezzavano in due le
+tracce vere — la fusione temporale ricuce la stessa traccia entro 240s anche
+sopra un match diverso, che vale come conferma; (3) i match da campione
+singolo erano quasi sempre rumore (verifica a orecchio) — ora ricevono fino a
+due conferme lontane ±(6-30s): smentiti = scartati, mai verificati = dubbi.
+Spec: `docs/superpowers/specs/2026-07-19-shazam-robustness-v2-design.md`.
+
 ## Milestone 2026-07-19 - Shazam: riconoscimento mix piu' robusto
 
 Il cuore di `mix_identify` non si fida piu' del singolo campione: i buchi vengono
