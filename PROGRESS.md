@@ -56,6 +56,18 @@ segnale in UI, poi abort della griglia dopo 3 segmenti.
 - Test: nuovi casi su client one-shot (server locale 429: 1 sola richiesta,
   status esposto), wiring `http_client`, `on_backoff` e messaggio d'errore;
   smoke test reale riuscito (segmento owned riconosciuto in 0.7s).
+- **Retry pitch-compensato** (`PITCH_RATES` 0.96/1.04/0.92/1.08): un buco rimasto
+  tale dopo il retry spostato viene ritentato col segmento ricampionato
+  (`asetrate`, shift di pitch+tempo come un pitch fader senza keylock) — oltre
+  ~2% di pitch l'impronta Shazam non matcha piu'. Il primo rate che matcha
+  diventa preferito per i buchi successivi (pitch di set perlopiu' globale) e
+  per le conferme del run (a rate naturale la conferma smentirebbe una traccia
+  vera). La scala completa si sonda solo sui primi `PITCH_PROBE_HOLES` (3)
+  buchi: mix non pitchati / brani fuori catalogo non bruciano il budget
+  (`MAX_EXTRA_CALLS` condiviso). Contratto interno: `recognize_at(offset, rate)`.
+- **Conferma live della diagnosi 429**: al rilancio del mix SoundCloud la fase
+  del job ha mostrato "Shazam non risponde (HTTP 429): riprovo tra 120s…" a
+  147/198 segmenti — il rate limiting e' reale, visibile, e il job sopravvive.
 - **Test "flaky" doppio-avvio mix: non era flaky.** Il fallimento sporadico di
   `test_mix_identify_double_start_is_noop_at_job_level` era deterministico
   rispetto allo stato del disco: unico test a chiamare `start_job` del mix
