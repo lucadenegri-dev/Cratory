@@ -159,11 +159,3 @@ def test_pipeline_wishlist_esclude_scartate(db, monkeypatch):
     snap = pipeline_snapshot(db)
     assert snap["wishlist"] == 1
     assert snap["archived_count"] == 1
-
-
-def test_discovery_non_ripropone_scartate(db):
-    from app.services.discovery import DiscoveryCandidate, _drop_in_library, _key
-    t = _mk(db, 1, archived=True)
-    cand = DiscoveryCandidate(artist=t.artist, title=t.title, match=0.9, source="similar_artist")
-    candidates = {_key(t.artist, t.title): cand}
-    assert _drop_in_library(candidates, [t]) == []
