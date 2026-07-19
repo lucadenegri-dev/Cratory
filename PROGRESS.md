@@ -30,6 +30,35 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-19 - Set Builder: residui della tappa 2 chiusi
+
+Giro di pulizia dopo la review finale della tappa 2.
+
+- **Ritirato il toggle technical/creative.** Il campo `mode` non selezionava piu'
+  comportamento (i prompt di curatela sono unici): sopravviveva solo in `_model_for`
+  per scegliere il modello, e il frontend prometteva "arco emotivo/contrasti" che non
+  accade piu'. Rimosso `mode` dalla request, `_model_for`/`AI_MODEL_CREATIVE` dal router
+  e dalla config, il toggle dal form; riscritta la sezione AI della **pagina guida**
+  (`set-builder/guida`), che descriveva ancora il vecchio flusso "AI ordina + 60
+  candidate + riverifica". L'unico asse AI ora e' `use_ai` (curatela on/off).
+- **Puliture del motore.** `genre_families_of` memoizzato (`lru_cache`); `_percentiles`
+  con pari a **rango medio** (l'id non decide piu' l'impatto tra tracce identiche, il
+  pareggio lo rompe l'elezione a valle); `generate_set` accetta le candidate gia'
+  filtrate (via `candidates=`), cosi' la curatela non fa una seconda `select_candidates`
+  identica; `curated` testa contenuto reale.
+
+Stato verificato (2026-07-19): backend 971 test verdi (ordine fisso), frontend
+lint/build/58 unit verdi.
+
+**Rimandati di proposito** (nessuno urgente):
+- **Latenza della curatela**: fino a ~7 chiamate LLM sequenziali a pool pieno; i lotti
+  mood sono l'unico punto parallelizzabile senza toccare l'architettura. Da fare solo
+  se l'attesa su una run reale pesa.
+- **Sezione "Motore" della pagina guida**: i tre passi (Candidate Engine -> beam search
+  -> scoring) descrivono ancora il motore a fase singola, non lo scheletro a due fasi
+  della tappa 1 (anchor, riserva bombe, piano di genere, convergenza). Non e' falso, ma
+  omette la novita' centrale: da riscrivere in un giro dedicato alla guida.
+
 ## Milestone 2026-07-19 - Set Builder: l'AI cura il pool, il motore sequenzia (tappa 2 del piano a due fasi)
 
 Seguito diretto della milestone precedente (tappa 1, sotto): il percorso `generate_ai_set()`
