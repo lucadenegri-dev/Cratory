@@ -160,6 +160,7 @@ class SetlistTrackOut(BaseModel):
     transition_note: str | None = None
     ai_reason: str | None = None
     risk_level: str | None = None
+    mood_tags: list[str] = []
     # F10: classificazione semantica della transizione dal brano precedente
     transition_class: str | None = None
     transition_class_reason: str | None = None
@@ -180,6 +181,7 @@ class SetlistOut(BaseModel):
     # Disk-first: il set e' nato "solo brani posseduti" (l'editor lo fa rispettare)
     owned_only: bool = False
     validation: dict = {}
+    curation: dict = {}
     # Piano di mixaggio deterministico del set (come legare i brani, dove i salti).
     mixing_overview: list[str] = []
     total_duration_seconds: int = 0
