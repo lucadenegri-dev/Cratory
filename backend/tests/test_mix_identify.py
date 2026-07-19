@@ -1,6 +1,6 @@
 """Identificazione mix DJ (Shazam) — cuore deterministico, senza rete ne' audio.
 
-Testa la parte pura (campionamento offset, dedup dei match consecutivi, orchestrazione
+Testa la parte pura (campionamento offset, raggruppamento con finestra sui buchi, orchestrazione
 con recognizer finto) e il parsing del payload Shazam. L'I/O (yt-dlp/ffmpeg) non e' qui.
 """
 
@@ -173,6 +173,48 @@ def test_identify_progress_extends_total_with_confirmations():
     identify_from_recognizer(60, recognize_at, on_progress=lambda i, n: progress.append((i, n)))
     assert progress[:5] == [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)]  # passata principale
     assert progress[-1] == (6, 6)  # la conferma di B estende il totale
+
+
+def test_identify_confirm_loop_stops_when_recognizer_is_down():
+    # il recognizer muore dopo due match singoli: la fase di conferma non deve
+    # martellare l'endpoint che la passata principale ha appena dichiarato giu'
+    table = {0: _m("A", "One"), 72: _m("B", "Two")}
+    calls: list[int] = []
+
+    def recognize_at(offset: int):
+        calls.append(offset)
+        if offset in table:
+            return table[offset]
+        raise RecognizerError("down")
+
+    out = identify_from_recognizer(7200, recognize_at)
+    # 2 match + 8 errori consecutivi (griglia+retry), poi zero chiamate di conferma
+    assert len(calls) == 10
+    assert [(t.artist, t.confidence) for t in out] == [
+        ("A", CONFIDENCE_DUBIOUS), ("B", CONFIDENCE_DUBIOUS),
+    ]
+
+
+def test_identify_no_self_confirmation_on_short_audio():
+    # audio cortissimo: il campione di conferma coinciderebbe con l'originale ->
+    # niente autoconferma, la voce resta dubbia e il budget non si consuma
+    table = {0: _m("A", "One")}
+    calls, recognize_at = _tracker(table)
+    out = identify_from_recognizer(14, recognize_at)
+    assert calls == [0]
+    assert [(t.artist, t.confidence) for t in out] == [("A", CONFIDENCE_DUBIOUS)]
+
+
+def test_identify_budget_consumed_by_retry_leaves_singles_unconfirmed():
+    # ordine di consumo: il retry sul buco brucia l'unico budget, la conferma
+    # di B non parte -> resta dubbia
+    table = {0: _m("A", "One"), 12: _m("A", "One"), 24: _m("B", "Two")}
+    calls, recognize_at = _tracker(table)
+    out = identify_from_recognizer(60, recognize_at, max_extra_calls=1)
+    assert calls == [0, 12, 24, 36, 42, 48]  # 42 = retry sul buco a 36; nessuna conferma
+    assert [(t.artist, t.confidence) for t in out] == [
+        ("A", CONFIDENCE_CONFIRMED), ("B", CONFIDENCE_DUBIOUS),
+    ]
 
 
 # --- parsing payload Shazam --------------------------------------------------

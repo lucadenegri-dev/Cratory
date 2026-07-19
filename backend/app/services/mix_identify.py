@@ -187,15 +187,16 @@ def identify_from_recognizer(
     total = len(offsets) + len(to_confirm)
     done = len(offsets)
     for run in to_confirm:
-        if budget <= 0:
-            break  # budget esaurito: i singoli restano dubbi
-        budget -= 1
+        if budget <= 0 or consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+            break  # budget esaurito o recognizer giu': i singoli restano dubbi
         confirm_at = run.offset + CONFIRM_DELTA
         if duration_seconds > 0 and confirm_at + SEGMENT_LENGTH > duration_seconds:
             confirm_at = max(0, run.offset - CONFIRM_DELTA)
-        match = try_recognize(confirm_at)
-        if match is not None and _match_key(match) == run.key:
-            run.hits += 1
+        if confirm_at != run.offset:  # se coincide, nessun campione indipendente: resta dubbia
+            budget -= 1
+            match = try_recognize(confirm_at)
+            if match is not None and _match_key(match) == run.key:
+                run.hits += 1
         done += 1
         if on_progress:
             on_progress(done, total)
