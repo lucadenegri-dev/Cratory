@@ -1,7 +1,7 @@
 """Discovery v2 — "crate digging": lista-dig a volume da Discogs.
 
-A differenza dell'espansione playlist (Last.fm -> resolver Spotify, ~20 candidati
-risolti), il dig produce TANTI lead leggeri NON risolti dai semi Genere/Etichetta. La
+Il dig produce TANTI lead leggeri NON risolti dai semi Genere/Etichetta (l'identita'
+Spotify si risolve solo al salvataggio). La
 pila di release del seme e' ordinata da Discogs per DOMANDA (want desc): `depth`
 sceglie IN CHE PUNTO pescarci dentro (0 = i classici del seme, 1 = il fondo della
 cassa), il gusto (`TasteProfile`) ordina SEMPRE dentro la finestra scelta.

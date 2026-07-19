@@ -5,7 +5,6 @@ preview audio effimera e importa/salva-per-dopo i lead scelti. La sorgente e'
 Discogs (integrations/discogs); iTunes/YouTube servono solo la preview.
 """
 
-import logging
 import re
 import time
 
@@ -87,7 +86,6 @@ def _parse_duration(value: str | None) -> int | None:
     return minutes * 60 + seconds
 
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/discovery", tags=["discovery"])
 
 # Cache TTL in-memory del get_release: lo stesso disco viene interrogato più volte
