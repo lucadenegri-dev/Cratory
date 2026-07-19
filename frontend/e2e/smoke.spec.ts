@@ -6,7 +6,9 @@ import { test, expect, type Page, type ConsoleMessage } from "@playwright/test";
  * (LIBRARY_ROOT/ARCHIVE_ROOT/SLSKD_URL vuoti via playwright.config.ts).
  *
  * "/downloads/issues" non esiste piu': la pagina e' stata unificata in
- * "/downloads" (vedi docs/superpowers/plans/2026-07-09-download-unificato.md).
+ * "/downloads" (vedi docs/superpowers/plans/2026-07-09-download-unificato.md),
+ * poi rinominata in "/wishlist" (2026-07-19): "/downloads" ora e' solo un
+ * redirect 307, non una rotta.
  *
  * "/" (dashboard) e' l'unica rotta senza <h1> di PageLayout (nessun `title`
  * passato): per quella verifichiamo solo che <main> renderizzi contenuto.

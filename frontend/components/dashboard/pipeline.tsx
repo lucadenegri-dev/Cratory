@@ -45,7 +45,7 @@ export function PipelineStrip({ p }: { p: PipelineStatus }) {
     {
       key: "acquisisci", label: t.dashboard.stageAcquire, value: String(p.wishlist),
       sub: t.dashboard.stageAcquireSub(p.download_active, p.download_pending),
-      hot: p.wishlist > 0 || p.download_active, href: "/downloads",
+      hot: p.wishlist > 0 || p.download_active, href: "/wishlist",
     },
     {
       key: "organizza", label: t.dashboard.stageOrganize,
