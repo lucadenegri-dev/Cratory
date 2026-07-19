@@ -139,6 +139,10 @@ def patch_track(track_id: int, payload: TrackUpdateIn, db: Session = Depends(get
     if track is None:
         raise api_error(404, "track_not_found", "Track not found")
     data = payload.model_dump(exclude_unset=True)
+    # `archived` e' un bool NOT NULL: un null esplicito non puo' azzerare,
+    # vale come "invariato" (a differenza degli altri campi PATCH).
+    if data.get("archived") is None:
+        data.pop("archived", None)
     # La tonalita' non si inventa: se fornita, deve essere un valore Camelot valido.
     if data.get("camelot_key"):
         camelot = str(data["camelot_key"]).strip().upper()
