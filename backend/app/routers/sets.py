@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.http_errors import api_error
 from app.db import SessionLocal, get_db
 from app.integrations.llm import LLMError, LLMNotConfigured, get_llm_client, llm_configured
@@ -56,13 +55,6 @@ def _should_use_ai(req: SetGenerationRequest) -> bool:
     return llm_configured() and bool(req.prompt and req.prompt.strip())
 
 
-def _model_for(req: SetGenerationRequest) -> str | None:
-    """Modello da usare: in creative, se impostato, usa AI_MODEL_CREATIVE (più capace)."""
-    if req.mode == "creative" and settings.ai_model_creative:
-        return settings.ai_model_creative
-    return None  # None = default (AI_MODEL / DEFAULT_MODEL)
-
-
 # Fase mostrata durante la generazione deterministica (non-AI); le fasi del
 # path AI sono già bilingui in ai_curation.py (_CURATION_PHASES).
 _BUILDING_SET_PHASE = {"it": "Costruisco il set", "en": "Building the set"}
@@ -86,7 +78,7 @@ def _run_generation(req: SetGenerationRequest, use_ai: bool) -> None:
     try:
         if use_ai:
             setlist = run_curated_generation(
-                db, req, get_llm_client(_model_for(req)),
+                db, req, get_llm_client(),
                 on_phase=lambda p: _gen_state.update(phase=p),
             )
         else:
@@ -137,7 +129,7 @@ def generate(req: SetGenerationRequest, db: Session = Depends(get_db)):
     lang = get_language(db)
     if _should_use_ai(req):
         try:
-            setlist = run_curated_generation(db, req, get_llm_client(_model_for(req)))
+            setlist = run_curated_generation(db, req, get_llm_client())
         except LLMNotConfigured as exc:
             raise api_error(409, "ai_not_configured", f"AI not configured: {exc}",
                              reason=str(exc)) from exc

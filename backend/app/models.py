@@ -162,7 +162,7 @@ class Setlist(Base):
     # Disk-first: True se il set e' nato con la garanzia "solo brani posseduti".
     # L'editor (replace/alternative) la fa rispettare leggendo questo flag.
     owned_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
-    validation: Mapped[dict] = mapped_column(JSON, default=dict)  # warnings/auto-fix del Validation Engine
+    validation: Mapped[dict] = mapped_column(JSON, default=dict)  # warning + missing_library_suggestions della curatela (storico: Validation Engine)
     # Curatela AI (tappa 2): intento compilato ("come ti ho capito"), warning
     # delle chiamate AI. {} = set non curato.
     curation: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")

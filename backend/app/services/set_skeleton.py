@@ -85,20 +85,36 @@ def _desired_energy(req: SetGenerationRequest, progress: float,
 
 
 # Impatto (0-1): quanto una traccia "spinge" rispetto al pool. Percentili
-# rank-based, tie-break per id (determinismo). Pesi tunabili.
+# rank-based, pari a rango medio (il pareggio lo rompe l'elezione a valle). Pesi tunabili.
 _IMPACT_ENERGY_SHARE = 0.7
 _IMPACT_BPM_SHARE = 0.3
 
 
 def _percentiles(values: dict[int, float]) -> dict[int, float]:
-    """id -> percentile 0-1 sul pool (rank-based, tie-break deterministico per id)."""
+    """id -> percentile 0-1 sul pool (rank-based, pari a rango medio).
+
+    Le tracce con lo stesso valore ricevono lo stesso percentile (la media dei
+    loro ranghi): l'id non decide piu' chi "vale di piu'" tra gemelle, cosi'
+    l'impatto riflette la musica e non l'ordine di inserimento. Chi rompe il
+    pareggio a valle (elezione, riserva) resta deterministico per id.
+    """
     if not values:
         return {}
     if len(values) == 1:
         return {tid: 0.5 for tid in values}
     ordered = sorted(values.items(), key=lambda kv: (kv[1], kv[0]))
     top = len(ordered) - 1
-    return {tid: idx / top for idx, (tid, _) in enumerate(ordered)}
+    out: dict[int, float] = {}
+    i, n = 0, len(ordered)
+    while i < n:
+        j = i
+        while j < n and ordered[j][1] == ordered[i][1]:
+            j += 1
+        mean_rank = (i + j - 1) / 2  # media dei ranghi del gruppo a pari valore
+        for k in range(i, j):
+            out[ordered[k][0]] = mean_rank / top
+        i = j
+    return out
 
 
 def impact_scores(candidates: list[Track]) -> dict[int, float]:

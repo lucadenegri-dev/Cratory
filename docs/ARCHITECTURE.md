@@ -397,14 +397,10 @@ The AI cannot:
 - overwrite constraints the user set explicitly in the form;
 - touch BPM/key/energy.
 
-Set Builder modes:
-
-- `technical`: cautious, based on the data provided.
-- `creative`: also uses general musical knowledge, but stays bound to candidates and validation.
-
-Today `mode` only selects the model (`AI_MODEL_CREATIVE` if configured, see `_model_for` in
-`routers/sets.py`): the curation/narrative system prompts are unique and shared across modes.
-Wiring distinct prompts per mode is a possible follow-up, not yet implemented.
+There is a single AI axis: AI curation on or off (`use_ai`). The curation has one
+character — musical — so there is no technical/creative distinction: the mood/anchor/
+narrative system prompts are unique. The earlier `mode` field was retired once its only
+surviving effect (model selection) no longer justified a user-facing toggle.
 
 ## Internationalization (i18n IT/EN)
 

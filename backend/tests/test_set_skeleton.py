@@ -45,6 +45,17 @@ def test_impact_single_track_is_neutral():
     assert impact_scores([only]) == {1: 0.5}
 
 
+def test_impact_ties_get_equal_percentile_not_split_by_id():
+    # Due gemelle (stesso bpm+energia) devono avere lo stesso impatto: l'id non
+    # decide chi "vale di piu'". Col rango medio il pareggio resta pareggio.
+    twin_a = make_track(id=1, bpm=130.0, energy=80)
+    twin_b = make_track(id=2, bpm=130.0, energy=80)
+    low = make_track(id=3, bpm=120.0, energy=40)
+    imp = impact_scores([twin_a, twin_b, low])
+    assert imp[1] == imp[2]   # pari valore -> pari impatto
+    assert imp[1] > imp[3]     # restano sopra la piu' debole
+
+
 # --- piano di genere -----------------------------------------------------------
 
 
@@ -169,19 +180,19 @@ def test_segment_families_none_for_single_family_pool():
 
 
 def test_anchor_hint_bonus_tips_the_election():
-    # Tre tracce di punta quasi gemelle (stesso BPM/energia, id diversi): senza
-    # hint vince la 51 (tie-break sui percentili per id); l'hint AI sulla 50
-    # vale +12, piu' del gap di impatto (~3.5 punti), e ribalta l'elezione.
+    # Due tracce di punta gemelle (stesso BPM/energia sopra tutto il pool, quindi
+    # stesso impatto): senza hint vince la 50 (tie-break dell'elezione per id piu'
+    # basso); l'hint AI sulla 51 vale +12, piu' del nulla che le separa, e ribalta.
     pool = _pool()
-    twin_a = make_track(id=50, title="TA", artist="ZA", bpm=136.0, energy=90, genre="Techno")
-    twin_b = make_track(id=51, title="TB", artist="ZB", bpm=136.0, energy=90, genre="Techno")
+    twin_a = make_track(id=50, title="TA", artist="ZA", bpm=138.0, energy=95, genre="Techno")
+    twin_b = make_track(id=51, title="TB", artist="ZB", bpm=138.0, energy=95, genre="Techno")
     req = SetGenerationRequest(target_duration_minutes=70)
     sk_plain = build_skeleton(pool + [twin_a, twin_b], req, strategy_profile("smooth"),
                               125.0, 125.0, 70 * 60)
-    assert next(a for a in sk_plain.anchors if a.role == "peak").track.id == 51
+    assert next(a for a in sk_plain.anchors if a.role == "peak").track.id == 50
     sk_hint = build_skeleton(pool + [twin_a, twin_b], req, strategy_profile("smooth"),
-                             125.0, 125.0, 70 * 60, anchor_hints={"peak": [50]})
-    assert next(a for a in sk_hint.anchors if a.role == "peak").track.id == 50
+                             125.0, 125.0, 70 * 60, anchor_hints={"peak": [51]})
+    assert next(a for a in sk_hint.anchors if a.role == "peak").track.id == 51
 
 
 def test_mood_scores_influence_election():

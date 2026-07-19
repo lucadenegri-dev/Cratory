@@ -137,7 +137,6 @@ Recommended providers (Discovery only — none of these feed BPM/key/genre):
 DISCOGS_TOKEN=
 AI_API_KEY=
 AI_MODEL=
-AI_MODEL_CREATIVE=
 ```
 
 File acquisition (optional):
@@ -196,7 +195,7 @@ Typical run: start backend + frontend → in Settings, connect Spotify → impor
 or paste a tracklist → run Sortory separately to tag and organize new files onto disk
 → index the library (Settings → "Library (disk)", or let it auto-run at startup) →
 analyze new tracks in Rekordbox and import the collection XML to fill in BPM/key →
-generate a set (technical or creative) → review transitions, warnings and alternatives →
+generate a set (deterministic engine, optionally AI-curated) → review transitions, warnings and alternatives →
 export or create a Spotify playlist → use Discovery ("Scava" by genre/label via
 Discogs) to find tracks that fit your taste → optionally acquire files for tracks you own
 via Soulseek (Downloads page, per-playlist or per-track from Discovery), once slskd is

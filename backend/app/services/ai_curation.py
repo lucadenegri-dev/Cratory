@@ -474,7 +474,7 @@ def run_curated_generation(db, req: SetGenerationRequest, llm, on_phase=None):
         candidates = select_candidates(db, merged)
     if len(candidates) < 3:
         # generate_set solleva l'errore giusto: inutile spendere chiamate AI
-        return generate_set(db, merged)
+        return generate_set(db, merged, candidates=candidates)
     pool = _rank_candidates(candidates, merged)  # budget = POOL_CAP
 
     phase("mood")
@@ -489,7 +489,7 @@ def run_curated_generation(db, req: SetGenerationRequest, llm, on_phase=None):
     warnings += w
 
     phase("building")
-    setlist = generate_set(db, merged,
+    setlist = generate_set(db, merged, candidates=candidates,
                            mood_scores=mood_scores if mood_useful else None,
                            anchor_hints=anchor_hints or None)
 
@@ -500,7 +500,13 @@ def run_curated_generation(db, req: SetGenerationRequest, llm, on_phase=None):
     narrative, w = narrate(llm, tracks_payload, merged, lang)
     warnings += w
 
-    curated = bool(compiled or mood_useful or anchor_hints or narrative)
+    # curated = l'AI ha davvero contribuito qualcosa di reale al set (non un dict
+    # compiled vuoto con intent_summary blank): intento riassunto o vincoli
+    # applicati, mood, anchor o narrativa.
+    intent_summary = compiled.get("intent_summary", "").strip()
+    compiled_applied = any(k != "intent_summary" for k in compiled)
+    curated = bool(intent_summary or compiled_applied or mood_useful
+                   or anchor_hints or narrative)
     if narrative:
         if not req.name and narrative.get("set_title"):
             setlist.name = narrative["set_title"]

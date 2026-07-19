@@ -364,9 +364,13 @@ def _beam_search_span(
 
 
 def generate_set(db: Session, req: SetGenerationRequest, *,
+                 candidates: list[Track] | None = None,
                  mood_scores: dict[int, int] | None = None,
                  anchor_hints: dict[str, list[int]] | None = None) -> Setlist:
-    candidates = select_candidates(db, req)
+    # candidates gia' filtrate (la curatela le ha selezionate una volta): evita
+    # una seconda select_candidates identica. None = calcola qui, come sempre.
+    if candidates is None:
+        candidates = select_candidates(db, req)
     if len(candidates) < 3:
         if req.owned_only:
             raise SetGenerationError(
