@@ -265,23 +265,35 @@ BEAM_WIDTH = 6
 BEAM_EXPANSIONS = 8
 
 
-def _beam_search(
+def _beam_search_span(
     opener: Track, candidates: list[Track], req: SetGenerationRequest,
-    profile: StrategyProfile, start_bpm: float, end_bpm: float, target_seconds: int,
-) -> list[tuple[Track, TransitionScore | None]]:
-    """Ritorna la sequenza [(track, transition_score|None), ...] con opener in testa."""
+    profile: StrategyProfile, start_bpm: float, end_bpm: float,
+    target_seconds: int, *, elapsed_secs: int, fill_until_secs: int,
+    converge_to: Track | None = None,
+    used: set[int] | None = None, artist_counts: dict[str, int] | None = None,
+    plan_family: str | None = None, reserved_ids: frozenset[int] = frozenset(),
+    peak_window: tuple[float, float] | None = None,
+) -> list[tuple[Track, TransitionScore]]:
+    """Riempe uno span di set col beam search; ritorna i soli filler (opener escluso).
+
+    elapsed_secs include gia' l'opener; ci si ferma a fill_until_secs. Il progress
+    passato allo scoring resta GLOBALE (secondi/target del set intero), cosi'
+    archi, reset point e finestra del peak parlano la stessa scala. Il ramp di
+    convergenza invece e' locale allo span: cresce da 0 a 1 verso l'anchor.
+    """
+    span_start = elapsed_secs
+    span_len = max(1, fill_until_secs - span_start)
+    base_used = set(used or ()) | {opener.id}
+    base_arts = dict(artist_counts or {})
+
     def new_beam() -> dict:
-        arts: dict[str, int] = {}
-        if opener.artist:
-            arts[opener.artist.lower()] = 1
-        return {"chosen": [(opener, None)], "used": {opener.id}, "arts": arts,
-                "secs": opener.duration_seconds or 0, "cum": 0.0,
-                "done": (opener.duration_seconds or 0) >= target_seconds}
+        return {"chosen": [], "prev": opener, "used": set(base_used),
+                "arts": dict(base_arts), "secs": elapsed_secs, "cum": 0.0,
+                "done": elapsed_secs >= fill_until_secs}
 
     def expand(b: dict) -> list[dict]:
-        """Espande un beam nei suoi migliori BEAM_EXPANSIONS successori (o lo marca done)."""
-        prev = b["chosen"][-1][0]
         progress = min(1.0, b["secs"] / target_seconds)
+        ramp = min(1.0, (b["secs"] - span_start) / span_len)
         desired = _desired_bpm(start_bpm, end_bpm, progress, profile.bpm_curve)
         desired_energy = _desired_energy(req, progress, profile)
         eligible = [
@@ -293,7 +305,10 @@ def _beam_search(
             b["done"] = True
             return [b]
         scored = sorted(
-            ((_candidate_score(prev, t, desired, req, b["arts"], profile, progress, desired_energy), t)
+            ((_candidate_score(b["prev"], t, desired, req, b["arts"], profile, progress,
+                               desired_energy, converge_to=converge_to,
+                               converge_ramp=ramp, plan_family=plan_family,
+                               reserved_ids=reserved_ids, peak_window=peak_window), t)
              for t in eligible),
             key=lambda it: (it[0][0], it[1].id), reverse=True,
         )[:BEAM_EXPANSIONS]
@@ -304,9 +319,10 @@ def _beam_search(
                 arts[t.artist.lower()] = arts.get(t.artist.lower(), 0) + 1
             secs = b["secs"] + (t.duration_seconds or 0)
             children.append({
-                "chosen": b["chosen"] + [(t, ts)], "used": b["used"] | {t.id},
-                "arts": arts, "secs": secs, "cum": b["cum"] + sc,
-                "done": secs >= target_seconds,
+                "chosen": b["chosen"] + [(t, ts)], "prev": t,
+                "used": b["used"] | {t.id}, "arts": arts,
+                "secs": secs, "cum": b["cum"] + sc,
+                "done": secs >= fill_until_secs,
             })
         return children
 
@@ -315,20 +331,18 @@ def _beam_search(
         expanded: list[dict] = []
         for b in beams:
             expanded.extend([b] if b["done"] else expand(b))
-        # Prune ai migliori BEAM_WIDTH per punteggio cumulativo (tie-break deterministico).
         expanded.sort(key=lambda b: (b["cum"], [t.id for t, _ in b["chosen"]]), reverse=True)
         beams = expanded[:BEAM_WIDTH]
 
-    # Rete di sicurezza: il percorso puramente greedy (sempre il #1 successore) è
-    # sempre in gara nella scelta finale, così il beam non può fare peggio del greedy.
+    # Rete di sicurezza greedy, come prima: il percorso "sempre il migliore
+    # localmente" resta in gara, il beam non puo' fare peggio.
     greedy = new_beam()
     while not greedy["done"]:
         greedy = expand(greedy)[0]
 
-    # Fra i beam completi scegli il migliore per punteggio medio (evita il bias sulla lunghezza).
-    complete = [b for b in beams if b["secs"] >= target_seconds] or beams
+    complete = [b for b in beams if b["secs"] >= fill_until_secs] or beams
     complete.append(greedy)
-    best = max(complete, key=lambda b: (b["cum"] / max(1, len(b["chosen"]) - 1),
+    best = max(complete, key=lambda b: (b["cum"] / max(1, len(b["chosen"])),
                                         [t.id for t, _ in b["chosen"]]))
     return best["chosen"]
 
@@ -354,7 +368,10 @@ def generate_set(db: Session, req: SetGenerationRequest) -> Setlist:
     target_seconds = req.target_duration_minutes * 60
     profile = strategy_profile(req.strategy)
     first = _pick_first(candidates, req, start_bpm)
-    chosen = _beam_search(first, candidates, req, profile, start_bpm, end_bpm, target_seconds)
+    chosen = [(first, None)] + _beam_search_span(
+        first, candidates, req, profile, start_bpm, end_bpm, target_seconds,
+        elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds,
+        artist_counts={first.artist.lower(): 1} if first.artist else None)
     total_seconds = sum((t.duration_seconds or 0) for t, _ in chosen)
 
     setlist = Setlist(

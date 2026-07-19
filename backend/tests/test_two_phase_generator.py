@@ -4,7 +4,8 @@ import pytest
 
 from app.models import Track
 from app.schemas import SetGenerationRequest
-from app.services.set_generator import _DEFAULT_PROFILE, _candidate_score
+from app.services.set_generator import _DEFAULT_PROFILE, _beam_search_span, _candidate_score
+from app.services.set_skeleton import strategy_profile
 
 
 def make_track(**kw) -> Track:
@@ -64,3 +65,47 @@ def test_plan_family_bonus_orders_match_over_unknown_over_mismatch():
     assert s_match - _score(prev, match) == pytest.approx(100.0 * 0.20)
     assert s_unknown - _score(prev, unknown) == pytest.approx(50.0 * 0.20)
     assert s_mismatch - _score(prev, mismatch) == 0.0
+
+
+# --- beam search a span --------------------------------------------------------
+
+
+def _span_pool(n: int = 10) -> list[Track]:
+    return [make_track(id=i, title=f"T{i}", artist=f"Art{i}",
+                       bpm=124.0 + i, energy=40 + i * 3, genre="Techno")
+            for i in range(1, n + 1)]
+
+
+def test_span_returns_only_fillers_within_budget():
+    pool = _span_pool()
+    opener = pool[0]
+    fillers = _beam_search_span(
+        opener, pool, SetGenerationRequest(), strategy_profile("smooth"),
+        125.0, 125.0, 3600,
+        elapsed_secs=300, fill_until_secs=1200)  # spazio per ~3 filler da 300s
+    assert 0 < len(fillers) <= 3
+    ids = [t.id for t, _ in fillers]
+    assert opener.id not in ids
+    assert fillers[0][1] is not None  # transizione opener -> primo filler
+    assert 300 + sum(t.duration_seconds for t, _ in fillers) >= 1200
+
+
+def test_span_excludes_used_and_respects_artist_counts():
+    pool = _span_pool()
+    opener = pool[0]
+    fillers = _beam_search_span(
+        opener, pool, SetGenerationRequest(max_tracks_per_artist=1),
+        strategy_profile("smooth"), 125.0, 125.0, 3600,
+        elapsed_secs=300, fill_until_secs=1500,
+        used={pool[1].id, opener.id}, artist_counts={"art3": 1})
+    ids = {t.id for t, _ in fillers}
+    assert pool[1].id not in ids   # gia' usato (es. anchor futuro)
+    assert pool[2].id not in ids   # artista "Art3" gia' al limite
+
+
+def test_span_empty_when_budget_already_filled():
+    pool = _span_pool()
+    fillers = _beam_search_span(
+        pool[0], pool, SetGenerationRequest(), strategy_profile("smooth"),
+        125.0, 125.0, 3600, elapsed_secs=1200, fill_until_secs=1200)
+    assert fillers == []
