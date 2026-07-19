@@ -115,8 +115,8 @@ source").
   track with its download outcome, playlist provenance, buy links (Bandcamp/Beatport/
   Discogs) and reversible archiving via `PATCH /api/tracks/{id}` (`archived`). See
   `docs/API.md` and PROGRESS.md for detail.
-- **DIG refactor** — DONE (2026-07-19). Navigazione: la voce Discovery è rinominata "DIG"
-  (route `/discovery` invariata) e la Wishlist passa nel gruppo "Discover" (DIG · Shazam ·
+- **Dig refactor** — DONE (2026-07-19). Navigazione: la voce Discovery è rinominata "Dig"
+  (route `/discovery` invariata) e la Wishlist passa nel gruppo "Discover" (Dig · Shazam ·
   Wishlist). La ricerca Soulseek libera è in testa alla pagina Wishlist. Rimosso Juno
   Download dai buy-link (negozio non più funzionante). Solo frontend, nessun cambio API.
 

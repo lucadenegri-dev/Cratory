@@ -1,4 +1,4 @@
-# Design — Refactor Wishlist/Discovery → DIG
+# Design — Refactor Wishlist/Discovery → Dig
 
 Data: 2026-07-19
 Stato: approvato (brainstorming)
@@ -9,7 +9,7 @@ Quattro ritocchi richiesti dall'utente, tutti lato frontend (nessun backend),
 route invariate:
 
 1. Spostare la voce **Wishlist** nel gruppo "Discover" della sidebar.
-2. Rinominare la voce/pagina **Discovery → "DIG"** (solo etichetta).
+2. Rinominare la voce/pagina **Discovery → "Dig"** (solo etichetta).
 3. Portare la ricerca **Soulseek libera ("FreeDownload") in testa** alla pagina Wishlist.
 4. Rimuovere **JunoDownload** dai buy-link della wishlist (negozio non più funzionante).
 
@@ -23,16 +23,16 @@ titolo della **sezione** "Discover"/"Scopri" (resta invariato).
 `frontend/components/index-nav.tsx`, `navGroups(t)`:
 - Rimuovere `{ href: "/wishlist", label: t.nav.downloads }` dal gruppo `groupCollect`.
 - Aggiungerlo al gruppo `groupDiscover` **dopo Shazam**.
-- Ordine risultante del gruppo: **DIG · Shazam · Wishlist**.
+- Ordine risultante del gruppo: **Dig · Shazam · Wishlist**.
 - Route `/wishlist` invariata. Il badge pending è legato a `href === "/wishlist"`,
   quindi funziona identico nel nuovo gruppo.
 
-### 2. Rinomina "Discovery" → "DIG" (solo etichetta)
+### 2. Rinomina "Discovery" → "Dig" (solo etichetta)
 
 - `frontend/lib/i18n/en.ts` e `frontend/lib/i18n/it.ts`: valore `nav.discovery`
-  `"Discovery"` → `"DIG"` (chiave i18n invariata; "DIG" in entrambe le lingue,
+  `"Discovery"` → `"Dig"` (chiave i18n invariata; "Dig" in entrambe le lingue,
   è un termine).
-- `frontend/app/discovery/page.tsx`: `PageLayout title="Discovery"` → `title="DIG"`.
+- `frontend/app/discovery/page.tsx`: `PageLayout title="Discovery"` → `title="Dig"`.
 - Route `/discovery`, link interni e titolo del gruppo "Discover"/"Scopri" invariati.
 
 ### 3. Ricerca FreeDownload (Soulseek libera) in testa
@@ -61,7 +61,7 @@ titolo della **sezione** "Discover"/"Scopri" (resta invariato).
 - `cd frontend && npm run lint && npm run build`
 - vitest su `store-links.test.ts` (ordine e URL aggiornati)
 - Controllo visivo nel browser:
-  - sidebar: gruppo "Discover" mostra **DIG · Shazam · Wishlist**; "Collect" senza Wishlist.
-  - pagina `/discovery`: titolo "DIG".
+  - sidebar: gruppo "Discover" mostra **Dig · Shazam · Wishlist**; "Collect" senza Wishlist.
+  - pagina `/discovery`: titolo "Dig".
   - pagina `/wishlist`: sezione ricerca Soulseek in cima (collassata); menu "Compra ▾"
     di una riga senza la voce "Juno Download".
