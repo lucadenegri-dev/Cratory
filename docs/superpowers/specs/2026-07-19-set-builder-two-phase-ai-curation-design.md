@@ -1,7 +1,7 @@
 # Set Builder: generatore a due fasi + AI curatrice
 
 Data: 2026-07-19
-Stato: bozza in revisione
+Stato: implementata (tappa 1 e tappa 2, 2026-07-19)
 
 ## Contesto e problema
 
@@ -77,8 +77,10 @@ Gli artisti seed mantengono il bonus attuale anche nell'elezione degli anchor.
 
 **Riserva delle bombe.** Le candidate nel top 15% di `impact` sono prenotate per il
 segmento peak: fuori da quel segmento ricevono una penalità fissa (−25) nello
-scoring di fase 2. Se il pool è piccolo (sotto ~20 candidate) la riserva si riduce
-alle sole top 3 per non affamare gli altri segmenti.
+scoring di fase 2. Una sola formula unificata, non un ramo separato per pool
+piccoli: `reserve_size = max(1, round(n * 0.15))`, dove `n` è la dimensione del
+pool — il floor a 1 è ciò che evita che la riserva si azzeri sui pool piccoli
+(es. n=8 → 1, n=16 → 2, n=20 → 3), senza affamare gli altri segmenti.
 
 **Piano di genere.** Le candidate si raggruppano per famiglia (`_GENRE_FAMILIES`
 esistente). Se la famiglia dominante copre ≥80% del pool, il piano degenera: nessun

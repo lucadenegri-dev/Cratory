@@ -25,8 +25,12 @@ discovery and a corpus of identified mixes.
 - Spotify provides no mixing features: it serves identity, metadata, import/export.
 - The remaining external providers (Discogs, Spotify) serve **Discovery only**, for
   taste and crate-digging, not the feature pipeline.
-- The AI never receives the whole library: the Candidate Engine passes it at most 60 candidates.
-- Every AI output goes through a Pydantic schema and the Validation Engine.
+- The AI never receives the whole library: the Set Builder AI curation stage caps the pool it
+  sees at 200 candidates, in per-call batches of at most 60.
+- Every AI call is schema-constrained (JSON Schema for the LLM response, Pydantic for the
+  merged request); ids outside the candidates sent or values outside declared bounds are
+  discarded with a warning, never surfaced or saved as fact. Any AI call that fails degrades
+  to the deterministic default with a warning — never an error.
 - The app is not a DJ deck (no waveform/cue/queue — that stays with the Set Builder/
   Rekordbox) and does not transcode or persist third-party audio. "The app does not play
   audio" no longer holds in absolute terms: Cratory plays its **own owned library**,
@@ -51,9 +55,9 @@ Spotify / manual import
   -> SQLite
   -> Library Explorer / Gap Analysis
   -> Candidate Engine
-  -> deterministic Set Builder
-  -> optional AI Set Agent
-  -> Validation Engine
+  -> optional AI curation (intent compilation, mood-fit, anchor hints)
+  -> deterministic two-phase Set Builder (always sequences the tracklist)
+  -> optional AI narrative (title, explanation, missing-library suggestions)
   -> Set Editor / Export / Discovery write-back
 ```
 
@@ -333,17 +337,40 @@ Responsibilities:
   segment's genre plan, with a penalty for spending a reserved track outside the peak window.
   Falls back to the previous
   single-phase beam search when the pool is under 8 candidates or the expected set is under 6
-  tracks. Fully deterministic, same external interface; a two-phase AI curation stage (phase 2 —
-  interpreting intent, curating the pool, retiring the AI-orders-the-tracklist path) is planned
-  but not implemented — see
+  tracks. Fully deterministic, same external interface regardless of AI curation;
+- **AI curation** (phase 2 of the two-phase plan, `services/ai_curation.py`, optional, on when
+  `use_ai` is truthy): read-only on the pool, it never sequences tracks. Up to four LLM calls
+  run before the deterministic engine, pool cap 200 and per-call cap 60 throughout:
+  1. **intent compilation** — the free prompt is translated into `SetGenerationRequest`
+     overrides, but only for fields the user left unset (`model_fields_set` is the
+     discriminant; `owned_only`/`sources` are never compilable). The compiled `start_bpm`/
+     `end_bpm`/`start_energy`/`end_energy` are set-arc preferences on the request, not
+     track-level BPM/key — rule 2 (never ask an AI for track BPM/key) stays intact;
+  2. **mood-fit** in batches of 50 — a 0-100 score plus up to 3 tags per candidate; candidates
+     a batch fails to judge default to the neutral 50 (they neither win nor lose);
+  3. **anchor hints** — up to 3 track ids per role (opening/peak/closing) among the
+     mood-fit leaders;
+  4. **narrative** (after the set is built) — title, global explanation and up to 3
+     missing-library suggestions over the finished tracklist.
+
+  Mood-fit and anchor hints feed the deterministic engine as two extra, non-binding terms:
+  a ×0.30 weight in `_candidate_score` (fill stage) and a ×0.2 weight plus a +12 bonus in the
+  anchor election (`build_skeleton`) — the AI nudges scores, it never picks a track directly.
+  Any AI call that fails degrades to the deterministic default with a warning on the setlist
+  (`Setlist.curation.warnings`), never an error; if every call fails or produces nothing usable,
+  `generated_by` stays `algorithmic` (otherwise `algorithmic+ai_curation`; historical sets may
+  still read `ai`). The former "AI orders the tracklist" path (`generate_ai_set()`,
+  `services/ai_agent.py`, `services/validation.py`'s `validate_ai_set()`, schemas
+  `AITrackChoice`/`AISetResponse`) has been retired entirely — see
   `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`;
 - role assignment across the set arc;
-- candidate filtering with a cap of 60;
+- candidate filtering feeding the AI curation stage (pool cap 200, per-call cap 60);
 - gap analysis;
 - discovery ranking;
-- AI output validation.
+- schema-bound AI output (foreign ids and out-of-bounds values discarded with a warning, never
+  surfaced as fact).
 
-After editing in the workbench, roles are re-derived positionally by `assign_roles` (peak at ~70%); for strategies with non-standard peak placement (e.g., closing), the peak label may shift relative to the anchor elected at generation time; persistent peak alignment is deferred to phase 2.
+After editing in the workbench, roles are re-derived positionally by `assign_roles` (peak at ~70%); for strategies with non-standard peak placement (e.g., closing), the peak label may shift relative to the anchor elected at generation time; persistent peak alignment across edits remains a future improvement (out of AI curation's scope).
 
 The absence of BPM/key does not block the system: the track stays `imported` (not
 usable by the Set Builder until they arrive from a Rekordbox import) and partial
@@ -353,10 +380,12 @@ scores use neutral values where possible.
 
 The AI can:
 
-- interpret free prompts;
-- propose a narrative direction;
+- interpret free prompts into request constraints (intent compilation — only for fields the
+  user left open);
+- score the mood-fit of candidates and suggest anchor tracks (opening/peak/closing) — hints
+  the deterministic engine may use, never a selection it is bound to;
+- propose a narrative direction (title, explanation, missing-library suggestions);
 - explain choices and transitions;
-- suggest creative alternatives;
 - comment on Discovery candidates.
 
 The AI cannot:
@@ -364,7 +393,8 @@ The AI cannot:
 - invent track_id;
 - invent BPM/key/ISRC/sources;
 - select tracks outside the candidates it received;
-- bypass the Validation Engine;
+- sequence the tracklist — that is always the deterministic engine's job;
+- overwrite constraints the user set explicitly in the form;
 - touch BPM/key/energy.
 
 Set Builder modes:
@@ -393,7 +423,7 @@ Three surfaces, three strategies:
 - **Generated phrases + AI output**: produced by the backend directly in the selected
   language. Enum labels (e.g. transition classification) stay codes
   translated by the frontend; composed phrases (reason/mixing tip/overview in
-  `services/scoring.py`, job phases, AI agent texts in `services/ai_agent.py`)
+  `services/scoring.py`, job phases and AI curation texts in `services/ai_curation.py`)
   come from per-language catalogs indexed by `get_language(db)` at the entry point.
   The AI system prompts stay in Italian as instructions to the model: only the
   directive on the output language is parametric.
@@ -424,9 +454,14 @@ Main entities:
 - `playlist_tracks`: M2M association table (Playlist <-> Track) with `added_at`
   per-playlist. A track can belong to multiple playlists; the import adds
   membership without overwriting.
-- `Setlist`: generated set, prompt, strategy, global explanation, validation and
-  `owned_only` ("owned only" guarantee, see "Disk-first").
-- `SetlistTrack`: position, role, score, transition notes, AI reason and risk.
+- `Setlist`: generated set, prompt, strategy, global explanation, `owned_only` ("owned only"
+  guarantee, see "Disk-first"), `generated_by` (`algorithmic` | `algorithmic+ai_curation`;
+  historical sets may read `ai`), `validation` (AI warnings + missing-library suggestions,
+  `{}` for a non-AI set) and `curation` (AI curation metadata: `intent_summary`, `compiled`
+  constraints, `warnings`; `{}` for a non-curated set).
+- `SetlistTrack`: position, role, score, transition notes, AI reason, risk and `mood_tags`
+  (up to 3 tags from the AI mood-fit judgement, empty when curation did not run or did not
+  produce usable tags).
 - `SpotifyToken`: Spotify OAuth tokens persisted for the local user.
 - `DjSet`: external mix identified via Shazam, separate from the library.
 - `DjSetTrack`: track identified within a `DjSet`.
