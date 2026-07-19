@@ -104,6 +104,8 @@ Sposta i due helper generici che il dig importa dall'expand, poi cancella il mod
 - Modify: `backend/app/services/discovery_dig.py`
 - Delete: `backend/app/services/discovery.py`
 - Modify: `backend/tests/test_discovery.py`
+- Delete: `backend/tests/test_expand_variant_dedup.py`
+- Modify: `backend/tests/test_archived.py`
 
 **Interfaces:**
 - Consumes: niente.
@@ -148,6 +150,13 @@ Verifica cosa resta usato prima di cancellare le fixture:
 cd backend && grep -n "def test_\|FakeSimilarity\|_make_playlist\|ManySimilarity\|discover_for_playlist\|LastFMClient" tests/test_discovery.py
 ```
 
+- [ ] **Step 3b: Rimuovere gli altri test che importano `app.services.discovery`**
+
+Altri due file di test dipendono dal modulo expand (scoperti in esecuzione):
+
+- `backend/tests/test_expand_variant_dedup.py`: è interamente expand (feature A16, testa `_drop_in_library`/`_key`/`DiscoveryCandidate`). **Eliminalo intero:** `cd backend && rm tests/test_expand_variant_dedup.py`.
+- `backend/tests/test_archived.py`: testa la feature "traccia scartata" in generale — quasi tutto resta. Rimuovi **solo** il test `test_discovery_non_ripropone_scartate` (righe ~164-169) e la sua riga di import locale `from app.services.discovery import DiscoveryCandidate, _drop_in_library, _key`. **Non toccare** gli altri 11 test del file. (La garanzia "il dig non ripropone le scartate" resta comunque valida via `_library_tracks`, che include le archiviate nell'owned-index del dig; un eventuale test dig-level è follow-up, non parte di questo task.)
+
 - [ ] **Step 4: Eseguire i test discovery + del dig**
 
 Run: `cd backend && python -m pytest tests/test_discovery.py tests/test_discovery_dig.py -q`
@@ -163,8 +172,8 @@ Expected: nessun output (solo `discovery_dig` deve comparire, non `discovery`).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/app/services/discovery_dig.py backend/tests/test_discovery.py
-git rm backend/app/services/discovery.py
+git add backend/app/services/discovery_dig.py backend/tests/test_discovery.py backend/tests/test_archived.py
+git rm backend/app/services/discovery.py backend/tests/test_expand_variant_dedup.py
 git commit -m "refactor(discovery): sposta _norm/_library_tracks nel dig ed elimina services/discovery"
 ```
 
