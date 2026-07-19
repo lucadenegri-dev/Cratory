@@ -6,10 +6,12 @@ Pipeline DETERMINISTICA:
 3. riconoscimento di ogni segmento (AudioRecognizer, iniettato);
 4. dedup dei match consecutivi (gestisce le transizioni del DJ).
 
-Il cuore (`plan_offsets`, `dedup_consecutive`, `identify_from_recognizer`) e' puro e
+Il cuore (`plan_offsets`, `group_samples`/`build_tracks`, `identify_from_recognizer`) e' puro e
 testabile senza rete ne' audio: l'I/O (yt-dlp/ffmpeg) sta in funzioni separate e il
 recognizer e' iniettato. Le tracce identificate NON entrano in libreria.
 """
+
+from __future__ import annotations
 
 import logging
 import math
@@ -26,6 +28,9 @@ logger = logging.getLogger(__name__)
 SEGMENT_LENGTH = 12      # secondi di audio per ogni tentativo di riconoscimento
 MAX_SEGMENTS = 100       # tetto ai segmenti (= chiamate al recognizer) per mix
 MAX_CONSECUTIVE_ERRORS = 8  # oltre questo numero di errori di fila, interrompe
+MERGE_MAX_GAPS = 2       # buchi consecutivi oltre i quali la stessa traccia e' una voce nuova
+CONFIDENCE_CONFIRMED = 90  # 2+ campioni concordi
+CONFIDENCE_DUBIOUS = 45    # campione singolo mai confermato
 
 
 @dataclass
@@ -71,31 +76,53 @@ def _match_key(match: dict[str, Any]) -> tuple:
     return ("ta", (match.get("artist") or "").strip().lower(), (match.get("title") or "").strip().lower())
 
 
-def dedup_consecutive(samples: list[tuple[int, dict[str, Any] | None]]) -> list[IdentifiedTrack]:
-    """Collassa i match CONSECUTIVI identici (stessa traccia campionata piu' volte).
+@dataclass
+class MatchRun:
+    """Serie di campioni concordi sulla stessa traccia."""
+    key: tuple
+    offset: int  # offset del primo campione della serie
+    match: dict[str, Any]
+    hits: int = 1
 
-    `samples` = [(offset, match|None), ...] in ordine di offset. Un brano che riappare
-    piu' tardi, dopo un altro, e' una nuova voce (il DJ l'ha rimesso)."""
-    out: list[IdentifiedTrack] = []
-    last_key: tuple | None = None
+
+def group_samples(samples: list[tuple[int, dict[str, Any] | None]]) -> list[MatchRun]:
+    """Raggruppa i campioni in serie per traccia, con finestra sui buchi.
+
+    `samples` = [(offset, match|None), ...] in ordine di offset. Campioni consecutivi
+    con la stessa chiave si sommano (`hits`). La stessa chiave che ricompare dopo
+    soli buchi (fino a MERGE_MAX_GAPS consecutivi) si fonde con la serie precedente;
+    con piu' buchi, o un'altra traccia in mezzo, e' una serie nuova (il DJ l'ha
+    rimessa davvero)."""
+    runs: list[MatchRun] = []
+    gap_count = 0
     for offset, match in samples:
         if not match:
-            last_key = None  # un buco rompe la sequenza
+            gap_count += 1
             continue
         key = _match_key(match)
-        if key == last_key:
-            continue
-        last_key = key
-        out.append(IdentifiedTrack(
-            position=len(out) + 1,
-            start_offset_seconds=offset,
-            artist=match["artist"],
-            title=match["title"],
-            isrc=match.get("isrc"),
-            apple_id=match.get("apple_id"),
-            confidence=int(match.get("confidence") or 0),
-        ))
-    return out
+        if runs and runs[-1].key == key and gap_count <= MERGE_MAX_GAPS:
+            runs[-1].hits += 1
+        else:
+            runs.append(MatchRun(key=key, offset=offset, match=match))
+        gap_count = 0
+    return runs
+
+
+def build_tracks(runs: list[MatchRun]) -> list[IdentifiedTrack]:
+    """Serie -> tracklist. La confidence deriva dai campioni concordi: 2+ =
+    confermata, 1 = dubbia (resta in lista, la UI la marca)."""
+    return [
+        IdentifiedTrack(
+            position=i,
+            start_offset_seconds=run.offset,
+            artist=run.match["artist"],
+            title=run.match["title"],
+            isrc=run.match.get("isrc"),
+            apple_id=run.match.get("apple_id"),
+            confidence=CONFIDENCE_CONFIRMED if run.hits >= 2 else CONFIDENCE_DUBIOUS,
+        )
+        for i, run in enumerate(runs, start=1)
+    ]
 
 
 ProgressFn = Callable[[int, int], None]
@@ -126,7 +153,7 @@ def identify_from_recognizer(
         samples.append((offset, match))
         if on_progress:
             on_progress(i, len(offsets))
-    return dedup_consecutive(samples)
+    return build_tracks(group_samples(samples))
 
 
 # ---- I/O: download (yt-dlp) + segmentazione (ffmpeg) -----------------------

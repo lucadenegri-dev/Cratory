@@ -5,6 +5,8 @@ provider esterni o da correzione manuale; l'energia e' stimata in modo
 deterministico (services/energy). Nessun motore di enrichment interno.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Table, Text

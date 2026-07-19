@@ -14,6 +14,8 @@ attuale di `mix_identify_job`), un finalizer lo chiude comunque alla garbage
 collection dell'istanza.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import weakref
@@ -32,8 +34,9 @@ class RecognizerError(Exception):
 class AudioRecognizer(ABC):
     """Riconosce un breve segmento audio. Ritorna un match normalizzato o None.
 
-    Match: {"artist": str, "title": str, "isrc": str|None, "apple_id": str|None,
-            "confidence": int}. None = nessun riconoscimento per quel segmento.
+    Match: {"artist": str, "title": str, "isrc": str|None, "apple_id": str|None}.
+    None = nessun riconoscimento per quel segmento. La confidence la calcola
+    `mix_identify` dai campioni concordi.
     """
 
     @abstractmethod
@@ -60,7 +63,6 @@ def parse_shazam(result: dict[str, Any] | None) -> dict[str, Any] | None:
         "title": title,
         "isrc": isrc.strip() if isinstance(isrc, str) and isrc.strip() else None,
         "apple_id": apple_id,
-        "confidence": 80,  # Shazam non da' uno score: match = confidenza alta ma non certa
     }
 
 
