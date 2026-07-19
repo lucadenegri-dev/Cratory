@@ -12,6 +12,7 @@ Composizione score (0-100), basata su BPM/key da Rekordbox o dall'analisi in-app
 
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from app.models import Track
 from app.services.camelot import camelot_compatibility, camelot_score, parse_camelot
@@ -581,10 +582,14 @@ def _genre_families(norm: str) -> frozenset[str]:
                      if any(f" {kw} " in padded for kw in keywords))
 
 
+@lru_cache(maxsize=1024)
 def genre_families_of(genre: str | None) -> frozenset[str]:
     """Famiglie note di un genere grezzo (vuoto se assente/sconosciuto/umbrella).
 
-    Lookup pubblico usato dallo scheletro del set per il piano di genere.
+    Lookup pubblico usato dallo scheletro del set e dallo scoring per il piano di
+    genere: chiamato per candidata a ogni espansione del beam, quindi memoizzato
+    (i generi distinti in libreria sono pochi; il risultato e' un frozenset,
+    immutabile e sicuro da condividere).
     """
     if not genre:
         return frozenset()
