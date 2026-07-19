@@ -11,8 +11,6 @@ testabile senza rete ne' audio: l'I/O (yt-dlp/ffmpeg) sta in funzioni separate e
 recognizer e' iniettato. Le tracce identificate NON entrano in libreria.
 """
 
-from __future__ import annotations
-
 import logging
 import math
 import os

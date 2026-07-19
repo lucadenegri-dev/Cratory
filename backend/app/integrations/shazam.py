@@ -14,8 +14,6 @@ attuale di `mix_identify_job`), un finalizer lo chiude comunque alla garbage
 collection dell'istanza.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import weakref
