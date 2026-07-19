@@ -390,7 +390,6 @@ export const it: Dictionary = {
     archivedEmptyTitle: "Nessuna traccia archiviata",
     archivedEmptyBody: "Le tracce che archivi dalla wishlist compariranno qui.",
     soulseekHeading: "Ricerca Soulseek libera",
-    soulseekToggle: "Cerca a mano su Soulseek",
     bulkHeading: "Azioni di gruppo",
   },
   tracks: {

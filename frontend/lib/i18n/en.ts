@@ -388,7 +388,6 @@ export const en = {
     archivedEmptyTitle: "No archived tracks",
     archivedEmptyBody: "Tracks you archive from the wishlist will show up here.",
     soulseekHeading: "Free Soulseek search",
-    soulseekToggle: "Search Soulseek manually",
     bulkHeading: "Bulk actions",
   },
   tracks: {

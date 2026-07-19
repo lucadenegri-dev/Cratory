@@ -113,7 +113,8 @@ export function WishlistRow({
         />
         {!archived && (
           <DropdownMenu
-            label={<MoreHorizontal size={13} aria-label={t.wishlist.moreActionsAria} />}
+            label={<MoreHorizontal size={13} />}
+            ariaLabel={t.wishlist.moreActionsAria}
             variant="ghost"
             items={[
               { key: "link", label: t.wishlist.linkFileButton, onSelect: () => onLinkFile(track) },

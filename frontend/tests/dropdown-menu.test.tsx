@@ -63,4 +63,15 @@ describe("DropdownMenu", () => {
     // Il menu resta aperto: l'item disabled non chiude e non naviga.
     expect(screen.getByText("Bandcamp")).toBeTruthy();
   });
+
+  it("ariaLabel diventa il nome accessibile del trigger", () => {
+    render(
+      <DropdownMenu
+        label={<span aria-hidden>•••</span>}
+        ariaLabel="Foo"
+        items={[{ key: "a", label: "Azione", onSelect: () => {} }]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Foo" })).toBeTruthy();
+  });
 });

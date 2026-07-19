@@ -442,12 +442,13 @@ export type MenuItem = {
   disabled?: boolean;
 };
 
-export function DropdownMenu({ label, items, disabled, size = "sm", variant = "outline" }: {
+export function DropdownMenu({ label, items, disabled, size = "sm", variant = "outline", ariaLabel }: {
   label: ReactNode;
   items: MenuItem[];
   disabled?: boolean;
   size?: Size;
   variant?: Variant;
+  ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -477,6 +478,7 @@ export function DropdownMenu({ label, items, disabled, size = "sm", variant = "o
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
+        aria-label={ariaLabel}
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         className={cn(BTN_BASE, BTN_VARIANT[variant], BTN_SIZE[size])}
