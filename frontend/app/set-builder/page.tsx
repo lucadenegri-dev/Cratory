@@ -261,7 +261,7 @@ function SetBuilderInner() {
                     className={cn("rounded-none px-3 py-1 text-xs font-medium uppercase tracking-wider transition-colors",
                       !useAi ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
                   >
-                    {t.setBuilder.algorithmLabel}
+                    {t.setBuilder.curationOffLabel}
                   </button>
                   <button
                     type="button"
@@ -272,13 +272,13 @@ function SetBuilderInner() {
                     className={cn("inline-flex items-center gap-1.5 rounded-none px-3 py-1 text-xs font-medium uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-40",
                       useAi ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
                   >
-                    <Sparkles size={13} /> AI
+                    <Sparkles size={13} /> {t.setBuilder.curationOnLabel}
                   </button>
                 </div>
                 <span className="text-xs text-muted">
                   {useAi
-                    ? <>{t.setBuilder.aiReasoningLabel}{aiStatus?.model && <span className="text-faint"> · {aiStatus.model}</span>}</>
-                    : <>{t.setBuilder.deterministicMixLabel}</>}
+                    ? <>{t.setBuilder.curationOnDesc}{aiStatus?.model && <span className="text-faint"> · {aiStatus.model}</span>}</>
+                    : <>{t.setBuilder.curationOffDesc}</>}
                 </span>
               </div>
               {!aiReady && (
@@ -391,7 +391,7 @@ function SetBuilderInner() {
 
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
               <span className="text-xs text-faint">
-                {t.setBuilder.footerEnginePrefix} <span className="text-muted">{useAi ? "AI" : t.setBuilder.engineAlgorithmic}</span> {t.setBuilder.footerGenerateHint} <kbd className="rounded-none border border-border px-1 text-muted">⌘⏎</kbd>
+                {t.setBuilder.footerEnginePrefix} <span className="text-muted">{useAi ? t.setBuilder.curationOnLabel : t.setBuilder.curationOffLabel}</span> {t.setBuilder.footerGenerateHint} <kbd className="rounded-none border border-border px-1 text-muted">⌘⏎</kbd>
               </span>
               <Button onClick={generate} disabled={busy}>
                 <Wand2 size={16} /> {busy ? t.setBuilder.generateButtonBusy : t.setBuilder.generateButton}
