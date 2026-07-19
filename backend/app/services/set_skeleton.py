@@ -175,6 +175,8 @@ _PEAK_WINDOW = (0.15, 0.10)     # finestra (prima, dopo) attorno al peak per le 
 _MIN_ANCHOR_GAP = 0.1           # reset troppo vicini a un altro anchor: scartati
 _ANCHOR_SEED_BONUS = 15.0       # i seed valgono anche nell'elezione degli anchor
 _PEAK_FAMILY_BONUS = 10.0
+_ANCHOR_HINT_BONUS = 12.0       # hint AI (suggest_anchors) sul ruolo in elezione (tunabile)
+_ELECTION_MOOD_WEIGHT = 0.2     # peso del mood AI nell'elezione degli anchor (tunabile, max 20 punti)
 
 
 @dataclass(frozen=True)
@@ -233,6 +235,8 @@ def _peak_position(req: SetGenerationRequest, profile: StrategyProfile) -> float
 def build_skeleton(
     candidates: list[Track], req: SetGenerationRequest, profile: StrategyProfile,
     start_bpm: float, end_bpm: float, target_seconds: int,
+    mood_scores: dict[int, int] | None = None,
+    anchor_hints: dict[str, list[int]] | None = None,
 ) -> Skeleton | None:
     """Fase 1: elegge gli anchor e prepara segmenti, riserva e piano di genere.
 
@@ -285,6 +289,16 @@ def build_skeleton(
         return (_desired_bpm(start_bpm, end_bpm, pos, profile.bpm_curve),
                 _desired_energy(req, pos, profile))
 
+    def curation_terms(t: Track, role: str) -> float:
+        """Curatela AI nell'elezione: mood-fit (sempre, se presente) + hint sull'anchor
+        del ruolo (i reset non hanno hint: nessun ruolo "reset" negli anchor_hints)."""
+        s = 0.0
+        if mood_scores is not None:
+            s += mood_scores.get(t.id, 50) * _ELECTION_MOOD_WEIGHT
+        if anchor_hints and t.id in anchor_hints.get(role, ()):
+            s += _ANCHOR_HINT_BONUS
+        return s
+
     def peak_score(t: Track) -> float:
         d_bpm, d_energy = desired_at(peak_pos)
         s = (impacts[t.id] * 100.0 * 0.6
@@ -292,17 +306,17 @@ def build_skeleton(
              + _arc_fit(t.energy, d_energy) * 0.15)
         if plan and plan.principal in genre_families_of(t.genre):
             s += _PEAK_FAMILY_BONUS
-        return s + (_ANCHOR_SEED_BONUS if _is_seed(t, seeds) else 0.0)
+        return s + (_ANCHOR_SEED_BONUS if _is_seed(t, seeds) else 0.0) + curation_terms(t, "peak")
 
     def opening_score(t: Track) -> float:
         _, d_energy = desired_at(0.0)
         s = -abs((t.bpm or start_bpm) - start_bpm) * 2.0 + _arc_fit(t.energy, d_energy) * 0.3
-        return s + (100.0 if _is_seed(t, seeds) else 0.0)  # come _pick_first
+        return s + (100.0 if _is_seed(t, seeds) else 0.0) + curation_terms(t, "opening")  # come _pick_first
 
     def closing_score(t: Track) -> float:
         _, d_energy = desired_at(1.0)
         s = -abs((t.bpm or end_bpm) - end_bpm) * 2.0 + _arc_fit(t.energy, d_energy) * 0.3
-        return s + (_ANCHOR_SEED_BONUS if _is_seed(t, seeds) else 0.0)
+        return s + (_ANCHOR_SEED_BONUS if _is_seed(t, seeds) else 0.0) + curation_terms(t, "closing")
 
     def reset_score_at(pos: float):
         d_bpm, _ = desired_at(pos)
@@ -311,7 +325,8 @@ def build_skeleton(
             # Un reset e' uno stacco che respira: premia l'energia bassa.
             calm = 100.0 - float(t.energy) if t.energy is not None else 50.0
             return (calm * 0.5 + _trajectory_fit(t.bpm, d_bpm) * 0.2
-                    + (_ANCHOR_SEED_BONUS if _is_seed(t, seeds) else 0.0))
+                    + (_ANCHOR_SEED_BONUS if _is_seed(t, seeds) else 0.0)
+                    + curation_terms(t, "reset"))
         return score
 
     # Ordine di elezione: il peak per primo (criteri piu' esigenti), poi gli
