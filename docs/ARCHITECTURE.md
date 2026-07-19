@@ -343,10 +343,10 @@ Responsibilities:
   family at peak, a calmer family elsewhere; degenerates to no plan above an 80% dominant share
   or without a second family at 15%+). Phase 2 fills each segment with the same beam search
   (span-budgeted: `_beam_search_span`), converging toward the incoming anchor and following the
-  segment's genre plan, with a
-  penalty for spending a reserved track outside the peak window. Falls back to the previous
+  segment's genre plan, with a penalty for spending a reserved track outside the peak window.
+  Falls back to the previous
   single-phase beam search when the pool is under 8 candidates or the expected set is under 6
-  tracks. Fully deterministic, same external interface; a two-phase AI curation stage (Tappa 2 —
+  tracks. Fully deterministic, same external interface; a two-phase AI curation stage (phase 2 —
   interpreting intent, curating the pool, retiring the AI-orders-the-tracklist path) is planned
   but not implemented — see
   `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`;
