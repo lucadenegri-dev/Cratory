@@ -87,13 +87,12 @@ backend/app/
 ```
 
 No enrichment chain: BPM/key from Rekordbox, text metadata from Sortory. The remaining
-external providers serve **Discovery only**: Last.fm (similarity), Discogs (dig "Scava"),
-Spotify (resolver).
+external providers serve **Discovery only**: Discogs (dig "Scava"), Spotify (resolver).
 
 Discovery works by taste, not by technical compatibility (that stays with the Set Builder):
-playlist expansion is Last.fm-centric (similarity) with a Spotify resolver via `/search`; the
-dig "Scava" uses Discogs by genre/label. Spotify `/recommendations` must not be used: for new
-apps or in development mode it returns 403/404.
+the dig "Scava" uses Discogs by genre/label, with Spotify only as an identity resolver.
+Spotify `/recommendations` must not be used: for new apps or in development mode it returns
+403/404.
 
 ## Track identity
 

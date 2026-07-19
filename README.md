@@ -48,9 +48,9 @@ BPM + genre — it is not sourced from any provider and cannot be edited by hand
   derived only and not directly editable).
 - Generate sets with a deterministic engine plus optional, validated AI.
 - Classify transitions as technically safe, creative risk, or good reset.
-- Discovery by taste: expand a playlist (Last.fm + Spotify resolver) or crate-dig by
-  genre/label via Discogs ("Scava") — the only three external providers left, and
-  they serve Discovery only, not track features.
+- Discovery by taste: crate-dig by genre/label via Discogs ("Scava") — the only
+  external provider left for Discovery (plus the Spotify resolver), and it serves
+  Discovery only, not track features.
 - Identify mix tracklists via Shazam/yt-dlp/ffmpeg into a corpus kept separate from the
   library — the only audio fingerprinting Cratory does (of external mixes, not of your
   library).
@@ -81,7 +81,7 @@ Backend:   Python, FastAPI, SQLAlchemy, Pydantic
 Frontend:  Next.js 16, React, Tailwind / design system
 Database:  SQLite (local); PostgreSQL in backlog
 AI:        LLM behind an interface, outputs validated with Pydantic
-External:  Spotify, Last.fm, Discogs (Discovery only), Shazam, slskd, Rekordbox (XML import)
+External:  Spotify, Discogs (Discovery only), Shazam, slskd, Rekordbox (XML import)
 ```
 
 ## Quickstart
@@ -134,7 +134,6 @@ SPOTIFY_REDIRECT_URI=http://127.0.0.1:8000/api/spotify/callback
 Recommended providers (Discovery only — none of these feed BPM/key/genre):
 
 ```text
-LASTFM_API_KEY=
 DISCOGS_TOKEN=
 AI_API_KEY=
 AI_MODEL=
@@ -198,7 +197,7 @@ or paste a tracklist → run Sortory separately to tag and organize new files on
 → index the library (Settings → "Library (disk)", or let it auto-run at startup) →
 analyze new tracks in Rekordbox and import the collection XML to fill in BPM/key →
 generate a set (technical or creative) → review transitions, warnings and alternatives →
-export or create a Spotify playlist → use Discovery (expand, or "Scava" by genre/label via
+export or create a Spotify playlist → use Discovery ("Scava" by genre/label via
 Discogs) to find tracks that fit your taste → optionally acquire files for tracks you own
 via Soulseek (Downloads page, per-playlist or per-track from Discovery), once slskd is
 running and configured.

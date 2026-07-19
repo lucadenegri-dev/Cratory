@@ -1,10 +1,8 @@
-"""Copertura HTTP (TestClient) del router /api/discovery: /status, /genres, /dig,
-/expand. La logica di discover_for_playlist/dig e' gia' testata a fondo a livello
-di funzione in tests/test_discovery.py (anche chiamando dig_endpoint/get_release_detail
-direttamente) e tests/test_discovery_dig.py: qui si copre lo strato HTTP mancante
-(shape JSON via TestClient, error codes sui casi non ancora esercitati a quel
-livello: 409 lastfm_not_configured). Il 502 su dig e' gia' coperto in test_discovery.py,
-non duplicato qui."""
+"""Copertura HTTP (TestClient) del router /api/discovery: /genres, /dig. La logica
+di dig e' gia' testata a fondo a livello di funzione in tests/test_discovery.py
+(anche chiamando dig_endpoint/get_release_detail direttamente) e
+tests/test_discovery_dig.py: qui si copre lo strato HTTP mancante (shape JSON via
+TestClient). Il 502 su dig e' gia' coperto in test_discovery.py, non duplicato qui."""
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -13,8 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
-from app.models import Playlist, Track
-from app.repositories import add_track_to_playlist
+from app.models import Track
 
 
 @pytest.fixture()
@@ -34,22 +31,6 @@ def client():
     app.dependency_overrides[get_db] = _get_db
     yield TestClient(app), S
     app.dependency_overrides.clear()
-
-
-# --- /status --------------------------------------------------------------------
-
-
-def test_status_riflette_lastfm_spotify_ai(client, monkeypatch):
-    from app.routers import discovery as dr
-
-    c, _ = client
-    monkeypatch.setattr(dr, "lastfm_configured", lambda: True)
-    monkeypatch.setattr(dr, "_spotify_configured", lambda: False)
-    monkeypatch.setattr(dr, "llm_configured", lambda: False)
-
-    r = c.get("/api/discovery/status")
-    assert r.status_code == 200
-    assert r.json() == {"configured": True, "spotify_resolver": False, "ai_explanations": False}
 
 
 # --- /genres ----------------------------------------------------------------------
@@ -160,105 +141,6 @@ def test_dig_endpoint_rejects_out_of_range_depth(client):
     c, _ = client
     r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "x", "depth": 1.5})
     assert r.status_code == 422
-
-
-# --- /expand ----------------------------------------------------------------------
-
-
-def test_expand_409_senza_lastfm(client, monkeypatch):
-    from app.routers import discovery as dr
-
-    c, S = client
-    monkeypatch.setattr(dr, "lastfm_configured", lambda: False)
-    with S() as s:
-        pl = Playlist(platform="spotify", name="Seed", kind="playlist")
-        s.add(pl)
-        s.commit()
-        playlist_id = pl.id
-
-    r = c.post("/api/discovery/expand", json={"playlist_id": playlist_id})
-    assert r.status_code == 409
-    assert r.json()["detail"]["code"] == "lastfm_not_configured"
-
-
-def test_expand_404_playlist_inesistente(client, monkeypatch):
-    from app.routers import discovery as dr
-
-    c, _ = client
-    monkeypatch.setattr(dr, "lastfm_configured", lambda: True)
-    monkeypatch.setattr(dr, "_spotify_configured", lambda: False)
-
-    class _EmptySimilarity:
-        name = "fake"
-
-        def similar_artists(self, artist, *, limit=20):
-            return []
-
-        def similar_tracks(self, artist, title, *, limit=20):
-            return []
-
-        def artist_top_tracks(self, artist, *, limit=10):
-            return []
-
-        def top_tracks_by_tag(self, tag, *, limit=20):
-            return []
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(dr, "get_lastfm_client", lambda: _EmptySimilarity())
-
-    r = c.post("/api/discovery/expand", json={"playlist_id": 999999})
-    assert r.status_code == 404
-    assert r.json()["detail"]["code"] == "discovery_not_found"
-
-
-def test_expand_200_via_http(client, monkeypatch):
-    from app.routers import discovery as dr
-
-    c, S = client
-    monkeypatch.setattr(dr, "lastfm_configured", lambda: True)
-    monkeypatch.setattr(dr, "_spotify_configured", lambda: False)
-
-    class _FakeSimilarity:
-        name = "fake"
-
-        def similar_artists(self, artist, *, limit=20):
-            return [{"name": "NewBand", "match": 0.9}] if artist == "Artist 0" else []
-
-        def similar_tracks(self, artist, title, *, limit=20):
-            return []
-
-        def artist_top_tracks(self, artist, *, limit=10):
-            return [{"artist": "NewBand", "title": "Fresh Cut"}] if artist == "NewBand" else []
-
-        def top_tracks_by_tag(self, tag, *, limit=20):
-            return []
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(dr, "get_lastfm_client", lambda: _FakeSimilarity())
-
-    with S() as s:
-        pl = Playlist(platform="spotify", name="Seed Playlist", kind="playlist")
-        s.add(pl)
-        s.flush()
-        t = Track(source_type="spotify", platform="spotify", status="ready_for_set",
-                  artist="Artist 0", title="Song A")
-        s.add(t)
-        s.flush()
-        add_track_to_playlist(s, t, pl)
-        s.commit()
-        playlist_id = pl.id
-
-    r = c.post("/api/discovery/expand", json={"playlist_id": playlist_id, "limit": 10})
-    assert r.status_code == 200
-    body = r.json()
-    assert body["mode"] == "expand"
-    assert body["scope"] == "Seed Playlist"
-    titles = {cand["title"] for cand in body["candidates"]}
-    assert "Fresh Cut" in titles
 
 
 def test_release_detail_exposes_youtube_videos(client, monkeypatch):

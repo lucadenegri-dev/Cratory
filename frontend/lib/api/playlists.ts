@@ -1,10 +1,8 @@
 import { apiDelete, apiGet, apiPost } from "./client";
 import type {
-  DiscoveryCandidate,
   GapAnalysis,
   LikedTrackPreview,
   Playlist,
-  PlaylistAddTrackResult,
   PlaylistDeleteResult,
   PlaylistImportReport,
   SpotifyPlaylistRef,
@@ -71,18 +69,6 @@ export function playlistGaps(id: number, opts?: { signal?: AbortSignal }) {
 
 export function libraryGaps() {
   return apiGet<GapAnalysis>("/api/playlists/library/gaps");
-}
-
-export function addDiscoveredTrackToPlaylist(playlistId: number, c: DiscoveryCandidate) {
-  return apiPost<PlaylistAddTrackResult>(`/api/playlists/${playlistId}/discovered-tracks`, {
-    artist: c.artist,
-    title: c.title,
-    spotify_id: c.spotify_id,
-    isrc: c.isrc,
-    duration_seconds: c.duration_seconds,
-    album_art_url: c.album_art_url,
-    url: c.spotify_url,
-  });
 }
 
 export function createPlaylistFromTracks(name: string, trackIds: number[]) {

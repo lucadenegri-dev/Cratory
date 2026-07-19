@@ -26,7 +26,7 @@ page is complete**: BPM/key now have two deterministic sources — Rekordbox imp
 (primary, source-aware overwrite) and in-app analysis via Essentia (alternative,
 `/analysis`) — with explicit per-value provenance (`bpm_source`/`key_source`: manual >
 rekordbox > cratory) and an explicit apply bridge to the canonical fields. Discovery is
-operational (Last.fm expand + Discogs dig). **The dig's engine was redesigned
+operational (Discogs dig). **The dig's engine was redesigned
 (2026-07-16):** the Discogs pile for a seed is sorted by demand (`sort=want`) and
 `depth` picks where to fetch a window from it (0.0 = the seed's classics, 1.0 = the
 bottom of the crate) — taste always ranks inside that window, it is no longer a mode.
@@ -52,10 +52,16 @@ value is product quality, not scale.
 ## Next steps
 
 **The agreed plan is complete** (2026-07-12): Discovery improvement done (taste +
-explanations, per-release tracklists; Last.fm tags as a 2nd dig source parked), audit + quick
-wins done, documentation rework done, and the whole 2026-07-05 audit backlog cleared (see the
-historical section below). No committed next step: new work starts from fresh product ideas,
-not from this backlog.
+explanations, per-release tracklists; a similarity-based 2nd dig source closed as not
+applicable — see below), audit + quick wins done, documentation rework done, and the
+whole 2026-07-05 audit backlog cleared (see the historical section below). No committed
+next step: new work starts from fresh product ideas, not from this backlog.
+
+**2026-07-19:** the Discovery playlist-expansion flow (similarity-based suggestions plus
+a Spotify resolver) was removed entirely, backend to frontend to docs. Discovery is now
+the dig ("Scava"/Discogs) alone. This also closes, as not applicable, the backlog item
+below that assumed the expansion flow still existed ("similarity tags as a 2nd dig
+source").
 
 ## Suspended / revised
 
@@ -85,9 +91,11 @@ not from this backlog.
 
 ## Technical backlog (non-blocking)
 
-- **Discovery: enrich the dig.** Last.fm tags as a 2nd source is **parked** (deprioritized
-  2026-07-12, not planned for now). (Per-release tracklists DONE 2026-07-12; Genre + Label
-  already unified; Playlist stays Spotify-resolved on purpose, a different goal.)
+- **Discovery: enrich the dig.** Tagging the dig from a similarity-based 2nd source is
+  **closed as not applicable (2026-07-19)**: the provider it would have relied on was
+  removed along with the whole playlist-expansion flow. (Per-release tracklists DONE
+  2026-07-12; Genre + Label already unified; Playlist stays Spotify-resolved on
+  purpose, a different goal.)
 - **Shazam phase 2.** `DjSetTrack` as a corpus for co-occurrence suggestions.
 - **PostgreSQL.** Low priority: SQLite is enough for personal use (only needed for an
   eventual multi-user setup).
@@ -96,8 +104,9 @@ not from this backlog.
 
 **The 2026-07-05 audit backlog is done.** Every actionable item was either implemented (all
 verified: TDD on the backend, live browser checks on the UI), resolved by decision (A7
-confirmed as-is; dead scores + `POST /transitions/score` removed), consciously parked (Last.fm
-tags as a 2nd dig source; the E14 test-fixture dedup — invasive, low value), or noted as a
+confirmed as-is; dead scores + `POST /transitions/score` removed), consciously parked (tags
+from the since-removed similarity provider as a 2nd dig source; the E14 test-fixture dedup —
+invasive, low value), or noted as a
 minor non-planned residual inside the theme bullets below. E2E presidio added (Playwright
 smoke + jobs-provider unit). Final state: backend 842 tests green, frontend 12 e2e + 4 unit
 green, lint/tsc/build clean.
@@ -128,8 +137,9 @@ exception; 2026-07-12); E1e (selectinload on `Track.playlists` in setlist/transi
 download-pending); A19 (Soulseek auto-pick filters by confidence first, then score —
 `auto_pick_candidates`); A17 (dig: Discogs pagination up to 3 pages + explicit 502
 `discovery_provider_error` instead of silent empty results); A28 ("Search on Soulseek" button on
-the wishlist track detail, wired to the existing per-track auto-pick endpoint); E12 (Last.fm
-User-Agent per ToS + 300s in-memory TTL cache on the client — errors never cached); A23 (energy
+the wishlist track detail, wired to the existing per-track auto-pick endpoint); E12 (the
+since-removed similarity provider's client got a compliant User-Agent + 300s in-memory TTL
+cache — errors never cached); A23 (energy
 in the composite transition score: centered ±7.5/−4.5 correction only when both tracks have
 energy, bit-identical scores otherwise); B9 (shared ConfirmModal replaces all 6 native
 `window.confirm`); B24 (relative `/api` paths + Next rewrite to `BACKEND_URL` — the app now works
@@ -191,7 +201,7 @@ All 2026-07-12.
 
 Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Order is indicative.
 
-- **Discovery** — *(Last.fm tags as a 2nd dig source: parked, see above.)*
+- **Discovery** — *(similarity-based 2nd dig source: closed as not applicable, 2026-07-19 — see above.)*
 - **Set → console / editor** — (nothing open).
 - **Scoring** — **DECIDED (2026-07-12): dead scores removed** (`bpm/key/mood_compatibility_score`
   + `POST /api/transitions/score` deleted with their tests — never called by the app; the
@@ -228,7 +238,7 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
 | Tracks without BPM/key | the track status stays `imported` (unusable by the Set Builder) until a Rekordbox import arrives; no automatic estimation |
 | Rate limits or network errors (Discovery providers) | retry/backoff, async jobs |
 | Invented AI output | candidate cap, Pydantic schema, Validation Engine |
-| Spotify recommendation unavailable | Discovery based on Last.fm and the Spotify `/search` resolver |
+| Spotify recommendation unavailable | Discovery based on Discogs crate digging |
 | Spotify dev-mode limits depth (5 users, `label:` search cap 10) | genre/label depth from Discogs (open); Spotify only as a resolver |
 | Product rename breaks data paths | legacy paths kept, migration only if explicit |
 | Rekordbox import misaligned (path/hash/name do not match) | three match levels (NFC path → audio_hash gated on basename → artist+title), report with an `unmatched` count |

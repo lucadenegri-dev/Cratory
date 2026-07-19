@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Compass, Pencil,
+  ArrowLeft, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Pencil,
   RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart,
 } from "lucide-react";
 import {
@@ -249,7 +249,6 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const marginalia = (
     <div className="space-y-3">
       <ButtonLink href={`/set-builder?playlist=${pid}`} size="sm" block><Sparkles size={15} /> {t.playlists.buildSetButton}</ButtonLink>
-      <ButtonLink href={`/playlists/${pid}/expand`} size="sm" variant="outline" block><Compass size={15} /> {t.playlists.discoverSimilarButton}</ButtonLink>
       {missing > 0 && (
         <Button size="sm" variant="outline" className="w-full" onClick={doDownloadMissing} disabled={downloading}>
           {downloading ? <Spinner /> : <Download size={15} />} {t.playlists.downloadMissingButton(missing)}

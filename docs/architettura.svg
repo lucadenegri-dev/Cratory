@@ -69,12 +69,9 @@
   <!-- BAND 03 — DISCOVERY -->
   <text x="40" y="360" class="band">03 — DISCOVERY (per gusto)</text>
   <g>
-    <rect class="box" x="40"  y="372" width="520" height="58"/>
-    <text class="lbl" x="56"  y="396">DISCOVERY · EXPAND</text>
-    <text class="sub" x="56"  y="414">Last.fm similarity → resolver Spotify /search → ranking per gusto</text>
-    <rect class="box" x="620" y="372" width="520" height="58"/>
-    <text class="lbl" x="636" y="396">DISCOVERY · DIG «SCAVA»</text>
-    <text class="sub" x="636" y="414">Discogs per genere/etichetta → lead → ranking domanda/novità</text>
+    <rect class="box" x="40" y="372" width="1100" height="58"/>
+    <text class="lbl" x="56" y="396">DISCOVERY · DIG «SCAVA»</text>
+    <text class="sub" x="56" y="414">Discogs per genere/etichetta → lead → ranking di gusto nella finestra</text>
   </g>
   <!-- write-back loop into library (right margin) -->
   <path class="conn" d="M1140,372 L1162,372 L1162,90 L1140,90 L1140,104" marker-end="url(#arrow)"/>

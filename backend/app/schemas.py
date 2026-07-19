@@ -151,16 +151,6 @@ class AISetResponse(BaseModel):
     missing_library_suggestions: list[str] = []
 
 
-class DiscoveryExplainEntry(BaseModel):
-    """Una spiegazione AI per il candidato Discovery all'indice `index` (vedi
-    services/discovery._explain). Validata voce per voce: un elemento malformato
-    viene scartato senza invalidare le altre spiegazioni (l'AI qui e' best-effort,
-    spiega ma non sceglie i candidati — vedi services/discovery.py)."""
-
-    index: int
-    text: str = ""
-
-
 class SetlistTrackOut(BaseModel):
     position: int
     role: str | None = None
@@ -427,30 +417,7 @@ class GapAnalysisResponse(BaseModel):
     gaps: list[GapOut] = []
 
 
-# --- Discovery mode (Fase F) -------------------------------------------------
-
-
-class DiscoveryCandidateOut(BaseModel):
-    artist: str
-    title: str
-    match: float
-    source: str  # similar_artist | similar_track | tag | label
-    seed: str | None = None
-    spotify_id: str | None = None
-    spotify_url: str | None = None
-    album_art_url: str | None = None
-    isrc: str | None = None
-    duration_seconds: int | None = None
-    label: str | None = None
-    label_owned: bool = False
-    explanation: str | None = None
-
-
-class DiscoveryResponse(BaseModel):
-    mode: str   # expand | labels
-    scope: str  # nome playlist o etichette
-    seed_count: int = 0
-    candidates: list[DiscoveryCandidateOut] = []
+# --- Discovery: import/salvataggio lead del dig -----------------------------
 
 
 class DiscoveryAddRequest(BaseModel):
@@ -468,31 +435,6 @@ class DiscoveryAddRequest(BaseModel):
 class DiscoveryAddResponse(BaseModel):
     created: bool
     track: TrackOut
-
-
-class PlaylistAddTrackRequest(BaseModel):
-    """Aggiunge una traccia scoperta (expand) a una playlist specifica."""
-
-    artist: str
-    title: str
-    spotify_id: str | None = None
-    isrc: str | None = None
-    duration_seconds: int | None = None
-    album_art_url: str | None = None
-    url: str | None = None
-
-
-class PlaylistAddTrackResponse(BaseModel):
-    created: bool
-    track: TrackOut
-    spotify_added: bool = False
-    spotify_error: str | None = None
-
-
-class DiscoveryExpandRequest(BaseModel):
-    playlist_id: int
-    limit: int = Field(default=20, ge=1, le=50)
-    use_ai: bool | None = None  # None = auto (AI se configurata)
 
 
 # --- Discovery v2: dig (crate digging via Discogs) ---------------------------

@@ -124,7 +124,6 @@ GET    /api/playlists
 GET    /api/playlists/{playlist_id}
 DELETE /api/playlists/{playlist_id}
 GET    /api/playlists/{playlist_id}/tracks
-POST   /api/playlists/{playlist_id}/discovered-tracks
 GET    /api/playlists/{playlist_id}/gaps
 GET    /api/playlists/library/gaps
 ```
@@ -154,14 +153,6 @@ job, BPM/key come only from the Rekordbox import.
 tracks already in the library (disk-first), in the given order. Request:
 `{name, track_ids}`. Response: `PlaylistOut`. `422` if the name is empty or a
 track_id does not exist.
-`POST /api/playlists/{playlist_id}/discovered-tracks` adds to that playlist a track
-discovered by the expansion (request: artist/title/spotify_id/isrc/
-duration_seconds/url/album_art_url). It imports the track (idempotent), attaches it to
-the playlist (1:1 model: it does not move a track already belonging to another
-playlist) and, if the playlist is an owned Spotify one and the track is resolved, adds
-it on Spotify too (best-effort write-back). Response: `created`, `track`,
-`spotify_added`, `spotify_error`. The expansion is launched from the playlist detail
-(`/playlists/[id]/expand`); the `POST /api/discovery/expand` endpoint stays unchanged.
 
 ## Tracks and library
 
@@ -347,8 +338,6 @@ syncable from this endpoint: they only grow via the selective flow above.
 ## Discovery
 
 ```text
-GET  /api/discovery/status
-POST /api/discovery/expand
 GET  /api/discovery/genres
 POST /api/discovery/dig
 GET  /api/discovery/release/{discogs_id}
@@ -356,16 +345,6 @@ GET  /api/discovery/preview
 POST /api/discovery/add
 POST /api/discovery/save-for-later
 ```
-
-`expand` expands an imported playlist, suggesting tracks of **affine taste** to add
-(not a technical compatibility: BPM/key/transitions stay with the Set Builder):
-
-```text
-playlist -> seed artists/tracks -> Last.fm similarity -> Spotify resolver -> ranking by taste
-```
-
-The `expand` candidates are annotated with their **label**: one on a label you
-already collect gets a small boost and is marked `label_owned`.
 
 `dig` ("Scava") does crate digging via **Discogs** by genre or label: it finds
 releases/tracks not yet owned. Discogs sorts the seed's whole pile by **demand**
@@ -428,12 +407,12 @@ Spotify. The AI, if configured and requested, adds explanations but does not cho
 the candidates. `save-for-later` persists a lead without attaching it to a playlist
 (same idempotent import).
 
-The old Discovery mode based on playlist gaps has been removed: Discovery expands
-playlists, while Gap Analysis stays a separate read-only endpoint.
+The old Discovery mode based on playlist gaps has been removed, and so has playlist
+expansion: Discovery is now the dig alone, while Gap Analysis stays a separate
+read-only endpoint.
 
-Note: these three providers (Last.fm, Discogs, Spotify-as-resolver) are the only ones
-left in Cratory and serve Discovery only — they do not provide BPM/key/genre/mood to
-the library.
+Note: Discogs and Spotify-as-resolver are the only providers left in Cratory for
+Discovery — they do not provide BPM/key/genre/mood to the library.
 
 ## Shazam / mix identification
 
@@ -536,8 +515,8 @@ GET /api/services/status
 ```
 
 `/api/services/status` returns the aggregate state of the integrations: Spotify, AI,
-Last.fm, Discogs (`connected` = `DISCOGS_TOKEN` present; works even without a token,
-the token raises the rate limit), slskd and related services.
+Discogs (`connected` = `DISCOGS_TOKEN` present; works even without a token, the token
+raises the rate limit), slskd and related services.
 
 ## Settings
 
