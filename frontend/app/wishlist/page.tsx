@@ -193,15 +193,30 @@ function WishlistInner() {
           </div>
 
           {items === null && <Loading />}
-          {items !== null && rows.length === 0 && (
-            <EmptyState icon={<Heart size={28} />} title={
-              showArchived ? t.wishlist.archivedEmptyTitle
-                : items.length === 0 ? t.wishlist.emptyTitle : t.wishlist.emptyFilteredTitle
-            }>
-              {showArchived ? t.wishlist.archivedEmptyBody
-                : items.length === 0 ? t.wishlist.emptyBody : t.wishlist.emptyFilteredBody}
-            </EmptyState>
-          )}
+          {items !== null && rows.length === 0 && (() => {
+            // Tre casi distinti (title e body condividono la stessa logica): lista
+            // davvero vuota (per vista) vs. tracce presenti ma escluse dal filtro
+            // corrente (tab/testo/playlist) — "nessuna archiviata" non deve comparire
+            // se archiviate esistono ma il filtro non ne mostra nessuna.
+            const emptyKind = showArchived && items.length === 0 ? "archived"
+              : items.length === 0 ? "none"
+              : "filtered";
+            const TITLE = {
+              archived: t.wishlist.archivedEmptyTitle,
+              none: t.wishlist.emptyTitle,
+              filtered: t.wishlist.emptyFilteredTitle,
+            } as const;
+            const BODY = {
+              archived: t.wishlist.archivedEmptyBody,
+              none: t.wishlist.emptyBody,
+              filtered: t.wishlist.emptyFilteredBody,
+            } as const;
+            return (
+              <EmptyState icon={<Heart size={28} />} title={TITLE[emptyKind]}>
+                {BODY[emptyKind]}
+              </EmptyState>
+            );
+          })()}
           {rows.length > 0 && (
             <Card>
               <ul className="divide-y divide-border text-sm">
