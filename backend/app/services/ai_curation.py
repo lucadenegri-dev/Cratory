@@ -16,6 +16,9 @@ from app.integrations.llm import LLMError
 from app.models import Track
 from app.repositories import library_stats
 from app.schemas import SetGenerationRequest
+from app.services.app_state import get_language
+from app.services.candidate_engine import select_candidates
+from app.services.set_generator import generate_set
 
 logger = logging.getLogger(__name__)
 
@@ -370,3 +373,126 @@ def suggest_anchors(llm, req: SetGenerationRequest, candidates: list[Track],
         if ids:
             hints[role] = ids
     return hints, ([_WARN_ANCHOR_FOREIGN[lang]] if foreign else [])
+
+
+NARRATIVE_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "set_title": {"type": "string"},
+        "global_explanation": {"type": "string"},
+        "missing_library_suggestions": {"type": "array", "items": {"type": "string"},
+                                         "maxItems": 3},
+    },
+    "required": ["set_title", "global_explanation", "missing_library_suggestions"],
+}
+
+NARRATIVE_SYSTEM = """Sei un DJ esperto. Ricevi la scaletta DEFINITIVA di un set (gia'
+costruita da un motore deterministico) e l'intento dell'utente. Scrivi:
+set_title (breve, evocativo, senza virgolette), global_explanation (max 2 frasi
+sul racconto del set; NON dichiarare compatibilita' armonica: la calcola il
+sistema), missing_library_suggestions (0-3 consigli su che TIPO di traccia
+aggiungere alla libreria; niente id, niente brani inventati).
+Riferisciti ai brani per «artista – titolo», mai per id."""
+
+_NARRATIVE_LANGUAGE = {
+    "it": "Scrivi in italiano.",
+    "en": "Write in English.",
+}
+
+_WARN_NARRATIVE = {
+    "it": "curatela AI: narrativa non disponibile (titolo e spiegazione deterministici)",
+    "en": "AI curation: narrative unavailable (deterministic title and explanation)",
+}
+
+_CURATION_PHASES = {
+    "intent": {"it": "Interpreto la richiesta", "en": "Interpreting the request"},
+    "mood": {"it": "Giudico il mood delle candidate", "en": "Judging candidate mood"},
+    "anchors": {"it": "Cerco gli anchor del racconto", "en": "Looking for story anchors"},
+    "building": {"it": "Costruisco il set", "en": "Building the set"},
+    "narrating": {"it": "Racconto il set", "en": "Narrating the set"},
+}
+
+
+def narrate(llm, setlist_payload: list[dict], req: SetGenerationRequest, lang: str,
+            ) -> tuple[dict, list[str]]:
+    payload = {"user_prompt": req.prompt or "", "strategy": req.strategy,
+               "tracks": setlist_payload}
+    try:
+        raw = llm.complete_json(NARRATIVE_SYSTEM + "\n" + _NARRATIVE_LANGUAGE[lang],
+                                payload, NARRATIVE_SCHEMA)
+    except LLMError:
+        logger.warning("narrate fallita", exc_info=True)
+        return {}, [_WARN_NARRATIVE[lang]]
+    return raw, []
+
+
+def run_curated_generation(db, req: SetGenerationRequest, llm, on_phase=None):
+    """Pipeline tappa 2: l'AI compila/cura/narra, generate_set sequenzia.
+
+    Ogni passo AI degrada con warning. generated_by testimonia se almeno un
+    contributo AI e' arrivato al set.
+    """
+    lang = get_language(db)
+    lang = lang if lang in ("it", "en") else "it"
+
+    def phase(key: str) -> None:
+        if on_phase:
+            on_phase(_CURATION_PHASES[key][lang])
+
+    warnings: list[str] = []
+    phase("intent")
+    merged, compiled, w = compile_intent(llm, req, lang)
+    warnings += w
+
+    candidates = select_candidates(db, merged)
+    if len(candidates) < 3:
+        # generate_set solleva l'errore giusto: inutile spendere chiamate AI
+        return generate_set(db, merged)
+    pool = _rank_candidates(candidates, merged)  # budget = POOL_CAP
+
+    phase("mood")
+    mood_scores, mood_tags, w = score_mood_fit(llm, merged, pool, lang)
+    warnings += w
+    # I tag esistono solo per i giudizi arrivati davvero (gli score si riempiono
+    # comunque col neutro 50): sono la prova che almeno un lotto e' andato a segno.
+    mood_useful = bool(mood_tags)
+
+    phase("anchors")
+    anchor_hints, w = suggest_anchors(llm, merged, pool, mood_scores, lang)
+    warnings += w
+
+    phase("building")
+    setlist = generate_set(db, merged,
+                           mood_scores=mood_scores if mood_useful else None,
+                           anchor_hints=anchor_hints or None)
+
+    phase("narrating")
+    tracks_payload = [{"position": st.position, "artist": st.track.artist or "",
+                       "title": st.track.title or "", "role": st.role or ""}
+                      for st in setlist.tracks]
+    narrative, w = narrate(llm, tracks_payload, merged, lang)
+    warnings += w
+
+    curated = bool(compiled or mood_useful or anchor_hints or narrative)
+    if narrative:
+        if not req.name and narrative.get("set_title"):
+            setlist.name = narrative["set_title"]
+        if narrative.get("global_explanation"):
+            setlist.global_explanation = narrative["global_explanation"]
+    setlist.generated_by = "algorithmic+ai_curation" if curated else "algorithmic"
+    setlist.curation = {"intent_summary": compiled.get("intent_summary", ""),
+                        "compiled": {k: v for k, v in compiled.items()
+                                     if k != "intent_summary"},
+                        "warnings": warnings}
+    setlist.validation = {
+        "warnings": warnings,
+        "missing_library_suggestions": narrative.get("missing_library_suggestions", []) if narrative else [],
+    }
+    if mood_useful:
+        for st in setlist.tracks:
+            st.mood_tags = mood_tags.get(st.track_id) or None
+    db.commit()
+    db.refresh(setlist)
+    logger.info("Set curato generato: %s tracce, %s warning AI, curated=%s",
+                len(setlist.tracks), len(warnings), curated)
+    return setlist
