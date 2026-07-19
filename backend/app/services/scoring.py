@@ -581,6 +581,17 @@ def _genre_families(norm: str) -> frozenset[str]:
                      if any(f" {kw} " in padded for kw in keywords))
 
 
+def genre_families_of(genre: str | None) -> frozenset[str]:
+    """Famiglie note di un genere grezzo (vuoto se assente/sconosciuto/umbrella).
+
+    Lookup pubblico usato dallo scheletro del set per il piano di genere.
+    """
+    if not genre:
+        return frozenset()
+    norm = _norm_genre(genre)
+    return _genre_families(norm) if norm else frozenset()
+
+
 def genre_similarity_score(from_genre: str | None, to_genre: str | None) -> int:
     """Similarita' di genere (0-100): famiglie note prima, token overlap come fallback."""
     if not from_genre or not to_genre:
