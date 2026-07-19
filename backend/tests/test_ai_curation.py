@@ -126,3 +126,25 @@ def test_anchors_degrade_on_llm_error():
                                       SetGenerationRequest(prompt="p"), cands,
                                       {t.id: 50 for t in cands}, "it")
     assert hints == {} and len(warnings) == 1
+
+
+def test_mood_malformed_item_degrades_batch_but_others_survive():
+    # Un lotto con un item senza mood_fit (risposta JSON valida ma non conforme
+    # al contratto): il parsing va DENTRO il try, quindi non deve esplodere la
+    # pipeline. Il lotto rotto si scarta (le sue candidate restano neutre), gli
+    # altri lotti sopravvivono.
+    cands = [_mk_track(i) for i in range(1, 101)]  # 2 lotti da 50
+    broken = {"items": [{"track_id": 1, "tags": ["deep"]}]}  # manca mood_fit
+    llm = ScriptedLLM([broken, _mood_response(range(51, 101), score=70)])
+    scores, tags, warnings = score_mood_fit(llm, SetGenerationRequest(prompt="p"), cands, "it")
+    assert scores[1] == 50 and 1 not in tags       # lotto rotto: scartato, resta neutro
+    assert scores[60] == 70 and tags[60] == ["deep"]  # secondo lotto: sopravvive
+    assert len(warnings) == 1
+
+
+def test_anchors_degrade_on_non_dict_raw():
+    cands = [_mk_track(i) for i in range(1, 10)]
+    hints, warnings = suggest_anchors(ScriptedLLM([["not", "a", "dict"]]),
+                                      SetGenerationRequest(prompt="p"), cands,
+                                      {t.id: 50 for t in cands}, "it")
+    assert hints == {} and len(warnings) == 1

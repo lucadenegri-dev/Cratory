@@ -158,7 +158,7 @@ class Setlist(Base):
     strategy: Mapped[str | None] = mapped_column(String)
     prompt: Mapped[str | None] = mapped_column(Text)
     global_explanation: Mapped[str | None] = mapped_column(Text)
-    generated_by: Mapped[str] = mapped_column(String, default="algorithmic")  # algorithmic | ai
+    generated_by: Mapped[str] = mapped_column(String, default="algorithmic")  # algorithmic | algorithmic+ai_curation (storico: ai)
     # Disk-first: True se il set e' nato con la garanzia "solo brani posseduti".
     # L'editor (replace/alternative) la fa rispettare leggendo questo flag.
     owned_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")

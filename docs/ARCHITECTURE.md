@@ -402,6 +402,10 @@ Set Builder modes:
 - `technical`: cautious, based on the data provided.
 - `creative`: also uses general musical knowledge, but stays bound to candidates and validation.
 
+Today `mode` only selects the model (`AI_MODEL_CREATIVE` if configured, see `_model_for` in
+`routers/sets.py`): the curation/narrative system prompts are unique and shared across modes.
+Wiring distinct prompts per mode is a possible follow-up, not yet implemented.
+
 ## Internationalization (i18n IT/EN)
 
 Cratory is bilingual Italian/English. The language is a persistent setting

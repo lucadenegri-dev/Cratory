@@ -55,8 +55,9 @@ Read in this order:
    metadata, covers, duration, ISRC, URLs and playlists.
 4. **The AI never receives the whole library.** It only receives candidates filtered by the
    Candidate Engine: pool cap 200, seen by any single call in batches of at most 60.
-5. **Every AI output is validated.** Use Pydantic schemas and the Validation Engine before
-   showing or saving results.
+5. **Every AI output is validated.** Use Pydantic schemas and deterministic checks
+   (schema-constrained outputs, foreign ids and out-of-bounds values discarded with
+   warnings) before showing or saving results.
 6. **The AI does not invent factual data.** It must distinguish external source, musical
    inference and creative hypothesis.
 7. **The library is the disk.** Ownership (`has_local_file`) comes from indexing

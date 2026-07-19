@@ -190,6 +190,10 @@ _WARN_INTENT_FAILED = {
     "it": "curatela AI: compilazione dell'intento non disponibile (il set usa i vincoli del form)",
     "en": "AI curation: intent compilation unavailable (the set uses the form constraints)",
 }
+_WARN_COMPILED_TOO_STRICT = {
+    "it": "curatela AI: vincoli compilati dal prompt troppo stretti, ignorati",
+    "en": "AI curation: constraints compiled from the prompt were too strict, ignored",
+}
 
 
 def compile_intent(llm, req: SetGenerationRequest, lang: str,
@@ -213,17 +217,17 @@ def compile_intent(llm, req: SetGenerationRequest, lang: str,
     try:
         raw = llm.complete_json(INTENT_SYSTEM + "\n" + _INTENT_LANGUAGE[lang],
                                 payload, INTENT_SCHEMA)
-    except LLMError:
+        updates = {}
+        for f in open_fields:
+            value = raw.get(f)
+            if value in (None, [], ""):
+                continue
+            updates[f] = value
+        summary = (raw.get("intent_summary") or "").strip()
+    except (LLMError, AttributeError, KeyError, TypeError, ValueError):
         logger.warning("compile_intent fallita", exc_info=True)
         return req, {}, [_WARN_INTENT_FAILED[lang]]
 
-    updates = {}
-    for f in open_fields:
-        value = raw.get(f)
-        if value in (None, [], ""):
-            continue
-        updates[f] = value
-    summary = (raw.get("intent_summary") or "").strip()
     if not updates:
         return req, ({"intent_summary": summary} if summary else {}), []
     try:
@@ -328,17 +332,24 @@ def score_mood_fit(llm, req: SetGenerationRequest, candidates: list[Track], lang
         batch = candidates[start:start + MOOD_BATCH_SIZE]
         try:
             raw = llm.complete_json(system, _mood_payload(req, batch), MOOD_SCHEMA)
-        except LLMError:
+            batch_scores: dict[int, int] = {}
+            batch_tags: dict[int, list[str]] = {}
+            batch_foreign = False
+            for item in raw.get("items", []):
+                tid = item.get("track_id")
+                if tid not in valid_ids:
+                    batch_foreign = True
+                    continue
+                batch_scores[tid] = int(item["mood_fit"])
+                batch_tags[tid] = list(dict.fromkeys(s for s in item.get("tags", []) if s))[:3]
+        except (LLMError, AttributeError, KeyError, TypeError, ValueError):
             logger.warning("score_mood_fit: lotto fallito", exc_info=True)
             failed = True
             continue
-        for item in raw.get("items", []):
-            tid = item.get("track_id")
-            if tid not in valid_ids:
-                foreign = True
-                continue
-            scores[tid] = int(item["mood_fit"])
-            tags[tid] = [s for s in item.get("tags", []) if s][:3]
+        scores.update(batch_scores)
+        tags.update(batch_tags)
+        if batch_foreign:
+            foreign = True
     for t in candidates:
         scores.setdefault(t.id, 50)
     if failed:
@@ -360,18 +371,19 @@ def suggest_anchors(llm, req: SetGenerationRequest, candidates: list[Track],
     }
     try:
         raw = llm.complete_json(ANCHOR_SYSTEM, payload, ANCHOR_SCHEMA)
-    except LLMError:
+        sent_ids = {t.id for t in top}
+        hints: dict[str, list[int]] = {}
+        foreign = False
+        for role in ("opening", "peak", "closing"):
+            role_raw = raw.get(role, [])
+            ids = [i for i in role_raw if i in sent_ids]
+            if len(ids) != len(role_raw):
+                foreign = True
+            if ids:
+                hints[role] = ids
+    except (LLMError, AttributeError, KeyError, TypeError, ValueError):
         logger.warning("suggest_anchors fallita", exc_info=True)
         return {}, [_WARN_ANCHORS[lang]]
-    sent_ids = {t.id for t in top}
-    hints: dict[str, list[int]] = {}
-    foreign = False
-    for role in ("opening", "peak", "closing"):
-        ids = [i for i in raw.get(role, []) if i in sent_ids]
-        if len(ids) != len(raw.get(role, [])):
-            foreign = True
-        if ids:
-            hints[role] = ids
     return hints, ([_WARN_ANCHOR_FOREIGN[lang]] if foreign else [])
 
 
@@ -420,10 +432,16 @@ def narrate(llm, setlist_payload: list[dict], req: SetGenerationRequest, lang: s
     try:
         raw = llm.complete_json(NARRATIVE_SYSTEM + "\n" + _NARRATIVE_LANGUAGE[lang],
                                 payload, NARRATIVE_SCHEMA)
-    except LLMError:
+        result = {
+            "set_title": str(raw.get("set_title", "")),
+            "global_explanation": str(raw.get("global_explanation", "")),
+            "missing_library_suggestions":
+                [str(s) for s in raw.get("missing_library_suggestions", [])][:3],
+        }
+    except (LLMError, AttributeError, KeyError, TypeError, ValueError):
         logger.warning("narrate fallita", exc_info=True)
         return {}, [_WARN_NARRATIVE[lang]]
-    return raw, []
+    return result, []
 
 
 def run_curated_generation(db, req: SetGenerationRequest, llm, on_phase=None):
@@ -445,6 +463,15 @@ def run_curated_generation(db, req: SetGenerationRequest, llm, on_phase=None):
     warnings += w
 
     candidates = select_candidates(db, merged)
+    compiled_fields = {k: v for k, v in compiled.items() if k != "intent_summary"}
+    if compiled_fields and len(candidates) < 3:
+        # I vincoli compilati dal prompt (mai messi dall'utente nel form) affamano
+        # il pool: meglio ignorarli e ripartire dai vincoli originali che mostrare
+        # un 422 "allargare i vincoli" che parla di vincoli l'utente non ha scelto.
+        warnings.append(_WARN_COMPILED_TOO_STRICT[lang])
+        merged = req
+        compiled = {"intent_summary": compiled.get("intent_summary", "")}
+        candidates = select_candidates(db, merged)
     if len(candidates) < 3:
         # generate_set solleva l'errore giusto: inutile spendere chiamate AI
         return generate_set(db, merged)

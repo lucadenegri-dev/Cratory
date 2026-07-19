@@ -88,6 +88,24 @@ def test_phases_are_reported(db, seed_tracks):
     assert len(phases) >= 4  # intento, mood, anchor, costruzione, narrativa
 
 
+class NarrowGenreLLM(PipelineLLM):
+    """Come PipelineLLM, ma l'intento compila un genere che non esiste in libreria:
+    il pool con quel vincolo crolla sotto 3 candidate."""
+
+    def __init__(self):
+        super().__init__()
+        self.intent = {**self.intent, "genres": ["genere inesistente"]}
+
+
+def test_compiled_constraints_too_strict_fallback_to_original_request(db, seed_tracks):
+    seed_tracks(n=30)
+    llm = NarrowGenreLLM()
+    setlist = run_curated_generation(db, _req(), llm)
+    assert setlist.tracks  # il set nasce comunque, niente 422
+    assert any("troppo stretti" in w for w in setlist.curation["warnings"])
+    assert "genres" not in setlist.curation["compiled"]
+
+
 def test_router_uses_curated_pipeline(db, seed_tracks, monkeypatch):
     # Il ramo use_ai del router deve puntare alla pipeline curata (niente
     # TestClient: conftest non ha una fixture client, si chiama la funzione
