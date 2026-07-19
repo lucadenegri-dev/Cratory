@@ -28,6 +28,56 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-19 - Set Builder: il generatore pianifica prima, riempie dopo (tappa 1 del piano a due fasi)
+
+Il generatore deterministico (`set_generator.generate_set`) costruiva la scaletta con un
+beam search unico, passo dopo passo, dalla prima all'ultima traccia. Due sintomi
+ricorrenti: **struttura piatta** (nessuno pianificava un peak, un'apertura o una chiusura
+prima di scegliere le tracce: il beam ottimizza solo "la prossima buona data la
+precedente" più l'aderenza posizionale all'arco); **bombe sprecate** (le tracce a più
+alto impatto potevano finire ovunque nel set, anche fuori dal peak, per puro accumulo
+locale di punteggio); **genere solo locale** (la similarità di coppia evita il ping-pong
+tra famiglie ma nessuno pianifica un percorso di genere lungo l'intero set). Spec e
+piano in `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`
+(tappa 1), implementati TDD in una serie di commit sullo stesso branch:
+
+- **`backend/app/services/set_skeleton.py` (nuovo):** estratto da `set_generator` il
+  layer di strategia/archi (`StrategyProfile`, `_desired_bpm`, `_desired_energy`,
+  `_trajectory_fit`) più tre pezzi nuovi. `impact_scores`: percentili rank-based
+  energia (peso 0.7) + BPM (0.3) su ciascuna candidata del pool. `plan_genre_families`:
+  famiglia principale al peak e famiglia calma al resto del set, degenera a `None`
+  (nessun vincolo, comportamento identico a prima) se una famiglia copre ≥80% del pool
+  o non c'è una seconda famiglia con quota ≥15%. `build_skeleton`: elegge gli anchor
+  opening/peak/closing/reset in ordine (peak per primo, criteri più esigenti), riserva
+  il top 15% per impatto libero solo nella finestra del peak (peak−0.15, peak+0.10),
+  peak a 0.7 di norma o 0.2 se l'arco di energia della strategia/richiesta scende;
+  ritorna `None` (fallback alla fase singola) se il pool è sotto 8 candidate o il set
+  atteso sotto 6 tracce.
+- **`backend/app/services/scoring.py`:** nuovo wrapper pubblico `genre_families_of` sopra
+  la lookup di famiglie già esistente (`_genre_families`, restava privata e prendeva un
+  genere già normalizzato) — usato dallo scheletro per il piano di genere.
+- **`backend/app/services/set_generator.py`:** `_beam_search_span` sostituisce il beam
+  search monolitico — riempie uno span fino a un budget in secondi invece dell'intero
+  set, con due termini di scoring nuovi in `_candidate_score`: convergenza verso
+  l'anchor in arrivo (peso ×0.35, cresce col ramp locale allo span) e aderenza al piano
+  di genere del segmento (peso ×0.20, scalato su `genre_coherence`), più una penalità
+  −25 per spendere una bomba riservata fuori dalla finestra del peak. `generate_set`
+  ora chiama `build_skeleton`: se torna uno scheletro, orchestrazione a fase 2 (segmenti
+  tra un anchor e il successivo, opening/anchor già in `used`/`artist_counts`); se torna
+  `None`, fallback identico al flusso precedente. `assign_roles` accetta `peak_at` per
+  allineare il ruolo `peak` all'anchor eletto invece che posizionale (~70%).
+- **Interfaccia esterna invariata:** stessa request/response su
+  `POST /api/sets/generate-async`, nessuna chiamata LLM (percorso 100% deterministico),
+  AI Set Agent non toccato.
+
+Stato finale verificato (2026-07-19): backend 977 test verdi.
+
+**Come riprendere:** tappa 2 (l'AI cura il pool — intento compilato da prompt libero,
+mood-fit a lotti, anchor suggeriti — mentre il motore deterministico resta l'unico a
+sequenziare; ritiro del percorso "AI ordina la scaletta" e di `validate_ai_set`) è
+pianificata ma non implementata: piano completo nella stessa spec, sezione "Tappa 2".
+`use_ai`/`generate_ai_set` restano invariati fino ad allora.
+
 ## Milestone 2026-07-19 - Rimozione completa del flusso Discovery expand (Last.fm)
 
 Discovery torna a essere **solo il dig "Scava" (Discogs)**: il ramo "espansione
