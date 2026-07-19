@@ -646,8 +646,15 @@ export const it: Dictionary = {
   },
   shazam: {
     intro: "Identifica le tracce di un set DJ da un URL (SoundCloud, Mixcloud, YouTube).",
-    notesTitle: "Note",
-    sourcesNote: "Sorgenti: SoundCloud, Mixcloud, YouTube. L'audio viene scaricato solo temporaneamente per il fingerprinting, mai conservato.",
+    notesTitle: "Come funziona",
+    sourcesNote: "Sorgenti: SoundCloud, Mixcloud, YouTube.",
+    guideSteps: [
+      "Incolla l'URL di un mix e avvia l'identificazione.",
+      "Il mix viene campionato a intervalli regolari; ogni segmento passa da Shazam.",
+      "Una traccia è confermata quando 2+ campioni concordano; un match da campione singolo resta marcato DUBBIA.",
+      "I tratti muti sono normali: transizioni, o tracce che Shazam non conosce (unreleased).",
+      "Importa la tracklist come playlist per lavorare le tracce come lead.",
+    ],
     unavailablePrefix: "Identificazione non disponibile: il backend richiede ",
     unavailableAnd: " e ",
     identifyButton: "Identifica",

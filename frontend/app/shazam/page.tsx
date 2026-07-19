@@ -81,9 +81,17 @@ export default function ShazamPage() {
   const running = jobs.shazamIdentify?.status === "running";
 
   const marginalia = (
-    <p className="text-xs leading-relaxed text-muted">
-      {t.shazam.sourcesNote}
-    </p>
+    <div className="space-y-3 text-xs leading-relaxed text-muted">
+      <ol className="space-y-2">
+        {t.shazam.guideSteps.map((step, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="tnum shrink-0 text-faint">{i + 1}</span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="border-t border-border pt-3">{t.shazam.sourcesNote}</p>
+    </div>
   );
 
   return (

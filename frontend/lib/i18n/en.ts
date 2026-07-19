@@ -643,8 +643,15 @@ export const en = {
   },
   shazam: {
     intro: "Identify a DJ set's tracks from a URL (SoundCloud, Mixcloud, YouTube).",
-    notesTitle: "Notes",
-    sourcesNote: "Sources: SoundCloud, Mixcloud, YouTube. Audio is downloaded only temporarily for fingerprinting, never kept.",
+    notesTitle: "How it works",
+    sourcesNote: "Sources: SoundCloud, Mixcloud, YouTube.",
+    guideSteps: [
+      "Paste a mix URL and start the identification.",
+      "The mix is sampled at regular intervals; every segment goes through Shazam.",
+      "A track is confirmed when 2+ samples agree; a single-sample match stays flagged UNCERTAIN.",
+      "Silent stretches are normal: transitions, or tracks Shazam does not know (unreleased).",
+      "Import the tracklist as a playlist to work the tracks as leads.",
+    ],
     unavailablePrefix: "Identification unavailable: the backend requires ",
     unavailableAnd: " and ",
     identifyButton: "Identify",
