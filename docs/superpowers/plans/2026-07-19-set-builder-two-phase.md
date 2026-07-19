@@ -834,7 +834,7 @@ git commit -m "feat(set): scoring con convergenza all'anchor, piano di genere e 
 - Test: `backend/tests/test_two_phase_generator.py` (append)
 
 **Interfaces:**
-- Produces: `_beam_search_span(opener: Track, candidates, req, profile, start_bpm, end_bpm, target_seconds, *, elapsed_secs: int, fill_until_secs: int, converge_to: Track | None = None, used: set[int] | None = None, artist_counts: dict[str, int] | None = None, plan_family: str | None = None, reserved_ids: frozenset[int] = frozenset(), peak_window: tuple[float, float] | None = None) -> list[tuple[Track, TransitionScore]]` — ritorna SOLO i filler (opener escluso); il primo filler ha `ts = score_transition(opener, filler)`. `elapsed_secs` include già la durata dell'opener. Si ferma quando i secondi cumulati raggiungono `fill_until_secs`.
+- Produces: `_beam_search_span(opener: Track, candidates, req, profile, start_bpm, end_bpm, target_seconds, *, elapsed_secs: int, fill_until_secs: int, converge_to: Track | None = None, used: set[int] | None = None, artist_counts: dict[str, int] | None = None, plan_family: str | None = None, reserved_ids: frozenset[int] = frozenset(), peak_window: tuple[float, float] | None = None) -> list[tuple[Track, TransitionScore]]` — ritorna SOLO i filler (opener escluso); il primo filler ha `ts = score_transition(opener, filler)`. Contratto di stato: `elapsed_secs`, `used` e `artist_counts` descrivono TUTTO ciò che è già nel set, opener compreso (la funzione aggiunge da sé `opener.id` a `used`, ma NON conta l'artista dell'opener: è responsabilità del chiamante — il vecchio `_beam_search` lo contava in `new_beam`, e la parità di comportamento a fase singola dipende da questo). Si ferma quando i secondi cumulati raggiungono `fill_until_secs`.
 - La vecchia `_beam_search` viene SOSTITUITA da questa (unico chiamante: `generate_set`, adeguato nello stesso task).
 
 - [ ] **Step 1: Test che falliscono** (append a `test_two_phase_generator.py`; estendere gli import con `_beam_search_span` e `from app.services.set_skeleton import strategy_profile`):
@@ -979,8 +979,11 @@ In `generate_set`, sostituire la riga `chosen = _beam_search(first, ...)` con:
 ```python
     chosen = [(first, None)] + _beam_search_span(
         first, candidates, req, profile, start_bpm, end_bpm, target_seconds,
-        elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds)
+        elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds,
+        artist_counts={first.artist.lower(): 1} if first.artist else None)
 ```
+
+(L'artista dell'opener va contato dal chiamante: il vecchio `_beam_search` lo seminava in `new_beam`, e senza questo conteggio il cap per artista permette una traccia di troppo dell'artista dell'opener — lo verifica `test_engine_upgrades.py::test_beam_respects_invariants`.)
 
 - [ ] **Step 4: Verificare che passi, insieme alla suite completa**
 
