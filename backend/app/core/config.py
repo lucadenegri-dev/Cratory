@@ -43,9 +43,6 @@ class Settings(BaseSettings):
     slskd_download_dir: str = ""
     ai_api_key: str = ""
     ai_model: str = ""
-    # Modello per la modalità "creative" del Set Builder (vuoto = stesso di ai_model).
-    # Permette: ai_model economico (technical) + un modello più capace solo in creative.
-    ai_model_creative: str = ""
     # Modello di default: claude-opus-4-8 (vedi integrations/llm.py).
     # Effort/thinking bassi tengono bassa la latenza: con effort alto + thinking
     # esteso la generazione diventa molto lenta. Ottimale misurato su set reali

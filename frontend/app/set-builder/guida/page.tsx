@@ -100,10 +100,9 @@ export default function SetBuilderGuide() {
             {g.motoreGenereRest2}
           </p>
           <p>
-            <K>AI</K>{" "}{g.motoreAiRest1} <K>{g.motore60CandidatesTerm}</K>{" "}
-            {g.motoreAiRest2} <K>{g.motoreReverifiedTerm}</K>{" "}
-            {g.motoreAiRest3} <K>{t.setBuilder.technicalLabel}</K>{" "}{g.motoreAiRest4}{" "}
-            <K>{t.setBuilder.creativeLabel}</K>{" "}{g.motoreAiRest5}
+            <K>AI</K>{" "}{g.motoreAiRest1} <K>{g.motoreIntentTerm}</K>{" "}
+            {g.motoreAiRest2} <K>{g.motoreMoodTerm}</K>{" "}
+            {g.motoreAiRest3}
           </p>
         </S>
 

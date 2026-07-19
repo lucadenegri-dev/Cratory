@@ -125,11 +125,8 @@ class SetGenerationRequest(BaseModel):
     # Disk-first: di default il set nasce SOLO da tracce possedute (file su disco),
     # cosi' e' garantito suonabile. False = includi anche i lead (senza file).
     owned_only: bool = True
-    prompt: str | None = None  # prompt libero: usato dall'AI agent in MVP 3
+    prompt: str | None = None  # prompt libero: interpretato dalla curatela AI
     use_ai: bool | None = None  # None = auto (AI se configurata e c'e' un prompt)
-    # technical = mix prudente sui soli dati; creative = l'AI usa la sua conoscenza
-    # musicale (vibe, arco emotivo, contrasti) restando vincolata alle candidate.
-    mode: Literal["technical", "creative"] = "technical"
 
 
 class SetlistTrackOut(BaseModel):

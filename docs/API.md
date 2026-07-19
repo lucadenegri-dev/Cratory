@@ -255,9 +255,9 @@ Generation:
 
 - `generate` returns the set immediately.
 - `generate-async` starts a job and the UI reads `generate-status`.
-- `mode=technical|creative`: today its only effect is model selection (`AI_MODEL_CREATIVE`
-  if set, see `_model_for` in `routers/sets.py`) — the curation/narrative prompts are single
-  and shared regardless of `mode`. Wiring per-mode prompts is a possible follow-up.
+- `use_ai`: `true` = AI curation (intent + mood-fit + anchor hints + narrative), `false` =
+  pure deterministic engine, omitted = auto (AI if configured and a prompt is present).
+  There is no technical/creative `mode`: AI curation has a single musical character.
 - Disk-first: `owned_only` (default `true`) generates the set from owned tracks only.
   The flag stays on the saved set (exposed in `SetlistOut.owned_only`) and editing
   respects it: `alternatives` excludes leads from the pool and `replace` with a track

@@ -76,7 +76,6 @@ function SetBuilderInner() {
   const [prompt, setPrompt] = useState("");
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [useAi, setUseAi] = useState(false);
-  const [mode, setMode] = useState<"technical" | "creative">("technical");
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   // Pre-selezione da ?playlist=… letta una sola volta all'inizializzazione (no setState in effect).
   const [playlistId, setPlaylistId] = useState(() => searchParams.get("playlist") ?? "");
@@ -174,7 +173,6 @@ function SetBuilderInner() {
         owned_only: ownedOnly,
         prompt: useAi ? prompt || null : null,
         use_ai: useAi,
-        mode,
       });
       // Seed del guard di redirect: se la generazione è velocissima la prima poll
       // del provider potrebbe vedere già "done" senza mai passare da "running", e
@@ -190,7 +188,7 @@ function SetBuilderInner() {
     } finally {
       submittingRef.current = false;
     }
-  }, [busy, playlistId, duration, startBpm, endBpm, startEnergy, endEnergy, selGenres, seedArtists, strategy, maxPerArtist, sources, avoidShort, ownedOnly, prompt, useAi, mode, jobs]);
+  }, [busy, playlistId, duration, startBpm, endBpm, startEnergy, endEnergy, selGenres, seedArtists, strategy, maxPerArtist, sources, avoidShort, ownedOnly, prompt, useAi, jobs]);
 
   const aiReady = !!aiStatus?.configured;
 
@@ -292,30 +290,6 @@ function SetBuilderInner() {
                   <Textarea rows={2} placeholder={t.setBuilder.freePromptPlaceholder}
                     value={prompt} onChange={(e) => setPrompt(e.target.value)} />
                 </Field>
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <span className="text-xs font-medium uppercase tracking-wide text-muted">{t.setBuilder.aiStyleLabel}</span>
-                  <div role="group" aria-label={t.setBuilder.aiStyleLabel} className="inline-flex rounded-none border border-border bg-surface p-1">
-                    {(["technical", "creative"] as const).map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        aria-pressed={mode === m}
-                        onClick={() => setMode(m)}
-                        className={cn(
-                          "rounded-none px-3 py-1 text-sm font-medium transition-colors",
-                          mode === m ? "bg-elevated text-fg" : "text-muted hover:text-fg",
-                        )}
-                      >
-                        {m === "technical" ? t.setBuilder.technicalLabel : t.setBuilder.creativeLabel}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="text-xs text-muted">
-                    {mode === "creative"
-                      ? t.setBuilder.creativeModeDesc
-                      : t.setBuilder.technicalModeDesc}
-                  </span>
-                </div>
               </Section>
             )}
 
