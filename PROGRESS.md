@@ -6,7 +6,7 @@
 
 ## Current state
 
-**Last updated:** 2026-07-16
+**Last updated:** 2026-07-19
 
 **Product name:** **Cratory** (rename done on 2026-06-25 across UI, code, docs and
 icon). "SetArc" and "DJ Assistant" remain only as historical names; legacy technical
@@ -19,13 +19,37 @@ disk, streaming playlists = leads); **disk-first + Rekordbox paradigm pivot comp
 now only from a Rekordbox XML import, `energy` derived); **Analysis page complete**
 (BPM/key gained a second deterministic source, in-app analysis via Essentia, alongside
 Rekordbox import — explicit per-value provenance, `bpm_source`/`key_source`: manual >
-rekordbox > cratory); Discovery operational (Last.fm expand + Discogs dig — the pile
-is sorted by demand, `depth` picks the window to fetch from it, taste always ranks
-inside that window); technical/creative Set Builder with an "owned-only" guarantee; dashboard
+rekordbox > cratory); Discovery is now the dig alone (**playlist expansion removed
+2026-07-19**) — Discogs crate digging, whose pile is sorted by demand, `depth` picks
+the window to fetch from it, taste always ranks inside that window; technical/creative
+Set Builder with an "owned-only" guarantee; dashboard
 with a five-stage pipeline (Index moved to a nav button) and documentation realigned to
 the new paradigm; mix identification via Shazam integrated (phase 1; co-occurrence in
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-07-19 - Rimozione completa del flusso Discovery expand (Last.fm)
+
+Discovery torna a essere **solo il dig "Scava" (Discogs)**: il ramo "espansione
+playlist" (seed da artisti/tracce della playlist, similarity Last.fm, resolver Spotify
+per il match, ranking di gusto) è stato rimosso interamente — backend, frontend, test e
+documentazione — non solo deprecato o nascosto dietro un flag.
+
+Rimossi dal codice: `backend/app/services/discovery.py` (il servizio dell'expand),
+`backend/app/integrations/lastfm.py` e il suo `SimilarityClient`, l'endpoint
+`POST /api/playlists/{playlist_id}/discovered-tracks`, `SpotifyWebClient.add_tracks`
+(write-back su Spotify usato solo dall'expand), il campo di configurazione
+`lastfm_api_key`/`LASTFM_API_KEY` e la relativa card "Last.fm" nella pagina
+Impostazioni. Le utility `_norm`/`_library_tracks`, condivise tra expand e dig, sono
+state spostate nel modulo del dig (`discovery_dig.py`), unico consumatore rimasto.
+
+Documentazione riallineata in questo stesso giro (README, CLAUDE.md, ARCHITECTURE.md +
+`architettura.svg`, API.md, ROADMAP.md, DEPENDENCIES.md): tolti gli endpoint
+`POST /api/discovery/expand` / `GET /api/discovery/status` dal contratto, tolto Last.fm
+dall'elenco provider e dalle dipendenze, chiuso come non applicabile il backlog "Last.fm
+tags come 2a fonte del dig" (l'expand da cui sarebbe dipeso non esiste più), aggiornato
+il diagramma architetturale (il box "DISCOVERY · EXPAND" è sparito, il box del dig ora
+occupa l'intera banda 03).
 
 ## Milestone 2026-07-16 - Discovery: il dig pesca nella pila ordinata per domanda, non più in un campione arbitrario
 

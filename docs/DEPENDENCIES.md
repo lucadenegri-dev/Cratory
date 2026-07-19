@@ -26,7 +26,7 @@ and `frontend/package.json` — those manifests are authoritative; this document
 - `pydantic-settings>=2.6,<3.0` — typed settings from `.env`.
 
 **HTTP client**
-- `httpx>=0.27` — outbound calls to Spotify, Last.fm, Discogs, slskd; also the test client.
+- `httpx>=0.27` — outbound calls to Spotify, Discogs, slskd; also the test client.
 
 **AI**
 - `anthropic>=0.69,<1.0` — LLM client behind the AI interface.
@@ -71,14 +71,13 @@ Not Python/Node packages, but required for the corresponding feature to work:
 | Service | Feature | Required? |
 |---|---|---|
 | Spotify Web API | Track identity, editorial metadata, covers, ISRC, playlist import/export | Required for Spotify import |
-| Last.fm API | Discovery (playlist expand, similarity) | Optional (Discovery) |
 | Discogs API | Discovery "Scava" (crate-dig by genre/label) | Optional (token only raises rate limit) |
 | iTunes Search API | Discovery preview (30s audio clip for dig leads) | Optional (Discovery), public — no auth/token |
 | slskd daemon | File acquisition via Soulseek | Optional, runs separately |
 | Rekordbox | BPM/Camelot key via `collection.xml` export | Required for BPM/key (no package dep — just a file upload) |
 | Sortory (sibling app) | Text metadata enrichment + on-disk tagging | Optional, separate app |
 
-None of Last.fm/Discogs/Spotify feed BPM/key/genre — those providers serve **Discovery
+None of Discogs/Spotify feed BPM/key/genre — those providers serve **Discovery
 only**. BPM/key come from Rekordbox; text metadata/tagging come from Sortory.
 
 The Discovery preview's fallback embeds the YouTube video Discogs already associates

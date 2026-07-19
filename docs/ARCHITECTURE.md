@@ -23,8 +23,8 @@ discovery and a corpus of identified mixes.
   organization remain Sortory's job; the textual enrichment of metadata
   (title/artist/album/label/genre) is also Sortory's.
 - Spotify provides no mixing features: it serves identity, metadata, import/export.
-- The remaining external providers (Last.fm, Discogs, Spotify) serve **Discovery only**,
-  for taste and similarity, not the feature pipeline.
+- The remaining external providers (Discogs, Spotify) serve **Discovery only**, for
+  taste and crate-digging, not the feature pipeline.
 - The AI never receives the whole library: the Candidate Engine passes it at most 60 candidates.
 - Every AI output goes through a Pydantic schema and the Validation Engine.
 - The app is not a DJ deck (no waveform/cue/queue — that stays with the Set Builder/
@@ -68,21 +68,8 @@ Rekordbox (user analysis)
   -> energy recomputed deterministically
 ```
 
-Discovery has two parallel branches, both oriented toward **taste** (not technical
-compatibility, which stays with the Set Builder). Playlist expansion:
-
-```text
-imported playlist
-  -> artist/track seeds
-  -> Last.fm similarity
-  -> dedup vs library
-  -> Spotify /search resolver
-  -> taste ranking + label annotation (boost if already collected)
-  -> optional AI explanation
-  -> add to library
-```
-
-Crate digging (Scava), an alternative source via Discogs (no Last.fm/Spotify):
+Discovery is a single branch oriented toward **taste** (not technical compatibility,
+which stays with the Set Builder): crate digging (Scava) via Discogs.
 
 ```text
 seed: genre or label
@@ -444,7 +431,6 @@ droppable on SQLite due to a baked-in FK on `playlist_id` — but are dead and e
 | Integration | State | Notes |
 |---|---|---|
 | Spotify | active | OAuth, import, Discovery resolver, playlist export |
-| Last.fm | active | artist/track similarity for Discovery (playlist expansion) |
 | Discogs | active | Discovery "Scava" crate digging by genre/label; works without a token, `DISCOGS_TOKEN` raises the rate limit |
 | LLM | active if configured | structured and validated outputs |
 | Shazam | active if dependencies present | ffmpeg, yt-dlp, shazamio; fingerprinting of external mixes, not of the library |
@@ -454,7 +440,7 @@ droppable on SQLite due to a baked-in FK on `playlist_id` — but are dead and e
 | SoundCloud | active if dependencies present | yt-dlp (metadata only, never audio) for playlists/secret links and likes: flat like preview (fast), import/sync with full per-track extraction (uploader/duration/artwork, ~1s per track); no ISRC (not exposed), dedup on `platform_track_id`; sync always additive (never prune, unlike Spotify) |
 | PostgreSQL | backlog | SQLite is enough for single-user |
 
-The remaining external providers (Last.fm, Discogs, Spotify) serve **Discovery
+The remaining external providers (Discogs, Spotify) serve **Discovery
 only**: none of them provides BPM/key/mood/energy anymore. The textual
 enrichment of metadata (title/artist/album/label/genre) is Sortory's
 job, not Cratory's. Spotify `/recommendations` must not be used: for
