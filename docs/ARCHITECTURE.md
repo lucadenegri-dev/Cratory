@@ -356,6 +356,8 @@ Responsibilities:
 - discovery ranking;
 - AI output validation.
 
+After editing in the workbench, roles are re-derived positionally by `assign_roles` (peak at ~70%); for strategies with non-standard peak placement (e.g., closing), the peak label may shift relative to the anchor elected at generation time; persistent peak alignment is deferred to phase 2.
+
 The absence of BPM/key does not block the system: the track stays `imported` (not
 usable by the Set Builder until they arrive from a Rekordbox import) and partial
 scores use neutral values where possible.

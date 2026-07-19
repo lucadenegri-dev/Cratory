@@ -9,7 +9,6 @@ da scoring.
 
 import logging
 import statistics
-from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
@@ -287,6 +286,9 @@ def _beam_search_span(
     passato allo scoring resta GLOBALE (secondi/target del set intero), cosi'
     archi, reset point e finestra del peak parlano la stessa scala. Il ramp di
     convergenza invece e' locale allo span: cresce da 0 a 1 verso l'anchor.
+
+    used viene arricchito con opener.id qui dentro; artist_counts NO: l'artista dell'opener
+    deve essere gia' contato dal chiamante (altrimenti il cap per artista sfora di uno).
     """
     span_start = elapsed_secs
     span_len = max(1, fill_until_secs - span_start)
