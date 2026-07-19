@@ -251,7 +251,7 @@ def test_on_progress_aggiorna_processed_total_phase(patch_job, monkeypatch):
         on_progress(2, 2)
         seen.append(dict(job.job_state()))
         meta = SetMeta(source_url=url, title="T")
-        return meta, []
+        return meta, [], None
 
     monkeypatch.setattr("app.services.mix_identify.identify_set", _fake_identify_set)
     monkeypatch.setattr("app.integrations.shazam.ShazamioRecognizer", _FakeRecognizer)

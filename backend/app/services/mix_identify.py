@@ -29,7 +29,9 @@ SEGMENT_LENGTH = 12      # secondi di audio per ogni tentativo di riconoscimento
 MAX_SEGMENTS = 200       # tetto ai segmenti (= chiamate al recognizer) per mix: su 2h il
                          # passo e' ~39s, cosi' quasi ogni traccia raccoglie 2+ campioni
                          # e il voto di conferma separa le vere dai falsi positivi
-MAX_CONSECUTIVE_ERRORS = 8  # oltre questo numero di errori di fila, interrompe
+MAX_CONSECUTIVE_ERRORS = 3  # errori di fila oltre cui interrompe: basso perche' ogni
+                            # errore ha gia' assorbito il pacing+backoff del recognizer
+                            # (fino a ~185s), quindi 3 = ~10 min di endpoint giu', non di piu'
 MERGE_WINDOW_SECONDS = 240  # stessa chiave che ricompare entro questa distanza = stessa esecuzione
 CONFIDENCE_CONFIRMED = 90  # 2+ campioni concordi
 CONFIDENCE_DUBIOUS = 45    # campione singolo mai verificato (i verificati e smentiti si scartano)
@@ -153,15 +155,11 @@ def build_tracks(runs: list[MatchRun]) -> list[IdentifiedTrack]:
 ProgressFn = Callable[[int, int], None]
 
 
-def _retry_delta(step: int) -> int:
-    """Spostamento del retry su un buco: mezzo passo, tra 6 e 20 secondi."""
-    return max(6, min(step // 2, 20))
-
-
-def _confirm_delta(step: int) -> int:
-    """Distanza del campione di conferma: mezzo passo, tra 6 e 30 secondi —
-    abbastanza lontano dalla transizione che ha generato un eventuale falso."""
-    return max(6, min(step // 2, 30))
+def _clamped_delta(step: int, cap: int) -> int:
+    """Mezzo passo, con floor a 6s e cap variabile — spostamento del retry sul
+    buco (cap 20) e distanza del campione di conferma (cap 30, piu' lontano
+    dalla transizione che ha generato un eventuale falso)."""
+    return max(6, min(step // 2, cap))
 
 
 def identify_from_recognizer(
@@ -189,27 +187,32 @@ def identify_from_recognizer(
     consecutive_errors = 0
     aborted_at: int | None = None
 
-    def try_recognize(offset: int) -> dict[str, Any] | None:
+    def try_recognize(offset: int) -> tuple[dict[str, Any] | None, bool]:
+        """Ritorna (match, errored). `errored` distingue il guasto del recognizer
+        (endpoint giu', gia' passato per pacing+backoff) da un buco genuino: solo
+        il buco merita il retry sul buco e vale come tentativo di verifica."""
         nonlocal consecutive_errors
         try:
             match = recognize_at(offset)
             consecutive_errors = 0
-            return match
+            return match, False
         except RecognizerError as exc:
             logger.warning("Riconoscimento fallito a %ss: %s", offset, exc)
             consecutive_errors += 1
-            return None
+            return None, True
 
     samples: list[tuple[int, dict[str, Any] | None]] = []
     for i, offset in enumerate(offsets, start=1):
-        match = try_recognize(offset)
-        if match is None and budget > 0 and consecutive_errors < MAX_CONSECUTIVE_ERRORS:
-            retry_at = offset + _retry_delta(step)
+        match, errored = try_recognize(offset)
+        # Retry solo su un buco genuino: su errore il recognizer ha gia' ritentato
+        # col backoff, insistere raddoppierebbe l'attesa verso un endpoint giu'.
+        if match is None and not errored and budget > 0 and consecutive_errors < MAX_CONSECUTIVE_ERRORS:
+            retry_at = offset + _clamped_delta(step, 20)
             if duration_seconds > 0:
                 retry_at = min(retry_at, max(0, duration_seconds - SEGMENT_LENGTH))
             if retry_at > offset:
                 budget -= 1
-                match = try_recognize(retry_at)
+                match, _ = try_recognize(retry_at)
         samples.append((offset, match))
         if on_progress:
             on_progress(i, len(offsets))
@@ -223,7 +226,7 @@ def identify_from_recognizer(
     to_confirm = [r for r in runs if r.hits == 1]
     total = len(offsets) + len(to_confirm)
     done = len(offsets)
-    delta = _confirm_delta(step)
+    delta = _clamped_delta(step, 30)
     for run in to_confirm:
         if budget <= 0 or consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
             break  # nessuna verifica possibile: i singoli non verificati restano dubbi
@@ -235,8 +238,10 @@ def identify_from_recognizer(
             if budget <= 0 or consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                 break
             budget -= 1
+            match, errored = try_recognize(confirm_at)
+            if errored:
+                continue  # endpoint giu': non e' una verifica, la voce resta dubbia
             run.confirm_attempted = True
-            match = try_recognize(confirm_at)
             if match is not None and _match_key(match) == run.key:
                 run.hits += 1
                 break

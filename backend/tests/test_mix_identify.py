@@ -183,16 +183,22 @@ def test_identify_budget_zero_disables_retry_and_confirm():
     assert aborted is None
 
 
-def test_identify_error_on_grid_recovered_by_retry():
-    # errore sull'offset pianificato, il retry riconosce: la serie non si spezza
+def test_identify_error_on_grid_gets_no_hole_retry_but_confirmation_can_rescue():
+    # un errore sull'offset pianificato NON scatena il retry sul buco (il
+    # recognizer ha gia' fatto backoff internamente); la traccia adiacente
+    # rimasta singola puo' comunque essere confermata
     table = {6: _m("A", "One"), 12: _m("A", "One")}
+    calls: list[int] = []
 
     def recognize_at(offset: int):
+        calls.append(offset)
         if offset == 0:
             raise RecognizerError("boom")
         return table.get(offset)
 
     out, aborted = identify_from_recognizer(24, recognize_at)  # offsets [0, 12]
+    # 0 -> errore (nessun retry a 6); 12 -> A singola; conferma a 12-6=6 -> A
+    assert calls == [0, 12, 6]
     assert [(t.artist, t.confidence) for t in out] == [("A", CONFIDENCE_CONFIRMED)]
     assert aborted is None
 
@@ -206,8 +212,31 @@ def test_identify_stops_after_max_consecutive_errors_and_reports_abort():
 
     out, aborted = identify_from_recognizer(7200, recognize_at)
     assert out == []
-    assert len(calls) == 8  # MAX_CONSECUTIVE_ERRORS, retry compresi
-    assert aborted == 108  # passo 36: quarto offset di griglia, dove ci si e' fermati
+    # ogni errore ha gia' assorbito il backoff del recognizer: bastano 3 di fila
+    assert len(calls) == 3  # MAX_CONSECUTIVE_ERRORS, senza retry sui buchi
+    assert aborted == 72  # passo 36: terzo offset di griglia, dove ci si e' fermati
+
+
+def test_identify_errored_confirmation_is_not_a_verification():
+    # il tentativo di conferma che va in ERRORE non conta come verifica:
+    # il singolo resta dubbio (recognizer giu' = assenza di prove)
+    table = {0: _m("A", "One"), 12: _m("B", "Two")}
+    calls: list[int] = []
+
+    def recognize_at(offset: int):
+        calls.append(offset)
+        if offset not in table:
+            raise RecognizerError("down")
+        return table[offset]
+
+    out, aborted = identify_from_recognizer(36, recognize_at)  # offsets [0, 12, 24]
+    # griglia: 0->A, 12->B, 24->errore (niente retry). Conferme: A a 6 -> errore
+    # (non conta), -6 invalido; B a 18 -> errore, poi il contatore ferma tutto.
+    assert calls == [0, 12, 24, 6, 18]
+    assert [(t.artist, t.confidence) for t in out] == [
+        ("A", CONFIDENCE_DUBIOUS), ("B", CONFIDENCE_DUBIOUS),
+    ]
+    assert aborted is None  # la griglia era completa: parziale no, dubbie si'
 
 
 def test_identify_progress_extends_total_with_confirmations():
@@ -232,13 +261,13 @@ def test_identify_confirm_loop_stops_when_recognizer_is_down():
         raise RecognizerError("down")
 
     out, aborted = identify_from_recognizer(7200, recognize_at)
-    # passo 36s: 2 match + 2 errori sul buco a 36 (griglia+retry, azzerati da B a 72)
-    # + 8 errori consecutivi dopo B, poi zero chiamate di conferma
-    assert len(calls) == 12
+    # passo 36s: A@0, errore@36 (nessun retry sul buco: e' un errore), B@72,
+    # poi 3 errori consecutivi (108/144/180) -> abort, zero conferme
+    assert calls == [0, 36, 72, 108, 144, 180]
     assert [(t.artist, t.confidence) for t in out] == [
         ("A", CONFIDENCE_DUBIOUS), ("B", CONFIDENCE_DUBIOUS),
     ]
-    assert aborted == 216
+    assert aborted == 180
 
 
 def test_identify_no_self_confirmation_on_short_audio():
