@@ -4,7 +4,7 @@ Testa la parte pura (campionamento offset, dedup dei match consecutivi, orchestr
 con recognizer finto) e il parsing del payload Shazam. L'I/O (yt-dlp/ffmpeg) non e' qui.
 """
 
-from app.integrations.shazam import parse_shazam
+from app.integrations.shazam import RecognizerError, parse_shazam
 from app.services.mix_identify import (
     CONFIDENCE_CONFIRMED,
     CONFIDENCE_DUBIOUS,
@@ -93,20 +93,86 @@ def test_build_tracks_confidence_from_hits():
 
 
 # --- identify_from_recognizer (recognizer finto) -----------------------------
+# Con durata 60: offsets pianificati [0, 12, 24, 36, 48], passo 12, retry a +6s.
 
 
-def test_identify_from_recognizer_end_to_end():
-    # mappa offset -> match; alcuni offset senza riconoscimento
-    table = {0: _m("A", "One"), 12: _m("A", "One"), 24: _m("B", "Two")}
+def _tracker(table):
     calls: list[int] = []
 
     def recognize_at(offset: int):
         calls.append(offset)
         return table.get(offset)
 
+    return calls, recognize_at
+
+
+def test_identify_retry_fills_hole_and_confirms_singles():
+    # buco a 12 -> il retry a 18 becca A (stessa serie di 0: hit 2, confermata);
+    # B ha un solo hit -> campione di conferma a 24+4=28 (buco: resta dubbia).
+    table = {0: _m("A", "One"), 18: _m("A", "One"), 24: _m("B", "Two")}
+    calls, recognize_at = _tracker(table)
     out = identify_from_recognizer(60, recognize_at)
-    assert calls == plan_offsets(60)  # ha campionato tutti gli offset previsti
-    assert [(t.artist, t.title) for t in out] == [("A", "One"), ("B", "Two")]
+    # 36 -> retry a 42; 48 -> il retry (54) sforerebbe la durata: clampato a 48, saltato
+    assert calls == [0, 12, 18, 24, 36, 42, 48, 28]
+    assert [(t.artist, t.title, t.confidence) for t in out] == [
+        ("A", "One", CONFIDENCE_CONFIRMED), ("B", "Two", CONFIDENCE_DUBIOUS),
+    ]
+
+
+def test_identify_confirmation_promotes_single_to_confirmed():
+    # durata 36 -> offsets [0, 12, 24]. B singola a 12, la conferma a 16 concorda.
+    table = {0: _m("A", "One"), 12: _m("B", "Two"), 16: _m("B", "Two")}
+    calls, recognize_at = _tracker(table)
+    out = identify_from_recognizer(36, recognize_at)
+    assert [(t.artist, t.confidence) for t in out] == [
+        ("A", CONFIDENCE_DUBIOUS),      # conferma a 0+4=4: buco -> dubbia
+        ("B", CONFIDENCE_CONFIRMED),    # conferma a 16 concorde -> 90
+    ]
+    assert 4 in calls and 16 in calls
+
+
+def test_identify_budget_zero_disables_retry_and_confirm():
+    table = {0: _m("A", "One"), 12: _m("A", "One"), 24: _m("B", "Two")}
+    calls, recognize_at = _tracker(table)
+    out = identify_from_recognizer(60, recognize_at, max_extra_calls=0)
+    assert calls == plan_offsets(60)  # solo la griglia pianificata
+    assert [(t.artist, t.confidence) for t in out] == [
+        ("A", CONFIDENCE_CONFIRMED), ("B", CONFIDENCE_DUBIOUS),
+    ]
+
+
+def test_identify_error_on_grid_recovered_by_retry():
+    # errore sull'offset pianificato, il retry riconosce: la serie non si spezza
+    table = {6: _m("A", "One"), 12: _m("A", "One")}
+
+    def recognize_at(offset: int):
+        if offset == 0:
+            raise RecognizerError("boom")
+        return table.get(offset)
+
+    out = identify_from_recognizer(24, recognize_at)  # offsets [0, 12]
+    assert [(t.artist, t.confidence) for t in out] == [("A", CONFIDENCE_CONFIRMED)]
+
+
+def test_identify_stops_after_max_consecutive_errors():
+    calls: list[int] = []
+
+    def recognize_at(offset: int):
+        calls.append(offset)
+        raise RecognizerError("down")
+
+    out = identify_from_recognizer(7200, recognize_at)
+    assert out == []
+    assert len(calls) == 8  # MAX_CONSECUTIVE_ERRORS, retry compresi
+
+
+def test_identify_progress_extends_total_with_confirmations():
+    table = {0: _m("A", "One"), 12: _m("A", "One"), 24: _m("B", "Two")}
+    progress: list[tuple[int, int]] = []
+    _, recognize_at = _tracker(table)
+    identify_from_recognizer(60, recognize_at, on_progress=lambda i, n: progress.append((i, n)))
+    assert progress[:5] == [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)]  # passata principale
+    assert progress[-1] == (6, 6)  # la conferma di B estende il totale
 
 
 # --- parsing payload Shazam --------------------------------------------------

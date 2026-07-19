@@ -3,8 +3,8 @@
 Pipeline DETERMINISTICA:
 1. download dell'audio dall'URL (yt-dlp);
 2. campionamento a segmenti sovrapposti (ffmpeg) lungo la durata;
-3. riconoscimento di ogni segmento (AudioRecognizer, iniettato);
-4. dedup dei match consecutivi (gestisce le transizioni del DJ).
+3. riconoscimento di ogni segmento con retry sui buchi (AudioRecognizer, iniettato);
+4. conferma dei match singoli e dedup con finestra sui buchi (gestisce le transizioni del DJ).
 
 Il cuore (`plan_offsets`, `group_samples`/`build_tracks`, `identify_from_recognizer`) e' puro e
 testabile senza rete ne' audio: l'I/O (yt-dlp/ffmpeg) sta in funzioni separate e il
@@ -29,6 +29,8 @@ MAX_CONSECUTIVE_ERRORS = 8  # oltre questo numero di errori di fila, interrompe
 MERGE_MAX_GAPS = 2       # buchi consecutivi oltre i quali la stessa traccia e' una voce nuova
 CONFIDENCE_CONFIRMED = 90  # 2+ campioni concordi
 CONFIDENCE_DUBIOUS = 45    # campione singolo mai confermato
+MAX_EXTRA_CALLS = 50     # budget per retry sui buchi + conferme dei singoli (per mix)
+CONFIRM_DELTA = 4        # secondi di scarto del campione di conferma
 
 
 @dataclass
@@ -126,32 +128,79 @@ def build_tracks(runs: list[MatchRun]) -> list[IdentifiedTrack]:
 ProgressFn = Callable[[int, int], None]
 
 
+def _retry_delta(step: int) -> int:
+    """Spostamento del retry su un buco: mezzo passo, tra 6 e 20 secondi."""
+    return max(6, min(step // 2, 20))
+
+
 def identify_from_recognizer(
     duration_seconds: int,
     recognize_at: Callable[[int], dict[str, Any] | None],
     *,
     on_progress: ProgressFn | None = None,
+    max_extra_calls: int = MAX_EXTRA_CALLS,
 ) -> list[IdentifiedTrack]:
-    """Campiona gli offset, riconosce e deduplica. `recognize_at(offset)->match|None`
-    isola l'I/O: i test passano una funzione finta."""
+    """Campiona gli offset, riconosce, conferma e deduplica.
+
+    `recognize_at(offset)->match|None` isola l'I/O: i test passano una funzione
+    finta. Robustezza (tutto entro `max_extra_calls` chiamate oltre la griglia):
+    un buco viene ritentato una volta a offset spostato (le transizioni sono la
+    causa principale); le serie con un solo campione ricevono un campione di
+    conferma a +-CONFIRM_DELTA, e restano in lista come dubbie se non confermate.
+    Il campione di un retry riuscito resta registrato all'offset pianificato."""
     offsets = plan_offsets(duration_seconds)
-    samples: list[tuple[int, dict[str, Any] | None]] = []
+    step = offsets[1] - offsets[0] if len(offsets) > 1 else SEGMENT_LENGTH
+    budget = max_extra_calls
     consecutive_errors = 0
-    for i, offset in enumerate(offsets, start=1):
+
+    def try_recognize(offset: int) -> dict[str, Any] | None:
+        nonlocal consecutive_errors
         try:
             match = recognize_at(offset)
             consecutive_errors = 0
+            return match
         except RecognizerError as exc:
             logger.warning("Riconoscimento fallito a %ss: %s", offset, exc)
-            match = None
             consecutive_errors += 1
-            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                logger.error("Troppi errori di riconoscimento consecutivi: interrompo.")
-                break
+            return None
+
+    samples: list[tuple[int, dict[str, Any] | None]] = []
+    for i, offset in enumerate(offsets, start=1):
+        match = try_recognize(offset)
+        if match is None and budget > 0 and consecutive_errors < MAX_CONSECUTIVE_ERRORS:
+            retry_at = offset + _retry_delta(step)
+            if duration_seconds > 0:
+                retry_at = min(retry_at, max(0, duration_seconds - SEGMENT_LENGTH))
+            if retry_at > offset:
+                budget -= 1
+                match = try_recognize(retry_at)
         samples.append((offset, match))
         if on_progress:
             on_progress(i, len(offsets))
-    return build_tracks(group_samples(samples))
+        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+            logger.error("Troppi errori di riconoscimento consecutivi: interrompo.")
+            break
+
+    runs = group_samples(samples)
+
+    to_confirm = [r for r in runs if r.hits == 1]
+    total = len(offsets) + len(to_confirm)
+    done = len(offsets)
+    for run in to_confirm:
+        if budget <= 0:
+            break  # budget esaurito: i singoli restano dubbi
+        budget -= 1
+        confirm_at = run.offset + CONFIRM_DELTA
+        if duration_seconds > 0 and confirm_at + SEGMENT_LENGTH > duration_seconds:
+            confirm_at = max(0, run.offset - CONFIRM_DELTA)
+        match = try_recognize(confirm_at)
+        if match is not None and _match_key(match) == run.key:
+            run.hits += 1
+        done += 1
+        if on_progress:
+            on_progress(done, total)
+
+    return build_tracks(runs)
 
 
 # ---- I/O: download (yt-dlp) + segmentazione (ffmpeg) -----------------------
