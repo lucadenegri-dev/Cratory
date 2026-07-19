@@ -31,7 +31,10 @@ operational (Last.fm expand + Discogs dig). **The dig's engine was redesigned
 `depth` picks where to fetch a window from it (0.0 = the seed's classics, 1.0 = the
 bottom of the crate) — taste always ranks inside that window, it is no longer a mode.
 The Set Builder
-(technical/creative) guarantees owned-only. The dashboard shows a five-stage pipeline (Index
+(technical/creative) guarantees owned-only; **its deterministic generator was reworked into two
+phases (2026-07-19, tappa 1)** — a skeleton (anchors, bomb reserve, genre plan) is built first,
+then filled with beam search per segment, same external interface — with an AI curation stage
+(tappa 2) planned but not implemented. The dashboard shows a five-stage pipeline (Index
 moved to a nav button). Mix identification via Shazam is integrated (phase 1; co-occurrence
 in backlog). SoundCloud import (playlists/secret links + selective likes) works via yt-dlp.
 **Owned tracks are now playable, read-only, for quick audition** (`GET /api/tracks/{id}/audio`,
@@ -82,6 +85,17 @@ not from this backlog.
   window `want` is roughly constant, so they could not discriminate leads anyway) and
   taste ranks inside the window unconditionally, not as a mode. Cost: 4-5 Discogs
   requests per dig. See `docs/API.md` (Discovery) and PROGRESS.md for detail.
+- **Set Builder: two-phase generator** — Tappa 1 DONE (2026-07-19). `generate_set()` now plans
+  a skeleton first (opening/peak/closing/reset anchors elected per strategy, a bomb reserve —
+  top 15% by impact score — freed only in the peak window, a genre plan with a principal family
+  at peak and a calmer one elsewhere) and then fills it with beam search per segment, instead of
+  one flat beam search over the whole set. Falls back to the previous single-phase flow for
+  short expected sets (< 6 tracks) or small pools (< 8 candidates). Fully deterministic, same
+  API. Tappa 2 (AI curation — interpreting intent, curating the pool, retiring the "AI orders
+  the tracklist" path) is planned, not yet implemented: see
+  `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`. `use_ai` and
+  `generate_ai_set()` stay unchanged until then. See `docs/ARCHITECTURE.md` and PROGRESS.md for
+  detail.
 
 ## Technical backlog (non-blocking)
 

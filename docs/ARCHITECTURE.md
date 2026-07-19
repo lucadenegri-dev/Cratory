@@ -336,6 +336,20 @@ Responsibilities:
   coherence is a dedicated ranking term (like the energy arc), modulated per
   strategy (`StrategyProfile.genre_coherence`: exploratory strategies reduce it);
 - transition classification;
+- deterministic set generation in two phases (`services/set_skeleton.py` +
+  `services/set_generator.py`). Phase 1 (`build_skeleton`) elects opening/peak/closing/reset
+  anchors per strategy, reserves the top 15% of candidates by impact score (0.7 energy
+  percentile + 0.3 BPM percentile) for the peak segment only, and plans a genre arc (dominant
+  family at peak, a calmer family elsewhere; degenerates to no plan above an 80% dominant share
+  or without a second family at 15%+). Phase 2 fills each segment with the same beam search
+  (span-budgeted: `_beam_search_span`), converging toward the incoming anchor and following the
+  segment's genre plan, with a
+  penalty for spending a reserved track outside the peak window. Falls back to the previous
+  single-phase beam search when the pool is under 8 candidates or the expected set is under 6
+  tracks. Fully deterministic, same external interface; a two-phase AI curation stage (Tappa 2 —
+  interpreting intent, curating the pool, retiring the AI-orders-the-tracklist path) is planned
+  but not implemented — see
+  `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`;
 - role assignment across the set arc;
 - candidate filtering with a cap of 60;
 - gap analysis;
