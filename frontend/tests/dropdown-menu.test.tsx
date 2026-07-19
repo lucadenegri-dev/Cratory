@@ -37,4 +37,30 @@ describe("DropdownMenu", () => {
     fireEvent.click(screen.getByText("Menu"));
     expect(screen.queryByText("Azione")).toBeNull();
   });
+
+  it("il click fuori dal menu lo chiude", () => {
+    render(<DropdownMenu label="Menu" items={[{ key: "a", label: "Azione", onSelect: () => {} }]} />);
+    fireEvent.click(screen.getByText("Menu"));
+    expect(screen.getByText("Azione")).toBeTruthy();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByText("Azione")).toBeNull();
+  });
+
+  it("un item href con disabled non e' navigabile", () => {
+    const onSelect = vi.fn();
+    render(
+      <DropdownMenu
+        label="Compra"
+        items={[{ key: "b", label: "Bandcamp", href: "https://bandcamp.com/search?q=x", disabled: true, onSelect }]}
+      />,
+    );
+    fireEvent.click(screen.getByText("Compra"));
+    const a = screen.getByText("Bandcamp").closest("a");
+    expect(a?.getAttribute("aria-disabled")).toBe("true");
+    expect(a?.className).toContain("pointer-events-none");
+    fireEvent.click(a!);
+    expect(onSelect).not.toHaveBeenCalled();
+    // Il menu resta aperto: l'item disabled non chiude e non naviga.
+    expect(screen.getByText("Bandcamp")).toBeTruthy();
+  });
 });

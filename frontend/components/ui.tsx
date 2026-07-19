@@ -479,8 +479,7 @@ export function DropdownMenu({ label, items, disabled, size = "sm", variant = "o
         aria-controls={menuId}
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
-        className={cn("inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50",
-          BTN_VARIANT[variant], BTN_SIZE[size])}
+        className={cn(BTN_BASE, BTN_VARIANT[variant], BTN_SIZE[size])}
       >
         {label}
       </button>
@@ -490,7 +489,9 @@ export function DropdownMenu({ label, items, disabled, size = "sm", variant = "o
           {items.map((it) =>
             it.href ? (
               <a key={it.key} role="menuitem" href={it.href} target="_blank" rel="noopener noreferrer"
-                className={itemClass} onClick={() => setOpen(false)}>
+                aria-disabled={it.disabled}
+                className={cn(itemClass, it.disabled && "pointer-events-none opacity-50")}
+                onClick={(e) => { if (it.disabled) { e.preventDefault(); return; } setOpen(false); }}>
                 {it.label}
               </a>
             ) : (
