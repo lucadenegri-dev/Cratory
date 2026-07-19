@@ -6,7 +6,7 @@
 
 ## Current state
 
-**Last updated:** 2026-07-16
+**Last updated:** 2026-07-19
 
 **Product name:** **Cratory** (rename done on 2026-06-25 across UI, code, docs and
 icon). "SetArc" and "DJ Assistant" remain only as historical names; legacy technical
@@ -26,6 +26,16 @@ with a five-stage pipeline (Index moved to a nav button) and documentation reali
 the new paradigm; mix identification via Shazam integrated (phase 1; co-occurrence in
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-07-19 - Shazam: riconoscimento mix piu' robusto
+
+Il cuore di `mix_identify` non si fida piu' del singolo campione: i buchi vengono
+ritentati una volta a offset vicino, le tracce viste in un solo campione ricevono
+un campione di conferma (budget: 50 chiamate extra per mix) e il dedup fonde la
+stessa traccia attraverso 1-2 buchi consecutivi invece di duplicarla. La
+confidence ora e' reale — 90 confermata, 45 dubbia (l'80 fisso resta solo nei set
+gia' analizzati) — e la pagina del set marca le voci dubbie con un badge.
+Spec: `docs/superpowers/specs/2026-07-19-shazam-mix-robustness-design.md`.
 
 ## Milestone 2026-07-16 - Discovery: il dig pesca nella pila ordinata per domanda, non più in un campione arbitrario
 
