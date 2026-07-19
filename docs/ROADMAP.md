@@ -31,10 +31,12 @@ operational (Discogs dig). **The dig's engine was redesigned
 `depth` picks where to fetch a window from it (0.0 = the seed's classics, 1.0 = the
 bottom of the crate) — taste always ranks inside that window, it is no longer a mode.
 The Set Builder
-(technical/creative) guarantees owned-only; **its deterministic generator was reworked into two
+guarantees owned-only; **its deterministic generator was reworked into two
 phases (2026-07-19, phase 1)** — a skeleton (anchors, bomb reserve, genre plan) is built first,
-then filled with beam search per segment, same external interface — with an AI curation stage
-(phase 2) planned but not implemented. The dashboard shows a five-stage pipeline (Index
+then filled with beam search per segment, same external interface. **An AI curation stage
+(phase 2, 2026-07-19)** sits on top when enabled: the AI compiles the intent from the free
+prompt, judges mood-fit and suggests anchors, while the engine always sequences; the only
+AI axis is curation on/off (`use_ai`), no technical/creative mode. The dashboard shows a five-stage pipeline (Index
 moved to a nav button). Mix identification via Shazam is integrated (phase 1; co-occurrence
 in backlog). SoundCloud import (playlists/secret links + selective likes) works via yt-dlp.
 **Owned tracks are now playable, read-only, for quick audition** (`GET /api/tracks/{id}/audio`,

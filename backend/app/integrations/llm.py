@@ -96,7 +96,7 @@ class AnthropicLLMClient(LLMClient):
 def get_llm_client(model: str | None = None) -> LLMClient:
     """Factory del client LLM. Solleva LLMNotConfigured se manca la chiave.
 
-    `model` opzionale sovrascrive `AI_MODEL` (usato per la modalità creative).
+    `model` opzionale sovrascrive `AI_MODEL` (oggi nessun call-site lo usa).
     """
     return AnthropicLLMClient(model)
 

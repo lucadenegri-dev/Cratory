@@ -85,7 +85,7 @@ def _desired_energy(req: SetGenerationRequest, progress: float,
 
 
 # Impatto (0-1): quanto una traccia "spinge" rispetto al pool. Percentili
-# rank-based, tie-break per id (determinismo). Pesi tunabili.
+# rank-based, pari a rango medio (il pareggio lo rompe l'elezione a valle). Pesi tunabili.
 _IMPACT_ENERGY_SHARE = 0.7
 _IMPACT_BPM_SHARE = 0.3
 

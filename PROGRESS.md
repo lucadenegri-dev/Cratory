@@ -21,7 +21,7 @@ now only from a Rekordbox XML import, `energy` derived); **Analysis page complet
 Rekordbox import — explicit per-value provenance, `bpm_source`/`key_source`: manual >
 rekordbox > cratory); Discovery is now the dig alone (**playlist expansion removed
 2026-07-19**) — Discogs crate digging, whose pile is sorted by demand, `depth` picks
-the window to fetch from it, taste always ranks inside that window; technical/creative
+the window to fetch from it, taste always ranks inside that window; the
 Set Builder with an "owned-only" guarantee, a two-phase deterministic generator (skeleton then
 fill) and an optional AI curation stage (intent compilation, mood-fit, anchor hints — the AI
 never sequences tracks); dashboard
