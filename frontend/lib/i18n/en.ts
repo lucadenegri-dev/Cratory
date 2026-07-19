@@ -701,6 +701,8 @@ export const en = {
       noTracksMessage: (failed: boolean) => `No tracks recognized ${failed ? "(identification failed)" : "in this set"}.`,
       ownedBadge: "OWNED",
       inLibraryBadge: "IN LIBRARY",
+      dubiousBadge: "UNCERTAIN",
+      dubiousBadgeTitle: "Recognized in a single sample: it may not be in the mix",
       viewInLibraryTitle: "Open in library",
       saveAsLeadButton: "Save as lead",
       savedAsLeadDone: "Saved",

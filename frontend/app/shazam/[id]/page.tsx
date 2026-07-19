@@ -9,6 +9,7 @@ import {
 } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Spinner, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { ConfidenceBadge } from "@/components/confidence-badge";
 import { useT } from "@/lib/i18n";
 
 // Polling mentre l'identificazione del set e' in corso: la Jobs bar globale non
@@ -189,6 +190,7 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
                   <span className="text-muted"> — {trk.title ?? "?"}</span>
                 </span>
                 {trk.isrc && <Badge tone="neutral" className="tnum shrink-0">{trk.isrc}</Badge>}
+                <ConfidenceBadge confidence={trk.confidence} />
                 <TrackLibraryAction track={trk} onSaved={(track) => patchTrackSaved(trk.position, track)} />
               </li>
             ))}

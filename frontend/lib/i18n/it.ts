@@ -704,6 +704,8 @@ export const it: Dictionary = {
       noTracksMessage: (failed: boolean) => `Nessuna traccia riconosciuta ${failed ? "(identificazione fallita)" : "in questo set"}.`,
       ownedBadge: "POSSEDUTA",
       inLibraryBadge: "IN LIBRERIA",
+      dubiousBadge: "DUBBIA",
+      dubiousBadgeTitle: "Riconosciuta in un solo campione: potrebbe non essere nel mix",
       viewInLibraryTitle: "Apri in libreria",
       saveAsLeadButton: "Salva come lead",
       savedAsLeadDone: "Salvata",
