@@ -1,9 +1,9 @@
-import type { SeedType } from "@/components/discovery-dig-bar";
+import { DEPTHS, type SeedType } from "@/components/discovery-dig-bar";
 
 export type SurprisePick = { seedType: SeedType; value: string; depth: number };
 
-// Gli stessi tre valori di DEPTHS in discovery-dig-bar (surface/mid/deep).
-const DEPTH_VALUES = [0.0, 0.5, 1.0];
+// Una sola fonte per i valori di profondita': gli stessi di DEPTHS (surface/mid/deep).
+const DEPTH_VALUES = DEPTHS.map((d) => d.value);
 
 /**
  * Pesca un seme casuale dal gusto (libreria): generi di libreria + etichette,
