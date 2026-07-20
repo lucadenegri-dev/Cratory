@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Disc3 } from "lucide-react";
 import {
@@ -18,6 +18,7 @@ import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { applyLens, DiscoveryLeadGrid, FORMAT_VALUES, type SortMode } from "@/components/discovery-lead-grid";
 import { DiscoveryDigBar, type SeedType } from "@/components/discovery-dig-bar";
+import { pickSurprise } from "@/lib/discovery-surprise";
 import { useI18n } from "@/lib/i18n";
 
 function DiscoveryInner() {
@@ -52,6 +53,17 @@ function DiscoveryInner() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // "Sorprendimi": traccia se il dig in corso nasce dal bottone (per il reroll)
+  // e se il reroll singolo è già stato speso.
+  const surpriseRef = useRef(false);
+  const surpriseRerolledRef = useRef(false);
+
+  const surprisePool = useMemo(
+    () => ({ genres: genres?.library ?? [], labels: labels?.map((l) => l.label) ?? [] }),
+    [genres, labels],
+  );
+  const canSurprise = surprisePool.genres.length + surprisePool.labels.length > 0;
 
   useEffect(() => {
     getDiscoveryGenres()
@@ -96,6 +108,8 @@ function DiscoveryInner() {
   const runDig = () => {
     const value = subject.trim();
     if (!value) return;
+    surpriseRef.current = false;
+    surpriseRerolledRef.current = false;
     const params = new URLSearchParams();
     params.set("seed", seedType);
     params.set("value", value);
@@ -106,6 +120,38 @@ function DiscoveryInner() {
     if (params.toString() === searchParams.toString()) return;
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
+
+  const navigateDig = (seed: SeedType, value: string, d: number) => {
+    const params = new URLSearchParams();
+    params.set("seed", seed);
+    params.set("value", value);
+    params.set("depth", String(d));
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  const runSurprise = () => {
+    const pick = pickSurprise(surprisePool, subject.trim() || null);
+    if (!pick) return;
+    surpriseRef.current = true;        // questo dig nasce da Sorprendimi
+    surpriseRerolledRef.current = false; // nuovo click: reroll di nuovo disponibile
+    navigateDig(pick.seedType, pick.value, pick.depth);
+  };
+
+  // Colpo a vuoto di "Sorprendimi": un solo reroll automatico, poi l'empty state
+  // normale. Vale solo per i dig nati dal bottone (surpriseRef), mai per i manuali.
+  useEffect(() => {
+    if (!dig) return;
+    if (!surpriseRef.current) return;
+    surpriseRef.current = false; // consuma il flag del dig appena risolto
+    if (dig.leads.length > 0) return;
+    if (surpriseRerolledRef.current) return; // reroll già speso: mostra empty state
+    surpriseRerolledRef.current = true;
+    const pick = pickSurprise(surprisePool, dig.value);
+    if (!pick) return;
+    surpriseRef.current = true; // anche il reroll nasce da Sorprendimi
+    navigateDig(pick.seedType, pick.value, pick.depth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dig]);
 
   const digReady = !!subject.trim();
   // Invalida a ogni cambio di seme (soggetto o tipo): senza questo controllo `pilePages`
@@ -144,6 +190,8 @@ function DiscoveryInner() {
         busy={busy}
         ready={digReady}
         onSubmit={runDig}
+        onSurprise={runSurprise}
+        canSurprise={canSurprise}
       />
 
       {dig && (
