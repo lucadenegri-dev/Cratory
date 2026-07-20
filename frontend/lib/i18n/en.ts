@@ -739,6 +739,9 @@ export const en = {
   },
   setBuilder: {
     guideLinkTitle: "Set Builder guide",
+    guideLinkLabel: "Guide",
+    guidePrompt: "To see how the engine reasons,",
+    guideLinkText: "read the guide",
     intro: "Generate a set list from constraints, or describe in words the set you want and let the AI reason about it. The set opens in the workbench, where you reorder and swap tracks.",
     sectionBase: "Base",
     startPlaylistLabel: "Starting playlist",
