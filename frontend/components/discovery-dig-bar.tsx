@@ -5,16 +5,7 @@ import { Dices, Disc3, Shovel, Tags } from "lucide-react";
 
 import { Button, Combobox, SegmentedControl, Spinner, type ComboOption } from "@/components/ui";
 import { useT } from "@/lib/i18n";
-
-/** DOVE si pesca nella pila ordinata per domanda. Non e' un mix di ordinamento:
- *  sceglie il bacino (vedi spec del motore, `_window`). */
-export const DEPTHS = [
-  { key: "surface", value: 0.0 },
-  { key: "mid", value: 0.5 },
-  { key: "deep", value: 1.0 },
-] as const;
-
-export type SeedType = "genre" | "label";
+import { DEPTHS, type SeedType } from "@/lib/discovery-dig";
 
 export function DiscoveryDigBar({
   subject, onSubjectChange, depth, onDepthChange,

@@ -1,4 +1,4 @@
-import { DEPTHS, type SeedType } from "@/components/discovery-dig-bar";
+import { DEPTHS, type SeedType } from "@/lib/discovery-dig";
 
 export type SurprisePick = { seedType: SeedType; value: string; depth: number };
 
