@@ -15,6 +15,7 @@ function setup(over: Partial<React.ComponentProps<typeof DiscoveryDigBar>> = {})
     depth: 0, onDepthChange: vi.fn(),
     options: OPTIONS, pilePages: null as number | null,
     busy: false, ready: true, onSubmit: vi.fn(),
+    onSurprise: vi.fn(), canSurprise: true,
     ...over,
   };
   render(<DiscoveryDigBar {...props} />);
@@ -128,5 +129,16 @@ describe("DiscoveryDigBar", () => {
     fireEvent.focus(subjectInput());
     const opts = screen.getAllByRole("option").map((o) => o.textContent ?? "");
     expect(opts.filter((o) => o.includes("Acid House"))).toHaveLength(1);
+  });
+
+  it("il click su Sorprendimi chiama onSurprise", () => {
+    const p = setup();
+    fireEvent.click(screen.getByText("Sorprendimi"));
+    expect(p.onSurprise).toHaveBeenCalledTimes(1);
+  });
+
+  it("Sorprendimi e' disabilitato quando il pool e' vuoto", () => {
+    setup({ canSurprise: false });
+    expect(screen.getByText("Sorprendimi").closest("button")?.hasAttribute("disabled")).toBe(true);
   });
 });

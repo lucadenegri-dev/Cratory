@@ -622,6 +622,8 @@ export const it: Dictionary = {
   discovery: {
     intro: "Scava nuova musica per genere o etichetta.",
     dig: "Scava",
+    surprise: "Sorprendimi",
+    surpriseEmpty: "Nessun genere o etichetta in libreria da cui pescare.",
     subjectPlaceholder: "Genere o etichetta… es. Acid House, Trax Records",
     groupGenre: "genere",
     groupLabel: "etichetta",

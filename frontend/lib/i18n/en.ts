@@ -620,6 +620,8 @@ export const en = {
   discovery: {
     intro: "Dig for new music by genre or label.",
     dig: "Dig",
+    surprise: "Surprise me",
+    surpriseEmpty: "No genre or label in your library to pick from.",
     subjectPlaceholder: "Genre or label… e.g. Acid House, Trax Records",
     groupGenre: "genre",
     groupLabel: "label",
