@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Disc3, Shovel, Tags } from "lucide-react";
+import { Dices, Disc3, Shovel, Tags } from "lucide-react";
 
 import { Button, Combobox, SegmentedControl, Spinner, type ComboOption } from "@/components/ui";
 import { useT } from "@/lib/i18n";
@@ -18,7 +18,7 @@ export type SeedType = "genre" | "label";
 
 export function DiscoveryDigBar({
   subject, onSubjectChange, depth, onDepthChange,
-  options, pilePages, busy, ready, onSubmit,
+  options, pilePages, busy, ready, onSubmit, onSurprise, canSurprise,
 }: {
   subject: string;
   onSubjectChange: (value: string, seed: SeedType) => void;
@@ -35,6 +35,8 @@ export function DiscoveryDigBar({
   busy: boolean;
   ready: boolean;
   onSubmit: () => void;
+  onSurprise: () => void;
+  canSurprise: boolean;
 }) {
   const t = useT();
 
@@ -114,6 +116,17 @@ export function DiscoveryDigBar({
 
         <Button type="submit" disabled={busy || !ready} className="w-full sm:w-auto">
           {busy ? <Spinner /> : <Shovel size={15} />} {t.discovery.dig}
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onSurprise}
+          disabled={busy || !canSurprise}
+          title={canSurprise ? undefined : t.discovery.surpriseEmpty}
+          className="w-full sm:w-auto"
+        >
+          <Dices size={15} /> {t.discovery.surprise}
         </Button>
       </div>
 

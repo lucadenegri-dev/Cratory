@@ -622,6 +622,8 @@ export const it: Dictionary = {
   discovery: {
     intro: "Scava nuova musica per genere o etichetta.",
     dig: "Scava",
+    surprise: "Sorprendimi",
+    surpriseEmpty: "Nessun genere o etichetta in libreria da cui pescare.",
     subjectPlaceholder: "Genere o etichetta… es. Acid House, Trax Records",
     groupGenre: "genere",
     groupLabel: "etichetta",
@@ -742,6 +744,9 @@ export const it: Dictionary = {
   },
   setBuilder: {
     guideLinkTitle: "Guida del Set Builder",
+    guideLinkLabel: "Guida",
+    guidePrompt: "Per capire come ragiona il motore,",
+    guideLinkText: "leggi la guida",
     intro: "Genera una scaletta dai vincoli, o descrivi a parole il set che vuoi e lascia ragionare l'AI. Il set si apre nel workbench, dove lo riordini e sostituisci le tracce.",
     sectionBase: "Base",
     startPlaylistLabel: "Playlist di partenza",

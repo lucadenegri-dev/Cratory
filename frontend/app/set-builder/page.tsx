@@ -196,13 +196,21 @@ function SetBuilderInner() {
     <PageLayout
       title="Set Builder"
       action={
-        <Link href="/set-builder/guida" title={t.setBuilder.guideLinkTitle} aria-label={t.setBuilder.guideLinkTitle}
-          className="text-faint transition-colors hover:text-fg">
-          <HelpCircle size={17} />
+        <Link href="/set-builder/guida" title={t.setBuilder.guideLinkTitle}
+          className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted transition-colors hover:text-fg">
+          <HelpCircle size={15} />
+          {t.setBuilder.guideLinkLabel}
         </Link>
       }
     >
-      <p className="mb-6 text-sm text-muted">{t.setBuilder.intro}</p>
+      <p className="mb-6 text-sm text-muted">
+        {t.setBuilder.intro}{" "}
+        {t.setBuilder.guidePrompt}{" "}
+        <Link href="/set-builder/guida" className="text-fg underline underline-offset-2 transition-colors hover:text-faint">
+          {t.setBuilder.guideLinkText}
+        </Link>
+        .
+      </p>
 
       <div onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generate(); }}>
         <Card className="mb-6">
