@@ -30,6 +30,35 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-20 - Set Builder: guida scopribile + dig "Sorprendimi"
+
+Due interventi di frontend, brainstorming → spec → piano → esecuzione a subagent
+con review a ogni task (spec in `docs/superpowers/specs/`, piano in
+`docs/superpowers/plans/`, entrambi 2026-07-20).
+
+- **Guida del Set Builder visibile**: l'icona-fantasma `?` (solo icona,
+  `text-faint`, in alto a destra) diventa un link con testo "Guida"/"Guide" a
+  contrasto pieno, piu' un richiamo inline in coda alla frase introduttiva
+  ("…leggi la guida" / "…read the guide"). Solo markup + i18n, nessuno stato.
+- **Dig "Sorprendimi"** (`discovery-dig-bar.tsx`, `discovery/page.tsx`): bottone
+  accanto a "Scava" che pesca un seme casuale **dal gusto** (generi di libreria
+  + etichette, style curati esclusi) e una profondita' a caso, poi lancia il dig.
+  Roulette dei parametri lato client: il motore di dig resta deterministico
+  (nessuna modifica al backend), l'URL risultante e' condivisibile/riproducibile.
+- Logica di pick isolata e pura in `lib/discovery-surprise.ts` (`pickSurprise`,
+  RNG iniettabile): pick uniforme, **anti-ripetizione** del seme corrente
+  (case-insensitive), e se resta l'unico seme lo ripesca. La barra si aggiorna
+  mostrando seme+profondita' pescati; **reroll automatico singolo** sul colpo a
+  vuoto (seme senza risultati), poi l'empty state normale.
+- Verifica browser dal vivo (backend reale): "Sorprendimi" ha pescato
+  *Submerge Recordings* → 35 lead. Un difetto colto solo qui — la barra non
+  rifletteva il seme pescato — corretto sincronizzando lo stato in `navigateDig`.
+- Pulizia post-review: `DEPTH_VALUES` derivato da `DEPTHS` (una sola fonte per la
+  profondita'); `SeedType` e `DEPTHS` spostati in `lib/discovery-dig.ts`, togliendo
+  la dipendenza invertita `lib/ → components/`.
+- Test: unit su `pickSurprise` (6) e sul bottone della dig-bar; suite frontend
+  85/85, `tsc`/lint puliti. Merge locale in `master` (non pushato).
+
 ## Milestone 2026-07-20 - Shazam: fine del martellamento sotto 429, attese visibili
 
 Diagnosi del run parziale del 2026-07-19 (mix SoundCloud 2h08: abort a 57min,
