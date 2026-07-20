@@ -122,6 +122,12 @@ function DiscoveryInner() {
   };
 
   const navigateDig = (seed: SeedType, value: string, d: number) => {
+    // Sincronizza la barra col seme pescato: "Sorprendimi" (e il reroll) aggiornano
+    // l'URL ma il componente non rimonta, quindi lo state va allineato a mano perché
+    // Combobox e profondità mostrino cosa è uscito.
+    setSeedType(seed);
+    setSubject(value);
+    setDepth(d);
     const params = new URLSearchParams();
     params.set("seed", seed);
     params.set("value", value);
@@ -149,6 +155,9 @@ function DiscoveryInner() {
     const pick = pickSurprise(surprisePool, dig.value);
     if (!pick) return;
     surpriseRef.current = true; // anche il reroll nasce da Sorprendimi
+    // navigateDig risincronizza la barra (subject/seedType/depth) col nuovo seme
+    // pescato dal reroll, non un loop di stato
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     navigateDig(pick.seedType, pick.value, pick.depth);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dig]);
