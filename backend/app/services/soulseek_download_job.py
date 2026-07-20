@@ -30,6 +30,7 @@ STALL_TIMEOUT = 60.0           # transfer InProgress ma bytesTransferred fermo d
 QUEUE_PATIENCE = 45.0          # oltre questo, se resta solo in coda, si prova un altro utente
 HARD_TIMEOUT = 1800.0          # tetto assoluto anche se il progresso avanza (lossless da peer lenti)
 MAX_ATTEMPTS = 4               # quanti candidati (utenti diversi) provare per traccia
+SEARCH_MAX_WAIT = 15.0         # il job e' in background: attesa piena per variante, non il budget ridotto di /candidates
 
 _lock = threading.Lock()
 _state: dict = {
@@ -209,7 +210,8 @@ def _process_item(db, client, download_dir, track,
 
     # Cascata di varianti di query (la letterale spesso esclude file validi).
     ranked = search_candidates(client, artist=track.artist or "",
-                               title=track.title or "", expected_duration=expected)
+                               title=track.title or "", expected_duration=expected,
+                               max_wait=SEARCH_MAX_WAIT)
     if not ranked:
         return "not_found", None, None
     # La confidenza si valuta su tutti i candidati: un primo posto incerto non

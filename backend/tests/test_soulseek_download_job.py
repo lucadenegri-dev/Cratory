@@ -448,6 +448,27 @@ def test_auto_pick_nessun_confidente_va_in_needs_review(patch_job, monkeypatch):
     assert fake.enqueued == []
 
 
+def test_job_usa_il_budget_di_attesa_pieno_per_la_ricerca(patch_job, monkeypatch):
+    # Il job gira in background: nessun vincolo di latenza HTTP, quindi non
+    # deve ereditare il budget ridotto dell'endpoint sincrono /candidates
+    # (5s < searchTimeout del daemon → liste vuote sulle tracce rare).
+    from app.services.soulseek_select import CANDIDATE_SEARCH_MAX_WAIT
+    TestSession, fake = patch_job
+    captured = {}
+
+    def fake_search(*a, **kw):
+        captured.update(kw)
+        return []
+
+    monkeypatch.setattr(job, "search_candidates", fake_search)
+    track_id = _make_track(TestSession, "budget1")
+
+    job._run([(track_id, None)], None)
+
+    assert captured.get("max_wait") == job.SEARCH_MAX_WAIT
+    assert job.SEARCH_MAX_WAIT > CANDIDATE_SEARCH_MAX_WAIT
+
+
 def test_auto_pick_primo_confidente_resta_scelto(patch_job, monkeypatch):
     # Il primo per score e' anche confidente: si sceglie lui (nessun cambio).
     TestSession, fake = patch_job

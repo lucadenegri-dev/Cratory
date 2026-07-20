@@ -17,12 +17,18 @@ LOSSY_EXTS = {"mp3", "m4a", "aac", "ogg", "opus", "wma"}
 
 AUTO_PICK_MIN_CONFIDENCE = 0.7
 _MIN_NAME_SCORE = 0.45
+# Soglia del ripescaggio quando la cascata esaurisce le varianti a vuoto: sotto
+# la soglia piena ma sopra la spazzatura. I ripescati hanno confidenza < 0.7 per
+# costruzione (name < 0.45 → 0.45*0.8 + 0.2 + 0.1 < 0.7): mai auto-pickabili,
+# finiscono in needs_review per la revisione umana invece di un not_found secco.
+_RELAXED_NAME_SCORE = 0.30
 
 # Budget di attesa per variante di query nella cascata di search_candidates.
-# query_variants() produce al massimo 3 varianti: con il default di SlskdClient
+# query_variants() produce al massimo 5 varianti: con il default di SlskdClient
 # (max_wait=15.0) il caso peggiore per /api/downloads/candidates (sincrono
-# sulla request HTTP) arrivava a ~45s. Configurabile (monkeypatchabile nei
-# test); il default riporta il totale nel caso peggiore a ~15s.
+# sulla request HTTP) esploderebbe; questo default lo tiene a ~25s (5x5s), e
+# solo quando OGNI variante torna a vuoto. Il job in background non ha vincoli
+# di latenza e passa il suo budget pieno (SEARCH_MAX_WAIT).
 CANDIDATE_SEARCH_MAX_WAIT = 5.0
 
 # Token di versione: per un DJ il radio edit al posto dell'extended e' un fallimento
@@ -62,7 +68,10 @@ class ScoredCandidate:
 
 def _norm(text: str | None) -> str:
     text = (text or "").lower().replace("&", " and ")
-    text = re.sub(r"[^\w\s]", " ", text)
+    # L'underscore e' \w ma nei nomi Soulseek e' un separatore di parole
+    # ("Daft_Punk_-_Digital_Love"): senza trattarlo come spazio i match
+    # perfetti in quello stile crollano sotto la soglia minima.
+    text = re.sub(r"[^\w\s]|_", " ", text)
     return _SPACE_RE.sub(" ", text).strip()
 
 
@@ -81,6 +90,19 @@ def _basename_stem(filename: str) -> str:
     """
     name = filename.replace("\\", "/").rsplit("/", 1)[-1]
     return _strip_extension(name)
+
+
+def _path_segments(filename: str) -> list[str]:
+    """Segmenti del path normalizzati (cartelle + nome file senza estensione).
+
+    L'artista spesso vive in una cartella intermedia: confrontarlo col singolo
+    segmento (ratio quasi 1.0 su "Chemical Brothers") da' un segnale netto che
+    sul path intero appiattito affogherebbe nel rumore di anno/formato/album.
+    """
+    parts = filename.replace("\\", "/").split("/")
+    if parts:
+        parts[-1] = _strip_extension(parts[-1])
+    return [seg for seg in (_norm(p) for p in parts) if seg]
 
 
 def _version_tokens(text_norm: str) -> set[str]:
@@ -104,11 +126,16 @@ def _name_score(file: SlskdFile, artist: str, title: str) -> float:
         elif t in full:
             s += 0.15
     if a:
-        # Artista: di solito e' una cartella del path → cerca nell'intero path.
+        # Artista: di solito e' una cartella del path → substring sull'intero
+        # path, altrimenti miglior similarita' sui singoli segmenti (cartella
+        # "Chemical Brothers" per "The Chemical Brothers": ratio ~0.9 sul
+        # segmento, irriconoscibile sul path appiattito).
         if a in full:
             s += 0.15
         else:
-            s += SequenceMatcher(None, a, full).ratio() * 0.10
+            best = max((SequenceMatcher(None, a, seg).ratio()
+                        for seg in _path_segments(file.filename)), default=0.0)
+            s += best * 0.15
     # Versioni esplicite: la versione richiesta va premiata, quella non richiesta
     # (o mancante quando richiesta) penalizzata — la similarita' generica da sola
     # non distingue "Song (Radio Edit)" da "Song (Extended Mix)".
@@ -233,6 +260,18 @@ def _clean_title(title: str) -> str:
     return _SPACE_RE.sub(" ", t).strip()
 
 
+# Separatori tra artisti multipli nei metadati streaming ("A, B", "A & B",
+# "A feat. B", "A x B"): "x" e "vs" solo come token isolati tra spazi.
+_ARTIST_SPLIT_RE = re.compile(
+    r"\s*(?:,|;|&|\s+x\s+|\s+vs\.?\s+|\s+(?:feat\.?|ft\.?|featuring)\s+)\s*",
+    re.IGNORECASE,
+)
+
+
+def _primary_artist(artist: str) -> str:
+    return _ARTIST_SPLIT_RE.split(artist or "", maxsplit=1)[0].strip()
+
+
 def query_variants(artist: str, title: str) -> list[str]:
     """Varianti di query in ordine di fedelta': completa → pulita → essenziale.
 
@@ -252,20 +291,53 @@ def query_variants(artist: str, title: str) -> list[str]:
     stop = _VERSION_TOKENS | {"original", "mix"}
     core = " ".join(w for w in cleaned.split() if w.lower() not in stop)
     add(f"{artist} {core}")
+    # Ultima spiaggia: solo il primo artista ("come la digiterebbe un umano").
+    # Con artisti multipli il match AND di Soulseek esclude i file nominati col
+    # solo artista principale; tenerlo in query preserva comunque l'ancora
+    # sull'artista (una query solo-titolo pescherebbe file di chiunque).
+    primary = _primary_artist(artist)
+    if primary and primary != artist:
+        add(f"{primary} {cleaned}")
+        add(f"{primary} {core}")
     return variants
 
 
 def search_candidates(client, *, artist: str, title: str,
                       expected_duration: int | None = None,
                       pref: QualityPreference = QualityPreference(),
-                      min_name_score: float = _MIN_NAME_SCORE) -> list[ScoredCandidate]:
+                      min_name_score: float = _MIN_NAME_SCORE,
+                      max_wait: float | None = None) -> list[ScoredCandidate]:
     """Cerca su slskd provando le varianti di query in cascata: si ferma alla
-    prima che produce almeno un candidato valido (post-filtro)."""
+    prima che produce almeno un candidato valido (post-filtro).
+
+    Il searchTimeout passato al daemon resta SOTTO `max_wait`: slskd popola
+    /responses solo a ricerca completa, quindi un'attesa piu' corta del timeout
+    della ricerca legge liste vuote proprio sulle tracce rare (che il timeout
+    lo consumano tutto). `max_wait` di default e' il budget ridotto pensato per
+    l'endpoint sincrono /candidates; i chiamanti senza vincoli di latenza (job
+    in background) possono passarne uno piu' ampio."""
+    if max_wait is None:
+        max_wait = CANDIDATE_SEARCH_MAX_WAIT
+    search_timeout_ms = max(1000, int((max_wait - 1.0) * 1000))
+    seen: set[tuple[str, str]] = set()
+    collected: list = []
     for query in query_variants(artist, title):
-        files = client.search(query, "", max_wait=CANDIDATE_SEARCH_MAX_WAIT)
+        files = client.search(query, "", max_wait=max_wait,
+                              search_timeout_ms=search_timeout_ms)
+        for f in files:
+            key = (f.username, f.filename)
+            if key not in seen:
+                seen.add(key)
+                collected.append(f)
         ranked = rank_candidates(files, artist=artist, title=title, pref=pref,
                                  min_name_score=min_name_score,
                                  expected_duration=expected_duration)
         if ranked:
             return ranked
-    return []
+    # Ripescaggio: nessuna variante ha prodotto candidati sopra soglia, ma i
+    # file raccolti potrebbero contenere match plausibili nominati male (a mano
+    # si riconoscono a vista). Soglia ridotta sui file accumulati: l'esito per
+    # il chiamante passa da not_found a needs_review, mai ad auto-pick.
+    return rank_candidates(collected, artist=artist, title=title, pref=pref,
+                           min_name_score=_RELAXED_NAME_SCORE,
+                           expected_duration=expected_duration)

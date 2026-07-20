@@ -78,6 +78,38 @@ def test_name_match_uses_basename_not_full_path():
     assert best.confidence >= 0.7
 
 
+# --- Path nel punteggio: underscore e artista nella cartella padre --------------
+
+
+def test_nome_file_con_underscore_riconosciuto():
+    # Stile Soulseek classico: "Daft_Punk_-_Digital_Love.flac" e' un match
+    # perfetto ma con gli underscore trattati come caratteri di parola veniva
+    # scartato del tutto (name_score ~0.38, sotto la soglia 0.45).
+    files = [_f("Daft_Punk_-_Digital_Love.flac")]
+    ranked = rank_candidates(files, artist="Daft Punk", title="Digital Love")
+    assert len(ranked) == 1
+    best = best_for_auto(files, artist="Daft Punk", title="Digital Love")
+    assert best is not None and best.confidence >= 0.7
+
+
+def test_naming_scene_con_underscore_e_trattini():
+    # Rip old-school: cartella VA + "B2-daft_punk-digital_love.mp3".
+    files = [_f("VA-Ibiza_2001\\B2-daft_punk-digital_love.mp3", bitrate=320)]
+    ranked = rank_candidates(files, artist="Daft Punk", title="Digital Love")
+    assert len(ranked) == 1
+
+
+def test_artista_quasi_uguale_nella_cartella_padre():
+    # Artista solo nella cartella, e per giunta senza il "The": la similarita'
+    # va cercata sul singolo segmento del path (la cartella), non sul path
+    # intero appiattito dove il segnale affoga nel rumore.
+    files = [_f("Chemical Brothers\\04 - Elektrobank (Album Version).mp3",
+                bitrate=320)]
+    best = best_for_auto(files, artist="The Chemical Brothers",
+                         title="Elektrobank")
+    assert best is not None and best.confidence >= 0.7
+
+
 # --- Durata attesa nel ranking (disk-first: la versione giusta, non solo il nome) ---
 
 
@@ -196,6 +228,30 @@ def test_query_variants_titolo_pulito_resta_unico():
     assert query_variants("Arca", "Time") == ["Arca Time"]
 
 
+def test_query_variants_artisti_multipli_riducono_al_primo():
+    # Soulseek fa match AND sui token: con "A, B" in query i file nominati col
+    # solo artista principale non matchano MAI. Le ultime varianti devono
+    # provare col solo primo artista.
+    v = query_variants("FISHER, Chris Lake", "Losing It")
+    assert v[0] == "FISHER, Chris Lake Losing It"
+    assert "FISHER Losing It" in v
+    assert v.index("FISHER Losing It") > v.index("FISHER, Chris Lake Losing It")
+
+
+def test_query_variants_artista_con_ampersand_e_feat():
+    v = query_variants("Dom Dolla & Nelly Furtado", "Dreamin")
+    assert "Dom Dolla Dreamin" in v
+    v2 = query_variants("Jamie Jones feat. Kelis", "Sunshine")
+    assert "Jamie Jones Sunshine" in v2
+
+
+def test_query_variants_primo_artista_combinato_con_titolo_pulito():
+    # La riduzione dell'artista si combina con la pulizia del titolo: e' la
+    # variante "come la digiterebbe un umano".
+    v = query_variants("Camelphat, Elderbrook", "Cola (Extended Mix)")
+    assert "Camelphat Cola" in v
+
+
 def test_search_candidates_cascata_si_ferma_alla_prima_utile():
     class FakeClient:
         def __init__(self):
@@ -240,9 +296,74 @@ def test_search_candidates_usa_un_budget_di_attesa_ridotto():
     assert select_mod.CANDIDATE_SEARCH_MAX_WAIT <= 5.0
 
 
+def test_search_candidates_timeout_ricerca_sotto_il_budget_di_attesa():
+    # slskd popola /responses solo a ricerca COMPLETA: se il searchTimeout del
+    # daemon (default 6s) supera il max_wait dell'attesa, per le tracce rare si
+    # legge una lista vuota anche quando i file esistono (a mano si trovano, in
+    # automatico no). Il timeout passato al daemon deve stare SOTTO l'attesa.
+    class FakeClient:
+        def __init__(self):
+            self.kwargs = []
+
+        def search(self, artist, title, **kw):
+            self.kwargs.append(kw)
+            return [_f("Daft Punk - Da Funk.flac")]
+
+    client = FakeClient()
+    search_candidates(client, artist="Daft Punk", title="Da Funk")
+    kw = client.kwargs[0]
+    assert kw.get("search_timeout_ms") is not None
+    assert kw["search_timeout_ms"] < kw["max_wait"] * 1000
+
+
+def test_search_candidates_max_wait_personalizzato_mantiene_l_invariante():
+    # Il job in background non ha vincoli di latenza HTTP: puo' passare un
+    # budget piu' ampio, e il timeout del daemon deve seguirlo restando sotto.
+    class FakeClient:
+        def __init__(self):
+            self.kwargs = []
+
+        def search(self, artist, title, **kw):
+            self.kwargs.append(kw)
+            return [_f("Daft Punk - Da Funk.flac")]
+
+    client = FakeClient()
+    search_candidates(client, artist="Daft Punk", title="Da Funk", max_wait=15.0)
+    kw = client.kwargs[0]
+    assert kw["max_wait"] == 15.0
+    assert kw["search_timeout_ms"] < 15_000
+
+
 def test_search_candidates_esaurisce_le_varianti_a_vuoto():
     class EmptyClient:
         def search(self, artist, title, **kw):
             return []
 
     assert search_candidates(EmptyClient(), artist="A", title="B (feat. C) - Dub") == []
+
+
+# --- Giro finale a filtro ridotto (not_found → needs_review) --------------------
+
+
+def test_search_candidates_ripescaggio_a_filtro_ridotto():
+    # Nome debole ma plausibile (score ~0.40, sotto la soglia 0.45): oggi la
+    # cascata torna vuota → not_found secco, mentre a mano il file si trova e
+    # si riconosce. Esaurite le varianti, i file raccolti vanno ri-rankati con
+    # soglia ridotta: l'esito diventa needs_review coi candidati gia' pronti.
+    class WeakClient:
+        def search(self, artist, title, **kw):
+            return [_f("mix rip\\dafunk daft.flac")]
+
+    ranked = search_candidates(WeakClient(), artist="Daft Punk", title="Da Funk")
+    assert len(ranked) == 1  # stesso file da ogni variante: dedup, non doppioni
+    # Mai auto-pickabile: il ripescaggio serve alla revisione umana, non al
+    # download automatico di un match incerto.
+    assert ranked[0].confidence < 0.7
+
+
+def test_search_candidates_ripescaggio_non_salva_la_spazzatura():
+    class GarbageClient:
+        def search(self, artist, title, **kw):
+            return [_f("Completely Unrelated Song.flac")]
+
+    assert search_candidates(GarbageClient(), artist="Daft Punk", title="Da Funk") == []
