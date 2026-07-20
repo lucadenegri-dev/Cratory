@@ -17,7 +17,8 @@ import { Alert, Chip, EmptyState, Loading, SegmentedControl } from "@/components
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { applyLens, DiscoveryLeadGrid, FORMAT_VALUES, type SortMode } from "@/components/discovery-lead-grid";
-import { DiscoveryDigBar, type SeedType } from "@/components/discovery-dig-bar";
+import { DiscoveryDigBar } from "@/components/discovery-dig-bar";
+import { type SeedType } from "@/lib/discovery-dig";
 import { pickSurprise } from "@/lib/discovery-surprise";
 import { useI18n } from "@/lib/i18n";
 
