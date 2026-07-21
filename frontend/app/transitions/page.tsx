@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
 import { errText, transitions as fetchTransitions, apiGet, trackLabel, type Track, type TransitionCandidate } from "@/lib/api";
@@ -9,6 +10,7 @@ import { PageLayout } from "@/components/page-layout";
 import { TrackCover } from "@/components/track-cover";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
+import { withFrom } from "@/lib/back-link";
 
 const LENS_DEFS = [
   { value: "all", key: "all" },
@@ -27,6 +29,7 @@ export default function TransitionFinder() {
   // Risposta taggata con la chiave della richiesta che l'ha prodotta: lo stato
   // si aggiorna solo nei callback async (niente setState sincrono nell'effect)
   // e i risultati stantii di una richiesta precedente vengono ignorati.
+  const from = usePathname();
   const [response, setResponse] = useState<
     { key: string; results: TransitionCandidate[] | null; error: string | null } | null
   >(null);
@@ -162,7 +165,7 @@ export default function TransitionFinder() {
                   <li key={track.id} className="px-4 py-3 text-sm">
                     <div className="flex items-center gap-3">
                       <Badge tone="neutral" className="tnum w-9 justify-center">{score.score}</Badge>
-                      <Link href={`/tracks/${track.id}`} className="min-w-0 flex-1 truncate font-medium hover:text-fg-strong">{trackLabel(track)}</Link>
+                      <Link href={withFrom(`/tracks/${track.id}`, from)} className="min-w-0 flex-1 truncate font-medium hover:text-fg-strong">{trackLabel(track)}</Link>
                       {track.has_local_file && <Badge tone="success" className="shrink-0">{t.transitions.hasFileBadge}</Badge>}
                       {score.classification && (
                         <Badge tone="neutral" className="shrink-0">

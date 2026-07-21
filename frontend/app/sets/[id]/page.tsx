@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { use, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Sparkles, Download, Lightbulb, SlidersHorizontal,
@@ -18,6 +18,7 @@ import { TrackPlayButton } from "@/components/track-play-button";
 import { SetArc } from "@/components/set-arc";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
+import { withFrom } from "@/lib/back-link";
 
 /* Riordino ottimistico: scambio due righe subito, il server poi restituisce la verità
    (con transition_score/mix_tip ricalcolati). */
@@ -90,6 +91,8 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
   const [addQuery, setAddQuery] = useState("");
   const [addResults, setAddResults] = useState<Track[] | null>(null);
   const [addLoading, setAddLoading] = useState(false);
+
+  const from = usePathname();
 
   useEffect(() => {
     apiGet<Setlist>(`/api/sets/${id}`).then(setSetlist).catch((e) => setError(String(e.message ?? e)));
@@ -384,7 +387,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     {st.role && <Badge tone="neutral">{st.role}</Badge>}
-                    <Link href={`/tracks/${st.track.id}`} className="truncate font-medium hover:text-fg-strong">{trackLabel(st.track)}</Link>
+                    <Link href={withFrom(`/tracks/${st.track.id}`, from)} className="truncate font-medium hover:text-fg-strong">{trackLabel(st.track)}</Link>
                     <span className="tnum shrink-0 text-xs text-fg">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? "?"} <span className="text-muted">· {fmtDuration(st.track.duration_seconds)}{st.track.genre ? ` · ${st.track.genre}` : ""}</span></span>
                     {st.transition_class && (
                       <Badge tone="neutral">

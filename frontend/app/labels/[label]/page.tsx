@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { use, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Pencil, Shovel } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
@@ -12,6 +13,7 @@ import { TrackStateIcons } from "@/components/track-state-icons";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { MiniBars, type MiniBarRow } from "@/components/dashboard/mini-bars";
 import { useT } from "@/lib/i18n";
+import { withFrom } from "@/lib/back-link";
 
 export default function LabelDetail({ params }: { params: Promise<{ label: string }> }) {
   const t = useT();
@@ -24,6 +26,9 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
   const [qTitle, setQTitle] = useState("");
   const [qArtist, setQArtist] = useState("");
   const [qGenre, setQGenre] = useState("");
+
+  // Origine per il link indietro del dettaglio traccia (es. "/labels/Hessle%20Audio").
+  const from = usePathname();
 
   useEffect(() => {
     apiGet<{ total: number; items: Track[] }>("/api/tracks", { label, limit: 500, sort: "artist" })
@@ -103,7 +108,7 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
               <tr key={tr.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
                 <td className={`${cell} tnum text-faint`}>{String(i + 1).padStart(2, "0")}</td>
                 <td className={cell}>
-                  <Link href={`/tracks/${tr.id}`} className="flex items-center gap-2.5">
+                  <Link href={withFrom(`/tracks/${tr.id}`, from)} className="flex items-center gap-2.5">
                     <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
                     <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
                   </Link>
