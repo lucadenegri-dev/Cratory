@@ -148,7 +148,7 @@ imported Spotify and SoundCloud playlist in one job; liked playlists are exclude
 platforms (they grow through the selective flow). A playlist that fails does not stop the
 others: the job still ends `done` and the aggregate report lands in `sync_all`
 (`synced`, `failed`, summed `created`/`updated`/`removed`/`skipped`, plus `failures` with
-name, platform and reason). While it runs, `current_label` carries the playlist in flight
+`playlist_id`, `name`, `platform` and `error`). While it runs, `current_label` carries the playlist in flight
 with its own item progress, and `processed`/`total` count playlists, not tracks. Responds
 `409 no_syncable_playlists` when there is nothing to realign.
 `DELETE /api/playlists/{playlist_id}` removes the playlist and its "orphan leads":
