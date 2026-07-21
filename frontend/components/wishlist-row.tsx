@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Download as DownloadIcon, Link2, MoreHorizontal, RotateCcw, Search, ShoppingCart } from "lucide-react";
 import { Badge, Button, DropdownMenu } from "@/components/ui";
 import { STORES, storeQuery } from "@/lib/store-links";
@@ -14,6 +13,7 @@ export type WishlistRowProps = {
   track: Track;
   archived?: boolean;              // vista "mostra archiviate": solo Ripristina + Compra
   downloadsAvailable: boolean;     // slskd configurato e nessun job in corso
+  from: string;                    // origine per i link indietro (path+query vivi della pagina, vedi wishlist/page.tsx)
   onDownload: (t: Track) => void;  // auto-pick (mai tentata / riprova)
   onReview: (t: Track) => void;    // apre DownloadReviewModal
   onLinkFile: (t: Track) => void;  // apre LinkLocalFileModal
@@ -33,7 +33,7 @@ const BADGE_TONE: Record<WishlistStatus, "warning" | "danger" | "neutral"> = {
 const MAX_CHIPS = 2;
 
 export function WishlistRow({
-  track, archived, downloadsAvailable,
+  track, archived, downloadsAvailable, from,
   onDownload, onReview, onLinkFile, onClearOutcome, onArchive, onRestore,
 }: WishlistRowProps) {
   const t = useT();
@@ -51,8 +51,6 @@ export function WishlistRow({
   const chips = track.playlists.slice(0, MAX_CHIPS);
   const extra = track.playlists.length - chips.length;
   const q = storeQuery(track.artist, track.title);
-  // Origine per i link indietro di dettaglio traccia e dettaglio playlist.
-  const from = usePathname();
 
   const primary = (() => {
     if (archived) return null;

@@ -37,8 +37,9 @@ Due interventi, brainstorming → spec → piano → esecuzione a task (spec in
 
 - **Il link "indietro" non mente piu'**: al dettaglio traccia si arriva da mezza
   app, ma il ritorno buttava sempre in libreria. Ora ogni link verso un dettaglio
-  porta `?from=<path+query>` e la pagina di dettaglio torna esattamente li',
-  filtri e paginazione compresi, con l'etichetta della sezione di provenienza.
+  porta `?from=<path+query>` e la pagina di dettaglio torna esattamente li', con
+  l'etichetta della sezione di provenienza; dove i filtri vivono nell'URL
+  (libreria, wishlist) tornano anche filtri e paginazione.
 - Logica isolata e pura in `lib/back-link.ts` (`resolveBackLink`, `sectionOf`,
   `withFrom`): valida che `from` sia un path interno (niente `//host` o `/\host`)
   e che punti a una sezione nota, altrimenti ripiega sul default della pagina.

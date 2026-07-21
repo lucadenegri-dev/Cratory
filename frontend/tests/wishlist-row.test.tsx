@@ -17,36 +17,43 @@ const base = {
 
 const noop = { onDownload: vi.fn(), onReview: vi.fn(), onLinkFile: vi.fn(), onClearOutcome: vi.fn(), onArchive: vi.fn(), onRestore: vi.fn() };
 
+// Valore realistico di `from` come lo calcola WishlistInner (path + query dei
+// filtri vivi, vedi app/wishlist/page.tsx): la riga non lo ricostruisce piu' da
+// usePathname(), lo riceve come prop.
+const from = "/wishlist?tab=not_found&q=aphex";
+
 describe("WishlistRow", () => {
   it("mostra label, chip playlist e badge 'mai tentata'", () => {
-    render(<WishlistRow track={base} downloadsAvailable {...noop} />);
+    render(<WishlistRow track={base} downloadsAvailable from={from} {...noop} />);
     expect(screen.getByText("Marco Faraone — Real Freak")).toBeTruthy();
-    // usePathname() fuori da un router provider (qui in jsdom) restituisce null;
-    // withFrom lo serializza comunque con encodeURIComponent, da cui "?from=null".
-    expect(screen.getByText("Techno Peak").closest("a")?.getAttribute("href")).toBe("/playlists/7?from=null");
-    expect(screen.getByText("Scoperte").closest("a")?.getAttribute("href")).toBe("/playlists/9?from=null");
+    // `from` arriva come prop (path + query dei filtri correnti della wishlist):
+    // l'href deve portare l'origine esatta, codificata per intero (query compresa).
+    expect(screen.getByText("Techno Peak").closest("a")?.getAttribute("href"))
+      .toBe("/playlists/7?from=%2Fwishlist%3Ftab%3Dnot_found%26q%3Daphex");
+    expect(screen.getByText("Scoperte").closest("a")?.getAttribute("href"))
+      .toBe("/playlists/9?from=%2Fwishlist%3Ftab%3Dnot_found%26q%3Daphex");
     expect(screen.getByText("mai tentata")).toBeTruthy();
   });
 
   it("azione primaria contestuale: Scarica se mai tentata, Riprova se non trovata, Rivedi se in review", () => {
-    const { rerender } = render(<WishlistRow track={base} downloadsAvailable {...noop} />);
+    const { rerender } = render(<WishlistRow track={base} downloadsAvailable from={from} {...noop} />);
     fireEvent.click(screen.getByText("Scarica"));
     expect(noop.onDownload).toHaveBeenCalled();
-    rerender(<WishlistRow track={{ ...base, last_download_outcome: "not_found" } as Track} downloadsAvailable {...noop} />);
+    rerender(<WishlistRow track={{ ...base, last_download_outcome: "not_found" } as Track} downloadsAvailable from={from} {...noop} />);
     expect(screen.getByText("Riprova")).toBeTruthy();
-    rerender(<WishlistRow track={{ ...base, last_download_outcome: "needs_review" } as Track} downloadsAvailable {...noop} />);
+    rerender(<WishlistRow track={{ ...base, last_download_outcome: "needs_review" } as Track} downloadsAvailable from={from} {...noop} />);
     fireEvent.click(screen.getByText("Rivedi"));
     expect(noop.onReview).toHaveBeenCalled();
   });
 
   it("scaricata-non-collegata: primaria = Collega file", () => {
-    render(<WishlistRow track={{ ...base, last_download_outcome: "downloaded" } as Track} downloadsAvailable {...noop} />);
+    render(<WishlistRow track={{ ...base, last_download_outcome: "downloaded" } as Track} downloadsAvailable from={from} {...noop} />);
     fireEvent.click(screen.getByText("Collega file"));
     expect(noop.onLinkFile).toHaveBeenCalled();
   });
 
   it("downloadsAvailable=false disabilita solo il download, Compra resta attivo", () => {
-    render(<WishlistRow track={base} downloadsAvailable={false} {...noop} />);
+    render(<WishlistRow track={base} downloadsAvailable={false} from={from} {...noop} />);
     expect((screen.getByText("Scarica").closest("button") as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByText("Compra"));
     expect(screen.getByText("Bandcamp").closest("a")?.getAttribute("href"))
@@ -54,7 +61,7 @@ describe("WishlistRow", () => {
   });
 
   it("vista archiviata: solo Ripristina e Compra", () => {
-    render(<WishlistRow track={base} archived downloadsAvailable {...noop} />);
+    render(<WishlistRow track={base} archived downloadsAvailable from={from} {...noop} />);
     fireEvent.click(screen.getByText("Ripristina"));
     expect(noop.onRestore).toHaveBeenCalled();
     expect(screen.queryByText("Scarica")).toBeNull();

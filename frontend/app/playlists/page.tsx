@@ -89,6 +89,11 @@ export default function PlaylistsPage() {
     setStartingSyncAll(true);
     try {
       await syncAllPlaylists();
+      // Il sync gira in background (barra job globale): senza questo refresh
+      // jobRunning resta false fino al prossimo poll (POLL_MS), lasciando il
+      // bottone cliccabile per un paio di secondi (stesso pattern di doSync
+      // in playlists/[id]/page.tsx).
+      jobs.refresh();
       setNotice(t.playlists.syncAllStarted);
     } catch (e) {
       setError(errText(e));

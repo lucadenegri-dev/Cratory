@@ -87,20 +87,30 @@ function WishlistInner() {
     listImportedPlaylists().then((p) => alive.current && setPlaylists(p)).catch(() => undefined);
   }, []);
 
-  // Stato -> URL (replace + debounce, default fuori dall'URL).
-  useEffect(() => {
+  // Querystring corrente derivata dallo stato dei filtri: unica fonte sia per la
+  // sincronizzazione dell'URL (sotto) sia per il `from` che WishlistRow porta
+  // verso dettaglio traccia e dettaglio playlist, cosi' il back-link torna
+  // esattamente su questa vista filtrata (stesso pattern di library/page.tsx:
+  // si usa lo stato vivo, NON searchParams, che e' indietro di un debounce
+  // rispetto ai filtri appena toccati).
+  const queryString = useMemo(() => {
     const params = new URLSearchParams();
     if (tab !== "all") params.set("tab", tab);
     if (query) params.set("q", query);
     if (playlistFilter) params.set("playlist", playlistFilter);
     if (showArchived) params.set("archived", "1");
-    const next = params.toString();
-    if (next === searchParams.toString()) return;
+    return params.toString();
+  }, [tab, query, playlistFilter, showArchived]);
+  const from = queryString ? `${pathname}?${queryString}` : pathname;
+
+  // Stato -> URL (replace + debounce, default fuori dall'URL).
+  useEffect(() => {
+    if (queryString === searchParams.toString()) return;
     const timer = setTimeout(() => {
-      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+      router.replace(queryString ? `${pathname}?${queryString}` : pathname, { scroll: false });
     }, 300);
     return () => clearTimeout(timer);
-  }, [tab, query, playlistFilter, showArchived, pathname, router, searchParams]);
+  }, [queryString, pathname, router, searchParams]);
 
   const available = jobStatus?.available ?? true;
   const running = jobStatus?.status === "running";
@@ -253,7 +263,7 @@ function WishlistInner() {
               <ul className="divide-y divide-border text-sm">
                 {rows.map((tr) => (
                   <WishlistRow key={tr.id} track={tr} archived={showArchived}
-                    downloadsAvailable={downloadsAvailable}
+                    downloadsAvailable={downloadsAvailable} from={from}
                     onDownload={onDownload}
                     onReview={(x) => setReview({ track_id: x.id, artist: x.artist, title: x.title })}
                     onLinkFile={(x) => setLinking({ id: x.id, artist: x.artist, title: x.title })}
