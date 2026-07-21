@@ -121,8 +121,15 @@ def list_files(
         .where(DupMember.file_id == AudioFile.id, DupGroup.dismissed.is_(False))
         .scalar_subquery()
     )
+    cover_proposal = (
+        select(func.count())
+        .select_from(Issue)
+        .where(Issue.file_id == AudioFile.id, Issue.type == "missing_cover",
+               Issue.status == "open")
+        .scalar_subquery()
+    )
 
-    stmt = select(AudioFile, issue_count, worst_rank, in_dup).where(
+    stmt = select(AudioFile, issue_count, worst_rank, in_dup, cover_proposal).where(
         AudioFile.status == status
     )
     if root_id is not None:
@@ -148,13 +155,14 @@ def list_files(
     stmt = stmt.order_by(ordering, AudioFile.id).limit(limit).offset(offset)
 
     rows = []
-    for f, n_issues, rank, dup_n in db.execute(stmt).all():
+    for f, n_issues, rank, dup_n, cover_n in db.execute(stmt).all():
         rows.append(FileRow(
             id=f.id, root_id=f.root_id, path=f.path, ext=f.ext,
             artist=f.artist, title=f.title, album=f.album, genre=f.genre,
             year=f.year, label=f.label, bitrate=f.bitrate, duration_s=f.duration_s,
             status=f.status, issue_count=n_issues or 0,
             worst_severity=_RANK_SEV.get(rank or 0), in_dup_group=bool(dup_n),
+            cover_source="embedded" if f.has_cover else ("provider" if cover_n else None),
         ))
     return rows
 
