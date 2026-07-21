@@ -31,7 +31,7 @@ from app.integrations.spotify import (
     SpotifyNotConnected,
     SpotifyWebClient,
 )
-from app.repositories import get_playlist
+from app.repositories import get_playlist, list_playlists
 from app.services.playlist_import import (
     LIKED_PLAYLIST_NAME,
     import_playlist,
@@ -50,6 +50,8 @@ _state: dict = {
     "phase": None,  # fetching | importing
     "processed": 0, "total": 0,
     "result": None,
+    "current_label": None,
+    "sync_all": None,
     "error": None, "error_code": None,
     "started_at": None, "finished_at": None,
 }
@@ -98,6 +100,18 @@ def sync_error_for(playlist) -> tuple[str, str] | None:
     if playlist.kind != "liked" and not playlist.platform_playlist_id:
         return ("playlist_not_syncable", "This playlist can't be synced from Spotify.")
     return None
+
+
+def syncable_playlists(db) -> list:
+    """Le playlist riallineabili in blocco, nell'ordine di `list_playlists`.
+
+    Esclude i liked di entrambe le piattaforme (crescono per selezione manuale,
+    non per sync totale) e tutto ciò che `sync_error_for` già rifiuta: playlist
+    manuali, Spotify senza `platform_playlist_id`, SoundCloud senza URL."""
+    return [
+        p for p in list_playlists(db)
+        if p.kind != "liked" and sync_error_for(p) is None
+    ]
 
 
 # --- Handler per kind ----------------------------------------------------------

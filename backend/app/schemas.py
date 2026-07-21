@@ -305,6 +305,28 @@ class PlaylistImportReport(BaseModel):
     total: int = 0
 
 
+class PlaylistSyncFailure(BaseModel):
+    """Una playlist che il sync di massa non è riuscito a riallineare."""
+
+    playlist_id: int
+    name: str
+    platform: str
+    error: str
+
+
+class PlaylistsSyncAllReport(BaseModel):
+    """Esito aggregato del sync di massa: i conteggi sono la somma sulle playlist
+    riuscite, `failures` elenca quelle saltate con il motivo."""
+
+    synced: int
+    failed: int
+    created: int = 0
+    updated: int = 0
+    removed: int = 0
+    skipped: int = 0
+    failures: list[PlaylistSyncFailure] = []
+
+
 class StreamingImportJobStatus(BaseModel):
     """Stato del job unico di import/sync streaming (Spotify/SoundCloud): import
     playlist/liked, import selettivo dei liked, sync. Un solo job alla volta."""
@@ -315,6 +337,10 @@ class StreamingImportJobStatus(BaseModel):
     processed: int = 0
     total: int = 0
     result: PlaylistImportReport | None = None
+    # Sync di massa: la playlist in corso col suo progresso interno ("Techno · 45/120").
+    current_label: str | None = None
+    # Valorizzato solo dal kind playlists_sync_all (per gli altri kind vale `result`).
+    sync_all: PlaylistsSyncAllReport | None = None
     error: str | None = None
     error_code: str | None = None
     started_at: str | None = None
