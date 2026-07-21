@@ -27,6 +27,7 @@ provider services (all optional, all degrade cleanly).
 | `mutagen`           | Read/write audio tags (`integrations/tagio.py`). |
 | `anthropic`         | Claude Haiku calls for the "Resolve with AI" features (`services/ai_tags.py`). |
 | `pyacoustid`        | Acoustic fingerprint lookup against AcoustID (`integrations/acoustid.py`); shells out to `fpcalc`. |
+| `Pillow`            | Ridimensiona le copertine embeddate in miniature 96px (`services/thumbs.py`). Obbligatoria: le cover nei tag arrivano a diversi MB. |
 | `python-dotenv`     | Loads `backend/.env` into `os.environ` at startup (`main.py`). |
 | `httpx`             | HTTP client for provider integrations + FastAPI test client. |
 | `pytest`            | Test runner (`backend/tests`, ~295 tests). |

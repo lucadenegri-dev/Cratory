@@ -26,5 +26,10 @@ class Settings(BaseSettings):
     # Cache thumbnail delle cover proposte (git-ignored, come ./data).
     cover_cache_dir: str = "./data/cover_cache"
 
+    # Cache thumbnail delle cover **embeddate** nei file, generate on-demand.
+    # Separata da cover_cache_dir: entrambe indicizzano per {file_id}.jpg e
+    # condividerle confonderebbe l'artwork reale con la proposta di un provider.
+    thumb_cache_dir: str = "./data/thumb_cache"
+
 
 settings = Settings()
