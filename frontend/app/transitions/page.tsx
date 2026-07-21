@@ -26,10 +26,10 @@ export default function TransitionFinder() {
   const [matches, setMatches] = useState<Track[]>([]);
   const [selected, setSelected] = useState<Track | null>(null);
   const [lens, setLens] = useState<Lens>("all");
+  const from = usePathname();
   // Risposta taggata con la chiave della richiesta che l'ha prodotta: lo stato
   // si aggiorna solo nei callback async (niente setState sincrono nell'effect)
   // e i risultati stantii di una richiesta precedente vengono ignorati.
-  const from = usePathname();
   const [response, setResponse] = useState<
     { key: string; results: TransitionCandidate[] | null; error: string | null } | null
   >(null);
