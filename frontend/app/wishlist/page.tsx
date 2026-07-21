@@ -7,6 +7,7 @@ import { PageLayout } from "@/components/page-layout";
 import { Alert, Button, Card, Checkbox, EmptyState, Input, Loading, Select } from "@/components/ui";
 import { useJobs } from "@/components/jobs-provider";
 import { WishlistRow } from "@/components/wishlist-row";
+import { SlskSearchResults } from "@/components/slsk-search-results";
 import { DownloadReviewModal, type ReviewTarget } from "@/components/download-review-modal";
 import { LinkLocalFileModal, type LinkTarget } from "@/components/link-local-file-modal";
 import { AutoLinkModal } from "@/components/auto-link-modal";
@@ -153,9 +154,12 @@ function WishlistInner() {
 
         {/* Ricerca Soulseek libera ("FreeDownload"): in testa, collassabile (chiusa di default) */}
         <section>
+          {/* Titolo piu' evidente del solito 10px: la ricerca libera e' un
+              punto d'ingresso primario della pagina, non un dettaglio. */}
           <button type="button" onClick={() => setSlskOpen((v) => !v)}
-            className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted hover:text-fg">
-            {slskOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {t.wishlist.soulseekHeading}
+            className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wider text-fg hover:text-fg-strong">
+            {slskOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <Search size={14} className="text-muted" /> {t.wishlist.soulseekHeading}
           </button>
           {slskOpen && (
             <div className="mt-2">
@@ -172,21 +176,7 @@ function WishlistInner() {
                 <p className="mt-2 text-sm text-faint">{t.downloads.noSearchResults(slskQuery)}</p>
               )}
               {slskResults && slskResults.length > 0 && (
-                <ul className="mt-3 divide-y divide-border border border-border">
-                  {slskResults.slice(0, 40).map((c, i) => (
-                    <li key={`${c.username}-${i}`} className="flex items-center justify-between gap-3 px-3 py-2">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm">{c.filename.split(/[\\/]/).pop()}</div>
-                        <div className="text-xs text-faint">
-                          {c.format?.toUpperCase()}{c.bitrate ? ` · ${c.bitrate}kbps` : ""} · {c.username}
-                        </div>
-                      </div>
-                      <Button size="sm" variant="outline" onClick={() => grab(c)} disabled={running}>
-                        <DownloadIcon size={13} /> {t.downloads.downloadButton}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
+                <SlskSearchResults results={slskResults} onGrab={grab} running={running} />
               )}
             </div>
           )}

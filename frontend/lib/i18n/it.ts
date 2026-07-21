@@ -312,6 +312,7 @@ export const it: Dictionary = {
     searchButton: "Cerca",
     searchingLabel: "Ricerca su Soulseek…",
     noSearchResults: (q: string) => `Nessun risultato per «${q}».`,
+    resultsCount: (n: number) => n === 1 ? "1 risultato" : `${n} risultati`,
     downloadButton: "Scarica",
     filterByOutcomeAria: "Filtra per esito",
     filterAll: "Tutte",
