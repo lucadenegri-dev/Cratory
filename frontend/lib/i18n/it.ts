@@ -35,6 +35,8 @@ export const it: Dictionary = {
     error: "Errore",
     retry: "Riprova",
     never: "mai",
+    coverAlt: "copertina",
+    coverProposed: "Copertina proposta da un provider — non ancora nel file",
     empty: "—",
     guide: "Guida",
     inProgress: "In corso",

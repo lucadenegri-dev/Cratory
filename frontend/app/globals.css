@@ -128,3 +128,12 @@ body {
   .eqm-scan { animation: none; left: 38%; }
   .eqm-cursor { animation: none; }
 }
+
+/* ---- Miniature copertine ------------------------------------------------- */
+/* Placeholder "nessuna copertina": stesso dither a scacchiera di .eqm-rest,
+   così un buco nella tabella resta coerente col resto del sistema. */
+.cv-none {
+  background-image: conic-gradient(var(--c-border-strong) 0 90deg, transparent 90deg 180deg, var(--c-border-strong) 180deg 270deg, transparent 270deg 360deg);
+  background-size: 4px 4px;
+  opacity: 0.45;
+}
