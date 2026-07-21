@@ -30,6 +30,25 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-21 - Cover della traccia nelle righe wishlist
+
+Spec in `docs/superpowers/specs/2026-07-21-cover-wishlist-design.md`.
+
+- La wishlist era l'unica lista di tracce senza artwork (libreria, playlist,
+  label, set e transizioni montano tutte `TrackCover`): ora ogni riga apre con la
+  cover a 40px, formato del Set Builder, allineata al blocco titolo + chip di
+  provenienza. Altezza riga da ~59px a 61px, densita' di fatto invariata.
+- Nessuna modifica a backend, API o tipi: `album_art_url` era gia' nella
+  risposta di `GET /api/tracks`. Poiche' la wishlist filtra
+  `has_local_file=false`, `trackCoverSrc` puo' risolvere solo l'artwork Spotify e
+  il ramo "cover embedded nel file" non si attiva mai — verificato in pagina,
+  zero richieste a `/api/tracks/{id}/cover`. Chi non ha artwork mostra il
+  placeholder.
+- La cover e' un `<a>` verso il dettaglio traccia con lo stesso `withFrom(…)` del
+  titolo, ma `aria-hidden` + `tabIndex={-1}`: piu' superficie di click per il
+  mouse, un solo link per traccia per tastiera e screen reader. Il wrapping
+  separato e' anche un vincolo HTML, i chip di provenienza sono gia' `<Link>`.
+
 ## Milestone 2026-07-21 - Ritorno alla pagina di provenienza + sync di tutte le playlist
 
 Due interventi, brainstorming → spec → piano → esecuzione a task (spec in

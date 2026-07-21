@@ -58,7 +58,9 @@ altro `<a>`.
 `WishlistRow` è lo stesso componente per la vista normale e per quella
 archiviata: la cover compare in entrambe.
 
-Costo visivo: altezza riga da ~44px a ~50px.
+Costo visivo: trascurabile. Misurato in pagina, la riga passa da ~59px a 61px:
+il blocco titolo + chip era già alto quanto la cover, quindi i 40px non
+aggiungono altezza, la assecondano.
 
 ## Test
 

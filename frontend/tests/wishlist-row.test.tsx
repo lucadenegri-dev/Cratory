@@ -60,6 +60,23 @@ describe("WishlistRow", () => {
       .toBe("https://bandcamp.com/search?q=Marco%20Faraone%20Real%20Freak");
   });
 
+  // La wishlist carica solo tracce con has_local_file=false, quindi trackCoverSrc
+  // può usare unicamente album_art_url (Spotify): il ramo "artwork embedded dal
+  // file" non si attiva mai e non parte nessuna richiesta a /api/tracks/{id}/cover.
+  it("mostra la cover Spotify quando c'e', altrimenti il placeholder", () => {
+    const { container, rerender } = render(
+      <WishlistRow track={{ ...base, album_art_url: "https://i.scdn.co/image/abc", has_local_file: false } as Track}
+        downloadsAvailable from={from} {...noop} />,
+    );
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("https://i.scdn.co/image/abc");
+
+    rerender(
+      <WishlistRow track={{ ...base, album_art_url: null, has_local_file: false } as Track}
+        downloadsAvailable from={from} {...noop} />,
+    );
+    expect(container.querySelector("img")).toBeNull();
+  });
+
   it("vista archiviata: solo Ripristina e Compra", () => {
     render(<WishlistRow track={base} archived downloadsAvailable from={from} {...noop} />);
     fireEvent.click(screen.getByText("Ripristina"));
