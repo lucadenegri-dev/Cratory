@@ -136,3 +136,37 @@ def test_sync_all_short_circuits_when_spotify_is_disconnected(db, sync_job, monk
     assert report["failed"] == 2
     assert report["synced"] == 1
     assert sorted(f["name"] for f in report["failures"]) == ["S1", "S2"]
+
+
+def test_sync_all_endpoint_409_when_nothing_to_sync(db):
+    """Solo liked e playlist manuali: non c'è nulla da riallineare."""
+    from fastapi import HTTPException
+
+    from app.routers import playlists as playlists_router
+
+    db.add_all([
+        Playlist(platform="spotify", name="Liked", kind="liked"),
+        Playlist(platform="manual", name="Manuale", kind="manual"),
+    ])
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        playlists_router.sync_all_playlists(db)
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "no_syncable_playlists"
+
+
+def test_sync_all_endpoint_409_when_a_job_is_running(db, sync_job):
+    """Slot singolo: un import già in corso blocca il sync di massa."""
+    from fastapi import HTTPException
+
+    from app.routers import playlists as playlists_router
+
+    db.add(Playlist(platform="spotify", name="PL", kind="playlist", platform_playlist_id="PL1"))
+    db.commit()
+    sync_job._state.update(status="running", kind="spotify_playlist")
+
+    with pytest.raises(HTTPException) as exc:
+        playlists_router.sync_all_playlists(db)
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "streaming_import_already_running"
