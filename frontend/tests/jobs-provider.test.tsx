@@ -50,7 +50,7 @@ const idleShazam: ShazamIdentifyState = {
 };
 const idleStreamingImport: StreamingImportJobStatus = {
   status: "idle", kind: null, phase: null, processed: 0, total: 0, result: null,
-  error: null, error_code: null,
+  current_label: null, sync_all: null, error: null, error_code: null,
 };
 
 /** Riporta tutti e sei gli endpoint allo stato idle (nessun job attivo). */
@@ -146,6 +146,33 @@ describe("JobsProvider — merge del poller", () => {
       dismiss.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     expect(screen.queryByText("Connessione persa")).toBeNull();
+  });
+
+  it("il sync di massa mostra la playlist in corso e il riepilogo aggregato all'esito", async () => {
+    streamingImportStatus.mockResolvedValue({
+      ...idleStreamingImport, status: "running", kind: "playlists_sync_all",
+      processed: 2, total: 5, current_label: "Techno 2026 · 45/120",
+    });
+    render(<JobsProvider><div /></JobsProvider>);
+    await tick();
+
+    expect(screen.getByText("Import playlist")).toBeTruthy();
+    // `current_label` (playlist in corso col progresso interno) prevale sulla fase.
+    expect(screen.getByText("Techno 2026 · 45/120")).toBeTruthy();
+
+    // Prossimo poll: sync di massa concluso, con un fallimento.
+    streamingImportStatus.mockResolvedValue({
+      ...idleStreamingImport, status: "done", kind: "playlists_sync_all",
+      processed: 5, total: 5,
+      sync_all: {
+        synced: 4, failed: 1, created: 2, updated: 2, removed: 1, skipped: 0,
+        failures: [{ playlist_id: 9, name: "Foo", platform: "spotify", error: "boom" }],
+      },
+    });
+    await tick(2000); // POLL_MS
+
+    // `sync_all` ha priorità su `result` per il riepilogo dell'esito.
+    expect(screen.getByText("4 sincronizzate · 1 fallite")).toBeTruthy();
   });
 
   it("con la tab nascosta il polling si ferma e riprende al ritorno in foreground", async () => {

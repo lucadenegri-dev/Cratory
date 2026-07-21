@@ -189,11 +189,15 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         : v.phase === "importing" ? t.jobs.streamingImportPhaseImporting
         : undefined;
       track(v.status, {
-        key: "streaming-import", label: t.jobs.streamingImport, detail: phaseDetail,
+        // Nel sync di massa `current_label` porta la playlist in corso col suo
+        // progresso interno: più informativo della sola fase.
+        key: "streaming-import", label: t.jobs.streamingImport, detail: v.current_label ?? phaseDetail,
         processed: v.processed, total: v.total, href: "/playlists",
       }, v.status === "error"
         ? (v.error ?? t.common.error)
-        : v.result ? t.jobs.streamingImportSummary(v.result.name, v.result.created) : t.jobs.completed);
+        : v.sync_all ? t.jobs.syncAllSummary(v.sync_all.synced, v.sync_all.failed)
+        : v.result ? t.jobs.streamingImportSummary(v.result.name, v.result.created)
+        : t.jobs.completed);
     }
     wasRunning.current = nowRunning;
     if (alive.current) setPolled(next);

@@ -63,6 +63,24 @@ export interface PlaylistImportReport {
   total: number;
 }
 
+export interface PlaylistSyncFailure {
+  playlist_id: number;
+  name: string;
+  platform: string;
+  error: string;
+}
+
+/** Esito aggregato del sync di massa (kind `playlists_sync_all`). */
+export interface PlaylistsSyncAllReport {
+  synced: number;
+  failed: number;
+  created: number;
+  updated: number;
+  removed: number;
+  skipped: number;
+  failures: PlaylistSyncFailure[];
+}
+
 export interface Gap {
   gap_type: string;
   severity: "info" | "warning";
@@ -363,6 +381,10 @@ export interface StreamingImportJobStatus {
   processed: number;
   total: number;
   result: PlaylistImportReport | null;
+  /** Sync di massa: playlist in corso col suo progresso interno. */
+  current_label: string | null;
+  /** Valorizzato solo dal sync di massa; per gli altri kind vale `result`. */
+  sync_all: PlaylistsSyncAllReport | null;
   error: string | null;
   error_code: string | null;
 }

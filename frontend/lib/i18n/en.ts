@@ -89,6 +89,8 @@ export const en = {
     streamingImportPhaseFetching: "Fetching",
     streamingImportPhaseImporting: "Importing",
     streamingImportSummary: (name: string, created: number) => `${name} — ${created} new`,
+    syncAllSummary: (synced: number, failed: number) =>
+      `${synced} synced${failed > 0 ? ` · ${failed} failed` : ""}`,
     dig: "Crate digging",
     completed: "Completed",
     dismissError: "Dismiss",
@@ -481,6 +483,12 @@ export const en = {
     syncedPrefix: "Synced: ",
     syncSummary: (created: number, removed: number, total: number) =>
       `${created} new · ${removed} removed (stay in library) · ${total} total`,
+    syncAllButton: "Sync all",
+    syncAllStarted: "Sync started: progress in the bar below.",
+    syncAllSummary: (synced: number, created: number, removed: number) =>
+      `${synced} playlists synced · ${created} new · ${removed} removed (still in the library)`,
+    syncAllFailuresHeading: (n: number) =>
+      n === 1 ? "1 playlist not synced:" : `${n} playlists not synced:`,
     removeButton: "Remove",
     exportRekordboxButton: "Export for Rekordbox (M3U8)",
     exportFailed: (msg: string) => `Export failed: ${msg}`,

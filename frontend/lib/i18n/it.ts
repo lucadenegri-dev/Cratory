@@ -91,6 +91,8 @@ export const it: Dictionary = {
     streamingImportPhaseFetching: "Scarico",
     streamingImportPhaseImporting: "Importo",
     streamingImportSummary: (name: string, created: number) => `${name} — ${created} nuove`,
+    syncAllSummary: (synced: number, failed: number) =>
+      `${synced} sincronizzate${failed > 0 ? ` · ${failed} fallite` : ""}`,
     dig: "Scava crate",
     completed: "Completata",
     dismissError: "Chiudi",
@@ -483,6 +485,12 @@ export const it: Dictionary = {
     syncedPrefix: "Sincronizzato: ",
     syncSummary: (created: number, removed: number, total: number) =>
       `${created} nuove · ${removed} rimosse (restano in libreria) · ${total} totali`,
+    syncAllButton: "Sincronizza tutte",
+    syncAllStarted: "Sincronizzazione avviata: progresso nella barra in basso.",
+    syncAllSummary: (synced: number, created: number, removed: number) =>
+      `${synced} playlist sincronizzate · ${created} nuove · ${removed} rimosse (restano in libreria)`,
+    syncAllFailuresHeading: (n: number) =>
+      n === 1 ? "1 playlist non sincronizzata:" : `${n} playlist non sincronizzate:`,
     removeButton: "Rimuovi",
     exportRekordboxButton: "Esporta per Rekordbox (M3U8)",
     exportFailed: (msg: string) => `Export fallito: ${msg}`,
