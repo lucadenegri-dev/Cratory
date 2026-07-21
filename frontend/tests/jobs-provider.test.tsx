@@ -160,10 +160,16 @@ describe("JobsProvider — merge del poller", () => {
     // `current_label` (playlist in corso col progresso interno) prevale sulla fase.
     expect(screen.getByText("Techno 2026 · 45/120")).toBeTruthy();
 
-    // Prossimo poll: sync di massa concluso, con un fallimento.
+    // Prossimo poll: sync di massa concluso, con un fallimento. `result` è
+    // valorizzato apposta con un report concorrente: se la priorità fosse
+    // invertita la barra mostrerebbe "Residuo — 7 nuove" invece del riepilogo.
     streamingImportStatus.mockResolvedValue({
       ...idleStreamingImport, status: "done", kind: "playlists_sync_all",
       processed: 5, total: 5,
+      result: {
+        playlist_id: 3, name: "Residuo", created: 7, updated: 0,
+        removed: 0, skipped: 0, total: 7,
+      },
       sync_all: {
         synced: 4, failed: 1, created: 2, updated: 2, removed: 1, skipped: 0,
         failures: [{ playlist_id: 9, name: "Foo", platform: "spotify", error: "boom" }],
@@ -173,6 +179,7 @@ describe("JobsProvider — merge del poller", () => {
 
     // `sync_all` ha priorità su `result` per il riepilogo dell'esito.
     expect(screen.getByText("4 sincronizzate · 1 fallite")).toBeTruthy();
+    expect(screen.queryByText("Residuo — 7 nuove")).toBeNull();
   });
 
   it("con la tab nascosta il polling si ferma e riprende al ritorno in foreground", async () => {
