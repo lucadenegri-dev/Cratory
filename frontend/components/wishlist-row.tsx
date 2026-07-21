@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Download as DownloadIcon, Link2, MoreHorizontal, RotateCcw, Search, ShoppingCart } from "lucide-react";
 import { Badge, Button, DropdownMenu } from "@/components/ui";
 import { STORES, storeQuery } from "@/lib/store-links";
 import { wishlistStatus, type WishlistStatus } from "@/lib/wishlist-status";
 import { trackLabel, type Track } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { withFrom } from "@/lib/back-link";
 
 export type WishlistRowProps = {
   track: Track;
@@ -49,6 +51,8 @@ export function WishlistRow({
   const chips = track.playlists.slice(0, MAX_CHIPS);
   const extra = track.playlists.length - chips.length;
   const q = storeQuery(track.artist, track.title);
+  // Origine per i link indietro di dettaglio traccia e dettaglio playlist.
+  const from = usePathname();
 
   const primary = (() => {
     if (archived) return null;
@@ -84,10 +88,10 @@ export function WishlistRow({
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
       <div className="min-w-0 flex-1">
-        <a href={`/tracks/${track.id}`} className="block truncate hover:text-fg-strong">{trackLabel(track)}</a>
+        <a href={withFrom(`/tracks/${track.id}`, from)} className="block truncate hover:text-fg-strong">{trackLabel(track)}</a>
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
           {chips.map((p) => (
-            <Link key={p.id} href={`/playlists/${p.id}`}
+            <Link key={p.id} href={withFrom(`/playlists/${p.id}`, from)}
               className="border border-border px-1.5 py-px text-[10px] uppercase tracking-wider text-muted hover:text-fg">
               {p.name}
             </Link>

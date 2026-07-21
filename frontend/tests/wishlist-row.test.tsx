@@ -21,8 +21,10 @@ describe("WishlistRow", () => {
   it("mostra label, chip playlist e badge 'mai tentata'", () => {
     render(<WishlistRow track={base} downloadsAvailable {...noop} />);
     expect(screen.getByText("Marco Faraone — Real Freak")).toBeTruthy();
-    expect(screen.getByText("Techno Peak").closest("a")?.getAttribute("href")).toBe("/playlists/7");
-    expect(screen.getByText("Scoperte").closest("a")?.getAttribute("href")).toBe("/playlists/9");
+    // usePathname() fuori da un router provider (qui in jsdom) restituisce null;
+    // withFrom lo serializza comunque con encodeURIComponent, da cui "?from=null".
+    expect(screen.getByText("Techno Peak").closest("a")?.getAttribute("href")).toBe("/playlists/7?from=null");
+    expect(screen.getByText("Scoperte").closest("a")?.getAttribute("href")).toBe("/playlists/9?from=null");
     expect(screen.getByText("mai tentata")).toBeTruthy();
   });
 
