@@ -6,7 +6,7 @@ secondo una preferenza configurabile.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from difflib import SequenceMatcher
 
 from app.integrations.slskd import SlskdFile
@@ -22,11 +22,15 @@ _MIN_NAME_SCORE = 0.45
 # costruzione (name < 0.45 → 0.45*0.8 + 0.2 + 0.1 < 0.7): mai auto-pickabili,
 # finiscono in needs_review per la revisione umana invece di un not_found secco.
 _RELAXED_NAME_SCORE = 0.30
+# Tetto di confidenza per i ripescati a qualita' sotto soglia (nome pieno ma
+# bitrate sotto il minimo): sotto AUTO_PICK_MIN_CONFIDENCE per costruzione,
+# cosi' la bassa qualita' non si scarica MAI da sola — solo revisione umana.
+_LOW_QUALITY_CONFIDENCE_CAP = 0.65
 
 # Budget di attesa per variante di query nella cascata di search_candidates.
-# query_variants() produce al massimo 5 varianti: con il default di SlskdClient
+# query_variants() produce al massimo 6 varianti: con il default di SlskdClient
 # (max_wait=15.0) il caso peggiore per /api/downloads/candidates (sincrono
-# sulla request HTTP) esploderebbe; questo default lo tiene a ~25s (5x5s), e
+# sulla request HTTP) esploderebbe; questo default lo tiene a ~30s (6x5s), e
 # solo quando OGNI variante torna a vuoto. Il job in background non ha vincoli
 # di latenza e passa il suo budget pieno (SEARCH_MAX_WAIT).
 CANDIDATE_SEARCH_MAX_WAIT = 5.0
@@ -291,14 +295,21 @@ def query_variants(artist: str, title: str) -> list[str]:
     stop = _VERSION_TOKENS | {"original", "mix"}
     core = " ".join(w for w in cleaned.split() if w.lower() not in stop)
     add(f"{artist} {core}")
-    # Ultima spiaggia: solo il primo artista ("come la digiterebbe un umano").
-    # Con artisti multipli il match AND di Soulseek esclude i file nominati col
-    # solo artista principale; tenerlo in query preserva comunque l'ancora
+    # Riduzione al primo artista ("come la digiterebbe un umano"). Con artisti
+    # multipli il match AND di Soulseek esclude i file nominati col solo
+    # artista principale; tenerlo in query preserva comunque l'ancora
     # sull'artista (una query solo-titolo pescherebbe file di chiunque).
     primary = _primary_artist(artist)
     if primary and primary != artist:
         add(f"{primary} {cleaned}")
         add(f"{primary} {core}")
+    # Ultima spiaggia: SOLO l'artista. Nei rip da vinile/compilation il titolo
+    # nei nomi file e' inaffidabile (apostrofi resi come ', ´ o nulla, "b1"
+    # al posto dell'artista, titolo per intero solo nella cartella release):
+    # ogni query col titolo torna vuota mentre l'artista da solo trova il pool
+    # giusto, e la selezione la fa il ranking (filtro nome + confidenza).
+    if primary:
+        add(primary)
     return variants
 
 
@@ -334,10 +345,21 @@ def search_candidates(client, *, artist: str, title: str,
                                  expected_duration=expected_duration)
         if ranked:
             return ranked
-    # Ripescaggio: nessuna variante ha prodotto candidati sopra soglia, ma i
-    # file raccolti potrebbero contenere match plausibili nominati male (a mano
-    # si riconoscono a vista). Soglia ridotta sui file accumulati: l'esito per
-    # il chiamante passa da not_found a needs_review, mai ad auto-pick.
+    # Ripescaggio qualita': nome PIENO ma bitrate sotto il minimo (i rip anni
+    # '90 spesso esistono SOLO a 160-226kbps). Identita' quasi certa, qualita'
+    # da far decidere all'umano: confidenza cappata sotto l'auto-pick, cosi'
+    # l'esito e' needs_review e mai un download automatico di bassa qualita'.
+    low_pref = replace(pref, min_bitrate=1)
+    ranked_low = rank_candidates(collected, artist=artist, title=title,
+                                 pref=low_pref, min_name_score=min_name_score,
+                                 expected_duration=expected_duration)
+    if ranked_low:
+        return [replace(c, confidence=min(c.confidence, _LOW_QUALITY_CONFIDENCE_CAP))
+                for c in ranked_low]
+    # Ripescaggio nome: nessuna variante ha prodotto candidati sopra soglia, ma
+    # i file raccolti potrebbero contenere match plausibili nominati male (a
+    # mano si riconoscono a vista). Soglia ridotta sui file accumulati: l'esito
+    # per il chiamante passa da not_found a needs_review, mai ad auto-pick.
     return rank_candidates(collected, artist=artist, title=title, pref=pref,
                            min_name_score=_RELAXED_NAME_SCORE,
                            expected_duration=expected_duration)

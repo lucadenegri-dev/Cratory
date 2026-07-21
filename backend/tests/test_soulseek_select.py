@@ -219,13 +219,17 @@ def test_query_variants_pulizia_progressiva():
 
 def test_query_variants_suffisso_versione():
     v = query_variants("deadmau5", "Strobe - Extended Mix")
-    assert "Extended" not in v[-1]
-    assert v[-1].startswith("deadmau5 Strobe")
+    # L'ultima variante col titolo e' senza suffisso versione; dopo resta solo
+    # la ultima-spiaggia solo-artista.
+    assert v[-1] == "deadmau5"
+    assert "Extended" not in v[-2]
+    assert v[-2].startswith("deadmau5 Strobe")
 
 
 def test_query_variants_titolo_pulito_resta_unico():
-    # Titolo gia' pulito: una sola variante, niente doppioni.
-    assert query_variants("Arca", "Time") == ["Arca Time"]
+    # Titolo gia' pulito: niente doppioni, solo la coppia piena e la
+    # ultima-spiaggia solo-artista.
+    assert query_variants("Arca", "Time") == ["Arca Time", "Arca"]
 
 
 def test_query_variants_artisti_multipli_riducono_al_primo():
@@ -250,6 +254,31 @@ def test_query_variants_primo_artista_combinato_con_titolo_pulito():
     # variante "come la digiterebbe un umano".
     v = query_variants("Camelphat, Elderbrook", "Cola (Extended Mix)")
     assert "Camelphat Cola" in v
+
+
+def test_query_variants_solo_artista_come_ultima_spiaggia():
+    # Caso reale (NIP Collective — I'm About (Rave Mix)): nei rip da vinile il
+    # titolo nei nomi file e' inaffidabile (apostrofi resi come ', ´ o nulla,
+    # posizione traccia al posto dell'artista, titolo solo nella cartella della
+    # release). Ogni query col titolo torna vuota; "nip collective" da sola
+    # trova 80+ file, e il ranking sceglie sul pool. La query solo-artista va
+    # provata per ULTIMA: l'ancora resta l'artista, mai il titolo da solo.
+    v = query_variants("NIP Collective", "I'm About (Rave Mix)")
+    assert v[-1] == "NIP Collective"
+    assert v[0] == "NIP Collective I'm About (Rave Mix)"
+
+
+def test_query_variants_solo_artista_usa_il_primo_artista():
+    v = query_variants("FISHER, Chris Lake", "Losing It")
+    assert v[-1] == "FISHER"
+
+
+def test_query_variants_senza_artista_niente_variante_vuota():
+    # Artista mancante: nessuna variante solo-artista (sarebbe una query vuota
+    # o, peggio, solo-titolo senza ancora).
+    v = query_variants("", "Some Title (Remix)")
+    assert all(x.strip() for x in v)
+    assert "Some Title" in v[-1] or v[-1] == "Some Title"
 
 
 def test_search_candidates_cascata_si_ferma_alla_prima_utile():
@@ -367,3 +396,30 @@ def test_search_candidates_ripescaggio_non_salva_la_spazzatura():
             return [_f("Completely Unrelated Song.flac")]
 
     assert search_candidates(GarbageClient(), artist="Daft Punk", title="Da Funk") == []
+
+
+def test_search_candidates_ripescaggio_qualita_sotto_soglia():
+    # Caso reale (NIP Collective 1993): l'UNICA copia in rete e' un mp3 a
+    # 226kbps con nome quasi perfetto (name_score 0.93). Il floor di qualita'
+    # la scartava in silenzio → not_found. Un match di nome pieno a bassa
+    # qualita' va ripescato per la revisione umana, MAI auto-scaricato: la
+    # confidenza resta sotto la soglia di auto-pick per costruzione.
+    class LowBitrateClient:
+        def search(self, artist, title, **kw):
+            return [_f("nip collective - advanced structure ep (1993)\\"
+                       "a1   live on mars (original mix).mp3", bitrate=226)]
+
+    ranked = search_candidates(LowBitrateClient(), artist="NIP Collective",
+                               title="Live On Mars (Original Mix)")
+    assert len(ranked) == 1
+    assert ranked[0].confidence < 0.7
+
+
+def test_search_candidates_bassa_qualita_e_nome_debole_resta_fuori():
+    # Il ripescaggio qualita' richiede il nome PIENO (0.45): bassa qualita'
+    # E nome debole insieme restano spazzatura.
+    class BadClient:
+        def search(self, artist, title, **kw):
+            return [_f("mix rip\\dafunk daft.mp3", bitrate=128)]
+
+    assert search_candidates(BadClient(), artist="Daft Punk", title="Da Funk") == []

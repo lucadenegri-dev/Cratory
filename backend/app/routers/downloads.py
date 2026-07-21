@@ -13,7 +13,9 @@ from app.repositories import get_track, tracks_download_pending
 from app.services import soulseek_download_job as job
 from app.schemas import TrackOut
 from app.serializers import track_out
-from app.services.soulseek_select import rank_candidates, search_candidates
+from app.services.soulseek_select import (
+    QualityPreference, rank_candidates, search_candidates,
+)
 from app.services.download_review import (
     NoReviewFileError, discard_downloaded, keep_downloaded, review_detail,
 )
@@ -209,8 +211,12 @@ def search(req: SearchIn):
         raise api_error(502, "slskd_error", f"slskd error: {exc}", reason=str(exc)) from exc
     finally:
         client.close()
-    # Ricerca libera: slskd ha gia' filtrato per query, l'utente sceglie a vista.
-    ranked = rank_candidates(files, artist="", title=query, min_name_score=0.0)
+    # Ricerca libera: slskd ha gia' filtrato per query, l'utente sceglie a
+    # vista. Niente floor di qualita' (min_bitrate=1): dei rip anni '90 spesso
+    # esiste SOLO una copia a 160-226kbps, e il bitrate e' mostrato in lista —
+    # la scelta e' dell'utente. Il floor resta per l'auto-pick.
+    ranked = rank_candidates(files, artist="", title=query, min_name_score=0.0,
+                             pref=QualityPreference(min_bitrate=1))
     return [_candidate_out(c) for c in ranked]
 
 

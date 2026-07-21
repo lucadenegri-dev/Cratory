@@ -104,6 +104,30 @@ def test_search_returns_candidates(monkeypatch):
     assert body and body[0]["format"] == "flac"
 
 
+def test_search_manuale_mostra_anche_bitrate_sotto_soglia(monkeypatch):
+    # La ricerca libera e' "a vista": un mp3 a 226kbps (unica copia esistente
+    # dei rip anni '90) deve comparire, con bitrate visibile — decide l'utente.
+    # Il floor di qualita' resta solo per l'auto-pick.
+    from app.integrations.slskd import SlskdFile
+
+    class _C:
+        def search(self, a, t, **k):
+            return [SlskdFile(username="u", filename="a1 live on mars.mp3", size=1,
+                              bitrate=226, length=None, has_free_slot=True,
+                              queue_length=0)]
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
+    monkeypatch.setattr(downloads_router, "get_slskd_client", lambda: _C())
+    r = client.post("/api/downloads/search", json={"query": "nip collective"})
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["bitrate"] == 226
+
+
 def test_search_closes_the_slskd_client(monkeypatch):
     from app.integrations.slskd import SlskdFile
 
