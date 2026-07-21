@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Pencil,
   RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart,
@@ -12,6 +12,7 @@ import {
   startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist,
   type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
+import { useBackLink, withFrom } from "@/lib/back-link";
 import { Card, Badge, Alert, Button, Spinner, Input, Select, Checkbox, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { ButtonLink } from "@/components/button-link";
@@ -37,7 +38,7 @@ function camelotRank(key: string | null): number {
   return Number(m[1]) * 2 + (m[2].toUpperCase() === "B" ? 1 : 0);
 }
 
-export default function PlaylistDetail({ params }: { params: Promise<{ id: string }> }) {
+function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const t = useT();
   const STATUS_OPTIONS: [string, string][] = [
     ["ready_for_set", t.library.statusReadyOption],
@@ -46,6 +47,10 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const pid = Number(id);
   const router = useRouter();
+  // Alla playlist si arriva dalla lista, da Shazam e dalla wishlist: si torna
+  // dove eri, non sempre all'elenco.
+  const back = useBackLink({ href: "/playlists", labelKey: "playlists" });
+  const from = usePathname();
   const [downloading, setDownloading] = useState(false);
   const jobs = useJobs();
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
@@ -210,7 +215,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
 
   if (error) return (
     <PageLayout title={t.playlists.pageTitle}>
-      <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.playlists.backLink}</Link>
+      <Link href={back.href} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {back.label}</Link>
       <Alert tone="danger">⚠ {error}</Alert>
     </PageLayout>
   );
@@ -316,7 +321,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
 
   return (
     <PageLayout title={t.playlists.pageTitle} meta={playlist.name} marginaliaTitle={t.playlists.marginaliaDetails} marginalia={marginalia}>
-      <Link href="/playlists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.playlists.backLink}</Link>
+      <Link href={back.href} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {back.label}</Link>
 
       <div className="mb-6 flex flex-wrap items-start gap-4">
         <PlaylistCover artworkUrl={playlist.artwork_url} platform={playlist.platform} kind={playlist.kind} className="h-24 w-24" iconSize={30} placeholderClassName="bg-surface-2" />
@@ -404,7 +409,7 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
               <tr key={tr.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
                 <td className={`${cell} tnum text-faint`}>{insertionRank.get(tr.id) ?? "—"}</td>
                 <td className={cell}>
-                  <Link href={`/tracks/${tr.id}`} className="flex items-center gap-2.5">
+                  <Link href={withFrom(`/tracks/${tr.id}`, from)} className="flex items-center gap-2.5">
                     <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
                     <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
                   </Link>
@@ -475,4 +480,8 @@ export default function PlaylistDetail({ params }: { params: Promise<{ id: strin
       />
     </PageLayout>
   );
+}
+
+export default function PlaylistDetail(props: { params: Promise<{ id: string }> }) {
+  return <Suspense><PlaylistDetailInner {...props} /></Suspense>;
 }

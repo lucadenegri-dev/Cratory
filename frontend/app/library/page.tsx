@@ -95,9 +95,11 @@ function LibraryInner() {
     if (offset > 0) params.set("offset", String(offset));
     return params.toString();
   }, [artist, title, genre, source, status, owned, bpmMin, bpmMax, key, incomplete, sort, order, offset]);
-  // Il suffisso da appendere ai link verso il dettaglio traccia: solo se c'e'
-  // almeno un filtro/sort/offset attivo, altrimenti niente `from` nell'URL.
-  const trackLinkQuery = queryString ? `?from=${encodeURIComponent(queryString)}` : "";
+  // Suffisso `?from=` per i link verso il dettaglio traccia: porta con sé path +
+  // filtri/sort/paginazione, così il link indietro là torna esattamente qui.
+  // NB: si usa `queryString` (lo stato vivo) e non searchParams, che è indietro
+  // di un debounce rispetto ai filtri appena toccati.
+  const trackLinkQuery = `?from=${encodeURIComponent(queryString ? `${pathname}?${queryString}` : pathname)}`;
 
   // Stato -> URL: replace (non push, niente cronologia inquinata) con un debounce
   // leggero per non riscrivere l'URL a ogni tasto negli input di testo.

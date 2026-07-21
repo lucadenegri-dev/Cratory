@@ -162,6 +162,22 @@ def sync_playlist(playlist_id: int, db: Session = Depends(get_db)):
     return streaming_import_job.start_job("playlist_sync", playlist_id=playlist_id)
 
 
+@router.post("/sync-all", response_model=StreamingImportJobStatus, status_code=202)
+def sync_all_playlists(db: Session = Depends(get_db)):
+    """Avvia in background il riallineamento di TUTTE le playlist Spotify e
+    SoundCloud importate; i liked sono esclusi (crescono per selezione manuale).
+    Una playlist che fallisce non ferma le altre: l'elenco dei fallimenti è in
+    `sync_all.failures` dello stato del job. Segui lo stato con
+    GET /api/playlists/import/status."""
+    if not streaming_import_job.syncable_playlists(db):
+        raise api_error(
+            409, "no_syncable_playlists",
+            "No syncable playlists: only Spotify/SoundCloud playlists, liked excluded.",
+        )
+    _streaming_job_or_409()
+    return streaming_import_job.start_job("playlists_sync_all")
+
+
 @router.get("/import/status", response_model=StreamingImportJobStatus)
 def import_status():
     return streaming_import_job.job_state()

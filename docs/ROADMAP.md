@@ -42,7 +42,12 @@ in backlog). SoundCloud import (playlists/secret links + selective likes) works 
 **Owned tracks are now playable, read-only, for quick audition** (`GET /api/tracks/{id}/audio`,
 single shared docked player also used for the Discovery preview, `TrackPlayButton` on track
 rows) — one track at a time, no transcoding, no DJ-deck features (waveform/cue/queue stay
-with the Set Builder/Rekordbox).
+with the Set Builder/Rekordbox). **Detail pages now return where you came from**
+(2026-07-21): links into a detail page carry a validated internal `?from=<path+query>`, so
+the back link restores the origin — library filters included — instead of always falling
+back to the library. **Playlists gained a bulk "Sync all"**: one background job realigns
+every Spotify and SoundCloud playlist (liked excluded, they grow through the selective
+flow); a failing playlist is reported and skipped, never fatal to the rest.
 
 Full chronological history lives in [PROGRESS.md](../PROGRESS.md).
 

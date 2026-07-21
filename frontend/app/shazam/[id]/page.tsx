@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import { ArrowLeft, Radar, Music4, ExternalLink, Clock, ListPlus, Check } from "lucide-react";
 import {
@@ -12,6 +13,7 @@ import { PageLayout } from "@/components/page-layout";
 import { ConfidenceBadge } from "@/components/confidence-badge";
 import { PartialBadge, isPartial } from "@/components/partial-badge";
 import { useT } from "@/lib/i18n";
+import { withFrom } from "@/lib/back-link";
 
 // Polling mentre l'identificazione del set e' in corso: la Jobs bar globale non
 // espone lo stato raw per-set, quindi il dettaglio fa polling diretto dell'endpoint
@@ -23,11 +25,13 @@ function TrackLibraryAction({ track, onSaved }: { track: DjSetTrack; onSaved: (t
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Origine per il link indietro del dettaglio traccia.
+  const from = usePathname();
 
   if (track.library_status && track.library_track_id != null) {
     const owned = track.library_status === "owned";
     return (
-      <Link href={`/tracks/${track.library_track_id}`} title={t.shazam.detail.viewInLibraryTitle} className="shrink-0">
+      <Link href={withFrom(`/tracks/${track.library_track_id}`, from)} title={t.shazam.detail.viewInLibraryTitle} className="shrink-0">
         <Badge tone={owned ? "success" : "info"}>
           {owned ? t.shazam.detail.ownedBadge : t.shazam.detail.inLibraryBadge}
         </Badge>
@@ -72,6 +76,8 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<{ id: number; created: number } | null>(null);
+  // Origine per il link indietro del dettaglio playlist.
+  const from = usePathname();
 
   useEffect(() => {
     getDjSet(Number(id)).then(setSet).catch((e) => setError(String(e.message ?? e)));
@@ -139,7 +145,7 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
           {importedPlaylistId ? (
             <p className="text-[11px] text-muted">
               {t.shazam.detail.importedAsPlaylist(imported?.created)} ·{" "}
-              <Link href={`/playlists/${importedPlaylistId}`} className="text-fg underline-offset-4 hover:underline">{t.shazam.detail.openLink}</Link>
+              <Link href={withFrom(`/playlists/${importedPlaylistId}`, from)} className="text-fg underline-offset-4 hover:underline">{t.shazam.detail.openLink}</Link>
             </p>
           ) : (
             <Button size="sm" variant="outline" className="w-full" onClick={doImport} disabled={importing}>

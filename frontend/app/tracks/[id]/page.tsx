@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, use, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useBackLink } from "@/lib/back-link";
 import { ArrowLeft, Check, Download, ExternalLink, Link2, ArrowRightLeft, Pencil } from "lucide-react";
 import { apiGet, downloadTrackAuto, fmtDuration, transitions, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Loading, Spinner } from "@/components/ui";
@@ -34,15 +34,10 @@ function TransitionList({ title, items, emptyLabel }: { title: string; items: Tr
 function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
   const t = useT();
   const { id } = use(params);
-  // Il link "Torna alla libreria" porta con sé i filtri/sort/paginazione da cui si
-  // proviene (param `from`, impostato da library/page.tsx sui link verso il
-  // dettaglio), cosi' non si perde il filtro attivo tornando indietro (vedi B1).
-  const searchParams = useSearchParams();
-  // `from` è già decodificato una volta da useSearchParams: è la query string
-  // pronta (es. "artist=Simon+%26+Garfunkel"). NON ri-decodificare, altrimenti
-  // valori con &/%/# vengono corrotti e i filtri ripristinati saltano.
-  const from = searchParams.get("from");
-  const libraryHref = from ? `/library?${from}` : "/library";
+  // Al dettaglio traccia si arriva da mezza app (libreria, playlist, etichette,
+  // set, transizioni, wishlist, Shazam): il link indietro torna dove eri, filtri
+  // compresi. Senza `from` (link diretto, refresh) ripiega sulla libreria.
+  const back = useBackLink({ href: "/library", labelKey: "library" });
   const [track, setTrack] = useState<TrackDetail | null>(null);
   const [compatible, setCompatible] = useState<TransitionCandidate[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +90,7 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <PageLayout title={t.tracks.pageTitle} meta={track.artist ?? undefined} marginaliaTitle={t.tracks.detailsTitle} marginalia={marginalia}>
-      <Link href={libraryHref} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.nav.library}</Link>
+      <Link href={back.href} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {back.label}</Link>
 
       <div className="mb-6 flex items-center gap-4">
         <TrackCover track={track} className="h-20 w-20" iconSize={28} />

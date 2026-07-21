@@ -7,11 +7,13 @@ import { STORES, storeQuery } from "@/lib/store-links";
 import { wishlistStatus, type WishlistStatus } from "@/lib/wishlist-status";
 import { trackLabel, type Track } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { withFrom } from "@/lib/back-link";
 
 export type WishlistRowProps = {
   track: Track;
   archived?: boolean;              // vista "mostra archiviate": solo Ripristina + Compra
   downloadsAvailable: boolean;     // slskd configurato e nessun job in corso
+  from: string;                    // origine per i link indietro (path+query vivi della pagina, vedi wishlist/page.tsx)
   onDownload: (t: Track) => void;  // auto-pick (mai tentata / riprova)
   onReview: (t: Track) => void;    // apre DownloadReviewModal
   onLinkFile: (t: Track) => void;  // apre LinkLocalFileModal
@@ -31,7 +33,7 @@ const BADGE_TONE: Record<WishlistStatus, "warning" | "danger" | "neutral"> = {
 const MAX_CHIPS = 2;
 
 export function WishlistRow({
-  track, archived, downloadsAvailable,
+  track, archived, downloadsAvailable, from,
   onDownload, onReview, onLinkFile, onClearOutcome, onArchive, onRestore,
 }: WishlistRowProps) {
   const t = useT();
@@ -84,10 +86,10 @@ export function WishlistRow({
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
       <div className="min-w-0 flex-1">
-        <a href={`/tracks/${track.id}`} className="block truncate hover:text-fg-strong">{trackLabel(track)}</a>
+        <a href={withFrom(`/tracks/${track.id}`, from)} className="block truncate hover:text-fg-strong">{trackLabel(track)}</a>
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
           {chips.map((p) => (
-            <Link key={p.id} href={`/playlists/${p.id}`}
+            <Link key={p.id} href={withFrom(`/playlists/${p.id}`, from)}
               className="border border-border px-1.5 py-px text-[10px] uppercase tracking-wider text-muted hover:text-fg">
               {p.name}
             </Link>

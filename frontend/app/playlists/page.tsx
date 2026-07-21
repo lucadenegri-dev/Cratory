@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, CloudDownload } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, CloudDownload, RefreshCw } from "lucide-react";
 import {
   listImportedPlaylists,
   deletePlaylist,
+  syncAllPlaylists,
   errText,
   fmtDate,
   type Playlist,
+  type PlaylistsSyncAllReport,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Spinner, Loading } from "@/components/ui";
 import { ButtonLink } from "@/components/button-link";
@@ -17,15 +20,22 @@ import { PageLayout } from "@/components/page-layout";
 import { PlaylistCover } from "@/components/playlist-cover";
 import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
+import { withFrom } from "@/lib/back-link";
 
 export default function PlaylistsPage() {
   const t = useT();
   const jobs = useJobs();
+  const from = usePathname();
   const [imported, setImported] = useState<Playlist[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Playlist | null>(null);
+  const [startingSyncAll, setStartingSyncAll] = useState(false);
+  const [syncAllReport, setSyncAllReport] = useState<PlaylistsSyncAllReport | null>(null);
+  const [syncAllError, setSyncAllError] = useState<string | null>(null);
+  // Slot singolo lato backend: qualsiasi import/sync in corso blocca il bottone.
+  const jobRunning = jobs.streamingImport?.status === "running";
 
   const reload = useCallback(() => {
     listImportedPlaylists().then(setImported).catch((e) => setError(errText(e)));
@@ -41,11 +51,56 @@ export default function PlaylistsPage() {
   const prevStreamingImportStatus = useRef<string | null>(null);
   useEffect(() => {
     const status = jobs.streamingImport?.status ?? null;
-    if (prevStreamingImportStatus.current === "running" && status === "done") {
-      reload();
+    // Lo slot job e' condiviso da tutti gli import/sync streaming (playlist
+    // singola, liked, SoundCloud, sync singolo): solo il sync di massa deve
+    // alimentare questo riepilogo, altrimenti il fallimento di un import
+    // qualsiasi comparirebbe sotto "Sincronizza tutte" come suo esito.
+    const isSyncAll = jobs.streamingImport?.kind === "playlists_sync_all";
+    if (prevStreamingImportStatus.current === "running") {
+      // Entrambi i rami sotto risincronizzano lo stato locale da un sistema
+      // esterno (il poller job), non generano un loop: la soppressione vale
+      // per entrambe le setState anche se il linter la ancora solo alla prima.
+      if (status === "done") {
+        if (isSyncAll) {
+          // Il riepilogo resta qui: la barra job svanisce dopo pochi secondi
+          // e porterebbe via con sé l'elenco delle fallite.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setSyncAllReport(jobs.streamingImport?.sync_all ?? null);
+        }
+        reload(); // la lista e' stantia dopo qualsiasi import/sync, non solo il sync di massa
+      } else if (status === "error" && isSyncAll) {
+        setSyncAllError(jobs.streamingImport?.error ?? null);
+      }
     }
     prevStreamingImportStatus.current = status;
-  }, [jobs.streamingImport?.status, reload]);
+  }, [
+    jobs.streamingImport?.status,
+    jobs.streamingImport?.kind,
+    jobs.streamingImport?.sync_all,
+    jobs.streamingImport?.error,
+    reload,
+  ]);
+
+  const doSyncAll = async () => {
+    setError(null);
+    setNotice(null);
+    setSyncAllReport(null);
+    setSyncAllError(null);
+    setStartingSyncAll(true);
+    try {
+      await syncAllPlaylists();
+      // Il sync gira in background (barra job globale): senza questo refresh
+      // jobRunning resta false fino al prossimo poll (POLL_MS), lasciando il
+      // bottone cliccabile per un paio di secondi (stesso pattern di doSync
+      // in playlists/[id]/page.tsx).
+      jobs.refresh();
+      setNotice(t.playlists.syncAllStarted);
+    } catch (e) {
+      setError(errText(e));
+    } finally {
+      setStartingSyncAll(false);
+    }
+  };
 
   const doDelete = async (p: Playlist) => {
     setError(null);
@@ -70,6 +125,9 @@ export default function PlaylistsPage() {
 
   const marginalia = (
     <div className="space-y-3">
+      <Button size="sm" variant="outline" className="w-full" onClick={doSyncAll} disabled={startingSyncAll || jobRunning}>
+        {startingSyncAll ? <Spinner /> : <RefreshCw size={15} />} {t.playlists.syncAllButton}
+      </Button>
       <ButtonLink href="/playlists/import-spotify" size="sm" block><Download size={15} /> {t.playlists.importSpotifyButton}</ButtonLink>
       <ButtonLink href="/playlists/import-soundcloud" size="sm" block><CloudDownload size={15} /> {t.playlists.importSoundcloudButton}</ButtonLink>
       <ButtonLink href="/playlists/import-manual" size="sm" variant="outline" block><ClipboardList size={15} /> {t.playlists.importManualButton}</ButtonLink>
@@ -92,6 +150,24 @@ export default function PlaylistsPage() {
 
       {imported === null && !error && <Loading />}
       {notice && <div className="mb-4"><Alert tone="info">{notice}</Alert></div>}
+      {syncAllError && <div className="mb-4"><Alert tone="danger">⚠ {syncAllError}</Alert></div>}
+      {syncAllReport && (
+        <div className="mb-4">
+          <Alert tone={syncAllReport.failed > 0 ? "warning" : "info"}>
+            <p>{t.playlists.syncAllSummary(syncAllReport.synced, syncAllReport.created, syncAllReport.removed)}</p>
+            {syncAllReport.failures.length > 0 && (
+              <>
+                <p className="mt-2 font-medium">{t.playlists.syncAllFailuresHeading(syncAllReport.failures.length)}</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs">
+                  {syncAllReport.failures.map((f) => (
+                    <li key={f.playlist_id}><span className="font-medium">{f.name}</span> — {f.error}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </Alert>
+        </div>
+      )}
 
       {imported && imported.length === 0 && (
         <EmptyState icon={<Music2 size={28} />} title={t.playlists.emptyTitle}>
@@ -108,7 +184,7 @@ export default function PlaylistsPage() {
                 <PlaylistCover artworkUrl={p.artwork_url} platform={p.platform} kind={p.kind} className="h-11 w-11 shrink-0" iconSize={18} placeholderClassName="bg-elevated" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <Link href={`/playlists/${p.id}`} className="truncate font-medium hover:text-fg-strong">{p.name}</Link>
+                    <Link href={withFrom(`/playlists/${p.id}`, from)} className="truncate font-medium hover:text-fg-strong">{p.name}</Link>
                     <Badge tone="neutral">{p.platform}</Badge>
                     {p.kind === "liked" && <Badge tone="neutral">liked</Badge>}
                   </div>
@@ -120,7 +196,7 @@ export default function PlaylistsPage() {
                 </div>
               </div>
               <div className="flex shrink-0 gap-1.5">
-                <ButtonLink href={`/playlists/${p.id}`} size="sm" variant="outline">
+                <ButtonLink href={withFrom(`/playlists/${p.id}`, from)} size="sm" variant="outline">
                   <Eye size={15} /> {t.playlists.openButton}
                 </ButtonLink>
                 <Button size="sm" variant="danger" onClick={() => setConfirmDelete(p)} disabled={busy !== null}>

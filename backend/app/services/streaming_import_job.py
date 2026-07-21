@@ -31,7 +31,7 @@ from app.integrations.spotify import (
     SpotifyNotConnected,
     SpotifyWebClient,
 )
-from app.repositories import get_playlist
+from app.repositories import get_playlist, list_playlists
 from app.services.playlist_import import (
     LIKED_PLAYLIST_NAME,
     import_playlist,
@@ -50,6 +50,8 @@ _state: dict = {
     "phase": None,  # fetching | importing
     "processed": 0, "total": 0,
     "result": None,
+    "current_label": None,
+    "sync_all": None,
     "error": None, "error_code": None,
     "started_at": None, "finished_at": None,
 }
@@ -100,6 +102,18 @@ def sync_error_for(playlist) -> tuple[str, str] | None:
     return None
 
 
+def syncable_playlists(db) -> list:
+    """Le playlist riallineabili in blocco, nell'ordine di `list_playlists`.
+
+    Esclude i liked di entrambe le piattaforme (crescono per selezione manuale,
+    non per sync totale) e tutto ciò che `sync_error_for` già rifiuta: playlist
+    manuali, Spotify senza `platform_playlist_id`, SoundCloud senza URL."""
+    return [
+        p for p in list_playlists(db)
+        if p.kind != "liked" and sync_error_for(p) is None
+    ]
+
+
 # --- Handler per kind ----------------------------------------------------------
 
 def _run_spotify_playlist(db, params: dict) -> dict:
@@ -147,7 +161,7 @@ def _run_spotify_liked_selected(db, params: dict) -> dict:
     return import_selected_liked_tracks(db, items, params["spotify_ids"], on_progress=_progress)
 
 
-def _run_soundcloud_sync(db, playlist) -> dict:
+def _run_soundcloud_sync(db, playlist, on_progress=_progress) -> dict:
     info = sc_fetch_playlist(playlist.url)
     thumbnails = info.get("thumbnails") or []
     _state["phase"] = "importing"
@@ -161,11 +175,11 @@ def _run_soundcloud_sync(db, playlist) -> dict:
         platform_playlist_id=playlist.platform_playlist_id,
         owner=info.get("uploader") or playlist.owner, url=playlist.url,
         artwork_url=(thumbnails[-1].get("url") if thumbnails else playlist.artwork_url),
-        kind=playlist.kind, prune=False, on_progress=_progress,
+        kind=playlist.kind, prune=False, on_progress=on_progress,
     )
 
 
-def _run_spotify_sync(db, playlist) -> dict:
+def _run_spotify_sync(db, playlist, on_progress=_progress) -> dict:
     client = SpotifyWebClient(db)
     # I liked non hanno meta: nome di sistema fisso. Le playlist vere rileggono
     # nome/owner/url/copertina dalla sorgente (A25), con fallback ai valori attuali.
@@ -188,7 +202,7 @@ def _run_spotify_sync(db, playlist) -> dict:
         db, platform="spotify", name=name, items=items,
         platform_playlist_id=playlist.platform_playlist_id,
         owner=owner, url=url, artwork_url=artwork,
-        kind=playlist.kind, prune=True, on_progress=_progress,
+        kind=playlist.kind, prune=True, on_progress=on_progress,
     )
 
 
@@ -205,6 +219,55 @@ def _run_playlist_sync(db, params: dict) -> dict:
     if playlist.platform == "soundcloud":
         return _run_soundcloud_sync(db, playlist)
     return _run_spotify_sync(db, playlist)
+
+
+def _run_playlists_sync_all(db, params: dict) -> dict:
+    """Riallinea tutte le playlist sincronizzabili, una alla volta.
+
+    Una playlist che fallisce finisce in `failures` e il giro prosegue: su una
+    sync di massa una playlist morta non deve invalidare le altre. La barra
+    avanza sulle playlist; il progresso interno vive in `current_label`."""
+    playlists = syncable_playlists(db)
+    _state.update(total=len(playlists), processed=0)
+    report: dict = {
+        "synced": 0, "failed": 0,
+        "created": 0, "updated": 0, "removed": 0, "skipped": 0,
+        "failures": [],
+    }
+    # Credenziali Spotify assenti/scadute: vale per tutte le sue playlist, non ha
+    # senso ripetere la stessa chiamata di rete una volta per playlist.
+    spotify_dead: str | None = None
+
+    for done, playlist in enumerate(playlists):
+        _state.update(processed=done, phase="fetching", current_label=playlist.name)
+
+        def on_progress(processed: int, total: int, name: str = playlist.name) -> None:
+            _state["current_label"] = f"{name} · {processed}/{total}"
+
+        try:
+            if playlist.platform == "soundcloud":
+                one = _run_soundcloud_sync(db, playlist, on_progress=on_progress)
+            elif spotify_dead is not None:
+                raise SpotifyNotConnected(spotify_dead)
+            else:
+                one = _run_spotify_sync(db, playlist, on_progress=on_progress)
+        except Exception as exc:  # noqa: BLE001 — l'errore è dato di report, non un crash
+            db.rollback()
+            if isinstance(exc, (SpotifyNotConnected, SpotifyNotConfigured)) and spotify_dead is None:
+                spotify_dead = str(exc)
+            report["failed"] += 1
+            report["failures"].append({
+                "playlist_id": playlist.id, "name": playlist.name,
+                "platform": playlist.platform, "error": str(exc),
+            })
+            logger.warning("Sync di massa: playlist '%s' fallita: %s", playlist.name, exc)
+        else:
+            report["synced"] += 1
+            for key in ("created", "updated", "removed", "skipped"):
+                report[key] += one.get(key, 0)
+
+    _state.update(processed=len(playlists), current_label=None)
+    return report
 
 
 def _run_soundcloud_playlist(db, params: dict) -> dict:
@@ -254,6 +317,7 @@ _RUNNERS = {
     "spotify_liked": _run_spotify_liked,
     "spotify_liked_selected": _run_spotify_liked_selected,
     "playlist_sync": _run_playlist_sync,
+    "playlists_sync_all": _run_playlists_sync_all,
     "soundcloud_playlist": _run_soundcloud_playlist,
     "soundcloud_likes_selected": _run_soundcloud_likes_selected,
 }
@@ -277,7 +341,10 @@ def _run(kind: str, params: dict) -> None:
     db = SessionLocal()
     try:
         report = _RUNNERS[kind](db, params)
-        _state.update(status="done", phase=None, result=report)
+        # Il sync di massa produce un aggregato, non il report di una playlist:
+        # vive in un campo suo (`result` resta None per quel kind).
+        key = "sync_all" if kind == "playlists_sync_all" else "result"
+        _state.update(status="done", phase=None, current_label=None, **{key: report})
         logger.info("Job import/sync streaming completato (%s): %s", kind, report)
     except SpotifyError as exc:
         _state.update(status="error", error=str(exc), error_code=_spotify_error_code(exc))
@@ -300,7 +367,8 @@ def start_job(kind: str, **params) -> dict:
         if _state["status"] == "running":
             return _state_snapshot()
         _state.update(status="running", kind=kind, phase="fetching",
-                      processed=0, total=0, result=None, error=None, error_code=None,
+                      processed=0, total=0, result=None, sync_all=None,
+                      current_label=None, error=None, error_code=None,
                       started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)
     _spawn(lambda: _run(kind, params))
     return job_state()

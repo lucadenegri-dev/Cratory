@@ -117,6 +117,7 @@ confirmation. `422` (`analysis_force_required`) if `mode="all"` without `force`;
 GET    /api/playlists/spotify/available
 POST   /api/playlists/import
 POST   /api/playlists/{playlist_id}/sync
+POST   /api/playlists/sync-all
 GET    /api/playlists/import/status
 POST   /api/playlists/import-manual
 POST   /api/playlists/create-from-tracks
@@ -142,6 +143,14 @@ by Cratory, `added_by='cratory'`, are never pruned). SoundCloud (see dedicated
 section): always additive, never prune; only for playlists imported from URL (not the
 "likes"). Responds `409` for a "like"-type SoundCloud playlist or one without a saved
 `url`; provider errors surface in the job state (`error`/`error_code`).
+`POST /api/playlists/sync-all` (also `202` + the same status endpoint) realigns **every**
+imported Spotify and SoundCloud playlist in one job; liked playlists are excluded on both
+platforms (they grow through the selective flow). A playlist that fails does not stop the
+others: the job still ends `done` and the aggregate report lands in `sync_all`
+(`synced`, `failed`, summed `created`/`updated`/`removed`/`skipped`, plus `failures` with
+`playlist_id`, `name`, `platform` and `error`). While it runs, `current_label` carries the playlist in flight
+with its own item progress, and `processed`/`total` count playlists, not tracks. Responds
+`409 no_syncable_playlists` when there is nothing to realign.
 `DELETE /api/playlists/{playlist_id}` removes the playlist and its "orphan leads":
 tracks without a local file that are in no other playlist nor in a saved set (tracks
 on disk, or present in another playlist/set, stay). Responds `200` with

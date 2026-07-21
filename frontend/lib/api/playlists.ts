@@ -76,6 +76,12 @@ export function syncPlaylist(id: number) {
   return apiPost<StreamingImportJobStatus>(`/api/playlists/${id}/sync`);
 }
 
+/** Avvia in background il riallineamento di tutte le playlist Spotify e
+ *  SoundCloud importate (liked esclusi). */
+export function syncAllPlaylists() {
+  return apiPost<StreamingImportJobStatus>("/api/playlists/sync-all");
+}
+
 export function playlistGaps(id: number, opts?: { signal?: AbortSignal }) {
   return apiGet<GapAnalysis>(`/api/playlists/${id}/gaps`, undefined, opts);
 }
