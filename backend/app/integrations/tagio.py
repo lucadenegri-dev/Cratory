@@ -258,6 +258,35 @@ def remove_cover(path: str) -> None:
         raise TagWriteError(str(exc)) from exc
 
 
+def read_cover(path: str) -> bytes | None:
+    """Byte della copertina embeddata (front cover se distinguibile), o None.
+    Speculare a write_cover. Non solleva: un file illeggibile è, ai fini della
+    miniatura, un file senza copertina."""
+    try:
+        raw = MutagenFile(path)
+    except (MutagenError, OSError):
+        return None
+    if raw is None:
+        return None
+    pictures = getattr(raw, "pictures", None)
+    if pictures:  # FLAC
+        front = next((p for p in pictures if p.type == 3), pictures[0])
+        return bytes(front.data)
+    tags = getattr(raw, "tags", None)
+    if tags is None:
+        return None
+    if hasattr(tags, "getall"):  # ID3: mp3, wav, aiff
+        apics = tags.getall("APIC")
+        if apics:
+            front = next((a for a in apics if a.type == 3), apics[0])
+            return bytes(front.data)
+    try:
+        covers = tags.get("covr")  # MP4 (m4a)
+    except (TypeError, AttributeError):
+        return None
+    return bytes(covers[0]) if covers else None
+
+
 @dataclass
 class TechInfo:
     bitrate: int | None
