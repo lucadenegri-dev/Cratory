@@ -51,21 +51,31 @@ export default function PlaylistsPage() {
   const prevStreamingImportStatus = useRef<string | null>(null);
   useEffect(() => {
     const status = jobs.streamingImport?.status ?? null;
+    // Lo slot job e' condiviso da tutti gli import/sync streaming (playlist
+    // singola, liked, SoundCloud, sync singolo): solo il sync di massa deve
+    // alimentare questo riepilogo, altrimenti il fallimento di un import
+    // qualsiasi comparirebbe sotto "Sincronizza tutte" come suo esito.
+    const isSyncAll = jobs.streamingImport?.kind === "playlists_sync_all";
     if (prevStreamingImportStatus.current === "running") {
+      // Entrambi i rami sotto risincronizzano lo stato locale da un sistema
+      // esterno (il poller job), non generano un loop: la soppressione vale
+      // per entrambe le setState anche se il linter la ancora solo alla prima.
       if (status === "done") {
-        // Il riepilogo del sync di massa resta qui: la barra job svanisce dopo
-        // pochi secondi e porterebbe via con sé l'elenco delle fallite. Non è
-        // un loop di stato: risincronizza dall'external system (poller job).
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setSyncAllReport(jobs.streamingImport?.sync_all ?? null);
-        reload();
-      } else if (status === "error") {
+        if (isSyncAll) {
+          // Il riepilogo resta qui: la barra job svanisce dopo pochi secondi
+          // e porterebbe via con sé l'elenco delle fallite.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setSyncAllReport(jobs.streamingImport?.sync_all ?? null);
+        }
+        reload(); // la lista e' stantia dopo qualsiasi import/sync, non solo il sync di massa
+      } else if (status === "error" && isSyncAll) {
         setSyncAllError(jobs.streamingImport?.error ?? null);
       }
     }
     prevStreamingImportStatus.current = status;
   }, [
     jobs.streamingImport?.status,
+    jobs.streamingImport?.kind,
     jobs.streamingImport?.sync_all,
     jobs.streamingImport?.error,
     reload,
