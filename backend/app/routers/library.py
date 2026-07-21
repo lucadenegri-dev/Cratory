@@ -1,13 +1,17 @@
 """Router LIBRARY: letture read-only per il frontend (statistiche + lista file).
 Router sottile: query dirette, nessun servizio nuovo."""
 
-from fastapi import APIRouter, Depends, Query
+import os
+
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.http_errors import api_error
 from app.db import get_db
 from app.models import AudioFile, DupGroup, DupMember, Issue, ScanRoot
 from app.schemas import FileRow, LibraryFacets, LibraryStatsRead
+from app.services import cover_cache, thumbs
 
 router = APIRouter(prefix="/api", tags=["library"])
 
@@ -153,3 +157,31 @@ def list_files(
             worst_severity=_RANK_SEV.get(rank or 0), in_dup_group=bool(dup_n),
         ))
     return rows
+
+
+@router.get("/files/{file_id}/thumb")
+def file_thumb(file_id: int, request: Request, db: Session = Depends(get_db)):
+    """Miniatura della traccia: l'artwork embeddato se c'è, altrimenti la
+    copertina proposta dai provider già in cache. 404 se non c'è nulla — il
+    frontend disegna il placeholder e non ritenta."""
+    f = db.get(AudioFile, file_id)
+    if f is None:
+        raise api_error(404, "file_not_found", "File not found")
+
+    # ETag sull'mtime del *file audio*: un apply che riscrive i tag invalida
+    # anche la copia nel browser, non solo quella su disco.
+    try:
+        stamp = str(os.path.getmtime(f.path))
+    except OSError:
+        stamp = "0"
+    etag = f'W/"{file_id}-{stamp}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
+
+    data = thumbs.get_thumb(file_id, f.path) if f.has_cover else None
+    if data is None:
+        data = cover_cache.read_thumb(file_id)
+    if data is None:
+        raise api_error(404, "thumb_missing", "No thumbnail")
+    return Response(content=data, media_type="image/jpeg",
+                    headers={"ETag": etag, "Cache-Control": "no-cache"})
