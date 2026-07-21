@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Download, ClipboardList, Music2, Eye, Trash2, Calendar, CloudDownload } from "lucide-react";
 import {
   listImportedPlaylists,
@@ -17,10 +18,12 @@ import { PageLayout } from "@/components/page-layout";
 import { PlaylistCover } from "@/components/playlist-cover";
 import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
+import { withFrom } from "@/lib/back-link";
 
 export default function PlaylistsPage() {
   const t = useT();
   const jobs = useJobs();
+  const from = usePathname();
   const [imported, setImported] = useState<Playlist[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +111,7 @@ export default function PlaylistsPage() {
                 <PlaylistCover artworkUrl={p.artwork_url} platform={p.platform} kind={p.kind} className="h-11 w-11 shrink-0" iconSize={18} placeholderClassName="bg-elevated" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <Link href={`/playlists/${p.id}`} className="truncate font-medium hover:text-fg-strong">{p.name}</Link>
+                    <Link href={withFrom(`/playlists/${p.id}`, from)} className="truncate font-medium hover:text-fg-strong">{p.name}</Link>
                     <Badge tone="neutral">{p.platform}</Badge>
                     {p.kind === "liked" && <Badge tone="neutral">liked</Badge>}
                   </div>
@@ -120,7 +123,7 @@ export default function PlaylistsPage() {
                 </div>
               </div>
               <div className="flex shrink-0 gap-1.5">
-                <ButtonLink href={`/playlists/${p.id}`} size="sm" variant="outline">
+                <ButtonLink href={withFrom(`/playlists/${p.id}`, from)} size="sm" variant="outline">
                   <Eye size={15} /> {t.playlists.openButton}
                 </ButtonLink>
                 <Button size="sm" variant="danger" onClick={() => setConfirmDelete(p)} disabled={busy !== null}>
