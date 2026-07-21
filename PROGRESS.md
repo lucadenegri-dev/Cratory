@@ -6,7 +6,7 @@
 
 ## Current state
 
-**Last updated:** 2026-07-20
+**Last updated:** 2026-07-21
 
 **Product name:** **Cratory** (rename done on 2026-06-25 across UI, code, docs and
 icon). "SetArc" and "DJ Assistant" remain only as historical names; legacy technical
@@ -29,6 +29,45 @@ with a five-stage pipeline (Index moved to a nav button) and documentation reali
 the new paradigm; mix identification via Shazam integrated (phase 1; co-occurrence in
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-07-21 - Ritorno alla pagina di provenienza + sync di tutte le playlist
+
+Due interventi, brainstorming → spec → piano → esecuzione a task (spec in
+`docs/superpowers/specs/`, piano in `docs/superpowers/plans/`, entrambi 2026-07-21).
+
+- **Il link "indietro" non mente piu'**: al dettaglio traccia si arriva da mezza
+  app, ma il ritorno buttava sempre in libreria. Ora ogni link verso un dettaglio
+  porta `?from=<path+query>` e la pagina di dettaglio torna esattamente li',
+  filtri e paginazione compresi, con l'etichetta della sezione di provenienza.
+- Logica isolata e pura in `lib/back-link.ts` (`resolveBackLink`, `sectionOf`,
+  `withFrom`): valida che `from` sia un path interno (niente `//host` o `/\host`)
+  e che punti a una sezione nota, altrimenti ripiega sul default della pagina.
+  Emettono l'origine libreria, etichette, set, transizioni, wishlist, Shazam e
+  lista playlist; la consumano `/tracks/[id]` e `/playlists/[id]` (quest'ultima
+  avvolta in `<Suspense>`, richiesto da `useSearchParams`).
+- **"Sincronizza tutte" in Playlist**: nuovo kind `playlists_sync_all` del job
+  singleton `streaming_import_job` (`POST /api/playlists/sync-all`) che riallinea
+  tutte le playlist Spotify e SoundCloud; i liked restano esclusi (crescono per
+  selezione manuale). Una playlist che fallisce non ferma le altre: finisce in
+  `sync_all.failures` e il job chiude comunque `done`. Se Spotify non e'
+  connesso le sue playlist falliscono subito senza altre chiamate di rete,
+  le SoundCloud proseguono.
+- La barra job avanza sulle playlist (`processed`/`total`) e mostra in
+  `current_label` quella in corso col suo progresso interno; il riepilogo con
+  l'elenco delle fallite resta in un Alert su `/playlists`, che la barra job
+  — transitoria — non poteva ospitare, filtrato per `kind === "playlists_sync_all"`
+  cosi' il fallimento di un sync singolo (stesso slot job) non finisce nel
+  riepilogo del sync di massa.
+- Test: unit su `resolveBackLink` (8) e pytest su selezione, prosecuzione dopo
+  fallimento, short-circuit Spotify e le due guardie 409 del router.
+- Verifica finale: backend 1022 test, frontend 101 test unit, lint 4 warning
+  preesistenti (non introdotti da questa feature), build ok. Verificato anche
+  a mano nel browser: dal dettaglio traccia aperto da `/playlists/2` il link
+  indietro dice "Playlists" e riporta li'; da `/library?artist=Sega+Bodega&sort=bpm`
+  dice "Library" e riporta all'URL completo con filtri e ordinamento. Il bottone
+  "Sync all" e' presente in cima alla colonna laterale di `/playlists`, ma non e'
+  stato premuto in questa verifica: avrebbe sincronizzato per davvero le playlist
+  Spotify dell'utente.
 
 ## Milestone 2026-07-20 - Set Builder: guida scopribile + dig "Sorprendimi"
 
