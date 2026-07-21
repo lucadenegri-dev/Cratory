@@ -310,6 +310,7 @@ export const en = {
     searchButton: "Search",
     searchingLabel: "Searching Soulseek…",
     noSearchResults: (q: string) => `No results for “${q}”.`,
+    resultsCount: (n: number) => n === 1 ? "1 result" : `${n} results`,
     downloadButton: "Download",
     filterByOutcomeAria: "Filter by outcome",
     filterAll: "All",
