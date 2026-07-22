@@ -163,7 +163,7 @@ def test_release_detail_exposes_youtube_videos(client, monkeypatch):
     }
     monkeypatch.setattr(DiscogsClient, "get_release", lambda self, rid: payload)
 
-    r = c.get("/api/discovery/release/42")
+    r = c.get("/api/discovery/release", params={"id": "42"})
     assert r.status_code == 200
     body = r.json()
     assert body["videos"] == [
@@ -242,3 +242,45 @@ def test_dig_rejects_an_unknown_source(client):
     r = c.post("/api/discovery/dig",
                json={"seed_type": "genre", "value": "x", "source": "soundcloud"})
     assert r.status_code == 422
+
+
+# --- Task 6: GET /api/discovery/release?source=&id= — entrambe le sorgenti ---
+
+
+def test_release_detail_of_a_bandcamp_lead(client, monkeypatch):
+    from app.routers import discovery as router_mod
+
+    class _FakeBandcamp:
+        def tralbum(self, *, band_id, tralbum_id, tralbum_type="a"):
+            assert (band_id, tralbum_id) == (2920024821, 1022287860)
+            return {
+                "title": "Love Letter", "tralbum_artist": "Inox Traxx",
+                "bandcamp_url": "https://ostgut.bandcamp.com/album/love-letter",
+                "art_id": 2027095290, "label": "Ostgut Ton", "release_date": 1782432000,
+                "tags": [{"name": "techno"}],
+                "tracks": [{"track_num": 1, "title": "Love Letter", "duration": 212.012,
+                            "streaming_url": {"mp3-128": "https://bandcamp/stream/1"}}],
+            }
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(router_mod, "BandcampClient", lambda: _FakeBandcamp())
+    c, _ = client
+    r = c.get("/api/discovery/release", params={"source": "bandcamp",
+                                                "id": "2920024821:1022287860"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source"] == "bandcamp"
+    assert body["artist"] == "Inox Traxx"
+    assert body["source_url"].endswith("/album/love-letter")
+    assert body["tracks"][0]["stream_url"] == "https://bandcamp/stream/1"
+    assert body["tracks"][0]["duration_seconds"] == 212
+    assert body["videos"] == []
+
+
+@pytest.mark.parametrize("bad", ["notanumber", "1:2:3", "abc:1", ""])
+def test_release_detail_rejects_a_malformed_id(client, bad):
+    c, _ = client
+    r = c.get("/api/discovery/release", params={"source": "bandcamp", "id": bad})
+    assert r.status_code == 400

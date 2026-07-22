@@ -8,9 +8,14 @@ export type PreviewItem = {
   key: string;
   artist: string;
   title: string;
-  discogsId: number | null;
+  /** Id neutro della release. Discogs: "123". Bandcamp: "band_id:item_id". */
+  sourceId: string | null;
+  source: string;
   level: "release" | "track";
   label: string;
+  /** Stream diretto Bandcamp della singola traccia: quando presente, salta la
+   *  risoluzione iTunes/YouTube. Cablato nella Task 7 — qui solo il campo. */
+  streamUrl?: string | null;
   /** Payload per l'azione "ADD" (salva il lead in libreria) dal player docked. */
   addInput?: DiscoveryImportInput;
 };
@@ -53,10 +58,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setStatus("playing"); // stream diretto: nessuna risoluzione async
       return;
     }
-    // discovery-preview: risoluzione async della sorgente di terzi (iTunes/YouTube)
+    // discovery-preview: risoluzione async della sorgente di terzi (iTunes/YouTube).
+    // Il fallback Discogs (get_release lato backend) vuole un id numerico: su Bandcamp
+    // "band_id:item_id" non lo è, quindi niente discogsId fuori da source === "discogs".
     setStatus("loading");
     const item = source.item;
-    discoveryPreview({ artist: item.artist, title: item.title, discogsId: item.discogsId, level: item.level })
+    const discogsId = item.source === "discogs" && item.sourceId ? Number(item.sourceId) : null;
+    discoveryPreview({ artist: item.artist, title: item.title, discogsId, level: item.level })
       .then((res) => {
         if (id !== reqId.current) return; // richiesta superata da un nuovo play
         setData(res);

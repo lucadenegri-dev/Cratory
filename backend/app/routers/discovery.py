@@ -14,13 +14,12 @@ from sqlalchemy.orm import Session
 
 from app.core.http_errors import api_error
 from app.db import get_db
+from app.integrations.bandcamp import BandcampClient, BandcampError
 from app.integrations.discogs import DiscogsClient, DiscogsError
 from app.integrations.itunes import ItunesClient
 from app.models import Track
 from app.repositories import add_track_to_playlist
 from app.schemas import (
-    DiscogsReleaseOut,
-    DiscogsTrackOut,
     DiscogsVideoOut,
     DiscoveryAddRequest,
     DiscoveryAddResponse,
@@ -29,11 +28,14 @@ from app.schemas import (
     DiscoveryGenresOut,
     DiscoveryLeadOut,
     DiscoveryPreviewOut,
+    DiscoveryReleaseOut,
     DiscoverySaveForLaterRequest,
     DiscoverySaveForLaterResponse,
+    DiscoveryTrackOut,
     ReasonOut,
 )
 from app.serializers import track_out
+from app.services.dig_sources.bandcamp import _art_url, _bc_year_from_epoch
 from app.services.dig_sources.discogs import DiscogsSource
 from app.services.discovery_dig import DiscoveryLead, dig
 from app.services.playlist_import import get_or_create_discovery_playlist, import_single_track
@@ -147,10 +149,20 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/release/{discogs_id}", response_model=DiscogsReleaseOut)
-def get_release_detail(discogs_id: int):
-    """Dettaglio di un disco del dig: tracklist reale, fetch lazy all'apertura
-    del pannello (mai in batch per tutta la griglia)."""
+def _bandcamp_ids(raw: str) -> tuple[int, int]:
+    """"band_id:item_id" -> (band_id, item_id).
+
+    Solo interi: nessun URL attraversa il confine, quindi non c'e' niente da far
+    seguire al backend e nessun allowlist di host da tenere corretto per sempre.
+    """
+    parts = (raw or "").split(":")
+    if len(parts) != 2 or not all(p.isdigit() for p in parts):
+        raise api_error(400, "discovery_bad_id",
+                        "Id Bandcamp non valido: atteso 'band_id:item_id'.")
+    return int(parts[0]), int(parts[1])
+
+
+def _discogs_release(discogs_id: int) -> DiscoveryReleaseOut:
     client = DiscogsClient()
     try:
         payload = client.get_release(discogs_id)
@@ -167,7 +179,7 @@ def get_release_detail(discogs_id: int):
     uri = payload.get("uri") or ""
 
     tracks = [
-        DiscogsTrackOut(
+        DiscoveryTrackOut(
             position=item.get("position") or "",
             title=item.get("title") or "",
             duration_seconds=_parse_duration(item.get("duration")),
@@ -176,17 +188,58 @@ def get_release_detail(discogs_id: int):
         if item.get("type_") == "track"
     ]
 
-    return DiscogsReleaseOut(
-        discogs_id=discogs_id,
-        title=payload.get("title") or "",
-        artist=artist,
+    return DiscoveryReleaseOut(
+        source="discogs", source_id=str(discogs_id),
+        source_url=f"https://www.discogs.com{uri}" if uri.startswith("/") else (uri or None),
+        title=payload.get("title") or "", artist=artist,
         thumb_url=images[0].get("uri") if images else None,
-        discogs_url=f"https://www.discogs.com{uri}" if uri.startswith("/") else (uri or None),
-        year=payload.get("year"),
-        label=labels[0].get("name") if labels else None,
-        tracks=tracks,
-        videos=[DiscogsVideoOut(**v) for v in extract_youtube_videos(payload)],
+        year=payload.get("year"), label=labels[0].get("name") if labels else None,
+        tracks=tracks, videos=[DiscogsVideoOut(**v) for v in extract_youtube_videos(payload)],
     )
+
+
+def _bandcamp_release(band_id: int, item_id: int) -> DiscoveryReleaseOut:
+    client = BandcampClient()
+    try:
+        payload = client.tralbum(band_id=band_id, tralbum_id=item_id)
+    except BandcampError as exc:
+        raise api_error(502, "discovery_provider_error",
+                        f"Discovery provider error: {exc}", reason=str(exc)) from exc
+    finally:
+        client.close()
+
+    tracks = [
+        DiscoveryTrackOut(
+            position=str(item.get("track_num") or ""),
+            title=item.get("title") or "",
+            duration_seconds=(int(item["duration"]) if item.get("duration") else None),
+            stream_url=(item.get("streaming_url") or {}).get("mp3-128"),
+        )
+        for item in (payload.get("tracks") or [])
+        if item.get("title")
+    ]
+    return DiscoveryReleaseOut(
+        source="bandcamp", source_id=f"{band_id}:{item_id}",
+        source_url=payload.get("bandcamp_url"),
+        title=payload.get("title") or "",
+        artist=payload.get("tralbum_artist") or "Sconosciuto",
+        thumb_url=_art_url(payload.get("art_id"), size="16"),
+        year=_bc_year_from_epoch(payload.get("release_date")),
+        label=payload.get("label"),
+        tracks=tracks,
+        videos=[],
+    )
+
+
+@router.get("/release", response_model=DiscoveryReleaseOut)
+def get_release_detail(source: str = "discogs", id: str = ""):
+    """Dettaglio di un disco del dig: tracklist reale, fetch lazy all'apertura del
+    pannello (mai in batch per tutta la griglia)."""
+    if source == "bandcamp":
+        return _bandcamp_release(*_bandcamp_ids(id))
+    if not id.isdigit():
+        raise api_error(400, "discovery_bad_id", "Id Discogs non valido.")
+    return _discogs_release(int(id))
 
 
 @router.get("/preview", response_model=DiscoveryPreviewOut)

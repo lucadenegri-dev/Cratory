@@ -508,10 +508,12 @@ class DiscoveryGenresOut(BaseModel):
     styles: list[str] = []    # stili curati (sottoinsieme Discogs) per il drill-down
 
 
-class DiscogsTrackOut(BaseModel):
+class DiscoveryTrackOut(BaseModel):
     position: str
     title: str
     duration_seconds: int | None = None
+    # Popolato solo da Bandcamp: le tracce Discogs non hanno audio.
+    stream_url: str | None = None
 
 
 class DiscogsVideoOut(BaseModel):
@@ -520,15 +522,18 @@ class DiscogsVideoOut(BaseModel):
     duration_seconds: int | None = None
 
 
-class DiscogsReleaseOut(BaseModel):
-    discogs_id: int
+class DiscoveryReleaseOut(BaseModel):
+    source: str
+    source_id: str
+    source_url: str | None = None
     title: str
     artist: str
     thumb_url: str | None = None
-    discogs_url: str | None = None
     year: int | None = None
     label: str | None = None
-    tracks: list[DiscogsTrackOut] = []
+    tracks: list[DiscoveryTrackOut] = []
+    # Video YouTube della release: solo Discogs. Su Bandcamp e' sempre vuota, perche'
+    # le tracce hanno gia' lo stream vero.
     videos: list[DiscogsVideoOut] = []
 
 

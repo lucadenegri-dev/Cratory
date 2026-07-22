@@ -434,10 +434,12 @@ export interface LabelStats {
   year_max: number | null;
 }
 
-export interface DiscogsTrack {
+export interface DiscoveryTrack {
   position: string;
   title: string;
   duration_seconds: number | null;
+  /** Popolato solo da Bandcamp: le tracce Discogs non hanno audio. */
+  stream_url: string | null;
 }
 
 export type DiscogsVideo = {
@@ -446,15 +448,17 @@ export type DiscogsVideo = {
   duration_seconds: number | null;
 };
 
-export interface DiscogsRelease {
-  discogs_id: number;
+export interface DiscoveryRelease {
+  source: string;
+  source_id: string;
+  source_url: string | null;
   title: string;
   artist: string;
   thumb_url: string | null;
-  discogs_url: string | null;
   year: number | null;
   label: string | null;
-  tracks: DiscogsTrack[];
+  tracks: DiscoveryTrack[];
+  /** Video YouTube della release: solo Discogs. Su Bandcamp e' sempre vuota. */
   videos: DiscogsVideo[];
 }
 

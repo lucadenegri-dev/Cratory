@@ -3,14 +3,19 @@
 import { useEffect, useState } from "react";
 import { Check, Disc3, Download, ExternalLink, Play } from "lucide-react";
 import {
-  discoveryImportTrack, discoverySaveForLater, downloadTrackAuto, errText, fmtDuration, getDiscogsRelease,
-  type DiscogsRelease, type DiscoveryLead,
+  discoveryImportTrack, discoverySaveForLater, downloadTrackAuto, errText, fmtDuration, getDiscoveryRelease,
+  type DiscoveryLead, type DiscoveryRelease,
 } from "@/lib/api";
 import { Alert, Button, Modal, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
 
-type PanelTrack = { position: string; title: string; duration_seconds: number | null };
+type PanelTrack = {
+  position: string;
+  title: string;
+  duration_seconds: number | null;
+  stream_url: string | null;
+};
 
 export function DiscoveryTracklistPanel({ lead, onClose }: {
   lead: DiscoveryLead | null;
@@ -36,14 +41,12 @@ export function DiscoveryTracklistPanel({ lead, onClose }: {
 
 function PanelBody({ lead }: { lead: DiscoveryLead }) {
   const t = useT();
-  const [release, setRelease] = useState<DiscogsRelease | null>(null);
+  const [release, setRelease] = useState<DiscoveryRelease | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Discogs-only per ora (Task 5): source_id e' l'id numerico Discogs come stringa.
-    // Il dettaglio Bandcamp arriva con la Task 6.
-    getDiscogsRelease(Number(lead.source_id))
+    getDiscoveryRelease(lead.source, lead.source_id!)
       .then(setRelease)
       .catch((e) => setError(errText(e)))
       .finally(() => setLoading(false));
@@ -55,7 +58,7 @@ function PanelBody({ lead }: { lead: DiscoveryLead }) {
   const tracks: PanelTrack[] = release
     ? release.tracks.length
       ? release.tracks
-      : [{ position: "", title: release.title, duration_seconds: null }]
+      : [{ position: "", title: release.title, duration_seconds: null, stream_url: null }]
     : [];
 
   return (
@@ -81,14 +84,14 @@ function PanelBody({ lead }: { lead: DiscoveryLead }) {
               <div className="min-w-0">
                 {release.label && <span className="truncate">{release.label}</span>}
                 {release.year != null && <span> · {release.year}</span>}
-                {release.discogs_url && (
+                {release.source_url && (
                   <a
-                    href={release.discogs_url}
+                    href={release.source_url}
                     target="_blank"
                     rel="noreferrer"
                     className="ml-2 inline-flex items-center gap-1 text-fg hover:underline"
                   >
-                    <ExternalLink size={12} /> Discogs
+                    <ExternalLink size={12} /> {release.source === "bandcamp" ? "Bandcamp" : "Discogs"}
                   </a>
                 )}
               </div>
@@ -106,7 +109,7 @@ function PanelBody({ lead }: { lead: DiscoveryLead }) {
   );
 }
 
-function SaveAllButton({ release, tracks }: { release: DiscogsRelease; tracks: PanelTrack[] }) {
+function SaveAllButton({ release, tracks }: { release: DiscoveryRelease; tracks: PanelTrack[] }) {
   const t = useT();
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
@@ -119,7 +122,7 @@ function SaveAllButton({ release, tracks }: { release: DiscogsRelease; tracks: P
       for (const trk of tracks) {
         await discoverySaveForLater({
           artist: release.artist, title: trk.title, duration_seconds: trk.duration_seconds,
-          album_art_url: release.thumb_url, url: release.discogs_url,
+          album_art_url: release.thumb_url, url: release.source_url,
         });
       }
       setDone(true);
@@ -140,7 +143,7 @@ function SaveAllButton({ release, tracks }: { release: DiscogsRelease; tracks: P
   );
 }
 
-function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTrack }) {
+function TrackRow({ release, track }: { release: DiscoveryRelease; track: PanelTrack }) {
   const t = useT();
   const player = usePlayer();
   const [saving, setSaving] = useState(false);
@@ -151,7 +154,7 @@ function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTra
 
   const input = {
     artist: release.artist, title: track.title, duration_seconds: track.duration_seconds,
-    album_art_url: release.thumb_url, url: release.discogs_url,
+    album_art_url: release.thumb_url, url: release.source_url,
   };
 
   const saveForLater = async () => {
@@ -200,10 +203,12 @@ function TrackRow({ release, track }: { release: DiscogsRelease; track: PanelTra
             player.play({
               kind: "discovery-preview",
               item: {
-                key: `t:${release.discogs_id}:${track.position}:${track.title}`,
+                key: `t:${release.source_id}:${track.position}:${track.title}`,
                 artist: release.artist,
                 title: track.title,
-                discogsId: release.discogs_id,
+                sourceId: release.source_id,
+                source: release.source,
+                streamUrl: track.stream_url,
                 level: "track",
                 label: track.title,
                 addInput: input,

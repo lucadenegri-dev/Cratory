@@ -13,6 +13,7 @@ Differenze strutturali da Discogs, tutte volute e tutte visibili qui:
 
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from app.integrations.bandcamp import DISCOVER_PAGE_SIZE, BandcampError
@@ -63,6 +64,14 @@ def _bc_year(value: Any) -> int | None:
     """
     m = re.search(r"\b(\d{4})\b", str(value or ""))
     return int(m.group(1)) if m else None
+
+
+def _bc_year_from_epoch(value: Any) -> int | None:
+    """`tralbum_details` da' la data come timestamp unix, non come stringa."""
+    try:
+        return datetime.fromtimestamp(int(value), tz=timezone.utc).year
+    except (TypeError, ValueError, OSError):
+        return None
 
 
 def _art_url(art_id: Any, size: str = "9") -> str | None:

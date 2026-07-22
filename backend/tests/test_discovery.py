@@ -164,7 +164,7 @@ def test_dig_endpoint_502_on_discogs_error(db, monkeypatch):
     assert exc_info.value.detail["code"] == "discovery_provider_error"
 
 
-# --- Task 3: GET /api/discovery/release/{discogs_id} — tracklist reale -------
+# --- Task 3/6: GET /api/discovery/release?source=&id= — tracklist reale -----
 
 _RELEASE_DETAIL = {
     "id": 249504,
@@ -187,13 +187,14 @@ def test_release_detail_normalizes_tracklist(db, monkeypatch):
     from app.routers.discovery import get_release_detail
 
     monkeypatch.setattr(DiscogsClient, "get_release", lambda self, rid: _RELEASE_DETAIL)
-    out = get_release_detail(249504)
-    assert out.discogs_id == 249504
+    out = get_release_detail(id="249504")
+    assert out.source == "discogs"
+    assert out.source_id == "249504"
     assert out.title == "Selected Ambient Works 85-92"
     assert out.artist == "Aphex Twin"  # suffisso di disambiguazione Discogs "(2)" rimosso
     assert out.label == "Apollo"
     assert out.thumb_url == "http://img/cover.jpg"
-    assert out.discogs_url == _RELEASE_DETAIL["uri"]
+    assert out.source_url == _RELEASE_DETAIL["uri"]
     # la voce "heading" (Side B) e' esclusa: non e' una traccia
     assert [t.title for t in out.tracks] == ["Xtal", "Tha", "Untitled"]
     assert out.tracks[0].duration_seconds == 296  # "4:56" -> 4*60+56
@@ -208,7 +209,7 @@ def test_release_detail_502_on_discogs_error(monkeypatch):
         raise DiscogsError("Discogs 500: boom")
     monkeypatch.setattr(DiscogsClient, "get_release", _raise)
     with pytest.raises(HTTPException) as exc_info:
-        get_release_detail(249504)
+        get_release_detail(id="249504")
     assert exc_info.value.status_code == 502
 
 
@@ -224,7 +225,7 @@ def test_release_detail_tolerates_image_and_label_without_keys(monkeypatch):
         "tracklist": [{"position": "A1", "type_": "track", "title": "T", "duration": "3:00"}],
     }
     monkeypatch.setattr(DiscogsClient, "get_release", lambda self, rid: payload)
-    out = get_release_detail(1)
+    out = get_release_detail(id="1")
     assert out.thumb_url is None
     assert out.label is None
     assert [t.title for t in out.tracks] == ["T"]

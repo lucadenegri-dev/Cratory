@@ -18,10 +18,10 @@ function Harness() {
   const p = usePlayer();
   return (
     <div>
-      <button onClick={() => p.play({ kind: "discovery-preview", item: { key: "a", artist: "Artist", title: "Acid Trip", discogsId: 42, level: "track", label: "Acid Trip" } })}>
+      <button onClick={() => p.play({ kind: "discovery-preview", item: { key: "a", artist: "Artist", title: "Acid Trip", sourceId: "42", source: "discogs", level: "track", label: "Acid Trip" } })}>
         play-a
       </button>
-      <button onClick={() => p.play({ kind: "discovery-preview", item: { key: "b", artist: "Artist", title: "Other", discogsId: 42, level: "track", label: "Other" } })}>
+      <button onClick={() => p.play({ kind: "discovery-preview", item: { key: "b", artist: "Artist", title: "Other", sourceId: "42", source: "discogs", level: "track", label: "Other" } })}>
         play-b
       </button>
       <span data-testid="status">{p.status}</span>

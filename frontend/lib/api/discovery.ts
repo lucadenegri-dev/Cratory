@@ -1,12 +1,12 @@
 import { apiGet, apiPost } from "./client";
 import type { DigSourceKey } from "../discovery-dig";
 import type {
-  DiscogsRelease,
   DiscoveryAddResponse,
   DiscoveryDigResponse,
   DiscoveryGenres,
   DiscoveryImportInput,
   DiscoveryPreview,
+  DiscoveryRelease,
 } from "./types";
 
 export type { DigSourceKey };
@@ -30,8 +30,8 @@ export function discoveryDig(
   });
 }
 
-export function getDiscogsRelease(discogsId: number) {
-  return apiGet<DiscogsRelease>(`/api/discovery/release/${discogsId}`);
+export function getDiscoveryRelease(source: string, sourceId: string) {
+  return apiGet<DiscoveryRelease>("/api/discovery/release", { source, id: sourceId });
 }
 
 export function discoveryPreview(input: {

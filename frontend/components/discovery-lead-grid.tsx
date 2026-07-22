@@ -140,7 +140,8 @@ function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void })
                 key: `r:${lead.source_id ?? "x"}`,
                 artist: lead.artist,
                 title: lead.title,
-                discogsId: lead.source_id ? Number(lead.source_id) : null,
+                sourceId: lead.source_id,
+                source: lead.source,
                 level: "release",
                 label: lead.title,
                 addInput: {

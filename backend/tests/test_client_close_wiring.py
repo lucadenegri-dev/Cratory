@@ -66,7 +66,7 @@ def test_spotify_status_closes_client_even_on_error(client_db, monkeypatch):
 
 
 def test_discogs_release_detail_closes_client(client_db, monkeypatch):
-    """GET /api/discovery/release/{id} crea un DiscogsClient() per una singola
+    """GET /api/discovery/release?id= crea un DiscogsClient() per una singola
     chiamata get_release(): deve chiuderlo prima di rispondere."""
     client, db = client_db
     closed = []
@@ -77,7 +77,7 @@ def test_discogs_release_detail_closes_client(client_db, monkeypatch):
         "uri": "/release/1", "year": 2020, "tracklist": [],
     })
 
-    resp = client.get("/api/discovery/release/1")
+    resp = client.get("/api/discovery/release", params={"id": "1"})
 
     assert resp.status_code == 200
     assert len(closed) == 1
@@ -98,7 +98,7 @@ def test_discogs_release_detail_closes_client_on_error(client_db, monkeypatch):
 
     monkeypatch.setattr(DiscogsClient, "get_release", boom)
 
-    resp = client.get("/api/discovery/release/1")
+    resp = client.get("/api/discovery/release", params={"id": "1"})
 
     assert resp.status_code == 502
     assert len(closed) == 1
