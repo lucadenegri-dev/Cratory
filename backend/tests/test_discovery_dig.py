@@ -1,5 +1,6 @@
 """Test Discovery v2 dig (nessuna rete: search Discogs finta)."""
 
+import math
 from types import SimpleNamespace
 
 import pytest
@@ -667,6 +668,34 @@ def test_window_is_never_empty_on_a_non_empty_pile():
         for depth in _DEPTHS:
             _, count = _window(depth, pile)
             assert count > 0
+
+
+def test_window_stays_within_two_pages_of_the_retired_page_formula():
+    """Presidio di TRANSIZIONE: quanto si discosta la finestra in item dalla vecchia
+    formula a pagine, che questo refactor ha cancellato.
+
+    Il limite di 2 pagine e' stato dichiarato due volte in prosa e sbagliato due volte,
+    perche' nessuno lo verificava: un numero che nessun test controlla e' una
+    supposizione con l'aria di un fatto. Qui la vecchia formula e' riprodotta apposta,
+    per poterle confrontare.
+
+    Si cancella quando questo branch e' fuso: a quel punto la vecchia formula non e' piu'
+    il riferimento di nessuno, e le invarianti durature sono gli altri test qui sopra
+    (la finestra non promette piu' item di quanti la sorgente ne raggiunga, e a
+    profondita' massima finisce esattamente sul fondo).
+    """
+    def retired_first_page(depth: float, total: int) -> int:
+        usable = min(math.ceil(total / 100), 100)
+        return 1 + round(max(0.0, min(1.0, depth)) * max(0, usable - 3))
+
+    worst = 0
+    for total in (301, 401, 406, 999, 1001, 2001, 5001, 9937, 20001, 43_345):
+        for step in range(0, 1001):
+            depth = step / 1000
+            offset, _ = _window(depth, _discogs_pile(total))
+            slip = abs((offset // 100 + 1) - retired_first_page(depth, total))
+            worst = max(worst, slip)
+    assert worst <= 2, f"scivolamento massimo {worst} pagine, atteso <= 2"
 
 
 # --- Task 6: il punteggio e' solo gusto ---------------------------------------
