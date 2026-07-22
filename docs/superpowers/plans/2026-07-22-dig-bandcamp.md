@@ -24,8 +24,8 @@ esterno, pytest. Next.js 16 App Router + React + Tailwind (frontend), vitest + P
   qualunque altezza di pila**. Misurato per esaustione (totali 1..20.000 × 1.001
   profondità, più campionamento fino a 5 milioni) e approvato il 2026-07-22: il vecchio
   modello misurava lo scarto in pagine e su una pila non tonda prometteva una profondità
-  che la pila non aveva (a `depth=1.0` su 401 release pescava 206 item veri dichiarandone
-  300). Il limite è fissato dal test
+  che la pila non aveva (a `depth=1.0` su 401 release pescava le pagine 3-5, cioè 201 item
+  veri — la pagina 5 ne contiene uno solo — dichiarandone 300). Il limite è fissato dal test
   `test_window_stays_within_two_pages_of_the_retired_page_formula`, non dalla prosa.
   Filtri, ordinamento e composizione della finestra non cambiano. Nessun'altra differenza
   è accettabile.
