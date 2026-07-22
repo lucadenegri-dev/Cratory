@@ -10,6 +10,7 @@ from app.db import get_db
 from app.core.http_errors import api_error
 from app.models import AudioFile, ScanRoot
 from app.schemas import ScanRootCreate, ScanRootRead
+from app.services import cover_cache, thumbs
 
 router = APIRouter(prefix="/api/sources", tags=["sources"])
 
@@ -54,5 +55,12 @@ def delete_source(root_id: int, db: Session = Depends(get_db)):
     root = db.get(ScanRoot, root_id)
     if root is None:
         raise api_error(404, "source_not_found", "Root not found")
+    # id raccolti PRIMA del cascade: dopo la delete i rowid sono liberi e uno
+    # scan successivo può riassegnarli, quindi la cache thumbnail va purgata
+    # per ognuno o resterebbe a servire la cover del file vecchio.
+    file_ids = list(db.scalars(select(AudioFile.id).where(AudioFile.root_id == root_id)))
     db.delete(root)
     db.commit()
+    for file_id in file_ids:
+        thumbs.drop_thumb(file_id)
+        cover_cache.drop_thumb(file_id)

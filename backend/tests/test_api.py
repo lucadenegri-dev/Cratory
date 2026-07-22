@@ -1,3 +1,4 @@
+import os
 import time
 
 from fastapi.testclient import TestClient
@@ -24,6 +25,39 @@ def test_sources_crud(tmp_path):
 
         assert client.delete(f"/api/sources/{root_id}").status_code == 204
         assert client.get("/api/sources").json() == []
+
+
+def test_delete_source_purges_thumbnail_caches(db, tmp_path, monkeypatch):
+    """Gli id di AudioFile sono rowid semplici (niente AUTOINCREMENT): uno
+    scan successivo può riassegnarli, quindi le cache thumbnail dei file
+    cancellati con la sorgente vanno rimosse o un id riciclato rischia di
+    servire la cover del file vecchio."""
+    from app.core.config import settings
+    from app.models import AudioFile, ScanRoot
+    from app.services import cover_cache, thumbs
+
+    monkeypatch.setattr(settings, "thumb_cache_dir", str(tmp_path / "tc"))
+    monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
+
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    db.add(ScanRoot(id=1, path=str(lib)))
+    db.add(AudioFile(id=10, root_id=1, path=f"{lib}/a.mp3", ext="mp3", size_bytes=1,
+                     hash_method="file", status="present", has_cover=True))
+    db.add(AudioFile(id=11, root_id=1, path=f"{lib}/b.mp3", ext="mp3", size_bytes=1,
+                     hash_method="file", status="present", has_cover=False))
+    db.commit()
+
+    with open(thumbs.thumb_path(10), "wb") as fh:
+        fh.write(b"\xff\xd8thumb")
+    with open(cover_cache.thumb_path(11), "wb") as fh:
+        fh.write(b"\xff\xd8cover")
+
+    with TestClient(app) as client:
+        assert client.delete("/api/sources/1").status_code == 204
+
+    assert not os.path.exists(thumbs.thumb_path(10))
+    assert not os.path.exists(cover_cache.thumb_path(11))
 
 
 def test_sources_count_excludes_missing(db, tmp_path):

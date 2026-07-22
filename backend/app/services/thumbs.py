@@ -26,6 +26,17 @@ def thumb_path(file_id: int) -> str:
     return os.path.join(_dir(), f"{file_id}.jpg")
 
 
+def drop_thumb(file_id: int) -> None:
+    """Rimuove la thumbnail cachata di un file eliminato. `id` di AudioFile è
+    un rowid SQLite semplice (niente AUTOINCREMENT): una volta liberato può
+    essere riassegnato da uno scan successivo, e senza questa pulizia
+    servirebbe la cover del vecchio file. Silenziosa se il file non c'è."""
+    try:
+        os.remove(thumb_path(file_id))
+    except OSError:
+        pass
+
+
 def _render(data: bytes) -> bytes | None:
     """Ridimensiona a THUMB_MAX_PX (lato lungo) e ricodifica in JPEG.
     None se l'immagine non è decodificabile: artwork rotto = nessuna cover.

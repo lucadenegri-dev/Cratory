@@ -16,6 +16,16 @@ def thumb_path(file_id: int) -> str:
     return os.path.join(_dir(), f"{file_id}.jpg")
 
 
+def drop_thumb(file_id: int) -> None:
+    """Rimuove la proposta cachata di un file eliminato. Gemella di
+    thumbs.drop_thumb: stesso motivo (id di AudioFile riassegnabile),
+    silenziosa se il file non c'è."""
+    try:
+        os.remove(thumb_path(file_id))
+    except OSError:
+        pass
+
+
 def save_thumb(file_id: int, data: bytes) -> str:
     # Scrittura atomica: file temporaneo nella stessa dir + os.replace(), così
     # due richieste concorrenti non interleaviano mai byte nello stesso file.
