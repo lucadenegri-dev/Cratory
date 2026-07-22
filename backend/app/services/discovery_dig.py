@@ -48,6 +48,16 @@ def _library_tracks(db: Session) -> list[Track]:
     return list(db.scalars(select(Track)).all())
 
 
+def _reach(pile: Pile) -> int:
+    """Quanto e' davvero raggiungibile della pila: il minimo fra quanto e' alta e
+    quanto ne raggiunge la sorgente, mai negativo. Un solo posto per questa clamp:
+    prima viveva duplicata in `_window` e in `dig()`, due copie che dovevano restare
+    d'accordo per sempre — la stessa malattia per cui la vecchia `_usable_pages` era
+    stata isolata in una funzione a se'.
+    """
+    return max(0, min(pile.height, pile.reach))
+
+
 def _window(depth: float, pile: Pile) -> tuple[int, int]:
     """La finestra (offset, count) da pescare nella pila.
 
@@ -56,7 +66,7 @@ def _window(depth: float, pile: Pile) -> tuple[int, int]:
     corta della finestra `depth` non ha effetto: non c'e' profondita' da scegliere, e il
     chiamante lo segnala alla UI via `pile_reach`.
     """
-    reach = max(0, min(pile.height, pile.reach))
+    reach = _reach(pile)
     if reach <= 0:
         return 0, 0
     start = round(max(0.0, min(1.0, depth)) * max(0, reach - WINDOW_ITEMS))
@@ -290,9 +300,9 @@ def _weights(seed_type: str, *, has_styles: bool = True) -> Weights:
         label = 0.0
     if not has_styles:
         style = 0.0
+    # `artist` non e' mai azzerato da nessuna combinazione: `total >= W_ARTIST > 0`
+    # sempre, quindi non serve (e non esiste) un ramo per total<=0.
     total = artist + label + style
-    if total <= 0:
-        return Weights(artist=1.0, label=0.0, style=0.0)
     return Weights(artist=artist / total, label=label / total, style=style / total)
 
 
@@ -416,7 +426,7 @@ def dig(
     seed = Seed(type=seed_type, value=value)
     pile = source.probe(seed)
     offset, count = _window(depth, pile)
-    reach = max(0, min(pile.height, pile.reach))
+    reach = _reach(pile)
     if count <= 0:
         return DigResult(seed_type=seed_type, value=value, pile_total=pile.height,
                          pile_reach=reach, seed_resolution=pile.resolution)

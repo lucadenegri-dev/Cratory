@@ -4,7 +4,6 @@ Traduce la finestra in item del motore nella paginazione di Discogs (pagine da 1
 tetto a pagina 100) e mappa i record di `/database/search` su `DiscoveryLead`.
 """
 
-import logging
 import math
 import re
 from typing import Any
@@ -19,9 +18,7 @@ from app.services.dig_sources import DiscoveryLead, Pile, Seed
 # Il motore e le altre sorgenti condividono queste utility: stanno nel motore per non
 # duplicarle. Nessun ciclo: `dig_sources/__init__` non importa il motore, e il motore
 # non importa le sorgenti concrete (le costruisce il router).
-from app.services.discovery_dig import _VARIOUS, _clean_artist, _norm, _parse_year
-
-logger = logging.getLogger(__name__)
+from app.services.discovery_dig import _VARIOUS, _clean_artist, _parse_year
 
 # Formati che un DJ NON vuole tra i lead (vuole release singole, non mix gia' fatti).
 _BAD_FORMATS = {"compilation", "dj mix", "mixed", "mixtape"}

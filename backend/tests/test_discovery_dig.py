@@ -600,9 +600,14 @@ def test_window_moves_monotonically_with_depth():
 
 
 def test_window_on_a_pile_shorter_than_itself_ignores_depth():
-    # Niente profondita' da scegliere: la finestra E' tutta la pila.
+    # Niente profondita' da scegliere: la finestra E' tutta la pila, a QUALSIASI
+    # depth — non solo agli estremi. (La vecchia suite a pagine aveva una
+    # regressione dedicata su `_window(0.5, 40) == [1]`: il mid-range depth su una
+    # pila corta e' lo stesso caso, qui pinnato di nuovo dopo la riscrittura in item.)
     assert _window(0.0, _discogs_pile(150)) == (0, 150)
+    assert _window(0.5, _discogs_pile(150)) == (0, 150)
     assert _window(1.0, _discogs_pile(150)) == (0, 150)
+    assert _window(0.5, _discogs_pile(40)) == (0, 40)
 
 
 def test_window_on_an_empty_pile_is_empty():
@@ -612,6 +617,56 @@ def test_window_on_an_empty_pile_is_empty():
 def test_window_is_capped_by_what_the_source_reaches_not_by_the_pile():
     # 434.149 item esistono, ma la sorgente ne raggiunge 3.000: il fondo e' li'.
     assert _window(1.0, Pile(height=434_149, reach=3_000)) == (2700, WINDOW_ITEMS)
+
+
+# --- invarianti durevoli di _window: valgono per costruzione, non per confronto
+# con la vecchia formula a pagine (cancellata). Coprono lo spettro di totali su cui
+# la review ha accertato che il nuovo modello in item diverge da quello vecchio
+# (fino a 1 pagina su pile 999+, fino a 2 su pile corte ~300-700) — e diverge
+# perche' e' PIU' corretto, non per un compromesso: queste asserzioni fissano
+# esattamente la proprieta' che lo rende tale.
+
+
+_PILE_TOTALS = [0, 40, 150, 301, 406, 999, 5_000, 43_345, 500_000]
+_DEPTHS = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+
+def test_window_never_claims_more_items_than_the_source_can_reach():
+    # La finestra e' un CONTRATTO con chi la scarica: offset+count non deve mai
+    # eccedere cio' che pila e sorgente possono davvero dare, qualunque combinazione
+    # di totale e profondita'. Il vecchio modello a pagine lo rispettava solo per
+    # costruzione fortunata (pagine intere); qui si fissa che vale sempre, anche
+    # sui totali non multipli di 100 dove una pagina sarebbe stata parziale.
+    for total in _PILE_TOTALS:
+        pile = Pile(height=total, reach=10_000)
+        for depth in _DEPTHS:
+            offset, count = _window(depth, pile)
+            assert offset + count <= min(pile.height, pile.reach)
+
+
+def test_window_reaches_exactly_the_bottom_at_max_depth():
+    # Il caso preciso su cui il vecchio modello a pagine sbagliava: su una pila di
+    # 406 release, a depth=1.0 la formula a pagine (usable=ceil(406/100)=5, meno le
+    # prime 2 di "cima") chiedeva le pagine 3-5, cioe' 206 item VERI presentati come
+    # una finestra da 300 — il resto era padding di una pagina parziale che Discogs
+    # avrebbe restituito comunque, ma non ESISTE come item reale. Il modello in
+    # item non ha pagine da riempire: a depth=1.0 la finestra finisce esattamente
+    # sul fondo raggiungibile, ne' un item oltre ne' uno sotto.
+    for total in [301, 406, 999, 5_000, 43_345, 500_000]:      # tutti >= WINDOW_ITEMS
+        pile = Pile(height=total, reach=10_000)
+        offset, count = _window(1.0, pile)
+        assert offset + count == min(pile.height, pile.reach)
+
+
+def test_window_is_never_empty_on_a_non_empty_pile():
+    # Una pila che esiste deve sempre dare qualcosa da scavare: una finestra vuota
+    # su un seme vivo sarebbe un dig silenzioso senza lead, indistinguibile da un
+    # seme morto (pila.height == 0) per chi guarda solo il risultato.
+    for total in [1, 40, 150, 301, 406, 999, 5_000, 43_345, 500_000]:
+        pile = Pile(height=total, reach=10_000)
+        for depth in _DEPTHS:
+            _, count = _window(depth, pile)
+            assert count > 0
 
 
 # --- Task 6: il punteggio e' solo gusto ---------------------------------------
