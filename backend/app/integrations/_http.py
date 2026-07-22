@@ -145,6 +145,47 @@ def get_json(
     return parse_json(response, error_cls, message=json_error_message or f"{name}: risposta non JSON")
 
 
+def post_with_retries(
+    client: httpx.Client,
+    url: str,
+    *,
+    json_body: dict,
+    error_cls: type[Exception],
+    retries: int = DEFAULT_RETRIES,
+    backoff: float = DEFAULT_BACKOFF,
+) -> httpx.Response:
+    """Come `get_with_retries`, per le API che parlano solo POST (Bandcamp)."""
+    return _request_with_retries(
+        lambda: client.post(url, json=json_body), "POST", url,
+        error_cls=error_cls, retries=retries, backoff=backoff,
+    )
+
+
+def post_json(
+    client: httpx.Client,
+    url: str,
+    *,
+    json_body: dict,
+    error_cls: type[Exception],
+    name: str,
+    rate_limit_message: str | None = None,
+    text_preview: int = 160,
+    context: str = "",
+    json_error_message: str | None = None,
+    retries: int = DEFAULT_RETRIES,
+    backoff: float = DEFAULT_BACKOFF,
+):
+    """POST + retry di trasporto + mappatura status + parsing JSON, in un colpo.
+
+    Gemello di `get_json`: stessa composizione, stessi messaggi, verbo diverso.
+    """
+    response = post_with_retries(client, url, json_body=json_body, error_cls=error_cls,
+                                 retries=retries, backoff=backoff)
+    raise_for_status(response, error_cls, name=name, rate_limit_message=rate_limit_message,
+                     text_preview=text_preview, context=context)
+    return parse_json(response, error_cls, message=json_error_message or f"{name}: risposta non JSON")
+
+
 class ClosableHttpClient:
     """Mixin per i client che possiedono un `httpx.Client` proprio.
 
