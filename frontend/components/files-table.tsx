@@ -86,10 +86,11 @@ export function FilesTable({
               <td className="py-1 pl-3 pr-0">
                 <CoverThumb fileId={r.id} source={r.cover_source} />
               </td>
-              {/* dir=rtl porta l'ellissi in testa: si legge la coda del percorso
-                  (il nome del file), non l'inizio sempre uguale */}
               <td className="max-w-[300px] px-3 py-1 text-muted" title={r.path}>
-                <span dir="rtl" className="block truncate text-left">{r.path}</span>
+                {/* U+200E (LRM) prima del path: dir=rtl porta l'ellissi in testa,
+                    ma senza un carattere forte LTR iniziale lo "/" di apertura è
+                    neutro e il bidi lo sposta in coda alla riga. */}
+                <span dir="rtl" className="block truncate text-left">{"‎" + r.path}</span>
               </td>
               <td className="px-3 py-1 text-fg">{r.artist || <span className="text-faint">—</span>}</td>
               <td className="px-3 py-1 text-fg-strong">{r.title || <span className="text-faint">—</span>}</td>
