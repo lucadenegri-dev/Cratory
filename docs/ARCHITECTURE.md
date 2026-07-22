@@ -23,8 +23,8 @@ discovery and a corpus of identified mixes.
   organization remain Sortory's job; the textual enrichment of metadata
   (title/artist/album/label/genre) is also Sortory's.
 - Spotify provides no mixing features: it serves identity, metadata, import/export.
-- The remaining external providers (Discogs, Spotify) serve **Discovery only**, for
-  taste and crate-digging, not the feature pipeline.
+- The remaining external providers (Discogs, Bandcamp, Spotify) serve **Discovery
+  only**, for taste and crate-digging, not the feature pipeline.
 - The AI never receives the whole library: the Set Builder AI curation stage caps the pool it
   sees at 200 candidates, in per-call batches of at most 60.
 - Every AI call is schema-constrained (JSON Schema for the LLM response, Pydantic for the
@@ -41,10 +41,12 @@ discovery and a corpus of identified mixes.
   Shazam module, which downloads audio only temporarily for fingerprinting and
   does not keep it.
 - An additional, narrowly-scoped exception: the Discovery dig plays an **ephemeral
-  third-party preview** to evaluate a lead before acquiring it — a 30s iTunes clip or,
-  as a fallback, the YouTube video Discogs associates with the release. Nothing is
-  downloaded or kept; the audio is streamed from iTunes/YouTube and discarded. The same
-  shared docked player also plays owned tracks (see below).
+  third-party preview** to evaluate a lead before acquiring it — a 30s iTunes clip, the
+  YouTube video Discogs associates with the release as a fallback, or, when the lead
+  comes from Bandcamp, the real per-track stream Bandcamp already hands back inside the
+  dig result itself (no separate resolution call). Nothing is downloaded or kept in any
+  case; the audio is streamed from the provider and discarded. The same shared docked
+  player also plays owned tracks (see below).
 
 ## Main flow
 
@@ -73,16 +75,37 @@ Rekordbox (user analysis)
 ```
 
 Discovery is a single branch oriented toward **taste** (not technical compatibility,
-which stays with the Set Builder): crate digging (Scava) via Discogs.
+which stays with the Set Builder): crate digging (Scava) via two sources behind a
+shared `DigSource` protocol (`backend/app/services/dig_sources/`) — Discogs and
+Bandcamp, chosen per dig.
 
 ```text
 seed: genre or label
-  -> Discogs pile sorted by demand (want desc); `depth` picks WHERE in the pile
-     to fetch a 3-page window (0.0 = the seed's classics, 1.0 = bottom of the crate)
+  -> DigSource.probe: how tall the pile is, how far this source reaches into it
+  -> engine picks a (offset, count) window from `depth` in ITEMS, not pages
+     (0.0 = the seed's classics, 1.0 = the bottom of what the source reaches)
+  -> DigSource.fetch translates the window into its own pagination:
+     Discogs jumps to page numbers, Bandcamp walks a cursor sequentially
   -> unowned leads, dedup vs library + variant dedup
   -> taste-only ranking inside the window (familiarity + label + style), per-artist cap
   -> add to library
 ```
+
+The engine only ever reasons in items, never in a provider's own pagination unit —
+that boundary is what made a second source possible without the engine knowing who is
+behind it (`probe`/`fetch`/`to_lead`, `backend/app/services/dig_sources/__init__.py`).
+Bandcamp trades three signals for reach, all measured against the live API: no
+have/want (no rarity signal, so `rare_wanted`/`deep_cut` never fire for it), no styles
+in the result list (only in the release detail, so `style_match` never fires and its
+score weight redistributes into artist/label), and a capped `reach` of 3,000 items
+(`BANDCAMP_REACH`) — not a Bandcamp limit but a cost choice, since depth on Bandcamp
+costs requests (a sequential cursor walk) rather than a page jump, and the pile itself
+can be far larger (e.g. techno ≈ 434,000 releases on Bandcamp). In exchange, Bandcamp
+hands back a real per-track stream inside the dig result (no iTunes/YouTube preview
+resolution needed for those leads) and a richer release-detail panel (real tags, price,
+exact release date). Its one inferred field is `format_badge` (Single/EP/Album),
+derived from track count — Discogs declares the format on the release itself, Bandcamp
+does not declare one at all.
 
 Gap Analysis stays a deterministic read of a playlist's gaps, but the old Discovery
 section that suggested tracks starting from gaps has been removed.
@@ -483,6 +506,7 @@ droppable on SQLite due to a baked-in FK on `playlist_id` — but are dead and e
 |---|---|---|
 | Spotify | active | OAuth, import, Discovery resolver, playlist export |
 | Discogs | active | Discovery "Scava" crate digging by genre/label; works without a token, `DISCOGS_TOKEN` raises the rate limit |
+| Bandcamp | active | Discovery "Scava" second dig source (genre/label), behind the same `DigSource` seam as Discogs; internal, undocumented endpoints, no key/token; contract-tested with `@pytest.mark.network` (excluded from the default suite) |
 | LLM | active if configured | structured and validated outputs |
 | Shazam | active if dependencies present | ffmpeg, yt-dlp, shazamio; fingerprinting of external mixes, not of the library |
 | slskd (Soulseek) | active if configured | download via REST API; `SLSKD_URL`/`SLSKD_API_KEY`/`SLSKD_DOWNLOAD_DIR` |
@@ -491,7 +515,7 @@ droppable on SQLite due to a baked-in FK on `playlist_id` — but are dead and e
 | SoundCloud | active if dependencies present | yt-dlp (metadata only, never audio) for playlists/secret links and likes: flat like preview (fast), import/sync with full per-track extraction (uploader/duration/artwork, ~1s per track); no ISRC (not exposed), dedup on `platform_track_id`; sync always additive (never prune, unlike Spotify) |
 | PostgreSQL | backlog | SQLite is enough for single-user |
 
-The remaining external providers (Discogs, Spotify) serve **Discovery
+The remaining external providers (Discogs, Bandcamp, Spotify) serve **Discovery
 only**: none of them provides BPM/key/mood/energy anymore. The textual
 enrichment of metadata (title/artist/album/label/genre) is Sortory's
 job, not Cratory's. Spotify `/recommendations` must not be used: for

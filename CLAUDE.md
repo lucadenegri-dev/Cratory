@@ -21,8 +21,10 @@ explicit exception to "does not keep audio files": persistent acquisition via
 Soulseek/slskd, which links a file to the existing `Track` in the library
 (`has_local_file`/`local_path`/`local_format`/`local_bitrate`). Eccezione ulteriore, a scope
 ristretto: il dig di Discovery riproduce una **preview effimera di terzi** (clip iTunes
-30s o, in fallback, il video YouTube associato alla release da Discogs) per valutare un
-lead prima di acquisirlo; nulla viene scaricato o conservato. Lo stesso player docked
+30s, in fallback il video YouTube associato alla release da Discogs, oppure — quando il
+lead viene da Bandcamp — lo stream reale per-traccia che Bandcamp restituisce già dentro
+il risultato del dig, senza risoluzione aggiuntiva) per valutare un lead prima di
+acquisirlo; nulla viene scaricato o conservato in nessun caso. Lo stesso player docked
 condiviso riproduce sia questa preview sia le tracce possedute.
 
 ## Source of truth
@@ -90,10 +92,12 @@ backend/app/
 ```
 
 No enrichment chain: BPM/key from Rekordbox, text metadata from Sortory. The remaining
-external providers serve **Discovery only**: Discogs (dig "Scava"), Spotify (resolver).
+external providers serve **Discovery only**: Discogs and Bandcamp (dig "Scava", two
+sources behind the `DigSource` protocol), Spotify (resolver).
 
 Discovery works by taste, not by technical compatibility (that stays with the Set Builder):
-the dig "Scava" uses Discogs by genre/label, with Spotify only as an identity resolver.
+the dig "Scava" uses Discogs or Bandcamp by genre/label, with Spotify only as an identity
+resolver.
 Spotify `/recommendations` must not be used: for new apps or in development mode it returns
 403/404.
 

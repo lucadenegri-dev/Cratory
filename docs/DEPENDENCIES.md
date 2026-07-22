@@ -72,7 +72,8 @@ Not Python/Node packages, but required for the corresponding feature to work:
 |---|---|---|
 | Spotify Web API | Track identity, editorial metadata, covers, ISRC, playlist import/export | Required for Spotify import |
 | Discogs API | Discovery "Scava" (crate-dig by genre/label) | Optional (token only raises rate limit) |
-| iTunes Search API | Discovery preview (30s audio clip for dig leads) | Optional (Discovery), public — no auth/token |
+| Bandcamp (internal API) | Discovery "Scava" second dig source (crate-dig by genre/label) | Optional (Discovery), public — no auth/token, undocumented endpoints |
+| iTunes Search API | Discovery preview (30s audio clip for dig leads without their own stream) | Optional (Discovery), public — no auth/token |
 | slskd daemon | File acquisition via Soulseek | Optional, runs separately |
 | Rekordbox | BPM/Camelot key via `collection.xml` export | Required for BPM/key (no package dep — just a file upload) |
 | Sortory (sibling app) | Text metadata enrichment + on-disk tagging | Optional, separate app |
@@ -84,6 +85,23 @@ The Discovery preview's fallback embeds the YouTube video Discogs already associ
 with a release (`GET https://itunes.apple.com/search` is tried first, no key required).
 That embed can surface ads and sits in a ToS grey area for this kind of use; accepted
 here given Cratory's personal, self-hosted, single-user scope (no redistribution).
+
+**Bandcamp** is the second Discovery dig source, behind the same `DigSource` seam as
+Discogs (see `docs/ARCHITECTURE.md`). It talks to `bandcamp.com`'s own internal,
+undocumented endpoints (`api/discover/1/discover_web`,
+`api/bcsearch_public_api/1/autocomplete_elastic`, `api/mobile/24/band_details`,
+`api/mobile/24/tralbum_details`) — the same ones behind `bandcamp.com/discover` in a
+browser, not a published API. No key, no token, no registration: plain unauthenticated
+POST requests (`backend/app/integrations/bandcamp.py`, `httpx` client injectable for
+tests, same shape as `discogs.py`). Because the endpoints are internal, Bandcamp can
+change or remove them without notice; the risk is accepted for Cratory's personal,
+self-hosted, single-user scope (the same posture already taken for yt-dlp on
+SoundCloud) and contained by the `DigSource` seam — if Bandcamp breaks, only that
+source stops working, Discogs keeps digging. `backend/tests/test_bandcamp_contract.py`
+is marked `@pytest.mark.network` and excluded from the default suite (`pytest.ini`:
+`addopts = -m 'not network'`); it hits the real API and checks the shape of the
+response, and is the diagnostic to run by hand when the Bandcamp dig stops returning
+leads.
 
 ## History
 

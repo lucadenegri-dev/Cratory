@@ -48,9 +48,10 @@ BPM + genre — it is not sourced from any provider and cannot be edited by hand
   derived only and not directly editable).
 - Generate sets with a deterministic engine plus optional, validated AI.
 - Classify transitions as technically safe, creative risk, or good reset.
-- Discovery by taste: crate-dig by genre/label via Discogs ("Scava") — the only
-  external provider left for Discovery (plus the Spotify resolver), and it serves
-  Discovery only, not track features.
+- Discovery by taste: crate-dig by genre/label ("Scava"), switching between two
+  crates — Discogs (depth and a real rarity signal) and Bandcamp (buyable, with a real
+  listen) — plus the Spotify resolver; none of them feed track features, Discovery
+  only.
 - Identify mix tracklists via Shazam/yt-dlp/ffmpeg into a corpus kept separate from the
   library — the only audio fingerprinting Cratory does (of external mixes, not of your
   library).
@@ -81,7 +82,7 @@ Backend:   Python, FastAPI, SQLAlchemy, Pydantic
 Frontend:  Next.js 16, React, Tailwind / design system
 Database:  SQLite (local); PostgreSQL in backlog
 AI:        LLM behind an interface, outputs validated with Pydantic
-External:  Spotify, Discogs (Discovery only), Shazam, slskd, Rekordbox (XML import)
+External:  Spotify, Discogs + Bandcamp (Discovery only), Shazam, slskd, Rekordbox (XML import)
 ```
 
 ## Quickstart
@@ -197,7 +198,7 @@ or paste a tracklist → run Sortory separately to tag and organize new files on
 analyze new tracks in Rekordbox and import the collection XML to fill in BPM/key →
 generate a set (deterministic engine, optionally AI-curated) → review transitions, warnings and alternatives →
 export or create a Spotify playlist → use Discovery ("Scava" by genre/label via
-Discogs) to find tracks that fit your taste → optionally acquire files for tracks you own
+Discogs or Bandcamp) to find tracks that fit your taste → optionally acquire files for tracks you own
 via Soulseek (Downloads page, per-playlist or per-track from Discovery), once slskd is
 running and configured.
 

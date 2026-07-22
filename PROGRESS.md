@@ -6,7 +6,7 @@
 
 ## Current state
 
-**Last updated:** 2026-07-21
+**Last updated:** 2026-07-23
 
 **Product name:** **Cratory** (rename done on 2026-06-25 across UI, code, docs and
 icon). "SetArc" and "DJ Assistant" remain only as historical names; legacy technical
@@ -21,7 +21,9 @@ now only from a Rekordbox XML import, `energy` derived); **Analysis page complet
 Rekordbox import — explicit per-value provenance, `bpm_source`/`key_source`: manual >
 rekordbox > cratory); Discovery is now the dig alone (**playlist expansion removed
 2026-07-19**) — Discogs crate digging, whose pile is sorted by demand, `depth` picks
-the window to fetch from it, taste always ranks inside that window; the
+the window to fetch from it, taste always ranks inside that window, plus **Bandcamp as
+a second dig source since 2026-07-23** (same engine, chosen per dig behind a shared
+`DigSource` protocol); the
 Set Builder with an "owned-only" guarantee, a two-phase deterministic generator (skeleton then
 fill) and an optional AI curation stage (intent compilation, mood-fit, anchor hints — the AI
 never sequences tracks); dashboard
@@ -29,6 +31,78 @@ with a five-stage pipeline (Index moved to a nav button) and documentation reali
 the new paradigm; mix identification via Shazam integrated (phase 1; co-occurrence in
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-07-23 - Dig Bandcamp: seconda sorgente del crate digging
+
+Brainstorming → design → piano → esecuzione a task con review a ogni step (design in
+`docs/superpowers/specs/2026-07-22-dig-bandcamp-design.md`, piano in
+`docs/superpowers/plans/2026-07-22-dig-bandcamp.md`, 8 task).
+
+- **Il seam `DigSource`** (`backend/app/services/dig_sources/__init__.py`:
+  `Seed`/`Pile`/`probe`/`fetch`/`to_lead`) sposta il confine fra motore e sorgente: il
+  motore (`discovery_dig.py`) ragiona in ITEM — una finestra `(offset, count)` dentro la
+  pila di un seme — e ogni sorgente traduce quella finestra nella propria paginazione:
+  numeri di pagina per Discogs, sfogliata sequenziale col cursore per Bandcamp
+  (`dig_sources/bandcamp.py`, client iniettabile in `integrations/bandcamp.py`, stesso
+  pattern di `discogs.py`). Dedup, esclusione del posseduto, `TasteProfile` e `_select`
+  non cambiano e non sanno chi c'e' dietro.
+- **Bandcamp come sorgente**: seme genere → tag normalizzato (`funk-soul`, un solo
+  alias necessario per `drum n bass` → `drum-and-bass`, perche' la normalizzazione
+  naive trova una pila vera ma sbagliata); seme etichetta → discografia della band in
+  due richieste (ricerca + `band_details`), pila corta per costruzione
+  (`reach == height`). Niente have/want (nessun segnale di rarita'), niente stili in
+  lista (solo nel dettaglio), badge di formato derivato dal conteggio tracce
+  (`format_badge`, l'unico campo inferito). `BANDCAMP_REACH = 3.000`, scelta di costo:
+  la sfogliata rende la profondita' costosa in richieste (fino a ~20s al depth
+  massimo), non un limite di Bandcamp — la pila reale puo' essere enorme (techno ≈
+  434.149 release su Bandcamp).
+- **API**: `POST /api/discovery/dig` guadagna `source: "discogs"|"bandcamp"` (default
+  `"discogs"`); la risposta sostituisce `pile_pages` con `pile_total`/`pile_reach`
+  (item, non pagine: `pile_reach <= 300` = profondita' inerte, `pile_total >
+  pile_reach` = si vede solo una porzione); i lead usano `source_id`/`source_url`/
+  `stream_url` al posto di `discogs_id`/`discogs_url`; `GET /api/discovery/release/{id}`
+  diventa `GET /api/discovery/release?source=&id=` (`band_id:item_id` per Bandcamp,
+  solo interi — nessun URL attraversa il confine, quindi nessuna superficie SSRF).
+- **Preview e pannello**: Bandcamp regala uno stream mp3 reale dentro il risultato del
+  dig (il player lo suona diretto, niente risoluzione iTunes/YouTube); il pannello
+  tracklist apre `tralbum_details` e ha tag veri, prezzo e data esatta — su Bandcamp e'
+  piu' ricco, non piu' povero, di quello Discogs.
+- **Conseguenza accettata sul dig Discogs**: passare da pagine a item cambia l'unita' di
+  misura dello scivolamento. Misurato per esaustione (tutti i totali da 1 a 20.000 per
+  1.001 profondita' ciascuno, piu' campionamento fino a 5 milioni): lo scivolamento
+  massimo rispetto alla vecchia formula a pagine e' **2 pagine, a qualunque altezza di
+  pila**, senza soglia sotto cui vale 1 e sopra cui vale 2 — il numero da tenere e' 2,
+  senza condizioni. Il comportamento nuovo e' piu' corretto (sulle pile corte il
+  vecchio prometteva una profondita' che la pila non aveva), non una regressione. Il
+  limite ha un test dedicato,
+  `test_window_stays_within_two_pages_of_the_retired_page_formula`
+  (`backend/tests/test_discovery_dig.py`), presidio di transizione da cancellare a
+  fusione avvenuta.
+- **Conseguenza accettata sul dig Bandcamp**: e' piu' rumoroso di quello Discogs, e non
+  esiste un modo deterministico di renderlo meno rumoroso con i dati disponibili
+  (niente domanda misurata, niente campo formato, "self-released" non discrimina).
+  Scritto qui perche' sia una scelta e non una scoperta.
+- **Rischio**: endpoint Bandcamp interni e non documentati
+  (`api/discover/1/discover_web` e affini), che possono cambiare senza preavviso. Il
+  seam `DigSource` fa si' che, quando succede, si rompa solo quello: il dig Discogs
+  continua a funzionare. `backend/tests/test_bandcamp_contract.py`
+  (`@pytest.mark.network`, escluso dalla suite di default) e' lo strumento diagnostico
+  per quando succede.
+- Esecuzione a 8 task con review a ogni step (seam, client HTTP, sorgente Bandcamp per
+  tag ed etichetta, contratto HTTP neutro, dettaglio release per entrambe le sorgenti,
+  UI, documentazione).
+
+**Verifica:** backend 1095/1095 test verdi (4 deselected `-m network`, esclusi di
+default), incluso il test di transizione sullo scivolamento Discogs. Frontend: lint 0
+errori (4 warning preesistenti, non introdotti da questa feature), `tsc` puliti,
+103/103 test unit verdi. Il worktree e' stato esercitato contro l'API Bandcamp reale
+attraverso il proxy del frontend vero: un dig "Techno" dal vivo ha restituito 275 lead
+con stream funzionanti. Il click-through completo nel browser (grid → card → pannello
+→ play) NON e' stato confermato visivamente end-to-end in questa sessione — limite
+dell'ambiente dev-server/harness di automazione di questo worktree, che riguarda
+identicamente il dig Discogs preesistente e non e' quindi specifico di Bandcamp.
+`test:e2e` non eseguibile in questo worktree: manca `backend/.venv` (richiesto dal
+runner Playwright), non presente in questa sessione.
 
 ## Milestone 2026-07-21 - Cover della traccia nelle righe wishlist
 

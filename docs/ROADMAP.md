@@ -30,7 +30,13 @@ operational (Discogs dig). **The dig's engine was redesigned
 (2026-07-16):** the Discogs pile for a seed is sorted by demand (`sort=want`) and
 `depth` picks where to fetch a window from it (0.0 = the seed's classics, 1.0 = the
 bottom of the crate) — taste always ranks inside that window, it is no longer a mode.
-The Set Builder
+**A second dig source, Bandcamp, was added (2026-07-23):** the engine was generalized
+to reason in items behind a `DigSource` protocol (`probe`/`fetch`/`to_lead`), so
+Discogs and Bandcamp share the same window/taste/dedup machinery and the user picks
+the source per dig. Bandcamp gives up rarity/style signal and unlimited depth (capped
+at `reach` = 3,000 items, a cost choice) in exchange for a real per-track stream and a
+richer release detail — accepted as noisier by design (see "Suspended / revised"
+below). The Set Builder
 guarantees owned-only; **its deterministic generator was reworked into two
 phases (2026-07-19, phase 1)** — a skeleton (anchors, bomb reserve, genre plan) is built first,
 then filled with beam search per segment, same external interface. **An AI curation stage
@@ -98,6 +104,30 @@ source").
   window `want` is roughly constant, so they could not discriminate leads anyway) and
   taste ranks inside the window unconditionally, not as a mode. Cost: 4-5 Discogs
   requests per dig. See `docs/API.md` (Discovery) and PROGRESS.md for detail.
+- **Dig second source: Bandcamp** — DONE (2026-07-23). Added behind a `DigSource`
+  protocol (`Seed`/`Pile`/`probe`/`fetch`/`to_lead`,
+  `backend/app/services/dig_sources/`): the engine now reasons in items and each source
+  translates the `(offset, count)` window into its own pagination — Discogs into page
+  numbers, Bandcamp into a sequential cursor walk. `POST /api/discovery/dig` gained
+  `source: "discogs" | "bandcamp"` (default `"discogs"`); the response replaced
+  `pile_pages` with `pile_total`/`pile_reach`; leads use `source_id`/`source_url`/
+  `stream_url` instead of `discogs_id`/`discogs_url`; `GET /api/discovery/release/{id}`
+  became `GET /api/discovery/release?source=&id=` (integer ids only — no URL crosses
+  the boundary, so there is no SSRF surface and no host allowlist to maintain).
+  Accepted limits, by design: Bandcamp has no have/want (no rarity signal), no styles
+  in the result list (only in the release detail), a capped `reach` of 3,000 items
+  (`BANDCAMP_REACH`, a cost choice — depth costs cursor-walk requests, not a page jump),
+  a derived `format_badge` (its one inferred field, from track count), and is overall
+  **more noisy** than Discogs (no demand/format/self-released de-noise signal exists on
+  Bandcamp). One accepted regression, measured exhaustively: the Discogs window can now
+  differ from the retired page-based formula by **up to 2 pages, at any pile height** —
+  the new item-based window is more correct (the old one promised depth that short
+  piles didn't have), pinned by
+  `test_window_stays_within_two_pages_of_the_retired_page_formula`. Bandcamp's
+  endpoints are internal and undocumented: if they change, only the Bandcamp source
+  breaks (`DigSource` isolates it), diagnosed with the `@pytest.mark.network` contract
+  test. See `docs/superpowers/specs/2026-07-22-dig-bandcamp-design.md`, `docs/API.md`,
+  `docs/ARCHITECTURE.md`, `docs/DEPENDENCIES.md` and PROGRESS.md for detail.
 - **Set Builder: two-phase generator + AI curation** — DONE (2026-07-19), both phases.
   Phase 1: `generate_set()` plans a skeleton first (opening/peak/closing/reset anchors elected
   per strategy, a bomb reserve — top 15% by impact score — freed only in the peak window, a
@@ -131,7 +161,9 @@ source").
   **closed as not applicable (2026-07-19)**: the provider it would have relied on was
   removed along with the whole playlist-expansion flow. (Per-release tracklists DONE
   2026-07-12; Genre + Label already unified; Playlist stays Spotify-resolved on
-  purpose, a different goal.)
+  purpose, a different goal.) Not to be confused with the **Bandcamp dig source** added
+  2026-07-23 (see "Suspended / revised" above): that one is a full alternate crate to
+  dig from, chosen per request, not a tagging enrichment of the Discogs dig.
 - **Shazam phase 2.** `DjSetTrack` as a corpus for co-occurrence suggestions.
 - **PostgreSQL.** Low priority: SQLite is enough for personal use (only needed for an
   eventual multi-user setup).
@@ -274,8 +306,9 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
 | Tracks without BPM/key | the track status stays `imported` (unusable by the Set Builder) until a Rekordbox import arrives; no automatic estimation |
 | Rate limits or network errors (Discovery providers) | retry/backoff, async jobs |
 | Invented AI output | pool/per-call caps, JSON-schema-constrained calls, foreign ids and out-of-bounds values discarded with a warning |
-| Spotify recommendation unavailable | Discovery based on Discogs crate digging |
-| Spotify dev-mode limits depth (5 users, `label:` search cap 10) | genre/label depth from Discogs (open); Spotify only as a resolver |
+| Spotify recommendation unavailable | Discovery based on Discogs/Bandcamp crate digging |
+| Spotify dev-mode limits depth (5 users, `label:` search cap 10) | genre/label depth from Discogs/Bandcamp (open); Spotify only as a resolver |
+| Bandcamp's dig endpoints are internal/undocumented and may change without notice | `DigSource` seam isolates it — only the Bandcamp source breaks, Discogs keeps working; diagnosed via the `@pytest.mark.network` contract test |
 | Product rename breaks data paths | legacy paths kept, migration only if explicit |
 | Rekordbox import misaligned (path/hash/name do not match) | three match levels (NFC path → audio_hash gated on basename → artist+title), report with an `unmatched` count |
 
@@ -292,6 +325,9 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
 - Spotify is a source of identity/metadata, not of mixing features.
 - Discovery: genre/label depth from Discogs (open); Spotify stays only an identity resolver
   (at save time).
+- Discovery dig has two sources, Discogs and Bandcamp, chosen per request behind a
+  shared `DigSource` protocol (2026-07-23) — same taste ranking and UI regardless of
+  source, adding a third does not require a rewrite of the engine.
 - Discovery does not use Spotify `/recommendations`.
 - Discovery no longer suggests tracks from playlist gaps; those gaps stay a separate analysis.
 - Discovery works by taste, not by technical compatibility: BPM/key/transitions are the Set

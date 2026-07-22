@@ -378,67 +378,126 @@ syncable from this endpoint: they only grow via the selective flow above.
 ```text
 GET  /api/discovery/genres
 POST /api/discovery/dig
-GET  /api/discovery/release/{discogs_id}
+GET  /api/discovery/release
 GET  /api/discovery/preview
 POST /api/discovery/add
 POST /api/discovery/save-for-later
 ```
 
-`dig` ("Scava") does crate digging via **Discogs** by genre or label: it finds
-releases/tracks not yet owned. Discogs sorts the seed's whole pile by **demand**
-(`sort=want` desc); `depth` (`0.0`-`1.0`, replaces the old `adventurousness`) picks
-**where in that pile to fetch from** — `0.0` is the seed's classics, `1.0` is the
-bottom of the crate. The pile holds up along its whole length (median `want` still
-~89 at rank 10,000 in measurements), so `depth` never runs dry. `depth` chooses the
-*window*, not the ranking: inside one window `want` is roughly constant and does not
-discriminate leads. `genres` lists the genres and styles available as a dig seed.
+`dig` ("Scava") does crate digging by genre or label: it finds releases/tracks not yet
+owned. Two sources sit behind a shared `DigSource` protocol
+(`backend/app/services/dig_sources/`, `Seed`/`Pile`/`probe`/`fetch`/`to_lead`) —
+**Discogs** (`source="discogs"`, the default) and **Bandcamp** (`source="bandcamp"`) —
+picked per request via `DiscoveryDigRequest.source`. The engine
+(`backend/app/services/discovery_dig.py`) reasons in **items**, never in pages: it asks
+the source to `probe` the seed (how tall the pile is, how far *this* source reaches
+into it), derives a window `(offset, count)` from `depth`, and only the source knows how
+to translate that window into its own pagination — Discogs into page numbers, Bandcamp
+into a sequential cursor walk (no jump-to-page on Bandcamp). `depth` (`0.0`-`1.0`) picks
+**where in the pile to fetch from** — `0.0` is the seed's classics, `1.0` is the bottom
+of what the source reaches — and taste always ranks inside that window, never across
+it.
+
+Discogs sorts its whole pile by **demand** (`sort=want` desc) before windowing; the pile
+holds up along its whole length (median `want` still ~89 at rank 10,000 in
+measurements), so `depth` never runs dry there. Bandcamp has no demand signal at all (no
+have/want) and sorts by `slice: "top"` instead, the closest Bandcamp equivalent.
+`genres` lists the genres and styles available as a seed — the same curated Discogs
+vocabulary for both sources; Bandcamp normalizes each entry into a tag (lowercase,
+runs of non-alphanumeric characters collapsed to one hyphen) with one hand-kept alias
+(`"Drum n Bass"` -> `drum-and-bass`, because the naive normalization lands on a real but
+wrong tag).
+
+The response no longer carries `pile_pages`. It exposes, source-neutral, in **items**:
+
+- `pile_total` — the pile's real height (the provider's raw count for the seed; `0` is a
+  dead seed).
+- `pile_reach` — how many items *this* source can actually reach into that pile
+  (Discogs: `DISCOGS_MAX_PAGES * SEARCH_PER_PAGE` = 10,000, page 101 is a hard 404 wall;
+  Bandcamp: `BANDCAMP_REACH` = 3,000, a cost choice, not a provider limit — the cursor
+  walk makes depth cost requests, up to ~20s worst case at `depth=1.0`).
+
+`pile_reach <= 300` means the window already covers everything the source can reach and
+`depth` has no effect — the UI disables the depth control and shows a note instead of an
+inert slider (the old `pile_pages <= 3` check, now source-neutral). `pile_total >
+pile_reach` means only part of the pile is shown, and the UI says so (a Bandcamp label
+seed always has `pile_reach == pile_total`: the whole discography is fetched once by
+`probe` and `fetch` just slices it — no fetch cost left to pay). `seed_resolution` gained
+two Bandcamp values: `"style"|"genre"|"label"|"tag"|"discography"|null` (`"tag"` for a
+Bandcamp genre seed, `"discography"` for a Bandcamp label seed). `"genre"` still means a
+Discogs seed fell back to a top-level genre (~15 huge shelves like `Electronic`,
+millions of releases): only the most-wanted releases are reachable through pagination,
+and the UI says so instead of letting a shelf pass for a fine-grained dig. A dead seed
+(unknown to the source) has `pile_total: 0` and `seed_resolution: null`, for both
+sources.
+
+Each lead exposes `source`, `source_id`, `source_url` and `stream_url` in place of the
+old `discogs_id`/`discogs_url` (two sources cannot share a field named after one of
+them). `source_id` is a plain string: the Discogs release id for Discogs,
+`"<band_id>:<item_id>"` for Bandcamp. `source_url` is `null` for Bandcamp leads that come
+from a label seed — the discography endpoint that produces them carries no page URL; the
+release detail panel below still resolves one via `tralbum_details`. `stream_url` is
+populated only by Bandcamp genre-seed leads, which hand back a real per-track mp3 stream
+inside the dig result itself — no fallback to iTunes/YouTube, no extra request; Discogs
+leads never set it and resolve their preview the usual way (see `preview` below).
+`have`/`want` stay `0` on every Bandcamp lead (the concept does not exist there) and
+`style` is always `null` (Bandcamp exposes styles only in the release detail, not in the
+list) — the reason codes that read those fields (`rare_wanted`, `deep_cut`,
+`style_match`) simply never fire for Bandcamp leads, with no source-specific branch
+needed.
 
 Taste always ranks inside the chosen window — not a mode, not optional. The score is
 **taste-only**: graduated familiarity on the artist, owned label and style affinity
 with your genres. Novelty, demand and recency are **not** score inputs any more —
-demand only gates which window `depth` reads (above), it does not order within it. The
-taste profile is always built from the **whole library** (the former
-`taste_playlist_id` reference was removed: on lead-only playlists — which carry no
-file tags, hence no labels or genres — it silently zeroed the ranking); the dedup is
-library-wide as well. Each lead carries deterministic `reasons[]` (`{code, data}`) to
-explain why (e.g. `rare_wanted`, `deep_cut`, `label_followed`, `artist_collected`,
-`style_match`, `recent`); the chip text is composed by the UI — these are display
-badges, not the score's factors.
+demand only gates which window `depth` reads on Discogs (above), it does not order
+within it. On Bandcamp, which has no style signal in the result list, the style weight
+redistributes into artist/label — the same mechanism already used to zero out the label
+weight on a label seed. The taste profile is always built from the **whole library**
+(the former `taste_playlist_id` reference was removed: on lead-only playlists — which
+carry no file tags, hence no labels or genres — it silently zeroed the ranking); the
+dedup is library-wide as well. Each lead carries deterministic `reasons[]` (`{code,
+data}`) to explain why (e.g. `rare_wanted`, `deep_cut`, `label_followed`,
+`artist_collected`, `style_match`, `recent`); the chip text is composed by the UI —
+these are display badges, not the score's factors.
 
-The response is **never truncated**: the window's ~300 raw releases are the natural
-limit (the former `limit` field was removed — measured against the demand-sorted pile
-it silently hid ~160 valid leads on every dig). How many to *show* is a client-side
-lens in the UI, together with format and ordering.
+The response is **never truncated**: the window's ~300 raw items are the natural limit
+(`WINDOW_ITEMS` in `backend/app/services/dig_sources/__init__.py`, shared by both
+sources — the former `limit` field was removed, since capping it below the window
+silently hid valid leads). How many to *show* is a client-side lens in the UI, together
+with format and ordering.
 
-Network cost: **4-5 Discogs requests per dig** — one `count_releases` probe to size
-the pile (needed to place `depth`'s window) plus 3 content pages, plus one extra probe
-when a `genre` seed's fine-grained `style=` filter returns nothing and falls back to
-the coarser `genre=` filter. The response carries `pile_pages`: how many pages the
-pile actually has. When `pile_pages <= 3` the whole pile already fits in one window and
-`depth` has no effect — the UI disables the depth control and shows a note instead of
-offering an inert one.
+Network cost: Discogs spends **4-5 requests per dig** — one `count_releases` probe to
+size the pile (needed to place `depth`'s window) plus 3 content pages, plus one extra
+probe when a `genre` seed's fine-grained `style=` filter returns nothing and falls back
+to the coarser `genre=` filter. Bandcamp spends 1-6 requests depending on `depth`
+(`ceil((offset + 300) / 500)`, batches of up to 500 items): 1 request at `depth=0.0`, up
+to 6 (~20s) at `depth=1.0` on a deep pile — this is `BANDCAMP_REACH`'s cost trade-off,
+not a rate limit.
 
-The response also says **how the seed resolved**: `seed_resolution`
-(`"style" | "genre" | "label" | null`) and `pile_total` (the probe's raw item count —
-`pile_pages` is capped at 100 and cannot tell 43k from 4.9M). `"genre"` means the seed
-fell back to a Discogs top-level genre (~15 huge shelves like `Electronic`, 4.9M
-releases): only the ~10,000 most wanted are reachable through pagination, and the UI
-says so instead of letting a shelf pass for a fine-grained dig. A dead seed (unknown to
-Discogs on both levels) has `pile_pages: 0` and `seed_resolution: null`.
+`GET /api/discovery/release?source=&id=` replaces the old `release/{discogs_id}`,
+expanding a lead from the dig into its **real tracklist** (fetched lazily when the
+release is opened): `?source=discogs&id=<int>` (the numeric Discogs release id) or
+`?source=bandcamp&id=<band_id>:<item_id>` (colon-separated pair, both integers). Only
+integers ever cross this boundary — no URL is taken from the client and followed by the
+backend, so there is no SSRF surface and no host allowlist to maintain. A malformed id
+(non-numeric Discogs id, or a Bandcamp id missing the colon / with non-digit parts)
+responds `400 discovery_bad_id`. Each row of the tracklist carries position, title,
+duration and, Bandcamp only, `stream_url` (`DiscoveryTrackOut.stream_url`, always `null`
+on Discogs). The response type is `DiscoveryReleaseOut`, with `source`/`source_url` in
+place of the old `discogs_id`/`discogs_url`; `videos` (YouTube videos Discogs already
+associates with the release) stays populated only for Discogs — Bandcamp tracks already
+carry a real stream, so there is nothing to resolve there. Provider errors surface as an
+explicit `502 discovery_provider_error` for both sources.
 
-`release/{discogs_id}` expands a Discogs release from the dig into its **real
-tracklist** (fetched lazily when the release is opened): each row is a candidate track
-with its position, title and duration; Discogs errors surface as an explicit `502`. The
-response now also carries `videos: [{ youtube_video_id, title, duration_seconds }]`, the
-YouTube videos Discogs already associates with the release.
-
-`preview` resolves an **ephemeral audio preview** for a lead, so it can be evaluated
-before acquiring it: query params `artist`, `title`, optional `discogs_id` and `level`
-(`release`|`track`, default `track`). It responds `DiscoveryPreviewOut { kind:
-"itunes"|"youtube"|"none", audio_url, youtube_video_id, source_url, matched_title }`.
-iTunes Search is the primary source (30s clip); if there is no match, it falls back to
-the YouTube video Discogs associates with the release. Provider errors resolve to
-`kind: "none"` with `HTTP 200`, never an error status. Nothing is persisted.
+`preview` resolves an **ephemeral audio preview** for a lead that has no `stream_url` of
+its own, so it can be evaluated before acquiring it: query params `artist`, `title`,
+optional `discogs_id` and `level` (`release`|`track`, default `track`). It responds
+`DiscoveryPreviewOut { kind: "itunes"|"youtube"|"none", audio_url, youtube_video_id,
+source_url, matched_title }`. iTunes Search is the primary source (30s clip); if there
+is no match, it falls back to the YouTube video Discogs associates with the release.
+Provider errors resolve to `kind: "none"` with `HTTP 200`, never an error status. Nothing
+is persisted. Bandcamp genre-seed leads skip this endpoint entirely: they already carry
+a real `stream_url` in the dig result.
 
 `add` imports a candidate into the app's library idempotently. It does not write to
 Spotify. The AI, if configured and requested, adds explanations but does not choose
@@ -449,8 +508,10 @@ The old Discovery mode based on playlist gaps has been removed, and so has playl
 expansion: Discovery is now the dig alone, while Gap Analysis stays a separate
 read-only endpoint.
 
-Note: Discogs and Spotify-as-resolver are the only providers left in Cratory for
-Discovery — they do not provide BPM/key/genre/mood to the library.
+Note: Discogs, Bandcamp and Spotify-as-resolver are the only providers left in Cratory
+for Discovery — they do not provide BPM/key/genre/mood to the library. Bandcamp's
+endpoints are internal and undocumented (see `docs/DEPENDENCIES.md`): if they change,
+only the Bandcamp source breaks — the `DigSource` seam keeps Discogs unaffected.
 
 ## Shazam / mix identification
 
