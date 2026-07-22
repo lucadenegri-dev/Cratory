@@ -145,13 +145,32 @@ le 800 e tiene ogni sorgente in un file che si legge tutto d'un fiato.
 
 ### Due conseguenze dichiarate
 
-**Il dig Discogs può scivolare di una pagina a parità di `depth`.** Oggi
-`start_page = 1 + round(depth · (usable − 3))` su una pila misurata in pagine; domani
-l'offset è in item e la sorgente lo arrotonda alla propria griglia da 100. Esempio
-calcolato su `style=Acid House` (43.345 release): a `depth=0.5` si passa da pagina 50 a
-pagina 49. Filtri, ordinamento e composizione della finestra non cambiano: cambia solo un
-bordo. La parità esatta costerebbe al motore la conoscenza della granularità di ogni
-sorgente, cioè proprio il seam che si sta comprando. **Si accetta lo scivolamento.**
+**Il dig Discogs scivola, e sulle pile corte scivola di due pagine.** Misurato
+confrontando le due formule su tutto lo spazio (total, depth):
+
+| pila | scivolamento massimo |
+|---|---|
+| ≥ 999 release | 1 pagina |
+| ~300-700 release | **2 pagine** (es. 406 release a `depth=0.75`: `[3,4,5]` → `[1,2,3]`) |
+
+La causa non è un arrotondamento: è che le due formule misurano lo scarto in **unità
+diverse**. La vecchia lo misurava in pagine (`usable − 3`), la nuova in item
+(`reach − 300`). Su 406 release la vecchia vedeva 2 pagine di scarto e a `depth=1.0`
+pescava le pagine 3-5 — cioè **206 item veri spacciati per una finestra da 300**,
+riempita con una pagina parziale. La nuova parte dall'item 106 e ne prende 300 davvero.
+
+**Il comportamento nuovo è quindi più corretto, non una regressione:** sulle pile corte
+il vecchio prometteva una profondità che la pila non aveva. Si accetta, e il limite vero
+va fissato da un test invece che assunto.
+
+Una nota su come questo è stato scoperto, perché vale più della correzione: la prima
+stesura di questa spec dichiarava «una pagina» e portava come esempio `style=Acid House`
+(43.345 release) a `depth=0.5`, «pagina 50 → 49». **Quell'esempio era inventato**: con
+entrambe le formule il risultato è `[49,50,51]`. L'errore veniva da un arrotondamento
+fatto a mente (`round(48.5) = 49`) dove Python arrotonda al pari (`48`). Il limite
+dichiarato era sbagliato *e* l'esempio che avrebbe dovuto dimostrarlo non si verificava:
+due errori che si coprivano a vicenda, trovati solo perché qualcuno ha ricostruito la
+formula cancellata e le ha confrontate punto per punto.
 
 **`discogs_id`/`discogs_url` diventano `source_id`/`source_url`.** Due sorgenti non
 possono convivere in un campo che si chiama `discogs_id`. `source` esiste già nel lead e
