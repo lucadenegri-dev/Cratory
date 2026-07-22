@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { coverThumbUrl, type Issue } from "@/lib/api";
+import { CoverThumb } from "@/components/cover-thumb";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 
@@ -111,8 +112,13 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
       {showSev && <td className="px-3 py-2 text-center align-top"><SevMark sev={issue.severity} /></td>}
       {showType && <td className="whitespace-nowrap px-3 py-2 align-top text-[11px] text-muted">{t.issues.typeLabel(issue.type)}</td>}
       <td className="px-3 py-2 align-top">
-        <div className="text-fg-strong">{issue.artist || t.common.empty}{issue.title ? ` — ${issue.title}` : ""}</div>
-        <div className="max-w-[240px] truncate text-[10px] text-faint" title={issue.file_path}>{issue.file_path}</div>
+        <div className="flex items-start gap-2">
+          <CoverThumb fileId={issue.file_id} />
+          <div className="min-w-0">
+            <div className="text-fg-strong">{issue.artist || t.common.empty}{issue.title ? ` — ${issue.title}` : ""}</div>
+            <div className="max-w-[240px] truncate text-[10px] text-faint" title={issue.file_path}>{issue.file_path}</div>
+          </div>
+        </div>
       </td>
       <td className="px-3 py-2 align-top text-muted">{issue.field || t.common.empty}</td>
       <td className="px-3 py-2 align-top">
