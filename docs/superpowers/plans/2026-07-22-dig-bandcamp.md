@@ -20,12 +20,15 @@ esterno, pytest. Next.js 16 App Router + React + Tailwind (frontend), vitest + P
 - **Spec di riferimento:** `docs/superpowers/specs/2026-07-22-dig-bandcamp-design.md`.
   In caso di divergenza fra questo piano e la spec, **fermarsi e chiedere**, non decidere.
 - **Il dig Discogs non cambia comportamento**, con una sola eccezione approvata: la
-  finestra può scivolare rispetto alla vecchia formula a pagine — **fino a 1 pagina sulle
-  pile da 999 release in su, fino a 2 sulle pile corte (~300-700)**. Misurato su tutto lo
-  spazio (total, depth) e approvato il 2026-07-22: sulle pile corte il vecchio modello
-  prometteva una profondità che la pila non aveva (a `depth=1.0` su 406 release pescava
-  206 item veri dichiarandone 300). Filtri, ordinamento e composizione della finestra non
-  cambiano. Nessun'altra differenza è accettabile.
+  finestra può scivolare rispetto alla vecchia formula a pagine, **fino a 2 pagine, a
+  qualunque altezza di pila**. Misurato per esaustione (totali 1..20.000 × 1.001
+  profondità, più campionamento fino a 5 milioni) e approvato il 2026-07-22: il vecchio
+  modello misurava lo scarto in pagine e su una pila non tonda prometteva una profondità
+  che la pila non aveva (a `depth=1.0` su 401 release pescava 206 item veri dichiarandone
+  300). Il limite è fissato dal test
+  `test_window_stays_within_two_pages_of_the_retired_page_formula`, non dalla prosa.
+  Filtri, ordinamento e composizione della finestra non cambiano. Nessun'altra differenza
+  è accettabile.
 - **I due pesi Discogs restano esatti:** seme etichetta → artista `0.5/0.7 = 0.714…`,
   stile `0.2/0.7 = 0.286…`. È un'invariante con un test dedicato.
 - **Nessuna chiamata di rete nei test**, tranne quelli marcati `@pytest.mark.network`, che

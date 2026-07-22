@@ -145,13 +145,14 @@ le 800 e tiene ogni sorgente in un file che si legge tutto d'un fiato.
 
 ### Due conseguenze dichiarate
 
-**Il dig Discogs scivola, e sulle pile corte scivola di due pagine.** Misurato
-confrontando le due formule su tutto lo spazio (total, depth):
+**Il dig Discogs scivola, fino a due pagine, a qualunque altezza di pila.**
 
-| pila | scivolamento massimo |
-|---|---|
-| ≥ 999 release | 1 pagina |
-| ~300-700 release | **2 pagine** (es. 406 release a `depth=0.75`: `[3,4,5]` → `[1,2,3]`) |
+Misurato per esaustione: tutti i totali da 1 a 20.000 per 1.001 profondità ciascuno, più
+un campionamento fino a 5 milioni. Massimo assoluto **2 pagine** — per esempio 401
+release a `depth=0.75` (`[3,4,5]` → `[1,2,3]`) e 1.001 release a `depth=0.563`
+(pagina 6 → pagina 4). Sopra i 20.000 lo scivolamento non supera 1 pagina, ma **non
+esiste una soglia sotto la quale il limite di 2 valga e sopra la quale non valga**: il
+numero da tenere è 2, senza condizioni.
 
 La causa non è un arrotondamento: è che le due formule misurano lo scarto in **unità
 diverse**. La vecchia lo misurava in pagine (`usable − 3`), la nuova in item
@@ -163,14 +164,25 @@ riempita con una pagina parziale. La nuova parte dall'item 106 e ne prende 300 d
 il vecchio prometteva una profondità che la pila non aveva. Si accetta, e il limite vero
 va fissato da un test invece che assunto.
 
-Una nota su come questo è stato scoperto, perché vale più della correzione: la prima
-stesura di questa spec dichiarava «una pagina» e portava come esempio `style=Acid House`
-(43.345 release) a `depth=0.5`, «pagina 50 → 49». **Quell'esempio era inventato**: con
-entrambe le formule il risultato è `[49,50,51]`. L'errore veniva da un arrotondamento
-fatto a mente (`round(48.5) = 49`) dove Python arrotonda al pari (`48`). Il limite
-dichiarato era sbagliato *e* l'esempio che avrebbe dovuto dimostrarlo non si verificava:
-due errori che si coprivano a vicenda, trovati solo perché qualcuno ha ricostruito la
-formula cancellata e le ha confrontate punto per punto.
+Una nota su come ci si è arrivati, perché vale più della correzione. Questo paragrafo ha
+dichiarato **due volte** un numero sbagliato:
+
+1. La prima stesura diceva «una pagina» e portava come esempio 43.345 release a
+   `depth=0.5`, «pagina 50 → 49». L'esempio era **inventato**: con entrambe le formule il
+   risultato è `[49,50,51]`. L'errore veniva da un arrotondamento fatto a mente
+   (`round(48.5) = 49`) dove Python arrotonda al pari (`48`).
+2. La correzione diceva «≤1 pagina sopra le 999 release, ≤2 sotto» e si presentava come
+   «misurata su tutto lo spazio». Era ricavata da **quattro totali** stampati a schermo.
+   Falsificata da 1.001 release a `depth=0.563`.
+
+Entrambe le volte l'errore è stato trovato da qualcuno che ha ricostruito la formula
+cancellata e l'ha confrontata punto per punto, invece di credere alla frase. La lezione
+non è «misurare meglio»: è che **un numero in prosa che nessun test verifica è una
+supposizione con l'aria di un fatto**. Per questo il limite ora ha un test
+(`test_window_stays_within_two_pages_of_the_retired_page_formula`), che riproduce la
+vecchia formula e fallisce se la divergenza supera 2 pagine. È un presidio di
+transizione, dichiarato tale nel suo commento: serve finché questo branch non è fuso, e
+poi si cancella.
 
 **`discogs_id`/`discogs_url` diventano `source_id`/`source_url`.** Due sorgenti non
 possono convivere in un campo che si chiama `discogs_id`. `source` esiste già nel lead e
