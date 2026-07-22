@@ -5,11 +5,11 @@ import { Dices, Disc3, Shovel, Tags } from "lucide-react";
 
 import { Button, Combobox, SegmentedControl, Spinner, type ComboOption } from "@/components/ui";
 import { useT } from "@/lib/i18n";
-import { DEPTHS, type SeedType } from "@/lib/discovery-dig";
+import { DEPTHS, WINDOW_ITEMS, type SeedType } from "@/lib/discovery-dig";
 
 export function DiscoveryDigBar({
   subject, onSubjectChange, depth, onDepthChange,
-  options, pilePages, busy, ready, onSubmit, onSurprise, canSurprise,
+  options, pile, busy, ready, onSubmit, onSurprise, canSurprise,
 }: {
   subject: string;
   onSubjectChange: (value: string, seed: SeedType) => void;
@@ -22,7 +22,7 @@ export function DiscoveryDigBar({
     genres: { library: string[]; styles: string[] };
     labels: string[];
   };
-  pilePages: number | null;
+  pile: { total: number; reach: number } | null;
   busy: boolean;
   ready: boolean;
   onSubmit: () => void;
@@ -67,12 +67,11 @@ export function DiscoveryDigBar({
       : activeDepth.key === "mid" ? "depthMidDesc" : "depthDeepDesc"
   ];
 
-  // Due casi diversi, non uno. La pila NON ESISTE (seme che Discogs non conosce) e' altra
-  // cosa da una pila CORTA (seme vero ma con pochi dischi): confonderli fa dire alla UI
-  // "tutta qui" su un seme che non ha mai avuto niente. In entrambi i casi `depth` non ha
-  // effetto e il controllo va spento, ma il motivo va detto giusto.
-  const emptyPile = pilePages === 0;
-  const shortPile = pilePages !== null && pilePages > 0 && pilePages <= 3;
+  // Due casi diversi, non uno. La pila NON ESISTE (seme che la sorgente non conosce)
+  // e' altra cosa da una pila CORTA (seme vero ma con pochi dischi): confonderli fa
+  // dire alla UI "tutta qui" su un seme che non ha mai avuto niente.
+  const emptyPile = pile?.total === 0;
+  const shortPile = pile != null && pile.reach > 0 && pile.reach <= WINDOW_ITEMS;
   const depthInert = emptyPile || shortPile;
 
   return (

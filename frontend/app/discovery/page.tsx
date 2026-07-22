@@ -8,7 +8,6 @@ import {
   errText,
   getDiscoveryGenres,
   getLabels,
-  DISCOGS_PAGE_SIZE,
   type DiscoveryDigResponse,
   type DiscoveryGenres,
   type LabelStats,
@@ -164,12 +163,14 @@ function DiscoveryInner() {
   }, [dig]);
 
   const digReady = !!subject.trim();
-  // Invalida a ogni cambio di seme (soggetto o tipo): senza questo controllo `pilePages`
+  // Invalida a ogni cambio di seme (soggetto o tipo): senza questo controllo `pile`
   // resta legato all'ULTIMA risposta, non al soggetto corrente digitato — il controllo
   // di profondita' restava disabilitato (pila corta di prima) finche' non si rilanciava
   // il dig, contro la spec ("disabled fino al prossimo cambio di seme").
-  const pilePages =
-    dig && dig.seed_type === seedType && dig.value === subject.trim() ? dig.pile_pages : null;
+  const pile =
+    dig && dig.seed_type === seedType && dig.value === subject.trim()
+      ? { total: dig.pile_total, reach: dig.pile_reach }
+      : null;
 
   // Lista e conteggio escono dalla STESSA lente: "40 di 240" e le 40 card mostrate
   // non possono divergere. Il taglio (`show`) viene dopo il filtro di formato.
@@ -196,7 +197,7 @@ function DiscoveryInner() {
           genres: genres ?? { library: [], styles: [] },
           labels: labels?.map((l) => l.label) ?? [],
         }}
-        pilePages={pilePages}
+        pile={pile}
         busy={busy}
         ready={digReady}
         onSubmit={runDig}
@@ -243,14 +244,11 @@ function DiscoveryInner() {
               ]}
             />
           </div>
-          {dig.seed_resolution === "genre" && dig.pile_total > dig.pile_pages * DISCOGS_PAGE_SIZE && (
-            // Il seme e' ripiegato sullo scaffale Discogs (~15 categorie enormi):
-            // la pila raggiungibile e' una briciola del totale, e va detto. La guardia
-            // sul totale evita di dire "ne vedi solo N" quando la pila e' tutta li'.
+          {dig.pile_total > dig.pile_reach && (
             <span className="tnum text-muted">
               {t.discovery.broadSeed(
                 dig.pile_total.toLocaleString(lang),
-                (dig.pile_pages * DISCOGS_PAGE_SIZE).toLocaleString(lang),
+                dig.pile_reach.toLocaleString(lang),
               )}
             </span>
           )}

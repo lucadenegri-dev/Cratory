@@ -100,7 +100,7 @@ def test_dig_422_seed_type_non_valido(client):
     assert r.status_code == 422  # Literal["genre", "label"] non rispettato
 
 
-def test_dig_endpoint_accepts_depth_and_returns_pile_pages(client, monkeypatch):
+def test_dig_endpoint_accepts_depth_and_returns_pile_reach(client, monkeypatch):
     from app.integrations.discogs import DiscogsClient
 
     c, _ = client
@@ -115,7 +115,7 @@ def test_dig_endpoint_accepts_depth_and_returns_pile_pages(client, monkeypatch):
 
     r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "Acid House", "depth": 1.0})
     assert r.status_code == 200
-    assert r.json()["pile_pages"] == 100
+    assert r.json()["pile_reach"] == 10_000  # tetto duro Discogs: 100 pagine da 100
     assert captured["pages"] == [98, 99, 100]
 
 
@@ -207,3 +207,38 @@ def test_dig_endpoint_exposes_seed_resolution_and_pile_total(client, monkeypatch
     assert r.status_code == 200
     assert r.json()["seed_resolution"] == "genre"
     assert r.json()["pile_total"] == 4_960_093
+
+
+def test_dig_response_speaks_items_not_pages(client, monkeypatch):
+    from app.routers import discovery as router_mod
+    from app.services.dig_sources import DiscoveryLead
+    from app.services.discovery_dig import DigResult
+
+    def _fake_dig(db, **kw):
+        return DigResult(
+            seed_type="genre", value="Acid House",
+            leads=[DiscoveryLead(artist="A", title="B", source="discogs",
+                                 source_id="7", source_url="https://discogs/7")],
+            pile_total=43345, pile_reach=10_000, seed_resolution="style",
+        )
+
+    monkeypatch.setattr(router_mod, "dig", _fake_dig)
+    c, _ = client
+    r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "Acid House"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["pile_total"] == 43345
+    assert body["pile_reach"] == 10_000
+    assert "pile_pages" not in body
+    assert body["source"] == "discogs"
+    lead = body["leads"][0]
+    assert lead["source_id"] == "7" and lead["source_url"] == "https://discogs/7"
+    assert lead["stream_url"] is None
+    assert "discogs_id" not in lead
+
+
+def test_dig_rejects_an_unknown_source(client):
+    c, _ = client
+    r = c.post("/api/discovery/dig",
+               json={"seed_type": "genre", "value": "x", "source": "soundcloud"})
+    assert r.status_code == 422

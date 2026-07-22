@@ -120,25 +120,28 @@ export interface DiscoveryLead {
   style: string | null;
   source: string;
   seed: string | null;
-  discogs_url: string | null;
+  /** Id neutro. Discogs: "123". Bandcamp: "band_id:item_id" (il dettaglio vuole entrambi). */
+  source_id: string | null;
+  source_url: string | null;
+  /** Stream diretto quando la sorgente lo regala: il player salta la risoluzione. */
+  stream_url: string | null;
   thumb_url: string | null;
   have: number;
   want: number;
   reasons: Reason[];
-  discogs_id: number | null;
   format_badge: string | null;
 }
 
 export interface DiscoveryDigResponse {
   seed_type: string;
   value: string;
+  source: string;
   leads: DiscoveryLead[];
-  /** Quante pagine utili ha la pila del seme. <= 3 => `depth` non ha effetto. */
-  pile_pages: number;
-  /** Com'è stato risolto il seme. "genre" = scaffale Discogs: la UI avverte. */
-  seed_resolution: "style" | "genre" | "label" | null;
-  /** Conteggio grezzo della sonda: pile_pages è cappato a 100 e non distingue 43k da 4,9M. */
+  /** Quanto è alta la pila. 0 => seme che la sorgente non conosce. */
   pile_total: number;
+  /** Quanti item la sorgente raggiunge. <= WINDOW_ITEMS => `depth` non ha effetto. */
+  pile_reach: number;
+  seed_resolution: "style" | "genre" | "label" | "tag" | "discography" | null;
 }
 
 export interface DiscoveryGenres {

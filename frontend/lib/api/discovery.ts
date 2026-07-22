@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from "./client";
+import type { DigSourceKey } from "../discovery-dig";
 import type {
   DiscogsRelease,
   DiscoveryAddResponse,
@@ -8,26 +9,24 @@ import type {
   DiscoveryPreview,
 } from "./types";
 
+export type { DigSourceKey };
+
 // --- Discovery (Fase F) -----------------------------------------------------
 
 export function getDiscoveryGenres() {
   return apiGet<DiscoveryGenres>("/api/discovery/genres");
 }
 
-// Rispecchia SEARCH_PER_PAGE del backend (il massimo per pagina di Discogs).
-// Serve alla UI per calcolare quante release sono raggiungibili
-// (pile_pages × DISCOGS_PAGE_SIZE) senza cablare "10.000" nel testo.
-export const DISCOGS_PAGE_SIZE = 100;
-
 export function discoveryDig(
   seedType: "genre" | "label",
   value: string,
-  opts?: { depth?: number },
+  opts?: { depth?: number; source?: DigSourceKey },
 ) {
   return apiPost<DiscoveryDigResponse>("/api/discovery/dig", {
     seed_type: seedType,
     value,
     depth: opts?.depth,
+    source: opts?.source,
   });
 }
 

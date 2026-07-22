@@ -13,7 +13,7 @@ function setup(over: Partial<React.ComponentProps<typeof DiscoveryDigBar>> = {})
   const props = {
     subject: "", onSubjectChange: vi.fn(),
     depth: 0, onDepthChange: vi.fn(),
-    options: OPTIONS, pilePages: null as number | null,
+    options: OPTIONS, pile: null as { total: number; reach: number } | null,
     busy: false, ready: true, onSubmit: vi.fn(),
     onSurprise: vi.fn(), canSurprise: true,
     ...over,
@@ -66,13 +66,13 @@ describe("DiscoveryDigBar", () => {
   });
 
   it("su pila corta la profondita' e' inerte", () => {
-    setup({ pilePages: 2 });
+    setup({ pile: { total: 200, reach: 200 } });
     expect(screen.getByText("Superficie").closest("button")?.hasAttribute("disabled")).toBe(true);
     expect(screen.getByText("pila corta: tutta qui")).toBeTruthy();
   });
 
   it("su pila lunga la profondita' e' attiva", () => {
-    setup({ pilePages: 100 });
+    setup({ pile: { total: 10_000, reach: 10_000 } });
     expect(screen.getByText("Superficie").closest("button")?.hasAttribute("disabled")).toBe(false);
   });
 
@@ -80,7 +80,7 @@ describe("DiscoveryDigBar", () => {
     // Confonderli fa dire "tutta qui" su un seme che non ha mai avuto niente: la pila
     // corta e' un seme vero con pochi dischi, la pila vuota e' un seme che Discogs non
     // conosce. In entrambi i casi la profondita' e' inerte, ma il motivo cambia.
-    setup({ pilePages: 0 });
+    setup({ pile: { total: 0, reach: 0 } });
     expect(screen.getByText("Superficie").closest("button")?.hasAttribute("disabled")).toBe(true);
     expect(screen.getByText("nessuna pila: Discogs non conosce questo seme")).toBeTruthy();
     expect(screen.queryByText("pila corta: tutta qui")).toBeNull();

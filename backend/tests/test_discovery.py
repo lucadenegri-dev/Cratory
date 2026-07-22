@@ -93,7 +93,7 @@ def test_format_badge_priority():
     assert _format_badge({"vinyl", "lp", "album", "repress"}) == "LP"
 
 
-def test_dig_endpoint_exposes_discogs_id_and_format_badge(db, monkeypatch):
+def test_dig_endpoint_exposes_source_id_and_format_badge(db, monkeypatch):
     release = {
         "id": 42, "title": "Cult - Grail", "year": 2024,
         "label": ["Lbl"], "style": ["Acid House"],
@@ -107,7 +107,7 @@ def test_dig_endpoint_exposes_discogs_id_and_format_badge(db, monkeypatch):
     _stub_pile(monkeypatch)
     resp = dig_endpoint(DiscoveryDigRequest(seed_type="genre", value="Acid House"), db)
     lead = resp.leads[0]
-    assert lead.discogs_id == 42
+    assert lead.source_id == "42"
     assert lead.format_badge == "EP"
 
 

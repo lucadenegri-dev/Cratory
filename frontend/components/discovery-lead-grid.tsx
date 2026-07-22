@@ -5,6 +5,7 @@ import { Disc3, Play } from "lucide-react";
 import { type DiscoveryDigResponse, type DiscoveryLead, type Reason } from "@/lib/api";
 import { EmptyState } from "@/components/ui";
 import { DiscoveryTracklistPanel } from "@/components/discovery-tracklist-panel";
+import { WINDOW_ITEMS } from "@/lib/discovery-dig";
 import { useT, type Dictionary } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
 
@@ -54,11 +55,11 @@ export function DiscoveryLeadGrid({ dig, leads }: {
   const [openLead, setOpenLead] = useState<DiscoveryLead | null>(null);
 
   // Zero lead ha due cause diverse, e dirle uguali mente. Se la pila non esiste
-  // (`pile_pages === 0`) il seme e' sconosciuto a Discogs: la libreria non c'entra e
-  // "vai piu' a fondo" e' un consiglio che non puo' funzionare, perche' non c'e' fondo.
+  // (`pile_total === 0`) il seme e' sconosciuto alla sorgente: la libreria non c'entra
+  // e "vai piu' a fondo" e' un consiglio che non puo' funzionare, perche' non c'e' fondo.
   // Se invece la pila c'e', i dischi sono stati filtrati (li possiedi gia') e scavare
   // piu' a fondo e' esattamente la mossa giusta.
-  if (dig.pile_pages === 0) {
+  if (dig.pile_total === 0) {
     return (
       <EmptyState icon={<Disc3 size={28} />} title={t.discovery.deadSeedTitle}>
         {t.discovery.deadSeedBody(dig.value)}
@@ -67,10 +68,10 @@ export function DiscoveryLeadGrid({ dig, leads }: {
   }
 
   if (dig.leads.length === 0) {
-    // Su una pila CORTA (1-3 pagine: la finestra e' l'intera pila) "vai piu' a fondo"
-    // e' un consiglio inerte — la profondita' e' disabilitata proprio per quella pila.
+    // Su una pila CORTA (la finestra e' l'intera pila) "vai piu' a fondo" e' un
+    // consiglio inerte — la profondita' e' disabilitata proprio per quella pila.
     // Se possiedi gia' tutto quello che c'e', va detto cosi'.
-    const shortPile = dig.pile_pages <= 3;
+    const shortPile = dig.pile_reach <= WINDOW_ITEMS;
     return (
       <EmptyState icon={<Disc3 size={28} />} title={t.discovery.nothingToDigTitle}>
         {shortPile
@@ -87,7 +88,7 @@ export function DiscoveryLeadGrid({ dig, leads }: {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3">
           {leads.map((l, i) => (
-            <LeadCell key={`${l.discogs_id ?? l.artist}-${l.title}-${i}`} lead={l} onOpen={() => setOpenLead(l)} />
+            <LeadCell key={`${l.source_id ?? l.artist}-${l.title}-${i}`} lead={l} onOpen={() => setOpenLead(l)} />
           ))}
         </div>
       )}
@@ -136,17 +137,17 @@ function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void })
             player.play({
               kind: "discovery-preview",
               item: {
-                key: `r:${lead.discogs_id ?? "x"}`,
+                key: `r:${lead.source_id ?? "x"}`,
                 artist: lead.artist,
                 title: lead.title,
-                discogsId: lead.discogs_id,
+                discogsId: lead.source_id ? Number(lead.source_id) : null,
                 level: "release",
                 label: lead.title,
                 addInput: {
                   artist: lead.artist,
                   title: lead.title,
                   album_art_url: lead.thumb_url,
-                  url: lead.discogs_url,
+                  url: lead.source_url,
                 },
               },
             });

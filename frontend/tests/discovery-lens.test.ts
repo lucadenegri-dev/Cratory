@@ -6,8 +6,8 @@ import type { DiscoveryLead } from "@/lib/api/types";
 function lead(over: Partial<DiscoveryLead>): DiscoveryLead {
   return {
     artist: "A", title: "T", year: 2000, label: null, style: null,
-    source: "discogs", seed: null, discogs_url: null, thumb_url: null,
-    have: 0, want: 0, reasons: [], discogs_id: null, format_badge: null,
+    source: "discogs", seed: null, source_id: null, source_url: null, stream_url: null,
+    thumb_url: null, have: 0, want: 0, reasons: [], format_badge: null,
     ...over,
   };
 }

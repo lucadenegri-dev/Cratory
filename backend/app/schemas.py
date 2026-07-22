@@ -466,36 +466,41 @@ class DiscoveryLeadOut(BaseModel):
     style: str | None = None
     source: str = "discogs"
     seed: str | None = None
-    discogs_url: str | None = None
+    # Neutro: due sorgenti non stanno in un campo che si chiama `discogs_id`. Stringa
+    # perche' Bandcamp ci mette una coppia "band_id:item_id".
+    source_id: str | None = None
+    source_url: str | None = None
+    # Stream diretto quando la sorgente lo regala (Bandcamp): il player salta la
+    # risoluzione iTunes/YouTube e suona.
+    stream_url: str | None = None
     thumb_url: str | None = None
     have: int = 0
     want: int = 0
     reasons: list[ReasonOut] = []
-    discogs_id: int | None = None
     format_badge: str | None = None
 
 
 class DiscoveryDigRequest(BaseModel):
     seed_type: Literal["genre", "label"]
     value: str = Field(min_length=1)
-    # DOVE pescare nella pila ordinata per domanda: 0 = i classici del seme,
-    # 1 = il fondo della cassa. Non e' un mix di ordinamento: sceglie il bacino.
+    # DOVE pescare nella pila della sorgente: 0 = la cima, 1 = il fondo di cio' che
+    # la sorgente raggiunge. Non e' un mix di ordinamento: sceglie il bacino.
     depth: float = Field(default=0.0, ge=0.0, le=1.0)
+    source: Literal["discogs", "bandcamp"] = "discogs"
 
 
 class DiscoveryDigResponse(BaseModel):
     seed_type: str
     value: str
+    source: str = "discogs"
     leads: list[DiscoveryLeadOut] = []
-    # Quante pagine utili ha la pila del seme. Se <= 3 la finestra e' l'intera pila e
-    # `depth` non ha effetto: la UI deve poterlo dire invece di offrire un controllo inerte.
-    pile_pages: int = 0
-    # Com'e' stato risolto il seme ("style" | "genre" | "label" | null). "genre" =
-    # scaffale Discogs (~15 categorie enormi): la UI avverte che si vede solo la cima.
-    seed_resolution: str | None = None
-    # Conteggio grezzo della sonda: serve al messaggio ("4.960.093 dischi") — pile_pages
-    # e' cappato a 100 e non distingue 43k da 4,9M.
+    # Quanto e' alta la pila (0 = seme che la sorgente non conosce).
     pile_total: int = 0
+    # Quanti item la sorgente raggiunge. <= 300 => la finestra e' l'intera pila e
+    # `depth` non ha effetto. < pile_total => la UI avverte che si vede una porzione.
+    pile_reach: int = 0
+    # "style"|"genre"|"label"|"tag"|"discography"|null
+    seed_resolution: str | None = None
 
 
 class DiscoveryGenresOut(BaseModel):

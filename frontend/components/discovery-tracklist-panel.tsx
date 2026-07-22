@@ -24,10 +24,10 @@ export function DiscoveryTracklistPanel({ lead, onClose }: {
       title={lead ? `${lead.artist} — ${lead.title}` : undefined}
       size="lg"
     >
-      {lead?.discogs_id != null ? (
-        <PanelBody key={lead.discogs_id} lead={lead} />
+      {lead?.source_id != null ? (
+        <PanelBody key={lead.source_id} lead={lead} />
       ) : lead ? (
-        // lead without a discogs_id: no fetch possible — show a minimal fallback, not an empty modal
+        // lead without a source_id: no fetch possible — show a minimal fallback, not an empty modal
         <p className="py-6 text-sm text-muted">{t.discovery.noDetails}</p>
       ) : null}
     </Modal>
@@ -41,11 +41,13 @@ function PanelBody({ lead }: { lead: DiscoveryLead }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getDiscogsRelease(lead.discogs_id!)
+    // Discogs-only per ora (Task 5): source_id e' l'id numerico Discogs come stringa.
+    // Il dettaglio Bandcamp arriva con la Task 6.
+    getDiscogsRelease(Number(lead.source_id))
       .then(setRelease)
       .catch((e) => setError(errText(e)))
       .finally(() => setLoading(false));
-    // Runs once per mount: the parent keys PanelBody on lead.discogs_id, so a fresh
+    // Runs once per mount: the parent keys PanelBody on lead.source_id, so a fresh
     // mount (and fresh state) already happens whenever the disc changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
