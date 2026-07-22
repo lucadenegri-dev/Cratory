@@ -39,6 +39,7 @@ export const en = {
     error: "Error",
     retry: "Retry",
     never: "never",
+    coverProposed: "Cover proposed by a provider — not embedded in the file yet",
     empty: "—",
     guide: "Guide",
     inProgress: "In progress",

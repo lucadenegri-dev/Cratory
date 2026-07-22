@@ -247,6 +247,9 @@ class FileRow(BaseModel):
     issue_count: int
     worst_severity: str | None
     in_dup_group: bool
+    # "embedded" = artwork nei tag, "provider" = solo una proposta in cache,
+    # None = niente da mostrare (il frontend salta del tutto la richiesta).
+    cover_source: str | None = None
 
 
 class LibraryFacets(BaseModel):

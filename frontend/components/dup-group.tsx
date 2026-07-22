@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { fmtDuration, type DupGroup } from "@/lib/api";
+import { CoverThumb } from "@/components/cover-thumb";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 
@@ -49,11 +50,12 @@ export function DupGroupCard({ group, onSetKeeper, onDismiss }: {
               onClick={isRemove && !busy ? () => run(() => onSetKeeper(group.id, m.file_id)) : undefined}
               title={isRemove ? t.duplicates.makeKeeper : undefined}
               className={cn(
-                "grid grid-cols-[64px_1fr_auto] items-center gap-3 border-b border-surface-2 px-3 py-1.5 last:border-0",
+                "grid grid-cols-[32px_64px_1fr_auto] items-center gap-3 border-b border-surface-2 px-3 py-1.5 last:border-0",
                 isKeeper && "border-l-2 border-l-ok bg-surface",
                 isRemove && "cursor-pointer hover:bg-surface",
               )}
             >
+              <CoverThumb fileId={m.file_id} />
               <span className={cn("border px-1.5 py-0.5 text-center text-[9px] tracking-wider",
                 isKeeper ? "border-ok text-ok" : "border-border text-muted")}>
                 {isKeeper ? "KEEP" : isRemove ? "REMOVE" : t.common.empty}

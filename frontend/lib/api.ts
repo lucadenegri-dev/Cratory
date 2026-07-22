@@ -59,6 +59,7 @@ export interface FileRow {
   issue_count: number;
   worst_severity: Severity | null;
   in_dup_group: boolean;
+  cover_source: "embedded" | "provider" | null;
 }
 
 export interface LibraryFacets {
@@ -256,6 +257,11 @@ export function providerSuggest(covers = true) {
 }
 export function coverThumbUrl(fileId: number): string {
   return `${API}/api/issues/cover-thumb/${fileId}`;
+}
+
+/** Miniatura della traccia: artwork embeddato, o proposta provider come fallback. */
+export function fileThumbUrl(fileId: number): string {
+  return `${API}/api/files/${fileId}/thumb`;
 }
 
 export interface DetectRatingsResult {

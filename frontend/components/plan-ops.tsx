@@ -1,6 +1,7 @@
 "use client";
 
 import { coverThumbUrl, type PlanOp } from "@/lib/api";
+import { CoverThumb } from "@/components/cover-thumb";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import type { Dictionary } from "@/lib/i18n";
@@ -27,9 +28,15 @@ function OpRow({ op }: { op: PlanOp }) {
   const t = useT();
   const isDelete = op.kind === "DELETE";
   return (
-    <div className={cn("flex items-baseline gap-3 border border-t-0 border-surface-2 px-3 py-1.5 first:border-t",
+    <div className={cn("flex items-center gap-3 border border-t-0 border-surface-2 px-3 py-1.5 first:border-t",
       isDelete ? "border-l-2 border-l-danger" : "border-l-2 border-l-border",
       op.skipped && "opacity-50")}>
+      {/* Sui COVER l'unica cover reale è quella già mostrata al centro della riga
+          (la proposta da embeddare): il planner emette COVER solo per file senza
+          artwork (planner.py, has_cover è False), quindi qui a sinistra cadrebbe
+          comunque sulla stessa proposta — due copie della stessa immagine, la
+          seconda senza tratteggio, che si legge come "artwork già nel file". */}
+      <CoverThumb fileId={op.file_id} source={op.kind === "COVER" ? null : undefined} />
       {op.skipped && (
         <span className="shrink-0 text-[9px] uppercase tracking-wider text-warning">{t.plan.skip}</span>
       )}

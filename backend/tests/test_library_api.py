@@ -67,3 +67,25 @@ def test_list_files_sort_and_paging(db):
         assert len(ext_first) == 2
         page = client.get("/api/files", params={"limit": 1, "offset": 1}).json()
         assert [r["id"] for r in page] == [2]
+
+
+def test_list_files_cover_source(db):
+    db.add(ScanRoot(id=1, path="/m", label="M"))
+    db.add(AudioFile(id=1, root_id=1, path="/m/con-cover.flac", ext="flac", size_bytes=1,
+                     hash_method="file", status="present", has_cover=True))
+    db.add(AudioFile(id=2, root_id=1, path="/m/proposta.mp3", ext="mp3", size_bytes=1,
+                     hash_method="file", status="present", has_cover=False))
+    db.add(AudioFile(id=3, root_id=1, path="/m/niente.mp3", ext="mp3", size_bytes=1,
+                     hash_method="file", status="present", has_cover=False))
+    # la proposta provider esiste solo come issue missing_cover aperta
+    db.add(Issue(file_id=2, type="missing_cover", field="cover", severity="info",
+                 detail="x", suggested_fix_json={"thumb_ref": "cover_cache/2.jpg"},
+                 status="open"))
+    # una accettata NON è più una proposta da mostrare come tale
+    db.add(Issue(file_id=3, type="missing_cover", field="cover", severity="info",
+                 detail="x", suggested_fix_json=None, status="accepted"))
+    db.commit()
+
+    with TestClient(app) as client:
+        rows = {r["id"]: r["cover_source"] for r in client.get("/api/files").json()}
+    assert rows == {1: "embedded", 2: "provider", 3: None}

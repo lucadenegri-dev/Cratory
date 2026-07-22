@@ -128,3 +128,23 @@ body {
   .eqm-scan { animation: none; left: 38%; }
   .eqm-cursor { animation: none; }
 }
+
+/* ---- Miniature copertine ------------------------------------------------- */
+/* Placeholder "nessuna copertina": stesso dither a scacchiera di .eqm-rest,
+   così un buco nella tabella resta coerente col resto del sistema. */
+.cv-none {
+  background-image: conic-gradient(var(--c-border-strong) 0 90deg, transparent 90deg 180deg, var(--c-border-strong) 180deg 270deg, transparent 270deg 360deg);
+  background-size: 4px 4px;
+  opacity: 0.45;
+}
+
+/* ---- Path troncato a sinistra (FILES) ------------------------------------ */
+/* dir="rtl" porta l'ellissi del truncate in testa, ma lo "/" iniziale del path
+   è un carattere neutro al confine del paragrafo bidi e senza un LRM davanti
+   finirebbe spostato in coda alla riga. Il LRM va qui, non concatenato al testo
+   in JSX: come contenuto di ::before non entra nella selezione dell'utente (chi
+   copia il path non si ritrova un carattere invisibile incollato nel terminale),
+   ma partecipa comunque alla line box quindi bidi e truncate restano corretti. */
+.path-lrm::before {
+  content: "\200E";
+}
