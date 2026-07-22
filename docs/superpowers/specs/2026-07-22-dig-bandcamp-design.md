@@ -55,6 +55,13 @@ Le copertine si costruiscono da `primary_image.image_id`:
 `https://f4.bcbits.com/img/a{image_id}_9.jpg` (~15KB, per la griglia) e `_16` (~50KB,
 per il pannello). Verificate: HTTP 200.
 
+Il dettaglio di una release si ottiene da
+`POST https://bandcamp.com/api/mobile/24/tralbum_details` con
+`{"band_id": <int>, "tralbum_id": <int>, "tralbum_type": "a"}`. Restituisce
+`bandcamp_url`, `tralbum_artist`, `title`, `art_id`, `label`, `tags`, `price`,
+`release_date` (timestamp unix) e `tracks[]` con `track_num`, `title`, `duration` e
+`streaming_url["mp3-128"]`. Verificato su Ostgut Ton / "Love Letter": 2 tracce con stream.
+
 Lo `stream_url` del brano in evidenza risponde **206 con qualunque `Origin`/`Referer`**,
 senza autenticazione, `accept-ranges: bytes`, `cache-control: max-age=31536000`. La
 risposta osservata era un cache HIT di 16 giorni: il token nell'URL non è applicato
@@ -174,9 +181,12 @@ Non esiste endpoint per enumerare o validare i tag Bandcamp: cercato e non trova
 `autocomplete_elastic` con `search_filter` `t`/`g` restituisce tracce e album, non tag).
 La tabella di alias marcirà come `_CURATED_STYLES` in
 `backend/app/routers/discovery.py`, e ha la **stessa difesa**: `probe` restituisce
-`result_count`, e `0` è un seme morto che la UI già sa dichiarare. Il piano deve
-verificare l'intera lista `_CURATED_STYLES` contro l'API e riempire la tabella con i
-soli casi misurati.
+`result_count`, e `0` è un seme morto che la UI già sa dichiarare.
+
+Tutti e 25 i semi di `_CURATED_STYLES` sono stati misurati contro l'API il 2026-07-22:
+**23 su 25 funzionano con la sola normalizzazione naive** (da `acid-house` con 13.080 a
+`ambient` con 812.272). Le due righe della tabella sono quelle qui sopra, e non
+un'incognita da scoprire in implementazione.
 
 **`label` → discografia, in due richieste:**
 
@@ -185,10 +195,20 @@ soli casi misurati.
    dà `id` (il `band_id`) e `item_url_root`. Verificato su "Ostgut Ton" →
    `https://ostgut.bandcamp.com`, id `2920024821`.
 2. `POST /api/mobile/24/band_details` con `{"band_id": <id>}` → `discography[]`.
-   Verificato: 153 release.
+   Verificato: 153 release, ognuna con `item_id`, `band_id`, `item_type`, `title`,
+   **`artist_name`** (non `artist`), `band_name` (l'etichetta), `art_id`, `release_date`.
 
-Il `band_id` va in `Pile.handle`, così `fetch` non ripete la ricerca. La pila è la
-discografia intera, quindi corta: `reach <= WINDOW_ITEMS` e la profondità non ha niente
+**La discografia ha una forma diversa dai risultati del discover** e richiede un mapping
+separato: mancano `featured_track`, `track_count` e l'URL della pagina, e `release_date`
+è un formato diverso (`"26 Jun 2026 00:00:00 GMT"` contro `"2026-07-17 00:00:00 UTC"`).
+Conseguenze: i lead da seme etichetta non hanno `stream_url` né `format_badge`, e il loro
+`source_url` resta `None`. Nessuna delle tre è visibile nella griglia — la card non rende
+un link esterno, e il play ricade sulla risoluzione iTunes che già esiste e non ha bisogno
+di un id di sorgente. Il pannello, che apre `tralbum_details`, ha comunque URL, tag e
+stream veri.
+
+La discografia intera viene già scaricata da `probe` e finisce in `Pile.handle`: `fetch`
+è una fetta di lista, zero richieste. La pila è quindi corta: `reach <= WINDOW_ITEMS` e la profondità non ha niente
 da scegliere — **caso che la UI già gestisce** (oggi `pile_pages <= 3`, domani
 `pile_reach <= 300`: slider disabilitato e messaggio dedicato). Un'etichetta che su
 Bandcamp non c'è è un seme morto, già gestito.
@@ -220,7 +240,7 @@ rispetto alla sorgente.
 | `artist` | `album_artist`, fallback `band_name` |
 | `title` | `title` |
 | `label` | `band_name` quando differisce da `album_artist` — su Bandcamp l'etichetta *è* la band che ospita (verificato: `band_name` "Mutual Rytm" / `album_artist` "Phil Berg") |
-| `year` | anno di `release_date` (che è una data esatta, non solo l'anno) |
+| `year` | anno di `release_date`. **Serve un parser dedicato**: `_parse_year` del motore àncora la regex all'inizio (`^\s*(\d{4})`) e su `"26 Jun 2026 00:00:00 GMT"` fallisce. Bandcamp cerca il primo gruppo di 4 cifre ovunque nella stringa |
 | `source` | `"bandcamp"` |
 | `source_id` | `item_id` |
 | `source_url` | `item_url` ripulito di `?from=discover_page` |
@@ -282,11 +302,16 @@ guadagna un ramo: se l'item di `discovery-preview` porta uno `streamUrl`, salta 
 risoluzione via `GET /api/discovery/preview` e suona direttamente. Se la riproduzione
 fallisce (token scaduto), si ricade sul dettaglio release, che restituisce URL freschi.
 
-**Pannello tracklist.** La pagina album porta `data-tralbum` (JSON in un attributo HTML)
-con la tracklist completa, **uno `stream_url` per traccia**, le durate e i tag veri della
-release. Verificato su `mutual-rytm.bandcamp.com/album/d-rin`: 7 tracce con stream, tag
-`hypnotic techno`, `hardgroove`, `tribal`, `oldschool`. Sul dig Bandcamp il pannello è
-quindi **più ricco** di quello Discogs, non più povero.
+**Pannello tracklist.** `tralbum_details` restituisce in JSON la tracklist completa con
+`streaming_url["mp3-128"]` per traccia, le durate, `bandcamp_url`, i tag veri della release
+e il prezzo. Sul dig Bandcamp il pannello è quindi **più ricco** di quello Discogs, non più
+povero.
+
+Si è scartata l'alternativa di raschiare l'attributo `data-tralbum` dalla pagina album
+(337KB di HTML per release): `tralbum_details` dà le stesse cose in JSON, e soprattutto
+lavora su **id numerici**. È la differenza che cancella il rischio SSRF descritto in §4:
+non c'è nessun URL da far seguire al backend, quindi non c'è nessun allowlist da tenere
+corretto per sempre.
 
 ## 4 — API
 
@@ -299,10 +324,14 @@ quindi **più ricco** di quello Discogs, non più povero.
   `pile_reach <= 300`; **messaggio "ne vedi solo N di M"** = `pile_total > pile_reach`.
   `DISCOGS_PAGE_SIZE` sparisce dal frontend.
 - `GET /api/discovery/release/{discogs_id}` diventa `GET /api/discovery/release` con
-  query: `?source=discogs&id=<int>` oppure `?source=bandcamp&url=<url della pagina album>`.
-
-  **`url` va validato contro un allowlist di host `*.bandcamp.com`.** Senza quella
-  guardia il parametro è una SSRF che fa fare al backend fetch arbitrari.
+  query: `?source=discogs&id=<int>` oppure `?source=bandcamp&id=<item_id>&band_id=<band_id>`.
+  Solo interi: nessun URL attraversa il confine, quindi **nessuna superficie SSRF e
+  nessun allowlist da mantenere**.
+- La risposta di dettaglio smette di chiamarsi `DiscogsReleaseOut` e diventa
+  `DiscoveryReleaseOut`, con `source` e `source_url` al posto di `discogs_id`/`discogs_url`.
+  `videos` (i video YouTube della release) resta popolato solo da Discogs; per Bandcamp
+  è sempre vuoto, perché le tracce hanno già lo stream vero.
+  Le tracce guadagnano `stream_url: str | None`, popolato solo da Bandcamp.
 - `GET /api/discovery/preview` invariato: i lead Bandcamp non lo chiamano.
 - `GET /api/discovery/genres` invariato: stessi semi, gli alias vivono lato backend.
 
@@ -339,11 +368,16 @@ per etichetta, una pagina album per il pannello):
 
 - `_window` in item: parità con il comportamento attuale su Discogs entro lo scivolamento
   di una pagina dichiarato in §1; estremi `depth` 0 e 1; pila più corta della finestra.
-- Sorgente Bandcamp: mapping raw → lead (artista/etichetta da `album_artist`/`band_name`),
+- Sorgente Bandcamp, mapping **discover**: artista/etichetta da `album_artist`/`band_name`,
   alias dei tag, badge derivato dai `track_count`, scarti strutturali, `result_count: 0`.
-- Pesi: ridistribuzione senza stili, per tag e per etichetta.
+- Sorgente Bandcamp, mapping **discografia**: artista da `artist_name`, anno da
+  `"26 Jun 2026 00:00:00 GMT"`, assenza di `stream_url`/`format_badge`/`source_url`.
+- Sfogliata col cursore: l'offset viene consumato davvero; un errore **durante** lo skip
+  solleva, un errore **dopo** degrada ai risultati raccolti.
+- Pesi: ridistribuzione senza stili, per tag e per etichetta; i due valori Discogs
+  invariati (0.714 / 0.286).
 - Motore: dedup ed esclusione del posseduto invariati con una `DigSource` finta.
-- Router: 502 su errore provider; seme morto; allowlist dell'host sull'endpoint release.
+- Router: 502 su errore provider; seme morto; dettaglio release per entrambe le sorgenti.
 - Frontend: la sorgente entra nell'URL, la lente resta invariata.
 - E2E: lo smoke Playwright esistente non deve rompersi.
 
