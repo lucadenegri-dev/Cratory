@@ -209,3 +209,103 @@ def test_structurally_broken_items_are_dropped_not_crashed(broken):
     # solo gli scarti strutturali. Un campo mancante scarta il lead, non solleva.
     assert BandcampSource(_FakeBandcamp()).to_lead({**DISCOVER_ITEM, **broken},
                                                    Seed("genre", "T")) is None
+
+
+# --- seme etichetta ----------------------------------------------------------
+
+# Un item di `band_details`, catturato dall'API reale il 2026-07-22. Forma DIVERSA
+# dai risultati di discover: artist_name, nessuno stream, nessun track_count,
+# nessun URL, e una data in un altro formato.
+DISCOGRAPHY_ITEM = {
+    "item_id": 1022287860,
+    "item_type": "album",
+    "artist_name": "Inox Traxx",
+    "band_name": "Ostgut Ton",
+    "title": "Love Letter",
+    "art_id": 2027095290,
+    "release_date": "26 Jun 2026 00:00:00 GMT",
+    "is_purchasable": True,
+    "band_id": 2920024821,
+}
+
+
+_DEFAULT_BAND = {"id": 2920024821, "name": "Ostgut Ton"}
+
+
+class _FakeLabelBandcamp(_FakeBandcamp):
+    def __init__(self, band=_DEFAULT_BAND, discography=None):
+        # NB: il default e' il dict stesso, non None-come-sentinella — altrimenti
+        # `band=None` esplicito (il seme morto) collasserebbe sullo stesso default.
+        super().__init__()
+        self.band = band
+        self.discography = discography if discography is not None else [DISCOGRAPHY_ITEM]
+
+    def find_band(self, name):
+        self.calls.append({"op": "find_band", "name": name})
+        return self.band
+
+    def band_discography(self, band_id):
+        self.calls.append({"op": "discography", "band_id": band_id})
+        return self.discography
+
+
+def test_label_probe_resolves_the_band_and_keeps_the_discography():
+    fake = _FakeLabelBandcamp(discography=[DISCOGRAPHY_ITEM] * 153)
+    pile = BandcampSource(fake).probe(Seed("label", "Ostgut Ton"))
+    assert pile.height == 153
+    # La pila E' la discografia: non c'e' un fondo oltre cui andare.
+    assert pile.reach == 153
+    assert pile.resolution == "discography"
+    assert len(pile.handle) == 153
+    assert [c["op"] for c in fake.calls] == ["find_band", "discography"]
+
+
+def test_a_label_bandcamp_does_not_host_is_a_dead_seed():
+    fake = _FakeLabelBandcamp(band=None)
+    pile = BandcampSource(fake).probe(Seed("label", "Etichetta Inesistente"))
+    assert (pile.height, pile.reach) == (0, 0)
+    assert pile.resolution is None
+
+
+def test_label_fetch_slices_the_discography_without_any_request():
+    fake = _FakeLabelBandcamp()
+    items = [{**DISCOGRAPHY_ITEM, "item_id": i} for i in range(100)]
+    pile = Pile(height=100, reach=100, resolution="discography", handle=items)
+    got = BandcampSource(fake).fetch(Seed("label", "Ostgut Ton"), pile, 0, 300)
+    assert len(got) == 100
+    assert fake.calls == []      # probe aveva gia' pagato
+
+
+def test_lead_from_discography_reads_artist_name_not_artist():
+    lead = BandcampSource(_FakeLabelBandcamp()).to_lead(
+        DISCOGRAPHY_ITEM, Seed("label", "Ostgut Ton"))
+    assert lead.artist == "Inox Traxx"
+    assert lead.label == "Ostgut Ton"
+    assert lead.title == "Love Letter"
+    assert lead.source_id == "2920024821:1022287860"
+    assert lead.thumb_url == "https://f4.bcbits.com/img/a2027095290_9.jpg"
+
+
+def test_lead_from_discography_parses_the_other_date_format():
+    # '26 Jun 2026 ...' non e' ancorabile all'inizio: l'anno va cercato nella stringa.
+    lead = BandcampSource(_FakeLabelBandcamp()).to_lead(
+        DISCOGRAPHY_ITEM, Seed("label", "Ostgut Ton"))
+    assert lead.year == 2026
+
+
+def test_lead_from_discography_has_no_stream_badge_or_url():
+    # Nessuna delle tre e' visibile in griglia: la card non rende link esterni, e il
+    # play ricade sulla risoluzione iTunes che non ha bisogno di un id di sorgente.
+    # Il pannello, che apre tralbum_details, ha comunque URL, tag e stream veri.
+    lead = BandcampSource(_FakeLabelBandcamp()).to_lead(
+        DISCOGRAPHY_ITEM, Seed("label", "Ostgut Ton"))
+    assert lead.stream_url is None
+    assert lead.format_badge is None
+    assert lead.source_url is None
+
+
+@pytest.mark.parametrize("broken", [{"title": ""}, {"artist_name": ""},
+                                    {"artist_name": "Various Artists"}])
+def test_broken_discography_items_are_dropped(broken):
+    assert BandcampSource(_FakeLabelBandcamp()).to_lead(
+        {**DISCOGRAPHY_ITEM, **broken}, Seed("label", "Ostgut Ton")) is None

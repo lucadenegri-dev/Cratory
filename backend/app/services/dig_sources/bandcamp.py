@@ -87,6 +87,8 @@ class BandcampSource:
     # --- probe ---------------------------------------------------------------
 
     def probe(self, seed: Seed) -> Pile:
+        if seed.type == "label":
+            return self._probe_label(seed)
         if seed.type != "genre":
             return Pile(height=0, reach=0)
         tag = _tag_norm(seed.value)
@@ -97,11 +99,29 @@ class BandcampSource:
         return Pile(height=total, reach=BANDCAMP_REACH,
                     resolution="tag" if total else None, handle=tag)
 
+    def _probe_label(self, seed: Seed) -> Pile:
+        """L'etichetta non e' un filtro del discover: si passa dalla sua discografia.
+
+        Due richieste (cerca il nome, scarica la discografia) e la lista finisce in
+        `handle`: `fetch` diventa una fetta, zero richieste. La pila e' quindi corta
+        per costruzione, e `reach == height` perche' non esiste un fondo oltre a
+        quello che l'etichetta ha pubblicato.
+        """
+        band = self.client.find_band(seed.value)
+        if not band or not band.get("id"):
+            return Pile(height=0, reach=0)
+        discography = self.client.band_discography(int(band["id"]))
+        return Pile(height=len(discography), reach=len(discography),
+                    resolution="discography" if discography else None,
+                    handle=discography)
+
     # --- fetch ---------------------------------------------------------------
 
     def fetch(self, seed: Seed, pile: Pile, offset: int, count: int) -> list[dict]:
         if count <= 0 or not pile.handle:
             return []
+        if seed.type == "label":
+            return list(pile.handle)[offset:offset + count]
         tag = pile.handle
         cursor: str | None = "*"
         seen = 0
@@ -137,7 +157,35 @@ class BandcampSource:
     # --- mapping -------------------------------------------------------------
 
     def to_lead(self, raw: dict, seed: Seed) -> DiscoveryLead | None:
+        # Due endpoint, due forme: il discover porta stream e conteggio tracce, la
+        # discografia porta `artist_name` e nient'altro di riproducibile.
+        if seed.type == "label":
+            return self._lead_from_discography(raw, seed)
         return self._lead_from_discover(raw, seed)
+
+    def _lead_from_discography(self, raw: dict, seed: Seed) -> DiscoveryLead | None:
+        title = (raw.get("title") or "").strip()
+        artist_raw = (raw.get("artist_name") or "").strip()
+        if not title or not artist_raw or artist_raw.lower() in _VARIOUS:
+            return None
+        artist, artist_keys = _clean_artist(artist_raw)
+        if not artist or not artist_keys:
+            return None
+        band_id, item_id = raw.get("band_id"), raw.get("item_id")
+        return DiscoveryLead(
+            artist=artist, artist_keys=artist_keys, title=title,
+            year=_bc_year(raw.get("release_date")),
+            label=(raw.get("band_name") or "").strip() or None,
+            styles=[],
+            source="bandcamp", seed=seed.value,
+            source_id=(f"{band_id}:{item_id}" if band_id and item_id else None),
+            # La discografia non porta l'URL della pagina: lo risolve il pannello,
+            # che apre `tralbum_details` e riceve `bandcamp_url`.
+            source_url=None,
+            thumb_url=_art_url(raw.get("art_id")),
+            stream_url=None,
+            format_badge=None,
+        )
 
     def _lead_from_discover(self, raw: dict, seed: Seed) -> DiscoveryLead | None:
         title = (raw.get("title") or "").strip()
