@@ -1,43 +1,43 @@
-"""Discovery v2 — "crate digging": lista-dig a volume da Discogs.
+"""Discovery v2 — "crate digging": lista-dig a volume da una `DigSource`.
 
 Il dig produce TANTI lead leggeri NON risolti dai semi Genere/Etichetta (l'identita'
-Spotify si risolve solo al salvataggio). La
-pila di release del seme e' ordinata da Discogs per DOMANDA (want desc): `depth`
-sceglie IN CHE PUNTO pescarci dentro (0 = i classici del seme, 1 = il fondo della
-cassa), il gusto (`TasteProfile`) ordina SEMPRE dentro la finestra scelta.
-L'identita' Spotify si risolve solo al salvataggio (riusa l'import idempotente).
-Sorgente: Discogs (vedi integrations/discogs).
+Spotify si risolve solo al salvataggio). Il motore ragiona in ITEM, non in pagine: chiede
+alla sorgente una `Pile` (quanto e' alta, quanto ne raggiunge) e ne ricava una finestra
+(offset, count) via `_window`; `depth` sceglie IN CHE PUNTO pescarci dentro (0 = la cima
+della pila, 1 = il fondo di cio' che la sorgente raggiunge), il gusto (`TasteProfile`)
+ordina SEMPRE dentro la finestra scelta. Chi conosce la paginazione del provider (pagine
+Discogs, sfogliata Bandcamp) e' la `DigSource` stessa (`app/services/dig_sources/`), non
+questo modulo: e' il confine che rende possibile aggiungerne una seconda.
 
 De-noise: distingue la gemma rara dal rumore self-released con la DOMANDA (want vs
 have) come FILTRO — non piu' come ordinamento, quello lo decide il gusto dentro la
 finestra —, scarta formati off-target (compilation/DJ mix) e self-released morti,
-deduplica le varianti ("(Original Mix)") e limita quante voci per artista.
+deduplica le varianti ("(Original Mix)") e limita quante voci per artista (questi filtri
+restano nella sorgente Discogs, che e' l'unica a doverne conoscere i dati grezzi).
 
-Deterministico e testabile: le funzioni di ricerca e conteggio Discogs sono iniettate.
+Deterministico e testabile: la sorgente e' iniettata (`DigSource` Protocol).
 """
 
 import logging
-import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.integrations.discogs import (
-    DISCOGS_MAX_PAGES,
-    SEARCH_PER_PAGE,
-    SORT_DESC,
-    SORT_WANT,
+from app.services.dig_sources import (
+    WINDOW_ITEMS,
+    DigSource,
+    DiscoveryLead,
+    Pile,
+    Reason,
+    Seed,
 )
 from app.models import Track
 
 logger = logging.getLogger(__name__)
-
-
-PAGES_PER_DIG = 3  # quante pagine scarica un dig: 3 richieste di contenuto
 
 
 def _norm(value: str | None) -> str:
@@ -48,41 +48,23 @@ def _library_tracks(db: Session) -> list[Track]:
     return list(db.scalars(select(Track)).all())
 
 
-def _usable_pages(total_items: int) -> int:
-    """Quante pagine utili ha la pila (il tetto Discogs e' 100: pagina 101 -> 404).
+def _window(depth: float, pile: Pile) -> tuple[int, int]:
+    """La finestra (offset, count) da pescare nella pila.
 
-    Unica fonte della formula: la usano sia `_window` (per piazzare la finestra) sia
-    `dig()` (per `pile_pages` nel contratto). Due copie che devono restare d'accordo
-    per sempre sono un futuro bug di coerenza.
+    depth 0 = la cima (il canone del seme), depth 1 = il fondo di cio' che la sorgente
+    RAGGIUNGE — che non e' il fondo della pila quando `reach < height`. Su una pila piu'
+    corta della finestra `depth` non ha effetto: non c'e' profondita' da scegliere, e il
+    chiamante lo segnala alla UI via `pile_reach`.
     """
-    return min(math.ceil(total_items / SEARCH_PER_PAGE), DISCOGS_MAX_PAGES)
-
-
-def _window(depth: float, total_items: int) -> list[int]:
-    """Le pagine da scaricare dalla pila ordinata per domanda.
-
-    depth 0 = il canone del seme, depth 1 = il fondo della pila. La pila regge per
-    tutta la sua lunghezza: a rango 9901-10000 il `want` mediano e' ancora 89, e a
-    NESSUNA profondita' esiste un disco con want<5 (misurato su style=Acid House).
-
-    Su una pila piu' corta della finestra, `depth` non ha effetto: non c'e' profondita'
-    da scegliere. Il chiamante lo segnala alla UI via `pile_pages`.
-    """
-    usable = _usable_pages(total_items)
-    if usable <= 0:
-        return []
-    start = 1 + round(max(0.0, min(1.0, depth)) * max(0, usable - PAGES_PER_DIG))
-    # il `- 1` non e' cosmetico: senza, la finestra e' di 4 pagine e ogni dig
-    # spende una richiesta di troppo.
-    return list(range(start, min(start + PAGES_PER_DIG - 1, usable) + 1))
+    reach = max(0, min(pile.height, pile.reach))
+    if reach <= 0:
+        return 0, 0
+    start = round(max(0.0, min(1.0, depth)) * max(0, reach - WINDOW_ITEMS))
+    return start, min(WINDOW_ITEMS, reach - start)
 
 
 _MAX_PER_ARTIST = 2  # un artista non deve monopolizzare la lista
 _VARIOUS = {"various", "various artists", "va", "unknown artist"}
-# Formati che un DJ NON vuole tra i lead (vuole release singole, non mix gia' fatti).
-_BAD_FORMATS = {"compilation", "dj mix", "mixed", "mixtape"}
-# Etichetta "non etichetta": segnale di autoproduzione.
-_SELF_RELEASED_RE = re.compile(r"not on label|self[- ]released", re.IGNORECASE)
 
 # Grammatica di Discogs: gli omonimi sono disambiguati con '*' o '(N)' — 'Tyree*',
 # 'Gravity Zero (4)'. Non sono parte del nome: senza toglierli, il 17% dei lead non
@@ -123,27 +105,6 @@ _VARIANT_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Badge di formato per la UI (grid cell): primo match in ordine di priorità sui
-# descrittori Discogs. Match ESATTO (intersezione di insiemi), non per sostringa:
-# 'ep' e' sottostringa di 'repress' (r-e-p...), e le ristampe sono frequentissime
-# nel crate digging — una ristampa LP verrebbe marcata "EP". Il campo `format` e'
-# gia' nella risposta di /database/search: nessuna chiamata di rete aggiuntiva.
-_FORMAT_BADGES = [
-    ({"ep"}, "EP"),
-    ({"lp"}, "LP"),
-    ({"album"}, "Album"),
-    ({"single"}, "Single"),
-    ({'12"'}, '12"'),
-]
-
-
-def _format_badge(formats: set[str]) -> str | None:
-    for needles, badge in _FORMAT_BADGES:
-        if needles & formats:
-            return badge
-    return None
-
-
 # Pesi del termine "gusto" nello score (somma 1.0). Tarabili.
 W_ARTIST = 0.5
 W_LABEL = 0.3
@@ -159,63 +120,10 @@ REASON_DEEP_CUT_MIN_WANT = 5    # sotto, non c'e' domanda misurabile: rumore, no
 REASON_STYLE_MATCH_MIN = 0.5    # soglia sulla Jaccard: un token condiviso non basta
 REASON_RECENT_MIN = 0.8         # recency alta (ultimi ~3 anni su span 15)
 
-SearchReleases = Callable[..., list[dict[str, Any]]]
-CountReleases = Callable[..., int]
-
-
-@dataclass
-class Reason:
-    """Spiegazione strutturata: codice + payload dati. Il testo lo compone la UI."""
-    code: str
-    data: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class DiscoveryLead:
-    artist: str
-    title: str
-    year: int | None = None
-    label: str | None = None
-    styles: list[str] = field(default_factory=list)   # TUTTI gli style della release
-    artist_keys: list[str] = field(default_factory=list)  # interno: match, non DTO
-    source: str = "discogs"
-    seed: str | None = None
-    discogs_id: int | None = None
-    discogs_url: str | None = None
-    thumb_url: str | None = None
-    have: int = 0
-    want: int = 0
-    format_badge: str | None = None    # EP | LP | Album | Single | 12" | None
-    isrc: str | None = None
-    score: float = 0.0
-    reasons: list[Reason] = field(default_factory=list)
-
-
-@dataclass
-class DigResult:
-    seed_type: str
-    value: str
-    leads: list[DiscoveryLead] = field(default_factory=list)
-    pile_pages: int = 0
-    # Com'e' stato risolto il seme: "style" | "genre" | "label" | None (pila vuota).
-    # "genre" = il fallback sullo scaffale Discogs (~15 categorie enormi): la UI deve
-    # poterlo dire, perche' pile_pages e' cappato a 100 e non distingue 43k da 4,9M.
-    seed_resolution: str | None = None
-    # Conteggio grezzo della sonda (pagination.items) del filtro che ha vinto.
-    pile_total: int = 0
-
 
 def _parse_year(value: Any) -> int | None:
     m = re.match(r"\s*(\d{4})", str(value or ""))
     return int(m.group(1)) if m else None
-
-
-def _first(seq: Any) -> str | None:
-    return seq[0] if isinstance(seq, list) and seq else None
-
-
-def _is_self_released(labels: Any) -> bool:
-    return any(_SELF_RELEASED_RE.search(str(label)) for label in (labels or []))
 
 
 def _dedup_title(title: str) -> str:
@@ -338,47 +246,6 @@ class TasteProfile:
         return best
 
 
-def _lead_from_release(item: dict[str, Any], seed: str) -> DiscoveryLead | None:
-    """Lead da un result di /database/search, con filtri anti-rumore.
-
-    Scarta: titoli non splittabili, Various, formati off-target (compilation/DJ mix),
-    e i self-released 'morti' (nessuno li ha ne' li cerca).
-    """
-    title = item.get("title") or ""
-    if " - " not in title:
-        return None
-    artist_raw, _, track_title = title.partition(" - ")
-    artist_raw, track_title = artist_raw.strip(), track_title.strip()
-    if not artist_raw or not track_title or artist_raw.lower() in _VARIOUS:
-        return None
-    artist, artist_keys = _clean_artist(artist_raw)
-    if not artist or not artist_keys:
-        return None
-    formats = {str(f).lower() for f in (item.get("format") or [])}
-    if formats & _BAD_FORMATS:
-        return None
-    community = item.get("community") or {}
-    have = int(community.get("have") or 0)
-    want = int(community.get("want") or 0)
-    labels = item.get("label") or []
-    # self-released che nessuno ha ne' cerca: rumore, non una gemma rara.
-    if have == 0 and want == 0 and _is_self_released(labels):
-        return None
-    uri = item.get("uri") or ""
-    return DiscoveryLead(
-        artist=artist, artist_keys=artist_keys, title=track_title,
-        year=_parse_year(item.get("year")),
-        label=_first(labels),
-        styles=[str(s) for s in (item.get("style") or [])],
-        source="discogs", seed=seed,
-        discogs_id=item.get("id"),
-        discogs_url=f"https://www.discogs.com{uri}" if uri.startswith("/") else (uri or None),
-        thumb_url=item.get("cover_image") or item.get("thumb") or None,
-        have=have, want=want,
-        format_badge=_format_badge(formats),
-    )
-
-
 def _recency(year: int | None, current_year: int) -> float:
     """0..1: piu' recente -> piu' alto (lineare sugli ultimi 15 anni)."""
     if not year:
@@ -405,27 +272,28 @@ class Weights:
     style: float
 
 
-def _weights(seed_type: str) -> Weights:
+def _weights(seed_type: str, *, has_styles: bool = True) -> Weights:
     """I segnali costanti per costruzione escono, e il peso si redistribuisce.
 
     Su un dig per etichetta ogni lead ha l'etichetta del seme: `label_affinity` vale
     1.0 per tutti. E' una costante additiva — non ordina, e dilava gli altri segnali.
+    Stessa malattia quando la sorgente non porta gli stili nella lista (Bandcamp): un
+    peso su un segnale sempre nullo e' peso buttato.
 
-    Il seme `genre` NON riceve lo stesso trattamento, ma non per la ragione che si
-    potrebbe pensare guardando `style_affinity` (Jaccard massima tra gli style della
-    release e i generi della libreria): ogni release del dig contiene lo style del seme
-    per costruzione (e' il filtro `style=value` della ricerca Discogs), quindi il seme
-    impone un PAVIMENTO uguale per tutti i lead — gli altri style possono solo alzare
-    quel max, mai abbassarlo. Se la libreria ha alla lettera il genere del seme, il
-    pavimento e' 1.0 e `style_affinity` sarebbe una costante esatta: la stessa
-    malattia che qui sopra cura `label`. La cura pero' NON e' azzerare il peso (si
-    butterebbe anche il segnale buono): e' `_styles_beyond_seed`, che esclude il seme
-    dal calcolo — resta solo l'affinita' EXTRA, che discrimina davvero.
+    Il seme `genre` NON perde il peso `style` per la ragione simmetrica, anche se ogni
+    release del dig contiene lo style del seme per costruzione: li' la cura non e'
+    azzerare il peso (si butterebbe anche il segnale buono) ma `_styles_beyond_seed`,
+    che esclude il seme dal calcolo lasciando solo l'affinita' EXTRA.
     """
+    artist, label, style = W_ARTIST, W_LABEL, W_STYLE
     if seed_type == "label":
-        rest = W_ARTIST + W_STYLE
-        return Weights(artist=W_ARTIST / rest, label=0.0, style=W_STYLE / rest)
-    return Weights(artist=W_ARTIST, label=W_LABEL, style=W_STYLE)
+        label = 0.0
+    if not has_styles:
+        style = 0.0
+    total = artist + label + style
+    if total <= 0:
+        return Weights(artist=1.0, label=0.0, style=0.0)
+    return Weights(artist=artist / total, label=label / total, style=style / total)
 
 
 def _styles_beyond_seed(styles: list[str], seed_norm: str) -> list[str]:
@@ -480,18 +348,18 @@ def _reasons(lead: DiscoveryLead, profile: TasteProfile, seed_type: str,
 
 def _select(leads: list[DiscoveryLead]) -> list[DiscoveryLead]:
     """Ordina per score e applica il cap per artista (no monopolio). NON tronca:
-    la finestra di 3 pagine e' gia' il limite naturale (~300 release grezze), e il
-    vecchio tetto di 80 nascondeva 160 lead a ogni dig senza che nulla lo dicesse
+    la finestra di WINDOW_ITEMS item e' gia' il limite naturale (~300 release grezze),
+    e il vecchio tetto di 80 nascondeva 160 lead a ogni dig senza che nulla lo dicesse
     (misurato su style=Acid House: 244 candidati validi su 300). Quanti mostrarne
     e' una lente della UI, non un parametro del motore.
 
     Il sort DEVE restare stabile — `sorted` lo garantisce, ed e' su questa garanzia che
     poggia il fallback a gusto piatto: quando il riferimento e' vuoto (o nessun segnale
     aggancia) i lead pareggiano tutti, e l'ordine che sopravvive e' quello in cui sono
-    entrati, cioe' l'ordine per domanda con cui Discogs ha risposto dentro la finestra.
-    E' l'unico ordine sensato che resta quando il gusto non discrimina, ed e' voluto:
-    sostituire `sorted` con un ordinamento instabile lo romperebbe in silenzio (nessun
-    errore, solo lead in ordine arbitrario).
+    entrati, cioe' l'ordine con cui la sorgente ha risposto dentro la finestra (per
+    Discogs, quello per domanda). E' l'unico ordine sensato che resta quando il gusto
+    non discrimina, ed e' voluto: sostituire `sorted` con un ordinamento instabile lo
+    romperebbe in silenzio (nessun errore, solo lead in ordine arbitrario).
     """
     out: list[DiscoveryLead] = []
     per_artist: dict[str, int] = {}
@@ -504,66 +372,61 @@ def _select(leads: list[DiscoveryLead]) -> list[DiscoveryLead]:
     return out
 
 
+@dataclass
+class DigResult:
+    seed_type: str
+    value: str
+    leads: list[DiscoveryLead] = field(default_factory=list)
+    # Quanto e' alta la pila del seme (0 = seme che la sorgente non conosce).
+    pile_total: int = 0
+    # Quanti item la sorgente raggiunge davvero. Se <= WINDOW_ITEMS la finestra e'
+    # l'intera pila e `depth` non ha effetto: la UI deve poterlo dire invece di
+    # offrire un controllo inerte. Se < pile_total, la UI avverte che si vede
+    # solo una porzione.
+    pile_reach: int = 0
+    # Com'e' stato risolto il seme: "style"|"genre"|"label"|"tag"|"discography"|None.
+    seed_resolution: str | None = None
+
+
 def dig(
     db: Session,
     *,
     seed_type: str,
     value: str,
-    search_releases: SearchReleases,
-    count_releases: CountReleases,
+    source: DigSource,
     library: list | None = None,
     depth: float = 0.0,
 ) -> DigResult:
     """Lead non posseduti dal seme dato (genere|etichetta), ordinati per gusto.
 
-    Due assi separati: `depth` sceglie DOVE pescare nella pila ordinata per domanda
-    (0 = i classici del seme, 1 = il fondo); il gusto ordina SEMPRE dentro la finestra.
+    Due assi separati: `depth` sceglie DOVE pescare nella pila della sorgente (0 = la
+    cima, 1 = il fondo di cio' che raggiunge); il gusto ordina SEMPRE dentro la
+    finestra.
 
     Il profilo di gusto e la dedup del posseduto usano la STESSA `library`, per
-    scelta: il riferimento per-playlist e' stato rimosso perche' su una playlist
-    magra (etichette e generi vengono dai tag dei file, che i lead da streaming
-    non hanno) il gusto si azzerava in silenzio e la lista ricadeva sull'ordine
-    della pila senza che nulla lo dicesse.
-
-    Costo di rete: una sonda `count_releases` PRIMA di scegliere la finestra (serve
-    `pagination.items` per sapere quanto e' alta la pila), piu' una seconda sonda se il
-    seme e' `genre` e lo `style` (il livello fine) non ha risultati e si ripiega sul
-    `genre` (il livello grosso) — Discogs li distingue. Totale 4-5 richieste per dig.
+    scelta: il riferimento per-playlist e' stato rimosso perche' su una playlist magra
+    il gusto si azzerava in silenzio e la lista ricadeva sull'ordine della pila senza
+    che nulla lo dicesse.
     """
     if library is None:
         library = _library_tracks(db)
     owned_tracks, owned_albums = _owned_index(library)
     profile = TasteProfile.from_tracks(library)
 
-    if seed_type == "label":
-        filters: dict[str, Any] = {"label": value}
-        resolution = "label"
-    elif seed_type == "genre":
-        # Discogs distingue `style` (fine: 'Deep House') da `genre` (grosso:
-        # 'Electronic'): si prova il piu' specifico e si ripiega.
-        filters = {"style": value}
-        resolution = "style"
-    else:
-        return DigResult(seed_type=seed_type, value=value, pile_pages=0)
+    seed = Seed(type=seed_type, value=value)
+    pile = source.probe(seed)
+    offset, count = _window(depth, pile)
+    reach = max(0, min(pile.height, pile.reach))
+    if count <= 0:
+        return DigResult(seed_type=seed_type, value=value, pile_total=pile.height,
+                         pile_reach=reach, seed_resolution=pile.resolution)
 
-    total = count_releases(**filters)
-    if total == 0 and seed_type == "genre":
-        # Fallback sullo scaffale: 'Electronic' non e' uno style ma un genre.
-        filters = {"genre": value}
-        resolution = "genre"
-        total = count_releases(**filters)
-
-    usable = _usable_pages(total) if total > 0 else 0
-    pages = _window(depth, total)
-    if not pages:
-        return DigResult(seed_type=seed_type, value=value, pile_pages=0)
-
-    items = search_releases(**filters, pages=pages, sort=SORT_WANT, sort_order=SORT_DESC)
+    items = source.fetch(seed, pile, offset, count)
 
     leads: list[DiscoveryLead] = []
     seen: set[tuple[str, str]] = set()
     for item in items or []:
-        lead = _lead_from_release(item, value)
+        lead = source.to_lead(item, seed)
         if lead is None:
             continue
         k = _dedup_key(lead.artist_keys[0], lead.title)  # collassa varianti e pressature
@@ -572,7 +435,10 @@ def dig(
         seen.add(k)
         leads.append(lead)
 
-    weights = _weights(seed_type)
+    # Quali segnali esistono lo dicono i DATI, non il nome della sorgente: se un
+    # giorno Bandcamp restituisse gli stili nella lista, il peso torna da solo.
+    has_styles = any(lead.styles for lead in leads)
+    weights = _weights(seed_type, has_styles=has_styles)
     current_year = datetime.now(timezone.utc).year
     seed_norm = _norm(value)
     for lead in leads:
@@ -581,7 +447,9 @@ def dig(
         lead.reasons = _reasons(lead, profile, seed_type, current_year, extra_styles)
     selected = _select(leads)
 
-    logger.info("Discovery dig %s=%r: %s lead (depth=%.2f, pagine %s di %s)",
-                seed_type, value, len(selected), depth, pages, usable)
-    return DigResult(seed_type=seed_type, value=value, leads=selected, pile_pages=usable,
-                     seed_resolution=resolution, pile_total=total)
+    logger.info("Discovery dig %s %s=%r: %s lead (depth=%.2f, offset %s, pila %s/%s)",
+                source.name, seed_type, value, len(selected), depth, offset,
+                reach, pile.height)
+    return DigResult(seed_type=seed_type, value=value, leads=selected,
+                     pile_total=pile.height, pile_reach=reach,
+                     seed_resolution=pile.resolution)

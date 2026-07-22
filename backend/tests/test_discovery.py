@@ -79,7 +79,9 @@ def test_dig_endpoint_returns_reasons(db, monkeypatch):
 
 
 def test_format_badge_priority():
-    from app.services.discovery_dig import _format_badge
+    # `_format_badge` e' Discogs-specifico (have/want, format Discogs): si e' spostato
+    # in `dig_sources/discogs.py` col seam del Task 1.
+    from app.services.dig_sources.discogs import _format_badge
 
     assert _format_badge({"vinyl", "ep"}) == "EP"
     assert _format_badge({"vinyl", "lp", "album"}) == "LP"  # LP ha priorità su Album

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.http_errors import api_error
 from app.db import get_db
-from app.integrations.discogs import DiscogsClient, DiscogsError
+from app.integrations.discogs import DiscogsClient, DiscogsError, SEARCH_PER_PAGE
 from app.integrations.itunes import ItunesClient
 from app.models import Track
 from app.repositories import add_track_to_playlist
@@ -34,6 +34,7 @@ from app.schemas import (
     ReasonOut,
 )
 from app.serializers import track_out
+from app.services.dig_sources.discogs import DiscogsSource
 from app.services.discovery_dig import DiscoveryLead, dig
 from app.services.playlist_import import get_or_create_discovery_playlist, import_single_track
 from app.services.preview import extract_youtube_videos, resolve_preview
@@ -108,10 +109,10 @@ def _lead_out(lead: DiscoveryLead) -> DiscoveryLeadOut:
     return DiscoveryLeadOut(
         artist=lead.artist, title=lead.title, year=lead.year, label=lead.label,
         style=lead.styles[0] if lead.styles else None, source=lead.source, seed=lead.seed,
-        discogs_url=lead.discogs_url, thumb_url=lead.thumb_url,
+        discogs_url=lead.source_url, thumb_url=lead.thumb_url,
         have=lead.have, want=lead.want,
         reasons=[ReasonOut(code=r.code, data=r.data) for r in lead.reasons],
-        discogs_id=lead.discogs_id, format_badge=lead.format_badge,
+        discogs_id=int(lead.source_id) if lead.source_id else None, format_badge=lead.format_badge,
     )
 
 
@@ -130,12 +131,8 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
     """Lista-dig a volume da Discogs per genere/stile o etichetta (lead non risolti)."""
     client = DiscogsClient()
     try:
-        result = dig(
-            db, seed_type=req.seed_type, value=req.value,
-            search_releases=lambda **kw: client.search_releases(**kw),
-            count_releases=lambda **kw: client.count_releases(**kw),
-            depth=req.depth,
-        )
+        result = dig(db, seed_type=req.seed_type, value=req.value,
+                     source=DiscogsSource(client), depth=req.depth)
     except DiscogsError as exc:
         # Rate limit / token mancante: 502 esplicito, mai uno "zero risultati" muto.
         raise api_error(502, "discovery_provider_error", f"Discovery provider error: {exc}",
@@ -145,7 +142,9 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
     return DiscoveryDigResponse(
         seed_type=result.seed_type, value=result.value,
         leads=[_lead_out(lead) for lead in result.leads],
-        pile_pages=result.pile_pages,
+        # Il contratto HTTP non cambia in questa task: `pile_pages` si ricava dagli
+        # item. La Task 5 lo sostituisce con pile_total/pile_reach.
+        pile_pages=result.pile_reach // SEARCH_PER_PAGE,
         seed_resolution=result.seed_resolution, pile_total=result.pile_total,
     )
 
