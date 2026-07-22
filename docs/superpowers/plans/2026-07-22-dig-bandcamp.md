@@ -38,11 +38,26 @@ esterno, pytest. Next.js 16 App Router + React + Tailwind (frontend), vitest + P
 
 ### Comandi
 
+**Questo è un worktree e NON ha un proprio `backend/.venv`.** Si usa l'interprete del
+checkout principale, con la working directory nel backend del worktree:
+
 ```bash
-# backend (dal worktree)
-cd backend && source .venv/bin/activate && python -m pytest tests -q
-# frontend
-cd frontend && npm run lint && npx tsc --noEmit && npm run test:unit
+cd <worktree>/backend
+/Users/lucadenegri/Develop/DJProject01/backend/.venv/bin/python -m pytest tests -q
+```
+
+Dove il piano scrive `cd backend && python -m pytest ...`, intende quel comando.
+**Baseline verificata prima di iniziare: 1028 test passati in ~13s.** Ogni task deve
+finire con almeno 1028 test verdi più i propri; un numero inferiore è una regressione,
+non una task finita.
+
+Il worktree non ha nemmeno `frontend/node_modules`: la prima task che tocca il
+frontend (Task 5) deve eseguire `npm install` reale nel worktree. **Un symlink al
+`node_modules` del checkout principale regge `tsc`/`eslint` ma rompe la build e il dev
+server di Turbopack:** non usarlo.
+
+```bash
+cd <worktree>/frontend && npm run lint && npx tsc --noEmit && npm run test:unit
 ```
 
 ---
@@ -411,12 +426,12 @@ from app.integrations.discogs import (
     SORT_WANT,
 )
 from app.services.dig_sources import DiscoveryLead, Pile, Seed
+# Il motore e le altre sorgenti condividono queste utility: stanno nel motore per non
+# duplicarle. Nessun ciclo: `dig_sources/__init__` non importa il motore, e il motore
+# non importa le sorgenti concrete (le costruisce il router).
+from app.services.discovery_dig import _VARIOUS, _clean_artist, _norm, _parse_year
 
 logger = logging.getLogger(__name__)
-
-# Il motore e le altre sorgenti condividono queste utility: stanno nel motore per non
-# duplicarle, e si importano da li'.
-from app.services.discovery_dig import _VARIOUS, _clean_artist, _norm, _parse_year  # noqa: E402
 
 # Formati che un DJ NON vuole tra i lead (vuole release singole, non mix gia' fatti).
 _BAD_FORMATS = {"compilation", "dj mix", "mixed", "mixtape"}
@@ -546,12 +561,13 @@ class DiscogsSource:
         )
 ```
 
-Nota sull'import in mezzo al file: `_clean_artist` e compagni vivono nel motore, che a
-sua volta importa dal pacchetto `dig_sources`. L'import posticipato dopo le costanti
-evita il ciclo. Se al momento dell'implementazione risultasse comunque circolare,
-**spostare `_norm`, `_parse_year`, `_clean_artist`, `_VARIOUS` e le loro regex in
-`dig_sources/__init__.py`** e importarli da lì in entrambe le direzioni — è la
-soluzione pulita, e il motore li re-esporta per non rompere i test esistenti.
+Nota sulla direzione degli import: `dig_sources/__init__.py` non importa niente da
+`discovery_dig`, e `discovery_dig` non importa le sorgenti concrete (le costruisce il
+router). Quindi `dig_sources/discogs.py` può importare da entrambi in cima al file
+senza ciclo. **Se durante l'implementazione emergesse comunque un `ImportError`
+circolare, non aggirarlo con un import posticipato:** spostare `_norm`, `_parse_year`,
+`_clean_artist`, `_VARIOUS` e le loro regex in `dig_sources/__init__.py`, e lasciare
+che `discovery_dig` li re-esporti per non rompere i test esistenti.
 
 - [ ] **Step 9: Eseguire i test della sorgente Discogs**
 
@@ -1169,18 +1185,18 @@ def test_tralbum_still_carries_url_tags_and_streams(client):
 
 - [ ] **Step 7: Registrare il marker ed escluderlo di default**
 
-Trovare la configurazione pytest del backend (`pyproject.toml`, `pytest.ini` o
-`setup.cfg`) e aggiungere:
+Il backend **non ha oggi nessun file di configurazione pytest** (verificato: né
+`pyproject.toml`, né `pytest.ini`, né `setup.cfg`). Crearne uno nuovo: usare
+`backend/pytest.ini`, **non** `pyproject.toml` — introdurre un `pyproject.toml` dove
+non c'è cambierebbe anche come il pacchetto viene scoperto, ed è un effetto collaterale
+che questa task non vuole.
 
 ```ini
-[tool.pytest.ini_options]
-markers = ["network: tocca la rete reale; escluso di default"]
-addopts = "-m 'not network'"
+[pytest]
+markers =
+    network: tocca la rete reale; escluso di default
+addopts = -m 'not network'
 ```
-
-Se `addopts` esiste già, **aggiungere** `-m 'not network'` a quello che c'è, senza
-sostituirlo. Se non esiste nessun file di configurazione pytest, crearlo in
-`backend/pyproject.toml`.
 
 - [ ] **Step 8: Verificare che il test di contratto sia davvero escluso**
 
@@ -1198,7 +1214,7 @@ segnalarlo**, non adattare il client alla cieca.
 git status --porcelain
 git add backend/app/integrations/bandcamp.py backend/app/integrations/_http.py \
         backend/tests/test_bandcamp_client.py backend/tests/test_bandcamp_contract.py \
-        backend/pyproject.toml
+        backend/pytest.ini
 git commit -m "feat(bandcamp): client HTTP per discover, ricerca band, discografia e dettaglio
 
 Endpoint interni non documentati, confinati in un solo modulo con parsing
@@ -1771,7 +1787,7 @@ def test_broken_discography_items_are_dropped(broken):
 
 - [ ] **Step 2: Eseguire per vederli fallire**
 
-Run: `cd backend && python -m pytest tests/test_dig_sources_bandcamp.py -q -k label or discography`
+Run: `cd backend && python -m pytest tests/test_dig_sources_bandcamp.py -q -k "label or discography"`
 Expected: FAIL — `probe` di un seme `label` restituisce oggi `Pile(0, 0)`.
 
 - [ ] **Step 3: Estendere `probe` e `fetch`**
