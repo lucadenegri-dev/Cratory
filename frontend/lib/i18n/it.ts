@@ -643,14 +643,17 @@ export const it: Dictionary = {
     depthSurfaceDesc: "I dischi più cercati del seme, meno quelli che hai già.",
     depthMidDesc: "Più a fondo: meno noti, ancora molto cercati.",
     depthDeepDesc: "Il fondo della cassa: oscuri, ma qualcuno li cerca ancora.",
+    sourceLabel: "Sorgente",
+    sourceDiscogs: "Discogs",
+    sourceBandcamp: "Bandcamp",
     shortPile: "pila corta: tutta qui",
-    emptyPile: "nessuna pila: Discogs non conosce questo seme",
+    emptyPile: (src: string) => `nessuna pila: ${src} non conosce questo seme`,
     leadCount: (n: number) => `${n} lead`,
     leadCountOf: (shown: number, total: number) => `${shown} di ${total}`,
     showLabel: "Mostra",
     showAll: "tutti",
-    broadSeed: (total: string, reachable: string) =>
-      `Genere molto generico: ${total} dischi su Discogs, ne vedi solo i ${reachable} più cercati. Un sottogenere più preciso scava meglio.`,
+    broadSeed: (total: string, reachable: string, src: string) =>
+      `Seme molto ampio: ${total} dischi su ${src}, ne vedi solo i ${reachable} più in cima. Un sottogenere più preciso scava meglio.`,
     formatLabel: "Formato",
     formatAll: "Tutti",
     sortLabel: "Ordine",
@@ -675,9 +678,9 @@ export const it: Dictionary = {
     // stati filtrati (li possiedi gia'), quindi "vai piu' a fondo" e' un consiglio che
     // puo' funzionare. Qui la pila non esiste: non e' un problema della tua libreria e
     // nessuna profondita' aiuta.
-    deadSeedTitle: "Seme sconosciuto a Discogs",
-    deadSeedBody: (value: string) =>
-      `Discogs non ha nessun disco catalogato come “${value}”: quel nome non esiste nel suo vocabolario. Non c'entra la tua libreria, e cambiare profondità non aiuta. Scegli una voce dai suggerimenti del campo.`,
+    deadSeedTitle: (src: string) => `Seme sconosciuto a ${src}`,
+    deadSeedBody: (value: string, src: string) =>
+      `${src} non ha nessun disco catalogato come “${value}”: quel nome non esiste nel suo vocabolario. Non c'entra la tua libreria, e cambiare profondità non aiuta. Scegli una voce dai suggerimenti del campo.`,
     seedTypeValue: "valore",
     seedTypeStyle: "stile",
     noFormatMatch: "Nessun disco con questo formato.",

@@ -17,7 +17,7 @@ import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { applyLens, DiscoveryLeadGrid, FORMAT_VALUES, type SortMode } from "@/components/discovery-lead-grid";
 import { DiscoveryDigBar } from "@/components/discovery-dig-bar";
-import { type SeedType } from "@/lib/discovery-dig";
+import { type DigSourceKey, type SeedType } from "@/lib/discovery-dig";
 import { pickSurprise } from "@/lib/discovery-surprise";
 import { useI18n } from "@/lib/i18n";
 
@@ -36,6 +36,8 @@ function DiscoveryInner() {
   const initialValue = searchParams.get("value") ?? "";
   const initialDepthRaw = Number(searchParams.get("depth") ?? "0");
   const initialDepth = Number.isFinite(initialDepthRaw) ? Math.min(1, Math.max(0, initialDepthRaw)) : 0;
+  const initialSource: DigSourceKey =
+    searchParams.get("source") === "bandcamp" ? "bandcamp" : "discogs";
   const [genres, setGenres] = useState<DiscoveryGenres | null>(null);
   const [labels, setLabels] = useState<LabelStats[] | null>(null);
 
@@ -44,6 +46,7 @@ function DiscoveryInner() {
   const [seedType, setSeedType] = useState<SeedType>(initialSeed);
   const [subject, setSubject] = useState(initialValue);
   const [depth, setDepth] = useState(initialDepth);
+  const [source, setSource] = useState<DigSourceKey>(initialSource);
   const [dig, setDig] = useState<DiscoveryDigResponse | null>(null);
 
   // lenti sui risultati già ottenuti: fuori dall'URL, non rilanciano il dig
@@ -75,14 +78,15 @@ function DiscoveryInner() {
   }, []);
 
   const executeDig = useCallback(
-    async (seed: SeedType, value: string, d: number) => {
+    async (seed: SeedType, value: string, d: number, src: DigSourceKey) => {
       setBusy(true);
       setError(null);
       setDig(null);
+      const sourceName = src === "bandcamp" ? t.discovery.sourceBandcamp : t.discovery.sourceDiscogs;
       jobs.startClientJob("dig", t.jobs.dig);
-      jobs.updateClientJob("dig", { detail: `Discogs · ${value}` });
+      jobs.updateClientJob("dig", { detail: `${sourceName} · ${value}` });
       try {
-        setDig(await discoveryDig(seed, value, { depth: d }));
+        setDig(await discoveryDig(seed, value, { depth: d, source: src }));
       } catch (e) {
         setError(errText(e));
       } finally {
@@ -100,8 +104,9 @@ function DiscoveryInner() {
     if (!value) return; // pagina aperta senza un dig: mostra l'empty state, non eseguire
     const depthRaw = Number(searchParams.get("depth") ?? "0");
     const d = Number.isFinite(depthRaw) ? Math.min(1, Math.max(0, depthRaw)) : 0;
+    const src: DigSourceKey = searchParams.get("source") === "bandcamp" ? "bandcamp" : "discogs";
     // eslint-disable-next-line react-hooks/set-state-in-effect -- il dig è l'external system: l'effect risincronizza i risultati sull'URL (query string), non su state locale
-    executeDig(seed, value, d);
+    executeDig(seed, value, d, src);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramsKey]);
 
@@ -114,6 +119,7 @@ function DiscoveryInner() {
     params.set("seed", seedType);
     params.set("value", value);
     params.set("depth", String(depth));
+    params.set("source", source);
     // Params identici a quelli già nell'URL: la ricerca è deterministica, il
     // risultato sarebbe lo stesso. Non pushare, così non si accumula una voce
     // di cronologia duplicata (back richiederebbe due click).
@@ -124,7 +130,8 @@ function DiscoveryInner() {
   const navigateDig = (seed: SeedType, value: string, d: number) => {
     // Sincronizza la barra col seme pescato: "Sorprendimi" (e il reroll) aggiornano
     // l'URL ma il componente non rimonta, quindi lo state va allineato a mano perché
-    // Combobox e profondità mostrino cosa è uscito.
+    // Combobox e profondità mostrino cosa è uscito. La sorgente NON cambia: "Sorprendimi"
+    // pesca un seme, non una sorgente, quindi resta quella già selezionata (closure `source`).
     setSeedType(seed);
     setSubject(value);
     setDepth(d);
@@ -132,6 +139,7 @@ function DiscoveryInner() {
     params.set("seed", seed);
     params.set("value", value);
     params.set("depth", String(d));
+    params.set("source", source);
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
@@ -193,6 +201,8 @@ function DiscoveryInner() {
         }}
         depth={depth}
         onDepthChange={setDepth}
+        source={source}
+        onSourceChange={setSource}
         options={{
           genres: genres ?? { library: [], styles: [] },
           labels: labels?.map((l) => l.label) ?? [],
@@ -249,6 +259,7 @@ function DiscoveryInner() {
               {t.discovery.broadSeed(
                 dig.pile_total.toLocaleString(lang),
                 dig.pile_reach.toLocaleString(lang),
+                dig.source === "bandcamp" ? t.discovery.sourceBandcamp : t.discovery.sourceDiscogs,
               )}
             </span>
           )}

@@ -61,8 +61,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // discovery-preview: risoluzione async della sorgente di terzi (iTunes/YouTube).
     // Il fallback Discogs (get_release lato backend) vuole un id numerico: su Bandcamp
     // "band_id:item_id" non lo è, quindi niente discogsId fuori da source === "discogs".
-    setStatus("loading");
     const item = source.item;
+    // Bandcamp regala lo stream dentro il risultato del dig: suonarlo subito evita
+    // un round-trip e da' il brano intero invece dei 30s di iTunes.
+    if (item.streamUrl) {
+      setData({
+        kind: "itunes", audio_url: item.streamUrl, youtube_video_id: null,
+        source_url: null, matched_title: item.title,
+      });
+      setStatus("playing");
+      return;
+    }
+    setStatus("loading");
     const discogsId = item.source === "discogs" && item.sourceId ? Number(item.sourceId) : null;
     discoveryPreview({ artist: item.artist, title: item.title, discogsId, level: item.level })
       .then((res) => {

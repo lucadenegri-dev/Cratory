@@ -641,14 +641,17 @@ export const en = {
     depthSurfaceDesc: "The most wanted records for this seed, minus the ones you own.",
     depthMidDesc: "Deeper: less known, still much wanted.",
     depthDeepDesc: "The bottom of the crate: obscure, but someone still wants them.",
+    sourceLabel: "Source",
+    sourceDiscogs: "Discogs",
+    sourceBandcamp: "Bandcamp",
     shortPile: "short pile: this is all of it",
-    emptyPile: "no pile: Discogs doesn't know this seed",
+    emptyPile: (src: string) => `no pile: ${src} doesn't know this seed`,
     leadCount: (n: number) => `${n} leads`,
     leadCountOf: (shown: number, total: number) => `${shown} of ${total}`,
     showLabel: "Show",
     showAll: "all",
-    broadSeed: (total: string, reachable: string) =>
-      `Very broad genre: ${total} records on Discogs, you only see the ${reachable} most wanted. A more specific subgenre digs better.`,
+    broadSeed: (total: string, reachable: string, src: string) =>
+      `Very broad seed: ${total} records on ${src}, you only see the top ${reachable}. A more specific subgenre digs better.`,
     formatLabel: "Format",
     formatAll: "All",
     sortLabel: "Order",
@@ -672,9 +675,9 @@ export const en = {
     // Dead seed: distinct from "nothing new". There the pile exists and the records were
     // filtered out (you already own them), so "dig deeper" is advice that can work. Here
     // the pile doesn't exist: it's not your library's fault and no depth helps.
-    deadSeedTitle: "Seed unknown to Discogs",
-    deadSeedBody: (value: string) =>
-      `Discogs has no records catalogued as “${value}”: that name isn't in its vocabulary. It's not your library, and changing depth won't help. Pick an entry from the field's suggestions.`,
+    deadSeedTitle: (src: string) => `Seed unknown to ${src}`,
+    deadSeedBody: (value: string, src: string) =>
+      `${src} has no records catalogued as “${value}”: that name isn't in its vocabulary. It's not your library, and changing depth won't help. Pick an entry from the field's suggestions.`,
     seedTypeValue: "value",
     seedTypeStyle: "style",
     noFormatMatch: "No record with this format.",

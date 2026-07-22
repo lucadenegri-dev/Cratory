@@ -244,6 +244,43 @@ def test_dig_rejects_an_unknown_source(client):
     assert r.status_code == 422
 
 
+# --- Task 7: il router ramifica su BandcampSource/DiscogsSource -------------------
+
+
+def test_dig_with_source_bandcamp_uses_the_bandcamp_source(client, monkeypatch):
+    from app.routers import discovery as router_mod
+
+    seen = {}
+
+    def _fake_dig(db, **kw):
+        seen["source"] = kw["source"].name
+        from app.services.discovery_dig import DigResult
+        return DigResult(seed_type="genre", value="Techno", leads=[],
+                         pile_total=434149, pile_reach=3000, seed_resolution="tag")
+
+    monkeypatch.setattr(router_mod, "dig", _fake_dig)
+    c, _ = client
+    r = c.post("/api/discovery/dig",
+               json={"seed_type": "genre", "value": "Techno", "source": "bandcamp"})
+    assert r.status_code == 200
+    assert seen["source"] == "bandcamp"
+    assert r.json()["pile_reach"] == 3000
+
+
+def test_a_bandcamp_provider_error_is_a_502_not_a_500(client, monkeypatch):
+    from app.integrations.bandcamp import BandcampError
+    from app.routers import discovery as router_mod
+
+    def _boom(db, **kw):
+        raise BandcampError("rate limit")
+
+    monkeypatch.setattr(router_mod, "dig", _boom)
+    c, _ = client
+    r = c.post("/api/discovery/dig",
+               json={"seed_type": "genre", "value": "Techno", "source": "bandcamp"})
+    assert r.status_code == 502
+
+
 # --- Task 6: GET /api/discovery/release?source=&id= — entrambe le sorgenti ---
 
 

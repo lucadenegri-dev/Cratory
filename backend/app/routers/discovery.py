@@ -1,8 +1,9 @@
-"""Discovery mode: crate digging via Discogs ("Scava").
+"""Discovery mode: crate digging ("Scava").
 
 Endpoint dig: genera lead per genere/etichetta, ne apre la tracklist, offre una
 preview audio effimera e importa/salva-per-dopo i lead scelti. La sorgente e'
-Discogs (integrations/discogs); iTunes/YouTube servono solo la preview.
+Discogs o Bandcamp (`req.source`, `app/services/dig_sources/`); iTunes/YouTube
+servono solo alla preview del fallback Discogs.
 """
 
 import re
@@ -35,7 +36,7 @@ from app.schemas import (
     ReasonOut,
 )
 from app.serializers import track_out
-from app.services.dig_sources.bandcamp import _art_url, _bc_year_from_epoch
+from app.services.dig_sources.bandcamp import BandcampSource, _art_url, _bc_year_from_epoch
 from app.services.dig_sources.discogs import DiscogsSource
 from app.services.discovery_dig import DiscoveryLead, dig
 from app.services.playlist_import import get_or_create_discovery_playlist, import_single_track
@@ -130,15 +131,18 @@ def discovery_genres(db: Session = Depends(get_db)):
 
 @router.post("/dig", response_model=DiscoveryDigResponse)
 def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
-    """Lista-dig a volume da Discogs per genere/stile o etichetta (lead non risolti)."""
-    client = DiscogsClient()
+    """Lista-dig a volume per genere/stile o etichetta (lead non risolti)."""
+    client = BandcampClient() if req.source == "bandcamp" else DiscogsClient()
+    source = BandcampSource(client) if req.source == "bandcamp" else DiscogsSource(client)
     try:
         result = dig(db, seed_type=req.seed_type, value=req.value,
-                     source=DiscogsSource(client), depth=req.depth)
-    except DiscogsError as exc:
-        # Rate limit / token mancante: 502 esplicito, mai uno "zero risultati" muto.
+                     source=source, depth=req.depth)
+    except (DiscogsError, BandcampError) as exc:
+        # Rate limit / token mancante / endpoint cambiato: 502 esplicito, mai uno
+        # "zero risultati" muto — l'utente deve poter distinguere "non c'e' niente"
+        # da "il provider non ha risposto".
         raise api_error(502, "discovery_provider_error", f"Discovery provider error: {exc}",
-                         reason=str(exc)) from exc
+                        reason=str(exc)) from exc
     finally:
         client.close()
     return DiscoveryDigResponse(

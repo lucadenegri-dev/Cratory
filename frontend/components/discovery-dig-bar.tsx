@@ -5,16 +5,18 @@ import { Dices, Disc3, Shovel, Tags } from "lucide-react";
 
 import { Button, Combobox, SegmentedControl, Spinner, type ComboOption } from "@/components/ui";
 import { useT } from "@/lib/i18n";
-import { DEPTHS, WINDOW_ITEMS, type SeedType } from "@/lib/discovery-dig";
+import { DEPTHS, WINDOW_ITEMS, type DigSourceKey, type SeedType } from "@/lib/discovery-dig";
 
 export function DiscoveryDigBar({
-  subject, onSubjectChange, depth, onDepthChange,
+  subject, onSubjectChange, depth, onDepthChange, source, onSourceChange,
   options, pile, busy, ready, onSubmit, onSurprise, canSurprise,
 }: {
   subject: string;
   onSubjectChange: (value: string, seed: SeedType) => void;
   depth: number;
   onDepthChange: (v: number) => void;
+  source: DigSourceKey;
+  onSourceChange: (s: DigSourceKey) => void;
   // Niente selettore del gusto: la manopola azzerava l'ordinamento in silenzio su
   // 7 playlist su 10 (profilo quasi vuoto — etichette e generi vengono dai tag dei
   // file, che le playlist di lead non hanno). Il gusto resta acceso sulla libreria.
@@ -30,6 +32,7 @@ export function DiscoveryDigBar({
   canSurprise: boolean;
 }) {
   const t = useT();
+  const srcName = source === "bandcamp" ? t.discovery.sourceBandcamp : t.discovery.sourceDiscogs;
 
   // Ordine a campo vuoto voluto dalla spec: generi di libreria, poi etichette, poi gli
   // style curati (il "resto" che la libreria non ha — il mestiere di Discovery). Un
@@ -80,6 +83,21 @@ export function DiscoveryDigBar({
       className="mb-6 border border-border p-4"
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-muted">
+            {t.discovery.sourceLabel}
+          </span>
+          <SegmentedControl
+            value={source}
+            onChange={onSourceChange}
+            options={[
+              { value: "discogs", label: t.discovery.sourceDiscogs },
+              { value: "bandcamp", label: t.discovery.sourceBandcamp },
+            ]}
+            disabled={busy}
+          />
+        </div>
+
         {/* Zona soggetto: niente microlabel ridondante — placeholder e gruppi
             (genere/etichetta) nel menu bastano a spiegarla; "Scava" resta solo
             sull'azione, non anche qui appesa a fianco del campo. */}
@@ -121,7 +139,7 @@ export function DiscoveryDigBar({
       </div>
 
       <p className="mt-2 text-xs text-muted">
-        {emptyPile ? t.discovery.emptyPile : shortPile ? t.discovery.shortPile : depthDesc}
+        {emptyPile ? t.discovery.emptyPile(srcName) : shortPile ? t.discovery.shortPile : depthDesc}
       </p>
     </form>
   );

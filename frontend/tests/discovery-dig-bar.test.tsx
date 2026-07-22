@@ -13,6 +13,7 @@ function setup(over: Partial<React.ComponentProps<typeof DiscoveryDigBar>> = {})
   const props = {
     subject: "", onSubjectChange: vi.fn(),
     depth: 0, onDepthChange: vi.fn(),
+    source: "discogs" as const, onSourceChange: vi.fn(),
     options: OPTIONS, pile: null as { total: number; reach: number } | null,
     busy: false, ready: true, onSubmit: vi.fn(),
     onSurprise: vi.fn(), canSurprise: true,
@@ -140,5 +141,12 @@ describe("DiscoveryDigBar", () => {
   it("Sorprendimi e' disabilitato quando il pool e' vuoto", () => {
     setup({ canSurprise: false });
     expect(screen.getByText("Sorprendimi").closest("button")?.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("propaga il cambio di sorgente", () => {
+    const onSourceChange = vi.fn();
+    setup({ source: "discogs", onSourceChange });
+    fireEvent.click(screen.getByText("Bandcamp"));
+    expect(onSourceChange).toHaveBeenCalledWith("bandcamp");
   });
 });

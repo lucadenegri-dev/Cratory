@@ -53,6 +53,10 @@ export function DiscoveryLeadGrid({ dig, leads }: {
 }) {
   const t = useT();
   const [openLead, setOpenLead] = useState<DiscoveryLead | null>(null);
+  // Nome leggibile della sorgente di QUESTO dig (non quella selezionata ora nella
+  // barra): le stringhe che nominano la sorgente non devono mentire su un risultato
+  // che viene da un dig precedente.
+  const srcName = dig.source === "bandcamp" ? t.discovery.sourceBandcamp : t.discovery.sourceDiscogs;
 
   // Zero lead ha due cause diverse, e dirle uguali mente. Se la pila non esiste
   // (`pile_total === 0`) il seme e' sconosciuto alla sorgente: la libreria non c'entra
@@ -61,8 +65,8 @@ export function DiscoveryLeadGrid({ dig, leads }: {
   // piu' a fondo e' esattamente la mossa giusta.
   if (dig.pile_total === 0) {
     return (
-      <EmptyState icon={<Disc3 size={28} />} title={t.discovery.deadSeedTitle}>
-        {t.discovery.deadSeedBody(dig.value)}
+      <EmptyState icon={<Disc3 size={28} />} title={t.discovery.deadSeedTitle(srcName)}>
+        {t.discovery.deadSeedBody(dig.value, srcName)}
       </EmptyState>
     );
   }
@@ -142,6 +146,7 @@ function LeadCell({ lead, onOpen }: { lead: DiscoveryLead; onOpen: () => void })
                 title: lead.title,
                 sourceId: lead.source_id,
                 source: lead.source,
+                streamUrl: lead.stream_url,
                 level: "release",
                 label: lead.title,
                 addInput: {
