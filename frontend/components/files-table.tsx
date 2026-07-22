@@ -87,10 +87,12 @@ export function FilesTable({
                 <CoverThumb fileId={r.id} source={r.cover_source} />
               </td>
               <td className="max-w-[300px] px-3 py-1 text-muted" title={r.path}>
-                {/* U+200E (LRM) prima del path: dir=rtl porta l'ellissi in testa,
-                    ma senza un carattere forte LTR iniziale lo "/" di apertura è
-                    neutro e il bidi lo sposta in coda alla riga. */}
-                <span dir="rtl" className="block truncate text-left">{"‎" + r.path}</span>
+                {/* .path-lrm mette un LRM (U+200E) prima del path via ::before:
+                    dir=rtl porta l'ellissi del truncate in testa, ma senza un
+                    carattere forte LTR iniziale lo "/" di apertura è neutro e il
+                    bidi lo sposta in coda alla riga. Il LRM è in CSS e non nel
+                    testo per non finire nella selezione/copia dell'utente. */}
+                <span dir="rtl" className="path-lrm block truncate text-left">{r.path}</span>
               </td>
               <td className="px-3 py-1 text-fg">{r.artist || <span className="text-faint">—</span>}</td>
               <td className="px-3 py-1 text-fg-strong">{r.title || <span className="text-faint">—</span>}</td>

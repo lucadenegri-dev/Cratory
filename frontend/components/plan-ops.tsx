@@ -31,7 +31,12 @@ function OpRow({ op }: { op: PlanOp }) {
     <div className={cn("flex items-center gap-3 border border-t-0 border-surface-2 px-3 py-1.5 first:border-t",
       isDelete ? "border-l-2 border-l-danger" : "border-l-2 border-l-border",
       op.skipped && "opacity-50")}>
-      <CoverThumb fileId={op.file_id} />
+      {/* Sui COVER l'unica cover reale è quella già mostrata al centro della riga
+          (la proposta da embeddare): il planner emette COVER solo per file senza
+          artwork (planner.py, has_cover è False), quindi qui a sinistra cadrebbe
+          comunque sulla stessa proposta — due copie della stessa immagine, la
+          seconda senza tratteggio, che si legge come "artwork già nel file". */}
+      <CoverThumb fileId={op.file_id} source={op.kind === "COVER" ? null : undefined} />
       {op.skipped && (
         <span className="shrink-0 text-[9px] uppercase tracking-wider text-warning">{t.plan.skip}</span>
       )}
