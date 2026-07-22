@@ -169,12 +169,19 @@ terza sorgente.
 `deep house` → `deep-house` (148.803), `uk garage` → `uk-garage` (16.472),
 `trip hop` → `trip-hop` (55.486), `hip hop` → `hip-hop` (376.035).
 
-**Il vocabolario Discogs però non traduce tutto**, e serve una tabella di alias esplicita:
+La normalizzazione deve collassare **ogni corsa di caratteri non alfanumerici in un solo
+trattino**, non limitarsi a sostituire gli spazi: `Funk / Soul` diventa così `funk-soul`
+(1.630 release) invece di `funk-/-soul`, che su Bandcamp non esiste.
 
-| seme curato (Discogs) | normalizzazione naive | tag Bandcamp corretto |
+Resta un solo caso che la normalizzazione non può risolvere, e serve un alias esplicito:
+
+| seme curato (Discogs) | normalizzazione | tag Bandcamp corretto |
 |---|---|---|
 | `Drum n Bass` | `drum-n-bass` → 9.745 | `drum-and-bass` → 37.264 |
-| `Funk / Soul` | `funk-/-soul` → **0** | `funk-soul` → 1.630 |
+
+È il caso peggiore da diagnosticare, e per questo l'alias è necessario: la forma
+normalizzata trova una pila **vera ma sbagliata**, quindi nessun controllo su "zero
+risultati" la intercetterebbe mai — il dig funzionerebbe scavando nel posto sbagliato.
 
 Non esiste endpoint per enumerare o validare i tag Bandcamp: cercato e non trovato
 (`discover_options`, `get_options`, `search_tags` → 404;
@@ -184,9 +191,9 @@ La tabella di alias marcirà come `_CURATED_STYLES` in
 `result_count`, e `0` è un seme morto che la UI già sa dichiarare.
 
 Tutti e 25 i semi di `_CURATED_STYLES` sono stati misurati contro l'API il 2026-07-22:
-**23 su 25 funzionano con la sola normalizzazione naive** (da `acid-house` con 13.080 a
-`ambient` con 812.272). Le due righe della tabella sono quelle qui sopra, e non
-un'incognita da scoprire in implementazione.
+**24 su 25 funzionano con la sola normalizzazione** (da `acid-house` con 13.080 a
+`ambient` con 812.272). La tabella ha la riga qui sopra e basta: non è un'incognita da
+scoprire in implementazione.
 
 **`label` → discografia, in due richieste:**
 
