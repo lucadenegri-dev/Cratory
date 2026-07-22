@@ -1,6 +1,7 @@
 """Endpoint miniatura: embedded → proposta provider → 404."""
 
 import io
+import os
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -56,7 +57,11 @@ def test_thumb_404_when_nothing_available(db, tmp_path, monkeypatch):
     _seed(db, "/m/senza-cover.flac", has_cover=False)
 
     with TestClient(app) as client:
-        assert client.get("/api/files/1/thumb").status_code == 404
+        r = client.get("/api/files/1/thumb")
+    assert r.status_code == 404
+    # ISSUES/DUPLICATES/PLAN non passano cover_source: ogni riga senza cover
+    # rifà questa richiesta a ogni mount, un max-age corto la smorza.
+    assert "max-age" in r.headers["cache-control"]
 
 
 def test_thumb_404_for_unknown_file(db):
@@ -92,3 +97,49 @@ def test_thumb_304_on_matching_etag(db, copy_fixture, tmp_path, monkeypatch):
                            headers={"If-None-Match": first.headers["etag"]})
     assert again.status_code == 304
     assert again.content == b""
+
+
+def test_thumb_200_with_new_etag_after_mtime_change(db, copy_fixture, tmp_path, monkeypatch):
+    """L'altra metà del contratto ETag: quando l'mtime del file audio cambia
+    (un apply che riscrive i tag, per esempio) il vecchio If-None-Match non
+    deve più bastare — l'utente deve ricevere la copertina aggiornata, non un
+    304 con l'immagine superata."""
+    monkeypatch.setattr(settings, "thumb_cache_dir", str(tmp_path / "tc"))
+    f = copy_fixture("flac", tmp_path / "a.flac")
+    tagio.write_cover(f, _jpeg())
+    _seed(db, f, has_cover=True)
+
+    with TestClient(app) as client:
+        first = client.get("/api/files/1/thumb")
+        etag = first.headers["etag"]
+
+        future = os.path.getmtime(f) + 10
+        os.utime(f, (future, future))
+
+        again = client.get("/api/files/1/thumb", headers={"If-None-Match": etag})
+    assert again.status_code == 200
+    assert again.headers["etag"] != etag
+
+
+def test_thumb_etag_folds_in_cover_cache_mtime(db, tmp_path, monkeypatch):
+    """Sul fallback (has_cover=False) i byte vengono da cover_cache/{id}.jpg:
+    'importa metadati dal provider' può sovrascrivere quel file senza toccare
+    l'audio, quindi il suo mtime deve entrare nello stamp — altrimenti un
+    client con l'ETag vecchio riceverebbe un 304 con l'immagine superata."""
+    monkeypatch.setattr(settings, "thumb_cache_dir", str(tmp_path / "tc"))
+    monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
+    _seed(db, "/m/senza-cover.flac", has_cover=False)
+    cover_cache.save_thumb(1, b"\xff\xd8prima")
+
+    with TestClient(app) as client:
+        first = client.get("/api/files/1/thumb")
+        etag = first.headers["etag"]
+
+        cover_cache.save_thumb(1, b"\xff\xd8seconda")
+        future = os.path.getmtime(cover_cache.thumb_path(1)) + 10
+        os.utime(cover_cache.thumb_path(1), (future, future))
+
+        again = client.get("/api/files/1/thumb", headers={"If-None-Match": etag})
+    assert again.status_code == 200
+    assert again.headers["etag"] != etag
+    assert again.content == b"\xff\xd8seconda"

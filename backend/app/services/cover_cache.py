@@ -2,6 +2,7 @@
 servibili come file statico. La full-res NON passa di qui (scaricata all'apply)."""
 
 import os
+import uuid
 
 from app.core.config import settings
 
@@ -16,8 +17,15 @@ def thumb_path(file_id: int) -> str:
 
 
 def save_thumb(file_id: int, data: bytes) -> str:
-    with open(thumb_path(file_id), "wb") as fh:
+    # Scrittura atomica: file temporaneo nella stessa dir + os.replace(), così
+    # due richieste concorrenti non interleaviano mai byte nello stesso file.
+    # Suffisso random (non solo pid): con handler sincroni FastAPI gira su un
+    # threadpool, quindi due richieste concorrenti possono condividere il pid.
+    path = thumb_path(file_id)
+    tmp = f"{path}.{uuid.uuid4().hex}.tmp"
+    with open(tmp, "wb") as fh:
         fh.write(data)
+    os.replace(tmp, path)
     return f"cover_cache/{file_id}.jpg"
 
 
@@ -25,5 +33,10 @@ def read_thumb(file_id: int) -> bytes | None:
     path = thumb_path(file_id)
     if not os.path.exists(path):
         return None
-    with open(path, "rb") as fh:
-        return fh.read()
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    except OSError:
+        # Race con una delete/rewrite concorrente tra l'exists() e l'open():
+        # trattata come cache assente, non come 500.
+        return None

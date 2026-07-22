@@ -182,6 +182,15 @@ def file_thumb(file_id: int, request: Request, db: Session = Depends(get_db)):
         stamp = str(os.path.getmtime(f.path))
     except OSError:
         stamp = "0"
+    if not f.has_cover:
+        # Fallback = cover_cache/{id}.jpg: "importa metadati dal provider" può
+        # sovrascrivere la proposta senza toccare l'audio, quindi il suo mtime
+        # deve entrare nello stamp o un client con l'ETag vecchio riceve un
+        # 304 e resta con l'immagine superata.
+        try:
+            stamp += f"-{os.path.getmtime(cover_cache.thumb_path(file_id))}"
+        except OSError:
+            pass
     etag = f'W/"{file_id}-{stamp}"'
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
@@ -190,6 +199,11 @@ def file_thumb(file_id: int, request: Request, db: Session = Depends(get_db)):
     if data is None:
         data = cover_cache.read_thumb(file_id)
     if data is None:
-        raise api_error(404, "thumb_missing", "No thumbnail")
+        # Niente ETag da validare qui: ISSUES/DUPLICATES/PLAN non passano
+        # cover_source, quindi ogni riga senza copertina rifà questa richiesta
+        # a ogni mount. Un max-age corto la smorza senza rischiare di
+        # nascondere per troppo tempo una copertina appena importata.
+        raise api_error(404, "thumb_missing", "No thumbnail",
+                        headers={"Cache-Control": "max-age=60"})
     return Response(content=data, media_type="image/jpeg",
                     headers={"ETag": etag, "Cache-Control": "no-cache"})

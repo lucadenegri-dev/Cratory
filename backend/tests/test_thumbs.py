@@ -2,6 +2,7 @@
 
 import io
 import os
+import struct
 
 import pytest
 from PIL import Image
@@ -17,6 +18,17 @@ def _jpeg(size=(500, 400), color=(200, 30, 30)) -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", size, color).save(buf, format="JPEG")
     return buf.getvalue()
+
+
+def _decompression_bomb_bmp(width=20000, height=20000) -> bytes:
+    """Header BMP valido che dichiara `width x height` pixel senza contenerne
+    i dati: Pillow calcola le dimensioni dall'header in Image.open(), prima
+    di decodificare un solo pixel, e solleva DecompressionBombError appena
+    width*height supera 2x Image.MAX_IMAGE_PIXELS (~179M). Non serve altro
+    che i 54 byte di header per farlo scattare."""
+    dib = struct.pack("<IiiHHIIiiII", 40, width, height, 1, 24, 0, 0, 0, 0, 0, 0)
+    file_header = b"BM" + struct.pack("<IHHI", 14 + 40, 0, 0, 14 + 40)
+    return file_header + dib
 
 
 @pytest.fixture
@@ -76,4 +88,13 @@ def test_get_thumb_corrupt_artwork_is_none(copy_fixture, tmp_path, cache_dir):
     """Artwork che Pillow non sa aprire: trattato come 'senza copertina'."""
     f = copy_fixture("flac", tmp_path / "a.flac")
     tagio.write_cover(f, b"questa non e' un'immagine")
+    assert thumbs.get_thumb(1, f) is None
+
+
+def test_get_thumb_decompression_bomb_is_none(copy_fixture, tmp_path, cache_dir):
+    """Image.open() solleva DecompressionBombError (eredita da Exception, non
+    da OSError/ValueError) per un header che dichiara dimensioni abnormi:
+    deve degradare a 'nessuna cover', non propagare un 500."""
+    f = copy_fixture("flac", tmp_path / "a.flac")
+    tagio.write_cover(f, _decompression_bomb_bmp())
     assert thumbs.get_thumb(1, f) is None
