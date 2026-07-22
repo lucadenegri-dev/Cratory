@@ -3,6 +3,7 @@
 import { fmtDuration, type FileRow, type FileQuery } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
+import { CoverThumb } from "@/components/cover-thumb";
 
 type SortKey = NonNullable<FileQuery["sort"]>;
 type SortDir = NonNullable<FileQuery["dir"]>;
@@ -69,6 +70,7 @@ export function FilesTable({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="border-b border-border text-left text-[9px]">
+            <th className="w-8 px-3 py-2" aria-label="cover" />
             <SortHead label="Path" col="path" {...headProps} />
             <SortHead label="Artist" col="artist" {...headProps} />
             <SortHead label="Title" col="title" {...headProps} />
@@ -81,13 +83,20 @@ export function FilesTable({
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="border-b border-surface-2 last:border-0 hover:bg-surface">
-              <td className="max-w-[260px] truncate px-3 py-1.5 text-muted" title={r.path}>{r.path}</td>
-              <td className="px-3 py-1.5 text-fg">{r.artist || <span className="text-faint">—</span>}</td>
-              <td className="px-3 py-1.5 text-fg-strong">{r.title || <span className="text-faint">—</span>}</td>
-              <td className="px-3 py-1.5 uppercase text-muted">{r.ext}</td>
-              <td className="tnum px-3 py-1.5 text-right text-fg">{r.bitrate ?? "—"}</td>
-              <td className="tnum px-3 py-1.5 text-right text-fg">{fmtDuration(r.duration_s)}</td>
-              <td className="px-3 py-1.5 text-center"><Indicator row={r} /></td>
+              <td className="py-1 pl-3 pr-0">
+                <CoverThumb fileId={r.id} source={r.cover_source} />
+              </td>
+              {/* dir=rtl porta l'ellissi in testa: si legge la coda del percorso
+                  (il nome del file), non l'inizio sempre uguale */}
+              <td className="max-w-[300px] px-3 py-1 text-muted" title={r.path}>
+                <span dir="rtl" className="block truncate text-left">{r.path}</span>
+              </td>
+              <td className="px-3 py-1 text-fg">{r.artist || <span className="text-faint">—</span>}</td>
+              <td className="px-3 py-1 text-fg-strong">{r.title || <span className="text-faint">—</span>}</td>
+              <td className="px-3 py-1 uppercase text-muted">{r.ext}</td>
+              <td className="tnum px-3 py-1 text-right text-fg">{r.bitrate ?? "—"}</td>
+              <td className="tnum px-3 py-1 text-right text-fg">{fmtDuration(r.duration_s)}</td>
+              <td className="px-3 py-1 text-center"><Indicator row={r} /></td>
             </tr>
           ))}
         </tbody>
