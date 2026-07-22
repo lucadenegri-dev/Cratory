@@ -819,7 +819,7 @@ finestra puo' scivolare di una pagina (depth=0.5 su 43.345 release: pagina 50
 - Create: `backend/tests/test_bandcamp_client.py`
 - Create: `backend/tests/test_bandcamp_contract.py`
 - Modify: `backend/app/integrations/_http.py`
-- Modify: `backend/pyproject.toml` o `setup.cfg` (marker `network`, vedi Step 7)
+- Create: `backend/pytest.ini` (marker `network`, vedi Step 7)
 
 **Interfaces:**
 - Consumes: `ClosableHttpClient`, `raise_for_status`, `parse_json`, `_request_with_retries`
