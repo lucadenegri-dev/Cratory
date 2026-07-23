@@ -25,7 +25,7 @@ def download_track_audio(url: str, dest_dir: str) -> str:
     se la cartella manca o se yt-dlp/ffmpeg falliscono; SoundCloudInvalidUrl su
     URL ostile (delega a validate_soundcloud_url).
     """
-    validate_soundcloud_url(url)
+    url = validate_soundcloud_url(url)  # usa l'URL normalizzato (strip), non il grezzo
     if not dest_dir:
         raise SoundCloudAudioError("Cartella di download non configurata (SLSKD_DOWNLOAD_DIR).")
 
