@@ -154,8 +154,9 @@ def test_edit_reconcile_clear_branch(db, tmp_path, copy_fixture):
 
 
 def test_edit_write_failure_is_controlled(db, tmp_path, copy_fixture, monkeypatch):
-    # una TagWriteError diventa un ManualEditError(500); la voce di journal resta
-    # (innocua) e il DB NON viene allineato.
+    # una TagWriteError diventa un ManualEditError(500); poiché nulla è atterrato
+    # sul disco, la run appena creata (Plan + journal) viene RIMOSSA — niente run
+    # "applied" fantasma in History (simmetrico al ramo "nulla è atterrato").
     f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
     file = _seed(db, f, artist="Old")
 
@@ -166,7 +167,8 @@ def test_edit_write_failure_is_controlled(db, tmp_path, copy_fixture, monkeypatc
     with pytest.raises(manual_edit.ManualEditError) as e:
         manual_edit.edit_tags(db, file, {"artist": "New"})
     assert e.value.status == 500 and e.value.code == "tag_write_failed"
-    assert db.scalar(select(Plan)) is not None        # journal resta
+    assert db.scalar(select(Plan)) is None            # run rimossa, niente fantasma
+    assert db.scalar(select(UndoJournal)) is None
     assert db.get(AudioFile, 1).artist == "Old"       # DB non allineato
 
 

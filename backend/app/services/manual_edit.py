@@ -93,8 +93,12 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
     try:
         tagio.write_tags(file.path, effective)      # poi muta il disco
     except tagio.TagWriteError as exc:
-        # La voce di journal resta (innocua: undo → RETAG su prior==corrente è un
-        # no-op). Errore controllato, col codice tradotto dal frontend.
+        # La scrittura è fallita: nulla è atterrato in modo affidabile → rimuovi la
+        # run appena creata (come il ramo "nulla è atterrato"), niente run "applied"
+        # fantasma in History. Errore controllato, col codice tradotto dal frontend.
+        db.delete(journal)
+        db.delete(plan)
+        db.commit()
         raise ManualEditError(500, "tag_write_failed", str(exc))
 
     # Ri-leggi il disco e allinea il DB a ciò che è ATTERRATO: write_tags salta in
