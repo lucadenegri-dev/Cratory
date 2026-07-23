@@ -397,8 +397,10 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
               {th("#", "rank", true)}
               {th("Title", "title")}
               {th("Artist", "artist")}
+              {th(t.library.colGenre, "genre")}
               {th("BPM", "bpm", true)}
               {th("Key", "key")}
+              {th(t.library.colEnergy, "energy", true)}
               {th(t.library.colDuration, "duration", true)}
               <th className={cell}>{t.library.colStatus}</th>
               <th className={cell}></th>
@@ -415,8 +417,10 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                   </Link>
                 </td>
                 <td className={`${cell} text-muted`}>{tr.artist ?? "—"}</td>
+                <td className={`${cell} max-w-[10rem] truncate text-muted`}>{tr.genre ?? "—"}</td>
                 <td className={`${cell} tnum`}>{tr.bpm?.toFixed(0) ?? "—"}</td>
                 <td className={`${cell} tnum`}><KeyBadge camelot={tr.camelot_key} /></td>
+                <td className={`${cell} tnum text-muted`}>{tr.energy ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
                 <td className={cell}><TrackStateIcons track={tr} /></td>
                 <td className={cell}>
@@ -429,7 +433,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                 </td>
               </tr>
             ))}
-            {visible.length === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
           </tbody>
         </table>
       </div>

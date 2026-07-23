@@ -290,6 +290,7 @@ export const it: Dictionary = {
     incompleteOnlyLabel: "solo dati incompleti",
     sortColumnHint: "Ordina per questa colonna",
     colGenre: "Genere",
+    colEnergy: "Energia",
     colDuration: "Dur",
     colStatus: "Stato",
     untitledTrack: "senza titolo",

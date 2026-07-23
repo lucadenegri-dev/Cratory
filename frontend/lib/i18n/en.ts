@@ -288,6 +288,7 @@ export const en = {
     incompleteOnlyLabel: "incomplete data only",
     sortColumnHint: "Sort by this column",
     colGenre: "Genre",
+    colEnergy: "Energy",
     colDuration: "Dur",
     colStatus: "Status",
     untitledTrack: "untitled",
