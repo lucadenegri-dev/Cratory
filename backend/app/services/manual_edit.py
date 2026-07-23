@@ -1,0 +1,109 @@
+"""Modifica manuale dei metadati di un file dalla schermata FILES.
+
+A differenza dei fix da issue (che aspettano l'Apply), scrive i tag SUBITO sul
+disco ed è reversibile: crea un Plan sintetico + una voce UndoJournal RETAG, così
+la modifica compare in History e si annulla come una run qualsiasi. Ricalca il
+pattern RETAG di services/apply.py: journal-first, poi mutazione, poi DB."""
+
+import os
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.integrations import tagio
+from app.models import AudioFile, Issue, Plan, UndoJournal, utcnow
+
+# Campi tag correggibili a mano (= planner._EFFECTIVE_FIELDS = issues._RETAGGABLE).
+_EDITABLE = {"artist", "title", "album", "album_artist", "genre", "year",
+             "label", "track_no", "comment"}
+_INT_FIELDS = {"year", "track_no"}
+
+
+class ManualEditError(Exception):
+    """Errore di modifica manuale con codice/stato HTTP; il router lo traduce."""
+
+    def __init__(self, status: int, code: str, message: str):
+        super().__init__(message)
+        self.status = status
+        self.code = code
+        self.message = message
+
+
+def _coerce(field: str, raw):
+    """Normalizza un valore: stringa vuota/None → None (pulisce il tag);
+    year/track_no → intero non negativo. Solleva ManualEditError(400)."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = raw.strip()
+        if raw == "":
+            return None
+    if field in _INT_FIELDS:
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            raise ManualEditError(400, "value_invalid", f"'{field}' must be a number")
+        if n < 0:
+            raise ManualEditError(400, "value_invalid", f"'{field}' must be positive")
+        return n
+    return str(raw)
+
+
+def _norm(v):
+    return None if v is None else str(v)
+
+
+def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
+    """Applica le modifiche manuali (field→valore) a `file`.
+    Idempotente: i campi già uguali al DB sono ignorati; se nulla cambia è un
+    no-op (nessuna scrittura, nessuna run)."""
+    unknown = set(changes) - _EDITABLE
+    if unknown:
+        raise ManualEditError(400, "field_not_editable",
+                              f"Field not editable: {', '.join(sorted(unknown))}")
+    if file.status != "present" or file.scan_error or not os.path.exists(file.path):
+        raise ManualEditError(409, "file_not_writable", "File is not writable")
+
+    coerced = {f: _coerce(f, changes[f]) for f in changes}
+    # solo i campi il cui valore normalizzato differisce davvero da quello nel DB
+    effective = {f: v for f, v in coerced.items() if _norm(getattr(file, f)) != _norm(v)}
+    if not effective:
+        return
+
+    # prior letti dal DISCO (come apply.py): l'undo ripristina lo stato reale.
+    disk = tagio.read_tags(file.path)
+    prior = {f: getattr(disk, f) for f in effective}
+
+    # journal-first: Plan sintetico + voce RETAG PRIMA di toccare il file.
+    plan = Plan(status="applied",
+                rules_json={"kind": "manual_edit", "file_id": file.id,
+                            "fields": sorted(effective)})
+    db.add(plan)
+    db.flush()
+    db.add(UndoJournal(run_id=plan.id, op_seq=0, kind="RETAG", file_id=file.id,
+                       from_path=file.path, prior_tags_json=prior))
+    db.commit()
+
+    tagio.write_tags(file.path, effective)          # poi muta il disco
+    for f, v in effective.items():                  # allinea il DB al disco
+        setattr(file, f, v)
+    _reconcile_issues(db, file.id, effective)
+    db.commit()
+
+
+def _reconcile_issues(db: Session, file_id: int, effective: dict) -> None:
+    """Chiude le issue aperte sui campi appena modificati: manual vince su tutto
+    (precedenza). Specchio di routers.issues.fix_issue."""
+    issues = db.scalars(select(Issue).where(
+        Issue.file_id == file_id, Issue.status == "open",
+        Issue.field.in_(list(effective)))).all()
+    for iss in issues:
+        v = effective[iss.field]
+        if v is None:
+            iss.suggested_fix_json = {"field": iss.field, "action": "clear",
+                                      "source": "manual"}
+        else:
+            iss.suggested_fix_json = {"field": iss.field, "action": "retag",
+                                      "to": str(v), "source": "manual"}
+        iss.status = "accepted"
+        iss.updated_at = utcnow()
