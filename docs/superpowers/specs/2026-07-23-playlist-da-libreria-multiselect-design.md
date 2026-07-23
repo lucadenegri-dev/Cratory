@@ -136,6 +136,47 @@ Due esigenze utente:
   popover nel dettaglio; eventuale test unit/e2e leggero se il resto della suite lo rende
   agevole.
 
+## Iterazione 2 (2026-07-23, post-verifica): multi-playlist, pannello, già-presente, conferma
+
+Feedback utente dopo la verifica live. Modifiche additive sullo stesso branch, prima del
+merge.
+
+### Backend
+
+- Il filtro `in_playlist` su `GET /api/tracks` diventa **multi-valore**:
+  `?in_playlist=1&in_playlist=2` → tracce che appartengono a **una qualsiasi** delle
+  playlist indicate (unione). `_apply_track_filters` accetta `in_playlist: list[int] | None`
+  e usa `Track.id.in_(select track_id where playlist_id.in_(in_playlist))`. FastAPI
+  interpreta un singolo `?in_playlist=8` come lista di uno → retro-compatibile col
+  comportamento dell'iterazione 1.
+
+### Frontend — `import-manual` (modalità library)
+
+1. **Filtro playlist multi-selezione**: il `Select` singolo diventa un popover a checkbox
+   ("Playlist ▾") con **tutte** le playlist; stato `Set<number>` (`inPlaylists`). La query
+   invia `in_playlist` ripetuto. La lista mostra l'unione.
+2. **Pannello "Selezionate (N)"** sempre visibile: elenca le tracce raccolte con label e una
+   X per rimuoverle singolarmente. La selezione diventa `Map<number, Track>` (id → Track) per
+   avere le label anche di tracce non più a video (raccolte con un altro filtro).
+   "Seleziona tutte" popola la mappa dall'intero risultato (`limit=0`).
+3. **Già presenti nella destinazione**: quando si sceglie una playlist nel target di
+   "Aggiungi a esistente", si carica la sua membership (`playlistTracks(targetId)` → set di
+   id) e nella lista le tracce già dentro diventano **non-selezionabili** con badge
+   **"già presente"**, escluse anche dal seleziona-tutto.
+4. **Conferma evidente**: il messaggio "N aggiunte, M già presenti" è ben visibile vicino ai
+   pulsanti d'azione; dopo l'ADD si **ricarica la membership del target**, così le tracce
+   appena aggiunte passano a "già presente" a vista (conferma visiva).
+
+### Frontend — popover dettaglio traccia
+
+- Dopo add/create, riga di **conferma** transitoria ("Aggiunta a {nome}" / "Creata {nome}")
+  oltre allo spunto sulla riga già esistente.
+
+### Test (iterazione 2)
+
+- Backend: `in_playlist` multi-valore → unione di due playlist; il caso singolo resta verde.
+- Frontend: verifica live via preview (multi-filtro, pannello, già-presente, conferma).
+
 ## Note e vincoli
 
 - Nessuna modifica ai file audio: le playlist restano metadati; tag di competenza di
