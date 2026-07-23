@@ -7,6 +7,7 @@ import { ArrowLeft, ClipboardList, Library, ListPlus } from "lucide-react";
 import { apiGet, addTracksToPlaylist, createPlaylistFromTracks, errText, importManualPlaylist, listImportedPlaylists, trackLabel, type Playlist, type Track } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Spinner, Input, Textarea, Field, Checkbox, Badge, Select } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { PlaylistFilterMenu } from "@/components/playlist-filter-menu";
 import { useT } from "@/lib/i18n";
 
 export default function ImportManualPage() {
@@ -22,10 +23,10 @@ export default function ImportManualPage() {
   const [query, setQuery] = useState("");
   const [ownedOnly, setOwnedOnly] = useState(true);
   const [genre, setGenre] = useState("");
-  const [inPlaylist, setInPlaylist] = useState("");   // id playlist come stringa; "" = tutte
+  const [inPlaylists, setInPlaylists] = useState<Set<number>>(new Set());   // id playlist selezionate; vuoto = tutte
   const [results, setResults] = useState<Track[]>([]);
   const [total, setTotal] = useState(0);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selectedTracks, setSelectedTracks] = useState<Map<number, Track>>(new Map());
   const [allPlaylists, setAllPlaylists] = useState<Playlist[]>([]);
   const [addTarget, setAddTarget] = useState("");     // id playlist per "aggiungi a esistente"
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -44,14 +45,14 @@ export default function ImportManualPage() {
         title: query || undefined,
         genre: genre || undefined,
         has_local_file: ownedOnly ? "true" : undefined,
-        in_playlist: inPlaylist || undefined,
+        in_playlist: inPlaylists.size ? [...inPlaylists] : undefined,
         limit: 50,
       })
         .then((r) => { setResults(r.items); setTotal(r.total); })
         .catch(() => { setResults([]); setTotal(0); });
     }, 300);
     return () => clearTimeout(timer);
-  }, [mode, query, genre, ownedOnly, inPlaylist]);
+  }, [mode, query, genre, ownedOnly, inPlaylists]);
 
   const doImport = async () => {
     setError(null);
@@ -69,7 +70,7 @@ export default function ImportManualPage() {
     setError(null);
     setBusy(true);
     try {
-      await createPlaylistFromTracks(name.trim() || t.playlists.importManual.defaultPlaylistName, [...selected]);
+      await createPlaylistFromTracks(name.trim() || t.playlists.importManual.defaultPlaylistName, [...selectedTracks.keys()]);
       router.push("/playlists");
     } catch (e) {
       setError(t.playlists.importManual.createFailed(errText(e)));
@@ -83,7 +84,7 @@ export default function ImportManualPage() {
     setFeedback(null);
     setBusy(true);
     try {
-      const res = await addTracksToPlaylist(Number(addTarget), [...selected]);
+      const res = await addTracksToPlaylist(Number(addTarget), [...selectedTracks.keys()]);
       setFeedback(t.playlists.importManual.addedFeedback(res.added, res.skipped));
       setBusy(false);
     } catch (e) {
@@ -92,8 +93,15 @@ export default function ImportManualPage() {
     }
   };
 
-  const toggle = (id: number) =>
-    setSelected((s) => {
+  const toggle = (tr: Track) =>
+    setSelectedTracks((m) => {
+      const next = new Map(m);
+      if (next.has(tr.id)) next.delete(tr.id); else next.set(tr.id, tr);
+      return next;
+    });
+
+  const togglePlaylist = (id: number) =>
+    setInPlaylists((s) => {
       const next = new Set(s);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
@@ -105,10 +113,10 @@ export default function ImportManualPage() {
         title: query || undefined,
         genre: genre || undefined,
         has_local_file: ownedOnly ? "true" : undefined,
-        in_playlist: inPlaylist || undefined,
+        in_playlist: inPlaylists.size ? [...inPlaylists] : undefined,
         limit: 0,
       });
-      setSelected(new Set(r.items.map((tr) => tr.id)));
+      setSelectedTracks(new Map(r.items.map((tr) => [tr.id, tr])));
     } catch {
       /* noop: la selezione resta invariata */
     }
@@ -134,7 +142,7 @@ export default function ImportManualPage() {
       <div className="border-t border-border pt-4 text-xs">
         <div className="flex justify-between gap-2">
           <span className="text-muted">{mode === "paste" ? im.rowsDetectedLabel : im.tracksSelectedLabel}</span>
-          <span className="tnum text-fg">{mode === "paste" ? lineCount : selected.size}</span>
+          <span className="tnum text-fg">{mode === "paste" ? lineCount : selectedTracks.size}</span>
         </div>
       </div>
     </div>
@@ -211,29 +219,24 @@ export default function ImportManualPage() {
                   placeholder={im.genreFilterPlaceholder}
                   disabled={busy}
                 />
-                <Select
-                  className="h-9"
-                  value={inPlaylist}
-                  onChange={(e) => setInPlaylist(e.target.value)}
-                  disabled={busy}
-                >
-                  <option value="">{im.playlistFilterAllOption}</option>
-                  {allPlaylists.map((p) => (
-                    <option key={p.id} value={String(p.id)}>{p.name}</option>
-                  ))}
-                </Select>
+                <PlaylistFilterMenu
+                  playlists={allPlaylists}
+                  selected={inPlaylists}
+                  onToggle={togglePlaylist}
+                  label={im.playlistFilterButton(inPlaylists.size)}
+                />
                 <div className="flex items-center">
                   <Checkbox label={im.ownedOnlyLabel} checked={ownedOnly} onChange={setOwnedOnly} />
                 </div>
               </div>
 
               <div className="flex items-center justify-between gap-2 text-xs text-muted">
-                <span>{im.selectedCount(selected.size)}</span>
+                <span>{im.selectedCount(selectedTracks.size)}</span>
                 <div className="flex gap-3">
                   <button type="button" onClick={selectAllMatching} className="hover:text-fg" disabled={total === 0}>
                     {im.selectAllMatching(total)}
                   </button>
-                  <button type="button" onClick={() => setSelected(new Set())} className="hover:text-fg" disabled={selected.size === 0}>
+                  <button type="button" onClick={() => setSelectedTracks(new Map())} className="hover:text-fg" disabled={selectedTracks.size === 0}>
                     {im.clearSelection}
                   </button>
                 </div>
@@ -247,8 +250,8 @@ export default function ImportManualPage() {
                   >
                     <input
                       type="checkbox"
-                      checked={selected.has(tr.id)}
-                      onChange={() => toggle(tr.id)}
+                      checked={selectedTracks.has(tr.id)}
+                      onChange={() => toggle(tr)}
                       className="shrink-0"
                     />
                     <span className="min-w-0 flex-1 truncate">{trackLabel(tr)}</span>
@@ -257,6 +260,24 @@ export default function ImportManualPage() {
                 ))}
                 {results.length === 0 && (
                   <div className="px-3 py-6 text-center text-sm text-muted">{im.noResults}</div>
+                )}
+              </div>
+
+              <div className="border border-border">
+                <div className="border-b border-border px-3 py-2 text-xs font-medium text-muted">
+                  {im.selectedPanelTitle(selectedTracks.size)}
+                </div>
+                {selectedTracks.size === 0 ? (
+                  <div className="px-3 py-4 text-center text-xs text-muted">{im.emptySelectionHint}</div>
+                ) : (
+                  <ul className="max-h-48 divide-y divide-border overflow-y-auto">
+                    {[...selectedTracks.values()].map((tr) => (
+                      <li key={tr.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
+                        <span className="min-w-0 flex-1 truncate">{trackLabel(tr)}</span>
+                        <button type="button" onClick={() => toggle(tr)} aria-label={im.removeAria} className="shrink-0 text-muted hover:text-fg">✕</button>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
 
@@ -274,12 +295,12 @@ export default function ImportManualPage() {
                       <option key={p.id} value={String(p.id)}>{p.name}</option>
                     ))}
                   </Select>
-                  <Button variant="outline" onClick={doAddToExisting} disabled={busy || selected.size === 0 || !addTarget}>
+                  <Button variant="outline" onClick={doAddToExisting} disabled={busy || selectedTracks.size === 0 || !addTarget}>
                     {busy ? <Spinner /> : <ListPlus size={15} />} {im.addToExistingButton}
                   </Button>
                 </div>
-                <Button onClick={doCreateFromLibrary} disabled={busy || selected.size === 0}>
-                  {busy ? <Spinner /> : <Library size={15} />} {im.createPlaylistButton(selected.size)}
+                <Button onClick={doCreateFromLibrary} disabled={busy || selectedTracks.size === 0}>
+                  {busy ? <Spinner /> : <Library size={15} />} {im.createPlaylistButton(selectedTracks.size)}
                 </Button>
               </div>
             </>
