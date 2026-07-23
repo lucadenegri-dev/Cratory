@@ -462,6 +462,13 @@ export const en = {
     scan_running: "A scan is already running.",
     run_not_found: "Run not found.",
     run_not_applied: "This run is not in the 'applied' state.",
+    file_not_found: "File not found.",
+    file_not_writable: "The file can't be written (missing or moved). Re-scan and try again.",
+    field_not_editable: (p) => `Field not editable: ${p.fields}.`,
+    value_invalid: (p) =>
+      p.reason === "positive" ? `'${p.field}' must be a positive number.` : `'${p.field}' must be a number.`,
+    tag_write_failed: "Couldn't write the tags to the file.",
+    tag_verify_failed: "The tags were saved but couldn't be verified. Re-scan to reconcile.",
   } as Record<string, string | ((p: Record<string, unknown>) => string)>,
 };
 

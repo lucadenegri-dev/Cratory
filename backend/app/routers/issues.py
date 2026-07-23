@@ -15,13 +15,13 @@ from app.models import AudioFile, Issue, utcnow
 from app.schemas import (IntegrityCheckBody, IssueBulkBody, IssueFixBody, IssueRead,
                          IssueStatusBody, ProviderRescanBody, ProviderSuggestBody)
 from app.services import ai_tags, apply_job, cover_cache, covers as cover_svc, integrity_job, provider_rescan_job, ratings, scan_job, text_providers
+from app.services.planner import EDITABLE_TAG_FIELDS
 
 router = APIRouter(prefix="/api/issues", tags=["issues"])
 _VALID = {"open", "accepted", "dismissed"}
 
-# Campi tag effettivi (= planner._EFFECTIVE_FIELDS): gli unici correggibili a mano.
-_RETAGGABLE = {"artist", "title", "album", "album_artist", "genre", "year",
-               "label", "track_no", "comment"}
+# Gli unici campi correggibili a mano: fonte unica in planner.EDITABLE_TAG_FIELDS.
+_RETAGGABLE = frozenset(EDITABLE_TAG_FIELDS)
 
 
 def _to_read(issue: Issue, file: AudioFile) -> IssueRead:

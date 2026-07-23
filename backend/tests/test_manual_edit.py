@@ -81,6 +81,7 @@ def test_edit_rejects_bad_year(db, tmp_path, copy_fixture):
     with pytest.raises(manual_edit.ManualEditError) as e:
         manual_edit.edit_tags(db, file, {"year": "notayear"})
     assert e.value.status == 400 and e.value.code == "value_invalid"
+    assert e.value.params == {"field": "year", "reason": "number"}
 
 
 def test_edit_rejects_unknown_field(db, tmp_path, copy_fixture):
@@ -89,6 +90,7 @@ def test_edit_rejects_unknown_field(db, tmp_path, copy_fixture):
     with pytest.raises(manual_edit.ManualEditError) as e:
         manual_edit.edit_tags(db, file, {"bpm": "128"})
     assert e.value.status == 400 and e.value.code == "field_not_editable"
+    assert e.value.params == {"fields": "bpm"}
 
 
 def test_edit_rejects_missing_file(db, tmp_path):
@@ -154,8 +156,9 @@ def test_edit_reconcile_clear_branch(db, tmp_path, copy_fixture):
 
 
 def test_edit_write_failure_is_controlled(db, tmp_path, copy_fixture, monkeypatch):
-    # una TagWriteError diventa un ManualEditError(500); la voce di journal resta
-    # (innocua) e il DB NON viene allineato.
+    # una TagWriteError diventa un ManualEditError(500); poiché nulla è atterrato
+    # sul disco, la run appena creata (Plan + journal) viene RIMOSSA — niente run
+    # "applied" fantasma in History (simmetrico al ramo "nulla è atterrato").
     f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
     file = _seed(db, f, artist="Old")
 
@@ -166,7 +169,8 @@ def test_edit_write_failure_is_controlled(db, tmp_path, copy_fixture, monkeypatc
     with pytest.raises(manual_edit.ManualEditError) as e:
         manual_edit.edit_tags(db, file, {"artist": "New"})
     assert e.value.status == 500 and e.value.code == "tag_write_failed"
-    assert db.scalar(select(Plan)) is not None        # journal resta
+    assert db.scalar(select(Plan)) is None            # run rimossa, niente fantasma
+    assert db.scalar(select(UndoJournal)) is None
     assert db.get(AudioFile, 1).artist == "Old"       # DB non allineato
 
 
@@ -204,3 +208,25 @@ def test_edit_flac_comment_still_works(db, tmp_path, copy_fixture):
     assert tagio.read_tags(f).comment == "kept"
     assert db.get(AudioFile, 1).comment == "kept"
     assert db.scalar(select(Plan)) is not None
+
+
+def test_edit_verify_read_failure_is_controlled(db, tmp_path, copy_fixture, monkeypatch):
+    # la scrittura riesce ma la RI-LETTURA di verifica fallisce: errore controllato
+    # con codice DISTINTO da quello della scrittura (tag_verify_failed), perché qui
+    # il disco È già mutato ma non riusciamo a confermare cosa sia atterrato.
+    f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
+    file = _seed(db, f, artist="Old")
+    real_read = tagio.read_tags
+    calls = {"n": 0}
+
+    def flaky_read(path):
+        calls["n"] += 1
+        if calls["n"] >= 2:          # la 2ª lettura (verify post-scrittura) esplode
+            raise tagio.TagReadError("verify boom")
+        return real_read(path)
+
+    monkeypatch.setattr(tagio, "read_tags", flaky_read)
+    with pytest.raises(manual_edit.ManualEditError) as e:
+        manual_edit.edit_tags(db, file, {"artist": "New"})
+    assert e.value.status == 500 and e.value.code == "tag_verify_failed"
+    assert real_read(f).artist == "New"          # la scrittura ERA avvenuta

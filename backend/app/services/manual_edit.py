@@ -12,21 +12,23 @@ from sqlalchemy.orm import Session
 
 from app.integrations import tagio
 from app.models import AudioFile, Issue, Plan, UndoJournal, utcnow
+from app.services.planner import EDITABLE_TAG_FIELDS
 
-# Campi tag correggibili a mano (= planner._EFFECTIVE_FIELDS = issues._RETAGGABLE).
-_EDITABLE = {"artist", "title", "album", "album_artist", "genre", "year",
-             "label", "track_no", "comment"}
+# Gli unici campi correggibili a mano: fonte unica in planner.EDITABLE_TAG_FIELDS.
+_EDITABLE = frozenset(EDITABLE_TAG_FIELDS)
 _INT_FIELDS = {"year", "track_no"}
 
 
 class ManualEditError(Exception):
-    """Errore di modifica manuale con codice/stato HTTP; il router lo traduce."""
+    """Errore di modifica manuale con codice/stato HTTP e `params` opzionali per la
+    traduzione nel frontend; il router lo converte in api_error."""
 
-    def __init__(self, status: int, code: str, message: str):
+    def __init__(self, status: int, code: str, message: str, params: dict | None = None):
         super().__init__(message)
         self.status = status
         self.code = code
         self.message = message
+        self.params = params or {}
 
 
 def _coerce(field: str, raw):
@@ -42,9 +44,11 @@ def _coerce(field: str, raw):
         try:
             n = int(raw)
         except (TypeError, ValueError):
-            raise ManualEditError(400, "value_invalid", f"'{field}' must be a number")
+            raise ManualEditError(400, "value_invalid", f"'{field}' must be a number",
+                                  {"field": field, "reason": "number"})
         if n < 0:
-            raise ManualEditError(400, "value_invalid", f"'{field}' must be positive")
+            raise ManualEditError(400, "value_invalid", f"'{field}' must be positive",
+                                  {"field": field, "reason": "positive"})
         return n
     return str(raw)
 
@@ -61,8 +65,9 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
     non resta una run fantasma se nulla è cambiato sul file."""
     unknown = set(changes) - _EDITABLE
     if unknown:
+        fields = ", ".join(sorted(unknown))
         raise ManualEditError(400, "field_not_editable",
-                              f"Field not editable: {', '.join(sorted(unknown))}")
+                              f"Field not editable: {fields}", {"fields": fields})
     if file.status != "present" or file.scan_error or not os.path.exists(file.path):
         raise ManualEditError(409, "file_not_writable", "File is not writable")
 
@@ -93,8 +98,12 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
     try:
         tagio.write_tags(file.path, effective)      # poi muta il disco
     except tagio.TagWriteError as exc:
-        # La voce di journal resta (innocua: undo → RETAG su prior==corrente è un
-        # no-op). Errore controllato, col codice tradotto dal frontend.
+        # La scrittura è fallita: nulla è atterrato in modo affidabile → rimuovi la
+        # run appena creata (come il ramo "nulla è atterrato"), niente run "applied"
+        # fantasma in History. Errore controllato, col codice tradotto dal frontend.
+        db.delete(journal)
+        db.delete(plan)
+        db.commit()
         raise ManualEditError(500, "tag_write_failed", str(exc))
 
     # Ri-leggi il disco e allinea il DB a ciò che è ATTERRATO: write_tags salta in
@@ -103,7 +112,9 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
     try:
         written = tagio.read_tags(file.path)
     except tagio.TagReadError as exc:
-        raise ManualEditError(500, "tag_write_failed", str(exc))
+        # Il disco È già mutato ma non riusciamo a verificare cosa sia atterrato:
+        # codice distinto dalla scrittura fallita (DB non allineato → ri-scan concilia).
+        raise ManualEditError(500, "tag_verify_failed", str(exc))
     landed = {f: getattr(written, f) for f in effective}
     for f, v in landed.items():
         setattr(file, f, v)

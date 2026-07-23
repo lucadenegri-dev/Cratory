@@ -5,8 +5,11 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-_EFFECTIVE_FIELDS = ("artist", "title", "album", "album_artist", "genre", "year",
-                     "label", "track_no", "comment")
+# I 9 campi tag testuali che Sortory gestisce: compongono i "tag effettivi" per il
+# piano, sono gli unici correggibili a mano (services.manual_edit) e via fix di una
+# issue (routers.issues). Unica fonte condivisa, per non farli divergere.
+EDITABLE_TAG_FIELDS = ("artist", "title", "album", "album_artist", "genre", "year",
+                       "label", "track_no", "comment")
 _TEMPLATE_FIELD_RE = re.compile(r"\{(\w+)\}")
 _SANITIZE_RE = re.compile(r'[/\\:*?"<>|]')
 
@@ -64,10 +67,10 @@ def fixes_by_file(accepted_issues) -> dict[int, list[dict]]:
 
 
 def effective_tags(file, fixes: list[dict]) -> dict:
-    tags = {k: getattr(file, k) for k in _EFFECTIVE_FIELDS}
+    tags = {k: getattr(file, k) for k in EDITABLE_TAG_FIELDS}
     for fix in fixes:
         field = fix.get("field")
-        if field in _EFFECTIVE_FIELDS:
+        if field in EDITABLE_TAG_FIELDS:
             tags[field] = None if fix.get("action") == "clear" else fix.get("to")
     return tags
 
@@ -103,7 +106,7 @@ def build_plan(files, accepted_issues, removals, settings_snapshot,
         if fixes:
             eff = effective_tags(f, fixes)
             touched = sorted({fix["field"] for fix in fixes
-                              if fix.get("field") in _EFFECTIVE_FIELDS})
+                              if fix.get("field") in EDITABLE_TAG_FIELDS})
             # Solo i campi il cui valore è DAVVERO diverso da quello già sul file:
             # una issue resta 'accepted' per sempre, e senza questo filtro
             # rigenererebbe un RETAG no-op a ogni ricostruzione del piano.

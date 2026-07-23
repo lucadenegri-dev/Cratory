@@ -61,3 +61,14 @@ def test_post_tags_400_on_bad_year(db, tmp_path, copy_fixture):
     r = client.post("/api/files/1/tags", json={"year": "abc"})
     assert r.status_code == 400
     assert r.json()["detail"]["code"] == "value_invalid"
+
+
+def test_post_tags_value_invalid_carries_params(db, tmp_path, copy_fixture):
+    # il codice errore porta il campo (+ motivo) come params, così il frontend può
+    # tradurre "'year' dev'essere un numero" invece di ricadere sul testo inglese.
+    f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
+    _seed(db, f)
+    d = client.post("/api/files/1/tags", json={"year": "abc"}).json()["detail"]
+    assert d["code"] == "value_invalid"
+    assert d["params"]["field"] == "year"
+    assert d["params"]["reason"] == "number"
