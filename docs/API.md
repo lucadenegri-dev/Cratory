@@ -163,7 +163,7 @@ job, BPM/key come only from the Rekordbox import.
 tracks already in the library (disk-first), in the given order. Request:
 `{name, track_ids}`. Response: `PlaylistOut`. `422` if the name is empty or a
 track_id does not exist.
-`POST /api/playlists/{playlist_id}/add-tracks` adds tracks already in the library to
+`POST /api/playlists/{playlist_id}/add-tracks` (`200`) adds tracks already in the library to
 an **existing** playlist. Request: `{track_ids}` (at least one). Idempotent: track ids
 already in the playlist, and duplicate ids within the same request, are counted as
 `skipped` rather than added twice; every new membership is marked `added_by="cratory"`
