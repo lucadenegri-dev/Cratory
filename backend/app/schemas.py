@@ -259,6 +259,17 @@ class PlaylistOut(BaseModel):
     imported_at: datetime
 
 
+class PlaylistAddTracksRequest(BaseModel):
+    """Aggiunta di tracce di libreria a una playlist esistente."""
+    track_ids: list[int] = Field(min_length=1)
+
+
+class PlaylistAddTracksResult(BaseModel):
+    playlist: PlaylistOut
+    added: int
+    skipped: int
+
+
 class PlaylistDeleteResult(BaseModel):
     """Esito eliminazione playlist: quante tracce-lead orfane sono state rimosse."""
 

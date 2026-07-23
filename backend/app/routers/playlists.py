@@ -38,6 +38,8 @@ from app.schemas import (
     LikedSelectedImportRequest,
     LikedTrackPreview,
     ManualImportRequest,
+    PlaylistAddTracksRequest,
+    PlaylistAddTracksResult,
     PlaylistDeleteResult,
     PlaylistFromTracksRequest,
     PlaylistImportReport,
@@ -213,6 +215,38 @@ def create_from_tracks(req: PlaylistFromTracksRequest, db: Session = Depends(get
     db.commit()
     db.refresh(playlist)
     return playlist
+
+
+@router.post("/{playlist_id}/add-tracks", response_model=PlaylistAddTracksResult)
+def add_tracks(playlist_id: int, req: PlaylistAddTracksRequest, db: Session = Depends(get_db)):
+    """Aggiunge tracce di libreria a una playlist esistente (idempotente).
+
+    Le membership sono marcate `added_by="cratory"`, cosi' il prune del sync non
+    le rimuove. Le tracce gia' presenti (o id ripetuti) contano come `skipped`.
+    """
+    playlist = get_playlist(db, playlist_id)
+    if playlist is None:
+        raise api_error(404, "playlist_not_found", "Playlist not found")
+    tracks = db.scalars(select(Track).where(Track.id.in_(req.track_ids))).all()
+    by_id = {t.id: t for t in tracks}
+    missing = [i for i in req.track_ids if i not in by_id]
+    if missing:
+        raise api_error(422, "tracks_not_found", f"Nonexistent tracks: {missing}", missing=missing)
+    existing = {t.id for t in playlist.tracks}
+    added = 0
+    for track_id in req.track_ids:
+        if track_id in existing:
+            continue
+        add_track_to_playlist(db, by_id[track_id], playlist, added_by="cratory")
+        existing.add(track_id)
+        added += 1
+    skipped = len(req.track_ids) - added
+    recount_playlist(db, playlist)
+    db.commit()
+    db.refresh(playlist)
+    return PlaylistAddTracksResult(
+        playlist=PlaylistOut.model_validate(playlist), added=added, skipped=skipped,
+    )
 
 
 @router.get("", response_model=list[PlaylistOut])
