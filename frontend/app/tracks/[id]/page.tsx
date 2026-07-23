@@ -11,6 +11,7 @@ import { TrackEditModal } from "@/components/track-edit-modal";
 import { TrackCover } from "@/components/track-cover";
 import { LinkLocalFileModal } from "@/components/link-local-file-modal";
 import { TrackPlayButton } from "@/components/track-play-button";
+import { AddToPlaylistMenu } from "@/components/add-to-playlist-menu";
 import { useT } from "@/lib/i18n";
 
 function TransitionList({ title, items, emptyLabel }: { title: string; items: TransitionCandidate[]; emptyLabel: string }) {
@@ -53,6 +54,10 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
     transitions(id, { limit: 8 }).then(setCompatible).catch(() => {});
   }, [id]);
 
+  const refresh = () => {
+    apiGet<TrackDetail>(`/api/tracks/${id}`).then(setTrack).catch(() => {});
+  };
+
   if (error) return <PageLayout title={t.tracks.pageTitle}><Alert tone="danger">⚠ {error}</Alert></PageLayout>;
   if (!track) return <PageLayout title={t.tracks.pageTitle}><Loading /></PageLayout>;
 
@@ -94,6 +99,7 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-2">
         <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> {t.tracks.editValues}</Button>
+        <AddToPlaylistMenu track={track} onChanged={refresh} />
       </div>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
         <div className="flex justify-between gap-2"><span className="text-muted">{t.tracks.rowSource}</span><span className="text-fg">{track.source_type}</span></div>

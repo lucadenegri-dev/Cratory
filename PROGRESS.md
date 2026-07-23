@@ -32,6 +32,25 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-23 - Playlist da libreria: multi-selezione, filtri e "Aggiungi a playlist"
+
+- Pagina **"Crea playlist da libreria"** (`frontend/app/playlists/import-manual/page.tsx`)
+  potenziata: selezione multipla a checkbox, filtro per genere e filtro per playlist a
+  selezione multipla (unione, non intersezione), pannello laterale "Selezionate" e
+  tracce gia' presenti nella playlist target mostrate ma non selezionabili; conferma
+  prima di eseguire l'ADD.
+- Nuovo endpoint `POST /api/playlists/{playlist_id}/add-tracks` (`routers/playlists.py`,
+  `add_tracks`): aggiunge tracce di libreria a una playlist gia' esistente, idempotente
+  (id gia' presenti o ripetuti nella stessa richiesta contano come `skipped`, mai
+  duplicati), nuove membership marcate `added_by="cratory"` cosi' il prune del sync non
+  le rimuove; `404 playlist_not_found`, `422 tracks_not_found` (con `missing`). Risposta
+  `{playlist, added, skipped}`.
+- `GET /api/tracks` guadagna il filtro ripetibile `in_playlist` (`_apply_track_filters`
+  in `repositories.py`): tracce di QUALSIASI delle playlist indicate (unione),
+  combinabile in AND con gli altri filtri (genere, `has_local_file`, ecc.).
+- Nuovo bottone **"Aggiungi a playlist"** nel dettaglio traccia
+  (`frontend/app/tracks/[id]/page.tsx`, `components/add-to-playlist-menu.tsx`).
+
 ## Milestone 2026-07-23 - Download SoundCloud via yt-dlp dal dettaglio traccia
 
 - Pulsante **"Scarica da SoundCloud"** nella pagina di dettaglio traccia

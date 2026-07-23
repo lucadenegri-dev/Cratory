@@ -55,7 +55,7 @@ async function handle<T>(res: Response): Promise<T> {
 
 export async function apiGet<T>(
   path: string,
-  params?: Record<string, string | number | boolean | undefined>,
+  params?: Record<string, string | number | boolean | undefined | (string | number)[]>,
   opts?: { signal?: AbortSignal },
 ): Promise<T> {
   // Niente `new URL(...)`: con base relativa (API vuota) lancerebbe. La query
@@ -64,7 +64,12 @@ export async function apiGet<T>(
   if (params) {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== "") qs.set(k, String(v));
+      if (v === undefined || v === "") continue;
+      if (Array.isArray(v)) {
+        for (const item of v) qs.append(k, String(item));
+      } else {
+        qs.set(k, String(v));
+      }
     }
     const s = qs.toString();
     if (s) url += (url.includes("?") ? "&" : "?") + s;
