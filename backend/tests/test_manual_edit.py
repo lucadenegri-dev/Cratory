@@ -204,3 +204,25 @@ def test_edit_flac_comment_still_works(db, tmp_path, copy_fixture):
     assert tagio.read_tags(f).comment == "kept"
     assert db.get(AudioFile, 1).comment == "kept"
     assert db.scalar(select(Plan)) is not None
+
+
+def test_edit_verify_read_failure_is_controlled(db, tmp_path, copy_fixture, monkeypatch):
+    # la scrittura riesce ma la RI-LETTURA di verifica fallisce: errore controllato
+    # con codice DISTINTO da quello della scrittura (tag_verify_failed), perché qui
+    # il disco È già mutato ma non riusciamo a confermare cosa sia atterrato.
+    f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
+    file = _seed(db, f, artist="Old")
+    real_read = tagio.read_tags
+    calls = {"n": 0}
+
+    def flaky_read(path):
+        calls["n"] += 1
+        if calls["n"] >= 2:          # la 2ª lettura (verify post-scrittura) esplode
+            raise tagio.TagReadError("verify boom")
+        return real_read(path)
+
+    monkeypatch.setattr(tagio, "read_tags", flaky_read)
+    with pytest.raises(manual_edit.ManualEditError) as e:
+        manual_edit.edit_tags(db, file, {"artist": "New"})
+    assert e.value.status == 500 and e.value.code == "tag_verify_failed"
+    assert real_read(f).artist == "New"          # la scrittura ERA avvenuta

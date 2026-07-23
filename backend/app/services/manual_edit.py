@@ -103,7 +103,9 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
     try:
         written = tagio.read_tags(file.path)
     except tagio.TagReadError as exc:
-        raise ManualEditError(500, "tag_write_failed", str(exc))
+        # Il disco È già mutato ma non riusciamo a verificare cosa sia atterrato:
+        # codice distinto dalla scrittura fallita (DB non allineato → ri-scan concilia).
+        raise ManualEditError(500, "tag_verify_failed", str(exc))
     landed = {f: getattr(written, f) for f in effective}
     for f, v in landed.items():
         setattr(file, f, v)
