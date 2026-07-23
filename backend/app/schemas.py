@@ -234,6 +234,7 @@ class HistoryItem(BaseModel):
     status: str
     created_at: datetime
     n_ops: int
+    kind: str | None = None
 
 
 class LibraryStatsRead(BaseModel):

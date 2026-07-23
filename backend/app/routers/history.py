@@ -20,7 +20,8 @@ def list_history(db: Session = Depends(get_db)):
     out = []
     for p in plans:
         n = db.scalar(select(func.count()).select_from(PlanOp).where(PlanOp.plan_id == p.id))
-        out.append(HistoryItem(id=p.id, status=p.status, created_at=p.created_at, n_ops=n or 0))
+        out.append(HistoryItem(id=p.id, status=p.status, created_at=p.created_at,
+                               n_ops=n or 0, kind=(p.rules_json or {}).get("kind")))
     return out
 
 
