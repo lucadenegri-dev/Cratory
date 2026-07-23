@@ -5,7 +5,7 @@ import logging
 import threading
 from datetime import datetime, timedelta, timezone
 
-from app.core.config import settings
+from app.core import runtime_settings
 from app.db import SessionLocal
 from app.services.app_state import get_state, set_state
 from app.services.library_index import index_library
@@ -60,7 +60,7 @@ def _run_job(root: str) -> None:
 
     try:
         report = index_library(db, root=root,
-                               archive_root=settings.archive_root or None,
+                               archive_root=runtime_settings.archive_root() or None,
                                on_progress=on_progress)
         set_state(db, "last_index_at", datetime.now(timezone.utc).isoformat())
         _state.update(status="done", **{k: report[k] for k in
@@ -83,9 +83,9 @@ def start_job() -> dict:
             return job_state()
         _state.update(status="running", processed=0, total=0, scanned=0, matched=0,
                       created=0, relinked=0, duplicates=0, lost=0, failed=0, unchanged=0, archived=0, errors=[], error=None,
-                      root=settings.library_root,
+                      root=runtime_settings.library_root(),
                       started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)
-    _spawn(lambda: _run_job(settings.library_root))
+    _spawn(lambda: _run_job(runtime_settings.library_root()))
     return job_state()
 
 

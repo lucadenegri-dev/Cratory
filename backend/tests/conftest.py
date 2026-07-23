@@ -22,6 +22,17 @@ CAMELOT_KEYS = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _reset_runtime_settings():
+    """La cache override di `runtime_settings` è un global di modulo: azzerarla
+    tra i test evita contaminazione e fa sì che i `monkeypatch.setattr(settings, …)`
+    esistenti continuino a valere (cache vuota → fallback a `settings`)."""
+    from app.core import runtime_settings
+    runtime_settings._overrides = {}
+    yield
+    runtime_settings._overrides = {}
+
+
 @pytest.fixture()
 def db():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False})

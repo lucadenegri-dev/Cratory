@@ -8,6 +8,7 @@ elenco completo invece dello stato dei soli alcuni servizi.
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.core import runtime_settings
 from app.core.config import settings
 from app.db import get_db
 from app.integrations.spotify import SpotifyWebClient
@@ -56,7 +57,7 @@ def services_status(db: Session = Depends(get_db)):
                 "key": "slskd", "name": "slskd (Soulseek)", "category": "Download",
                 # Configurato = URL + cartella download presenti; l'API key e' opzionale
                 # (slskd puo' girare senza auth). Stessa condizione di slskd_configured().
-                "configured": bool(settings.slskd_url and settings.slskd_download_dir),
+                "configured": bool(runtime_settings.slskd_url() and runtime_settings.slskd_download_dir()),
                 "connected": None,
                 "detail": "Acquisizione file via Soulseek: scarica le tracce di una playlist e "
                           "collega il file alla libreria. SLSKD_API_KEY opzionale.",

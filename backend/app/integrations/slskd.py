@@ -1,8 +1,9 @@
 """Client per il daemon Soulseek headless slskd (REST API v0).
 
-slskd fa la rete P2P (login, peer, code); Cratory orchestra. Usato SOLO come
-downloader: non si sfrutta la condivisione. Confermare gli endpoint contro
-lo Swagger del proprio slskd (<SLSKD_URL>/swagger).
+slskd fa la rete P2P (login, peer, code); Cratory orchestra. Principalmente un
+downloader; la condivisione della libreria è un opt-in esplicito (flag in Settings,
+vedi `services/slskd_shares.py` che scrive `shares.directories` nello YAML).
+Confermare gli endpoint contro lo Swagger del proprio slskd (<SLSKD_URL>/swagger).
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from pathlib import Path
 
 import httpx
 
+from app.core import runtime_settings
 from app.core.config import settings
 from app.integrations._http import ClosableHttpClient, get_with_retries, raise_for_status
 
@@ -51,7 +53,7 @@ class SlskdFile:
 class SlskdClient(ClosableHttpClient):
     def __init__(self, url: str | None = None, api_key: str | None = None,
                  http: httpx.Client | None = None):
-        self.url = (url if url is not None else settings.slskd_url).rstrip("/")
+        self.url = (url if url is not None else runtime_settings.slskd_url()).rstrip("/")
         self.api_key = api_key if api_key is not None else settings.slskd_api_key
         if not self.url:
             raise SlskdNotConfigured("SLSKD_URL mancante in backend/.env.")
@@ -107,6 +109,13 @@ class SlskdClient(ClosableHttpClient):
     def disconnect(self) -> None:
         """Disconnette il client dalla rete Soulseek (DELETE /server)."""
         self._delete("/server")
+
+    def rescan_shares(self) -> None:
+        """Forza un rescan delle share (PUT /shares). Usato dopo che Cratory ha
+        scritto `shares.directories` in slskd.yml (le share non sono mutabili via
+        API a runtime, solo dallo YAML): il rescan le rende effettive senza
+        aspettare l'intervallo di retention."""
+        self._put("/shares")
 
     def soulseek_username(self) -> str | None:
         """Username dell'account Soulseek configurato in slskd (GET /options).
@@ -241,11 +250,11 @@ class SlskdClient(ClosableHttpClient):
 
 
 def slskd_configured() -> bool:
-    return bool(settings.slskd_url and settings.slskd_download_dir)
+    return bool(runtime_settings.slskd_url() and runtime_settings.slskd_download_dir())
 
 
 def get_slskd_client() -> SlskdClient:
-    if not settings.slskd_url:
+    if not runtime_settings.slskd_url():
         raise SlskdNotConfigured("SLSKD_URL mancante in backend/.env.")
     return SlskdClient()
 

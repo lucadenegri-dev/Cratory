@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from app.core.config import settings
+from app.core import runtime_settings
 from app.integrations.local_files import AUDIO_EXTENSIONS
 
 MAX_RESULTS = 50
@@ -30,10 +30,12 @@ _cache: dict[str, tuple[float, list[Path]]] = {}
 def search_roots() -> list[tuple[str, str]]:
     """Coppie (source, radice) configurate ed esistenti. Cartelle mancanti: saltate."""
     roots: list[tuple[str, str]] = []
-    if settings.library_root and Path(settings.library_root).is_dir():
-        roots.append(("library", settings.library_root))
-    if settings.slskd_download_dir and Path(settings.slskd_download_dir).is_dir():
-        roots.append(("downloads", settings.slskd_download_dir))
+    library = runtime_settings.library_root()
+    if library and Path(library).is_dir():
+        roots.append(("library", library))
+    downloads = runtime_settings.slskd_download_dir()
+    if downloads and Path(downloads).is_dir():
+        roots.append(("downloads", downloads))
     return roots
 
 

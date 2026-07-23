@@ -24,6 +24,26 @@ def set_state(db: Session, key: str, value: str) -> None:
     db.commit()
 
 
+def delete_state(db: Session, key: str) -> None:
+    """Rimuove una chiave (no-op se assente). Usato per "azzera override" nei
+    settings di config: cancellare la riga = tornare al default `.env`."""
+    row = db.get(AppState, key)
+    if row is not None:
+        db.delete(row)
+        db.commit()
+
+
+def get_states_by_prefix(db: Session, prefix: str) -> dict[str, str]:
+    """Tutte le coppie chiave/valore la cui chiave inizia per `prefix`, con il
+    prefisso rimosso dalla chiave restituita. Serve a `runtime_settings` per
+    caricare in blocco gli override di config (`cfg.*`)."""
+    from sqlalchemy import select
+    rows = db.execute(
+        select(AppState).where(AppState.key.startswith(prefix))
+    ).scalars().all()
+    return {row.key[len(prefix):]: row.value for row in rows}
+
+
 LANGUAGE_KEY = "language"
 DEFAULT_LANGUAGE = "it"
 

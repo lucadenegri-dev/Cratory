@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     slskd_api_key: str = ""
     # slskd: cartella dove slskd scrive i download completati (usata per collegare il file alla Track).
     slskd_download_dir: str = ""
+    # slskd: percorso del suo file di config, editato dal flag "Condividi libreria"
+    # (slskd non espone le share via API a runtime). Default = posizione standard.
+    slskd_config_path: str = "~/.config/slskd/slskd.yml"
     ai_api_key: str = ""
     ai_model: str = ""
     # Modello di default: claude-opus-4-8 (vedi integrations/llm.py).
@@ -53,7 +56,8 @@ class Settings(BaseSettings):
     ai_thinking: str = "adaptive"  # adaptive | disabled
     ai_timeout_seconds: float = 120.0
 
-    @field_validator("library_root", "archive_root", "slskd_download_dir")
+    @field_validator("library_root", "archive_root", "slskd_download_dir",
+                     "slskd_config_path")
     @classmethod
     def expand_user_paths(cls, value: str) -> str:
         """`~` va espanso: un LIBRARY_ROOT='~/Music' altrimenti non risolve e

@@ -14,6 +14,7 @@ from typing import Callable
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core import runtime_settings
 from app.core.config import settings
 from app.models import Playlist, Track
 from app.services import soulseek_download_job
@@ -65,7 +66,7 @@ def pipeline_snapshot(
         (Track.bpm.is_(None)) | (Track.camelot_key.is_(None)) | (Track.camelot_key == ""),
     )
 
-    inbox_files = _count_audio_files(settings.slskd_download_dir, ttl=ttl, clock=clock)
+    inbox_files = _count_audio_files(runtime_settings.slskd_download_dir(), ttl=ttl, clock=clock)
 
     download = soulseek_download_job.job_state()
     download_active = download["status"] == "running"

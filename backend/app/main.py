@@ -36,10 +36,16 @@ logger = logging.getLogger("app.request")
 async def lifespan(app: FastAPI):
     setup_logging()
     ensure_schema()
+    # Carica gli override di config (Settings UI) nella cache runtime PRIMA di
+    # leggerli: library_root & co. possono essere sovrascritti dal DB.
+    from app.core import runtime_settings
+    from app.db import SessionLocal
+    with SessionLocal() as db:
+        runtime_settings.load(db)
     # Disk-first: il disco È la libreria — riallineala all'avvio, ma non a ogni
     # reload di uvicorn: start_job_if_due salta se un run è finito da poco. Il job
     # è un thread daemon; con la scansione incrementale il costo è minimo.
-    if settings.library_root:
+    if runtime_settings.library_root():
         library_index_job.start_job_if_due()
     yield
 

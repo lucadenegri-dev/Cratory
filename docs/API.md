@@ -670,14 +670,42 @@ raises the rate limit), slskd and related services.
 ## Settings
 
 ```text
-GET /api/settings/language
-PUT /api/settings/language
+GET   /api/settings/language
+PUT   /api/settings/language
+GET   /api/settings/config
+PATCH /api/settings/config
+PUT   /api/settings/share-library
 ```
 
-Setting persisted in `AppState` (key `language`, no dedicated table: single-user local
-app). `GET /api/settings/language` returns `{"language": "it"|"en"}` (default `"it"` if
-not set yet). `PUT /api/settings/language` with body `{"language": "it"|"en"}` saves
-the choice and returns the same object; `422` on values other than `"it"`/`"en"`.
+Settings persisted in `AppState` (no dedicated table: single-user local app), letti in
+cache da `core/runtime_settings`.
+
+`GET`/`PUT /api/settings/language`: `{"language": "it"|"en"}` (default `"it"`); `422` su
+valori diversi.
+
+`GET /api/settings/config` returns the editable config that **overrides `backend/.env` at
+runtime, without restarting the backend**. Editable fields (`library_root`, `archive_root`,
+`slskd_download_dir`, `slskd_url`, `slskd_config_path`) each come as
+`{value, source: "env"|"db", valid, detail}` — `source` says whether the effective value is
+a DB override or the `.env` default. Plus `share_library` (bool) and `warning` (soft note).
+The override lives in `AppState` under keys `cfg.*`; the affected read-sites now call
+`runtime_settings.<field>()` instead of `settings.<field>`, so a change takes effect on the
+next indexing run / slskd client / file search.
+
+`PATCH /api/settings/config` with any subset of the editable fields: a non-empty value sets
+an override, an empty string clears it (back to `.env`). Everything is validated **before**
+persisting anything (`422 invalid_setting` with `params.field`/`detail` on a bad path/URL;
+a directory must exist, `slskd_url` must be `http(s)://`). Returns the same shape as `GET`.
+If `share_library` is on and `library_root` changed, the share is re-applied best-effort
+(`warning` set on soft failure).
+
+`PUT /api/settings/share-library` with `{"enabled": bool}` toggles library sharing on
+Soulseek. slskd can't change shares via API at runtime, so Cratory edits `shares.directories`
+in slskd's own YAML (round-trip preserving comments/permissions, with a `.bak` backup) and
+forces a rescan (`PUT /api/v0/shares`). Returns `{share_library, applied_to_yaml, rescan}`
+(`rescan:false` when the daemon is down — the share applies at its next start). `409
+share_precondition` when the slskd config is missing/not writable, or enabling without a
+`library_root`.
 
 ## Conventions
 

@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.core.config import settings
 from app.db import Base
 from app.integrations.slskd import SlskdFile
 from app.models import Track
@@ -54,7 +55,7 @@ def patch_job(monkeypatch, tmp_path):
     download_dir.mkdir()
     _write_wav(download_dir / "Da Funk.flac")  # basename combacia col candidato
     monkeypatch.setattr(job, "SessionLocal", TestSession)
-    monkeypatch.setattr(job.settings, "slskd_download_dir", str(download_dir))
+    monkeypatch.setattr(settings, "slskd_download_dir", str(download_dir))
     monkeypatch.setattr(job, "POLL_INTERVAL", 0.0)
     monkeypatch.setattr(job, "STALL_TIMEOUT", 1.0)
     monkeypatch.setattr(job, "HARD_TIMEOUT", 1.0)
@@ -178,7 +179,7 @@ def test_durata_incoerente_va_in_needs_review(patch_job):
 
     TestSession, fake = patch_job
     fake._filename = "bob\\Da Funk.wav"  # wav vero: mutagen sceglie il parser dall'estensione
-    _write_wav(Path(job.settings.slskd_download_dir) / "Da Funk.wav", secs=2)
+    _write_wav(Path(settings.slskd_download_dir) / "Da Funk.wav", secs=2)
     db = TestSession()
     t = Track(platform="spotify", spotify_id="s9", source_type="spotify",
               title="Da Funk", artist="Daft Punk", duration_seconds=300)
@@ -211,7 +212,7 @@ def test_chosen_in_sottocartella_con_mismatch_durata_viene_comunque_collegato(pa
     from pathlib import Path
 
     TestSession, fake = patch_job
-    sub = Path(job.settings.slskd_download_dir) / "1998 - Love (Loved)"
+    sub = Path(settings.slskd_download_dir) / "1998 - Love (Loved)"
     sub.mkdir()
     _write_wav(sub / "02. Love (Loved).wav", secs=2)  # 2s reali
     fake._filename = "bob\\1998 - Love (Loved)\\02. Love (Loved).wav"
@@ -243,7 +244,7 @@ def test_chosen_manuale_con_mismatch_durata_non_va_in_needs_review(patch_job):
 
     TestSession, fake = patch_job
     fake._filename = "bob\\Da Funk.wav"
-    _write_wav(Path(job.settings.slskd_download_dir) / "Da Funk.wav", secs=2)
+    _write_wav(Path(settings.slskd_download_dir) / "Da Funk.wav", secs=2)
     db = TestSession()
     t = Track(platform="spotify", spotify_id="chosen-mismatch", source_type="spotify",
               title="Da Funk", artist="Daft Punk", duration_seconds=300)  # 300 vs ~2s reali
@@ -270,7 +271,7 @@ def test_autopick_con_mismatch_durata_resta_needs_review(patch_job):
 
     TestSession, fake = patch_job
     fake._filename = "bob\\Da Funk.wav"
-    _write_wav(Path(job.settings.slskd_download_dir) / "Da Funk.wav", secs=2)
+    _write_wav(Path(settings.slskd_download_dir) / "Da Funk.wav", secs=2)
     db = TestSession()
     t = Track(platform="spotify", spotify_id="autopick-mismatch", source_type="spotify",
               title="Da Funk", artist="Daft Punk", duration_seconds=300)
@@ -296,7 +297,7 @@ def test_chosen_manuale_con_durata_coerente_viene_collegato(patch_job):
 
     TestSession, fake = patch_job
     fake._filename = "bob\\Da Funk.wav"
-    _write_wav(Path(job.settings.slskd_download_dir) / "Da Funk.wav", secs=2)
+    _write_wav(Path(settings.slskd_download_dir) / "Da Funk.wav", secs=2)
     db = TestSession()
     t = Track(platform="spotify", spotify_id="chosen-match", source_type="spotify",
               title="Da Funk", artist="Daft Punk", duration_seconds=2)
@@ -320,7 +321,7 @@ def test_durata_coerente_viene_collegata(patch_job):
 
     TestSession, fake = patch_job
     fake._filename = "bob\\Da Funk.wav"
-    _write_wav(Path(job.settings.slskd_download_dir) / "Da Funk.wav", secs=2)
+    _write_wav(Path(settings.slskd_download_dir) / "Da Funk.wav", secs=2)
     db = TestSession()
     t = Track(platform="spotify", spotify_id="s10", source_type="spotify",
               title="Da Funk", artist="Daft Punk", duration_seconds=2)

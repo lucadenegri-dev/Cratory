@@ -12,4 +12,5 @@ export * from "./api/shazam";
 export * from "./api/analysis";
 export * from "./api/misc";
 export * from "./api/slskd";
+export * from "./api/settings";
 export * from "./api/transitions";

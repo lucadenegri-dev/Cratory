@@ -420,6 +420,47 @@ export interface SlskdStatus {
   is_transitioning: boolean;
   state: string | null;
   username: string | null;
+  /** URL della web UI di slskd (= SLSKD_URL), valorizzato appena configurato
+   *  anche se il demone e' irraggiungibile; null se non configurato. */
+  web_url: string | null;
+}
+
+/** Stato di un singolo campo di config editabile (path/URL). `source` dice se il
+ *  valore effettivo viene da un override DB o dal default `.env`. */
+export interface FieldState {
+  value: string;
+  source: "env" | "db";
+  valid: boolean;
+  detail: string | null;
+}
+
+/** Config editabile dalla pagina Settings + flag condivisione libreria. */
+export interface ConfigSettings {
+  library_root: FieldState;
+  archive_root: FieldState;
+  slskd_download_dir: FieldState;
+  slskd_url: FieldState;
+  slskd_config_path: FieldState;
+  share_library: boolean;
+  /** Avviso soft (es. share non ri-applicata dopo un cambio di libreria). */
+  warning: string | null;
+}
+
+/** Corpo del PATCH: campo assente = invariato; stringa vuota = azzera l'override. */
+export interface ConfigPatch {
+  library_root?: string;
+  archive_root?: string;
+  slskd_download_dir?: string;
+  slskd_url?: string;
+  slskd_config_path?: string;
+}
+
+export interface ShareLibraryResult {
+  share_library: boolean;
+  /** true = slskd.yml scritto. */
+  applied_to_yaml: boolean;
+  /** true = rescan sul demone eseguito (false se slskd era giù: share attiva al riavvio). */
+  rescan: boolean;
 }
 
 export interface SoundCloudLikedTrackPreview {

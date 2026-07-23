@@ -142,6 +142,13 @@ error on one track does not stop the job. It requires slskd configured; without 
 endpoints respond `409`. The file stays linked to the `Track` as a local reference,
 it is not re-uploaded or redistributed by the app.
 
+**Library sharing (opt-in).** Historically slskd was used purely as a downloader. A
+"Condividi libreria" flag in Settings now lets the user opt in to sharing `LIBRARY_ROOT`
+on Soulseek. slskd doesn't accept share changes via API at runtime (shares live in its
+YAML), so `services/slskd_shares.py` edits `shares.directories` in slskd's own config
+(round-trip via `ruamel.yaml`, `.bak` backup, permissions preserved) and forces a rescan.
+It is off by default; enabling it exposes the library's filenames to the network.
+
 Beyond auto-pick, `POST /api/downloads/search` offers free search on slskd with
 manual selection of the candidate (`POST /api/downloads/manual`). Outcomes to review
 (`needs_review|not_found|failed`) stay in a "to fix" queue, persisted on

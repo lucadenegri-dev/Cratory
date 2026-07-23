@@ -13,7 +13,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.core.config import settings
+from app.core import runtime_settings
 from app.db import SessionLocal
 from app.integrations.local_files import read_audio_quality, read_tags
 from app.integrations.slskd import (
@@ -242,7 +242,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
     client = None
     try:
         client = get_slskd_client()
-        download_dir = settings.slskd_download_dir
+        download_dir = runtime_settings.slskd_download_dir()
         _state.update(total=len(items), playlist_id=playlist_id)
         for i, (track_id, chosen) in enumerate(items, start=1):
             track = None
@@ -385,7 +385,7 @@ def _run_soundcloud(track_id: int) -> None:
             return
         _state["current_label"] = _track_label(track)
         try:
-            path = download_track_audio(track.url, settings.slskd_download_dir)
+            path = download_track_audio(track.url, runtime_settings.slskd_download_dir())
             quality = read_audio_quality(path)
             attach_local_file(db, track, path=path, fmt=quality["format"],
                               bitrate=quality["bitrate"])

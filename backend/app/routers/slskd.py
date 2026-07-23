@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.core.config import settings
+from app.core import runtime_settings
 from app.core.http_errors import api_error
 from app.integrations.slskd import SlskdError, get_slskd_client
 
@@ -27,6 +27,12 @@ class SlskdStatus(BaseModel):
     is_transitioning: bool
     state: str | None = None
     username: str | None = None
+    # URL della web UI di slskd (= SLSKD_URL: il demone serve UI e REST sulla
+    # stessa origin). Valorizzato appena `configured`, anche se il demone e' giu':
+    # il link serve proprio quando i download da Cratory falliscono. None se non
+    # configurato. NB: e' l'URL visto dal backend; nel setup self-hosted (stessa
+    # macchina) coincide con quello del browser.
+    web_url: str | None = None
 
 
 _NOT_CONFIGURED = SlskdStatus(
@@ -39,8 +45,10 @@ def _status() -> SlskdStatus:
     """Interroga il demone. Se SLSKD_URL manca -> non configurato; se il demone
     non risponde -> configurato ma non raggiungibile (200 con reachable=False,
     cosi' la UI puo' fare polling senza trattare il down come errore duro)."""
-    if not settings.slskd_url:
+    slskd_url = runtime_settings.slskd_url()
+    if not slskd_url:
         return _NOT_CONFIGURED
+    web_url = slskd_url.rstrip("/")
     client = get_slskd_client()
     try:
         state = client.server_state()
@@ -49,12 +57,14 @@ def _status() -> SlskdStatus:
         return SlskdStatus(
             configured=True, reachable=False, is_connected=False,
             is_logged_in=False, is_connecting=False, is_transitioning=False,
+            web_url=web_url,
         )
     finally:
         client.close()
     return SlskdStatus(
         configured=True,
         reachable=True,
+        web_url=web_url,
         is_connected=bool(state.get("isConnected")),
         is_logged_in=bool(state.get("isLoggedIn")),
         # slskd espone sia isConnecting sia isLoggingIn: per la UI sono la stessa
@@ -67,7 +77,7 @@ def _status() -> SlskdStatus:
 
 
 def _require_configured() -> None:
-    if not settings.slskd_url:
+    if not runtime_settings.slskd_url():
         raise api_error(409, "slskd_not_configured",
                         "slskd not configured (SLSKD_URL).")
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from app.core.config import settings
+from app.core import runtime_settings
 from app.core.http_errors import api_error
 from app.db import SessionLocal, get_db
 from app.integrations.slskd import (
@@ -218,7 +218,7 @@ def download_track_soundcloud(req: TrackSoundcloudIn):
         raise api_error(409, "ytdlp_unavailable", "yt-dlp not available on the backend.")
     if not _ffmpeg_available():
         raise api_error(409, "ffmpeg_unavailable", "ffmpeg not available on the backend.")
-    if not settings.slskd_download_dir:
+    if not runtime_settings.slskd_download_dir():
         raise api_error(409, "download_dir_not_configured",
                         "Download dir not configured (SLSKD_DOWNLOAD_DIR).")
     if job.is_running():

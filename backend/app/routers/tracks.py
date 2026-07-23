@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.core import runtime_settings
 from app.core.http_errors import api_error
 from app.services.file_search import path_within_roots, search_roots
 from app.db import get_db
@@ -174,7 +174,7 @@ def link_file(track_id: int, payload: TrackLinkFileIn, db: Session = Depends(get
 @router.post("/library/index", response_model=LibraryIndexJobStatus, status_code=202)
 def start_library_index():
     """Indicizza la libreria canonica (LIBRARY_ROOT): il disco È la libreria."""
-    if not settings.library_root:
+    if not runtime_settings.library_root():
         raise api_error(
             409, "library_root_not_configured",
             "LIBRARY_ROOT not configured: set the canonical library folder in .env.",
