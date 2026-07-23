@@ -429,7 +429,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                       <input
                         type="number"
                         min={1}
-                        max={visible.length}
+                        max={tracks.length}
                         defaultValue={insertionRank.get(tr.id) ?? 1}
                         autoFocus
                         disabled={reordering}
