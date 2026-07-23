@@ -84,9 +84,10 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(0);
 
-  // Riordino manuale della colonna "#": disponibile solo sulle playlist
-  // manuali e quando non è attivo un ordinamento su un'altra colonna.
-  const canReorder = playlist?.kind === "manual" && sort === "";
+  // Riordino manuale della colonna "#": disponibile su tutte le playlist manuali,
+  // anche con un ordinamento per colonna attivo (agisce sull'ordine della playlist,
+  // non sulla vista ordinata).
+  const canReorder = playlist?.kind === "manual";
   const [editingRank, setEditingRank] = useState<number | null>(null); // id traccia in modifica
   const [reordering, setReordering] = useState(false);
 
