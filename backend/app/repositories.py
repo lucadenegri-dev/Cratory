@@ -396,6 +396,24 @@ def tracks_for_playlist(db: Session, playlist_id: int) -> list[Track]:
     ).all())
 
 
+def reorder_playlist_track(db: Session, playlist_id: int, track_id: int, position: int) -> list[Track] | None:
+    """Sposta `track_id` alla posizione 1-based `position` (clampata) e rinumera 1..N.
+    Ritorna la lista riordinata, o None se la traccia non e' nella playlist. Non committa."""
+    members = tracks_for_playlist(db, playlist_id)
+    ids = [t.id for t in members]
+    if track_id not in ids:
+        return None
+    ids.remove(track_id)
+    idx = max(0, min(position - 1, len(ids)))
+    ids.insert(idx, track_id)
+    for new_pos, tid in enumerate(ids, start=1):
+        db.execute(playlist_tracks.update().where(
+            playlist_tracks.c.playlist_id == playlist_id,
+            playlist_tracks.c.track_id == tid,
+        ).values(position=new_pos))
+    return tracks_for_playlist(db, playlist_id)
+
+
 def tracks_download_pending(db: Session) -> list[Track]:
     """Wishlist con esito download da sistemare (da rivedere/non trovata/fallita)."""
     return list(db.scalars(

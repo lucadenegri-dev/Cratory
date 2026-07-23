@@ -270,6 +270,11 @@ class PlaylistAddTracksResult(BaseModel):
     skipped: int
 
 
+class PlaylistReorderRequest(BaseModel):
+    track_id: int
+    position: int = Field(ge=1)
+
+
 class PlaylistDeleteResult(BaseModel):
     """Esito eliminazione playlist: quante tracce-lead orfane sono state rimosse."""
 
