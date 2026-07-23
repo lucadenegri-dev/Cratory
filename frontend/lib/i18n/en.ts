@@ -208,6 +208,19 @@ export const en = {
     sevInfo: "info",
     formats: "Formats",
     dupTitle: "duplicate",
+    editTitle: "Edit tags",
+    field: {
+      artist: "Artist",
+      title: "Title",
+      album: "Album",
+      album_artist: "Album artist",
+      genre: "Genre",
+      year: "Year",
+      label: "Label",
+      track_no: "Track",
+      comment: "Comment",
+    },
+    numHint: "Numbers only",
   },
   issues: {
     summary: "Summary",
@@ -428,6 +441,7 @@ export const en = {
     badgeApplied: "applied",
     badgeUndone: "undone",
     undo: "↺ undo",
+    manualEdit: "manual edit",
   },
   errors: {
     plan_draft_missing: "No draft plan.",

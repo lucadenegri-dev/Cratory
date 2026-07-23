@@ -82,7 +82,9 @@ export default function HistoryPage() {
                   <tr key={r.id} className="border-b border-surface-2 last:border-0">
                     <td className="px-3 py-2 text-fg-strong">#{r.id}</td>
                     <td className="px-3 py-2 text-muted">{fmtDate(r.created_at)}</td>
-                    <td className="tnum px-3 py-2 text-right text-fg">{r.n_ops}</td>
+                    <td className="tnum px-3 py-2 text-right text-fg">
+                      {r.kind === "manual_edit" ? t.history.manualEdit : r.n_ops}
+                    </td>
                     <td className="px-3 py-2">
                       <span className={cn("border border-border px-2 py-0.5 text-[9px] uppercase tracking-wider",
                         r.status === "applied" ? "text-ok" : "text-faint")}>
