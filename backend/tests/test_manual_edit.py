@@ -168,3 +168,39 @@ def test_edit_write_failure_is_controlled(db, tmp_path, copy_fixture, monkeypatc
     assert e.value.status == 500 and e.value.code == "tag_write_failed"
     assert db.scalar(select(Plan)) is not None        # journal resta
     assert db.get(AudioFile, 1).artist == "Old"       # DB non allineato
+
+
+def test_edit_mp3_comment_is_honest_noop(db, tmp_path, copy_fixture):
+    # comment non si scrive su mp3 (limite EasyID3): l'edit NON deve lasciare il
+    # DB divergente né una run fantasma in History.
+    f = copy_fixture("mp3", tmp_path / "lib" / "x.mp3")
+    file = _seed(db, f, ext="mp3", comment=None)
+    manual_edit.edit_tags(db, file, {"comment": "won't land"})
+    assert tagio.read_tags(f).comment is None          # disco: invariato
+    assert db.get(AudioFile, 1).comment is None         # DB: allineato al disco
+    assert db.scalar(select(Plan)) is None              # nessuna run fantasma
+
+
+def test_edit_mp3_partial_landing(db, tmp_path, copy_fixture):
+    # artist atterra, comment no: DB riflette il disco reale; la run registra solo
+    # i campi davvero cambiati; l'undo ripristina solo quelli.
+    f = copy_fixture("mp3", tmp_path / "lib" / "x.mp3")
+    file = _seed(db, f, ext="mp3", artist=None, comment=None)
+    manual_edit.edit_tags(db, file, {"artist": "Landed", "comment": "won't land"})
+    assert db.get(AudioFile, 1).artist == "Landed"
+    assert db.get(AudioFile, 1).comment is None
+    plan = db.scalar(select(Plan))
+    assert plan is not None and plan.rules_json["fields"] == ["artist"]
+    from app.models import UndoJournal
+    j = db.scalar(select(UndoJournal).where(UndoJournal.run_id == plan.id))
+    assert j.prior_tags_json == {"artist": None}        # solo il campo atterrato
+
+
+def test_edit_flac_comment_still_works(db, tmp_path, copy_fixture):
+    # regressione: su flac il comment si scrive → run creata, DB = disco.
+    f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
+    file = _seed(db, f, comment=None)
+    manual_edit.edit_tags(db, file, {"comment": "kept"})
+    assert tagio.read_tags(f).comment == "kept"
+    assert db.get(AudioFile, 1).comment == "kept"
+    assert db.scalar(select(Plan)) is not None

@@ -55,8 +55,10 @@ def _norm(v):
 
 def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
     """Applica le modifiche manuali (field→valore) a `file`.
-    Idempotente: i campi già uguali al DB sono ignorati; se nulla cambia è un
-    no-op (nessuna scrittura, nessuna run)."""
+    Idempotente: i campi già uguali al DB sono ignorati. Dopo la scrittura ri-legge
+    il disco e allinea il DB a ciò che è ATTERRATO davvero (alcuni formati non
+    scrivono certi campi, es. comment su mp3): così DB e disco non divergono mai e
+    non resta una run fantasma se nulla è cambiato sul file."""
     unknown = set(changes) - _EDITABLE
     if unknown:
         raise ManualEditError(400, "field_not_editable",
@@ -65,7 +67,7 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
         raise ManualEditError(409, "file_not_writable", "File is not writable")
 
     coerced = {f: _coerce(f, changes[f]) for f in changes}
-    # solo i campi il cui valore normalizzato differisce davvero da quello nel DB
+    # solo i campi il cui valore normalizzato differisce da quello nel DB
     effective = {f: v for f, v in coerced.items() if _norm(getattr(file, f)) != _norm(v)}
     if not effective:
         return
@@ -83,8 +85,9 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
                             "fields": sorted(effective)})
     db.add(plan)
     db.flush()
-    db.add(UndoJournal(run_id=plan.id, op_seq=0, kind="RETAG", file_id=file.id,
-                       from_path=file.path, prior_tags_json=prior))
+    journal = UndoJournal(run_id=plan.id, op_seq=0, kind="RETAG", file_id=file.id,
+                          from_path=file.path, prior_tags_json=prior)
+    db.add(journal)
     db.commit()
 
     try:
@@ -93,9 +96,32 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
         # La voce di journal resta (innocua: undo → RETAG su prior==corrente è un
         # no-op). Errore controllato, col codice tradotto dal frontend.
         raise ManualEditError(500, "tag_write_failed", str(exc))
-    for f, v in effective.items():                  # allinea il DB al disco
+
+    # Ri-leggi il disco e allinea il DB a ciò che è ATTERRATO: write_tags salta in
+    # silenzio i campi che un formato non sa scrivere (es. comment su mp3), quindi
+    # il valore richiesto non è affidabile — quello sul disco sì.
+    try:
+        written = tagio.read_tags(file.path)
+    except tagio.TagReadError as exc:
+        raise ManualEditError(500, "tag_write_failed", str(exc))
+    landed = {f: getattr(written, f) for f in effective}
+    for f, v in landed.items():
         setattr(file, f, v)
-    _reconcile_issues(db, file.id, effective)
+
+    changed = {f: v for f, v in landed.items() if _norm(v) != _norm(prior[f])}
+    if not changed:
+        # Niente è atterrato sul disco (es. solo comment su mp3): la run sarebbe
+        # ingannevole e l'undo un no-op → rimuovi journal e Plan.
+        db.delete(journal)
+        db.delete(plan)
+        db.commit()
+        return
+
+    # Restringi journal e Plan ai soli campi realmente cambiati sul disco (l'undo
+    # non deve "ripristinare" un campo mai toccato).
+    journal.prior_tags_json = {f: prior[f] for f in changed}
+    plan.rules_json = {**plan.rules_json, "fields": sorted(changed)}
+    _reconcile_issues(db, file.id, changed)
     db.commit()
 
 
