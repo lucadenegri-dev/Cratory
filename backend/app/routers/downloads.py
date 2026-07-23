@@ -4,11 +4,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from app.core.config import settings
 from app.core.http_errors import api_error
 from app.db import SessionLocal, get_db
 from app.integrations.slskd import (
     SlskdError, SlskdFile, get_slskd_client, slskd_configured,
 )
+from app.integrations.soundcloud import soundcloud_available
 from app.repositories import get_track, tracks_download_pending
 from app.services import soulseek_download_job as job
 from app.schemas import TrackOut
@@ -53,6 +55,10 @@ class TrackAutopickIn(BaseModel):
     track_id: int
 
 
+class TrackSoundcloudIn(BaseModel):
+    track_id: int
+
+
 class SearchIn(BaseModel):
     query: str
 
@@ -93,6 +99,13 @@ def _slskd_file(c: CandidateOut) -> SlskdFile:
     return SlskdFile(username=c.username, filename=c.filename, size=c.size,
                      bitrate=c.bitrate, length=c.length, has_free_slot=True,
                      queue_length=None)
+
+
+def _ffmpeg_available() -> bool:
+    """ffmpeg presente? Serve al postprocessor MP3 di yt-dlp."""
+    import shutil
+
+    return shutil.which("ffmpeg") is not None
 
 
 @router.get("/pending", response_model=list[TrackOut])
@@ -194,6 +207,32 @@ def download_track_auto(req: TrackAutopickIn):
     finally:
         db.close()
     return {"available": True, **job.start_track_autopick_job(req.track_id)}
+
+
+@router.post("/track/soundcloud", status_code=202)
+def download_track_soundcloud(req: TrackSoundcloudIn):
+    """Scarica via yt-dlp l'audio di una singola traccia SoundCloud (dal dettaglio
+    traccia) e la collega come file posseduto. Stessa barra/job del download
+    Soulseek: un solo download alla volta."""
+    if not soundcloud_available():
+        raise api_error(409, "ytdlp_unavailable", "yt-dlp not available on the backend.")
+    if not _ffmpeg_available():
+        raise api_error(409, "ffmpeg_unavailable", "ffmpeg not available on the backend.")
+    if not settings.slskd_download_dir:
+        raise api_error(409, "download_dir_not_configured",
+                        "Download dir not configured (SLSKD_DOWNLOAD_DIR).")
+    if job.is_running():
+        raise api_error(409, "download_already_running", "A download is already running.")
+    db = SessionLocal()
+    try:
+        track = get_track(db, req.track_id)
+        if track is None:
+            raise api_error(404, "track_not_found", "Track not found.")
+        if track.platform != "soundcloud" or not track.url:
+            raise api_error(422, "not_a_soundcloud_track", "Track has no SoundCloud URL.")
+        return {"available": True, **job.start_soundcloud_track_job(track.id)}
+    finally:
+        db.close()
 
 
 @router.post("/search", response_model=list[CandidateOut])
