@@ -57,12 +57,13 @@ function Indicator({ row }: { row: FileRow }) {
 }
 
 export function FilesTable({
-  rows, sort, dir, onSort,
+  rows, sort, dir, onSort, onEdit,
 }: {
   rows: FileRow[];
   sort: SortKey;
   dir: SortDir;
   onSort: (col: SortKey) => void;
+  onEdit: (row: FileRow) => void;
 }) {
   const headProps = { sort, dir, onSort };
   return (
@@ -82,7 +83,11 @@ export function FilesTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className="border-b border-surface-2 last:border-0 hover:bg-surface">
+            <tr
+              key={r.id}
+              onClick={() => onEdit(r)}
+              className="cursor-pointer border-b border-surface-2 last:border-0 hover:bg-surface"
+            >
               <td className="py-1 pl-3 pr-0">
                 <CoverThumb fileId={r.id} source={r.cover_source} />
               </td>

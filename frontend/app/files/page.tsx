@@ -8,6 +8,7 @@ import {
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { FilesTable } from "@/components/files-table";
+import { FileEditPanel } from "@/components/file-edit-panel";
 import { SourceMenu } from "@/components/source-menu";
 import { Alert, Button, EmptyState, Input, Loading, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
@@ -66,6 +67,7 @@ export default function FilesPage() {
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<FileRow | null>(null);
 
   const loadRoots = useCallback(() => {
     listSources().then(setRoots).catch(() => {});
@@ -226,9 +228,21 @@ export default function FilesPage() {
         ) : rows.length === 0 && !offline ? (
           <EmptyState title={t.files.emptyTitle}>{t.files.emptyBody}</EmptyState>
         ) : (
-          <FilesTable rows={rows} sort={sort} dir={dir} onSort={onSort} />
+          <FilesTable rows={rows} sort={sort} dir={dir} onSort={onSort} onEdit={setEditing} />
         )}
       </div>
+
+      {editing && (
+        <FileEditPanel
+          row={editing}
+          facets={facets}
+          onClose={() => setEditing(null)}
+          onSaved={(updated) => {
+            setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+            setEditing(null);
+          }}
+        />
+      )}
     </PageLayout>
   );
 }
