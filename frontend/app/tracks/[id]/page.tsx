@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, use, useEffect, useState } from "react";
 import { useBackLink } from "@/lib/back-link";
 import { ArrowLeft, Check, Download, ExternalLink, Link2, ArrowRightLeft, Pencil } from "lucide-react";
-import { apiGet, downloadTrackAuto, fmtDuration, transitions, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
+import { apiGet, downloadTrackAuto, downloadTrackSoundcloud, fmtDuration, transitions, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Loading, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
@@ -45,6 +45,8 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
   const [linking, setLinking] = useState(false);
   const [dlState, setDlState] = useState<"idle" | "running" | "queued">("idle");
   const [dlError, setDlError] = useState<string | null>(null);
+  const [scState, setScState] = useState<"idle" | "running" | "queued">("idle");
+  const [scError, setScError] = useState<string | null>(null);
 
   useEffect(() => {
     apiGet<TrackDetail>(`/api/tracks/${id}`).then(setTrack).catch((e) => setError(String(e.message ?? e)));
@@ -64,6 +66,19 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
     } catch (e) {
       setDlError(String((e as { message?: string })?.message ?? e));
       setDlState("idle");
+    }
+  };
+
+  const downloadSoundcloud = async () => {
+    setScState("running");
+    setScError(null);
+    try {
+      await downloadTrackSoundcloud(track.id);
+      // Stesso job bar globale del download Soulseek: aggancia il progresso da solo.
+      setScState("queued");
+    } catch (e) {
+      setScError(String((e as { message?: string })?.message ?? e));
+      setScState("idle");
     }
   };
 
@@ -133,6 +148,13 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
                       : <><Download size={14} /> {t.tracks.searchSoulseek}</>}
                   </Button>
                 )}
+                {!track.has_local_file && track.platform === "soundcloud" && track.url && (
+                  <Button size="sm" variant={scState === "queued" ? "ghost" : "outline"} onClick={downloadSoundcloud} disabled={scState !== "idle"}>
+                    {scState === "queued" ? <><Check size={14} /> {t.tracks.soundcloudQueued}</>
+                      : scState === "running" ? <Spinner />
+                      : <><Download size={14} /> {t.tracks.downloadSoundcloud}</>}
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" onClick={() => setLinking(true)}>
                   <Link2 size={14} /> {track.has_local_file ? t.tracks.replaceFile : t.tracks.linkFile}
                 </Button>
@@ -140,6 +162,7 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
             }
           />
           {dlError && <p className="border-b border-border/50 px-4 py-2 text-xs text-danger">⚠ {dlError}</p>}
+          {scError && <p className="border-b border-border/50 px-4 py-2 text-xs text-danger">⚠ {scError}</p>}
           <table className="w-full text-sm">
             <tbody>
               <tr className="border-b border-border/50 last:border-0">

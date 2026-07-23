@@ -459,6 +459,8 @@ export const en = {
     linkAction: "Link",
     searchSoulseek: "Search on Soulseek",
     soulseekQueued: "Search started",
+    downloadSoundcloud: "Download from SoundCloud",
+    soundcloudQueued: "Download started",
   },
   playlists: {
     pageTitle: "Playlist",
