@@ -345,8 +345,14 @@ def add_track_to_playlist(db: Session, track: Track, playlist: Playlist, *,
     ).first()
     if exists:
         return
+    max_pos = db.scalar(
+        select(func.max(playlist_tracks.c.position)).where(
+            playlist_tracks.c.playlist_id == playlist.id
+        )
+    )
     db.execute(playlist_tracks.insert().values(
         playlist_id=playlist.id, track_id=track.id, added_at=added_at, added_by=added_by,
+        position=(max_pos or 0) + 1,
     ))
 
 
@@ -382,7 +388,11 @@ def tracks_for_playlist(db: Session, playlist_id: int) -> list[Track]:
         .options(selectinload(Track.playlists))
         .join(playlist_tracks, playlist_tracks.c.track_id == Track.id)
         .where(playlist_tracks.c.playlist_id == playlist_id)
-        .order_by(playlist_tracks.c.added_at.is_(None), playlist_tracks.c.added_at)
+        .order_by(
+            playlist_tracks.c.position.is_(None), playlist_tracks.c.position,
+            playlist_tracks.c.added_at.is_(None), playlist_tracks.c.added_at,
+            Track.id,
+        )
     ).all())
 
 
