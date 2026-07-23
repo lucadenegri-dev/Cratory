@@ -50,7 +50,7 @@ def get_tracks(  # noqa: PLR0913
     has_soundcloud: bool | None = None,
     has_local_file: bool | None = None,
     archived: bool = False,
-    in_playlist: int | None = None,
+    in_playlist: list[int] | None = Query(default=None),
     incomplete_metadata: bool | None = None,
     sort: str | None = Query(
         default=None,

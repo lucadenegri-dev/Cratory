@@ -60,3 +60,18 @@ def test_in_playlist_combina_con_genre(client_db):
     r = client.get("/api/tracks", params={"in_playlist": pl.id, "genre": "House"})
     assert r.status_code == 200
     assert [t["title"] for t in r.json()["items"]] == ["h"]
+
+
+def test_in_playlist_unione_di_piu_playlist(client_db):
+    client, db = client_db
+    pa = Playlist(platform="manual", name="A", kind="manual")
+    pb = Playlist(platform="manual", name="B", kind="manual")
+    db.add_all([pa, pb]); db.flush()
+    a, b, c = _tr(db, "a"), _tr(db, "b"), _tr(db, "c")
+    add_track_to_playlist(db, a, pa)
+    add_track_to_playlist(db, b, pb)
+    db.commit()  # c non e' in nessuna delle due
+
+    r = client.get("/api/tracks", params={"in_playlist": [pa.id, pb.id]})
+    assert r.status_code == 200
+    assert sorted(t["title"] for t in r.json()["items"]) == ["a", "b"]

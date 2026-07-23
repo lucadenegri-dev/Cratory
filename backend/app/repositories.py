@@ -50,7 +50,7 @@ def _apply_track_filters(  # noqa: PLR0913
     has_local_file: bool | None = None,
     incomplete_metadata: bool | None = None,
     archived: bool = False,
-    in_playlist: int | None = None,
+    in_playlist: list[int] | None = None,
 ):
     if artist:
         stmt = stmt.where(Track.artist.ilike(f"%{artist}%"))
@@ -93,10 +93,10 @@ def _apply_track_filters(  # noqa: PLR0913
             Track.title.is_(None) | Track.artist.is_(None)
             | Track.bpm.is_(None) | Track.camelot_key.is_(None)
         )
-    if in_playlist is not None:
+    if in_playlist:
         stmt = stmt.where(Track.id.in_(
             select(playlist_tracks.c.track_id).where(
-                playlist_tracks.c.playlist_id == in_playlist
+                playlist_tracks.c.playlist_id.in_(in_playlist)
             )
         ))
     # Scartate: fuori da ogni vista di default; archived=True le mostra da sole.
