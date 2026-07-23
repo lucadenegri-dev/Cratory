@@ -462,12 +462,13 @@ def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
             select(playlist_tracks.c.playlist_id).where(playlist_tracks.c.track_id == keep.id)
         )
     }
-    for pid, added in db.execute(
-        select(playlist_tracks.c.playlist_id, playlist_tracks.c.added_at)
+    for pid, added, pos in db.execute(
+        select(playlist_tracks.c.playlist_id, playlist_tracks.c.added_at, playlist_tracks.c.position)
         .where(playlist_tracks.c.track_id == drop.id)
     ).all():
         if pid not in keep_pls:
-            db.execute(playlist_tracks.insert().values(playlist_id=pid, track_id=keep.id, added_at=added))
+            db.execute(playlist_tracks.insert().values(
+                playlist_id=pid, track_id=keep.id, added_at=added, position=pos))
     db.execute(playlist_tracks.delete().where(playlist_tracks.c.track_id == drop.id))
     # Membership set: ripunta i SetlistTrack di drop a keep.
     db.execute(
