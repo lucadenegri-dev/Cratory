@@ -531,7 +531,6 @@ export const en = {
     trackRemoved: (title: string) => `"${title}" removed from the playlist.`,
     trackRemovedWithLead: (title: string) => `"${title}" removed from the playlist and deleted as an orphan lead.`,
     removeTrackFailed: (msg: string) => `Track removal failed: ${msg}`,
-    moveToTopTitle: "Move to top",
     editPositionTitle: "Change position",
     reorderPositionAria: "New position",
     reorderFailed: (msg: string) => `Reorder failed: ${msg}`,
