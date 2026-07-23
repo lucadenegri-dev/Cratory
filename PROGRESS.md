@@ -32,6 +32,28 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-23 - Download SoundCloud via yt-dlp dal dettaglio traccia
+
+- Pulsante **"Scarica da SoundCloud"** nella pagina di dettaglio traccia
+  (`frontend/app/tracks/[id]/page.tsx`): scarica l'audio della traccia via yt-dlp e lo
+  estrae in MP3 dentro la stessa cartella condivisa `SLSKD_DOWNLOAD_DIR`, collegandolo
+  alla `Track` esistente (`has_local_file`/`local_path`/`local_format`/`local_bitrate`,
+  via `attach_local_file`) — stessa logica di linking di Soulseek, i tag restano compito
+  di Sortory.
+- Nuovo modulo `backend/app/integrations/soundcloud_audio.py`
+  (`download_track_audio`/`SoundCloudAudioError`), riusa il guard anti-SSRF gia'
+  presente in `integrations/soundcloud.py` (`validate_soundcloud_url`).
+- Job condiviso con Soulseek in `soulseek_download_job.py`: `_run_soundcloud` /
+  `start_soundcloud_track_job` riusano lo stesso stato/lock e la stessa barra di
+  avanzamento in UI (nessun nuovo poller — `jobs-provider` gia' polla
+  `GET /api/downloads/status`); un solo download alla volta, con rollback se
+  l'estrazione fallisce (niente traccia mezzo-posseduta).
+- Nuovo endpoint `POST /api/downloads/track/soundcloud` (`202`) in
+  `routers/downloads.py`, con gating su yt-dlp/ffmpeg non disponibili, cartella di
+  download non configurata, job gia' in corso, traccia inesistente o non-SoundCloud.
+- Test: `test_soundcloud_audio.py`, `test_soundcloud_download_job.py`,
+  `test_soundcloud_download_router.py`, `test_soundcloud_validate_url.py`.
+
 ## Milestone 2026-07-23 - Login Soulseek dalla pagina Settings
 
 - Nuova card **Soulseek** in Settings (`frontend/app/settings/page.tsx`,

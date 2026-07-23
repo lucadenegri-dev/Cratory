@@ -19,13 +19,17 @@ mutates the file (tags remain Sortory's job). The Shazam module downloads audio 
 temporarily for fingerprinting and saves a separate corpus of identified tracklists. An
 explicit exception to "does not keep audio files": persistent acquisition via
 Soulseek/slskd, which links a file to the existing `Track` in the library
-(`has_local_file`/`local_path`/`local_format`/`local_bitrate`). Eccezione ulteriore, a scope
-ristretto: il dig di Discovery riproduce una **preview effimera di terzi** (clip iTunes
-30s, in fallback il video YouTube associato alla release da Discogs, oppure — quando il
-lead viene da Bandcamp — lo stream reale per-traccia che Bandcamp restituisce già dentro
-il risultato del dig, senza risoluzione aggiuntiva) per valutare un lead prima di
-acquisirlo; nulla viene scaricato o conservato in nessun caso. Lo stesso player docked
-condiviso riproduce sia questa preview sia le tracce possedute.
+(`has_local_file`/`local_path`/`local_format`/`local_bitrate`). A parallel exception:
+per-track SoundCloud download via yt-dlp from the track detail page, which extracts an
+MP3 into the same shared download folder (`SLSKD_DOWNLOAD_DIR`) and links it to the
+existing `Track` (`has_local_file`/`local_path`/`local_format`/`local_bitrate`); tags
+stay Sortory's job. Eccezione ulteriore, a scope ristretto: il dig di Discovery
+riproduce una **preview effimera di terzi** (clip iTunes 30s, in fallback il video
+YouTube associato alla release da Discogs, oppure — quando il lead viene da Bandcamp —
+lo stream reale per-traccia che Bandcamp restituisce già dentro il risultato del dig,
+senza risoluzione aggiuntiva) per valutare un lead prima di acquisirlo; nulla viene
+scaricato o conservato in nessun caso. Lo stesso player docked condiviso riproduce sia
+questa preview sia le tracce possedute.
 
 ## Source of truth
 

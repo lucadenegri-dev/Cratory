@@ -563,6 +563,7 @@ DELETE /api/downloads/pending/{track_id}
 POST   /api/downloads/candidates
 POST /api/downloads/playlist/{playlist_id}
 POST /api/downloads/track
+POST   /api/downloads/track/soundcloud
 POST   /api/downloads/search
 POST   /api/downloads/manual
 ```
@@ -611,6 +612,14 @@ if slskd is not configured or a job is already in progress.
 explicitly chosen candidate (mini-selector, e.g. from Discovery). Request: `track_id`,
 `candidate` (same shape as `CandidateOut`). `404` if the track does not exist, `409` if
 slskd is not configured or a job is already in progress.
+
+`POST /api/downloads/track/soundcloud` (`202`) downloads via yt-dlp the audio of a
+single SoundCloud track (`platform == "soundcloud"`, `url` present), extracts it to MP3
+into the shared `SLSKD_DOWNLOAD_DIR` folder and links it to the `Track`
+(`has_local_file`). Reuses the Soulseek download job/bar (one download at a time).
+Request: `{track_id}`. Response: `202 {"available": true, ...job_state}`. Errors: `409
+ytdlp_unavailable` · `409 ffmpeg_unavailable` · `409 download_dir_not_configured` ·
+`409 download_already_running` · `404 track_not_found` · `422 not_a_soundcloud_track`.
 
 The job is single-instance (one download at a time, like library indexing): an error
 on one track does not stop the others. The UI polls `GET /api/downloads/status` during
