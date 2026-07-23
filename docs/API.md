@@ -642,12 +642,15 @@ daemon, reusing the `SLSKD_API_KEY` already in use (maps onto slskd's
 
 `GET /api/slskd/status` returns `configured` (`SLSKD_URL` present — we know where the
 daemon is), `reachable` (the daemon answered), `is_connected`, `is_logged_in`,
-`is_connecting`, `is_transitioning`, `state` (raw slskd state string) and `username`
+`is_connecting`, `is_transitioning`, `state` (raw slskd state string), `username`
 (the Soulseek account configured in slskd, from `GET /api/v0/options`; password stays
-masked). The connection flags are meaningful only when `reachable`. Two graceful
-degradations, both `200` (so the UI can poll without treating them as hard errors):
-`SLSKD_URL` empty -> `configured:false`; daemon unreachable -> `configured:true`,
-`reachable:false`.
+masked) and `web_url` (slskd's web UI = `SLSKD_URL`, trailing slash stripped; `null`
+when unconfigured). `web_url` is populated as soon as `configured`, **even when the
+daemon is unreachable** — the Wishlist links to it so the user can search/download by
+hand in slskd exactly when a Cratory download fails. The connection flags are meaningful
+only when `reachable`. Two graceful degradations, both `200` (so the UI can poll without
+treating them as hard errors): `SLSKD_URL` empty -> `configured:false`; daemon
+unreachable -> `configured:true`, `reachable:false`.
 
 `POST /api/slskd/connect` connects the daemon to the Soulseek network (login with the
 credentials already in slskd) and `POST /api/slskd/disconnect` disconnects it; both

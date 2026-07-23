@@ -2,20 +2,19 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronRight, Download as DownloadIcon, Heart, Link2, Search } from "lucide-react";
+import { Download as DownloadIcon, ExternalLink, Heart, Link2 } from "lucide-react";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, Button, Card, Checkbox, EmptyState, Input, Loading, Select } from "@/components/ui";
+import { ButtonLink } from "@/components/button-link";
 import { useJobs } from "@/components/jobs-provider";
 import { WishlistRow } from "@/components/wishlist-row";
-import { SlskSearchResults } from "@/components/slsk-search-results";
 import { DownloadReviewModal, type ReviewTarget } from "@/components/download-review-modal";
 import { LinkLocalFileModal, type LinkTarget } from "@/components/link-local-file-modal";
 import { AutoLinkModal } from "@/components/auto-link-modal";
 import { ConfirmModal } from "@/components/confirm-modal";
 import {
-  apiGet, downloadManual, downloadTrackAuto, errText, ignoreDownload, listImportedPlaylists,
-  retryPending, searchDownloads, startPlaylistDownload, trackLabel, updateTrack,
-  type DownloadCandidate, type Playlist, type Track,
+  apiGet, downloadTrackAuto, errText, ignoreDownload, retryPending,
+  slskdStatus, trackLabel, updateTrack, type Track,
 } from "@/lib/api";
 import { statusTab, wishlistStatus, type WishlistTab } from "@/lib/wishlist-status";
 import { useT } from "@/lib/i18n";
@@ -46,15 +45,12 @@ function WishlistInner() {
   const [showArchived, setShowArchived] = useState(searchParams.get("archived") === "1");
 
   const [items, setItems] = useState<Track[] | null>(null);
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [bulkPlaylist, setBulkPlaylist] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Ricerca Soulseek libera ("FreeDownload"): in testa alla pagina, chiusa di default.
-  const [slskOpen, setSlskOpen] = useState(false);
-  const [slskQuery, setSlskQuery] = useState("");
-  const [slskResults, setSlskResults] = useState<DownloadCandidate[] | null>(null);
-  const [slskSearching, setSlskSearching] = useState(false);
+  // Link alla web UI di slskd (= SLSKD_URL, esposto da /api/slskd/status): per
+  // cercare/scaricare a mano quando il download da Cratory non riesce. null se
+  // slskd non e' configurato -> il blocco non compare.
+  const [slskdWebUrl, setSlskdWebUrl] = useState<string | null>(null);
 
   const [review, setReview] = useState<ReviewTarget | null>(null);
   const [linking, setLinking] = useState<LinkTarget | null>(null);
@@ -83,8 +79,10 @@ function WishlistInner() {
     return () => ac.abort();
   }, [load, jobStatus?.status, jobStatus?.processed]);
 
+  // Solo per il link "Apri slskd": web_url resta valorizzato anche se il demone
+  // e' irraggiungibile (e' proprio quando serve andare a cercare a mano).
   useEffect(() => {
-    listImportedPlaylists().then((p) => alive.current && setPlaylists(p)).catch(() => undefined);
+    slskdStatus().then((s) => alive.current && setSlskdWebUrl(s.web_url)).catch(() => undefined);
   }, []);
 
   // Querystring corrente derivata dallo stato dei filtri: unica fonte sia per la
@@ -144,17 +142,7 @@ function WishlistInner() {
   const onClearOutcome = (tr: Track) => act(() => ignoreDownload(tr.id), () => load());
   const onArchive = (tr: Track) => act(() => updateTrack(tr.id, { archived: true }), () => load());
   const onRestore = (tr: Track) => act(() => updateTrack(tr.id, { archived: false }), () => load());
-  const startBulk = () => bulkPlaylist && act(() => startPlaylistDownload(Number(bulkPlaylist)), refresh);
   const retryAll = () => act(() => retryPending(), refresh);
-  const runSlskSearch = async () => {
-    const q = slskQuery.trim();
-    if (!q) return;
-    setSlskSearching(true); setError(null); setSlskResults(null);
-    try { setSlskResults(await searchDownloads(q)); }
-    catch (e) { setError(errText(e)); }
-    finally { setSlskSearching(false); }
-  };
-  const grab = (c: DownloadCandidate) => act(() => downloadManual(c), refresh);
 
   return (
     <PageLayout title={t.wishlist.pageTitle} meta={items?.length || undefined}>
@@ -162,47 +150,23 @@ function WishlistInner() {
         {!available && <Alert tone="info">{t.downloads.notConfigured}</Alert>}
         {error && <Alert tone="danger">⚠ {error}</Alert>}
 
-        {/* Ricerca Soulseek libera ("FreeDownload"): in testa, collassabile (chiusa di default) */}
-        <section>
-          {/* Titolo piu' evidente del solito 10px: la ricerca libera e' un
-              punto d'ingresso primario della pagina, non un dettaglio. */}
-          <button type="button" onClick={() => setSlskOpen((v) => !v)}
-            className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wider text-fg hover:text-fg-strong">
-            {slskOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            <Search size={14} className="text-muted" /> {t.wishlist.soulseekHeading}
-          </button>
-          {slskOpen && (
-            <div className="mt-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Input value={slskQuery} onChange={(e) => setSlskQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") runSlskSearch(); }}
-                  placeholder={t.downloads.searchPlaceholder} disabled={!available} />
-                <Button variant="outline" onClick={runSlskSearch} disabled={!available || slskSearching || !slskQuery.trim()}>
-                  <Search size={14} /> {t.downloads.searchButton}
-                </Button>
-              </div>
-              {slskSearching && <Loading label={t.downloads.searchingLabel} />}
-              {slskResults && slskResults.length === 0 && !slskSearching && (
-                <p className="mt-2 text-sm text-faint">{t.downloads.noSearchResults(slskQuery)}</p>
-              )}
-              {slskResults && slskResults.length > 0 && (
-                <SlskSearchResults results={slskResults} onGrab={grab} running={running} />
-              )}
-            </div>
-          )}
-        </section>
+        {/* Soulseek: link alla web UI di slskd per cercare/scaricare a mano.
+            Reso solo se SLSKD_URL e' configurato (web_url != null); compare anche
+            quando il demone e' irraggiungibile — che e' proprio quando serve. */}
+        {slskdWebUrl && (
+          <section>
+            <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.wishlist.soulseekHeading}</div>
+            <ButtonLink href={slskdWebUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">
+              <ExternalLink size={14} /> {t.wishlist.soulseekOpen}
+            </ButtonLink>
+            <p className="mt-2 text-sm text-faint">{t.wishlist.soulseekHint}</p>
+          </section>
+        )}
 
         {/* Azioni di gruppo */}
         <section>
           <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.wishlist.bulkHeading}</div>
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={bulkPlaylist} onChange={(e) => setBulkPlaylist(e.target.value)} disabled={!downloadsAvailable}>
-              <option value="">{t.downloads.choosePlaylistOption}</option>
-              {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </Select>
-            <Button onClick={startBulk} disabled={!downloadsAvailable || !bulkPlaylist}>
-              <DownloadIcon size={14} /> {t.downloads.downloadPlaylistButton}
-            </Button>
             <Button variant="outline" onClick={retryAll} disabled={!downloadsAvailable}>
               <DownloadIcon size={13} /> {t.downloads.retryAllButton}
             </Button>

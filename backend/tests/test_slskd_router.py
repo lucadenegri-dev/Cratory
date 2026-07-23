@@ -54,6 +54,8 @@ def test_status_not_configured_returns_configured_false(monkeypatch):
     body = r.json()
     assert body["configured"] is False
     assert body["is_connected"] is False
+    # Non configurato -> nessun URL da linkare.
+    assert body["web_url"] is None
 
 
 def test_status_returns_connection_state(monkeypatch):
@@ -66,6 +68,7 @@ def test_status_returns_connection_state(monkeypatch):
     assert body["is_connected"] is True
     assert body["is_logged_in"] is True
     assert body["username"] == "lucadenegri"
+    assert body["web_url"] == "http://localhost:5030"
 
 
 def test_status_unreachable_daemon_returns_reachable_false(monkeypatch):
@@ -76,6 +79,14 @@ def test_status_unreachable_daemon_returns_reachable_false(monkeypatch):
     assert body["configured"] is True
     assert body["reachable"] is False
     assert body["is_connected"] is False
+    # web_url c'e' anche col demone giu': e' proprio quando serve il link manuale.
+    assert body["web_url"] == "http://localhost:5030"
+
+
+def test_status_web_url_strips_trailing_slash(monkeypatch):
+    _use_client(monkeypatch, _FakeClient(state=CONNECTED), url="http://localhost:5030/")
+    body = TestClient(app).get("/api/slskd/status").json()
+    assert body["web_url"] == "http://localhost:5030"
 
 
 def test_connect_calls_client_and_returns_status(monkeypatch):
