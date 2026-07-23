@@ -616,6 +616,37 @@ The job is single-instance (one download at a time, like library indexing): an e
 on one track does not stop the others. The UI polls `GET /api/downloads/status` during
 execution.
 
+## Soulseek connection (slskd server)
+
+```text
+GET  /api/slskd/status
+POST /api/slskd/connect
+POST /api/slskd/disconnect
+```
+
+Login to the Soulseek network from the Settings page. The Soulseek account credentials
+are **not** handled here: they stay in slskd's own config (`slskd.yml` or
+`SLSKD_SLSK_USERNAME`/`SLSKD_SLSK_PASSWORD`) — slskd's REST API exposes no clean way to
+set them. Cratory only reads the connection state and drives connect/disconnect on the
+daemon, reusing the `SLSKD_API_KEY` already in use (maps onto slskd's
+`GET`/`PUT`/`DELETE /api/v0/server`).
+
+`GET /api/slskd/status` returns `configured` (`SLSKD_URL` present — we know where the
+daemon is), `reachable` (the daemon answered), `is_connected`, `is_logged_in`,
+`is_connecting`, `is_transitioning`, `state` (raw slskd state string) and `username`
+(the Soulseek account configured in slskd, from `GET /api/v0/options`; password stays
+masked). The connection flags are meaningful only when `reachable`. Two graceful
+degradations, both `200` (so the UI can poll without treating them as hard errors):
+`SLSKD_URL` empty -> `configured:false`; daemon unreachable -> `configured:true`,
+`reachable:false`.
+
+`POST /api/slskd/connect` connects the daemon to the Soulseek network (login with the
+credentials already in slskd) and `POST /api/slskd/disconnect` disconnects it; both
+return the refreshed status. slskd stays "in transition" for a few seconds after the
+action (Connecting -> LoggingIn -> LoggedIn), so the UI polls `status` until
+`is_transitioning` is false. `409` if `SLSKD_URL` is not configured, `502` on slskd
+error.
+
 ## AI and services
 
 ```text
