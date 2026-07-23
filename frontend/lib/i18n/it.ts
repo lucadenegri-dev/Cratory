@@ -461,6 +461,8 @@ export const it: Dictionary = {
     linkAction: "Collega",
     searchSoulseek: "Cerca su Soulseek",
     soulseekQueued: "Ricerca avviata",
+    downloadSoundcloud: "Scarica da SoundCloud",
+    soundcloudQueued: "Download avviato",
   },
   playlists: {
     pageTitle: "Playlist",

@@ -22,6 +22,7 @@ from app.integrations.slskd import (
 from app.repositories import get_track, tracks_without_local_file
 from app.services.acquisition import attach_local_file
 from app.services.soulseek_select import auto_pick_candidates, search_candidates
+from app.integrations.soundcloud_audio import SoundCloudAudioError, download_track_audio
 
 logger = logging.getLogger(__name__)
 
@@ -304,16 +305,20 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
         db.close()
 
 
+def _reset_running_state(total: int, playlist_id: int | None) -> None:
+    _state.update(status="running", processed=0, total=total,
+                  downloaded=0, needs_review=0, not_found=0, failed=0,
+                  playlist_id=playlist_id, items=[], error=None,
+                  current_label=None,
+                  started_at=datetime.now(timezone.utc).isoformat(),
+                  finished_at=None)
+
+
 def _start(items, playlist_id) -> dict:
     with _lock:
         if _state["status"] == "running":
             return job_state()
-        _state.update(status="running", processed=0, total=len(items),
-                      downloaded=0, needs_review=0, not_found=0, failed=0,
-                      playlist_id=playlist_id, items=[], error=None,
-                      current_label=None,
-                      started_at=datetime.now(timezone.utc).isoformat(),
-                      finished_at=None)
+        _reset_running_state(len(items), playlist_id)
     threading.Thread(target=_run, args=(items, playlist_id), daemon=True).start()
     return job_state()
 
@@ -352,3 +357,67 @@ def start_track_autopick_job(track_id: int) -> dict:
 def start_manual_job(chosen: SlskdFile) -> dict:
     """Ricerca manuale: scarica il candidato scelto e lo cataloga in libreria."""
     return _start([(None, chosen)], None)
+
+
+def start_soundcloud_track_job(track_id: int) -> dict:
+    """Scarica via yt-dlp l'audio di una singola traccia SoundCloud e la collega.
+
+    Riusa lo stesso stato/lock/barra del download Soulseek (un solo download alla
+    volta). Nessun candidato slskd: scarica direttamente da track.url.
+    """
+    with _lock:
+        if _state["status"] == "running":
+            return job_state()
+        _reset_running_state(1, None)
+    threading.Thread(target=_run_soundcloud, args=(track_id,), daemon=True).start()
+    return job_state()
+
+
+def _run_soundcloud(track_id: int) -> None:
+    """Worker: scarica l'audio SoundCloud della traccia e la collega. Niente slskd."""
+    db = SessionLocal()
+    outcome = "failed"
+    reason: str | None = None
+    try:
+        track = get_track(db, track_id)
+        if track is None:
+            _state.update(status="error", error="track_not_found")
+            return
+        _state["current_label"] = _track_label(track)
+        try:
+            path = download_track_audio(track.url, settings.slskd_download_dir)
+            quality = read_audio_quality(path)
+            attach_local_file(db, track, path=path, fmt=quality["format"],
+                              bitrate=quality["bitrate"])
+            outcome = "downloaded"
+        except SoundCloudAudioError as exc:
+            # attach_local_file puo' aver gia' mutato track.has_local_file in memoria
+            # prima di fallire: rollback per non persistere un possesso solo parziale.
+            db.rollback()
+            reason = str(exc)
+            logger.warning("Download SoundCloud fallito per track_id=%s: %s", track_id, exc)
+        except Exception:  # noqa: BLE001 — un fallimento non deve lasciare il job appeso
+            db.rollback()
+            reason = "error"
+            logger.exception("Download SoundCloud fallito per track_id=%s", track_id)
+        _state[outcome] = _state.get(outcome, 0) + 1
+        _state["processed"] = 1
+        track.last_download_outcome = outcome
+        track.last_download_reason = reason
+        track.last_download_path = None
+        db.commit()
+        _state["items"].append({
+            "track_id": track_id,
+            "artist": track.artist,
+            "title": track.title,
+            "outcome": outcome,
+            "reason": reason,
+        })
+        _state.update(status="done")
+    except Exception as exc:  # noqa: BLE001
+        _state.update(status="error", error=str(exc))
+        logger.exception("Job download SoundCloud interrotto: %s", exc)
+    finally:
+        _state["current_label"] = None
+        _state["finished_at"] = datetime.now(timezone.utc).isoformat()
+        db.close()

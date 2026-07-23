@@ -12,6 +12,10 @@ export function downloadTrackAuto(trackId: number) {
   return apiPost<DownloadStatus>("/api/downloads/track/auto", { track_id: trackId });
 }
 
+export function downloadTrackSoundcloud(trackId: number) {
+  return apiPost<DownloadStatus>("/api/downloads/track/soundcloud", { track_id: trackId });
+}
+
 // --- Download (Soulseek/slskd) ----------------------------------------------
 
 export function downloadStatus() {

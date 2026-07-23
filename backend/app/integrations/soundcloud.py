@@ -53,6 +53,15 @@ def _validate_url(url: str) -> str:
     return url
 
 
+def validate_soundcloud_url(url: str) -> str:
+    """Valida un URL SoundCloud (allowlist host, solo http(s)) e lo ritorna.
+
+    Wrapper pubblico di `_validate_url`: stesso SSRF guard usato anche da
+    `soundcloud_audio`, senza importare un simbolo privato tra moduli.
+    """
+    return _validate_url(url)
+
+
 def is_likes_url(url: str) -> bool:
     """True per gli URL /likes: nel flusso import-playlist vanno rifiutati (422)."""
     return urlparse(url or "").path.rstrip("/").endswith("/likes")
