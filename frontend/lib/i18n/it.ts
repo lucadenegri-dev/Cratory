@@ -473,6 +473,12 @@ export const it: Dictionary = {
     soulseekQueued: "Ricerca avviata",
     downloadSoundcloud: "Scarica da SoundCloud",
     soundcloudQueued: "Download avviato",
+    addToPlaylist: "Aggiungi a playlist",
+    addToPlaylistNoManual: "Nessuna playlist manuale.",
+    createNewPlaylistOption: "Crea nuova playlist",
+    newPlaylistNamePlaceholder: "Nome nuova playlist…",
+    createAndAddButton: "Crea",
+    addToPlaylistFailed: (msg: string) => `Aggiunta fallita: ${msg}`,
   },
   playlists: {
     pageTitle: "Playlist",

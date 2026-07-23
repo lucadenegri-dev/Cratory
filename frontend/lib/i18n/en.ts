@@ -471,6 +471,12 @@ export const en = {
     soulseekQueued: "Search started",
     downloadSoundcloud: "Download from SoundCloud",
     soundcloudQueued: "Download started",
+    addToPlaylist: "Add to playlist",
+    addToPlaylistNoManual: "No manual playlists.",
+    createNewPlaylistOption: "Create new playlist",
+    newPlaylistNamePlaceholder: "New playlist name…",
+    createAndAddButton: "Create",
+    addToPlaylistFailed: (msg: string) => `Add failed: ${msg}`,
   },
   playlists: {
     pageTitle: "Playlist",
