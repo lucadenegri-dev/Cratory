@@ -534,6 +534,7 @@ export const it: Dictionary = {
     trackRemovedWithLead: (title: string) => `"${title}" tolta dalla playlist e rimossa come lead orfano.`,
     removeTrackFailed: (msg: string) => `Rimozione traccia fallita: ${msg}`,
     moveToTopTitle: "Sposta in cima",
+    editPositionTitle: "Cambia posizione",
     reorderPositionAria: "Nuova posizione",
     reorderFailed: (msg: string) => `Riordino fallito: ${msg}`,
     statTracksLabel: "Tracce",

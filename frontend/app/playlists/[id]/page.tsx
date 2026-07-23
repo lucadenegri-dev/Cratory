@@ -450,7 +450,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                           onClick={() => setEditingRank(tr.id)}
                           disabled={reordering}
                           className="tnum hover:text-fg"
-                          title={t.library.sortColumnHint}
+                          title={t.playlists.editPositionTitle}
                         >
                           {insertionRank.get(tr.id) ?? "—"}
                         </button>

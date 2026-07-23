@@ -32,6 +32,18 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-23 - Riordino manuale delle playlist + colonne Genere/Energia
+
+- La lista tracce di una playlist (`frontend/app/playlists/[id]/page.tsx`) mostra ora
+  anche le colonne **Genere** ed **Energia**.
+- Riordino manuale della colonna `#`: sulle sole playlist manuali si puo' spostare una
+  traccia a una posizione scelta, le altre scalano di conseguenza. Nuovo endpoint
+  `POST /api/playlists/{playlist_id}/reorder` (`routers/playlists.py`, `reorder_track` /
+  `reorder_playlist_track` in `repositories.py`): `409 playlist_not_manual` fuori dalle
+  playlist manuali, `404 playlist_not_found` / `404 track_not_in_playlist`.
+- Colonna `playlist_tracks.position` resa persistente, con backfill idempotente delle
+  righe esistenti (`_migrate_backfill_playlist_positions` in `db.py`).
+
 ## Milestone 2026-07-23 - Playlist da libreria: multi-selezione, filtri e "Aggiungi a playlist"
 
 - Pagina **"Crea playlist da libreria"** (`frontend/app/playlists/import-manual/page.tsx`)
