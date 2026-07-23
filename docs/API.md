@@ -121,6 +121,7 @@ POST   /api/playlists/sync-all
 GET    /api/playlists/import/status
 POST   /api/playlists/import-manual
 POST   /api/playlists/create-from-tracks
+POST   /api/playlists/{playlist_id}/add-tracks
 GET    /api/playlists
 GET    /api/playlists/{playlist_id}
 DELETE /api/playlists/{playlist_id}
@@ -162,6 +163,13 @@ job, BPM/key come only from the Rekordbox import.
 tracks already in the library (disk-first), in the given order. Request:
 `{name, track_ids}`. Response: `PlaylistOut`. `422` if the name is empty or a
 track_id does not exist.
+`POST /api/playlists/{playlist_id}/add-tracks` adds tracks already in the library to
+an **existing** playlist. Request: `{track_ids}` (at least one). Idempotent: track ids
+already in the playlist, and duplicate ids within the same request, are counted as
+`skipped` rather than added twice; every new membership is marked `added_by="cratory"`
+so a later sync prune never removes it. `404 playlist_not_found` if the playlist does
+not exist; `422 tracks_not_found` (with `missing`) if any track id does not exist.
+Response: `{playlist, added, skipped}`.
 
 ## Tracks and library
 
@@ -182,8 +190,11 @@ Filters supported by `GET /api/tracks`: artist, title, album, genre, label
 (`label`, exact match) and archived (`archived`, default `false`: archived ones are
 excluded; `true` shows only the archived ones), source (incl. `local_files`), state
 (`imported` | `ready_for_set`), BPM min/max, key, duration, Spotify/SoundCloud
-presence, ownership (`has_local_file`), incomplete metadata, sort/order, limit/offset
-— for the tracks of a playlist use `GET /api/playlists/{playlist_id}/tracks`.
+presence, ownership (`has_local_file`), incomplete metadata, sort/order, limit/offset,
+and `in_playlist` (repeatable, e.g. `?in_playlist=1&in_playlist=2`): tracks belonging
+to **any** of the given playlists (union), AND-combined with every other filter (e.g.
+paired with `genre` it narrows to tracks in any of those playlists that also match the
+genre) — for the tracks of a single playlist use `GET /api/playlists/{playlist_id}/tracks`.
 
 `GET /api/tracks/{track_id}/cover` serves the artwork **embedded in the file** of an
 owned track, read on-demand from disk (not saved in the DB). Responds with the image
