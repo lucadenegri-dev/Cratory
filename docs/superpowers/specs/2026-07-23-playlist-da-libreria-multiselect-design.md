@@ -67,8 +67,13 @@ Due esigenze utente:
   - `recount_playlist` + commit + refresh.
 - Risposta `PlaylistAddTracksResult`: `{ playlist: PlaylistOut, added: int, skipped: int }`
   → la UI mostra "N aggiunte, M già presenti".
-- L'endpoint accetta **qualsiasi** playlist; i selettori nel frontend elencheranno solo le
-  playlist `kind="manual"` per evitare di sporcare quelle importate da streaming.
+- L'endpoint accetta **qualsiasi** playlist. Perimetro dei selettori nel frontend
+  (deciso in verifica, 2026-07-23): il **filtro "per playlist" in libreria elenca TUTTE
+  le playlist** (incluse le importate/liked/discovery) — "filtrando per le altre
+  playlist" deve funzionare subito con le playlist esistenti dell'utente. Invece i
+  **selettori di destinazione "aggiungi a esistente"** (dropdown in import-manual e
+  popover nel dettaglio traccia) elencano **solo le playlist `kind="manual"`**: le
+  importate restano specchio fedele dello streaming e non si sporcano.
 
 **3. Schemi (`backend/app/schemas.py`)**
 
@@ -92,8 +97,8 @@ Due esigenze utente:
   - ricerca testo `title` (esistente),
   - toggle "solo posseduti" → `has_local_file` (esistente),
   - **genere**: input testo con `datalist` dei generi noti → filtro `genre`,
-  - **playlist**: dropdown delle playlist manuali → filtro `in_playlist` (tracce dentro la
-    playlist scelta).
+  - **playlist**: dropdown di **tutte** le playlist (importate/liked/discovery/manuali) →
+    filtro `in_playlist` (tracce dentro la playlist scelta).
 - **Seleziona tutto**: casella in testata "Seleziona le N corrispondenti" che esegue un
   fetch `GET /api/tracks?...&limit=0` con i filtri correnti e seleziona **tutti** gli id
   risultanti (non solo quelli visibili). Deseleziona-tutto svuota la selezione. Contatore
