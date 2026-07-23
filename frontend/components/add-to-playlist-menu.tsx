@@ -23,6 +23,9 @@ export function AddToPlaylistMenu({ track, onChanged }: { track: TrackDetail; on
     if (!open) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSuccess(null);
+    setError(null);
+    setCreating(false);
+    setNewName("");
     listImportedPlaylists()
       .then((all) => setPlaylists(all.filter((p) => p.kind === "manual")))
       .catch(() => setPlaylists([]));
@@ -60,7 +63,8 @@ export function AddToPlaylistMenu({ track, onChanged }: { track: TrackDetail; on
     setError(null);
     setSuccess(null);
     try {
-      await createPlaylistFromTracks(newName.trim(), [track.id]);
+      const created = await createPlaylistFromTracks(newName.trim(), [track.id]);
+      setPlaylists((prev) => [...prev, created]);
       onChanged();
       setSuccess(t.tracks.createdPlaylist(newName.trim()));
       setNewName("");

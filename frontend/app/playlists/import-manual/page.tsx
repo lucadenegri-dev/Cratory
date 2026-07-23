@@ -100,13 +100,17 @@ export default function ImportManualPage() {
     try {
       const res = await addTracksToPlaylist(Number(addTarget), [...selectedTracks.keys()]);
       setFeedback(t.playlists.importManual.addedFeedback(res.added, res.skipped));
-      // Le tracce aggiunte ora fanno parte del target: aggiorna i badge e svuota la selezione.
-      const refreshed = await playlistTracks(Number(addTarget));
-      setTargetMemberIds(new Set(refreshed.map((tr) => tr.id)));
       setSelectedTracks(new Map());
-      setBusy(false);
+      // Refresh dei badge "già presente": best-effort, l'add è già andato a buon fine.
+      try {
+        const refreshed = await playlistTracks(Number(addTarget));
+        setTargetMemberIds(new Set(refreshed.map((tr) => tr.id)));
+      } catch {
+        /* ignora: il refresh dei badge non deve trasformare un add riuscito in errore */
+      }
     } catch (e) {
       setError(t.playlists.importManual.addFailed(errText(e)));
+    } finally {
       setBusy(false);
     }
   };
