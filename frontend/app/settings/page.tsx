@@ -2,10 +2,11 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Copy, Check, ExternalLink } from "lucide-react";
+import { Copy, Check, ExternalLink, Plug, Unplug } from "lucide-react";
 import {
-  apiGet, servicesStatus, setSoundcloudUsername, soundcloudStatus, SPOTIFY_LOGIN_URL, startLibraryIndex,
-  type ServiceStatus, type SoundCloudStatus, type SpotifyStatus,
+  apiGet, servicesStatus, setSoundcloudUsername, slskdConnect, slskdDisconnect, slskdStatus,
+  soundcloudStatus, SPOTIFY_LOGIN_URL, startLibraryIndex,
+  type ServiceStatus, type SlskdStatus, type SoundCloudStatus, type SpotifyStatus,
 } from "@/lib/api";
 import { Alert, Button, Card, CardHeader, Field, Input, Loading, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -133,7 +134,79 @@ function SettingsInner() {
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">SoundCloud</div>
       <SoundCloudCard />
+
+      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">Soulseek</div>
+      <SoulseekCard />
     </PageLayout>
+  );
+}
+
+function SoulseekCard() {
+  const t = useT();
+  const [status, setStatus] = useState<SlskdStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    slskdStatus()
+      .then((s) => { setStatus(s); setError(null); })
+      .catch((e) => setError(String((e as Error).message ?? e)));
+  }, []);
+  useEffect(load, [load]);
+
+  // Dopo connect/disconnect slskd resta "in transizione" per qualche secondo
+  // (Connecting → LoggingIn → LoggedIn): si fa polling breve e limitato finché
+  // lo stato si stabilizza, tenendo i pulsanti disabilitati nel frattempo.
+  const act = async (fn: () => Promise<SlskdStatus>) => {
+    setBusy(true); setError(null);
+    try {
+      let s = await fn();
+      setStatus(s);
+      for (let i = 0; i < 10 && (s.is_transitioning || s.is_connecting); i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        s = await slskdStatus();
+        setStatus(s);
+      }
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const st = ((): { text: string; strong: boolean } => {
+    if (!status) return { text: "—", strong: false };
+    if (!status.configured) return { text: t.settings.soulseekNotConfigured, strong: false };
+    if (!status.reachable) return { text: t.settings.soulseekUnreachable, strong: false };
+    if (status.is_connecting || status.is_transitioning) return { text: t.settings.soulseekConnecting, strong: false };
+    if (status.is_connected && status.is_logged_in) {
+      return { text: status.username ? t.settings.soulseekConnectedAs(status.username) : t.settings.soulseekConnected, strong: true };
+    }
+    return { text: t.settings.soulseekDisconnected, strong: false };
+  })();
+
+  const canAct = !!status?.configured && !!status?.reachable;
+  const connected = !!status?.is_connected && !!status?.is_logged_in;
+
+  return (
+    <Card>
+      <CardHeader title="Soulseek" subtitle={t.settings.soulseekSubtitle} />
+      <div className="flex items-center justify-between gap-4 p-4">
+        <span className={`text-sm ${st.strong ? "text-fg-strong" : "text-muted"}`}>{st.text}</span>
+        {canAct && (
+          connected ? (
+            <Button size="sm" variant="outline" onClick={() => act(slskdDisconnect)} disabled={busy}>
+              {busy ? <Spinner /> : <Unplug size={14} />} {t.settings.soulseekDisconnect}
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => act(slskdConnect)} disabled={busy}>
+              {busy ? <Spinner /> : <Plug size={14} />} {t.settings.soulseekConnect}
+            </Button>
+          )
+        )}
+      </div>
+      {error && <div className="px-4 pb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
+    </Card>
   );
 }
 

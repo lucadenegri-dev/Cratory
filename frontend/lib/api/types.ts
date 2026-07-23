@@ -408,6 +408,20 @@ export interface SoundCloudStatus {
   username: string | null;
 }
 
+/** Stato del login alla rete Soulseek via il demone slskd. `configured` = SLSKD_URL
+ *  presente; `reachable` = il demone ha risposto. I flag di connessione contano
+ *  solo se `reachable`. */
+export interface SlskdStatus {
+  configured: boolean;
+  reachable: boolean;
+  is_connected: boolean;
+  is_logged_in: boolean;
+  is_connecting: boolean;
+  is_transitioning: boolean;
+  state: string | null;
+  username: string | null;
+}
+
 export interface SoundCloudLikedTrackPreview {
   track_id: string;
   /** Titolo grezzo, come appare su SoundCloud (lo split artista/titolo avviene all'import). */

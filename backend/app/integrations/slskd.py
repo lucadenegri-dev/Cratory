@@ -79,6 +79,14 @@ class SlskdClient(ClosableHttpClient):
         raise_for_status(r, SlskdError, name="slskd")
         return r.json() if r.content else {}
 
+    def _put(self, path: str, json=None):
+        try:
+            r = self.http.put(f"{self.url}{BASE}{path}", json=json)
+        except httpx.HTTPError as exc:
+            raise SlskdError(f"slskd PUT {path} fallita: {exc}") from exc
+        raise_for_status(r, SlskdError, name="slskd")
+        return r.json() if r.content else {}
+
     def _delete(self, path: str, params: dict | None = None):
         try:
             r = self.http.delete(f"{self.url}{BASE}{path}", params=params)
@@ -86,6 +94,29 @@ class SlskdClient(ClosableHttpClient):
             raise SlskdError(f"slskd DELETE {path} fallita: {exc}") from exc
         raise_for_status(r, SlskdError, name="slskd")
         return r.json() if r.content else {}
+
+    def server_state(self) -> dict:
+        """Stato della connessione alla rete Soulseek (GET /server): flag booleani
+        `isConnected`/`isLoggedIn`/`isConnecting`/`isTransitioning` e `state`."""
+        return self._get("/server")
+
+    def connect(self) -> None:
+        """Connette il client alla rete Soulseek (PUT /server)."""
+        self._put("/server")
+
+    def disconnect(self) -> None:
+        """Disconnette il client dalla rete Soulseek (DELETE /server)."""
+        self._delete("/server")
+
+    def soulseek_username(self) -> str | None:
+        """Username dell'account Soulseek configurato in slskd (GET /options).
+
+        La password e' mascherata da slskd e non ci interessa: a Cratory serve
+        solo lo username per mostrare "connesso come ...". Sezione o campo
+        assenti -> None (nessun KeyError)."""
+        options = self._get("/options") or {}
+        soulseek = options.get("soulseek") or {}
+        return soulseek.get("username")
 
     def search(self, artist: str, title: str, *, response_limit: int = 30,
                search_timeout_ms: int = 6000, max_wait: float = 15.0,

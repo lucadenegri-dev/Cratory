@@ -32,6 +32,27 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-23 - Login Soulseek dalla pagina Settings
+
+- Nuova card **Soulseek** in Settings (`frontend/app/settings/page.tsx`,
+  `SoulseekCard`): stato della connessione alla rete Soulseek (connesso come
+  `<username>` / disconnesso / connessione in corso / demone irraggiungibile /
+  non configurato) e pulsante **Connetti/Disconnetti**. Dopo l'azione un polling
+  breve e limitato (~10s) attende che la transizione di slskd si stabilizzi.
+- Backend (opzione A, scelta dopo aver verificato l'API di slskd): le credenziali
+  Soulseek **restano nella config di slskd** (`slskd.yml`), Cratory non le
+  inserisce ne' le memorizza — l'API REST di slskd non espone un modo pulito per
+  impostarle (solo `upload_yaml` a token, con password mascherata). Cratory legge
+  lo stato e comanda connect/disconnect con l'API key gia' in uso:
+  `SlskdClient.server_state()` (GET /server), `connect()` (PUT /server),
+  `disconnect()` (DELETE /server), `soulseek_username()` (GET /options); nuovo
+  router `routers/slskd.py` con `GET /api/slskd/status` +
+  `POST /api/slskd/connect|disconnect`.
+- `status` distingue `configured` (SLSKD_URL presente) da `reachable` (il demone
+  ha risposto): demone giu' -> 200 con `reachable:false`, cosi' la UI puo' fare
+  polling senza trattarlo come errore duro. Test: `test_slskd_client.py` (+5),
+  `test_slskd_router.py` (nuovo, 6).
+
 ## Milestone 2026-07-23 - Modifica manuale di titolo e artista
 
 - Il modal "Modifica valori" (`frontend/components/track-edit-modal.tsx`, condiviso da

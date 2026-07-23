@@ -21,6 +21,7 @@ from app.routers import (
     rekordbox,
     services,
     sets,
+    slskd,
     soundcloud,
     spotify,
     tracks,
@@ -79,6 +80,7 @@ app.include_router(ai.router)
 app.include_router(discovery.router)
 app.include_router(dj_sets.router)
 app.include_router(services.router)
+app.include_router(slskd.router)
 app.include_router(downloads.router)
 app.include_router(files.router)
 app.include_router(pipeline.router)

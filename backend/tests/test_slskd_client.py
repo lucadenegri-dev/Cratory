@@ -30,6 +30,10 @@ class _FakeHttp:
         self.calls.append(("POST", url, json))
         return _Resp(self._match(url))
 
+    def put(self, url, json=None):
+        self.calls.append(("PUT", url, json))
+        return _Resp(self._match(url))
+
     def delete(self, url, params=None):
         self.calls.append(("DELETE", url, params))
         return _Resp(self._match(url))
@@ -108,6 +112,56 @@ def test_search_delete_failure_is_best_effort():
     c = SlskdClient(url="http://slskd.local:5030", api_key="k", http=http)
     files = c.search("Daft Punk", "Da Funk", max_wait=5.0, poll_interval=0.0)
     assert len(files) == 1  # nessuna eccezione propagata dal DELETE fallito
+
+
+def test_server_state_reads_server_endpoint():
+    # Lo stato della connessione alla rete Soulseek arriva da GET /server.
+    routes = {"/server": {"state": "Connected, LoggedIn", "isConnected": True,
+                          "isLoggedIn": True, "isConnecting": False,
+                          "isTransitioning": False}}
+    http = _FakeHttp(routes)
+    c = SlskdClient(url="http://slskd.local:5030", api_key="k", http=http)
+    state = c.server_state()
+    assert state["isConnected"] is True
+    assert state["isLoggedIn"] is True
+    assert any(call[0] == "GET" and call[1].endswith("/server") for call in http.calls)
+
+
+def test_connect_puts_to_server():
+    # Connettersi alla rete Soulseek = PUT /server (verbo confermato contro il
+    # ServerController di slskd).
+    http = _FakeHttp({})
+    c = SlskdClient(url="http://slskd.local:5030", api_key="k", http=http)
+    c.connect()
+    puts = [call for call in http.calls if call[0] == "PUT"]
+    assert len(puts) == 1
+    assert puts[0][1].endswith("/server")
+
+
+def test_disconnect_deletes_server():
+    # Disconnettersi = DELETE /server.
+    http = _FakeHttp({})
+    c = SlskdClient(url="http://slskd.local:5030", api_key="k", http=http)
+    c.disconnect()
+    deletes = [call for call in http.calls if call[0] == "DELETE"]
+    assert len(deletes) == 1
+    assert deletes[0][1].endswith("/server")
+
+
+def test_soulseek_username_reads_options():
+    # Lo username dell'account Soulseek arriva da GET /options (la password e'
+    # mascherata da slskd e non ci interessa).
+    routes = {"/options": {"soulseek": {"username": "lucadenegri", "password": "*****"}}}
+    http = _FakeHttp(routes)
+    c = SlskdClient(url="http://slskd.local:5030", api_key="k", http=http)
+    assert c.soulseek_username() == "lucadenegri"
+
+
+def test_soulseek_username_absent_returns_none():
+    # Options senza sezione soulseek (o senza username): None, non un KeyError.
+    http = _FakeHttp({"/options": {}})
+    c = SlskdClient(url="http://slskd.local:5030", api_key="k", http=http)
+    assert c.soulseek_username() is None
 
 
 def test_search_exits_early_when_responses_stabilize(monkeypatch):
