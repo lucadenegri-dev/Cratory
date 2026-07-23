@@ -62,6 +62,36 @@ _SORT_COLS = {
 }
 
 
+def _file_row(f: AudioFile, n_issues: int, rank: int, dup_n: int, cover_n: int) -> FileRow:
+    return FileRow(
+        id=f.id, root_id=f.root_id, path=f.path, ext=f.ext,
+        artist=f.artist, title=f.title, album=f.album, album_artist=f.album_artist,
+        genre=f.genre, year=f.year, label=f.label, track_no=f.track_no,
+        comment=f.comment, bitrate=f.bitrate, duration_s=f.duration_s,
+        status=f.status, issue_count=n_issues,
+        worst_severity=_RANK_SEV.get(rank), in_dup_group=bool(dup_n),
+        cover_source="embedded" if f.has_cover else ("provider" if cover_n else None),
+    )
+
+
+def build_file_row(db: Session, f: AudioFile) -> FileRow:
+    """FileRow di un singolo file (per l'endpoint di modifica manuale): stesse
+    quattro metriche di `list_files`, ma calcolate per un solo `f`."""
+    n_issues = db.scalar(select(func.count()).select_from(Issue).where(
+        Issue.file_id == f.id, Issue.status == "open")) or 0
+    rank = db.scalar(select(func.max(case(_SEV_RANK, value=Issue.severity, else_=0)))
+                     .select_from(Issue).where(Issue.file_id == f.id,
+                                               Issue.status == "open")) or 0
+    dup_n = db.scalar(select(func.count()).select_from(DupMember)
+                      .join(DupGroup, DupGroup.id == DupMember.group_id)
+                      .where(DupMember.file_id == f.id,
+                             DupGroup.dismissed.is_(False))) or 0
+    cover_n = db.scalar(select(func.count()).select_from(Issue).where(
+        Issue.file_id == f.id, Issue.type == "missing_cover",
+        Issue.status == "open")) or 0
+    return _file_row(f, n_issues, rank, dup_n, cover_n)
+
+
 @router.get("/library/facets", response_model=LibraryFacets)
 def library_facets(db: Session = Depends(get_db)):
     """Valori distinti (solo file `present`) per i filtri per-tag di FILES."""
@@ -156,14 +186,7 @@ def list_files(
 
     rows = []
     for f, n_issues, rank, dup_n, cover_n in db.execute(stmt).all():
-        rows.append(FileRow(
-            id=f.id, root_id=f.root_id, path=f.path, ext=f.ext,
-            artist=f.artist, title=f.title, album=f.album, genre=f.genre,
-            year=f.year, label=f.label, bitrate=f.bitrate, duration_s=f.duration_s,
-            status=f.status, issue_count=n_issues or 0,
-            worst_severity=_RANK_SEV.get(rank or 0), in_dup_group=bool(dup_n),
-            cover_source="embedded" if f.has_cover else ("provider" if cover_n else None),
-        ))
+        rows.append(_file_row(f, n_issues or 0, rank or 0, dup_n, cover_n))
     return rows
 
 

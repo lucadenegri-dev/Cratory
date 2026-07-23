@@ -76,6 +76,20 @@ class IssueFixBody(BaseModel):
     value: str
 
 
+class FileTagsUpdate(BaseModel):
+    """Modifica manuale dei tag da FILES: solo i campi presenti vengono toccati
+    (il router usa `exclude_unset`). Valori grezzi; year/track parsati dal service."""
+    artist: str | None = None
+    title: str | None = None
+    album: str | None = None
+    album_artist: str | None = None
+    genre: str | None = None
+    year: str | None = None
+    label: str | None = None
+    track_no: str | None = None
+    comment: str | None = None
+
+
 class ProviderSuggestBody(BaseModel):
     covers: bool = True
 
@@ -238,9 +252,12 @@ class FileRow(BaseModel):
     artist: str | None
     title: str | None
     album: str | None = None
+    album_artist: str | None = None
     genre: str | None = None
     year: int | None = None
     label: str | None = None
+    track_no: int | None = None
+    comment: str | None = None
     bitrate: int | None
     duration_s: float | None
     status: str
