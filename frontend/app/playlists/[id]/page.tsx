@@ -5,11 +5,11 @@ import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from
 import { useRouter, usePathname } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Pencil,
-  RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart,
+  RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart, ChevronsUp,
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDuration,
-  startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist,
+  startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack,
   type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
 import { useBackLink, withFrom } from "@/lib/back-link";
@@ -84,6 +84,12 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(0);
 
+  // Riordino manuale della colonna "#": disponibile solo sulle playlist
+  // manuali e quando non è attivo un ordinamento su un'altra colonna.
+  const canReorder = playlist?.kind === "manual" && sort === "";
+  const [editingRank, setEditingRank] = useState<number | null>(null); // id traccia in modifica
+  const [reordering, setReordering] = useState(false);
+
   const reload = useCallback((signal?: AbortSignal) => {
     playlistTracks(pid, { signal }).then(setTracks).catch(() => {});
     playlistGaps(pid, { signal }).then(setGaps).catch(() => {});
@@ -97,19 +103,13 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
     return () => ac.abort();
   }, [pid, reload]);
 
-  // Rank di inserimento STABILE: posizione cronologica per added_at crescente
-  // (la traccia aggiunta per prima nella playlist Spotify = #1). Resta legato alla
-  // traccia anche quando si ordina/filtra per un'altra colonna.
+  // Rank di posizione: indice nell'array `tracks`, che arriva già in ordine
+  // `position` dal backend (manuale-riordinabile o cronologico per le altre
+  // playlist). Resta legato alla traccia anche quando si ordina/filtra per
+  // un'altra colonna.
   const insertionRank = useMemo(() => {
-    const ranked = [...tracks].sort((a, b) => {
-      const aa = a.added_at, bb = b.added_at;
-      if (aa && bb) return aa < bb ? -1 : aa > bb ? 1 : a.id - b.id;
-      if (aa) return -1;
-      if (bb) return 1;
-      return a.id - b.id;
-    });
     const map = new Map<number, number>();
-    ranked.forEach((tr, i) => map.set(tr.id, i + 1));
+    tracks.forEach((tr, i) => map.set(tr.id, i + 1));
     return map;
   }, [tracks]);
 
@@ -277,6 +277,20 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
+  const applyReorder = async (trackId: number, position: number) => {
+    setEditingRank(null);
+    setActionError(null);
+    setReordering(true);
+    try {
+      const rows = await reorderPlaylistTrack(pid, trackId, position);
+      setTracks(rows);
+    } catch (e) {
+      setActionError(t.playlists.reorderFailed(errText(e)));
+    } finally {
+      setReordering(false);
+    }
+  };
+
   const doExport = async () => {
     if (!playlist) return;
     setActionError(null);
@@ -397,8 +411,10 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
               {th("#", "rank", true)}
               {th("Title", "title")}
               {th("Artist", "artist")}
+              {th(t.library.colGenre, "genre")}
               {th("BPM", "bpm", true)}
               {th("Key", "key")}
+              {th(t.library.colEnergy, "energy", true)}
               {th(t.library.colDuration, "duration", true)}
               <th className={cell}>{t.library.colStatus}</th>
               <th className={cell}></th>
@@ -407,7 +423,54 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
           <tbody>
             {pageTracks.map((tr) => (
               <tr key={tr.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
-                <td className={`${cell} tnum text-faint`}>{insertionRank.get(tr.id) ?? "—"}</td>
+                <td className={`${cell} tnum text-faint`}>
+                  {canReorder ? (
+                    editingRank === tr.id ? (
+                      <input
+                        type="number"
+                        min={1}
+                        max={tracks.length}
+                        defaultValue={insertionRank.get(tr.id) ?? 1}
+                        autoFocus
+                        disabled={reordering}
+                        aria-label={t.playlists.reorderPositionAria}
+                        onBlur={() => setEditingRank(null)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const v = Number((e.target as HTMLInputElement).value);
+                            if (Number.isFinite(v) && v >= 1) applyReorder(tr.id, v);
+                          } else if (e.key === "Escape") setEditingRank(null);
+                        }}
+                        className="w-12 border border-border bg-bg px-1 py-0.5 text-right text-xs tnum"
+                      />
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingRank(tr.id)}
+                          disabled={reordering}
+                          className="tnum hover:text-fg"
+                          title={t.playlists.editPositionTitle}
+                        >
+                          {insertionRank.get(tr.id) ?? "—"}
+                        </button>
+                        {insertionRank.get(tr.id) !== 1 && (
+                          <button
+                            type="button"
+                            onClick={() => applyReorder(tr.id, 1)}
+                            disabled={reordering}
+                            title={t.playlists.moveToTopTitle}
+                            className="text-faint hover:text-fg"
+                          >
+                            <ChevronsUp size={13} />
+                          </button>
+                        )}
+                      </div>
+                    )
+                  ) : (
+                    insertionRank.get(tr.id) ?? "—"
+                  )}
+                </td>
                 <td className={cell}>
                   <Link href={withFrom(`/tracks/${tr.id}`, from)} className="flex items-center gap-2.5">
                     <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
@@ -415,8 +478,10 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                   </Link>
                 </td>
                 <td className={`${cell} text-muted`}>{tr.artist ?? "—"}</td>
+                <td className={`${cell} max-w-[10rem] truncate text-muted`}>{tr.genre ?? "—"}</td>
                 <td className={`${cell} tnum`}>{tr.bpm?.toFixed(0) ?? "—"}</td>
                 <td className={`${cell} tnum`}><KeyBadge camelot={tr.camelot_key} /></td>
+                <td className={`${cell} tnum text-muted`}>{tr.energy ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
                 <td className={cell}><TrackStateIcons track={tr} /></td>
                 <td className={cell}>
@@ -429,7 +494,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                 </td>
               </tr>
             ))}
-            {visible.length === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
           </tbody>
         </table>
       </div>

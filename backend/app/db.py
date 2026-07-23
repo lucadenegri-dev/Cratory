@@ -50,6 +50,7 @@ def ensure_schema(eng=None) -> None:
         _migrate_drop_legacy(conn)
         _migrate_drop_enrichment_cols(conn)
         _migrate_playlist_memberships(conn)
+        _migrate_backfill_playlist_positions(conn)
         _migrate_rename_liked_spotify(conn)
         _migrate_rename_discovery_playlist(conn)
         _migrate_backfill_bpm_key_sources(conn)
@@ -273,6 +274,31 @@ def _migrate_playlist_memberships(conn) -> None:
     ))
     conn.execute(text(
         "UPDATE tracks SET playlist_id = NULL, playlist_name = NULL WHERE playlist_id IS NOT NULL"
+    ))
+
+
+def _migrate_backfill_playlist_positions(conn) -> None:
+    """Backfill di playlist_tracks.position: per ogni playlist assegna 1..N nell'ordine
+    corrente (added_at NULLs-last, poi track_id) alle sole righe con position NULL.
+
+    Idempotente: dopo il backfill le position sono valorizzate, quindi le ri-esecuzioni
+    (WHERE position IS NULL) sono no-op.
+    """
+    if not _table_exists(conn, "playlist_tracks"):
+        return
+    cols = {r[1] for r in conn.execute(text('PRAGMA table_info("playlist_tracks")')).fetchall()}
+    if "position" not in cols:
+        return
+    conn.execute(text(
+        "WITH ordered AS ("
+        "  SELECT playlist_id, track_id, ROW_NUMBER() OVER ("
+        "    PARTITION BY playlist_id ORDER BY (added_at IS NULL), added_at, track_id"
+        "  ) AS rn FROM playlist_tracks"
+        ") "
+        "UPDATE playlist_tracks SET position = ("
+        "  SELECT rn FROM ordered o WHERE o.playlist_id = playlist_tracks.playlist_id "
+        "    AND o.track_id = playlist_tracks.track_id"
+        ") WHERE position IS NULL"
     ))
 
 

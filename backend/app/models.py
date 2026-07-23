@@ -29,6 +29,7 @@ playlist_tracks = Table(
     Column("track_id", ForeignKey("tracks.id"), primary_key=True, index=True),
     Column("added_at", DateTime, nullable=True),
     Column("added_by", String, nullable=True),
+    Column("position", Integer, nullable=True),
 )
 
 

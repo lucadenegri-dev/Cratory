@@ -106,3 +106,9 @@ export function addTracksToPlaylist(playlistId: number, trackIds: number[]) {
     track_ids: trackIds,
   });
 }
+
+/** Sposta una traccia alla posizione 1-based indicata (solo playlist manuali).
+ *  Ritorna la lista tracce riordinata. */
+export function reorderPlaylistTrack(playlistId: number, trackId: number, position: number) {
+  return apiPost<Track[]>(`/api/playlists/${playlistId}/reorder`, { track_id: trackId, position });
+}

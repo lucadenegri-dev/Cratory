@@ -122,6 +122,7 @@ GET    /api/playlists/import/status
 POST   /api/playlists/import-manual
 POST   /api/playlists/create-from-tracks
 POST   /api/playlists/{playlist_id}/add-tracks
+POST   /api/playlists/{playlist_id}/reorder
 GET    /api/playlists
 GET    /api/playlists/{playlist_id}
 DELETE /api/playlists/{playlist_id}
@@ -170,6 +171,13 @@ already in the playlist, and duplicate ids within the same request, are counted 
 so a later sync prune never removes it. `404 playlist_not_found` if the playlist does
 not exist; `422 tracks_not_found` (with `missing`) if any track id does not exist.
 Response: `{playlist, added, skipped}`.
+`POST /api/playlists/{playlist_id}/reorder` moves a track to a 1-based position within
+the playlist, shifting the others; the order is persisted in the `playlist_tracks.position`
+column (not just a client-side sort). Request: `{track_id, position}` (`position >= 1`,
+clamped to `[1, N]` for the current track count). Manual playlists only: `409
+playlist_not_manual` on any other kind. `404 playlist_not_found` if the playlist does not
+exist; `404 track_not_in_playlist` if `track_id` is not a member. Response: the reordered
+track list (`list[TrackOut]`), same shape as `GET /api/playlists/{playlist_id}/tracks`.
 
 ## Tracks and library
 

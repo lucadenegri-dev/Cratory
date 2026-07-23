@@ -345,8 +345,14 @@ def add_track_to_playlist(db: Session, track: Track, playlist: Playlist, *,
     ).first()
     if exists:
         return
+    max_pos = db.scalar(
+        select(func.max(playlist_tracks.c.position)).where(
+            playlist_tracks.c.playlist_id == playlist.id
+        )
+    )
     db.execute(playlist_tracks.insert().values(
         playlist_id=playlist.id, track_id=track.id, added_at=added_at, added_by=added_by,
+        position=(max_pos or 0) + 1,
     ))
 
 
@@ -382,8 +388,30 @@ def tracks_for_playlist(db: Session, playlist_id: int) -> list[Track]:
         .options(selectinload(Track.playlists))
         .join(playlist_tracks, playlist_tracks.c.track_id == Track.id)
         .where(playlist_tracks.c.playlist_id == playlist_id)
-        .order_by(playlist_tracks.c.added_at.is_(None), playlist_tracks.c.added_at)
+        .order_by(
+            playlist_tracks.c.position.is_(None), playlist_tracks.c.position,
+            playlist_tracks.c.added_at.is_(None), playlist_tracks.c.added_at,
+            Track.id,
+        )
     ).all())
+
+
+def reorder_playlist_track(db: Session, playlist_id: int, track_id: int, position: int) -> list[Track] | None:
+    """Sposta `track_id` alla posizione 1-based `position` (clampata) e rinumera 1..N.
+    Ritorna la lista riordinata, o None se la traccia non e' nella playlist. Non committa."""
+    members = tracks_for_playlist(db, playlist_id)
+    ids = [t.id for t in members]
+    if track_id not in ids:
+        return None
+    ids.remove(track_id)
+    idx = max(0, min(position - 1, len(ids)))
+    ids.insert(idx, track_id)
+    for new_pos, tid in enumerate(ids, start=1):
+        db.execute(playlist_tracks.update().where(
+            playlist_tracks.c.playlist_id == playlist_id,
+            playlist_tracks.c.track_id == tid,
+        ).values(position=new_pos))
+    return tracks_for_playlist(db, playlist_id)
 
 
 def tracks_download_pending(db: Session) -> list[Track]:
@@ -452,12 +480,13 @@ def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
             select(playlist_tracks.c.playlist_id).where(playlist_tracks.c.track_id == keep.id)
         )
     }
-    for pid, added in db.execute(
-        select(playlist_tracks.c.playlist_id, playlist_tracks.c.added_at)
+    for pid, added, pos in db.execute(
+        select(playlist_tracks.c.playlist_id, playlist_tracks.c.added_at, playlist_tracks.c.position)
         .where(playlist_tracks.c.track_id == drop.id)
     ).all():
         if pid not in keep_pls:
-            db.execute(playlist_tracks.insert().values(playlist_id=pid, track_id=keep.id, added_at=added))
+            db.execute(playlist_tracks.insert().values(
+                playlist_id=pid, track_id=keep.id, added_at=added, position=pos))
     db.execute(playlist_tracks.delete().where(playlist_tracks.c.track_id == drop.id))
     # Membership set: ripunta i SetlistTrack di drop a keep.
     db.execute(

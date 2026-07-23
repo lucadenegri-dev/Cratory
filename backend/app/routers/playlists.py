@@ -30,6 +30,7 @@ from app.repositories import (
     get_playlist,
     list_playlists,
     recount_playlist,
+    reorder_playlist_track,
     tracks_for_playlist,
 )
 from app.schemas import (
@@ -45,6 +46,7 @@ from app.schemas import (
     PlaylistImportReport,
     PlaylistImportRequest,
     PlaylistOut,
+    PlaylistReorderRequest,
     SpotifyPlaylistRef,
     StreamingImportJobStatus,
     TrackOut,
@@ -247,6 +249,21 @@ def add_tracks(playlist_id: int, req: PlaylistAddTracksRequest, db: Session = De
     return PlaylistAddTracksResult(
         playlist=PlaylistOut.model_validate(playlist), added=added, skipped=skipped,
     )
+
+
+@router.post("/{playlist_id}/reorder", response_model=list[TrackOut])
+def reorder_track(playlist_id: int, req: PlaylistReorderRequest, db: Session = Depends(get_db)):
+    """Riordino manuale: sposta una traccia a una posizione (solo playlist manuali)."""
+    playlist = get_playlist(db, playlist_id)
+    if playlist is None:
+        raise api_error(404, "playlist_not_found", "Playlist not found")
+    if playlist.kind != "manual":
+        raise api_error(409, "playlist_not_manual", "Reorder is only allowed on manual playlists")
+    result = reorder_playlist_track(db, playlist_id, req.track_id, req.position)
+    if result is None:
+        raise api_error(404, "track_not_in_playlist", "Track is not in this playlist")
+    db.commit()
+    return [track_out(t) for t in result]
 
 
 @router.get("", response_model=list[PlaylistOut])
