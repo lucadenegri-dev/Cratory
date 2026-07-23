@@ -567,6 +567,18 @@ export const en = {
       importFailed: (msg: string) => `Manual import failed: ${msg}`,
       createFailed: (msg: string) => `Creation failed: ${msg}`,
       defaultPlaylistName: "Manual playlist",
+      filterSelectSubtitle: "Filter, bulk-select and create or add to a playlist.",
+      genreFilterPlaceholder: "Filter by genre…",
+      playlistFilterAllOption: "From any playlist",
+      selectAllMatching: (n: number) => `Select all (${n})`,
+      clearSelection: "Clear",
+      selectedCount: (n: number) => `${n} selected`,
+      addToExistingLabel: "Add to existing playlist",
+      addToExistingPlaceholder: "Choose playlist…",
+      addToExistingButton: "Add",
+      addedFeedback: (added: number, skipped: number) =>
+        `${added} added, ${skipped} already in.`,
+      addFailed: (msg: string) => `Add failed: ${msg}`,
     },
     importSpotify: {
       pageTitle: "Import — Spotify",

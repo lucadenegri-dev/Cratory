@@ -569,6 +569,18 @@ export const it: Dictionary = {
       importFailed: (msg: string) => `Import manuale fallito: ${msg}`,
       createFailed: (msg: string) => `Creazione fallita: ${msg}`,
       defaultPlaylistName: "Playlist manuale",
+      filterSelectSubtitle: "Filtra, seleziona in blocco e crea o aggiungi a una playlist.",
+      genreFilterPlaceholder: "Filtra per genere…",
+      playlistFilterAllOption: "Da qualsiasi playlist",
+      selectAllMatching: (n: number) => `Seleziona tutte (${n})`,
+      clearSelection: "Deseleziona",
+      selectedCount: (n: number) => `${n} selezionate`,
+      addToExistingLabel: "Aggiungi a playlist esistente",
+      addToExistingPlaceholder: "Scegli playlist…",
+      addToExistingButton: "Aggiungi",
+      addedFeedback: (added: number, skipped: number) =>
+        `${added} aggiunte, ${skipped} già presenti.`,
+      addFailed: (msg: string) => `Aggiunta fallita: ${msg}`,
     },
     importSpotify: {
       pageTitle: "Import — Spotify",
