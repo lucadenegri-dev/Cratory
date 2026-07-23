@@ -20,13 +20,15 @@ _INT_FIELDS = {"year", "track_no"}
 
 
 class ManualEditError(Exception):
-    """Errore di modifica manuale con codice/stato HTTP; il router lo traduce."""
+    """Errore di modifica manuale con codice/stato HTTP e `params` opzionali per la
+    traduzione nel frontend; il router lo converte in api_error."""
 
-    def __init__(self, status: int, code: str, message: str):
+    def __init__(self, status: int, code: str, message: str, params: dict | None = None):
         super().__init__(message)
         self.status = status
         self.code = code
         self.message = message
+        self.params = params or {}
 
 
 def _coerce(field: str, raw):
@@ -42,9 +44,11 @@ def _coerce(field: str, raw):
         try:
             n = int(raw)
         except (TypeError, ValueError):
-            raise ManualEditError(400, "value_invalid", f"'{field}' must be a number")
+            raise ManualEditError(400, "value_invalid", f"'{field}' must be a number",
+                                  {"field": field, "reason": "number"})
         if n < 0:
-            raise ManualEditError(400, "value_invalid", f"'{field}' must be positive")
+            raise ManualEditError(400, "value_invalid", f"'{field}' must be positive",
+                                  {"field": field, "reason": "positive"})
         return n
     return str(raw)
 
@@ -61,8 +65,9 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
     non resta una run fantasma se nulla è cambiato sul file."""
     unknown = set(changes) - _EDITABLE
     if unknown:
+        fields = ", ".join(sorted(unknown))
         raise ManualEditError(400, "field_not_editable",
-                              f"Field not editable: {', '.join(sorted(unknown))}")
+                              f"Field not editable: {fields}", {"fields": fields})
     if file.status != "present" or file.scan_error or not os.path.exists(file.path):
         raise ManualEditError(409, "file_not_writable", "File is not writable")
 

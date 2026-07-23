@@ -22,5 +22,5 @@ def update_file_tags(file_id: int, body: FileTagsUpdate,
     try:
         manual_edit.edit_tags(db, file, body.model_dump(exclude_unset=True))
     except manual_edit.ManualEditError as exc:
-        raise api_error(exc.status, exc.code, exc.message)
+        raise api_error(exc.status, exc.code, exc.message, **exc.params)
     return build_file_row(db, file)

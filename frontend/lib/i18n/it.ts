@@ -457,5 +457,12 @@ export const it: Dictionary = {
     scan_running: "Scan in corso.",
     run_not_found: "Run non trovata.",
     run_not_applied: "La run non è in stato 'applied'.",
+    file_not_found: "File non trovato.",
+    file_not_writable: "Impossibile scrivere il file (mancante o spostato). Ri-scansiona e riprova.",
+    field_not_editable: (p) => `Campo non modificabile: ${p.fields}.`,
+    value_invalid: (p) =>
+      p.reason === "positive" ? `'${p.field}' dev'essere un numero positivo.` : `'${p.field}' dev'essere un numero.`,
+    tag_write_failed: "Impossibile scrivere i tag sul file.",
+    tag_verify_failed: "I tag sono stati salvati ma non è stato possibile verificarli. Ri-scansiona per conciliare.",
   },
 };

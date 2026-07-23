@@ -81,6 +81,7 @@ def test_edit_rejects_bad_year(db, tmp_path, copy_fixture):
     with pytest.raises(manual_edit.ManualEditError) as e:
         manual_edit.edit_tags(db, file, {"year": "notayear"})
     assert e.value.status == 400 and e.value.code == "value_invalid"
+    assert e.value.params == {"field": "year", "reason": "number"}
 
 
 def test_edit_rejects_unknown_field(db, tmp_path, copy_fixture):
@@ -89,6 +90,7 @@ def test_edit_rejects_unknown_field(db, tmp_path, copy_fixture):
     with pytest.raises(manual_edit.ManualEditError) as e:
         manual_edit.edit_tags(db, file, {"bpm": "128"})
     assert e.value.status == 400 and e.value.code == "field_not_editable"
+    assert e.value.params == {"fields": "bpm"}
 
 
 def test_edit_rejects_missing_file(db, tmp_path):
