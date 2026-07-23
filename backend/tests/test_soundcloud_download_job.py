@@ -68,3 +68,26 @@ def test_run_soundcloud_failure(monkeypatch):
     tr = db.get(Track, track_id)
     assert tr.has_local_file is False
     assert tr.last_download_outcome == "failed"
+
+
+def test_run_soundcloud_partial_attach_failure_leaves_track_unowned(monkeypatch):
+    factory, track_id = _factory_with_track()
+    monkeypatch.setattr(job, "SessionLocal", factory)
+    monkeypatch.setattr(job, "download_track_audio", lambda url, d: "/dl/A - B.mp3")
+    monkeypatch.setattr(job, "read_audio_quality", lambda p: {"format": "mp3", "bitrate": 245})
+
+    def _attach_then_fail(db, track, *, path, fmt, bitrate):
+        track.has_local_file = True  # muta il possesso in memoria...
+        raise RuntimeError("dedup/merge failure")  # ...poi fallisce
+
+    monkeypatch.setattr(job, "attach_local_file", _attach_then_fail)
+
+    job._state.update(status="running")
+    job._run_soundcloud(track_id)
+
+    assert job._state["status"] == "done"
+    assert job._state["failed"] == 1
+    db = factory()
+    tr = db.get(Track, track_id)
+    assert tr.has_local_file is False  # rollback: NON marcata posseduta
+    assert tr.last_download_outcome == "failed"

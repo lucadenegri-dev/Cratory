@@ -391,9 +391,13 @@ def _run_soundcloud(track_id: int) -> None:
                               bitrate=quality["bitrate"])
             outcome = "downloaded"
         except SoundCloudAudioError as exc:
+            # attach_local_file puo' aver gia' mutato track.has_local_file in memoria
+            # prima di fallire: rollback per non persistere un possesso solo parziale.
+            db.rollback()
             reason = str(exc)
             logger.warning("Download SoundCloud fallito per track_id=%s: %s", track_id, exc)
         except Exception:  # noqa: BLE001 — un fallimento non deve lasciare il job appeso
+            db.rollback()
             reason = "error"
             logger.exception("Download SoundCloud fallito per track_id=%s", track_id)
         _state[outcome] = _state.get(outcome, 0) + 1
