@@ -5,7 +5,7 @@ import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from
 import { useRouter, usePathname } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Pencil,
-  RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart, ChevronsUp,
+  RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart,
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDuration,
@@ -444,28 +444,15 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                         className="w-12 border border-border bg-bg px-1 py-0.5 text-right text-xs tnum"
                       />
                     ) : (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setEditingRank(tr.id)}
-                          disabled={reordering}
-                          className="tnum hover:text-fg"
-                          title={t.playlists.editPositionTitle}
-                        >
-                          {insertionRank.get(tr.id) ?? "—"}
-                        </button>
-                        {insertionRank.get(tr.id) !== 1 && (
-                          <button
-                            type="button"
-                            onClick={() => applyReorder(tr.id, 1)}
-                            disabled={reordering}
-                            title={t.playlists.moveToTopTitle}
-                            className="text-faint hover:text-fg"
-                          >
-                            <ChevronsUp size={13} />
-                          </button>
-                        )}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingRank(tr.id)}
+                        disabled={reordering}
+                        className="tnum hover:text-fg"
+                        title={t.playlists.editPositionTitle}
+                      >
+                        {insertionRank.get(tr.id) ?? "—"}
+                      </button>
                     )
                   ) : (
                     insertionRank.get(tr.id) ?? "—"
