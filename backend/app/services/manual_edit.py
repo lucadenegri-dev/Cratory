@@ -12,10 +12,10 @@ from sqlalchemy.orm import Session
 
 from app.integrations import tagio
 from app.models import AudioFile, Issue, Plan, UndoJournal, utcnow
+from app.services.planner import EDITABLE_TAG_FIELDS
 
-# Campi tag correggibili a mano (= planner._EFFECTIVE_FIELDS = issues._RETAGGABLE).
-_EDITABLE = {"artist", "title", "album", "album_artist", "genre", "year",
-             "label", "track_no", "comment"}
+# Gli unici campi correggibili a mano: fonte unica in planner.EDITABLE_TAG_FIELDS.
+_EDITABLE = frozenset(EDITABLE_TAG_FIELDS)
 _INT_FIELDS = {"year", "track_no"}
 
 
