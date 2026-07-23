@@ -26,16 +26,16 @@ export default function ImportManualPage() {
   const [results, setResults] = useState<Track[]>([]);
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [manualPlaylists, setManualPlaylists] = useState<Playlist[]>([]);
+  const [allPlaylists, setAllPlaylists] = useState<Playlist[]>([]);
   const [addTarget, setAddTarget] = useState("");     // id playlist per "aggiungi a esistente"
   const [feedback, setFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     if (mode !== "library") return;
-    listImportedPlaylists()
-      .then((all) => setManualPlaylists(all.filter((p) => p.kind === "manual")))
-      .catch(() => setManualPlaylists([]));
+    listImportedPlaylists().then(setAllPlaylists).catch(() => setAllPlaylists([]));
   }, [mode]);
+
+  const manualPlaylists = allPlaylists.filter((p) => p.kind === "manual");
 
   useEffect(() => {
     if (mode !== "library") return;
@@ -218,7 +218,7 @@ export default function ImportManualPage() {
                   disabled={busy}
                 >
                   <option value="">{im.playlistFilterAllOption}</option>
-                  {manualPlaylists.map((p) => (
+                  {allPlaylists.map((p) => (
                     <option key={p.id} value={String(p.id)}>{p.name}</option>
                   ))}
                 </Select>
