@@ -15,10 +15,14 @@ const CAMELOT_KEYS = [
 type FieldType = "number" | "int" | "text";
 type Key = keyof TrackUpdate;
 
-const FIELD_KEYS: Key[] = ["bpm", "camelot_key", "genre", "label", "year"];
+const FIELD_KEYS: Key[] = ["title", "artist", "bpm", "camelot_key", "genre", "label", "year"];
 
-function buildFields(t: Dictionary): { key: Key; label: string; type: FieldType; hint?: string; min?: number; max?: number; placeholder?: string }[] {
+function buildFields(t: Dictionary): { key: Key; label: string; type: FieldType; hint?: string; min?: number; max?: number; placeholder?: string; full?: boolean }[] {
   return [
+    // Titolo e artista sono identità editoriale (correzione manuale nel DB di
+    // Cratory, il file non viene toccato): riga intera, sopra ai valori tecnici.
+    { key: "title", label: t.tracks.rowTitle, type: "text", full: true },
+    { key: "artist", label: t.tracks.rowArtist, type: "text", full: true },
     { key: "bpm", label: "BPM", type: "number", placeholder: "128", min: 1, max: 400 },
     { key: "camelot_key", label: t.tracks.fieldKeyLabel, type: "text", placeholder: "8A", hint: t.tracks.fieldKeyHint },
     { key: "genre", label: t.tracks.rowGenre, type: "text", placeholder: t.tracks.fieldGenrePlaceholder },
@@ -128,24 +132,25 @@ function EditForm({ track, onClose, onSaved }: { track: Track; onClose: () => vo
         onSubmit={(e) => { e.preventDefault(); void save(); }}
       >
         {FIELDS.map((f) => (
-          <Field
-            key={f.key}
-            label={f.label}
-            hint={f.key === "camelot_key" && camelotInvalid ? <span className="text-danger">{t.tracks.invalidKeyNotation}</span> : f.hint}
-          >
-            <Input
-              type={f.type === "text" ? "text" : "number"}
-              inputMode={f.type === "int" ? "numeric" : undefined}
-              step={f.type === "number" ? "0.1" : undefined}
-              min={f.min}
-              max={f.max}
-              placeholder={f.placeholder}
-              list={f.key === "camelot_key" ? "camelot-keys" : undefined}
-              value={form[f.key]}
-              onChange={(e) => set(f.key, e.target.value)}
-              className={f.key === "camelot_key" && camelotInvalid ? "border-danger/60" : undefined}
-            />
-          </Field>
+          <div key={f.key} className={f.full ? "col-span-2 sm:col-span-3" : undefined}>
+            <Field
+              label={f.label}
+              hint={f.key === "camelot_key" && camelotInvalid ? <span className="text-danger">{t.tracks.invalidKeyNotation}</span> : f.hint}
+            >
+              <Input
+                type={f.type === "text" ? "text" : "number"}
+                inputMode={f.type === "int" ? "numeric" : undefined}
+                step={f.type === "number" ? "0.1" : undefined}
+                min={f.min}
+                max={f.max}
+                placeholder={f.placeholder}
+                list={f.key === "camelot_key" ? "camelot-keys" : undefined}
+                value={form[f.key]}
+                onChange={(e) => set(f.key, e.target.value)}
+                className={f.key === "camelot_key" && camelotInvalid ? "border-danger/60" : undefined}
+              />
+            </Field>
+          </div>
         ))}
       </form>
     </Modal>

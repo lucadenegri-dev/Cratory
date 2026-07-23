@@ -32,6 +32,16 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-07-23 - Modifica manuale di titolo e artista
+
+- Il modal "Modifica valori" (`frontend/components/track-edit-modal.tsx`, condiviso da
+  Library/Wishlist/Playlists/Labels/Shazam/dettaglio) ora espone anche `title` e
+  `artist`, a riga intera sopra ai valori tecnici. Backend invariato: `TrackUpdateIn` e
+  `PATCH /tracks/{id}` gia' accettavano i due campi.
+- Correzione nel DB di Cratory, mai sui tag del file (che restano compito di Sortory):
+  stessa natura dell'editing di genere/etichetta gia' presente. Etichette i18n
+  `rowTitle`/`rowArtist` in `it.ts`/`en.ts`.
+
 ## Milestone 2026-07-23 - Dig Bandcamp: seconda sorgente del crate digging
 
 Brainstorming → design → piano → esecuzione a task con review a ogni step (design in

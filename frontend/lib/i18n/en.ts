@@ -400,6 +400,8 @@ export const en = {
     untitledHeading: "Untitled",
     untitledLower: "untitled",
     unknownArtist: "Unknown artist",
+    rowTitle: "Title",
+    rowArtist: "Artist",
     rowGenre: "Genre",
     rowYear: "Year",
     rowDuration: "Duration",

@@ -402,6 +402,8 @@ export const it: Dictionary = {
     untitledHeading: "Senza titolo",
     untitledLower: "senza titolo",
     unknownArtist: "Artista sconosciuto",
+    rowTitle: "Titolo",
+    rowArtist: "Artista",
     rowGenre: "Genere",
     rowYear: "Anno",
     rowDuration: "Durata",
