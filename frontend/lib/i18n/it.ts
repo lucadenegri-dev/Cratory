@@ -204,6 +204,19 @@ export const it: Dictionary = {
     sevInfo: "info",
     formats: "Formati",
     dupTitle: "doppione",
+    editTitle: "Modifica tag",
+    field: {
+      artist: "Artista",
+      title: "Titolo",
+      album: "Album",
+      album_artist: "Artista album",
+      genre: "Genere",
+      year: "Anno",
+      label: "Etichetta",
+      track_no: "Traccia",
+      comment: "Commento",
+    },
+    numHint: "Solo numeri",
   },
   issues: {
     summary: "Riepilogo",
@@ -423,6 +436,7 @@ export const it: Dictionary = {
     badgeApplied: "applicata",
     badgeUndone: "annullata",
     undo: "↺ annulla",
+    manualEdit: "modifica manuale",
   },
   errors: {
     plan_draft_missing: "Nessun piano draft.",

@@ -50,9 +50,12 @@ export interface FileRow {
   artist: string | null;
   title: string | null;
   album: string | null;
+  album_artist: string | null;
   genre: string | null;
   year: number | null;
   label: string | null;
+  track_no: number | null;
+  comment: string | null;
   bitrate: number | null;
   duration_s: number | null;
   status: string;
@@ -168,6 +171,24 @@ export function libraryStats() {
 }
 export function libraryFacets() {
   return apiGet<LibraryFacets>("/api/library/facets");
+}
+
+export interface EditableTags {
+  artist: string;
+  title: string;
+  album: string;
+  album_artist: string;
+  genre: string;
+  year: string;
+  label: string;
+  track_no: string;
+  comment: string;
+}
+
+// Modifica manuale dei tag da FILES: manda solo i campi cambiati; ritorna la
+// riga aggiornata (issue_count ricalcolato) da rimettere in-place nella tabella.
+export function updateFileTags(fileId: number, changes: Partial<EditableTags>) {
+  return apiSend<FileRow>("POST", `/api/files/${fileId}/tags`, changes);
 }
 
 // --- PROVIDERS --------------------------------------------------------------
@@ -439,6 +460,7 @@ export interface HistoryItem {
   status: string; // applied | undone
   created_at: string;
   n_ops: number;
+  kind: string | null; // "manual_edit" per le modifiche manuali, altrimenti null
 }
 export interface UndoResult {
   run_id: number;
