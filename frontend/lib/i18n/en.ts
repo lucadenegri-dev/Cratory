@@ -477,6 +477,8 @@ export const en = {
     newPlaylistNamePlaceholder: "New playlist name…",
     createAndAddButton: "Create",
     addToPlaylistFailed: (msg: string) => `Add failed: ${msg}`,
+    addedToPlaylist: (name: string) => `Added to ${name}`,
+    createdPlaylist: (name: string) => `Created ${name}`,
   },
   playlists: {
     pageTitle: "Playlist",

@@ -479,6 +479,8 @@ export const it: Dictionary = {
     newPlaylistNamePlaceholder: "Nome nuova playlist…",
     createAndAddButton: "Crea",
     addToPlaylistFailed: (msg: string) => `Aggiunta fallita: ${msg}`,
+    addedToPlaylist: (name: string) => `Aggiunta a ${name}`,
+    createdPlaylist: (name: string) => `Creata ${name}`,
   },
   playlists: {
     pageTitle: "Playlist",
