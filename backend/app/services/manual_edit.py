@@ -71,7 +71,10 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
         return
 
     # prior letti dal DISCO (come apply.py): l'undo ripristina lo stato reale.
-    disk = tagio.read_tags(file.path)
+    try:
+        disk = tagio.read_tags(file.path)
+    except tagio.TagReadError as exc:
+        raise ManualEditError(409, "file_not_writable", str(exc))
     prior = {f: getattr(disk, f) for f in effective}
 
     # journal-first: Plan sintetico + voce RETAG PRIMA di toccare il file.
@@ -84,7 +87,12 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
                        from_path=file.path, prior_tags_json=prior))
     db.commit()
 
-    tagio.write_tags(file.path, effective)          # poi muta il disco
+    try:
+        tagio.write_tags(file.path, effective)      # poi muta il disco
+    except tagio.TagWriteError as exc:
+        # La voce di journal resta (innocua: undo → RETAG su prior==corrente è un
+        # no-op). Errore controllato, col codice tradotto dal frontend.
+        raise ManualEditError(500, "tag_write_failed", str(exc))
     for f, v in effective.items():                  # allinea il DB al disco
         setattr(file, f, v)
     _reconcile_issues(db, file.id, effective)

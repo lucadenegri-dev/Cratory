@@ -136,3 +136,35 @@ def test_edit_leaves_no_phantom_retag(db, tmp_path, copy_fixture):
                                         "folder_template": ""},
                      root_targets={})
     assert not any(o.kind == "RETAG" for o in ops)
+
+
+def test_edit_reconcile_clear_branch(db, tmp_path, copy_fixture):
+    # svuotare un campo che ha un'issue aperta → issue accepted con action "clear"
+    f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
+    tagio.write_tags(f, {"label": "Old"})
+    file = _seed(db, f, label="Old")
+    db.add(Issue(file_id=1, type="dirty_label", field="label",
+                 severity="info", detail="dirty", status="open"))
+    db.commit()
+    manual_edit.edit_tags(db, file, {"label": ""})
+    iss = db.scalar(select(Issue).where(Issue.field == "label"))
+    assert iss.status == "accepted"
+    assert iss.suggested_fix_json == {"field": "label", "action": "clear",
+                                      "source": "manual"}
+
+
+def test_edit_write_failure_is_controlled(db, tmp_path, copy_fixture, monkeypatch):
+    # una TagWriteError diventa un ManualEditError(500); la voce di journal resta
+    # (innocua) e il DB NON viene allineato.
+    f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
+    file = _seed(db, f, artist="Old")
+
+    def boom(*a, **k):
+        raise tagio.TagWriteError("disk on fire")
+
+    monkeypatch.setattr(tagio, "write_tags", boom)
+    with pytest.raises(manual_edit.ManualEditError) as e:
+        manual_edit.edit_tags(db, file, {"artist": "New"})
+    assert e.value.status == 500 and e.value.code == "tag_write_failed"
+    assert db.scalar(select(Plan)) is not None        # journal resta
+    assert db.get(AudioFile, 1).artist == "Old"       # DB non allineato
