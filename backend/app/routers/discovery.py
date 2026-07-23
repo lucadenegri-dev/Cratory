@@ -8,6 +8,7 @@ servono solo alla preview del fallback Discogs.
 
 import re
 import time
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -73,6 +74,21 @@ _ARTIST_SUFFIX_RE = re.compile(r"\s*\(\d+\)\s*$")
 
 def _clean_artist_name(name: str) -> str:
     return _ARTIST_SUFFIX_RE.sub("", name).strip()
+
+
+def _bc_duration(value: Any) -> int | None:
+    """Durata Bandcamp -> secondi interi. E' un float ("212.012"), non 'mm:ss' come
+    Discogs, quindi il parsing passa da `float` e non da `int` diretto.
+
+    Endpoint non documentato: un valore non numerico (o assente) non deve far cadere
+    la release in un 500, la traccia resta solo senza durata (il ranking la tratta
+    come neutra, mai penalizzata)."""
+    if not value:
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def _parse_duration(value: str | None) -> int | None:
@@ -216,7 +232,7 @@ def _bandcamp_release(band_id: int, item_id: int) -> DiscoveryReleaseOut:
         DiscoveryTrackOut(
             position=str(item.get("track_num") or ""),
             title=item.get("title") or "",
-            duration_seconds=(int(item["duration"]) if item.get("duration") else None),
+            duration_seconds=_bc_duration(item.get("duration")),
             stream_url=(item.get("streaming_url") or {}).get("mp3-128"),
         )
         for item in (payload.get("tracks") or [])

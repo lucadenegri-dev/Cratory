@@ -256,7 +256,9 @@ function DiscoveryInner() {
           </div>
           {dig.pile_total > dig.pile_reach && (
             <span className="tnum text-muted">
-              {t.discovery.broadSeed(
+              {/* Sul seme etichetta il consiglio "un sottogenere più preciso" non ha
+                  senso (una label non è un genere): variante senza quella frase. */}
+              {(dig.seed_type === "label" ? t.discovery.broadSeedLabel : t.discovery.broadSeed)(
                 dig.pile_total.toLocaleString(lang),
                 dig.pile_reach.toLocaleString(lang),
                 dig.source === "bandcamp" ? t.discovery.sourceBandcamp : t.discovery.sourceDiscogs,

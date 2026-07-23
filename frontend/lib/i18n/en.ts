@@ -652,6 +652,10 @@ export const en = {
     showAll: "all",
     broadSeed: (total: string, reachable: string, src: string) =>
       `Very broad seed: ${total} records on ${src}, you only see the top ${reachable}. A more specific subgenre digs better.`,
+    // Label variant: "a more specific subgenre" makes no sense for a label seed (it's
+    // not a genre), so this one keeps only the pile-size information.
+    broadSeedLabel: (total: string, reachable: string, src: string) =>
+      `Very broad seed: ${total} records on ${src}, you only see the top ${reachable}.`,
     formatLabel: "Format",
     formatAll: "All",
     sortLabel: "Order",

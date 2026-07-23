@@ -813,9 +813,10 @@ def test_dig_picks_the_window_from_depth():
 
 
 def test_dig_reports_pile_reach():
-    # `pile_pages` e' uscito dal contratto interno col Task 1 (resta solo nel router,
-    # derivato da `pile_reach` per l'HTTP): 150 release, la sorgente le raggiunge tutte
-    # (150 < WINDOW_ITEMS), niente profondita' da scegliere.
+    # `pile_pages` e' uscito dal contratto col Task 1 (interno) e col Task 5 (HTTP):
+    # la risposta porta `pile_total`/`pile_reach` diretti, non piu' pagine derivate.
+    # 150 release, la sorgente le raggiunge tutte (150 < WINDOW_ITEMS), niente
+    # profondita' da scegliere.
     res = dig(None, seed_type="label", value="Piccola", source=_src(lambda **kw: [], total=150),
               library=[], depth=0.5)
     assert res.pile_reach == 150

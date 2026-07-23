@@ -15,14 +15,11 @@ ATTENZIONE: sono endpoint INTERNI e non documentati, quelli dietro
 httpx iniettabile -> test senza rete.
 """
 
-import logging
 from typing import Any
 
 import httpx
 
 from app.integrations._http import ClosableHttpClient, post_json
-
-logger = logging.getLogger(__name__)
 
 BASE = "https://bandcamp.com"
 _USER_AGENT = "Mozilla/5.0 (compatible; Cratory/0.1)"

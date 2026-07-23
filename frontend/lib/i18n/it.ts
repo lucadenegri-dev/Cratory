@@ -654,6 +654,10 @@ export const it: Dictionary = {
     showAll: "tutti",
     broadSeed: (total: string, reachable: string, src: string) =>
       `Seme molto ampio: ${total} dischi su ${src}, ne vedi solo i ${reachable} più in cima. Un sottogenere più preciso scava meglio.`,
+    // Variante per il seme etichetta: "un sottogenere più preciso" non ha senso su
+    // una label (non è un genere), quindi qui si tiene solo l'informazione sulla pila.
+    broadSeedLabel: (total: string, reachable: string, src: string) =>
+      `Seme molto ampio: ${total} dischi su ${src}, ne vedi solo i ${reachable} più in cima.`,
     formatLabel: "Formato",
     formatAll: "Tutti",
     sortLabel: "Ordine",

@@ -211,6 +211,14 @@ def test_structurally_broken_items_are_dropped_not_crashed(broken):
                                                    Seed("genre", "T")) is None
 
 
+def test_a_non_numeric_track_count_drops_the_lead_instead_of_crashing():
+    # Endpoint non documentato: un `track_count` non numerico (es. un formato futuro
+    # sconosciuto) deve valere 0 e far scartare il lead dal guard esistente, non
+    # sollevare ValueError da `int()` e diventare un 500 in `dig()`.
+    raw = {**DISCOVER_ITEM, "track_count": "abc"}
+    assert BandcampSource(_FakeBandcamp()).to_lead(raw, Seed("genre", "T")) is None
+
+
 # --- seme etichetta ----------------------------------------------------------
 
 # Un item di `band_details`, catturato dall'API reale il 2026-07-22. Forma DIVERSA

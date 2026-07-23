@@ -316,6 +316,33 @@ def test_release_detail_of_a_bandcamp_lead(client, monkeypatch):
     assert body["videos"] == []
 
 
+def test_release_detail_of_a_bandcamp_lead_with_a_non_numeric_duration(client, monkeypatch):
+    # Endpoint non documentato: una `duration` non numerica (formato futuro sconosciuto)
+    # deve degradare a durata assente, non far cadere l'intero dettaglio in un 500 —
+    # il ranking tratta una durata ignota come neutra, mai come errore.
+    from app.routers import discovery as router_mod
+
+    class _FakeBandcamp:
+        def tralbum(self, *, band_id, tralbum_id, tralbum_type="a"):
+            return {
+                "title": "Love Letter", "tralbum_artist": "Inox Traxx",
+                "bandcamp_url": "https://ostgut.bandcamp.com/album/love-letter",
+                "art_id": 2027095290, "label": "Ostgut Ton", "release_date": 1782432000,
+                "tracks": [{"track_num": 1, "title": "Love Letter", "duration": "n/a",
+                            "streaming_url": {"mp3-128": "https://bandcamp/stream/1"}}],
+            }
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(router_mod, "BandcampClient", lambda: _FakeBandcamp())
+    c, _ = client
+    r = c.get("/api/discovery/release", params={"source": "bandcamp",
+                                                "id": "2920024821:1022287860"})
+    assert r.status_code == 200
+    assert r.json()["tracks"][0]["duration_seconds"] is None
+
+
 @pytest.mark.parametrize("bad", ["notanumber", "1:2:3", "abc:1", ""])
 def test_release_detail_rejects_a_malformed_id(client, bad):
     c, _ = client

@@ -79,6 +79,19 @@ def _art_url(art_id: Any, size: str = "9") -> str | None:
     return f"https://f4.bcbits.com/img/a{art_id}_{size}.jpg" if art_id else None
 
 
+def _track_count(value: Any) -> int:
+    """Il conteggio tracce di un item discover, tollerante al valore.
+
+    Endpoint non documentato: se `track_count` arriva non numerico non deve far
+    esplodere `to_lead` (che `dig()` non protegge con un try/except) in un 500 — deve
+    solo valere 0, cosi' il guard sotto scarta il lead come release vuota.
+    """
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _badge(track_count: int) -> str | None:
     if track_count <= 0:
         return None
@@ -203,7 +216,7 @@ class BandcampSource:
         artist_raw = album_artist or band
         if not title or not artist_raw or artist_raw.lower() in _VARIOUS:
             return None
-        track_count = int(raw.get("track_count") or 0)
+        track_count = _track_count(raw.get("track_count"))
         if track_count <= 0:
             return None
         stream = ((raw.get("featured_track") or {}).get("stream_url") or "").strip()
@@ -215,7 +228,8 @@ class BandcampSource:
         if not artist or not artist_keys:
             return None
         # L'etichetta e' la band che OSPITA, quando non coincide con l'artista.
-        label = band if album_artist and _norm(band) != _norm(album_artist) else None
+        # `band or None`: se il nome band arriva vuoto l'etichetta e' assente, non "".
+        label = (band or None) if album_artist and _norm(band) != _norm(album_artist) else None
         band_id, item_id = raw.get("band_id"), raw.get("item_id")
         return DiscoveryLead(
             artist=artist, artist_keys=artist_keys, title=title,
