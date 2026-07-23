@@ -44,6 +44,12 @@ export interface Playlist {
   imported_at: string;
 }
 
+export interface PlaylistAddTracksResult {
+  playlist: Playlist;
+  added: number;
+  skipped: number;
+}
+
 export interface SpotifyPlaylistRef {
   platform_playlist_id: string;
   name: string;

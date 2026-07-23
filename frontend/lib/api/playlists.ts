@@ -3,6 +3,7 @@ import type {
   GapAnalysis,
   LikedTrackPreview,
   Playlist,
+  PlaylistAddTracksResult,
   PlaylistDeleteResult,
   PlaylistImportReport,
   SpotifyPlaylistRef,
@@ -96,4 +97,12 @@ export function createPlaylistFromTracks(name: string, trackIds: number[]) {
 
 export function importManualPlaylist(name: string, text: string) {
   return apiPost<PlaylistImportReport>("/api/playlists/import-manual", { name, text });
+}
+
+/** Aggiunge tracce a una playlist esistente (idempotente, additivo).
+ *  `added` = nuove membership create, `skipped` = tracce gia' presenti. */
+export function addTracksToPlaylist(playlistId: number, trackIds: number[]) {
+  return apiPost<PlaylistAddTracksResult>(`/api/playlists/${playlistId}/add-tracks`, {
+    track_ids: trackIds,
+  });
 }
