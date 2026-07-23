@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ClipboardList, Library, ListPlus } from "lucide-react";
-import { apiGet, addTracksToPlaylist, createPlaylistFromTracks, errText, importManualPlaylist, listImportedPlaylists, trackLabel, type Playlist, type Track } from "@/lib/api";
+import { apiGet, addTracksToPlaylist, createPlaylistFromTracks, errText, importManualPlaylist, listImportedPlaylists, playlistTracks, trackLabel, type Playlist, type Track } from "@/lib/api";
 import { Card, CardHeader, Button, Alert, Spinner, Input, Textarea, Field, Checkbox, Badge, Select } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { PlaylistFilterMenu } from "@/components/playlist-filter-menu";
@@ -30,11 +30,25 @@ export default function ImportManualPage() {
   const [allPlaylists, setAllPlaylists] = useState<Playlist[]>([]);
   const [addTarget, setAddTarget] = useState("");     // id playlist per "aggiungi a esistente"
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [targetMemberIds, setTargetMemberIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (mode !== "library") return;
     listImportedPlaylists().then(setAllPlaylists).catch(() => setAllPlaylists([]));
   }, [mode]);
+
+  useEffect(() => {
+    if (!addTarget) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset sincrono quando il target viene deselezionato, non derivazione da altro state locale
+      setTargetMemberIds(new Set());
+      return;
+    }
+    let alive = true;
+    playlistTracks(Number(addTarget))
+      .then((tracks) => { if (alive) setTargetMemberIds(new Set(tracks.map((t) => t.id))); })
+      .catch(() => { if (alive) setTargetMemberIds(new Set()); });
+    return () => { alive = false; };
+  }, [addTarget]);
 
   const manualPlaylists = allPlaylists.filter((p) => p.kind === "manual");
 
@@ -86,6 +100,10 @@ export default function ImportManualPage() {
     try {
       const res = await addTracksToPlaylist(Number(addTarget), [...selectedTracks.keys()]);
       setFeedback(t.playlists.importManual.addedFeedback(res.added, res.skipped));
+      // Le tracce aggiunte ora fanno parte del target: aggiorna i badge e svuota la selezione.
+      const refreshed = await playlistTracks(Number(addTarget));
+      setTargetMemberIds(new Set(refreshed.map((tr) => tr.id)));
+      setSelectedTracks(new Map());
       setBusy(false);
     } catch (e) {
       setError(t.playlists.importManual.addFailed(errText(e)));
@@ -116,7 +134,9 @@ export default function ImportManualPage() {
         in_playlist: inPlaylists.size ? [...inPlaylists] : undefined,
         limit: 0,
       });
-      setSelectedTracks(new Map(r.items.map((tr) => [tr.id, tr])));
+      setSelectedTracks(new Map(
+        r.items.filter((tr) => !targetMemberIds.has(tr.id)).map((tr) => [tr.id, tr]),
+      ));
     } catch {
       /* noop: la selezione resta invariata */
     }
@@ -202,8 +222,6 @@ export default function ImportManualPage() {
             </>
           ) : (
             <>
-              {feedback && <Alert tone="success">{feedback}</Alert>}
-
               <div className="grid gap-2 sm:grid-cols-2">
                 <Input
                   className="h-9"
@@ -243,21 +261,26 @@ export default function ImportManualPage() {
               </div>
 
               <div className="max-h-72 divide-y divide-border overflow-y-auto border border-border">
-                {results.map((tr) => (
-                  <label
-                    key={tr.id}
-                    className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elevated"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedTracks.has(tr.id)}
-                      onChange={() => toggle(tr)}
-                      className="shrink-0"
-                    />
-                    <span className="min-w-0 flex-1 truncate">{trackLabel(tr)}</span>
-                    {tr.has_local_file && <Badge tone="success">FILE</Badge>}
-                  </label>
-                ))}
+                {results.map((tr) => {
+                  const already = targetMemberIds.has(tr.id);
+                  return (
+                    <label
+                      key={tr.id}
+                      className={`flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors ${already ? "cursor-default opacity-50" : "cursor-pointer hover:bg-elevated"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!already && selectedTracks.has(tr.id)}
+                        disabled={already}
+                        onChange={() => toggle(tr)}
+                        className="shrink-0"
+                      />
+                      <span className="min-w-0 flex-1 truncate">{trackLabel(tr)}</span>
+                      {already && <Badge tone="neutral">{im.alreadyInTarget}</Badge>}
+                      {tr.has_local_file && !already && <Badge tone="success">FILE</Badge>}
+                    </label>
+                  );
+                })}
                 {results.length === 0 && (
                   <div className="px-3 py-6 text-center text-sm text-muted">{im.noResults}</div>
                 )}
@@ -280,6 +303,8 @@ export default function ImportManualPage() {
                   </ul>
                 )}
               </div>
+
+              {feedback && <Alert tone="success">{feedback}</Alert>}
 
               <div className="flex flex-wrap items-end justify-between gap-3 border-t border-border pt-3">
                 <div className="flex items-end gap-2">

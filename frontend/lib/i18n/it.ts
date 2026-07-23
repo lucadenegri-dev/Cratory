@@ -590,6 +590,7 @@ export const it: Dictionary = {
       addedFeedback: (added: number, skipped: number) =>
         `${added} aggiunte, ${skipped} già presenti.`,
       addFailed: (msg: string) => `Aggiunta fallita: ${msg}`,
+      alreadyInTarget: "già presente",
     },
     importSpotify: {
       pageTitle: "Import — Spotify",
