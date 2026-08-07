@@ -143,6 +143,8 @@ class Playlist(Base):
     artwork_url: Mapped[str | None] = mapped_column(Text)
     track_count: Mapped[int] = mapped_column(Integer, default=0)
     kind: Mapped[str] = mapped_column(String, default="playlist")  # playlist | liked
+    # Nome bloccato dall'utente (rename): il sync non lo sovrascrive piu' dalla sorgente.
+    name_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

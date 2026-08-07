@@ -47,6 +47,7 @@ from app.schemas import (
     PlaylistImportRequest,
     PlaylistOut,
     PlaylistReorderRequest,
+    PlaylistUpdateIn,
     SpotifyPlaylistRef,
     StreamingImportJobStatus,
     TrackOut,
@@ -264,6 +265,24 @@ def reorder_track(playlist_id: int, req: PlaylistReorderRequest, db: Session = D
         raise api_error(404, "track_not_in_playlist", "Track is not in this playlist")
     db.commit()
     return [track_out(t) for t in result]
+
+
+@router.patch("/{playlist_id}", response_model=PlaylistOut)
+def update_playlist(playlist_id: int, req: PlaylistUpdateIn, db: Session = Depends(get_db)):
+    """Rename della playlist. Il nome scelto e' definitivo: `name_locked` impedisce
+    al sync di risovrascriverlo dalla piattaforma (no-op sulle playlist manuali,
+    che un sync non ce l'hanno)."""
+    playlist = get_playlist(db, playlist_id)
+    if playlist is None:
+        raise api_error(404, "playlist_not_found", "Playlist not found")
+    name = req.name.strip()
+    if not name:
+        raise api_error(422, "playlist_name_empty", "Playlist name is empty.")
+    playlist.name = name
+    playlist.name_locked = True
+    db.commit()
+    db.refresh(playlist)
+    return PlaylistOut.model_validate(playlist)
 
 
 @router.get("", response_model=list[PlaylistOut])

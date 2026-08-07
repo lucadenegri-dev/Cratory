@@ -384,7 +384,8 @@ def import_playlist(
     if playlist is None:
         playlist = Playlist(platform=platform, name=name, kind=kind)
         db.add(playlist)
-    playlist.name = name
+    if not playlist.name_locked:
+        playlist.name = name
     playlist.platform_playlist_id = platform_playlist_id
     playlist.owner = owner
     playlist.url = url

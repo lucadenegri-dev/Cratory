@@ -259,7 +259,13 @@ class PlaylistOut(BaseModel):
     artwork_url: str | None = None
     track_count: int = 0
     kind: str = "playlist"
+    name_locked: bool = False
     imported_at: datetime
+
+
+class PlaylistUpdateIn(BaseModel):
+    """Rename di una playlist. Il nome scelto blocca la sovrascrittura del sync."""
+    name: str = Field(min_length=1, max_length=200)
 
 
 class PlaylistAddTracksRequest(BaseModel):
