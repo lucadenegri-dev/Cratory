@@ -123,6 +123,47 @@ export default function PlaylistsPage() {
 
   const totalTracks = imported?.reduce((sum, p) => sum + p.track_count, 0) ?? 0;
 
+  // Playlist di sistema fissate in alto in una sezione dedicata, in ordine
+  // fisso: Discovery, SoundCloud Likes, Spotify Likes.
+  const specialRank = (p: Playlist) =>
+    p.kind === "discovery" ? 0 : p.platform === "soundcloud" ? 1 : 2;
+  const isSpecial = (p: Playlist) => p.kind === "discovery" || p.kind === "liked";
+  const specials = (imported ?? []).filter(isSpecial).sort((a, b) => specialRank(a) - specialRank(b));
+  const regular = (imported ?? []).filter((p) => !isSpecial(p));
+
+  // Card condivisa tra le due sezioni: le speciali non hanno numero d'ordine,
+  // la numerazione progressiva appartiene solo all'archivio delle importate.
+  const renderCard = (p: Playlist, ordinal?: string) => (
+    <Card key={p.id} className="p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          {ordinal && <span className="tnum text-xs text-faint">{ordinal}</span>}
+          <PlaylistCover artworkUrl={p.artwork_url} platform={p.platform} kind={p.kind} className="h-11 w-11 shrink-0" iconSize={18} placeholderClassName="bg-elevated" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Link href={withFrom(`/playlists/${p.id}`, from)} className="truncate font-medium hover:text-fg-strong">{p.name}</Link>
+              <Badge tone="neutral">{p.platform}</Badge>
+              {p.kind === "liked" && <Badge tone="neutral">liked</Badge>}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-faint">
+              <span>{t.playlists.trackCount(p.track_count)}</span>
+              <span>· {p.owner ?? "—"}</span>
+              <span className="inline-flex items-center gap-1">· <Calendar size={11} /> {t.playlists.importedOn(fmtDate(p.imported_at))}</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-1.5">
+          <ButtonLink href={withFrom(`/playlists/${p.id}`, from)} size="sm" variant="outline">
+            <Eye size={15} /> {t.playlists.openButton}
+          </ButtonLink>
+          <Button size="sm" variant="danger" onClick={() => setConfirmDelete(p)} disabled={busy !== null}>
+            {busy === `del-${p.id}` ? <Spinner /> : <Trash2 size={15} />}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+
   const marginalia = (
     <div className="space-y-3">
       <Button size="sm" variant="outline" className="w-full" onClick={doSyncAll} disabled={startingSyncAll || jobRunning}>
@@ -175,37 +216,19 @@ export default function PlaylistsPage() {
         </EmptyState>
       )}
 
+      {specials.length > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-3 text-xs uppercase tracking-wide text-faint">{t.playlists.specialsHeading}</h2>
+          <div className="grid gap-3">
+            {specials.map((p) => renderCard(p))}
+          </div>
+        </div>
+      )}
+      {specials.length > 0 && regular.length > 0 && (
+        <h2 className="mb-3 text-xs uppercase tracking-wide text-faint">{t.playlists.importedHeading}</h2>
+      )}
       <div className="grid gap-3">
-        {imported?.map((p, i) => (
-          <Card key={p.id} className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="tnum text-xs text-faint">{String(i + 1).padStart(2, "0")}</span>
-                <PlaylistCover artworkUrl={p.artwork_url} platform={p.platform} kind={p.kind} className="h-11 w-11 shrink-0" iconSize={18} placeholderClassName="bg-elevated" />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Link href={withFrom(`/playlists/${p.id}`, from)} className="truncate font-medium hover:text-fg-strong">{p.name}</Link>
-                    <Badge tone="neutral">{p.platform}</Badge>
-                    {p.kind === "liked" && <Badge tone="neutral">liked</Badge>}
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-faint">
-                    <span>{t.playlists.trackCount(p.track_count)}</span>
-                    <span>· {p.owner ?? "—"}</span>
-                    <span className="inline-flex items-center gap-1">· <Calendar size={11} /> {t.playlists.importedOn(fmtDate(p.imported_at))}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex shrink-0 gap-1.5">
-                <ButtonLink href={withFrom(`/playlists/${p.id}`, from)} size="sm" variant="outline">
-                  <Eye size={15} /> {t.playlists.openButton}
-                </ButtonLink>
-                <Button size="sm" variant="danger" onClick={() => setConfirmDelete(p)} disabled={busy !== null}>
-                  {busy === `del-${p.id}` ? <Spinner /> : <Trash2 size={15} />}
-                </Button>
-              </div>
-            </div>
-          </Card>
-        ))}
+        {regular.map((p, i) => renderCard(p, String(i + 1).padStart(2, "0")))}
       </div>
 
       <ConfirmModal

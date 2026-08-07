@@ -494,6 +494,8 @@ export const en = {
     importManualButton: "Enter manually",
     statsPlaylists: "Playlists",
     statsTracksTotal: "Total tracks",
+    specialsHeading: "Specials",
+    importedHeading: "Imported",
     emptyTitle: "No playlists imported",
     emptyBody: "Use “Import from Spotify”, “Import from SoundCloud”, or “Enter manually” to start building a set.",
     deleteConfirm: (name: string) =>
