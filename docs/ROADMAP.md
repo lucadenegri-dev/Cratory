@@ -59,7 +59,12 @@ every track, owned or not): set via `PATCH /api/tracks/{track_id}` (`null` clear
 filterable and sortable on `GET /api/tracks` (unvoted tracks always sort last), a small
 tie-break bonus in the Set Builder generator (`_RATING_BONUS`, never above compatibility,
 never seen by the AI), and a system playlist **"Top"** (`kind="rating_top"`) that stays
-deterministically in sync with every track voted `3`.
+deterministically in sync with every track voted `3`. **Settings folder picker and local file link modal**
+(2026-08-07): native macOS dialog for path selection (`GET /api/files/pick/availability`,
+`POST /api/files/pick`), "Sfoglia…" button in Settings for `library_root`, `archive_root`,
+`slskd_download_dir` (folder pick) and `slskd_config_path` (file pick),
+same button in the "Collega file locale" modal next to the "percorso esatto" input (file pick only) —
+availability gated by `usePickerAvailability()` hook, shared by both contexts.
 
 Full chronological history lives in [PROGRESS.md](../PROGRESS.md).
 
