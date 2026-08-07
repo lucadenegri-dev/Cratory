@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Pulsante "Sfoglia…" accanto ai campi percorso in Settings che fa aprire al backend il dialog nativo del Finder (osascript) e riporta il percorso scelto nella bozza del campo.
+**Goal:** Pulsante "Sfoglia…" accanto ai campi percorso in Settings e all'input "percorso esatto" della modale "Collega file locale": fa aprire al backend il dialog nativo del Finder (osascript) e riporta il percorso scelto nel campo.
 
-**Architecture:** Un servizio deterministico `native_picker` (osascript, lock anti-concorrenza, timeout) esposto dal router `files` come `GET /api/files/pick/availability` + `POST /api/files/pick`. Nel frontend un componente riusabile `PathPickerButton` chiama l'endpoint e passa il percorso al genitore; `ConfigCard` in Settings lo monta accanto ai 4 campi percorso solo se il picker è disponibile. Il salvataggio resta manuale (pulsante Salva, validazione backend invariata).
+**Architecture:** Un servizio deterministico `native_picker` (osascript, lock anti-concorrenza, timeout) esposto dal router `files` come `GET /api/files/pick/availability` + `POST /api/files/pick`. Nel frontend un componente riusabile `PathPickerButton` (con hook `usePickerAvailability` condiviso) chiama l'endpoint e passa il percorso al genitore; lo montano `ConfigCard` in Settings (4 campi percorso) e la modale link file (percorso esatto), solo se il picker è disponibile. Salvataggio/collegamento restano manuali (validazione backend invariata).
 
 **Tech Stack:** FastAPI + Pydantic (backend), pytest con monkeypatch (niente osascript reale nei test), Next.js 16 + React + vitest/@testing-library (frontend).
 
@@ -474,9 +474,10 @@ git commit -m "feat(files): endpoint pick per il dialog nativo di scelta percors
 
 **Interfaces:**
 - Consumes (dal Task 2): gli endpoint `/api/files/pick*`.
-- Produces (usati dal Task 4):
+- Produces (usati dai Task 4 e 5):
   - `pickerAvailability(): Promise<{ available: boolean }>` e `pickPath(kind, start?, prompt?): Promise<{ path: string | null }>` esportati dal barrel `@/lib/api`
-  - `<PathPickerButton kind start? prompt? onPick(path) onError(message) />`
+  - `<PathPickerButton kind start? prompt? onPick(path) onError(message) />` (il bottone interno è `type="button"`: montabile dentro un `<form>` senza scatenarne il submit)
+  - `usePickerAvailability(): boolean` (fetch di availability al mount; errore = `false`)
   - chiave i18n `t.settings.browseButton`
 
 - [ ] **Step 1: Client API**
@@ -614,14 +615,26 @@ Crea `frontend/components/path-picker-button.tsx`:
 ```tsx
 "use client";
 
-import { useState } from "react";
-import { errText, pickPath } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { errText, pickerAvailability, pickPath } from "@/lib/api";
 import { Button, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
+/** Disponibilità del dialog nativo: fetch una volta al mount, errore = false
+ *  (i pulsanti Sfoglia semplicemente non compaiono). Condiviso da Settings e
+ *  dalla modale "Collega file locale". */
+export function usePickerAvailability(): boolean {
+  const [ok, setOk] = useState(false);
+  useEffect(() => {
+    pickerAvailability().then((r) => setOk(r.available)).catch(() => setOk(false));
+  }, []);
+  return ok;
+}
+
 /* Apre il dialog nativo del backend (macOS) e riporta il percorso scelto.
-   Il genitore decide se montarlo (availability) e cosa farne: qui niente
-   salvataggio, solo la scelta. */
+   Il genitore decide se montarlo (usePickerAvailability) e cosa farne: qui
+   niente salvataggio, solo la scelta. type="button": il pulsante vive anche
+   dentro form (modale link file) e non deve scatenarne il submit. */
 export function PathPickerButton({ kind, start, prompt, onPick, onError }: {
   kind: "folder" | "file";
   start?: string;
@@ -645,7 +658,7 @@ export function PathPickerButton({ kind, start, prompt, onPick, onError }: {
   };
 
   return (
-    <Button size="sm" onClick={open} disabled={busy}>
+    <Button type="button" size="sm" onClick={open} disabled={busy}>
       {busy ? <Spinner /> : t.settings.browseButton}
     </Button>
   );
@@ -799,11 +812,11 @@ marcate con `// NEW` (marcatori da NON copiare nel file finale):
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  errText, getConfigSettings, patchConfigSettings, pickerAvailability, setLibraryShare,
+  errText, getConfigSettings, patchConfigSettings, setLibraryShare,
   type ConfigPatch, type ConfigSettings,
 } from "@/lib/api";
 import { Alert, Badge, Button, CardHeader, Checkbox, Field, Input, Loading, Spinner } from "@/components/ui";
-import { PathPickerButton } from "@/components/path-picker-button";
+import { PathPickerButton, usePickerAvailability } from "@/components/path-picker-button";
 import { useT } from "@/lib/i18n";
 
 const CONFIG_FIELDS = [
@@ -830,7 +843,7 @@ export function ConfigCard() {
   const [warning, setWarning] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareMsg, setShareMsg] = useState<string | null>(null);
-  const [pickerOk, setPickerOk] = useState(false); // NEW
+  const pickerOk = usePickerAvailability(); // NEW
 
   const hydrate = useCallback((c: ConfigSettings) => {
     setConfig(c);
@@ -841,12 +854,6 @@ export function ConfigCard() {
   useEffect(() => {
     getConfigSettings().then(hydrate).catch((e) => setError(errText(e)));
   }, [hydrate]);
-
-  // NEW: fetch della disponibilità al mount; fallimento = pulsanti nascosti,
-  // la card resta usabile.
-  useEffect(() => {
-    pickerAvailability().then((r) => setPickerOk(r.available)).catch(() => setPickerOk(false));
-  }, []);
 
   const FIELD_LABEL: Record<ConfigFieldKey, string> = {
     library_root: t.settings.fieldLibraryRoot,
@@ -980,14 +987,157 @@ Expected: lint pulito, tutti i test unit PASS, build ok.
 
 Avvia backend e frontend, apri Settings: accanto ai 4 campi percorso compare "Sfoglia…"; il click apre il Finder in primo piano; scegliere una cartella riempie il campo con hint "Modifica non salvata"; annullare non cambia nulla; Salva persiste come prima.
 
-- [ ] **Step 9: Aggiorna ROADMAP/PROGRESS**
-
-- `docs/ROADMAP.md`: registra la feature come fatta secondo lo stile della sezione stato corrente.
-- `PROGRESS.md`: voce diario in coda, stile delle voci esistenti, con data 2026-08-07 e rimando alla spec.
-
-- [ ] **Step 10: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add frontend/app/settings/page.tsx frontend/components/settings/config-card.tsx frontend/tests/settings-config-card.test.tsx docs/ROADMAP.md PROGRESS.md
+git add frontend/app/settings/page.tsx frontend/components/settings/config-card.tsx frontend/tests/settings-config-card.test.tsx
 git commit -m "feat(settings): pulsante Sfoglia coi percorsi scelti dal dialog nativo"
+```
+
+---
+
+### Task 5: Pulsante Sfoglia nella modale "Collega file locale"
+
+**Files:**
+- Modify: `frontend/components/link-local-file-modal.tsx` (funzione `LinkDialog`; l'input "percorso esatto" è nel secondo `<form>`, righe ~126-144)
+- Test: `frontend/tests/link-local-file-modal.test.tsx`
+
+**Interfaces:**
+- Consumes (dal Task 3): `PathPickerButton` (già `type="button"`: dentro il form non scatena il submit), `usePickerAvailability`.
+- Produces: UI finale; nessun consumer successivo.
+
+- [ ] **Step 1: Scrivi i test (falliranno)**
+
+Crea `frontend/tests/link-local-file-modal.test.tsx`:
+
+```tsx
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { LinkLocalFileModal } from "@/components/link-local-file-modal";
+
+const searchLocalFiles = vi.fn();
+const linkLocalFile = vi.fn();
+const pickerAvailability = vi.fn();
+const pickPath = vi.fn();
+
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  searchLocalFiles: (...a: unknown[]) => searchLocalFiles(...a),
+  linkLocalFile: (...a: unknown[]) => linkLocalFile(...a),
+  pickerAvailability: (...a: unknown[]) => pickerAvailability(...a),
+  pickPath: (...a: unknown[]) => pickPath(...a),
+}));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+const TARGET = { id: 5, artist: "Objekt", title: "Ganzfeld" };
+
+async function mount(available: boolean) {
+  pickerAvailability.mockResolvedValue({ available });
+  await act(async () => {
+    render(<LinkLocalFileModal target={TARGET} onClose={() => {}} onLinked={() => {}} />);
+  });
+}
+
+describe("LinkLocalFileModal + picker", () => {
+  it("con picker disponibile il percorso esatto ha Sfoglia", async () => {
+    await mount(true);
+    expect(screen.getByRole("button", { name: "Sfoglia…" })).toBeTruthy();
+  });
+
+  it("senza picker niente Sfoglia (resta l'input testuale)", async () => {
+    await mount(false);
+    expect(screen.queryByRole("button", { name: "Sfoglia…" })).toBeNull();
+  });
+
+  it("il file scelto riempie il percorso esatto senza collegare subito", async () => {
+    // linkLocalFile mai chiamata = pinna anche il type=\"button\" del pulsante
+    // (un submit del form partirebbe col percorso vuoto).
+    await mount(true);
+    pickPath.mockResolvedValue({ path: "/Users/x/Downloads/track.mp3" });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sfoglia…" }));
+    });
+    expect(screen.getByDisplayValue("/Users/x/Downloads/track.mp3")).toBeTruthy();
+    expect(linkLocalFile).not.toHaveBeenCalled();
+  });
+
+  it("annullo del dialog: il percorso esatto resta vuoto", async () => {
+    await mount(true);
+    pickPath.mockResolvedValue({ path: null });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sfoglia…" }));
+    });
+    expect(screen.queryByDisplayValue("/Users/x/Downloads/track.mp3")).toBeNull();
+    expect(linkLocalFile).not.toHaveBeenCalled();
+  });
+});
+```
+
+- [ ] **Step 2: Verifica che falliscano**
+
+```bash
+cd frontend && npx vitest run tests/link-local-file-modal.test.tsx
+```
+
+Expected: FAIL — il pulsante "Sfoglia…" non esiste ancora nella modale (i primi due test falliscono; il mock di `pickerAvailability` resta inerte finché la modale non lo usa).
+
+- [ ] **Step 3: Monta il pulsante nella modale**
+
+In `frontend/components/link-local-file-modal.tsx`:
+
+1. Import (dopo gli import esistenti):
+
+```tsx
+import { PathPickerButton, usePickerAvailability } from "@/components/path-picker-button";
+```
+
+2. In `LinkDialog`, accanto agli altri hook (dopo `const [error, setError] = useState<string | null>(null);`):
+
+```tsx
+const pickerOk = usePickerAvailability();
+```
+
+3. Nel form del percorso esatto, dopo l'`<Input>` di `manualPath` e prima del `<Button type="submit">`:
+
+```tsx
+{pickerOk && (
+  <PathPickerButton kind="file" prompt={t.tracks.exactPathLabel}
+    onPick={setManualPath} onError={setError} />
+)}
+```
+
+(Niente `start`: `manualPath` di solito è vuoto o è un file, e il backend usa
+`start` solo se è una directory esistente.)
+
+- [ ] **Step 4: Verifica che passino**
+
+```bash
+cd frontend && npx vitest run tests/link-local-file-modal.test.tsx
+```
+
+Expected: 4 PASS.
+
+- [ ] **Step 5: Verifica frontend completa**
+
+```bash
+cd frontend && npm run lint && npm run test:unit && npm run build
+```
+
+Expected: lint pulito, tutti i test unit PASS, build ok.
+
+- [ ] **Step 6: Aggiorna ROADMAP/PROGRESS**
+
+- `docs/ROADMAP.md`: registra la feature (Settings + modale link file) come fatta secondo lo stile della sezione stato corrente.
+- `PROGRESS.md`: voce diario in coda, stile delle voci esistenti, con data 2026-08-07 e rimando alla spec.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add frontend/components/link-local-file-modal.tsx frontend/tests/link-local-file-modal.test.tsx docs/ROADMAP.md PROGRESS.md
+git commit -m "feat(tracks): pulsante Sfoglia nella modale Collega file locale"
 ```

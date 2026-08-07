@@ -1,14 +1,16 @@
 # Settings: pulsante "Sfoglia" con dialog nativo macOS
 
-Data: 2026-08-07 · Stato: approvata
+Data: 2026-08-07 · Stato: approvata (esteso in pari data: anche la modale
+"Collega file locale")
 
 ## Obiettivo
 
 In Settings i campi percorso (`library_root`, `archive_root`,
-`slskd_download_dir`, `slskd_config_path`) vanno digitati a mano. Il browser
-non può rivelare percorsi assoluti dal proprio file picker, ma il backend gira
-sulla stessa macchina: un pulsante "Sfoglia…" fa aprire al backend il dialog
-nativo del Finder e riporta il percorso scelto nel campo.
+`slskd_download_dir`, `slskd_config_path`) vanno digitati a mano; lo stesso
+vale per il campo "percorso esatto" della modale "Collega file locale". Il
+browser non può rivelare percorsi assoluti dal proprio file picker, ma il
+backend gira sulla stessa macchina: un pulsante "Sfoglia…" fa aprire al
+backend il dialog nativo del Finder e riporta il percorso scelto nel campo.
 
 Scelta di approccio: dialog nativo via `osascript` (macOS-only) invece di un
 folder picker in-app cross-platform — decisione esplicita dell'utente, meno
@@ -47,6 +49,16 @@ codice; estendibile dopo.
 - Nuove stringhe i18n in entrambe le lingue (etichetta pulsante, prompt del
   dialog se serve, errore "picker occupato/non disponibile").
 
+## Frontend (modale "Collega file locale")
+
+- Stesso pulsante "Sfoglia…" (scelta file) accanto all'input "percorso esatto"
+  di `link-local-file-modal.tsx`, visibile solo se il picker è disponibile.
+  Il file scelto riempie l'input; il collegamento resta manuale col pulsante
+  Collega (validazione backend invariata). La disponibilità arriva da un hook
+  condiviso con Settings (un solo punto che interroga `availability`).
+- Attenzione: l'input sta dentro un `<form>` — il pulsante Sfoglia deve avere
+  `type="button"` per non scatenare il submit del collegamento.
+
 ## Test
 
 - Backend (`backend/tests`): availability su darwin/non-darwin (monkeypatch di
@@ -55,10 +67,13 @@ codice; estendibile dopo.
   occupato e su piattaforma non supportata; `start` inesistente ignorato.
 - Frontend (vitest): il pulsante compare solo se `available`; click riempie la
   bozza senza salvare; annullo non tocca la bozza; errore mostrato nel banner.
+  Per la modale: Sfoglia presente solo se `available`, il file scelto riempie
+  il percorso esatto senza far partire il collegamento (pinna il
+  `type="button"`).
 
 ## Fuori scope
 
 - Supporto Windows (dialog PowerShell/WinForms) e ambienti headless.
-- Uso del picker fuori da Settings.
+- Uso del picker fuori da Settings e dalla modale "Collega file locale".
 - Folder picker in-app cross-platform (alternativa A, scartata).
 - Auto-salvataggio del percorso scelto.
