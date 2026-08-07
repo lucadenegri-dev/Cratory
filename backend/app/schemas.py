@@ -41,6 +41,7 @@ class TrackOut(BaseModel):
     local_format: str | None = None
     local_bitrate: int | None = None
     archived: bool = False
+    rating: int | None = None
     last_download_outcome: str | None = None
     last_download_reason: str | None = None
     last_download_path: str | None = None

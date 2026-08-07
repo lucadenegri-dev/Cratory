@@ -59,6 +59,10 @@ class Track(Base):
     # Scartata: il file e' finito nell'archivio (PASSED in DJPlayer). Esclusa da
     # wishlist/discovery/download; il possesso in Libreria la riabilita.
     archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
+    # Voto personale a 3 livelli (1..3), NULL = non votata. Vale per tutte le
+    # tracce, anche i lead non posseduti. La playlist speciale "Top"
+    # (kind='rating_top') e' sincronizzata col voto da services/rating.
+    rating: Mapped[int | None] = mapped_column(Integer, index=True)
     # Ultimo esito del download Soulseek (needs_review | not_found | failed |
     # downloaded): alimenta la sezione "da sistemare", che deve sopravvivere
     # a job e riavvii (lo stato del job e' in memoria).
