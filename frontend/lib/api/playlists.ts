@@ -1,4 +1,4 @@
-import { API, apiDelete, apiGet, apiPatch, apiPost } from "./client";
+import { API, apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
 import type {
   GapAnalysis,
   LikedTrackPreview,
@@ -116,4 +116,10 @@ export function addTracksToPlaylist(playlistId: number, trackIds: number[]) {
  *  Ritorna la lista tracce riordinata. */
 export function reorderPlaylistTrack(playlistId: number, trackId: number, position: number) {
   return apiPost<Track[]>(`/api/playlists/${playlistId}/reorder`, { track_id: trackId, position });
+}
+
+/** Sostituisce l'ordine completo della playlist (drag-and-drop): permutazione
+ *  esatta dei membri. Ritorna la lista riordinata. */
+export function setPlaylistOrder(playlistId: number, trackIds: number[]) {
+  return apiPut<Track[]>(`/api/playlists/${playlistId}/order`, { track_ids: trackIds });
 }

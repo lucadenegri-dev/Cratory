@@ -541,6 +541,8 @@ export const it: Dictionary = {
     removeTrackFailed: (msg: string) => `Rimozione traccia fallita: ${msg}`,
     editPositionTitle: "Cambia posizione",
     reorderPositionAria: "Nuova posizione",
+    dragToReorderHint: "Trascina le righe per riordinare.",
+    dragDisabledHint: "Per riordinare col trascinamento togli filtri e ordinamenti.",
     reorderFailed: (msg: string) => `Riordino fallito: ${msg}`,
     statTracksLabel: "Tracce",
     statReadyLabel: "Pronte",

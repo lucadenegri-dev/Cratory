@@ -10,6 +10,7 @@ import {
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDuration,
   startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack, renamePlaylist,
+  setPlaylistOrder,
   type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
 import { useBackLink, withFrom } from "@/lib/back-link";
@@ -87,12 +88,15 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(0);
 
-  // Riordino manuale della colonna "#": disponibile su tutte le playlist manuali,
-  // anche con un ordinamento per colonna attivo (agisce sull'ordine della playlist,
-  // non sulla vista ordinata).
-  const canReorder = playlist?.kind === "manual";
+  // Riordino manuale della colonna "#": disponibile sulle playlist manuali e
+  // shazam (ordine posseduto dall'utente), anche con un ordinamento per colonna
+  // attivo (agisce sull'ordine della playlist, non sulla vista ordinata).
+  const canReorder = playlist?.kind === "manual" || playlist?.kind === "shazam";
   const [editingRank, setEditingRank] = useState<number | null>(null); // id traccia in modifica
   const [reordering, setReordering] = useState(false);
+  // Drag-and-drop: attivo solo quando la vista coincide con l'ordine playlist
+  // (nessun sort di colonna e nessun filtro che nasconda righe).
+  const [dragId, setDragId] = useState<number | null>(null);
 
   const reload = useCallback((signal?: AbortSignal) => {
     playlistTracks(pid, { signal }).then(setTracks).catch(() => {});
@@ -291,6 +295,25 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
+  const dragEnabled = canReorder && sort === "" && visible.length === tracks.length;
+
+  const applyDrop = async (targetId: number) => {
+    if (dragId === null || dragId === targetId) return;
+    const ids = tracks.map((x) => x.id).filter((x) => x !== dragId);
+    ids.splice(ids.indexOf(targetId), 0, dragId);
+    setDragId(null);
+    setActionError(null);
+    setReordering(true);
+    try {
+      setTracks(await setPlaylistOrder(pid, ids));
+    } catch (e) {
+      setActionError(t.playlists.reorderFailed(errText(e)));
+      reload();
+    } finally {
+      setReordering(false);
+    }
+  };
+
   const applyReorder = async (trackId: number, position: number) => {
     setEditingRank(null);
     setActionError(null);
@@ -468,7 +491,15 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
           </thead>
           <tbody>
             {pageTracks.map((tr) => (
-              <tr key={tr.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
+              <tr
+                key={tr.id}
+                draggable={dragEnabled}
+                onDragStart={() => setDragId(tr.id)}
+                onDragOver={(e) => { if (dragEnabled && dragId !== null) e.preventDefault(); }}
+                onDrop={() => applyDrop(tr.id)}
+                onDragEnd={() => setDragId(null)}
+                className={`border-b border-border/50 last:border-0 hover:bg-elevated/40${dragEnabled ? " cursor-grab" : ""}${dragId === tr.id ? " opacity-40" : ""}`}
+              >
                 <td className={`${cell} tnum text-faint`}>
                   {canReorder ? (
                     editingRank === tr.id ? (
@@ -536,6 +567,12 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
           </tbody>
         </table>
       </div>
+
+      {canReorder && visible.length > 0 && (
+        <p className="mt-2 text-xs text-faint">
+          {dragEnabled ? t.playlists.dragToReorderHint : t.playlists.dragDisabledHint}
+        </p>
+      )}
 
       {visible.length > 0 && (
         <div className="mt-4 flex items-center justify-between text-sm">

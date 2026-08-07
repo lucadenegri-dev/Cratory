@@ -539,6 +539,8 @@ export const en = {
     removeTrackFailed: (msg: string) => `Track removal failed: ${msg}`,
     editPositionTitle: "Change position",
     reorderPositionAria: "New position",
+    dragToReorderHint: "Drag rows to reorder.",
+    dragDisabledHint: "To reorder by dragging, clear filters and sorting.",
     reorderFailed: (msg: string) => `Reorder failed: ${msg}`,
     statTracksLabel: "Tracks",
     statReadyLabel: "Ready",
