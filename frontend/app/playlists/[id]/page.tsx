@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PlaylistExportFormat } from "@/lib/api";
 import { useRouter, usePathname } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Pencil,
@@ -29,6 +30,11 @@ import { RatingDiamond } from "@/components/rating-diamond";
 import { useT, translateGap } from "@/lib/i18n";
 
 type Order = "asc" | "desc";
+
+const EXPORT_EXT: Record<PlaylistExportFormat, string> = { m3u8: "m3u8", csv: "csv", text: "txt", markdown: "md" };
+const EXPORT_MIME: Record<PlaylistExportFormat, string> = {
+  m3u8: "audio/x-mpegurl", csv: "text/csv", text: "text/plain", markdown: "text/markdown",
+};
 
 function slugName(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "playlist";
@@ -77,6 +83,8 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const [bulkRemoving, setBulkRemoving] = useState(false);
   const [confirmBulkRemove, setConfirmBulkRemove] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   // Filtri (come in libreria) — applicati lato client sulla playlist (insieme limitato).
   const [artist, setArtist] = useState("");
@@ -123,6 +131,16 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   useEffect(() => {
     setSelected(new Set());
   }, [tracks]);
+
+  // Chiude il menu export al click fuori (stesso pattern di AddToPlaylistMenu).
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setExportMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [exportMenuOpen]);
 
   // Rank di posizione: indice nell'array `tracks`, che arriva già in ordine
   // `position` dal backend (manuale-riordinabile o cronologico per le altre
@@ -384,16 +402,17 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
-  const doExport = async () => {
+  const doExport = async (format: PlaylistExportFormat) => {
     if (!playlist) return;
+    setExportMenuOpen(false);
     setActionError(null);
     setExporting(true);
     try {
-      const body = await exportPlaylist(pid);
-      const url = URL.createObjectURL(new Blob([body], { type: "audio/x-mpegurl" }));
+      const body = await exportPlaylist(pid, format);
+      const url = URL.createObjectURL(new Blob([body], { type: EXPORT_MIME[format] }));
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${slugName(playlist.name)}.m3u8`;
+      a.download = `${slugName(playlist.name)}.${EXPORT_EXT[format]}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -402,6 +421,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
       setExporting(false);
     }
   };
+
 
   const marginalia = (
     <div className="space-y-3">
@@ -415,7 +435,30 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
         ? <ButtonLink href={likedImportHref} size="sm" variant="outline" block><Heart size={14} /> {t.playlists.addMoreLiked}</ButtonLink>
         : canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} {t.playlists.syncFromButton(platformName)}</Button>}
       {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> {platformName}</Button></a>}
-      <Button size="sm" variant="outline" className="w-full" onClick={doExport} disabled={exporting}>{exporting ? <Spinner /> : <Download size={15} />} {t.playlists.exportRekordboxButton}</Button>
+      <div ref={exportMenuRef} className="relative">
+        <Button size="sm" variant="outline" className="w-full" onClick={() => setExportMenuOpen((o) => !o)} disabled={exporting}>
+          {exporting ? <Spinner /> : <Download size={15} />} {t.playlists.exportButton}
+        </Button>
+        {exportMenuOpen && (
+          <div className="absolute left-0 z-20 mt-1 w-full border border-border bg-elevated p-1 shadow-lg">
+            {([
+              ["m3u8", t.playlists.exportM3u8Option],
+              ["csv", t.playlists.exportCsvOption],
+              ["text", t.playlists.exportTextOption],
+              ["markdown", t.playlists.exportMarkdownOption],
+            ] as [PlaylistExportFormat, string][]).map(([fmt, label]) => (
+              <button
+                key={fmt}
+                type="button"
+                onClick={() => doExport(fmt)}
+                className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-surface"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <Button size="sm" variant="outline" className="w-full" onClick={doDuplicate} disabled={duplicating}>{duplicating ? <Spinner /> : <Copy size={14} />} {t.playlists.duplicateButton}</Button>
       <Button size="sm" variant="danger" className="w-full" onClick={() => setConfirmDelete(true)} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} {t.playlists.removeButton}</Button>
       <div className="space-y-2 border-t border-border pt-4 text-xs">

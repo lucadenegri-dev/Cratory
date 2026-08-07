@@ -81,9 +81,11 @@ export function removeTracksFromPlaylist(playlistId: number, trackIds: number[])
     `/api/playlists/${playlistId}/tracks/remove`, { track_ids: trackIds });
 }
 
-/** Export M3U8 della playlist (importabile in Rekordbox), come per i set. */
-export async function exportPlaylist(id: number): Promise<string> {
-  const res = await fetch(`${API}/api/playlists/${id}/export?format=m3u8`, { method: "POST" });
+export type PlaylistExportFormat = "m3u8" | "csv" | "text" | "markdown";
+
+/** Export della playlist nel formato scelto (default M3U8 per Rekordbox). */
+export async function exportPlaylist(id: number, format: PlaylistExportFormat = "m3u8"): Promise<string> {
+  const res = await fetch(`${API}/api/playlists/${id}/export?format=${format}`, { method: "POST" });
   if (!res.ok) throw new Error(res.statusText);
   return res.text();
 }

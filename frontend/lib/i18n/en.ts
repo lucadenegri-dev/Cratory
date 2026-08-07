@@ -531,7 +531,11 @@ export const en = {
     duplicateFailed: (msg: string) => `Duplicate failed: ${msg}`,
     renameTitle: "Rename playlist",
     renameFailed: (msg: string) => `Rename failed: ${msg}`,
-    exportRekordboxButton: "Export for Rekordbox (M3U8)",
+    exportButton: "Export",
+    exportM3u8Option: "M3U8 (Rekordbox)",
+    exportCsvOption: "CSV",
+    exportTextOption: "Text",
+    exportMarkdownOption: "Markdown",
     exportFailed: (msg: string) => `Export failed: ${msg}`,
     removeTrackTitle: "Remove from playlist",
     removeTrackConfirm: (title: string) =>

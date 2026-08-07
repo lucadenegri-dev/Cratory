@@ -533,7 +533,11 @@ export const it: Dictionary = {
     duplicateFailed: (msg: string) => `Duplicazione fallita: ${msg}`,
     renameTitle: "Rinomina playlist",
     renameFailed: (msg: string) => `Rinomina fallita: ${msg}`,
-    exportRekordboxButton: "Esporta per Rekordbox (M3U8)",
+    exportButton: "Esporta",
+    exportM3u8Option: "M3U8 (Rekordbox)",
+    exportCsvOption: "CSV",
+    exportTextOption: "Testo",
+    exportMarkdownOption: "Markdown",
     exportFailed: (msg: string) => `Export fallito: ${msg}`,
     removeTrackTitle: "Togli dalla playlist",
     removeTrackConfirm: (title: string) =>
