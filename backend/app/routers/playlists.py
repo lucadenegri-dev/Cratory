@@ -27,6 +27,7 @@ from app.repositories import (
     all_playable_tracks,
     delete_playlist,
     delete_playlist_track,
+    delete_playlist_tracks,
     get_playlist,
     list_playlists,
     recount_playlist,
@@ -42,12 +43,14 @@ from app.schemas import (
     ManualImportRequest,
     PlaylistAddTracksRequest,
     PlaylistAddTracksResult,
+    PlaylistBulkRemoveResult,
     PlaylistDeleteResult,
     PlaylistFromTracksRequest,
     PlaylistImportReport,
     PlaylistImportRequest,
     PlaylistOrderRequest,
     PlaylistOut,
+    PlaylistRemoveTracksRequest,
     PlaylistReorderRequest,
     PlaylistUpdateIn,
     SpotifyPlaylistRef,
@@ -343,6 +346,17 @@ def remove_playlist_track(playlist_id: int, track_id: int, db: Session = Depends
     if removed is None:
         raise api_error(404, "playlist_track_not_found", "Track not in playlist")
     return PlaylistDeleteResult(deleted_tracks=removed)
+
+
+@router.post("/{playlist_id}/tracks/remove", response_model=PlaylistBulkRemoveResult)
+def remove_playlist_tracks(playlist_id: int, req: PlaylistRemoveTracksRequest, db: Session = Depends(get_db)):
+    """Toglie piu' tracce dalla playlist (bulk). I lead diventati orfani vengono
+    cancellati come nella rimozione singola; gli id non-membri sono ignorati."""
+    result = delete_playlist_tracks(db, playlist_id, req.track_ids)
+    if result is None:
+        raise api_error(404, "playlist_not_found", "Playlist not found")
+    removed, deleted = result
+    return PlaylistBulkRemoveResult(removed=removed, deleted_tracks=deleted)
 
 
 @router.post("/{playlist_id}/export", response_class=PlainTextResponse)

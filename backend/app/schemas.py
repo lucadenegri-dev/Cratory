@@ -297,6 +297,16 @@ class PlaylistDeleteResult(BaseModel):
     deleted_tracks: int = 0
 
 
+class PlaylistRemoveTracksRequest(BaseModel):
+    """Rimozione bulk di tracce dalla playlist."""
+    track_ids: list[int] = Field(min_length=1)
+
+
+class PlaylistBulkRemoveResult(BaseModel):
+    removed: int = 0          # membership tolte
+    deleted_tracks: int = 0   # lead orfani cancellati dalla libreria
+
+
 class SpotifyPlaylistRef(BaseModel):
     """Playlist disponibile su Spotify (per la selezione, prima dell'import)."""
 

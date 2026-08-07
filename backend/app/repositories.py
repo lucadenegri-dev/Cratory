@@ -593,6 +593,33 @@ def delete_playlist_track(db: Session, playlist_id: int, track_id: int) -> int |
     return removed
 
 
+def delete_playlist_tracks(db: Session, playlist_id: int, track_ids: list[int]) -> tuple[int, int] | None:
+    """Toglie piu' tracce dalla playlist in un colpo; i lead diventati orfani
+    vengono cancellati (stessa politica di `delete_playlist_track`). Ritorna
+    (membership rimosse, orfani cancellati), o None se la playlist non esiste.
+    Gli id non-membri sono ignorati. Committa."""
+    playlist = get_playlist(db, playlist_id)
+    if playlist is None:
+        return None
+    members = set(db.scalars(
+        select(playlist_tracks.c.track_id).where(
+            playlist_tracks.c.playlist_id == playlist_id,
+            playlist_tracks.c.track_id.in_(track_ids),
+        )
+    ).all())
+    if not members:
+        return (0, 0)
+    db.execute(playlist_tracks.delete().where(
+        playlist_tracks.c.playlist_id == playlist_id,
+        playlist_tracks.c.track_id.in_(members),
+    ))
+    recount_playlist(db, playlist)
+    db.flush()  # le membership rimosse devono essere visibili al check orfani
+    deleted = delete_orphan_leads(db, list(members))
+    db.commit()
+    return (len(members), deleted)
+
+
 def delete_playlist(db: Session, playlist_id: int) -> int | None:
     """Rimuove una playlist e i lead diventati orfani (non su disco, non in altre
     playlist, non in alcun set salvato). Ritorna il numero di tracce orfane
