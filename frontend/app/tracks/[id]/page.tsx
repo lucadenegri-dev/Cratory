@@ -106,7 +106,7 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
           onSaved={(r) => setTrack((cur) => (cur ? { ...cur, rating: r } : cur))}
         />
         <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> {t.tracks.editValues}</Button>
-        <AddToPlaylistMenu track={track} onChanged={refresh} />
+        <AddToPlaylistMenu trackIds={[track.id]} inPlaylistIds={track.playlists.map((p) => p.id)} onChanged={refresh} />
       </div>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
         <div className="flex justify-between gap-2"><span className="text-muted">{t.tracks.rowSource}</span><span className="text-fg">{track.source_type}</span></div>

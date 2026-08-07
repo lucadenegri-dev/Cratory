@@ -69,6 +69,12 @@ export function removeTrackFromPlaylist(playlistId: number, trackId: number) {
   return apiDelete<PlaylistDeleteResult>(`/api/playlists/${playlistId}/tracks/${trackId}`);
 }
 
+/** Toglie più tracce dalla playlist (bulk); i lead orfani vengono cancellati. */
+export function removeTracksFromPlaylist(playlistId: number, trackIds: number[]) {
+  return apiPost<{ removed: number; deleted_tracks: number }>(
+    `/api/playlists/${playlistId}/tracks/remove`, { track_ids: trackIds });
+}
+
 /** Export M3U8 della playlist (importabile in Rekordbox), come per i set. */
 export async function exportPlaylist(id: number): Promise<string> {
   const res = await fetch(`${API}/api/playlists/${id}/export?format=m3u8`, { method: "POST" });

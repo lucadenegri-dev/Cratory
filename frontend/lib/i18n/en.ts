@@ -541,6 +541,15 @@ export const en = {
     reorderPositionAria: "New position",
     dragToReorderHint: "Drag rows to reorder.",
     dragDisabledHint: "To reorder by dragging, clear filters and sorting.",
+    selectedCount: (n: number) => n === 1 ? "1 selected" : `${n} selected`,
+    bulkRemoveButton: "Remove from playlist",
+    bulkRemoveConfirm: (n: number) =>
+      `Remove ${n} tracks from this playlist? Leads with no file on disk, not in other playlists nor in a set, will be deleted.`,
+    bulkRemoved: (n: number, deleted: number) =>
+      deleted > 0 ? `${n} tracks removed · ${deleted} orphan leads deleted.` : `${n} tracks removed from the playlist.`,
+    clearSelection: "Clear selection",
+    selectAllAria: "Select all visible tracks",
+    selectTrackAria: "Select track",
     reorderFailed: (msg: string) => `Reorder failed: ${msg}`,
     statTracksLabel: "Tracks",
     statReadyLabel: "Ready",

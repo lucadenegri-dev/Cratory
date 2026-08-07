@@ -10,7 +10,7 @@ import {
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDuration,
   startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack, renamePlaylist,
-  setPlaylistOrder,
+  setPlaylistOrder, removeTracksFromPlaylist,
   type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
 import { useBackLink, withFrom } from "@/lib/back-link";
@@ -21,6 +21,7 @@ import { TrackCover } from "@/components/track-cover";
 import { PlaylistCover } from "@/components/playlist-cover";
 import { useJobs } from "@/components/jobs-provider";
 import { TrackEditModal } from "@/components/track-edit-modal";
+import { AddToPlaylistMenu } from "@/components/add-to-playlist-menu";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { KeyBadge } from "@/components/key-badge";
 import { TrackStateIcons } from "@/components/track-state-icons";
@@ -70,6 +71,10 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const [removingTrackId, setRemovingTrackId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  // Selezione multipla per le azioni bulk (togli / aggiungi a playlist).
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkRemoving, setBulkRemoving] = useState(false);
+  const [confirmBulkRemove, setConfirmBulkRemove] = useState(false);
 
   // Filtri (come in libreria) — applicati lato client sulla playlist (insieme limitato).
   const [artist, setArtist] = useState("");
@@ -110,6 +115,11 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
     reload(ac.signal);
     return () => ac.abort();
   }, [pid, reload]);
+
+  // La selezione non sopravvive a un reload delle tracce (sync, rimozioni, riordino).
+  useEffect(() => {
+    setSelected(new Set());
+  }, [tracks]);
 
   // Rank di posizione: indice nell'array `tracks`, che arriva già in ordine
   // `position` dal backend (manuale-riordinabile o cronologico per le altre
@@ -328,6 +338,37 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
+  const toggleSelected = (id: number, on: boolean) => {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (on) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+
+  const allVisibleSelected = visible.length > 0 && visible.every((tr) => selected.has(tr.id));
+  const toggleSelectAll = (on: boolean) => {
+    setSelected(on ? new Set(visible.map((tr) => tr.id)) : new Set());
+  };
+
+  const doBulkRemove = async () => {
+    const ids = [...selected];
+    setBulkRemoving(true);
+    setActionError(null);
+    setNotice(null);
+    try {
+      const { removed, deleted_tracks } = await removeTracksFromPlaylist(pid, ids);
+      setNotice(t.playlists.bulkRemoved(removed, deleted_tracks));
+      setSelected(new Set());
+      getPlaylist(pid).then(setPlaylist).catch(() => {});
+      reload();
+    } catch (e) {
+      setActionError(t.playlists.removeTrackFailed(errText(e)));
+    } finally {
+      setBulkRemoving(false);
+    }
+  };
+
   const doExport = async () => {
     if (!playlist) return;
     setActionError(null);
@@ -473,10 +514,30 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
         </div>
       </Card>
 
+      {selected.size > 0 && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 border border-border bg-elevated px-3 py-2 text-sm">
+          <span className="text-muted">{t.playlists.selectedCount(selected.size)}</span>
+          <AddToPlaylistMenu trackIds={[...selected]} excludePlaylistId={pid} onChanged={() => reload()} />
+          <Button size="sm" variant="danger" onClick={() => setConfirmBulkRemove(true)} disabled={bulkRemoving}>
+            {bulkRemoving ? <Spinner /> : <Trash2 size={14} />} {t.playlists.bulkRemoveButton}
+          </Button>
+          <button className="text-xs text-muted hover:text-fg" onClick={() => setSelected(new Set())}>{t.playlists.clearSelection}</button>
+        </div>
+      )}
+
       <div className="overflow-x-auto border border-border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-faint">
+              <th className={cell}>
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={(e) => toggleSelectAll(e.target.checked)}
+                  aria-label={t.playlists.selectAllAria}
+                  className="h-4 w-4 accent-[var(--color-fg)]"
+                />
+              </th>
               {th("#", "rank", true)}
               {th("Title", "title")}
               {th("Artist", "artist")}
@@ -500,6 +561,15 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                 onDragEnd={() => setDragId(null)}
                 className={`border-b border-border/50 last:border-0 hover:bg-elevated/40${dragEnabled ? " cursor-grab" : ""}${dragId === tr.id ? " opacity-40" : ""}`}
               >
+                <td className={cell}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(tr.id)}
+                    onChange={(e) => toggleSelected(tr.id, e.target.checked)}
+                    aria-label={t.playlists.selectTrackAria}
+                    className="h-4 w-4 accent-[var(--color-fg)]"
+                  />
+                </td>
                 <td className={`${cell} tnum text-faint`}>
                   {canReorder ? (
                     editingRank === tr.id ? (
@@ -563,7 +633,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                 </td>
               </tr>
             ))}
-            {visible.length === 0 && <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -603,6 +673,16 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
         confirmLabel={t.common.delete}
         onConfirm={() => { setConfirmDelete(false); doDelete(); }}
         onClose={() => setConfirmDelete(false)}
+      />
+
+      <ConfirmModal
+        open={confirmBulkRemove}
+        title={t.playlists.bulkRemoveButton}
+        message={t.playlists.bulkRemoveConfirm(selected.size)}
+        tone="danger"
+        confirmLabel={t.common.delete}
+        onConfirm={() => { setConfirmBulkRemove(false); doBulkRemove(); }}
+        onClose={() => setConfirmBulkRemove(false)}
       />
 
       <ConfirmModal

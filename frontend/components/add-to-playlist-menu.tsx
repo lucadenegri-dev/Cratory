@@ -2,13 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, ListPlus, Plus } from "lucide-react";
-import { addTracksToPlaylist, createPlaylistFromTracks, errText, listImportedPlaylists, type Playlist, type TrackDetail } from "@/lib/api";
+import { addTracksToPlaylist, createPlaylistFromTracks, errText, listImportedPlaylists, type Playlist } from "@/lib/api";
 import { Button, Input, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
-/** Popover nella sidebar del dettaglio traccia: aggiunge la traccia a una
- *  playlist manuale esistente, o ne crea una nuova con dentro la traccia. */
-export function AddToPlaylistMenu({ track, onChanged }: { track: TrackDetail; onChanged: () => void }) {
+/** Popover "aggiungi a playlist": aggiunge una o più tracce a una playlist
+ *  manuale esistente, o ne crea una nuova. Con una sola traccia marca le
+ *  playlist che la contengono già (`inPlaylistIds`); `excludePlaylistId`
+ *  nasconde la playlist corrente (es. barra bulk del dettaglio playlist). */
+export function AddToPlaylistMenu({ trackIds, inPlaylistIds = [], excludePlaylistId, onChanged }: {
+  trackIds: number[];
+  inPlaylistIds?: number[];
+  excludePlaylistId?: number;
+  onChanged: () => void;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -27,9 +34,9 @@ export function AddToPlaylistMenu({ track, onChanged }: { track: TrackDetail; on
     setCreating(false);
     setNewName("");
     listImportedPlaylists()
-      .then((all) => setPlaylists(all.filter((p) => p.kind === "manual")))
+      .then((all) => setPlaylists(all.filter((p) => p.kind === "manual" && p.id !== excludePlaylistId)))
       .catch(() => setPlaylists([]));
-  }, [open]);
+  }, [open, excludePlaylistId]);
 
   useEffect(() => {
     if (!open) return;
@@ -40,14 +47,15 @@ export function AddToPlaylistMenu({ track, onChanged }: { track: TrackDetail; on
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  const inIds = new Set(track.playlists.map((p) => p.id));
+  // "Già presente" ha senso solo per una singola traccia (dettaglio traccia).
+  const inIds = new Set(trackIds.length === 1 ? inPlaylistIds : []);
 
   const addTo = async (pl: Playlist) => {
     setBusy(pl.id);
     setError(null);
     setSuccess(null);
     try {
-      await addTracksToPlaylist(pl.id, [track.id]);
+      await addTracksToPlaylist(pl.id, trackIds);
       onChanged();
       setSuccess(t.tracks.addedToPlaylist(pl.name));
     } catch (e) {
@@ -63,7 +71,7 @@ export function AddToPlaylistMenu({ track, onChanged }: { track: TrackDetail; on
     setError(null);
     setSuccess(null);
     try {
-      const created = await createPlaylistFromTracks(newName.trim(), [track.id]);
+      const created = await createPlaylistFromTracks(newName.trim(), trackIds);
       setPlaylists((prev) => [...prev, created]);
       onChanged();
       setSuccess(t.tracks.createdPlaylist(newName.trim()));

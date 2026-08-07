@@ -543,6 +543,15 @@ export const it: Dictionary = {
     reorderPositionAria: "Nuova posizione",
     dragToReorderHint: "Trascina le righe per riordinare.",
     dragDisabledHint: "Per riordinare col trascinamento togli filtri e ordinamenti.",
+    selectedCount: (n: number) => n === 1 ? "1 selezionata" : `${n} selezionate`,
+    bulkRemoveButton: "Togli dalla playlist",
+    bulkRemoveConfirm: (n: number) =>
+      `Togliere ${n} tracce da questa playlist? I lead senza file su disco, non in altre playlist né in un set, verranno cancellati.`,
+    bulkRemoved: (n: number, deleted: number) =>
+      deleted > 0 ? `${n} tracce tolte · ${deleted} lead orfani rimossi.` : `${n} tracce tolte dalla playlist.`,
+    clearSelection: "Deseleziona",
+    selectAllAria: "Seleziona tutte le tracce visibili",
+    selectTrackAria: "Seleziona traccia",
     reorderFailed: (msg: string) => `Riordino fallito: ${msg}`,
     statTracksLabel: "Tracce",
     statReadyLabel: "Pronte",
