@@ -14,6 +14,10 @@ import threading
 from pathlib import Path
 
 TIMEOUT_SECONDS = 300.0
+# Leggermente sopra TIMEOUT_SECONDS: lascia il tempo allo script AppleScript
+# (con il suo `with timeout of` interno) di uscire da solo prima che il kill
+# del subprocess intervenga.
+SUBPROCESS_TIMEOUT_SECONDS = TIMEOUT_SECONDS + 10.0
 
 _lock = threading.Lock()
 
@@ -38,7 +42,12 @@ def _escape(text: str) -> str:
 def build_script(kind: str, start: str | None, prompt: str | None) -> str:
     """AppleScript `choose folder`/`choose file` dentro System Events attivato:
     porta il dialog in primo piano anche se il backend gira in background.
-    `start` diventa `default location` solo se è una directory esistente."""
+    `start` diventa `default location` solo se è una directory esistente.
+
+    Il `choose` gira dentro un blocco `with timeout of` esplicito: l'Apple
+    Event verso System Events ha di default un reply timeout di 120s, troppo
+    poco se l'utente lascia il dialog aperto più a lungo. Lo estendiamo a
+    `TIMEOUT_SECONDS` per allinearlo al timeout del subprocess."""
     choose = "choose folder" if kind == "folder" else "choose file"
     if prompt:
         choose += f' with prompt "{_escape(prompt)}"'
@@ -49,7 +58,9 @@ def build_script(kind: str, start: str | None, prompt: str | None) -> str:
     return (
         'tell application "System Events"\n'
         "activate\n"
+        f"with timeout of {int(TIMEOUT_SECONDS)} seconds\n"
         f"POSIX path of ({choose})\n"
+        "end timeout\n"
         "end tell"
     )
 
@@ -68,7 +79,7 @@ def pick_path(kind: str, start: str | None = None, prompt: str | None = None,
         try:
             proc = runner(
                 ["osascript", "-e", build_script(kind, start, prompt)],
-                capture_output=True, text=True, timeout=TIMEOUT_SECONDS,
+                capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT_SECONDS,
             )
         except subprocess.TimeoutExpired:
             return None

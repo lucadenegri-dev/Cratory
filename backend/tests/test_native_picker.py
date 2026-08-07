@@ -100,7 +100,7 @@ def test_runner_riceve_timeout_e_osascript(monkeypatch):
 
     np.pick_path("folder", runner=runner)
     assert seen["cmd"][0] == "osascript"
-    assert seen["timeout"] == np.TIMEOUT_SECONDS
+    assert seen["timeout"] == np.SUBPROCESS_TIMEOUT_SECONDS
 
 
 def test_build_script_folder_vs_file():
@@ -121,3 +121,9 @@ def test_build_script_start_inesistente_ignorato():
 def test_build_script_prompt_con_escape_dei_doppi_apici():
     script = np.build_script("folder", None, 'Cartella "libreria"')
     assert 'with prompt "Cartella \\"libreria\\""' in script
+
+
+def test_build_script_contiene_timeout_esplicito_a_300s():
+    script = np.build_script("folder", None, None)
+    assert "with timeout of 300 seconds" in script
+    assert "end timeout" in script
