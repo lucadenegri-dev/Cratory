@@ -31,6 +31,7 @@ from app.repositories import (
     list_playlists,
     recount_playlist,
     reorder_playlist_track,
+    set_playlist_order,
     tracks_for_playlist,
 )
 from app.schemas import (
@@ -45,6 +46,7 @@ from app.schemas import (
     PlaylistFromTracksRequest,
     PlaylistImportReport,
     PlaylistImportRequest,
+    PlaylistOrderRequest,
     PlaylistOut,
     PlaylistReorderRequest,
     PlaylistUpdateIn,
@@ -252,17 +254,41 @@ def add_tracks(playlist_id: int, req: PlaylistAddTracksRequest, db: Session = De
     )
 
 
+# Kind con ordine posseduto dall'utente (nessuna sorgente che lo ridetta).
+REORDERABLE_KINDS = {"manual", "shazam"}
+
+
+def _reorderable_or_409(playlist: Playlist) -> None:
+    if playlist.kind not in REORDERABLE_KINDS:
+        raise api_error(409, "playlist_not_reorderable",
+                        "Reorder is only allowed on manual and shazam playlists")
+
+
 @router.post("/{playlist_id}/reorder", response_model=list[TrackOut])
 def reorder_track(playlist_id: int, req: PlaylistReorderRequest, db: Session = Depends(get_db)):
-    """Riordino manuale: sposta una traccia a una posizione (solo playlist manuali)."""
+    """Riordino manuale: sposta una traccia a una posizione (playlist manuali/shazam)."""
     playlist = get_playlist(db, playlist_id)
     if playlist is None:
         raise api_error(404, "playlist_not_found", "Playlist not found")
-    if playlist.kind != "manual":
-        raise api_error(409, "playlist_not_manual", "Reorder is only allowed on manual playlists")
+    _reorderable_or_409(playlist)
     result = reorder_playlist_track(db, playlist_id, req.track_id, req.position)
     if result is None:
         raise api_error(404, "track_not_in_playlist", "Track is not in this playlist")
+    db.commit()
+    return [track_out(t) for t in result]
+
+
+@router.put("/{playlist_id}/order", response_model=list[TrackOut])
+def set_order(playlist_id: int, req: PlaylistOrderRequest, db: Session = Depends(get_db)):
+    """Sostituisce l'ordine completo (drag-and-drop): permutazione esatta dei membri."""
+    playlist = get_playlist(db, playlist_id)
+    if playlist is None:
+        raise api_error(404, "playlist_not_found", "Playlist not found")
+    _reorderable_or_409(playlist)
+    result = set_playlist_order(db, playlist_id, req.track_ids)
+    if result is None:
+        raise api_error(422, "order_mismatch",
+                        "track_ids must be an exact permutation of the playlist members")
     db.commit()
     return [track_out(t) for t in result]
 
@@ -349,7 +375,12 @@ def export_playlist(
 def playlist_tracks(playlist_id: int, db: Session = Depends(get_db)):
     if get_playlist(db, playlist_id) is None:
         raise api_error(404, "playlist_not_found", "Playlist not found")
-    return [track_out(t) for t in tracks_for_playlist(db, playlist_id)]
+    out = []
+    for i, t in enumerate(tracks_for_playlist(db, playlist_id), start=1):
+        row = track_out(t)
+        row.playlist_position = i
+        out.append(row)
+    return out
 
 
 @router.get("/library/gaps", response_model=GapAnalysisResponse)

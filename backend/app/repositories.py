@@ -422,6 +422,21 @@ def reorder_playlist_track(db: Session, playlist_id: int, track_id: int, positio
     return tracks_for_playlist(db, playlist_id)
 
 
+def set_playlist_order(db: Session, playlist_id: int, track_ids: list[int]) -> list[Track] | None:
+    """Sostituisce l'ordine completo della playlist con la permutazione data e
+    rinumera 1..N. None se `track_ids` non e' una permutazione esatta dei membri.
+    Non committa."""
+    current = [t.id for t in tracks_for_playlist(db, playlist_id)]
+    if sorted(current) != sorted(track_ids):
+        return None
+    for new_pos, tid in enumerate(track_ids, start=1):
+        db.execute(playlist_tracks.update().where(
+            playlist_tracks.c.playlist_id == playlist_id,
+            playlist_tracks.c.track_id == tid,
+        ).values(position=new_pos))
+    return tracks_for_playlist(db, playlist_id)
+
+
 def tracks_download_pending(db: Session) -> list[Track]:
     """Wishlist con esito download da sistemare (da rivedere/non trovata/fallita)."""
     return list(db.scalars(

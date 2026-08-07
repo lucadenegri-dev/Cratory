@@ -33,6 +33,8 @@ class TrackOut(BaseModel):
     url: str | None = None
     isrc: str | None = None
     playlists: list[TrackPlaylistRef] = []
+    # Posizione 1-based nella playlist: valorizzata SOLO da GET /api/playlists/{id}/tracks.
+    playlist_position: int | None = None
     added_at: datetime | None = None
     spotify_url: str | None = None
     album_art_url: str | None = None
@@ -282,6 +284,11 @@ class PlaylistAddTracksResult(BaseModel):
 class PlaylistReorderRequest(BaseModel):
     track_id: int
     position: int = Field(ge=1)
+
+
+class PlaylistOrderRequest(BaseModel):
+    """Ordine completo della playlist: permutazione esatta dei membri."""
+    track_ids: list[int] = Field(min_length=1)
 
 
 class PlaylistDeleteResult(BaseModel):
