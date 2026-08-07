@@ -69,6 +69,11 @@ export function removeTrackFromPlaylist(playlistId: number, trackId: number) {
   return apiDelete<PlaylistDeleteResult>(`/api/playlists/${playlistId}/tracks/${trackId}`);
 }
 
+/** Fork della playlist in una copia manuale (riordinabile/editabile). */
+export function duplicatePlaylist(id: number, name?: string) {
+  return apiPost<Playlist>(`/api/playlists/${id}/duplicate`, { name: name ?? null });
+}
+
 /** Toglie più tracce dalla playlist (bulk); i lead orfani vengono cancellati. */
 export function removeTracksFromPlaylist(playlistId: number, trackIds: number[]) {
   return apiPost<{ removed: number; deleted_tracks: number }>(

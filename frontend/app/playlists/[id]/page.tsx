@@ -5,12 +5,12 @@ import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from
 import { useRouter, usePathname } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Pencil,
-  RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart,
+  RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart, Copy,
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDuration,
   startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack, renamePlaylist,
-  setPlaylistOrder, removeTracksFromPlaylist,
+  setPlaylistOrder, removeTracksFromPlaylist, duplicatePlaylist,
   type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
 import { useBackLink, withFrom } from "@/lib/back-link";
@@ -75,6 +75,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkRemoving, setBulkRemoving] = useState(false);
   const [confirmBulkRemove, setConfirmBulkRemove] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
 
   // Filtri (come in libreria) — applicati lato client sulla playlist (insieme limitato).
   const [artist, setArtist] = useState("");
@@ -369,6 +370,18 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
+  const doDuplicate = async () => {
+    setDuplicating(true);
+    setActionError(null);
+    try {
+      const copy = await duplicatePlaylist(pid);
+      router.push(`/playlists/${copy.id}`);
+    } catch (e) {
+      setActionError(t.playlists.duplicateFailed(errText(e)));
+      setDuplicating(false);
+    }
+  };
+
   const doExport = async () => {
     if (!playlist) return;
     setActionError(null);
@@ -401,6 +414,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
         : canSync && <Button size="sm" variant="outline" className="w-full" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : <RefreshCw size={14} />} {t.playlists.syncFromButton(platformName)}</Button>}
       {playlist.url && <a href={playlist.url} target="_blank" rel="noreferrer" className="block"><Button size="sm" variant="outline" className="w-full"><ExternalLink size={14} /> {platformName}</Button></a>}
       <Button size="sm" variant="outline" className="w-full" onClick={doExport} disabled={exporting}>{exporting ? <Spinner /> : <Download size={15} />} {t.playlists.exportRekordboxButton}</Button>
+      <Button size="sm" variant="outline" className="w-full" onClick={doDuplicate} disabled={duplicating}>{duplicating ? <Spinner /> : <Copy size={14} />} {t.playlists.duplicateButton}</Button>
       <Button size="sm" variant="danger" className="w-full" onClick={() => setConfirmDelete(true)} disabled={deleting}>{deleting ? <Spinner /> : <Trash2 size={15} />} {t.playlists.removeButton}</Button>
       <div className="space-y-2 border-t border-border pt-4 text-xs">
         <div className="flex justify-between gap-2"><span className="text-muted">{t.playlists.statTracksLabel}</span><span className="tnum text-fg">{playlist.track_count}</span></div>

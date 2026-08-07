@@ -527,6 +527,8 @@ export const en = {
     syncAllFailuresHeading: (n: number) =>
       n === 1 ? "1 playlist not synced:" : `${n} playlists not synced:`,
     removeButton: "Remove",
+    duplicateButton: "Duplicate as manual",
+    duplicateFailed: (msg: string) => `Duplicate failed: ${msg}`,
     renameTitle: "Rename playlist",
     renameFailed: (msg: string) => `Rename failed: ${msg}`,
     exportRekordboxButton: "Export for Rekordbox (M3U8)",
