@@ -6,6 +6,7 @@ import type {
   PlaylistAddTracksResult,
   PlaylistDeleteResult,
   PlaylistImportReport,
+  PlaylistSyncEvent,
   SpotifyPlaylistRef,
   StreamingImportJobStatus,
   Track,
@@ -97,6 +98,11 @@ export function syncPlaylist(id: number) {
  *  SoundCloud importate (liked esclusi). */
 export function syncAllPlaylists() {
   return apiPost<StreamingImportJobStatus>("/api/playlists/sync-all");
+}
+
+/** Ultimi diff di import/sync della playlist (più recente prima). */
+export function playlistSyncLog(id: number, opts?: { signal?: AbortSignal }) {
+  return apiGet<PlaylistSyncEvent[]>(`/api/playlists/${id}/sync-log`, undefined, opts);
 }
 
 export function playlistGaps(id: number, opts?: { signal?: AbortSignal }) {

@@ -10,8 +10,8 @@ import {
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDuration,
   startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack, renamePlaylist,
-  setPlaylistOrder, removeTracksFromPlaylist, duplicatePlaylist,
-  type Playlist, type Track, type GapAnalysis,
+  setPlaylistOrder, removeTracksFromPlaylist, duplicatePlaylist, playlistSyncLog,
+  type Playlist, type Track, type GapAnalysis, type PlaylistSyncEvent,
 } from "@/lib/api";
 import { useBackLink, withFrom } from "@/lib/back-link";
 import { Card, Badge, Alert, Button, Spinner, Input, Select, Checkbox, Loading } from "@/components/ui";
@@ -59,6 +59,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [gaps, setGaps] = useState<GapAnalysis | null>(null);
+  const [syncLog, setSyncLog] = useState<PlaylistSyncEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -107,6 +108,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const reload = useCallback((signal?: AbortSignal) => {
     playlistTracks(pid, { signal }).then(setTracks).catch(() => {});
     playlistGaps(pid, { signal }).then(setGaps).catch(() => {});
+    playlistSyncLog(pid, { signal }).then(setSyncLog).catch(() => {});
   }, [pid]);
 
   useEffect(() => {
@@ -527,6 +529,30 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
           <div className="mt-2"><Checkbox label={t.playlists.incompleteOnlyLabel} checked={incomplete} onChange={setIncomplete} /></div>
         </div>
       </Card>
+
+      {canSync && syncLog.length > 0 && (
+        <details className="group mb-4 border border-border">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
+            <span>{t.playlists.syncLogHeading(syncLog.length)}</span>
+            <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
+          </summary>
+          <div className="grid gap-3 border-t border-border p-4 text-sm">
+            {syncLog.map((ev) => (
+              <div key={ev.id}>
+                <p className="text-xs text-faint">
+                  {new Date(ev.created_at).toLocaleString()} · {t.playlists.syncLogAdded(ev.added.length)} · {t.playlists.syncLogRemoved(ev.removed.length)}
+                </p>
+                {ev.added.map((x, i) => (
+                  <p key={`a${i}`} className="text-fg">+ {x.artist ?? "?"} — {x.title ?? "?"}</p>
+                ))}
+                {ev.removed.map((x, i) => (
+                  <p key={`r${i}`} className="text-muted">− {x.artist ?? "?"} — {x.title ?? "?"}</p>
+                ))}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       {selected.size > 0 && (
         <div className="mb-2 flex flex-wrap items-center gap-2 border border-border bg-elevated px-3 py-2 text-sm">

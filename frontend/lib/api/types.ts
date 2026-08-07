@@ -46,6 +46,20 @@ export interface Playlist {
   imported_at: string;
 }
 
+export interface SyncTrackRef {
+  id: number | null;
+  artist: string | null;
+  title: string | null;
+}
+
+/** Un import/sync che ha cambiato la playlist: cosa è entrato e uscito. */
+export interface PlaylistSyncEvent {
+  id: number;
+  created_at: string;
+  added: SyncTrackRef[];
+  removed: SyncTrackRef[];
+}
+
 export interface PlaylistAddTracksResult {
   playlist: Playlist;
   added: number;

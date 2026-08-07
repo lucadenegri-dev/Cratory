@@ -562,6 +562,9 @@ export const it: Dictionary = {
     readyForSetLabel: (n: number) => `${n} pronte per il set`,
     ownedOfLabel: (owned: number, total: number) => `possiedi ${owned} di ${total}`,
     tipsHeading: (n: number) => `Tips · ${n}`,
+    syncLogHeading: (n: number) => `Storico sync · ${n}`,
+    syncLogAdded: (n: number) => n === 1 ? "1 aggiunta" : `${n} aggiunte`,
+    syncLogRemoved: (n: number) => n === 1 ? "1 rimossa" : `${n} rimosse`,
     incompleteOnlyLabel: "solo dati incompleti (manca BPM/key o metadati)",
     importManual: {
       pageTitle: "Nuova playlist",

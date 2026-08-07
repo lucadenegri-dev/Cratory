@@ -560,6 +560,9 @@ export const en = {
     readyForSetLabel: (n: number) => `${n} ready for set`,
     ownedOfLabel: (owned: number, total: number) => `you own ${owned} of ${total}`,
     tipsHeading: (n: number) => `Tips · ${n}`,
+    syncLogHeading: (n: number) => `Sync history · ${n}`,
+    syncLogAdded: (n: number) => n === 1 ? "1 added" : `${n} added`,
+    syncLogRemoved: (n: number) => n === 1 ? "1 removed" : `${n} removed`,
     incompleteOnlyLabel: "incomplete data only (missing BPM/key or metadata)",
     importManual: {
       pageTitle: "New playlist",
