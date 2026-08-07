@@ -73,6 +73,7 @@ export const en = {
     overrideBadge: "override .env",
     unsavedHint: "Unsaved change",
     saveButton: "Save",
+    browseButton: "Browse…",
     savedLabel: "Saved ✓",
     shareLibraryLabel: "Share the library on Soulseek",
     shareLibraryHint: "Adds the library folder to slskd's shares. This exposes your filenames to the Soulseek network (sharing is good etiquette — leech-only accounts get throttled).",
@@ -1162,6 +1163,8 @@ export const en = {
     download_review_error: (p: Record<string, unknown>) => `Download review error: ${p.reason ?? ""}`,
     shazam_deps_missing: "Identification unavailable: ffmpeg, yt-dlp and shazamio are required on the backend.",
     dj_set_already_imported: "Set already imported as playlist",
+    picker_unavailable: "Native picker unavailable: it requires the backend on macOS.",
+    picker_busy: "A picker dialog is already open on the backend machine.",
   } as Record<string, string | ((p: Record<string, unknown>) => string)>,
 };
 
