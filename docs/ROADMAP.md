@@ -53,7 +53,13 @@ with the Set Builder/Rekordbox). **Detail pages now return where you came from**
 the back link restores the origin — library filters included — instead of always falling
 back to the library. **Playlists gained a bulk "Sync all"**: one background job realigns
 every Spotify and SoundCloud playlist (liked excluded, they grow through the selective
-flow); a failing playlist is reported and skipped, never fatal to the rest.
+flow); a failing playlist is reported and skipped, never fatal to the rest. **Tracks now
+carry a personal 1-3 rating** (`rating`, nullable — NULL means "not rated", available on
+every track, owned or not): set via `PATCH /api/tracks/{track_id}` (`null` clears it),
+filterable and sortable on `GET /api/tracks` (unvoted tracks always sort last), a small
+tie-break bonus in the Set Builder generator (`_RATING_BONUS`, never above compatibility,
+never seen by the AI), and a system playlist **"Top"** (`kind="rating_top"`) that stays
+deterministically in sync with every track voted `3`.
 
 Full chronological history lives in [PROGRESS.md](../PROGRESS.md).
 

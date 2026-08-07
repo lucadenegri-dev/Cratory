@@ -27,6 +27,7 @@ _SORT_COLUMNS = {
     "duration": Track.duration_seconds,
     "year": Track.year,
     "status": Track.status,
+    "rating": Track.rating,
 }
 
 
@@ -43,6 +44,7 @@ def _apply_track_filters(  # noqa: PLR0913
     bpm_min: float | None = None,
     bpm_max: float | None = None,
     key: str | None = None,
+    rating: int | None = None,
     duration_min: int | None = None,
     duration_max: int | None = None,
     has_spotify: bool | None = None,
@@ -72,6 +74,8 @@ def _apply_track_filters(  # noqa: PLR0913
         stmt = stmt.where(Track.bpm <= bpm_max)
     if key:
         stmt = stmt.where(Track.camelot_key.ilike(key))  # case-insensitive: "7a" -> "7A"
+    if rating is not None:
+        stmt = stmt.where(Track.rating == rating)
     if duration_min is not None:
         stmt = stmt.where(Track.duration_seconds >= duration_min)
     if duration_max is not None:
@@ -160,6 +164,10 @@ def update_track(db: Session, track: Track, data: dict) -> Track:
         track.key_source = "manual" if track.camelot_key else None
     if "bpm" in data or "genre" in data:
         apply_estimated_energy(track)
+    if "rating" in data:
+        # Sync playlist "Top" nella stessa transazione del PATCH.
+        from app.services.rating import sync_rating_top
+        sync_rating_top(db, track)
     refresh_status(track)
     db.commit()
     db.refresh(track)
@@ -462,7 +470,7 @@ def orphan_lead_ids(db: Session, candidate_ids: Iterable[int] | None = None) -> 
 _MERGE_BACKFILL_FIELDS = (
     "spotify_id", "soundcloud_id", "platform", "platform_track_id", "isrc", "url",
     "title", "artist", "album", "genre", "year", "label", "duration_seconds",
-    "bpm", "camelot_key", "energy", "album_art_url",
+    "bpm", "camelot_key", "energy", "album_art_url", "rating",
     "local_path", "local_format", "local_bitrate", "local_mtime", "local_size", "audio_hash",
 )
 
@@ -509,6 +517,11 @@ def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
         keep.has_local_file = True
     db.flush()  # applica gli spostamenti prima di cancellare drop
     db.delete(drop)
+    # Il merge puo' aver trasferito la membership della Top (se drop aveva voto 3):
+    # la sync riallinea la membership al voto di keep (che ora e' quello vincente
+    # dopo il backfill sopra), cosi' l'invariante Top<->voto 3 non si rompe.
+    from app.services.rating import sync_rating_top
+    sync_rating_top(db, keep)
     return keep
 
 

@@ -179,6 +179,17 @@ playlist_not_manual` on any other kind. `404 playlist_not_found` if the playlist
 exist; `404 track_not_in_playlist` if `track_id` is not a member. Response: the reordered
 track list (`list[TrackOut]`), same shape as `GET /api/playlists/{playlist_id}/tracks`.
 
+The system playlist **"Top"** (`platform="manual"`, `kind="rating_top"`) is not created
+through any endpoint above: it comes into existence lazily, the first time a track is
+voted `rating=3` (see Tracks and library), and stays in sync deterministically from then
+on (`services/rating.py`, called from `PATCH /api/tracks/{track_id}` inside the same
+transaction as the vote, before commit — same precedent as the Discovery playlist).
+At most one such playlist exists. Membership tracks the current vote exactly: a track
+enters as soon as its `rating` reaches `3` and leaves the moment it drops below that (or
+the vote is cleared), regardless of how the track got into the library. New memberships
+are marked `added_by="cratory"` like the other system playlists, and `track_count` is
+kept realigned. Equivalent to querying `GET /api/tracks?rating=3` directly.
+
 ## Tracks and library
 
 ```text
@@ -195,11 +206,14 @@ GET   /api/stats
 ```
 
 Filters supported by `GET /api/tracks`: artist, title, album, genre, label
-(`label`, exact match) and archived (`archived`, default `false`: archived ones are
+(`label`, exact match), rating (`rating`, `1`-`3` exact match; tracks with no vote are
+never matched by this filter) and archived (`archived`, default `false`: archived ones are
 excluded; `true` shows only the archived ones), source (incl. `local_files`), state
 (`imported` | `ready_for_set`), BPM min/max, key, duration, Spotify/SoundCloud
-presence, ownership (`has_local_file`), incomplete metadata, sort/order, limit/offset,
-and `in_playlist` (repeatable, e.g. `?in_playlist=1&in_playlist=2`): tracks belonging
+presence, ownership (`has_local_file`), incomplete metadata, sort/order (`sort=rating` is
+supported like the other columns; tracks with `rating IS NULL` always sort last,
+regardless of `order`), limit/offset, and `in_playlist` (repeatable, e.g.
+`?in_playlist=1&in_playlist=2`): tracks belonging
 to **any** of the given playlists (union), AND-combined with every other filter (e.g.
 paired with `genre` it narrows to tracks in any of those playlists that also match the
 genre) — for the tracks of a single playlist use `GET /api/playlists/{playlist_id}/tracks`.
@@ -235,6 +249,15 @@ from BPM+genre and is recomputed automatically when the patch touches `bpm` or
 track out of the wishlist; unlike the other fields, `null` does NOT clear it and is
 treated as "unchanged" (the column is a NOT NULL bool). Library indexing still wins:
 owning the file on disk sets `archived` back to `false`.
+
+It also accepts `rating` (`int | null`, `1`-`3`, `422` from schema validation outside that
+range): a personal 3-level vote, available on **every** track including ones not owned
+(`has_local_file=false`). Unlike `archived`, an explicit `null` clears an existing vote
+back to "not rated" — consistent with the other nullable fields. Setting or clearing
+`rating` also deterministically syncs the "Top" playlist (see Playlists) in the same
+transaction as the patch, before commit (`services/rating.py`). The vote is never sent
+to the AI and never affects any deterministic score beyond the small Set Builder
+tie-break bonus (see Set Builder and saved sets).
 
 `POST /api/tracks/{track_id}/link-file` manually links a file on disk to the track
 (ownership without download): it validates existence and audio extension, sets
@@ -300,6 +323,12 @@ prompt, mood-fit and anchor hints feeding the deterministic generator, narrative
 is configured and `prompt` is non-empty). In every case the deterministic two-phase generator
 is the only thing that sequences tracks — the AI never orders or picks the tracklist, and any
 AI call that fails degrades silently to the deterministic default with a warning, never a 4xx/5xx.
+
+Track `rating` (1-3, see Tracks and library) feeds a small deterministic tie-break bonus into
+the generator's scoring (`_RATING_BONUS = 2.0` per level, max `6.0`, in `_candidate_score` and
+`_pick_first`): a higher vote nudges a track ahead of an equally-compatible one, but can never
+outweigh actual musical compatibility. The vote is deterministic-engine input only — it is
+never shown to or usable by the AI curation stage.
 
 `SetlistOut` (AI curation fields):
 

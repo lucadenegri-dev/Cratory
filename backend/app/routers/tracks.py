@@ -44,6 +44,7 @@ def get_tracks(  # noqa: PLR0913
     bpm_min: float | None = None,
     bpm_max: float | None = None,
     key: str | None = None,
+    rating: int | None = Query(default=None, ge=1, le=3),
     duration_min: int | None = None,
     duration_max: int | None = None,
     has_spotify: bool | None = None,
@@ -54,7 +55,7 @@ def get_tracks(  # noqa: PLR0913
     incomplete_metadata: bool | None = None,
     sort: str | None = Query(
         default=None,
-        pattern="^(title|artist|source|bpm|key|energy|genre|duration|year|status)$",
+        pattern="^(title|artist|source|bpm|key|energy|genre|duration|year|status|rating)$",
     ),
     order: str = Query(default="asc", pattern="^(asc|desc)$"),
     limit: int = Query(default=100, ge=0, le=500),  # 0 = tutte (nessuna paginazione)
@@ -64,7 +65,7 @@ def get_tracks(  # noqa: PLR0913
         db,
         limit=limit, offset=offset, sort=sort, order=order,
         artist=artist, title=title, album=album, genre=genre, label=label, source=source, status=status,
-        bpm_min=bpm_min, bpm_max=bpm_max, key=key,
+        bpm_min=bpm_min, bpm_max=bpm_max, key=key, rating=rating,
         duration_min=duration_min, duration_max=duration_max,
         has_spotify=has_spotify, has_soundcloud=has_soundcloud,
         has_local_file=has_local_file,

@@ -23,6 +23,7 @@ import { TrackEditModal } from "@/components/track-edit-modal";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { KeyBadge } from "@/components/key-badge";
 import { TrackStateIcons } from "@/components/track-state-icons";
+import { RatingDiamond } from "@/components/rating-diamond";
 import { useT, translateGap } from "@/lib/i18n";
 
 type Order = "asc" | "desc";
@@ -78,6 +79,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const [bpmMax, setBpmMax] = useState("");
   const [key, setKey] = useState("");
   const [owned, setOwned] = useState(""); // "" = tutte | "true" = possedute | "false" = wishlist
+  const [rating, setRating] = useState(""); // "" | "1" | "2" | "3"
   const [incomplete, setIncomplete] = useState(false);
   const [sort, setSort] = useState("");
   const [order, setOrder] = useState<Order>("asc");
@@ -123,6 +125,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
       if (source && tr.source_type !== source) return false;
       if (status && tr.status !== status) return false;
       if (owned && tr.has_local_file !== (owned === "true")) return false;
+      if (rating && tr.rating !== Number(rating)) return false;
       if (key && !inc(tr.camelot_key, key)) return false;
       if (bpmMin && (tr.bpm ?? -Infinity) < Number(bpmMin)) return false;
       if (bpmMax && (tr.bpm ?? Infinity) > Number(bpmMax)) return false;
@@ -139,7 +142,16 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
       bpm: (tr) => num(tr.bpm), key: (tr) => camelotRank(tr.camelot_key), energy: (tr) => num(tr.energy),
       genre: (tr) => str(tr.genre), duration: (tr) => num(tr.duration_seconds), status: (tr) => tr.status,
     };
-    if (sort && getters[sort]) {
+    if (sort === "rating") {
+      // Stesso criterio del backend: non votate sempre in fondo (in entrambi i
+      // versi), poi ordina per voto nella direzione scelta.
+      rows = [...rows].sort((a, b) => {
+        const aNull = a.rating == null, bNull = b.rating == null;
+        if (aNull !== bNull) return aNull ? 1 : -1;
+        if (aNull && bNull) return 0;
+        return order === "desc" ? (b.rating as number) - (a.rating as number) : (a.rating as number) - (b.rating as number);
+      });
+    } else if (sort && getters[sort]) {
       const g = getters[sort];
       rows = [...rows].sort((a, b) => { const x = g(a), y = g(b); return x < y ? -dir : x > y ? dir : 0; });
     } else {
@@ -147,13 +159,13 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
       rows = [...rows].sort((a, b) => (insertionRank.get(a.id) ?? 0) - (insertionRank.get(b.id) ?? 0));
     }
     return rows;
-  }, [tracks, artist, title, genre, source, status, owned, key, bpmMin, bpmMax, incomplete, sort, order, insertionRank]);
+  }, [tracks, artist, title, genre, source, status, owned, rating, key, bpmMin, bpmMax, incomplete, sort, order, insertionRank]);
 
   // Paginazione lato client sull'insieme già filtrato/ordinato: si riparte da pagina 0
   // ogni volta che cambia un filtro (stesso pattern della libreria).
   useEffect(() => {
     setPage(0);
-  }, [artist, title, genre, source, status, owned, key, bpmMin, bpmMax, incomplete]);
+  }, [artist, title, genre, source, status, owned, rating, key, bpmMin, bpmMax, incomplete]);
 
   const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   // Clamp difensivo: se la lista si accorcia (sync, edit) sotto la pagina corrente.
@@ -397,6 +409,12 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
               <option value="true">{t.library.ownedTrueOption}</option>
               <option value="false">{t.library.ownedFalseOption}</option>
             </Select>
+            <Select className="h-9" value={rating} onChange={(e) => setRating(e.target.value)}>
+              <option value="">{t.tracks.ratingLabel}</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </Select>
             <Input className="h-9" type="number" placeholder={t.library.bpmMinPlaceholder} value={bpmMin} onChange={(e) => setBpmMin(e.target.value)} />
             <Input className="h-9" type="number" placeholder={t.library.bpmMaxPlaceholder} value={bpmMax} onChange={(e) => setBpmMax(e.target.value)} />
             <Input className="h-9" placeholder={t.library.keyPlaceholder} value={key} onChange={(e) => setKey(e.target.value)} />
@@ -418,7 +436,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
               {th(t.library.colEnergy, "energy", true)}
               {th(t.library.colDuration, "duration", true)}
               <th className={cell}>{t.library.colStatus}</th>
-              <th className={cell}></th>
+              {th(t.tracks.ratingLabel, "rating")}
             </tr>
           </thead>
           <tbody>
@@ -474,6 +492,11 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                 <td className={cell}><TrackStateIcons track={tr} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
+                    <RatingDiamond
+                      trackId={tr.id}
+                      rating={tr.rating}
+                      onSaved={(r) => setTracks((cur) => cur.map((x) => (x.id === tr.id ? { ...x, rating: r } : x)))}
+                    />
                     <button onClick={() => setEditing(tr)} title={t.library.editValuesTitle} className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
                     <button onClick={() => setConfirmRemoveTrack(tr)} disabled={removingTrackId !== null} title={t.playlists.removeTrackTitle} className="text-faint transition-colors hover:text-danger disabled:opacity-40">
                       {removingTrackId === tr.id ? <Spinner /> : <Trash2 size={14} />}

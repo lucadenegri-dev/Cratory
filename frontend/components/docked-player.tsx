@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 
 import { discoverySaveForLater, trackAudioUrl } from "@/lib/api";
+import { RatingDiamond } from "@/components/rating-diamond";
 import { TrackCover } from "@/components/track-cover";
 import { useT } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
@@ -91,6 +92,9 @@ export function DockedPlayer() {
               {isAdded ? <Check size={13} /> : <Plus size={12} />}
               {t.discovery.add}
             </button>
+          )}
+          {active.kind === "local-track" && (
+            <RatingDiamond trackId={active.track.id} rating={active.track.rating ?? null} />
           )}
           <button aria-label={t.player.close} onClick={stop} className="text-faint hover:text-fg">
             <X size={16} />

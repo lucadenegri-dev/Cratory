@@ -41,6 +41,7 @@ class TrackOut(BaseModel):
     local_format: str | None = None
     local_bitrate: int | None = None
     archived: bool = False
+    rating: int | None = None
     last_download_outcome: str | None = None
     last_download_reason: str | None = None
     last_download_path: str | None = None
@@ -82,6 +83,8 @@ class TrackUpdateIn(BaseModel):
     # Archivia/ripristina dalla wishlist. Bool NOT NULL: null = invariato
     # (il "null azzera" degli altri campi non si applica, vedi patch_track).
     archived: bool | None = None
+    # Voto 1..3; null esplicito = toglie il voto (semantica PATCH standard).
+    rating: int | None = Field(default=None, ge=1, le=3)
 
 
 class TrackLinkFileIn(BaseModel):

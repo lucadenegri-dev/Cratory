@@ -480,6 +480,8 @@ export const en = {
     addToPlaylistFailed: (msg: string) => `Add failed: ${msg}`,
     addedToPlaylist: (name: string) => `Added to ${name}`,
     createdPlaylist: (name: string) => `Created ${name}`,
+    ratingLabel: "Rating",
+    ratingLevelTitle: (level: number) => `Rate ${level} of 3`,
   },
   playlists: {
     pageTitle: "Playlist",

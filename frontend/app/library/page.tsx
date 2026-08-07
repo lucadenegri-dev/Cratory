@@ -11,6 +11,7 @@ import { TrackEditModal } from "@/components/track-edit-modal";
 import { TrackCover } from "@/components/track-cover";
 import { TrackStateIcons } from "@/components/track-state-icons";
 import { KeyBadge } from "@/components/key-badge";
+import { RatingDiamond } from "@/components/rating-diamond";
 import { LibraryTrackGrid } from "@/components/library-track-grid";
 import { useT } from "@/lib/i18n";
 
@@ -58,6 +59,7 @@ function LibraryInner() {
   const [key, setKey] = useState(searchParams.get("key") ?? "");
   const [incomplete, setIncomplete] = useState(searchParams.get("incomplete") === "1");
   const [owned, setOwned] = useState(searchParams.get("owned") ?? ""); // "" = tutte | "true" = possedute | "false" = wishlist
+  const [rating, setRating] = useState(searchParams.get("rating") ?? "");
   const [sort, setSort] = useState(searchParams.get("sort") ?? "");
   const [order, setOrder] = useState<Order>(searchParams.get("order") === "desc" ? "desc" : "asc");
   const [editing, setEditing] = useState<Track | null>(null);
@@ -88,13 +90,14 @@ function LibraryInner() {
     if (bpmMax) params.set("bpm_max", bpmMax);
     if (key) params.set("key", key);
     if (incomplete) params.set("incomplete", "1");
+    if (rating) params.set("rating", rating);
     if (sort) {
       params.set("sort", sort);
       if (order !== "asc") params.set("order", order);
     }
     if (offset > 0) params.set("offset", String(offset));
     return params.toString();
-  }, [artist, title, genre, source, status, owned, bpmMin, bpmMax, key, incomplete, sort, order, offset]);
+  }, [artist, title, genre, source, status, owned, bpmMin, bpmMax, key, incomplete, rating, sort, order, offset]);
   // Suffisso `?from=` per i link verso il dettaglio traccia: porta con sé path +
   // filtri/sort/paginazione, così il link indietro là torna esattamente qui.
   // NB: si usa `queryString` (lo stato vivo) e non searchParams, che è indietro
@@ -124,11 +127,12 @@ function LibraryInner() {
       artist, title, genre, source, status, bpm_min: bpmMin, bpm_max: bpmMax, key,
       incomplete_metadata: incomplete ? true : undefined,
       has_local_file: owned || undefined,
+      rating: rating ? Number(rating) : undefined,
       sort: sort || undefined, order: sort ? order : undefined,
       limit, offset,
     }, { signal })
       .then((r) => { setItems(r.items); setTotal(r.total); setError(null); });
-  }, [artist, title, genre, source, status, bpmMin, bpmMax, key, incomplete, owned, sort, order, offset, view]);
+  }, [artist, title, genre, source, status, bpmMin, bpmMax, key, incomplete, owned, rating, sort, order, offset, view]);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -167,7 +171,7 @@ function LibraryInner() {
   };
 
   const hasActiveFilters = Boolean(
-    artist || title || genre || source || status || bpmMin || bpmMax || key || incomplete || owned
+    artist || title || genre || source || status || bpmMin || bpmMax || key || incomplete || owned || rating
   );
 
   const filters = (
@@ -190,6 +194,12 @@ function LibraryInner() {
         <option value="">{t.library.ownedAllOption}</option>
         <option value="true">{t.library.ownedTrueOption}</option>
         <option value="false">{t.library.ownedFalseOption}</option>
+      </Select>
+      <Select className="h-9" value={rating} onChange={(e) => { setRating(e.target.value); setOffset(0); }}>
+        <option value="">{t.tracks.ratingLabel}</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
       </Select>
       <div className="grid grid-cols-2 gap-2">
         <Input className="h-9" type="number" placeholder={t.library.bpmMinPlaceholder} value={bpmMin} onChange={(e) => { setBpmMin(e.target.value); setOffset(0); }} />
@@ -252,7 +262,7 @@ function LibraryInner() {
               {th(t.library.colGenre, "genre")}
               {th(t.library.colDuration, "duration", true)}
               <th className={cell}>{t.library.colStatus}</th>
-              <th className={cell}></th>
+              {th(t.tracks.ratingLabel, "rating")}
             </tr>
           </thead>
           <tbody>
@@ -274,6 +284,11 @@ function LibraryInner() {
                 <td className={cell}><TrackStateIcons track={tr} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
+                    <RatingDiamond
+                      trackId={tr.id}
+                      rating={tr.rating}
+                      onSaved={(r) => setItems((cur) => (cur ?? []).map((x) => (x.id === tr.id ? { ...x, rating: r } : x)))}
+                    />
                     <button onClick={() => setEditing(tr)} title={t.library.editValuesTitle} className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>
                   </div>
                 </td>

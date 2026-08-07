@@ -12,6 +12,7 @@ type Props = {
     artist: string | null;
     has_local_file?: boolean | null;
     album_art_url?: string | null;
+    rating?: number | null;
   };
   className?: string;
 };
@@ -37,6 +38,7 @@ export function TrackPlayButton({ track, className }: Props) {
           title: track.title ?? "",
           artist: track.artist ?? "",
           albumArtUrl: track.album_art_url ?? null,
+          rating: track.rating ?? null,
         },
       });
     }

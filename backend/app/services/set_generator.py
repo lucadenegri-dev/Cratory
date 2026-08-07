@@ -47,6 +47,7 @@ _ENERGY_ARC_WEIGHT = 0.30  # aderenza al target di energia della posizione (arco
 _GENRE_WEIGHT = 0.25   # coerenza di genere: termine dedicato (come l'arco di energia),
 #                        cosi' il set resta nello stesso mondo sonoro invece di zigzagare
 _KEY_PREF_BONUS = 8.0
+_RATING_BONUS = 2.0  # per livello di voto (max 6.0): tie-break, mai sopra la compatibilita'
 _SEED_BONUS = 15.0
 _SHARP_PENALTY = 40.0  # scoraggia i salti bruschi quando la strategia non li vuole
 RESET_WINDOW = 0.1     # ampiezza (frazione di set) attorno a un reset point
@@ -148,7 +149,10 @@ def _pick_first(candidates: list[Track], req: SetGenerationRequest, start_bpm: f
             s += 100.0
         return s
 
-    return max(candidates, key=first_score)
+    # A questa scala (~1 punto per BPM di distanza) il bonus voto additivo
+    # ribalterebbe l'aderenza al BPM di partenza: il voto conta SOLO come
+    # tie-break puro (secondo criterio dell'ordinamento), mai sommato al punteggio.
+    return max(candidates, key=lambda t: (first_score(t), t.rating or 0))
 
 
 def _candidate_score(
@@ -222,6 +226,8 @@ def _candidate_score(
         if cand_genre in wanted:
             seen = (genre_counts or {}).get(cand_genre, 0)
             total += _REQUESTED_GENRE_BONUS / (1 + seen)
+    # Voto personale: spinta piccola e deterministica, a parita' di compatibilita'.
+    total += _RATING_BONUS * (cand.rating or 0)
     return total, ts
 
 

@@ -12,6 +12,7 @@ import { TrackCover } from "@/components/track-cover";
 import { LinkLocalFileModal } from "@/components/link-local-file-modal";
 import { TrackPlayButton } from "@/components/track-play-button";
 import { AddToPlaylistMenu } from "@/components/add-to-playlist-menu";
+import { RatingDiamond } from "@/components/rating-diamond";
 import { useT } from "@/lib/i18n";
 
 function TransitionList({ title, items, emptyLabel }: { title: string; items: TransitionCandidate[]; emptyLabel: string }) {
@@ -98,6 +99,12 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
   const marginalia = (
     <div className="space-y-4">
       <div className="flex flex-col gap-2">
+        <RatingDiamond
+          trackId={track.id}
+          rating={track.rating}
+          size={22}
+          onSaved={(r) => setTrack((cur) => (cur ? { ...cur, rating: r } : cur))}
+        />
         <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> {t.tracks.editValues}</Button>
         <AddToPlaylistMenu track={track} onChanged={refresh} />
       </div>

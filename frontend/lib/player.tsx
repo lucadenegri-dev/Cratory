@@ -26,6 +26,8 @@ export type LocalTrack = {
   artist: string;
   /** Artwork Spotify se presente; il dock ripiega su cover embedded/placeholder. */
   albumArtUrl?: string | null;
+  /** Voto personale (1-3, o null): mostrato nel dock via RatingDiamond. */
+  rating?: number | null;
 };
 
 export type PlaybackSource =
