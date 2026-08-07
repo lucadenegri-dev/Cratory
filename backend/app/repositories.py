@@ -27,6 +27,7 @@ _SORT_COLUMNS = {
     "duration": Track.duration_seconds,
     "year": Track.year,
     "status": Track.status,
+    "rating": Track.rating,
 }
 
 
@@ -43,6 +44,7 @@ def _apply_track_filters(  # noqa: PLR0913
     bpm_min: float | None = None,
     bpm_max: float | None = None,
     key: str | None = None,
+    rating: int | None = None,
     duration_min: int | None = None,
     duration_max: int | None = None,
     has_spotify: bool | None = None,
@@ -72,6 +74,8 @@ def _apply_track_filters(  # noqa: PLR0913
         stmt = stmt.where(Track.bpm <= bpm_max)
     if key:
         stmt = stmt.where(Track.camelot_key.ilike(key))  # case-insensitive: "7a" -> "7A"
+    if rating is not None:
+        stmt = stmt.where(Track.rating == rating)
     if duration_min is not None:
         stmt = stmt.where(Track.duration_seconds >= duration_min)
     if duration_max is not None:
