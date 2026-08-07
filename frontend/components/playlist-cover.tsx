@@ -1,14 +1,16 @@
 import { Music4 } from "lucide-react";
 
-// Cover di default per le playlist "liked" (che non hanno artwork_url dal fetch):
-// asset editoriali statici in /public, uno per piattaforma.
+// Cover di default per le playlist di sistema (che non hanno artwork_url):
+// asset editoriali statici in /public — liked per piattaforma, più Discovery.
 const LIKED_COVER: Record<string, string> = {
   spotify: "/cover-liked-spotify.svg",
   soundcloud: "/cover-liked-soundcloud.svg",
 };
+const DISCOVERY_COVER = "/cover-discovery.svg";
 
 /** Cover di una playlist: artwork reale se presente, altrimenti la cover di
- *  default dei liked (per piattaforma) e infine il placeholder con icona. */
+ *  default di sistema (liked per piattaforma, Discovery) e infine il
+ *  placeholder con icona. */
 export function PlaylistCover({
   artworkUrl,
   platform,
@@ -24,7 +26,10 @@ export function PlaylistCover({
   iconSize?: number;
   placeholderClassName?: string;
 }) {
-  const fallback = kind === "liked" ? LIKED_COVER[platform ?? ""] ?? null : null;
+  const fallback =
+    kind === "liked" ? LIKED_COVER[platform ?? ""] ?? null
+    : kind === "discovery" ? DISCOVERY_COVER
+    : null;
   const src = artworkUrl ?? fallback;
   if (src) {
     return (

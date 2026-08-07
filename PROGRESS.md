@@ -6,7 +6,7 @@
 
 ## Current state
 
-**Last updated:** 2026-07-23
+**Last updated:** 2026-08-07
 
 **Product name:** **Cratory** (rename done on 2026-06-25 across UI, code, docs and
 icon). "SetArc" and "DJ Assistant" remain only as historical names; legacy technical
@@ -31,6 +31,20 @@ with a five-stage pipeline (Index moved to a nav button) and documentation reali
 the new paradigm; mix identification via Shazam integrated (phase 1; co-occurrence in
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-08-07 - Playlist speciali fissate in alto + fix conteggio tracce
+
+- La pagina Playlist ha ora una sezione "Speciali" fissata in cima con le tre playlist
+  di sistema in ordine fisso: Discovery, SoundCloud Likes, Spotify Likes (partizione
+  client-side su `kind`, nessun cambio backend). La numerazione progressiva resta solo
+  sull'archivio delle importate.
+- Discovery ha una cover editoriale statica (`frontend/public/cover-discovery.svg`,
+  bussola su gradiente), servita dal fallback di `PlaylistCover` come i liked.
+- Fix del conteggio tracce: `merge_tracks` non ricontava le playlist condivise tra
+  `keep` e `drop` dopo la dedup (db_hygiene/acquisition), lasciando `track_count`
+  gonfiato. Ora il merge riconta; una migrazione idempotente in `ensure_schema`
+  (`_migrate_recount_playlist_counts`) ripara i conteggi storici a ogni avvio.
+- Spec: `docs/superpowers/specs/2026-08-07-playlist-speciali-design.md`.
 
 ## Milestone 2026-07-23 - Riordino manuale delle playlist + colonne Genere/Energia
 

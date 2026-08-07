@@ -2,7 +2,12 @@
 from sqlalchemy import select
 
 from app.models import Playlist, Setlist, SetlistTrack, Track, playlist_tracks
-from app.repositories import add_track_to_playlist, merge_tracks, tracks_for_playlist
+from app.repositories import (
+    add_track_to_playlist,
+    merge_tracks,
+    recount_playlist,
+    tracks_for_playlist,
+)
 
 
 def _pl(db, name):
@@ -86,6 +91,45 @@ def test_merge_conserva_la_position_della_membership_trasferita(db):
     assert keep_pos == drop_pos  # keep eredita lo slot di drop, non NULL
     assert keep in tracks_for_playlist(db, pa.id)
     assert db.get(Track, drop.id) is None
+
+
+def test_merge_aggiorna_track_count_su_playlist_condivisa(db):
+    # keep e drop nella stessa playlist: il merge elimina una membership,
+    # il conteggio denormalizzato deve scendere di 1.
+    pa = _pl(db, "A")
+    keep = Track(source_type="spotify", title="K", artist="X")
+    drop = Track(source_type="local_files", title="D", artist="X")
+    db.add_all([keep, drop]); db.flush()
+    add_track_to_playlist(db, keep, pa)
+    add_track_to_playlist(db, drop, pa)
+    recount_playlist(db, pa)
+    db.commit()
+    assert pa.track_count == 2
+
+    merge_tracks(db, keep, drop); db.commit()
+    db.refresh(pa)
+
+    assert pa.track_count == 1
+
+
+def test_merge_track_count_invariato_su_playlist_disgiunte(db):
+    # drop in un'altra playlist: la membership viene trasferita, i conteggi
+    # di entrambe restano invariati.
+    pa, pb = _pl(db, "A"), _pl(db, "B")
+    keep = Track(source_type="spotify", title="K", artist="X")
+    drop = Track(source_type="local_files", title="D", artist="X")
+    db.add_all([keep, drop]); db.flush()
+    add_track_to_playlist(db, keep, pa)
+    add_track_to_playlist(db, drop, pb)
+    recount_playlist(db, pa)
+    recount_playlist(db, pb)
+    db.commit()
+
+    merge_tracks(db, keep, drop); db.commit()
+    db.refresh(pa); db.refresh(pb)
+
+    assert pa.track_count == 1
+    assert pb.track_count == 1
 
 
 def test_merge_noop_su_stessa_traccia(db):

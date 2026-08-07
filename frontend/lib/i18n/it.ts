@@ -496,6 +496,8 @@ export const it: Dictionary = {
     importManualButton: "Inserisci manualmente",
     statsPlaylists: "Playlist",
     statsTracksTotal: "Tracce totali",
+    specialsHeading: "Speciali",
+    importedHeading: "Importate",
     emptyTitle: "Nessuna playlist importata",
     emptyBody: "Usa “Importa da Spotify”, “Importa da SoundCloud” o “Inserisci manualmente” per iniziare a costruire un set.",
     deleteConfirm: (name: string) =>
