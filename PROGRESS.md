@@ -32,6 +32,36 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-08-07 - Sistema di voto tracce a 3 livelli
+
+- Nuova colonna `Track.rating` (int nullable, 1-3, indicizzata): `NULL` = non votata.
+  Disponibile su **qualsiasi** traccia, anche non posseduta — il voto non ha a che fare
+  col possesso su disco. Serializzata in `track_out`/`track_detail_out`.
+- `PATCH /api/tracks/{track_id}` accetta `rating` (`ge=1`, `le=3`, `422` fuori range):
+  un `null` esplicito toglie il voto, a differenza di `archived` che tratta `null` come
+  "invariato".
+- Playlist speciale **"Top"** (`platform="manual"`, `kind="rating_top"`): creata pigra
+  al primo voto 3, sincronizzata deterministicamente da `services/rating.py`
+  (`sync_rating_top`), chiamato da `repositories.update_track` PRIMA del commit cosi'
+  la sync viaggia nella stessa transazione del PATCH — stesso precedente di
+  `get_or_create_discovery_playlist`. Membership allineata esattamente al voto corrente
+  (dentro/fuori al variare del rating), `added_by="cratory"`, `track_count` riallineato
+  a ogni sync. Al piu' una Top esiste.
+- `GET /api/tracks` guadagna il filtro `rating` (match esatto 1-3) e `sort=rating`
+  (NULL sempre in fondo, id come tie-breaker come gli altri sort).
+- Set Builder: bonus deterministico di tie-break `_RATING_BONUS = 2.0` per livello
+  (max 6.0) in `_candidate_score` e `_pick_first` — mai sopra la compatibilita'
+  musicale, il voto non arriva mai all'AI di curation.
+- Frontend: nuovo componente `RatingDiamond` (`frontend/components/rating-diamond.tsx`,
+  rombo scala calore oliva/ambra/terracotta, espansione a click, aggiornamento
+  ottimistico con rollback su errore), montato in Library (voto inline + filtro + sort
+  di colonna), dettaglio playlist (filtro e sort locali), dettaglio traccia e player
+  docked — solo per tracce di libreria, mai sulla preview effimera di Discovery.
+  "Top" appare tra le playlist Speciali con cover dedicata
+  `frontend/public/cover-rating-top.svg`.
+- Spec: `docs/superpowers/specs/2026-08-07-voto-tracce-design.md`; piano:
+  `docs/superpowers/plans/2026-08-07-voto-tracce.md`.
+
 ## Milestone 2026-08-07 - Playlist speciali fissate in alto + fix conteggio tracce
 
 - La pagina Playlist ha ora una sezione "Speciali" fissata in cima con le tre playlist
