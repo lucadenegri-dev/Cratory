@@ -83,6 +83,8 @@ class TrackUpdateIn(BaseModel):
     # Archivia/ripristina dalla wishlist. Bool NOT NULL: null = invariato
     # (il "null azzera" degli altri campi non si applica, vedi patch_track).
     archived: bool | None = None
+    # Voto 1..3; null esplicito = toglie il voto (semantica PATCH standard).
+    rating: int | None = Field(default=None, ge=1, le=3)
 
 
 class TrackLinkFileIn(BaseModel):
