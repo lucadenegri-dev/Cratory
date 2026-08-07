@@ -160,6 +160,10 @@ def update_track(db: Session, track: Track, data: dict) -> Track:
         track.key_source = "manual" if track.camelot_key else None
     if "bpm" in data or "genre" in data:
         apply_estimated_energy(track)
+    if "rating" in data:
+        # Sync playlist "Top" nella stessa transazione del PATCH.
+        from app.services.rating import sync_rating_top
+        sync_rating_top(db, track)
     refresh_status(track)
     db.commit()
     db.refresh(track)
