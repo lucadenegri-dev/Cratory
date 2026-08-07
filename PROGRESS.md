@@ -6,7 +6,7 @@
 
 ## Current state
 
-**Last updated:** 2026-08-07
+**Last updated:** 2026-08-08
 
 **Product name:** **Cratory** (rename done on 2026-06-25 across UI, code, docs and
 icon). "SetArc" and "DJ Assistant" remain only as historical names; legacy technical
@@ -31,6 +31,33 @@ with a five-stage pipeline (Index moved to a nav button) and documentation reali
 the new paradigm; mix identification via Shazam integrated (phase 1; co-occurrence in
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
+
+## Milestone 2026-08-08 - Gestione playlist completata (rename, riordino DnD, bulk, fork, sync-log, export)
+
+- **Rename**: `PATCH /api/playlists/{id}` + matita inline nel dettaglio. Nuova colonna
+  `Playlist.name_locked` (auto-migrata da `ensure_schema`): il rename la setta e da lì
+  il sync rilegge tutto dalla piattaforma **tranne** il nome.
+- **Riordino**: kind riordinabili ora `manual` **e** `shazam` (`REORDERABLE_KINDS`,
+  errore `playlist_not_reorderable` al posto di `playlist_not_manual`); nuovo
+  `PUT /api/playlists/{id}/order` (permutazione completa, `422 order_mismatch`) usato dal
+  **drag-and-drop** delle righe nel dettaglio (attivo solo senza filtri/sort, con hint);
+  `playlist_position` (1-based) esposta da `GET /{id}/tracks`.
+- **Bulk**: checkbox di selezione nel dettaglio con barra azioni — "Aggiungi a playlist"
+  (`AddToPlaylistMenu` generalizzato a più tracce, riusato dal dettaglio traccia) e
+  "Togli dalla playlist" via `POST /{id}/tracks/remove` (membership multiple + cleanup
+  lead orfani come la rimozione singola).
+- **Fork**: `POST /{id}/duplicate` (`201`) clona qualsiasi playlist in copia manuale
+  editabile/riordinabile, stesso ordine, membership `added_by="cratory"`; bottone
+  "Duplica come manuale" in sidebar.
+- **Storico sync**: nuova tabella `playlist_sync_events` (snapshot testuali
+  added/removed per evento, scritta da `import_playlist` solo quando cambia qualcosa,
+  cancellata con la playlist); `GET /{id}/sync-log` + pannello collassabile nel
+  dettaglio (solo playlist sincronizzabili).
+- **Export**: `POST /{id}/export?format=m3u8|csv|text|markdown` (prima solo m3u8);
+  menu Esporta nel dettaglio con i 4 formati (estensione/MIME corretti).
+- Piano ed esecuzione TDD in `docs/superpowers/plans/2026-08-07-playlist-management-gaps.md`;
+  suite backend 1221 test verdi, lint/build frontend ok, smoke test end-to-end su
+  server reali (porte dedicate 8020/3020 nel worktree).
 
 ## Milestone 2026-08-07 - Sistema di voto tracce a 3 livelli
 

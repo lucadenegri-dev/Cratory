@@ -59,7 +59,13 @@ every track, owned or not): set via `PATCH /api/tracks/{track_id}` (`null` clear
 filterable and sortable on `GET /api/tracks` (unvoted tracks always sort last), a small
 tie-break bonus in the Set Builder generator (`_RATING_BONUS`, never above compatibility,
 never seen by the AI), and a system playlist **"Top"** (`kind="rating_top"`) that stays
-deterministically in sync with every track voted `3`.
+deterministically in sync with every track voted `3`. **Playlist management is now
+complete** (2026-08-08): rename with `name_locked` (a sync re-reads everything from the
+platform except a user-chosen name), drag-and-drop reordering (full-order
+`PUT /order`, `manual` and `shazam` kinds), multi-select bulk actions in the detail page
+(remove from playlist / add to another), "duplicate as manual" fork for any playlist, a
+per-playlist sync history (`playlist_sync_events` + `GET /sync-log`, added/removed
+snapshots per event) and export in four formats (`m3u8|csv|text|markdown`).
 
 Full chronological history lives in [PROGRESS.md](../PROGRESS.md).
 

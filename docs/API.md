@@ -123,10 +123,17 @@ POST   /api/playlists/import-manual
 POST   /api/playlists/create-from-tracks
 POST   /api/playlists/{playlist_id}/add-tracks
 POST   /api/playlists/{playlist_id}/reorder
+PUT    /api/playlists/{playlist_id}/order
+POST   /api/playlists/{playlist_id}/duplicate
 GET    /api/playlists
 GET    /api/playlists/{playlist_id}
+PATCH  /api/playlists/{playlist_id}
 DELETE /api/playlists/{playlist_id}
 GET    /api/playlists/{playlist_id}/tracks
+DELETE /api/playlists/{playlist_id}/tracks/{track_id}
+POST   /api/playlists/{playlist_id}/tracks/remove
+POST   /api/playlists/{playlist_id}/export
+GET    /api/playlists/{playlist_id}/sync-log
 GET    /api/playlists/{playlist_id}/gaps
 GET    /api/playlists/library/gaps
 ```
@@ -174,10 +181,39 @@ Response: `{playlist, added, skipped}`.
 `POST /api/playlists/{playlist_id}/reorder` moves a track to a 1-based position within
 the playlist, shifting the others; the order is persisted in the `playlist_tracks.position`
 column (not just a client-side sort). Request: `{track_id, position}` (`position >= 1`,
-clamped to `[1, N]` for the current track count). Manual playlists only: `409
-playlist_not_manual` on any other kind. `404 playlist_not_found` if the playlist does not
-exist; `404 track_not_in_playlist` if `track_id` is not a member. Response: the reordered
-track list (`list[TrackOut]`), same shape as `GET /api/playlists/{playlist_id}/tracks`.
+clamped to `[1, N]` for the current track count). Only on kinds whose order belongs to the
+user (`manual` and `shazam`): `409 playlist_not_reorderable` on any other kind. `404
+playlist_not_found` if the playlist does not exist; `404 track_not_in_playlist` if
+`track_id` is not a member. Response: the reordered track list (`list[TrackOut]`), same
+shape as `GET /api/playlists/{playlist_id}/tracks`.
+`PUT /api/playlists/{playlist_id}/order` replaces the **whole** order in one call
+(drag-and-drop): request `{track_ids}` must be an exact permutation of the current
+members (`422 order_mismatch` otherwise), same reorderable-kind guard as `/reorder`.
+Response: the reordered track list.
+`PATCH /api/playlists/{playlist_id}` renames the playlist (`{name}`, `422
+playlist_name_empty` if blank after trimming). Renaming sets `name_locked=true` on the
+playlist: from then on a sync re-reads everything from the platform **except** the name.
+`name_locked` is exposed in `PlaylistOut`.
+`POST /api/playlists/{playlist_id}/duplicate` (`201`) forks any playlist into a manual
+copy (`platform="manual"`, `kind="manual"`) with the same track order; request `{name}`
+(optional, defaults to `"<name> (copia)"`). Memberships are `added_by="cratory"`. The
+copy is editable and reorderable even when the source is a synced playlist.
+`DELETE /api/playlists/{playlist_id}/tracks/{track_id}` removes one membership (the
+track is deleted too when it becomes an orphan lead — not on disk, in no other playlist
+nor set); response `{deleted_tracks}`. `POST /api/playlists/{playlist_id}/tracks/remove`
+is the bulk version: request `{track_ids}`, non-member ids are ignored, response
+`{removed, deleted_tracks}` (memberships removed / orphan leads deleted).
+`POST /api/playlists/{playlist_id}/export?format=` exports the playlist in playlist
+order: `m3u8` (default, importable in Rekordbox — only tracks with a local file, the
+skipped count is noted in a comment) | `csv` | `text` | `markdown` (these three include
+every track, leads too).
+`GET /api/playlists/{playlist_id}/sync-log?limit=` (default 20, max 100) returns the
+recent import/sync diffs, newest first: `{id, created_at, added, removed}` where
+`added`/`removed` are `{id, artist, title}` snapshots (readable even after the track is
+deleted as an orphan lead). Events are recorded by every import/sync that changes the
+membership set (no-op syncs record nothing) and die with the playlist.
+`GET /api/playlists/{playlist_id}/tracks` returns the members in playlist order; each
+`TrackOut` carries `playlist_position` (1-based, only in this endpoint).
 
 The system playlist **"Top"** (`platform="manual"`, `kind="rating_top"`) is not created
 through any endpoint above: it comes into existence lazily, the first time a track is
