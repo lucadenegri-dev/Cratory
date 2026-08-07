@@ -6,6 +6,8 @@
 - analisi deterministica dei "buchi" di una playlist (o dell'intera libreria).
 """
 
+import csv
+import io
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -387,17 +389,50 @@ def remove_playlist_tracks(playlist_id: int, req: PlaylistRemoveTracksRequest, d
 @router.post("/{playlist_id}/export", response_class=PlainTextResponse)
 def export_playlist(
     playlist_id: int,
-    format: str = Query(default="m3u8", pattern="^m3u8$"),
+    format: str = Query(default="m3u8", pattern="^(m3u8|csv|text|markdown)$"),
     db: Session = Depends(get_db),
 ):
-    """Export M3U8 della playlist, importabile in Rekordbox (stessa logica dell'export
-    set). Punta ai file locali in libreria: le tracce senza file su disco non possono
-    stare in una playlist Rekordbox, quindi le escludiamo e ne segnaliamo il conteggio
-    con un commento. Ordine di inserimento (added_at), come nel dettaglio playlist."""
+    """Export della playlist in ordine playlist. M3U8 (importabile in Rekordbox,
+    stessa logica dell'export set): punta ai file locali, le tracce senza file su
+    disco sono escluse con un commento di conteggio. CSV/testo/Markdown includono
+    invece TUTTE le tracce (anche i lead senza file)."""
     playlist = get_playlist(db, playlist_id)
     if playlist is None:
         raise api_error(404, "playlist_not_found", "Playlist not found")
-    tracks = tracks_for_playlist(db, playlist_id)  # già ordinate per added_at
+    tracks = tracks_for_playlist(db, playlist_id)  # già in ordine playlist
+
+    if format == "csv":
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["position", "title", "artist", "genre", "bpm", "key", "energy",
+                         "duration_seconds", "rating", "owned", "local_path", "url"])
+        for i, t in enumerate(tracks, start=1):
+            writer.writerow([i, t.title or "", t.artist or "", t.genre or "", t.bpm or "",
+                             t.camelot_key or "", t.energy or "", t.duration_seconds or "",
+                             t.rating or "", "1" if t.has_local_file else "0",
+                             t.local_path or "", t.url or ""])
+        return PlainTextResponse(buf.getvalue(), media_type="text/csv")
+
+    if format == "markdown":
+        md = [f"# {playlist.name}", "",
+              "| # | Traccia | Genere | BPM | Key | Durata |",
+              "|--:|---|---|--:|---|--:|"]
+        for i, t in enumerate(tracks, start=1):
+            label = f"{t.artist or '?'} — {t.title or '?'}"
+            bpm = f"{t.bpm:.0f}" if t.bpm else "—"
+            dur = f"{t.duration_seconds // 60}:{t.duration_seconds % 60:02d}" if t.duration_seconds else "—"
+            md.append(f"| {i} | {label} | {t.genre or '—'} | {bpm} | {t.camelot_key or '—'} | {dur} |")
+        return PlainTextResponse("\n".join(md), media_type="text/markdown")
+
+    if format == "text":
+        lines = [f"# {playlist.name}", ""]
+        for i, t in enumerate(tracks, start=1):
+            label = f"{t.artist or '?'} - {t.title or '?'}"
+            meta = f" [{t.bpm:.0f} BPM, {t.camelot_key or '?'}]" if t.bpm else (f" [{t.camelot_key}]" if t.camelot_key else "")
+            lines.append(f"{i}. {label}{meta}")
+        return PlainTextResponse("\n".join(lines))
+
+    # m3u8 (default): solo tracce con file locale
     owned = [t for t in tracks if t.local_path]
     skipped = len(tracks) - len(owned)
     m3u = ["#EXTM3U"]

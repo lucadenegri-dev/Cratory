@@ -63,3 +63,55 @@ def test_export_missing_playlist_404(db):
     with pytest.raises(HTTPException) as exc:
         export_playlist(9999, "m3u8", db)
     assert exc.value.status_code == 404
+
+
+def test_export_csv_tutte_le_tracce(db):
+    pl = _pl(db)
+    add_track_to_playlist(db, _tr(db, "Owned", local_path="/music/owned.aiff"), pl)
+    add_track_to_playlist(db, _tr(db, "Lead"), pl)  # anche senza file locale
+    db.commit()
+
+    resp = export_playlist(pl.id, "csv", db)
+    assert resp.media_type == "text/csv"
+    lines = _body(resp).strip().splitlines()
+    assert lines[0].startswith("position,title,artist")
+    assert len(lines) == 3
+    assert lines[1].startswith("1,Owned,A")
+    assert lines[2].startswith("2,Lead,A")
+
+
+def test_export_text(db):
+    pl = _pl(db)
+    add_track_to_playlist(db, _tr(db, "Uno"), pl)
+    db.commit()
+
+    body = _body(export_playlist(pl.id, "text", db))
+    assert body.splitlines()[0] == "# P"
+    assert "1. A - Uno" in body
+
+
+def test_export_markdown(db):
+    pl = _pl(db)
+    add_track_to_playlist(db, _tr(db, "Uno"), pl)
+    db.commit()
+
+    resp = export_playlist(pl.id, "markdown", db)
+    assert resp.media_type == "text/markdown"
+    body = _body(resp)
+    assert body.startswith("# P")
+    assert "| # |" in body
+    assert "A — Uno" in body
+
+
+def test_export_formato_invalido_422():
+    from fastapi.testclient import TestClient
+    from app.db import get_db
+    from app.main import app
+
+    # Basta la validazione del Query param: nessun DB coinvolto (422 prima della rotta).
+    app.dependency_overrides[get_db] = lambda: None
+    try:
+        client = TestClient(app)
+        assert client.post("/api/playlists/1/export?format=xml").status_code == 422
+    finally:
+        app.dependency_overrides.pop(get_db, None)
