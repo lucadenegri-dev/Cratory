@@ -26,6 +26,7 @@ export interface Track {
   local_format: string | null;
   local_bitrate: number | null;
   archived: boolean;
+  rating: number | null;
   last_download_outcome: string | null;
   last_download_reason: string | null;
   last_download_path: string | null;
@@ -169,6 +170,7 @@ export interface TrackUpdate {
   camelot_key?: string | null;
   label?: string | null;
   archived?: boolean;
+  rating?: number | null;
 }
 
 export interface LibraryIndexJob {

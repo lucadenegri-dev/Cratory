@@ -482,6 +482,8 @@ export const it: Dictionary = {
     addToPlaylistFailed: (msg: string) => `Aggiunta fallita: ${msg}`,
     addedToPlaylist: (name: string) => `Aggiunta a ${name}`,
     createdPlaylist: (name: string) => `Creata ${name}`,
+    ratingLabel: "Voto",
+    ratingLevelTitle: (level: number) => `Vota ${level} su 3`,
   },
   playlists: {
     pageTitle: "Playlist",
