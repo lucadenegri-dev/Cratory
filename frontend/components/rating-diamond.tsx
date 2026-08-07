@@ -73,22 +73,28 @@ export function RatingDiamond({ trackId, rating, onSaved, size = 18 }: Props) {
   };
 
   return (
-    <span ref={rootRef} className="inline-flex shrink-0 items-center gap-0.5">
-      {open &&
-        [1, 2, 3].map((level) => (
-          <button
-            key={level}
-            type="button"
-            title={t.tracks.ratingLevelTitle(level)}
-            onClick={(e) => {
-              e.stopPropagation();
-              void commit(level === value ? null : level);
-            }}
-            className="shrink-0"
-          >
-            <Diamond value={level} size={size - 4} />
-          </button>
-        ))}
+    <span ref={rootRef} className="relative inline-flex shrink-0 items-center">
+      {/* Popup fuori dal flusso: l'espansione inline spostava gli elementi della
+          riga. Ancorato sopra e a destra (il rombo vive sul bordo destro delle
+          righe e in basso nel dock: sopra c'e' sempre spazio). */}
+      {open && (
+        <span className="absolute bottom-full right-0 z-20 mb-1 flex items-center gap-1 rounded border border-border bg-elevated px-1.5 py-1 shadow-lg">
+          {[1, 2, 3].map((level) => (
+            <button
+              key={level}
+              type="button"
+              title={t.tracks.ratingLevelTitle(level)}
+              onClick={(e) => {
+                e.stopPropagation();
+                void commit(level === value ? null : level);
+              }}
+              className="shrink-0"
+            >
+              <Diamond value={level} size={size - 4} />
+            </button>
+          ))}
+        </span>
+      )}
       <button
         type="button"
         aria-label={t.tracks.ratingLabel}

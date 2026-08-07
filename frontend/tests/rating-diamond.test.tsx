@@ -28,6 +28,15 @@ describe("RatingDiamond", () => {
     expect(screen.getAllByRole("button")).toHaveLength(4); // 3 livelli + toggle
   });
 
+  it("i livelli sono in un popup fuori dal flusso (niente spostamenti in riga)", async () => {
+    render(<RatingDiamond trackId={1} rating={null} />);
+    await act(async () => {
+      screen.getByRole("button").click();
+    });
+    const panel = screen.getByTitle("Vota 1 su 3").parentElement;
+    expect(panel?.className).toContain("absolute");
+  });
+
   it("scegliere un livello chiama la PATCH col valore giusto", async () => {
     render(<RatingDiamond trackId={7} rating={null} />);
     await act(async () => {
