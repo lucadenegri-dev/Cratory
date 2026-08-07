@@ -312,6 +312,23 @@ class PlaylistBulkRemoveResult(BaseModel):
     deleted_tracks: int = 0   # lead orfani cancellati dalla libreria
 
 
+class SyncTrackRef(BaseModel):
+    """Riferimento snapshot a una traccia in un evento di sync (l'id puo' essere
+    di una traccia nel frattempo cancellata come lead orfano)."""
+    id: int | None = None
+    artist: str | None = None
+    title: str | None = None
+
+
+class PlaylistSyncEventOut(BaseModel):
+    """Un import/sync che ha cambiato la playlist: cosa e' entrato e uscito."""
+
+    id: int
+    created_at: datetime
+    added: list[SyncTrackRef] = []
+    removed: list[SyncTrackRef] = []
+
+
 class SpotifyPlaylistRef(BaseModel):
     """Playlist disponibile su Spotify (per la selezione, prima dell'import)."""
 

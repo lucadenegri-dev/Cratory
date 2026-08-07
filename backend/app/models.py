@@ -154,6 +154,21 @@ class Playlist(Base):
     )
 
 
+class PlaylistSyncEvent(Base):
+    """Diff di un import/sync di playlist: quali tracce sono entrate/uscite.
+
+    Snapshot testuale (artist/title) perche' una traccia rimossa puo' sparire
+    dalla libreria (lead orfano): l'evento resta leggibile comunque."""
+
+    __tablename__ = "playlist_sync_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    playlist_id: Mapped[int] = mapped_column(ForeignKey("playlists.id"), index=True)
+    added_tracks: Mapped[list] = mapped_column(JSON, default=list)    # [{id, artist, title}]
+    removed_tracks: Mapped[list] = mapped_column(JSON, default=list)  # [{id, artist, title}]
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Setlist(Base):
     __tablename__ = "setlists"
 

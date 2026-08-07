@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.http_errors import api_error
 from app.db import get_db
-from app.models import Playlist, Track
+from app.models import Playlist, PlaylistSyncEvent, Track
 from app.integrations.spotify import (
     SpotifyError,
     SpotifyNotConfigured,
@@ -53,9 +53,11 @@ from app.schemas import (
     PlaylistOut,
     PlaylistRemoveTracksRequest,
     PlaylistReorderRequest,
+    PlaylistSyncEventOut,
     PlaylistUpdateIn,
     SpotifyPlaylistRef,
     StreamingImportJobStatus,
+    SyncTrackRef,
     TrackOut,
 )
 from app.serializers import track_out
@@ -418,6 +420,26 @@ def playlist_tracks(playlist_id: int, db: Session = Depends(get_db)):
         row.playlist_position = i
         out.append(row)
     return out
+
+
+@router.get("/{playlist_id}/sync-log", response_model=list[PlaylistSyncEventOut])
+def playlist_sync_log(playlist_id: int, limit: int = Query(default=20, ge=1, le=100),
+                      db: Session = Depends(get_db)):
+    """Ultimi diff di import/sync (piu' recente prima): cosa e' entrato e uscito."""
+    if get_playlist(db, playlist_id) is None:
+        raise api_error(404, "playlist_not_found", "Playlist not found")
+    events = db.scalars(
+        select(PlaylistSyncEvent).where(PlaylistSyncEvent.playlist_id == playlist_id)
+        .order_by(PlaylistSyncEvent.id.desc()).limit(limit)
+    ).all()
+    return [
+        PlaylistSyncEventOut(
+            id=e.id, created_at=e.created_at,
+            added=[SyncTrackRef(**x) for x in (e.added_tracks or [])],
+            removed=[SyncTrackRef(**x) for x in (e.removed_tracks or [])],
+        )
+        for e in events
+    ]
 
 
 @router.get("/library/gaps", response_model=GapAnalysisResponse)

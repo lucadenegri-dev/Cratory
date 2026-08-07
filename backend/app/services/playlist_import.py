@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Playlist, Track
+from app.models import Playlist, PlaylistSyncEvent, Track
 from app.repositories import (
     add_track_to_playlist,
     ci_equals,
@@ -393,6 +393,9 @@ def import_playlist(
     playlist.kind = kind
     db.flush()  # serve playlist.id per collegare le tracce
 
+    # Membri prima del giro: servono a fine corsa per il diff dello storico sync.
+    before_ids = {t.id for t in tracks_for_playlist(db, playlist.id)}
+
     created = updated = skipped = 0
     present_isrcs: set[str] = set()
     present_platform_ids: set[str] = set()
@@ -421,6 +424,7 @@ def import_playlist(
             on_progress(i, total_items)
 
     removed = 0
+    removed_details: list[dict] = []
     if prune:
         # Le membership aggiunte da Cratory (added_by='cratory', es. Discovery) non
         # si potano MAI: il write-back verso Spotify e' best-effort e puo' fallire,
@@ -437,6 +441,18 @@ def import_playlist(
             if not still_present:
                 remove_track_from_playlist(db, playlist.id, track.id)
                 removed += 1
+                removed_details.append({"id": track.id, "artist": track.artist, "title": track.title})
+
+    # Storico sync: registra il diff (solo se qualcosa e' cambiato, niente rumore).
+    added_details = [
+        {"id": t.id, "artist": t.artist, "title": t.title}
+        for t in tracks_for_playlist(db, playlist.id) if t.id not in before_ids
+    ]
+    if added_details or removed_details:
+        db.add(PlaylistSyncEvent(
+            playlist_id=playlist.id,
+            added_tracks=added_details, removed_tracks=removed_details,
+        ))
 
     recount_playlist(db, playlist)
     db.commit()
