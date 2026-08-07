@@ -265,6 +265,11 @@ class PlaylistOut(BaseModel):
     imported_at: datetime
 
 
+class PlaylistDuplicateRequest(BaseModel):
+    """Fork della playlist in una copia manuale (riordinabile/editabile)."""
+    name: str | None = Field(default=None, max_length=200)
+
+
 class PlaylistUpdateIn(BaseModel):
     """Rename di una playlist. Il nome scelto blocca la sovrascrittura del sync."""
     name: str = Field(min_length=1, max_length=200)

@@ -45,6 +45,7 @@ from app.schemas import (
     PlaylistAddTracksResult,
     PlaylistBulkRemoveResult,
     PlaylistDeleteResult,
+    PlaylistDuplicateRequest,
     PlaylistFromTracksRequest,
     PlaylistImportReport,
     PlaylistImportRequest,
@@ -223,6 +224,28 @@ def create_from_tracks(req: PlaylistFromTracksRequest, db: Session = Depends(get
     db.commit()
     db.refresh(playlist)
     return playlist
+
+
+@router.post("/{playlist_id}/duplicate", response_model=PlaylistOut, status_code=201)
+def duplicate_playlist(playlist_id: int, req: PlaylistDuplicateRequest, db: Session = Depends(get_db)):
+    """Fork: copia la playlist in una manuale (stesso ordine). Una playlist
+    sincronizzata non e' riordinabile ne' editabile: la copia manuale si'.
+    Le membership sono `added_by="cratory"` (mai toccate da un prune)."""
+    src = get_playlist(db, playlist_id)
+    if src is None:
+        raise api_error(404, "playlist_not_found", "Playlist not found")
+    name = (req.name or f"{src.name} (copia)").strip()
+    if not name:
+        raise api_error(422, "playlist_name_empty", "Playlist name is empty.")
+    copy = Playlist(platform="manual", name=name, kind="manual")
+    db.add(copy)
+    db.flush()  # serve copy.id per collegare le tracce
+    for track in tracks_for_playlist(db, playlist_id):
+        add_track_to_playlist(db, track, copy, added_by="cratory")
+    recount_playlist(db, copy)
+    db.commit()
+    db.refresh(copy)
+    return PlaylistOut.model_validate(copy)
 
 
 @router.post("/{playlist_id}/add-tracks", response_model=PlaylistAddTracksResult)
