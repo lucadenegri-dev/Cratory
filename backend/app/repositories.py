@@ -480,6 +480,7 @@ def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
             select(playlist_tracks.c.playlist_id).where(playlist_tracks.c.track_id == keep.id)
         )
     }
+    shared_pids: list[int] = []
     for pid, added, pos in db.execute(
         select(playlist_tracks.c.playlist_id, playlist_tracks.c.added_at, playlist_tracks.c.position)
         .where(playlist_tracks.c.track_id == drop.id)
@@ -487,7 +488,15 @@ def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
         if pid not in keep_pls:
             db.execute(playlist_tracks.insert().values(
                 playlist_id=pid, track_id=keep.id, added_at=added, position=pos))
+        else:
+            shared_pids.append(pid)
     db.execute(playlist_tracks.delete().where(playlist_tracks.c.track_id == drop.id))
+    # Nelle playlist condivise la membership di drop sparisce senza rimpiazzo:
+    # il conteggio denormalizzato va riallineato.
+    for pid in shared_pids:
+        pl = db.get(Playlist, pid)
+        if pl is not None:
+            recount_playlist(db, pl)
     # Membership set: ripunta i SetlistTrack di drop a keep.
     db.execute(
         update(SetlistTrack).where(SetlistTrack.track_id == drop.id).values(track_id=keep.id)

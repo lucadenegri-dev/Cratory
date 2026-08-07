@@ -55,6 +55,7 @@ def ensure_schema(eng=None) -> None:
         _migrate_rename_discovery_playlist(conn)
         _migrate_backfill_bpm_key_sources(conn)
         _migrate_null_soundcloud_stream_urls(conn)
+        _migrate_recount_playlist_counts(conn)
 
 
 def _migrate_add_model_columns(conn, dialect) -> None:
@@ -342,6 +343,23 @@ def _migrate_null_soundcloud_stream_urls(conn) -> None:
         return
     conn.execute(text(
         "UPDATE tracks SET url = NULL WHERE url LIKE '%media-streaming.soundcloud.cloud%'"
+    ))
+
+
+def _migrate_recount_playlist_counts(conn) -> None:
+    """Riallinea il `track_count` denormalizzato al numero reale di membership.
+
+    Ripara i conteggi gonfiati dal bug storico di `merge_tracks` (dedup che
+    eliminava membership senza ricontare, fix in repositories.py). Naturalmente
+    idempotente e auto-riparante: ricalcola sempre il valore corretto.
+    """
+    if not _table_exists(conn, "playlists") or not _table_exists(conn, "playlist_tracks"):
+        return
+    conn.execute(text(
+        "UPDATE playlists SET track_count = ("
+        "    SELECT COUNT(*) FROM playlist_tracks"
+        "    WHERE playlist_tracks.playlist_id = playlists.id"
+        ")"
     ))
 
 
