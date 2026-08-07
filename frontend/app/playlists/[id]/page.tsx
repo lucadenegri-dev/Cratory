@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDuration,
-  startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack,
+  startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack, renamePlaylist,
   type Playlist, type Track, type GapAnalysis,
 } from "@/lib/api";
 import { useBackLink, withFrom } from "@/lib/back-link";
@@ -68,6 +68,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const [confirmRemoveTrack, setConfirmRemoveTrack] = useState<Track | null>(null);
   const [removingTrackId, setRemovingTrackId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [renaming, setRenaming] = useState(false);
 
   // Filtri (come in libreria) — applicati lato client sulla playlist (insieme limitato).
   const [artist, setArtist] = useState("");
@@ -354,7 +355,33 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
         <PlaylistCover artworkUrl={playlist.artwork_url} platform={playlist.platform} kind={playlist.kind} className="h-24 w-24" iconSize={30} placeholderClassName="bg-surface-2" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{playlist.name}</h1>
+            {renaming ? (
+              <Input
+                className="h-9 max-w-md text-xl font-semibold"
+                defaultValue={playlist.name}
+                autoFocus
+                aria-label={t.playlists.renameTitle}
+                onBlur={() => setRenaming(false)}
+                onKeyDown={async (e) => {
+                  if (e.key === "Enter") {
+                    const v = (e.target as HTMLInputElement).value.trim();
+                    if (!v || v === playlist.name) { setRenaming(false); return; }
+                    try {
+                      setPlaylist(await renamePlaylist(pid, v));
+                    } catch (err) {
+                      setActionError(t.playlists.renameFailed(errText(err)));
+                    }
+                    setRenaming(false);
+                  } else if (e.key === "Escape") setRenaming(false);
+                }}
+              />
+            ) : (
+              <>
+                <h1 className="text-2xl font-semibold tracking-tight">{playlist.name}</h1>
+                <button onClick={() => setRenaming(true)} title={t.playlists.renameTitle}
+                  className="text-faint transition-colors hover:text-fg-strong"><Pencil size={15} /></button>
+              </>
+            )}
             <Badge tone="neutral">{playlist.platform}</Badge>
             {playlist.kind === "liked" && <Badge tone="neutral">liked</Badge>}
           </div>

@@ -42,6 +42,7 @@ export interface Playlist {
   artwork_url: string | null;
   track_count: number;
   kind: string;
+  name_locked: boolean;
   imported_at: string;
 }
 

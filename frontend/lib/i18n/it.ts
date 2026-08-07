@@ -529,6 +529,8 @@ export const it: Dictionary = {
     syncAllFailuresHeading: (n: number) =>
       n === 1 ? "1 playlist non sincronizzata:" : `${n} playlist non sincronizzate:`,
     removeButton: "Rimuovi",
+    renameTitle: "Rinomina playlist",
+    renameFailed: (msg: string) => `Rinomina fallita: ${msg}`,
     exportRekordboxButton: "Esporta per Rekordbox (M3U8)",
     exportFailed: (msg: string) => `Export fallito: ${msg}`,
     removeTrackTitle: "Togli dalla playlist",

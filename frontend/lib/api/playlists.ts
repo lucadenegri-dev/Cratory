@@ -1,4 +1,4 @@
-import { API, apiDelete, apiGet, apiPost } from "./client";
+import { API, apiDelete, apiGet, apiPatch, apiPost } from "./client";
 import type {
   GapAnalysis,
   LikedTrackPreview,
@@ -48,6 +48,11 @@ export function listImportedPlaylists() {
 
 export function getPlaylist(id: number, opts?: { signal?: AbortSignal }) {
   return apiGet<Playlist>(`/api/playlists/${id}`, undefined, opts);
+}
+
+/** Rinomina la playlist. Il nome scelto e' definitivo: il sync non lo sovrascrive. */
+export function renamePlaylist(id: number, name: string) {
+  return apiPatch<Playlist>(`/api/playlists/${id}`, { name });
 }
 
 export function deletePlaylist(id: number) {
