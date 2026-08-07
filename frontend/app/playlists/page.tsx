@@ -124,10 +124,10 @@ export default function PlaylistsPage() {
   const totalTracks = imported?.reduce((sum, p) => sum + p.track_count, 0) ?? 0;
 
   // Playlist di sistema fissate in alto in una sezione dedicata, in ordine
-  // fisso: Discovery, SoundCloud Likes, Spotify Likes.
+  // fisso: Discovery, Top, SoundCloud Likes, Spotify Likes.
   const specialRank = (p: Playlist) =>
-    p.kind === "discovery" ? 0 : p.platform === "soundcloud" ? 1 : 2;
-  const isSpecial = (p: Playlist) => p.kind === "discovery" || p.kind === "liked";
+    p.kind === "discovery" ? 0 : p.kind === "rating_top" ? 1 : p.platform === "soundcloud" ? 2 : 3;
+  const isSpecial = (p: Playlist) => p.kind === "discovery" || p.kind === "rating_top" || p.kind === "liked";
   const specials = (imported ?? []).filter(isSpecial).sort((a, b) => specialRank(a) - specialRank(b));
   const regular = (imported ?? []).filter((p) => !isSpecial(p));
 

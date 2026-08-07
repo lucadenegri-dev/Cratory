@@ -7,6 +7,7 @@ const LIKED_COVER: Record<string, string> = {
   soundcloud: "/cover-liked-soundcloud.svg",
 };
 const DISCOVERY_COVER = "/cover-discovery.svg";
+const RATING_TOP_COVER = "/cover-rating-top.svg";
 
 /** Cover di una playlist: artwork reale se presente, altrimenti la cover di
  *  default di sistema (liked per piattaforma, Discovery) e infine il
@@ -29,6 +30,7 @@ export function PlaylistCover({
   const fallback =
     kind === "liked" ? LIKED_COVER[platform ?? ""] ?? null
     : kind === "discovery" ? DISCOVERY_COVER
+    : kind === "rating_top" ? RATING_TOP_COVER
     : null;
   const src = artworkUrl ?? fallback;
   if (src) {
