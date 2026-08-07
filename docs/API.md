@@ -270,6 +270,14 @@ case-insensitive) in `LIBRARY_ROOT` and `SLSKD_DOWNLOAD_DIR`; max 50 results, a 
 under 2 characters returns an empty list. Response: list of
 `{path, name, format, size, source}` with `source` = `library` | `downloads`.
 
+- `GET /api/files/pick/availability` → `{available}`: il dialog nativo di scelta
+  percorso è disponibile (solo macOS con osascript nel PATH).
+- `POST /api/files/pick` `{kind: "folder"|"file", start?, prompt?}` → `{path}`:
+  apre il dialog nativo (Finder) sulla macchina del backend e ritorna il percorso
+  scelto; `path: null` se l'utente annulla o il dialog scade (300 s). 409
+  `picker_unavailable` fuori da macOS, 409 `picker_busy` se un dialog è già aperto.
+  Usato dal pulsante "Sfoglia…" dei Settings.
+
 `GET /api/stats` returns the deterministic library aggregates (`LibraryStatsOut`):
 counts, BPM/key coverage, `key_distribution` and `genre_distribution` (genre->count
 map; genres are merged case-insensitively keeping the most frequent spelling), BPM and
