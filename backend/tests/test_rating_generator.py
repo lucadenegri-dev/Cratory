@@ -2,7 +2,7 @@
 
 from app.models import Track
 from app.schemas import SetGenerationRequest
-from app.services.set_generator import _DEFAULT_PROFILE, _candidate_score
+from app.services.set_generator import _DEFAULT_PROFILE, _candidate_score, _pick_first
 
 
 def make_track(**kw) -> Track:
@@ -36,3 +36,23 @@ def test_voto_non_ribalta_la_compatibilita():
     compatibile = make_track(id=2, bpm=126.0, camelot_key="8A")
     incompatibile_votata = make_track(id=3, bpm=145.0, camelot_key="3B", rating=3)
     assert _score(prev, compatibile) > _score(prev, incompatibile_votata)
+
+
+def test_pick_first_bpm_esatto_batte_votata_fuori_bpm():
+    # Il voto non deve mai ribaltare l'aderenza al BPM di partenza, nemmeno per
+    # la prima traccia: qui la votata e' a qualche BPM di distanza, l'altra e'
+    # esattamente sul BPM richiesto e non votata.
+    req = SetGenerationRequest()
+    esatta = make_track(id=1, bpm=126.0)
+    votata_fuori_bpm = make_track(id=2, bpm=130.0, rating=3)
+    scelta = _pick_first([esatta, votata_fuori_bpm], req, start_bpm=126.0)
+    assert scelta is esatta
+
+
+def test_pick_first_a_parita_di_bpm_vince_la_votata():
+    # Stesso BPM (stesso first_score): qui il voto e' un legittimo tie-break puro.
+    req = SetGenerationRequest()
+    non_votata = make_track(id=1, bpm=126.0)
+    votata = make_track(id=2, bpm=126.0, rating=3)
+    scelta = _pick_first([non_votata, votata], req, start_bpm=126.0)
+    assert scelta is votata

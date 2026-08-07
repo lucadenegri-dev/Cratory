@@ -470,7 +470,7 @@ def orphan_lead_ids(db: Session, candidate_ids: Iterable[int] | None = None) -> 
 _MERGE_BACKFILL_FIELDS = (
     "spotify_id", "soundcloud_id", "platform", "platform_track_id", "isrc", "url",
     "title", "artist", "album", "genre", "year", "label", "duration_seconds",
-    "bpm", "camelot_key", "energy", "album_art_url",
+    "bpm", "camelot_key", "energy", "album_art_url", "rating",
     "local_path", "local_format", "local_bitrate", "local_mtime", "local_size", "audio_hash",
 )
 
@@ -517,6 +517,11 @@ def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
         keep.has_local_file = True
     db.flush()  # applica gli spostamenti prima di cancellare drop
     db.delete(drop)
+    # Il merge puo' aver trasferito la membership della Top (se drop aveva voto 3):
+    # la sync riallinea la membership al voto di keep (che ora e' quello vincente
+    # dopo il backfill sopra), cosi' l'invariante Top<->voto 3 non si rompe.
+    from app.services.rating import sync_rating_top
+    sync_rating_top(db, keep)
     return keep
 
 

@@ -147,9 +147,12 @@ def _pick_first(candidates: list[Track], req: SetGenerationRequest, start_bpm: f
         s = -abs((t.bpm or start_bpm) - start_bpm)
         if seeds and t.artist and any(seed in t.artist.lower() for seed in seeds):
             s += 100.0
-        return s + _RATING_BONUS * (t.rating or 0)
+        return s
 
-    return max(candidates, key=first_score)
+    # A questa scala (~1 punto per BPM di distanza) il bonus voto additivo
+    # ribalterebbe l'aderenza al BPM di partenza: il voto conta SOLO come
+    # tie-break puro (secondo criterio dell'ordinamento), mai sommato al punteggio.
+    return max(candidates, key=lambda t: (first_score(t), t.rating or 0))
 
 
 def _candidate_score(

@@ -3,6 +3,7 @@
 from sqlalchemy import select
 
 from app.models import Playlist, Track, playlist_tracks
+from app.repositories import merge_tracks
 from app.routers import tracks
 from app.schemas import TrackUpdateIn
 
@@ -70,3 +71,44 @@ def test_patch_di_altri_campi_non_tocca_la_top(db):
     tracks.patch_track(t.id, TrackUpdateIn(rating=3), db)
     tracks.patch_track(t.id, TrackUpdateIn(title="Nuovo"), db)
     assert _member_ids(db, _top(db)) == {t.id}
+
+
+def test_merge_con_keep_non_votata_e_drop_votata_3_porta_keep_in_top(db):
+    # drop e' in Top (voto 3), keep non ha voto: il merge deve backfillare il
+    # voto su keep e la sync deve confermarlo in Top (non lasciare la membership
+    # trasferita "orfana" di un voto coerente).
+    keep = _track(db)
+    drop = _track(db)
+    tracks.patch_track(drop.id, TrackUpdateIn(rating=3), db)
+    db.refresh(keep)
+    db.refresh(drop)
+
+    merge_tracks(db, keep, drop)
+    db.commit()
+    db.refresh(keep)
+
+    top = _top(db)
+    assert keep.rating == 3
+    assert _member_ids(db, top) == {keep.id}
+    assert top.track_count == 1
+
+
+def test_merge_con_keep_votata_1_e_drop_votata_3_non_lascia_keep_in_top(db):
+    # keep ha gia' un voto (1): il backfill non lo tocca (keep resta autorevole).
+    # drop era in Top per il suo voto 3: quella membership viene trasferita dal
+    # merge ma la sync la deve rimuovere, perche' il voto di keep resta 1.
+    keep = _track(db)
+    drop = _track(db)
+    tracks.patch_track(keep.id, TrackUpdateIn(rating=1), db)
+    tracks.patch_track(drop.id, TrackUpdateIn(rating=3), db)
+    db.refresh(keep)
+    db.refresh(drop)
+
+    merge_tracks(db, keep, drop)
+    db.commit()
+    db.refresh(keep)
+
+    top = _top(db)
+    assert keep.rating == 1
+    assert _member_ids(db, top) == set()
+    assert top.track_count == 0
