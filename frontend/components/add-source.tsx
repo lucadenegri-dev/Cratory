@@ -45,7 +45,7 @@ export function AddSource({ onAdded }: { onAdded: () => void }) {
           />
           {pickerOk && (
             <PathPickerButton kind="folder" start={path} prompt={t.sources.addRoot}
-              onPick={setPath} onError={setError} />
+              onPick={(p) => { setError(null); setPath(p); }} onError={setError} />
           )}
         </div>
         <div className="flex gap-2">
