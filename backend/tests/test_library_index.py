@@ -326,3 +326,32 @@ def test_report_indice_contiene_created_ids(db, tmp_path, monkeypatch):
     report = index_library(db, root=tmp_path / "Libreria")
     assert report["created"] == 1
     assert len(report["created_ids"]) == 1
+
+
+def test_indicizzazione_backfilla_added_at_dal_birthtime(db, fake_audio, monkeypatch):
+    """Traccia senza data: l'indice la data dal birthtime del file (recupero
+    per le storiche); chi ha già una data non viene mai retrodatato."""
+    from datetime import datetime, timezone
+
+    from app.models import Track
+    from app.services import library_index as li
+    from app.services.library_index import index_library
+
+    birth = datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(li, "_file_added_at", lambda p: birth)
+
+    senza = Track(source_type="local_files", title="Senza", artist="A",
+                  has_local_file=True, local_path="/vecchio/a.mp3", audio_hash="H1")
+    con = Track(source_type="spotify", spotify_id="s1", title="Con", artist="A",
+                has_local_file=True, local_path="/vecchio/b.mp3", audio_hash="H2",
+                added_at=datetime(2025, 1, 1))
+    db.add_all([senza, con]); db.commit()
+
+    make, root = fake_audio
+    make("A/A - Senza.mp3", digest="H1")
+    make("A/A - Con.mp3", digest="H2")
+    index_library(db, root=root)
+
+    db.refresh(senza); db.refresh(con)
+    assert senza.added_at is not None and str(senza.added_at).startswith("2026-06-27")
+    assert str(con.added_at).startswith("2025-01-01")

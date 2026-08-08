@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import delete, select
@@ -102,6 +103,17 @@ def _find_track(db: Session, *, digest: str, tags: dict) -> tuple[Track | None, 
                         and _duration_ok(cand.duration_seconds, file_dur)):
                     return cand, "fuzzy-norm"
     return None, ""
+
+
+def _file_added_at(path: Path) -> datetime | None:
+    """Data di nascita del file su disco (st_birthtime su macOS, st_ctime su
+    Windows). L'mtime non va bene: le scritture dei tag (Sortory) lo aggiornano."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    ts = getattr(st, "st_birthtime", None) or getattr(st, "st_ctime", None)
+    return datetime.fromtimestamp(ts, tz=timezone.utc) if ts else None
 
 
 def _fill_identity(track: Track, tags: dict, path: Path) -> None:
@@ -292,8 +304,7 @@ def index_library(db: Session, *, root: str | Path,
                 on_progress(i, total)
             continue
         if track is None:
-            track = Track(source_type=PLATFORM, platform=PLATFORM, platform_track_id=digest,
-                          added_at=utcnow())
+            track = Track(source_type=PLATFORM, platform=PLATFORM, platform_track_id=digest)
             db.add(track)
             db.flush()  # serve l'id per l'auto-enrichment a fine job
             report["created"] += 1
@@ -304,6 +315,10 @@ def index_library(db: Session, *, root: str | Path,
                 report["relinked"] += 1
         _fill_identity(track, tags, path)
         _own(track, path=path, digest=digest)
+        if track.added_at is None:
+            # Data d'ingresso in collezione: birthtime del file. Vale sia per le
+            # tracce nuove sia come recupero per le storiche rimaste senza data.
+            track.added_at = _file_added_at(path) or utcnow()
         refresh_status(track)
         seen_paths.add(str(path.resolve()))
         if on_progress is not None:
