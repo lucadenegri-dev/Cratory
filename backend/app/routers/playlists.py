@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.http_errors import api_error
 from app.db import get_db
 from app.models import Playlist, PlaylistSyncEvent, Track
+from app.models import playlist_tracks as playlist_tracks_table
 from app.integrations.spotify import (
     SpotifyError,
     SpotifyNotConfigured,
@@ -449,10 +450,15 @@ def export_playlist(
 def playlist_tracks(playlist_id: int, db: Session = Depends(get_db)):
     if get_playlist(db, playlist_id) is None:
         raise api_error(404, "playlist_not_found", "Playlist not found")
+    added_map = dict(db.execute(
+        select(playlist_tracks_table.c.track_id, playlist_tracks_table.c.added_at)
+        .where(playlist_tracks_table.c.playlist_id == playlist_id)
+    ).all())
     out = []
     for i, t in enumerate(tracks_for_playlist(db, playlist_id), start=1):
         row = track_out(t)
         row.playlist_position = i
+        row.playlist_added_at = added_map.get(t.id)
         out.append(row)
     return out
 

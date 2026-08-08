@@ -35,6 +35,9 @@ class TrackOut(BaseModel):
     playlists: list[TrackPlaylistRef] = []
     # Posizione 1-based nella playlist: valorizzata SOLO da GET /api/playlists/{id}/tracks.
     playlist_position: int | None = None
+    # Data di aggiunta ALLA playlist (playlist_tracks.added_at): valorizzata SOLO
+    # da GET /api/playlists/{id}/tracks. `added_at` resta il primo import in libreria.
+    playlist_added_at: datetime | None = None
     added_at: datetime | None = None
     spotify_url: str | None = None
     album_art_url: str | None = None
