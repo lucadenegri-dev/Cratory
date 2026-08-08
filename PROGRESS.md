@@ -46,8 +46,12 @@ app is now bilingual IT/EN (language toggle in Settings).
 - Stessa regola per le **nuove tracce**: indicizzazione locale, import manuale e
   flat/soundcloud datano `Track.added_at` alla creazione (prima solo Spotify);
   la data piattaforma vince quando c'è, i re-sync non retrodatano mai le
-  esistenti (guardia su `track.id is None` in `_apply_fields`). Le tracce
-  storiche senza data restano `—`.
+  esistenti (guardia su `track.id is None` in `_apply_fields`).
+- **Recupero storiche**: l'indice libreria backfilla `added_at` dal **birthtime**
+  del file (`st_birthtime`, non mtime che è sporcato dai tag Sortory), anche sul
+  fast-path incrementale (stat già disponibile). Eseguito sul DB reale:
+  212/246 tracce recuperate; restano `—` solo 34 lead senza file e le 209
+  membership storiche di playlist non-Spotify (nessuna fonte vera, non si inventa).
 - Formato compatto `gg/mm/aa` (`fmtDateShort`) con data estesa nel tooltip: il
   formato esteso del design (`12 lug 2026`) allargava la tabella playlist oltre il
   container a 1440px (misurato nel browser; il residuo di ~15px a 1440 e lo scroll
