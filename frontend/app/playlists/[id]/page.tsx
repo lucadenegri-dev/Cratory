@@ -9,7 +9,7 @@ import {
   RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart, Copy,
 } from "lucide-react";
 import {
-  getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDate, fmtDuration,
+  getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDate, fmtDateShort, fmtDuration,
   startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack, renamePlaylist,
   setPlaylistOrder, removeTracksFromPlaylist, duplicatePlaylist, playlistSyncLog,
   type Playlist, type Track, type GapAnalysis, type PlaylistSyncEvent,
@@ -733,7 +733,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                 <td className={`${cell} tnum`}><KeyBadge camelot={tr.camelot_key} /></td>
                 <td className={`${cell} tnum text-muted`}>{tr.energy ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
-                <td className={`${cell} whitespace-nowrap text-xs text-muted`}>{fmtDate(tr.playlist_added_at)}</td>
+                <td className={`${cell} tnum whitespace-nowrap text-xs text-muted`} title={tr.playlist_added_at ? fmtDate(tr.playlist_added_at) : undefined}>{fmtDateShort(tr.playlist_added_at)}</td>
                 <td className={cell}><TrackStateIcons track={tr} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
