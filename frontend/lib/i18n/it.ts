@@ -293,6 +293,7 @@ export const it: Dictionary = {
     colGenre: "Genere",
     colEnergy: "Energia",
     colDuration: "Dur",
+    colAdded: "Aggiunta",
     colStatus: "Stato",
     untitledTrack: "senza titolo",
     emptyStatePrefix: "Nessuna traccia con questi filtri.",

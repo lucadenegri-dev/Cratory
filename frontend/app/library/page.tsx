@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, List, LayoutGrid } from "lucide-react";
-import { apiGet, errText, fmtDuration, type Track } from "@/lib/api";
+import { apiGet, errText, fmtDate, fmtDuration, type Track } from "@/lib/api";
 import { Input, Select, Checkbox, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
@@ -280,6 +280,7 @@ function LibraryInner() {
               {th("Energy", "energy", true)}
               {th(t.library.colGenre, "genre")}
               {th(t.library.colDuration, "duration", true)}
+              {th(t.library.colAdded, "added_at")}
               <th className={cell}>{t.library.colStatus}</th>
               {th(t.tracks.ratingLabel, "rating")}
             </tr>
@@ -302,6 +303,7 @@ function LibraryInner() {
                 <td className={`${cell} tnum text-muted`}>{tr.energy ?? "—"}</td>
                 <td className={`${cell} max-w-[10rem] truncate text-muted`}>{tr.genre ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
+                <td className={`${cell} whitespace-nowrap text-xs text-muted`}>{fmtDate(tr.added_at)}</td>
                 <td className={cell}><TrackStateIcons track={tr} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">

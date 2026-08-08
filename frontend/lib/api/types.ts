@@ -19,6 +19,8 @@ export interface Track {
   isrc: string | null;
   playlists: { id: number; name: string }[];
   added_at: string | null;
+  /** Data di aggiunta ALLA playlist: presente solo da GET /playlists/{id}/tracks. */
+  playlist_added_at: string | null;
   spotify_url: string | null;
   album_art_url: string | null;
   has_local_file: boolean;

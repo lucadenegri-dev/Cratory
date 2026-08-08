@@ -291,6 +291,7 @@ export const en = {
     colGenre: "Genre",
     colEnergy: "Energy",
     colDuration: "Dur",
+    colAdded: "Added",
     colStatus: "Status",
     untitledTrack: "untitled",
     emptyStatePrefix: "No tracks match these filters.",
