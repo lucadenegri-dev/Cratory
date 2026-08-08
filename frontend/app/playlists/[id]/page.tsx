@@ -274,7 +274,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const ownedCount = tracks.filter((tr) => tr.has_local_file).length;
   const missing = tracks.filter((tr) => !tr.has_local_file && !tr.archived).length;
   const totalDur = tracks.reduce((s, tr) => s + (tr.duration_seconds ?? 0), 0);
-  const cell = "px-3 py-2.5";
+  const cell = "px-2 py-2";
   const canSync =
     (playlist.platform === "spotify" && (playlist.kind === "liked" || !!playlist.platform_playlist_id)) ||
     (playlist.platform === "soundcloud" && playlist.kind !== "liked" && !!playlist.url);
@@ -612,18 +612,46 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-faint">
-              <th className={cell}>
-                <input
-                  type="checkbox"
-                  checked={allVisibleSelected}
-                  onChange={(e) => toggleSelectAll(e.target.checked)}
-                  aria-label={t.playlists.selectAllAria}
-                  className="h-4 w-4 accent-[var(--color-fg)]"
-                />
+              <th className={`${cell} whitespace-nowrap`}>
+                <span className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={(e) => toggleSelectAll(e.target.checked)}
+                    aria-label={t.playlists.selectAllAria}
+                    className="h-4 w-4 accent-[var(--color-fg)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("rank")}
+                    title={t.library.sortColumnHint}
+                    className={`tnum inline-flex cursor-pointer select-none items-center gap-1 transition-colors hover:text-fg ${sort === "rank" ? "text-fg" : ""}`}
+                  >
+                    #{sort === "rank" && (order === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                  </button>
+                </span>
               </th>
-              {th("#", "rank", true)}
-              {th("Title", "title")}
-              {th("Artist", "artist")}
+              <th className={`${cell} whitespace-nowrap`}>
+                <span className="inline-flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("title")}
+                    title={t.library.sortColumnHint}
+                    className={`inline-flex cursor-pointer select-none items-center gap-1 transition-colors hover:text-fg ${sort === "title" ? "text-fg" : ""}`}
+                  >
+                    Title{sort === "title" && (order === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                  </button>
+                  <span className="text-faint">·</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("artist")}
+                    title={t.library.sortColumnHint}
+                    className={`inline-flex cursor-pointer select-none items-center gap-1 transition-colors hover:text-fg ${sort === "artist" ? "text-fg" : ""}`}
+                  >
+                    Artist{sort === "artist" && (order === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                  </button>
+                </span>
+              </th>
               {th(t.library.colGenre, "genre")}
               {th("BPM", "bpm", true)}
               {th("Key", "key")}
@@ -644,57 +672,59 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                 onDragEnd={() => setDragId(null)}
                 className={`border-b border-border/50 last:border-0 hover:bg-elevated/40${dragEnabled ? " cursor-grab" : ""}${dragId === tr.id ? " opacity-40" : ""}`}
               >
-                <td className={cell}>
-                  <input
-                    type="checkbox"
-                    checked={selected.has(tr.id)}
-                    onChange={(e) => toggleSelected(tr.id, e.target.checked)}
-                    aria-label={t.playlists.selectTrackAria}
-                    className="h-4 w-4 accent-[var(--color-fg)]"
-                  />
-                </td>
                 <td className={`${cell} tnum text-faint`}>
-                  {canReorder ? (
-                    editingRank === tr.id ? (
-                      <input
-                        type="number"
-                        min={1}
-                        max={tracks.length}
-                        defaultValue={insertionRank.get(tr.id) ?? 1}
-                        autoFocus
-                        disabled={reordering}
-                        aria-label={t.playlists.reorderPositionAria}
-                        onBlur={() => setEditingRank(null)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const v = Number((e.target as HTMLInputElement).value);
-                            if (Number.isFinite(v) && v >= 1) applyReorder(tr.id, v);
-                          } else if (e.key === "Escape") setEditingRank(null);
-                        }}
-                        className="w-12 border border-border bg-bg px-1 py-0.5 text-right text-xs tnum"
-                      />
+                  <span className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(tr.id)}
+                      onChange={(e) => toggleSelected(tr.id, e.target.checked)}
+                      aria-label={t.playlists.selectTrackAria}
+                      className="h-4 w-4 accent-[var(--color-fg)]"
+                    />
+                    {canReorder ? (
+                      editingRank === tr.id ? (
+                        <input
+                          type="number"
+                          min={1}
+                          max={tracks.length}
+                          defaultValue={insertionRank.get(tr.id) ?? 1}
+                          autoFocus
+                          disabled={reordering}
+                          aria-label={t.playlists.reorderPositionAria}
+                          onBlur={() => setEditingRank(null)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const v = Number((e.target as HTMLInputElement).value);
+                              if (Number.isFinite(v) && v >= 1) applyReorder(tr.id, v);
+                            } else if (e.key === "Escape") setEditingRank(null);
+                          }}
+                          className="w-12 border border-border bg-bg px-1 py-0.5 text-right text-xs tnum"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEditingRank(tr.id)}
+                          disabled={reordering}
+                          className="tnum hover:text-fg"
+                          title={t.playlists.editPositionTitle}
+                        >
+                          {insertionRank.get(tr.id) ?? "—"}
+                        </button>
+                      )
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => setEditingRank(tr.id)}
-                        disabled={reordering}
-                        className="tnum hover:text-fg"
-                        title={t.playlists.editPositionTitle}
-                      >
-                        {insertionRank.get(tr.id) ?? "—"}
-                      </button>
-                    )
-                  ) : (
-                    insertionRank.get(tr.id) ?? "—"
-                  )}
+                      insertionRank.get(tr.id) ?? "—"
+                    )}
+                  </span>
                 </td>
                 <td className={cell}>
                   <Link href={withFrom(`/tracks/${tr.id}`, from)} className="flex items-center gap-2.5">
                     <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
-                    <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
+                    <span className="min-w-0">
+                      <span className="block max-w-[18rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
+                      <span className="block max-w-[18rem] truncate text-xs text-muted">{tr.artist ?? "—"}</span>
+                    </span>
                   </Link>
                 </td>
-                <td className={`${cell} text-muted`}>{tr.artist ?? "—"}</td>
                 <td className={`${cell} max-w-[10rem] truncate text-muted`}>{tr.genre ?? "—"}</td>
                 <td className={`${cell} tnum`}>{tr.bpm?.toFixed(0) ?? "—"}</td>
                 <td className={`${cell} tnum`}><KeyBadge camelot={tr.camelot_key} /></td>
@@ -716,7 +746,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                 </td>
               </tr>
             ))}
-            {visible.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
           </tbody>
         </table>
       </div>

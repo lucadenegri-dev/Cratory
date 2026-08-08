@@ -142,7 +142,7 @@ function LibraryInner() {
     return () => { clearTimeout(timer); ac.abort(); };
   }, [load]);
 
-  const cell = "px-3 py-2.5";
+  const cell = "px-2 py-2";
 
   const toggleSort = (col: string) => {
     if (sort === col) setOrder(order === "asc" ? "desc" : "asc");
@@ -254,8 +254,27 @@ function LibraryInner() {
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-faint">
               <th className={cell}>#</th>
-              {th("Title", "title")}
-              {th("Artist", "artist")}
+              <th className="whitespace-nowrap">
+                <span className={`${cell} flex items-center gap-1.5 uppercase tracking-wide`}>
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("title")}
+                    title={t.library.sortColumnHint}
+                    className={`inline-flex cursor-pointer select-none items-center gap-1 transition-colors hover:text-fg ${sort === "title" ? "text-fg" : ""}`}
+                  >
+                    Title{sort === "title" && (order === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                  </button>
+                  <span className="text-faint">·</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("artist")}
+                    title={t.library.sortColumnHint}
+                    className={`inline-flex cursor-pointer select-none items-center gap-1 transition-colors hover:text-fg ${sort === "artist" ? "text-fg" : ""}`}
+                  >
+                    Artist{sort === "artist" && (order === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                  </button>
+                </span>
+              </th>
               {th("BPM", "bpm", true)}
               {th("Key", "key")}
               {th("Energy", "energy", true)}
@@ -272,10 +291,12 @@ function LibraryInner() {
                 <td className={cell}>
                   <Link href={`/tracks/${tr.id}${trackLinkQuery}`} className="flex items-center gap-2.5">
                     <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
-                    <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
+                    <span className="min-w-0">
+                      <span className="block max-w-[18rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
+                      <span className="block max-w-[18rem] truncate text-xs text-muted">{tr.artist ?? <span className="text-faint">—</span>}</span>
+                    </span>
                   </Link>
                 </td>
-                <td className={`${cell} text-muted`}>{tr.artist ?? <span className="text-faint">—</span>}</td>
                 <td className={`${cell} tnum`}>{tr.bpm?.toFixed(0) ?? "—"}</td>
                 <td className={`${cell} tnum`}><KeyBadge camelot={tr.camelot_key} /></td>
                 <td className={`${cell} tnum text-muted`}>{tr.energy ?? "—"}</td>
