@@ -7,6 +7,7 @@ import {
 } from "@/lib/api";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, Button, Loading, Spinner } from "@/components/ui";
+import { PathPickerButton, usePickerAvailability } from "@/components/path-picker-button";
 import { useI18n, useT } from "@/lib/i18n";
 
 // Valori d'esempio per l'anteprima client-side (approssimata: la resa reale con
@@ -233,6 +234,8 @@ function RootRow({ root, folder, naming, onSave }: {
   const [savedTargetRoot, setSavedTargetRoot] = useState(root.target_root);
   const [target, setTarget] = useState(root.target_root ?? "");
   const [busy, setBusy] = useState(false);
+  const pickerOk = usePickerAvailability();
+  const [pickError, setPickError] = useState<string | null>(null);
   if (savedTargetRoot !== root.target_root) {
     setSavedTargetRoot(root.target_root);
     setTarget(root.target_root ?? "");
@@ -255,8 +258,14 @@ function RootRow({ root, folder, naming, onSave }: {
             value={target} onChange={(e) => setTarget(e.target.value)}
             placeholder={t.settings.targetPlaceholder}
           />
+          {pickerOk && (
+            <PathPickerButton kind="folder" start={target} prompt={t.settings.rowDestination}
+              onPick={(p) => { setPickError(null); setTarget(p); }}
+              onError={setPickError} />
+          )}
           <Button variant="outline" size="sm" disabled={busy} onClick={save}>{busy ? <Spinner /> : t.settings.save}</Button>
         </div>
+        {pickError && <p className="mt-1 text-xs text-danger">{pickError}</p>}
       </div>
 
       <div className="mt-2 overflow-x-auto whitespace-nowrap text-[10px] text-faint">
