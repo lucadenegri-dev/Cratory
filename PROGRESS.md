@@ -32,6 +32,25 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-08-08 - Data di aggiunta tracce in Library e dettaglio playlist
+
+- **Library**: colonna "Aggiunta" ordinabile (`Track.added_at`, primo import in
+  libreria); nuovo `sort=added_at` su `GET /api/tracks` (NULL in fondo come le altre
+  colonne). Nessuna migrazione: il dato esisteva già.
+- **Dettaglio playlist**: colonna con la data di ingresso in *quella* playlist —
+  nuovo campo `playlist_added_at` su `TrackOut`, valorizzato solo da
+  `GET /playlists/{id}/tracks` (pattern `playlist_position`), sort client-side.
+- `add_track_to_playlist` senza `added_at` esplicito ora data la membership
+  "adesso" (prima restava NULL); gli import continuano a passare la data piattaforma.
+  Le membership storiche senza data mostrano `—`.
+- Formato compatto `gg/mm/aa` (`fmtDateShort`) con data estesa nel tooltip: il
+  formato esteso del design (`12 lug 2026`) allargava la tabella playlist oltre il
+  container a 1440px (misurato nel browser; il residuo di ~15px a 1440 e lo scroll
+  a 1280 sono preesistenti, la tabella sbordava già di 102px senza la colonna).
+- Spec `docs/superpowers/specs/2026-08-08-data-aggiunta-tracce-design.md`, piano
+  `docs/superpowers/plans/2026-08-08-data-aggiunta-tracce.md`; backend 1249 test
+  verdi, lint/build/unit frontend ok, verifica visiva su dev server reale.
+
 ## Milestone 2026-08-08 - Gestione playlist completata (rename, riordino DnD, bulk, fork, sync-log, export)
 
 - **Rename**: `PATCH /api/playlists/{id}` + matita inline nel dettaglio. Nuova colonna

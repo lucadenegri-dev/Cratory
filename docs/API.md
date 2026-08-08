@@ -213,7 +213,10 @@ recent import/sync diffs, newest first: `{id, created_at, added, removed}` where
 deleted as an orphan lead). Events are recorded by every import/sync that changes the
 membership set (no-op syncs record nothing) and die with the playlist.
 `GET /api/playlists/{playlist_id}/tracks` returns the members in playlist order; each
-`TrackOut` carries `playlist_position` (1-based, only in this endpoint).
+`TrackOut` carries `playlist_position` (1-based) and `playlist_added_at` (when the track
+entered *this* playlist, from `playlist_tracks.added_at` — the platform date for imports,
+"now" for memberships created by Cratory; both fields only in this endpoint, `added_at`
+stays the first library import).
 
 The system playlist **"Top"** (`platform="manual"`, `kind="rating_top"`) is not created
 through any endpoint above: it comes into existence lazily, the first time a track is
@@ -248,7 +251,8 @@ excluded; `true` shows only the archived ones), source (incl. `local_files`), st
 (`imported` | `ready_for_set`), BPM min/max, key, duration, Spotify/SoundCloud
 presence, ownership (`has_local_file`), incomplete metadata, sort/order (`sort=rating` is
 supported like the other columns; tracks with `rating IS NULL` always sort last,
-regardless of `order`), limit/offset, and `in_playlist` (repeatable, e.g.
+regardless of `order`; `sort=added_at` sorts by first library import, NULLs last),
+limit/offset, and `in_playlist` (repeatable, e.g.
 `?in_playlist=1&in_playlist=2`): tracks belonging
 to **any** of the given playlists (union), AND-combined with every other filter (e.g.
 paired with `genre` it narrows to tracks in any of those playlists that also match the
