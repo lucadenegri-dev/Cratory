@@ -55,7 +55,7 @@ def get_tracks(  # noqa: PLR0913
     incomplete_metadata: bool | None = None,
     sort: str | None = Query(
         default=None,
-        pattern="^(title|artist|source|bpm|key|energy|genre|duration|year|status|rating)$",
+        pattern="^(title|artist|source|bpm|key|energy|genre|duration|year|status|rating|added_at)$",
     ),
     order: str = Query(default="asc", pattern="^(asc|desc)$"),
     limit: int = Query(default=100, ge=0, le=500),  # 0 = tutte (nessuna paginazione)

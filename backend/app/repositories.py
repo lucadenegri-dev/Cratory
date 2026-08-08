@@ -28,6 +28,7 @@ _SORT_COLUMNS = {
     "year": Track.year,
     "status": Track.status,
     "rating": Track.rating,
+    "added_at": Track.added_at,
 }
 
 
