@@ -215,19 +215,25 @@ export default function IssuesPage() {
     prevRescan.current = rescan.status;
   }, [rescan.status, rescan.result, rescan.error, load, t]);
 
-  // Controllo integrità: stesso pattern del rescan (running→done ricarica).
-  const prevIntegrity = useRef(integrity.status);
-  useEffect(() => {
-    if (prevIntegrity.current === "running" && integrity.status === "done") {
-      load();
-      const g = integrity.result;
-      if (g) setAiNote(t.issues.integrityNote(g.corrupt, g.checked));
+  // Controllo integrità: nota/errore impostati durante il render sul fronte di
+  // transizione running→done/error (pattern React "storing information from
+  // previous renders", evita setState sincroni negli effetti); l'effetto resta
+  // solo per ricaricare le issue.
+  const [seenIntegrity, setSeenIntegrity] = useState(integrity.status);
+  if (seenIntegrity !== integrity.status) {
+    if (seenIntegrity === "running" && integrity.status === "done" && integrity.result) {
+      setAiNote(t.issues.integrityNote(integrity.result.corrupt, integrity.result.checked));
     }
-    if (prevIntegrity.current === "running" && integrity.status === "error") {
+    if (seenIntegrity === "running" && integrity.status === "error") {
       setActionError(integrity.error || t.issues.integrityUnavailable);
     }
+    setSeenIntegrity(integrity.status);
+  }
+  const prevIntegrity = useRef(integrity.status);
+  useEffect(() => {
+    if (prevIntegrity.current === "running" && integrity.status === "done") load();
     prevIntegrity.current = integrity.status;
-  }, [integrity.status, integrity.result, integrity.error, load, t]);
+  }, [integrity.status, load]);
 
   const types = useMemo(() => [...new Set(issues.map((i) => i.type))].sort(), [issues]);
   const fields = useMemo(
