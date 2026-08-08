@@ -355,3 +355,30 @@ def test_indicizzazione_backfilla_added_at_dal_birthtime(db, fake_audio, monkeyp
     db.refresh(senza); db.refresh(con)
     assert senza.added_at is not None and str(senza.added_at).startswith("2026-06-27")
     assert str(con.added_at).startswith("2025-01-01")
+
+
+def test_backfill_added_at_anche_sul_fast_path_incrementale(db, fake_audio, monkeypatch):
+    """File invariato (mtime+size noti): niente ri-hash, ma la traccia storica
+    senza data viene comunque datata dal birthtime."""
+    from datetime import datetime, timezone
+
+    from app.models import Track
+    from app.services import library_index as li
+    from app.services.library_index import index_library
+
+    birth = datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(li, "_added_at_from_stat", lambda st: birth)
+
+    make, root = fake_audio
+    p = make("A/A - Invariata.mp3", digest="H1")
+    stat = p.stat()
+    t = Track(source_type="local_files", title="Invariata", artist="A",
+              has_local_file=True, local_path=str(p.resolve()), audio_hash="H1",
+              local_mtime=stat.st_mtime, local_size=stat.st_size)
+    db.add(t); db.commit()
+
+    report = index_library(db, root=root)
+
+    db.refresh(t)
+    assert report["unchanged"] == 1
+    assert t.added_at is not None and str(t.added_at).startswith("2026-06-27")

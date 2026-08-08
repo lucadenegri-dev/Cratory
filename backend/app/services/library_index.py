@@ -105,15 +105,19 @@ def _find_track(db: Session, *, digest: str, tags: dict) -> tuple[Track | None, 
     return None, ""
 
 
+def _added_at_from_stat(st) -> datetime | None:
+    """Data di nascita del file (st_birthtime su macOS, st_ctime su Windows).
+    L'mtime non va bene: le scritture dei tag (Sortory) lo aggiornano."""
+    ts = getattr(st, "st_birthtime", None) or getattr(st, "st_ctime", None)
+    return datetime.fromtimestamp(ts, tz=timezone.utc) if ts else None
+
+
 def _file_added_at(path: Path) -> datetime | None:
-    """Data di nascita del file su disco (st_birthtime su macOS, st_ctime su
-    Windows). L'mtime non va bene: le scritture dei tag (Sortory) lo aggiornano."""
     try:
         st = path.stat()
     except OSError:
         return None
-    ts = getattr(st, "st_birthtime", None) or getattr(st, "st_ctime", None)
-    return datetime.fromtimestamp(ts, tz=timezone.utc) if ts else None
+    return _added_at_from_stat(st)
 
 
 def _fill_identity(track: Track, tags: dict, path: Path) -> None:
@@ -237,6 +241,10 @@ def index_library(db: Session, *, root: str | Path,
             seen_paths.add(resolved)
             if known.audio_hash:
                 seen_digests.add(known.audio_hash)
+            if known.added_at is None:
+                # Recupero data anche sul fast-path: traccia storica senza data,
+                # lo stat è già in mano (nessun costo aggiuntivo).
+                known.added_at = _added_at_from_stat(stat)
             done += 1
             if on_progress is not None:
                 on_progress(done, total)
