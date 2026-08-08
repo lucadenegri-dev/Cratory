@@ -9,7 +9,7 @@ import {
   RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart, Copy,
 } from "lucide-react";
 import {
-  getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDuration,
+  getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDate, fmtDuration,
   startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack, renamePlaylist,
   setPlaylistOrder, removeTracksFromPlaylist, duplicatePlaylist, playlistSyncLog,
   type Playlist, type Track, type GapAnalysis, type PlaylistSyncEvent,
@@ -177,6 +177,8 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
       title: (tr) => str(tr.title), artist: (tr) => str(tr.artist), source: (tr) => tr.source_type,
       bpm: (tr) => num(tr.bpm), key: (tr) => camelotRank(tr.camelot_key), energy: (tr) => num(tr.energy),
       genre: (tr) => str(tr.genre), duration: (tr) => num(tr.duration_seconds), status: (tr) => tr.status,
+      // ISO string ordina lessicograficamente; senza data sempre in fondo in entrambi i versi.
+      added: (tr) => tr.playlist_added_at ?? (order === "asc" ? "￿" : ""),
     };
     if (sort === "rating") {
       // Stesso criterio del backend: non votate sempre in fondo (in entrambi i
@@ -657,6 +659,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
               {th("Key", "key")}
               {th(t.library.colEnergy, "energy", true)}
               {th(t.library.colDuration, "duration", true)}
+              {th(t.library.colAdded, "added")}
               <th className={cell}>{t.library.colStatus}</th>
               {th(t.tracks.ratingLabel, "rating")}
             </tr>
@@ -730,6 +733,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                 <td className={`${cell} tnum`}><KeyBadge camelot={tr.camelot_key} /></td>
                 <td className={`${cell} tnum text-muted`}>{tr.energy ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
+                <td className={`${cell} whitespace-nowrap text-xs text-muted`}>{fmtDate(tr.playlist_added_at)}</td>
                 <td className={cell}><TrackStateIcons track={tr} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
@@ -746,7 +750,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                 </td>
               </tr>
             ))}
-            {visible.length === 0 && <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">{t.library.emptyStatePrefix}</td></tr>}
           </tbody>
         </table>
       </div>
