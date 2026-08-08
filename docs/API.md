@@ -306,6 +306,14 @@ case-insensitive) in `LIBRARY_ROOT` and `SLSKD_DOWNLOAD_DIR`; max 50 results, a 
 under 2 characters returns an empty list. Response: list of
 `{path, name, format, size, source}` with `source` = `library` | `downloads`.
 
+- `GET /api/files/pick/availability` → `{available}`: whether the native path-picker
+  dialog is available (macOS only, with osascript in the PATH).
+- `POST /api/files/pick` `{kind: "folder"|"file", start?, prompt?}` → `{path}`:
+  opens the native (Finder) dialog on the backend machine and returns the chosen
+  path; `path: null` if the user cancels or the dialog times out (300 s). 409
+  `picker_unavailable` outside macOS, 409 `picker_busy` if a dialog is already open.
+  Used by the "Sfoglia…" button in Settings.
+
 `GET /api/stats` returns the deterministic library aggregates (`LibraryStatsOut`):
 counts, BPM/key coverage, `key_distribution` and `genre_distribution` (genre->count
 map; genres are merged case-insensitively keeping the most frequent spelling), BPM and

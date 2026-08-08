@@ -75,6 +75,7 @@ export const it: Dictionary = {
     overrideBadge: "override .env",
     unsavedHint: "Modifica non salvata",
     saveButton: "Salva",
+    browseButton: "Sfoglia…",
     savedLabel: "Salvato ✓",
     shareLibraryLabel: "Condividi la libreria su Soulseek",
     shareLibraryHint: "Aggiunge la cartella libreria alle share di slskd. Espone i nomi dei file alla rete Soulseek (condividere è buona etichetta: gli account solo-leech vengono limitati).",
@@ -1185,5 +1186,7 @@ export const it: Dictionary = {
     download_review_error: (p: Record<string, unknown>) => `Errore revisione download: ${p.reason ?? ""}`,
     shazam_deps_missing: "Identificazione non disponibile: servono ffmpeg, yt-dlp e shazamio nel backend.",
     dj_set_already_imported: "Set già importato come playlist",
+    picker_unavailable: "Dialog nativo non disponibile: richiede il backend su macOS.",
+    picker_busy: "Un dialog di scelta è già aperto sulla macchina del backend.",
   } as Record<string, string | ((p: Record<string, unknown>) => string)>,
 };

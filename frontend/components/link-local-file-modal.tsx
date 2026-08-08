@@ -8,6 +8,7 @@ import {
   type LocalFileHit, type TrackDetail,
 } from "@/lib/api";
 import { useT, type Dictionary } from "@/lib/i18n";
+import { PathPickerButton, usePickerAvailability } from "@/components/path-picker-button";
 
 export type LinkTarget = { id: number; artist: string | null; title: string | null };
 
@@ -46,6 +47,7 @@ function LinkDialog({ target, onClose, onLinked }: {
   const [manualPath, setManualPath] = useState("");
   const [linking, setLinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pickerOk = usePickerAvailability();
 
   const runSearch = async () => {
     const q = query.trim();
@@ -136,6 +138,10 @@ function LinkDialog({ target, onClose, onLinked }: {
               onChange={(e) => setManualPath(e.target.value)}
               placeholder={t.tracks.exactPathPlaceholder}
             />
+            {pickerOk && (
+              <PathPickerButton kind="file" prompt={t.tracks.exactPathLabel}
+                onPick={setManualPath} onError={setError} />
+            )}
             <Button type="submit" variant="outline"
               disabled={linking || !manualPath.trim()}>
               <Link2 size={14} /> {t.tracks.linkAction}

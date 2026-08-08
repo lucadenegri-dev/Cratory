@@ -103,6 +103,34 @@ app is now bilingual IT/EN (language toggle in Settings).
   (`_migrate_recount_playlist_counts`) ripara i conteggi storici a ogni avvio.
 - Spec: `docs/superpowers/specs/2026-08-07-playlist-speciali-design.md`.
 
+## Milestone 2026-08-07 - Settings: pulsante Sfoglia con dialog nativo macOS + Collega file locale
+
+Estensione della feature Settings folder picker (5 task completati, Tasks 1-5 del piano
+`docs/superpowers/plans/2026-08-07-settings-folder-picker.md`):
+
+- **Backend (`routers/files.py`):** `GET /api/files/pick/availability` (vero solo su
+  macOS con `osascript` disponibile) e `POST /api/files/pick` (body `{kind, start}`
+  → `{path}`). Logica di dialog via `services/native_picker.py` (pura, testabile),
+  lock di modulo per dialog concorrenti, timeout 300s, annullamento utente → `path: null`.
+- **Frontend Settings (`ConfigCard`):** at mount, fetch availability; se disponibile,
+  pulsante "Sfoglia…" accanto a campi percorso (`library_root`, `archive_root`,
+  `slskd_download_dir`, `slskd_config_path`) — scelta cartella per i primi tre, file
+  per l'ultimo. Click aggiorna **la bozza** del campo; salvataggio resta manuale.
+  Hook condiviso `usePickerAvailability()` — fetch una sola volta al mount.
+- **Frontend modale "Collega file locale":** stesso pulsante "Sfoglia…" accanto
+  all'input "percorso esatto", visibile solo se picker disponibile. File scelto
+  riempie l'input; collegamento resta manuale col pulsante Collega. Pulsante ha
+  `type="button"` (dentro un form, non deve scatenare il submit).
+- **Test:** backend (availability su darwin/non-darwin, pick con successo/annullo/timeout,
+  409 su lock occupato e piattaforma non supportata); frontend (pulsante condizionato su
+  `available`, click riempie bozza senza salvare, annullo non tocca il campo, errori
+  mostrati; per la modale: Sfoglia presente solo se `available`, file scelto non fa
+  partire il collegamento).
+- Spec: `docs/superpowers/specs/2026-08-07-settings-folder-picker-design.md`.
+
+Verifica finale (2026-08-07): backend + frontend lint/test:unit/build tutti verdi,
+4 test unit sulla modale, nessuna riga della modale alterata oltre le aggiunte del brief.
+
 ## Milestone 2026-07-23 - Riordino manuale delle playlist + colonne Genere/Energia
 
 - La lista tracce di una playlist (`frontend/app/playlists/[id]/page.tsx`) mostra ora

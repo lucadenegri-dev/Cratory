@@ -66,6 +66,12 @@ platform except a user-chosen name), drag-and-drop reordering (full-order
 (remove from playlist / add to another), "duplicate as manual" fork for any playlist, a
 per-playlist sync history (`playlist_sync_events` + `GET /sync-log`, added/removed
 snapshots per event) and export in four formats (`m3u8|csv|text|markdown`).
+**Settings folder picker and local file link modal**
+(2026-08-07): native macOS dialog for path selection (`GET /api/files/pick/availability`,
+`POST /api/files/pick`), "Sfoglia…" button in Settings for `library_root`, `archive_root`,
+`slskd_download_dir` (folder pick) and `slskd_config_path` (file pick),
+same button in the "Collega file locale" modal next to the "percorso esatto" input (file pick only) —
+availability gated by `usePickerAvailability()` hook, shared by both contexts.
 
 Full chronological history lives in [PROGRESS.md](../PROGRESS.md).
 
