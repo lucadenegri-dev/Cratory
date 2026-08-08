@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import DjSet, DjSetTrack, Playlist, PlaylistSyncEvent, Setlist, SetlistTrack, Track, playlist_tracks
+from app.models import DjSet, DjSetTrack, Playlist, PlaylistSyncEvent, Setlist, SetlistTrack, Track, playlist_tracks, utcnow
 
 
 def ci_equals(column, value: str):
@@ -344,6 +344,8 @@ def add_track_to_playlist(db: Session, track: Track, playlist: Playlist, *,
 
     `added_by` marca la provenienza della membership: NULL = import dalla
     piattaforma, 'cratory' = aggiunta da una feature Cratory (es. Discovery).
+    `added_at=None` -> la membership viene datata adesso (gli import passano
+    la data originale della piattaforma).
     Se la membership esiste gia' non viene toccata (nemmeno la provenienza).
     """
     exists = db.execute(
@@ -360,7 +362,8 @@ def add_track_to_playlist(db: Session, track: Track, playlist: Playlist, *,
         )
     )
     db.execute(playlist_tracks.insert().values(
-        playlist_id=playlist.id, track_id=track.id, added_at=added_at, added_by=added_by,
+        playlist_id=playlist.id, track_id=track.id,
+        added_at=added_at or utcnow(), added_by=added_by,
         position=(max_pos or 0) + 1,
     ))
 

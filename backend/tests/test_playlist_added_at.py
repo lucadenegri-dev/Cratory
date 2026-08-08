@@ -44,6 +44,20 @@ def test_playlist_added_at_valorizzato(client_db):
     assert rows["a"]["playlist_added_at"].startswith("2026-03-15T12:00:00")
 
 
+def test_add_senza_added_at_valorizza_adesso(client_db):
+    client, db = client_db
+    pl = Playlist(platform="manual", name="P2", kind="manual")
+    t = Track(source_type="manual", title="x", artist="A")
+    db.add_all([pl, t])
+    db.flush()
+    add_track_to_playlist(db, t, pl)
+    db.commit()
+
+    r = client.get(f"/api/playlists/{pl.id}/tracks")
+    assert r.status_code == 200
+    assert r.json()[0]["playlist_added_at"] is not None
+
+
 def test_playlist_added_at_assente_su_get_tracks(client_db):
     client, db = client_db
     t = Track(source_type="manual", title="solo", artist="A")
