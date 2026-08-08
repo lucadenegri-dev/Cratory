@@ -23,7 +23,7 @@ from app.integrations.local_files import (
     read_audio_quality,
     read_tags,
 )
-from app.models import ArchiveSeen, Track
+from app.models import ArchiveSeen, Track, utcnow
 from app.repositories import ci_equals, unreferenced_track_ids
 from app.services.audio_energy import analyze_file, recompute_energy
 from app.services.genre_norm import normalize_genre
@@ -292,7 +292,8 @@ def index_library(db: Session, *, root: str | Path,
                 on_progress(i, total)
             continue
         if track is None:
-            track = Track(source_type=PLATFORM, platform=PLATFORM, platform_track_id=digest)
+            track = Track(source_type=PLATFORM, platform=PLATFORM, platform_track_id=digest,
+                          added_at=utcnow())
             db.add(track)
             db.flush()  # serve l'id per l'auto-enrichment a fine job
             report["created"] += 1

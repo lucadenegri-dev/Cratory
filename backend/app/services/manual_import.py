@@ -13,7 +13,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Playlist, Track
+from app.models import Playlist, Track, utcnow
 from app.repositories import add_track_to_playlist, ci_equals, recount_playlist
 from app.services.track_status import refresh_status
 
@@ -80,7 +80,8 @@ def _import_pairs(db: Session, *, name: str, items, default_name: str, source: s
             add_track_to_playlist(db, existing, playlist)
             updated += 1
         else:
-            track = Track(source_type=source, platform=source, artist=artist, title=title, isrc=isrc or None)
+            track = Track(source_type=source, platform=source, artist=artist, title=title, isrc=isrc or None,
+                          added_at=utcnow())
             db.add(track)
             refresh_status(track)
             db.flush()

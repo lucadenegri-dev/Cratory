@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Playlist, PlaylistSyncEvent, Track
+from app.models import Playlist, PlaylistSyncEvent, Track, utcnow
 from app.repositories import (
     add_track_to_playlist,
     ci_equals,
@@ -280,7 +280,10 @@ def _apply_fields(track: Track, norm: NormalizedTrack) -> None:
         track.url = track.url or norm.url
     track.album_art_url = track.album_art_url or norm.artwork_url
     track.isrc = track.isrc or norm.isrc
-    track.added_at = track.added_at or norm.added_at
+    if track.added_at is None:
+        # Data della piattaforma quando c'e'; altrimenti "adesso", ma solo alla
+        # nascita della traccia (id ancora assente): i re-sync non retrodatano.
+        track.added_at = norm.added_at or (utcnow() if track.id is None else None)
     # local_path: overwrite-quando-presente (solo i NormalizedTrack locali lo valorizzano),
     # così un file spostato/rinominato aggiorna il path pur mantenendo l'identità via hash.
     if norm.local_path:

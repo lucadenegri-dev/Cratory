@@ -43,6 +43,11 @@ app is now bilingual IT/EN (language toggle in Settings).
 - `add_track_to_playlist` senza `added_at` esplicito ora data la membership
   "adesso" (prima restava NULL); gli import continuano a passare la data piattaforma.
   Le membership storiche senza data mostrano `—`.
+- Stessa regola per le **nuove tracce**: indicizzazione locale, import manuale e
+  flat/soundcloud datano `Track.added_at` alla creazione (prima solo Spotify);
+  la data piattaforma vince quando c'è, i re-sync non retrodatano mai le
+  esistenti (guardia su `track.id is None` in `_apply_fields`). Le tracce
+  storiche senza data restano `—`.
 - Formato compatto `gg/mm/aa` (`fmtDateShort`) con data estesa nel tooltip: il
   formato esteso del design (`12 lug 2026`) allargava la tabella playlist oltre il
   container a 1440px (misurato nel browser; il residuo di ~15px a 1440 e lo scroll
