@@ -25,6 +25,7 @@ export const it: Dictionary = {
   common: {
     loading: "Caricamento…",
     save: "Salva",
+    browseButton: "Sfoglia…",
     cancel: "Annulla",
     close: "Chiudi",
     confirm: "Conferma",
@@ -464,5 +465,7 @@ export const it: Dictionary = {
       p.reason === "positive" ? `'${p.field}' dev'essere un numero positivo.` : `'${p.field}' dev'essere un numero.`,
     tag_write_failed: "Impossibile scrivere i tag sul file.",
     tag_verify_failed: "I tag sono stati salvati ma non è stato possibile verificarli. Ri-scansiona per conciliare.",
+    picker_unavailable: "Dialog nativo non disponibile: richiede il backend su macOS.",
+    picker_busy: "Un dialog di scelta è già aperto sulla macchina del backend.",
   },
 };

@@ -29,6 +29,7 @@ export const en = {
   common: {
     loading: "Loading…",
     save: "Save",
+    browseButton: "Browse…",
     cancel: "Cancel",
     close: "Close",
     confirm: "Confirm",
@@ -469,6 +470,8 @@ export const en = {
       p.reason === "positive" ? `'${p.field}' must be a positive number.` : `'${p.field}' must be a number.`,
     tag_write_failed: "Couldn't write the tags to the file.",
     tag_verify_failed: "The tags were saved but couldn't be verified. Re-scan to reconcile.",
+    picker_unavailable: "Native picker unavailable: it requires the backend on macOS.",
+    picker_busy: "A picker dialog is already open on the backend machine.",
   } as Record<string, string | ((p: Record<string, unknown>) => string)>,
 };
 

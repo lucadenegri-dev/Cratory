@@ -542,3 +542,15 @@ export function fmtDate(iso: string | null | undefined): string {
   const locale = lang === "it" ? "it-IT" : "en-GB";
   return d.toLocaleString(locale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
+
+// --- PICKER -----------------------------------------------------------------
+/** Il dialog nativo di scelta percorso è disponibile? (solo backend su macOS) */
+export function pickerAvailability() {
+  return apiGet<{ available: boolean }>("/api/picker/availability");
+}
+/** Apre il dialog nativo sulla macchina del backend; path null = annullato. */
+export function pickPath(kind: "folder" | "file", start?: string, prompt?: string) {
+  return apiSend<{ path: string | null }>("POST", "/api/picker/pick", {
+    kind, start: start || null, prompt: prompt || null,
+  });
+}
