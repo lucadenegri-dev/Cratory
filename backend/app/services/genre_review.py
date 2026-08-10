@@ -84,9 +84,16 @@ def _apply_proposal(db: Session, f: AudioFile, proposal: dict) -> str:
         _drop_stale_review_row()  # genere confermato: la proposta non serve più
         return "confirmed"
 
+    level = proposal.get("level")
     fix = {"field": "genre", "action": "retag", "to": value,
-           "source": "ai", "confidence": proposal.get("confidence", "low")}
-    detail = f"AI: genre → {value}"
+           "source": "ai", "confidence": proposal.get("confidence", "low"),
+           "level": level}
+    # Il livello (track/release/artist) arriva anche nel detail mostrato in
+    # ISSUES, così l'utente vede a colpo d'occhio se la proposta nasce da un
+    # tag di traccia o solo dalla fama dell'artista. Stringa tecnica non
+    # localizzata (stesso stile di "provider: {field} → {value}" in
+    # provider_rescan.py), non va tradotta.
+    detail = f"AI ({level}): genre → {value}" if level else f"AI: genre → {value}"
     open_rows = db.scalars(select(Issue).where(
         Issue.file_id == f.id, Issue.field == "genre",
         Issue.status == "open")).all()

@@ -63,7 +63,17 @@ _REVIEW_PROMPT = (
     "'Tech House', 'Acid Techno', 'Drum & Bass'). I candidati dei provider "
     "(MusicBrainz/Discogs) sono evidenza forte: preferiscili quando plausibili. "
     "Usa la ricerca web SOLO quando l'evidenza disponibile non basta a decidere. "
-    "IMPORTANTE: per ogni elemento della risposta valorizza SEMPRE index con il "
+    "SCALA DI EVIDENZA: usa il livello più specifico per cui esiste evidenza "
+    "reale, nell'ordine traccia → release/album → artista, e non fermarti al "
+    "genere generale dell'artista quando è reperibile evidenza sulla release "
+    "specifica. Un artista con discografia eterogenea può avere release di "
+    "generi diversi (es. Oneohtrix Point Never ha album ambient, ma anche "
+    "album più vicini a progressive/IDM/synthpop): il genere 'tipico' "
+    "dell'artista non è una prova sul singolo brano, è solo la sua ultima "
+    "spiaggia. Quando l'unica base disponibile è la reputazione generale "
+    "dell'artista (nessuna evidenza specifica sulla traccia o sulla release), "
+    "dichiaralo con level='artist' invece di spacciarlo per una risposta "
+    "certa. IMPORTANTE: per ogni elemento della risposta valorizza SEMPRE index con il "
     "numero che precede la traccia (es. per la riga '3. ...' usa index=3) e "
     "title con la parte iniziale di quella riga così com'è scritta, cioè "
     "'Artista - Titolo' per intero (tutto ciò che segue il numero e precede "
@@ -71,7 +81,11 @@ _REVIEW_PROMPT = (
     "traccia giusta e non a quella vicina, quindi non ometterli e non "
     "riecheggiare la parte iniziale di un'altra riga. Non serve rispondere "
     "nello stesso ordine delle tracce, ma ogni risposta deve riportare "
-    "l'index e il title corretti della traccia a cui si riferisce. Imposta "
+    "l'index e il title corretti della traccia a cui si riferisce. Valorizza "
+    "level con il livello di evidenza effettivamente usato per decidere: "
+    "'track' se hai trovato evidenza sulla traccia specifica, 'release' se "
+    "l'evidenza più specifica trovata riguarda la release/l'album, 'artist' "
+    "se ti sei basato solo sulla reputazione generale dell'artista. Imposta "
     "confidence='high' se sei sicuro, "
     "'low' se incerto. Se non riesci a determinare il genere metti genre a "
     "null; non inventare valori spazzatura."
@@ -83,10 +97,17 @@ class _Review(BaseModel):
     title: str | None = None
     genre: str | None = None
     confidence: str = "low"
+    level: str | None = None
 
 
 class _Reviews(BaseModel):
     items: list[_Review]
+
+
+# Livelli di evidenza ammessi per il campo `level`, in ordine di specificità
+# decrescente (vedi scala nel prompt sopra). Un valore fuori da questo
+# vocabolario (o assente) viene normalizzato a None invece di propagarsi.
+_EVIDENCE_LEVELS = {"track", "release", "artist"}
 
 
 def _normalize_title_for_match(title: str | None) -> str:
@@ -138,7 +159,8 @@ class AiReviewError(Exception):
 def review_genres(items: list[dict]) -> list[dict]:
     """Rivede il genere di un batch di tracce con contesto provider e web search.
     items: [{'artist','title','album','label','current_genre','candidates'}];
-    ritorna [{'genre': str|None, 'confidence': 'high'|'low'}] allineato per indice."""
+    ritorna [{'genre': str|None, 'confidence': 'high'|'low',
+    'level': 'track'|'release'|'artist'|None}] allineato per indice."""
     if not items:
         return []
     from anthropic import Anthropic  # import lazy
@@ -199,11 +221,21 @@ def review_genres(items: list[dict]) -> list[dict]:
                 # slittamento), la scartiamo invece di fidarcene.
                 r = None
         if r is None:
-            out.append({"genre": None, "confidence": "low"})
+            out.append({"genre": None, "confidence": "low", "level": None})
             continue
         matched += 1
         conf = "high" if r.confidence == "high" else "low"
-        out.append({"genre": r.genre or None, "confidence": conf})
+        level = r.level if r.level in _EVIDENCE_LEVELS else None
+        if level == "artist":
+            # Effetto alone dell'artista: la ricerca ha mostrato che è qui che
+            # si concentrano gli errori (il modello marca 'high' anche quando
+            # sbaglia, scivolando sul genere più famoso associato al nome
+            # invece che sulla release/traccia specifica). Quando l'unica
+            # base è la reputazione generale dell'artista la confidenza va
+            # forzata a bassa nel codice, non lasciata al giudizio del
+            # modello.
+            conf = "low"
+        out.append({"genre": r.genre or None, "confidence": conf, "level": level})
 
     if matched * 2 < len(items):
         # Meno della metà delle risposte ha superato la guardia indice/titolo:

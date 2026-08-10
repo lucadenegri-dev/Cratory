@@ -79,7 +79,41 @@ def test_review_proposes_genre_review_issue_when_differs(db):
     assert issue.status == "open"
     assert issue.suggested_fix_json == {
         "field": "genre", "action": "retag", "to": "Techno",
-        "source": "ai", "confidence": "high"}
+        "source": "ai", "confidence": "high", "level": None}
+    assert f.genre_reviewed_at is not None
+
+
+def test_review_proposal_detail_and_fix_carry_level(db):
+    """Il livello di evidenza (track/release/artist) arriva sia nel detail
+    mostrato in ISSUES sia nel suggested_fix_json, così l'utente vede a
+    colpo d'occhio se la proposta nasce da un tag di traccia o solo dalla
+    fama generale dell'artista."""
+    _file(db, 1, artist="Oneohtrix Point Never", title="Boring Angel",
+          genre="Ambient")
+    res = genre_review.review(
+        db, mb=_MB(None), discogs=_DG(None),
+        ai_fn=_ai_returning({"genre": "Progressive Electronic",
+                             "confidence": "high", "level": "release"}))
+    assert res["proposed"] == 1
+    (issue,) = _issues(db, 1)
+    assert issue.detail == "AI (release): genre → Progressive Electronic"
+    assert issue.suggested_fix_json == {
+        "field": "genre", "action": "retag", "to": "Progressive Electronic",
+        "source": "ai", "confidence": "high", "level": "release"}
+
+
+def test_review_proposal_detail_without_level_has_no_parentheses(db):
+    """Una proposta senza livello (None, es. modello che non lo valorizza)
+    produce un detail senza parentesi, invece di 'AI (None): ...'."""
+    f = _file(db, 1, artist="A", title="T", genre="House")
+    res = genre_review.review(
+        db, mb=_MB(None), discogs=_DG(None),
+        ai_fn=_ai_returning({"genre": "Techno", "confidence": "high"}))
+    assert res["proposed"] == 1
+    (issue,) = _issues(db, 1)
+    assert issue.detail == "AI: genre → Techno"
+    assert "level" in issue.suggested_fix_json
+    assert issue.suggested_fix_json["level"] is None
     assert f.genre_reviewed_at is not None
 
 

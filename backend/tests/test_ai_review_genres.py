@@ -63,8 +63,8 @@ def test_review_genres_prompt_tools_and_alignment(monkeypatch):
     assert "Tech House; Techno" in text
     # output allineato per indice: la seconda traccia (nessuna risposta) è
     # None/low, non la risposta della prima
-    assert out == [{"genre": "Tech House", "confidence": "high"},
-                   {"genre": None, "confidence": "low"}]
+    assert out == [{"genre": "Tech House", "confidence": "high", "level": None},
+                   {"genre": None, "confidence": "low", "level": None}]
 
 
 def test_review_genres_no_parsed_output_raises(monkeypatch):
@@ -89,7 +89,7 @@ def test_review_genres_weird_confidence_becomes_low(monkeypatch):
     out = ai_tags.review_genres([{"artist": "A", "title": "B", "album": None,
                                   "label": None, "current_genre": None,
                                   "candidates": []}])
-    assert out == [{"genre": "Acid", "confidence": "low"}]
+    assert out == [{"genre": "Acid", "confidence": "low", "level": None}]
 
 
 def test_review_genres_shifted_titles_are_discarded_and_raise(monkeypatch):
@@ -155,8 +155,8 @@ def test_review_genres_real_observed_echo_includes_artist_prefix(monkeypatch):
              title="Oneohtrix Point Never - I Don't Love Me Anymore",
              genre="Synthpop", confidence="high")])
     out = ai_tags.review_genres(items)
-    assert out == [{"genre": "Ambient", "confidence": "high"},
-                   {"genre": "Synthpop", "confidence": "high"}]
+    assert out == [{"genre": "Ambient", "confidence": "high", "level": None},
+                   {"genre": "Synthpop", "confidence": "high", "level": None}]
 
 
 def test_review_genres_short_title_below_threshold_skips_containment_guard(
@@ -175,7 +175,7 @@ def test_review_genres_short_title_below_threshold_skips_containment_guard(
         [ai_tags._Review(index=0, title="rataxes - Acid Face",
                          genre="Acid Techno", confidence="high")])
     out = ai_tags.review_genres(items)
-    assert out == [{"genre": "Acid Techno", "confidence": "high"}]
+    assert out == [{"genre": "Acid Techno", "confidence": "high", "level": None}]
 
 
 def test_review_genres_out_of_order_indices_match_correct_track(monkeypatch):
@@ -200,9 +200,9 @@ def test_review_genres_out_of_order_indices_match_correct_track(monkeypatch):
          ai_tags._Review(index=1, title="Second", genre="Trance",
                          confidence="low")])
     out = ai_tags.review_genres(items)
-    assert out == [{"genre": "House", "confidence": "high"},
-                   {"genre": "Trance", "confidence": "low"},
-                   {"genre": "Techno", "confidence": "high"}]
+    assert out == [{"genre": "House", "confidence": "high", "level": None},
+                   {"genre": "Trance", "confidence": "low", "level": None},
+                   {"genre": "Techno", "confidence": "high", "level": None}]
 
 
 def test_review_genres_missing_response_for_one_item_stays_unresolved(monkeypatch):
@@ -225,9 +225,9 @@ def test_review_genres_missing_response_for_one_item_stays_unresolved(monkeypatc
          ai_tags._Review(index=2, title="Third", genre="Techno",
                          confidence="high")])
     out = ai_tags.review_genres(items)
-    assert out == [{"genre": "House", "confidence": "high"},
-                   {"genre": None, "confidence": "low"},
-                   {"genre": "Techno", "confidence": "high"}]
+    assert out == [{"genre": "House", "confidence": "high", "level": None},
+                   {"genre": None, "confidence": "low", "level": None},
+                   {"genre": "Techno", "confidence": "high", "level": None}]
 
 
 def test_review_genres_typographic_apostrophe_and_case_do_not_false_reject(monkeypatch):
@@ -245,7 +245,7 @@ def test_review_genres_typographic_apostrophe_and_case_do_not_false_reject(monke
         [ai_tags._Review(index=0, title="i don't love me  anymore",
                          genre="Downtempo", confidence="high")])
     out = ai_tags.review_genres(items)
-    assert out == [{"genre": "Downtempo", "confidence": "high"}]
+    assert out == [{"genre": "Downtempo", "confidence": "high", "level": None}]
 
 
 def test_review_genres_out_of_range_index_ignored(monkeypatch):
@@ -265,8 +265,8 @@ def test_review_genres_out_of_range_index_ignored(monkeypatch):
          ai_tags._Review(index=0, title="First", genre="House",
                          confidence="high")])
     out = ai_tags.review_genres(items)
-    assert out == [{"genre": "House", "confidence": "high"},
-                   {"genre": None, "confidence": "low"}]
+    assert out == [{"genre": "House", "confidence": "high", "level": None},
+                   {"genre": None, "confidence": "low", "level": None}]
 
 
 def test_review_genres_duplicate_index_keeps_first_occurrence(monkeypatch):
@@ -282,7 +282,66 @@ def test_review_genres_duplicate_index_keeps_first_occurrence(monkeypatch):
          ai_tags._Review(index=0, title="First", genre="Techno",
                          confidence="low")])
     out = ai_tags.review_genres(items)
-    assert out == [{"genre": "House", "confidence": "high"}]
+    assert out == [{"genre": "House", "confidence": "high", "level": None}]
+
+
+def test_review_genres_level_is_returned(monkeypatch):
+    """Il livello di evidenza dichiarato dal modello (track/release/artist)
+    arriva nel dict di output, allineato per indice come genre/confidence."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="Boring Angel", genre="Progressive Electronic",
+                         confidence="high", level="release")])
+    out = ai_tags.review_genres(
+        [{"artist": "Oneohtrix Point Never", "title": "Boring Angel",
+          "album": "R Plus Seven", "label": None, "current_genre": "Ambient",
+          "candidates": []}])
+    assert out == [{"genre": "Progressive Electronic", "confidence": "high",
+                    "level": "release"}]
+
+
+def test_review_genres_level_out_of_vocabulary_becomes_none(monkeypatch):
+    """Un valore di level fuori dai tre ammessi (track/release/artist) viene
+    normalizzato a None invece di propagarsi com'è o far sollevare eccezioni."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="low",
+                         level="boh")])
+    out = ai_tags.review_genres([{"artist": "A", "title": "B", "album": None,
+                                  "label": None, "current_genre": None,
+                                  "candidates": []}])
+    assert out == [{"genre": "Acid", "confidence": "low", "level": None}]
+
+
+def test_review_genres_level_absent_becomes_none(monkeypatch):
+    """Se il modello non valorizza level (default del BaseModel), l'output
+    riporta None e non solleva eccezioni."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="high")])
+    out = ai_tags.review_genres([{"artist": "A", "title": "B", "album": None,
+                                  "label": None, "current_genre": None,
+                                  "candidates": []}])
+    assert out == [{"genre": "Acid", "confidence": "high", "level": None}]
+
+
+def test_review_genres_artist_level_forces_confidence_low(monkeypatch):
+    """Regola deterministica: level == 'artist' forza confidence a 'low' anche
+    se il modello dichiara 'high' — è esattamente dove si concentra l'effetto
+    alone dell'artista (vedi Oneohtrix Point Never / Boring Angel nel report)."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="Boring Angel", genre="Ambient",
+                         confidence="high", level="artist")])
+    out = ai_tags.review_genres(
+        [{"artist": "Oneohtrix Point Never", "title": "Boring Angel",
+          "album": "R Plus Seven", "label": None, "current_genre": None,
+          "candidates": []}])
+    assert out == [{"genre": "Ambient", "confidence": "low", "level": "artist"}]
 
 
 def test_review_genres_no_title_on_item_skips_guard(monkeypatch):
@@ -296,4 +355,4 @@ def test_review_genres_no_title_on_item_skips_guard(monkeypatch):
         [ai_tags._Review(index=0, title="Qualunque Cosa", genre="House",
                          confidence="high")])
     out = ai_tags.review_genres(items)
-    assert out == [{"genre": "House", "confidence": "high"}]
+    assert out == [{"genre": "House", "confidence": "high", "level": None}]
