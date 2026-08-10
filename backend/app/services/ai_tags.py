@@ -65,12 +65,14 @@ _REVIEW_PROMPT = (
     "Usa la ricerca web SOLO quando l'evidenza disponibile non basta a decidere. "
     "IMPORTANTE: per ogni elemento della risposta valorizza SEMPRE index con il "
     "numero che precede la traccia (es. per la riga '3. ...' usa index=3) e "
-    "title con il titolo esattamente come compare in quella riga dopo il "
-    "trattino: servono a verificare che la risposta sia abbinata alla traccia "
-    "giusta e non a quella vicina, quindi non ometterli e non riecheggiare il "
-    "titolo di un'altra riga. Non serve rispondere nello stesso ordine delle "
-    "tracce, ma ogni risposta deve riportare l'index e il title corretti della "
-    "traccia a cui si riferisce. Imposta confidence='high' se sei sicuro, "
+    "title con la parte iniziale di quella riga così com'è scritta, cioè "
+    "'Artista - Titolo' per intero (tutto ciò che segue il numero e precede "
+    "il primo '|'): servono a verificare che la risposta sia abbinata alla "
+    "traccia giusta e non a quella vicina, quindi non ometterli e non "
+    "riecheggiare la parte iniziale di un'altra riga. Non serve rispondere "
+    "nello stesso ordine delle tracce, ma ogni risposta deve riportare "
+    "l'index e il title corretti della traccia a cui si riferisce. Imposta "
+    "confidence='high' se sei sicuro, "
     "'low' se incerto. Se non riesci a determinare il genere metti genre a "
     "null; non inventare valori spazzatura."
 )
@@ -95,6 +97,32 @@ def _normalize_title_for_match(title: str | None) -> str:
     if title is None:
         return ""
     return "".join(ch.lower() for ch in title if ch.isalnum())
+
+
+# Il modello, nonostante il prompt chieda "Artista - Titolo", tende a volte a
+# riecheggiare l'intera testa della riga passata (che include l'artista)
+# invece del solo titolo dell'item: un confronto per uguaglianza scarterebbe
+# quindi anche risposte perfettamente allineate. Usiamo il contenimento
+# (normalizzato contro normalizzato) così "oneohtrixpointneverreplica"
+# continua a "contenere" "replica". Sotto questa soglia di lunghezza il
+# contenimento smette di essere prova affidabile: un titolo corto come
+# "Acid" (4 caratteri normalizzati) può comparire per puro caso dentro la
+# riga di una traccia completamente diversa (es. "rataxes - Acid Face"),
+# quindi sotto soglia rinunciamo al confronto testuale e ci affidiamo al
+# solo index.
+_MIN_NORMALIZED_TITLE_LEN_FOR_GUARD = 5
+
+
+def _titles_match_for_guard(echoed_head: str | None, expected_title: str) -> bool:
+    """True se la testa di riga riecheggiata dal modello è compatibile col
+    titolo atteso per quell'indice: uguaglianza o contenimento reciproco
+    (dopo normalizzazione), oppure titolo troppo corto per un confronto
+    affidabile (vedi soglia sopra)."""
+    norm_expected = _normalize_title_for_match(expected_title)
+    if len(norm_expected) < _MIN_NORMALIZED_TITLE_LEN_FOR_GUARD:
+        return True
+    norm_echoed = _normalize_title_for_match(echoed_head)
+    return norm_expected in norm_echoed or norm_echoed in norm_expected
 
 
 class AiReviewError(Exception):
@@ -164,11 +192,10 @@ def review_genres(items: list[dict]) -> list[dict]:
         r = by_index.get(k)
         if r is not None:
             expected_title = it.get("title")
-            if expected_title is not None and (
-                    _normalize_title_for_match(r.title)
-                    != _normalize_title_for_match(expected_title)):
-                # Il titolo riecheggiato non corrisponde a quello della
-                # traccia a quell'indice: risposta sospetta (probabile
+            if expected_title is not None and not _titles_match_for_guard(
+                    r.title, expected_title):
+                # La testa di riga riecheggiata non è compatibile col titolo
+                # della traccia a quell'indice: risposta sospetta (probabile
                 # slittamento), la scartiamo invece di fidarcene.
                 r = None
         if r is None:

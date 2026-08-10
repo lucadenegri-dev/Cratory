@@ -94,11 +94,14 @@ def test_review_genres_weird_confidence_becomes_low(monkeypatch):
 
 def test_review_genres_shifted_titles_are_discarded_and_raise(monkeypatch):
     """Riproduce dal vivo lo slittamento osservato: il modello risponde con
-    indici corretti (0,1,2) ma ognuno riecheggia il titolo della traccia
-    SUCCESSIVA (a rotazione) invece della propria. Nessuna risposta supera la
-    guardia titolo -> tutte scartate -> sotto soglia (metà) -> deve sollevare
-    AiReviewError invece di restituire silenziosamente 3 unresolved (che il
-    chiamante marcherebbe come "revisionati", perdendo la traccia)."""
+    indici corretti (0,1,2) ma ognuno riecheggia la testa 'Artista - Titolo'
+    della traccia SUCCESSIVA (a rotazione) invece della propria — nel formato
+    reale osservato in produzione, non il solo titolo. Anche con la guardia
+    per contenimento nessuna risposta è compatibile con l'item al proprio
+    indice (gli artisti/titoli non si sovrappongono affatto) -> tutte
+    scartate -> sotto soglia (metà) -> deve sollevare AiReviewError invece di
+    restituire silenziosamente 3 unresolved (che il chiamante marcherebbe
+    come "revisionati", perdendo la traccia)."""
     captured = {}
     items = [
         {"artist": "Oneohtrix Point Never", "title": "Boring Angel",
@@ -113,14 +116,66 @@ def test_review_genres_shifted_titles_are_discarded_and_raise(monkeypatch):
     ]
     _install_fake_anthropic(
         monkeypatch, captured,
-        [ai_tags._Review(index=0, title="Track Two", genre="Electro",
+        [ai_tags._Review(index=0, title="Artist B - Track Two", genre="Electro",
                          confidence="high"),
-         ai_tags._Review(index=1, title="Track Three", genre="Techno",
+         ai_tags._Review(index=1, title="Artist C - Track Three", genre="Techno",
                          confidence="high"),
-         ai_tags._Review(index=2, title="Boring Angel", genre="Ambient",
-                         confidence="high")])
+         ai_tags._Review(index=2,
+                         title="Oneohtrix Point Never - Boring Angel",
+                         genre="Ambient", confidence="high")])
     with pytest.raises(ai_tags.AiReviewError):
         ai_tags.review_genres(items)
+
+
+def test_review_genres_real_observed_echo_includes_artist_prefix(monkeypatch):
+    """Caso reale osservato dal vivo: il modello riecheggia 'Artista -
+    Titolo' invece del solo titolo (nonostante il prompt lo chieda), pur
+    essendo perfettamente allineato per indice — compreso un apostrofo
+    tipografico nell'item ('I Don’t Love Me Anymore') riecheggiato con
+    apostrofo dritto dal modello. Con il confronto per contenimento tutte le
+    risposte devono passare (nessuna eccezione, generi abbinati
+    correttamente) invece di essere scartate in blocco come nel bug
+    osservato (0 risposte su N superavano il vecchio controllo per
+    uguaglianza -> AiReviewError su ogni batch)."""
+    captured = {}
+    items = [
+        {"artist": "Oneohtrix Point Never", "title": "Replica",
+         "album": None, "label": None, "current_genre": "Ambient",
+         "candidates": ["Ambient", "Electronic"]},
+        {"artist": "Oneohtrix Point Never",
+         "title": "I Don’t Love Me Anymore", "album": None, "label": None,
+         "current_genre": "Synthpop", "candidates": ["Synthpop"]},
+    ]
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="Oneohtrix Point Never - Replica",
+                         genre="Ambient", confidence="high"),
+         ai_tags._Review(
+             index=1,
+             title="Oneohtrix Point Never - I Don't Love Me Anymore",
+             genre="Synthpop", confidence="high")])
+    out = ai_tags.review_genres(items)
+    assert out == [{"genre": "Ambient", "confidence": "high"},
+                   {"genre": "Synthpop", "confidence": "high"}]
+
+
+def test_review_genres_short_title_below_threshold_skips_containment_guard(
+        monkeypatch):
+    """Un titolo molto corto (es. 'Acid', 4 caratteri normalizzati) è sotto
+    la soglia minima per un confronto per contenimento affidabile: rischia di
+    essere contenuto per puro caso nella riga riecheggiata di una traccia
+    diversa (es. 'rataxes - Acid Face'). Sotto soglia la guardia testuale
+    viene saltata e ci si affida al solo index, quindi la risposta passa
+    comunque invece di essere scartata per un falso negativo di lunghezza."""
+    captured = {}
+    items = [{"artist": "Some Artist", "title": "Acid", "album": None,
+              "label": None, "current_genre": None, "candidates": []}]
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="rataxes - Acid Face",
+                         genre="Acid Techno", confidence="high")])
+    out = ai_tags.review_genres(items)
+    assert out == [{"genre": "Acid Techno", "confidence": "high"}]
 
 
 def test_review_genres_out_of_order_indices_match_correct_track(monkeypatch):
