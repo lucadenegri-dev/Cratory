@@ -176,6 +176,13 @@ class MusicBrainzProvider:
         return max(tags, key=lambda t: t.get("count", 0))["name"] if tags else None
 
     @staticmethod
+    def _all_tags(rec):
+        """Tutti i tag con nome, ordinati per popolarità decrescente."""
+        tags = [t for t in (rec.get("tags") or []) if t.get("name")]
+        return [t["name"] for t in
+                sorted(tags, key=lambda t: t.get("count", 0), reverse=True)]
+
+    @staticmethod
     def _release_mbids(rec):
         return [rel["id"] for rel in MusicBrainzProvider._prioritized_releases(rec)
                 if rel.get("id")]
@@ -204,6 +211,8 @@ class MusicBrainzProvider:
             out["release_date"] = rd
         if genre := self._top_tag(rec):
             out["genre_primary"] = genre
+        if cands := self._all_tags(rec):
+            out["genre_candidates"] = cands
         if isrc:
             out["isrc"] = isrc
         if rels := self._release_mbids(rec):

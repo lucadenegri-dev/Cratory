@@ -59,6 +59,10 @@ class DiscogsMetaClient:
             out["genre_primary"] = styles[0]
         elif genres:
             out["genre_primary"] = genres[0]
+        # Tutti gli stili + generi (senza duplicati) come candidati per l'AI.
+        cands = styles + [g for g in genres if g not in styles]
+        if cands:
+            out["genre_candidates"] = cands
         if top.get("year"):
             out["release_date"] = str(top["year"])
         return out or None

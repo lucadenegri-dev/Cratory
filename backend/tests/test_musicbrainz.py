@@ -115,3 +115,23 @@ def test_album_prefers_studio_album_over_single():
     assert out["release_date"].startswith("2019")
     # il release-MBID dell'album viene prima del singolo
     assert out["release_mbids"][0] == "rel-album"
+
+
+def test_parse_recording_exposes_genre_candidates():
+    """_parse_recording espone tutti i tag come candidati genere (ordinati per count)."""
+    p = MusicBrainzProvider(user_agent="test/1.0")
+    rec = {"id": "mbid-1", "title": "Spastik",
+           "artist-credit": [{"name": "Plastikman"}],
+           "tags": [{"name": "techno", "count": 5},
+                    {"name": "acid techno", "count": 2},
+                    {"name": "electronic", "count": 7}]}
+    out = p._parse_recording(rec, isrc=None, exact=True)
+    assert out["genre_primary"] == "electronic"
+    assert out["genre_candidates"] == ["electronic", "techno", "acid techno"]
+
+
+def test_parse_recording_no_tags_no_candidates():
+    p = MusicBrainzProvider(user_agent="test/1.0")
+    rec = {"id": "mbid-2", "title": "X", "artist-credit": [{"name": "Y"}]}
+    out = p._parse_recording(rec, isrc=None, exact=False)
+    assert "genre_candidates" not in out
