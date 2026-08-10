@@ -260,6 +260,8 @@ export const it: Dictionary = {
     genreReviewNote: (proposed, confirmed, unresolved) =>
       `Revisione generi: ${proposed} proposte di modifica, ${confirmed} confermati${unresolved > 0 ? `, ${unresolved} non risolti` : ""} — rivedi e accetta con ✓.`,
     genreReviewFailed: "Revisione generi fallita",
+    genreReviewFolderLabel: "Limita a una cartella (opzionale) — cerca ovunque nel percorso.",
+    genreReviewNoMatch: "Nessuna traccia corrisponde a questa cartella.",
     providerImportBusy: "importo…",
     providerSuggestBtn: "Importa metadati mancanti da Provider",
     forceProvider: "forza ricerca provider",

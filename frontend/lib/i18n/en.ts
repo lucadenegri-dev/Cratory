@@ -264,6 +264,8 @@ export const en = {
     genreReviewNote: (proposed: number, confirmed: number, unresolved: number) =>
       `Genre review: ${proposed} change proposals, ${confirmed} confirmed${unresolved > 0 ? `, ${unresolved} unresolved` : ""} — review and accept with ✓.`,
     genreReviewFailed: "Genre review failed",
+    genreReviewFolderLabel: "Restrict to a folder (optional) — matches anywhere in the path.",
+    genreReviewNoMatch: "No tracks match this folder.",
     providerImportBusy: "importing…",
     providerSuggestBtn: "Import missing metadata from Provider",
     forceProvider: "force provider lookup",

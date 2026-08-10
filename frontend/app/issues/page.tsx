@@ -23,7 +23,23 @@ export default function IssuesPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [genreBusy, setGenreBusy] = useState(false);
-  const [genreModal, setGenreModal] = useState<{ files: number } | null>(null);
+  const [genreModalOpen, setGenreModalOpen] = useState(false);
+  const [genreFiles, setGenreFiles] = useState(0);
+  // Cartella per cui "genreFiles" è valido: quando diverge da genreFolder, il
+  // conteggio è da ricalcolare (evita sia il refetch subito dopo l'apertura
+  // della modale, dove il conteggio iniziale è già corretto, sia letture di
+  // ref durante il render, non ammesse dalla regola react-hooks/refs).
+  const [genreFilesFor, setGenreFilesFor] = useState("");
+  const [genreFolder, setGenreFolder] = useState("");
+  // "In ricalcolo" è derivato (non state): true finché genreFilesFor non ha
+  // raggiunto genreFolder. Evita di chiamare setState in modo sincrono nel
+  // corpo dell'effetto (react-hooks/set-state-in-effect) — lo stesso motivo
+  // per cui integrity/genreReview poco sotto calcolano nota/errore durante il
+  // render invece che in un effetto.
+  const genrePreviewLoading = genreModalOpen && genreFolder !== genreFilesFor;
+  // Sequenza incrementale: scarta una risposta lenta arrivata dopo una più
+  // recente (usata solo dentro l'effetto/le sue callback, mai durante il render).
+  const genrePreviewSeq = useRef(0);
   const genreReviewRunning = genreReviewJob.status === "running";
   const [providerBusy, setProviderBusy] = useState(false);
   const [ratingBusy, setRatingBusy] = useState(false);
@@ -106,7 +122,12 @@ export default function IssuesPage() {
     try {
       const p = await genreReviewPreview();
       if (!p.configured) setActionError(t.issues.aiNotConfigured);
-      else setGenreModal({ files: p.files });
+      else {
+        setGenreFolder("");
+        setGenreFiles(p.files);
+        setGenreFilesFor("");
+        setGenreModalOpen(true);
+      }
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t.common.error);
     } finally {
@@ -115,13 +136,39 @@ export default function IssuesPage() {
   };
 
   const onGenreReviewStart = async () => {
-    setGenreModal(null);
+    setGenreModalOpen(false);
     try {
-      await startGenreReview({});
+      await startGenreReview({ folder: genreFolder || null });
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t.common.error);
     }
   };
+
+  // Ricalcola il conteggio della modale quando il filtro cartella cambia:
+  // debounce 350ms (in linea con l'intervallo tipico di digitazione) invece
+  // che una richiesta ad ogni tasto, per non martellare il backend mentre
+  // l'utente sta ancora scrivendo. Skippa il refetch se il filtro è identico
+  // all'ultimo già interrogato (es. apertura modale, dove il conteggio
+  // iniziale arriva già da onGenreReviewClick).
+  useEffect(() => {
+    if (!genreModalOpen || genreFolder === genreFilesFor) return;
+    const seq = ++genrePreviewSeq.current;
+    const timer = setTimeout(() => {
+      genreReviewPreview(genreFolder || undefined)
+        .then((p) => {
+          if (genrePreviewSeq.current !== seq) return; // risposta lenta e superata: ignorata
+          setGenreFiles(p.files);
+          setGenreFilesFor(genreFolder);
+        })
+        .catch(() => {
+          // filtro non valido o backend momentaneamente giù: tiene l'ultimo
+          // conteggio noto ma smette di "ricalcolare" (evita spinner bloccato).
+          if (genrePreviewSeq.current !== seq) return;
+          setGenreFilesFor(genreFolder);
+        });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [genreFolder, genreModalOpen, genreFilesFor]);
 
   const onProviderSuggest = async () => {
     setActionError(null);
@@ -484,15 +531,33 @@ export default function IssuesPage() {
         </Modal>
 
         <Modal
-          open={genreModal !== null}
-          onClose={() => setGenreModal(null)}
+          open={genreModalOpen}
+          onClose={() => setGenreModalOpen(false)}
           title={t.issues.genreReviewBtn}
           footer={<>
-            <Button variant="ghost" size="sm" onClick={() => setGenreModal(null)}>{t.common.cancel}</Button>
-            <Button variant="primary" size="sm" onClick={onGenreReviewStart}>{t.issues.modalStart}</Button>
+            <Button variant="ghost" size="sm" onClick={() => setGenreModalOpen(false)}>{t.common.cancel}</Button>
+            <Button
+              variant="primary" size="sm" onClick={onGenreReviewStart}
+              disabled={genreFiles === 0 || genrePreviewLoading}
+            >
+              {t.issues.modalStart}
+            </Button>
           </>}
         >
-          <p className="text-sm text-muted">{t.issues.genreReviewConfirm(genreModal?.files ?? 0)}</p>
+          <p className="text-sm text-muted">{t.issues.genreReviewConfirm(genreFiles)}</p>
+          <div className="mt-3">
+            <p className="mb-1 text-[11px] text-muted">{t.issues.genreReviewFolderLabel}</p>
+            <Input
+              value={genreFolder}
+              onChange={(e) => setGenreFolder(e.target.value)}
+              placeholder={t.issues.folderPlaceholder}
+              className="h-8 text-xs"
+            />
+            <div className="mt-1.5 flex h-4 items-center gap-1.5 text-[11px] text-faint">
+              {genrePreviewLoading && <Spinner className="h-3 w-3" />}
+              {!genrePreviewLoading && genreFiles === 0 && <span>{t.issues.genreReviewNoMatch}</span>}
+            </div>
+          </div>
         </Modal>
 
         {/* barra sopra la lista: azioni di massa a sinistra, raggruppamento a destra */}

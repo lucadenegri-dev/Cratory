@@ -362,8 +362,8 @@ export function genreReview(body: GenreReviewBody = {}) {
 export function genreReviewStatus() {
   return apiGet<GenreReviewJobState>("/api/genre-review/status");
 }
-export function genreReviewPreview() {
-  return apiGet<{ configured: boolean; files: number }>("/api/genre-review/preview");
+export function genreReviewPreview(folder?: string) {
+  return apiGet<{ configured: boolean; files: number }>("/api/genre-review/preview", { folder });
 }
 
 export interface IntegrityResult {
