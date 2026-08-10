@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, genreReviewPreview,
-  providerSuggest, acceptStrongOverrides, detectRatings,
+  providerSuggest, acceptStrongOverrides, detectRatings, getSettings,
   type Issue, type ScanRoot,
 } from "@/lib/api";
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { IssuesTable, issueIsFixable, issueIsStrong, type GroupBy } from "@/components/issues-table";
 import { Alert, Button, Checkbox, EmptyState, Input, Loading, Modal, Select, Spinner } from "@/components/ui";
+import { PathPickerButton, usePickerAvailability } from "@/components/path-picker-button";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 
@@ -19,6 +20,11 @@ export default function IssuesPage() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [roots, setRoots] = useState<ScanRoot[]>([]);
+  // Cartella da cui aprire il picker nativo: la libreria organizzata (target_root),
+  // non la radice di scansione — i campi che il picker alimenta filtrano un
+  // percorso che, dopo l'apply, vive sotto la libreria (es. .../Library/Techno).
+  const [libraryRoot, setLibraryRoot] = useState<string | undefined>(undefined);
+  const pickerOk = usePickerAvailability();
   const [offline, setOffline] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
@@ -74,6 +80,11 @@ export default function IssuesPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { listSources().then(setRoots).catch(() => {}); }, []);
+  useEffect(() => {
+    getSettings()
+      .then((s) => setLibraryRoot(s.roots.find((r) => r.target_root)?.target_root ?? undefined))
+      .catch(() => {});
+  }, []);
   useEffect(() => { if (scan.status === "done") load(); }, [scan.status, load]);
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -470,10 +481,16 @@ export default function IssuesPage() {
               <div className="border-t border-border px-3 py-3">
                 <p className="mb-2.5 text-[11px] leading-relaxed text-fg">{t.issues.forceLookupHint}</p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
-                  <input
-                    className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
-                    placeholder={t.issues.folderPlaceholder} value={rescanFolder}
-                    onChange={(e) => setRescanFolder(e.target.value)} />
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
+                      placeholder={t.issues.folderPlaceholder} value={rescanFolder}
+                      onChange={(e) => setRescanFolder(e.target.value)} />
+                    {pickerOk && (
+                      <PathPickerButton kind="folder" start={rescanFolder || libraryRoot} prompt={t.issues.forceLookupToggle}
+                        onPick={(p) => { setActionError(null); setRescanFolder(p); }} onError={setActionError} />
+                    )}
+                  </div>
                   <input
                     className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
                     placeholder={t.issues.currentGenrePlaceholder} value={rescanGenre}
@@ -547,12 +564,18 @@ export default function IssuesPage() {
           <p className="text-sm text-muted">{t.issues.genreReviewConfirm(genreFiles)}</p>
           <div className="mt-3">
             <p className="mb-1 text-[11px] text-muted">{t.issues.genreReviewFolderLabel}</p>
-            <Input
-              value={genreFolder}
-              onChange={(e) => setGenreFolder(e.target.value)}
-              placeholder={t.issues.folderPlaceholder}
-              className="h-8 text-xs"
-            />
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={genreFolder}
+                onChange={(e) => setGenreFolder(e.target.value)}
+                placeholder={t.issues.folderPlaceholder}
+                className="h-8 text-xs"
+              />
+              {pickerOk && (
+                <PathPickerButton kind="folder" start={genreFolder || libraryRoot} prompt={t.issues.genreReviewBtn}
+                  onPick={(p) => { setActionError(null); setGenreFolder(p); }} onError={setActionError} />
+              )}
+            </div>
             <div className="mt-1.5 flex h-4 items-center gap-1.5 text-[11px] text-faint">
               {genrePreviewLoading && <Spinner className="h-3 w-3" />}
               {!genrePreviewLoading && genreFiles === 0 && <span>{t.issues.genreReviewNoMatch}</span>}
