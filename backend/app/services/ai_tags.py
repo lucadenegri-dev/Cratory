@@ -224,7 +224,41 @@ class AiReviewError(Exception):
     decidere un singolo item (quello resta un `genre: None` legittimo): qui
     non abbiamo ricevuto alcuna risposta valida, quindi il chiamante
     (genre_review.review) deve trattare l'intero batch come fallito invece di
-    marcare i file come revisionati."""
+    marcare i file come revisionati.
+
+    `web_searches`: totale delle ricerche web consumate nei tentativi già
+    effettuati per questo batch (Fix 4) — un batch che fallisce può aver
+    comunque speso ricerche a pagamento prima di arrendersi, e il chiamante
+    non deve perderne il conteggio solo perché l'esito non è utilizzabile."""
+
+    def __init__(self, message: str, *, web_searches: int = 0):
+        super().__init__(message)
+        self.web_searches = web_searches
+
+
+class _ReviewResults(list):
+    """list[dict] — la stessa forma di ritorno di sempre, allineata per
+    indice — con un attributo aggiuntivo `web_searches` (Fix 4): il numero
+    di ricerche web effettivamente eseguite dal modello per produrre QUESTO
+    batch, sommato su tutti i tentativi. Sottoclasse di list invece di
+    cambiare la forma del valore restituito: chi confronta il risultato con
+    `== [...]` o lo itera/indicizza (guardia esistente, test) continua a
+    funzionare invariato — list.__eq__ confronta gli elementi, non il tipo.
+    Chi vuole il conteggio lo legge con `getattr(risultato, 'web_searches',
+    0)`, così un ai_fn iniettato nei test che ritorna una list semplice
+    (senza l'attributo) continua a funzionare, riportando 0 ricerche invece
+    di sollevare."""
+    web_searches: int = 0
+
+
+def _extract_web_search_count(resp) -> int:
+    """Numero di ricerche web eseguite in QUESTA risposta, da
+    response.usage.server_tool_use.web_search_requests. Accesso difensivo:
+    fake/risposte prive di questi attributi (nei test, o quando il tool
+    web_search non è stato passato) danno 0 invece di sollevare."""
+    usage = getattr(resp, "usage", None)
+    stu = getattr(usage, "server_tool_use", None)
+    return getattr(stu, "web_search_requests", 0) or 0
 
 
 def _match_reviews_to_items(parsed: list["_Review"],
@@ -302,15 +336,23 @@ def review_genres(items: list[dict], *, max_web_searches: int = 3,
     imposta, tetto 3) per chi chiama la funzione senza questi parametri.
 
     Se la risposta del modello è vuota o troppo corta per essere credibile
-    (vedi soglia sotto), la richiesta viene ritentata UNA sola volta prima di
+    (vedi soglia sotto), OPPURE se non produce alcun output strutturato
+    (parsing fallito o turno consumato interamente dalla ricerca web — vedi
+    AiReviewError), la richiesta viene ritentata UNA sola volta prima di
     sollevare: osservato dal vivo che lo stesso batch, a distanza di
     chiamate identiche, può tornare con 0 elementi invece dei 3 attesi (zero
     ricerche eseguite) pur avendo risposto correttamente al giro precedente
     e a quello successivo — un problema di quella singola risposta, non del
-    batch. Il ritentativo non ha un costo aggiuntivo netto: un batch scartato
-    viene comunque ripassato alla prossima passata di revisione (stesso
-    lavoro, rifatto più tardi), ma ritentando subito lo si completa ORA
-    invece di rimandarlo, così le tracce non restano indietro."""
+    batch. Il secondo caso (parsed_output None) è reso più probabile dal
+    budget di ricerca dei sotto-batch bisognosi (fino a len(sub) ricerche web
+    in una sola chiamata): più ricerche significa più probabilità che il
+    turno le esaurisca senza arrivare a un output strutturato. Il
+    ritentativo non ha un costo aggiuntivo netto: un batch scartato viene
+    comunque ripassato alla prossima passata di revisione (stesso lavoro,
+    rifatto più tardi), ma ritentando subito lo si completa ORA invece di
+    rimandarlo, così le tracce non restano indietro — ed evita che un batch
+    deterministico rifallisca identico, bruciando le stesse ricerche ad ogni
+    passata senza mai marcare i suoi file."""
     if not items:
         return []
     from anthropic import Anthropic  # import lazy
@@ -331,7 +373,18 @@ def review_genres(items: list[dict], *, max_web_searches: int = 3,
     prompt = _build_review_prompt(always_search=always_search)
     kwargs: dict = dict(
         model=_MODEL,
-        max_tokens=4096,
+        # 4096 era troppo stretto: un sotto-batch bisognoso può autorizzare
+        # fino a len(sub) ricerche web (10 al massimo, batch_size di
+        # default) in UNA sola chiamata, e ogni ricerca aggiunge query +
+        # risultati al turno prima ancora di arrivare all'output strutturato
+        # finale (10 item con index/title/genre/confidence/level, poche
+        # centinaia di token). "Turno consumato dalla ricerca web" (Fix 1) è
+        # esattamente il fallimento che un tetto basso rende probabile in
+        # quello scenario. Si paga l'output EFFETTIVAMENTE prodotto, non il
+        # tetto, quindi alzarlo non ha costo: 32000 lascia margine ampio
+        # rispetto al caso limite (10 ricerche + 10 item strutturati) pur
+        # restando a metà degli 64K di output massimi di Claude Haiku 4.5.
+        max_tokens=32000,
         messages=[{"role": "user",
                    "content": f"{prompt}\n\n" + "\n".join(lines)}],
         output_format=_Reviews,
@@ -340,17 +393,35 @@ def review_genres(items: list[dict], *, max_web_searches: int = 3,
         kwargs["tools"] = [{"type": "web_search_20250305", "name": "web_search",
                             "max_uses": max_web_searches}]
 
+    total_web_searches = 0
     for attempt in range(1, _MAX_REVIEW_ATTEMPTS + 1):
         resp = client.messages.parse(**kwargs)
+        total_web_searches += _extract_web_search_count(resp)
         if resp.parsed_output is None:
             # Nessun output strutturato per l'intero batch (parsing fallito o
             # turno esaurito in ricerca web): caso distinto dalla lista
             # `items` vuota/corta gestita sotto (qui non c'è proprio una
-            # risposta da valutare). Non ritentiamo: comportamento
-            # preesistente invariato.
+            # risposta da valutare). Fix 1: ritentiamo come per il caso
+            # sotto, con la stessa disciplina (un solo ritentativo
+            # complessivo — _MAX_REVIEW_ATTEMPTS è condiviso, non c'è un
+            # tetto separato per tipo di fallimento, quindi nessuna
+            # possibilità di catena).
+            if attempt < _MAX_REVIEW_ATTEMPTS:
+                logger.warning(
+                    "review_genres: nessun output strutturato al tentativo "
+                    "%d/%d (parsing fallito o turno consumato dalla ricerca "
+                    "web) — ritento la stessa richiesta",
+                    attempt, _MAX_REVIEW_ATTEMPTS)
+                continue
+            logger.warning(
+                "review_genres: nessun output strutturato anche al "
+                "tentativo %d/%d — abbandono il batch",
+                attempt, _MAX_REVIEW_ATTEMPTS)
             raise AiReviewError(
                 "review_genres: nessun output strutturato ricevuto dal modello "
-                "(parsing fallito o turno consumato dalla ricerca web)")
+                "(parsing fallito o turno consumato dalla ricerca web), "
+                "anche dopo un ritentativo",
+                web_searches=total_web_searches)
         out, matched = _match_reviews_to_items(resp.parsed_output.items, items)
 
         # Soglia: meno della metà delle risposte ha superato la guardia
@@ -365,7 +436,9 @@ def review_genres(items: list[dict], *, max_web_searches: int = 3,
         # "non so" resta una risposta valida e non fa scattare il
         # ritentativo.
         if matched * 2 >= len(items):
-            return out
+            result = _ReviewResults(out)
+            result.web_searches = total_web_searches
+            return result
 
         if attempt < _MAX_REVIEW_ATTEMPTS:
             logger.warning(
@@ -393,4 +466,5 @@ def review_genres(items: list[dict], *, max_web_searches: int = 3,
             "ritentativo — probabile risposta vuota/troncata o "
             "disallineamento del batch (slittamento posizionale); scarto "
             "l'intero batch invece di rischiare di scrivere il genere "
-            "sbagliato sulla traccia sbagliata")
+            "sbagliato sulla traccia sbagliata",
+            web_searches=total_web_searches)

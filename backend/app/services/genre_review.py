@@ -150,9 +150,12 @@ def _process_partition(db: Session, ai_fn, partition: list[tuple], *,
     la modalità appropriati, applica gli esiti e marca genre_reviewed_at.
     Un sotto-batch la cui chiamata AI solleva conta come unresolved e NON
     marca i suoi file (restano candidati per la passata successiva); non
-    ferma gli altri sotto-batch né l'altra partizione. Ritorna il nuovo
-    valore di `done`. Partizione vuota → nessuna chiamata (range(0,0,n) non
-    itera)."""
+    ferma gli altri sotto-batch né l'altra partizione. Committa dopo OGNI
+    sotto-batch (Fix 3: granularità di resumabilità pari al sotto-batch, non
+    alla finestra — un crash a metà finestra perde al più un sotto-batch,
+    non le 5-6 chiamate AI già pagate della finestra intera). Ritorna il
+    nuovo valore di `done`. Partizione vuota → nessuna chiamata (range(0,0,n)
+    non itera, nessun commit)."""
     for start in range(0, len(partition), batch_size):
         sub = partition[start:start + batch_size]
         sub_files = [f for f, _ in sub]
@@ -162,9 +165,22 @@ def _process_partition(db: Session, ai_fn, partition: list[tuple], *,
             results = ai_fn(sub_items, max_web_searches=budget,
                             always_search=always_search)
             ai_failed = False
-        except Exception:  # noqa: BLE001 — un sotto-batch fallito non ferma il job
+        except Exception as exc:  # noqa: BLE001 — un sotto-batch fallito non ferma il job
             results = [None] * len(sub)
             ai_failed = True
+            # Fix 4: anche un batch fallito può aver consumato ricerche web
+            # (prima di arrendersi) — se l'eccezione le riporta (vedi
+            # AiReviewError.web_searches) le contiamo comunque, invece di
+            # perdere il costo di un tentativo che non ha prodotto un esito
+            # utilizzabile. Un'eccezione qualunque che non ha l'attributo
+            # (es. i RuntimeError dei test più vecchi) conta 0.
+            res["web_searches"] += getattr(exc, "web_searches", 0) or 0
+        else:
+            # Stesso principio per il caso di successo: ai_fn può riportare
+            # il conteggio come attributo sul valore di ritorno (vedi
+            # ai_tags._ReviewResults); un ai_fn iniettato che ritorna una
+            # list semplice non ha l'attributo -> 0, nessun errore.
+            res["web_searches"] += getattr(results, "web_searches", 0) or 0
         for f, proposal in zip(sub_files, results):
             res[_apply_proposal(db, f, proposal or {})] += 1
             if not ai_failed:
@@ -172,6 +188,7 @@ def _process_partition(db: Session, ai_fn, partition: list[tuple], *,
                 # passata successiva li riprende invece di darli per
                 # "revisionati".
                 f.genre_reviewed_at = utcnow()
+        db.commit()
         done += len(sub)
         if on_progress is not None:
             on_progress(done, total, "reviewing")
@@ -186,14 +203,23 @@ def review(db: Session, *, mb, discogs, ai_fn, folder: str | None = None,
     (nessun candidato provider: _provider_candidates ha dato lista vuota) e
     coperte, forma sotto-batch da al più batch_size da ciascuna partizione,
     chiama l'AI una volta per sotto-batch col budget di ricerca appropriato
-    (alto e imposto per le bisognose, basso e libero per le coperte), poi
-    committa l'intera finestra. La partizione esiste (non è una passata
-    provider globale seguita da un partizionamento) così l'incrementalità
-    resta: un crash a metà perde al più la finestra in corso."""
+    (alto e imposto per le bisognose, basso e libero per le coperte). Il
+    commit avviene per sotto-batch, dentro _process_partition (Fix 3), non
+    più per finestra. La partizione esiste (non è una passata provider
+    globale seguita da un partizionamento) così l'incrementalità resta: un
+    crash a metà perde al più un sotto-batch, non l'intera finestra.
+
+    `on_progress(processed, total, phase)`: `processed` è SEMPRE il numero
+    di file effettivamente completati (mai una proiezione in avanti di
+    lavoro non ancora finito) ed è monotono non decrescente — Fix 2. Durante
+    la fase 'looking_up' resta fermo al valore dell'ultimo sotto-batch
+    completato: la fase stessa comunica all'utente cosa sta succedendo, non
+    serve (ed è disonesto) far avanzare il contatore per lookup ancora in
+    corso, salvo poi farlo tornare indietro quando si passa a 'reviewing'."""
     files = db.scalars(_candidates_stmt(folder, genre, redo)).all()
     total = len(files)
     res = {"configured": True, "files": total, "proposed": 0, "confirmed": 0,
-           "unresolved": 0, "skipped": 0}
+           "unresolved": 0, "skipped": 0, "web_searches": 0}
     done = 0
     window_size = batch_size * _WINDOW_MULTIPLIER
     for wstart in range(0, total, window_size):
@@ -201,7 +227,11 @@ def review(db: Session, *, mb, discogs, ai_fn, folder: str | None = None,
         entries: list[tuple] = []
         for f in window:
             if on_progress is not None:
-                on_progress(done + len(entries), total, "looking_up")
+                # `done`, non `done + len(entries)`: le lookup in corso non
+                # sono ancora tracce completate, quindi il contatore non
+                # deve muoversi finché il sotto-batch che le comprende non è
+                # stato effettivamente processato (vedi _process_partition).
+                on_progress(done, total, "looking_up")
             entries.append((f, {
                 "artist": f.artist, "title": f.title, "album": f.album,
                 "label": f.label, "current_genre": f.genre,
@@ -217,5 +247,4 @@ def review(db: Session, *, mb, discogs, ai_fn, folder: str | None = None,
         done = _process_partition(
             db, ai_fn, covered, batch_size=batch_size, always_search=False,
             res=res, done=done, total=total, on_progress=on_progress)
-        db.commit()
     return res

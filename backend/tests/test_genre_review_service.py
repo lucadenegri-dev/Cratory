@@ -477,6 +477,134 @@ def test_review_window_all_covered_no_call_for_empty_needy_partition(db):
     assert len(calls[0][0]) == 2
 
 
+def test_review_progress_processed_never_decreases_across_windows(db):
+    """Fix 2: durante la fase 'looking_up' il contatore non deve più
+    proiettare in avanti il lavoro non ancora completato (bug osservato:
+    (99, 120, 'looking_up') -> (50, 120, 'reviewing'), tredici denti di
+    sega su libreria reale). Con un input abbastanza grande da coprire più
+    finestre, processed deve essere monotono NON decrescente e il valore
+    finale pari al totale. Il test esistente (test_review_progress_phases)
+    usa un solo file: è proprio il caso in cui il difetto non può
+    manifestarsi."""
+    n = 40
+    for i in range(1, n + 1):
+        _file(db, i, artist=f"A{i}", title=f"T{i}", genre="House")
+    seen = []
+
+    def fn(items, **kwargs):
+        return [{"genre": None, "confidence": "low"} for _ in items]
+
+    res = genre_review.review(
+        db, mb=_MB(None), discogs=_DG(None), ai_fn=fn, batch_size=3,
+        on_progress=lambda p, t, ph: seen.append((p, t, ph)))
+    processed_values = [p for p, _, _ in seen]
+    assert all(a <= b for a, b in zip(processed_values, processed_values[1:])), \
+        processed_values
+    assert processed_values[-1] == n
+    assert res["files"] == n
+
+
+def test_review_commits_per_subbatch_not_per_window(db, monkeypatch):
+    """Fix 3: la resumabilità deve avere la granularità del sotto-batch, non
+    della finestra (50 file di default) — un'interruzione a metà finestra
+    non deve perdere fino a 5-6 chiamate AI con le ricerche già pagate.
+    Verifica che db.commit() sia invocato una volta per sotto-batch invece
+    che una sola volta per l'intera finestra."""
+    for i in range(1, 7):
+        _file(db, i, artist=f"A{i}", title=f"T{i}", genre="House")
+    commit_calls = []
+    orig_commit = db.commit
+
+    def counting_commit():
+        commit_calls.append(1)
+        return orig_commit()
+
+    monkeypatch.setattr(db, "commit", counting_commit)
+
+    def fn(items, **kwargs):
+        return [{"genre": None, "confidence": "low"} for _ in items]
+
+    genre_review.review(db, mb=_MB(None), discogs=_DG(None), ai_fn=fn,
+                        batch_size=2)
+    # 6 file bisognosi (nessun candidato), batch_size=2 -> 3 sotto-batch
+    # nella STESSA finestra (window_size=2*5=10 > 6): con commit per
+    # finestra ci sarebbe UNA sola chiamata a commit, non tre.
+    assert len(commit_calls) == 3
+
+
+def test_review_result_reports_web_search_count_from_ai_fn(db):
+    """Fix 4: review() somma le ricerche web riportate da ai_fn (via
+    l'attributo `web_searches` sul valore di ritorno, come fa
+    ai_tags.review_genres) e le espone nel dict finale sotto la nuova
+    chiave `web_searches`."""
+    _file(db, 1, artist="A", title="T", genre="House")
+    _file(db, 2, artist="B", title="U", genre="House")
+
+    class _ReviewResultsFake(list):
+        def __init__(self, items, web_searches):
+            super().__init__(items)
+            self.web_searches = web_searches
+
+    def fn(items, **kwargs):
+        return _ReviewResultsFake(
+            [{"genre": None, "confidence": "low"} for _ in items], 3)
+
+    res = genre_review.review(db, mb=_MB(None), discogs=_DG(None), ai_fn=fn)
+    assert res["web_searches"] == 3  # finestra unica -> una sola chiamata
+
+
+def test_review_web_search_count_defaults_to_zero_when_ai_fn_does_not_report(db):
+    """Un ai_fn iniettato (come nei test esistenti) che ritorna una list
+    semplice senza l'attributo web_searches non deve far fallire review():
+    il conteggio resta a zero, nessun errore."""
+    f = _file(db, 1, artist="A", title="T", genre="House")
+    res = genre_review.review(
+        db, mb=_MB(None), discogs=_DG(None),
+        ai_fn=_ai_returning({"genre": None, "confidence": "low"}))
+    assert res["web_searches"] == 0
+    assert f.genre_reviewed_at is not None
+
+
+def test_review_web_search_count_accumulates_across_subbatches(db):
+    """Il conteggio è la SOMMA su tutti i sotto-batch della passata, non
+    solo l'ultimo."""
+    for i in range(1, 5):
+        _file(db, i, artist=f"A{i}", title=f"T{i}", genre="House")
+
+    class _ReviewResultsFake(list):
+        def __init__(self, items, web_searches):
+            super().__init__(items)
+            self.web_searches = web_searches
+
+    def fn(items, **kwargs):
+        return _ReviewResultsFake(
+            [{"genre": None, "confidence": "low"} for _ in items], len(items))
+
+    res = genre_review.review(
+        db, mb=_MB(None), discogs=_DG(None), ai_fn=fn, batch_size=2)
+    # 4 file bisognosi, batch_size=2 -> 2 sotto-batch da 2 -> 2+2 = 4
+    assert res["web_searches"] == 4
+
+
+def test_review_web_search_count_includes_failed_batch_via_exception_attr(db):
+    """Anche un sotto-batch fallito può aver consumato ricerche web prima di
+    sollevare: se l'eccezione porta un attributo web_searches (come
+    AiReviewError dopo il fix), il conteggio lo include comunque — il
+    chiamante non deve perdere il costo di un batch fallito."""
+    _file(db, 1, artist="A", title="T", genre="House")
+
+    class _Boom(RuntimeError):
+        def __init__(self):
+            super().__init__("api down")
+            self.web_searches = 2
+
+    def fn(items, **kwargs):
+        raise _Boom()
+
+    res = genre_review.review(db, mb=_MB(None), discogs=_DG(None), ai_fn=fn)
+    assert res["web_searches"] == 2
+
+
 def test_review_needy_partition_failure_does_not_block_covered(db):
     """Il fallimento della chiamata AI su una partizione (qui: la bisognosa)
     non impedisce all'altra partizione (coperta) di essere processata, e

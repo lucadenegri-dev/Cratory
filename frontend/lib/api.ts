@@ -339,6 +339,9 @@ export interface GenreReviewResult {
   confirmed: number;
   unresolved: number;
   skipped: number;
+  // Ricerche web effettivamente consumate dalla passata (opzionale: stato
+  // job più vecchi in memoria, prima del fix, possono non averlo).
+  web_searches?: number;
 }
 export interface GenreReviewJobState {
   status: "idle" | "running" | "done" | "error";

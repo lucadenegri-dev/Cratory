@@ -611,6 +611,151 @@ def test_review_genres_prompt_forbids_list_separators(monkeypatch):
     assert "separator" in text.lower()
 
 
+def test_review_genres_retries_once_when_parsed_output_is_none_then_succeeds(
+        monkeypatch):
+    """Fix 1: quando il primo tentativo non produce alcun output strutturato
+    (parsed_output None — parsing fallito o turno consumato dalla ricerca
+    web), review_genres deve ritentare la STESSA richiesta una volta invece
+    di sollevare subito: è precisamente il fallimento che il budget di
+    ricerca più alto (fino a 10 ricerche in una singola chiamata per i
+    sotto-batch bisognosi) rende più probabile, e la composizione dei
+    sotto-batch è deterministica — un batch che fallisce così rifallirebbe
+    identico alla passata successiva, senza mai marcare i suoi file."""
+    calls = []
+    items = [{"artist": "A", "title": "First", "album": None, "label": None,
+              "current_genre": None, "candidates": []}]
+    _install_fake_anthropic_sequence(monkeypatch, calls, [
+        None,  # tentativo 1: nessun output strutturato
+        [ai_tags._Review(index=0, title="First", genre="House",
+                         confidence="high")],
+    ])
+    out = ai_tags.review_genres(items)
+    assert len(calls) == 2
+    assert out == [{"genre": "House", "confidence": "high", "level": None}]
+
+
+def test_review_genres_raises_after_retry_when_parsed_output_still_none(
+        monkeypatch):
+    """Se anche il secondo tentativo non produce output strutturato,
+    review_genres solleva come prima — ma con ESATTAMENTE due chiamate
+    all'API: un solo ritentativo complessivo, non uno per tipo di
+    fallimento, e nessuna possibilità di catena."""
+    calls = []
+    items = [{"artist": "A", "title": "First", "album": None, "label": None,
+              "current_genre": None, "candidates": []}]
+    _install_fake_anthropic_sequence(monkeypatch, calls, [None, None])
+    with pytest.raises(ai_tags.AiReviewError):
+        ai_tags.review_genres(items)
+    assert len(calls) == 2
+
+
+def test_review_genres_max_tokens_has_ample_headroom(monkeypatch):
+    """Fix 1: max_tokens deve avere margine ampio rispetto a un sotto-batch
+    da 10 elementi strutturati (il caso limite dei bisognosi, dove il budget
+    di ricerca è len(sub)) — 4096 era la causa del 'turno consumato dalla
+    ricerca web'. Non fissiamo un valore esatto (motivato nel commento del
+    codice), solo un pavimento molto più alto del vecchio tetto."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="high")])
+    ai_tags.review_genres([{"artist": "A", "title": "B", "album": None,
+                            "label": None, "current_genre": None,
+                            "candidates": []}])
+    assert captured["max_tokens"] >= 16000
+
+
+def test_review_genres_reports_web_search_count_on_success(monkeypatch):
+    """Fix 4: il numero di ricerche web effettivamente eseguite (da
+    response.usage.server_tool_use.web_search_requests) viene comunicato al
+    chiamante come attributo `web_searches` sul valore di ritorno — senza
+    cambiare la forma per-traccia (resta una list di dict allineata per
+    indice, confrontabile con == a una list semplice)."""
+    calls = []
+
+    class _RespWithUsage(_FakeResp):
+        def __init__(self, items, web_search_requests):
+            super().__init__(items)
+            self.usage = types.SimpleNamespace(
+                server_tool_use=types.SimpleNamespace(
+                    web_search_requests=web_search_requests))
+
+    class _FakeMessages:
+        def parse(self, **kwargs):
+            calls.append(kwargs)
+            return _RespWithUsage(
+                [ai_tags._Review(index=0, title="B", genre="Acid",
+                                 confidence="high")], 4)
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            self.messages = _FakeMessages()
+
+    mod = types.ModuleType("anthropic")
+    mod.Anthropic = _FakeClient
+    monkeypatch.setitem(sys.modules, "anthropic", mod)
+
+    out = ai_tags.review_genres([{"artist": "A", "title": "B", "album": None,
+                                  "label": None, "current_genre": None,
+                                  "candidates": []}])
+    assert out == [{"genre": "Acid", "confidence": "high", "level": None}]
+    assert getattr(out, "web_searches", None) == 4
+
+
+def test_review_genres_web_search_count_defaults_to_zero_without_usage(
+        monkeypatch):
+    """Una risposta (reale o fake) priva di `usage.server_tool_use` non deve
+    far sollevare l'estrazione del conteggio: default a zero."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="high")])
+    out = ai_tags.review_genres([{"artist": "A", "title": "B", "album": None,
+                                  "label": None, "current_genre": None,
+                                  "candidates": []}])
+    assert getattr(out, "web_searches", None) == 0
+
+
+def test_review_genres_raises_with_accumulated_web_search_count(monkeypatch):
+    """L'eccezione sollevata dopo il ritentativo esaurito porta con sé il
+    totale delle ricerche web consumate nei DUE tentativi (Fix 4): il
+    chiamante non deve perdere il costo di un batch fallito solo perché non
+    ha prodotto un esito utilizzabile."""
+    calls = []
+    items = [{"artist": "A", "title": "First", "album": None, "label": None,
+              "current_genre": None, "candidates": []}]
+
+    class _RespEmptyWithUsage(_FakeResp):
+        def __init__(self, items, web_search_requests):
+            super().__init__(items)
+            self.usage = types.SimpleNamespace(
+                server_tool_use=types.SimpleNamespace(
+                    web_search_requests=web_search_requests))
+
+    responses = [_RespEmptyWithUsage([], 2), _RespEmptyWithUsage([], 3)]
+    state = {"n": 0}
+
+    class _FakeMessages:
+        def parse(self, **kwargs):
+            calls.append(kwargs)
+            i = state["n"]
+            state["n"] += 1
+            return responses[i]
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            self.messages = _FakeMessages()
+
+    mod = types.ModuleType("anthropic")
+    mod.Anthropic = _FakeClient
+    monkeypatch.setitem(sys.modules, "anthropic", mod)
+
+    with pytest.raises(ai_tags.AiReviewError) as exc_info:
+        ai_tags.review_genres(items)
+    assert len(calls) == 2
+    assert exc_info.value.web_searches == 5
+
+
 def test_review_genres_no_title_on_item_skips_guard(monkeypatch):
     """Se la traccia non ha titolo (None), la guardia viene saltata e ci si
     affida solo all'indice."""
