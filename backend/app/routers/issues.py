@@ -86,9 +86,12 @@ def bulk(body: IssueBulkBody, db: Session = Depends(get_db)):
         stmt = stmt.where(Issue.severity == body.severity)
     updated = 0
     for issue in db.scalars(stmt).all():
-        # Le override si toccano in blocco solo se targetizzate per tipo, mai per
-        # sola severità (così "ignora tutti gli info" non cancella le proposte).
+        # Le override e le proposte AI genre_review si toccano in blocco solo se
+        # targetizzate per tipo, mai per sola severità (così "ignora tutti gli
+        # info" non cancella in un colpo le proposte, pagate in ricerche web).
         if issue.type == "provider_override" and body.type != "provider_override":
+            continue
+        if issue.type == "genre_review" and body.type != "genre_review":
             continue
         if body.status == "accepted" and issue.suggested_fix_json is None:
             continue

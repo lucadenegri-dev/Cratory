@@ -80,6 +80,34 @@ def test_stale_issue_deleted(db):
     assert db.scalar(select(Issue).where(Issue.field == "genre")) is None
 
 
+def test_genre_review_survives_recompute_in_every_status(db):
+    # genre_review è synthetic (creata dal job di revisione generi, non
+    # dall'Inspector): un recompute() non deve mai cancellarla, in nessuno
+    # stato — altrimenti ogni scan (anche automatico, dopo un apply) azzera
+    # l'intero output del job.
+    f1 = _add_file(db, path="/m/open.mp3", artist="A", title="T1", genre="House",
+                   content_hash="o")
+    f2 = _add_file(db, path="/m/accepted.mp3", artist="B", title="T2", genre="House",
+                   content_hash="acc")
+    f3 = _add_file(db, path="/m/dismissed.mp3", artist="C", title="T3", genre="House",
+                   content_hash="dis")
+    fix = {"field": "genre", "action": "retag", "to": "Techno",
+           "source": "ai", "confidence": "high"}
+    db.add(Issue(file_id=f1.id, type="genre_review", field="genre", severity="info",
+                 detail="AI: genre → Techno", suggested_fix_json=fix, status="open"))
+    db.add(Issue(file_id=f2.id, type="genre_review", field="genre", severity="info",
+                 detail="AI: genre → Techno", suggested_fix_json=fix, status="accepted"))
+    db.add(Issue(file_id=f3.id, type="genre_review", field="genre", severity="info",
+                 detail="AI: genre → Techno", suggested_fix_json=fix, status="dismissed"))
+    db.commit()
+
+    recompute(db)
+
+    rows = db.scalars(select(Issue).where(Issue.type == "genre_review")).all()
+    statuses = {r.file_id: r.status for r in rows}
+    assert statuses == {f1.id: "open", f2.id: "accepted", f3.id: "dismissed"}
+
+
 def test_recompute_deletes_orphaned_bridge_mismatch(db):
     # bridge_mismatch era un tipo di issue legacy (bridge Cratory) che l'Inspector
     # non ricalcola più: T9 ha rimosso l'esenzione _EXTERNAL_TYPES, quindi il
