@@ -543,13 +543,33 @@ filterwarnings =
 e aggiungendo in `backend/tests/organize/conftest.py`, subito dopo gli import:
 
 ```python
+from pathlib import Path  # noqa: E402
+
+_ORGANIZE_TESTS = Path(__file__).resolve().parent
+
+
 def pytest_collection_modifyitems(items):
     """Strictness sui warning ristretta ai test Organize finché la suite Cratory
     non è ripulita (vedi spec F1). Rimuovere quando `filterwarnings = error`
-    varrà per tutta la suite."""
+    varrà per tutta la suite.
+
+    ATTENZIONE: questo hook, pur vivendo in un conftest di sottocartella, riceve
+    da pytest l'elenco COMPLETO degli item della sessione — anche quelli di
+    Cratory. Senza il filtro sul path la strictness si applicherebbe a tutta la
+    suite, ed è esattamente ciò che questa funzione deve evitare."""
     for item in items:
-        item.add_marker(pytest.mark.filterwarnings("error"))
+        if _ORGANIZE_TESTS in Path(str(item.fspath)).parents:
+            item.add_marker(pytest.mark.filterwarnings("error"))
 ```
+
+**Verifica obbligatoria dopo aver aggiunto l'hook** — lanciare la suite *combinata*, non solo le due metà separate, perché il difetto si manifesta solo lì:
+
+```bash
+cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend && \
+.venv/bin/python -m pytest tests -q 2>&1 | grep "^FAILED" | grep -v "tests/organize/" | head
+```
+
+Atteso: **nessun output**. Ogni fallimento fuori da `tests/organize/` significa che la strictness è tracimata sui test Cratory.
 
 Qualunque strada prendi, **scrivila nel commit message**: è un'informazione che serve a F2.
 
