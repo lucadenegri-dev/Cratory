@@ -13,17 +13,27 @@ import tempfile
 _TMP_DB = os.path.join(tempfile.mkdtemp(prefix="organize-test-"), "test.db")
 os.environ["DJORG_DATABASE_URL"] = f"sqlite:///{_TMP_DB}"
 
+from pathlib import Path  # noqa: E402
+
 import pytest  # noqa: E402
 
 from app.organize.db import Base, SessionLocal, engine  # noqa: E402
+
+_ORGANIZE_TESTS = Path(__file__).resolve().parent
 
 
 def pytest_collection_modifyitems(items):
     """Strictness sui warning ristretta ai test Organize finché la suite Cratory
     non è ripulita (vedi spec F1). Rimuovere quando `filterwarnings = error`
-    varrà per tutta la suite."""
+    varrà per tutta la suite.
+
+    ATTENZIONE: questo hook, pur vivendo in un conftest di sottocartella, riceve
+    da pytest l'elenco COMPLETO degli item della sessione — anche quelli di
+    Cratory. Senza il filtro sul path la strictness si applicherebbe a tutta la
+    suite, ed è esattamente ciò che questa funzione deve evitare."""
     for item in items:
-        item.add_marker(pytest.mark.filterwarnings("error"))
+        if _ORGANIZE_TESTS in Path(str(item.fspath)).parents:
+            item.add_marker(pytest.mark.filterwarnings("error"))
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +56,6 @@ def db():
 
 
 import shutil  # noqa: E402
-from pathlib import Path  # noqa: E402
 
 _FIXTURES = Path(__file__).parent / "fixtures"
 
