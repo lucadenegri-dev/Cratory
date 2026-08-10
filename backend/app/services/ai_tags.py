@@ -373,18 +373,35 @@ def review_genres(items: list[dict], *, max_web_searches: int = 3,
     prompt = _build_review_prompt(always_search=always_search)
     kwargs: dict = dict(
         model=_MODEL,
-        # 4096 era troppo stretto: un sotto-batch bisognoso può autorizzare
-        # fino a len(sub) ricerche web (10 al massimo, batch_size di
-        # default) in UNA sola chiamata, e ogni ricerca aggiunge query +
-        # risultati al turno prima ancora di arrivare all'output strutturato
-        # finale (10 item con index/title/genre/confidence/level, poche
-        # centinaia di token). "Turno consumato dalla ricerca web" (Fix 1) è
-        # esattamente il fallimento che un tetto basso rende probabile in
-        # quello scenario. Si paga l'output EFFETTIVAMENTE prodotto, non il
-        # tetto, quindi alzarlo non ha costo: 32000 lascia margine ampio
-        # rispetto al caso limite (10 ricerche + 10 item strutturati) pur
-        # restando a metà degli 64K di output massimi di Claude Haiku 4.5.
-        max_tokens=32000,
+        # ATTENZIONE, controintuitivo: NON alzare questo valore per dare
+        # margine alle ricerche web. I risultati della ricerca web contano
+        # come token di INPUT, non di output — non consumano affatto questo
+        # budget. Misurato dal vivo su un batch da 10 tracce con 3 ricerche
+        # web: input=25065, output=382. L'output di questa funzione è una
+        # lista strutturata di poche decine di token per traccia, quindi
+        # poche centinaia in totale anche per il sotto-batch più numeroso
+        # (10 elementi, batch_size di default): 4096 è già ampio margine
+        # (~10x) rispetto al fabbisogno reale osservato.
+        #
+        # Il commit 97727b0 lo aveva alzato a 32000 proprio per "dare
+        # margine alle ricerche" — presupposto sbagliato — e l'effetto reale
+        # è stato rompere la feature: l'SDK Python di Anthropic rifiuta le
+        # chiamate NON in streaming la cui durata stimata (funzione di
+        # max_tokens) supera i 10 minuti:
+        #   "Streaming is required for operations that may take longer than
+        #   10 minutes. See
+        #   https://github.com/anthropics/anthropic-sdk-python#long-requests"
+        # Con max_tokens=32000 OGNI chiamata a questa funzione falliva con
+        # quel ValueError (client.messages.parse non è in streaming), e il
+        # job su 10 tracce reali è finito con proposed=0, confirmed=0,
+        # unresolved=10, web_searches=0 — zero file marcati. La soglia
+        # dell'SDK per questo modello è intorno a 21333 token (vedi
+        # anthropic._base_client.BaseClient._calculate_nonstreaming_timeout,
+        # che stima 1h di durata massima per 128000 token e rifiuta se la
+        # stima supera 10 minuti): restare su un valore modesto qui sotto
+        # NON è solo prudenza per il costo, è un requisito per far
+        # funzionare la chiamata.
+        max_tokens=4096,
         messages=[{"role": "user",
                    "content": f"{prompt}\n\n" + "\n".join(lines)}],
         output_format=_Reviews,

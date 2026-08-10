@@ -649,12 +649,28 @@ def test_review_genres_raises_after_retry_when_parsed_output_still_none(
     assert len(calls) == 2
 
 
-def test_review_genres_max_tokens_has_ample_headroom(monkeypatch):
-    """Fix 1: max_tokens deve avere margine ampio rispetto a un sotto-batch
-    da 10 elementi strutturati (il caso limite dei bisognosi, dove il budget
-    di ricerca è len(sub)) — 4096 era la causa del 'turno consumato dalla
-    ricerca web'. Non fissiamo un valore esatto (motivato nel commento del
-    codice), solo un pavimento molto più alto del vecchio tetto."""
+def test_review_genres_max_tokens_regression_stays_below_sdk_streaming_ceiling(
+        monkeypatch):
+    """Regressione (non un test di comportamento: un vincolo dell'ambiente,
+    va spiegato o fra sei mesi sembra arbitrario). Il commit 97727b0 aveva
+    alzato max_tokens 4096->32000 per dare margine ai sotto-batch bisognosi
+    (fino a 10 ricerche web in una chiamata), sul presupposto — sbagliato —
+    che i risultati delle ricerche pesassero sull'output: sono invece token
+    di INPUT, misurato dal vivo su un batch da 10 con 3 ricerche:
+    input=25065, output=382. L'output reale di questa funzione è una lista
+    strutturata di poche decine di token per traccia (poche centinaia in
+    totale per un batch da 10): l'aumento non serviva a nulla, e ha rotto la
+    feature. L'SDK Python di Anthropic rifiuta le chiamate non-streaming la
+    cui durata stimata (funzione di max_tokens) supera 10 minuti:
+    'Streaming is required for operations that may take longer than 10
+    minutes. See https://github.com/anthropics/anthropic-sdk-python#long-requests'
+    — con max_tokens=32000 OGNI chiamata falliva con questo ValueError,
+    azzerando la feature (misurato dal vivo su 10 tracce:
+    proposed=0, confirmed=0, unresolved=10, web_searches=0). Fissiamo qui un
+    tetto ben sotto la soglia dell'SDK (~21333 token per claude-haiku-4-5,
+    dalla formula in anthropic._base_client._calculate_nonstreaming_timeout)
+    così che un futuro "diamo più margine" non ripeta lo stesso errore senza
+    che un test lo segnali."""
     captured = {}
     _install_fake_anthropic(
         monkeypatch, captured,
@@ -662,7 +678,10 @@ def test_review_genres_max_tokens_has_ample_headroom(monkeypatch):
     ai_tags.review_genres([{"artist": "A", "title": "B", "album": None,
                             "label": None, "current_genre": None,
                             "candidates": []}])
-    assert captured["max_tokens"] >= 16000
+    # Tetto documentato: ampio margine sopra il fabbisogno reale (~400 token
+    # per un batch da 10) ma ben sotto la soglia di rifiuto non-streaming
+    # dell'SDK.
+    assert captured["max_tokens"] <= 8192
 
 
 def test_review_genres_reports_web_search_count_on_success(monkeypatch):
