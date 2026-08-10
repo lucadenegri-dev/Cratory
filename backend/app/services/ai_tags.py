@@ -92,6 +92,32 @@ _REVIEW_PROMPT = (
 )
 
 
+# Istruzione aggiuntiva iniettata nel prompt SOLO in modalità "cerca sempre"
+# (tracce senza alcun candidato dai provider): a differenza del prompt
+# comune, che autorizza la ricerca "quando l'evidenza non basta", qui il
+# modello va istruito a cercare — per queste tracce non esiste alternativa
+# documentata, quindi rispondere a memoria è esattamente il comportamento che
+# vogliamo impedire. Composta in coda al prompt comune (non lo duplica).
+_ALWAYS_SEARCH_INSTRUCTION = (
+    "ATTENZIONE: per le tracce di questo batch i provider (MusicBrainz/"
+    "Discogs) non hanno restituito NESSUN candidato: non hai alcuna "
+    "evidenza documentata da cui partire. DEVI cercare sul web prima di "
+    "rispondere, non affidarti alla sola memoria/reputazione dell'artista. "
+    "Se la ricerca non produce nulla di solido, è preferibile mettere "
+    "genre a null piuttosto che indovinare dal nome dell'artista."
+)
+
+
+def _build_review_prompt(*, always_search: bool) -> str:
+    """Compone il prompt di revisione: il testo comune, più — in modalità
+    'cerca sempre' — l'istruzione aggiuntiva che spinge a cercare invece di
+    rispondere a memoria. Componimento per concatenazione, non duplicazione
+    del prompt comune (è lungo)."""
+    if always_search:
+        return _REVIEW_PROMPT + "\n\n" + _ALWAYS_SEARCH_INSTRUCTION
+    return _REVIEW_PROMPT
+
+
 class _Review(BaseModel):
     index: int = -1
     title: str | None = None
@@ -156,11 +182,20 @@ class AiReviewError(Exception):
     marcare i file come revisionati."""
 
 
-def review_genres(items: list[dict]) -> list[dict]:
+def review_genres(items: list[dict], *, max_web_searches: int = 3,
+                  always_search: bool = False) -> list[dict]:
     """Rivede il genere di un batch di tracce con contesto provider e web search.
     items: [{'artist','title','album','label','current_genre','candidates'}];
     ritorna [{'genre': str|None, 'confidence': 'high'|'low',
-    'level': 'track'|'release'|'artist'|None}] allineato per indice."""
+    'level': 'track'|'release'|'artist'|None}] allineato per indice.
+
+    max_web_searches: tetto di ricerche web per QUESTA chiamata (finisce in
+    max_uses del tool); a 0 il tool web_search non viene passato affatto
+    (nessuna ricerca possibile), invece di essere passato con un tetto zero.
+    always_search: se True, il prompt include l'istruzione aggiuntiva che
+    impone di cercare (batch di tracce senza candidati dai provider); il
+    default preserva il comportamento preesistente (autorizzata ma non
+    imposta, tetto 3) per chi chiama la funzione senza questi parametri."""
     if not items:
         return []
     from anthropic import Anthropic  # import lazy
@@ -178,15 +213,18 @@ def review_genres(items: list[dict]) -> list[dict]:
         if it.get("candidates"):
             parts.append("candidati provider: " + "; ".join(it["candidates"]))
         lines.append(f"{j}. " + " | ".join(parts))
-    resp = client.messages.parse(
+    prompt = _build_review_prompt(always_search=always_search)
+    kwargs: dict = dict(
         model=_MODEL,
         max_tokens=4096,
-        tools=[{"type": "web_search_20250305", "name": "web_search",
-                "max_uses": 3}],
         messages=[{"role": "user",
-                   "content": f"{_REVIEW_PROMPT}\n\n" + "\n".join(lines)}],
+                   "content": f"{prompt}\n\n" + "\n".join(lines)}],
         output_format=_Reviews,
     )
+    if max_web_searches > 0:
+        kwargs["tools"] = [{"type": "web_search_20250305", "name": "web_search",
+                            "max_uses": max_web_searches}]
+    resp = client.messages.parse(**kwargs)
     if resp.parsed_output is None:
         # Nessun output strutturato per l'intero batch (parsing fallito o
         # turno esaurito in ricerca web): diverso da una risposta valida ma

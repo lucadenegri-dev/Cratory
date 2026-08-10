@@ -344,6 +344,64 @@ def test_review_genres_artist_level_forces_confidence_low(monkeypatch):
     assert out == [{"genre": "Ambient", "confidence": "low", "level": "artist"}]
 
 
+def test_review_genres_budget_becomes_max_uses(monkeypatch):
+    """Il tetto passato in max_web_searches finisce nel max_uses del tool
+    web_search (non un valore fisso hardcoded)."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="high")])
+    ai_tags.review_genres(
+        [{"artist": "A", "title": "B", "album": None, "label": None,
+          "current_genre": None, "candidates": []}],
+        max_web_searches=5)
+    assert captured["tools"] == [{"type": "web_search_20250305",
+                                  "name": "web_search", "max_uses": 5}]
+
+
+def test_review_genres_zero_budget_omits_tool(monkeypatch):
+    """Con budget 0 il tool web_search non va passato affatto (non con
+    max_uses=0)."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="high")])
+    ai_tags.review_genres(
+        [{"artist": "A", "title": "B", "album": None, "label": None,
+          "current_genre": None, "candidates": []}],
+        max_web_searches=0)
+    assert "tools" not in captured
+
+
+def test_review_genres_always_search_adds_instruction_to_prompt(monkeypatch):
+    """In modalità 'cerca sempre' il prompt contiene l'istruzione aggiuntiva
+    che spinge a cercare sul web invece di rispondere a memoria."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="high")])
+    ai_tags.review_genres(
+        [{"artist": "A", "title": "B", "album": None, "label": None,
+          "current_genre": None, "candidates": []}],
+        always_search=True)
+    text = captured["messages"][0]["content"]
+    assert "DEVI cercare" in text
+
+
+def test_review_genres_default_mode_has_no_always_search_instruction(monkeypatch):
+    """Senza always_search (default) l'istruzione aggiuntiva non compare nel
+    prompt — comportamento preesistente preservato."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="high")])
+    ai_tags.review_genres(
+        [{"artist": "A", "title": "B", "album": None, "label": None,
+          "current_genre": None, "candidates": []}])
+    text = captured["messages"][0]["content"]
+    assert "DEVI cercare" not in text
+
+
 def test_review_genres_no_title_on_item_skips_guard(monkeypatch):
     """Se la traccia non ha titolo (None), la guardia viene saltata e ci si
     affida solo all'indice."""

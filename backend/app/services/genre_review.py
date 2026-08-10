@@ -15,6 +15,21 @@ GENRE_REVIEW_TYPE = "genre_review"
 # Issue "da inspector" che il job può riempire invece di crearne una nuova.
 _FILLABLE_TYPES = ("missing_metadata", "dirty_genre")
 _BATCH = 10
+# Dimensione della finestra di lavoro (lookup provider + commit), in multipli
+# di batch_size: abbastanza grande da accumulare, ad ogni finestra, un
+# ventaglio di tracce bisognose/coperte sufficiente a non sprecare budget di
+# ricerca in sotto-batch minuscoli, abbastanza piccola da mantenere una
+# resumabilità incrementale ragionevole (un crash a metà perde al più una
+# finestra di lookup, non l'intera libreria). Con batch_size=10 di default
+# la finestra è 50 file.
+_WINDOW_MULTIPLIER = 5
+# Tetto di ricerche per un sotto-batch "coperto" (tutte le tracce hanno già
+# candidati dai provider): basso perché qui la ricerca è solo un ripiego per
+# candidati implausibili, non un'esigenza sistematica. Fisso, non
+# proporzionale alla dimensione del sotto-batch: un batch coperto da 10
+# tracce non ha bisogno di più budget di uno da 3, l'evidenza c'è già per
+# entrambi.
+_COVERED_BUDGET = 2
 
 
 def _candidates_stmt(folder: str | None, genre: str | None, redo: bool):
@@ -126,47 +141,81 @@ def _apply_proposal(db: Session, f: AudioFile, proposal: dict) -> str:
     return "skipped"  # accepted/dismissed: decisione utente
 
 
+def _process_partition(db: Session, ai_fn, partition: list[tuple], *,
+                       batch_size: int, always_search: bool, res: dict,
+                       done: int, total: int, on_progress) -> int:
+    """Spezza `partition` (coppie file/item già arricchite dei candidati
+    provider, tutte bisognose o tutte coperte) in sotto-batch da al più
+    batch_size elementi, chiama ai_fn una volta per sotto-batch col budget e
+    la modalità appropriati, applica gli esiti e marca genre_reviewed_at.
+    Un sotto-batch la cui chiamata AI solleva conta come unresolved e NON
+    marca i suoi file (restano candidati per la passata successiva); non
+    ferma gli altri sotto-batch né l'altra partizione. Ritorna il nuovo
+    valore di `done`. Partizione vuota → nessuna chiamata (range(0,0,n) non
+    itera)."""
+    for start in range(0, len(partition), batch_size):
+        sub = partition[start:start + batch_size]
+        sub_files = [f for f, _ in sub]
+        sub_items = [it for _, it in sub]
+        budget = len(sub) if always_search else _COVERED_BUDGET
+        try:
+            results = ai_fn(sub_items, max_web_searches=budget,
+                            always_search=always_search)
+            ai_failed = False
+        except Exception:  # noqa: BLE001 — un sotto-batch fallito non ferma il job
+            results = [None] * len(sub)
+            ai_failed = True
+        for f, proposal in zip(sub_files, results):
+            res[_apply_proposal(db, f, proposal or {})] += 1
+            if not ai_failed:
+                # Un sotto-batch fallito lascia i suoi file non marcati: la
+                # passata successiva li riprende invece di darli per
+                # "revisionati".
+                f.genre_reviewed_at = utcnow()
+        done += len(sub)
+        if on_progress is not None:
+            on_progress(done, total, "reviewing")
+    return done
+
+
 def review(db: Session, *, mb, discogs, ai_fn, folder: str | None = None,
            genre: str | None = None, redo: bool = False,
            batch_size: int = _BATCH, on_progress=None) -> dict:
-    """Loop principale: batch di file → lookup provider → una chiamata AI →
-    applicazione esiti + commit. Un batch AI fallito conta come unresolved e il
-    job prosegue col successivo, ma NON marca genre_reviewed_at sui suoi file:
-    restano candidati per la passata successiva (chiave invalida, quota
-    esaurita, server tool disabilitato sono transitori, non un "revisionato
-    senza proposte")."""
+    """Loop principale, a finestre: per ogni finestra di file (multiplo di
+    batch_size) fa le lookup provider, PARTIZIONA la finestra in bisognose
+    (nessun candidato provider: _provider_candidates ha dato lista vuota) e
+    coperte, forma sotto-batch da al più batch_size da ciascuna partizione,
+    chiama l'AI una volta per sotto-batch col budget di ricerca appropriato
+    (alto e imposto per le bisognose, basso e libero per le coperte), poi
+    committa l'intera finestra. La partizione esiste (non è una passata
+    provider globale seguita da un partizionamento) così l'incrementalità
+    resta: un crash a metà perde al più la finestra in corso."""
     files = db.scalars(_candidates_stmt(folder, genre, redo)).all()
     total = len(files)
     res = {"configured": True, "files": total, "proposed": 0, "confirmed": 0,
            "unresolved": 0, "skipped": 0}
     done = 0
-    for start in range(0, total, batch_size):
-        batch = files[start:start + batch_size]
-        items = []
-        for f in batch:
+    window_size = batch_size * _WINDOW_MULTIPLIER
+    for wstart in range(0, total, window_size):
+        window = files[wstart:wstart + window_size]
+        entries: list[tuple] = []
+        for f in window:
             if on_progress is not None:
-                on_progress(done + len(items), total, "looking_up")
-            items.append({
+                on_progress(done + len(entries), total, "looking_up")
+            entries.append((f, {
                 "artist": f.artist, "title": f.title, "album": f.album,
                 "label": f.label, "current_genre": f.genre,
                 "candidates": _provider_candidates(f, mb=mb, discogs=discogs),
-            })
+            }))
         if on_progress is not None:
             on_progress(done, total, "reviewing")
-        try:
-            results = ai_fn(items)
-            ai_failed = False
-        except Exception:  # noqa: BLE001 — un batch fallito non ferma il job
-            results = [None] * len(batch)
-            ai_failed = True
-        for f, proposal in zip(batch, results):
-            res[_apply_proposal(db, f, proposal or {})] += 1
-            if not ai_failed:
-                # Un batch fallito lascia i suoi file non marcati: la passata
-                # successiva li riprende invece di darli per "revisionati".
-                f.genre_reviewed_at = utcnow()
-        done += len(batch)
+        needy = [e for e in entries if not e[1]["candidates"]]
+        covered = [e for e in entries if e[1]["candidates"]]
+        done = _process_partition(
+            db, ai_fn, needy, batch_size=batch_size, always_search=True,
+            res=res, done=done, total=total, on_progress=on_progress)
+        done = _process_partition(
+            db, ai_fn, covered, batch_size=batch_size, always_search=False,
+            res=res, done=done, total=total, on_progress=on_progress)
         db.commit()
-        if on_progress is not None:
-            on_progress(done, total, "reviewing")
     return res

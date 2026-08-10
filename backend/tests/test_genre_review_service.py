@@ -49,10 +49,22 @@ class _DG:
 
 
 def _ai_returning(*proposals):
-    """ai_fn finto: risponde con le proposte date, allineate all'input."""
-    def fn(items):
+    """ai_fn finto: risponde con le proposte date, allineate all'input.
+    Accetta (e ignora) max_web_searches/always_search: i test che verificano
+    quei parametri usano una fake dedicata (_ai_capturing)."""
+    def fn(items, **kwargs):
         assert len(items) == len(proposals)
         return list(proposals)
+    return fn
+
+
+def _ai_capturing(calls, *, genre=None, confidence="low"):
+    """ai_fn finto che registra ogni chiamata (items, kwargs) in `calls` e
+    risponde con un esito fisso per ogni item — serve a ispezionare come
+    review() partiziona i sotto-batch e con quale budget/modalità li chiama."""
+    def fn(items, **kwargs):
+        calls.append((list(items), dict(kwargs)))
+        return [{"genre": genre, "confidence": confidence} for _ in items]
     return fn
 
 
@@ -211,7 +223,7 @@ def test_review_ai_failure_counts_unresolved_and_continues(db):
     f1 = _file(db, 1, artist="A", title="T")
     f2 = _file(db, 2, artist="B", title="U")
 
-    def boom(items):
+    def boom(items, **kwargs):
         raise RuntimeError("api down")
 
     res = genre_review.review(db, mb=_MB(None), discogs=_DG(None), ai_fn=boom)
@@ -227,7 +239,7 @@ def test_review_candidates_merged_normalized_deduped(db):
     _file(db, 1, artist="A", title="T")
     captured = {}
 
-    def fn(items):
+    def fn(items, **kwargs):
         captured["items"] = items
         return [{"genre": None, "confidence": "low"}]
 
@@ -248,7 +260,7 @@ def test_review_candidates_skip_discogs_when_mb_has_candidates(db):
     captured = {}
     dg = _DG({"genre_candidates": ["Electronic"]})
 
-    def fn(items):
+    def fn(items, **kwargs):
         captured["items"] = items
         return [{"genre": None, "confidence": "low"}]
 
@@ -267,7 +279,7 @@ def test_review_candidates_calls_discogs_when_mb_empty(db):
     _file(db, 1, artist="A", title="T")
     dg = _DG({"genre_candidates": ["Electronic"]})
 
-    def fn(items):
+    def fn(items, **kwargs):
         return [{"genre": None, "confidence": "low"}]
 
     genre_review.review(db, mb=_MB(None), discogs=dg, ai_fn=fn)
@@ -361,12 +373,14 @@ def test_review_drops_stale_genre_review_when_other_open_issue_on_field(db):
 
 def test_review_batches_respect_batch_size(db):
     """Finding 2: review() deve spezzare le richieste AI in slice non più
-    grandi di batch_size, chiamando ai_fn una volta per slice."""
+    grandi di batch_size, chiamando ai_fn una volta per slice. Qui tutti i
+    file sono privi di candidati (bisognosi): un'unica partizione più grande
+    di batch_size."""
     for i in range(1, 6):
         _file(db, i, artist=f"A{i}", title=f"T{i}", genre="House")
     call_sizes = []
 
-    def fn(items):
+    def fn(items, **kwargs):
         call_sizes.append(len(items))
         return [{"genre": None, "confidence": "low"} for _ in items]
 
@@ -377,3 +391,112 @@ def test_review_batches_respect_batch_size(db):
     assert sum(call_sizes) == 5
     assert res["files"] == 5
     assert res["unresolved"] == 5
+
+
+def test_review_covered_partition_also_respects_batch_size(db):
+    """Simmetrico al test precedente ma per la partizione coperta (tutte le
+    tracce hanno candidati dal provider): nessun sotto-batch supera
+    batch_size, anche se la partizione coperta è più grande di batch_size."""
+    for i in range(1, 6):
+        _file(db, i, artist=f"A{i}", title=f"T{i}", genre="House")
+    call_sizes = []
+
+    def fn(items, **kwargs):
+        call_sizes.append(len(items))
+        return [{"genre": None, "confidence": "low"} for _ in items]
+
+    res = genre_review.review(
+        db, mb=_MB({"genre_candidates": ["Techno"]}), discogs=_DG(None),
+        ai_fn=fn, batch_size=2)
+    assert len(call_sizes) == 3  # 2 + 2 + 1
+    assert all(n <= 2 for n in call_sizes)
+    assert sum(call_sizes) == 5
+    assert res["files"] == 5
+
+
+def test_review_window_mixed_partition_two_distinct_ai_calls(db):
+    """Una finestra con tracce coperte (candidati dai provider) e bisognose
+    (nessun candidato) produce due chiamate ai_fn distinte: quella delle
+    tracce senza candidati ha budget pari al numero di tracce del sotto-batch
+    e modalità 'cerca sempre'; quella delle tracce coperte ha budget basso e
+    NON richiede la ricerca."""
+    _file(db, 1, artist="A1", title="T1", genre="House")  # coperto
+    _file(db, 2, artist="A2", title="T2", genre="House")  # coperto
+    _file(db, 3, artist="A3", title="T3", genre="House")  # coperto
+    _file(db, 4, artist="A4", title="T4", genre="House")  # bisognoso
+
+    class _MixedMB:
+        def lookup(self, **kw):
+            if kw.get("artist") in ("A1", "A2", "A3"):
+                return {"genre_candidates": ["Techno"]}
+            return None
+
+    calls = []
+    res = genre_review.review(
+        db, mb=_MixedMB(), discogs=_DG(None),
+        ai_fn=_ai_capturing(calls))
+
+    assert len(calls) == 2
+    needy_items, needy_kwargs = next(
+        c for c in calls if c[1]["always_search"] is True)
+    covered_items, covered_kwargs = next(
+        c for c in calls if c[1]["always_search"] is False)
+    assert len(needy_items) == 1  # solo A4
+    assert needy_kwargs["max_web_searches"] == 1  # una ricerca a testa
+    assert len(covered_items) == 3  # A1, A2, A3
+    # budget basso e NON proporzionale al numero di tracce coperte (3):
+    # è un tetto fisso, non "una a testa" come per i bisognosi.
+    assert covered_kwargs["max_web_searches"] < len(covered_items)
+    assert res["files"] == 4
+
+
+def test_review_window_all_needy_no_call_for_empty_covered_partition(db):
+    """Una finestra di sole tracce bisognose non produce nessuna chiamata
+    ai_fn per la partizione coperta, che è vuota."""
+    _file(db, 1, artist="A", title="T", genre="House")
+    _file(db, 2, artist="B", title="U", genre="House")
+    calls = []
+    genre_review.review(
+        db, mb=_MB(None), discogs=_DG(None), ai_fn=_ai_capturing(calls))
+    assert len(calls) == 1
+    assert calls[0][1]["always_search"] is True
+    assert len(calls[0][0]) == 2
+
+
+def test_review_window_all_covered_no_call_for_empty_needy_partition(db):
+    """Simmetrico: una finestra di sole tracce coperte non produce nessuna
+    chiamata ai_fn per la partizione bisognosa, che è vuota."""
+    _file(db, 1, artist="A", title="T", genre="House")
+    _file(db, 2, artist="B", title="U", genre="House")
+    calls = []
+    genre_review.review(
+        db, mb=_MB({"genre_candidates": ["Techno"]}), discogs=_DG(None),
+        ai_fn=_ai_capturing(calls))
+    assert len(calls) == 1
+    assert calls[0][1]["always_search"] is False
+    assert len(calls[0][0]) == 2
+
+
+def test_review_needy_partition_failure_does_not_block_covered(db):
+    """Il fallimento della chiamata AI su una partizione (qui: la bisognosa)
+    non impedisce all'altra partizione (coperta) di essere processata, e
+    lascia non marcati solo i file della partizione fallita."""
+    f1 = _file(db, 1, artist="A1", title="T1", genre="House")  # coperto
+    f2 = _file(db, 2, artist="A2", title="T2", genre="House")  # bisognoso
+
+    class _MixedMB:
+        def lookup(self, **kw):
+            if kw.get("artist") == "A1":
+                return {"genre_candidates": ["Techno"]}
+            return None
+
+    def fn(items, *, always_search, **kwargs):
+        if always_search:
+            raise RuntimeError("web search down")
+        return [{"genre": None, "confidence": "low"} for _ in items]
+
+    res = genre_review.review(
+        db, mb=_MixedMB(), discogs=_DG(None), ai_fn=fn)
+    assert res["unresolved"] == 2  # covered: genre None -> unresolved; needy: fallito -> unresolved
+    assert f1.genre_reviewed_at is not None  # partizione coperta processata
+    assert f2.genre_reviewed_at is None  # partizione bisognosa fallita: non marcato
