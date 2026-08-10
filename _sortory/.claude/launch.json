@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/lucadenegri/Develop/DjOrganizer01/backend && exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8010"
+      ],
+      "port": 8010
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/lucadenegri/Develop/DjOrganizer01/frontend && exec npm run dev -- -p 3001"
+      ],
+      "port": 3001
+    }
+  ]
+}
