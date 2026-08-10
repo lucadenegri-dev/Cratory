@@ -123,13 +123,21 @@ git commit -m "chore: innesto del repo Sortory sotto _sortory/ (subtree merge, s
 
 Atteso: `Automatic merge went well` seguito dal commit. Il flag `-s ours` fa sì che il merge non porti nulla nella root; `read-tree --prefix` deposita l'albero Sortory sotto `_sortory/`.
 
-- [ ] **Step 5: Verificare che la storia di Sortory sia navigabile**
+- [ ] **Step 5: Verificare che la storia di Sortory sia raggiungibile**
 
 ```bash
-cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1 && git log --oneline --follow -- _sortory/backend/app/models.py | wc -l
+cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1 && \
+git merge-base --is-ancestor sortory/main HEAD && echo "sortory/main è antenato di HEAD" && \
+git rev-list HEAD ^master | wc -l
 ```
 
-Atteso: un numero **maggiore di 1** (i commit storici di quel file in Sortory). Se restituisce `1`, il merge ha perso la storia: rifare dallo Step 4.
+Atteso: il messaggio `sortory/main è antenato di HEAD`, e un conteggio di **321** (i 320 commit Sortory più il commit di merge). Se `--is-ancestor` fallisce, il merge ha perso la storia: rifare dallo Step 4.
+
+**Non** usare `git log --follow` per questa verifica: `--follow` non attraversa i commit di merge e non può vedere un path che prima del merge non esisteva con quel nome, quindi restituisce `0` anche quando la storia è perfettamente preservata. Per leggere la storia di un singolo file Sortory si parte dal ref di origine:
+
+```bash
+git log --oneline sortory/main -- backend/app/models.py
+```
 
 - [ ] **Step 6: Verificare che i due alberi convivano**
 
@@ -322,10 +330,12 @@ git rm -q _sortory/backend/app/main.py
 
 ```bash
 cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend/app/organize && \
-find . -name '*.py' -print0 | xargs -0 sed -i '' -E 's/\bapp\.(services|models|integrations|core|db|schemas|routers)\b/app.organize.\1/g'
+find . -name '*.py' -print0 | xargs -0 sed -i '' -E 's/[[:<:]]app\.(services|models|integrations|core|db|schemas|routers)[[:>:]]/app.organize.\1/g'
 ```
 
 Il pattern elenca le sette radici **esplicitamente** e lascia fuori `app.main`: in F1 `app.main` è l'unico entrypoint FastAPI (quello di Cratory), quindi i riferimenti a `app.main` devono continuare a puntare lì.
+
+⚠️ **`\b` non funziona su macOS.** Il sed di BSD non conosce `\b`: un pattern che lo usa non fallisce, semplicemente non sostituisce nulla — silenziosamente. I delimitatori di parola BSD sono `[[:<:]]` (inizio) e `[[:>:]]` (fine), usati sopra. Verifica sempre l'esito con il grep dello Step 5 invece di fidarti dell'assenza di errori.
 
 - [ ] **Step 5: Verificare che non sia rimasto nessun import vecchio**
 
@@ -422,10 +432,17 @@ git rm -q _sortory/backend/tests/__init__.py
 
 ```bash
 cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend/tests/organize && \
-find . -name '*.py' -print0 | xargs -0 sed -i '' -E 's/\bapp\.(services|models|integrations|core|db|schemas|routers)\b/app.organize.\1/g'
+find . -name '*.py' -print0 | xargs -0 sed -i '' -E 's/[[:<:]]app\.(services|models|integrations|core|db|schemas|routers)[[:>:]]/app.organize.\1/g'
 ```
 
-Anche qui `app.main` resta intatto: i test HTTP di Organize useranno l'app unificata.
+Anche qui `app.main` resta intatto: i test HTTP di Organize useranno l'app unificata. Valgono le stesse avvertenze del Task 3: `\b` è muto sul sed di macOS, i delimitatori sono `[[:<:]]` e `[[:>:]]`. Verifica l'esito:
+
+```bash
+cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend/tests/organize && \
+grep -rnE "(from|import) app\.(services|models|integrations|core|db|schemas|routers)[[:>:]]" . | grep -v "app\.organize" | head
+```
+
+Atteso: **nessun output**.
 
 - [ ] **Step 3: Adeguare il conftest di Organize**
 
