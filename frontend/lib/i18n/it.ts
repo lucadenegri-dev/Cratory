@@ -19,6 +19,7 @@ const ISSUE_TYPE_LABELS_IT: Record<string, string> = {
   scan_error: "Errore di scansione",
   retag: "Tag da ripulire",
   stray_rating: "Stelline (rating)",
+  genre_review: "Genere da rivedere",
 };
 
 export const it: Dictionary = {
@@ -48,6 +49,7 @@ export const it: Dictionary = {
     apply: "Applicazione",
     providerLookup: "Ricerca provider",
     integrity: "Controllo integrità",
+    genreReview: "Revisione generi",
   },
   nav: {
     tagline: "Organizza la tua musica",
@@ -233,8 +235,6 @@ export const it: Dictionary = {
     providerNotConfigured: "Configura le chiavi provider (MusicBrainz/Discogs) nel backend.",
     aiTagsNote: (suggested, unresolved) =>
       `${suggested} suggerimenti pronti${unresolved > 0 ? `, ${unresolved} non ricavabili dal nome file` : ""} — rivedi e accetta col ✓.`,
-    aiGenresNote: (suggested, unresolved) =>
-      `${suggested} generi suggeriti — mancanti + sporchi (bassa confidenza, rivedi)${unresolved > 0 ? `, ${unresolved} non ricavabili` : ""} — accetta col ✓.`,
     providerNote: (suggested, covers, fingerprinted, unresolved, acoustid) =>
       `${suggested} suggerimenti da provider${covers > 0 ? `, ${covers} copertine trovate` : ""}${fingerprinted > 0 ? ` (${fingerprinted} via fingerprint)` : ""}${unresolved > 0 ? `, ${unresolved} non trovati` : ""}${acoustid ? "" : " — fingerprint off, solo match testuale"} — rivedi e accetta col ✓.`,
     acceptHighNote: (updated) => `${updated} proposte ad alta confidenza accettate → andranno nel PLAN.`,
@@ -253,7 +253,13 @@ export const it: Dictionary = {
     searchPlaceholder: "cerca…",
     aiBusy: "AI…",
     aiTagsBtn: "Recupera Artista/Titolo con AI",
-    aiGenresBtn: "Recupera Genere con AI",
+    genreReviewBtn: "Rivedi generi con AI",
+    genreReviewDesc: "Rivede tutti i generi della libreria (provider + ricerca web) e propone correzioni.",
+    genreReviewConfirm: (files) =>
+      `L'AI rivedrà ${files} tracce usando i provider e ricerche web a pagamento (al massimo pochi euro per migliaia di tracce). Procedere?`,
+    genreReviewNote: (proposed, confirmed, unresolved) =>
+      `Revisione generi: ${proposed} proposte di modifica, ${confirmed} confermati${unresolved > 0 ? `, ${unresolved} non risolti` : ""} — rivedi e accetta con ✓.`,
+    genreReviewFailed: "Revisione generi fallita",
     providerImportBusy: "importo…",
     providerSuggestBtn: "Importa metadati mancanti da Provider",
     forceProvider: "forza ricerca provider",
@@ -279,7 +285,6 @@ export const it: Dictionary = {
     enrichTitle: "Arricchisci le proposte",
     enrichHint: "Riempi le proposte vuote da una sorgente, poi rivedi e accetta ciascuna col ✓.",
     enrichAiTagsDesc: "Indovina Artista e Titolo dal nome del file, per i file con tag sporchi o mancanti.",
-    enrichAiGenresDesc: "Propone un Genere dove manca o è disordinato. Bassa confidenza — rivedi prima di accettare.",
     enrichProviderDesc: "Recupera Artista, Titolo, Album, Anno, Etichetta e copertina da MusicBrainz / Discogs.",
     enrichAi: "Claude AI",
     enrichProviderTag: "Provider",
