@@ -21,6 +21,13 @@ def test_start_without_key_not_configured(db, monkeypatch):
     with TestClient(app) as client:
         r = client.post("/api/genre-review").json()
         assert r["configured"] is False
+        # La scorciatoia "non configurato" deve comunque restituire la forma
+        # completa dello stato job (come GET /status), non solo configured/status:
+        # il client TypeScript dichiara questi campi come non opzionali.
+        for key in ("status", "phase", "processed", "total", "result",
+                    "error", "started_at", "finished_at"):
+            assert key in r, f"campo mancante nella risposta: {key}"
+        assert r["status"] == "idle"
 
 
 def test_start_passes_body_to_job(db, monkeypatch):

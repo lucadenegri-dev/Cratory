@@ -14,7 +14,9 @@ router = APIRouter(prefix="/api/genre-review", tags=["genre-review"])
 @router.post("", response_model=dict)
 def genre_review_start(body: GenreReviewBody | None = None):
     if not ai_tags.is_configured():
-        return {"configured": False, "status": "idle"}
+        # Forma completa dello stato job (come GET /status) + configured: False,
+        # cosi' il client riceve sempre la shape dichiarata da GenreReviewJobState.
+        return {**genre_review_job.job_state(), "configured": False}
     if scan_job.is_running() or apply_job.is_running():
         raise api_error(409, "scan_or_apply_running", "Scan or apply in progress")
     b = body or GenreReviewBody()

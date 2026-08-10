@@ -349,6 +349,7 @@ export interface GenreReviewJobState {
   error: string | null;
   started_at: string | null;
   finished_at: string | null;
+  configured?: boolean;
 }
 export interface GenreReviewBody {
   folder?: string | null;
