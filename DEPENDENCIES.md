@@ -100,8 +100,9 @@ calls Claude Haiku with the `web_search_20250305` server tool enabled (up to 3
 searches per batch) to resolve doubtful genres. This is the app's only
 variable-cost dependency: web search is billed separately from token usage and
 must be enabled for the organization in the Anthropic Console before the job
-can use it. Without it enabled the tool call simply returns no results — the
-job still runs, it just falls back to the provider candidates alone.
+can use it. If web search isn't available, the job produces no proposals for
+the tracks that needed it — those files are left unmarked and stay candidates
+for a later pass, instead of being counted as reviewed.
 
 ## Cross-cutting env vars
 

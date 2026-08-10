@@ -78,6 +78,16 @@ class _Reviews(BaseModel):
     items: list[_Review]
 
 
+class AiReviewError(Exception):
+    """Il batch non ha prodotto un output strutturato (parsing fallito, oppure
+    il turno è stato consumato interamente dalla ricerca web senza arrivare a
+    un `parsed_output`). Va distinto dal caso in cui l'AI risponde ma non sa
+    decidere un singolo item (quello resta un `genre: None` legittimo): qui
+    non abbiamo ricevuto alcuna risposta valida, quindi il chiamante
+    (genre_review.review) deve trattare l'intero batch come fallito invece di
+    marcare i file come revisionati."""
+
+
 def review_genres(items: list[dict]) -> list[dict]:
     """Rivede il genere di un batch di tracce con contesto provider e web search.
     items: [{'artist','title','album','label','current_genre','candidates'}];
@@ -108,7 +118,14 @@ def review_genres(items: list[dict]) -> list[dict]:
                    "content": f"{_REVIEW_PROMPT}\n\n" + "\n".join(lines)}],
         output_format=_Reviews,
     )
-    parsed = resp.parsed_output.items if resp.parsed_output else []
+    if resp.parsed_output is None:
+        # Nessun output strutturato per l'intero batch (parsing fallito o
+        # turno esaurito in ricerca web): diverso da una risposta valida ma
+        # più corta, che viene invece completata item per item più sotto.
+        raise AiReviewError(
+            "review_genres: nessun output strutturato ricevuto dal modello "
+            "(parsing fallito o turno consumato dalla ricerca web)")
+    parsed = resp.parsed_output.items
     out: list[dict] = []
     for k in range(len(items)):
         r = parsed[k] if k < len(parsed) else _Review()

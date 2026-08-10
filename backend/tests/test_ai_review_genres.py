@@ -3,6 +3,8 @@
 import sys
 import types
 
+import pytest
+
 from app.services import ai_tags
 
 
@@ -13,7 +15,7 @@ class _FakeParsed:
 
 class _FakeResp:
     def __init__(self, items):
-        self.parsed_output = _FakeParsed(items)
+        self.parsed_output = _FakeParsed(items) if items is not None else None
 
 
 def _install_fake_anthropic(monkeypatch, captured, items_out):
@@ -58,6 +60,20 @@ def test_review_genres_prompt_tools_and_alignment(monkeypatch):
     # output allineato: il secondo item (mancante nella risposta) è None/low
     assert out == [{"genre": "Tech House", "confidence": "high"},
                    {"genre": None, "confidence": "low"}]
+
+
+def test_review_genres_no_parsed_output_raises(monkeypatch):
+    # Fix: se il modello non produce alcun output strutturato (parsing
+    # fallito, o turno consumato interamente dalla ricerca web) la funzione
+    # deve sollevare invece di restituire dei _Review() di default per ogni
+    # item — altrimenti il batch tornerebbe tutto genre=None e verrebbe
+    # marcato "revisionato" per errore (bug di resumabilità).
+    captured = {}
+    _install_fake_anthropic(monkeypatch, captured, None)
+    with pytest.raises(ai_tags.AiReviewError):
+        ai_tags.review_genres([{"artist": "A", "title": "B", "album": None,
+                                "label": None, "current_genre": None,
+                                "candidates": []}])
 
 
 def test_review_genres_weird_confidence_becomes_low(monkeypatch):
