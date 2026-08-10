@@ -330,10 +330,12 @@ git rm -q _sortory/backend/app/main.py
 
 ```bash
 cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend/app/organize && \
-find . -name '*.py' -print0 | xargs -0 sed -i '' -E 's/\bapp\.(services|models|integrations|core|db|schemas|routers)\b/app.organize.\1/g'
+find . -name '*.py' -print0 | xargs -0 sed -i '' -E 's/[[:<:]]app\.(services|models|integrations|core|db|schemas|routers)[[:>:]]/app.organize.\1/g'
 ```
 
 Il pattern elenca le sette radici **esplicitamente** e lascia fuori `app.main`: in F1 `app.main` è l'unico entrypoint FastAPI (quello di Cratory), quindi i riferimenti a `app.main` devono continuare a puntare lì.
+
+⚠️ **`\b` non funziona su macOS.** Il sed di BSD non conosce `\b`: un pattern che lo usa non fallisce, semplicemente non sostituisce nulla — silenziosamente. I delimitatori di parola BSD sono `[[:<:]]` (inizio) e `[[:>:]]` (fine), usati sopra. Verifica sempre l'esito con il grep dello Step 5 invece di fidarti dell'assenza di errori.
 
 - [ ] **Step 5: Verificare che non sia rimasto nessun import vecchio**
 
@@ -430,10 +432,17 @@ git rm -q _sortory/backend/tests/__init__.py
 
 ```bash
 cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend/tests/organize && \
-find . -name '*.py' -print0 | xargs -0 sed -i '' -E 's/\bapp\.(services|models|integrations|core|db|schemas|routers)\b/app.organize.\1/g'
+find . -name '*.py' -print0 | xargs -0 sed -i '' -E 's/[[:<:]]app\.(services|models|integrations|core|db|schemas|routers)[[:>:]]/app.organize.\1/g'
 ```
 
-Anche qui `app.main` resta intatto: i test HTTP di Organize useranno l'app unificata.
+Anche qui `app.main` resta intatto: i test HTTP di Organize useranno l'app unificata. Valgono le stesse avvertenze del Task 3: `\b` è muto sul sed di macOS, i delimitatori sono `[[:<:]]` e `[[:>:]]`. Verifica l'esito:
+
+```bash
+cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend/tests/organize && \
+grep -rnE "(from|import) app\.(services|models|integrations|core|db|schemas|routers)[[:>:]]" . | grep -v "app\.organize" | head
+```
+
+Atteso: **nessun output**.
 
 - [ ] **Step 3: Adeguare il conftest di Organize**
 
