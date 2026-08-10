@@ -4,6 +4,7 @@ Mockabile nei test (monkeypatch su ai_tags.suggest)."""
 
 import logging
 import os
+import re
 
 from pydantic import BaseModel
 
@@ -63,7 +64,12 @@ _REVIEW_PROMPT = (
     "Sei un esperto di musica da DJ (prevalentemente elettronica) che verifica "
     "il GENERE di tracce. Per ogni traccia numerata qui sotto scegli il genere "
     "primario più accurato e specifico, UNO solo, con casing canonico (es. "
-    "'Tech House', 'Acid Techno', 'Drum & Bass'). I candidati dei provider "
+    "'Tech House', 'Acid Techno', 'Drum & Bass'). Se una fonte (es. Beatport, "
+    "Discogs) riporta una lista o un tag composto — esempio reale osservato: "
+    "'Breaks / Breakbeat / UK Bass' — NON restituire la lista così com'è: "
+    "scegli tu il singolo genere più specifico tra quelli elencati. Il valore "
+    "restituito non deve mai contenere separatori di elenco (virgola, barra, "
+    "punto e virgola). I candidati dei provider "
     "(MusicBrainz/Discogs) sono evidenza forte: preferiscili quando plausibili. "
     "Usa la ricerca web SOLO quando l'evidenza disponibile non basta a decidere. "
     "SCALA DI EVIDENZA: usa il livello più specifico per cui esiste evidenza "
@@ -184,6 +190,33 @@ def _titles_match_for_guard(echoed_head: str | None, expected_title: str) -> boo
     return norm_expected in norm_echoed or norm_echoed in norm_expected
 
 
+# Rete di sicurezza: caso osservato dal vivo (Djrum - Waxcap), 2 esecuzioni su
+# 3 identiche, il modello ha restituito 'Breaks / Breakbeat / UK Bass' —
+# copiata pari pari la stringa di tag composita di Beatport — nonostante il
+# prompt chieda esplicitamente UN solo genere. Trattiamo come separatore di
+# ELENCO barra, virgola, punto e virgola e trattino verticale: non qualunque
+# punteggiatura, altrimenti generi legittimi come 'Drum & Bass', 'Tech House'
+# o 'Hi-NRG' (che contengono '&' e '-' ma non sono liste) verrebbero troncati
+# per errore. Il trattino singolo NON è incluso: è usato dentro nomi di
+# genere legittimi (Hi-NRG) e non come separatore da queste fonti.
+_GENRE_LIST_SEP_RE = re.compile(r"[,/;|]")
+
+
+def _reduce_compound_genre(genre: str | None) -> str | None:
+    """Se `genre` contiene un separatore di elenco, lo riduce al primo
+    componente invece di scartarlo: nelle fonti che restituiscono liste
+    ordinate (Discogs styles, tag compositi Beatport) il primo elemento è la
+    scelta più specifica — la stessa convenzione già adottata da
+    DiscogsMetaClient.lookup, che prende styles[0]. Nessun separatore -> il
+    valore torna invariato."""
+    if genre is None:
+        return None
+    if not _GENRE_LIST_SEP_RE.search(genre):
+        return genre
+    first = _GENRE_LIST_SEP_RE.split(genre, maxsplit=1)[0].strip()
+    return first or None
+
+
 class AiReviewError(Exception):
     """Il batch non ha prodotto un output strutturato (parsing fallito, oppure
     il turno è stato consumato interamente dalla ricerca web senza arrivare a
@@ -242,7 +275,8 @@ def _match_reviews_to_items(parsed: list["_Review"],
             # forzata a bassa nel codice, non lasciata al giudizio del
             # modello.
             conf = "low"
-        out.append({"genre": r.genre or None, "confidence": conf, "level": level})
+        genre = _reduce_compound_genre(r.genre or None)
+        out.append({"genre": genre, "confidence": conf, "level": level})
     return out, matched
 
 

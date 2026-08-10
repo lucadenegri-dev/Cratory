@@ -542,6 +542,75 @@ def test_review_genres_prompt_requires_one_item_per_track_always_search_mode(
     assert "un elemento per" in text
 
 
+def test_review_genres_compound_genre_reduced_to_first_component(monkeypatch):
+    """Caso reale osservato dal vivo (Djrum - Waxcap): il modello restituisce
+    la stringa composita di Beatport copiata pari pari invece di scegliere un
+    solo genere, nonostante il prompt lo richieda esplicitamente. Il primo
+    componente ('Breaks') va tenuto: è la scelta più specifica secondo la
+    convenzione già in uso in DiscogsMetaClient.lookup (styles[0])."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="Djrum - Waxcap",
+                         genre="Breaks / Breakbeat / UK Bass",
+                         confidence="high", level="track")])
+    out = ai_tags.review_genres(
+        [{"artist": "Djrum", "title": "Waxcap", "album": None, "label": None,
+          "current_genre": None, "candidates": []}])
+    assert out == [{"genre": "Breaks", "confidence": "high", "level": "track"}]
+
+
+def test_review_genres_comma_separated_list_reduced_to_first_component(monkeypatch):
+    """Stesso difetto ma con separatore virgola (es. genere Discogs multi-style
+    incollato pari pari): tenuto il primo componente."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Techno, House, Acid",
+                         confidence="high")])
+    out = ai_tags.review_genres([{"artist": "A", "title": "B", "album": None,
+                                  "label": None, "current_genre": None,
+                                  "candidates": []}])
+    assert out == [{"genre": "Techno", "confidence": "high", "level": None}]
+
+
+def test_review_genres_legitimate_ampersand_and_hyphen_genres_untouched(
+        monkeypatch):
+    """La rete di sicurezza deve intervenire SOLO sui separatori di elenco
+    (virgola, barra, punto e virgola, trattino verticale), non su qualunque
+    punteggiatura: generi legittimi come 'Drum & Bass', 'Tech House' e
+    'Hi-NRG' non contengono liste e devono passare identici, senza essere
+    troncati alla prima parola/componente per errore."""
+    captured = {}
+    genres = ["Drum & Bass", "Tech House", "Hi-NRG"]
+    for g in genres:
+        captured.clear()
+        _install_fake_anthropic(
+            monkeypatch, captured,
+            [ai_tags._Review(index=0, title="B", genre=g, confidence="high")])
+        out = ai_tags.review_genres(
+            [{"artist": "A", "title": "B", "album": None, "label": None,
+              "current_genre": None, "candidates": []}])
+        assert out == [{"genre": g, "confidence": "high", "level": None}], g
+
+
+def test_review_genres_prompt_forbids_list_separators(monkeypatch):
+    """Il prompt deve prevenire il difetto a monte, non solo la rete di
+    sicurezza nel codice: istruzione esplicita a scegliere il genere singolo
+    più specifico quando la fonte riporta una lista/tag composto, con
+    l'esempio reale osservato ('Breaks / Breakbeat / UK Bass')."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="high")])
+    ai_tags.review_genres(
+        [{"artist": "A", "title": "B", "album": None, "label": None,
+          "current_genre": None, "candidates": []}])
+    text = captured["messages"][0]["content"]
+    assert "Breaks / Breakbeat / UK Bass" in text
+    assert "separator" in text.lower()
+
+
 def test_review_genres_no_title_on_item_skips_guard(monkeypatch):
     """Se la traccia non ha titolo (None), la guardia viene saltata e ci si
     affida solo all'indice."""
