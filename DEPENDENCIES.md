@@ -82,7 +82,7 @@ pipeline keeps working (clean degradation). Configured via `backend/.env`
 
 | Provider              | Env var / requirement            | Key required? | Used for |
 |-----------------------|----------------------------------|---------------|----------|
-| **Anthropic (Claude Haiku)** | `ANTHROPIC_API_KEY` (no `DJORG_` prefix) | Yes, for AI actions | "Resolve with AI" (artist/title) and "Suggest genre". |
+| **Anthropic (Claude Haiku)** | `ANTHROPIC_API_KEY` (no `DJORG_` prefix) | Yes, for AI actions | "Resolve with AI" (artist/title) and the genre review job (`services/genre_review.py`). |
 | **MusicBrainz**       | `DJORG_MUSICBRAINZ_USER_AGENT`   | No key, but needs an identifiable User-Agent (real contact email/URL) | Textual metadata + MBID resolution. |
 | **Discogs**           | `DJORG_DISCOGS_TOKEN`            | Optional (works at ~25 req/min without, ~60 req/min with a free token) | Fills missing label/style/year. |
 | **AcoustID**          | `DJORG_ACOUSTID_API_KEY` **+** `fpcalc` binary | Yes (key + binary) for fingerprinting | Acoustic fingerprint → certain `AudioFile.mbid`; enables fingerprint-first provider lookup. |
@@ -92,6 +92,16 @@ Getting keys:
 - Anthropic: <https://console.anthropic.com/> → API Keys
 - Discogs token: <https://www.discogs.com/settings/developers>
 - AcoustID key: <https://acoustid.org/new-application> (and `brew install chromaprint` for `fpcalc`)
+
+### Anthropic web search (variable cost)
+
+The genre review job (`services/genre_review.py`, `services/ai_tags.py:review_genres`)
+calls Claude Haiku with the `web_search_20250305` server tool enabled (up to 3
+searches per batch) to resolve doubtful genres. This is the app's only
+variable-cost dependency: web search is billed separately from token usage and
+must be enabled for the organization in the Anthropic Console before the job
+can use it. Without it enabled the tool call simply returns no results — the
+job still runs, it just falls back to the provider candidates alone.
 
 ## Cross-cutting env vars
 
