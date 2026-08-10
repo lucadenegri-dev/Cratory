@@ -37,10 +37,14 @@ class _MB:
 
 
 class _DG:
+    """Discogs finto: risponde con candidati fissi (o None), registra le chiamate
+    (serve a verificare che venga interrogato solo come gap-fill, Finding 5)."""
     def __init__(self, result=None):
         self.result = result
+        self.calls = []
 
     def lookup(self, **kw):
+        self.calls.append(kw)
         return self.result
 
 
@@ -166,8 +170,12 @@ def test_review_respects_user_decision_on_genre_review(db):
 
 
 def test_review_ai_failure_counts_unresolved_and_continues(db):
-    _file(db, 1, artist="A", title="T")
-    _file(db, 2, artist="B", title="U")
+    # Finding 4: un batch il cui ai_fn solleva non deve marcare
+    # genre_reviewed_at sui suoi file — restano candidati per la passata
+    # successiva invece di risultare "revisionati senza proposte" (chiave
+    # invalida/quota esaurita/server tool disabilitato sono transitori).
+    f1 = _file(db, 1, artist="A", title="T")
+    f2 = _file(db, 2, artist="B", title="U")
 
     def boom(items):
         raise RuntimeError("api down")
@@ -175,9 +183,13 @@ def test_review_ai_failure_counts_unresolved_and_continues(db):
     res = genre_review.review(db, mb=_MB(None), discogs=_DG(None), ai_fn=boom)
     assert res["unresolved"] == 2
     assert res["files"] == 2
+    assert f1.genre_reviewed_at is None
+    assert f2.genre_reviewed_at is None
 
 
 def test_review_candidates_merged_normalized_deduped(db):
+    # MB vuoto → Discogs fa gap-fill: i suoi candidati arrivano comunque,
+    # normalizzati e deduplicati.
     _file(db, 1, artist="A", title="T")
     captured = {}
 
@@ -187,12 +199,45 @@ def test_review_candidates_merged_normalized_deduped(db):
 
     genre_review.review(
         db,
+        mb=_MB(None),
+        discogs=_DG({"genre_candidates": ["Tech House", "tech house", "Electronic"]}),
+        ai_fn=fn)
+    assert captured["items"][0]["candidates"] == ["Tech House", "Electronic"]
+
+
+def test_review_candidates_skip_discogs_when_mb_has_candidates(db):
+    """Finding 5: Discogs si interroga solo come gap-fill. Se MusicBrainz ha
+    già dato candidati, il finto Discogs non deve essere chiamato — senza
+    token il suo limite è ~25 richieste/minuto, interrogarlo sempre sprecherebbe
+    la maggior parte delle chiamate in 429."""
+    _file(db, 1, artist="A", title="T")
+    captured = {}
+    dg = _DG({"genre_candidates": ["Electronic"]})
+
+    def fn(items):
+        captured["items"] = items
+        return [{"genre": None, "confidence": "low"}]
+
+    genre_review.review(
+        db,
         mb=_MB({"genre_candidates": ["tech house", "techno"],
                 "genre_primary": "tech house"}),
-        discogs=_DG({"genre_candidates": ["Tech House", "Electronic"]}),
-        ai_fn=fn)
-    assert captured["items"][0]["candidates"] == \
-        ["Tech House", "Techno", "Electronic"]
+        discogs=dg, ai_fn=fn)
+    assert dg.calls == []
+    assert captured["items"][0]["candidates"] == ["Tech House", "Techno"]
+
+
+def test_review_candidates_calls_discogs_when_mb_empty(db):
+    """Finding 5, gemello: quando MusicBrainz non produce nulla, Discogs viene
+    interrogato (gap-fill)."""
+    _file(db, 1, artist="A", title="T")
+    dg = _DG({"genre_candidates": ["Electronic"]})
+
+    def fn(items):
+        return [{"genre": None, "confidence": "low"}]
+
+    genre_review.review(db, mb=_MB(None), discogs=dg, ai_fn=fn)
+    assert len(dg.calls) == 1
 
 
 def test_review_progress_phases(db):
@@ -251,6 +296,33 @@ def test_review_fills_missing_metadata_keeps_dismissed_genre_review(db):
     assert set(issues) == {"genre_review", "missing_metadata"}
     assert issues["genre_review"].status == "dismissed"  # decisione utente intoccata
     assert issues["missing_metadata"].suggested_fix_json["to"] == "Dub Techno"
+
+
+def test_review_drops_stale_genre_review_when_other_open_issue_on_field(db):
+    """Finding 6: copre il terzo call site di _drop_stale_review_row (ramo
+    'un'altra issue aperta sul campo', diverso da fillable/confirmed). Un file
+    con una genre_review aperta *e* una provider_override aperta sul campo
+    genre: dopo review() la genre_review stantia sparisce, la
+    provider_override resta intatta (provider > AI, mai sovrascritta)."""
+    _file(db, 1, artist="A", title="T", genre="House")
+    override_fix = {"field": "genre", "action": "retag", "to": "Techno",
+                    "source": "provider", "confidence": "strong"}
+    db.add(Issue(file_id=1, type="provider_override", field="genre",
+                 severity="info", detail="provider: genre → Techno",
+                 suggested_fix_json=override_fix, status="open"))
+    db.add(Issue(file_id=1, type="genre_review", field="genre", severity="info",
+                 detail="vecchia proposta AI", status="open",
+                 suggested_fix_json={"field": "genre", "action": "retag",
+                                     "to": "Minimal", "source": "ai"}))
+    db.commit()
+    res = genre_review.review(
+        db, mb=_MB(None), discogs=_DG(None),
+        ai_fn=_ai_returning({"genre": "Minimal", "confidence": "low"}))
+    assert res["skipped"] == 1
+    (issue,) = _issues(db, 1)  # la genre_review stantia è sparita
+    assert issue.type == "provider_override"
+    assert issue.suggested_fix_json == override_fix  # intatta
+    assert issue.status == "open"
 
 
 def test_review_batches_respect_batch_size(db):

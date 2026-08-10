@@ -36,7 +36,12 @@ def count_candidates(db: Session, *, folder: str | None = None,
 
 def _provider_candidates(f: AudioFile, *, mb, discogs) -> list[str]:
     """Candidati genere dai provider, normalizzati e deduplicati (ordine: MB
-    per popolarità, poi Discogs). Gli errori/None dei provider sono tollerati."""
+    per popolarità, poi Discogs). Discogs si interroga SOLO come gap-fill,
+    quando MusicBrainz non ha prodotto candidati (stesso pattern di
+    text_providers.resolve): senza token il suo limite è ~25 richieste/minuto,
+    interrogarlo sempre su migliaia di file sprecherebbe un'ora di HTTP in 429
+    sopra al già lento MusicBrainz (1 req/s). Gli errori/None dei provider
+    sono tollerati."""
     raw: list[str] = []
     mb_res = mb.lookup(title=f.title, artist=f.artist,
                        isrc=(f.isrc.strip() or None) if f.isrc else None,
@@ -45,10 +50,10 @@ def _provider_candidates(f: AudioFile, *, mb, discogs) -> list[str]:
         raw += mb_res.get("genre_candidates") or []
         if mb_res.get("genre_primary"):
             raw.append(mb_res["genre_primary"])
-    dg_res = discogs.lookup(artist=f.artist, title=f.title) \
-        if discogs is not None else None
-    if dg_res:
-        raw += dg_res.get("genre_candidates") or []
+    if not raw and discogs is not None:
+        dg_res = discogs.lookup(artist=f.artist, title=f.title)
+        if dg_res:
+            raw += dg_res.get("genre_candidates") or []
     out: list[str] = []
     for g in raw:
         n = normalize_genre(g)
@@ -119,7 +124,10 @@ def review(db: Session, *, mb, discogs, ai_fn, folder: str | None = None,
            batch_size: int = _BATCH, on_progress=None) -> dict:
     """Loop principale: batch di file → lookup provider → una chiamata AI →
     applicazione esiti + commit. Un batch AI fallito conta come unresolved e il
-    job prosegue col successivo."""
+    job prosegue col successivo, ma NON marca genre_reviewed_at sui suoi file:
+    restano candidati per la passata successiva (chiave invalida, quota
+    esaurita, server tool disabilitato sono transitori, non un "revisionato
+    senza proposte")."""
     files = db.scalars(_candidates_stmt(folder, genre, redo)).all()
     total = len(files)
     res = {"configured": True, "files": total, "proposed": 0, "confirmed": 0,
@@ -140,11 +148,16 @@ def review(db: Session, *, mb, discogs, ai_fn, folder: str | None = None,
             on_progress(done, total, "reviewing")
         try:
             results = ai_fn(items)
+            ai_failed = False
         except Exception:  # noqa: BLE001 — un batch fallito non ferma il job
             results = [None] * len(batch)
+            ai_failed = True
         for f, proposal in zip(batch, results):
             res[_apply_proposal(db, f, proposal or {})] += 1
-            f.genre_reviewed_at = utcnow()
+            if not ai_failed:
+                # Un batch fallito lascia i suoi file non marcati: la passata
+                # successiva li riprende invece di darli per "revisionati".
+                f.genre_reviewed_at = utcnow()
         done += len(batch)
         db.commit()
         if on_progress is not None:
