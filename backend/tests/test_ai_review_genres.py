@@ -34,6 +34,32 @@ def _install_fake_anthropic(monkeypatch, captured, items_out):
     monkeypatch.setitem(sys.modules, "anthropic", mod)
 
 
+def _install_fake_anthropic_sequence(monkeypatch, captured_calls, items_out_sequence):
+    """Variante di _install_fake_anthropic che ritorna una risposta DIVERSA a
+    ogni chiamata successiva (una per elemento di `items_out_sequence`, nello
+    stesso ordine) — serve a testare il ritentativo di review_genres, dove il
+    primo e il secondo tentativo devono poter avere esiti diversi.
+    `captured_calls` è una lista: vi si accumulano i kwargs di OGNI chiamata,
+    così il test può verificare sia il contenuto sia il NUMERO di chiamate
+    effettuate."""
+    state = {"n": 0}
+
+    class _FakeMessages:
+        def parse(self, **kwargs):
+            captured_calls.append(kwargs)
+            i = state["n"]
+            state["n"] += 1
+            return _FakeResp(items_out_sequence[i])
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            self.messages = _FakeMessages()
+
+    mod = types.ModuleType("anthropic")
+    mod.Anthropic = _FakeClient
+    monkeypatch.setitem(sys.modules, "anthropic", mod)
+
+
 def test_review_genres_empty_input_no_call():
     assert ai_tags.review_genres([]) == []
 
@@ -400,6 +426,120 @@ def test_review_genres_default_mode_has_no_always_search_instruction(monkeypatch
           "current_genre": None, "candidates": []}])
     text = captured["messages"][0]["content"]
     assert "DEVI cercare" not in text
+
+
+def test_review_genres_retries_once_on_empty_items_then_succeeds(monkeypatch):
+    """Giro 3 osservato dal vivo: al primo tentativo parsed_output.items è
+    una lista VUOTA (zero risposte su 3 tracce, zero ricerche eseguite) —
+    ben sotto la soglia della guardia esistente. review_genres deve
+    ritentare la STESSA richiesta una volta sola; se il secondo tentativo è
+    valido, il batch va a buon fine (nessuna eccezione) e le tracce non
+    tornano indietro senza motivo."""
+    calls = []
+    items = [
+        {"artist": "Djrum", "title": "Waxcap", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+        {"artist": "B", "title": "Second", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+        {"artist": "C", "title": "Third", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+    ]
+    _install_fake_anthropic_sequence(monkeypatch, calls, [
+        [],  # tentativo 1: lista vuota, il caso osservato dal vivo
+        [ai_tags._Review(index=0, title="Djrum - Waxcap", genre="Breaks",
+                         confidence="high", level="track"),
+         ai_tags._Review(index=1, title="Second", genre="House",
+                         confidence="high"),
+         ai_tags._Review(index=2, title="Third", genre="Techno",
+                         confidence="high")],
+    ])
+    out = ai_tags.review_genres(items)
+    assert len(calls) == 2
+    assert out == [{"genre": "Breaks", "confidence": "high", "level": "track"},
+                   {"genre": "House", "confidence": "high", "level": None},
+                   {"genre": "Techno", "confidence": "high", "level": None}]
+
+
+def test_review_genres_retries_once_then_raises_if_still_empty(monkeypatch):
+    """Se anche il secondo tentativo è vuoto/troppo corto, review_genres
+    solleva AiReviewError come oggi — ma con ESATTAMENTE due chiamate
+    all'API: un solo ritentativo, non un ciclo."""
+    calls = []
+    items = [
+        {"artist": "A", "title": "First", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+        {"artist": "B", "title": "Second", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+        {"artist": "C", "title": "Third", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+    ]
+    _install_fake_anthropic_sequence(monkeypatch, calls, [[], []])
+    with pytest.raises(ai_tags.AiReviewError):
+        ai_tags.review_genres(items)
+    assert len(calls) == 2
+
+
+def test_review_genres_all_null_genre_is_valid_no_retry(monkeypatch):
+    """Giro 2 osservato dal vivo: tutti gli elementi presenti e allineati
+    per indice/titolo (passano la guardia), ma con genre=None su tutti —
+    un'astensione motivata ('non so'), non un fallimento. Non deve scattare
+    alcun ritentativo: una sola chiamata, output con tutti i generi a
+    null."""
+    calls = []
+    items = [
+        {"artist": "Djrum", "title": "Waxcap", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+        {"artist": "B", "title": "Second", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+        {"artist": "C", "title": "Third", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+    ]
+    _install_fake_anthropic_sequence(monkeypatch, calls, [
+        [ai_tags._Review(index=0, title="Djrum - Waxcap", genre=None,
+                         confidence="low"),
+         ai_tags._Review(index=1, title="Second", genre=None,
+                         confidence="low"),
+         ai_tags._Review(index=2, title="Third", genre=None,
+                         confidence="low")],
+    ])
+    out = ai_tags.review_genres(items)
+    assert len(calls) == 1
+    assert out == [{"genre": None, "confidence": "low", "level": None},
+                   {"genre": None, "confidence": "low", "level": None},
+                   {"genre": None, "confidence": "low", "level": None}]
+
+
+def test_review_genres_prompt_requires_one_item_per_track_default_mode(monkeypatch):
+    """Il prompt deve pretendere esplicitamente un elemento per traccia
+    (anche in modalità non always_search), altrimenti una lista vuota o
+    incompleta non viene riconosciuta dal modello come risposta invalida."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="high")])
+    ai_tags.review_genres(
+        [{"artist": "A", "title": "B", "album": None, "label": None,
+          "current_genre": None, "candidates": []}])
+    text = captured["messages"][0]["content"].lower()
+    assert "un elemento per" in text
+
+
+def test_review_genres_prompt_requires_one_item_per_track_always_search_mode(
+        monkeypatch):
+    """Stesso requisito, ma in modalità always_search: qui il prompt include
+    anche 'preferisci null se la ricerca non basta', che potrebbe essere
+    letto come autorizzazione a omettere l'elemento — il requisito di un
+    elemento per traccia deve valere comunque."""
+    captured = {}
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="high")])
+    ai_tags.review_genres(
+        [{"artist": "A", "title": "B", "album": None, "label": None,
+          "current_genre": None, "candidates": []}],
+        always_search=True)
+    text = captured["messages"][0]["content"].lower()
+    assert "un elemento per" in text
 
 
 def test_review_genres_no_title_on_item_skips_guard(monkeypatch):

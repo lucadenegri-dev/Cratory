@@ -2,9 +2,12 @@
 modulo si carica senza il pacchetto `anthropic`; solo suggest() lo richiede.
 Mockabile nei test (monkeypatch su ai_tags.suggest)."""
 
+import logging
 import os
 
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 _MODEL = "claude-haiku-4-5"
 _CHUNK = 80
@@ -88,7 +91,12 @@ _REVIEW_PROMPT = (
     "se ti sei basato solo sulla reputazione generale dell'artista. Imposta "
     "confidence='high' se sei sicuro, "
     "'low' se incerto. Se non riesci a determinare il genere metti genre a "
-    "null; non inventare valori spazzatura."
+    "null; non inventare valori spazzatura. REQUISITO SULLA FORMA DELLA "
+    "RISPOSTA: la risposta deve contenere ESATTAMENTE un elemento per "
+    "ciascuna delle tracce numerate qui sotto, anche quando decidi di "
+    "lasciare genre a null — in quel caso l'elemento va comunque incluso, "
+    "non omesso. Una lista vuota, o con meno elementi delle tracce elencate, "
+    "non è una risposta valida."
 )
 
 
@@ -104,7 +112,11 @@ _ALWAYS_SEARCH_INSTRUCTION = (
     "evidenza documentata da cui partire. DEVI cercare sul web prima di "
     "rispondere, non affidarti alla sola memoria/reputazione dell'artista. "
     "Se la ricerca non produce nulla di solido, è preferibile mettere "
-    "genre a null piuttosto che indovinare dal nome dell'artista."
+    "genre a null piuttosto che indovinare dal nome dell'artista. Attenzione: "
+    "'genere non determinato' e 'traccia omessa dalla risposta' sono due "
+    "cose diverse, e solo la prima è accettabile — anche quando la ricerca "
+    "non porta a nulla di solido, l'elemento per quella traccia va comunque "
+    "incluso nella risposta, con genre a null."
 )
 
 
@@ -182,58 +194,15 @@ class AiReviewError(Exception):
     marcare i file come revisionati."""
 
 
-def review_genres(items: list[dict], *, max_web_searches: int = 3,
-                  always_search: bool = False) -> list[dict]:
-    """Rivede il genere di un batch di tracce con contesto provider e web search.
-    items: [{'artist','title','album','label','current_genre','candidates'}];
-    ritorna [{'genre': str|None, 'confidence': 'high'|'low',
-    'level': 'track'|'release'|'artist'|None}] allineato per indice.
-
-    max_web_searches: tetto di ricerche web per QUESTA chiamata (finisce in
-    max_uses del tool); a 0 il tool web_search non viene passato affatto
-    (nessuna ricerca possibile), invece di essere passato con un tetto zero.
-    always_search: se True, il prompt include l'istruzione aggiuntiva che
-    impone di cercare (batch di tracce senza candidati dai provider); il
-    default preserva il comportamento preesistente (autorizzata ma non
-    imposta, tetto 3) per chi chiama la funzione senza questi parametri."""
-    if not items:
-        return []
-    from anthropic import Anthropic  # import lazy
-
-    client = Anthropic()
-    lines = []
-    for j, it in enumerate(items):
-        parts = [f"{it.get('artist') or '?'} - {it.get('title') or '?'}"]
-        if it.get("album"):
-            parts.append(f"album: {it['album']}")
-        if it.get("label"):
-            parts.append(f"label: {it['label']}")
-        if it.get("current_genre"):
-            parts.append(f"genere attuale: {it['current_genre']}")
-        if it.get("candidates"):
-            parts.append("candidati provider: " + "; ".join(it["candidates"]))
-        lines.append(f"{j}. " + " | ".join(parts))
-    prompt = _build_review_prompt(always_search=always_search)
-    kwargs: dict = dict(
-        model=_MODEL,
-        max_tokens=4096,
-        messages=[{"role": "user",
-                   "content": f"{prompt}\n\n" + "\n".join(lines)}],
-        output_format=_Reviews,
-    )
-    if max_web_searches > 0:
-        kwargs["tools"] = [{"type": "web_search_20250305", "name": "web_search",
-                            "max_uses": max_web_searches}]
-    resp = client.messages.parse(**kwargs)
-    if resp.parsed_output is None:
-        # Nessun output strutturato per l'intero batch (parsing fallito o
-        # turno esaurito in ricerca web): diverso da una risposta valida ma
-        # più corta, che viene invece completata item per item più sotto.
-        raise AiReviewError(
-            "review_genres: nessun output strutturato ricevuto dal modello "
-            "(parsing fallito o turno consumato dalla ricerca web)")
-    parsed = resp.parsed_output.items
-
+def _match_reviews_to_items(parsed: list["_Review"],
+                             items: list[dict]) -> tuple[list[dict], int]:
+    """Abbina le risposte del modello (`parsed`, l'`items` di UN tentativo di
+    `_Reviews`) alle tracce del batch, per indice con guardia sul titolo
+    riecheggiato. Ritorna (output allineato per indice — 'genre'/'confidence'/
+    'level' per ogni traccia, unresolved dove non c'è risposta valida —,
+    numero di tracce abbinate con successo). Non solleva: la decisione se il
+    risultato è sufficiente spetta al chiamante (review_genres), che la usa
+    sia per decidere il ritentativo sia per la guardia finale."""
     # Abbinamento per indice, non per posizione: niente lega una risposta
     # alla sua domanda se non l'index/title riecheggiati dal modello, quindi
     # costruiamo una mappa index -> risposta invece di fidarci dell'ordine in
@@ -274,19 +243,120 @@ def review_genres(items: list[dict], *, max_web_searches: int = 3,
             # modello.
             conf = "low"
         out.append({"genre": r.genre or None, "confidence": conf, "level": level})
+    return out, matched
 
-    if matched * 2 < len(items):
-        # Meno della metà delle risposte ha superato la guardia indice/titolo:
-        # non è un caso di poche tracce genuinamente incerte, è il sintomo di
-        # un batch sistematicamente disallineato (slittamento posizionale).
-        # Solleviamo invece di restituire degli unresolved silenziosi: il
-        # chiamante (genre_review.review) tratta un'eccezione come batch
-        # fallito e NON marca i file come revisionati, così vengono
-        # ripassati alla prossima passata invece di perdere il lavoro.
+
+# Tetto di tentativi per un batch: la prima chiamata più UN solo ritentativo
+# quando la risposta è vuota/troppo corta, non un ciclo (vedi motivazione nel
+# corpo di review_genres).
+_MAX_REVIEW_ATTEMPTS = 2
+
+
+def review_genres(items: list[dict], *, max_web_searches: int = 3,
+                  always_search: bool = False) -> list[dict]:
+    """Rivede il genere di un batch di tracce con contesto provider e web search.
+    items: [{'artist','title','album','label','current_genre','candidates'}];
+    ritorna [{'genre': str|None, 'confidence': 'high'|'low',
+    'level': 'track'|'release'|'artist'|None}] allineato per indice.
+
+    max_web_searches: tetto di ricerche web per QUESTA chiamata (finisce in
+    max_uses del tool); a 0 il tool web_search non viene passato affatto
+    (nessuna ricerca possibile), invece di essere passato con un tetto zero.
+    always_search: se True, il prompt include l'istruzione aggiuntiva che
+    impone di cercare (batch di tracce senza candidati dai provider); il
+    default preserva il comportamento preesistente (autorizzata ma non
+    imposta, tetto 3) per chi chiama la funzione senza questi parametri.
+
+    Se la risposta del modello è vuota o troppo corta per essere credibile
+    (vedi soglia sotto), la richiesta viene ritentata UNA sola volta prima di
+    sollevare: osservato dal vivo che lo stesso batch, a distanza di
+    chiamate identiche, può tornare con 0 elementi invece dei 3 attesi (zero
+    ricerche eseguite) pur avendo risposto correttamente al giro precedente
+    e a quello successivo — un problema di quella singola risposta, non del
+    batch. Il ritentativo non ha un costo aggiuntivo netto: un batch scartato
+    viene comunque ripassato alla prossima passata di revisione (stesso
+    lavoro, rifatto più tardi), ma ritentando subito lo si completa ORA
+    invece di rimandarlo, così le tracce non restano indietro."""
+    if not items:
+        return []
+    from anthropic import Anthropic  # import lazy
+
+    client = Anthropic()
+    lines = []
+    for j, it in enumerate(items):
+        parts = [f"{it.get('artist') or '?'} - {it.get('title') or '?'}"]
+        if it.get("album"):
+            parts.append(f"album: {it['album']}")
+        if it.get("label"):
+            parts.append(f"label: {it['label']}")
+        if it.get("current_genre"):
+            parts.append(f"genere attuale: {it['current_genre']}")
+        if it.get("candidates"):
+            parts.append("candidati provider: " + "; ".join(it["candidates"]))
+        lines.append(f"{j}. " + " | ".join(parts))
+    prompt = _build_review_prompt(always_search=always_search)
+    kwargs: dict = dict(
+        model=_MODEL,
+        max_tokens=4096,
+        messages=[{"role": "user",
+                   "content": f"{prompt}\n\n" + "\n".join(lines)}],
+        output_format=_Reviews,
+    )
+    if max_web_searches > 0:
+        kwargs["tools"] = [{"type": "web_search_20250305", "name": "web_search",
+                            "max_uses": max_web_searches}]
+
+    for attempt in range(1, _MAX_REVIEW_ATTEMPTS + 1):
+        resp = client.messages.parse(**kwargs)
+        if resp.parsed_output is None:
+            # Nessun output strutturato per l'intero batch (parsing fallito o
+            # turno esaurito in ricerca web): caso distinto dalla lista
+            # `items` vuota/corta gestita sotto (qui non c'è proprio una
+            # risposta da valutare). Non ritentiamo: comportamento
+            # preesistente invariato.
+            raise AiReviewError(
+                "review_genres: nessun output strutturato ricevuto dal modello "
+                "(parsing fallito o turno consumato dalla ricerca web)")
+        out, matched = _match_reviews_to_items(resp.parsed_output.items, items)
+
+        # Soglia: meno della metà delle risposte ha superato la guardia
+        # indice/titolo. È la STESSA soglia usata sotto per decidere se
+        # arrendersi (vedi commento sulla guardia finale) — qui la applichiamo
+        # anche per decidere se vale la pena ritentare, perché il caso
+        # osservato dal vivo (items vuota) è semplicemente il punto più
+        # estremo di questa stessa condizione: matched=0 non può che stare
+        # sotto la metà. Un'astensione motivata (item presenti e allineati
+        # ma genre=None) NON tocca questa soglia: `matched` conta le tracce
+        # abbinate per indice/titolo, non quelle con un genere trovato, quindi
+        # "non so" resta una risposta valida e non fa scattare il
+        # ritentativo.
+        if matched * 2 >= len(items):
+            return out
+
+        if attempt < _MAX_REVIEW_ATTEMPTS:
+            logger.warning(
+                "review_genres: risposta insufficiente al tentativo %d/%d "
+                "(%d/%d tracce abbinate) — ritento la stessa richiesta",
+                attempt, _MAX_REVIEW_ATTEMPTS, matched, len(items))
+            continue
+
+        logger.warning(
+            "review_genres: risposta insufficiente anche al tentativo %d/%d "
+            "(%d/%d tracce abbinate) — abbandono il batch",
+            attempt, _MAX_REVIEW_ATTEMPTS, matched, len(items))
+        # Meno della metà delle risposte ha superato la guardia indice/titolo,
+        # anche dopo un ritentativo: non è un caso di poche tracce
+        # genuinamente incerte, è il sintomo di una risposta vuota/troncata o
+        # di un batch sistematicamente disallineato (slittamento
+        # posizionale). Solleviamo invece di restituire degli unresolved
+        # silenziosi: il chiamante (genre_review.review) tratta un'eccezione
+        # come batch fallito e NON marca i file come revisionati, così
+        # vengono ripassati alla prossima passata invece di perdere il
+        # lavoro.
         raise AiReviewError(
             "review_genres: meno della metà delle risposte del modello ha "
-            "superato il controllo di coerenza indice/titolo — probabile "
+            "superato il controllo di coerenza indice/titolo, anche dopo un "
+            "ritentativo — probabile risposta vuota/troncata o "
             "disallineamento del batch (slittamento posizionale); scarto "
             "l'intero batch invece di rischiare di scrivere il genere "
             "sbagliato sulla traccia sbagliata")
-    return out
