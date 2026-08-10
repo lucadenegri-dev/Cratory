@@ -119,6 +119,12 @@ class ProviderRescanBody(BaseModel):
         return v
 
 
+class GenreReviewBody(BaseModel):
+    folder: str | None = None
+    genre: str | None = None
+    redo: bool = False
+
+
 class DupMemberRead(BaseModel):
     file_id: int
     action: str

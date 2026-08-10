@@ -14,8 +14,8 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from app.db import ensure_schema  # noqa: E402
 from app.routers import (  # noqa: E402
-    analyze, apply, duplicates, files, fingerprint, history, issues, library, picker,
-    plan, providers, scan, settings, sources,
+    analyze, apply, duplicates, files, fingerprint, genre_review, history, issues,
+    library, picker, plan, providers, scan, settings, sources,
 )
 
 
@@ -50,6 +50,7 @@ app.include_router(files.router)
 app.include_router(fingerprint.router)
 app.include_router(providers.router)
 app.include_router(picker.router)
+app.include_router(genre_review.router)
 
 
 @app.get("/api/health")
