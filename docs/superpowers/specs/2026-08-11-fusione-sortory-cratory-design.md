@@ -85,7 +85,7 @@ Non si joinano. La chiave di migrazione è il **path assoluto**.
 |---|---|---|
 | D1 | Prodotto **Cratory**, Sortory diventa la sezione **Organize** | nome nuovo per l'insieme; Sortory come brand interno |
 | D2 | Modello **`Track` 1─N `AudioFile`** | collasso letterale in `tracks`; Library in `tracks` + tabella `inbox_file` a parte |
-| D3 | Repo Cratory + **subtree merge** di Sortory (storia preservata) | repo nuovo; copia senza storia |
+| D3 | Repo Cratory + **subtree merge** di Sortory (i 320 commit restano raggiungibili da `HEAD`; per la storia di un singolo file si parte dal ref `sortory/main`, non da `git log --follow`, che non attraversa i merge) | repo nuovo; copia senza storia |
 | D4 | Migro **storia sì, derivati rigenerati** | migrazione completa; solo Cratory con Sortory da zero |
 | D5 | **Uno scan solo, in due fasi** | due job concatenati; due job separati |
 | D6 | Codice Sortory sotto namespace **`app/organize/`** | appiattimento con prefissi `organize_*` |
