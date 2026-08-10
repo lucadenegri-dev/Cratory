@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, aiSuggestGenres,
+  listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, genreReviewPreview,
   providerSuggest, acceptStrongOverrides, detectRatings,
   type Issue, type ScanRoot,
 } from "@/lib/api";
@@ -15,7 +15,7 @@ import { useT } from "@/lib/i18n";
 
 export default function IssuesPage() {
   const t = useT();
-  const { scan, rescan, startRescan, integrity, startIntegrity } = useJobs();
+  const { scan, rescan, startRescan, integrity, startIntegrity, genreReviewJob, startGenreReview } = useJobs();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [roots, setRoots] = useState<ScanRoot[]>([]);
@@ -23,6 +23,8 @@ export default function IssuesPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [genreBusy, setGenreBusy] = useState(false);
+  const [genreModal, setGenreModal] = useState<{ files: number } | null>(null);
+  const genreReviewRunning = genreReviewJob.status === "running";
   const [providerBusy, setProviderBusy] = useState(false);
   const [ratingBusy, setRatingBusy] = useState(false);
   const [enrichMode, setEnrichMode] = useState<"enrich" | "maintenance">("enrich");
@@ -97,22 +99,27 @@ export default function IssuesPage() {
     }
   };
 
-  const onAiGenres = async () => {
+  const onGenreReviewClick = async () => {
     setActionError(null);
     setAiNote(null);
     setGenreBusy(true);
     try {
-      const r = await aiSuggestGenres();
-      if (!r.configured) {
-        setActionError(t.issues.aiNotConfigured);
-      } else {
-        load();
-        setAiNote(t.issues.aiGenresNote(r.suggested, r.unresolved));
-      }
+      const p = await genreReviewPreview();
+      if (!p.configured) setActionError(t.issues.aiNotConfigured);
+      else setGenreModal({ files: p.files });
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t.common.error);
     } finally {
       setGenreBusy(false);
+    }
+  };
+
+  const onGenreReviewStart = async () => {
+    setGenreModal(null);
+    try {
+      await startGenreReview({});
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : t.common.error);
     }
   };
 
@@ -215,6 +222,27 @@ export default function IssuesPage() {
     prevRescan.current = rescan.status;
   }, [rescan.status, rescan.result, rescan.error, load, t]);
 
+  // Revisione generi: nota/errore impostati durante il render sul fronte di
+  // transizione running→done/error (pattern React "storing information from
+  // previous renders", evita setState sincroni negli effetti, come per
+  // integrity poco sotto); l'effetto resta solo per ricaricare le issue.
+  const [seenGenreReview, setSeenGenreReview] = useState(genreReviewJob.status);
+  if (seenGenreReview !== genreReviewJob.status) {
+    if (seenGenreReview === "running" && genreReviewJob.status === "done" && genreReviewJob.result) {
+      const r = genreReviewJob.result;
+      setAiNote(t.issues.genreReviewNote(r.proposed, r.confirmed, r.unresolved));
+    }
+    if (seenGenreReview === "running" && genreReviewJob.status === "error") {
+      setActionError(genreReviewJob.error || t.issues.genreReviewFailed);
+    }
+    setSeenGenreReview(genreReviewJob.status);
+  }
+  const prevGenreReview = useRef(genreReviewJob.status);
+  useEffect(() => {
+    if (prevGenreReview.current === "running" && genreReviewJob.status === "done") load();
+    prevGenreReview.current = genreReviewJob.status;
+  }, [genreReviewJob.status, load]);
+
   // Controllo integrità: nota/errore impostati durante il render sul fronte di
   // transizione running→done/error (pattern React "storing information from
   // previous renders", evita setState sincroni negli effetti); l'effetto resta
@@ -282,9 +310,9 @@ export default function IssuesPage() {
     { group: "enrich", onClick: onAiSuggest, busy: aiBusy,
       label: aiBusy ? t.issues.aiBusy : t.issues.aiTagsBtn,
       desc: t.issues.enrichAiTagsDesc, tag: t.issues.enrichAi },
-    { group: "enrich", onClick: onAiGenres, busy: genreBusy,
-      label: genreBusy ? t.issues.aiBusy : t.issues.aiGenresBtn,
-      desc: t.issues.enrichAiGenresDesc, tag: t.issues.enrichAi },
+    { group: "enrich", onClick: onGenreReviewClick, busy: genreBusy || genreReviewRunning,
+      label: genreBusy || genreReviewRunning ? t.issues.aiBusy : t.issues.genreReviewBtn,
+      desc: t.issues.genreReviewDesc, tag: t.issues.enrichAi },
     { group: "enrich", onClick: onProviderSuggest, busy: providerBusy,
       label: providerBusy ? t.issues.providerImportBusy : t.issues.providerSuggestBtn,
       desc: t.issues.enrichProviderDesc, tag: t.issues.enrichProviderTag },
@@ -453,6 +481,18 @@ export default function IssuesPage() {
               {t.issues.reconsiderHint}
             </p>
           </div>
+        </Modal>
+
+        <Modal
+          open={genreModal !== null}
+          onClose={() => setGenreModal(null)}
+          title={t.issues.genreReviewBtn}
+          footer={<>
+            <Button variant="ghost" size="sm" onClick={() => setGenreModal(null)}>{t.common.cancel}</Button>
+            <Button variant="primary" size="sm" onClick={onGenreReviewStart}>{t.issues.modalStart}</Button>
+          </>}
+        >
+          <p className="text-sm text-muted">{t.issues.genreReviewConfirm(genreModal?.files ?? 0)}</p>
         </Modal>
 
         {/* barra sopra la lista: azioni di massa a sinistra, raggruppamento a destra */}
