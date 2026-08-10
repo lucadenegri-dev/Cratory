@@ -64,13 +64,19 @@ def _apply_proposal(db: Session, f: AudioFile, proposal: dict) -> str:
     review_row = db.scalar(select(Issue).where(
         Issue.file_id == f.id, Issue.type == GENRE_REVIEW_TYPE,
         Issue.field == "genre"))
+
+    def _drop_stale_review_row() -> None:
+        """Una genre_review aperta è superata quando un'altra issue gestisce
+        (o blocca) la proposta sullo stesso campo. Le decisioni utente
+        (accepted/dismissed) non si toccano mai."""
+        if review_row is not None and review_row.status == "open":
+            db.delete(review_row)
+
     if value is None:
         return "unresolved"
     current = normalize_genre(f.genre)
     if current is not None and value.lower() == current.lower():
-        # Genere confermato: una genre_review aperta non ha più ragione d'essere.
-        if review_row is not None and review_row.status == "open":
-            db.delete(review_row)
+        _drop_stale_review_row()  # genere confermato: la proposta non serve più
         return "confirmed"
 
     fix = {"field": "genre", "action": "retag", "to": value,
@@ -83,13 +89,18 @@ def _apply_proposal(db: Session, f: AudioFile, proposal: dict) -> str:
 
     fillable = next((by_type[t] for t in _FILLABLE_TYPES if t in by_type), None)
     if fillable is not None:
+        # La proposta è gestita da un'altra issue (inspector): la genre_review
+        # eventualmente aperta sullo stesso campo è superata, sia che si
+        # riesca a riempire fillable sia che si salti per priorità provider.
+        _drop_stale_review_row()
         if (fillable.suggested_fix_json or {}).get("source") == "provider":
             return "skipped"  # provider > AI, mai sovrascrivere
         fillable.suggested_fix_json = fix
         fillable.updated_at = utcnow()
         return "proposed"
     if any(r.type != GENRE_REVIEW_TYPE for r in open_rows):
-        return "skipped"  # es. provider_override aperto: niente doppioni
+        _drop_stale_review_row()  # es. provider_override aperto: idem sopra
+        return "skipped"  # niente doppioni
     if review_row is None:
         db.add(Issue(file_id=f.id, type=GENRE_REVIEW_TYPE, field="genre",
                      severity="info", detail=detail, suggested_fix_json=fix,

@@ -204,3 +204,70 @@ def test_review_progress_phases(db):
         on_progress=lambda p, t, ph: seen.append((p, t, ph)))
     assert ("looking_up" in {ph for _, _, ph in seen})
     assert seen[-1] == (1, 1, "reviewing")
+
+
+def test_review_fills_missing_metadata_and_drops_stale_open_genre_review(db):
+    """Finding 1: una genre_review aperta rimasta da una passata precedente
+    va eliminata quando una missing_metadata aperta sullo stesso campo viene
+    riempita dalla nuova proposta AI — non devono restare due issue aperte
+    sullo stesso file/campo."""
+    _file(db, 1, artist="A", title="T", genre=None)
+    db.add(Issue(file_id=1, type="genre_review", field="genre", severity="info",
+                 detail="vecchia proposta AI", status="open",
+                 suggested_fix_json={"field": "genre", "action": "retag",
+                                     "to": "Techno", "source": "ai"}))
+    db.add(Issue(file_id=1, type="missing_metadata", field="genre",
+                 severity="warning", detail="genre mancante",
+                 suggested_fix_json=None, status="open"))
+    db.commit()
+    res = genre_review.review(
+        db, mb=_MB(None), discogs=_DG(None),
+        ai_fn=_ai_returning({"genre": "Dub Techno", "confidence": "low"}))
+    assert res["proposed"] == 1
+    (issue,) = _issues(db, 1)  # la genre_review stantia è sparita
+    assert issue.type == "missing_metadata"
+    assert issue.suggested_fix_json["to"] == "Dub Techno"
+    assert issue.suggested_fix_json["source"] == "ai"
+
+
+def test_review_fills_missing_metadata_keeps_dismissed_genre_review(db):
+    """Una genre_review già decisa dall'utente (dismissed) non va mai toccata,
+    nemmeno quando esiste anche una missing_metadata aperta sullo stesso
+    campo che la proposta AI riempie."""
+    _file(db, 1, artist="A", title="T", genre=None)
+    db.add(Issue(file_id=1, type="genre_review", field="genre", severity="info",
+                 detail="AI: genre → Techno", status="dismissed",
+                 suggested_fix_json={"field": "genre", "action": "retag",
+                                     "to": "Techno", "source": "ai"}))
+    db.add(Issue(file_id=1, type="missing_metadata", field="genre",
+                 severity="warning", detail="genre mancante",
+                 suggested_fix_json=None, status="open"))
+    db.commit()
+    res = genre_review.review(
+        db, mb=_MB(None), discogs=_DG(None),
+        ai_fn=_ai_returning({"genre": "Dub Techno", "confidence": "low"}))
+    assert res["proposed"] == 1
+    issues = {i.type: i for i in _issues(db, 1)}
+    assert set(issues) == {"genre_review", "missing_metadata"}
+    assert issues["genre_review"].status == "dismissed"  # decisione utente intoccata
+    assert issues["missing_metadata"].suggested_fix_json["to"] == "Dub Techno"
+
+
+def test_review_batches_respect_batch_size(db):
+    """Finding 2: review() deve spezzare le richieste AI in slice non più
+    grandi di batch_size, chiamando ai_fn una volta per slice."""
+    for i in range(1, 6):
+        _file(db, i, artist=f"A{i}", title=f"T{i}", genre="House")
+    call_sizes = []
+
+    def fn(items):
+        call_sizes.append(len(items))
+        return [{"genre": None, "confidence": "low"} for _ in items]
+
+    res = genre_review.review(
+        db, mb=_MB(None), discogs=_DG(None), ai_fn=fn, batch_size=2)
+    assert len(call_sizes) == 3  # 2 + 2 + 1
+    assert all(n <= 2 for n in call_sizes)
+    assert sum(call_sizes) == 5
+    assert res["files"] == 5
+    assert res["unresolved"] == 5
