@@ -23,6 +23,7 @@ const ISSUE_TYPE_LABELS_EN: Record<string, string> = {
   scan_error: "Scan error",
   retag: "Tag to clean up",
   stray_rating: "Star rating",
+  genre_review: "Genre to review",
 };
 
 export const en = {
@@ -52,6 +53,7 @@ export const en = {
     apply: "Apply",
     providerLookup: "Provider lookup",
     integrity: "Integrity check",
+    genreReview: "Genre review",
   },
   nav: {
     tagline: "Organize your music",
@@ -237,8 +239,6 @@ export const en = {
     providerNotConfigured: "Configure the provider keys (MusicBrainz/Discogs) in the backend.",
     aiTagsNote: (suggested: number, unresolved: number) =>
       `${suggested} suggestions ready${unresolved > 0 ? `, ${unresolved} not derivable from the filename` : ""} — review and accept with ✓.`,
-    aiGenresNote: (suggested: number, unresolved: number) =>
-      `${suggested} genres suggested — missing + dirty (low confidence, review)${unresolved > 0 ? `, ${unresolved} not derivable` : ""} — accept with ✓.`,
     providerNote: (suggested: number, covers: number, fingerprinted: number, unresolved: number, acoustid: boolean) =>
       `${suggested} suggestions from providers${covers > 0 ? `, ${covers} covers found` : ""}${fingerprinted > 0 ? ` (${fingerprinted} via fingerprint)` : ""}${unresolved > 0 ? `, ${unresolved} not found` : ""}${acoustid ? "" : " — fingerprint off, text match only"} — review and accept with ✓.`,
     acceptHighNote: (updated: number) => `${updated} high-confidence proposals accepted → they'll go into the PLAN.`,
@@ -257,7 +257,13 @@ export const en = {
     searchPlaceholder: "search…",
     aiBusy: "AI…",
     aiTagsBtn: "Fetch Artist/Title with AI",
-    aiGenresBtn: "Fetch Genre with AI",
+    genreReviewBtn: "Review genres with AI",
+    genreReviewDesc: "Reviews every genre in the library (providers + web search) and proposes corrections.",
+    genreReviewConfirm: (files: number) =>
+      `The AI will review ${files} tracks using the providers and paid web searches (a few dollars per thousand tracks at most). Proceed?`,
+    genreReviewNote: (proposed: number, confirmed: number, unresolved: number) =>
+      `Genre review: ${proposed} change proposals, ${confirmed} confirmed${unresolved > 0 ? `, ${unresolved} unresolved` : ""} — review and accept with ✓.`,
+    genreReviewFailed: "Genre review failed",
     providerImportBusy: "importing…",
     providerSuggestBtn: "Import missing metadata from Provider",
     forceProvider: "force provider lookup",
@@ -283,7 +289,6 @@ export const en = {
     enrichTitle: "Enrich proposals",
     enrichHint: "Fill empty proposals from a source, then review and accept each with ✓.",
     enrichAiTagsDesc: "Guess Artist & Title from the filename, for files whose tags are junk or missing.",
-    enrichAiGenresDesc: "Propose a Genre where it's missing or messy. Low confidence — review before accepting.",
     enrichProviderDesc: "Match Artist, Title, Album, Year, Label and cover art from MusicBrainz / Discogs.",
     enrichAi: "Claude AI",
     enrichProviderTag: "Providers",

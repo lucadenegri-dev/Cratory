@@ -260,9 +260,6 @@ export interface AiSuggestResult {
 export function aiSuggestTags() {
   return apiSend<AiSuggestResult>("POST", "/api/issues/ai-suggest");
 }
-export function aiSuggestGenres() {
-  return apiSend<AiSuggestResult>("POST", "/api/issues/ai-suggest-genre");
-}
 
 export interface ProviderSuggestResult {
   configured: boolean;
@@ -333,6 +330,40 @@ export function providerRescanStatus() {
 }
 export function acceptStrongOverrides() {
   return apiSend<{ updated: number }>("POST", "/api/issues/provider-override/accept-strong");
+}
+
+export interface GenreReviewResult {
+  configured: boolean;
+  files: number;
+  proposed: number;
+  confirmed: number;
+  unresolved: number;
+  skipped: number;
+}
+export interface GenreReviewJobState {
+  status: "idle" | "running" | "done" | "error";
+  phase: string | null;
+  processed: number;
+  total: number;
+  result: GenreReviewResult | null;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  configured?: boolean;
+}
+export interface GenreReviewBody {
+  folder?: string | null;
+  genre?: string | null;
+  redo?: boolean;
+}
+export function genreReview(body: GenreReviewBody = {}) {
+  return apiSend<GenreReviewJobState>("POST", "/api/genre-review", body);
+}
+export function genreReviewStatus() {
+  return apiGet<GenreReviewJobState>("/api/genre-review/status");
+}
+export function genreReviewPreview() {
+  return apiGet<{ configured: boolean; files: number }>("/api/genre-review/preview");
 }
 
 export interface IntegrityResult {

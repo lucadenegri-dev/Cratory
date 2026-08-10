@@ -64,6 +64,10 @@ def ensure_schema(eng=None) -> None:
         if "integrity_detail" not in cols:
             with eng.begin() as conn:
                 conn.execute(text("ALTER TABLE audio_file ADD COLUMN integrity_detail TEXT"))
+        if "genre_reviewed_at" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE audio_file ADD COLUMN genre_reviewed_at DATETIME"))
         with eng.begin() as conn:
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS ix_audio_file_mbid ON audio_file (mbid)"

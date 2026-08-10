@@ -22,7 +22,11 @@ export function issueIsFixable(i: Issue): boolean {
 }
 
 // Override "forte" (match sicuro da provider): la ConfBadge mappa high→strong.
+// Riservato alle proposte di origine provider: le proposte AI (genre_review)
+// sono per definizione "da rivedere", mai accettabili in blocco come un match
+// sicuro — anche quando portano confidence "high" nel vocabolario dell'AI.
 export function issueIsStrong(i: Issue): boolean {
+  if (i.suggested_fix_json?.source !== "provider") return false;
   const c = i.suggested_fix_json?.confidence;
   return c === "high" || c === "strong";
 }
@@ -35,10 +39,14 @@ function SevMark({ sev }: { sev: string }) {
   return <span className="text-faint">·</span>;
 }
 
-function ConfBadge({ conf }: { conf: unknown }) {
+function ConfBadge({ conf, source }: { conf: unknown; source: unknown }) {
   const t = useT();
-  // normalizza il legacy: high->strong, text->weak
-  const g = conf === "high" ? "strong" : conf === "text" ? "weak" : conf;
+  // normalizza il legacy: high->strong, text->weak. Il badge "strong" (verde,
+  // "match sicuro da ID/tag vicini") è riservato ai provider: una proposta AI
+  // con confidence "high" non è un match verificato, quindi scende a "medium"
+  // per non far leggere come sicura un'ipotesi da rivedere.
+  const isAi = source === "ai";
+  const g = conf === "high" ? (isAi ? "medium" : "strong") : conf === "text" ? "weak" : conf;
   if (g !== "strong" && g !== "medium" && g !== "weak") return null;
   const cls =
     g === "strong" ? "border-ok text-ok"
@@ -100,6 +108,7 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
   const suggested = typeof issue.suggested_fix_json?.to === "string"
     ? (issue.suggested_fix_json.to as string) : "";
   const conf = issue.suggested_fix_json?.confidence;
+  const confSource = issue.suggested_fix_json?.source;
   const [value, setValue] = useState(suggested);
   const [busy, setBusy] = useState(false);
   const run = async (fn: () => Promise<void>) => {
@@ -159,7 +168,7 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
           </span>
         )}
       </td>
-      <td className="px-3 py-2 align-top"><ConfBadge conf={conf} /></td>
+      <td className="px-3 py-2 align-top"><ConfBadge conf={conf} source={confSource} /></td>
       <td className="whitespace-nowrap px-3 py-2 align-top text-right">
         {issue.status === "open" ? (
           <span className="flex justify-end gap-1">

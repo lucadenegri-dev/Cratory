@@ -61,6 +61,7 @@ class AudioFile(Base):
     integrity_ok: Mapped[bool | None] = mapped_column(Boolean)
     integrity_checked_hash: Mapped[str | None] = mapped_column(String)
     integrity_detail: Mapped[str | None] = mapped_column(Text)
+    genre_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_scanned_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

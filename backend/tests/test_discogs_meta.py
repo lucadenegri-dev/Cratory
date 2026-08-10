@@ -24,3 +24,13 @@ def test_lookup_returns_label_genre_year():
 def test_lookup_empty_results_returns_none():
     c = _client({"results": []})
     assert c.lookup(artist="X", title="Y") is None
+
+
+def test_lookup_exposes_genre_candidates_styles_first():
+    c = _client({"results": [
+        {"style": ["Tech House", "Minimal"], "genre": ["Electronic"],
+         "label": ["Drumcode"], "year": 2020},
+    ]})
+    out = c.lookup(artist="A", title="B")
+    assert out["genre_primary"] == "Tech House"
+    assert out["genre_candidates"] == ["Tech House", "Minimal", "Electronic"]

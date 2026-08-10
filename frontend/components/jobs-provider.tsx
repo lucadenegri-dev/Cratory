@@ -5,8 +5,9 @@ import {
   scanJobStatus, startScan as apiStartScan, applyStatus, startApply as apiStartApply,
   providerRescanStatus, providerRescan as apiProviderRescan,
   integrityStatus, integrityCheck as apiIntegrityCheck,
+  genreReviewStatus, genreReview as apiGenreReview,
   type ScanJobState, type ApplyJobState, type ProviderRescanJobState, type ProviderRescanBody,
-  type IntegrityJobState,
+  type IntegrityJobState, type GenreReviewJobState, type GenreReviewBody,
 } from "@/lib/api";
 import { EqMeter } from "./ui";
 import { useT } from "@/lib/i18n";
@@ -23,17 +24,19 @@ type JobsApi = {
   apply: ApplyJobState;
   rescan: ProviderRescanJobState;
   integrity: IntegrityJobState;
+  genreReviewJob: GenreReviewJobState;
   startScan: (rootIds?: number[]) => Promise<void>;
   startApply: () => Promise<void>;
   startRescan: (body: ProviderRescanBody) => Promise<void>;
   startIntegrity: () => Promise<IntegrityJobState>;
+  startGenreReview: (body?: GenreReviewBody) => Promise<void>;
   refresh: () => void;
 };
 
 const JobsCtx = createContext<JobsApi>({
-  scan: IDLE, apply: IDLE, rescan: IDLE, integrity: { ...IDLE, available: true },
+  scan: IDLE, apply: IDLE, rescan: IDLE, integrity: { ...IDLE, available: true }, genreReviewJob: IDLE,
   startScan: async () => {}, startApply: async () => {}, startRescan: async () => {},
-  startIntegrity: async () => ({ ...IDLE, available: true }), refresh: () => {},
+  startIntegrity: async () => ({ ...IDLE, available: true }), startGenreReview: async () => {}, refresh: () => {},
 });
 
 export function useJobs() {
@@ -51,6 +54,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [apply, setApply] = useState<ApplyJobState>(IDLE);
   const [rescan, setRescan] = useState<ProviderRescanJobState>(IDLE);
   const [integrity, setIntegrity] = useState<IntegrityJobState>({ ...IDLE, available: true });
+  const [genreReviewJob, setGenreReviewJob] = useState<GenreReviewJobState>(IDLE);
   const alive = useRef(true);
 
   const pollOnce = useCallback(async () => {
@@ -69,6 +73,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     try {
       const g = await integrityStatus();
       if (alive.current) setIntegrity(g);
+    } catch { /* backend offline */ }
+    try {
+      const gr = await genreReviewStatus();
+      if (alive.current) setGenreReviewJob(gr);
     } catch { /* backend offline */ }
   }, []);
 
@@ -91,6 +99,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     setIntegrity(g);
     return g;
   }, []);
+  const startGenreReview = useCallback(async (body: GenreReviewBody = {}) => {
+    const gr = await apiGenreReview(body);
+    setGenreReviewJob(gr);
+  }, []);
 
   // Auto-scan dopo un Apply andato a buon fine: rileva il fronte running→done
   // e riscansiona (tutte le sorgenti) solo se sono state applicate operazioni.
@@ -112,8 +124,12 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   }, [pollOnce]);
 
   const api = useMemo<JobsApi>(
-    () => ({ scan, apply, rescan, integrity, startScan, startApply, startRescan, startIntegrity, refresh }),
-    [scan, apply, rescan, integrity, startScan, startApply, startRescan, startIntegrity, refresh],
+    () => ({
+      scan, apply, rescan, integrity, genreReviewJob,
+      startScan, startApply, startRescan, startIntegrity, startGenreReview, refresh,
+    }),
+    [scan, apply, rescan, integrity, genreReviewJob,
+      startScan, startApply, startRescan, startIntegrity, startGenreReview, refresh],
   );
 
   const active: { label: string; job: ProgressJob } | null = scan.status === "running"
@@ -124,6 +140,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     ? { label: t.jobs.providerLookup, job: rescan }
     : integrity.status === "running"
     ? { label: t.jobs.integrity, job: integrity }
+    : genreReviewJob.status === "running"
+    ? { label: t.jobs.genreReview, job: genreReviewJob }
     : null;
 
   return (

@@ -52,7 +52,7 @@ def _merge_issues(db: Session, computed) -> None:
 
 
 # Issue create fuori dall'Inspector (azioni on-demand): sopravvivono al re-scan.
-_SYNTHETIC_TYPES = {"provider_override", "missing_cover", "stray_rating"}
+_SYNTHETIC_TYPES = {"provider_override", "missing_cover", "stray_rating", "genre_review"}
 
 
 def _signature(member_ids) -> str:

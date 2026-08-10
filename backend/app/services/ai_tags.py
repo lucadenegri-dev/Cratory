@@ -56,44 +56,79 @@ def suggest(filenames: list[str]) -> list[dict]:
     return out
 
 
-_GENRE_PROMPT = (
-    "Sei un assistente che assegna il GENERE musicale a tracce da DJ "
-    "(prevalentemente musica elettronica). Per ogni traccia numerata qui sotto "
-    "(formato 'Artista - Titolo') restituisci il genere principale più probabile, "
-    "UNO solo (non una lista), normalizzato con casing canonico (es. 'Tech House', "
-    "'Acid Techno', 'Drum & Bass'). Mantieni lo STESSO ordine, un elemento per "
-    "traccia. Se non sei ragionevolmente sicuro mettilo a null; non inventare "
-    "valori spazzatura (niente URL, niente 'Unbekannt', niente 'Music')."
+_REVIEW_PROMPT = (
+    "Sei un esperto di musica da DJ (prevalentemente elettronica) che verifica "
+    "il GENERE di tracce. Per ogni traccia numerata qui sotto scegli il genere "
+    "primario più accurato e specifico, UNO solo, con casing canonico (es. "
+    "'Tech House', 'Acid Techno', 'Drum & Bass'). I candidati dei provider "
+    "(MusicBrainz/Discogs) sono evidenza forte: preferiscili quando plausibili. "
+    "Usa la ricerca web SOLO quando l'evidenza disponibile non basta a decidere. "
+    "Mantieni lo STESSO ordine, un elemento per traccia. Imposta "
+    "confidence='high' se sei sicuro, 'low' se incerto. Se non riesci a "
+    "determinare il genere metti genre a null; non inventare valori spazzatura."
 )
 
 
-class _GenreGuess(BaseModel):
+class _Review(BaseModel):
     genre: str | None = None
+    confidence: str = "low"
 
 
-class _GenreGuesses(BaseModel):
-    items: list[_GenreGuess]
+class _Reviews(BaseModel):
+    items: list[_Review]
 
 
-def suggest_genres(descriptions: list[str]) -> list[str | None]:
-    """Ritorna un genere (o None) per ciascuna descrizione, allineato per indice."""
-    if not descriptions:
+class AiReviewError(Exception):
+    """Il batch non ha prodotto un output strutturato (parsing fallito, oppure
+    il turno è stato consumato interamente dalla ricerca web senza arrivare a
+    un `parsed_output`). Va distinto dal caso in cui l'AI risponde ma non sa
+    decidere un singolo item (quello resta un `genre: None` legittimo): qui
+    non abbiamo ricevuto alcuna risposta valida, quindi il chiamante
+    (genre_review.review) deve trattare l'intero batch come fallito invece di
+    marcare i file come revisionati."""
+
+
+def review_genres(items: list[dict]) -> list[dict]:
+    """Rivede il genere di un batch di tracce con contesto provider e web search.
+    items: [{'artist','title','album','label','current_genre','candidates'}];
+    ritorna [{'genre': str|None, 'confidence': 'high'|'low'}] allineato per indice."""
+    if not items:
         return []
     from anthropic import Anthropic  # import lazy
 
     client = Anthropic()
-    out: list[str | None] = []
-    for i in range(0, len(descriptions), _CHUNK):
-        chunk = descriptions[i:i + _CHUNK]
-        listing = "\n".join(f"{j}. {d}" for j, d in enumerate(chunk))
-        resp = client.messages.parse(
-            model=_MODEL,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": f"{_GENRE_PROMPT}\n\n{listing}"}],
-            output_format=_GenreGuesses,
-        )
-        items = resp.parsed_output.items if resp.parsed_output else []
-        for k in range(len(chunk)):
-            g = items[k] if k < len(items) else _GenreGuess()
-            out.append(g.genre or None)
+    lines = []
+    for j, it in enumerate(items):
+        parts = [f"{it.get('artist') or '?'} - {it.get('title') or '?'}"]
+        if it.get("album"):
+            parts.append(f"album: {it['album']}")
+        if it.get("label"):
+            parts.append(f"label: {it['label']}")
+        if it.get("current_genre"):
+            parts.append(f"genere attuale: {it['current_genre']}")
+        if it.get("candidates"):
+            parts.append("candidati provider: " + "; ".join(it["candidates"]))
+        lines.append(f"{j}. " + " | ".join(parts))
+    resp = client.messages.parse(
+        model=_MODEL,
+        max_tokens=4096,
+        tools=[{"type": "web_search_20250305", "name": "web_search",
+                "max_uses": 3}],
+        messages=[{"role": "user",
+                   "content": f"{_REVIEW_PROMPT}\n\n" + "\n".join(lines)}],
+        output_format=_Reviews,
+    )
+    if resp.parsed_output is None:
+        # Nessun output strutturato per l'intero batch (parsing fallito o
+        # turno esaurito in ricerca web): diverso da una risposta valida ma
+        # più corta, che viene invece completata item per item più sotto.
+        raise AiReviewError(
+            "review_genres: nessun output strutturato ricevuto dal modello "
+            "(parsing fallito o turno consumato dalla ricerca web)")
+    parsed = resp.parsed_output.items
+    out: list[dict] = []
+    for k in range(len(items)):
+        r = parsed[k] if k < len(parsed) else _Review()
+        conf = "high" if r.confidence == "high" else "low"
+        out.append({"genre": r.genre or None, "confidence": conf})
     return out
