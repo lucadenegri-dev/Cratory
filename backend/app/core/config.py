@@ -100,9 +100,13 @@ def setup_logging() -> None:
 
     root = logging.getLogger()
     root.setLevel(level)
-    # rimuove handler precedenti (evita duplicati col --reload di uvicorn)
+    # rimuove handler precedenti (evita duplicati col --reload di uvicorn) e li
+    # chiude: altrimenti il RotatingFileHandler resta con il file aperto e il gc
+    # emette ResourceWarning quando lo raccoglie. StreamHandler.close() non chiude
+    # lo stream sottostante (stderr resta valido), quindi e' sicuro farlo sempre.
     for handler in list(root.handlers):
         root.removeHandler(handler)
+        handler.close()
 
     console = logging.StreamHandler()
     console.setFormatter(formatter)
