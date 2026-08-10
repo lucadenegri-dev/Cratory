@@ -97,3 +97,64 @@ def suggest_genres(descriptions: list[str]) -> list[str | None]:
             g = items[k] if k < len(items) else _GenreGuess()
             out.append(g.genre or None)
     return out
+
+
+_REVIEW_PROMPT = (
+    "Sei un esperto di musica da DJ (prevalentemente elettronica) che verifica "
+    "il GENERE di tracce. Per ogni traccia numerata qui sotto scegli il genere "
+    "primario più accurato e specifico, UNO solo, con casing canonico (es. "
+    "'Tech House', 'Acid Techno', 'Drum & Bass'). I candidati dei provider "
+    "(MusicBrainz/Discogs) sono evidenza forte: preferiscili quando plausibili. "
+    "Usa la ricerca web SOLO quando l'evidenza disponibile non basta a decidere. "
+    "Mantieni lo STESSO ordine, un elemento per traccia. Imposta "
+    "confidence='high' se sei sicuro, 'low' se incerto. Se non riesci a "
+    "determinare il genere metti genre a null; non inventare valori spazzatura."
+)
+
+
+class _Review(BaseModel):
+    genre: str | None = None
+    confidence: str = "low"
+
+
+class _Reviews(BaseModel):
+    items: list[_Review]
+
+
+def review_genres(items: list[dict]) -> list[dict]:
+    """Rivede il genere di un batch di tracce con contesto provider e web search.
+    items: [{'artist','title','album','label','current_genre','candidates'}];
+    ritorna [{'genre': str|None, 'confidence': 'high'|'low'}] allineato per indice."""
+    if not items:
+        return []
+    from anthropic import Anthropic  # import lazy
+
+    client = Anthropic()
+    lines = []
+    for j, it in enumerate(items):
+        parts = [f"{it.get('artist') or '?'} - {it.get('title') or '?'}"]
+        if it.get("album"):
+            parts.append(f"album: {it['album']}")
+        if it.get("label"):
+            parts.append(f"label: {it['label']}")
+        if it.get("current_genre"):
+            parts.append(f"genere attuale: {it['current_genre']}")
+        if it.get("candidates"):
+            parts.append("candidati provider: " + "; ".join(it["candidates"]))
+        lines.append(f"{j}. " + " | ".join(parts))
+    resp = client.messages.parse(
+        model=_MODEL,
+        max_tokens=4096,
+        tools=[{"type": "web_search_20250305", "name": "web_search",
+                "max_uses": 3}],
+        messages=[{"role": "user",
+                   "content": f"{_REVIEW_PROMPT}\n\n" + "\n".join(lines)}],
+        output_format=_Reviews,
+    )
+    parsed = resp.parsed_output.items if resp.parsed_output else []
+    out: list[dict] = []
+    for k in range(len(items)):
+        r = parsed[k] if k < len(parsed) else _Review()
+        conf = "high" if r.confidence == "high" else "low"
+        out.append({"genre": r.genre or None, "confidence": conf})
+    return out
