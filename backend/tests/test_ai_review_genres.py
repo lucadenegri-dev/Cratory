@@ -1,4 +1,5 @@
-"""review_genres: formato del prompt, tool web_search, allineamento output."""
+"""review_genres: formato del prompt, tool web_search, abbinamento per indice
+(non più posizionale) con guardia sul titolo riecheggiato."""
 
 import sys
 import types
@@ -39,9 +40,12 @@ def test_review_genres_empty_input_no_call():
 
 def test_review_genres_prompt_tools_and_alignment(monkeypatch):
     captured = {}
+    # Solo la prima traccia riceve risposta (indice e titolo corretti); la
+    # seconda resta senza risposta -> unresolved (copre ancora il "padding").
     _install_fake_anthropic(
         monkeypatch, captured,
-        [ai_tags._Review(genre="Tech House", confidence="high")])
+        [ai_tags._Review(index=0, title="Hidden Beauties",
+                         genre="Tech House", confidence="high")])
     items = [{"artist": "ANNA", "title": "Hidden Beauties", "album": "EP1",
               "label": "Drumcode", "current_genre": "House",
               "candidates": ["Tech House", "Techno"]},
@@ -57,7 +61,8 @@ def test_review_genres_prompt_tools_and_alignment(monkeypatch):
     assert "ANNA - Hidden Beauties" in text
     assert "genere attuale: House" in text
     assert "Tech House; Techno" in text
-    # output allineato: il secondo item (mancante nella risposta) è None/low
+    # output allineato per indice: la seconda traccia (nessuna risposta) è
+    # None/low, non la risposta della prima
     assert out == [{"genre": "Tech House", "confidence": "high"},
                    {"genre": None, "confidence": "low"}]
 
@@ -79,8 +84,161 @@ def test_review_genres_no_parsed_output_raises(monkeypatch):
 def test_review_genres_weird_confidence_becomes_low(monkeypatch):
     captured = {}
     _install_fake_anthropic(
-        monkeypatch, captured, [ai_tags._Review(genre="Acid", confidence="boh")])
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="B", genre="Acid", confidence="boh")])
     out = ai_tags.review_genres([{"artist": "A", "title": "B", "album": None,
                                   "label": None, "current_genre": None,
                                   "candidates": []}])
     assert out == [{"genre": "Acid", "confidence": "low"}]
+
+
+def test_review_genres_shifted_titles_are_discarded_and_raise(monkeypatch):
+    """Riproduce dal vivo lo slittamento osservato: il modello risponde con
+    indici corretti (0,1,2) ma ognuno riecheggia il titolo della traccia
+    SUCCESSIVA (a rotazione) invece della propria. Nessuna risposta supera la
+    guardia titolo -> tutte scartate -> sotto soglia (metà) -> deve sollevare
+    AiReviewError invece di restituire silenziosamente 3 unresolved (che il
+    chiamante marcherebbe come "revisionati", perdendo la traccia)."""
+    captured = {}
+    items = [
+        {"artist": "Oneohtrix Point Never", "title": "Boring Angel",
+         "album": None, "label": None, "current_genre": "Ambient",
+         "candidates": ["Ambient", "Electronic", "IDM"]},
+        {"artist": "Artist B", "title": "Track Two",
+         "album": None, "label": None, "current_genre": None,
+         "candidates": []},
+        {"artist": "Artist C", "title": "Track Three",
+         "album": None, "label": None, "current_genre": None,
+         "candidates": []},
+    ]
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="Track Two", genre="Electro",
+                         confidence="high"),
+         ai_tags._Review(index=1, title="Track Three", genre="Techno",
+                         confidence="high"),
+         ai_tags._Review(index=2, title="Boring Angel", genre="Ambient",
+                         confidence="high")])
+    with pytest.raises(ai_tags.AiReviewError):
+        ai_tags.review_genres(items)
+
+
+def test_review_genres_out_of_order_indices_match_correct_track(monkeypatch):
+    """Il modello risponde fuori ordine (2, 0, 1) ma con indice e titolo
+    corretti: ogni traccia deve ricevere la SUA risposta, non quella nella
+    posizione in cui è arrivata."""
+    captured = {}
+    items = [
+        {"artist": "A", "title": "First", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+        {"artist": "B", "title": "Second", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+        {"artist": "C", "title": "Third", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+    ]
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=2, title="Third", genre="Techno",
+                         confidence="high"),
+         ai_tags._Review(index=0, title="First", genre="House",
+                         confidence="high"),
+         ai_tags._Review(index=1, title="Second", genre="Trance",
+                         confidence="low")])
+    out = ai_tags.review_genres(items)
+    assert out == [{"genre": "House", "confidence": "high"},
+                   {"genre": "Trance", "confidence": "low"},
+                   {"genre": "Techno", "confidence": "high"}]
+
+
+def test_review_genres_missing_response_for_one_item_stays_unresolved(monkeypatch):
+    """Una traccia senza risposta corrispondente diventa unresolved; le altre
+    restano corrette (non prendono la risposta di un'altra per riempire il
+    buco)."""
+    captured = {}
+    items = [
+        {"artist": "A", "title": "First", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+        {"artist": "B", "title": "Second", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+        {"artist": "C", "title": "Third", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+    ]
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="First", genre="House",
+                         confidence="high"),
+         ai_tags._Review(index=2, title="Third", genre="Techno",
+                         confidence="high")])
+    out = ai_tags.review_genres(items)
+    assert out == [{"genre": "House", "confidence": "high"},
+                   {"genre": None, "confidence": "low"},
+                   {"genre": "Techno", "confidence": "high"}]
+
+
+def test_review_genres_typographic_apostrophe_and_case_do_not_false_reject(monkeypatch):
+    """Il confronto del titolo dev'essere tollerante a maiuscole/minuscole,
+    spazi, punteggiatura e apostrofi tipografici (dati reali: 'I Don't Love Me
+    Anymore' con apostrofo curvo ’)."""
+    captured = {}
+    items = [{"artist": "A", "title": "I Don’t Love Me Anymore",
+              "album": None, "label": None, "current_genre": None,
+              "candidates": []}]
+    # Il modello riecheggia un titolo con apostrofo dritto, minuscolo e
+    # spaziatura leggermente diversa: deve comunque passare la guardia.
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="i don't love me  anymore",
+                         genre="Downtempo", confidence="high")])
+    out = ai_tags.review_genres(items)
+    assert out == [{"genre": "Downtempo", "confidence": "high"}]
+
+
+def test_review_genres_out_of_range_index_ignored(monkeypatch):
+    """Un indice fuori intervallo nella risposta viene ignorato senza
+    corrompere l'abbinamento delle altre tracce."""
+    captured = {}
+    items = [
+        {"artist": "A", "title": "First", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+        {"artist": "B", "title": "Second", "album": None, "label": None,
+         "current_genre": None, "candidates": []},
+    ]
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=5, title="Ghost", genre="Junk",
+                         confidence="high"),
+         ai_tags._Review(index=0, title="First", genre="House",
+                         confidence="high")])
+    out = ai_tags.review_genres(items)
+    assert out == [{"genre": "House", "confidence": "high"},
+                   {"genre": None, "confidence": "low"}]
+
+
+def test_review_genres_duplicate_index_keeps_first_occurrence(monkeypatch):
+    """Se il modello risponde due volte allo stesso indice, tiene la prima
+    occorrenza e non lascia che la seconda la sovrascriva silenziosamente."""
+    captured = {}
+    items = [{"artist": "A", "title": "First", "album": None, "label": None,
+              "current_genre": None, "candidates": []}]
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="First", genre="House",
+                         confidence="high"),
+         ai_tags._Review(index=0, title="First", genre="Techno",
+                         confidence="low")])
+    out = ai_tags.review_genres(items)
+    assert out == [{"genre": "House", "confidence": "high"}]
+
+
+def test_review_genres_no_title_on_item_skips_guard(monkeypatch):
+    """Se la traccia non ha titolo (None), la guardia viene saltata e ci si
+    affida solo all'indice."""
+    captured = {}
+    items = [{"artist": "A", "title": None, "album": None, "label": None,
+              "current_genre": None, "candidates": []}]
+    _install_fake_anthropic(
+        monkeypatch, captured,
+        [ai_tags._Review(index=0, title="Qualunque Cosa", genre="House",
+                         confidence="high")])
+    out = ai_tags.review_genres(items)
+    assert out == [{"genre": "House", "confidence": "high"}]
