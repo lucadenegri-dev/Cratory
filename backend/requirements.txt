@@ -21,3 +21,9 @@ defusedxml
 # e' l'ultima con wheel cp311 macosx-arm64. Licenza AGPL-3.0 (ok per uso
 # personale self-hosted, nessuna distribuzione).
 essentia==2.1b6.dev1389
+# --- Organize (ex Sortory) -------------------------------------------------
+# Fingerprint acustico AcoustID/MusicBrainz. Richiede anche il binario di
+# sistema `fpcalc` (chromaprint): senza, il provider fingerprint resta inattivo.
+pyacoustid
+# Thumbnail delle cover (proposte dai provider e embeddate nei file).
+Pillow
