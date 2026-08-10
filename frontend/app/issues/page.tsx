@@ -310,7 +310,7 @@ export default function IssuesPage() {
     { group: "enrich", onClick: onAiSuggest, busy: aiBusy,
       label: aiBusy ? t.issues.aiBusy : t.issues.aiTagsBtn,
       desc: t.issues.enrichAiTagsDesc, tag: t.issues.enrichAi },
-    { group: "enrich", onClick: onGenreReviewClick, busy: genreBusy || genreReviewRunning,
+    { group: "maintenance", onClick: onGenreReviewClick, busy: genreBusy || genreReviewRunning,
       label: genreBusy || genreReviewRunning ? t.issues.aiBusy : t.issues.genreReviewBtn,
       desc: t.issues.genreReviewDesc, tag: t.issues.enrichAi },
     { group: "enrich", onClick: onProviderSuggest, busy: providerBusy,
