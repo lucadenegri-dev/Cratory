@@ -391,7 +391,33 @@ git commit -m "feat(f2): una sola Settings, il prefisso DJORG_ sparisce (discogs
 
 **Il problema, in chiaro.** Le due suite isolavano il DB in modi diversi: Cratory con `app.dependency_overrides[get_db]` per test (l'engine di modulo non lo usava nessuno), Organize puntando l'engine di modulo a un file temporaneo via env var. Unificato l'engine, la seconda strategia si rompe — e non basta spostare l'env var in `tests/organize/conftest.py`, perché `tests/conftest.py` importa `app.db` **prima**, e a quel punto `app.core.config` ha già letto l'ambiente.
 
-La correzione va quindi nel conftest di livello superiore, e chiude anche un buco latente lato Cratory: oggi un test che si dimenticasse l'override scriverebbe sul `data/djassistant.db` **reale**.
+La correzione va quindi nel conftest di livello superiore, e chiude anche un buco latente lato Cratory: oggi un test che si dimenticasse l'override scriverebbe sul `data/djassistant.db` **reale**. Non è teorico: `DATABASE_URL=sqlite:///data/djassistant.db` è relativo e il validator lo risolve contro il `BACKEND_DIR` di chi esegue — nel checkout principale, quello vero.
+
+**Due cose in più, emerse eseguendo il Task 1.**
+
+**(a) Rimuovere lo stopgap del Task 1.** Il Task 1 ha dovuto tamponare l'isolamento sostituendo a runtime l'oggetto `engine` e riconfigurando `SessionLocal`, con una guardia di re-entrancy per il caso `from tests.organize.conftest import make_audio_file` (che rifà girare il conftest sotto un'altra identità di modulo, perché `tests/` non è un package e `tests/organize/` sì). Quel tampone esiste solo perché l'env var arrivava troppo tardi. Impostata `DATABASE_URL` nel conftest radice — cioè prima di ogni import di `app.*` — la sostituzione dell'engine e la guardia **vanno rimosse**: sono complessità che non serve più a nulla, e lasciarle significa due meccanismi di isolamento sovrapposti.
+
+**(b) Seminare le `ScanRoot` canoniche.** L'engine di Cratory imposta `PRAGMA foreign_keys=ON` a ogni connessione (`app/db.py:26`); il vecchio engine di Organize no. Unificandoli, l'enforcement delle FK si accende su 519 test scritti sotto un engine più permissivo, e **71 falliscono** con `FOREIGN KEY constraint failed`: creano un `AudioFile` con `root_id` che punta a una `ScanRoot` mai inserita (`make_audio_file` ha `root_id=1` di default).
+
+Non sistemare le 71 fixture una per una: in F3 `scan_root` sparisce insieme a `root_id`, e sarebbe lavoro da buttare. Semina invece le due radici canoniche dentro `_fresh_db`, subito dopo `create_all`:
+
+```python
+    # F2: l'engine unificato accende PRAGMA foreign_keys=ON (app/db.py), che il
+    # vecchio engine di Organize non aveva. Le fixture creano AudioFile con
+    # root_id 1/2 senza inserire la ScanRoot: qui le seminiamo una volta, così
+    # il vincolo è soddisfatto senza toccare 71 test.
+    # F3 rimuove scan_root: queste righe se ne vanno con lei.
+    from app.organize.models import ScanRoot
+
+    with SessionLocal() as seed:
+        seed.add_all([
+            ScanRoot(id=1, path="/inbox"),
+            ScanRoot(id=2, path="/library"),
+        ])
+        seed.commit()
+```
+
+I test che creano una propria `ScanRoot` con id espliciti diversi continuano a funzionare; quelli che ne creano una con id 1 o 2 vanno adattati se sbattono su un conflitto di chiave — verifica caso per caso, sono pochi.
 
 - [ ] **Step 1: Scrivere il test che fallisce**
 
@@ -500,7 +526,7 @@ Atteso: 2 passed.
 cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend && .venv/bin/python -m pytest tests -q
 ```
 
-Atteso: **tutto verde**, e in particolare azzerati i fallimenti annotati allo Step 8 del Task 1.
+Atteso: **tutto verde**, e in particolare azzerati i 71 `FOREIGN KEY constraint failed` annotati allo Step 8 del Task 1. Output pulito: il Task 1 lasciava anche 1 warning, e la suite non deve averne.
 
 Se qualche test Cratory fallisce ora e prima passava, è un test che dipendeva senza dirlo dal DB reale: **non aggirarlo puntandolo di nuovo al DB vero**. Rendilo esplicito seminando i dati che gli servono.
 
