@@ -11,7 +11,7 @@ from app.organize.services.undo import undo_run  # noqa: E402 (top del file)
 def _seed_plan(db, tmp_path, copy_fixture):
     root = tmp_path / "lib"
     f = copy_fixture("flac", root / "varie" / "x.flac")
-    # id 3: 1 e 2 sono le ScanRoot canoniche seminate da _fresh_db (F2).
+    # ScanRoot id >= 3: 1 e 2 sono le canoniche (conftest.SEEDED_SCAN_ROOT_IDS).
     db.add(ScanRoot(id=3, path=str(root)))
     db.add(AudioFile(id=1, root_id=3, path=f, ext="flac", size_bytes=10, hash_method="file",
                      status="present", has_cover=False, artist="A", title="T", genre="House"))

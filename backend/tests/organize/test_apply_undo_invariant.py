@@ -28,7 +28,7 @@ def _build(db, tmp_path, copy_fixture):
     tagio.write_tags(keep, {"artist": "PINCO", "title": "T"})   # casing da correggere
     tagio.write_tags(rem, {"artist": "A", "title": "T"})
     tagio.write_tags(plain, {"artist": "B", "title": "U"})
-    # id 3: 1 e 2 sono le ScanRoot canoniche seminate da _fresh_db (F2).
+    # ScanRoot id >= 3: 1 e 2 sono le canoniche (conftest.SEEDED_SCAN_ROOT_IDS).
     db.add(ScanRoot(id=3, path=str(root)))
     db.add(AudioFile(id=1, root_id=3, path=keep, ext="flac", size_bytes=10, hash_method="file",
                      status="present", has_cover=False, artist="PINCO", title="T", genre="House"))

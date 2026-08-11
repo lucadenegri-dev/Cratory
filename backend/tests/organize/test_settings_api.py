@@ -9,10 +9,10 @@ def test_get_settings_defaults(db):
         body = client.get("/api/organize/settings").json()
         assert body["naming_template"] == "{artist} - {title}"
         assert body["folder_template"] == "{genre}/{artist}"
-        # F2: _fresh_db semina le due ScanRoot canoniche (id 1/2), quindi "nessuna
-        # radice configurata" non è più uno stato raggiungibile nei test — verifica
-        # che siano esattamente quelle, non un elenco vuoto.
-        assert [r["path"] for r in body["roots"]] == ["/inbox", "/library"]
+        # "Nessuna radice configurata" non è raggiungibile nei test: conftest.
+        # SEEDED_SCAN_ROOT_IDS semina 1/2. Confronto su insieme, non sull'ordine
+        # (la query non garantisce un ORDER BY).
+        assert {r["path"] for r in body["roots"]} == {"/inbox", "/library"}
 
 
 def test_update_settings(db):
@@ -22,7 +22,7 @@ def test_update_settings(db):
 
 
 def test_set_root_target(db):
-    # id 3: 1 e 2 sono le ScanRoot canoniche seminate da _fresh_db (F2).
+    # ScanRoot id >= 3: 1 e 2 sono le canoniche (conftest.SEEDED_SCAN_ROOT_IDS).
     db.add(ScanRoot(id=3, path="/lib"))
     db.commit()
     with TestClient(app) as client:

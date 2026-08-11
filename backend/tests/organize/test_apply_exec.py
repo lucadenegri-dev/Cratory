@@ -20,10 +20,7 @@ def test_apply_move_and_delete_with_reorder(db, tmp_path, copy_fixture):
     db.add(ScanRoot(id=3, path=str(root)))
     _af(db, 1, keeper, title="T1")   # keeper → House/A/A - T1.flac
     _af(db, 2, dup, title="T1")      # dup rimosso, è nello slot destinazione
-    # DupGroup/DupMember non hanno una relationship() verso AudioFile: senza un
-    # flush qui, l'ordine di flush degli INSERT non è garantito e con
-    # foreign_keys=ON (engine unificato F2) può tentare l'INSERT di dup_group
-    # prima di audio_file, violando la FK su keeper_file_id.
+    # flush prima di DupGroup/DupMember: ordine FK-safe, vedi test_apply_undo_invariant.py.
     db.flush()
     db.add(DupGroup(id=1, match_kind="fuzzy", keeper_file_id=1, signature="s"))
     db.add(DupMember(group_id=1, file_id=1, action="keep"))

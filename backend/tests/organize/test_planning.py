@@ -17,8 +17,7 @@ def test_update_settings(db):
 
 
 def test_set_root_target_and_map(db):
-    # F2: _fresh_db semina anche le ScanRoot canoniche (id 1/2), quindi la mappa
-    # non è più esclusiva a questa radice: verifica solo la entry di id 3.
+    # Mappa non esclusiva: conftest.SEEDED_SCAN_ROOT_IDS semina 1/2, verifica solo id 3.
     root = ScanRoot(id=3, path="/lib")
     db.add(root)
     db.commit()

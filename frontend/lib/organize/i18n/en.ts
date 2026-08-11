@@ -465,6 +465,7 @@ export const en = {
     source_path_invalid: "The path does not exist or is not a folder.",
     source_already_present: "Root already present.",
     source_not_found: "Root not found.",
+    source_has_run_history: "This source has files referenced by an applied run or its undo history; deleting it would destroy that history.",
     target_root_not_absolute: "The destination must be an absolute path.",
     apply_running: "An apply is already running.",
     scan_running: "A scan is already running.",

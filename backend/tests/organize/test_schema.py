@@ -15,7 +15,6 @@ def test_schema_has_expected_tables_and_columns():
 def test_scan_root_roundtrip(db):
     db.add(ScanRoot(path="/music", label="Main"))
     db.commit()
-    # F2: _fresh_db semina anche le ScanRoot canoniche (id 1/2), quindi la
-    # tabella non è più a riga singola: filtra sulla radice appena creata.
+    # Non a riga singola (conftest.SEEDED_SCAN_ROOT_IDS): filtra sulla radice appena creata.
     got = db.query(ScanRoot).filter_by(path="/music").one()
     assert got.path == "/music" and got.label == "Main"

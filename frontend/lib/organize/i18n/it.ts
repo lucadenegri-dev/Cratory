@@ -460,6 +460,7 @@ export const it: Dictionary = {
     source_path_invalid: "Il path non esiste o non è una cartella.",
     source_already_present: "Radice già presente.",
     source_not_found: "Radice non trovata.",
+    source_has_run_history: "Questa sorgente ha file referenziati da una run applicata o dal suo undo: cancellarla distruggerebbe quella storia.",
     target_root_not_absolute: "La destinazione deve essere un path assoluto.",
     apply_running: "Apply in corso.",
     scan_running: "Scan in corso.",

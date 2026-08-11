@@ -20,7 +20,7 @@ def _jpeg(color=(10, 200, 90)) -> bytes:
 
 
 def _seed(db, path: str, *, has_cover: bool, file_id: int = 1) -> None:
-    # id 3: 1 e 2 sono le ScanRoot canoniche seminate da _fresh_db (F2).
+    # ScanRoot id >= 3: 1 e 2 sono le canoniche (conftest.SEEDED_SCAN_ROOT_IDS).
     db.add(ScanRoot(id=3, path="/m", label="M"))
     db.add(AudioFile(id=file_id, root_id=3, path=path, ext="flac", size_bytes=1,
                      hash_method="file", status="present", has_cover=has_cover))

@@ -102,11 +102,8 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
         # run appena creata (come il ramo "nulla è atterrato"), niente run "applied"
         # fantasma in History. Errore controllato, col codice tradotto dal frontend.
         db.delete(journal)
-        # Plan/UndoJournal non hanno una relationship() ORM tra loro: senza un
-        # flush qui, l'unit-of-work non sa ordinare i DELETE (nessun grafo di
-        # dipendenza da seguire) e può tentare quello su plan prima di quello
-        # su undo_journal, violando la FK di UndoJournal.run_id
-        # (foreign_keys=ON dall'engine unificato F2).
+        # Plan/UndoJournal senza relationship() ORM: serve un flush per l'ordine
+        # FK-safe dei DELETE (dettaglio nel ramo gemello più sotto).
         db.flush()
         db.delete(plan)
         db.commit()

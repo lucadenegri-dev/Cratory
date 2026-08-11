@@ -14,6 +14,13 @@ from app.db import Base, SessionLocal, engine
 
 _ORGANIZE_TESTS = Path(__file__).resolve().parent
 
+# ScanRoot canoniche seminate da _fresh_db (vedi sotto). Contratto condiviso:
+# i test che seminano una propria ScanRoot devono usare id >= SCAN_ROOT_NEXT_ID
+# o incappano in "UNIQUE constraint failed: scan_root.id". Un solo posto per
+# questa regola invece dei ~13 commenti che la ripetevano sparsi nei test.
+SEEDED_SCAN_ROOT_IDS = (1, 2)
+SCAN_ROOT_NEXT_ID = max(SEEDED_SCAN_ROOT_IDS) + 1
+
 
 def pytest_collection_modifyitems(items):
     """Strictness sui warning ristretta ai test Organize finché la suite Cratory
@@ -31,18 +38,25 @@ def pytest_collection_modifyitems(items):
 
 @pytest.fixture(autouse=True)
 def _fresh_db():
-    """Schema pulito prima di ogni test (import dei modelli per registrarli)."""
+    """Schema pulito prima di ogni test (import dei modelli per registrarli).
+
+    Semina anche le due ScanRoot canoniche SEEDED_SCAN_ROOT_IDS (id 1 e 2):
+    F2: l'engine unificato accende PRAGMA foreign_keys=ON (app/db.py), che il
+    vecchio engine di Organize non aveva. Le fixture creano AudioFile con
+    root_id 1/2 senza inserire la ScanRoot: qui le seminiamo una volta, così
+    il vincolo è soddisfatto senza toccare 71 test.
+    F3 rimuove scan_root: queste righe se ne vanno con lei.
+
+    Regola per chi scrive nuovi test: una ScanRoot propria va creata con
+    id >= SCAN_ROOT_NEXT_ID (id 1 e 2 sono occupati da questa semina), o la
+    UNIQUE constraint su ScanRoot.id fallisce.
+    """
     import app.models  # noqa: F401
     import app.organize.models  # noqa: F401
 
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
 
-    # F2: l'engine unificato accende PRAGMA foreign_keys=ON (app/db.py), che il
-    # vecchio engine di Organize non aveva. Le fixture creano AudioFile con
-    # root_id 1/2 senza inserire la ScanRoot: qui le seminiamo una volta, così
-    # il vincolo è soddisfatto senza toccare 71 test.
-    # F3 rimuove scan_root: queste righe se ne vanno con lei.
     from app.organize.models import ScanRoot
 
     with SessionLocal() as seed:

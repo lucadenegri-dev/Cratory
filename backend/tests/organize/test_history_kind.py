@@ -11,7 +11,7 @@ client = TestClient(app)
 def test_history_marks_manual_edit_runs(db, tmp_path, copy_fixture):
     f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
     tagio.write_tags(f, {"artist": "Old"})
-    # id 3: 1 e 2 sono le ScanRoot canoniche seminate da _fresh_db (F2).
+    # ScanRoot id >= 3: 1 e 2 sono le canoniche (conftest.SEEDED_SCAN_ROOT_IDS).
     db.add(ScanRoot(id=3, path=str(tmp_path / "lib")))
     db.add(AudioFile(id=1, root_id=3, path=f, ext="flac", size_bytes=10,
                      hash_method="file", status="present", artist="Old"))

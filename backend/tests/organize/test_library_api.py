@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.organize.models import AudioFile, DupGroup, DupMember, Issue, ScanRoot
+from tests.organize.conftest import SEEDED_SCAN_ROOT_IDS
 
 
 def _seed_stats(db):
@@ -37,8 +38,8 @@ def test_library_stats(db):
         assert s["by_ext"] == {"flac": 1, "mp3": 1}
         assert s["issues_by_severity"] == {"error": 1, "warning": 1}  # la dismissed esclusa
         assert s["dup_groups"] == 1
-        # 3 = le 2 ScanRoot canoniche seminate da _fresh_db (F2) + quella di _seed_stats
-        assert s["sources"] == 3
+        # Le canoniche di conftest.SEEDED_SCAN_ROOT_IDS + quella creata da _seed_stats.
+        assert s["sources"] == len(SEEDED_SCAN_ROOT_IDS) + 1
 
 
 def test_list_files_basic_and_indicators(db):

@@ -13,7 +13,7 @@ from app.organize.services.undo import undo_run
 def _seed(db, path, **kw):
     """ScanRoot(id=3) + un AudioFile 'present' su un file reale.
 
-    id 3: 1 e 2 sono le ScanRoot canoniche seminate da _fresh_db (F2)."""
+    ScanRoot id >= 3: 1 e 2 sono le canoniche (conftest.SEEDED_SCAN_ROOT_IDS)."""
     if db.get(ScanRoot, 3) is None:
         db.add(ScanRoot(id=3, path=os.path.dirname(path)))
     d = dict(id=1, root_id=3, path=path, ext="flac", size_bytes=10, hash_method="file",
