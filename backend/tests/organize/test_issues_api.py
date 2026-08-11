@@ -19,51 +19,51 @@ def _seed(db):
 def test_list_and_filter(db):
     _seed(db)
     with TestClient(app) as client:
-        all_issues = client.get("/api/issues").json()
+        all_issues = client.get("/api/organize/issues").json()
         assert len(all_issues) == 2
         assert all_issues[0]["file_path"] == "/m/a.mp3"
-        warn = client.get("/api/issues", params={"severity": "warning"}).json()
+        warn = client.get("/api/organize/issues", params={"severity": "warning"}).json()
         assert len(warn) == 2
-        casing = client.get("/api/issues", params={"type": "inconsistent_casing"}).json()
+        casing = client.get("/api/organize/issues", params={"type": "inconsistent_casing"}).json()
         assert len(casing) == 1
 
 
 def test_set_status(db):
     _seed(db)
     with TestClient(app) as client:
-        casing_id = client.get("/api/issues",
+        casing_id = client.get("/api/organize/issues",
                                params={"type": "inconsistent_casing"}).json()[0]["id"]
-        ok = client.post(f"/api/issues/{casing_id}/status", json={"status": "accepted"})
+        ok = client.post(f"/api/organize/issues/{casing_id}/status", json={"status": "accepted"})
         assert ok.status_code == 200 and ok.json()["status"] == "accepted"
 
 
 def test_accept_non_fixable_rejected(db):
     _seed(db)
     with TestClient(app) as client:
-        genre_id = client.get("/api/issues",
+        genre_id = client.get("/api/organize/issues",
                               params={"type": "missing_metadata"}).json()[0]["id"]
-        resp = client.post(f"/api/issues/{genre_id}/status", json={"status": "accepted"})
+        resp = client.post(f"/api/organize/issues/{genre_id}/status", json={"status": "accepted"})
         assert resp.status_code == 400
 
 
 def test_bulk_dismiss(db):
     _seed(db)
     with TestClient(app) as client:
-        resp = client.post("/api/issues/bulk", json={"severity": "warning",
+        resp = client.post("/api/organize/issues/bulk", json={"severity": "warning",
                                                      "status": "dismissed"})
         assert resp.json()["updated"] == 2
-        assert all(i["status"] == "dismissed" for i in client.get("/api/issues").json())
+        assert all(i["status"] == "dismissed" for i in client.get("/api/organize/issues").json())
 
 
 def test_bulk_accept_skips_non_fixable(db):
     """bulk accept: solo le issue con suggested_fix_json vengono accettate."""
     _seed(db)  # 1 fixable (inconsistent_casing), 1 non-fixable (missing_metadata)
     with TestClient(app) as client:
-        resp = client.post("/api/issues/bulk", json={"status": "accepted"})
+        resp = client.post("/api/organize/issues/bulk", json={"status": "accepted"})
         assert resp.status_code == 200
         assert resp.json() == {"updated": 1}
 
-        all_issues = client.get("/api/issues").json()
+        all_issues = client.get("/api/organize/issues").json()
         fixable = next(i for i in all_issues if i["type"] == "inconsistent_casing")
         non_fixable = next(i for i in all_issues if i["type"] == "missing_metadata")
         assert fixable["status"] == "accepted"
@@ -73,7 +73,7 @@ def test_bulk_accept_skips_non_fixable(db):
 def test_issue_read_has_root_id(db):
     _seed(db)
     with TestClient(app) as client:
-        rows = client.get("/api/issues").json()
+        rows = client.get("/api/organize/issues").json()
         assert all("root_id" in r for r in rows)
         assert rows[0]["root_id"] == 1
 
@@ -81,9 +81,9 @@ def test_issue_read_has_root_id(db):
 def test_fix_sets_retag_and_accepts(db):
     _seed(db)
     with TestClient(app) as client:
-        genre_id = client.get("/api/issues",
+        genre_id = client.get("/api/organize/issues",
                               params={"type": "missing_metadata"}).json()[0]["id"]
-        resp = client.post(f"/api/issues/{genre_id}/fix", json={"value": "House"})
+        resp = client.post(f"/api/organize/issues/{genre_id}/fix", json={"value": "House"})
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "accepted"
@@ -99,23 +99,23 @@ def test_fix_rejects_non_retaggable_field(db):
                  detail="128<256", suggested_fix_json=None, status="open"))
     db.commit()
     with TestClient(app) as client:
-        iid = client.get("/api/issues", params={"type": "bad_bitrate"}).json()[0]["id"]
-        resp = client.post(f"/api/issues/{iid}/fix", json={"value": "x"})
+        iid = client.get("/api/organize/issues", params={"type": "bad_bitrate"}).json()[0]["id"]
+        resp = client.post(f"/api/organize/issues/{iid}/fix", json={"value": "x"})
         assert resp.status_code == 400
 
 
 def test_fix_rejects_empty_value(db):
     _seed(db)
     with TestClient(app) as client:
-        genre_id = client.get("/api/issues",
+        genre_id = client.get("/api/organize/issues",
                               params={"type": "missing_metadata"}).json()[0]["id"]
-        resp = client.post(f"/api/issues/{genre_id}/fix", json={"value": "   "})
+        resp = client.post(f"/api/organize/issues/{genre_id}/fix", json={"value": "   "})
         assert resp.status_code == 400
 
 
 def test_fix_404(db):
     with TestClient(app) as client:
-        assert client.post("/api/issues/999/fix", json={"value": "x"}).status_code == 404
+        assert client.post("/api/organize/issues/999/fix", json={"value": "x"}).status_code == 404
 
 
 def test_only_new_filters_issues_by_fresh_files(db):
@@ -134,9 +134,9 @@ def test_only_new_filters_issues_by_fresh_files(db):
                  detail="x", status="open"))
     db.commit()
     with TestClient(app) as client:
-        only_new = client.get("/api/issues", params={"only_new": True}).json()
+        only_new = client.get("/api/organize/issues", params={"only_new": True}).json()
         assert [i["file_path"] for i in only_new] == ["/m/new.mp3"]
-        all_ = client.get("/api/issues").json()
+        all_ = client.get("/api/organize/issues").json()
         assert len(all_) == 2
         by_path = {i["file_path"]: i["is_new"] for i in all_}
         assert by_path == {"/m/new.mp3": True, "/m/old.mp3": False}

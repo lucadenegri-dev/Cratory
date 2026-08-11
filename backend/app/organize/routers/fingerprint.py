@@ -7,7 +7,7 @@ from app.organize.db import get_db
 from app.organize.integrations import acoustid
 from app.organize.services.fingerprint import fingerprint_files
 
-router = APIRouter(prefix="/api/fingerprint", tags=["fingerprint"])
+router = APIRouter(prefix="/api/organize/fingerprint", tags=["fingerprint"])
 
 
 @router.get("/status", response_model=dict)

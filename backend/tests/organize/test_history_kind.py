@@ -22,7 +22,7 @@ def test_history_marks_manual_edit_runs(db, tmp_path, copy_fixture):
     db.commit()
     manual_edit.edit_tags(db, db.get(AudioFile, 1), {"artist": "New"})
 
-    rows = client.get("/api/history").json()
+    rows = client.get("/api/organize/history").json()
     by_kind = {r["kind"]: r for r in rows}
     assert by_kind["manual_edit"]["n_ops"] == 0        # nessun PlanOp per l'edit manuale
     assert None in by_kind                             # la run normale non ha kind

@@ -9,7 +9,7 @@ from app.organize.core.http_errors import api_error
 from app.organize.models import Plan
 from app.organize.services import apply_job, scan_job
 
-router = APIRouter(prefix="/api/apply", tags=["apply"])
+router = APIRouter(prefix="/api/organize/apply", tags=["apply"])
 
 
 @router.post("")

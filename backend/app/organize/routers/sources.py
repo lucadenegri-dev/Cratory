@@ -12,7 +12,7 @@ from app.organize.models import AudioFile, ScanRoot
 from app.organize.schemas import ScanRootCreate, ScanRootRead
 from app.organize.services import cover_cache, thumbs
 
-router = APIRouter(prefix="/api/sources", tags=["sources"])
+router = APIRouter(prefix="/api/organize/sources", tags=["sources"])
 
 
 def _count(db: Session, root_id: int, status: str) -> int:

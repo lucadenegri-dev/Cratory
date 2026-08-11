@@ -22,9 +22,9 @@ def test_ai_suggest_sets_fixes_without_accepting(db, monkeypatch):
     monkeypatch.setattr(ai_tags, "suggest",
                         lambda names: [{"artist": "rataxes", "title": "acid face"}])
     with TestClient(app) as client:
-        r = client.post("/api/issues/ai-suggest").json()
+        r = client.post("/api/organize/issues/ai-suggest").json()
         assert r == {"configured": True, "files": 1, "suggested": 2, "unresolved": 0}
-        rows = client.get("/api/issues", params={"type": "missing_required_tag"}).json()
+        rows = client.get("/api/organize/issues", params={"type": "missing_required_tag"}).json()
         by_field = {i["field"]: i for i in rows}
         assert by_field["artist"]["suggested_fix_json"] == {
             "field": "artist", "action": "retag", "to": "rataxes", "source": "ai"}
@@ -36,7 +36,7 @@ def test_ai_suggest_sets_fixes_without_accepting(db, monkeypatch):
 def test_ai_suggest_no_key(db, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with TestClient(app) as client:
-        r = client.post("/api/issues/ai-suggest").json()
+        r = client.post("/api/organize/issues/ai-suggest").json()
         assert r["configured"] is False
         assert r["suggested"] == 0
 
@@ -46,7 +46,7 @@ def test_ai_suggest_unresolved(db, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
     monkeypatch.setattr(ai_tags, "suggest", lambda names: [{"artist": None, "title": None}])
     with TestClient(app) as client:
-        r = client.post("/api/issues/ai-suggest").json()
+        r = client.post("/api/organize/issues/ai-suggest").json()
         assert r["suggested"] == 0 and r["unresolved"] == 1
 
 
@@ -67,6 +67,6 @@ def test_ai_suggest_skips_already_suggested(db, monkeypatch):
 
     monkeypatch.setattr(ai_tags, "suggest", _fake)
     with TestClient(app) as client:
-        r = client.post("/api/issues/ai-suggest").json()
+        r = client.post("/api/organize/issues/ai-suggest").json()
         assert r["files"] == 0 and r["suggested"] == 0  # niente da suggerire
         assert called["n"] == 0  # suggest non chiamato se non ci sono file

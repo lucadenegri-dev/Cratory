@@ -10,7 +10,7 @@ from app.organize.routers.library import build_file_row
 from app.organize.schemas import FileRow, FileTagsUpdate
 from app.organize.services import manual_edit
 
-router = APIRouter(prefix="/api", tags=["files"])
+router = APIRouter(prefix="/api/organize", tags=["files"])
 
 
 @router.post("/files/{file_id}/tags", response_model=FileRow)

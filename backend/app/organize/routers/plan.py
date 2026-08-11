@@ -8,7 +8,7 @@ from app.organize.core.http_errors import api_error
 from app.organize.schemas import PlanRead
 from app.organize.services import planning
 
-router = APIRouter(prefix="/api/plan", tags=["plan"])
+router = APIRouter(prefix="/api/organize/plan", tags=["plan"])
 
 
 @router.post("", response_model=PlanRead)

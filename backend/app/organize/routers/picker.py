@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.organize.core.http_errors import api_error
 from app.organize.services import native_picker
 
-router = APIRouter(prefix="/api/picker", tags=["picker"])
+router = APIRouter(prefix="/api/organize/picker", tags=["picker"])
 
 
 class PickAvailabilityOut(BaseModel):

@@ -39,7 +39,7 @@ def test_provider_suggest_creates_missing_cover_issue(db, tmp_path, monkeypatch)
     with patch("app.organize.routers.issues.text_providers.resolve", return_value=_Resolved()), \
          patch("app.organize.routers.issues.acoustid.acoustid_configured", return_value=False), \
          patch("app.organize.integrations.cover_art.lookup_cover", return_value=fake_cover):
-        r = client.post("/api/issues/provider-suggest", json={"covers": True})
+        r = client.post("/api/organize/issues/provider-suggest", json={"covers": True})
     assert r.status_code == 200
     assert r.json()["covers"] == 1
     iss = db.query(Issue).filter(Issue.type == "missing_cover").one()
@@ -54,7 +54,7 @@ def test_cover_thumb_endpoint_serves_bytes(db, tmp_path, monkeypatch):
     from app.organize.services import cover_cache
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     cover_cache.save_thumb(7, b"\xff\xd8IMG")
-    r = client.get("/api/issues/cover-thumb/7")
+    r = client.get("/api/organize/issues/cover-thumb/7")
     assert r.status_code == 200 and r.content == b"\xff\xd8IMG"
     assert r.headers["content-type"].startswith("image/jpeg")
 
@@ -62,7 +62,7 @@ def test_cover_thumb_endpoint_serves_bytes(db, tmp_path, monkeypatch):
 def test_cover_thumb_404_when_missing(db, tmp_path, monkeypatch):
     from app.organize.core.config import settings
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
-    assert client.get("/api/issues/cover-thumb/12345").status_code == 404
+    assert client.get("/api/organize/issues/cover-thumb/12345").status_code == 404
 
 
 def test_covers_skipped_when_flag_false(db, tmp_path, monkeypatch):
@@ -71,7 +71,7 @@ def test_covers_skipped_when_flag_false(db, tmp_path, monkeypatch):
     _seed(db)
     with patch("app.organize.routers.issues.text_providers.resolve", return_value=_Resolved()), \
          patch("app.organize.routers.issues.acoustid.acoustid_configured", return_value=False):
-        r = client.post("/api/issues/provider-suggest", json={"covers": False})
+        r = client.post("/api/organize/issues/provider-suggest", json={"covers": False})
     assert r.json()["covers"] == 0
     assert db.query(Issue).filter(Issue.type == "missing_cover").count() == 0
 
@@ -82,7 +82,7 @@ def _run_with_cover(db, tmp_path, monkeypatch, cover):
     with patch("app.organize.routers.issues.text_providers.resolve", return_value=_Resolved()), \
          patch("app.organize.routers.issues.acoustid.acoustid_configured", return_value=False), \
          patch("app.organize.integrations.cover_art.lookup_cover", return_value=cover):
-        return client.post("/api/issues/provider-suggest", json={"covers": True})
+        return client.post("/api/organize/issues/provider-suggest", json={"covers": True})
 
 
 def test_accepted_cover_issue_not_clobbered(db, tmp_path, monkeypatch):

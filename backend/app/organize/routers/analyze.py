@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.organize.db import get_db
 from app.organize.services import analysis
 
-router = APIRouter(prefix="/api/analyze", tags=["analyze"])
+router = APIRouter(prefix="/api/organize/analyze", tags=["analyze"])
 
 
 @router.post("")

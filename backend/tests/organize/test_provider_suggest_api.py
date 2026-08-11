@@ -34,7 +34,7 @@ def test_provider_suggest_fills_label(db, monkeypatch):
     _seed(db)
     _no_fingerprint(monkeypatch)
     _conf(monkeypatch, {"label": ("Drumcode", "text")})
-    body = client.post("/api/issues/provider-suggest", json={"covers": False}).json()
+    body = client.post("/api/organize/issues/provider-suggest", json={"covers": False}).json()
     assert body["configured"] is True and body["suggested"] == 1
     assert body["acoustid_available"] is False and body["fingerprinted"] == 0
     iss = db.query(Issue).filter_by(field="label").one()
@@ -48,7 +48,7 @@ def test_provider_suggest_marks_high_confidence(db, monkeypatch):
     _seed(db)
     _no_fingerprint(monkeypatch)
     _conf(monkeypatch, {"label": ("Drumcode", "high")})
-    client.post("/api/issues/provider-suggest", json={"covers": False})
+    client.post("/api/organize/issues/provider-suggest", json={"covers": False})
     iss = db.query(Issue).filter_by(field="label").one()
     assert iss.suggested_fix_json["confidence"] == "high"
 
@@ -62,7 +62,7 @@ def test_provider_suggest_overwrites_ai_suggestion(db, monkeypatch):
     db.commit()
     _no_fingerprint(monkeypatch)
     _conf(monkeypatch, {"genre": ("Y", "text")})
-    body = client.post("/api/issues/provider-suggest", json={"covers": False}).json()
+    body = client.post("/api/organize/issues/provider-suggest", json={"covers": False}).json()
     assert body["suggested"] == 1
     db.refresh(iss)
     assert iss.suggested_fix_json == {"field": "genre", "action": "retag", "to": "Y",
@@ -77,7 +77,7 @@ def test_provider_suggest_overwrites_legacy_without_marker(db, monkeypatch):
     db.commit()
     _no_fingerprint(monkeypatch)
     _conf(monkeypatch, {"label": ("Drumcode", "text")})
-    body = client.post("/api/issues/provider-suggest", json={"covers": False}).json()
+    body = client.post("/api/organize/issues/provider-suggest", json={"covers": False}).json()
     assert body["suggested"] == 1
     db.refresh(iss)
     assert iss.suggested_fix_json["to"] == "Drumcode"
@@ -100,7 +100,7 @@ def test_provider_suggest_idempotent_on_own_suggestions(db, monkeypatch):
         return ResolvedText(fields={"label": ("ShouldNotBeUsed", "text")})
 
     monkeypatch.setattr("app.organize.routers.issues.text_providers.resolve", _fake)
-    body = client.post("/api/issues/provider-suggest", json={"covers": False}).json()
+    body = client.post("/api/organize/issues/provider-suggest", json={"covers": False}).json()
     assert body["configured"] is True and body["suggested"] == 0 and body["files"] == 0
     assert called["n"] == 0
 
@@ -121,7 +121,7 @@ def test_provider_suggest_fingerprints_files_without_mbid(db, monkeypatch):
 
     monkeypatch.setattr("app.organize.services.fingerprint.fingerprint_one", _fake_fp)
     _conf(monkeypatch, {"label": ("Drumcode", "high")})
-    body = client.post("/api/issues/provider-suggest", json={"covers": False}).json()
+    body = client.post("/api/organize/issues/provider-suggest", json={"covers": False}).json()
     assert body["acoustid_available"] is True
     assert body["fingerprinted"] == 1 and seen["fp"] == 1
     assert db.query(AudioFile).one().mbid == "mb-xyz"

@@ -8,7 +8,7 @@ from app.organize.integrations import acoustid
 from app.organize.schemas import ProviderInfo
 from app.organize.services import ai_tags
 
-router = APIRouter(prefix="/api", tags=["providers"])
+router = APIRouter(prefix="/api/organize", tags=["providers"])
 
 
 @router.get("/providers", response_model=list[ProviderInfo])

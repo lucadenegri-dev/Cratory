@@ -8,7 +8,7 @@ from app.organize.db import get_db
 from app.organize.schemas import GenreReviewBody
 from app.organize.services import ai_tags, apply_job, genre_review, genre_review_job, scan_job
 
-router = APIRouter(prefix="/api/genre-review", tags=["genre-review"])
+router = APIRouter(prefix="/api/organize/genre-review", tags=["genre-review"])
 
 
 @router.post("", response_model=dict)

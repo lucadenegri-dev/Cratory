@@ -19,7 +19,7 @@ def _seed(db, fid, **kw):
 def test_start_without_key_not_configured(db, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with TestClient(app) as client:
-        r = client.post("/api/genre-review").json()
+        r = client.post("/api/organize/genre-review").json()
         assert r["configured"] is False
         # La scorciatoia "non configurato" deve comunque restituire la forma
         # completa dello stato job (come GET /status), non solo configured/status:
@@ -40,7 +40,7 @@ def test_start_passes_body_to_job(db, monkeypatch):
 
     monkeypatch.setattr(genre_review_job, "start_job", fake_start)
     with TestClient(app) as client:
-        r = client.post("/api/genre-review",
+        r = client.post("/api/organize/genre-review",
                         json={"folder": "House", "redo": True}).json()
         assert r["status"] == "running"
         assert captured == {"folder": "House", "genre": None, "redo": True}
@@ -48,7 +48,7 @@ def test_start_passes_body_to_job(db, monkeypatch):
 
 def test_status_returns_job_state(db):
     with TestClient(app) as client:
-        r = client.get("/api/genre-review/status").json()
+        r = client.get("/api/organize/genre-review/status").json()
         assert r["status"] in ("idle", "running", "done", "error")
 
 
@@ -56,7 +56,7 @@ def test_preview_counts_candidates(db, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
     _seed(db, 1, artist="A", title="T")
     with TestClient(app) as client:
-        r = client.get("/api/genre-review/preview").json()
+        r = client.get("/api/organize/genre-review/preview").json()
         assert r == {"configured": True, "files": 1}
 
 

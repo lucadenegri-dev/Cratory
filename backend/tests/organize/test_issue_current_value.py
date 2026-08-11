@@ -18,6 +18,6 @@ def test_current_value_reflects_file_tag(db):
                                      "to": "House", "source": "provider",
                                      "confidence": "high"}, status="open"))
     db.commit()
-    row = next(i for i in client.get("/api/issues").json()
+    row = next(i for i in client.get("/api/organize/issues").json()
                if i["type"] == "provider_override")
     assert row["current_value"] == "house"

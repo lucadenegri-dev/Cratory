@@ -9,7 +9,7 @@ from app.organize.core.http_errors import api_error
 from app.organize.models import AudioFile, DupGroup, DupMember
 from app.organize.schemas import DupGroupRead, DupMemberRead, KeeperBody
 
-router = APIRouter(prefix="/api/duplicates", tags=["duplicates"])
+router = APIRouter(prefix="/api/organize/duplicates", tags=["duplicates"])
 
 
 def _group_read(db: Session, grp: DupGroup) -> DupGroupRead:

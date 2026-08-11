@@ -23,7 +23,7 @@ def test_post_tags_returns_updated_row(db, tmp_path, copy_fixture):
     f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
     tagio.write_tags(f, {"artist": "Old"})
     _seed(db, f, artist="Old")
-    r = client.post("/api/files/1/tags", json={"artist": "New", "year": "2003"})
+    r = client.post("/api/organize/files/1/tags", json={"artist": "New", "year": "2003"})
     assert r.status_code == 200
     body = r.json()
     assert body["artist"] == "New" and body["year"] == 2003
@@ -37,20 +37,20 @@ def test_post_tags_closes_issue_and_updates_count(db, tmp_path, copy_fixture):
     db.add(Issue(file_id=1, type="missing_required_tag", field="artist",
                  severity="error", detail="no artist", status="open"))
     db.commit()
-    r = client.post("/api/files/1/tags", json={"artist": "Fixed"})
+    r = client.post("/api/organize/files/1/tags", json={"artist": "Fixed"})
     assert r.status_code == 200
     assert r.json()["issue_count"] == 0
 
 
 def test_post_tags_404_when_missing(db):
-    r = client.post("/api/files/999/tags", json={"artist": "X"})
+    r = client.post("/api/organize/files/999/tags", json={"artist": "X"})
     assert r.status_code == 404
     assert r.json()["detail"]["code"] == "file_not_found"
 
 
 def test_post_tags_409_when_file_gone(db, tmp_path):
     _seed(db, str(tmp_path / "gone.flac"))
-    r = client.post("/api/files/1/tags", json={"artist": "X"})
+    r = client.post("/api/organize/files/1/tags", json={"artist": "X"})
     assert r.status_code == 409
     assert r.json()["detail"]["code"] == "file_not_writable"
 
@@ -58,7 +58,7 @@ def test_post_tags_409_when_file_gone(db, tmp_path):
 def test_post_tags_400_on_bad_year(db, tmp_path, copy_fixture):
     f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
     _seed(db, f)
-    r = client.post("/api/files/1/tags", json={"year": "abc"})
+    r = client.post("/api/organize/files/1/tags", json={"year": "abc"})
     assert r.status_code == 400
     assert r.json()["detail"]["code"] == "value_invalid"
 
@@ -68,7 +68,7 @@ def test_post_tags_value_invalid_carries_params(db, tmp_path, copy_fixture):
     # tradurre "'year' dev'essere un numero" invece di ricadere sul testo inglese.
     f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
     _seed(db, f)
-    d = client.post("/api/files/1/tags", json={"year": "abc"}).json()["detail"]
+    d = client.post("/api/organize/files/1/tags", json={"year": "abc"}).json()["detail"]
     assert d["code"] == "value_invalid"
     assert d["params"]["field"] == "year"
     assert d["params"]["reason"] == "number"

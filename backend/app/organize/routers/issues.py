@@ -17,7 +17,7 @@ from app.organize.schemas import (IntegrityCheckBody, IssueBulkBody, IssueFixBod
 from app.organize.services import ai_tags, apply_job, cover_cache, covers as cover_svc, integrity_job, provider_rescan_job, ratings, scan_job, text_providers
 from app.organize.services.planner import EDITABLE_TAG_FIELDS
 
-router = APIRouter(prefix="/api/issues", tags=["issues"])
+router = APIRouter(prefix="/api/organize/issues", tags=["issues"])
 _VALID = {"open", "accepted", "dismissed"}
 
 # Gli unici campi correggibili a mano: fonte unica in planner.EDITABLE_TAG_FIELDS.

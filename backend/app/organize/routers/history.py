@@ -10,7 +10,7 @@ from app.organize.models import Plan, PlanOp
 from app.organize.schemas import HistoryItem, UndoResult
 from app.organize.services import undo
 
-router = APIRouter(prefix="/api/history", tags=["history"])
+router = APIRouter(prefix="/api/organize/history", tags=["history"])
 
 
 @router.get("", response_model=list[HistoryItem])

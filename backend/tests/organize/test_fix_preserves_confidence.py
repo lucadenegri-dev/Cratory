@@ -22,7 +22,7 @@ def _override(db, to="Tech House", conf="high"):
 
 def test_fix_preserves_source_and_confidence(db):
     iss = _override(db, conf="high")
-    r = client.post(f"/api/issues/{iss.id}/fix", json={"value": "Tech House"})
+    r = client.post(f"/api/organize/issues/{iss.id}/fix", json={"value": "Tech House"})
     assert r.status_code == 200
     db.refresh(iss)
     assert iss.status == "accepted"
@@ -39,7 +39,7 @@ def test_fix_on_plain_issue_has_no_markers(db):
     iss = Issue(file_id=f.id, type="missing_required_tag", field="artist",
                 severity="error", detail="x", status="open")
     db.add(iss); db.commit()
-    r = client.post(f"/api/issues/{iss.id}/fix", json={"value": "ANNA"})
+    r = client.post(f"/api/organize/issues/{iss.id}/fix", json={"value": "ANNA"})
     assert r.status_code == 200
     db.refresh(iss)
     assert iss.suggested_fix_json == {"field": "artist", "action": "retag", "to": "ANNA"}

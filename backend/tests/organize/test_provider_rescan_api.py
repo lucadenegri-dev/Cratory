@@ -29,18 +29,18 @@ def test_accepts_artist_title_fields(monkeypatch):
     # Neutralizzo il job: qui verifico solo che lo schema li accetti (niente rete).
     monkeypatch.setattr(provider_rescan_job, "start_job",
                         lambda **kw: {"status": "running"})
-    r = client.post("/api/issues/provider-rescan",
+    r = client.post("/api/organize/issues/provider-rescan",
                     json={"fields": ["artist", "title"]})
     assert r.status_code == 200
 
 
 def test_rejects_unknown_field():
-    r = client.post("/api/issues/provider-rescan", json={"fields": ["bpm"]})
+    r = client.post("/api/organize/issues/provider-rescan", json={"fields": ["bpm"]})
     assert r.status_code == 422
 
 
 def test_status_endpoint_returns_state():
-    r = client.get("/api/issues/provider-rescan/status")
+    r = client.get("/api/organize/issues/provider-rescan/status")
     assert r.status_code == 200
     assert set(r.json()) >= {"status", "phase", "processed", "total", "result"}
 
@@ -58,7 +58,7 @@ def test_accept_strong_accepts_strong_and_legacy_high(db):
     _override(db, f3.id, "high")  # legacy, non ancora ri-scansionato
     db.commit()
 
-    r = client.post("/api/issues/provider-override/accept-strong")
+    r = client.post("/api/organize/issues/provider-override/accept-strong")
     assert r.status_code == 200 and r.json()["updated"] == 2
     rows = db.query(Issue).filter_by(type="provider_override").all()
     by_conf = {i.suggested_fix_json["confidence"]: i.status for i in rows}

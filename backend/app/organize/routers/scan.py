@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.organize.services import apply_job, scan_job
 from app.organize.core.http_errors import api_error
 
-router = APIRouter(prefix="/api/scan", tags=["scan"])
+router = APIRouter(prefix="/api/organize/scan", tags=["scan"])
 
 
 class ScanStart(BaseModel):

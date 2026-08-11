@@ -21,7 +21,7 @@ def _seed(db):
 def test_list_duplicates(db):
     _seed(db)
     with TestClient(app) as client:
-        groups = client.get("/api/duplicates").json()
+        groups = client.get("/api/organize/duplicates").json()
         assert len(groups) == 1
         assert {m["file_id"] for m in groups[0]["members"]} == {1, 2}
         assert groups[0]["keeper_file_id"] == 1
@@ -30,9 +30,9 @@ def test_list_duplicates(db):
 def test_set_keeper(db):
     _seed(db)
     with TestClient(app) as client:
-        resp = client.post("/api/duplicates/1/keeper", json={"file_id": 2})
+        resp = client.post("/api/organize/duplicates/1/keeper", json={"file_id": 2})
         assert resp.status_code == 200
-        g = client.get("/api/duplicates").json()[0]
+        g = client.get("/api/organize/duplicates").json()[0]
         assert g["keeper_file_id"] == 2 and g["keeper_overridden"] is True
         actions = {m["file_id"]: m["action"] for m in g["members"]}
         assert actions == {2: "keep", 1: "remove"}
@@ -41,13 +41,13 @@ def test_set_keeper(db):
 def test_set_keeper_non_member_rejected(db):
     _seed(db)
     with TestClient(app) as client:
-        assert client.post("/api/duplicates/1/keeper", json={"file_id": 99}).status_code == 400
+        assert client.post("/api/organize/duplicates/1/keeper", json={"file_id": 99}).status_code == 400
 
 
 def test_dismiss(db):
     _seed(db)
     with TestClient(app) as client:
-        assert client.post("/api/duplicates/1/dismiss").status_code == 200
-        g = client.get("/api/duplicates").json()[0]
+        assert client.post("/api/organize/duplicates/1/dismiss").status_code == 200
+        g = client.get("/api/organize/duplicates").json()[0]
         assert g["dismissed"] is True
         assert all(m["action"] == "keep" for m in g["members"])

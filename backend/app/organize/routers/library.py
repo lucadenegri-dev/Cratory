@@ -13,7 +13,7 @@ from app.organize.models import AudioFile, DupGroup, DupMember, Issue, ScanRoot
 from app.organize.schemas import FileRow, LibraryFacets, LibraryStatsRead
 from app.organize.services import cover_cache, thumbs
 
-router = APIRouter(prefix="/api", tags=["library"])
+router = APIRouter(prefix="/api/organize", tags=["library"])
 
 
 @router.get("/library/stats", response_model=LibraryStatsRead)

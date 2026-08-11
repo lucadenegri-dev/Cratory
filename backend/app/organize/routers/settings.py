@@ -14,7 +14,7 @@ from app.organize.schemas import (
 )
 from app.organize.services import planning
 
-router = APIRouter(prefix="/api/settings", tags=["settings"])
+router = APIRouter(prefix="/api/organize/settings", tags=["settings"])
 
 
 def _read(db: Session) -> SettingsRead:

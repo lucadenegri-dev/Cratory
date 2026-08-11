@@ -28,6 +28,24 @@ from app.routers import (
     transitions,
 )
 from app.routers import settings as settings_router
+from app.organize.db import ensure_schema as ensure_schema_organize
+from app.organize.routers import (
+    analyze as organize_analyze,
+    apply as organize_apply,
+    duplicates as organize_duplicates,
+    files as organize_files,
+    fingerprint as organize_fingerprint,
+    genre_review as organize_genre_review,
+    history as organize_history,
+    issues as organize_issues,
+    library as organize_library,
+    picker as organize_picker,
+    plan as organize_plan,
+    providers as organize_providers,
+    scan as organize_scan,
+    settings as organize_settings,
+    sources as organize_sources,
+)
 
 logger = logging.getLogger("app.request")
 
@@ -36,6 +54,9 @@ logger = logging.getLogger("app.request")
 async def lifespan(app: FastAPI):
     setup_logging()
     ensure_schema()
+    # F1: Organize ha ancora un proprio Base/engine e un proprio file SQLite.
+    # F2 unificherà i due schemi su un engine solo.
+    ensure_schema_organize()
     # Carica gli override di config (Settings UI) nella cache runtime PRIMA di
     # leggerli: library_root & co. possono essere sovrascritti dal DB.
     from app.core import runtime_settings
@@ -94,6 +115,14 @@ app.include_router(rekordbox.router)
 app.include_router(analysis.router)
 app.include_router(soundcloud.router)
 app.include_router(settings_router.router)
+
+for _organize_router in (
+    organize_sources, organize_scan, organize_analyze, organize_issues,
+    organize_duplicates, organize_settings, organize_plan, organize_apply,
+    organize_history, organize_library, organize_files, organize_fingerprint,
+    organize_providers, organize_picker, organize_genre_review,
+):
+    app.include_router(_organize_router.router)
 
 
 @app.get("/api/health")

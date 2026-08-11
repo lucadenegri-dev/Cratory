@@ -33,7 +33,7 @@ def test_thumb_from_embedded_cover(db, copy_fixture, tmp_path, monkeypatch):
     _seed(db, f, has_cover=True)
 
     with TestClient(app) as client:
-        r = client.get("/api/files/1/thumb")
+        r = client.get("/api/organize/files/1/thumb")
     assert r.status_code == 200
     assert r.headers["content-type"] == "image/jpeg"
     assert Image.open(io.BytesIO(r.content)).format == "JPEG"
@@ -46,7 +46,7 @@ def test_thumb_falls_back_to_provider_proposal(db, tmp_path, monkeypatch):
     cover_cache.save_thumb(1, b"\xff\xd8proposta")
 
     with TestClient(app) as client:
-        r = client.get("/api/files/1/thumb")
+        r = client.get("/api/organize/files/1/thumb")
     assert r.status_code == 200
     assert r.content == b"\xff\xd8proposta"
 
@@ -57,7 +57,7 @@ def test_thumb_404_when_nothing_available(db, tmp_path, monkeypatch):
     _seed(db, "/m/senza-cover.flac", has_cover=False)
 
     with TestClient(app) as client:
-        r = client.get("/api/files/1/thumb")
+        r = client.get("/api/organize/files/1/thumb")
     assert r.status_code == 404
     # ISSUES/DUPLICATES/PLAN non passano cover_source: ogni riga senza cover
     # rifà questa richiesta a ogni mount, un max-age corto la smorza.
@@ -66,7 +66,7 @@ def test_thumb_404_when_nothing_available(db, tmp_path, monkeypatch):
 
 def test_thumb_404_for_unknown_file(db):
     with TestClient(app) as client:
-        assert client.get("/api/files/999/thumb").status_code == 404
+        assert client.get("/api/organize/files/999/thumb").status_code == 404
 
 
 def test_thumb_does_not_open_file_when_has_cover_is_false(db, tmp_path, monkeypatch):
@@ -82,7 +82,7 @@ def test_thumb_does_not_open_file_when_has_cover_is_false(db, tmp_path, monkeypa
     monkeypatch.setattr(library.thumbs, "get_thumb", _boom)
 
     with TestClient(app) as client:
-        assert client.get("/api/files/1/thumb").status_code == 404
+        assert client.get("/api/organize/files/1/thumb").status_code == 404
 
 
 def test_thumb_304_on_matching_etag(db, copy_fixture, tmp_path, monkeypatch):
@@ -92,8 +92,8 @@ def test_thumb_304_on_matching_etag(db, copy_fixture, tmp_path, monkeypatch):
     _seed(db, f, has_cover=True)
 
     with TestClient(app) as client:
-        first = client.get("/api/files/1/thumb")
-        again = client.get("/api/files/1/thumb",
+        first = client.get("/api/organize/files/1/thumb")
+        again = client.get("/api/organize/files/1/thumb",
                            headers={"If-None-Match": first.headers["etag"]})
     assert again.status_code == 304
     assert again.content == b""
@@ -110,13 +110,13 @@ def test_thumb_200_with_new_etag_after_mtime_change(db, copy_fixture, tmp_path, 
     _seed(db, f, has_cover=True)
 
     with TestClient(app) as client:
-        first = client.get("/api/files/1/thumb")
+        first = client.get("/api/organize/files/1/thumb")
         etag = first.headers["etag"]
 
         future = os.path.getmtime(f) + 10
         os.utime(f, (future, future))
 
-        again = client.get("/api/files/1/thumb", headers={"If-None-Match": etag})
+        again = client.get("/api/organize/files/1/thumb", headers={"If-None-Match": etag})
     assert again.status_code == 200
     assert again.headers["etag"] != etag
 
@@ -132,14 +132,14 @@ def test_thumb_etag_folds_in_cover_cache_mtime(db, tmp_path, monkeypatch):
     cover_cache.save_thumb(1, b"\xff\xd8prima")
 
     with TestClient(app) as client:
-        first = client.get("/api/files/1/thumb")
+        first = client.get("/api/organize/files/1/thumb")
         etag = first.headers["etag"]
 
         cover_cache.save_thumb(1, b"\xff\xd8seconda")
         future = os.path.getmtime(cover_cache.thumb_path(1)) + 10
         os.utime(cover_cache.thumb_path(1), (future, future))
 
-        again = client.get("/api/files/1/thumb", headers={"If-None-Match": etag})
+        again = client.get("/api/organize/files/1/thumb", headers={"If-None-Match": etag})
     assert again.status_code == 200
     assert again.headers["etag"] != etag
     assert again.content == b"\xff\xd8seconda"

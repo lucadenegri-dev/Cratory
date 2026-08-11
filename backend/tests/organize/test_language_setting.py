@@ -37,18 +37,18 @@ def teardown_function():
 
 
 def test_get_default_en():
-    r = client.get("/api/settings/language")
+    r = client.get("/api/organize/settings/language")
     assert r.status_code == 200
     assert r.json() == {"language": "en"}
 
 
 def test_put_then_get_it():
-    assert client.put("/api/settings/language", json={"language": "it"}).status_code == 200
-    assert client.get("/api/settings/language").json() == {"language": "it"}
+    assert client.put("/api/organize/settings/language", json={"language": "it"}).status_code == 200
+    assert client.get("/api/organize/settings/language").json() == {"language": "it"}
 
 
 def test_put_invalid_422():
-    assert client.put("/api/settings/language", json={"language": "fr"}).status_code == 422
+    assert client.put("/api/organize/settings/language", json={"language": "fr"}).status_code == 422
 
 
 def test_get_language_helper():

@@ -25,23 +25,23 @@ def _seed(db):
 
 def test_search_by_artist(db):
     _seed(db)
-    rows = client.get("/api/issues", params={"q": "kai"}).json()
+    rows = client.get("/api/organize/issues", params={"q": "kai"}).json()
     assert {r["artist"] for r in rows} == {"Kai Tracid"}
 
 
 def test_search_by_title(db):
     _seed(db)
-    rows = client.get("/api/issues", params={"q": "hidden"}).json()
+    rows = client.get("/api/organize/issues", params={"q": "hidden"}).json()
     assert len(rows) == 1 and rows[0]["title"] == "Hidden"
 
 
 def test_search_by_path(db):
     _seed(db)
-    rows = client.get("/api/issues", params={"q": "anna-track"}).json()
+    rows = client.get("/api/organize/issues", params={"q": "anna-track"}).json()
     assert len(rows) == 1 and rows[0]["file_path"].endswith("anna-track.mp3")
 
 
 def test_no_query_returns_all(db):
     _seed(db)
-    rows = client.get("/api/issues").json()
+    rows = client.get("/api/organize/issues").json()
     assert len(rows) == 2
