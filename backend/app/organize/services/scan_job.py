@@ -4,7 +4,7 @@ in memoria con lock. La UI lancia e poi fa polling di job_state()."""
 import logging
 import threading
 
-from app.organize.db import SessionLocal
+from app.db import SessionLocal
 from app.organize.models import ScanRoot, utcnow
 from app.organize.services import analysis
 from app.organize.services.scanner import scan

@@ -1,6 +1,6 @@
 from sqlalchemy import inspect
 
-from app.organize.db import engine
+from app.db import engine
 
 
 def test_undo_journal_table():

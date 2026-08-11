@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.organize.core.http_errors import api_error
-from app.organize.db import get_db
+from app.db import get_db
 from app.organize.models import AudioFile
 from app.organize.routers.library import build_file_row
 from app.organize.schemas import FileRow, FileTagsUpdate

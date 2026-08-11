@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.organize.db import get_db
+from app.db import get_db
 from app.organize.core.http_errors import api_error
 from app.organize.models import Plan, PlanOp
 from app.organize.schemas import HistoryItem, UndoResult

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.organize.db import get_db
+from app.db import get_db
 from app.organize.services import analysis
 
 router = APIRouter(prefix="/api/organize/analyze", tags=["analyze"])

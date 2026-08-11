@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.organize.core.config import settings
 from app.organize.core.http_errors import api_error
-from app.organize.db import get_db
+from app.db import get_db
 from app.organize.integrations import acoustid, cover_art
 from app.organize.models import AudioFile, Issue, utcnow
 from app.organize.schemas import (IntegrityCheckBody, IssueBulkBody, IssueFixBody, IssueRead,

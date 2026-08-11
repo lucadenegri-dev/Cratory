@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.organize.db import get_db
+from app.db import get_db
 from app.organize.integrations import acoustid
 from app.organize.services.fingerprint import fingerprint_files
 

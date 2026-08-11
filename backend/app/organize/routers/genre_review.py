@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.organize.core.http_errors import api_error
-from app.organize.db import get_db
+from app.db import get_db
 from app.organize.schemas import GenreReviewBody
 from app.organize.services import ai_tags, apply_job, genre_review, genre_review_job, scan_job
 

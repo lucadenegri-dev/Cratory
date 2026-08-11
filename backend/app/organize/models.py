@@ -7,7 +7,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.organize.db import Base
+from app.db import Base
 
 
 def utcnow() -> datetime:

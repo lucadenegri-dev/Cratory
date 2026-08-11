@@ -8,7 +8,7 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.organize.core.http_errors import api_error
-from app.organize.db import get_db
+from app.db import get_db
 from app.organize.models import AudioFile, DupGroup, DupMember, Issue, ScanRoot
 from app.organize.schemas import FileRow, LibraryFacets, LibraryStatsRead
 from app.organize.services import cover_cache, thumbs

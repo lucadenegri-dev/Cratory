@@ -5,7 +5,7 @@ import logging
 import threading
 
 from app.organize.core.config import settings
-from app.organize.db import SessionLocal
+from app.db import SessionLocal
 from app.organize.models import utcnow
 from app.organize.services import ai_tags, genre_review
 

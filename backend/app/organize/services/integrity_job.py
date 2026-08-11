@@ -4,7 +4,7 @@ provider_rescan_job): la UI lancia e fa polling di job_state()."""
 import logging
 import threading
 
-from app.organize.db import SessionLocal
+from app.db import SessionLocal
 from app.organize.integrations.integrity import ffmpeg_available
 from app.organize.models import utcnow
 from app.organize.services import analysis, integrity

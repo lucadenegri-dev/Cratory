@@ -5,7 +5,7 @@ import threading
 
 from sqlalchemy import select
 
-from app.organize.db import SessionLocal
+from app.db import SessionLocal
 from app.organize.models import Plan, utcnow
 from app.organize.services.apply import apply_plan
 

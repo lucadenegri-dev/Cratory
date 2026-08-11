@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.organize.db import get_db
+from app.db import get_db
 from app.organize.core.http_errors import api_error
 from app.organize.schemas import PlanRead
 from app.organize.services import planning

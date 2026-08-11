@@ -17,7 +17,7 @@ from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
 
-from app.organize.db import Base, SessionLocal, engine  # noqa: E402
+from app.db import Base, SessionLocal, engine  # noqa: E402
 
 _ORGANIZE_TESTS = Path(__file__).resolve().parent
 

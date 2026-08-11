@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, inspect, text
 
-from app.organize.db import engine, ensure_schema
+from app.db import engine, ensure_schema
 
 
 def test_chunk3_tables_and_column():

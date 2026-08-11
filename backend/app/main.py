@@ -34,7 +34,6 @@ from app.routers import (
     transitions,
 )
 from app.routers import settings as settings_router
-from app.organize.db import ensure_schema as ensure_schema_organize
 from app.organize.routers import (
     analyze as organize_analyze,
     apply as organize_apply,
@@ -59,10 +58,9 @@ logger = logging.getLogger("app.request")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    # F2: un solo Base/engine. ensure_schema crea anche le tabelle Organize
+    # (import differito di app.organize.models dentro app.db.ensure_schema).
     ensure_schema()
-    # F1: Organize ha ancora un proprio Base/engine e un proprio file SQLite.
-    # F2 unificherà i due schemi su un engine solo.
-    ensure_schema_organize()
     # Carica gli override di config (Settings UI) nella cache runtime PRIMA di
     # leggerli: library_root & co. possono essere sovrascritti dal DB.
     from app.core import runtime_settings

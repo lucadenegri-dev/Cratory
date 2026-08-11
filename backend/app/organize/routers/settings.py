@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.organize.db import get_db
+from app.db import get_db
 from app.organize.core.http_errors import api_error
 from app.organize.models import ScanRoot
 from app.organize.schemas import (
