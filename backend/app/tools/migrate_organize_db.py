@@ -12,11 +12,22 @@ dry-run apre --dest in scrittura e prende un write lock su di esso):
     python -m app.tools.migrate_organize_db --src ../DjOrganizer01/backend/data/djorganizer.db \\
         --dest /tmp/djassistant-copia.db      # dry-run: stampa il report, non scrive
     python -m app.tools.migrate_organize_db --src … --dest /tmp/djassistant-copia.db --apply
+
+Se la sorgente contiene righe con una FK che punta a un target inesistente
+(nella sorgente: il vecchio Organize girava con le foreign key spente), il
+comportamento di default è fallire e basta — nessuna riga viene scartata in
+silenzio. Per scartarle esplicitamente:
+    python -m app.tools.migrate_organize_db --src … --dest … --apply --scarta-orfani
+Con quel flag le righe orfane vengono escluse dal travaso e scritte per
+intero (tutte le colonne) in un file JSONL accanto a --dest, il cui path è
+stampato nel report. Se quel file non può essere scritto, la migrazione non
+procede.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,6 +36,14 @@ from app.core.config import settings
 
 # Ordine di travaso: le tabelle che fanno da bersaglio alle FK vengono prima.
 _TABELLE = ("scan_root", "audio_file", "plan", "plan_op", "undo_journal")
+
+# FK dichiarate in app/organize/models.py: tabella figlia -> [(colonna, tabella padre), ...].
+# scan_root e plan non hanno colonne FK proprie (sono solo bersaglio di altre).
+_FK: dict[str, list[tuple[str, str]]] = {
+    "audio_file": [("root_id", "scan_root")],
+    "plan_op": [("plan_id", "plan"), ("file_id", "audio_file")],
+    "undo_journal": [("run_id", "plan"), ("file_id", "audio_file")],
+}
 
 
 def _path_db_produzione() -> Path | None:
@@ -48,21 +67,44 @@ class Report:
     undo_journal: int = 0
     fk_orfane: int = 0
     dry_run: bool = True
+    # Attivato da --scarta-orfani: righe con FK non risolvibile nella sorgente
+    # escluse dal travaso, per tabella.
+    scarta_orfani: bool = False
+    scartati: dict[str, int] = field(default_factory=dict)
+    dump_path: str | None = None
+    # Diagnosi sempre calcolata (con o senza il flag): (tabella, colonna, tabella_padre, righe_orfane).
+    dettaglio_orfani: list[tuple[str, str, str, int]] = field(default_factory=list)
 
     def ok(self) -> bool:
-        return (
-            self.fk_orfane == 0
-            and all(getattr(self, t) == self.sorgente.get(t, 0) for t in _TABELLE)
+        return self.fk_orfane == 0 and all(
+            getattr(self, t) + self.scartati.get(t, 0) == self.sorgente.get(t, 0)
+            for t in _TABELLE
         )
 
     def render(self) -> str:
         righe = [f"{'DRY-RUN' if self.dry_run else 'MIGRAZIONE'} — righe travasate"]
         for t in _TABELLE:
             atteso = self.sorgente.get(t, 0)
-            ottenuto = getattr(self, t)
-            segno = "ok" if atteso == ottenuto else "MISMATCH"
-            righe.append(f"  {t:<14} {ottenuto:>6} / {atteso:<6} {segno}")
+            migrati = getattr(self, t)
+            scartati = self.scartati.get(t, 0)
+            segno = "ok" if migrati + scartati == atteso else "MISMATCH"
+            extra = f" (+{scartati} scartate)" if scartati else ""
+            righe.append(f"  {t:<14} {migrati:>6}{extra} / {atteso:<6} {segno}")
         righe.append(f"  {'FK orfane':<14} {self.fk_orfane:>6}")
+
+        problematici = [d for d in self.dettaglio_orfani if d[3] > 0]
+        if self.scarta_orfani:
+            if self.dump_path:
+                totale = sum(self.scartati.values())
+                righe.append(f"  righe scartate: {totale} — dump completo in: {self.dump_path}")
+        elif problematici:
+            righe.append(
+                "  FK orfane nella sorgente (nessuna riga esclusa: usare --scarta-orfani "
+                "per escluderle e ottenere un dump di ciò che verrebbe scartato):"
+            )
+            for tabella, colonna, padre, n in problematici:
+                righe.append(f"    {tabella}.{colonna} -> {padre}.id: {n} righe orfane")
+
         righe.append(f"  esito: {'OK' if self.ok() else 'FALLITO'}")
         return "\n".join(righe)
 
@@ -72,7 +114,20 @@ def _colonne(conn: sqlite3.Connection, tabella: str, schema: str = "main") -> li
     return [r[1] for r in cur.fetchall()]
 
 
-def migra(src_organize: Path, dest: Path, *, dry_run: bool) -> Report:
+def _percorso_dump_default(dest: Path) -> Path:
+    """Un file accanto a --dest, mai dentro --dest: il dump delle righe
+    scartate deve sopravvivere anche se la migrazione stessa fallisce dopo."""
+    return dest.with_name(dest.stem + ".scartati.jsonl")
+
+
+def migra(
+    src_organize: Path,
+    dest: Path,
+    *,
+    dry_run: bool,
+    scarta_orfani: bool = False,
+    dump_path: Path | None = None,
+) -> Report:
     """Travasa src_organize dentro dest. Con dry_run=True non scrive nulla:
     esegue tutto dentro una transazione e fa ROLLBACK."""
     src_organize = Path(src_organize)
@@ -132,6 +187,13 @@ def migra(src_organize: Path, dest: Path, *, dry_run: bool) -> Report:
             # dati veri, meglio vedere tutti i problemi in un colpo.
             problemi: list[str] = []
             colonne_comuni: dict[str, list[str]] = {}
+            # Condizione SQL "la riga ha tutte le FK risolvibili nella sorgente"
+            # per le tabelle che hanno colonne FK proprie (scan_root e plan non
+            # ce l'hanno: sono solo bersaglio). Serve sia per la diagnosi (con o
+            # senza il flag) sia, con --scarta-orfani, per filtrare l'INSERT e
+            # selezionare le righe da scartare.
+            condizioni_fk_valide: dict[str, str] = {}
+            righe_scartate: dict[str, list[dict]] = {}
             for tabella in _TABELLE:
                 # Dentro la transazione: osservare "vuota" e poi scrivere
                 # devono condividere lo snapshot, altrimenti un writer
@@ -166,19 +228,77 @@ def migra(src_organize: Path, dest: Path, *, dry_run: bool) -> Report:
                     )
                 colonne_comuni[tabella] = [c for c in colonne_org if c in colonne_dest]
 
+                # Diagnosi FK sempre calcolata (anche senza --scarta-orfani: è
+                # quello che rende il messaggio d'errore del caso "fallisce"
+                # utile invece che un generico "FK orfane: N"). Per costruzione
+                # dello schema (app/organize/models.py) queste colonne sono
+                # NOT NULL; "is not null" resta comunque una guardia a costo
+                # zero contro sorgenti più vecchie/lasche.
+                fks = _FK.get(tabella, [])
+                for colonna, padre in fks:
+                    n_orfane = conn.execute(
+                        f"select count(*) from org.{tabella} o "
+                        f"where o.{colonna} is not null "
+                        f"and not exists (select 1 from org.{padre} p where p.id = o.{colonna})"
+                    ).fetchone()[0]
+                    report.dettaglio_orfani.append((tabella, colonna, padre, n_orfane))
+                if fks:
+                    condizioni_fk_valide[tabella] = " and ".join(
+                        f"(o.{colonna} is null or exists "
+                        f"(select 1 from org.{padre} p where p.id = o.{colonna}))"
+                        for colonna, padre in fks
+                    )
+                    if scarta_orfani:
+                        cur = conn.execute(
+                            f"select * from org.{tabella} o "
+                            f"where not ({condizioni_fk_valide[tabella]})"
+                        )
+                        nomi_colonne = [d[0] for d in cur.description]
+                        righe_scartate[tabella] = [
+                            dict(zip(nomi_colonne, riga)) for riga in cur.fetchall()
+                        ]
+
             if problemi:
                 raise RuntimeError("migrazione annullata:\n- " + "\n- ".join(problemi))
+
+            report.scarta_orfani = scarta_orfani
+            if scarta_orfani:
+                # Il dump va scritto PRIMA di qualunque INSERT: se non può
+                # essere scritto la migrazione non deve procedere, altrimenti
+                # uno scarto senza traccia è esattamente ciò che l'operatore
+                # vuole evitare. Un dump vuoto (nessuna riga orfana in questa
+                # run) viene scritto comunque, per coerenza: il report indica
+                # sempre dove guardare.
+                percorso_dump = Path(dump_path) if dump_path is not None else _percorso_dump_default(dest)
+                try:
+                    with open(percorso_dump, "w", encoding="utf-8") as fh:
+                        for tabella in _TABELLE:
+                            for riga in righe_scartate.get(tabella, []):
+                                fh.write(json.dumps({"tabella": tabella, **riga}, ensure_ascii=False, default=str))
+                                fh.write("\n")
+                except OSError as exc:
+                    raise RuntimeError(
+                        f"impossibile scrivere il dump delle righe scartate in {percorso_dump}: {exc}. "
+                        "La migrazione non procede: uno scarto senza traccia non è ammesso."
+                    ) from exc
+                report.dump_path = str(percorso_dump)
 
             # Passaggio 2: adesso che nessuna tabella ha problemi noti, scrivi.
             for tabella in _TABELLE:
                 comuni = colonne_comuni[tabella]
                 lista = ", ".join(comuni)
+                if scarta_orfani and tabella in condizioni_fk_valide:
+                    filtro = f" WHERE {condizioni_fk_valide[tabella]}"
+                else:
+                    filtro = ""
                 conn.execute(
-                    f"INSERT INTO main.{tabella} ({lista}) SELECT {lista} FROM org.{tabella}"
+                    f"INSERT INTO main.{tabella} ({lista}) SELECT {lista} FROM org.{tabella} o{filtro}"
                 )
                 setattr(report, tabella, conn.execute(
                     f"select count(*) from main.{tabella}"
                 ).fetchone()[0])
+                if scarta_orfani and tabella in righe_scartate:
+                    report.scartati[tabella] = len(righe_scartate[tabella])
 
             report.fk_orfane = _conta_fk_orfane(conn)
 
@@ -228,9 +348,19 @@ def main() -> int:
     parser.add_argument("--src", required=True, type=Path, help="djorganizer.db sorgente")
     parser.add_argument("--dest", required=True, type=Path, help="djassistant.db di destinazione (una COPIA)")
     parser.add_argument("--apply", action="store_true", help="scrive davvero (default: dry-run)")
+    parser.add_argument(
+        "--scarta-orfani",
+        action="store_true",
+        dest="scarta_orfani",
+        help=(
+            "esclude dal travaso le righe con una FK non risolvibile nella sorgente "
+            "(default: fallisce in presenza di orfani, non ne esclude nessuna). "
+            "Scrive un dump JSONL di tutte le righe scartate accanto a --dest."
+        ),
+    )
     args = parser.parse_args()
 
-    report = migra(args.src, args.dest, dry_run=not args.apply)
+    report = migra(args.src, args.dest, dry_run=not args.apply, scarta_orfani=args.scarta_orfani)
     print(report.render())
     return 0 if report.ok() else 1
 

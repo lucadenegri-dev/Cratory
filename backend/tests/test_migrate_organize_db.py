@@ -1,9 +1,11 @@
 """Migrazione del DB Organize dentro quello Cratory: invarianti, non costanti."""
 
 import hashlib
+import json
 import subprocess
 import sys
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -361,6 +363,133 @@ def src_organize_senza_has_rating(tmp_path):
     conn.commit()
     conn.close()
     return path
+
+
+@pytest.fixture()
+def src_organize_fk_orfana_mista(tmp_path):
+    """Come il DB reale che ha fatto fallire il dry-run: plan_op e
+    undo_journal hanno sia righe sane (file_id risolvibile) sia righe orfane
+    (file_id inesistente), mentre le altre tre FK (audio_file.root_id,
+    plan_op.plan_id, undo_journal.run_id) sono tutte sane."""
+    path = tmp_path / "djorganizer.db"
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        CREATE TABLE scan_root (id INTEGER PRIMARY KEY, path VARCHAR, label VARCHAR,
+                                last_scanned_at DATETIME, target_root VARCHAR);
+        CREATE TABLE audio_file (id INTEGER PRIMARY KEY, root_id INTEGER, path VARCHAR,
+                                 ext VARCHAR, size_bytes INTEGER, hash_method VARCHAR,
+                                 has_cover BOOLEAN, has_rating BOOLEAN, status VARCHAR,
+                                 first_seen_at DATETIME, last_scanned_at DATETIME);
+        CREATE TABLE plan (id INTEGER PRIMARY KEY, created_at DATETIME, status VARCHAR, rules_json JSON);
+        CREATE TABLE plan_op (id INTEGER PRIMARY KEY, plan_id INTEGER, seq INTEGER, kind VARCHAR,
+                              file_id INTEGER, before_json JSON, after_json JSON, status VARCHAR);
+        CREATE TABLE undo_journal (id INTEGER PRIMARY KEY, run_id INTEGER, op_seq INTEGER,
+                                   kind VARCHAR, file_id INTEGER, from_path VARCHAR, to_path VARCHAR,
+                                   applied_at DATETIME, reversed BOOLEAN);
+        INSERT INTO scan_root (id, path) VALUES (1, '/inbox');
+        INSERT INTO audio_file (id, root_id, path, ext, size_bytes, hash_method, has_cover, has_rating,
+                                status, first_seen_at, last_scanned_at)
+            VALUES (10, 1, '/inbox/a.mp3', '.mp3', 1, 'stream', 0, 0, 'present',
+                    '2024-01-01T00:00:00', '2024-01-01T00:00:00');
+        INSERT INTO plan (id, created_at, status, rules_json) VALUES (5, '2024-01-01T00:00:00', 'applied', '{}');
+        INSERT INTO plan_op (id, plan_id, seq, kind, file_id, before_json, after_json, status)
+            VALUES (50, 5, 0, 'move', 10, '{}', '{}', 'done'),
+                   (51, 5, 1, 'move', 999, '{}', '{}', 'done');
+        INSERT INTO undo_journal (id, run_id, op_seq, kind, file_id, applied_at, reversed)
+            VALUES (100, 5, 0, 'move', 10, '2024-01-01T00:00:00', 0),
+                   (101, 5, 1, 'move', 999, '2024-01-01T00:00:00', 0);
+    """)
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_scarta_orfani_assente_comportamento_attuale_invariato(src_organize_fk_orfana_mista, dest_cratory):
+    """Senza --scarta-orfani il comportamento non deve essere cambiato da
+    questo lavoro: fallisce, la destinazione resta vergine. Verifica anche che
+    il messaggio elenchi le FK orfane rilevate e citi --scarta-orfani."""
+    report = migra(src_organize_fk_orfana_mista, dest_cratory, dry_run=False)
+    assert not report.ok()
+    assert report.fk_orfane > 0
+    assert report.scartati == {}
+
+    testo = report.render()
+    assert "scarta-orfani" in testo
+    assert "plan_op.file_id -> audio_file.id: 1 righe orfane" in testo
+    assert "undo_journal.file_id -> audio_file.id: 1 righe orfane" in testo
+
+    conn = sqlite3.connect(dest_cratory)
+    for tabella in ("scan_root", "audio_file", "plan", "plan_op", "undo_journal"):
+        assert conn.execute(f"select count(*) from {tabella}").fetchone()[0] == 0
+    conn.close()
+
+
+def test_scarta_orfani_esclude_solo_le_righe_orfane(src_organize_fk_orfana_mista, dest_cratory):
+    """Con --scarta-orfani: le righe sane passano, le orfane no, ok() è True e
+    migrati + scartati == sorgente per ogni tabella. Una riga con FK
+    risolvibile (id 50/100, file_id=10) non deve essere scartata."""
+    report = migra(src_organize_fk_orfana_mista, dest_cratory, dry_run=False, scarta_orfani=True)
+    assert report.ok(), report.render()
+    assert report.fk_orfane == 0
+
+    for tabella in ("scan_root", "audio_file", "plan", "plan_op", "undo_journal"):
+        migrati = getattr(report, tabella)
+        scartati = report.scartati.get(tabella, 0)
+        assert migrati + scartati == report.sorgente[tabella], tabella
+
+    assert report.scartati.get("plan_op") == 1
+    assert report.scartati.get("undo_journal") == 1
+    assert report.scartati.get("audio_file", 0) == 0
+    assert report.scartati.get("scan_root", 0) == 0
+    assert report.scartati.get("plan", 0) == 0
+
+    conn = sqlite3.connect(dest_cratory)
+    assert conn.execute("select id from plan_op order by id").fetchall() == [(50,)]
+    assert conn.execute("select id from undo_journal order by id").fetchall() == [(100,)]
+    conn.close()
+
+
+def test_scarta_orfani_dump_contiene_esattamente_le_righe_scartate(src_organize_fk_orfana_mista, dest_cratory):
+    """Il dump è un JSONL con una riga per record scartato, tutte le colonne
+    originali comprese, e il nome della tabella di provenienza."""
+    report = migra(src_organize_fk_orfana_mista, dest_cratory, dry_run=False, scarta_orfani=True)
+    assert report.ok()
+    assert report.dump_path is not None
+
+    righe = [json.loads(riga) for riga in Path(report.dump_path).read_text(encoding="utf-8").splitlines()]
+    assert len(righe) == 2
+
+    per_tabella = {r["tabella"]: r for r in righe}
+    assert set(per_tabella) == {"plan_op", "undo_journal"}
+
+    scartata_plan_op = per_tabella["plan_op"]
+    assert scartata_plan_op["id"] == 51
+    assert scartata_plan_op["file_id"] == 999
+    assert scartata_plan_op["plan_id"] == 5
+    assert scartata_plan_op["kind"] == "move"
+
+    scartata_undo = per_tabella["undo_journal"]
+    assert scartata_undo["id"] == 101
+    assert scartata_undo["file_id"] == 999
+    assert scartata_undo["run_id"] == 5
+
+
+def test_scarta_orfani_dump_non_scrivibile_aborta(src_organize_fk_orfana_mista, dest_cratory, tmp_path):
+    """Se il dump non può essere scritto (qui: directory inesistente), la
+    migrazione non deve procedere: uno scarto senza traccia è vietato."""
+    dump_path = tmp_path / "directory-inesistente" / "scartati.jsonl"
+
+    with pytest.raises(RuntimeError, match="dump"):
+        migra(
+            src_organize_fk_orfana_mista, dest_cratory, dry_run=False,
+            scarta_orfani=True, dump_path=dump_path,
+        )
+
+    assert not dump_path.exists()
+    conn = sqlite3.connect(dest_cratory)
+    for tabella in ("scan_root", "audio_file", "plan", "plan_op", "undo_journal"):
+        assert conn.execute(f"select count(*) from {tabella}").fetchone()[0] == 0
+    conn.close()
 
 
 def test_sorgente_senza_colonna_notnull_aborta(src_organize_senza_has_rating, dest_cratory):
