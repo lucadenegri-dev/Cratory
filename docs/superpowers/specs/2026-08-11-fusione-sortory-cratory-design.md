@@ -315,19 +315,44 @@ file audio viene letto, spostato o riscritto.
 7. `issue` e `dup_group` **non** si migrano: sono derivati, le issue sono tutte
    chiuse, i gruppi sono zero. Li rigenera il primo scan.
 
-**Assert di fine migrazione** (numeri già misurati sui dati reali): se uno non
-torna, lo script si ferma e la copia si butta.
+**Assert di fine migrazione — su invarianti, non su costanti.** Lo script conta
+la sorgente all'inizio della propria transazione e verifica che la destinazione
+combaci; se un confronto non torna, si ferma e la copia si butta.
 
 ```
-audio_file migrati        = 1777
-di cui location=library   =  649
-di cui location=inbox     = 1128
-track_id valorizzati      =  625
-tracks.primary_file_id    =  625
-plan                      =   98
-undo_journal              = 2995
-FK orfane                 =    0
+audio_file migrati        == COUNT(*) da s.audio_file
+location=library + inbox  == audio_file migrati            (nessun terzo caso)
+track_id valorizzati      == COUNT(join su path assoluto)
+tracks.primary_file_id    == track_id valorizzati          (specchio esatto)
+plan, plan_op, undo_journal == rispettivi COUNT sorgente
+FK orfane                 == 0
 ```
+
+**Perché non numeri fissi.** La prima stesura di questa spec congelava i valori
+misurati il 2026-08-11 (1777 / 649 / 1128 / 625 / 98 / 2995). Rimisurati lo
+stesso giorno, dopo un uso di Sortory standalone, erano già 1778 / 650 / 1128 /
+625 / 99 / 2996. Un assert su costanti avrebbe fatto fallire una migrazione
+corretta. I numeri assoluti restano utili come **ordine di grandezza atteso**
+nel report, non come condizione di successo.
+
+Baseline di riferimento (2026-08-11, seconda misura), da confrontare a occhio
+col report del dry-run:
+
+| | |
+|---|---:|
+| `audio_file` totali | 1.778 |
+| di cui in `Library/` | 650 |
+| di cui in `Downloads/` | 1.128 |
+| match su path assoluto | 625 |
+| `plan` | 99 |
+| `undo_journal` | 2.996 |
+| `issue` (non migrate) | 1.025 |
+| `dup_group` (non migrati) | 0 |
+| `tracks` Cratory | 677 |
+| `tracks` con `has_local_file` | 626 |
+
+Se il dry-run si discosta di molto da questi ordini di grandezza, **fermati**:
+non è la migrazione ad avere un bug, è il DB sorgente a non essere quello atteso.
 
 Prima della migrazione reale gira un **dry-run**: stessa procedura su un DB in
 memoria, stampa il report, non scrive niente.
