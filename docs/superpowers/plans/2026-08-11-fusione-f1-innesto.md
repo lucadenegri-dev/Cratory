@@ -613,7 +613,11 @@ client = TestClient(app)
 
 
 def _paths() -> set[str]:
-    return {r.path for r in app.routes}
+    # NON usare {r.path for r in app.routes}: da FastAPI 0.141 `app.routes`
+    # contiene wrapper `_IncludedRouter` privi di `.path`, e la comprehension
+    # esplode. `app.openapi()["paths"]` è l'API pubblica stabile per l'elenco
+    # dei path effettivamente registrati.
+    return set(app.openapi()["paths"].keys())
 
 
 def test_rotte_organize_prefissate():
@@ -633,7 +637,12 @@ def test_nessuna_rotta_organize_fuori_dal_prefisso():
 
 def test_rotte_cratory_intatte():
     paths = _paths()
-    assert "/api/settings" in paths
+    # `/api/settings` nudo NON è un path registrato: il router Cratory ha
+    # prefix="/api/settings" ma nessuna rotta sulla suffix vuota, solo
+    # /language, /config, /share-library. Asserirlo sarebbe sempre falso.
+    # `/api/settings/language` è invece la collisione vera: prima del prefisso
+    # anche il router Organize esponeva /language sotto lo stesso prefix.
+    assert "/api/settings/language" in paths
     assert "/api/tracks" in paths
     assert "/api/library/index" in paths
 
