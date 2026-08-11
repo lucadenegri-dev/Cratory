@@ -21,8 +21,21 @@ import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app.core.config import settings
+
 # Ordine di travaso: le tabelle che fanno da bersaglio alle FK vengono prima.
 _TABELLE = ("scan_root", "audio_file", "plan", "plan_op", "undo_journal")
+
+
+def _path_db_produzione() -> Path | None:
+    """Il path del DB configurato in produzione (app.core.config.settings),
+    solo se è uno sqlite su file reale. None per ':memory:' o URL non-sqlite
+    (nessun altro backend è usato oggi, ma non è questa la funzione che deve
+    deciderlo)."""
+    url = settings.database_url
+    if not url.startswith("sqlite:///") or url == "sqlite:///:memory:":
+        return None
+    return Path(url.removeprefix("sqlite:///"))
 
 
 @dataclass
@@ -69,82 +82,125 @@ def migra(src_organize: Path, dest: Path, *, dry_run: bool) -> Report:
     if not dest.exists():
         raise FileNotFoundError(f"DB di destinazione non trovato: {dest}")
 
+    # Ultima rete prima di lanciare lo script sui dati veri: --dest deve
+    # sempre essere una copia. Confrontiamo path risolti (non stringhe grezze)
+    # perché --dest può arrivare relativo o con '..'/symlink.
+    prod = _path_db_produzione()
+    if prod is not None and dest.resolve() == prod.resolve():
+        raise RuntimeError(
+            f"--dest ({dest}) risolve al DB di produzione configurato "
+            f"({prod}): --dest deve essere sempre una COPIA, mai il file vero."
+        )
+
     # uri=True abilita il riconoscimento degli URI anche per l'ATTACH successivo
     # (il flag SQLITE_OPEN_URI si applica alla connessione, non al singolo open):
     # è quello che ci permette di attaccare la sorgente in sola lettura sotto.
     conn = sqlite3.connect(str(dest), uri=True)
-    # isolation_level=None → autocommit: BEGIN/COMMIT/ROLLBACK espliciti
-    # funzionano. Col default, sqlite3 apre transazioni implicite sulle DML e il
-    # nostro BEGIN esploderebbe con "cannot start a transaction within a
-    # transaction". ATTACH, per lo stesso motivo, va fatto fuori transazione.
-    conn.isolation_level = None
-    conn.execute("PRAGMA foreign_keys = OFF")  # travasiamo in ordine, controlliamo dopo
-    # Sorgente attaccata in sola lettura: nessuna istruzione dello script ci
-    # scrive (sono tutti SELECT), ma senza mode=ro SQLite può comunque scrivere
-    # sul file attaccato per conto suo (rollback di un hot journal, checkpoint
-    # WAL alla chiusura). mode=ro lo rende strutturalmente impossibile: un
-    # tentativo di scrittura diventa "attempt to write a readonly database".
-    org_uri = src_organize.resolve().as_uri() + "?mode=ro"
-    conn.execute("ATTACH DATABASE ? AS org", (org_uri,))
     report = Report(dry_run=dry_run)
-
-    conn.execute("BEGIN")
     try:
-        for tabella in _TABELLE:
-            # Precondizione: la destinazione dev'essere vergine. È ciò che
-            # permette di conservare gli id originali senza tabella di
-            # corrispondenza — vedi la nota sulla preservazione nel piano.
-            # Dentro la transazione: osservare "vuota" e poi scrivere devono
-            # condividere lo snapshot, altrimenti un writer concorrente fra i
-            # due passi vanificherebbe il controllo.
-            report.sorgente[tabella] = conn.execute(
-                f"select count(*) from org.{tabella}"
-            ).fetchone()[0]
-            gia_presenti = conn.execute(f"select count(*) from main.{tabella}").fetchone()[0]
-            if gia_presenti:
-                raise RuntimeError(
-                    f"main.{tabella} è già popolata ({gia_presenti} righe): "
-                    "la destinazione non è vergine, migrazione annullata."
+        # isolation_level=None → autocommit: BEGIN/COMMIT/ROLLBACK espliciti
+        # funzionano. Col default, sqlite3 apre transazioni implicite sulle DML
+        # e il nostro BEGIN esploderebbe con "cannot start a transaction within
+        # a transaction". ATTACH, per lo stesso motivo, va fatto fuori transazione.
+        conn.isolation_level = None
+        conn.execute("PRAGMA foreign_keys = OFF")  # travasiamo in ordine, controlliamo dopo
+        # Sorgente attaccata in sola lettura: nessuna istruzione dello script ci
+        # scrive (sono tutti SELECT), ma senza mode=ro SQLite può comunque
+        # scrivere sul file attaccato per conto suo. Verificato empiricamente:
+        # se la sorgente è in journal_mode=WAL con un -wal non ancora
+        # checkpointato (il caso reale: app/db.py:24 forza WAL, e uno stop non
+        # pulito di Organize lascia frame WAL pendenti), attaccarla in
+        # scrittura e poi fare DETACH esegue un checkpoint completo — il .db
+        # cresce (4096 -> 8192 byte) e il -wal si azzera — senza che lo
+        # script esegua una sola scrittura logica. I conteggi restano
+        # identici attraverso quel checkpoint, quindi non è un mismatch che
+        # il Report intercetterebbe: mode=ro è l'unica cosa che lo rende
+        # strutturalmente impossibile — un tentativo di scrittura diventa
+        # "attempt to write a readonly database". Vedi
+        # test_dry_run_non_scrive_non_altera_bytewise per la verifica a
+        # livello di byte (non di conteggio) di questa proprietà.
+        org_uri = src_organize.resolve().as_uri() + "?mode=ro"
+        conn.execute("ATTACH DATABASE ? AS org", (org_uri,))
+
+        conn.execute("BEGIN")
+        try:
+            # Passaggio 1: diagnosi completa su tutte le tabelle prima di
+            # qualunque INSERT. Farlo dentro il ciclo che scrive fermerebbe
+            # l'operatore alla prima tabella colpevole, con fino a quattro
+            # tabelle già travasate (e da far rollback) prima di scoprire un
+            # quinto problema al prossimo tentativo — su una run one-shot sui
+            # dati veri, meglio vedere tutti i problemi in un colpo.
+            problemi: list[str] = []
+            colonne_comuni: dict[str, list[str]] = {}
+            for tabella in _TABELLE:
+                # Dentro la transazione: osservare "vuota" e poi scrivere
+                # devono condividere lo snapshot, altrimenti un writer
+                # concorrente fra i due passi vanificherebbe il controllo.
+                report.sorgente[tabella] = conn.execute(
+                    f"select count(*) from org.{tabella}"
+                ).fetchone()[0]
+
+                # Precondizione: la destinazione dev'essere vergine. È ciò che
+                # permette di conservare gli id originali senza tabella di
+                # corrispondenza — vedi la nota sulla preservazione nel piano.
+                gia_presenti = conn.execute(f"select count(*) from main.{tabella}").fetchone()[0]
+                if gia_presenti:
+                    problemi.append(
+                        f"main.{tabella} è già popolata ({gia_presenti} righe): "
+                        "la destinazione non è vergine."
+                    )
+
+                # Le colonne comuni alle due copie della tabella (la destinazione
+                # può averne di più: ensure_schema crea lo schema corrente). Una
+                # colonna presente SOLO nella sorgente sparirebbe in silenzio —
+                # inaccettabile per una migrazione one-shot di dati insostituibili
+                # — quindi va rilevata e bloccata, non lasciata scomparire dietro
+                # un "ok".
+                colonne_org = _colonne(conn, tabella, "org")
+                colonne_dest = _colonne(conn, tabella)
+                mancanti = set(colonne_org) - set(colonne_dest)
+                if mancanti:
+                    problemi.append(
+                        f"{tabella}: colonne presenti solo nella sorgente e che la "
+                        f"migrazione perderebbe: {sorted(mancanti)}"
+                    )
+                colonne_comuni[tabella] = [c for c in colonne_org if c in colonne_dest]
+
+            if problemi:
+                raise RuntimeError("migrazione annullata:\n- " + "\n- ".join(problemi))
+
+            # Passaggio 2: adesso che nessuna tabella ha problemi noti, scrivi.
+            for tabella in _TABELLE:
+                comuni = colonne_comuni[tabella]
+                lista = ", ".join(comuni)
+                conn.execute(
+                    f"INSERT INTO main.{tabella} ({lista}) SELECT {lista} FROM org.{tabella}"
                 )
+                setattr(report, tabella, conn.execute(
+                    f"select count(*) from main.{tabella}"
+                ).fetchone()[0])
 
-            # Le colonne comuni alle due copie della tabella (la destinazione può
-            # averne di più: ensure_schema crea lo schema corrente). Una colonna
-            # presente SOLO nella sorgente sparirebbe in silenzio — inaccettabile
-            # per una migrazione one-shot di dati insostituibili — quindi va
-            # rilevata e bloccata, non lasciata scomparire dietro un "ok".
-            colonne_org = _colonne(conn, tabella, "org")
-            colonne_dest = _colonne(conn, tabella)
-            mancanti = set(colonne_org) - set(colonne_dest)
-            if mancanti:
-                raise RuntimeError(
-                    f"{tabella}: colonne presenti solo nella sorgente e che la "
-                    f"migrazione perderebbe: {sorted(mancanti)}"
-                )
+            report.fk_orfane = _conta_fk_orfane(conn)
 
-            comuni = [c for c in colonne_org if c in colonne_dest]
-            lista = ", ".join(comuni)
-            conn.execute(
-                f"INSERT INTO main.{tabella} ({lista}) SELECT {lista} FROM org.{tabella}"
-            )
-            setattr(report, tabella, conn.execute(
-                f"select count(*) from main.{tabella}"
-            ).fetchone()[0])
-
-        report.fk_orfane = _conta_fk_orfane(conn)
-
-        if dry_run or not report.ok():
-            conn.execute("ROLLBACK")
-        else:
-            conn.execute("COMMIT")
-    except Exception:
-        # C'è sempre una transazione aperta a questo punto (BEGIN è la prima
-        # istruzione, prima di ogni controllo): nessun bisogno di proteggere il
-        # ROLLBACK, a differenza di quando la precondizione "vergine" viveva
-        # fuori transazione.
-        conn.execute("ROLLBACK")
-        raise
+            if dry_run or not report.ok():
+                conn.execute("ROLLBACK")
+            else:
+                conn.execute("COMMIT")
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.OperationalError:
+                # SQLite fa auto-rollback su SQLITE_FULL/IOERR/NOMEM o
+                # interrupt: dopo un auto-rollback la transazione non è più
+                # attiva, e un ROLLBACK esplicito solleva "cannot rollback -
+                # no transaction is active", mascherando l'eccezione vera
+                # (quella che l'operatore deve vedere). Nessun dato perso:
+                # l'auto-rollback garantisce che nulla sia stato scritto.
+                pass
+            raise
+        finally:
+            conn.execute("DETACH DATABASE org")
     finally:
-        conn.execute("DETACH DATABASE org")
         conn.close()
 
     return report
