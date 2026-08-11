@@ -11,11 +11,11 @@ import { ThemeToggle } from "./theme-toggle";
 import { useT } from "@/lib/organize/i18n";
 
 const NAV = [
-  { href: "/files", label: "Files" },
-  { href: "/issues", label: "Issues" },
-  { href: "/duplicates", label: "Duplicates" },
-  { href: "/plan", label: "Plan" },
-  { href: "/history", label: "History" },
+  { href: "/organize/files", label: "Files" },
+  { href: "/organize/issues", label: "Issues" },
+  { href: "/organize/duplicates", label: "Duplicates" },
+  { href: "/organize/plan", label: "Plan" },
+  { href: "/organize/history", label: "History" },
 ] as const;
 
 function sumIssues(s: LibraryStats | null): number {
@@ -40,11 +40,11 @@ export function IndexNav() {
   }, [scan.status, load]);
 
   const counts: Record<string, string> = {
-    "/files": stats ? String(stats.files_total) : "—",
-    "/issues": stats ? String(sumIssues(stats)) : "—",
-    "/duplicates": stats ? String(stats.dup_groups) : "—",
-    "/plan": "—",
-    "/history": "—",
+    "/organize/files": stats ? String(stats.files_total) : "—",
+    "/organize/issues": stats ? String(sumIssues(stats)) : "—",
+    "/organize/duplicates": stats ? String(stats.dup_groups) : "—",
+    "/organize/plan": "—",
+    "/organize/history": "—",
   };
 
   const isActive = (href: string) => pathname.startsWith(href);
@@ -87,10 +87,10 @@ export function IndexNav() {
       <div className="hidden flex-col border-t border-border lg:flex">
         <Link
           href="/organize/settings"
-          aria-current={isActive("/settings") ? "page" : undefined}
+          aria-current={isActive("/organize/settings") ? "page" : undefined}
           className={cn(
             "flex items-center gap-1.5 px-2 py-1.5 text-xs uppercase tracking-wider transition-colors",
-            isActive("/settings")
+            isActive("/organize/settings")
               ? "border-l-2 border-danger bg-surface-2 text-fg-strong"
               : "border-l-2 border-transparent text-muted hover:text-fg",
           )}
