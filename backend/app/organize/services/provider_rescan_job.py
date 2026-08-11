@@ -4,7 +4,7 @@ scan_job): la UI lancia e poi fa polling di job_state()."""
 import logging
 import threading
 
-from app.organize.core.config import settings
+from app.core.config import settings
 from app.db import SessionLocal
 from app.organize.integrations import acoustid, cover_art
 from app.organize.models import utcnow

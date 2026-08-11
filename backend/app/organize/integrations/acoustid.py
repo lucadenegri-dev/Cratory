@@ -18,7 +18,7 @@ from typing import Any, Callable
 
 import httpx
 
-from app.organize.core.config import settings
+from app.core.config import settings
 from app.organize.integrations._http import post_with_retries
 
 logger = logging.getLogger(__name__)

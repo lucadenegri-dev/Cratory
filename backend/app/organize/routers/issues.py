@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.organize.core.config import settings
+from app.core.config import settings
 from app.organize.core.http_errors import api_error
 from app.db import get_db
 from app.organize.integrations import acoustid, cover_art

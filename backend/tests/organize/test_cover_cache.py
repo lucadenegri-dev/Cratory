@@ -2,7 +2,7 @@ from app.organize.services import cover_cache
 
 
 def test_save_read_roundtrip(tmp_path, monkeypatch):
-    from app.organize.core.config import settings
+    from app.core.config import settings
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     ref = cover_cache.save_thumb(42, b"\xff\xd8jpg")
     assert ref == "cover_cache/42.jpg"
@@ -10,7 +10,7 @@ def test_save_read_roundtrip(tmp_path, monkeypatch):
 
 
 def test_read_missing_is_none(tmp_path, monkeypatch):
-    from app.organize.core.config import settings
+    from app.core.config import settings
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     assert cover_cache.read_thumb(999) is None
 
@@ -19,7 +19,7 @@ def test_read_race_between_exists_and_open_returns_none(tmp_path, monkeypatch):
     """Tra l'exists() e l'open() qualcuno può far sparire il file (es. una
     drop_thumb concorrente durante la delete di una sorgente): non deve
     diventare un 500, la richiesta della thumb gira su ogni riga di tabella."""
-    from app.organize.core.config import settings
+    from app.core.config import settings
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     cover_cache.save_thumb(7, b"\xff\xd8jpg")
 

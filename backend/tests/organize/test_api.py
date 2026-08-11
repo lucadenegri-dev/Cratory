@@ -35,7 +35,7 @@ def test_delete_source_purges_thumbnail_caches(db, tmp_path, monkeypatch):
     scan successivo può riassegnarli, quindi le cache thumbnail dei file
     cancellati con la sorgente vanno rimosse o un id riciclato rischia di
     servire la cover del file vecchio."""
-    from app.organize.core.config import settings
+    from app.core.config import settings
     from app.organize.models import AudioFile, ScanRoot
     from app.organize.services import cover_cache, thumbs
 

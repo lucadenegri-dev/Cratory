@@ -4,7 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-from app.organize.core.config import settings
+from app.core.config import settings
 from app.organize.models import AudioFile
 
 _LOSSLESS = {"flac", "wav", "aiff", "aif"}

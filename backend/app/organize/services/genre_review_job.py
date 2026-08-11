@@ -4,7 +4,7 @@ provider_rescan_job): la UI lancia e poi fa polling di job_state()."""
 import logging
 import threading
 
-from app.organize.core.config import settings
+from app.core.config import settings
 from app.db import SessionLocal
 from app.organize.models import utcnow
 from app.organize.services import ai_tags, genre_review

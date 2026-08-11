@@ -3,7 +3,7 @@ Settings (elenco uniforme alle Impostazioni di Cratory). Read-only."""
 
 from fastapi import APIRouter
 
-from app.organize.core.config import settings
+from app.core.config import settings
 from app.organize.integrations import acoustid
 from app.organize.schemas import ProviderInfo
 from app.organize.services import ai_tags
@@ -21,15 +21,15 @@ def list_providers():
             key="musicbrainz", name="MusicBrainz", category="metadati testuali",
             description="Identità del brano + label, genere (via tag) e anno. "
                         "Nessuna chiave richiesta (~1 richiesta/secondo).",
-            env_vars=["DJORG_MUSICBRAINZ_USER_AGENT"],
+            env_vars=["MUSICBRAINZ_USER_AGENT"],
             docs_url="https://musicbrainz.org/doc/MusicBrainz_API",
             status="connected",
         ),
         ProviderInfo(
             key="discogs", name="Discogs", category="metadati testuali",
             description="Riempie label/genere/anno mancanti dopo MusicBrainz. "
-                        "Funziona senza token; DJORG_DISCOGS_TOKEN alza il rate limit.",
-            env_vars=["DJORG_DISCOGS_TOKEN"],
+                        "Funziona senza token; DISCOGS_TOKEN alza il rate limit.",
+            env_vars=["DISCOGS_TOKEN"],
             docs_url="https://www.discogs.com/settings/developers",
             status="configured" if discogs_token else "connected",
         ),
@@ -37,7 +37,7 @@ def list_providers():
             key="acoustid", name="AcoustID / Chromaprint", category="fingerprint",
             description="Identità acustica del file → MBID (match MusicBrainz esatto, "
                         "alta confidenza). Richiede la chiave AcoustID e il binario fpcalc.",
-            env_vars=["DJORG_ACOUSTID_API_KEY", "FPCALC"],
+            env_vars=["ACOUSTID_API_KEY", "FPCALC"],
             docs_url="https://acoustid.org/",
             status="configured" if acoustid_ok else "missing",
         ),

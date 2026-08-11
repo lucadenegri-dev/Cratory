@@ -10,7 +10,7 @@ import uuid
 
 from PIL import Image
 
-from app.organize.core.config import settings
+from app.core.config import settings
 from app.organize.integrations import tagio
 
 # 3x rispetto ai 32px a schermo: nitida su display retina, ~4 KB per file.

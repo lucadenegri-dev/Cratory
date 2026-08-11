@@ -4,7 +4,7 @@ servibili come file statico. La full-res NON passa di qui (scaricata all'apply).
 import os
 import uuid
 
-from app.organize.core.config import settings
+from app.core.config import settings
 
 
 def _dir() -> str:

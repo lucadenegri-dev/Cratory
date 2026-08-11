@@ -31,7 +31,7 @@ class _Resolved:
 
 
 def test_provider_suggest_creates_missing_cover_issue(db, tmp_path, monkeypatch):
-    from app.organize.core.config import settings
+    from app.core.config import settings
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     fid = _seed(db)
     fake_cover = __import__("app.organize.integrations.cover_art", fromlist=["CoverResult"]).CoverResult(
@@ -50,7 +50,7 @@ def test_provider_suggest_creates_missing_cover_issue(db, tmp_path, monkeypatch)
 
 
 def test_cover_thumb_endpoint_serves_bytes(db, tmp_path, monkeypatch):
-    from app.organize.core.config import settings
+    from app.core.config import settings
     from app.organize.services import cover_cache
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     cover_cache.save_thumb(7, b"\xff\xd8IMG")
@@ -60,13 +60,13 @@ def test_cover_thumb_endpoint_serves_bytes(db, tmp_path, monkeypatch):
 
 
 def test_cover_thumb_404_when_missing(db, tmp_path, monkeypatch):
-    from app.organize.core.config import settings
+    from app.core.config import settings
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     assert client.get("/api/organize/issues/cover-thumb/12345").status_code == 404
 
 
 def test_covers_skipped_when_flag_false(db, tmp_path, monkeypatch):
-    from app.organize.core.config import settings
+    from app.core.config import settings
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     _seed(db)
     with patch("app.organize.routers.issues.text_providers.resolve", return_value=_Resolved()), \
@@ -77,7 +77,7 @@ def test_covers_skipped_when_flag_false(db, tmp_path, monkeypatch):
 
 
 def _run_with_cover(db, tmp_path, monkeypatch, cover):
-    from app.organize.core.config import settings
+    from app.core.config import settings
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     with patch("app.organize.routers.issues.text_providers.resolve", return_value=_Resolved()), \
          patch("app.organize.routers.issues.acoustid.acoustid_configured", return_value=False), \
@@ -86,7 +86,7 @@ def _run_with_cover(db, tmp_path, monkeypatch, cover):
 
 
 def test_accepted_cover_issue_not_clobbered(db, tmp_path, monkeypatch):
-    from app.organize.core.config import settings
+    from app.core.config import settings
     from app.organize.services import cover_cache
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     fid = _seed(db)

@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
-# serve all'SDK Anthropic, che legge ANTHROPIC_API_KEY da os.environ.
-# La key non ha il prefisso DJORG_, quindi pydantic-settings non la carica.
+# serve all'SDK Anthropic, che legge ANTHROPIC_API_KEY da os.environ:
+# pydantic-settings non la carica (non è un campo di Settings).
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from fastapi import FastAPI, Request

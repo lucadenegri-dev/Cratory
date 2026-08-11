@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from app.organize.core.config import settings
+from app.core.config import settings
 from app.organize.integrations._http import get_with_retries
 
 logger = logging.getLogger(__name__)

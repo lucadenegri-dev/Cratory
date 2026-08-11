@@ -23,10 +23,10 @@ def test_musicbrainz_always_connected():
 
 
 def test_discogs_status_reflects_token(monkeypatch):
-    monkeypatch.setattr("app.organize.core.config.settings.discogs_token", "tok")
+    monkeypatch.setattr("app.core.config.settings.discogs_token", "tok")
     body = client.get("/api/organize/providers").json()
     assert next(p for p in body if p["key"] == "discogs")["status"] == "configured"
-    monkeypatch.setattr("app.organize.core.config.settings.discogs_token", None)
+    monkeypatch.setattr("app.core.config.settings.discogs_token", None)
     body = client.get("/api/organize/providers").json()
     assert next(p for p in body if p["key"] == "discogs")["status"] == "connected"
 

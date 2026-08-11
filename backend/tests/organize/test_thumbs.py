@@ -7,7 +7,7 @@ import struct
 import pytest
 from PIL import Image
 
-from app.organize.core.config import settings
+from app.core.config import settings
 from app.organize.integrations import tagio
 from app.organize.services import thumbs
 
