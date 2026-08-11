@@ -856,16 +856,17 @@ const API_ROOT = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 const API = `${API_ROOT}/api/organize`;
 ```
 
-Poi accorciare i 35 path dei call site (che oggi iniziano con `/api/`):
+Poi accorciare i path dei call site (che oggi iniziano con `/api/`). **L'ordine conta**: fai la sostituzione globale *prima* di introdurre la costante, così non devi escluderla dal pattern.
 
 ```bash
 cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/frontend && \
-sed -i '' -E 's|\("/api/|("/|g' lib/organize/api.ts && \
-sed -i '' -E 's|\$\{API\}/api/|${API}/|g' lib/organize/api.ts && \
+sed -i '' -E 's|"/api/|"/|g; s|\$\{API\}/api/|${API}/|g' lib/organize/api.ts && \
 grep -n '/api/' lib/organize/api.ts
 ```
 
-Atteso dal `grep`: solo le due righe della costante `API`/`API_ROOT`.
+Atteso dal `grep`: solo le righe della costante `API`/`API_ROOT` e il commento (se hai già inserito il blocco della costante, ricontrolla che la sed non l'abbia toccato e ripristinalo).
+
+⚠️ **Non restringere il pattern a `\("/api/`.** I path non compaiono solo come primo argomento: `apiSend` li riceve come **secondo** (`apiSend<T>("PUT", "/api/sources/…")`), e sono ~24 call site su ~35. Un pattern ancorato alla parentesi aperta li manca tutti e il grep di verifica te lo dice.
 
 - [ ] **Step 6: Lanciare il test e verificare che passi**
 
