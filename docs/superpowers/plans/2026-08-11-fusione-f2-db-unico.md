@@ -443,7 +443,18 @@ Le righe `sys.path.insert` esistenti restano dove sono, purché anch'esse preced
 
 - [ ] **Step 4: Ripulire il conftest di Organize**
 
-In `backend/tests/organize/conftest.py`: rimuovere il blocco che imposta `DJORG_DATABASE_URL` (e gli `import os` / `import tempfile` se non servono più ad altro), e cambiare l'import dell'engine:
+**Modifica chirurgica, NON riscrittura del file.** `backend/tests/organize/conftest.py` contiene molto più di quanto mostrato qui sotto e tutto il resto va lasciato **esattamente com'è**:
+
+- `pytest_collection_modifyitems` con il filtro su `_ORGANIZE_TESTS` — l'hook riceve da pytest gli item dell'**intera** sessione, e senza quel filtro la strictness sui warning tracimerebbe sui test Cratory. È già stato un bug in F1: non reintrodurlo.
+- le fixture `db`, `fixture_path`, `copy_fixture` e la factory `make_audio_file`.
+
+Le uniche tre modifiche da fare:
+
+1. rimuovere il blocco che imposta `DJORG_DATABASE_URL` (e `import os` / `import tempfile` se non servono ad altro nel file);
+2. cambiare la riga di import dell'engine;
+3. aggiungere `import app.models` dentro `_fresh_db`.
+
+L'import dell'engine diventa:
 
 ```python
 """Fixture pytest di Organize.
@@ -459,7 +470,9 @@ import pytest
 from app.db import Base, SessionLocal, engine
 ```
 
-La fixture `_fresh_db` resta com'è ma deve importare **entrambi** i moduli di modelli, altrimenti `create_all` sul Base condiviso ricrea solo metà schema:
+La fixture `_fresh_db` resta com'è ma deve importare **entrambi** i moduli di modelli, altrimenti `create_all` sul Base condiviso ricrea solo metà schema.
+
+Nota di costo, da tenere d'occhio ma non da ottimizzare adesso: con un solo `Base` questa fixture passa da ~9 a ~20 tabelle droppate e ricreate, per ognuno dei 519 test Organize. Se la suite rallenta in modo evidente, segnalalo come concern — non cambiare strategia di tua iniziativa.
 
 ```python
 @pytest.fixture(autouse=True)
