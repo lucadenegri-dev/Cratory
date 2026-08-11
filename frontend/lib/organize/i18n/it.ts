@@ -126,7 +126,7 @@ export const it: Dictionary = {
       },
       discogs: {
         category: "metadati testuali",
-        description: "Riempie label/genere/anno mancanti dopo MusicBrainz. Funziona senza token; DJORG_DISCOGS_TOKEN alza il rate limit.",
+        description: "Riempie label/genere/anno mancanti dopo MusicBrainz. Funziona senza token; DISCOGS_TOKEN alza il rate limit.",
       },
       acoustid: {
         category: "fingerprint",

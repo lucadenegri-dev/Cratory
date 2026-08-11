@@ -130,7 +130,7 @@ export const en = {
       },
       discogs: {
         category: "text metadata",
-        description: "Fills missing label/genre/year after MusicBrainz. Works without a token; DJORG_DISCOGS_TOKEN raises the rate limit.",
+        description: "Fills missing label/genre/year after MusicBrainz. Works without a token; DISCOGS_TOKEN raises the rate limit.",
       },
       acoustid: {
         category: "fingerprint",

@@ -173,6 +173,36 @@ def test_delete_source_rejects_when_plan_op_exists(db, tmp_path):
     assert db.scalars(select(PlanOp).where(PlanOp.file_id == 10)).first() is not None
 
 
+def test_delete_source_allows_when_only_draft_plan_op_exists(db, tmp_path):
+    """Un piano draft (quello che la pagina Piano tiene sempre pronto per la
+    preview) referenzia plan_op per ogni file: non è run history, è
+    usa-e-getta (create_plan lo ricrea da zero a ogni chiamata). La delete
+    della sorgente deve passare e le sue plan_op devono sparire con essa,
+    altrimenti la FK plan_op.file_id scatterebbe sulla delete di audio_file."""
+    from app.organize.models import AudioFile, Plan, PlanOp, ScanRoot
+
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    db.add(ScanRoot(id=3, path=str(lib)))
+    db.add(AudioFile(id=10, root_id=3, path=f"{lib}/a.mp3", ext="mp3", size_bytes=1,
+                     hash_method="file", status="present", has_cover=False))
+    db.flush()
+    db.add(Plan(id=1, status="draft", rules_json={}))
+    db.flush()
+    db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=10,
+                  before_json={"path": "a"}, after_json={"path": "b"}, status="pending"))
+    db.commit()
+
+    with TestClient(app) as client:
+        resp = client.delete("/api/organize/sources/3")
+        assert resp.status_code == 204
+
+    db.expire_all()
+    assert db.get(ScanRoot, 3) is None
+    assert db.scalars(select(AudioFile).where(AudioFile.id == 10)).first() is None
+    assert db.scalars(select(PlanOp).where(PlanOp.file_id == 10)).first() is None
+
+
 def test_delete_source_rejects_when_undo_journal_exists(db, tmp_path):
     """Stesso rifiuto se il file compare solo nell'undo_journal (senza righe
     ancora in plan_op, es. plan_op già rimosso a valle): la storia dell'undo

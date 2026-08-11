@@ -23,7 +23,7 @@ provider services (all optional, all degrade cleanly).
 | `uvicorn[standard]` | ASGI server (dev + run). |
 | `sqlalchemy` `>=2.0`| ORM (`app/models.py`, `app/db.py`). |
 | `pydantic` `>=2`    | Request/response schemas (`app/schemas.py`). |
-| `pydantic-settings` | Env-driven config, `DJORG_` prefix (`app/core/config.py`). |
+| `pydantic-settings` | Env-driven config, no prefix — shared with Cratory (`app/core/config.py`). |
 | `mutagen`           | Read/write audio tags (`integrations/tagio.py`). |
 | `anthropic`         | Claude Haiku calls for the "Resolve with AI" features (`services/ai_tags.py`). |
 | `pyacoustid`        | Acoustic fingerprint lookup against AcoustID (`integrations/acoustid.py`); shells out to `fpcalc`. |
@@ -82,10 +82,10 @@ pipeline keeps working (clean degradation). Configured via `backend/.env`
 
 | Provider              | Env var / requirement            | Key required? | Used for |
 |-----------------------|----------------------------------|---------------|----------|
-| **Anthropic (Claude Haiku)** | `ANTHROPIC_API_KEY` (no `DJORG_` prefix) | Yes, for AI actions | "Resolve with AI" (artist/title) and the genre review job (`services/genre_review.py`). |
-| **MusicBrainz**       | `DJORG_MUSICBRAINZ_USER_AGENT`   | No key, but needs an identifiable User-Agent (real contact email/URL) | Textual metadata + MBID resolution. |
-| **Discogs**           | `DJORG_DISCOGS_TOKEN`            | Optional (works at ~25 req/min without, ~60 req/min with a free token) | Fills missing label/style/year. |
-| **AcoustID**          | `DJORG_ACOUSTID_API_KEY` **+** `fpcalc` binary | Yes (key + binary) for fingerprinting | Acoustic fingerprint → certain `AudioFile.mbid`; enables fingerprint-first provider lookup. |
+| **Anthropic (Claude Haiku)** | `ANTHROPIC_API_KEY` | Yes, for AI actions | "Resolve with AI" (artist/title) and the genre review job (`services/genre_review.py`). |
+| **MusicBrainz**       | `MUSICBRAINZ_USER_AGENT`         | No key, but needs an identifiable User-Agent (real contact email/URL) | Textual metadata + MBID resolution. |
+| **Discogs**           | `DISCOGS_TOKEN` (shared with Cratory's Discovery) | Optional (works at ~25 req/min without, ~60 req/min with a free token) | Fills missing label/style/year. |
+| **AcoustID**          | `ACOUSTID_API_KEY` **+** `fpcalc` binary | Yes (key + binary) for fingerprinting | Acoustic fingerprint → certain `AudioFile.mbid`; enables fingerprint-first provider lookup. |
 
 Getting keys:
 
@@ -108,8 +108,8 @@ for a later pass, instead of being counted as reviewed.
 
 | Var                     | Default                              | Where |
 |-------------------------|--------------------------------------|-------|
-| `DJORG_DATABASE_URL`    | `sqlite:///./data/djorganizer.db`    | backend |
-| `DJORG_COVER_CACHE_DIR` | `./data/cover_cache`                 | backend (git-ignored) |
+| `DATABASE_URL`          | `sqlite:///./data/djassistant.db` (shared with Cratory) | backend |
+| `COVER_CACHE_DIR`       | `./data/cover_cache`                 | backend (git-ignored) |
 | `NEXT_PUBLIC_API_BASE`  | `http://localhost:8010`              | frontend |
 
 See [CLAUDE.md](CLAUDE.md) for architecture and [README.md](README.md) for the

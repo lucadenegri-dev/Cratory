@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.organize.core.http_errors import api_error
 from app.organize.models import (
-    AudioFile, DupGroup, DupMember, Issue, PlanOp, ScanRoot, UndoJournal,
+    AudioFile, DupGroup, DupMember, Issue, Plan, PlanOp, ScanRoot, UndoJournal,
 )
 from app.organize.schemas import ScanRootCreate, ScanRootRead
 from app.organize.services import cover_cache, thumbs
@@ -53,11 +53,18 @@ def add_source(body: ScanRootCreate, db: Session = Depends(get_db)):
 
 
 def _has_run_history(db: Session, file_ids: list[int]) -> bool:
-    """True se uno dei file compare in plan_op o undo_journal: quella è la
-    storia degli apply già eseguiti (undo incluso), irrinunciabile."""
+    """True se uno dei file compare in plan_op di un piano non-draft (un
+    apply già eseguito o annullato) o in undo_journal: quella è la storia
+    degli apply già eseguiti (undo incluso), irrinunciabile. Le plan_op di
+    un piano draft sono invece usa-e-getta (create_plan le ricrea da zero a
+    ogni chiamata, cascade Plan.ops le cancella): non contano come storia."""
     if not file_ids:
         return False
-    in_plan = db.scalar(select(PlanOp.id).where(PlanOp.file_id.in_(file_ids)).limit(1))
+    in_plan = db.scalar(
+        select(PlanOp.id).join(Plan, PlanOp.plan_id == Plan.id)
+        .where(PlanOp.file_id.in_(file_ids), Plan.status != "draft")
+        .limit(1)
+    )
     if in_plan is not None:
         return True
     in_journal = db.scalar(select(UndoJournal.id).where(UndoJournal.file_id.in_(file_ids)).limit(1))
@@ -78,15 +85,19 @@ def delete_source(root_id: int, db: Session = Depends(get_db)):
     if _has_run_history(db, file_ids):
         raise api_error(
             409, "source_has_run_history",
-            "Cannot delete: files in this source are referenced by an applied "
-            "plan or its undo journal, and that run history must stay reversible.",
+            "Cannot delete: files in this source are referenced by a non-draft "
+            "plan (applied or undone) or by the undo journal, and that run "
+            "history must stay reversible.",
         )
 
     # Issue/DupMember/DupGroup puntano ad audio_file con FK grezze (niente
     # relationship(), niente ondelete): con foreign_keys=ON (F2) vanno rimosse
     # a mano, in ordine FK-safe, prima dei file e della radice. Sono derivate:
-    # un nuovo scan le rigenera (a differenza di plan_op/undo_journal, per cui
-    # sopra rifiutiamo la delete).
+    # un nuovo scan le rigenera (a differenza di plan_op di piani non-draft e
+    # undo_journal, per cui sopra rifiutiamo la delete). Le plan_op residue a
+    # questo punto appartengono per forza a un piano draft (il guard sopra ha
+    # già escluso le altre): sono usa-e-getta, vanno cancellate qui o la FK
+    # plan_op.file_id scatterebbe comunque sulla delete dell'audio_file.
     if file_ids:
         group_ids = list(db.scalars(select(DupGroup.id).where(DupGroup.keeper_file_id.in_(file_ids))))
         db.execute(delete(Issue).where(Issue.file_id.in_(file_ids)))
@@ -94,6 +105,7 @@ def delete_source(root_id: int, db: Session = Depends(get_db)):
             or_(DupMember.file_id.in_(file_ids), DupMember.group_id.in_(group_ids))
         ))
         db.execute(delete(DupGroup).where(DupGroup.id.in_(group_ids)))
+        db.execute(delete(PlanOp).where(PlanOp.file_id.in_(file_ids)))
 
     db.delete(root)
     db.commit()

@@ -2,6 +2,10 @@
 
 Migra scan_root, audio_file, plan, plan_op, undo_journal preservando gli id.
 NON migra issue e dup_group: sono derivati e li rigenera il primo scan.
+NON migra settings: sulla sorgente reale contiene solo i valori di default
+(naming_template, folder_template, language, dedup_keep_rules_json) e
+planning.get_settings li ri-semina identici alla prima richiesta lato
+Cratory, quindi non c'è nulla da preservare.
 NON tocca track_id/location/primary_file_id: sono colonne di F3.
 
 La verifica è su invarianti calcolati dalla sorgente, mai su costanti: i numeri
