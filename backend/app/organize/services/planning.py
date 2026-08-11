@@ -3,7 +3,9 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.organize.models import AudioFile, DupMember, Issue, Plan, PlanOp, ScanRoot, Settings, utcnow
+from app.organize.models import (
+    AudioFile, DupMember, Issue, Plan, PlanOp, ScanRoot, Settings, UndoJournal, utcnow,
+)
 from app.organize.schemas import ConflictRead, PlanOpRead, PlanRead, PlanStats
 from app.organize.services import conflict
 from app.organize.services.planner import PlanOpComputed, build_plan
@@ -86,7 +88,21 @@ def create_plan(db: Session) -> PlanRead:
     files, accepted, removals, snapshot, targets = _inputs(db)
     computed = build_plan(files, accepted, removals, snapshot, targets)
     for old in db.scalars(select(Plan).where(Plan.status == "draft")).all():
-        db.delete(old)
+        # Una bozza con righe di undo journal non è una bozza: è un apply morto
+        # prima di potersi marcare 'applied' (apply.py lo fa in fondo, sia sul
+        # percorso normale sia su quello d'errore, quindi ci si arriva solo con
+        # una terminazione brutale del processo — es. il server fermato durante
+        # un apply lungo). Cancellarla distruggerebbe il journal, cioè la
+        # reversibilità dei file già spostati su disco; e con foreign_keys=ON
+        # fallirebbe comunque, perché UndoJournal.run_id non ha una
+        # relationship() che ordini le cancellazioni. La si promuove ad
+        # 'applied': è ciò che l'apply avrebbe fatto se fosse arrivato in fondo.
+        # Qui una flush() non servirebbe a nulla: le righe figlie esistono
+        # davvero, non è un problema di ordinamento.
+        if db.scalar(select(UndoJournal.id).where(UndoJournal.run_id == old.id).limit(1)) is not None:
+            old.status = "applied"
+        else:
+            db.delete(old)
     db.flush()
     rules = {**snapshot, "targets": {str(k): v for k, v in targets.items()}}
     plan = Plan(status="draft", rules_json=rules)

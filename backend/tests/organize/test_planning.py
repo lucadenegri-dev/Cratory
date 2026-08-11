@@ -1,6 +1,6 @@
 from sqlalchemy import select
 
-from app.organize.models import AudioFile, Issue, Plan, PlanOp, ScanRoot
+from app.organize.models import AudioFile, Issue, Plan, PlanOp, ScanRoot, UndoJournal
 from app.organize.services import planning
 
 
@@ -119,3 +119,42 @@ def test_accepted_corrupt_file_enters_removals(db):
     db.commit()
     _files, _accepted, removals, _snap, _targets = planning._inputs(db)
     assert f.id in removals
+
+
+def test_draft_con_journal_viene_promosso_non_cancellato(db):
+    """Un piano 'draft' con righe di undo journal è un apply morto prima di
+    marcarsi 'applied'. Cancellarlo distruggerebbe il journal — cioè la
+    reversibilità dei file già spostati su disco — e con foreign_keys=ON
+    fallirebbe comunque (UndoJournal.run_id non ha relationship())."""
+    db.add(ScanRoot(id=3, path="/lib"))
+    f = _file(db, 1)
+    morto = Plan(status="draft", rules_json={})
+    db.add(morto)
+    db.flush()
+    db.add(UndoJournal(run_id=morto.id, op_seq=0, kind="MOVE", file_id=f.id,
+                       from_path="/lib/a.mp3", to_path="/lib/b.mp3"))
+    db.commit()
+    morto_id = morto.id
+
+    planning.create_plan(db)
+
+    promosso = db.get(Plan, morto_id)
+    assert promosso is not None, "il piano col journal non deve essere cancellato"
+    assert promosso.status == "applied"
+    assert db.scalar(select(UndoJournal).where(UndoJournal.run_id == morto_id)) is not None
+
+
+def test_draft_senza_journal_viene_cancellato(db):
+    """La bozza normale resta usa-e-getta: senza journal non c'è nulla da salvare."""
+    db.add(ScanRoot(id=3, path="/lib"))
+    _file(db, 1)
+    # Marcatore invece dell'id: SQLite riusa il rowid, quindi il piano nuovo
+    # rinascerebbe con lo stesso id di quello appena cancellato.
+    db.add(Plan(status="draft", rules_json={"marcatore": "bozza-vecchia"}))
+    db.commit()
+
+    planning.create_plan(db)
+
+    superstiti = db.scalars(select(Plan)).all()
+    assert len(superstiti) == 1
+    assert superstiti[0].rules_json.get("marcatore") is None
