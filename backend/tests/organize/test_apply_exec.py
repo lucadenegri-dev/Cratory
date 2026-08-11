@@ -7,7 +7,7 @@ from app.organize.services.apply import apply_plan
 
 
 def _af(db, fid, path, **kw):
-    d = dict(id=fid, root_id=1, path=path, ext="flac", size_bytes=10, hash_method="file",
+    d = dict(id=fid, root_id=3, path=path, ext="flac", size_bytes=10, hash_method="file",
              status="present", has_cover=False, artist="A", title=f"T{fid}", genre="House")
     d.update(kw)
     db.add(AudioFile(**d))
@@ -17,14 +17,19 @@ def test_apply_move_and_delete_with_reorder(db, tmp_path, copy_fixture):
     root = tmp_path / "lib"
     keeper = copy_fixture("flac", root / "varie" / "k.flac")
     dup = copy_fixture("flac", root / "House" / "A" / "A - T1.flac")  # occupa lo slot del keeper
-    db.add(ScanRoot(id=1, path=str(root)))
+    db.add(ScanRoot(id=3, path=str(root)))
     _af(db, 1, keeper, title="T1")   # keeper → House/A/A - T1.flac
     _af(db, 2, dup, title="T1")      # dup rimosso, è nello slot destinazione
+    # DupGroup/DupMember non hanno una relationship() verso AudioFile: senza un
+    # flush qui, l'ordine di flush degli INSERT non è garantito e con
+    # foreign_keys=ON (engine unificato F2) può tentare l'INSERT di dup_group
+    # prima di audio_file, violando la FK su keeper_file_id.
+    db.flush()
     db.add(DupGroup(id=1, match_kind="fuzzy", keeper_file_id=1, signature="s"))
     db.add(DupMember(group_id=1, file_id=1, action="keep"))
     db.add(DupMember(group_id=1, file_id=2, action="remove"))
     plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "{genre}/{artist}", "targets": {"1": str(root)}})
+                "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
     db.add(plan)
     dest = str(root / "House" / "A" / "A - T1.flac")
     db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=1,
@@ -47,10 +52,10 @@ def test_apply_cleans_emptied_source_dirs(db, tmp_path, copy_fixture):
     # dopo lo spostamento la vecchia cartella genere resta vuota → va rimossa
     root = tmp_path / "lib"
     src = copy_fixture("flac", root / "Hous" / "A" / "A - T1.flac")  # genere sporco
-    db.add(ScanRoot(id=1, path=str(root)))
+    db.add(ScanRoot(id=3, path=str(root)))
     _af(db, 1, src, title="T1", genre="House")
     plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "{genre}/{artist}", "targets": {"1": str(root)}})
+                "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
     db.add(plan)
     dest = str(root / "House" / "A" / "A - T1.flac")
     db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=1,
@@ -68,10 +73,10 @@ def test_apply_retag(db, tmp_path, copy_fixture):
     f = copy_fixture("flac", root / "x.flac")
     from app.organize.integrations import tagio
     tagio.write_tags(f, {"artist": "PINCO", "title": "T"})
-    db.add(ScanRoot(id=1, path=str(root)))
+    db.add(ScanRoot(id=3, path=str(root)))
     _af(db, 1, f, artist="PINCO", title="T")
     plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "", "targets": {"1": str(root)}})  # folder vuoto → niente move
+                "folder_template": "", "targets": {"3": str(root)}})  # folder vuoto → niente move
     db.add(plan)
     db.add(PlanOp(plan_id=1, seq=0, kind="RETAG", file_id=1,
                   before_json={"artist": "PINCO"}, after_json={"artist": "Pinco"}, status="pending"))
@@ -88,10 +93,10 @@ def test_apply_retag_updates_db_row(db, tmp_path, copy_fixture):
     # ricostruzione del piano SENZA re-scan non rigenera un RETAG fantasma.
     root = tmp_path / "lib"
     f = copy_fixture("flac", root / "x.flac")
-    db.add(ScanRoot(id=1, path=str(root)))
+    db.add(ScanRoot(id=3, path=str(root)))
     _af(db, 1, f, artist=None, title=None, genre="House")
     plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "{genre}/{artist}", "targets": {"1": str(root)}})
+                "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
     db.add(plan)
     db.add(PlanOp(plan_id=1, seq=0, kind="RETAG", file_id=1,
                   before_json={"artist": None, "title": None},

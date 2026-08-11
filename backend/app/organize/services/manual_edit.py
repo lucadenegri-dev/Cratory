@@ -102,6 +102,12 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
         # run appena creata (come il ramo "nulla è atterrato"), niente run "applied"
         # fantasma in History. Errore controllato, col codice tradotto dal frontend.
         db.delete(journal)
+        # Plan/UndoJournal non hanno una relationship() ORM tra loro: senza un
+        # flush qui, l'unit-of-work non sa ordinare i DELETE (nessun grafo di
+        # dipendenza da seguire) e può tentare quello su plan prima di quello
+        # su undo_journal, violando la FK di UndoJournal.run_id
+        # (foreign_keys=ON dall'engine unificato F2).
+        db.flush()
         db.delete(plan)
         db.commit()
         raise ManualEditError(500, "tag_write_failed", str(exc))
@@ -124,6 +130,12 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
         # Niente è atterrato sul disco (es. solo comment su mp3): la run sarebbe
         # ingannevole e l'undo un no-op → rimuovi journal e Plan.
         db.delete(journal)
+        # Plan/UndoJournal non hanno una relationship() ORM tra loro: senza un
+        # flush qui, l'unit-of-work non sa ordinare i DELETE (nessun grafo di
+        # dipendenza da seguire) e può tentare quello su plan prima di quello
+        # su undo_journal, violando la FK di UndoJournal.run_id
+        # (foreign_keys=ON dall'engine unificato F2).
+        db.flush()
         db.delete(plan)
         db.commit()
         return

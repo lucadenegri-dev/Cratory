@@ -1,5 +1,7 @@
 import copy
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -8,6 +10,13 @@ from sqlalchemy.orm import sessionmaker
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+
+# DEVE precedere ogni import di app.*: app.core.config legge l'ambiente al
+# momento dell'import, e app.db costruisce l'engine da settings.database_url.
+# Senza questo, un test che dimentichi dependency_overrides[get_db] scriverebbe
+# sul DB reale. Vale per entrambe le suite: da F2 l'engine è uno solo.
+_TMP_DB = os.path.join(tempfile.mkdtemp(prefix="cratory-test-"), "test.db")
+os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DB}"
 
 from app.db import Base  # noqa: E402
 import app.models  # noqa: E402,F401 — registra tutte le tabelle su Base.metadata prima di create_all

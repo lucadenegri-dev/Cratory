@@ -5,8 +5,8 @@ from app.organize.models import AudioFile, ScanRoot
 
 
 def _seed(db):
-    db.add(ScanRoot(id=1, path="/lib"))
-    db.add(AudioFile(id=1, root_id=1, path="/lib/varie/x.mp3", ext="mp3", size_bytes=1000,
+    db.add(ScanRoot(id=3, path="/lib"))
+    db.add(AudioFile(id=1, root_id=3, path="/lib/varie/x.mp3", ext="mp3", size_bytes=1000,
                      hash_method="file", status="present", has_cover=False,
                      artist="A", title="T", genre="House"))
     db.commit()
@@ -30,8 +30,8 @@ def test_post_then_get_plan(db):
 
 
 def test_plan_reports_conflict_on_missing_data(db):
-    db.add(ScanRoot(id=1, path="/lib"))
-    db.add(AudioFile(id=1, root_id=1, path="/lib/x.mp3", ext="mp3", size_bytes=1,
+    db.add(ScanRoot(id=3, path="/lib"))
+    db.add(AudioFile(id=1, root_id=3, path="/lib/x.mp3", ext="mp3", size_bytes=1,
                      hash_method="file", status="present", has_cover=False,
                      artist="A", title="T", genre=None))  # genre mancante
     db.commit()

@@ -5,13 +5,18 @@ from app.organize.models import AudioFile, DupGroup, DupMember, Issue, ScanRoot
 
 
 def _seed_stats(db):
-    db.add(ScanRoot(id=1, path="/m", label="M"))
-    db.add(AudioFile(id=1, root_id=1, path="/m/a.flac", ext="flac", size_bytes=1,
+    db.add(ScanRoot(id=3, path="/m", label="M"))
+    db.add(AudioFile(id=1, root_id=3, path="/m/a.flac", ext="flac", size_bytes=1,
                      hash_method="file", status="present", has_cover=False))
-    db.add(AudioFile(id=2, root_id=1, path="/m/b.mp3", ext="mp3", size_bytes=1,
+    db.add(AudioFile(id=2, root_id=3, path="/m/b.mp3", ext="mp3", size_bytes=1,
                      hash_method="file", status="present", has_cover=False))
-    db.add(AudioFile(id=3, root_id=1, path="/m/c.mp3", ext="mp3", size_bytes=1,
+    db.add(AudioFile(id=3, root_id=3, path="/m/c.mp3", ext="mp3", size_bytes=1,
                      hash_method="file", status="missing", has_cover=False))
+    # Issue/DupGroup/DupMember non hanno una relationship() verso AudioFile:
+    # senza un flush qui, l'ordine di flush degli INSERT non è garantito e con
+    # foreign_keys=ON (engine unificato F2) può tentare l'INSERT di una riga
+    # figlia prima di audio_file, violando la sua FK.
+    db.flush()
     db.add(Issue(file_id=1, type="bad_bitrate", field=None, severity="error",
                  detail="x", suggested_fix_json=None, status="open"))
     db.add(Issue(file_id=2, type="missing_metadata", field="genre", severity="warning",
@@ -32,7 +37,8 @@ def test_library_stats(db):
         assert s["by_ext"] == {"flac": 1, "mp3": 1}
         assert s["issues_by_severity"] == {"error": 1, "warning": 1}  # la dismissed esclusa
         assert s["dup_groups"] == 1
-        assert s["sources"] == 1
+        # 3 = le 2 ScanRoot canoniche seminate da _fresh_db (F2) + quella di _seed_stats
+        assert s["sources"] == 3
 
 
 def test_list_files_basic_and_indicators(db):
@@ -52,7 +58,7 @@ def test_list_files_filters(db):
     with TestClient(app) as client:
         only_issues = client.get("/api/organize/files", params={"has_issues": True}).json()
         assert {r["id"] for r in only_issues} == {1, 2}
-        by_root = client.get("/api/organize/files", params={"root_id": 1}).json()
+        by_root = client.get("/api/organize/files", params={"root_id": 3}).json()
         assert len(by_root) == 2
         searched = client.get("/api/organize/files", params={"q": "a.flac"}).json()
         assert [r["id"] for r in searched] == [1]
@@ -70,13 +76,14 @@ def test_list_files_sort_and_paging(db):
 
 
 def test_list_files_cover_source(db):
-    db.add(ScanRoot(id=1, path="/m", label="M"))
-    db.add(AudioFile(id=1, root_id=1, path="/m/con-cover.flac", ext="flac", size_bytes=1,
+    db.add(ScanRoot(id=3, path="/m", label="M"))
+    db.add(AudioFile(id=1, root_id=3, path="/m/con-cover.flac", ext="flac", size_bytes=1,
                      hash_method="file", status="present", has_cover=True))
-    db.add(AudioFile(id=2, root_id=1, path="/m/proposta.mp3", ext="mp3", size_bytes=1,
+    db.add(AudioFile(id=2, root_id=3, path="/m/proposta.mp3", ext="mp3", size_bytes=1,
                      hash_method="file", status="present", has_cover=False))
-    db.add(AudioFile(id=3, root_id=1, path="/m/niente.mp3", ext="mp3", size_bytes=1,
+    db.add(AudioFile(id=3, root_id=3, path="/m/niente.mp3", ext="mp3", size_bytes=1,
                      hash_method="file", status="present", has_cover=False))
+    db.flush()  # Issue non ha una relationship() verso AudioFile: vedi _seed_stats
     # la proposta provider esiste solo come issue missing_cover aperta
     db.add(Issue(file_id=2, type="missing_cover", field="cover", severity="info",
                  detail="x", suggested_fix_json={"thumb_ref": "cover_cache/2.jpg"},

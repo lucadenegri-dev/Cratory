@@ -11,8 +11,9 @@ client = TestClient(app)
 def test_history_marks_manual_edit_runs(db, tmp_path, copy_fixture):
     f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
     tagio.write_tags(f, {"artist": "Old"})
-    db.add(ScanRoot(id=1, path=str(tmp_path / "lib")))
-    db.add(AudioFile(id=1, root_id=1, path=f, ext="flac", size_bytes=10,
+    # id 3: 1 e 2 sono le ScanRoot canoniche seminate da _fresh_db (F2).
+    db.add(ScanRoot(id=3, path=str(tmp_path / "lib")))
+    db.add(AudioFile(id=1, root_id=3, path=f, ext="flac", size_bytes=10,
                      hash_method="file", status="present", artist="Old"))
     # una run "normale" applicata, senza kind
     normal = Plan(id=99, status="applied", rules_json={"naming_template": "{artist}"})

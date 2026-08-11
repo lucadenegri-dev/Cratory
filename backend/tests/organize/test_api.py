@@ -24,10 +24,15 @@ def test_sources_crud(tmp_path):
         assert created.json()["file_count"] == 0
 
         listed = client.get("/api/organize/sources").json()
-        assert len(listed) == 1 and listed[0]["label"] == "Main"
+        # F2: _fresh_db semina le due ScanRoot canoniche (id 1/2), quindi la
+        # lista non è più esclusiva: verifica solo la presenza della sorgente
+        # appena creata.
+        created = next(r for r in listed if r["id"] == root_id)
+        assert created["label"] == "Main"
 
         assert client.delete(f"/api/organize/sources/{root_id}").status_code == 204
-        assert client.get("/api/organize/sources").json() == []
+        after = client.get("/api/organize/sources").json()
+        assert all(r["id"] != root_id for r in after)
 
 
 def test_delete_source_purges_thumbnail_caches(db, tmp_path, monkeypatch):
@@ -44,10 +49,11 @@ def test_delete_source_purges_thumbnail_caches(db, tmp_path, monkeypatch):
 
     lib = tmp_path / "lib"
     lib.mkdir()
-    db.add(ScanRoot(id=1, path=str(lib)))
-    db.add(AudioFile(id=10, root_id=1, path=f"{lib}/a.mp3", ext="mp3", size_bytes=1,
+    # id 3: 1 e 2 sono le ScanRoot canoniche seminate da _fresh_db (F2).
+    db.add(ScanRoot(id=3, path=str(lib)))
+    db.add(AudioFile(id=10, root_id=3, path=f"{lib}/a.mp3", ext="mp3", size_bytes=1,
                      hash_method="file", status="present", has_cover=True))
-    db.add(AudioFile(id=11, root_id=1, path=f"{lib}/b.mp3", ext="mp3", size_bytes=1,
+    db.add(AudioFile(id=11, root_id=3, path=f"{lib}/b.mp3", ext="mp3", size_bytes=1,
                      hash_method="file", status="present", has_cover=False))
     db.commit()
 
@@ -57,7 +63,7 @@ def test_delete_source_purges_thumbnail_caches(db, tmp_path, monkeypatch):
         fh.write(b"\xff\xd8cover")
 
     with TestClient(app) as client:
-        assert client.delete("/api/organize/sources/1").status_code == 204
+        assert client.delete("/api/organize/sources/3").status_code == 204
 
     assert not os.path.exists(thumbs.thumb_path(10))
     assert not os.path.exists(cover_cache.thumb_path(11))
@@ -68,13 +74,14 @@ def test_sources_count_excludes_missing(db, tmp_path):
 
     lib = tmp_path / "lib"
     lib.mkdir()
-    db.add(ScanRoot(id=1, path=str(lib)))
+    # id 3: 1 e 2 sono le ScanRoot canoniche seminate da _fresh_db (F2).
+    db.add(ScanRoot(id=3, path=str(lib)))
     for i, status in enumerate(["present", "present", "missing", "missing", "missing"]):
-        db.add(AudioFile(root_id=1, path=f"{lib}/{i}.mp3", ext="mp3", size_bytes=1,
+        db.add(AudioFile(root_id=3, path=f"{lib}/{i}.mp3", ext="mp3", size_bytes=1,
                          hash_method="file", status=status, has_cover=False))
     db.commit()
     with TestClient(app) as client:
-        row = client.get("/api/organize/sources").json()[0]
+        row = next(r for r in client.get("/api/organize/sources").json() if r["id"] == 3)
         assert row["file_count"] == 2       # solo i presenti su disco
         assert row["missing_count"] == 3    # i mancanti restano visibili a parte
 

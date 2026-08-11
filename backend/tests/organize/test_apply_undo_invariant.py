@@ -28,18 +28,24 @@ def _build(db, tmp_path, copy_fixture):
     tagio.write_tags(keep, {"artist": "PINCO", "title": "T"})   # casing da correggere
     tagio.write_tags(rem, {"artist": "A", "title": "T"})
     tagio.write_tags(plain, {"artist": "B", "title": "U"})
-    db.add(ScanRoot(id=1, path=str(root)))
-    db.add(AudioFile(id=1, root_id=1, path=keep, ext="flac", size_bytes=10, hash_method="file",
+    # id 3: 1 e 2 sono le ScanRoot canoniche seminate da _fresh_db (F2).
+    db.add(ScanRoot(id=3, path=str(root)))
+    db.add(AudioFile(id=1, root_id=3, path=keep, ext="flac", size_bytes=10, hash_method="file",
                      status="present", has_cover=False, artist="PINCO", title="T", genre="House"))
-    db.add(AudioFile(id=2, root_id=1, path=rem, ext="flac", size_bytes=10, hash_method="file",
+    db.add(AudioFile(id=2, root_id=3, path=rem, ext="flac", size_bytes=10, hash_method="file",
                      status="present", has_cover=False, artist="A", title="T", genre="House"))
-    db.add(AudioFile(id=3, root_id=1, path=plain, ext="flac", size_bytes=10, hash_method="file",
+    db.add(AudioFile(id=3, root_id=3, path=plain, ext="flac", size_bytes=10, hash_method="file",
                      status="present", has_cover=False, artist="B", title="U", genre="House"))
+    # DupGroup/DupMember non hanno una relationship() verso AudioFile: senza un
+    # flush qui, l'ordine di flush degli INSERT non è garantito e con
+    # foreign_keys=ON (engine unificato F2) può tentare l'INSERT di dup_group
+    # prima di audio_file, violando la FK su keeper_file_id.
+    db.flush()
     db.add(DupGroup(id=1, match_kind="fuzzy", keeper_file_id=1, signature="s"))
     db.add(DupMember(group_id=1, file_id=1, action="keep"))
     db.add(DupMember(group_id=1, file_id=2, action="remove"))
     plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "{genre}/{artist}", "targets": {"1": str(root)}})
+                "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
     db.add(plan)
     # ops: RETAG keep (PINCO→Pinco), MOVE keep nello slot del rimosso, MOVE plain, DELETE rem
     keep_dest = str(root / "House" / "Pinco" / "Pinco - T.flac")

@@ -11,11 +11,12 @@ from app.organize.services.undo import undo_run  # noqa: E402 (top del file)
 def _seed_plan(db, tmp_path, copy_fixture):
     root = tmp_path / "lib"
     f = copy_fixture("flac", root / "varie" / "x.flac")
-    db.add(ScanRoot(id=1, path=str(root)))
-    db.add(AudioFile(id=1, root_id=1, path=f, ext="flac", size_bytes=10, hash_method="file",
+    # id 3: 1 e 2 sono le ScanRoot canoniche seminate da _fresh_db (F2).
+    db.add(ScanRoot(id=3, path=str(root)))
+    db.add(AudioFile(id=1, root_id=3, path=f, ext="flac", size_bytes=10, hash_method="file",
                      status="present", has_cover=False, artist="A", title="T", genre="House"))
     db.add(Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "{genre}/{artist}", "targets": {"1": str(root)}}))
+                "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}}))
     db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=1, before_json={"path": f},
                   after_json={"path": str(root / "House" / "A" / "A - T.flac")}, status="pending"))
     db.commit()

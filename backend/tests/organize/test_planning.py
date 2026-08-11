@@ -17,17 +17,19 @@ def test_update_settings(db):
 
 
 def test_set_root_target_and_map(db):
-    root = ScanRoot(id=1, path="/lib")
+    # F2: _fresh_db semina anche le ScanRoot canoniche (id 1/2), quindi la mappa
+    # non è più esclusiva a questa radice: verifica solo la entry di id 3.
+    root = ScanRoot(id=3, path="/lib")
     db.add(root)
     db.commit()
-    planning.set_root_target(db, 1, "/lib/Library")
-    assert planning.root_targets(db) == {1: "/lib/Library"}
-    planning.set_root_target(db, 1, None)  # in-place → la radice stessa
-    assert planning.root_targets(db) == {1: "/lib"}
+    planning.set_root_target(db, 3, "/lib/Library")
+    assert planning.root_targets(db)[3] == "/lib/Library"
+    planning.set_root_target(db, 3, None)  # in-place → la radice stessa
+    assert planning.root_targets(db)[3] == "/lib"
 
 
 def _file(db, fid, **kw):
-    defaults = dict(id=fid, root_id=1, path=f"/lib/varie/{fid}.mp3", ext="mp3", size_bytes=1000,
+    defaults = dict(id=fid, root_id=3, path=f"/lib/varie/{fid}.mp3", ext="mp3", size_bytes=1000,
                     hash_method="file", status="present", has_cover=False,
                     artist="A", title=f"T{fid}", genre="House")
     defaults.update(kw)
@@ -38,7 +40,7 @@ def _file(db, fid, **kw):
 
 
 def test_create_plan_persists_and_replaces_draft(db):
-    db.add(ScanRoot(id=1, path="/lib"))
+    db.add(ScanRoot(id=3, path="/lib"))
     _file(db, 1)
     p1 = planning.create_plan(db)
     assert p1.stats.n_move == 1
@@ -49,7 +51,7 @@ def test_create_plan_persists_and_replaces_draft(db):
 
 
 def test_plan_includes_retag_and_delete_and_stats(db):
-    db.add(ScanRoot(id=1, path="/lib"))
+    db.add(ScanRoot(id=3, path="/lib"))
     _file(db, 1, artist="PINCO")
     _file(db, 2)
     db.add(Issue(file_id=1, type="inconsistent_casing", field="artist", severity="warning",
@@ -73,7 +75,7 @@ def test_load_plan_none_when_absent(db):
 def test_collision_skips_ops_without_blocking(db):
     # due file → stessa dest (collisione), un terzo si muove pulito:
     # il piano NON è bloccante, gli op in conflitto sono marcati skipped.
-    db.add(ScanRoot(id=1, path="/lib"))
+    db.add(ScanRoot(id=3, path="/lib"))
     _file(db, 1, title="T")
     _file(db, 2, title="T")     # stesso artist+title+genre → stessa dest
     _file(db, 3, title="Solo")  # pulito
@@ -86,7 +88,7 @@ def test_collision_skips_ops_without_blocking(db):
 
 
 def test_blocking_only_when_nothing_applicable(db):
-    db.add(ScanRoot(id=1, path="/lib"))
+    db.add(ScanRoot(id=3, path="/lib"))
     _file(db, 1, title="T")
     _file(db, 2, title="T")  # solo op in collisione → niente da applicare
     p = planning.create_plan(db)
@@ -102,7 +104,7 @@ def test_load_plan_flags_disk_occupied_dest(db, tmp_path):
     src = root / "varie" / "1.mp3"; src.write_text("a")
     dest = root / "House" / "A" / "A - T1.mp3"
     dest.parent.mkdir(parents=True); dest.write_text("b")
-    db.add(ScanRoot(id=1, path=str(root)))
+    db.add(ScanRoot(id=3, path=str(root)))
     _file(db, 1, path=str(src))
     p = planning.create_plan(db)
     assert any("su disco" in c.detail for c in p.conflicts)
@@ -110,7 +112,7 @@ def test_load_plan_flags_disk_occupied_dest(db, tmp_path):
 
 
 def test_accepted_corrupt_file_enters_removals(db):
-    db.add(ScanRoot(id=1, path="/lib"))
+    db.add(ScanRoot(id=3, path="/lib"))
     f = _file(db, 1)
     db.add(Issue(file_id=f.id, type="corrupt_file", field=None, severity="error",
                  detail="corrotto", suggested_fix_json={"action": "quarantine"},

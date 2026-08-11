@@ -62,7 +62,9 @@ def test_build_plan_skips_rating_when_already_cleared(db, copy_fixture, tmp_path
 
 def test_detect_sets_has_rating_flag(db, copy_fixture, tmp_path):
     f, p = _rated_flac(db, copy_fixture, tmp_path)
-    root = db.query(ScanRoot).one()
+    # F2: _fresh_db semina anche le ScanRoot canoniche (id 1/2), quindi la
+    # tabella non è più a riga singola: filtra sulla radice creata da _rated_flac.
+    root = db.query(ScanRoot).filter_by(path=str(tmp_path)).one()
     p2 = copy_fixture("flac", tmp_path / "b.flac")   # nessun rating
     g = AudioFile(root_id=root.id, path=p2, ext="flac", size_bytes=1,
                   hash_method="full", status="present")

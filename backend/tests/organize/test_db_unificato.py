@@ -30,20 +30,15 @@ def test_ensure_schema_crea_anche_le_tabelle_organize(tmp_path):
 
 
 def test_engine_dei_test_non_punta_al_db_reale():
-    """Stopgap (F2, correzione post Task 1): il conftest di questa cartella
-    sostituisce `app.db.engine` con uno costruito su un file temporaneo
-    per-sessione (serve un rimpiazzo dell'oggetto engine, non solo dell'env
-    var: `tests/conftest.py`, caricato da pytest PRIMA di questo, importa già
-    `app.db` col DATABASE_URL del .env). Senza quel rimpiazzo la fixture
-    autouse `_fresh_db` farebbe drop_all/create_all sul DB reale dell'utente
-    (backend/data/djassistant.db) a ogni test Organize.
+    """F2 Task 3: l'isolamento non è più uno stopgap per-cartella (sostituzione a
+    runtime dell'oggetto `engine`) ma una `DATABASE_URL` su file temporaneo
+    impostata da `tests/conftest.py` PRIMA di ogni import di `app.*` — quindi
+    prima che `app.db` costruisca l'engine di modulo. Un solo meccanismo, per
+    entrambe le suite (vedi anche `tests/test_db_isolation.py`).
 
-    Non si importa qui `tests.organize.conftest` per leggere il suo `_TMP_DB`:
-    "tests" non è un package (niente `__init__.py`), quindi un import con
-    quel dotted path esegue il modulo una seconda volta sotto un'identità
-    diversa da quella usata da pytest, con un secondo mkdtemp — falso
-    negativo già osservato in sviluppo. Si verifica quindi solo la forma e
-    la provenienza del path, non l'uguaglianza con la variabile del conftest.
+    Qui si verifica in più che il sessionmaker condiviso da get_db() e dai job
+    service resti legato allo stesso oggetto engine: se non lo fosse, chi
+    l'ha già importato altrove finirebbe per usarne un altro.
     """
     import tempfile
     from pathlib import Path
@@ -56,9 +51,6 @@ def test_engine_dei_test_non_punta_al_db_reale():
 
     tmp_root = Path(tempfile.gettempdir()).resolve()
     assert tmp_root in engine_path.parents
-    assert engine_path.parent.name.startswith("organize-test-")
+    assert engine_path.parent.name.startswith("cratory-test-")
 
-    # La sostituzione deve valere anche per il sessionmaker condiviso da
-    # get_db() e dai job service: se il bind non è lo stesso oggetto, chi ha
-    # già importato SessionLocal altrove continuerebbe a usare l'engine vecchio.
     assert SessionLocal.kw["bind"] is engine
