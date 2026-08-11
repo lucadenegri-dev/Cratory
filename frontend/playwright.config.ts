@@ -33,6 +33,11 @@ export default defineConfig({
         LIBRARY_ROOT: "",
         ARCHIVE_ROOT: "",
         SLSKD_URL: "",
+        // Organize (fusione F1) ha ancora un proprio DB separato (F2 li
+        // unificherà): isolato allo stesso modo, altrimenti le nuove rotte
+        // /organize/* di questa suite leggerebbero il djorganizer.db reale
+        // dello sviluppatore invece di un DB di test vuoto e deterministico.
+        DJORG_DATABASE_URL: "sqlite:///./data/test_e2e_organize.db",
       },
     },
     {
