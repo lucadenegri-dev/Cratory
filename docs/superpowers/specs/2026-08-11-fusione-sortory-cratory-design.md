@@ -357,6 +357,23 @@ non è la migrazione ad avere un bug, è il DB sorgente a non essere quello atte
 Prima della migrazione reale gira un **dry-run**: stessa procedura su un DB in
 memoria, stampa il report, non scrive niente.
 
+**Cosa ha trovato la migrazione reale (2026-08-12).** Il dry-run è fallito al primo
+tentativo, ed è il suo mestiere: **158 riferimenti orfani** nella sorgente,
+accumulati perché il vecchio engine di Organize girava con le foreign key spente —
+87 `plan_op.file_id` e 71 `undo_journal.file_id` verso `audio_file` non più
+esistenti (gli altri tre vincoli: zero). Delle 71 voci di undo, **52 erano rename
+di sola normalizzazione Unicode** (`from_path` e `to_path` byte-diversi ma
+identici dopo NFC), 19 differenze di percorso reali.
+
+Decisione presa: **scartarle**, con dump completo su file
+(`backend/data/djassistant.scartati.jsonl`, 158 righe con tutte le colonne, quindi
+la storia resta ricostruibile). Lo script ha guadagnato il flag `--scarta-orfani`;
+senza flag il default resta il rifiuto, e l'invariante è passato da
+`migrati == sorgente` a `migrati + scartati == sorgente`.
+
+Nota per chi legge dopo: la normalizzazione Unicode **non** tocca l'aggancio dei
+625 di F3 (verificato: 625 match esatti, zero recuperi aggiuntivi via NFC).
+
 **Casi noti fuori dai 625**, attesi nel report:
 
 - 1 traccia Cratory il cui `local_path` nessun file Sortory conosce → resta senza
@@ -382,7 +399,7 @@ uno per fase, in sequenza, ciascuno dopo che la milestone della fase precedente
 | Fase | Contenuto | Milestone |
 |---|---|---|
 | **F1** Innesto | subtree merge (`--allow-unrelated-histories`), codice sotto `organize/`, import riscritti, un `requirements.txt`, un venv, un `package.json`. Un solo processo FastAPI che monta anche i router `organize`, ma con **due engine e due file DB** ancora separati; il client API del frontend Sortory punta all'unica base `:8000` | entrambe le suite passano insieme, l'app parte, le pagine Organize rispondono; misurato l'impatto di `filterwarnings = error` |
-| **F2** DB unico | un `Base`, un engine, un `ensure_schema`; script di migrazione con dry-run e assert | dry-run coi numeri attesi, migrazione reale, suite verde sul DB migrato |
+| **F2** DB unico | un `Base`, un engine, un `ensure_schema`; script di migrazione con dry-run e assert | ✅ **completata 2026-08-12** — 1801 test verdi, 0 warning; migrazione reale eseguita (1.778 `audio_file`, 99 `plan`, 3.337 `plan_op`, 2.925 `undo_journal`); 191 issue rigenerate; 625 agganci pronti per F3 |
 | **F3** Modello A | `track_id`, `location`, `primary_file_id`; `scan_root` rimossa; `local_*` come cache | 625 tracce col file agganciato, nessuna query esistente di Cratory modificata |
 | **F4** Scanner unico | una camminata, due fasi | un solo bottone; il secondo scan consecutivo non cambia nulla nel DB (idempotenza) |
 | **F5** UI unificata | nav con Organize, componenti deduplicati, `Progress` travasato, i18n `organize.*`, `globals.css`, Settings unica, Sources cancellata | `npm run build` + `lint` + e2e Playwright verdi; confronto visivo con le due app affiancate |
