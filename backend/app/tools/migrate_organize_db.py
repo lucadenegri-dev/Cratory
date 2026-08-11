@@ -1,16 +1,17 @@
 """Migrazione del DB Organize (djorganizer.db) dentro quello Cratory (djassistant.db).
 
-Migra scan_root, audio_file, plan, plan_op, undo_journal rimappando gli id.
+Migra scan_root, audio_file, plan, plan_op, undo_journal preservando gli id.
 NON migra issue e dup_group: sono derivati e li rigenera il primo scan.
 NON tocca track_id/location/primary_file_id: sono colonne di F3.
 
 La verifica è su invarianti calcolati dalla sorgente, mai su costanti: i numeri
 del DB reale cambiano a ogni uso dell'app.
 
-Uso:
+Uso (--dest è sempre una COPIA del DB Cratory, mai il file vero: anche il
+dry-run apre --dest in scrittura e prende un write lock su di esso):
     python -m app.tools.migrate_organize_db --src ../DjOrganizer01/backend/data/djorganizer.db \\
-        --dest data/djassistant.db            # dry-run: stampa il report, non scrive
-    python -m app.tools.migrate_organize_db --src … --dest … --apply
+        --dest /tmp/djassistant-copia.db      # dry-run: stampa il report, non scrive
+    python -m app.tools.migrate_organize_db --src … --dest /tmp/djassistant-copia.db --apply
 """
 
 from __future__ import annotations
@@ -68,21 +69,34 @@ def migra(src_organize: Path, dest: Path, *, dry_run: bool) -> Report:
     if not dest.exists():
         raise FileNotFoundError(f"DB di destinazione non trovato: {dest}")
 
-    conn = sqlite3.connect(dest)
+    # uri=True abilita il riconoscimento degli URI anche per l'ATTACH successivo
+    # (il flag SQLITE_OPEN_URI si applica alla connessione, non al singolo open):
+    # è quello che ci permette di attaccare la sorgente in sola lettura sotto.
+    conn = sqlite3.connect(str(dest), uri=True)
     # isolation_level=None → autocommit: BEGIN/COMMIT/ROLLBACK espliciti
     # funzionano. Col default, sqlite3 apre transazioni implicite sulle DML e il
     # nostro BEGIN esploderebbe con "cannot start a transaction within a
     # transaction". ATTACH, per lo stesso motivo, va fatto fuori transazione.
     conn.isolation_level = None
     conn.execute("PRAGMA foreign_keys = OFF")  # travasiamo in ordine, controlliamo dopo
-    conn.execute("ATTACH DATABASE ? AS org", (str(src_organize),))
+    # Sorgente attaccata in sola lettura: nessuna istruzione dello script ci
+    # scrive (sono tutti SELECT), ma senza mode=ro SQLite può comunque scrivere
+    # sul file attaccato per conto suo (rollback di un hot journal, checkpoint
+    # WAL alla chiusura). mode=ro lo rende strutturalmente impossibile: un
+    # tentativo di scrittura diventa "attempt to write a readonly database".
+    org_uri = src_organize.resolve().as_uri() + "?mode=ro"
+    conn.execute("ATTACH DATABASE ? AS org", (org_uri,))
     report = Report(dry_run=dry_run)
 
+    conn.execute("BEGIN")
     try:
-        # Precondizione, PRIMA di aprire la transazione: la destinazione dev'essere
-        # vergine. È ciò che permette di conservare gli id originali senza tabella
-        # di corrispondenza — vedi la nota sulla rimappatura nel piano.
         for tabella in _TABELLE:
+            # Precondizione: la destinazione dev'essere vergine. È ciò che
+            # permette di conservare gli id originali senza tabella di
+            # corrispondenza — vedi la nota sulla preservazione nel piano.
+            # Dentro la transazione: osservare "vuota" e poi scrivere devono
+            # condividere lo snapshot, altrimenti un writer concorrente fra i
+            # due passi vanificherebbe il controllo.
             report.sorgente[tabella] = conn.execute(
                 f"select count(*) from org.{tabella}"
             ).fetchone()[0]
@@ -93,11 +107,21 @@ def migra(src_organize: Path, dest: Path, *, dry_run: bool) -> Report:
                     "la destinazione non è vergine, migrazione annullata."
                 )
 
-        conn.execute("BEGIN")
-        # Le colonne comuni alle due copie della tabella (la destinazione può
-        # averne di più: ensure_schema crea lo schema corrente).
-        for tabella in _TABELLE:
-            comuni = [c for c in _colonne(conn, tabella, "org") if c in _colonne(conn, tabella)]
+            # Le colonne comuni alle due copie della tabella (la destinazione può
+            # averne di più: ensure_schema crea lo schema corrente). Una colonna
+            # presente SOLO nella sorgente sparirebbe in silenzio — inaccettabile
+            # per una migrazione one-shot di dati insostituibili — quindi va
+            # rilevata e bloccata, non lasciata scomparire dietro un "ok".
+            colonne_org = _colonne(conn, tabella, "org")
+            colonne_dest = _colonne(conn, tabella)
+            mancanti = set(colonne_org) - set(colonne_dest)
+            if mancanti:
+                raise RuntimeError(
+                    f"{tabella}: colonne presenti solo nella sorgente e che la "
+                    f"migrazione perderebbe: {sorted(mancanti)}"
+                )
+
+            comuni = [c for c in colonne_org if c in colonne_dest]
             lista = ", ".join(comuni)
             conn.execute(
                 f"INSERT INTO main.{tabella} ({lista}) SELECT {lista} FROM org.{tabella}"
@@ -113,13 +137,11 @@ def migra(src_organize: Path, dest: Path, *, dry_run: bool) -> Report:
         else:
             conn.execute("COMMIT")
     except Exception:
-        # La precondizione "destinazione vergine" scatta PRIMA del BEGIN: lì non
-        # c'è transazione da annullare e ROLLBACK solleverebbe a sua volta,
-        # mascherando l'errore vero.
-        try:
-            conn.execute("ROLLBACK")
-        except sqlite3.OperationalError:
-            pass
+        # C'è sempre una transazione aperta a questo punto (BEGIN è la prima
+        # istruzione, prima di ogni controllo): nessun bisogno di proteggere il
+        # ROLLBACK, a differenza di quando la precondizione "vergine" viveva
+        # fuori transazione.
+        conn.execute("ROLLBACK")
         raise
     finally:
         conn.execute("DETACH DATABASE org")
@@ -131,16 +153,16 @@ def migra(src_organize: Path, dest: Path, *, dry_run: bool) -> Report:
 def _conta_fk_orfane(conn: sqlite3.Connection) -> int:
     """Righe figlie che puntano a un padre inesistente dopo il travaso."""
     controlli = (
-        "select count(*) from audio_file f "
-        "where not exists (select 1 from scan_root r where r.id = f.root_id)",
-        "select count(*) from plan_op o "
-        "where not exists (select 1 from plan p where p.id = o.plan_id)",
-        "select count(*) from plan_op o "
-        "where not exists (select 1 from audio_file f where f.id = o.file_id)",
-        "select count(*) from undo_journal u "
-        "where not exists (select 1 from audio_file f where f.id = u.file_id)",
-        "select count(*) from undo_journal u "
-        "where not exists (select 1 from plan p where p.id = u.run_id)",
+        "select count(*) from main.audio_file f "
+        "where not exists (select 1 from main.scan_root r where r.id = f.root_id)",
+        "select count(*) from main.plan_op o "
+        "where not exists (select 1 from main.plan p where p.id = o.plan_id)",
+        "select count(*) from main.plan_op o "
+        "where not exists (select 1 from main.audio_file f where f.id = o.file_id)",
+        "select count(*) from main.undo_journal u "
+        "where not exists (select 1 from main.audio_file f where f.id = u.file_id)",
+        "select count(*) from main.undo_journal u "
+        "where not exists (select 1 from main.plan p where p.id = u.run_id)",
     )
     return sum(conn.execute(q).fetchone()[0] for q in controlli)
 
