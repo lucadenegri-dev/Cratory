@@ -5,9 +5,12 @@ import { resolve } from "node:path";
 const source = readFileSync(resolve(__dirname, "../lib/organize/api.ts"), "utf8");
 
 describe("client API Organize", () => {
-  it("punta al backend unico, non alla vecchia porta 8010", () => {
+  it("usa un path relativo (nessun URL assoluto verso il backend)", () => {
     expect(source).not.toContain("8010");
-    expect(source).toContain("http://localhost:8000");
+    expect(source).not.toContain("localhost:8000");
+    expect(source).not.toContain("NEXT_PUBLIC_API_BASE");
+    expect(source).not.toMatch(/https?:\/\//);
+    expect(source).toContain('const API = "/api/organize"');
   });
 
   it("prefissa tutte le chiamate con /api/organize", () => {

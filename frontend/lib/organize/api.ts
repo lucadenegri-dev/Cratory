@@ -1,9 +1,11 @@
 import { getCurrentLanguage, translateApiError, type Language } from "@/lib/organize/i18n/runtime";
 
-const API_ROOT = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
-/* Le rotte Organize vivono sotto /api/organize: i path passati a apiGet/apiSend
+/* Base relativa = stesso host della pagina: le chiamate /api/organize/* passano
+   dal rewrite di next.config.ts verso il backend (come lib/api/client.ts), così
+   l'app funziona anche aperta da un altro dispositivo in LAN e senza CORS.
+   Le rotte Organize vivono sotto /api/organize: i path passati a apiGet/apiSend
    sono relativi a questa base (es. "/sources" → /api/organize/sources). */
-const API = `${API_ROOT}/api/organize`;
+const API = "/api/organize";
 
 export interface ScanRoot {
   id: number;
@@ -127,11 +129,18 @@ async function apiGet<T>(
   path: string,
   params?: Record<string, string | number | boolean | undefined>,
 ): Promise<T> {
-  const url = new URL(API + path);
+  // Niente `new URL(...)`: con base relativa (API sotto /api/organize) lancerebbe.
+  // La query string viene costruita a mano, come in lib/api/client.ts, così l'URL
+  // resta relativo allo stesso host.
+  let url = API + path;
   if (params) {
+    const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== "") url.searchParams.set(k, String(v));
+      if (v === undefined || v === "") continue;
+      qs.set(k, String(v));
     }
+    const s = qs.toString();
+    if (s) url += (url.includes("?") ? "&" : "?") + s;
   }
   return handle<T>(await fetch(url));
 }
