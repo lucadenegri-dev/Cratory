@@ -3,6 +3,10 @@ uvicorn[standard]>=0.32
 sqlalchemy>=2.0,<3.0
 pydantic>=2.9,<3.0
 pydantic-settings>=2.6,<3.0
+# Import diretto in app/main.py (load_dotenv per ANTHROPIC_API_KEY, senza
+# prefisso DJORG_): gia' presente come dipendenza transitiva di
+# pydantic-settings, ora esplicita perche' il codice la importa direttamente.
+python-dotenv>=1.0
 python-multipart>=0.0.17
 # Editing round-trip di slskd.yml (flag "Condividi libreria"): preserva commenti,
 # ordine e formato del config con credenziali; PyYAML no.

@@ -11,7 +11,12 @@ def test_archived_default_false(db):
     assert t.archived is False
 
 
-def test_archive_root_default_vuoto():
+def test_archive_root_default_vuoto(monkeypatch):
+    # Isola dal vero ARCHIVE_ROOT dello sviluppatore: app/main.py ora fa
+    # load_dotenv(backend/.env) (serve ad ANTHROPIC_API_KEY per l'SDK
+    # Anthropic), quindi da quando il modulo e' stato importato la variabile
+    # e' anche nel process env — _env_file=None da solo non basta più.
+    monkeypatch.delenv("ARCHIVE_ROOT", raising=False)
     s = Settings(_env_file=None)
     assert s.archive_root == ""
 

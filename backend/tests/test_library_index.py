@@ -4,7 +4,12 @@ import pytest
 from app.core.config import Settings
 
 
-def test_library_root_default_vuoto():
+def test_library_root_default_vuoto(monkeypatch):
+    # Isola dal vero LIBRARY_ROOT dello sviluppatore: app/main.py ora fa
+    # load_dotenv(backend/.env) (serve ad ANTHROPIC_API_KEY per l'SDK
+    # Anthropic), quindi da quando il modulo e' stato importato la variabile
+    # e' anche nel process env — _env_file=None da solo non basta più.
+    monkeypatch.delenv("LIBRARY_ROOT", raising=False)
     s = Settings(_env_file=None)
     assert s.library_root == ""
 
