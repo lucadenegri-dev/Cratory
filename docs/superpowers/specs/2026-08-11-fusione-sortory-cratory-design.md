@@ -403,7 +403,36 @@ uno per fase, in sequenza, ciascuno dopo che la milestone della fase precedente
 | **F3a** Modello A | `track_id`, `location`, `primary_file_id`; `local_*` come cache | **completata 2026-08-12**: 624 tracce col file agganciato (625 prima della fusione del duplicato *Aqua Viva*), zero asimmetrie e zero orfani anche dopo uno scan reale, `routers/` e `repositories.py` non toccati, 1829 test verdi |
 | **F3b** Via `scan_root` | rimozione di `scan_root`/`root_id`/`root_targets` e della pagina Sources (83 riferimenti) | ✅ **completata 2026-08-12** — eseguita in due tempi, F3a (modello) e F3b (`scan_root` fuori dal dominio): i target del piano derivano da Settings, nessuna regressione su Piano e Apply, 1844 test verdi. La rimozione **di schema** — la colonna `audio_file.root_id` e la tabella `scan_root` — è **rimandata**: si rivaluta dopo F4, se lo scanner unico richiede comunque un rebuild di `audio_file` |
 | **F4** Scanner unico | una camminata, due fasi | ✅ **completata 2026-08-12** — una sola camminata (`_iter_audio_files` nello scanner, `scan_folder` solo dentro `indicizza_archivio`), un solo job (`library_index_job` assorbito da `scan_job`), un solo avvio. La fase di aggancio è in **quattro** parti nell'ordine `collega_tracce` → `indicizza_archivio` → `riconcilia_possessi` → `recompute_energy`, e l'ordine non è arbitrario: la libreria va prima dell'archivio perché a parità di audio il possesso vince, e la riconciliazione va per ultima o una traccia il cui file passa in `ARCHIVE_ROOT` viene cancellata invece che marcata scartata. Idempotenza verificata su due corse consecutive: `inserted=0 updated=0 unchanged=625 missing=0`, invarianti a zero. Aggiunto in corso d'opera lo **scanner incrementale** (`AudioFile.mtime`): la camminata è passata da **148,4s a 0,2s** quando nulla è cambiato — serviva perché da questa fase quel percorso è anche quello dell'avvio automatico al boot, che prima passava dall'indicizzazione incrementale di Cratory |
-| **F5** UI unificata | nav con Organize, componenti deduplicati, `Progress` travasato, i18n `organize.*`, `globals.css`, Settings unica, Sources cancellata | `npm run build` + `lint` + e2e Playwright verdi; confronto visivo con le due app affiancate |
+| **F5** UI unificata | nav con Organize, componenti deduplicati, i18n `organize.*`, Settings unica | `npm run build` + `lint` + e2e Playwright verdi; confronto visivo — **completata 2026-08-13**, 161 unit + 21 e2e + 1882 backend verdi |
+
+Note di completamento F5, dove la sezione "5. Frontend" qui sopra è stata
+smentita dai fatti:
+
+- **`globals.css` non è stato riconciliato**: ne esisteva già uno solo. F1 non
+  aveva mai portato dentro quello di Organize, quindi le pagine `/organize`
+  giravano sui token di Cratory da settimane. Le "90 righe di differenza" erano
+  una misura fra i due repo pre-fusione.
+- **`Progress` non è stato travasato.** Era l'unico export di `organize/ui.tsx`
+  assente da quello di Cratory, ma non lo usa nessuno: dei dodici simboli
+  effettivamente importati, tutti esistevano già.
+- **Il cluster morto era di quattro componenti, non due**: `editorial-shell`
+  non era importato da nessuno, e `index-nav`/`clock`/`theme-toggle` erano
+  raggiungibili solo attraverso di lui. Il doppio tema
+  (`djorganizer-theme` vs `cratory-theme`) non è quindi mai stato un difetto.
+- **La "riga arricchita" della barra non è servita**: `JobRow` di Cratory già
+  rendeva `EqMeter` a tutta larghezza, il dettaglio sotto l'etichetta e
+  `pct` + `n/m`. Mancava solo la fase, ora passata come `detail`.
+- **`scan` e `libraryIndex` sono lo stesso job da due endpoint**: si polla una
+  volta e si espone con entrambi i nomi. Pollarli entrambi avrebbe mostrato la
+  stessa scansione due volte nella barra.
+- **I codici errore di Organize non stanno sotto `organize.*`** ma nel blocco
+  `errors` di primo livello: è lì che `translateApiError` li cerca
+  (`DICTIONARIES[lang].errors[code]`). Nidificarli li avrebbe lasciati senza
+  traduzione, in silenzio.
+- **La pagina `/organize/settings` forniva più delle tre card previste**:
+  template con anteprima, lista provider con stato ed env vars, fingerprint
+  AcoustID, e uno switcher di lingua (sparito come duplicato). Nessuna UI per
+  le regole dedup: quell'impostazione esiste nel DB ma non era esposta.
 | **F6** Pulizia | `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/ROADMAP.md` per un prodotto solo; repo Sortory archiviato su GitHub (non cancellato); rimossi `organizer_url` e il link "Apri Sortory" | documentazione senza riferimenti a due app separate |
 
 ## Verifica

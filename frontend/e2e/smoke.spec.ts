@@ -22,7 +22,7 @@ const ROUTES: { path: string; title: string | null }[] = [
   { path: "/sets", title: null },
   { path: "/transitions", title: null },
   { path: "/analysis", title: null },
-  { path: "/discovery", title: "Discovery" },
+  { path: "/discovery", title: "Dig" },
   { path: "/shazam", title: "Shazam" },
   { path: "/set-builder", title: "Set Builder" },
   { path: "/settings", title: null },
@@ -31,13 +31,14 @@ const ROUTES: { path: string; title: string | null }[] = [
   // sul titolo "Files". "/organize/sources" non esiste piu' (fase F3b: le
   // sorgenti non sono un concetto della UI, vedi lib/organize/api.ts) — non
   // e' ne' una pagina ne' un redirect, va rimossa dalla lista.
+  // "/organize/settings" e' sparita in F5: template e provider sono ora una
+  // sezione di "/settings", gia' coperta qui sopra.
   { path: "/organize", title: "Files" },
   { path: "/organize/files", title: "Files" },
   { path: "/organize/issues", title: "Issues" },
   { path: "/organize/duplicates", title: "Duplicates" },
   { path: "/organize/plan", title: "Plan" },
   { path: "/organize/history", title: "History" },
-  { path: "/organize/settings", title: "Settings" },
 ];
 
 // Rumore noto e innocuo che puo' comparire in dev mode: whitelist esplicita,
