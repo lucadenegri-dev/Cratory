@@ -251,6 +251,13 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     if _ha_camminato_la_libreria(roots):
         summary.linking = _aggancia_le_tracce(db, on_progress)
 
+    # NOTA (F4): da qui in poi `scan()` non è più atomico. Prima aveva un solo
+    # commit in coda, e un crash annullava l'intera scansione; ora le funzioni
+    # della fase di aggancio committano al loro interno, quindi un errore in
+    # `indicizza_archivio` o in `analysis.recompute` lascia indice e aggancio
+    # parziali su disco. È benigno perché l'intera pipeline è idempotente e
+    # converge alla corsa successiva — è la milestone dichiarata della fase — ma
+    # è una proprietà persa, non una scelta: non contarci sopra.
     db.commit()
     summary.finished_at = utcnow()
     return summary

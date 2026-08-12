@@ -275,10 +275,19 @@ the file is gone). No transcoding: an unsupported browser format simply fails to
 client-side. One track at a time via the shared docked player (the same one used for the
 Discovery ephemeral preview).
 
-`POST /api/library/index` (202) indexes the canonical `LIBRARY_ROOT` library
-(disk-first: the disk IS the library) — scan + re-link by audio-hash + ownership
-reconciliation; `409` if `LIBRARY_ROOT` is not configured. Job state on
-`GET /api/library/index/status`.
+`POST /api/library/index` (202) is an **alias of the single scan job** (`scan_job`), the
+same one started by `POST /api/organize/scan`: one walk over the configured roots, then
+the linking phase — link to `Track`, archive pass, ownership reconciliation, energy
+calibration. `409` if `LIBRARY_ROOT` is not configured, and `409` `apply_running` while
+an Organize Apply is in progress (scanning a half-moved tree would mis-merge rows).
+
+Job state on `GET /api/library/index/status`. Its shape is the job state, **not** a flat
+report: `{status, phase, processed, total, result, error}`, where `phase` is one of
+`scanning | linking | inspecting | deduping | null` and `result.linking` carries the
+linking counters (`scanned`, `created`, `relinked`, `unchanged`, `duplicates`, `lost`,
+`archived`, `energy_computed`). **`result.linking` is `null`** when the run did not walk
+the library root — a scan restricted to the inbox does phase 1 only and deliberately
+leaves the tracks alone.
 
 `PATCH /api/tracks/{track_id}` accepts partial updates on BPM, Camelot, genre, label,
 year and related fields. Manual values take precedence over imported data. `422` on a
