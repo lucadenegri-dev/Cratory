@@ -256,7 +256,6 @@ def test_pipeline_wishlist_esclude_scartate(db, monkeypatch):
     from app.services.pipeline import pipeline_snapshot
     monkeypatch.setattr(settings, "slskd_download_dir", "")
     monkeypatch.setattr(settings, "library_root", "")
-    monkeypatch.setattr(settings, "organizer_url", "")
     _mk(db, 1)
     _mk(db, 2, archived=True)
     snap = pipeline_snapshot(db)

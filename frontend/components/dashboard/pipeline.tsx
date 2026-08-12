@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { type PipelineStatus } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -10,7 +10,7 @@ import { Card } from "@/components/ui";
 
 /* Una fase della striscia: numero vivo + etichetta, "accesa" (pallino) se c'è
    lavoro pendente. Fasi con href navigano (Analizza -> /analysis); Organizza
-   apre un pannello inline (link a Sortory). */
+   apre un pannello inline (link alla sezione Organize). */
 type StageDef = {
   key: string;
   label: string;
@@ -95,14 +95,14 @@ export function PipelineStrip({ p }: { p: PipelineStatus }) {
               ? t.dashboard.inboxNotConfigured
               : t.dashboard.inboxWaiting(p.inbox_files)}
           </span>
-          {p.organizer_url && (
-            <a
-              href={p.organizer_url} target="_blank" rel="noreferrer"
-              className="inline-flex shrink-0 items-center gap-1.5 text-fg-strong hover:underline"
-            >
-              {t.dashboard.openSortory} <ExternalLink size={12} />
-            </a>
-          )}
+          {/* Non è più un'altra app da aprire in una tab nuova: Organize è una
+              sezione di questa, e il link è navigazione interna. */}
+          <Link
+            href="/organize/files"
+            className="inline-flex shrink-0 items-center gap-1.5 text-fg-strong hover:underline"
+          >
+            {t.dashboard.openOrganize} <ChevronRight size={12} />
+          </Link>
         </div>
       )}
     </Card>

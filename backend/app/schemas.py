@@ -768,7 +768,6 @@ class PipelineOut(BaseModel):
     download_active: bool
     download_pending: int
     inbox_files: int | None = None
-    organizer_url: str | None = None
 
 
 # --- Shazam: DJ set identificati (Fase 1) ------------------------------------

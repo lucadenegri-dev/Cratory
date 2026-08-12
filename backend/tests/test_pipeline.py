@@ -7,10 +7,9 @@ from app.services.pipeline import pipeline_snapshot
 
 @pytest.fixture(autouse=True)
 def _no_dirs(monkeypatch):
-    """Default: nessuna cartella/URL configurati (i test che servono li impostano)."""
+    """Default: nessuna cartella configurata (i test che servono la impostano)."""
     monkeypatch.setattr(settings, "slskd_download_dir", "")
     monkeypatch.setattr(settings, "library_root", "")
-    monkeypatch.setattr(settings, "organizer_url", "")
 
 
 def test_snapshot_vuoto(db):
@@ -19,7 +18,6 @@ def test_snapshot_vuoto(db):
     assert snap["playlists"] == 0
     assert snap["download_active"] is False
     assert snap["inbox_files"] is None
-    assert snap["organizer_url"] is None
 
 
 def test_conteggi_db(db, seed_tracks):
@@ -48,10 +46,6 @@ def test_inbox_cartella_inesistente_e_neutra(db, monkeypatch):
     monkeypatch.setattr(settings, "slskd_download_dir", "/percorso/che/non/esiste")
     assert pipeline_snapshot(db)["inbox_files"] is None
 
-
-def test_organizer_url_esposto(db, monkeypatch):
-    monkeypatch.setattr(settings, "organizer_url", "http://localhost:3100")
-    assert pipeline_snapshot(db)["organizer_url"] == "http://localhost:3100"
 
 
 def test_analyze_pending_counts_owned_without_features(db):

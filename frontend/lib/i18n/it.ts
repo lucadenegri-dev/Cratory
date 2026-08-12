@@ -190,7 +190,7 @@ export const it: Dictionary = {
     inboxNotConfigured: "Inbox non configurata: imposta SLSKD_DOWNLOAD_DIR nel .env del backend.",
     inboxWaiting: (n: number) =>
       `${n} file audio in inbox in attesa di tagging e riorganizzazione (Sortory); poi torna qui e indicizza.`,
-    openSortory: "Apri Sortory",
+    openOrganize: "Vai a Organizza",
   },
   analysis: {
     pageTitle: "Analisi",

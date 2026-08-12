@@ -1,4 +1,5 @@
-"""GET /api/pipeline: snapshot unico per la striscia di orientamento."""
+"""La pipeline non punta più a un'app esterna: Organize è una sezione."""
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -11,8 +12,9 @@ from app.main import app
 
 @pytest.fixture()
 def client():
-    # StaticPool: TestClient esegue la route in un altro thread, serve la
-    # connessione unica condivisa (vedi test_track_lookup.py).
+    # Stesso pattern di test_pipeline_router: senza dependency_overrides la
+    # route userebbe l'engine di modulo, dove le tabelle esistono solo se un
+    # altro test le ha create prima — verde o rosso a seconda dell'ordine.
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
                            poolclass=StaticPool)
     Base.metadata.create_all(engine)
@@ -25,14 +27,24 @@ def client():
         session.close()
 
 
-def test_get_pipeline(client, monkeypatch):
+def test_settings_non_ha_piu_organizer_url():
     from app.core.config import settings
+
+    assert not hasattr(settings, "organizer_url")
+
+
+def test_la_risposta_pipeline_non_espone_organizer_url(client, monkeypatch):
+    from app.core.config import settings
+
     monkeypatch.setattr(settings, "slskd_download_dir", "")
     monkeypatch.setattr(settings, "library_root", "")
 
-    r = client.get("/api/pipeline")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["total_tracks"] == 0
-    assert body["download_active"] is False
-    assert body["inbox_files"] is None
+    res = client.get("/api/pipeline")
+    assert res.status_code == 200
+    assert "organizer_url" not in res.json()
+
+
+def test_lo_schema_non_dichiara_piu_il_campo():
+    from app.schemas import PipelineOut
+
+    assert "organizer_url" not in PipelineOut.model_fields

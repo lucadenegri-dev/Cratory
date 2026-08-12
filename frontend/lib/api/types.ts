@@ -295,7 +295,6 @@ export interface PipelineStatus {
   download_active: boolean;
   download_pending: number;
   inbox_files: number | null;
-  organizer_url: string | null;
 }
 
 export interface ServiceStatus {

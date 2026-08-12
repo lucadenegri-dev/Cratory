@@ -84,5 +84,4 @@ def pipeline_snapshot(
         "download_active": download_active,
         "download_pending": max(download["total"] - download["processed"], 0) if download_active else 0,
         "inbox_files": inbox_files,
-        "organizer_url": settings.organizer_url or None,
     }

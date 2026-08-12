@@ -193,7 +193,7 @@ export const en = {
     inboxNotConfigured: "Inbox not configured: set SLSKD_DOWNLOAD_DIR in the backend .env.",
     inboxWaiting: (n: number) =>
       `${n} ${n === 1 ? "audio file" : "audio files"} in inbox are waiting for tagging and reorganization (Sortory); then come back here and index.`,
-    openSortory: "Open Sortory",
+    openOrganize: "Go to Organize",
   },
   analysis: {
     pageTitle: "Analysis",
