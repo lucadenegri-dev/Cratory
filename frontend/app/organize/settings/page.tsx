@@ -5,8 +5,8 @@ import {
   getSettings, updateSettings, runFingerprint, listProviders,
   type Settings, type FingerprintResult, type ProviderInfo,
 } from "@/lib/organize/api";
-import { PageLayout } from "@/components/organize/page-layout";
-import { Alert, Button, Loading } from "@/components/organize/ui";
+import { PageLayout } from "@/components/page-layout";
+import { Alert, Button, Loading } from "@/components/ui";
 import { useI18n, useT } from "@/lib/i18n";
 
 // Valori d'esempio per l'anteprima client-side (approssimata: la resa reale con

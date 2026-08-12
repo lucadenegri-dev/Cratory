@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { buildPlan, getPlan, type Plan, type PlanStats, type ApplyResult } from "@/lib/organize/api";
 import { useJobs } from "@/components/organize/jobs-provider";
-import { PageLayout } from "@/components/organize/page-layout";
+import { PageLayout } from "@/components/page-layout";
 import { PlanOps } from "@/components/organize/plan-ops";
 import { ApplyModal } from "@/components/organize/apply-modal";
-import { Alert, Button, EmptyState, Loading, Spinner } from "@/components/organize/ui";
+import { Alert, Button, EmptyState, Loading, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 export default function PlanPage() {

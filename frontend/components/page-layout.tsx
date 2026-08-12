@@ -1,11 +1,21 @@
-import type { ReactNode } from "react";
+"use client";
 
+import type { ReactNode } from "react";
+import { useT } from "@/lib/i18n";
+
+/* Impaginazione comune a tutte le pagine. Ha due slot opzionali che vengono da
+   storie diverse e convivono: `action` (un controllo allineato a destra
+   nell'header) e `guide` (il testo esplicativo nella colonna marginale, usato
+   dalle pagine Organize). La colonna marginale si apre se c'è almeno uno fra
+   `marginalia` e `guide`.
+   È un client component perché l'intestazione della guida è tradotta. */
 export function PageLayout({
   title,
   meta,
   action,
   marginalia,
   marginaliaTitle,
+  guide,
   children,
 }: {
   title?: string;
@@ -13,10 +23,13 @@ export function PageLayout({
   action?: ReactNode;
   marginalia?: ReactNode;
   marginaliaTitle?: string;
+  guide?: ReactNode;
   children: ReactNode;
 }) {
+  const t = useT();
+  const hasAside = marginalia != null || guide != null;
   return (
-    <div className={marginalia ? "lg:grid lg:grid-cols-[1fr_240px]" : ""}>
+    <div className={hasAside ? "lg:grid lg:grid-cols-[1fr_240px]" : ""}>
       <section className="min-w-0 px-5 py-5 lg:px-6 lg:py-6">
         {title && (
           <header className="mb-5 flex items-baseline gap-3 border-b border-border pb-3">
@@ -27,12 +40,22 @@ export function PageLayout({
         )}
         {children}
       </section>
-      {marginalia && (
+      {hasAside && (
         <aside className="border-t border-border px-5 py-5 lg:border-l lg:border-t-0 lg:py-6">
-          {marginaliaTitle && (
-            <div className="mb-3 text-[10px] uppercase tracking-wider text-muted">{marginaliaTitle}</div>
+          {marginalia && (
+            <>
+              {marginaliaTitle && (
+                <div className="mb-3 text-[10px] uppercase tracking-wider text-muted">{marginaliaTitle}</div>
+              )}
+              {marginalia}
+            </>
           )}
-          {marginalia}
+          {guide && (
+            <div className={marginalia ? "mt-6 border-t border-border pt-4" : ""}>
+              <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.organize.common.guide}</div>
+              <div className="space-y-1.5 text-[11px] leading-relaxed text-faint">{guide}</div>
+            </div>
+          )}
         </aside>
       )}
     </div>

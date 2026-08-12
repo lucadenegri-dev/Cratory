@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { updateFileTags, type FileRow, type LibraryFacets, type EditableTags } from "@/lib/organize/api";
-import { Modal, Button, Input, Field, Alert } from "@/components/organize/ui";
+import { Modal, Button, Input, Field, Alert } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 const FIELDS: (keyof EditableTags)[] = [

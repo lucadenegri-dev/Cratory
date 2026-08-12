@@ -9,7 +9,7 @@ import {
   type ScanJobState, type ApplyJobState, type ProviderRescanJobState, type ProviderRescanBody,
   type IntegrityJobState, type GenreReviewJobState, type GenreReviewBody, type Location,
 } from "@/lib/organize/api";
-import { EqMeter } from "./ui";
+import { EqMeter } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 const IDLE = {

@@ -7,10 +7,10 @@ import {
   type Issue, type Location,
 } from "@/lib/organize/api";
 import { useJobs } from "@/components/organize/jobs-provider";
-import { PageLayout } from "@/components/organize/page-layout";
+import { PageLayout } from "@/components/page-layout";
 import { IssuesTable, issueIsFixable, issueIsStrong, type GroupBy } from "@/components/organize/issues-table";
-import { Alert, Button, Checkbox, EmptyState, Input, Loading, Modal, Select, Spinner } from "@/components/organize/ui";
-import { PathPickerButton, usePickerAvailability } from "@/components/organize/path-picker-button";
+import { Alert, Button, Checkbox, EmptyState, Input, Loading, Modal, Select, Spinner } from "@/components/ui";
+import { PathPickerButton, usePickerAvailability } from "@/components/path-picker-button";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 

@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { listHistory, undoRun, fmtDate, type HistoryItem } from "@/lib/organize/api";
 import { useJobs } from "@/components/organize/jobs-provider";
-import { PageLayout } from "@/components/organize/page-layout";
-import { Alert, EmptyState, Loading } from "@/components/organize/ui";
+import { PageLayout } from "@/components/page-layout";
+import { Alert, EmptyState, Loading } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 

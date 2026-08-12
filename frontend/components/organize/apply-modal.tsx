@@ -1,6 +1,6 @@
 "use client";
 
-import { Modal, Button } from "./ui";
+import { Modal, Button } from "@/components/ui";
 import { type PlanStats } from "@/lib/organize/api";
 import { useT } from "@/lib/i18n";
 

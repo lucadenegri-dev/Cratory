@@ -6,10 +6,10 @@ import {
   type FileRow, type LibraryStats, type LibraryFacets, type Location, type FileQuery,
 } from "@/lib/organize/api";
 import { useJobs } from "@/components/organize/jobs-provider";
-import { PageLayout } from "@/components/organize/page-layout";
+import { PageLayout } from "@/components/page-layout";
 import { FilesTable } from "@/components/organize/files-table";
 import { FileEditPanel } from "@/components/organize/file-edit-panel";
-import { Alert, Button, EmptyState, Input, Loading, Select, Spinner } from "@/components/organize/ui";
+import { Alert, Button, EmptyState, Input, Loading, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 const LIMIT = 500;

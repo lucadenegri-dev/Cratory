@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { listDuplicates, setKeeper, dismissDuplicate, type DupGroup } from "@/lib/organize/api";
 import { useJobs } from "@/components/organize/jobs-provider";
-import { PageLayout } from "@/components/organize/page-layout";
+import { PageLayout } from "@/components/page-layout";
 import { DupGroupCard } from "@/components/organize/dup-group";
-import { Alert, EmptyState, Loading } from "@/components/organize/ui";
+import { Alert, EmptyState, Loading } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 export default function DuplicatesPage() {
