@@ -307,9 +307,13 @@ function LibraryIndexCard() {
         {busy && (
           <p className="tnum text-sm text-muted">{t.settings.indexingProgress(libJob.processed, libJob.total)}</p>
         )}
-        {libJob?.status === "done" && (
+        {libJob?.status === "done" && libJob.result?.linking && (
           <p className="text-sm text-fg">
-            {t.settings.indexResultSummary(libJob.scanned, libJob.matched, libJob.created, libJob.duplicates, libJob.relinked, libJob.lost, libJob.failed)}
+            {t.settings.indexResultSummary(
+              libJob.result.linking.scanned, libJob.result.linking.matched, libJob.result.linking.created,
+              libJob.result.linking.duplicates, libJob.result.linking.relinked, libJob.result.linking.lost,
+              libJob.result.linking.failed,
+            )}
           </p>
         )}
       </div>

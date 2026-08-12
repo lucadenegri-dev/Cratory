@@ -18,6 +18,10 @@ export interface ScanResult {
   found: number;
   inserted: number;
   updated: number;
+  // File il cui (path, size, mtime) combacia con la riga esistente: rilevato
+  // dal fast-path incrementale, non riletto. Su una rescan di routine (disco
+  // fermo) è la stragrande maggioranza di `found` — updated resta a 0.
+  unchanged: number;
   moved: number;
   missing: number;
   errors: number;

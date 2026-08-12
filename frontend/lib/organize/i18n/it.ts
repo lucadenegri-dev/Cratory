@@ -135,6 +135,7 @@ export const it: Dictionary = {
     statFound: "trovati",
     statNew: "nuovi",
     statUpdated: "aggiornati",
+    statUnchanged: "invariati",
     statMoved: "spostati",
     statMissing: "mancanti",
     statErrors: "errori",

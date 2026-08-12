@@ -190,20 +190,59 @@ export interface TrackUpdate {
   rating?: number | null;
 }
 
-export interface LibraryIndexJob {
-  status: "idle" | "running" | "done" | "error";
-  processed: number;
-  total: number;
+/** Report combinato delle quattro parti dell'aggancio (collega_tracce +
+ *  indicizza_archivio + riconcilia_possessi + recompute_energy), copia di
+ *  `link_report` in `app/services/library_index.py`. */
+export interface LibraryIndexLinking {
   scanned: number;
   matched: number;
   created: number;
   relinked: number;
   duplicates: number;
   lost: number;
+  orphans_removed: number;
   failed: number;
+  unchanged: number;
+  archived: number;
   errors: { path: string; error: string }[];
+  energy_computed?: number;
+}
+
+/** Esito di uno scan+link completo: forma di `ScanSummary` (app/organize/schemas.py),
+ *  più `analysis` valorizzato dal job (app/organize/services/scan_job.py). */
+export interface LibraryIndexResult {
+  roots: number[];
+  found: number;
+  inserted: number;
+  updated: number;
+  unchanged: number;
+  moved: number;
+  missing: number;
+  errors: number;
+  started_at: string | null;
+  finished_at: string | null;
+  linking: LibraryIndexLinking | null;
+  analysis?: {
+    issues_total: number;
+    issues_by_severity: Record<string, number>;
+    dup_groups: number;
+    dup_files: number;
+  };
+}
+
+/** Stato del job unico di scan+link (`scan_job.job_state()`): stessa forma sia
+ *  che sia stato avviato da `/api/library/index` (Cratory) sia da
+ *  `/api/organize/scan` (Organize) — è lo stesso job in entrambi i casi. */
+export interface LibraryIndexJob {
+  status: "idle" | "running" | "done" | "error";
+  /** scanning/linking dallo scanner; inspecting/deduping da analysis.recompute. */
+  phase: "scanning" | "linking" | "inspecting" | "deduping" | null;
+  processed: number;
+  total: number;
+  result: LibraryIndexResult | null;
   error: string | null;
-  root: string | null;
+  started_at: string | null;
+  finished_at: string | null;
 }
 
 export interface AnalysisJobStatus {

@@ -139,6 +139,7 @@ export const en = {
     statFound: "found",
     statNew: "new",
     statUpdated: "updated",
+    statUnchanged: "unchanged",
     statMoved: "moved",
     statMissing: "missing",
     statErrors: "errors",

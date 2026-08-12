@@ -160,6 +160,7 @@ export default function FilesPage() {
             <ScanStat k={t.files.statFound} v={scan.result.found} />
             <ScanStat k={t.files.statNew} v={`+${scan.result.inserted}`} />
             <ScanStat k={t.files.statUpdated} v={scan.result.updated} />
+            <ScanStat k={t.files.statUnchanged} v={scan.result.unchanged} />
             <ScanStat k={t.files.statMoved} v={scan.result.moved} />
             <ScanStat k={t.files.statMissing} v={scan.result.missing} />
             <ScanStat k={t.files.statErrors} v={scan.result.errors} danger={scan.result.errors > 0} />
