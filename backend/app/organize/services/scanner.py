@@ -7,11 +7,13 @@ from collections.abc import Iterator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core import runtime_settings
 from app.core.config import settings
 from app.organize.integrations import content_hash, tagio
 from app.organize.models import AudioFile, ScanRoot, utcnow
 from app.organize.schemas import ScanSummary
 from app.organize.services.file_link import deriva_location, stacca_file
+from app.organize.services.roots import root_id_per
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +79,8 @@ def _location_per(path: str) -> str:
     ScanRoot, il caso sparisce.
     """
     try:
-        return deriva_location(path, library_root=settings.library_root,
-                               inbox_root=settings.slskd_download_dir)
+        return deriva_location(path, library_root=runtime_settings.library_root(),
+                               inbox_root=runtime_settings.slskd_download_dir())
     except ValueError:
         logger.warning("Path fuori dalle radici configurate, location=inbox: %s", path)
         return "inbox"
@@ -112,7 +114,7 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
             # (base del filtro "solo file nuovi").
             now = utcnow()
             row = AudioFile(
-                root_id=root.id, path=path, status="present",
+                root_id=root_id_per(db, _location_per(path)), path=path, status="present",
                 location=_location_per(path),
                 first_seen_at=now, last_scanned_at=now, **fields,
             )
@@ -166,6 +168,7 @@ def _reconcile(db, roots, seen_by_root, new_inserts, summary) -> None:
                 # Il file si è spostato: può aver attraversato il confine
                 # inbox↔library (è esattamente ciò che fa un Apply).
                 row.location = _location_per(moved_path)
+                row.root_id = root_id_per(db, row.location)
                 row.status = "present"
                 row.last_scanned_at = utcnow()
                 summary.moved += 1

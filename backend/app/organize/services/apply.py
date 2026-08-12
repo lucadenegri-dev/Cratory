@@ -6,8 +6,9 @@ import os
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core import runtime_settings
 from app.organize.integrations import cover_art, fsops, tagio
-from app.organize.models import AudioFile, DupMember, Issue, Plan, PlanOp, ScanRoot, UndoJournal, utcnow
+from app.organize.models import AudioFile, DupMember, Issue, Plan, PlanOp, UndoJournal, utcnow
 from app.organize.schemas import ApplyResult
 from app.organize.services import conflict
 from app.organize.services.planner import PlanOpComputed
@@ -15,9 +16,14 @@ from app.organize.services.planner import PlanOpComputed
 logger = logging.getLogger(__name__)
 
 
-def _root_path(db: Session, root_id: int) -> str:
-    root = db.get(ScanRoot, root_id)
-    return root.path if root else ""
+def _root_path_per(location: str) -> str:
+    """La cartella che contiene fisicamente un file di quella collocazione.
+
+    Base per `quarantine_path_for`: deve restare la cartella vera (libreria o
+    inbox), non `f.root_id` — che da F3b è solo schema morto derivato, non la
+    scelta dell'utente."""
+    return (runtime_settings.library_root() if location == "library"
+            else runtime_settings.slskd_download_dir())
 
 
 def _tag_value(tags, field):
@@ -88,7 +94,10 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
     src_dirs: set = set()     # cartelle sorgente svuotabili, pulite a fine run
 
     def _cleanup_dirs():
-        roots = {r.path for r in db.scalars(select(ScanRoot)).all()}
+        # Barriera di sicurezza per cleanup_empty_dirs: le due cartelle
+        # configurate, non più le ScanRoot dell'utente (schema morto da F3b).
+        roots = {p for p in (runtime_settings.library_root(),
+                             runtime_settings.slskd_download_dir()) if p}
         if target_root:
             roots.add(target_root)
         fsops.cleanup_empty_dirs(src_dirs, roots)
@@ -117,7 +126,7 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
 
     def _do_delete(o):
         f = files[o.file_id]
-        q = fsops.quarantine_path_for(f.path, _root_path(db, f.root_id))
+        q = fsops.quarantine_path_for(f.path, _root_path_per(f.location))
         _journal("DELETE", o.file_id, from_path=f.path, quarantine_path=q)  # journal PRIMA
         fsops.safe_move(f.path, q)                              # poi muta
         src_dirs.add(os.path.dirname(f.path))

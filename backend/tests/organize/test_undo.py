@@ -1,12 +1,17 @@
 import os
 
+from app.core.config import settings
 from app.organize.models import AudioFile, Plan, PlanOp, ScanRoot
 from app.organize.services.apply import apply_plan
 from app.organize.services.undo import undo_run
 
 
-def test_undo_restores_move_and_delete(db, tmp_path, copy_fixture):
+def test_undo_restores_move_and_delete(db, tmp_path, copy_fixture, monkeypatch):
     root = tmp_path / "lib"
+    # location di default degli AudioFile è "inbox": la quarantena del DELETE
+    # (apply.py) deriva la base da SLSKD_DOWNLOAD_DIR per quella location,
+    # non più da root_id — deve combaciare con `root` per restare dentro di essa.
+    monkeypatch.setattr(settings, "slskd_download_dir", str(root))
     keeper = copy_fixture("flac", root / "varie" / "k.flac")
     dup = copy_fixture("flac", root / "House" / "A" / "A - T1.flac")
     # ScanRoot id >= 3: 1 e 2 sono le canoniche (conftest.SEEDED_SCAN_ROOT_IDS).

@@ -5,8 +5,9 @@ import logging
 import threading
 
 from app.db import SessionLocal
-from app.organize.models import ScanRoot, utcnow
+from app.organize.models import utcnow
 from app.organize.services import analysis
+from app.organize.services.roots import radici
 from app.organize.services.scanner import scan
 
 logger = logging.getLogger(__name__)
@@ -42,8 +43,10 @@ def _run(root_ids: list[int] | None) -> None:
             _state.update(processed=processed, total=total, phase=phase)
 
     try:
-        query = db.query(ScanRoot)
-        roots = query.filter(ScanRoot.id.in_(root_ids)).all() if root_ids else query.all()
+        # Le radici non sono più righe scelte dall'utente: sono le due cartelle
+        # di Settings, derivate (e create/riallineate se serve) da roots.radici.
+        tutte = list(radici(db).values())
+        roots = [r for r in tutte if r.id in root_ids] if root_ids else tutte
         summary = scan(db, roots, on_progress=on_progress)
         analysis_summary = analysis.recompute(db, on_progress=on_progress)
         result = summary.model_dump(mode="json")

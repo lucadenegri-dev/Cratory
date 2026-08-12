@@ -15,6 +15,13 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# SCHEMA MORTO (F3b). Le sorgenti non sono più un'entità di dominio: esistono
+# due cartelle, LIBRARY_ROOT e SLSKD_DOWNLOAD_DIR, e queste righe le
+# rispecchiano soltanto. La tabella e la colonna audio_file.root_id restano
+# perché SQLite non può droppare root_id: è dentro uq_audio_root_path (indice
+# interno non droppabile) e in una FK, quindi servirebbe un rebuild di
+# audio_file — che ha quattro tabelle figlie. Stessa scelta, e stessa ragione,
+# di Track.playlist_id. Le scrive solo app/organize/services/roots.py.
 class ScanRoot(Base):
     __tablename__ = "scan_root"
 
@@ -34,6 +41,13 @@ class AudioFile(Base):
     __table_args__ = (UniqueConstraint("root_id", "path", name="uq_audio_root_path"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # SCHEMA MORTO (F3b). Le sorgenti non sono più un'entità di dominio: esistono
+    # due cartelle, LIBRARY_ROOT e SLSKD_DOWNLOAD_DIR, e queste righe le
+    # rispecchiano soltanto. La tabella e la colonna audio_file.root_id restano
+    # perché SQLite non può droppare root_id: è dentro uq_audio_root_path (indice
+    # interno non droppabile) e in una FK, quindi servirebbe un rebuild di
+    # audio_file — che ha quattro tabelle figlie. Stessa scelta, e stessa ragione,
+    # di Track.playlist_id. Le scrive solo app/organize/services/roots.py.
     root_id: Mapped[int] = mapped_column(ForeignKey("scan_root.id"), index=True)
     # Traccia di cui questo file è una copia. NULL = file non ancora
     # riconosciuto (tipicamente l'inbox, dove i file non sono ancora tracce).

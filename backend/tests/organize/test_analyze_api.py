@@ -118,10 +118,15 @@ def test_decisions_survive_reanalyze(db):
         )
 
 
-def test_scan_job_runs_analysis(tmp_path, copy_fixture):
+def test_scan_job_runs_analysis(tmp_path, copy_fixture, monkeypatch):
     lib = tmp_path / "lib"
     copy_fixture("mp3", lib / "a.mp3")
     with TestClient(app) as client:
+        # Dopo l'avvio (guardia _no_real_library_scan intatta durante il
+        # lifespan): scan_job deriva ora le radici da roots.radici(), che deve
+        # vedere `lib` come LIBRARY_ROOT per adottare la sorgente appena creata.
+        from app.core.config import settings
+        monkeypatch.setattr(settings, "library_root", str(lib))
         root_id = client.post("/api/organize/sources", json={"path": str(lib)}).json()["id"]
         client.post("/api/organize/scan", json={"root_ids": [root_id]})
         deadline = time.time() + 5

@@ -63,9 +63,9 @@ def target_root() -> str:
     riorganizza dentro. Non c'è un secondo posto dove un Apply possa portare
     qualcosa.
     """
-    from app.core.config import settings
+    from app.core import runtime_settings
 
-    return settings.library_root
+    return runtime_settings.library_root()
 
 
 def _inputs(db):

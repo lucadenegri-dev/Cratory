@@ -2,6 +2,7 @@ import os
 
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.organize.models import AudioFile, DupGroup, DupMember, Issue, Plan, PlanOp, ScanRoot, UndoJournal
 from app.organize.services.apply import apply_plan
 
@@ -13,8 +14,12 @@ def _af(db, fid, path, **kw):
     db.add(AudioFile(**d))
 
 
-def test_apply_move_and_delete_with_reorder(db, tmp_path, copy_fixture):
+def test_apply_move_and_delete_with_reorder(db, tmp_path, copy_fixture, monkeypatch):
     root = tmp_path / "lib"
+    # location di default degli AudioFile è "inbox": la quarantena del DELETE
+    # deriva la base da SLSKD_DOWNLOAD_DIR per quella location, non più da
+    # root_id — deve combaciare con `root` per restare dentro di essa.
+    monkeypatch.setattr(settings, "slskd_download_dir", str(root))
     keeper = copy_fixture("flac", root / "varie" / "k.flac")
     dup = copy_fixture("flac", root / "House" / "A" / "A - T1.flac")  # occupa lo slot del keeper
     db.add(ScanRoot(id=3, path=str(root)))

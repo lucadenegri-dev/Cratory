@@ -91,10 +91,15 @@ def test_add_source_rejects_missing_path():
         assert resp.status_code == 400
 
 
-def test_scan_endpoint_end_to_end(tmp_path, copy_fixture):
+def test_scan_endpoint_end_to_end(tmp_path, copy_fixture, monkeypatch):
     lib = tmp_path / "lib"
     copy_fixture("mp3", lib / "a.mp3")
     with TestClient(app) as client:
+        # Dopo l'avvio (guardia _no_real_library_scan intatta durante il
+        # lifespan): scan_job deriva ora le radici da roots.radici(), che deve
+        # vedere `lib` come LIBRARY_ROOT per adottare la sorgente appena creata.
+        from app.core.config import settings
+        monkeypatch.setattr(settings, "library_root", str(lib))
         root_id = client.post("/api/organize/sources", json={"path": str(lib)}).json()["id"]
         started = client.post("/api/organize/scan", json={"root_ids": [root_id]})
         assert started.status_code == 200

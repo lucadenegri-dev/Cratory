@@ -1,11 +1,17 @@
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.organize.models import AudioFile, ScanRoot
 from app.organize.services.scanner import scan
 
 
-def _make_root(db, copy_fixture, tmp_path, files):
+def _make_root(db, copy_fixture, tmp_path, files, monkeypatch):
+    # `scan()` deriva ora root_id da location (vedi roots.radici): la cartella
+    # ad hoc del test deve coincidere con LIBRARY_ROOT, altrimenti finirebbe
+    # fuori da entrambe le radici configurate e la riga scritta userebbe un id
+    # diverso da quello dello ScanRoot ad hoc creato qui sotto.
     root_dir = tmp_path / "lib"
+    monkeypatch.setattr(settings, "library_root", str(root_dir))
     for name, fmt in files:
         copy_fixture(fmt, root_dir / name)
     root = ScanRoot(path=str(root_dir))
@@ -14,8 +20,8 @@ def _make_root(db, copy_fixture, tmp_path, files):
     return root
 
 
-def test_scan_inserts_rows(db, copy_fixture, tmp_path):
-    root = _make_root(db, copy_fixture, tmp_path, [("a.mp3", "mp3"), ("b.flac", "flac")])
+def test_scan_inserts_rows(db, copy_fixture, tmp_path, monkeypatch):
+    root = _make_root(db, copy_fixture, tmp_path, [("a.mp3", "mp3"), ("b.flac", "flac")], monkeypatch)
     summary = scan(db, [root])
     assert summary.found == 2 and summary.inserted == 2 and summary.updated == 0
     rows = db.scalars(select(AudioFile)).all()
@@ -23,15 +29,15 @@ def test_scan_inserts_rows(db, copy_fixture, tmp_path):
     assert all(r.status == "present" and r.content_hash for r in rows)
 
 
-def test_progress_callback_called(db, copy_fixture, tmp_path):
-    root = _make_root(db, copy_fixture, tmp_path, [("a.mp3", "mp3")])
+def test_progress_callback_called(db, copy_fixture, tmp_path, monkeypatch):
+    root = _make_root(db, copy_fixture, tmp_path, [("a.mp3", "mp3")], monkeypatch)
     seen = []
     scan(db, [root], on_progress=lambda p, t, ph: seen.append((p, t, ph)))
     assert seen == [(1, 1, "scanning")]
 
 
-def test_rescan_is_idempotent(db, copy_fixture, tmp_path):
-    root = _make_root(db, copy_fixture, tmp_path, [("a.mp3", "mp3")])
+def test_rescan_is_idempotent(db, copy_fixture, tmp_path, monkeypatch):
+    root = _make_root(db, copy_fixture, tmp_path, [("a.mp3", "mp3")], monkeypatch)
     scan(db, [root])
     summary = scan(db, [root])
     assert summary.inserted == 0 and summary.updated == 1
@@ -39,8 +45,9 @@ def test_rescan_is_idempotent(db, copy_fixture, tmp_path):
     assert len(db.scalars(select(AudioFile)).all()) == 1
 
 
-def test_unreadable_file_recorded_not_crash(db, copy_fixture, tmp_path):
+def test_unreadable_file_recorded_not_crash(db, copy_fixture, tmp_path, monkeypatch):
     root_dir = tmp_path / "lib"
+    monkeypatch.setattr(settings, "library_root", str(root_dir))
     copy_fixture("mp3", root_dir / "ok.mp3")
     (root_dir / "broken.mp3").write_bytes(b"non audio")
     root = ScanRoot(path=str(root_dir))
@@ -52,7 +59,7 @@ def test_unreadable_file_recorded_not_crash(db, copy_fixture, tmp_path):
     assert broken.scan_error is not None
 
 
-def test_stat_failure_recorded_not_crash(db, copy_fixture, tmp_path):
+def test_stat_failure_recorded_not_crash(db, copy_fixture, tmp_path, monkeypatch):
     """Un file che sparisce dopo os.walk (stat fallisce con OSError) non crasha lo scan.
 
     Usa un broken symlink come trigger realistico: os.walk lo yielda ma
@@ -64,6 +71,7 @@ def test_stat_failure_recorded_not_crash(db, copy_fixture, tmp_path):
 
     root_dir = tmp_path / "lib"
     root_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(settings, "library_root", str(root_dir))
 
     # File buono
     copy_fixture("flac", root_dir / "a.flac")
@@ -92,8 +100,8 @@ def test_stat_failure_recorded_not_crash(db, copy_fixture, tmp_path):
     assert broken.scan_error is not None, "scan_error deve descrivere il fallimento del stat"
 
 
-def test_rescan_marks_missing(db, copy_fixture, tmp_path):
-    root = _make_root(db, copy_fixture, tmp_path, [("a.flac", "flac")])
+def test_rescan_marks_missing(db, copy_fixture, tmp_path, monkeypatch):
+    root = _make_root(db, copy_fixture, tmp_path, [("a.flac", "flac")], monkeypatch)
     scan(db, [root])
     (tmp_path / "lib" / "a.flac").unlink()
     summary = scan(db, [root])
@@ -102,8 +110,8 @@ def test_rescan_marks_missing(db, copy_fixture, tmp_path):
     assert row.status == "missing"
 
 
-def test_rescan_reconciles_move(db, copy_fixture, tmp_path):
-    root = _make_root(db, copy_fixture, tmp_path, [("a.flac", "flac")])
+def test_rescan_reconciles_move(db, copy_fixture, tmp_path, monkeypatch):
+    root = _make_root(db, copy_fixture, tmp_path, [("a.flac", "flac")], monkeypatch)
     scan(db, [root])
     original = db.scalar(select(AudioFile))
     original_id, first_seen = original.id, original.first_seen_at
@@ -119,10 +127,11 @@ def test_rescan_reconciles_move(db, copy_fixture, tmp_path):
     assert rows[0].status == "present"
 
 
-def test_scan_skips_quarantine_and_hidden_dirs(db, copy_fixture, tmp_path):
+def test_scan_skips_quarantine_and_hidden_dirs(db, copy_fixture, tmp_path, monkeypatch):
     """La .quarantine (creata dall'Apply per i DELETE) e le dir nascoste
     non devono rientrare nello scan: niente falsi 'nuovi file'."""
     root_dir = tmp_path / "lib"
+    monkeypatch.setattr(settings, "library_root", str(root_dir))
     copy_fixture("mp3", root_dir / "a.mp3")
     copy_fixture("mp3", root_dir / ".quarantine" / "b.mp3")
     copy_fixture("mp3", root_dir / ".hidden" / "sub" / "c.mp3")
@@ -135,10 +144,11 @@ def test_scan_skips_quarantine_and_hidden_dirs(db, copy_fixture, tmp_path):
     assert len(rows) == 1 and rows[0].path.endswith("a.mp3")
 
 
-def test_scan_reads_isrc(db, copy_fixture, tmp_path):
+def test_scan_reads_isrc(db, copy_fixture, tmp_path, monkeypatch):
     from mutagen.flac import FLAC
 
     root_dir = tmp_path / "lib"
+    monkeypatch.setattr(settings, "library_root", str(root_dir))
     path = copy_fixture("flac", root_dir / "a.flac")
     audio = FLAC(path)
     audio["isrc"] = "DEAB12300123"
