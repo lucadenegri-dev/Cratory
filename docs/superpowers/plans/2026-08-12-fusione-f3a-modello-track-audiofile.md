@@ -1070,6 +1070,39 @@ git commit -m "feat(f3a): primary_file_id mantenuto dove si scrivono i local_*"
 
 ---
 
+### Task 5b: Lo scanner deve derivare `location`
+
+**Files:**
+- Modify: `backend/app/organize/services/scanner.py`
+- Test: `backend/tests/organize/test_scanner_location.py`
+
+**Il buco che questo task chiude.** Il piano trattava `location` come se bastasse
+il backfill una tantum. Non basta: lo scanner crea gli `AudioFile` senza passare
+`location`, quindi cadono sul default del modello (`"inbox"`) — e un file nuovo in
+`LIBRARY_ROOT` nasce etichettato `inbox`. Il campo si degrada **dal primo scan
+dopo il backfill**, in silenzio, perché nessun invariante lo vede: "location vuota
+= 0" resta vero, è il valore a essere sbagliato.
+
+Due punti, non uno:
+
+1. la creazione della riga;
+2. il ramo `moved` del riconcilio, dove `row.path` cambia — un file può aver
+   attraversato il confine inbox↔library, ed è esattamente ciò che fa un Apply.
+
+Un path fuori da entrambe le radici non è libreria canonica per definizione:
+`"inbox"` è la risposta conservativa, con un `logger.warning` che nomina il path,
+così una `ScanRoot` incoerente emerge invece di passare muta. Con F3b, tolte le
+ScanRoot, il caso sparisce.
+
+- [ ] **Step 1: Test che fallisce** — due file veri, uno per radice, `scanner.scan`,
+  e l'asserzione su `location`. L'entry point è `scanner.scan(db, roots)`.
+- [ ] **Step 2: `_location_per(path)`** in `scanner.py`, che incapsula
+  `deriva_location` più il fallback con warning.
+- [ ] **Step 3: usarla** nella `AudioFile(...)` e nel ramo `moved`.
+- [ ] **Step 4: suite completa e commit.**
+
+---
+
 ### Task 6: Backfill sui dati reali
 
 **Files:**
@@ -1408,6 +1441,10 @@ Riporta: numero di test verdi, i valori degli invarianti dello Step 1, e se lo s
 - `Track.primary_file_id`, `AudioFile.track_id`, `AudioFile.location` esistono e sono valorizzate.
 - Le due facce della relazione sono simmetriche: zero asimmetrie, zero orfani in entrambe le direzioni.
 - Nessun `AudioFile` con `location` vuota; zero file fuori dalle due radici.
+- `location` è **derivata anche dallo scanner**, non solo dal backfill: uno scan
+  dopo il backfill non deve riportare file di `Library/` a `inbox`. Attenzione,
+  l'invariante "location vuota = 0" non basta a vederlo — il default del modello
+  è un valore valido ma sbagliato.
 - Le due `Track` sullo stesso file sono una sola; l'invariante è protetto da un test.
 - `stacca_file` è chiamata in ogni punto che cancella un `AudioFile`.
 - `primary_file_id` è mantenuta nei quattro punti che scrivono i `local_*`.
