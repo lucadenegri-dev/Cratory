@@ -18,6 +18,7 @@ from pathlib import Path
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.core import runtime_settings
 from app.integrations.local_files import (
     LocalFilesError,
     audio_hash,
@@ -28,9 +29,10 @@ from app.models import ArchiveSeen, Track, utcnow
 from app.repositories import ci_equals, unreferenced_track_ids
 from app.services.audio_energy import analyze_file, recompute_energy
 from app.services.genre_norm import normalize_genre
-# Ponte fra il modello core e Organize: file_link è il solo modulo autorizzato a
-# scrivere primary_file_id/track_id, e resta minuscolo apposta per non aprire un
+# Ponte fra il modello core e Organize: file_link/AudioFile sono gli unici
+# agganci a Organize da qui, e restano minuscoli apposta per non aprire un
 # ciclo di import fra i due mondi.
+from app.organize.models import AudioFile
 from app.organize.services.file_link import aggiorna_primary
 from app.services.manual_import import parse_line
 from app.services.local_import import scan_folder
@@ -211,34 +213,30 @@ def _is_hidden_path(path: Path, root: str | Path) -> bool:
     return any(part.startswith(".") for part in rel.parts)
 
 
-def index_library(db: Session, *, root: str | Path,
-                  archive_root: str | Path | None = None, on_progress=None) -> dict:
-    """Indicizza la libreria canonica e (se configurato) l'archivio delle scartate."""
-    files = scan_folder(root)
-    archive_files: list[Path] = []
+def indicizza_archivio(db: Session, *, archive_root: str | Path,
+                       on_progress=None) -> dict:
+    """Passata separata sull'archivio delle scartate.
+
+    Resta separata di proposito: ARCHIVE_ROOT non è nessuna delle due radici
+    dello scanner, e `AudioFile.location` ha due soli valori. I file d'archivio
+    non entrano nell'indice: si limitano a marcare come scartate le tracce
+    corrispondenti.
+    """
     archive_scanned = bool(archive_root and Path(archive_root).is_dir())
-    if archive_scanned:
-        archive_files = scan_folder(archive_root)
-    total = len(files) + len(archive_files)
-    report = {"scanned": len(files), "matched": 0, "created": 0,
-              "relinked": 0, "duplicates": 0, "lost": 0, "orphans_removed": 0,
-              "failed": 0, "unchanged": 0, "archived": 0, "errors": [], "created_ids": []}
+    archive_files: list[Path] = scan_folder(archive_root) if archive_scanned else []
+    total = len(archive_files)
+    report = {"scanned": total, "archived": 0, "failed": 0, "unchanged": 0, "errors": []}
     seen_paths: set[str] = set()
-    seen_digests: set[str] = set()
     # Firme dei file d'archivio già visti che non corrispondono ad alcuna traccia:
     # senza questo, verrebbero ri-hashati (ffmpeg) a ogni run. {path: (mtime, size)}
     archive_seen: dict[str, tuple[float, int]] = {}
     if archive_files:
         archive_seen = {r.path: (r.mtime, r.size) for r in db.scalars(select(ArchiveSeen))}
 
-    # Passata 1 — incrementale (Libreria E archivio): i file invariati (path noto,
-    # mtime+size uguali) reclamano subito path e hash SENZA ri-hash. Va fatta PRIMA
-    # della passata completa: altrimenti una copia nuova dello stesso audio, se
-    # scansionata prima dell'originale invariato, gli ruberebbe la traccia.
+    # Passata 1 — incrementale: i file invariati (firma nota) non vengono ri-hashati.
     done = 0
-    pending: list[tuple[Path, bool]] = []
-    for path, in_archive in ([(p, False) for p in files]
-                             + [(p, True) for p in archive_files]):
+    pending: list[Path] = []
+    for path in archive_files:
         resolved = str(path.resolve())
         try:
             stat = path.stat()
@@ -252,21 +250,7 @@ def index_library(db: Session, *, root: str | Path,
             if on_progress is not None:
                 on_progress(done, total)
             continue
-        known = db.scalar(select(Track).where(Track.local_path == resolved))
-        if (known is not None and known.local_mtime == stat.st_mtime
-                and known.local_size == stat.st_size):
-            report["unchanged"] += 1
-            seen_paths.add(resolved)
-            if known.audio_hash:
-                seen_digests.add(known.audio_hash)
-            if known.added_at is None:
-                # Recupero data anche sul fast-path: traccia storica senza data,
-                # lo stat è già in mano (nessun costo aggiuntivo).
-                known.added_at = _added_at_from_stat(stat)
-            done += 1
-            if on_progress is not None:
-                on_progress(done, total)
-        elif in_archive and archive_seen.get(resolved) == (stat.st_mtime, stat.st_size):
+        if archive_seen.get(resolved) == (stat.st_mtime, stat.st_size):
             # File d'archivio senza traccia, ma già visto e invariato: niente ri-hash.
             report["unchanged"] += 1
             seen_paths.add(resolved)
@@ -274,11 +258,10 @@ def index_library(db: Session, *, root: str | Path,
             if on_progress is not None:
                 on_progress(done, total)
         else:
-            pending.append((path, in_archive))
+            pending.append(path)
 
     # Passata 2 — flusso completo per i soli file nuovi o modificati.
-    # La Libreria viene prima dell'archivio: a parita' di audio il possesso vince.
-    for n_pending, (path, in_archive) in enumerate(pending):
+    for n_pending, path in enumerate(pending):
         # Commit incrementale a inizio giro (così i `continue` non lo saltano):
         # persiste il blocco precedente prima di attaccare il file successivo.
         if n_pending and n_pending % COMMIT_EVERY == 0:
@@ -291,47 +274,128 @@ def index_library(db: Session, *, root: str | Path,
             report["failed"] += 1
             report["errors"].append({"path": str(path), "error": str(exc)})
             logger.warning("File saltato %s: %s", path, exc)
+            if on_progress is not None:
+                on_progress(i, total)
+            continue
+        tags = read_tags(path)
+        track, how = _find_track(db, digest=digest, tags=tags, path=str(path.resolve()))
+        # In archivio non si creano tracce nuove: un file mai visto da
+        # Cratory che scarti non e' una wishlist da ricordare.
+        if track is not None:
+            _fill_identity(track, tags, path)
+            _discard(track, path=path, digest=digest)
+            # local_path punta ora al file in ARCHIVE_ROOT, che non è
+            # indicizzato da Organize: l'aggancio si azzera da sé.
+            aggiorna_primary(db, track)
+            refresh_status(track)
+            report["archived"] += 1
+            seen_paths.add(str(path.resolve()))
+        else:
+            # Senza traccia: ricorda la firma per non ri-hasharlo al prossimo run.
+            try:
+                stat = path.stat()
+            except OSError as exc:
+                # File sparito/illeggibile tra l'hash e lo stat(): si salta e
+                # si conta, senza far morire l'intero run (come in passata 1).
+                report["failed"] += 1
+                report["errors"].append({"path": str(path), "error": str(exc)})
+                logger.warning("File saltato %s: %s", path, exc)
+                if on_progress is not None:
+                    on_progress(i, total)
+                continue
+            db.merge(ArchiveSeen(path=str(path.resolve()), mtime=stat.st_mtime, size=stat.st_size))
+        if on_progress is not None:
+            on_progress(i, total)
+
+    # Pulisci la cache d'archivio dalle firme di file non più presenti.
+    if archive_scanned:
+        current_archive = {str(p.resolve()) for p in archive_files}
+        stale = [pth for pth in archive_seen if pth not in current_archive]
+        if stale:
+            db.execute(delete(ArchiveSeen).where(ArchiveSeen.path.in_(stale)))
+
+    db.commit()
+    return report
+
+
+def collega_tracce(db: Session, *, on_progress=None) -> dict:
+    """Aggancia le tracce ai file già indicizzati dallo scanner.
+
+    Fino a F4 questa funzione camminava LIBRARY_ROOT per conto proprio: due
+    attraversamenti dello stesso disco, con la possibilità che i due indici
+    divergessero. Ora legge le righe che la fase 1 ha appena scritto — le due
+    camminate producevano lo stesso insieme (verificato sul disco reale), quindi
+    la sostituzione non perde file.
+    """
+    righe = db.scalars(
+        select(AudioFile)
+        .where(AudioFile.location == "library", AudioFile.status == "present")
+        .order_by(AudioFile.path)
+    ).all()
+    report = {"scanned": len(righe), "matched": 0, "created": 0, "relinked": 0,
+              "duplicates": 0, "lost": 0, "orphans_removed": 0, "failed": 0,
+              "unchanged": 0, "archived": 0, "errors": [], "created_ids": []}
+    seen_paths: set[str] = set()
+    seen_digests: set[str] = set()
+
+    for indice, riga in enumerate(righe):
+        # Commit incrementale (così i `continue` non lo saltano): persiste il
+        # blocco precedente prima di attaccare la riga successiva.
+        if indice and indice % COMMIT_EVERY == 0:
+            db.commit()
+        path = Path(riga.path)
+        try:
+            stat = path.stat()
+        except OSError as exc:
+            # Sparito fra fase 1 e fase 2: si conta e si prosegue.
+            report["failed"] += 1
+            report["errors"].append({"path": riga.path, "error": str(exc)})
+            logger.warning("File saltato %s: %s", riga.path, exc)
+            if on_progress is not None:
+                on_progress(indice + 1, len(righe))
+            continue
+
+        # Fast-path. Si parte da riga.track_id — la relazione che F3a ha reso
+        # esplicita — e solo in mancanza si ricade sulla ricerca per local_path,
+        # che è ciò che il codice faceva prima di avere la colonna.
+        known = db.get(Track, riga.track_id) if riga.track_id else None
+        if known is None:
+            known = db.scalar(select(Track).where(Track.local_path == riga.path))
+        if (known is not None and known.local_mtime == stat.st_mtime
+                and known.local_size == stat.st_size):
+            report["unchanged"] += 1
+            seen_paths.add(riga.path)
+            if known.audio_hash:
+                seen_digests.add(known.audio_hash)
+            if known.added_at is None:
+                # Recupero data anche sul fast-path: traccia storica senza data,
+                # lo stat è già in mano (nessun costo aggiuntivo).
+                known.added_at = _added_at_from_stat(stat)
+            if on_progress is not None:
+                on_progress(indice + 1, len(righe))
+            continue
+
+        # Flusso completo: qui e solo qui si paga ffmpeg.
+        try:
+            digest = audio_hash(path)
+        except LocalFilesError as exc:
+            report["failed"] += 1
+            report["errors"].append({"path": riga.path, "error": str(exc)})
+            logger.warning("File saltato %s: %s", riga.path, exc)
+            if on_progress is not None:
+                on_progress(indice + 1, len(righe))
             continue
         if digest in seen_digests:
             # Due file con lo stesso audio nello stesso run: il primo vince, gli altri
             # si contano soltanto (la dedup su disco e' compito di Sortory).
             report["duplicates"] += 1
-            logger.warning("Audio duplicato nello stesso run: %s (digest gia' visto)", path)
+            logger.warning("Audio duplicato nello stesso run: %s (digest gia' visto)", riga.path)
             if on_progress is not None:
-                on_progress(i, total)
+                on_progress(indice + 1, len(righe))
             continue
         seen_digests.add(digest)
         tags = read_tags(path)
         track, how = _find_track(db, digest=digest, tags=tags, path=str(path.resolve()))
-        if in_archive:
-            # In archivio non si creano tracce nuove: un file mai visto da
-            # Cratory che scarti non e' una wishlist da ricordare.
-            if track is not None:
-                _fill_identity(track, tags, path)
-                _discard(track, path=path, digest=digest)
-                # local_path punta ora al file in ARCHIVE_ROOT, che non è
-                # indicizzato da Organize: l'aggancio si azzera da sé.
-                aggiorna_primary(db, track)
-                refresh_status(track)
-                report["archived"] += 1
-                seen_paths.add(str(path.resolve()))
-            else:
-                # Senza traccia: ricorda la firma per non ri-hasharlo al prossimo run.
-                try:
-                    stat = path.stat()
-                except OSError as exc:
-                    # File sparito/illeggibile tra l'hash e lo stat(): si salta e
-                    # si conta, senza far morire l'intero run (come in passata 1).
-                    report["failed"] += 1
-                    report["errors"].append({"path": str(path), "error": str(exc)})
-                    logger.warning("File saltato %s: %s", path, exc)
-                    if on_progress is not None:
-                        on_progress(i, total)
-                    continue
-                db.merge(ArchiveSeen(path=str(path.resolve()), mtime=stat.st_mtime, size=stat.st_size))
-            if on_progress is not None:
-                on_progress(i, total)
-            continue
         if track is None:
             track = Track(source_type=PLATFORM, platform=PLATFORM, platform_track_id=digest)
             db.add(track)
@@ -352,25 +416,19 @@ def index_library(db: Session, *, root: str | Path,
         refresh_status(track)
         seen_paths.add(str(path.resolve()))
         if on_progress is not None:
-            on_progress(i, total)
+            on_progress(indice + 1, len(righe))
 
-    # Pulisci la cache d'archivio dalle firme di file non più presenti.
-    if archive_scanned:
-        current_archive = {str(p.resolve()) for p in archive_files}
-        stale = [pth for pth in archive_seen if pth not in current_archive]
-        if stale:
-            db.execute(delete(ArchiveSeen).where(ArchiveSeen.path.in_(stale)))
-
-    # Anti-unmount (stesso principio dell'import locale): una radice vuota o
-    # illeggibile (path sbagliato, disco smontato) non deve azzerare i possessi.
-    if not files:
+    # Anti-unmount (stesso principio dell'import locale): un indice vuoto (scan
+    # non ancora passato, o radice smontata) non deve azzerare i possessi.
+    if not righe:
         db.commit()
         return report
 
     # Riconciliazione: possessi il cui file la scansione non ha visto — cancellato,
-    # spostato fuori, oppure finito in una cartella nascosta (esclusa da scan_folder).
+    # spostato fuori, oppure finito in una cartella nascosta (esclusa dallo scanner).
     # L'audio_hash resta: se il file ricompare, il riaggancio (anche a un lead Spotify
     # via ISRC/artista+titolo) e' immediato.
+    root = runtime_settings.library_root()
     owned = db.scalars(select(Track).where(Track.has_local_file.is_(True))).all()
     lost: list[Track] = []
     for track in owned:
@@ -402,6 +460,23 @@ def index_library(db: Session, *, root: str | Path,
             report["lost"] += 1
 
     db.commit()
+    return report
+
+
+def index_library(db: Session, *, root: str | Path | None = None,
+                  archive_root: str | Path | None = None, on_progress=None) -> dict:
+    """Compatibilità: chiama la fase 2 e, se configurato, l'archivio.
+
+    `root` non è più usato — la fase 2 parte dall'indice. Il parametro resta
+    per non rompere i chiamanti finché il Task 3 non li sposta sul job unico.
+    """
+    report = collega_tracce(db, on_progress=on_progress)
+    if archive_root:
+        arc_report = indicizza_archivio(db, archive_root=archive_root, on_progress=on_progress)
+        report["archived"] += arc_report["archived"]
+        report["failed"] += arc_report["failed"]
+        report["unchanged"] += arc_report["unchanged"]
+        report["errors"] += arc_report["errors"]
     # Calibrazione energia: mappa gli energy_raw (0..1) in energy 0-100 per percentili
     # sull'INTERA libreria, così "100" è la traccia più energica dell'utente.
     report["energy_computed"] = recompute_energy(db)
