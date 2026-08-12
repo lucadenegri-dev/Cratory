@@ -3,7 +3,42 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+
+
+class LinkingReport(BaseModel):
+    """Esito della fase 2 dello scan (aggancio tracce ai file indicizzati).
+
+    Era un `dict` non tipizzato esposto tal quale in JSON, con tre forme
+    possibili e nessun contratto: qui diventa verificabile da entrambe le
+    sponde. `ScanSummary.linking = None` significa "fase non eseguita" — uno
+    scan ristretto all'inbox si ferma alla fase 1.
+    """
+
+    scanned: int = 0
+    matched: int = 0
+    created: int = 0
+    relinked: int = 0
+    lost: int = 0
+    orphans_removed: int = 0
+    created_ids: list[int] = Field(default_factory=list)
+    # Ricalcolo dell'energia: assente se la fase non è girata (radice smontata).
+    energy_computed: int | None = None
+
+    # Contatori della sola libreria. Il giro d'archivio ha i propri, tenuti
+    # separati: `unchanged` di libreria (riga già agganciata e invariata) e
+    # `unchanged` d'archivio (file scartato già visto) non sono la stessa cosa,
+    # e sommarli sotto una chiave sola dava un numero che non significava nulla.
+    unchanged: int = 0
+    duplicates: int = 0
+    failed: int = 0
+    archive_unchanged: int = 0
+    archive_duplicates: int = 0
+    archive_failed: int = 0
+    # Tracce marcate come scartate dal giro d'archivio: lo produce solo quello,
+    # quindi non ha un gemello di libreria.
+    archived: int = 0
+    errors: list[dict] = Field(default_factory=list)
 
 
 class ScanSummary(BaseModel):
@@ -27,7 +62,7 @@ class ScanSummary(BaseModel):
     # Report combinato delle quattro parti dell'aggancio (collega_tracce +
     # indicizza_archivio, se configurato + riconcilia_possessi +
     # recompute_energy). None finché la fase 2 non è ancora girata.
-    linking: dict | None = None
+    linking: LinkingReport | None = None
 
 
 class AnalyzeSummary(BaseModel):

@@ -25,7 +25,7 @@ def test_uno_scan_produce_indice_e_tracce(db, fake_audio, monkeypatch):
     assert len(db.scalars(select(AudioFile)).all()) == 1
     t = db.scalar(select(Track).where(Track.audio_hash == "H7"))
     assert t is not None
-    assert summary.linking is not None and summary.linking["created"] == 1
+    assert summary.linking is not None and summary.linking.created == 1
 
 
 def test_le_fasi_sono_riportate_al_progresso(db, fake_audio, monkeypatch):
@@ -59,7 +59,7 @@ def test_il_secondo_scan_non_cambia_nulla(db, fake_audio, monkeypatch):
     db.commit()
 
     assert secondo.inserted == 0
-    assert secondo.linking["created"] == 0
+    assert secondo.linking.created == 0
     assert len(db.scalars(select(Track)).all()) == 1
     assert len(db.scalars(select(AudioFile)).all()) == 1
 
@@ -85,7 +85,7 @@ def test_scan_ricalcola_energia(db, fake_audio, monkeypatch):
     db.commit()
 
     assert calls == [1]
-    assert summary.linking["energy_computed"] == 3
+    assert summary.linking.energy_computed == 3
 
 
 def test_scan_non_ricalcola_energia_su_indice_vuoto(db, fake_audio, monkeypatch):
@@ -108,7 +108,10 @@ def test_scan_non_ricalcola_energia_su_indice_vuoto(db, fake_audio, monkeypatch)
     db.commit()
 
     assert calls == []
-    assert "energy_computed" not in summary.linking
+    # `in` su un BaseModel itera le coppie (chiave, valore) e non trova mai una
+    # stringa: dopo la tipizzazione di `linking` un `not in` sarebbe sempre vero,
+    # cioè vacuo. Il campo esiste sempre, quindi si asserisce sul valore.
+    assert summary.linking.energy_computed is None
 
 
 def _cfg(monkeypatch, lib, arc):
@@ -130,7 +133,11 @@ def test_possesso_vince_sull_archivio(db, fake_audio, monkeypatch):
 
     t = db.scalar(select(Track).where(Track.audio_hash == "H1"))
     assert t is not None and t.has_local_file is True and not t.archived
-    assert summary.linking["duplicates"] == 1
+    # Il duplicato lo trova il giro d'ARCHIVIO (il digest era già stato visto
+    # dalla libreria), non quello di libreria: finché i due contatori erano
+    # sommati sotto `duplicates` questa distinzione non si poteva fare.
+    assert summary.linking.archive_duplicates == 1
+    assert summary.linking.duplicates == 0
 
 
 def test_file_passato_in_archivio_e_scartato_non_cancellato(db, fake_audio, monkeypatch):
@@ -149,8 +156,8 @@ def test_file_passato_in_archivio_e_scartato_non_cancellato(db, fake_audio, monk
     t = db.scalar(select(Track).where(Track.audio_hash == "H2"))
     assert t is not None, "traccia CANCELLATA invece che marcata scartata"
     assert t.archived is True
-    assert summary.linking["archived"] == 1
-    assert summary.linking["orphans_removed"] == 0
+    assert summary.linking.archived == 1
+    assert summary.linking.orphans_removed == 0
 
 
 def _due_radici(monkeypatch, lib, inbox):
@@ -189,8 +196,8 @@ def test_radice_smontata_non_cancella_le_tracce(db, fake_audio, monkeypatch):
     assert db.scalar(select(Track).where(Track.audio_hash == "H1")) is not None, (
         "traccia CANCELLATA da uno scan su radice smontata"
     )
-    assert summary.linking["orphans_removed"] == 0
-    assert summary.linking["scanned"] == 0, "la fase 2 legge lo stato PRIMA di _reconcile"
+    assert summary.linking.orphans_removed == 0
+    assert summary.linking.scanned == 0, "la fase 2 legge lo stato PRIMA di _reconcile"
 
 
 def test_file_spostato_in_libreria_riceve_la_traccia_nella_stessa_corsa(
@@ -216,7 +223,7 @@ def test_file_spostato_in_libreria_riceve_la_traccia_nella_stessa_corsa(
     percorse = list(radici(db).values())
     primo = scan(db, percorse)
     db.commit()
-    assert primo.linking["created"] == 0  # un file in inbox non è un possesso
+    assert primo.linking.created == 0  # un file in inbox non è un possesso
 
     shutil.move(str(sorgente), str(destinazione))  # l'Apply
 
@@ -224,8 +231,8 @@ def test_file_spostato_in_libreria_riceve_la_traccia_nella_stessa_corsa(
     db.commit()
 
     assert summary.moved == 1
-    assert summary.linking["scanned"] == 1, "la riga fusa è invisibile alla fase 2"
-    assert summary.linking["created"] == 1
+    assert summary.linking.scanned == 1, "la riga fusa è invisibile alla fase 2"
+    assert summary.linking.created == 1
     riga = db.scalar(select(AudioFile))
     assert riga.location == "library" and riga.track_id is not None
 
@@ -258,3 +265,25 @@ def test_scan_del_solo_inbox_non_tocca_le_tracce(db, fake_audio, monkeypatch):
         "uno scan del solo inbox ha creato o cancellato tracce"
     )
     assert summary.linking is None, "fase di aggancio eseguita senza camminare la libreria"
+
+
+def test_il_progresso_non_torna_indietro(db, fake_audio, monkeypatch):
+    """Due `total` diversi sulla stessa callback facevano scendere la percentuale
+    al passaggio fra le fasi: la barra mostrava 100% e poi ripartiva da 0."""
+    from app.core.config import settings
+
+    make, root = fake_audio
+    monkeypatch.setattr(settings, "library_root", str(root))
+    monkeypatch.setattr(settings, "slskd_download_dir", "")
+    for i in range(4):
+        make(f"lib/A - T{i}.mp3", digest=f"H{i}", artist="A", title=f"T{i}")
+
+    frazioni: list[float] = []
+
+    def on_progress(processed: int, total: int, phase: str) -> None:
+        if total:
+            frazioni.append(processed / total)
+
+    scan(db, [radici(db)["library"]], on_progress=on_progress)
+
+    assert frazioni == sorted(frazioni), f"progresso non monotono: {frazioni}"

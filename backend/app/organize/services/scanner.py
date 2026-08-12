@@ -11,7 +11,7 @@ from app.core import runtime_settings
 from app.core.config import settings
 from app.organize.integrations import content_hash, tagio
 from app.organize.models import AudioFile, ScanRoot, utcnow
-from app.organize.schemas import ScanSummary
+from app.organize.schemas import LinkingReport, ScanSummary
 from app.organize.services.file_link import deriva_location, stacca_file
 from app.organize.services.roots import radici
 
@@ -138,6 +138,11 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
             visti.add(chiave)
             work.append((path, ext, _location_per(path)))
     summary.found = len(work)
+    # Denominatore UNICO per le due fasi. Finche' ognuna riportava il proprio,
+    # la percentuale scendeva al passaggio (100% di scanning -> 0% di linking).
+    # La fase 2 itera le righe di libreria: `work` le conosce gia'.
+    n_libreria = sum(1 for _, _, loc in work if loc == "library")
+    totale_fasi = len(work) + n_libreria
     # Una sola risoluzione delle radici per l'intero scan: `radici()` costa due
     # query più un flush, e chiamarla per file (via `root_id_per`) cambierebbe
     # anche il MOMENTO del flush — gli insert pendenti finirebbero a disco a
@@ -194,7 +199,7 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
             existing.last_scanned_at = utcnow()
             summary.unchanged += 1
             if on_progress is not None:
-                on_progress(index + 1, summary.found, "scanning")
+                on_progress(index + 1, totale_fasi, "scanning")
             continue
         fields = _scan_file_fields(path, ext, stat_mtime)
         if existing is None:
@@ -218,7 +223,7 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
         if fields["scan_error"]:
             summary.errors += 1
         if on_progress is not None:
-            on_progress(index + 1, summary.found, "scanning")
+            on_progress(index + 1, totale_fasi, "scanning")
     db.flush()  # assegna gli id ai nuovi insert
     _reconcile(db, seen_by_root, id_per_location, new_inserts, summary)
     # `_reconcile` scrive status/path/location/root_id SOLO in memoria e
@@ -249,7 +254,9 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     # chiamante, che la libreria NON è stata indicizzata (scan_job ci gate la
     # scrittura di `last_index_at`).
     if _ha_camminato_la_libreria(roots):
-        summary.linking = _aggancia_le_tracce(db, on_progress)
+        summary.linking = LinkingReport(
+            **_aggancia_le_tracce(db, on_progress, offset=len(work), totale=totale_fasi)
+        )
 
     # NOTA (F4): da qui in poi `scan()` non è più atomico. Prima aveva un solo
     # commit in coda, e un crash annullava l'intera scansione; ora le funzioni
@@ -280,7 +287,8 @@ def _ha_camminato_la_libreria(roots: list[ScanRoot]) -> bool:
     return chiave(libreria) in {chiave(r.path) for r in roots}
 
 
-def _aggancia_le_tracce(db: Session, on_progress) -> dict:
+def _aggancia_le_tracce(db: Session, on_progress, *, offset: int = 0,
+                        totale: int | None = None) -> dict:
     """Fase 2: le tracce si agganciano ai file che la fase 1 ha appena scritto.
 
     Import differito: app/services/library_index.py importa già da
@@ -294,8 +302,17 @@ def _aggancia_le_tracce(db: Session, on_progress) -> dict:
     )
 
     def _progress_linking(processed: int, total: int) -> None:
-        if on_progress is not None:
+        """Traduce il conteggio locale della fase 2 nel denominatore comune:
+        le funzioni interne continuano a contare per conto proprio, e' qui che
+        si somma l'offset della fase 1. Il min() protegge dalla stima: se le
+        righe da agganciare fossero piu' dei file camminati, la frazione non
+        supera 1."""
+        if on_progress is None:
+            return
+        if totale is None:
             on_progress(processed, total, "linking")
+            return
+        on_progress(min(offset + processed, totale), totale, "linking")
 
     # Le quattro parti del giro d'indicizzazione, nell'ordine obbligatorio
     # (vedi i docstring in library_index.py): la libreria prima dell'archivio
@@ -319,8 +336,14 @@ def _aggancia_le_tracce(db: Session, on_progress) -> dict:
         arc_report = indicizza_archivio(db, archive_root=archive_root,
                                         seen_paths=seen_paths, seen_digests=seen_digests,
                                         on_progress=_progress_linking)
-        for key in ("archived", "failed", "unchanged", "duplicates"):
-            link_report[key] += arc_report[key]
+        # I contatori dell'archivio NON si sommano a quelli di libreria: un
+        # `unchanged` di libreria (riga già agganciata e invariata) e uno
+        # d'archivio (file scartato già visto) sono due cose diverse, e la
+        # somma dava un numero che non significava nulla. `archived` è l'unico
+        # senza gemello — lo produce solo questo giro — e resta com'è.
+        link_report["archived"] += arc_report["archived"]
+        for key in ("failed", "unchanged", "duplicates"):
+            link_report[f"archive_{key}"] = arc_report[key]
         link_report["errors"] += arc_report["errors"]
 
     rec = riconcilia_possessi(db, seen_paths=seen_paths, scanned=link_report["scanned"])

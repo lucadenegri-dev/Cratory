@@ -193,19 +193,30 @@ export interface TrackUpdate {
 /** Report combinato delle quattro parti dell'aggancio (collega_tracce +
  *  indicizza_archivio + riconcilia_possessi + recompute_energy), copia di
  *  `link_report` in `app/services/library_index.py`. */
+/** Rispecchia `LinkingReport` (backend/app/organize/schemas.py). I contatori
+ *  del giro d'archivio sono distinti da quelli di libreria: `unchanged` di
+ *  libreria (riga già agganciata e invariata) e `archive_unchanged` (file
+ *  scartato già visto) non sono la stessa cosa, e finché erano sommati sotto
+ *  una chiave sola il numero non significava nulla. */
 export interface LibraryIndexLinking {
   scanned: number;
   matched: number;
   created: number;
   relinked: number;
-  duplicates: number;
   lost: number;
   orphans_removed: number;
+  created_ids: number[];
+  /** null se la fase non è girata (radice smontata). */
+  energy_computed: number | null;
+  duplicates: number;
   failed: number;
   unchanged: number;
+  archive_duplicates: number;
+  archive_failed: number;
+  archive_unchanged: number;
+  /** Tracce marcate come scartate: lo produce solo il giro d'archivio. */
   archived: number;
   errors: { path: string; error: string }[];
-  energy_computed?: number;
 }
 
 /** Esito di uno scan+link completo: forma di `ScanSummary` (app/organize/schemas.py),
