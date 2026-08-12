@@ -4,40 +4,19 @@ import pytest
 from app.core.config import Settings
 
 
-def test_library_root_default_vuoto():
+def test_library_root_default_vuoto(monkeypatch):
+    # Isola dal vero LIBRARY_ROOT dello sviluppatore: app/main.py ora fa
+    # load_dotenv(backend/.env) (serve ad ANTHROPIC_API_KEY per l'SDK
+    # Anthropic), quindi da quando il modulo e' stato importato la variabile
+    # e' anche nel process env — _env_file=None da solo non basta più.
+    monkeypatch.delenv("LIBRARY_ROOT", raising=False)
     s = Settings(_env_file=None)
     assert s.library_root == ""
 
 
-@pytest.fixture()
-def fake_audio(monkeypatch, tmp_path):
-    """Crea file finti e monkeypatcha hash/tag/qualita' per renderli deterministici."""
-    from app.services import library_index as li
-
-    hashes: dict[str, str] = {}
-    tags: dict[str, dict] = {}
-
-    def make(rel: str, *, digest: str, artist=None, title=None, isrc=None, genre=None, label=None):
-        p = tmp_path / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(b"x")
-        hashes[str(p.resolve())] = digest
-        tags[str(p.resolve())] = {
-            "title": title, "artist": artist, "album": None, "year": None,
-            "duration_seconds": 200, "isrc": isrc, "genre": genre, "label": label,
-        }
-        return p
-
-    monkeypatch.setattr(li, "audio_hash", lambda p: hashes[str(p.resolve() if hasattr(p, 'resolve') else p)])
-    monkeypatch.setattr(li, "read_tags", lambda p: tags[str(p.resolve() if hasattr(p, 'resolve') else p)])
-    monkeypatch.setattr(li, "read_audio_quality", lambda p: {"format": "mp3", "bitrate": 320})
-    return make, tmp_path
-
-
-def test_riaggancio_per_audio_hash(db, fake_audio):
+def test_riaggancio_per_audio_hash(db, fake_audio, collega_da_disco):
     """File rinominato/ritaggato: stesso hash ⇒ stessa Track, local_path aggiornato."""
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     t = Track(source_type="spotify", spotify_id="s1", title="Origin", artist="A",
@@ -45,7 +24,7 @@ def test_riaggancio_per_audio_hash(db, fake_audio):
     db.add(t); db.commit()
 
     make("Techno/A/A - Origin.mp3", digest="H1")
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     db.refresh(t)
     assert report["relinked"] == 1 and report["created"] == 0
@@ -53,57 +32,53 @@ def test_riaggancio_per_audio_hash(db, fake_audio):
     assert t.has_local_file is True and t.local_format == "mp3"
 
 
-def test_indicizzazione_backfilla_label_da_tag(db, fake_audio):
+def test_indicizzazione_backfilla_label_da_tag(db, fake_audio, collega_da_disco):
     """La label del file (TPUB) riempie il campo label se vuoto (backfill-only)."""
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     make("Warp/Aphex - Xtal.mp3", digest="HL", artist="Aphex Twin", title="Xtal", label="Warp")
-    index_library(db, root=root)
+    collega_da_disco(root)
 
     t = db.query(Track).filter_by(audio_hash="HL").one()
     assert t.label == "Warp"
 
 
-def test_match_per_isrc_da_tag(db, fake_audio):
+def test_match_per_isrc_da_tag(db, fake_audio, collega_da_disco):
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     t = Track(source_type="spotify", isrc="ISRC001", title="X", artist="A")
     db.add(t); db.commit()
 
     make("f.mp3", digest="H9", isrc="ISRC001")
-    index_library(db, root=root)
+    collega_da_disco(root)
 
     db.refresh(t)
     assert t.has_local_file is True and t.audio_hash == "H9"
 
 
-def test_match_fuzzy_artista_titolo(db, fake_audio):
+def test_match_fuzzy_artista_titolo(db, fake_audio, collega_da_disco):
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     t = Track(source_type="spotify", title="My Song", artist="Someone")
     db.add(t); db.commit()
 
     make("g.mp3", digest="H8", artist="someone", title="my song")
-    index_library(db, root=root)
+    collega_da_disco(root)
 
     db.refresh(t)
     assert t.has_local_file is True
 
 
-def test_file_sconosciuto_crea_track_local_files(db, fake_audio):
+def test_file_sconosciuto_crea_track_local_files(db, fake_audio, collega_da_disco):
     from sqlalchemy import select
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     make("Techno/N/N - New.mp3", digest="H7", artist="N", title="New")
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     assert report["created"] == 1
     t = db.scalar(select(Track).where(Track.audio_hash == "H7"))
@@ -111,10 +86,9 @@ def test_file_sconosciuto_crea_track_local_files(db, fake_audio):
     assert t.platform_track_id == "H7" and t.artist == "N"
 
 
-def test_non_sovrascrive_identita_esistente(db, fake_audio):
+def test_non_sovrascrive_identita_esistente(db, fake_audio, collega_da_disco):
     """I tag del file riempiono solo i campi vuoti (l'enrichment/manuale resta autorevole)."""
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     t = Track(source_type="spotify", title="Titolo Corretto", artist="A",
@@ -122,22 +96,21 @@ def test_non_sovrascrive_identita_esistente(db, fake_audio):
     db.add(t); db.commit()
 
     make("f.mp3", digest="H1", artist="A", title="titolo sbagliato dal tag")
-    index_library(db, root=root)
+    collega_da_disco(root)
 
     db.refresh(t)
     assert t.title == "Titolo Corretto" and t.genre == "Techno"
 
 
-def test_duplicati_stesso_run_primo_vince(db, fake_audio):
+def test_duplicati_stesso_run_primo_vince(db, fake_audio, collega_da_disco):
     """Stesso audio in due file: il primo vince, il secondo si conta come duplicato."""
     from sqlalchemy import select
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     make("a.mp3", digest="HD", artist="A", title="Dup")
     make("b.mp3", digest="HD", artist="A", title="Dup")
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     assert report["created"] == 1 and report["duplicates"] == 1
     assert report["relinked"] == 0
@@ -145,12 +118,11 @@ def test_duplicati_stesso_run_primo_vince(db, fake_audio):
     assert t.local_path.endswith("a.mp3")  # scan_folder ordina: il primo file vince
 
 
-def test_riconciliazione_sgancia_ma_tiene_se_in_playlist(db, fake_audio, tmp_path):
+def test_riconciliazione_sgancia_ma_tiene_se_in_playlist(db, fake_audio, collega_da_disco, tmp_path):
     """File sparito ma traccia in una playlist ⇒ si toglie solo il link (resta lead),
     hash conservato per il riaggancio futuro."""
     from app.models import Playlist, Track
     from app.repositories import add_track_to_playlist
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     pl = Playlist(platform="spotify", name="P"); db.add(pl)
@@ -161,7 +133,7 @@ def test_riconciliazione_sgancia_ma_tiene_se_in_playlist(db, fake_audio, tmp_pat
     add_track_to_playlist(db, sparito, pl); db.commit()
 
     make("resta.mp3", digest="HSTAY", artist="B", title="Stay")
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     db.refresh(sparito)
     assert report["lost"] == 1 and report["orphans_removed"] == 0
@@ -169,10 +141,9 @@ def test_riconciliazione_sgancia_ma_tiene_se_in_playlist(db, fake_audio, tmp_pat
     assert sparito.audio_hash == "HGONE"
 
 
-def test_riconciliazione_elimina_lost_orfano(db, fake_audio, tmp_path):
+def test_riconciliazione_elimina_lost_orfano(db, fake_audio, collega_da_disco, tmp_path):
     """File sparito e traccia in nessuna playlist/set ⇒ rimossa (niente lead fantasma)."""
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     orfano = Track(source_type="local_files", title="Ghost", artist="A",
@@ -181,18 +152,17 @@ def test_riconciliazione_elimina_lost_orfano(db, fake_audio, tmp_path):
     gid = orfano.id
 
     make("resta.mp3", digest="HSTAY")
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     assert report["orphans_removed"] == 1 and report["lost"] == 0
     assert db.get(Track, gid) is None
 
 
-def test_riconciliazione_sgancia_file_in_cartella_nascosta(db, fake_audio, tmp_path):
+def test_riconciliazione_sgancia_file_in_cartella_nascosta(db, fake_audio, collega_da_disco, tmp_path):
     """File esistente ma dentro una cartella nascosta (scan_folder lo esclude) ⇒
     non più posseduto; il file su disco non viene toccato."""
     from app.models import Playlist, Track
     from app.repositories import add_track_to_playlist
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     make("visibile.mp3", digest="HV")  # scan non vuoto (evita l'anti-unmount)
@@ -205,18 +175,17 @@ def test_riconciliazione_sgancia_file_in_cartella_nascosta(db, fake_audio, tmp_p
     db.add(t); db.flush()
     add_track_to_playlist(db, t, pl); db.commit()
 
-    index_library(db, root=root)
+    collega_da_disco(root)
 
     db.refresh(t)
     assert t.has_local_file is False
     assert hidden.exists()  # Cratory non muta i file su disco
 
 
-def test_fuzzy_normalizzato_aggancia_titolo_con_suffissi(db, fake_audio):
+def test_fuzzy_normalizzato_aggancia_titolo_con_suffissi(db, fake_audio, collega_da_disco):
     """File 'X feat. Y (Original Mix)' si aggancia al lead Spotify 'X' (stesso
     artista, durata coerente) invece di creare un doppione."""
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     lead = Track(source_type="spotify", spotify_id="s1", title="Rápido & Lento ;)",
@@ -226,17 +195,16 @@ def test_fuzzy_normalizzato_aggancia_titolo_con_suffissi(db, fake_audio):
 
     make("f.mp3", digest="HFZ", artist="Brenda, Verraco",
          title="Rápido & Lento ;) feat. Verraco (Original Mix)")
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     db.refresh(lead)
     assert report["created"] == 0 and report["matched"] == 1
     assert lead.id == lid and lead.has_local_file is True
 
 
-def test_fuzzy_normalizzato_rispetta_la_guardia_durata(db, fake_audio):
+def test_fuzzy_normalizzato_rispetta_la_guardia_durata(db, fake_audio, collega_da_disco):
     """Durata troppo diversa (brano vs suo remix esteso) ⇒ NON si fonde."""
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     lead = Track(source_type="spotify", title="Song", artist="A",
@@ -244,18 +212,17 @@ def test_fuzzy_normalizzato_rispetta_la_guardia_durata(db, fake_audio):
     db.add(lead); db.commit()
 
     make("f.mp3", digest="HG", artist="A", title="Song (Extended Mix)")  # tags: duration 200
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     db.refresh(lead)
     assert report["created"] == 1 and lead.has_local_file is False
 
 
-def test_file_che_rientra_si_riaggancia_al_lead_spotify(db, fake_audio):
+def test_file_che_rientra_si_riaggancia_al_lead_spotify(db, fake_audio, collega_da_disco):
     """Un file che (ri)entra nella libreria si aggancia al lead Spotify per ISRC:
     stessa riga, ora posseduta, ancora nella playlist."""
     from app.models import Playlist, Track
     from app.repositories import add_track_to_playlist, tracks_for_playlist
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     pl = Playlist(platform="spotify", name="P"); db.add(pl)
@@ -266,7 +233,7 @@ def test_file_che_rientra_si_riaggancia_al_lead_spotify(db, fake_audio):
     lid = lead.id
 
     make("Artist - Song.mp3", digest="HNEW", isrc="IT1234500001")
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     db.refresh(lead)
     assert report["created"] == 0 and report["matched"] == 1  # riaggancio, non nuova traccia
@@ -274,24 +241,22 @@ def test_file_che_rientra_si_riaggancia_al_lead_spotify(db, fake_audio):
     assert lead in tracks_for_playlist(db, pl.id)
 
 
-def test_riconciliazione_non_tocca_i_visti(db, fake_audio):
+def test_riconciliazione_non_tocca_i_visti(db, fake_audio, collega_da_disco):
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     t = Track(source_type="spotify", title="Here", artist="A", audio_hash="H1")
     db.add(t); db.commit()
     make("here.mp3", digest="H1")
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     db.refresh(t)
     assert report["lost"] == 0 and t.has_local_file is True
 
 
-def test_radice_vuota_non_azzera_i_possessi(db, fake_audio, tmp_path):
+def test_radice_vuota_non_azzera_i_possessi(db, fake_audio, collega_da_disco, tmp_path):
     """Anti-unmount: scan a zero file (root sbagliata/smontata) salta la riconciliazione."""
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     t = Track(source_type="spotify", title="Keep", artist="A",
@@ -301,18 +266,35 @@ def test_radice_vuota_non_azzera_i_possessi(db, fake_audio, tmp_path):
 
     vuota = tmp_path / "radice-vuota"
     vuota.mkdir()
-    report = index_library(db, root=vuota)
+    report = collega_da_disco(vuota)
 
     db.refresh(t)
     assert report["lost"] == 0
     assert t.has_local_file is True  # nessuna riconciliazione su scan vuoto
 
 
-def test_report_indice_contiene_created_ids(db, tmp_path, monkeypatch):
+def test_energia_non_ricalcolata_su_indice_vuoto(db, monkeypatch):
+    """Anti-unmount, versione wrapper: un indice di libreria vuoto (nessuna riga
+    AudioFile — scan mai passato, o radice smontata) non deve nemmeno
+    ricalcolare l'energia. Prima di F4 il return anticipato di `index_library`
+    usciva anche da qui; con `collega_tracce` che fa il return anticipato al
+    suo interno, il wrapper continuava fino a `recompute_energy` comunque."""
+    from app.services import library_index as li
+    from app.services.library_index import index_library
+
+    calls: list[int] = []
+    monkeypatch.setattr(li, "recompute_energy", lambda db: calls.append(1) or 0)
+
+    report = index_library(db)  # nessuna riga AudioFile in un DB vuoto
+
+    assert calls == []
+    assert "energy_computed" not in report
+
+
+def test_report_indice_contiene_created_ids(db, tmp_path, monkeypatch, collega_da_disco):
     """Il report espone gli id delle Track create: il chiamante (job in background)
     li usa per agire sulle tracce nuove appena indicizzate."""
     from app.services import library_index as li
-    from app.services.library_index import index_library
 
     p = tmp_path / "Libreria" / "A - Nuova.mp3"
     p.parent.mkdir(parents=True)
@@ -323,19 +305,18 @@ def test_report_indice_contiene_created_ids(db, tmp_path, monkeypatch):
         "duration_seconds": 200, "isrc": None, "genre": None})
     monkeypatch.setattr(li, "read_audio_quality", lambda _: {"format": "mp3", "bitrate": 320})
 
-    report = index_library(db, root=tmp_path / "Libreria")
+    report = collega_da_disco(tmp_path / "Libreria")
     assert report["created"] == 1
     assert len(report["created_ids"]) == 1
 
 
-def test_indicizzazione_backfilla_added_at_dal_birthtime(db, fake_audio, monkeypatch):
+def test_indicizzazione_backfilla_added_at_dal_birthtime(db, fake_audio, collega_da_disco, monkeypatch):
     """Traccia senza data: l'indice la data dal birthtime del file (recupero
     per le storiche); chi ha già una data non viene mai retrodatato."""
     from datetime import datetime, timezone
 
     from app.models import Track
     from app.services import library_index as li
-    from app.services.library_index import index_library
 
     birth = datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(li, "_file_added_at", lambda p: birth)
@@ -350,21 +331,20 @@ def test_indicizzazione_backfilla_added_at_dal_birthtime(db, fake_audio, monkeyp
     make, root = fake_audio
     make("A/A - Senza.mp3", digest="H1")
     make("A/A - Con.mp3", digest="H2")
-    index_library(db, root=root)
+    collega_da_disco(root)
 
     db.refresh(senza); db.refresh(con)
     assert senza.added_at is not None and str(senza.added_at).startswith("2026-06-27")
     assert str(con.added_at).startswith("2025-01-01")
 
 
-def test_backfill_added_at_anche_sul_fast_path_incrementale(db, fake_audio, monkeypatch):
+def test_backfill_added_at_anche_sul_fast_path_incrementale(db, fake_audio, collega_da_disco, monkeypatch):
     """File invariato (mtime+size noti): niente ri-hash, ma la traccia storica
     senza data viene comunque datata dal birthtime."""
     from datetime import datetime, timezone
 
     from app.models import Track
     from app.services import library_index as li
-    from app.services.library_index import index_library
 
     birth = datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(li, "_added_at_from_stat", lambda st: birth)
@@ -377,8 +357,34 @@ def test_backfill_added_at_anche_sul_fast_path_incrementale(db, fake_audio, monk
               local_mtime=stat.st_mtime, local_size=stat.st_size)
     db.add(t); db.commit()
 
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     db.refresh(t)
     assert report["unchanged"] == 1
     assert t.added_at is not None and str(t.added_at).startswith("2026-06-27")
+
+
+def test_non_conia_una_track_per_un_path_gia_posseduto(db, fake_audio, collega_da_disco):
+    """Regressione (fine F3b): un Apply di Organize cambia mtime e size, quindi
+    il fast-path della passata 1 salta; l'hash ricalcolato non combacia piu' con
+    quello memorizzato, il file non porta l'ISRC e i rami per nome escludono le
+    tracce gia' possedute. Prima del fix si coniava una Track local_files per un
+    path che un'altra Track rivendicava gia'."""
+    from sqlalchemy import select
+
+    from app.models import Track
+
+    make, root = fake_audio
+    p = make("Trance/R/R - Aqua Viva.mp3", digest="H_NUOVO", artist="R", title="Aqua Viva")
+    t = Track(source_type="spotify", spotify_id="s1", isrc="BEZ350900033",
+              artist="R", title="Aqua Viva", has_local_file=True,
+              local_path=str(p.resolve()), audio_hash="H_VECCHIO")
+    db.add(t)
+    db.commit()
+
+    report = collega_da_disco(root)
+
+    assert report["created"] == 0
+    assert len(db.scalars(select(Track)).all()) == 1
+    db.refresh(t)
+    assert t.audio_hash == "H_NUOVO"      # l'identita' audio si aggiorna

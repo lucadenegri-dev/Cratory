@@ -1,4 +1,4 @@
-"""Job unico di import/sync streaming in background (pattern library_index_job:
+"""Job unico di import/sync streaming in background (pattern scan_job:
 mono-utente, un job alla volta, stato in memoria con lock).
 
 Copre TUTTE le operazioni che prima erano sincrone nella richiesta HTTP e con

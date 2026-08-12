@@ -32,7 +32,8 @@ def fake_audio(monkeypatch, tmp_path):
     return make, tmp_path
 
 
-def test_file_archivio_ignoto_sparito_prima_dello_stat_non_uccide_il_run(db, fake_audio, monkeypatch):
+def test_file_archivio_ignoto_sparito_prima_dello_stat_non_uccide_il_run(
+        db, fake_audio, monkeypatch, semina_indice_libreria):
     """Un file d'archivio senza traccia da scartare che sparisce tra l'hash e lo
     stat() (usato solo per popolare ArchiveSeen) si salta e si conta come failed:
     il run completa e gli altri file d'archivio/libreria vengono comunque gestiti."""
@@ -56,6 +57,9 @@ def test_file_archivio_ignoto_sparito_prima_dello_stat_non_uccide_il_run(db, fak
 
     monkeypatch.setattr(li, "scan_folder", scan_poi_sparisce)
 
+    # `index_library` non cammina più `lib`: lo semina prima, come farebbe lo
+    # scanner di Organize, così `collega_tracce` trova la riga per T1.
+    semina_indice_libreria(lib)
     report = index_library(db, root=lib, archive_root=arc)
 
     assert report["failed"] == 1

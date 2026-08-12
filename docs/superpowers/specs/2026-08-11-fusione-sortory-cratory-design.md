@@ -315,22 +315,64 @@ file audio viene letto, spostato o riscritto.
 7. `issue` e `dup_group` **non** si migrano: sono derivati, le issue sono tutte
    chiuse, i gruppi sono zero. Li rigenera il primo scan.
 
-**Assert di fine migrazione** (numeri già misurati sui dati reali): se uno non
-torna, lo script si ferma e la copia si butta.
+**Assert di fine migrazione — su invarianti, non su costanti.** Lo script conta
+la sorgente all'inizio della propria transazione e verifica che la destinazione
+combaci; se un confronto non torna, si ferma e la copia si butta.
 
 ```
-audio_file migrati        = 1777
-di cui location=library   =  649
-di cui location=inbox     = 1128
-track_id valorizzati      =  625
-tracks.primary_file_id    =  625
-plan                      =   98
-undo_journal              = 2995
-FK orfane                 =    0
+audio_file migrati        == COUNT(*) da s.audio_file
+location=library + inbox  == audio_file migrati            (nessun terzo caso)
+track_id valorizzati      == COUNT(join su path assoluto)
+tracks.primary_file_id    == track_id valorizzati          (specchio esatto)
+plan, plan_op, undo_journal == rispettivi COUNT sorgente
+FK orfane                 == 0
 ```
+
+**Perché non numeri fissi.** La prima stesura di questa spec congelava i valori
+misurati il 2026-08-11 (1777 / 649 / 1128 / 625 / 98 / 2995). Rimisurati lo
+stesso giorno, dopo un uso di Sortory standalone, erano già 1778 / 650 / 1128 /
+625 / 99 / 2996. Un assert su costanti avrebbe fatto fallire una migrazione
+corretta. I numeri assoluti restano utili come **ordine di grandezza atteso**
+nel report, non come condizione di successo.
+
+Baseline di riferimento (2026-08-11, seconda misura), da confrontare a occhio
+col report del dry-run:
+
+| | |
+|---|---:|
+| `audio_file` totali | 1.778 |
+| di cui in `Library/` | 650 |
+| di cui in `Downloads/` | 1.128 |
+| match su path assoluto | 625 |
+| `plan` | 99 |
+| `undo_journal` | 2.996 |
+| `issue` (non migrate) | 1.025 |
+| `dup_group` (non migrati) | 0 |
+| `tracks` Cratory | 677 |
+| `tracks` con `has_local_file` | 626 |
+
+Se il dry-run si discosta di molto da questi ordini di grandezza, **fermati**:
+non è la migrazione ad avere un bug, è il DB sorgente a non essere quello atteso.
 
 Prima della migrazione reale gira un **dry-run**: stessa procedura su un DB in
 memoria, stampa il report, non scrive niente.
+
+**Cosa ha trovato la migrazione reale (2026-08-12).** Il dry-run è fallito al primo
+tentativo, ed è il suo mestiere: **158 riferimenti orfani** nella sorgente,
+accumulati perché il vecchio engine di Organize girava con le foreign key spente —
+87 `plan_op.file_id` e 71 `undo_journal.file_id` verso `audio_file` non più
+esistenti (gli altri tre vincoli: zero). Delle 71 voci di undo, **52 erano rename
+di sola normalizzazione Unicode** (`from_path` e `to_path` byte-diversi ma
+identici dopo NFC), 19 differenze di percorso reali.
+
+Decisione presa: **scartarle**, con dump completo su file
+(`backend/data/djassistant.scartati.jsonl`, 158 righe con tutte le colonne, quindi
+la storia resta ricostruibile). Lo script ha guadagnato il flag `--scarta-orfani`;
+senza flag il default resta il rifiuto, e l'invariante è passato da
+`migrati == sorgente` a `migrati + scartati == sorgente`.
+
+Nota per chi legge dopo: la normalizzazione Unicode **non** tocca l'aggancio dei
+625 di F3 (verificato: 625 match esatti, zero recuperi aggiuntivi via NFC).
 
 **Casi noti fuori dai 625**, attesi nel report:
 
@@ -357,9 +399,10 @@ uno per fase, in sequenza, ciascuno dopo che la milestone della fase precedente
 | Fase | Contenuto | Milestone |
 |---|---|---|
 | **F1** Innesto | subtree merge (`--allow-unrelated-histories`), codice sotto `organize/`, import riscritti, un `requirements.txt`, un venv, un `package.json`. Un solo processo FastAPI che monta anche i router `organize`, ma con **due engine e due file DB** ancora separati; il client API del frontend Sortory punta all'unica base `:8000` | entrambe le suite passano insieme, l'app parte, le pagine Organize rispondono; misurato l'impatto di `filterwarnings = error` |
-| **F2** DB unico | un `Base`, un engine, un `ensure_schema`; script di migrazione con dry-run e assert | dry-run coi numeri attesi, migrazione reale, suite verde sul DB migrato |
-| **F3** Modello A | `track_id`, `location`, `primary_file_id`; `scan_root` rimossa; `local_*` come cache | 625 tracce col file agganciato, nessuna query esistente di Cratory modificata |
-| **F4** Scanner unico | una camminata, due fasi | un solo bottone; il secondo scan consecutivo non cambia nulla nel DB (idempotenza) |
+| **F2** DB unico | un `Base`, un engine, un `ensure_schema`; script di migrazione con dry-run e assert | ✅ **completata 2026-08-12** — 1801 test verdi, 0 warning; migrazione reale eseguita (1.778 `audio_file`, 99 `plan`, 3.337 `plan_op`, 2.925 `undo_journal`); 191 issue rigenerate; 625 agganci pronti per F3 |
+| **F3a** Modello A | `track_id`, `location`, `primary_file_id`; `local_*` come cache | **completata 2026-08-12**: 624 tracce col file agganciato (625 prima della fusione del duplicato *Aqua Viva*), zero asimmetrie e zero orfani anche dopo uno scan reale, `routers/` e `repositories.py` non toccati, 1829 test verdi |
+| **F3b** Via `scan_root` | rimozione di `scan_root`/`root_id`/`root_targets` e della pagina Sources (83 riferimenti) | ✅ **completata 2026-08-12** — eseguita in due tempi, F3a (modello) e F3b (`scan_root` fuori dal dominio): i target del piano derivano da Settings, nessuna regressione su Piano e Apply, 1844 test verdi. La rimozione **di schema** — la colonna `audio_file.root_id` e la tabella `scan_root` — è **rimandata**: si rivaluta dopo F4, se lo scanner unico richiede comunque un rebuild di `audio_file` |
+| **F4** Scanner unico | una camminata, due fasi | ✅ **completata 2026-08-12** — una sola camminata (`_iter_audio_files` nello scanner, `scan_folder` solo dentro `indicizza_archivio`), un solo job (`library_index_job` assorbito da `scan_job`), un solo avvio. La fase di aggancio è in **quattro** parti nell'ordine `collega_tracce` → `indicizza_archivio` → `riconcilia_possessi` → `recompute_energy`, e l'ordine non è arbitrario: la libreria va prima dell'archivio perché a parità di audio il possesso vince, e la riconciliazione va per ultima o una traccia il cui file passa in `ARCHIVE_ROOT` viene cancellata invece che marcata scartata. Idempotenza verificata su due corse consecutive: `inserted=0 updated=0 unchanged=625 missing=0`, invarianti a zero. Aggiunto in corso d'opera lo **scanner incrementale** (`AudioFile.mtime`): la camminata è passata da **148,4s a 0,2s** quando nulla è cambiato — serviva perché da questa fase quel percorso è anche quello dell'avvio automatico al boot, che prima passava dall'indicizzazione incrementale di Cratory |
 | **F5** UI unificata | nav con Organize, componenti deduplicati, `Progress` travasato, i18n `organize.*`, `globals.css`, Settings unica, Sources cancellata | `npm run build` + `lint` + e2e Playwright verdi; confronto visivo con le due app affiancate |
 | **F6** Pulizia | `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/ROADMAP.md` per un prodotto solo; repo Sortory archiviato su GitHub (non cancellato); rimossi `organizer_url` e il link "Apri Sortory" | documentazione senza riferimenti a due app separate |
 

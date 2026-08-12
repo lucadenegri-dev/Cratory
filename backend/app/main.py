@@ -1,13 +1,19 @@
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
+# serve all'SDK Anthropic, che legge ANTHROPIC_API_KEY da os.environ:
+# pydantic-settings non la carica (non è un campo di Settings).
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings, setup_logging
 from app.db import ensure_schema
-from app.services import library_index_job
+from app.organize.services import scan_job
 from app.routers import (
     ai,
     analysis,
@@ -28,6 +34,22 @@ from app.routers import (
     transitions,
 )
 from app.routers import settings as settings_router
+from app.organize.routers import (
+    analyze as organize_analyze,
+    apply as organize_apply,
+    duplicates as organize_duplicates,
+    files as organize_files,
+    fingerprint as organize_fingerprint,
+    genre_review as organize_genre_review,
+    history as organize_history,
+    issues as organize_issues,
+    library as organize_library,
+    picker as organize_picker,
+    plan as organize_plan,
+    providers as organize_providers,
+    scan as organize_scan,
+    settings as organize_settings,
+)
 
 logger = logging.getLogger("app.request")
 
@@ -35,6 +57,8 @@ logger = logging.getLogger("app.request")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    # F2: un solo Base/engine. ensure_schema crea anche le tabelle Organize
+    # (import differito di app.organize.models dentro app.db.ensure_schema).
     ensure_schema()
     # Carica gli override di config (Settings UI) nella cache runtime PRIMA di
     # leggerli: library_root & co. possono essere sovrascritti dal DB.
@@ -46,7 +70,7 @@ async def lifespan(app: FastAPI):
     # reload di uvicorn: start_job_if_due salta se un run è finito da poco. Il job
     # è un thread daemon; con la scansione incrementale il costo è minimo.
     if runtime_settings.library_root():
-        library_index_job.start_job_if_due()
+        scan_job.start_job_if_due()
     yield
 
 
@@ -94,6 +118,14 @@ app.include_router(rekordbox.router)
 app.include_router(analysis.router)
 app.include_router(soundcloud.router)
 app.include_router(settings_router.router)
+
+for _organize_router in (
+    organize_scan, organize_analyze, organize_issues,
+    organize_duplicates, organize_settings, organize_plan, organize_apply,
+    organize_history, organize_library, organize_files, organize_fingerprint,
+    organize_providers, organize_picker, organize_genre_review,
+):
+    app.include_router(_organize_router.router)
 
 
 @app.get("/api/health")

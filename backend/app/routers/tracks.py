@@ -10,9 +10,9 @@ from app.services.file_search import path_within_roots, search_roots
 from app.db import get_db
 from app.integrations.local_files import read_cover
 from app.repositories import genres_overview, get_track, library_stats, list_tracks, update_track
+from app.organize.services import apply_job, scan_job
 from app.schemas import (
     GenreCountOut,
-    LibraryIndexJobStatus,
     LibraryStatsOut,
     TrackDetailOut,
     TrackLinkFileIn,
@@ -23,7 +23,6 @@ from app.serializers import track_detail_out, track_out
 from app.services.acquisition import LinkFileError, link_local_file
 from app.services.camelot import parse_camelot
 from app.services.genre_norm import normalize_genre
-from app.services import library_index_job
 
 router = APIRouter(prefix="/api", tags=["tracks"])
 
@@ -174,20 +173,29 @@ def link_file(track_id: int, payload: TrackLinkFileIn, db: Session = Depends(get
     return track_detail_out(track)
 
 
-@router.post("/library/index", response_model=LibraryIndexJobStatus, status_code=202)
+@router.post("/library/index", status_code=202)
 def start_library_index():
-    """Indicizza la libreria canonica (LIBRARY_ROOT): il disco È la libreria."""
+    """Alias del job unico di scansione (`scan_job`), sull'intera libreria
+    canonica (LIBRARY_ROOT): il disco È la libreria. Endpoint invariato per il
+    frontend (`startLibraryIndex` in frontend/lib/api.ts); da F4 il motore
+    dietro non è più un job dedicato ma lo stesso scan+link di
+    POST /api/organize/scan — stessa guardia di quella rotta canonica: uno
+    scan concorrente a un Apply in corso cammina un albero mezzo spostato e
+    `_reconcile` puo' fondere 1:1 attraverso il confine inbox/libreria
+    (mis-merge, vedi il docstring di `_reconcile` in scanner.py)."""
+    if apply_job.is_running():
+        raise api_error(409, "apply_running", "Apply in progress")
     if not runtime_settings.library_root():
         raise api_error(
             409, "library_root_not_configured",
             "LIBRARY_ROOT not configured: set the canonical library folder in .env.",
         )
-    return library_index_job.start_job()
+    return scan_job.start_job()
 
 
-@router.get("/library/index/status", response_model=LibraryIndexJobStatus)
+@router.get("/library/index/status")
 def library_index_status():
-    return library_index_job.job_state()
+    return scan_job.job_state()
 
 
 @router.get("/stats", response_model=LibraryStatsOut)

@@ -27,14 +27,13 @@ def fake_audio(monkeypatch, tmp_path):
     return make, tmp_path
 
 
-def test_own_salva_mtime_e_size(db, fake_audio):
+def test_own_salva_mtime_e_size(db, fake_audio, collega_da_disco):
     """L'aggancio memorizza mtime e size del file (base dell'incrementale)."""
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     p = make("Techno/A/A - T1.mp3", digest="H1", artist="A", title="T1")
-    index_library(db, root=root)
+    collega_da_disco(root)
 
     t = db.query(Track).filter(Track.audio_hash == "H1").one()
     stat = p.stat()
@@ -42,19 +41,18 @@ def test_own_salva_mtime_e_size(db, fake_audio):
     assert t.local_size == stat.st_size
 
 
-def test_file_invariato_niente_rehash(db, fake_audio, monkeypatch):
+def test_file_invariato_niente_rehash(db, fake_audio, monkeypatch, collega_da_disco):
     """Secondo run senza modifiche: 0 hash calcolati, contatore unchanged, niente lost."""
     from app.services import library_index as li
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     make("Techno/A/A - T1.mp3", digest="H1", artist="A", title="T1")
-    index_library(db, root=root)  # primo run: aggancia
+    collega_da_disco(root)  # primo run: aggancia
 
     calls = []
     original = li.audio_hash
     monkeypatch.setattr(li, "audio_hash", lambda p: calls.append(p) or original(p))
-    report = index_library(db, root=root)  # secondo run: tutto invariato
+    report = collega_da_disco(root)  # secondo run: tutto invariato
 
     assert calls == []                      # nessun ri-hash
     assert report["unchanged"] == 1
@@ -63,45 +61,42 @@ def test_file_invariato_niente_rehash(db, fake_audio, monkeypatch):
     assert report["matched"] == 0           # non ha rifatto il match
 
 
-def test_file_modificato_viene_rielaborato(db, fake_audio):
+def test_file_modificato_viene_rielaborato(db, fake_audio, collega_da_disco):
     """mtime/size cambiati: il file rientra nel flusso completo."""
     import os
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     p = make("Techno/A/A - T1.mp3", digest="H1", artist="A", title="T1")
-    index_library(db, root=root)
+    collega_da_disco(root)
 
     p.write_bytes(b"xy")  # size cambia
     os.utime(p, (p.stat().st_atime, p.stat().st_mtime + 10))
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     assert report["unchanged"] == 0
     assert report["matched"] == 1  # riagganciato per hash
 
 
-def test_duplicato_di_file_invariato_rilevato(db, fake_audio):
+def test_duplicato_di_file_invariato_rilevato(db, fake_audio, collega_da_disco):
     """L'hash del file skippato entra in seen_digests: un duplicato nuovo si conta."""
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     make("Techno/A/A - T1.mp3", digest="H1", artist="A", title="T1")
-    index_library(db, root=root)
+    collega_da_disco(root)
 
     make("House/A/A - T1 copia.mp3", digest="H1")  # stesso audio altrove
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     assert report["unchanged"] == 1
     assert report["duplicates"] == 1
 
 
-def test_file_agganciato_via_attach_niente_rehash(db, fake_audio, monkeypatch):
+def test_file_agganciato_via_attach_niente_rehash(db, fake_audio, monkeypatch, collega_da_disco):
     """Un file collegato con attach_local_file (download/link manuale) deve avere
     la firma mtime+size: il primo indice incrementale successivo lo salta."""
     from app.models import Track
     from app.services import acquisition
     from app.services import library_index as li
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     p = make("Techno/A/A - T1.mp3", digest="H1", artist="A", title="T1")
@@ -113,19 +108,18 @@ def test_file_agganciato_via_attach_niente_rehash(db, fake_audio, monkeypatch):
     calls: list[str] = []
     original = li.audio_hash
     monkeypatch.setattr(li, "audio_hash", lambda x: calls.append(str(x)) or original(x))
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     assert calls == []             # nessun ri-hash: la firma era gia' salvata
     assert report["unchanged"] == 1
     assert report["matched"] == 0
 
 
-def test_file_omonimo_non_ruba_a_traccia_posseduta(db, fake_audio):
+def test_file_omonimo_non_ruba_a_traccia_posseduta(db, fake_audio, collega_da_disco):
     """Il match esatto artista+titolo non deve riassegnare il file a una traccia
     che ne possiede gia' un altro (il riaggancio legittimo passa da hash/ISRC):
     il nuovo file omonimo diventa una traccia nuova."""
     from app.models import Track
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     make("Techno/A/A - T1.mp3", digest="H_NUOVO", artist="A", title="T1")
@@ -134,14 +128,14 @@ def test_file_omonimo_non_ruba_a_traccia_posseduta(db, fake_audio):
               has_local_file=True, local_path=str(suo.resolve()), audio_hash="H_SUO")
     db.add(t); db.commit()
 
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
     db.refresh(t)
 
     assert t.local_path == str(suo.resolve())  # non rubato dal file omonimo
     assert report["created"] == 1              # il file omonimo e' una traccia nuova
 
 
-def test_archivio_non_matchato_niente_rehash(db, fake_audio, monkeypatch):
+def test_archivio_non_matchato_niente_rehash(db, fake_audio, monkeypatch, semina_indice_libreria):
     """Un file nell'archivio che non corrisponde ad alcuna traccia NON deve essere
     ri-hashato a ogni run: era la causa dell'indicizzazione lenta a libreria ferma."""
     from app.services import library_index as li
@@ -151,11 +145,17 @@ def test_archivio_non_matchato_niente_rehash(db, fake_audio, monkeypatch):
     make("lib/A - keep.mp3", digest="H1", artist="A", title="keep")          # libreria
     make("arch/X - orphan.mp3", digest="ARCH1", artist="X", title="orphan")  # archivio, non matcha
     lib, arch = root / "lib", root / "arch"
+    # `index_library` non cammina più `root`: lo semina prima, come farebbe lo
+    # scanner di Organize, così `collega_tracce` (dentro `index_library`)
+    # trova la riga della libreria; `indicizza_archivio` cammina ancora `arch`
+    # per conto proprio.
+    semina_indice_libreria(lib)
     index_library(db, root=lib, archive_root=arch)  # primo run: hash tutto
 
     calls: list[str] = []
     original = li.audio_hash
     monkeypatch.setattr(li, "audio_hash", lambda p: calls.append(str(p)) or original(p))
+    semina_indice_libreria(lib)  # ri-scan idempotente, come farebbe Organize
     report = index_library(db, root=lib, archive_root=arch)  # secondo run, tutto invariato
 
     assert calls == []             # niente ri-hash, né libreria né archivio
@@ -165,7 +165,7 @@ def test_archivio_non_matchato_niente_rehash(db, fake_audio, monkeypatch):
 def test_auto_index_due_decision():
     """Il gate dell'auto-indicizzazione allo startup: salta se un run è finito da poco."""
     from datetime import datetime, timedelta, timezone
-    from app.services.library_index_job import _auto_index_due
+    from app.organize.services.scan_job import _auto_index_due
 
     now = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
     assert _auto_index_due(None, now) is True                                    # mai indicizzato

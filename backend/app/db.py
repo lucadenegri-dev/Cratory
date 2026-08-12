@@ -37,6 +37,13 @@ def ensure_schema(eng=None) -> None:
     eng = eng or engine
     with eng.begin() as conn:
         _recover_legacy_tracks_leftover(conn)
+    # F2: un solo Base. L'import registra le tabelle Organize su Base.metadata
+    # prima di create_all; da qui in poi ereditano gratis tutto il macchinario
+    # model-derived di questo modulo (_migrate_add_model_columns, creazione
+    # indici), che itera Base.metadata senza sapere di chi sia la tabella.
+    import app.models  # noqa: F401
+    import app.organize.models  # noqa: F401
+
     Base.metadata.create_all(eng)
     with eng.begin() as conn:
         _migrate_add_model_columns(conn, eng.dialect)

@@ -1,5 +1,7 @@
 import copy
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -9,10 +11,18 @@ from sqlalchemy.orm import sessionmaker
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
+# DEVE precedere ogni import di app.*: app.core.config legge l'ambiente al
+# momento dell'import, e app.db costruisce l'engine da settings.database_url.
+# Senza questo, un test che dimentichi dependency_overrides[get_db] scriverebbe
+# sul DB reale. Vale per entrambe le suite: da F2 l'engine è uno solo.
+_TMP_DB = os.path.join(tempfile.mkdtemp(prefix="cratory-test-"), "test.db")
+os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DB}"
+
 from app.db import Base  # noqa: E402
 import app.models  # noqa: E402,F401 — registra tutte le tabelle su Base.metadata prima di create_all
+from app.organize.services import scan_job  # noqa: E402
 from app.services import (  # noqa: E402
-    audio_analysis_job, library_index_job, mix_identify_job, soulseek_download_job,
+    audio_analysis_job, mix_identify_job, soulseek_download_job,
     streaming_import_job,
 )
 
@@ -84,23 +94,38 @@ def _no_real_llm(monkeypatch):
 def _no_real_library_scan(monkeypatch):
     """Un test che istanzia TestClient(app) fa scattare il lifespan di app/main.py
     (ensure_schema +, se LIBRARY_ROOT e' configurato nel .env reale dello
-    sviluppatore, library_index_job.start_job_if_due): senza questo guard un test
+    sviluppatore, scan_job.start_job_if_due): senza questo guard un test
     HTTP-level innescherebbe una scansione VERA della libreria musicale sul disco
     e scriverebbe sul DB reale (data/djassistant.db) invece che sul DB isolato del
-    test — lento (minuti su una libreria grande) e non isolato tra i test."""
+    test — lento (minuti su una libreria grande) e non isolato tra i test.
+
+    Da F4 blanka anche ARCHIVE_ROOT: `scanner.scan` (Organize) chiama ora la
+    fase 2 dell'indicizzazione, che legge `runtime_settings.archive_root()` allo
+    stesso modo del job — senza il guard, un test che invoca `scan()` senza
+    monkeypatchare esplicitamente la cartella cammina l'ARCHIVE_ROOT VERO
+    configurato nel .env dello sviluppatore.
+
+    Copre le TRE radici configurabili, non due: anche SLSKD_DOWNLOAD_DIR (la
+    cartella Inbox) va azzerata, altrimenti `radici(db)` la risolve comunque
+    dal .env reale dello sviluppatore e uno scan/link nei test cammina e hasha
+    quella cartella vera invece di una temporanea (vedi
+    test_db_isolation.py::test_guard_scan_azzera_tutte_e_tre_le_radici)."""
     from app.core.config import settings
     monkeypatch.setattr(settings, "library_root", "")
+    monkeypatch.setattr(settings, "archive_root", "")
+    monkeypatch.setattr(settings, "slskd_download_dir", "")
 
 
-# I 5 job in background (analisi BPM/key, indicizzazione libreria, download
+# I 5 job in background (analisi BPM/key, scansione+aggancio libreria, download
 # Soulseek, identificazione mix Shazam, import/sync streaming) tengono lo stato
 # in un dict globale di modulo (app locale mono-utente, niente sessione HTTP per
 # il polling). Un test che lascia lo stato a "running" (es. i test della guardia
 # doppio-avvio in test_job_double_start.py) contaminerebbe qualsiasi test
 # successivo che legge job_state() o chiama start_job() aspettandosi lo stato
-# iniziale "idle".
+# iniziale "idle". Da F4 Task 3 la scansione+indicizzazione e' un job solo
+# (scan_job), non piu' due (library_index_job e' assorbito).
 _JOB_STATE_MODULES = [
-    audio_analysis_job, library_index_job, mix_identify_job, soulseek_download_job,
+    audio_analysis_job, scan_job, mix_identify_job, soulseek_download_job,
     streaming_import_job,
 ]
 _PRISTINE_JOB_STATES = [copy.deepcopy(m._state) for m in _JOB_STATE_MODULES]
@@ -119,3 +144,110 @@ def _reset_job_states():
     _reset()
     yield
     _reset()
+
+
+@pytest.fixture()
+def fake_audio(monkeypatch, tmp_path):
+    """Crea file finti e monkeypatcha hash/tag/qualita' per renderli deterministici.
+
+    Condivisa: la usano i test dell'indicizzazione libreria e quelli sugli
+    invarianti (e servira' allo scanner unico di F4).
+    """
+    from app.services import library_index as li
+
+    hashes: dict[str, str] = {}
+    tags: dict[str, dict] = {}
+
+    def make(rel: str, *, digest: str, artist=None, title=None, isrc=None, genre=None, label=None):
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x")
+        hashes[str(p.resolve())] = digest
+        tags[str(p.resolve())] = {
+            "title": title, "artist": artist, "album": None, "year": None,
+            "duration_seconds": 200, "isrc": isrc, "genre": genre, "label": label,
+        }
+        return p
+
+    monkeypatch.setattr(li, "audio_hash", lambda p: hashes[str(p.resolve() if hasattr(p, 'resolve') else p)])
+    monkeypatch.setattr(li, "read_tags", lambda p: tags[str(p.resolve() if hasattr(p, 'resolve') else p)])
+    monkeypatch.setattr(li, "read_audio_quality", lambda p: {"format": "mp3", "bitrate": 320})
+    return make, tmp_path
+
+
+@pytest.fixture()
+def semina_indice_libreria(db):
+    """Semina in `AudioFile` una riga (`location='library'`, `status='present'`)
+    per ogni file audio sotto una radice, senza toccare le Track.
+
+    Perché esiste: da F4 `collega_tracce` legge le righe `AudioFile` che lo
+    scanner di Organize (`app/organize/services/scanner.py`) scrive quando
+    cammina il disco — non cammina più il disco lei stessa. Quello scanner non
+    gira nei test di questo modulo (`library_index`): questo helper riproduce
+    SOLO il suo passo di popolamento indice, riusando lo stesso walk
+    (`library_index.scan_folder`, così i test che lo monkeypatchano per
+    simulare file che spariscono a metà corsa continuano a funzionare
+    identici a prima di F4). I campi di qualità (`ext`/`size_bytes`/
+    `hash_method`) sono segnaposto, come già in `tests/test_collega_tracce.py`:
+    a `collega_tracce` non serve altro che path/location/status per agganciare
+    — hash e tag li rilegge dal file vero al momento dell'aggancio.
+
+    Upsert per (root_id, path), come lo scanner vero: un test che simula più
+    corse (scan+link, scan+link) chiamando l'helper più volte sullo stesso
+    file non deve urtare il vincolo di unicità.
+    """
+    from app.core import runtime_settings
+    from app.organize.models import AudioFile
+    from app.organize.services.roots import radici
+    from app.services import library_index as li
+    from sqlalchemy import select
+
+    def _run(root) -> None:
+        runtime_settings.apply(db, "library_root", str(root))
+        root_id = radici(db)["library"].id
+        for path in li.scan_folder(root):
+            resolved = str(path.resolve())
+            existing = db.scalar(select(AudioFile).where(
+                AudioFile.root_id == root_id, AudioFile.path == resolved))
+            if existing is not None:
+                existing.status = "present"
+                continue
+            db.add(AudioFile(
+                root_id=root_id, path=resolved, location="library",
+                status="present", ext=path.suffix.lstrip("."), size_bytes=0,
+                hash_method="test-stub",
+            ))
+        db.commit()
+
+    return _run
+
+
+@pytest.fixture()
+def collega_da_disco(db, semina_indice_libreria):
+    """Ponte fra i vecchi test 'index_library(db, root=...)' e la fase 2 attuale.
+
+    Fino a F4 `index_library`/`collega_tracce` camminavano `root` per conto
+    proprio. Ora `collega_tracce` legge solo le righe `AudioFile` già scritte
+    (dallo scanner di Organize, in produzione). Questo helper riproduce quel
+    solo passo di popolamento (`semina_indice_libreria`) e poi chiama le
+    funzioni sotto test — non un sostituto loro: l'aggancio (hash, match,
+    upsert) e la riconciliazione restano interamente lì.
+
+    Senza archivio, il giro sono due delle tre parti nell'ordine obbligatorio
+    (`collega_tracce` → `riconcilia_possessi`) con lo stesso `seen_paths`
+    condiviso; il report è la somma dei due, come lo compone `index_library`.
+    """
+    from app.services import library_index as li
+
+    def _run(root):
+        semina_indice_libreria(root)
+        seen_paths: set[str] = set()
+        seen_digests: set[str] = set()
+        report = li.collega_tracce(db, seen_paths=seen_paths, seen_digests=seen_digests)
+        rec = li.riconcilia_possessi(db, seen_paths=seen_paths,
+                                     scanned=report["scanned"])
+        report["lost"] += rec["lost"]
+        report["orphans_removed"] += rec["orphans_removed"]
+        return report
+
+    return _run

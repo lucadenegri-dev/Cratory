@@ -35,8 +35,8 @@ const idleDownload: DownloadStatus = {
   error: null, current_label: null,
 };
 const idleLibraryIndex: LibraryIndexJob = {
-  status: "idle", processed: 0, total: 0, scanned: 0, matched: 0, created: 0,
-  relinked: 0, duplicates: 0, lost: 0, failed: 0, errors: [], error: null, root: null,
+  status: "idle", phase: null, processed: 0, total: 0, result: null, error: null,
+  started_at: null, finished_at: null,
 };
 const idleAnalysis: AnalysisJobStatus = {
   status: "idle", processed: 0, total: 0, analyzed: 0, failed: 0, applied: 0,

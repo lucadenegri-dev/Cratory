@@ -17,15 +17,16 @@ def test_set_sovrascrive(db):
     assert get_state(db, "k") == "v2"
 
 
-def test_job_indicizzazione_persiste_last_index_at(monkeypatch, tmp_path):
-    """A fine indicizzazione riuscita, last_index_at è salvato in app_state."""
+def test_job_scansione_persiste_last_index_at(monkeypatch, tmp_path):
+    """A fine scansione riuscita, last_index_at è salvato in app_state (F4 Task 3:
+    scan_job ha assorbito library_index_job, stessa scrittura)."""
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
 
     from app.core.config import settings
     from app.db import Base
-    from app.services import library_index_job
+    from app.organize.services import scan_job
 
     # StaticPool: connessione unica condivisa, così la sessione del job e quella
     # di verifica vedono lo stesso DB in-memory (vedi test_track_lookup.py).
@@ -33,12 +34,11 @@ def test_job_indicizzazione_persiste_last_index_at(monkeypatch, tmp_path):
                            poolclass=StaticPool)
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
-    monkeypatch.setattr(library_index_job, "SessionLocal", factory)
+    monkeypatch.setattr(scan_job, "SessionLocal", factory)
     monkeypatch.setattr(settings, "library_root", str(tmp_path))
     monkeypatch.setattr(settings, "archive_root", "")
-    monkeypatch.setattr(library_index_job, "_spawn", lambda fn: fn())  # sincrono nel test
 
-    library_index_job.start_job()
+    scan_job._run(None)  # sincrono nel test, senza thread
 
     session = factory()
     try:

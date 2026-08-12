@@ -26,6 +26,18 @@ const ROUTES: { path: string; title: string | null }[] = [
   { path: "/shazam", title: "Shazam" },
   { path: "/set-builder", title: "Set Builder" },
   { path: "/settings", title: null },
+  // Organize (fusione F1, sezione ex Sortory): "/organize" e' un redirect
+  // verso "/organize/files" (root non ha una pagina propria), quindi atterra
+  // sul titolo "Files". "/organize/sources" non esiste piu' (fase F3b: le
+  // sorgenti non sono un concetto della UI, vedi lib/organize/api.ts) — non
+  // e' ne' una pagina ne' un redirect, va rimossa dalla lista.
+  { path: "/organize", title: "Files" },
+  { path: "/organize/files", title: "Files" },
+  { path: "/organize/issues", title: "Issues" },
+  { path: "/organize/duplicates", title: "Duplicates" },
+  { path: "/organize/plan", title: "Plan" },
+  { path: "/organize/history", title: "History" },
+  { path: "/organize/settings", title: "Settings" },
 ];
 
 // Rumore noto e innocuo che puo' comparire in dev mode: whitelist esplicita,

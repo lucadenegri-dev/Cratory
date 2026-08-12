@@ -34,11 +34,10 @@ def fake_audio(monkeypatch, tmp_path):
     return make, tmp_path
 
 
-def test_file_sparito_tra_scan_e_stat_non_uccide_il_run(db, fake_audio, monkeypatch):
+def test_file_sparito_tra_scan_e_stat_non_uccide_il_run(db, fake_audio, monkeypatch, collega_da_disco):
     """Un file cancellato tra la scansione e lo stat() si salta e si conta come
     failed: il run completa e gli altri file vengono indicizzati."""
     from app.services import library_index as li
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     make("lib/A - T1.mp3", digest="H1", artist="A", title="T1")
@@ -53,7 +52,7 @@ def test_file_sparito_tra_scan_e_stat_non_uccide_il_run(db, fake_audio, monkeypa
 
     monkeypatch.setattr(li, "scan_folder", scan_poi_sparisce)
 
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     assert report["failed"] == 1
     assert any("Ghost" in e["path"] for e in report["errors"])
@@ -61,38 +60,64 @@ def test_file_sparito_tra_scan_e_stat_non_uccide_il_run(db, fake_audio, monkeypa
     assert report["scanned"] == 2
 
 
-def test_commit_incrementale_prima_della_riconciliazione(db, fake_audio, monkeypatch):
+def test_commit_incrementale_prima_della_riconciliazione(db, fake_audio, monkeypatch,
+                                                         semina_indice_libreria):
     """Con molti file nuovi (> soglia) almeno un commit avviene DURANTE il loop
-    di scansione, cioè prima della riconciliazione finale (lost/orfani)."""
+    di aggancio — quindi prima della riconciliazione finale (lost/orfani), che
+    viene dopo il loop.
+
+    La misura si ferma dentro il loop (quanti commit erano già avvenuti quando è
+    stato agganciato l'ULTIMO file) e non guarda l'ordine commit/riconciliazione:
+    ci sono due commit che avvengono comunque prima della riconciliazione anche
+    con zero commit incrementali — quello in coda a `semina_indice_libreria` (è
+    dello scanner, non dell'aggancio) e quello in coda a `collega_tracce` —, e
+    contarli renderebbe il test vero per costruzione. Provato col sabotaggio:
+    con `COMMIT_EVERY` enorme questo test deve fallire.
+    """
     from app.services import library_index as li
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     for i in range(60):
         make(f"lib/A - T{i:03d}.mp3", digest=f"H{i:03d}", artist="A", title=f"T{i:03d}")
 
-    events: list[str] = []
+    semina_indice_libreria(root)
+
+    commit_fatti = {"n": 0}
     original_commit = db.commit
     monkeypatch.setattr(db, "commit",
-                        lambda: (events.append("commit"), original_commit())[1])
-    original_unref = li.unreferenced_track_ids
-    monkeypatch.setattr(li, "unreferenced_track_ids",
-                        lambda *a, **k: (events.append("reconcile"), original_unref(*a, **k))[1])
+                        lambda: (commit_fatti.__setitem__("n", commit_fatti["n"] + 1),
+                                 original_commit())[1])
+    # Ogni file nuovo passa da qui (è il flusso completo del loop): l'ultimo a
+    # scrivere lascia la fotografia dei commit visti fin dentro il loop.
+    commit_all_ultimo_file = {"n": 0}
+    original_hash = li.audio_hash
 
-    report = index_library(db, root=root)
+    def hash_spia(p):
+        commit_all_ultimo_file["n"] = commit_fatti["n"]
+        return original_hash(p)
+
+    monkeypatch.setattr(li, "audio_hash", hash_spia)
+    original_unref = li.unreferenced_track_ids
+    riconciliato = {"si": False}
+    monkeypatch.setattr(li, "unreferenced_track_ids",
+                        lambda *a, **k: (riconciliato.__setitem__("si", True),
+                                         original_unref(*a, **k))[1])
+
+    seen_paths: set[str] = set()
+    report = li.collega_tracce(db, seen_paths=seen_paths, seen_digests=set())
+    li.riconcilia_possessi(db, seen_paths=seen_paths, scanned=report["scanned"])
 
     assert report["created"] == 60
-    assert "reconcile" in events
-    # Almeno un commit incrementale prima che parta la riconciliazione.
-    assert "commit" in events[:events.index("reconcile")]
+    assert riconciliato["si"]
+    # Almeno un commit incrementale mentre il loop era ancora in corso.
+    assert commit_all_ultimo_file["n"] >= 1
 
 
-def test_commit_incrementale_progresso_sopravvive_a_crash(db, fake_audio, monkeypatch):
+def test_commit_incrementale_progresso_sopravvive_a_crash(db, fake_audio, monkeypatch, collega_da_disco):
     """Crash simulato a metà scansione: i blocchi già committati restano nel DB
     (il lavoro non committato si perde, ma non tutto il run)."""
     from app.models import Track
     from app.services import library_index as li
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     for i in range(60):
@@ -110,7 +135,7 @@ def test_commit_incrementale_progresso_sopravvive_a_crash(db, fake_audio, monkey
     monkeypatch.setattr(li, "audio_hash", hash_poi_crash)
 
     with pytest.raises(RuntimeError):
-        index_library(db, root=root)
+        collega_da_disco(root)
     db.rollback()  # scarta il lavoro non committato: resta solo il persistito
 
     persistite = db.query(Track).filter(Track.has_local_file.is_(True)).count()

@@ -29,6 +29,8 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 60_000,
       env: {
+        // F2 ha unificato Cratory e Organize su un solo DB: questa variabile
+        // isola entrambi i mondi, incluse le rotte /organize/* della suite.
         DATABASE_URL: "sqlite:///./data/test_e2e.db",
         LIBRARY_ROOT: "",
         ARCHIVE_ROOT: "",
