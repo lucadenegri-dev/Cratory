@@ -557,6 +557,22 @@ git commit -m "feat(f4): un solo job di scansione, library_index_job assorbito"
 
 ---
 
+### Task 3b: Scanner incrementale
+
+**Aggiunto in corso d'opera**, dopo un rilievo della review del Task 3. Non era nel piano originale.
+
+**Il motivo.** `_scan_file_fields` chiama `content_hash.compute`, che legge il file **intero** senza condizioni, per ogni file a ogni corsa: sulla libreria reale sono 625 file per **20,5 GB**. Non è una regressione di F4 — lo scanner di Sortory è sempre stato così — ma da questa fase quel percorso è anche quello dell'**avvio automatico**, quindi il costo si paga a ogni riavvio di uvicorn oltre la finestra dell'auto-avvio. L'indicizzazione di Cratory che il boot chiamava prima l'incrementale ce l'aveva, sul confronto `Track.local_mtime`/`local_size`.
+
+**La premessa sbagliata del piano.** In testa a questo documento si legge che «unificare non aggiunge letture: ne toglie, perché oggi il disco viene percorso due volte». Vero per una scansione manuale, **falso per il percorso automatico**: lì la fusione sostituisce una passata incrementale con una completa.
+
+**Il design.** `AudioFile` ha già `size_bytes`; si aggiunge `mtime: float | None` e si salta la lettura quando path, dimensione e mtime coincidono e la riga non porta uno `scan_error`. La colonna arriva sul DB esistente tramite `_migrate_add_model_columns`, che è model-derived.
+
+**Le tre cose da non rompere**: la riga saltata deve restare registrata in `seen_by_root`, altrimenti `_reconcile` dichiara sparita l'intera libreria a ogni scan; `content_hash` resta memorizzato e non va toccato nel ramo di skip, perché `_abbina_spostamenti` ci si appoggia; una riga con `scan_error` va ritentata, non saltata per sempre.
+
+Il brief completo, con i sei test e i tre sabotaggi, è in `.superpowers/sdd/task-3b-brief.md`.
+
+---
+
 ### Task 4: Un solo bottone
 
 **Files:**
