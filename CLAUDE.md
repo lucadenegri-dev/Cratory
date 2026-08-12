@@ -7,18 +7,18 @@ The single operational guide for the AI working on Cratory.
 **Cratory** is the new name of the app previously called DJ Assistant. It is a personal,
 local/self-hosted, single-user web app to import streaming playlists, build DJ set drafts
 on owned tracks (BPM/key from Rekordbox), analyze library gaps, do discovery, and identify
-mix tracklists. **Metadata enrichment (title/artist/album/label/genre) and tagging belong to the
-Organize section** (`/organize`, ex Sortory: absorbed into this app by the F1-F6
-fusion), which is the single writer of textual tags.
+mix tracklists. **Metadata enrichment (title/artist/album/label/genre) and tagging
+belong to the Organize section** (`/organize`, ex Sortory: absorbed into this app by
+the F1-F6 fusion), which is the single writer of textual tags.
 
 The project does not act as a DJ deck (no waveform/cue/queue — that stays with the Set
 Builder/Rekordbox) and does not transcode or persist third-party audio. "Does not play
 audio" no longer holds in absolute terms: Cratory now plays its **own owned library**,
 read-only, for quick audition — `GET /api/tracks/{id}/audio` streams a track's local file
 (`has_local_file`) through a single shared docked player, one track at a time, and never
-mutates the file (tags remain the Organize section's job). The Shazam module downloads audio only
-temporarily for fingerprinting and saves a separate corpus of identified tracklists. An
-explicit exception to "does not keep audio files": persistent acquisition via
+mutates the file (tags remain the Organize section's job). The Shazam module downloads
+audio only temporarily for fingerprinting and saves a separate corpus of identified
+tracklists. An explicit exception to "does not keep audio files": persistent acquisition via
 Soulseek/slskd, which links a file to the existing `Track` in the library
 (`has_local_file`/`local_path`/`local_format`/`local_bitrate`). A parallel exception:
 per-track SoundCloud download via yt-dlp from the track detail page, which extracts an
@@ -73,9 +73,10 @@ specified in `docs/superpowers/specs/2026-08-11-fusione-sortory-cratory-design.m
    inference and creative hypothesis.
 7. **The library is the disk.** Ownership (`has_local_file`) comes from indexing
    `LIBRARY_ROOT` (re-linking by `audio_hash`); streaming playlists are leads. Cratory reads
-   the files but never mutates them: tags are written only by the Organize section. Owned files are also
-   **playable, read-only** (`GET /api/tracks/{id}/audio`, one track at a time via the shared
-   docked player, for quick audition) — playback never touches the file or its tags.
+   the files but never mutates them: tags are written only by the Organize section.
+   Owned files are also **playable, read-only** (`GET /api/tracks/{id}/audio`, one
+   track at a time via the shared docked player, for quick audition) — playback never
+   touches the file or its tags.
 
 ## Stack and layout
 
@@ -107,9 +108,9 @@ backend/app/
                  too. Its HTTP surface is entirely under `/api/organize/*`.
 ```
 
-No enrichment chain: BPM/key from Rekordbox, text metadata from the Organize section. The remaining
-external providers serve **Discovery only**: Discogs and Bandcamp (dig "Scava", two
-sources behind the `DigSource` protocol), Spotify (resolver).
+No enrichment chain: BPM/key from Rekordbox, text metadata from the Organize section.
+The remaining external providers serve **Discovery only**: Discogs and Bandcamp (dig
+"Scava", two sources behind the `DigSource` protocol), Spotify (resolver).
 
 Discovery works by taste, not by technical compatibility (that stays with the Set Builder):
 the dig "Scava" uses Discogs or Bandcamp by genre/label, with Spotify only as an identity

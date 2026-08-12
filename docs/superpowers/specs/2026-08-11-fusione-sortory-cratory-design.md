@@ -433,7 +433,27 @@ smentita dai fatti:
   template con anteprima, lista provider con stato ed env vars, fingerprint
   AcoustID, e uno switcher di lingua (sparito come duplicato). Nessuna UI per
   le regole dedup: quell'impostazione esiste nel DB ma non era esposta.
-| **F6** Pulizia | `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/ROADMAP.md` per un prodotto solo; repo Sortory archiviato su GitHub (non cancellato); rimossi `organizer_url` e il link "Apri Sortory" | documentazione senza riferimenti a due app separate |
+| **F6** Pulizia | `CLAUDE.md`, `README.md`, `docs/*` per un prodotto solo; rimossi `organizer_url` e il link "Apri Sortory"; saldati i tre follow-up del report di scan; decisa `scan_root` | ✅ **completata 2026-08-13** — 1882 backend, 161 unit, 21 e2e verdi. Resta da fare **a mano**: archiviare `github.com/lucadenegri-dev/Sortory` (Settings → Archive, non cancellare: i 320 commit sono raggiungibili da `HEAD`, ma quel repo resta il riferimento comodo per la storia di un singolo file) |
+
+**Note di completamento F6.**
+
+- Il link della card pipeline in dashboard non è stato cancellato con
+  `organizer_url`: cambia destinazione, da ancora esterna con `target="_blank"`
+  a `Link` interno verso `/organize/files`.
+- `ScanSummary.linking` è un modello Pydantic (`LinkingReport`), non più un dict
+  nudo. I contatori del giro d'archivio sono distinti da quelli di libreria
+  (`archive_unchanged`, `archive_duplicates`, `archive_failed`): il test
+  `test_possesso_vince_sull_archivio` lo dimostra — il duplicato lo trovava
+  l'archivio, e sotto la chiave sommata sembrava di libreria.
+- Le due fasi dello scan condividono un denominatore (file da leggere + righe da
+  agganciare), quindi la percentuale non scende più passando da `scanning` a
+  `linking`.
+- **La storia non è stata riscritta**: `PROGRESS.md`, `docs/AUDIT-2026-07-05.md`
+  e `docs/superpowers/` dicevano il vero quando sono stati scritti. Si è
+  aggiornato ciò che *istruisce*, non ciò che *racconta*.
+- Corretto un errore vero trovato per strada: `docs/DEPENDENCIES.md` dichiarava
+  `pyacoustid` rimosso nel pivot disk-first di luglio, ma F1 l'ha rimesso per il
+  fingerprint di Organize.
 
 ## Verifica
 
