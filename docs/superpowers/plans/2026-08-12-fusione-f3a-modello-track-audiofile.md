@@ -30,6 +30,13 @@ Il secondo non è un dettaglio del primo: è una modifica di superficie API e UI
 - **`scan_root`, `root_id` e `root_targets` restano intatti.** Toccarli è F3b.
 - **Nessuna query esistente di Cratory va modificata.** `has_local_file`, `local_path`, `local_format`, `local_bitrate` restano dove sono e continuano a significare quello che significavano: `primary_file_id` si affianca, non sostituisce.
 - **Il DB reale si tocca solo tramite script con dry-run**, e solo dopo backup.
+- **Ogni strumento prende il DB con `--db` esplicito e stampa su quale sta lavorando.**
+  Il worktree ha un proprio `backend/.env` e un proprio `data/djassistant.db`: uno
+  strumento che si affida a `SessionLocal` lì dentro legge il DB del *worktree*, non
+  quello del checkout principale — e risponde "nessun duplicato" su un database quasi
+  vuoto sembrando aver funzionato. È successo davvero eseguendo questo piano. Lo script
+  di migrazione di F2 non ne soffriva perché prendeva `--src`/`--dest` assoluti.
+  DB reale: `/Users/lucadenegri/Develop/DJProject01/backend/data/djassistant.db`.
 
 ## Vincolo tecnico da conoscere prima di iniziare
 
@@ -341,7 +348,8 @@ Poi elenca e fondi:
 
 ```bash
 cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend && \
-.venv/bin/python -m app.tools.merge_duplicate_tracks --elenca
+.venv/bin/python -m app.tools.merge_duplicate_tracks \
+  --db /Users/lucadenegri/Develop/DJProject01/backend/data/djassistant.db --elenca
 ```
 
 Atteso: una riga sola, `/Users/lucadenegri/Music/Library/Trance/Robert Leiner/Robert Leiner - Aqua Viva.flac → tracce [150, 1157]`.
@@ -350,7 +358,9 @@ Atteso: una riga sola, `/Users/lucadenegri/Music/Library/Trance/Robert Leiner/Ro
 
 ```bash
 cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend && \
-.venv/bin/python -m app.tools.merge_duplicate_tracks --tenere 150 --scartare 1157 --apply
+.venv/bin/python -m app.tools.merge_duplicate_tracks \
+  --db /Users/lucadenegri/Develop/DJProject01/backend/data/djassistant.db \
+  --tenere 150 --scartare 1157 --apply
 ```
 
 Atteso: `membership spostate: 1`, `fusione applicata`.
@@ -1274,7 +1284,8 @@ Atteso: 3 passed.
 
 ```bash
 cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend && \
-.venv/bin/python -m app.tools.backfill_track_files
+.venv/bin/python -m app.tools.backfill_track_files \
+  --db /Users/lucadenegri/Develop/DJProject01/backend/data/djassistant.db
 ```
 
 Atteso, come ordine di grandezza: `library` intorno a 650, `inbox` intorno a 1128, `fuori` **0**, `track_id` e `primary_file_id` **624** e uguali fra loro, `esito: OK`.
@@ -1285,7 +1296,8 @@ Atteso, come ordine di grandezza: `library` intorno a 650, `inbox` intorno a 112
 
 ```bash
 cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/backend && \
-.venv/bin/python -m app.tools.backfill_track_files --apply
+.venv/bin/python -m app.tools.backfill_track_files \
+  --db /Users/lucadenegri/Develop/DJProject01/backend/data/djassistant.db --apply
 ```
 
 Atteso: stesso report, `backfill applicato`.
