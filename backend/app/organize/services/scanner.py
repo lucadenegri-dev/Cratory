@@ -186,18 +186,29 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     # Import differito: app/services/library_index.py importa già da
     # app/organize/ (per aggiorna_primary), e un import a livello di modulo
     # qui chiuderebbe il ciclo.
-    from app.services.library_index import collega_tracce, indicizza_archivio, riconcilia_possessi
+    from app.services.library_index import (
+        collega_tracce,
+        indicizza_archivio,
+        recompute_energy,
+        riconcilia_possessi,
+    )
 
     def _progress_linking(processed: int, total: int) -> None:
         if on_progress is not None:
             on_progress(processed, total, "linking")
 
-    # Le tre parti del giro d'indicizzazione, nell'ordine obbligatorio (vedi i
-    # docstring in library_index.py): la libreria prima dell'archivio (a
-    # parità di audio il possesso vince), la riconciliazione per ultima
+    # Le quattro parti del giro d'indicizzazione, nell'ordine obbligatorio
+    # (vedi i docstring in library_index.py): la libreria prima dell'archivio
+    # (a parità di audio il possesso vince), la riconciliazione per ultima
     # (altrimenti una traccia il cui file è passato in ARCHIVE_ROOT viene
-    # cancellata invece che marcata scartata). `seen_paths`/`seen_digests`
-    # sono lo stato condiviso fra le tre e vanno passati identici a tutte.
+    # cancellata invece che marcata scartata), e infine il ricalcolo
+    # dell'energia — `index_library` non è tre chiamate ma quattro
+    # (library_index.py `index_library`): `_own` scrive solo `energy_raw`,
+    # ed è `recompute_energy` a calibrarlo in `energy` (0-100). Senza questa
+    # chiusura le Track appena agganciate restano con `energy` NULL e fuori
+    # dall'arco energetico del Set Builder finché non gira, separatamente, il
+    # job di Cratory. `seen_paths`/`seen_digests` sono lo stato condiviso fra
+    # le prime tre e vanno passati identici a tutte.
     seen_paths: set[str] = set()
     seen_digests: set[str] = set()
     link_report = collega_tracce(db, seen_paths=seen_paths, seen_digests=seen_digests,
@@ -215,6 +226,12 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     rec = riconcilia_possessi(db, seen_paths=seen_paths, scanned=link_report["scanned"])
     link_report["lost"] += rec["lost"]
     link_report["orphans_removed"] += rec["orphans_removed"]
+
+    # Anti-unmount, versione energia (stesso guard di `index_library`): uno
+    # scan che non ha visto righe di libreria (radice smontata o vuota) non
+    # deve nemmeno ricalcolare l'energia.
+    if link_report["scanned"]:
+        link_report["energy_computed"] = recompute_energy(db)
 
     summary.linking = link_report
 

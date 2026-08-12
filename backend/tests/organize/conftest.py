@@ -68,9 +68,15 @@ def _fresh_db():
 
     with engine.connect() as conn:
         conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
-        Base.metadata.drop_all(bind=conn)
-        Base.metadata.create_all(bind=conn)
-        conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+        try:
+            Base.metadata.drop_all(bind=conn)
+            Base.metadata.create_all(bind=conn)
+        finally:
+            # Anche se drop_all/create_all solleva: senza il ripristino qui, il
+            # `with` esce con la PRAGMA ancora OFF e la connessione torna nel
+            # pool disarmata — un test successivo che la ripesca girerebbe
+            # senza enforcement FK, in silenzio.
+            conn.exec_driver_sql("PRAGMA foreign_keys=ON")
         conn.commit()
 
     from app.organize.models import ScanRoot

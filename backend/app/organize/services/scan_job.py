@@ -51,6 +51,16 @@ def _run(locations: list[str] | None) -> None:
         summary = scan(db, roots, on_progress=on_progress)
         analysis_summary = analysis.recompute(db, on_progress=on_progress)
         result = summary.model_dump(mode="json")
+        if result.get("linking"):
+            # `created_ids` è utile solo a chi vuole agire sulle Track appena
+            # create (nessun chiamante in-process, oggi); esposto tal quale in
+            # `job_state()["result"]` porterebbe ogni poll di
+            # GET /api/organize/scan/status a trascinare, su una prima
+            # indicizzazione da 20k brani, altrettanti interi. `library_index_job`
+            # copiava di proposito solo le chiavi aggregate: stesso principio qui,
+            # sul solo report esposto (`summary.linking` interno resta intero).
+            result["linking"] = {k: v for k, v in result["linking"].items()
+                                 if k != "created_ids"}
         result["analysis"] = analysis_summary.model_dump(mode="json")
         with _lock:
             _state.update(

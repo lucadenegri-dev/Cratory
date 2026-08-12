@@ -18,9 +18,9 @@ class ScanSummary(BaseModel):
     errors: int = 0
     started_at: datetime | None = None
     finished_at: datetime | None = None
-    # Report combinato delle tre parti dell'aggancio (collega_tracce +
-    # indicizza_archivio, se configurato + riconcilia_possessi). None finché
-    # la fase 2 non è ancora girata.
+    # Report combinato delle quattro parti dell'aggancio (collega_tracce +
+    # indicizza_archivio, se configurato + riconcilia_possessi +
+    # recompute_energy). None finché la fase 2 non è ancora girata.
     linking: dict | None = None
 
 

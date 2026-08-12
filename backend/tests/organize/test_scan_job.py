@@ -35,6 +35,26 @@ def test_job_runs_and_completes(db, copy_fixture, tmp_path, monkeypatch):
     assert db.scalar(select(AudioFile)) is not None
 
 
+def test_created_ids_non_esposto_nello_stato(db, copy_fixture, tmp_path, monkeypatch):
+    """`linking.created_ids` porta gli id delle Track create — comodo dentro il
+    processo, ma su una prima indicizzazione da 20k brani ogni poll di
+    GET /api/organize/scan/status trascinerebbe altrettanti interi. Il report
+    esposto in `job_state()["result"]` lo esclude; l'aggregato `created` resta."""
+    root_dir = tmp_path / "lib"
+    monkeypatch.setattr(settings, "library_root", str(root_dir))
+    copy_fixture("mp3", root_dir / "a.mp3")
+    root = ScanRoot(path=str(root_dir))
+    db.add(root)
+    db.commit()
+
+    scan_job.start_job(["library"])
+    state = _wait_done()
+
+    assert state["status"] == "done"
+    assert state["result"]["linking"]["created"] == 1
+    assert "created_ids" not in state["result"]["linking"]
+
+
 def test_double_start_is_rejected():
     # Forza lo stato running e verifica che start_job non lo sovrascriva.
     scan_job._state.update(status="running", processed=0, total=0)
