@@ -4,17 +4,14 @@ import { getCurrentLanguage, translateApiError, type Language } from "@/lib/orga
    dal rewrite di next.config.ts verso il backend (come lib/api/client.ts), così
    l'app funziona anche aperta da un altro dispositivo in LAN e senza CORS.
    Le rotte Organize vivono sotto /api/organize: i path passati a apiGet/apiSend
-   sono relativi a questa base (es. "/sources" → /api/organize/sources). */
+   sono relativi a questa base (es. "/files" → /api/organize/files). */
 const API = "/api/organize";
 
-export interface ScanRoot {
-  id: number;
-  path: string;
-  label: string | null;
-  last_scanned_at: string | null;
-  file_count: number;
-  missing_count: number;
-}
+// F3b: `scan_root` non è più un concetto gestito dall'utente. Esistono
+// esattamente due cartelle canoniche, derivate da Settings (LIBRARY_ROOT e
+// SLSKD_DOWNLOAD_DIR): la UI le tratta come location fisse, non come righe
+// di una lista da aggiungere/rimuovere.
+export type Location = "inbox" | "library";
 
 export interface ScanResult {
   roots: number[];
@@ -49,7 +46,7 @@ export type Severity = "error" | "warning" | "info";
 
 export interface FileRow {
   id: number;
-  root_id: number;
+  location: Location;
   path: string;
   ext: string;
   artist: string | null;
@@ -88,7 +85,7 @@ export interface LibraryStats {
 }
 
 export interface FileQuery {
-  root_id?: number;
+  location?: Location;
   status?: string;
   has_issues?: boolean;
   q?: string;
@@ -155,20 +152,9 @@ async function apiSend<T>(method: string, path: string, body?: unknown): Promise
   );
 }
 
-// --- SOURCES ----------------------------------------------------------------
-export function listSources() {
-  return apiGet<ScanRoot[]>("/sources");
-}
-export function addSource(path: string, label?: string) {
-  return apiSend<ScanRoot>("POST", "/sources", { path, label: label || null });
-}
-export function deleteSource(id: number) {
-  return apiSend<void>("DELETE", `/sources/${id}`);
-}
-
 // --- SCAN (job) -------------------------------------------------------------
-export function startScan(rootIds?: number[]) {
-  return apiSend<ScanJobState>("POST", "/scan", { root_ids: rootIds ?? null });
+export function startScan(locations?: Location[]) {
+  return apiSend<ScanJobState>("POST", "/scan", { locations: locations ?? null });
 }
 export function scanJobStatus() {
   return apiGet<ScanJobState>("/scan/status");
@@ -221,7 +207,7 @@ export function listProviders() {
 export interface Issue {
   id: number;
   file_id: number;
-  root_id: number;
+  location: Location;
   type: string;
   field: string | null;
   severity: Severity;
@@ -239,7 +225,7 @@ export interface IssueFilters {
   severity?: string;
   type?: string;
   status?: string;
-  root_id?: number;
+  location?: Location;
   q?: string;
   [key: string]: string | number | boolean | undefined;
 }
@@ -521,16 +507,9 @@ export function undoRun(id: number) {
 }
 
 // --- SETTINGS ---------------------------------------------------------------
-export interface RootTarget {
-  id: number;
-  path: string;
-  label: string | null;
-  target_root: string | null;
-}
 export interface Settings {
   naming_template: string;
   folder_template: string;
-  roots: RootTarget[];
 }
 export function getSettings() {
   return apiGet<Settings>("/settings");
@@ -540,9 +519,6 @@ export function updateSettings(body: {
   folder_template?: string;
 }) {
   return apiSend<Settings>("PUT", "/settings", body);
-}
-export function setRootTarget(rootId: number, target: string | null) {
-  return apiSend<Settings>("PUT", `/settings/roots/${rootId}/target`, { target_root: target });
 }
 export function getLanguage() {
   return apiGet<{ language: Language }>("/settings/language");

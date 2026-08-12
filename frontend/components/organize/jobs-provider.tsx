@@ -7,7 +7,7 @@ import {
   integrityStatus, integrityCheck as apiIntegrityCheck,
   genreReviewStatus, genreReview as apiGenreReview,
   type ScanJobState, type ApplyJobState, type ProviderRescanJobState, type ProviderRescanBody,
-  type IntegrityJobState, type GenreReviewJobState, type GenreReviewBody,
+  type IntegrityJobState, type GenreReviewJobState, type GenreReviewBody, type Location,
 } from "@/lib/organize/api";
 import { EqMeter } from "./ui";
 import { useT } from "@/lib/organize/i18n";
@@ -25,7 +25,7 @@ type JobsApi = {
   rescan: ProviderRescanJobState;
   integrity: IntegrityJobState;
   genreReviewJob: GenreReviewJobState;
-  startScan: (rootIds?: number[]) => Promise<void>;
+  startScan: (locations?: Location[]) => Promise<void>;
   startApply: () => Promise<void>;
   startRescan: (body: ProviderRescanBody) => Promise<void>;
   startIntegrity: () => Promise<IntegrityJobState>;
@@ -82,8 +82,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(() => { pollOnce(); }, [pollOnce]);
 
-  const startScan = useCallback(async (rootIds?: number[]) => {
-    const s = await apiStartScan(rootIds);
+  const startScan = useCallback(async (locations?: Location[]) => {
+    const s = await apiStartScan(locations);
     setScan(s);
   }, []);
   const startApply = useCallback(async () => {

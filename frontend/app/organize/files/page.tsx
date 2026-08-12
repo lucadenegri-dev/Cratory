@@ -2,15 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  listFiles, libraryStats, listSources, libraryFacets, deleteSource,
-  type FileRow, type LibraryStats, type LibraryFacets, type ScanRoot, type FileQuery,
+  listFiles, libraryStats, libraryFacets,
+  type FileRow, type LibraryStats, type LibraryFacets, type Location, type FileQuery,
 } from "@/lib/organize/api";
 import { useJobs } from "@/components/organize/jobs-provider";
 import { PageLayout } from "@/components/organize/page-layout";
 import { FilesTable } from "@/components/organize/files-table";
 import { FileEditPanel } from "@/components/organize/file-edit-panel";
-import { SourceMenu } from "@/components/organize/source-menu";
-import { Alert, Button, EmptyState, Input, Loading, Spinner } from "@/components/organize/ui";
+import { Alert, Button, EmptyState, Input, Loading, Select, Spinner } from "@/components/organize/ui";
 import { useT } from "@/lib/organize/i18n";
 
 const LIMIT = 500;
@@ -51,10 +50,11 @@ export default function FilesPage() {
   const [rows, setRows] = useState<FileRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [stats, setStats] = useState<LibraryStats | null>(null);
-  const [roots, setRoots] = useState<ScanRoot[]>([]);
   const [offline, setOffline] = useState(false);
 
-  const [rootId, setRootId] = useState<string>("");
+  // F3b: non più un elenco di sorgenti da amministrare, solo un filtro sulle
+  // due location fisse (derivate da Settings: LIBRARY_ROOT e SLSKD_DOWNLOAD_DIR).
+  const [location, setLocation] = useState<Location | "">("");
   const [onlyIssues, setOnlyIssues] = useState(false);
   const [sort, setSort] = useState<NonNullable<FileQuery["sort"]>>("path");
   const [dir, setDir] = useState<NonNullable<FileQuery["dir"]>>("asc");
@@ -65,15 +65,9 @@ export default function FilesPage() {
   });
   const setTagField = (k: string, v: string) => setTag((prev) => ({ ...prev, [k]: v }));
 
-  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [editing, setEditing] = useState<FileRow | null>(null);
 
-  const loadRoots = useCallback(() => {
-    listSources().then(setRoots).catch(() => {});
-  }, []);
-
-  const selectedRoot = rootId ? roots.find((r) => r.id === Number(rootId)) ?? null : null;
   const running = scan.status === "running";
 
   // click su una colonna: se già attiva inverte la direzione, altrimenti ordina asc
@@ -85,35 +79,10 @@ export default function FilesPage() {
   const onScan = async () => {
     setActionError(null);
     try {
-      await startScan(rootId ? [Number(rootId)] : undefined);
+      await startScan(location ? [location] : undefined);
       refresh();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : t.sources.scanStartFailed);
-    }
-  };
-  const onScanRoot = async (id: number) => {
-    setActionError(null);
-    try {
-      await startScan([id]);
-      refresh();
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : t.sources.scanStartFailed);
-    }
-  };
-  const onDeleteRoot = async (id: number) => {
-    if (deletingId !== null) return;
-    setActionError(null);
-    setDeletingId(id);
-    try {
-      await deleteSource(id);
-      // se la sorgente eliminata era quella filtrata, azzera il filtro:
-      // altrimenti la query resterebbe legata a un root_id fantasma
-      if (rootId && Number(rootId) === id) setRootId("");
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : t.sources.rootRemoveFailed);
-    } finally {
-      setDeletingId(null);
-      loadRoots();
+      setActionError(e instanceof Error ? e.message : t.files.scanStartFailed);
     }
   };
 
@@ -124,7 +93,7 @@ export default function FilesPage() {
 
   const load = useCallback(() => {
     const query: FileQuery = {
-      root_id: rootId ? Number(rootId) : undefined,
+      location: location || undefined,
       has_issues: onlyIssues ? true : undefined,
       sort,
       dir,
@@ -142,9 +111,8 @@ export default function FilesPage() {
       .catch(() => setOffline(true))
       .finally(() => setLoaded(true));
     libraryStats().then(setStats).catch(() => setStats(null));
-  }, [rootId, onlyIssues, sort, dir, q, tag]);
+  }, [location, onlyIssues, sort, dir, q, tag]);
 
-  useEffect(() => { loadRoots(); }, [loadRoots]);
   useEffect(() => { libraryFacets().then(setFacets).catch(() => {}); }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -158,7 +126,7 @@ export default function FilesPage() {
       marginaliaTitle={t.files.library}
       marginalia={<Marginalia stats={stats} />}
       guide={<>
-        <p>{t.sources.guideFolders}</p>
+        <p>{t.files.guide1}</p>
         <p>{t.files.guide2}</p>
         <p>{t.files.guide3}</p>
       </>}
@@ -168,33 +136,33 @@ export default function FilesPage() {
         {actionError && <Alert>{actionError}</Alert>}
 
         <div className="flex flex-wrap items-center gap-2">
-          <SourceMenu
-            roots={roots}
-            selectedId={rootId ? Number(rootId) : null}
-            onSelect={(id) => setRootId(id === null ? "" : String(id))}
-            onScanRoot={onScanRoot}
-            onDelete={onDeleteRoot}
-            onAdded={loadRoots}
-            deletingId={deletingId}
-          />
-          <Button onClick={onScan} disabled={running || roots.length === 0}>
+          <Select
+            value={location}
+            onChange={(e) => setLocation(e.target.value as Location | "")}
+            className="h-8 w-36 text-[11px]"
+          >
+            <option value="">{t.common.all}</option>
+            <option value="inbox">{t.files.inbox}</option>
+            <option value="library">{t.files.library}</option>
+          </Select>
+          <Button onClick={onScan} disabled={running || (stats != null && stats.sources === 0)}>
             {running && <Spinner />}
             {running
-              ? t.sources.scanning
-              : selectedRoot
-                ? t.files.scanOne(selectedRoot.label || selectedRoot.path)
+              ? t.files.scanning
+              : location
+                ? t.files.scanOne(location === "inbox" ? t.files.inbox : t.files.library)
                 : t.files.scanAll}
           </Button>
         </div>
 
         {scan.result && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 border border-border px-3 py-2 text-[11px]">
-            <ScanStat k={t.sources.statFound} v={scan.result.found} />
-            <ScanStat k={t.sources.statNew} v={`+${scan.result.inserted}`} />
-            <ScanStat k={t.sources.statUpdated} v={scan.result.updated} />
-            <ScanStat k={t.sources.statMoved} v={scan.result.moved} />
-            <ScanStat k={t.sources.statMissing} v={scan.result.missing} />
-            <ScanStat k={t.sources.statErrors} v={scan.result.errors} danger={scan.result.errors > 0} />
+            <ScanStat k={t.files.statFound} v={scan.result.found} />
+            <ScanStat k={t.files.statNew} v={`+${scan.result.inserted}`} />
+            <ScanStat k={t.files.statUpdated} v={scan.result.updated} />
+            <ScanStat k={t.files.statMoved} v={scan.result.moved} />
+            <ScanStat k={t.files.statMissing} v={scan.result.missing} />
+            <ScanStat k={t.files.statErrors} v={scan.result.errors} danger={scan.result.errors > 0} />
           </div>
         )}
 

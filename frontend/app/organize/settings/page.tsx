@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  getSettings, updateSettings, setRootTarget, runFingerprint, listProviders,
-  type Settings, type RootTarget, type FingerprintResult, type ProviderInfo,
+  getSettings, updateSettings, runFingerprint, listProviders,
+  type Settings, type FingerprintResult, type ProviderInfo,
 } from "@/lib/organize/api";
 import { PageLayout } from "@/components/organize/page-layout";
-import { Alert, Button, Loading, Spinner } from "@/components/organize/ui";
-import { PathPickerButton, usePickerAvailability } from "@/components/organize/path-picker-button";
+import { Alert, Button, Loading } from "@/components/organize/ui";
 import { useI18n, useT } from "@/lib/organize/i18n";
 
 // Valori d'esempio per l'anteprima client-side (approssimata: la resa reale con
@@ -21,15 +20,16 @@ function preview(tpl: string): string {
   return tpl.replace(/\{(\w+)\}/g, (_, k) => SAMPLE[k] ?? `{${k}}`);
 }
 
-// Percorso di destinazione d'esempio combinando target radice + template
-// cartelle + template nome, con i tag SAMPLE. Serve a mostrare "dove finisce"
-// davvero un file (anteprima approssimata; la resa reale è lato planner).
+// Percorso di destinazione d'esempio combinando template cartelle + template
+// nome, con i tag SAMPLE. Serve a mostrare "dove finisce" davvero un file
+// (anteprima approssimata; la resa reale è lato planner). F3b: la destinazione
+// non è più per-radice — ogni Apply sposta dentro la Library (LIBRARY_ROOT,
+// configurata in Impostazioni), quindi la base dell'anteprima è fissa.
 const SAMPLE_SOURCE = "…/Downloads/ANNA - Hidden Beauties.wav";
-function renderDest(targetRoot: string, folder: string, naming: string, sameFolderLabel: string): string {
-  const base = targetRoot.trim() || sameFolderLabel;
+function renderDest(folder: string, naming: string, libraryLabel: string): string {
   const folderPart = folder.trim() ? `${preview(folder)}/` : "";
   const namePart = preview(naming) || "{artist} - {title}";
-  return `${base}/${folderPart}${namePart}.flac`;
+  return `${libraryLabel}/${folderPart}${namePart}.flac`;
 }
 
 export default function SettingsPage() {
@@ -61,11 +61,6 @@ export default function SettingsPage() {
     try { setSettings(await updateSettings({ naming_template: naming, folder_template: folder })); }
     catch (e) { setError(e instanceof Error ? e.message : t.common.error); }
   };
-  const saveTarget = async (rootId: number, target: string) => {
-    setError(null);
-    try { setSettings(await setRootTarget(rootId, target.trim() || null)); }
-    catch (e) { setError(e instanceof Error ? e.message : t.common.error); }
-  };
   const onIdentify = async () => {
     setError(null);
     setFpBusy(true);
@@ -79,7 +74,7 @@ export default function SettingsPage() {
       title="Settings"
       guide={<>
         <p>{t.settings.guideL1}</p>
-        <p><b className="text-fg">{t.settings.guideTemplate}</b>{t.settings.guideL2mid}<b className="text-fg">{t.settings.guideDestination}</b>{t.settings.guideL2post}</p>
+        <p><b className="text-fg">{t.settings.guideTemplate}</b>{t.settings.guideL2}</p>
         <p>{t.settings.guideProviderPre}<b className="text-fg">{t.settings.guideProvider}</b>{t.settings.guideProviderPost}</p>
       </>}
     >
@@ -110,7 +105,6 @@ export default function SettingsPage() {
                 <h2 className="text-sm font-medium text-fg-strong">{t.settings.organization}</h2>
                 <p className="mt-1 text-xs text-faint">
                   {t.settings.orgIntroA}
-                  <b className="text-muted">{t.settings.orgWhere}</b>{t.settings.orgIntroB}
                   <b className="text-muted">{t.settings.orgSubfolders}</b>{t.settings.orgIntroC}
                   <b className="text-muted">{t.settings.orgName}</b>{t.settings.orgIntroD}
                 </p>
@@ -135,24 +129,14 @@ export default function SettingsPage() {
                 <div className="overflow-x-auto whitespace-nowrap font-mono text-[11px] leading-relaxed">
                   <div className="text-faint">{SAMPLE_SOURCE}</div>
                   <div className="text-muted">↓</div>
-                  <div className="text-ok">{renderDest(settings.roots[0]?.target_root ?? "", folder, naming, t.settings.sameFolder)}</div>
+                  <div className="text-ok">{renderDest(folder, naming, t.files.library)}</div>
                 </div>
                 <p className="mt-1.5 text-[10px] text-faint">{t.settings.previewHint}</p>
               </div>
 
               <Button variant="outline" size="sm" className="self-start" onClick={saveTemplates}>{t.settings.saveTemplates}</Button>
 
-              <div>
-                <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">{t.settings.whereToOrganize}</div>
-                <p className="mb-3 text-xs text-faint">
-                  {t.settings.rootExplainA}<b className="text-muted">{t.settings.rootExplainRoot}</b>{t.settings.rootExplainB}<b className="text-muted">{t.settings.rootExplainSources}</b>{t.settings.rootExplainC}<b className="text-muted">{t.settings.rootExplainDest}</b>{t.settings.rootExplainD}<b className="text-muted">{t.settings.rootExplainEmpty}</b>{t.settings.rootExplainE}
-                </p>
-                <div className="flex flex-col gap-3">
-                  {settings.roots.map((r) => (
-                    <RootRow key={r.id} root={r} folder={folder} naming={naming} onSave={saveTarget} />
-                  ))}
-                </div>
-              </div>
+              <p className="text-xs text-faint">{t.settings.foldersNote}</p>
             </section>
 
             <ProviderList
@@ -221,57 +205,5 @@ function ProviderList({ providers, fpResult, fpBusy, onIdentify }: {
         ))}
       </div>
     </section>
-  );
-}
-
-function RootRow({ root, folder, naming, onSave }: {
-  root: RootTarget;
-  folder: string;
-  naming: string;
-  onSave: (rootId: number, target: string) => Promise<void>;
-}) {
-  const t = useT();
-  const [savedTargetRoot, setSavedTargetRoot] = useState(root.target_root);
-  const [target, setTarget] = useState(root.target_root ?? "");
-  const [busy, setBusy] = useState(false);
-  const pickerOk = usePickerAvailability();
-  const [pickError, setPickError] = useState<string | null>(null);
-  if (savedTargetRoot !== root.target_root) {
-    setSavedTargetRoot(root.target_root);
-    setTarget(root.target_root ?? "");
-  }
-  const save = async () => { setBusy(true); try { await onSave(root.id, target); } finally { setBusy(false); } };
-  const moves = target.trim().length > 0;
-  return (
-    <div className="border border-border bg-surface p-3">
-      <div className="flex flex-col gap-1">
-        <span className="text-[9px] font-medium uppercase tracking-wider text-muted">{t.settings.rowSource}</span>
-        <div className="truncate font-mono text-xs text-fg-strong" title={root.path}>{root.path}</div>
-        {root.label && <div className="text-[10px] text-muted">{root.label}</div>}
-      </div>
-
-      <div className="mt-2.5 flex flex-col gap-1">
-        <span className="text-[9px] font-medium uppercase tracking-wider text-muted">{t.settings.rowDestination}</span>
-        <div className="flex items-center gap-2">
-          <input
-            className="w-full max-w-md border border-border bg-bg px-2 py-1 font-mono text-[11px] text-fg placeholder:text-faint focus:border-border-strong focus:outline-none"
-            value={target} onChange={(e) => setTarget(e.target.value)}
-            placeholder={t.settings.targetPlaceholder}
-          />
-          {pickerOk && (
-            <PathPickerButton kind="folder" start={target} prompt={t.settings.rowDestination}
-              onPick={(p) => { setPickError(null); setTarget(p); }}
-              onError={setPickError} />
-          )}
-          <Button variant="outline" size="sm" disabled={busy} onClick={save}>{busy ? <Spinner /> : t.settings.save}</Button>
-        </div>
-        {pickError && <p className="mt-1 text-xs text-danger">{pickError}</p>}
-      </div>
-
-      <div className="mt-2 overflow-x-auto whitespace-nowrap text-[10px] text-faint">
-        {moves ? t.settings.fileBecomes : t.settings.exampleInPlace}{" "}
-        <span className="font-mono text-ok">{renderDest(target, folder, naming, t.settings.sameFolder)}</span>
-      </div>
-    </div>
   );
 }

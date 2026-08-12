@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  listIssues, listSources, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, genreReviewPreview,
-  providerSuggest, acceptStrongOverrides, detectRatings, getSettings,
-  type Issue, type ScanRoot,
+  listIssues, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, genreReviewPreview,
+  providerSuggest, acceptStrongOverrides, detectRatings,
+  type Issue, type Location,
 } from "@/lib/organize/api";
 import { useJobs } from "@/components/organize/jobs-provider";
 import { PageLayout } from "@/components/organize/page-layout";
@@ -19,11 +19,6 @@ export default function IssuesPage() {
   const { scan, rescan, startRescan, integrity, startIntegrity, genreReviewJob, startGenreReview } = useJobs();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [roots, setRoots] = useState<ScanRoot[]>([]);
-  // Cartella da cui aprire il picker nativo: la libreria organizzata (target_root),
-  // non la radice di scansione — i campi che il picker alimenta filtrano un
-  // percorso che, dopo l'apply, vive sotto la libreria (es. .../Library/Techno).
-  const [libraryRoot, setLibraryRoot] = useState<string | undefined>(undefined);
   const pickerOk = usePickerAvailability();
   const [offline, setOffline] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -66,7 +61,7 @@ export default function IssuesPage() {
   const [type, setType] = useState("");
   const [field, setField] = useState("");
   const [status, setStatus] = useState("open");
-  const [rootId, setRootId] = useState("");
+  const [location, setLocation] = useState<Location | "">("");
   const [search, setSearch] = useState("");
   const [onlyNew, setOnlyNew] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupBy>("type");
@@ -79,12 +74,6 @@ export default function IssuesPage() {
       .finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { listSources().then(setRoots).catch(() => {}); }, []);
-  useEffect(() => {
-    getSettings()
-      .then((s) => setLibraryRoot(s.roots.find((r) => r.target_root)?.target_root ?? undefined))
-      .catch(() => {});
-  }, []);
   useEffect(() => { if (scan.status === "done") load(); }, [scan.status, load]);
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -333,7 +322,7 @@ export default function IssuesPage() {
     (!type || i.type === type) &&
     (!field || i.field === field) &&
     (!status || i.status === status) &&
-    (!rootId || i.root_id === Number(rootId)) &&
+    (!location || i.location === location) &&
     (!onlyNew || i.is_new) &&
     (!needle ||
       (i.artist || "").toLowerCase().includes(needle) ||
@@ -424,9 +413,10 @@ export default function IssuesPage() {
             <option value="dismissed">{t.issues.statusDismissed}</option>
             <option value="">{t.issues.statusAll}</option>
           </Select>
-          <Select value={rootId} onChange={(e) => setRootId(e.target.value)} className="h-8 text-xs">
-            <option value="">{t.issues.allRoots}</option>
-            {roots.map((r) => <option key={r.id} value={r.id}>{r.label || r.path}</option>)}
+          <Select value={location} onChange={(e) => setLocation(e.target.value as Location | "")} className="h-8 text-xs">
+            <option value="">{t.issues.allLocations}</option>
+            <option value="inbox">{t.files.inbox}</option>
+            <option value="library">{t.files.library}</option>
           </Select>
           <Input
             value={search} onChange={(e) => setSearch(e.target.value)}
@@ -487,7 +477,7 @@ export default function IssuesPage() {
                       placeholder={t.issues.folderPlaceholder} value={rescanFolder}
                       onChange={(e) => setRescanFolder(e.target.value)} />
                     {pickerOk && (
-                      <PathPickerButton kind="folder" start={rescanFolder || libraryRoot} prompt={t.issues.forceLookupToggle}
+                      <PathPickerButton kind="folder" start={rescanFolder} prompt={t.issues.forceLookupToggle}
                         onPick={(p) => { setActionError(null); setRescanFolder(p); }} onError={setActionError} />
                     )}
                   </div>
@@ -572,7 +562,7 @@ export default function IssuesPage() {
                 className="h-8 text-xs"
               />
               {pickerOk && (
-                <PathPickerButton kind="folder" start={genreFolder || libraryRoot} prompt={t.issues.genreReviewBtn}
+                <PathPickerButton kind="folder" start={genreFolder} prompt={t.issues.genreReviewBtn}
                   onPick={(p) => { setActionError(null); setGenreFolder(p); }} onError={setActionError} />
               )}
             </div>
