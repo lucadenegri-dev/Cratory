@@ -1,5 +1,7 @@
 """Uno scan solo produce l'indice dei file E le tracce."""
 
+import shutil
+
 from sqlalchemy import select
 
 from app.models import Track
@@ -149,3 +151,80 @@ def test_file_passato_in_archivio_e_scartato_non_cancellato(db, fake_audio, monk
     assert t.archived is True
     assert summary.linking["archived"] == 1
     assert summary.linking["orphans_removed"] == 0
+
+
+def _due_radici(monkeypatch, lib, inbox):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "library_root", str(lib))
+    monkeypatch.setattr(settings, "slskd_download_dir", str(inbox))
+    monkeypatch.setattr(settings, "archive_root", "")
+
+
+def test_radice_smontata_non_cancella_le_tracce(db, fake_audio, monkeypatch):
+    """Anti-unmount: la fase 2 deve VEDERE il `missing` scritto dalla fase 1.
+
+    `SessionLocal` è `autoflush=False` e la SELECT di `collega_tracce` filtra
+    sul DB, non sulla Session: senza un flush esplicito dopo `_reconcile` le
+    righe di una radice smontata risultano ancora `present`, `scanned` non è
+    zero, la guardia anti-unmount di `riconcilia_possessi` non scatta e ogni
+    possesso viene classificato perso — le tracce non referenziate finiscono
+    cancellate. Innesco realistico: disco esterno non montato al boot, più
+    l'avvio automatico dello scan nel lifespan.
+    """
+    make, root = fake_audio
+    lib = root / "lib"
+    _due_radici(monkeypatch, lib, root / "inbox")
+    make("lib/a.mp3", digest="H1", artist="A", title="A")
+
+    percorse = list(radici(db).values())
+    scan(db, percorse)
+    db.commit()
+    assert db.scalar(select(Track).where(Track.audio_hash == "H1")) is not None
+
+    shutil.rmtree(lib)  # disco esterno non montato
+
+    summary = scan(db, percorse)
+    db.commit()
+
+    assert db.scalar(select(Track).where(Track.audio_hash == "H1")) is not None, (
+        "traccia CANCELLATA da uno scan su radice smontata"
+    )
+    assert summary.linking["orphans_removed"] == 0
+    assert summary.linking["scanned"] == 0, "la fase 2 legge lo stato PRIMA di _reconcile"
+
+
+def test_file_spostato_in_libreria_riceve_la_traccia_nella_stessa_corsa(
+    db, fake_audio, monkeypatch
+):
+    """Il percorso più battuto: l'Apply sposta un file da inbox a libreria e il
+    frontend lancia subito uno scan.
+
+    `_reconcile` fonde la riga e le riscrive `path` e `location='library'` in
+    memoria; senza flush la SELECT della fase 2 filtra ancora sulla `location`
+    vecchia e la riga è invisibile — il file organizzato resta senza Track fino
+    alla scansione successiva, che l'utente non ha motivo di lanciare.
+    """
+    make, root = fake_audio
+    lib, inbox = root / "lib", root / "inbox"
+    _due_radici(monkeypatch, lib, inbox)
+    sorgente = make("inbox/a.mp3", digest="H1", artist="A", title="A")
+    # Registra hash e tag anche per il path di ARRIVO (la fixture li indicizza
+    # per path): il file ci arriverà con l'Apply, non deve esistere adesso.
+    destinazione = make("lib/a.mp3", digest="H1", artist="A", title="A")
+    destinazione.unlink()
+
+    percorse = list(radici(db).values())
+    primo = scan(db, percorse)
+    db.commit()
+    assert primo.linking["created"] == 0  # un file in inbox non è un possesso
+
+    shutil.move(str(sorgente), str(destinazione))  # l'Apply
+
+    summary = scan(db, percorse)
+    db.commit()
+
+    assert summary.moved == 1
+    assert summary.linking["scanned"] == 1, "la riga fusa è invisibile alla fase 2"
+    assert summary.linking["created"] == 1
+    riga = db.scalar(select(AudioFile))
+    assert riga.location == "library" and riga.track_id is not None

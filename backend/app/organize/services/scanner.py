@@ -221,6 +221,19 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
             on_progress(index + 1, summary.found, "scanning")
     db.flush()  # assegna gli id ai nuovi insert
     _reconcile(db, seen_by_root, id_per_location, new_inserts, summary)
+    # `_reconcile` scrive status/path/location/root_id SOLO in memoria e
+    # `SessionLocal` è `autoflush=False` (app/db.py): la SELECT della fase 2
+    # (`collega_tracce`, WHERE location='library' AND status='present') valuta
+    # la clausola contro il DATABASE, quindi senza questo flush leggerebbe lo
+    # stato PRECEDENTE alla riconciliazione. Due conseguenze, entrambe con
+    # perdita di dati: le righe di una radice smontata risulterebbero ancora
+    # `present` (l'anti-unmount di `riconcilia_possessi` non scatta e le tracce
+    # non referenziate vengono cancellate), e la riga fusa da un Apply
+    # risulterebbe ancora in `location='inbox'` (il file organizzato resta
+    # senza Track fino alla scansione successiva). Prima di F4 il problema non
+    # poteva esistere: la fase 2 girava in un job separato, con la propria
+    # sessione, su dati già committati.
+    db.flush()
 
     # Fase 2: le tracce si agganciano ai file appena indicizzati. Una camminata
     # sola sul disco (D5 della spec): prima era library_index a ripercorrerlo.
