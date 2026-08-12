@@ -56,6 +56,16 @@ class Track(Base):
     # path+mtime+size invariati => niente ri-hash).
     local_mtime: Mapped[float | None] = mapped_column(Float)
     local_size: Mapped[int | None] = mapped_column(Integer)
+    # File rappresentante fra quelli agganciati a questa traccia (Track 1─N
+    # AudioFile). I local_* qui sopra restano la cache derivata, interrogata
+    # ovunque nel codice: questa colonna dice DA QUALE file quella cache viene.
+    # Nessuna relationship da questo lato — la relazione è dichiarata su
+    # AudioFile.track con backref("files"), così il modello core non deve
+    # importare app.organize.
+    primary_file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("audio_file.id", use_alter=True, name="fk_tracks_primary_file"),
+        index=True,
+    )
     # Scartata: il file e' finito nell'archivio (PASSED in DJPlayer). Esclusa da
     # wishlist/discovery/download; il possesso in Libreria la riabilita.
     archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)

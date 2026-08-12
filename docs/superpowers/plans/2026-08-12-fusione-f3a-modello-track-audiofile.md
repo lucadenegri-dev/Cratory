@@ -496,11 +496,18 @@ In `backend/app/models.py`, dentro `class Track`, subito dopo il blocco dei camp
     # AudioFile.track con backref("files"), così il modello core non deve
     # importare app.organize.
     primary_file_id: Mapped[int | None] = mapped_column(
-        ForeignKey("audio_file.id"), index=True
+        ForeignKey("audio_file.id", use_alter=True, name="fk_tracks_primary_file"),
+        index=True,
     )
 ```
 
 `ForeignKey` è già importato in quel file.
+
+**`use_alter=True` non è decorativo.** Le due FK formano un ciclo — `tracks.primary_file_id → audio_file.id` e `audio_file.track_id → tracks.id` — e SQLAlchemy non riesce a ordinare le tabelle per CREATE/DROP su un backend che non supporta l'ALTER, come SQLite:
+
+> `Can't sort tables for DROP; an unresolvable foreign key dependency exists between tables: audio_file, tracks; and backend does not support ALTER.`
+
+`use_alter=True` marca il ciclo come noto e lo esclude dall'ordinamento. Senza, ogni test che usa la fixture `db` (che fa `create_all`/`drop_all`) va in errore.
 
 - [ ] **Step 4: Aggiungere colonne e relazione ad `AudioFile`**
 
@@ -520,10 +527,18 @@ In `backend/app/organize/models.py`, dentro `class AudioFile`, dopo `root_id`:
 e, accanto alla relationship `root` già presente:
 
 ```python
+    # foreign_keys esplicito: fra audio_file e tracks ci sono DUE percorsi FK
+    # (track_id di qua, primary_file_id di là), e l'ORM da solo non sa quale
+    # regge questa relazione.
     track: Mapped["Track | None"] = relationship(
-        "Track", backref=backref("files", passive_deletes=False),
+        "Track", foreign_keys="AudioFile.track_id",
+        backref=backref("files", passive_deletes=False),
     )
 ```
+
+Senza `foreign_keys` la configurazione dei mapper fallisce con `Could not determine
+join condition ... there are multiple foreign key paths linking the tables`: è la
+seconda faccia dello stesso ciclo che `use_alter` risolve lato DDL.
 
 In testa al file, aggiungere `backref` all'import `sqlalchemy.orm` già presente (che oggi porta `Mapped, mapped_column, relationship`) e importare `Track`:
 

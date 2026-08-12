@@ -5,9 +5,10 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
 
 from app.db import Base
+from app.models import Track  # risolve l'annotazione della relationship AudioFile.track
 
 
 def utcnow() -> datetime:
@@ -34,6 +35,14 @@ class AudioFile(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     root_id: Mapped[int] = mapped_column(ForeignKey("scan_root.id"), index=True)
+    # Traccia di cui questo file è una copia. NULL = file non ancora
+    # riconosciuto (tipicamente l'inbox, dove i file non sono ancora tracce).
+    track_id: Mapped[int | None] = mapped_column(ForeignKey("tracks.id"), index=True)
+    # Collocazione, derivata dal prefisso del path contro le due cartelle di
+    # Settings: "inbox" (SLSKD_DOWNLOAD_DIR) o "library" (LIBRARY_ROOT).
+    # Non esiste un terzo caso: lo scan cammina solo quelle due radici.
+    location: Mapped[str] = mapped_column(String, default="inbox",
+                                          server_default="inbox", index=True)
     path: Mapped[str] = mapped_column(String, index=True)
     ext: Mapped[str] = mapped_column(String)
     bitrate: Mapped[int | None] = mapped_column(Integer)
@@ -66,6 +75,15 @@ class AudioFile(Base):
     last_scanned_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     root: Mapped["ScanRoot"] = relationship(back_populates="files")
+    # La relazione vive qui, non su Track: così app/models.py non deve importare
+    # app.organize. Il backref popola Track.files a runtime.
+    # foreign_keys esplicito: fra audio_file e tracks ci sono DUE percorsi FK
+    # (track_id di qua, primary_file_id di là), e l'ORM da solo non sa quale
+    # regge questa relazione.
+    track: Mapped["Track | None"] = relationship(
+        "Track", foreign_keys="AudioFile.track_id",
+        backref=backref("files", passive_deletes=False),
+    )
 
 
 class Issue(Base):
