@@ -1,5 +1,10 @@
 # Sortory
 
+> **Documento storico, non operativo.** Descrive Sortory quando era
+> un'applicazione autonoma. La fusione F1-F6 l'ha assorbita in Cratory come
+> sezione `/organize`: per la guida corrente vedi `CLAUDE.md` e `docs/` nella
+> radice del repo. Conservato come riferimento sul perché delle scelte.
+
 Personal, local, standalone tool to **organize** music folders on disk and
 prepare them for import into **Rekordbox**: tag/metadata cleanup, enrichment from
 external providers, file renaming and folder structuring, deduplication and

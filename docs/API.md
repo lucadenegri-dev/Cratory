@@ -26,7 +26,7 @@ Single snapshot for the orientation strip in the dashboard. Response `PipelineOu
 library counts (`playlists`, `total_tracks`, `missing_key`, `wishlist`,
 `archived_count`, `with_local_file`, `analyze_pending`, `ready_for_set`), download
 state (`download_active`, `download_pending`) and disk state (`inbox_files` from
-`SLSKD_DOWNLOAD_DIR`, `organizer_url` from `ORGANIZER_URL`). `analyze_pending` counts
+`SLSKD_DOWNLOAD_DIR`). `analyze_pending` counts
 the owned tracks without BPM or without key, i.e. how many remain to "analyze in
 Rekordbox and import" (same number as `GET /api/rekordbox/pending`). `inbox_files` is
 `null` when `SLSKD_DOWNLOAD_DIR` is not configured or does not exist (neutral phase,
@@ -165,7 +165,7 @@ tracks without a local file that are in no other playlist nor in a saved set (tr
 on disk, or present in another playlist/set, stay). Responds `200` with
 `{deleted_tracks}` (how many orphan tracks were removed), `404` if it does not exist.
 `POST /api/playlists/import-manual` creates a playlist from pasted text. None of these
-start any enrichment: the text metadata (title/artist/album/label/genre) is Sortory's
+start any enrichment: the text metadata (title/artist/album/label/genre) is the Organize section's
 job, BPM/key come only from the Rekordbox import.
 `POST /api/playlists/create-from-tracks` (`201`) creates a manual playlist composed of
 tracks already in the library (disk-first), in the given order. Request:
@@ -342,7 +342,7 @@ GET  /api/labels
 library (aggregates with normalized names and merging of variants). Each entry exposes
 `label`, `track_count`, `artist_count`, `artists` (full list, for the by-artist
 filter), `genres` (capped) and the year range. The `label` comes from the file tag
-(read at indexing time, written by Sortory): the old backfill from Spotify has been
+(read at indexing time, written by the Organize section): the old backfill from Spotify has been
 removed.
 
 ## Set Builder and saved sets

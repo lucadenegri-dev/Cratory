@@ -137,7 +137,7 @@ source of truth for ownership) and uses streaming playlists and pasted tracklist
 or manual text/CSV import) as leads. They want to index the owned collection, import
 BPM/key from Rekordbox, build a set, discover missing tracks and identify them in external
 mixes, and acquire their files. Text metadata enrichment (title/artist/album/label/genre)
-and on-disk tagging are Sortory's job, not Cratory's.
+and on-disk tagging are the Organize section's job, not Cratory's.
 
 The job to be done: go from "I have these streaming leads and these files on disk" to "I
 have a ready set with reasoned transitions, the gaps filled, and the files of owned tracks
@@ -153,10 +153,10 @@ record label (deterministic per-label aggregates, with the label read from the f
 and mix tracklist identification.
 
 The flow (orientation strip on the dashboard, five stages): **Discover** (playlists/leads) →
-**Acquire** (Soulseek/slskd) → **Organize⤴** (text enrichment, tagging, organization: in
-Sortory) → **Analyze⤴** (analysis in Rekordbox, BPM/key import into Cratory) → **Play** (Set
-Builder). The two ⤴ stages leave Cratory toward Rekordbox/Sortory and return with an
-import. Library indexing (scan `LIBRARY_ROOT`, the disk is the library) is not a strip
+**Acquire** (Soulseek/slskd) → **Organize** (text enrichment, tagging, organization: the
+`/organize` section) → **Analyze⤴** (analysis in Rekordbox, BPM/key import) → **Play** (Set
+Builder). Only Analyze still carries the ⤴: it leaves the app toward Rekordbox and returns
+with an import. Organize used to carry it too, when it was a separate app. Library indexing (scan `LIBRARY_ROOT`, the disk is the library) is not a strip
 stage: launch it from the "Index" button in the left nav (or it starts automatically at
 startup).
 

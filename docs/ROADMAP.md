@@ -20,7 +20,7 @@ explicit migration.
 
 Core streaming-first is complete; **disk-first is complete** (the library is the disk,
 streaming playlists = leads); the **disk-first + Rekordbox pivot is complete** (the internal
-enrichment engine and AcoustID fingerprinting were retired toward Sortory, BPM/key now come
+enrichment engine and AcoustID fingerprinting were retired toward Organize, BPM/key now come
 only from a Rekordbox XML import, `energy` is derived deterministically). **The Analysis
 page is complete**: BPM/key now have two deterministic sources — Rekordbox import
 (primary, source-aware overwrite) and in-app analysis via Essentia (alternative,
@@ -204,15 +204,15 @@ which had drifted). **Closed since the audit** (removed from the backlog): A1 (s
 M3U/CSV/markdown + real Blob download), A3 (the 7 Set Builder strategies are now genuinely
 distinct), A8 (needs_review path persisted + retry/review flow), B5 (path to the editable set
 `/sets/[id]`), the dig's per-release tracklists (`get_release_detail`), B16 (label backfill
-removed — Sortory's job), E12-TLS (`tls12_context` is opt-in/unused, not forced).
+removed — the Organize section's job), E12-TLS (`tls12_context` is opt-in/unused, not forced).
 
 **Fixed on branch `fix/quick-wins-correttezza-discovery`** (2026-07-12): E8 (`~` expanded in
 config paths), E9 (`ci_equals` — exact case-insensitive match with %/_ escaping, wired into
 manual/playlist/index matching), A11 (dedup by artist+title+duration in `import_playlist`, so
 manual-then-Spotify no longer duplicates), A16 (expand dedups owned variants via the dig's
 `_dedup_key`), A27 (Labels→Discovery "dig this label" link). A15 was dropped after review: the
-label returns via the own→Sortory→index loop, and writing it in Cratory would fight Sortory's
-ownership of that field.
+label returns via the own→Organize→index loop, and writing it elsewhere would fight the
+Organize section's ownership of that field.
 
 **Fixed on master (incremental, post-triage):** A25 (playlist sync now refreshes name/cover/owner
 from the source — Spotify via `get_playlist_meta`, SoundCloud via the fetched `title`/thumbnails;
@@ -298,7 +298,7 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
   never fire (by design).
 - **Shazam** — (nothing open).
 - **Soulseek/download** — **DECIDED (2026-07-12): A7 confirmed as-is** — the manual grab leaves
-  the file in the inbox without marking ownership: cataloging is Sortory's job, ownership comes
+  the file in the inbox without marking ownership: cataloging is the Organize section's job, ownership comes
   from indexing. ⚠️ B11 issue counters now navigable, but grab has no per-candidate state and
   LinkLocalFileModal search does not auto-start (minor, not planned).
 - **Streaming import/sync (Spotify + SoundCloud)** — (nothing open).
@@ -353,12 +353,12 @@ Legend: **OPEN** = to do; **⚠️** = partial (core done, residual noted). Orde
 - The Shazam module does not populate the library directly: it produces a separate corpus (it
   remains the project's only audio fingerprinting — it identifies external mixes, not the
   library).
-- Text metadata enrichment (title/artist/album/label/genre) and on-disk tagging are Sortory's
+- Text metadata enrichment (title/artist/album/label/genre) and on-disk tagging are the Organize section's
   competence, not Cratory's (2026-07 pivot).
 - SQLite stays sufficient for local single-user use.
 - Disk-first: the library is the disk (`LIBRARY_ROOT`), not the streaming playlists (which stay
   leads). Cratory reads the files to index them but never writes them: tagging and organization
-  stay Sortory's competence.
+  stay the Organize section's competence.
 - Owned files are now playable, read-only, for quick audition (`GET /api/tracks/{id}/audio`,
   single shared docked player, one track at a time): "Cratory does not play audio" no longer
   holds in absolute terms. Still true: no transcoding, no queue/waveform/cue (Set

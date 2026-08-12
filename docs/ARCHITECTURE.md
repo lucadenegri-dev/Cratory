@@ -20,8 +20,8 @@ discovery and a corpus of identified mixes.
 - **`energy` is always derived** (deterministic, from BPM+genre or computed from the
   audio file): it is not a provider datum nor a manually editable field.
 - **Cratory reads audio files but never writes them.** Tags, renaming and on-disk
-  organization remain Sortory's job; the textual enrichment of metadata
-  (title/artist/album/label/genre) is also Sortory's.
+  organization remain the Organize section's job; the textual enrichment of metadata
+  (title/artist/album/label/genre) belongs to it too.
 - Spotify provides no mixing features: it serves identity, metadata, import/export.
 - The remaining external providers (Discogs, Bandcamp, Spotify) serve **Discovery
   only**, for taste and crate-digging, not the feature pipeline.
@@ -165,9 +165,9 @@ as acquisition.
 The library is the disk: a track's ownership (`has_local_file`) is not a
 side-effect of Soulseek acquisition alone, but the state of a canonical
 folder that Cratory actively indexes. **Cratory reads audio files but never
-mutates them** — tags, renaming and organization remain Sortory's exclusive job.
+mutates them** — tags, renaming and organization remain the Organize section's exclusive job.
 
-- **`LIBRARY_ROOT`**: the organized folder (managed by Sortory) that Cratory
+- **`LIBRARY_ROOT`**: the organized folder (managed by the Organize section) that Cratory
   indexes from Settings -> "Library (disk)". Empty = indexing disabled.
   Indexing also starts automatically at every app startup (background job,
   if `LIBRARY_ROOT` is configured), as well as on-demand.
@@ -205,7 +205,7 @@ mutates them** — tags, renaming and organization remain Sortory's exclusive jo
   otherwise it stays as a lead without a file (`lost` counter). Anti-unmount guard: a
   zero-file scan (empty root, wrong path, unmounted disk) does not touch existing
   ownerships. `duplicates` counts files with the same hash seen in the same run (the
-  first wins; on-disk dedup remains Sortory's job). Exposed via
+  first wins; on-disk dedup remains the Organize section's job). Exposed via
   `POST /api/library/index` (202, async job) and `GET /api/library/index/status`;
   responds `409` if `LIBRARY_ROOT` is not configured.
 - **Cover art:** the owned track's artwork is served on-demand from the file
@@ -524,7 +524,7 @@ droppable on SQLite due to a baked-in FK on `playlist_id` — but are dead and e
 
 The remaining external providers (Discogs, Bandcamp, Spotify) serve **Discovery
 only**: none of them provides BPM/key/mood/energy anymore. The textual
-enrichment of metadata (title/artist/album/label/genre) is Sortory's
+enrichment of metadata (title/artist/album/label/genre) is the Organize section's
 job, not Cratory's. Spotify `/recommendations` must not be used: for
 new apps or in development mode it can return 403/404.
 

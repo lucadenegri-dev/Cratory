@@ -76,10 +76,9 @@ Not Python/Node packages, but required for the corresponding feature to work:
 | iTunes Search API | Discovery preview (30s audio clip for dig leads without their own stream) | Optional (Discovery), public — no auth/token |
 | slskd daemon | File acquisition via Soulseek | Optional, runs separately |
 | Rekordbox | BPM/Camelot key via `collection.xml` export | Required for BPM/key (no package dep — just a file upload) |
-| Sortory (sibling app) | Text metadata enrichment + on-disk tagging | Optional, separate app |
 
 None of Discogs/Spotify feed BPM/key/genre — those providers serve **Discovery
-only**. BPM/key come from Rekordbox; text metadata/tagging come from Sortory.
+only**. BPM/key come from Rekordbox; text metadata/tagging come from the Organize section.
 
 The Discovery preview's fallback embeds the YouTube video Discogs already associates
 with a release (`GET https://itunes.apple.com/search` is tried first, no key required).
@@ -103,8 +102,25 @@ is marked `@pytest.mark.network` and excluded from the default suite (`pytest.in
 response, and is the diagnostic to run by hand when the Bandcamp dig stops returning
 leads.
 
+## Organize (the ex-Sortory section)
+
+The fusion (F1-F6) brought in two Python dependencies that serve **only** the
+`/organize` section, plus one system binary:
+
+| Dependency | Purpose | Without it |
+|---|---|---|
+| `pyacoustid` | AcoustID acoustic fingerprinting → `AudioFile.mbid` | `/api/organize/fingerprint` reports `configured: false`, the "Identify now" button stays disabled |
+| `Pillow` | Thumbnails of covers (both provider proposals and covers embedded in files) | thumbnails unavailable |
+| `fpcalc` (chromaprint, **system binary**) | required by `pyacoustid`. `brew install chromaprint` | same clean degradation as a missing `ACOUSTID_API_KEY` |
+
+Both keys are optional: `ACOUSTID_API_KEY` and `MUSICBRAINZ_USER_AGENT` in
+`backend/.env`. Without them the providers are simply inactive and the rest of
+the pipeline keeps working.
+
 ## History
 
 `pyacoustid` (and the `fpcalc`/chromaprint system requirement) backed AcoustID
-fingerprinting of the owned library. That feature was **removed in the 2026-07 disk-first
-pivot**; the dead dependency was dropped from `requirements.txt` on 2026-07-11.
+fingerprinting of the owned library. That feature was removed in the 2026-07 disk-first
+pivot and the dead dependency dropped from `requirements.txt` on 2026-07-11 — then
+**both came back with the fusion**, this time serving the Organize section rather than
+the library indexer (see the section above).

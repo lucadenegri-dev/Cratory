@@ -8,8 +8,8 @@ imports Spotify playlists (or pasted tracklists), normalizes and de-duplicates t
 indexes your on-disk library, imports BPM/Camelot key from a Rekordbox collection export,
 derives track energy deterministically, analyzes library gaps, generates explained set
 drafts, and helps you discover music that fits your taste. Text metadata enrichment
-(title/artist/album/label/genre) and disk tagging are handled by the companion app
-Sortory, not by Cratory.
+(title/artist/album/label/genre) and disk tagging are handled by its **Organize**
+section — once a separate app, Sortory, absorbed into Cratory by the F1-F6 fusion.
 
 It is **not a SaaS** — and that is a design choice, not a limitation. Spotify's Web API
 forbids a public multi-tenant Spotify app (development mode caps at 5 users; extended
@@ -22,13 +22,13 @@ downloads audio only temporarily to fingerprint external mixes, and persists onl
 identified tracklist.
 
 **Disk-first:** the library is the disk. Cratory indexes your canonical music
-folder (`LIBRARY_ROOT`), re-links files by audio hash after Sortory
+folder (`LIBRARY_ROOT`), re-links files by audio hash after Organize
 renames/moves them, and builds sets from tracks you actually own. Streaming
 playlists are *leads* — candidates to acquire — not the library. The index
 re-runs automatically on every app startup and scans incrementally; an optional
 archive folder (`ARCHIVE_ROOT`) marks discarded tracks. Cratory only *reads* files
-to index them — it never writes tags or moves anything on disk; that stays the job
-of Sortory.
+to index them — outside Organize it never writes tags nor moves anything on
+disk.
 
 **BPM/key come from Rekordbox, not from providers.** Cratory never estimates or
 invents mixing features: you analyze your library in Rekordbox and export the
@@ -117,8 +117,8 @@ Local URLs: app at `http://localhost:3000`, API docs at `http://localhost:8000/d
 health at `http://localhost:8000/api/health`.
 
 Shortcut: `./start-dev.sh` (macOS/Linux) or `start-dev.bat` (Windows) starts backend +
-frontend, plus a local slskd (`:5030`) and the sibling Sortory app (`:8010`/`:3010`)
-when available.
+frontend, plus a local slskd (`:5030`) when available. There is no second app to
+start: Organize is a section of this one.
 
 ## Configuration
 
@@ -153,7 +153,6 @@ Disk-first library indexing (optional):
 ```text
 LIBRARY_ROOT=
 ARCHIVE_ROOT=
-ORGANIZER_URL=
 ```
 
 Spotify provides track identity, editorial metadata, covers, duration, ISRC, URLs and
@@ -161,13 +160,13 @@ playlists — not reliable mixing BPM/key. `DISCOGS_TOKEN` is optional: Discover
 works without it; the token only raises the rate limit. `SLSKD_URL`/`SLSKD_DOWNLOAD_DIR`
 point to your own running slskd instance; without them, file acquisition stays disabled
 and the rest of the app is unaffected. `LIBRARY_ROOT` points to your canonical, organized
-music folder (the one Sortory manages); leave it empty to keep library indexing
+music folder (the one Organize manages); leave it empty to keep library indexing
 disabled — Settings → "Library (disk)" triggers `POST /api/library/index` once it is
 set (the index also re-runs automatically at every app startup, incremental scan),
 matching files to tracks by audio hash (falling back to legacy digest, ISRC, then
 fuzzy artist+title) and marking them as owned (`has_local_file`). `ARCHIVE_ROOT` is an
 optional discarded-tracks folder (DJPlayer's PASSED bin) recognized alongside the
-library. `ORGANIZER_URL` powers the optional "Open Sortory" link in the dashboard.
+library.
 
 ## Database
 
@@ -187,13 +186,13 @@ The `library` mode clears playlists, tracks and sets while preserving Spotify to
 
 The dashboard opens with a five-stage pipeline strip — **Discover → Acquire →
 Organize⤴ → Analyze⤴ → Play** — that shows where you are and what's next.
-Organize and Analyze hand off to the companion apps (Sortory for tagging, Rekordbox
-for BPM/key analysis) and loop back with an import. Indexing the library (scanning
+Organize is a section of this app; Analyze hands off to Rekordbox for BPM/key
+analysis and loops back with an import. Indexing the library (scanning
 `LIBRARY_ROOT`) runs from the "Index" button in the left nav (or automatically at
 startup), so it isn't a strip stage.
 
 Typical run: start backend + frontend → in Settings, connect Spotify → import a playlist
-or paste a tracklist → run Sortory separately to tag and organize new files onto disk
+or paste a tracklist → use Organize to tag and organize new files onto disk
 → index the library (Settings → "Library (disk)", or let it auto-run at startup) →
 analyze new tracks in Rekordbox and import the collection XML to fill in BPM/key →
 generate a set (deterministic engine, optionally AI-curated) → review transitions, warnings and alternatives →

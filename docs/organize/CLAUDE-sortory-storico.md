@@ -1,5 +1,10 @@
 # CLAUDE.md
 
+> **Documento storico, non operativo.** Descrive Sortory quando era
+> un'applicazione autonoma. La fusione F1-F6 l'ha assorbita in Cratory come
+> sezione `/organize`: per la guida corrente vedi `CLAUDE.md` e `docs/` nella
+> radice del repo. Conservato come riferimento sul perché delle scelte.
+
 Guidance for working in this repository. Read this before making changes.
 
 ## What this is

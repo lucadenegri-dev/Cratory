@@ -664,11 +664,13 @@ describe("RatingDiamond", () => {
 
   it("se la PATCH fallisce lo stato torna indietro", async () => {
     updateTrack.mockRejectedValueOnce(new Error("boom"));
-    render(<RatingDiamond trackId={7} rating={null} />);
+    const { container } = render(<RatingDiamond trackId={7} rating={null} />);
     await userEvent.click(screen.getByRole("button"));
     await userEvent.click(screen.getByTitle("Vota 3 su 3"));
-    // dopo il rollback il rombo torna "non votata" (nessun fill)
     expect(updateTrack).toHaveBeenCalledWith(7, { rating: 3 });
+    // dopo il rollback il rombo torna "non votata": contorno, nessun fill
+    const toggle = container.querySelector('button[aria-label] svg polygon');
+    expect(toggle?.getAttribute("fill")).toBe("none");
   });
 });
 ```

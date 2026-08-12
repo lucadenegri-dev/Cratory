@@ -7,15 +7,16 @@ The single operational guide for the AI working on Cratory.
 **Cratory** is the new name of the app previously called DJ Assistant. It is a personal,
 local/self-hosted, single-user web app to import streaming playlists, build DJ set drafts
 on owned tracks (BPM/key from Rekordbox), analyze library gaps, do discovery, and identify
-mix tracklists. **Metadata enrichment (title/artist/album/label/genre) and tagging are
-Sortory's job.**
+mix tracklists. **Metadata enrichment (title/artist/album/label/genre) and tagging belong to the
+Organize section** (`/organize`, ex Sortory: absorbed into this app by the F1-F6
+fusion), which is the single writer of textual tags.
 
 The project does not act as a DJ deck (no waveform/cue/queue — that stays with the Set
 Builder/Rekordbox) and does not transcode or persist third-party audio. "Does not play
 audio" no longer holds in absolute terms: Cratory now plays its **own owned library**,
 read-only, for quick audition — `GET /api/tracks/{id}/audio` streams a track's local file
 (`has_local_file`) through a single shared docked player, one track at a time, and never
-mutates the file (tags remain Sortory's job). The Shazam module downloads audio only
+mutates the file (tags remain the Organize section's job). The Shazam module downloads audio only
 temporarily for fingerprinting and saves a separate corpus of identified tracklists. An
 explicit exception to "does not keep audio files": persistent acquisition via
 Soulseek/slskd, which links a file to the existing `Track` in the library
@@ -23,7 +24,7 @@ Soulseek/slskd, which links a file to the existing `Track` in the library
 per-track SoundCloud download via yt-dlp from the track detail page, which extracts an
 MP3 into the same shared download folder (`SLSKD_DOWNLOAD_DIR`) and links it to the
 existing `Track` (`has_local_file`/`local_path`/`local_format`/`local_bitrate`); tags
-stay Sortory's job. Eccezione ulteriore, a scope ristretto: il dig di Discovery
+stay the Organize section's job. Eccezione ulteriore, a scope ristretto: il dig di Discovery
 riproduce una **preview effimera di terzi** (clip iTunes 30s, in fallback il video
 YouTube associato alla release da Discogs, oppure — quando il lead viene da Bandcamp —
 lo stream reale per-traccia che Bandcamp restituisce già dentro il risultato del dig,
@@ -42,6 +43,10 @@ Read in this order:
 5. `PROGRESS.md` - chronological diary to resume work.
 6. `docs/DESIGN.md` - product context and the "editorial archive" design system.
 7. `docs/DEPENDENCIES.md` - dependencies and external services reference.
+
+`docs/organize/` keeps Sortory's own documentation from when it was a separate
+app: historical reference, not operational. The fusion that absorbed it is
+specified in `docs/superpowers/specs/2026-08-11-fusione-sortory-cratory-design.md`.
 
 ## Non-negotiable rules
 
@@ -68,7 +73,7 @@ Read in this order:
    inference and creative hypothesis.
 7. **The library is the disk.** Ownership (`has_local_file`) comes from indexing
    `LIBRARY_ROOT` (re-linking by `audio_hash`); streaming playlists are leads. Cratory reads
-   the files but never mutates them: tags are written only by Sortory. Owned files are also
+   the files but never mutates them: tags are written only by the Organize section. Owned files are also
    **playable, read-only** (`GET /api/tracks/{id}/audio`, one track at a time via the shared
    docked player, for quick audition) — playback never touches the file or its tags.
 
@@ -93,9 +98,16 @@ backend/app/
   serializers.py
   integrations/
   core/
+  organize/      the ex-Sortory section, under its own namespace:
+                 models.py (Issue, DupGroup, Plan, PlanOp, UndoJournal),
+                 routers/ (scan, issues, duplicates, plan, apply, history, …),
+                 services/ (scanner, planner, apply, dedup, undo, inspector, …),
+                 integrations/ (tagio, fsops, acoustid, musicbrainz, …).
+                 `AudioFile` lives in the core `models.py`: the library reads it
+                 too. Its HTTP surface is entirely under `/api/organize/*`.
 ```
 
-No enrichment chain: BPM/key from Rekordbox, text metadata from Sortory. The remaining
+No enrichment chain: BPM/key from Rekordbox, text metadata from the Organize section. The remaining
 external providers serve **Discovery only**: Discogs and Bandcamp (dig "Scava", two
 sources behind the `DigSource` protocol), Spotify (resolver).
 
