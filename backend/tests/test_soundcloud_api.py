@@ -36,7 +36,7 @@ def api_db(monkeypatch):
     # legata allo stesso engine del test, altrimenti scriverebbe altrove.
     monkeypatch.setattr(sij, "SessionLocal", sessionmaker(bind=engine, expire_on_commit=False))
     # Niente thread reale nei test: il job gira sincrono, la risposta POST
-    # riflette gia' lo stato finale (mirror di library_index_job/audio_analysis_job).
+    # riflette gia' lo stato finale (mirror di scan_job/audio_analysis_job).
     monkeypatch.setattr(sij, "_spawn", lambda fn: fn())
     try:
         yield db

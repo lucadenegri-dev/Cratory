@@ -20,8 +20,9 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DB}"
 
 from app.db import Base  # noqa: E402
 import app.models  # noqa: E402,F401 — registra tutte le tabelle su Base.metadata prima di create_all
+from app.organize.services import scan_job  # noqa: E402
 from app.services import (  # noqa: E402
-    audio_analysis_job, library_index_job, mix_identify_job, soulseek_download_job,
+    audio_analysis_job, mix_identify_job, soulseek_download_job,
     streaming_import_job,
 )
 
@@ -93,7 +94,7 @@ def _no_real_llm(monkeypatch):
 def _no_real_library_scan(monkeypatch):
     """Un test che istanzia TestClient(app) fa scattare il lifespan di app/main.py
     (ensure_schema +, se LIBRARY_ROOT e' configurato nel .env reale dello
-    sviluppatore, library_index_job.start_job_if_due): senza questo guard un test
+    sviluppatore, scan_job.start_job_if_due): senza questo guard un test
     HTTP-level innescherebbe una scansione VERA della libreria musicale sul disco
     e scriverebbe sul DB reale (data/djassistant.db) invece che sul DB isolato del
     test — lento (minuti su una libreria grande) e non isolato tra i test.
@@ -108,15 +109,16 @@ def _no_real_library_scan(monkeypatch):
     monkeypatch.setattr(settings, "archive_root", "")
 
 
-# I 5 job in background (analisi BPM/key, indicizzazione libreria, download
+# I 5 job in background (analisi BPM/key, scansione+aggancio libreria, download
 # Soulseek, identificazione mix Shazam, import/sync streaming) tengono lo stato
 # in un dict globale di modulo (app locale mono-utente, niente sessione HTTP per
 # il polling). Un test che lascia lo stato a "running" (es. i test della guardia
 # doppio-avvio in test_job_double_start.py) contaminerebbe qualsiasi test
 # successivo che legge job_state() o chiama start_job() aspettandosi lo stato
-# iniziale "idle".
+# iniziale "idle". Da F4 Task 3 la scansione+indicizzazione e' un job solo
+# (scan_job), non piu' due (library_index_job e' assorbito).
 _JOB_STATE_MODULES = [
-    audio_analysis_job, library_index_job, mix_identify_job, soulseek_download_job,
+    audio_analysis_job, scan_job, mix_identify_job, soulseek_download_job,
     streaming_import_job,
 ]
 _PRISTINE_JOB_STATES = [copy.deepcopy(m._state) for m in _JOB_STATE_MODULES]

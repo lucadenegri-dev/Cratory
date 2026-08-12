@@ -165,7 +165,7 @@ def test_archivio_non_matchato_niente_rehash(db, fake_audio, monkeypatch, semina
 def test_auto_index_due_decision():
     """Il gate dell'auto-indicizzazione allo startup: salta se un run è finito da poco."""
     from datetime import datetime, timedelta, timezone
-    from app.services.library_index_job import _auto_index_due
+    from app.organize.services.scan_job import _auto_index_due
 
     now = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
     assert _auto_index_due(None, now) is True                                    # mai indicizzato

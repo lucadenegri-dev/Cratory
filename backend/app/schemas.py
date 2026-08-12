@@ -642,28 +642,6 @@ class EnergyBucket(BaseModel):
     count: int
 
 
-class LibraryIndexJobStatus(BaseModel):
-    """Stato del job di indicizzazione della libreria canonica (disk-first)."""
-
-    status: str
-    processed: int = 0
-    total: int = 0
-    scanned: int = 0
-    matched: int = 0
-    created: int = 0
-    relinked: int = 0
-    duplicates: int = 0
-    unchanged: int = 0
-    archived: int = 0
-    lost: int = 0
-    failed: int = 0
-    errors: list[dict] = []
-    error: str | None = None
-    root: str | None = None
-    started_at: str | None = None
-    finished_at: str | None = None
-
-
 class AnalysisJobStatus(BaseModel):
     """Stato del job di analisi BPM/key in-app (pagina Analisi)."""
 

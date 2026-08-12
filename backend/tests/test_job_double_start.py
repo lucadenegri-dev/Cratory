@@ -100,45 +100,45 @@ def test_soulseek_start_is_noop_at_job_level_when_running(monkeypatch):
     assert result["total"] == 10
 
 
-# --- library index: nessun controllo nel router, guardia dentro start_job -----
+# --- library index (F4 Task 3: alias di scan_job): nessun controllo nel -------
+# --- router, guardia dentro start_job ------------------------------------------
 
 
 def test_library_index_double_start_is_noop_at_job_level(monkeypatch):
-    from app.services import library_index_job as lij
+    from app.organize.services import scan_job
 
-    monkeypatch.setattr(lij, "_spawn",
-                        lambda fn: (_ for _ in ()).throw(AssertionError("non deve rilanciare l'indicizzazione")))
-    lij._state.update(status="running", scanned=5, root="/some/root")
+    monkeypatch.setattr(scan_job.threading, "Thread", _ThreadNotExpected)
+    scan_job._state.update(status="running", processed=5, total=10)
 
-    result = lij.start_job()
+    result = scan_job.start_job()
 
     assert result["status"] == "running"
-    assert result["scanned"] == 5  # stato precedente intatto
-    assert result["root"] == "/some/root"
+    assert result["processed"] == 5  # stato precedente intatto
+    assert result["total"] == 10
 
     # ripristina per non contaminare altri test del modulo
-    lij._state.update(status="idle", scanned=0, root=None)
+    scan_job._state.update(status="idle", processed=0, total=0)
 
 
 def test_library_index_double_start_via_router_is_also_noop(monkeypatch):
-    """Il router /api/library/index non controlla is_running() esplicitamente
-    (a differenza di analysis/downloads): verifichiamo che la richiesta HTTP non
-    esploda e che il job non venga comunque rilanciato mentre uno e' in corso."""
+    """Il router /api/library/index (alias di scan_job da F4 Task 3) non
+    controlla is_running() esplicitamente (a differenza di analysis/downloads):
+    verifichiamo che la richiesta HTTP non esploda e che il job non venga
+    comunque rilanciato mentre uno e' in corso."""
     from app.core.config import settings
-    from app.services import library_index_job as lij
+    from app.organize.services import scan_job
 
     monkeypatch.setattr(settings, "library_root", "/some/root")
-    monkeypatch.setattr(lij, "_spawn",
-                        lambda fn: (_ for _ in ()).throw(AssertionError("non deve rilanciare l'indicizzazione")))
-    lij._state.update(status="running", scanned=7)
+    monkeypatch.setattr(scan_job.threading, "Thread", _ThreadNotExpected)
+    scan_job._state.update(status="running", processed=7, total=10)
 
     r = client.post("/api/library/index")
 
     assert r.status_code == 202
     assert r.json()["status"] == "running"
-    assert r.json()["scanned"] == 7  # non risistemato: nessun nuovo run e' partito
+    assert r.json()["processed"] == 7  # non risistemato: nessun nuovo run e' partito
 
-    lij._state.update(status="idle", scanned=0, root=None)
+    scan_job._state.update(status="idle", processed=0, total=0)
 
 
 # --- mix identify (shazam): nessun controllo nel router, guardia in start_job -

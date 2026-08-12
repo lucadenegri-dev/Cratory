@@ -3,14 +3,33 @@ in memoria con lock. La UI lancia e poi fa polling di job_state()."""
 
 import logging
 import threading
+from datetime import datetime, timedelta, timezone
 
 from app.db import SessionLocal
 from app.organize.models import utcnow
 from app.organize.services import analysis
 from app.organize.services.roots import radici
 from app.organize.services.scanner import scan
+from app.services.app_state import get_state, set_state
 
 logger = logging.getLogger(__name__)
+
+# Auto-indicizzazione allo startup: salta se l'ultima è finita da meno di così
+# (evita la re-indicizzazione a ogni reload di uvicorn in sviluppo). Assorbito
+# da library_index_job (F4 Task 3): stesso valore, stesso comportamento.
+AUTO_INDEX_MIN_INTERVAL_MIN = 15
+
+
+def _auto_index_due(last_iso: str | None, now: datetime,
+                    min_interval_min: int = AUTO_INDEX_MIN_INTERVAL_MIN) -> bool:
+    """True se conviene rilanciare l'indicizzazione automatica (mai indicizzato, oppure
+    l'ultimo run è abbastanza vecchio). Valore corrotto → procedi."""
+    if not last_iso:
+        return True
+    try:
+        return now - datetime.fromisoformat(last_iso) >= timedelta(minutes=min_interval_min)
+    except ValueError:
+        return True
 
 _lock = threading.Lock()
 _state: dict = {
@@ -62,6 +81,10 @@ def _run(locations: list[str] | None) -> None:
             result["linking"] = {k: v for k, v in result["linking"].items()
                                  if k != "created_ids"}
         result["analysis"] = analysis_summary.model_dump(mode="json")
+        # Alimenta l'avvio automatico (start_job_if_due): senza questa scrittura
+        # l'auto-indicizzazione ripartirebbe a ogni reload di uvicorn in sviluppo.
+        # Assorbito da library_index_job (F4 Task 3), stessa chiave app_state.
+        set_state(db, "last_index_at", utcnow().isoformat())
         with _lock:
             _state.update(
                 status="done", phase=None, result=result,
@@ -87,3 +110,19 @@ def start_job(locations: list[str] | None = None) -> dict:
         snapshot = dict(_state)
     threading.Thread(target=_run, args=(locations,), daemon=True).start()
     return snapshot
+
+
+def start_job_if_due() -> dict | None:
+    """Avvio automatico allo startup: parte solo se l'ultima scansione è
+    abbastanza vecchia. Il pulsante «Indicizza»/«Scava» usa invece start_job()
+    e non è mai soggetto a questo gate. Assorbito da library_index_job (F4
+    Task 3): stessa finestra, stessa chiave app_state (`last_index_at`)."""
+    db = SessionLocal()
+    try:
+        last = get_state(db, "last_index_at")
+    finally:
+        db.close()
+    if not _auto_index_due(last, datetime.now(timezone.utc)):
+        logger.info("Scansione automatica saltata: ultimo run recente (%s)", last)
+        return None
+    return start_job()

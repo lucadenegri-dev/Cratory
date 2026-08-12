@@ -1,4 +1,4 @@
-"""Job di analisi BPM/key in background (pattern library_index_job: mono-utente,
+"""Job di analisi BPM/key in background (pattern scan_job: mono-utente,
 un job alla volta, stato in memoria con lock).
 
 Scrive SOLO analysis_* + analyzed_at/analysis_error; l'unico ponte automatico

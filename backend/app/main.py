@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings, setup_logging
 from app.db import ensure_schema
-from app.services import library_index_job
+from app.organize.services import scan_job
 from app.routers import (
     ai,
     analysis,
@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
     # reload di uvicorn: start_job_if_due salta se un run è finito da poco. Il job
     # è un thread daemon; con la scansione incrementale il costo è minimo.
     if runtime_settings.library_root():
-        library_index_job.start_job_if_due()
+        scan_job.start_job_if_due()
     yield
 
 
