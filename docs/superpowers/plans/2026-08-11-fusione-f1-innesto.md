@@ -910,6 +910,18 @@ grep -rn 'href="/' app/organize components/organize | grep -v '/organize/'
 
 Atteso dal `grep`: nessun output residuo che punti fuori da `/organize/` (a parte eventuali link volutamente esterni, che vanno lasciati).
 
+⚠️ **Gli `href` non sono l'unico modo di navigare.** Cerca anche le redirect programmatiche, che nessun `href` intercetta e che né `tsc`, né `lint`, né `npm run build`, né i test possono rilevare — si manifestano solo a runtime, come un 307 verso un path che non esiste più:
+
+```bash
+cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/fusione-f1/frontend && \
+grep -rnE "(redirect|router\.(push|replace))\(\s*[\"'\`]/" app/organize components/organize lib/organize
+```
+
+In questo progetto ce ne sono **due**, entrambe verso `/files`, entrambe da riscrivere in `/organize/files`:
+
+- `app/organize/page.tsx` → `redirect("/files")`
+- `app/organize/sources/page.tsx` → `router.replace("/files")`
+
 - [ ] **Step 9: Creare il layout della sezione con il provider i18n di Organize**
 
 Crea `frontend/app/organize/layout.tsx`:
