@@ -15,13 +15,25 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# SCHEMA MORTO (F3b). Le sorgenti non sono più un'entità di dominio: esistono
-# due cartelle, LIBRARY_ROOT e SLSKD_DOWNLOAD_DIR, e queste righe le
-# rispecchiano soltanto. La tabella e la colonna audio_file.root_id restano
-# perché SQLite non può droppare root_id: è dentro uq_audio_root_path (indice
-# interno non droppabile) e in una FK, quindi servirebbe un rebuild di
-# audio_file — che ha quattro tabelle figlie. Stessa scelta, e stessa ragione,
-# di Track.playlist_id. Le scrive solo app/organize/services/roots.py.
+# SCHEMA MORTO — decisione chiusa in F6, non un rinvio.
+#
+# Le sorgenti non sono più un'entità di dominio (F3b): esistono due cartelle,
+# LIBRARY_ROOT e SLSKD_DOWNLOAD_DIR, e queste righe le rispecchiano soltanto.
+# Le scrive solo app/organize/services/roots.py.
+#
+# La tabella e la colonna audio_file.root_id restano perché SQLite non può
+# droppare root_id: è dentro uq_audio_root_path (indice interno non droppabile)
+# e in una FK. Servirebbe un rebuild di audio_file, che ha quattro tabelle
+# figlie (issue, dup_member, plan_op, undo_journal) — lo stesso rebuild che il
+# progetto evita per tracks, e da cui F2 ha appena ripulito 158 righe orfane.
+# Stessa scelta, e stessa ragione, di Track.playlist_id.
+#
+# F3b aveva rimandato la decisione a "dopo F4, se lo scanner richiederà comunque
+# quel rebuild". F4 è passata e NON l'ha richiesto: il vincolo è identico,
+# quindi la conclusione è identica e la questione è chiusa.
+# Si riapre a una sola condizione: una modifica futura che richieda COMUNQUE il
+# rebuild di audio_file per altri motivi. In quel caso root_id e scan_root
+# escono insieme, a costo marginale zero.
 class ScanRoot(Base):
     __tablename__ = "scan_root"
 
@@ -41,7 +53,7 @@ class AudioFile(Base):
     __table_args__ = (UniqueConstraint("root_id", "path", name="uq_audio_root_path"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # SCHEMA MORTO (F3b): vedi la spiegazione in testa a ScanRoot, sopra.
+    # SCHEMA MORTO: vedi la decisione in testa a ScanRoot, sopra.
     root_id: Mapped[int] = mapped_column(ForeignKey("scan_root.id"), index=True)
     # Traccia di cui questo file è una copia. NULL = file non ancora
     # riconosciuto (tipicamente l'inbox, dove i file non sono ancora tracce).
