@@ -223,6 +223,8 @@ def collega_tracce(db: Session, *, on_progress=None) -> dict:
     ...
 ```
 
+> **Correzione a posteriori (dopo l'esecuzione del Task 1).** Lo scheletro qui sotto mostra **un ciclo unico**, e questo era sbagliato: l'`index_library` originale ha un disegno **a due passate** — prima il fast-path su tutte le righe, poi il flusso completo sulle sole `pending`. Collassarle rende l'ordine di `AudioFile.path` semanticamente rilevante, e un duplicato con lo stesso hash che ordina prima può rubare il `local_path` a un file già agganciato. Il disegno a due passate va conservato. Allo stesso modo, il wrapper dello Step 6 chiamava la riconciliazione dentro la fase 2, quindi **prima** dell'archivio: così una traccia il cui file passa in `ARCHIVE_ROOT` viene cancellata invece che marcata scartata. L'ordine corretto è **libreria → archivio → riconciliazione**, con quest'ultima estratta a sé e chiamata sull'unione dei path visti. Vedi `riconcilia_possessi` nel codice finale.
+
 Il corpo del ciclo, con lo scheletro esplicito. I blocchi marcati «invariato» sono quelli di oggi, spostati senza modifiche: si trapiantano, non si riscrivono.
 
 ```python
