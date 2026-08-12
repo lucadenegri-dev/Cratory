@@ -66,7 +66,7 @@ def check(plan_ops, files_by_id, accepted_issues, removals, settings_snapshot,
             conflicts.append(ConflictComputed("collision", op.file_id,
                                               f"destinazione già esistente su disco: {dest}"))
         file = files_by_id.get(op.file_id)
-        target = target_root if file else None
+        target = target_root if (file and target_root) else None
         if target is not None and not _is_under(dest, target):
             conflicts.append(ConflictComputed("outside_root", op.file_id,
                                               f"destinazione fuori radice: {dest}"))

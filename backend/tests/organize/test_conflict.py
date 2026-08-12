@@ -94,3 +94,27 @@ def test_move_into_removed_file_slot_not_collision():
     ops = build_plan([keeper, dup], [], {2}, SNAP, TARGET_ROOT)  # dup rimosso
     conflicts = check(ops, {1: keeper, 2: dup}, [], {2}, SNAP, TARGET_ROOT)
     assert not any(c.kind == "collision" for c in conflicts)
+
+
+def test_empty_target_root_disables_outside_root_check():
+    # LIBRARY_ROOT non configurata (default "", feature disattivata, vedi
+    # app/core/config.py): nessun target reale, quindi il check va disabilitato
+    # (come fa planner.render_destination, che ricade su dirname(file.path)) —
+    # non deve leggere "" come una radice vera sotto cui nulla sta.
+    f = make_audio_file(1, root_id=1, artist="A", title="T", genre="House",
+                        path="/lib/x.mp3", ext="mp3")
+    op = PlanOpComputed("MOVE", 1, {"path": "/lib/x.mp3"}, {"path": "/altrove/A - T.mp3"})
+    conflicts = check([op], {1: f}, [], set(), SNAP, "")
+    assert not any(c.kind == "outside_root" for c in conflicts)
+
+
+def test_move_from_inbox_into_target_root_no_conflict():
+    # Un file dell'inbox (fuori radice) che entra in libreria non è un
+    # conflitto: è esattamente il caso che la fusione dei due target esiste
+    # per rendere corretto.
+    f = make_audio_file(1, root_id=1, artist="A", title="T", genre="House",
+                        path="/inbox/x.mp3", ext="mp3")
+    op = PlanOpComputed("MOVE", 1, {"path": "/inbox/x.mp3"},
+                        {"path": "/lib/House/A/A - T.mp3"})
+    conflicts = check([op], {1: f}, [], set(), SNAP, TARGET_ROOT)
+    assert conflicts == []

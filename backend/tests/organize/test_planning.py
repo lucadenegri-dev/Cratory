@@ -1,17 +1,7 @@
-import pytest
 from sqlalchemy import select
 
-from app.core.config import settings
 from app.organize.models import AudioFile, Issue, Plan, PlanOp, ScanRoot, UndoJournal
 from app.organize.services import planning
-
-
-@pytest.fixture(autouse=True)
-def _library_root(monkeypatch):
-    # Da F3b la destinazione di un Apply è planning.target_root(), che legge
-    # settings.library_root (non più ScanRoot.path). "/lib" è la stessa radice
-    # usata da _file() e dai ScanRoot(path="/lib") seminati in questi test.
-    monkeypatch.setattr(settings, "library_root", "/lib")
 
 
 def test_get_settings_seeds_defaults(db):
@@ -97,6 +87,8 @@ def test_blocking_only_when_nothing_applicable(db):
 def test_load_plan_flags_disk_occupied_dest(db, tmp_path, monkeypatch):
     # la dest esiste su disco ma non nel DB (Library non scansionata) →
     # conflitto visibile già a livello di piano, op saltato.
+    from app.core.config import settings
+
     root = tmp_path / "lib"
     monkeypatch.setattr(settings, "library_root", str(root))
     (root / "varie").mkdir(parents=True)
