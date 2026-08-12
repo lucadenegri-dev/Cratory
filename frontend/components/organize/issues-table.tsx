@@ -4,7 +4,7 @@ import { useState } from "react";
 import { coverThumbUrl, type Issue } from "@/lib/organize/api";
 import { CoverThumb } from "@/components/organize/cover-thumb";
 import { cn } from "@/lib/cn";
-import { useT } from "@/lib/organize/i18n";
+import { useT } from "@/lib/i18n";
 
 export type GroupBy = "type" | "severity" | "none";
 
@@ -53,9 +53,9 @@ function ConfBadge({ conf, source }: { conf: unknown; source: unknown }) {
     : g === "medium" ? "border-warning text-warning"
     : "border-border text-faint";
   const label =
-    g === "strong" ? t.issues.confStrong
-    : g === "medium" ? t.issues.confMedium
-    : t.issues.confWeak;
+    g === "strong" ? t.organize.issues.confStrong
+    : g === "medium" ? t.organize.issues.confMedium
+    : t.organize.issues.confWeak;
   return (
     <span className={cn(
       "border px-1 py-0.5 text-[9px] uppercase tracking-wider", cls)}>
@@ -67,12 +67,12 @@ function ConfBadge({ conf, source }: { conf: unknown; source: unknown }) {
 function Cover({ fileId, dismissed }: { fileId: number; dismissed: boolean }) {
   const t = useT();
   const [zoom, setZoom] = useState(false);
-  if (dismissed) return <span className="text-faint">{t.issues.coverNotApplied}</span>;
+  if (dismissed) return <span className="text-faint">{t.organize.issues.coverNotApplied}</span>;
   return (
     <>
       <button type="button" onClick={() => setZoom(true)}
         className="block h-14 w-14 overflow-hidden border border-border transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg"
-        title={t.issues.zoomTitle}>
+        title={t.organize.issues.zoomTitle}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={coverThumbUrl(fileId)} alt="cover" className="h-full w-full object-cover" />
       </button>
@@ -119,31 +119,31 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
   return (
     <tr className={cn("border-b border-surface-2 last:border-0 hover:bg-surface", issue.status !== "open" && "opacity-70")}>
       {showSev && <td className="px-3 py-2 text-center align-top"><SevMark sev={issue.severity} /></td>}
-      {showType && <td className="whitespace-nowrap px-3 py-2 align-top text-[11px] text-muted">{t.issues.typeLabel(issue.type)}</td>}
+      {showType && <td className="whitespace-nowrap px-3 py-2 align-top text-[11px] text-muted">{t.organize.issues.typeLabel(issue.type)}</td>}
       <td className="px-3 py-2 align-top">
         <div className="flex items-start gap-2">
           <CoverThumb fileId={issue.file_id} />
           <div className="min-w-0">
-            <div className="text-fg-strong">{issue.artist || t.common.empty}{issue.title ? ` — ${issue.title}` : ""}</div>
+            <div className="text-fg-strong">{issue.artist || t.organize.common.empty}{issue.title ? ` — ${issue.title}` : ""}</div>
             <div className="max-w-[240px] truncate text-[10px] text-faint" title={issue.file_path}>{issue.file_path}</div>
           </div>
         </div>
       </td>
-      <td className="px-3 py-2 align-top text-muted">{issue.field || t.common.empty}</td>
+      <td className="px-3 py-2 align-top text-muted">{issue.field || t.organize.common.empty}</td>
       <td className="px-3 py-2 align-top">
         {isCover ? (
           <Cover fileId={issue.file_id} dismissed={issue.status === "dismissed"} />
         ) : issue.status === "open" ? (
           isQuarantine ? (
-            <span className="text-warning">{t.issues.fixQuarantine}</span>
+            <span className="text-warning">{t.organize.issues.fixQuarantine}</span>
           ) : isClear ? (
             <div className="flex items-center gap-1.5 text-[10px]">
               {issue.current_value && <span className="max-w-[200px] truncate text-faint line-through" title={issue.current_value}>{issue.current_value}</span>}
               <span className="text-faint">→</span>
-              <span className="text-muted">{t.issues.emptyValueMark}</span>
+              <span className="text-muted">{t.organize.issues.emptyValueMark}</span>
             </div>
           ) : !fixable ? (
-            <span className="text-faint">{t.issues.notFixable}</span>
+            <span className="text-faint">{t.organize.issues.notFixable}</span>
           ) : (
             <div className="flex flex-col gap-1">
               {issue.current_value && (
@@ -156,15 +156,15 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
                 className="w-40 border border-border bg-bg px-2 py-1 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                placeholder={t.issues.writeField(issue.field ?? "")}
+                placeholder={t.organize.issues.writeField(issue.field ?? "")}
               />
             </div>
           )
         ) : issue.status === "accepted" ? (
-          <span className="text-fg">{isQuarantine ? t.issues.fixQuarantine : (suggested || t.common.empty)}</span>
+          <span className="text-fg">{isQuarantine ? t.organize.issues.fixQuarantine : (suggested || t.organize.common.empty)}</span>
         ) : (
-          <span className="text-faint" title={t.issues.dismissedTagUnchanged}>
-            {issue.current_value ? `${issue.current_value} ${t.issues.unchangedSuffix}` : t.common.empty}
+          <span className="text-faint" title={t.organize.issues.dismissedTagUnchanged}>
+            {issue.current_value ? `${issue.current_value} ${t.organize.issues.unchangedSuffix}` : t.organize.common.empty}
           </span>
         )}
       </td>
@@ -176,28 +176,28 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
               <button disabled={busy}
                 onClick={() => run(() => onAccept(issue.id))}
                 className="border border-border px-2 py-0.5 text-[10px] text-ok hover:bg-elevated disabled:opacity-40"
-              >{isClear ? t.issues.emptyShort : isQuarantine ? t.issues.quarantineShort : t.issues.acceptShort}</button>
+              >{isClear ? t.organize.issues.emptyShort : isQuarantine ? t.organize.issues.quarantineShort : t.organize.issues.acceptShort}</button>
             ) : fixable && (
               <button
                 disabled={busy || !value.trim()}
                 onClick={() => run(() => onFix(issue.id, value.trim()))}
                 className="border border-border px-2 py-0.5 text-[10px] text-ok hover:bg-elevated disabled:opacity-40"
-              >{t.issues.acceptShort}</button>
+              >{t.organize.issues.acceptShort}</button>
             )}
             <button
               disabled={busy}
               onClick={() => run(() => onDismiss(issue.id))}
               className="border border-border px-2 py-0.5 text-[10px] text-muted hover:bg-elevated disabled:opacity-40"
-            >{t.issues.dismissShort}</button>
+            >{t.organize.issues.dismissShort}</button>
           </span>
         ) : (
           <span className="flex items-center justify-end gap-2">
             <span className={cn("border px-1.5 py-0.5 text-[9px] uppercase tracking-wider",
               issue.status === "accepted" ? "border-border text-ok" : "border-border text-faint")}>
-              {issue.status === "accepted" ? t.issues.badgeAccepted : t.issues.badgeDismissed}
+              {issue.status === "accepted" ? t.organize.issues.badgeAccepted : t.organize.issues.badgeDismissed}
             </span>
             <button disabled={busy} onClick={() => run(() => onReopen(issue.id))}
-              className="text-faint hover:text-fg disabled:opacity-40" title={t.issues.reopenTitle}>↺</button>
+              className="text-faint hover:text-fg disabled:opacity-40" title={t.organize.issues.reopenTitle}>↺</button>
           </span>
         )}
       </td>
@@ -235,12 +235,12 @@ export function IssuesTable({
     <thead>
       <tr className="border-b border-border text-left text-[9px] uppercase tracking-wider text-faint">
         {showSev && <th className="px-3 py-2 text-center font-normal">!</th>}
-        {showType && <th className="px-3 py-2 font-normal">{t.issues.colType}</th>}
-        <th className="px-3 py-2 font-normal">{t.issues.colTrack}</th>
-        <th className="px-3 py-2 font-normal">{t.issues.colField}</th>
-        <th className="px-3 py-2 font-normal">{t.issues.colFix}</th>
-        <th className="px-3 py-2 font-normal">{t.issues.colConf}</th>
-        <th className="px-3 py-2 text-right font-normal">{t.issues.colActions}</th>
+        {showType && <th className="px-3 py-2 font-normal">{t.organize.issues.colType}</th>}
+        <th className="px-3 py-2 font-normal">{t.organize.issues.colTrack}</th>
+        <th className="px-3 py-2 font-normal">{t.organize.issues.colField}</th>
+        <th className="px-3 py-2 font-normal">{t.organize.issues.colFix}</th>
+        <th className="px-3 py-2 font-normal">{t.organize.issues.colConf}</th>
+        <th className="px-3 py-2 text-right font-normal">{t.organize.issues.colActions}</th>
       </tr>
     </thead>
   );
@@ -274,7 +274,7 @@ export function IssuesTable({
   );
 
   const labelFor = (key: string) =>
-    groupBy === "type" ? t.issues.typeLabel(key) : key;
+    groupBy === "type" ? t.organize.issues.typeLabel(key) : key;
 
   const toggle = (key: string) =>
     setCollapsed((cur) => {
@@ -311,7 +311,7 @@ export function IssuesTable({
                       <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-strong">
                         {labelFor(key)}
                       </span>
-                      <span className="tnum text-[10px] text-muted">{t.issues.groupMeta(open, list.length)}</span>
+                      <span className="tnum text-[10px] text-muted">{t.organize.issues.groupMeta(open, list.length)}</span>
                     </button>
                     {open > 0 && (
                       <button
@@ -319,7 +319,7 @@ export function IssuesTable({
                         disabled={groupBusy === key}
                         onClick={() => acceptGroup(key)}
                         className="ml-auto border border-border px-2 py-0.5 text-[10px] text-ok hover:bg-elevated disabled:opacity-40"
-                      >{t.issues.groupAccept}</button>
+                      >{t.organize.issues.groupAccept}</button>
                     )}
                   </div>
                 </td>

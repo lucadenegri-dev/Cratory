@@ -2,7 +2,7 @@
 
 import { fmtDuration, type FileRow, type FileQuery } from "@/lib/organize/api";
 import { cn } from "@/lib/cn";
-import { useT } from "@/lib/organize/i18n";
+import { useT } from "@/lib/i18n";
 import { CoverThumb } from "@/components/organize/cover-thumb";
 
 type SortKey = NonNullable<FileQuery["sort"]>;
@@ -51,7 +51,7 @@ function Indicator({ row }: { row: FileRow }) {
       ) : !row.in_dup_group ? (
         <span className="text-faint">·</span>
       ) : null}
-      {row.in_dup_group && <span className="text-muted" title={t.files.dupTitle}>⧉</span>}
+      {row.in_dup_group && <span className="text-muted" title={t.organize.files.dupTitle}>⧉</span>}
     </span>
   );
 }

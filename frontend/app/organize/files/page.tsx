@@ -10,11 +10,11 @@ import { PageLayout } from "@/components/organize/page-layout";
 import { FilesTable } from "@/components/organize/files-table";
 import { FileEditPanel } from "@/components/organize/file-edit-panel";
 import { Alert, Button, EmptyState, Input, Loading, Select, Spinner } from "@/components/organize/ui";
-import { useT } from "@/lib/organize/i18n";
+import { useT } from "@/lib/i18n";
 
 const LIMIT = 500;
 
-// campi tag filtrabili (il placeholder è risolto da t.files.facet*)
+// campi tag filtrabili (il placeholder è risolto da t.organize.files.facet*)
 const FACET_KEYS: (keyof LibraryFacets)[] = ["genre", "artist", "album", "label", "ext", "year"];
 
 function facetOptions(facets: LibraryFacets | null, key: keyof LibraryFacets): string[] {
@@ -82,13 +82,13 @@ export default function FilesPage() {
       await startScan(location ? [location] : undefined);
       refresh();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : t.files.scanStartFailed);
+      setActionError(e instanceof Error ? e.message : t.organize.files.scanStartFailed);
     }
   };
 
   const facetPlaceholder: Record<string, string> = {
-    genre: t.files.facetGenre, artist: t.files.facetArtist, album: t.files.facetAlbum,
-    label: t.files.facetLabel, ext: t.files.facetExt, year: t.files.facetYear,
+    genre: t.organize.files.facetGenre, artist: t.organize.files.facetArtist, album: t.organize.files.facetAlbum,
+    label: t.organize.files.facetLabel, ext: t.organize.files.facetExt, year: t.organize.files.facetYear,
   };
 
   const load = useCallback(() => {
@@ -122,17 +122,17 @@ export default function FilesPage() {
   return (
     <PageLayout
       title="Files"
-      meta={stats ? (stats.files_total > rows.length ? t.files.metaOf(rows.length, stats.files_total) : String(rows.length)) : undefined}
-      marginaliaTitle={t.files.library}
+      meta={stats ? (stats.files_total > rows.length ? t.organize.files.metaOf(rows.length, stats.files_total) : String(rows.length)) : undefined}
+      marginaliaTitle={t.organize.files.library}
       marginalia={<Marginalia stats={stats} />}
       guide={<>
-        <p>{t.files.guide1}</p>
-        <p>{t.files.guide2}</p>
-        <p>{t.files.guide3}</p>
+        <p>{t.organize.files.guide1}</p>
+        <p>{t.organize.files.guide2}</p>
+        <p>{t.organize.files.guide3}</p>
       </>}
     >
       <div className="flex flex-col gap-4">
-        {offline && <Alert>{t.common.backendOffline}</Alert>}
+        {offline && <Alert>{t.organize.common.backendOffline}</Alert>}
         {actionError && <Alert>{actionError}</Alert>}
 
         <div className="flex flex-wrap items-center gap-2">
@@ -141,34 +141,34 @@ export default function FilesPage() {
             onChange={(e) => setLocation(e.target.value as Location | "")}
             className="h-8 w-36 text-[11px]"
           >
-            <option value="">{t.common.all}</option>
-            <option value="inbox">{t.files.inbox}</option>
-            <option value="library">{t.files.library}</option>
+            <option value="">{t.organize.common.all}</option>
+            <option value="inbox">{t.organize.files.inbox}</option>
+            <option value="library">{t.organize.files.library}</option>
           </Select>
           <Button onClick={onScan} disabled={running || (stats != null && stats.sources === 0)}>
             {running && <Spinner />}
             {running
-              ? t.files.scanning
+              ? t.organize.files.scanning
               : location
-                ? t.files.scanOne(location === "inbox" ? t.files.inbox : t.files.library)
-                : t.files.scanAll}
+                ? t.organize.files.scanOne(location === "inbox" ? t.organize.files.inbox : t.organize.files.library)
+                : t.organize.files.scanAll}
           </Button>
         </div>
 
         {scan.result && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 border border-border px-3 py-2 text-[11px]">
-            <ScanStat k={t.files.statFound} v={scan.result.found} />
-            <ScanStat k={t.files.statNew} v={`+${scan.result.inserted}`} />
-            <ScanStat k={t.files.statUpdated} v={scan.result.updated} />
-            <ScanStat k={t.files.statUnchanged} v={scan.result.unchanged} />
-            <ScanStat k={t.files.statMoved} v={scan.result.moved} />
-            <ScanStat k={t.files.statMissing} v={scan.result.missing} />
-            <ScanStat k={t.files.statErrors} v={scan.result.errors} danger={scan.result.errors > 0} />
+            <ScanStat k={t.organize.files.statFound} v={scan.result.found} />
+            <ScanStat k={t.organize.files.statNew} v={`+${scan.result.inserted}`} />
+            <ScanStat k={t.organize.files.statUpdated} v={scan.result.updated} />
+            <ScanStat k={t.organize.files.statUnchanged} v={scan.result.unchanged} />
+            <ScanStat k={t.organize.files.statMoved} v={scan.result.moved} />
+            <ScanStat k={t.organize.files.statMissing} v={scan.result.missing} />
+            <ScanStat k={t.organize.files.statErrors} v={scan.result.errors} danger={scan.result.errors > 0} />
           </div>
         )}
 
         <div className="flex flex-wrap items-center gap-2">
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.files.searchPlaceholder} className="w-48" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.organize.files.searchPlaceholder} className="w-48" />
           {FACET_KEYS.map((key) => (
             <FacetInput
               key={key} facet={key} placeholder={facetPlaceholder[key]} value={tag[key]}
@@ -182,20 +182,20 @@ export default function FilesPage() {
               onChange={(e) => setOnlyIssues(e.target.checked)}
               className="accent-danger"
             />
-            {t.files.filterIssues}
+            {t.organize.files.filterIssues}
           </label>
           {(Object.values(tag).some(Boolean) || onlyIssues) && (
             <button
               onClick={() => { setTag({ genre: "", artist: "", album: "", label: "", ext: "", year: "" }); setOnlyIssues(false); }}
               className="border border-border px-2 py-1 text-[11px] text-muted hover:bg-elevated"
-            >{t.files.clearFilters}</button>
+            >{t.organize.files.clearFilters}</button>
           )}
         </div>
 
         {!loaded ? (
           <Loading />
         ) : rows.length === 0 && !offline ? (
-          <EmptyState title={t.files.emptyTitle}>{t.files.emptyBody}</EmptyState>
+          <EmptyState title={t.organize.files.emptyTitle}>{t.organize.files.emptyBody}</EmptyState>
         ) : (
           <FilesTable rows={rows} sort={sort} dir={dir} onSort={onSort} onEdit={setEditing} />
         )}
@@ -218,23 +218,23 @@ export default function FilesPage() {
 
 function Marginalia({ stats }: { stats: LibraryStats | null }) {
   const t = useT();
-  if (!stats) return <p className="text-xs text-faint">{t.common.empty}</p>;
+  if (!stats) return <p className="text-xs text-faint">{t.organize.common.empty}</p>;
   const sev = stats.issues_by_severity;
   const issuesTotal = Object.values(sev).reduce((a, b) => a + b, 0);
   return (
     <div className="flex flex-col gap-4 text-xs">
-      <Stat v={stats.files_total} k={t.files.statFiles} />
+      <Stat v={stats.files_total} k={t.organize.files.statFiles} />
       <div>
-        <Stat v={issuesTotal} k={t.files.statIssues} />
+        <Stat v={issuesTotal} k={t.organize.files.statIssues} />
         <div className="mt-1 flex gap-3 text-[11px]">
-          <span className="text-danger">{sev.error ?? 0} {t.files.sevErr}</span>
-          <span className="text-warning">{sev.warning ?? 0} {t.files.sevWarn}</span>
-          <span className="text-muted">{sev.info ?? 0} {t.files.sevInfo}</span>
+          <span className="text-danger">{sev.error ?? 0} {t.organize.files.sevErr}</span>
+          <span className="text-warning">{sev.warning ?? 0} {t.organize.files.sevWarn}</span>
+          <span className="text-muted">{sev.info ?? 0} {t.organize.files.sevInfo}</span>
         </div>
       </div>
-      <Stat v={stats.dup_groups} k={t.files.statDups} />
+      <Stat v={stats.dup_groups} k={t.organize.files.statDups} />
       <div>
-        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">{t.files.formats}</div>
+        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">{t.organize.files.formats}</div>
         <div className="flex flex-col gap-1">
           {Object.entries(stats.by_ext).sort((a, b) => b[1] - a[1]).map(([ext, n]) => (
             <div key={ext} className="flex justify-between">

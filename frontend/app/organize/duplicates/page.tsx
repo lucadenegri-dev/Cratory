@@ -6,7 +6,7 @@ import { useJobs } from "@/components/organize/jobs-provider";
 import { PageLayout } from "@/components/organize/page-layout";
 import { DupGroupCard } from "@/components/organize/dup-group";
 import { Alert, EmptyState, Loading } from "@/components/organize/ui";
-import { useT } from "@/lib/organize/i18n";
+import { useT } from "@/lib/i18n";
 
 export default function DuplicatesPage() {
   const t = useT();
@@ -28,7 +28,7 @@ export default function DuplicatesPage() {
   const act = async (fn: () => Promise<unknown>) => {
     setActionError(null);
     try { await fn(); load(); }
-    catch (e) { setActionError(e instanceof Error ? e.message : t.common.error); }
+    catch (e) { setActionError(e instanceof Error ? e.message : t.organize.common.error); }
   };
   const onSetKeeper = (groupId: number, fileId: number) => act(() => setKeeper(groupId, fileId));
   const onDismiss = (groupId: number) => act(() => dismissDuplicate(groupId));
@@ -45,22 +45,22 @@ export default function DuplicatesPage() {
   return (
     <PageLayout
       title="Duplicates"
-      meta={t.duplicates.groupsCount(active.length)}
-      marginaliaTitle={t.common.summary}
+      meta={t.organize.duplicates.groupsCount(active.length)}
+      marginaliaTitle={t.organize.common.summary}
       marginalia={<Marginalia groups={active.length} filesToRemove={filesToRemove} byMatch={byMatch} />}
       guide={<>
-        <p>{t.duplicates.guide1}</p>
-        <p>{t.duplicates.guide2}</p>
+        <p>{t.organize.duplicates.guide1}</p>
+        <p>{t.organize.duplicates.guide2}</p>
       </>}
     >
       <div className="flex flex-col gap-4">
-        {offline && <Alert>{t.common.backendOffline}</Alert>}
+        {offline && <Alert>{t.organize.common.backendOffline}</Alert>}
         {actionError && <Alert>{actionError}</Alert>}
 
         {!loaded ? (
           <Loading />
         ) : groups.length === 0 && !offline ? (
-          <EmptyState title={t.duplicates.emptyTitle}>{t.duplicates.emptyBody}</EmptyState>
+          <EmptyState title={t.organize.duplicates.emptyTitle}>{t.organize.duplicates.emptyBody}</EmptyState>
         ) : (
           ordered.map((g) => (
             <DupGroupCard key={g.id} group={g} onSetKeeper={onSetKeeper} onDismiss={onDismiss} />
@@ -81,21 +81,21 @@ function Marginalia({ groups, filesToRemove, byMatch }: {
     <div className="flex flex-col gap-4 text-xs">
       <div>
         <div className="tnum text-2xl leading-none text-fg-strong">{groups}</div>
-        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.duplicates.statGroups}</div>
+        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.organize.duplicates.statGroups}</div>
       </div>
       <div>
         <div className="tnum text-2xl leading-none text-fg-strong">{filesToRemove}</div>
-        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.duplicates.filesToRemove}</div>
+        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.organize.duplicates.filesToRemove}</div>
       </div>
       <div>
-        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">{t.duplicates.byMatch}</div>
+        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">{t.organize.duplicates.byMatch}</div>
         <div className="flex flex-col gap-1">
           {Object.entries(byMatch).sort((a, b) => b[1] - a[1]).map(([k, n]) => (
             <div key={k} className="flex justify-between"><span className="text-muted">{k}</span><span className="tnum text-fg">{n}</span></div>
           ))}
         </div>
       </div>
-      <div className="text-[11px] text-ok">{t.duplicates.removalsNote(filesToRemove)}</div>
+      <div className="text-[11px] text-ok">{t.organize.duplicates.removalsNote(filesToRemove)}</div>
     </div>
   );
 }

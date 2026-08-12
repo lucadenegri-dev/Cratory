@@ -10,7 +10,7 @@ import {
   type IntegrityJobState, type GenreReviewJobState, type GenreReviewBody, type Location,
 } from "@/lib/organize/api";
 import { EqMeter } from "./ui";
-import { useT } from "@/lib/organize/i18n";
+import { useT } from "@/lib/i18n";
 
 const IDLE = {
   status: "idle" as const, phase: null, processed: 0, total: 0,
@@ -133,15 +133,15 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   );
 
   const active: { label: string; job: ProgressJob } | null = scan.status === "running"
-    ? { label: t.jobs.scan, job: scan }
+    ? { label: t.organize.jobs.scan, job: scan }
     : apply.status === "running"
-    ? { label: t.jobs.apply, job: apply }
+    ? { label: t.organize.jobs.apply, job: apply }
     : rescan.status === "running"
-    ? { label: t.jobs.providerLookup, job: rescan }
+    ? { label: t.organize.jobs.providerLookup, job: rescan }
     : integrity.status === "running"
-    ? { label: t.jobs.integrity, job: integrity }
+    ? { label: t.organize.jobs.integrity, job: integrity }
     : genreReviewJob.status === "running"
-    ? { label: t.jobs.genreReview, job: genreReviewJob }
+    ? { label: t.organize.jobs.genreReview, job: genreReviewJob }
     : null;
 
   return (

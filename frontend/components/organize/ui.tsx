@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useT } from "@/lib/organize/i18n";
+import { useT } from "@/lib/i18n";
 import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 /* ---------------------------------------------------------------- Card */
@@ -135,7 +135,7 @@ export function Progress({ value }: { value: number }) {
 export function Equalizer({ className }: { className?: string }) {
   const t = useT();
   return (
-    <span role="status" aria-label={t.common.loading} className={cn("eq", className ?? "h-4 w-4")}>
+    <span role="status" aria-label={t.organize.common.loading} className={cn("eq", className ?? "h-4 w-4")}>
       <span className="eq-bar"><span className="eq-track" /><span className="eq-fill eq-l1" /></span>
       <span className="eq-bar"><span className="eq-track" /><span className="eq-fill eq-l2" /></span>
       <span className="eq-bar"><span className="eq-track" /><span className="eq-fill eq-l3" /></span>
@@ -152,7 +152,7 @@ export function Loading({ label }: { label?: string }) {
   const t = useT();
   return (
     <p className="flex items-center gap-2 py-8 text-sm text-muted" role="status">
-      <Equalizer /> {label ?? t.common.loading}
+      <Equalizer /> {label ?? t.organize.common.loading}
     </p>
   );
 }
@@ -170,7 +170,7 @@ export function EqMeter({ value, className, calm = false }: { value: number | nu
     <div
       className={cn("eqm", calm && "eqm-calm", className ?? "h-6 w-full")}
       role={indeterminate ? "status" : "progressbar"}
-      aria-label={indeterminate ? t.common.inProgress : undefined}
+      aria-label={indeterminate ? t.organize.common.inProgress : undefined}
       aria-valuenow={indeterminate ? undefined : Math.round(v)}
       aria-valuemin={indeterminate ? undefined : 0}
       aria-valuemax={indeterminate ? undefined : 100}

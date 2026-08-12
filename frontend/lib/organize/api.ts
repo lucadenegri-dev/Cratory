@@ -1,4 +1,4 @@
-import { getCurrentLanguage, translateApiError, type Language } from "@/lib/organize/i18n/runtime";
+import { getCurrentLanguage, translateApiError, type Language } from "@/lib/i18n/runtime";
 
 /* Base relativa = stesso host della pagina: le chiamate /api/organize/* passano
    dal rewrite di next.config.ts verso il backend (come lib/api/client.ts), così

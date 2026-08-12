@@ -7,7 +7,7 @@ import {
 } from "@/lib/organize/api";
 import { PageLayout } from "@/components/organize/page-layout";
 import { Alert, Button, Loading } from "@/components/organize/ui";
-import { useI18n, useT } from "@/lib/organize/i18n";
+import { useI18n, useT } from "@/lib/i18n";
 
 // Valori d'esempio per l'anteprima client-side (approssimata: la resa reale con
 // sanitizzazione è lato planner).
@@ -59,13 +59,13 @@ export default function SettingsPage() {
   const saveTemplates = async () => {
     setError(null);
     try { setSettings(await updateSettings({ naming_template: naming, folder_template: folder })); }
-    catch (e) { setError(e instanceof Error ? e.message : t.common.error); }
+    catch (e) { setError(e instanceof Error ? e.message : t.organize.common.error); }
   };
   const onIdentify = async () => {
     setError(null);
     setFpBusy(true);
     try { setFpResult(await runFingerprint()); }
-    catch (e) { setError(e instanceof Error ? e.message : t.common.error); }
+    catch (e) { setError(e instanceof Error ? e.message : t.organize.common.error); }
     finally { setFpBusy(false); }
   };
 
@@ -73,27 +73,27 @@ export default function SettingsPage() {
     <PageLayout
       title="Settings"
       guide={<>
-        <p>{t.settings.guideL1}</p>
-        <p><b className="text-fg">{t.settings.guideTemplate}</b>{t.settings.guideL2}</p>
-        <p>{t.settings.guideProviderPre}<b className="text-fg">{t.settings.guideProvider}</b>{t.settings.guideProviderPost}</p>
+        <p>{t.organize.settings.guideL1}</p>
+        <p><b className="text-fg">{t.organize.settings.guideTemplate}</b>{t.organize.settings.guideL2}</p>
+        <p>{t.organize.settings.guideProviderPre}<b className="text-fg">{t.organize.settings.guideProvider}</b>{t.organize.settings.guideProviderPost}</p>
       </>}
     >
       <div className="flex max-w-2xl flex-col gap-6">
         <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium text-fg-strong">{t.settings.languageLabel}</h2>
+          <h2 className="text-sm font-medium text-fg-strong">{t.organize.settings.languageLabel}</h2>
           <div className="flex gap-2">
             <button
               type="button" onClick={() => setLang("it")} aria-pressed={lang === "it"}
               className={`border px-2 py-1 text-xs uppercase tracking-wider ${lang === "it" ? "border-border-strong bg-surface-2 text-fg-strong" : "border-border text-muted hover:text-fg"}`}
-            >{t.settings.languageIt}</button>
+            >{t.organize.settings.languageIt}</button>
             <button
               type="button" onClick={() => setLang("en")} aria-pressed={lang === "en"}
               className={`border px-2 py-1 text-xs uppercase tracking-wider ${lang === "en" ? "border-border-strong bg-surface-2 text-fg-strong" : "border-border text-muted hover:text-fg"}`}
-            >{t.settings.languageEn}</button>
+            >{t.organize.settings.languageEn}</button>
           </div>
         </section>
 
-        {offline && <Alert>{t.common.backendOffline}</Alert>}
+        {offline && <Alert>{t.organize.common.backendOffline}</Alert>}
         {error && <Alert>{error}</Alert>}
 
         {!loaded && !offline && <Loading />}
@@ -102,41 +102,41 @@ export default function SettingsPage() {
           <>
             <section className="flex flex-col gap-4">
               <div>
-                <h2 className="text-sm font-medium text-fg-strong">{t.settings.organization}</h2>
+                <h2 className="text-sm font-medium text-fg-strong">{t.organize.settings.organization}</h2>
                 <p className="mt-1 text-xs text-faint">
-                  {t.settings.orgIntroA}
-                  <b className="text-muted">{t.settings.orgSubfolders}</b>{t.settings.orgIntroC}
-                  <b className="text-muted">{t.settings.orgName}</b>{t.settings.orgIntroD}
+                  {t.organize.settings.orgIntroA}
+                  <b className="text-muted">{t.organize.settings.orgSubfolders}</b>{t.organize.settings.orgIntroC}
+                  <b className="text-muted">{t.organize.settings.orgName}</b>{t.organize.settings.orgIntroD}
                 </p>
               </div>
 
               <label className="block">
-                <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">{t.settings.tplNameLabel}</span>
+                <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">{t.organize.settings.tplNameLabel}</span>
                 <input className="w-full border border-border bg-surface px-3 py-2 text-sm text-fg-strong focus:border-border-strong focus:outline-none"
                   value={naming} onChange={(e) => setNaming(e.target.value)} />
-                <span className="mt-1.5 block text-xs text-faint">{t.settings.fieldsLabel} <span className="font-mono">{"{artist} {title} {album} {genre} {year} {label} {track_no}"}</span></span>
+                <span className="mt-1.5 block text-xs text-faint">{t.organize.settings.fieldsLabel} <span className="font-mono">{"{artist} {title} {album} {genre} {year} {label} {track_no}"}</span></span>
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">{t.settings.tplFolderLabel}</span>
+                <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">{t.organize.settings.tplFolderLabel}</span>
                 <input className="w-full border border-border bg-surface px-3 py-2 text-sm text-fg-strong focus:border-border-strong focus:outline-none"
                   value={folder} onChange={(e) => setFolder(e.target.value)} />
-                <span className="mt-1.5 block text-xs text-faint">{folder.trim() ? <>{t.settings.subfoldersLabel} <span className="text-ok">{preview(folder)}/</span></> : t.settings.noSubfolders}</span>
+                <span className="mt-1.5 block text-xs text-faint">{folder.trim() ? <>{t.organize.settings.subfoldersLabel} <span className="text-ok">{preview(folder)}/</span></> : t.organize.settings.noSubfolders}</span>
               </label>
 
               <div className="border border-border bg-surface p-3">
-                <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted">{t.settings.pathPreview}</div>
+                <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted">{t.organize.settings.pathPreview}</div>
                 <div className="overflow-x-auto whitespace-nowrap font-mono text-[11px] leading-relaxed">
                   <div className="text-faint">{SAMPLE_SOURCE}</div>
                   <div className="text-muted">↓</div>
-                  <div className="text-ok">{renderDest(folder, naming, t.files.library)}</div>
+                  <div className="text-ok">{renderDest(folder, naming, t.organize.files.library)}</div>
                 </div>
-                <p className="mt-1.5 text-[10px] text-faint">{t.settings.previewHint}</p>
+                <p className="mt-1.5 text-[10px] text-faint">{t.organize.settings.previewHint}</p>
               </div>
 
-              <Button variant="outline" size="sm" className="self-start" onClick={saveTemplates}>{t.settings.saveTemplates}</Button>
+              <Button variant="outline" size="sm" className="self-start" onClick={saveTemplates}>{t.organize.settings.saveTemplates}</Button>
 
-              <p className="text-xs text-faint">{t.settings.foldersNote}</p>
+              <p className="text-xs text-faint">{t.organize.settings.foldersNote}</p>
             </section>
 
             <ProviderList
@@ -151,7 +151,7 @@ export default function SettingsPage() {
 
 function StatusBadge({ status }: { status: ProviderInfo["status"] }) {
   const t = useT();
-  const label = status === "configured" ? t.settings.statusConfigured : status === "connected" ? t.settings.statusConnected : t.settings.statusMissing;
+  const label = status === "configured" ? t.organize.settings.statusConfigured : status === "connected" ? t.organize.settings.statusConnected : t.organize.settings.statusMissing;
   return (
     <span className={`shrink-0 text-[10px] uppercase tracking-wider ${status === "missing" ? "text-faint" : "text-ok"}`}>
       {label}
@@ -168,8 +168,8 @@ function ProviderList({ providers, fpResult, fpBusy, onIdentify }: {
   const t = useT();
   return (
     <section>
-      <h2 className="text-sm font-medium text-fg-strong">{t.settings.providerTitle}</h2>
-      <p className="mt-1 text-xs text-faint">{t.settings.providerHintPre}<span className="font-mono">backend/.env</span>{t.settings.providerHintPost}</p>
+      <h2 className="text-sm font-medium text-fg-strong">{t.organize.settings.providerTitle}</h2>
+      <p className="mt-1 text-xs text-faint">{t.organize.settings.providerHintPre}<span className="font-mono">backend/.env</span>{t.organize.settings.providerHintPost}</p>
       <div className="mt-3 flex flex-col">
         {providers.map((p, i) => (
           <div key={p.key} className="border-t border-border py-4 first:border-t-0">
@@ -178,9 +178,9 @@ function ProviderList({ providers, fpResult, fpBusy, onIdentify }: {
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                   <span className="tnum text-[11px] text-faint">{String(i + 1).padStart(2, "0")}</span>
                   <span className="text-sm font-medium uppercase tracking-wide text-fg-strong">{p.name}</span>
-                  <span className="text-[10px] uppercase tracking-wider text-muted">{t.settings.providersMeta[p.key]?.category ?? p.category}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-muted">{t.organize.settings.providersMeta[p.key]?.category ?? p.category}</span>
                 </div>
-                <p className="mt-1 max-w-xl text-xs text-faint">{t.settings.providersMeta[p.key]?.description ?? p.description}</p>
+                <p className="mt-1 max-w-xl text-xs text-faint">{t.organize.settings.providersMeta[p.key]?.description ?? p.description}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   {p.env_vars.map((v) => (
                     <code key={v} className="border border-border bg-bg px-1.5 py-0.5 font-mono text-[10px] text-muted">{v}</code>
@@ -190,12 +190,12 @@ function ProviderList({ providers, fpResult, fpBusy, onIdentify }: {
                     <button
                       onClick={onIdentify} disabled={fpBusy}
                       className="border border-border px-1.5 py-0.5 text-[10px] text-fg hover:bg-elevated disabled:opacity-40"
-                    >{fpBusy ? t.settings.identifyBusy : t.settings.identifyNow}</button>
+                    >{fpBusy ? t.organize.settings.identifyBusy : t.organize.settings.identifyNow}</button>
                   )}
                 </div>
                 {p.key === "acoustid" && fpResult && (
                   <p className="mt-1.5 text-[10px] text-faint">
-                    {t.settings.fpResult(fpResult.identified, fpResult.below_threshold, fpResult.not_found, fpResult.errors, fpResult.total)}
+                    {t.organize.settings.fpResult(fpResult.identified, fpResult.below_threshold, fpResult.not_found, fpResult.errors, fpResult.total)}
                   </p>
                 )}
               </div>

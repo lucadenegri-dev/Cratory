@@ -12,7 +12,7 @@ import { IssuesTable, issueIsFixable, issueIsStrong, type GroupBy } from "@/comp
 import { Alert, Button, Checkbox, EmptyState, Input, Loading, Modal, Select, Spinner } from "@/components/organize/ui";
 import { PathPickerButton, usePickerAvailability } from "@/components/organize/path-picker-button";
 import { cn } from "@/lib/cn";
-import { useT } from "@/lib/organize/i18n";
+import { useT } from "@/lib/i18n";
 
 export default function IssuesPage() {
   const t = useT();
@@ -79,7 +79,7 @@ export default function IssuesPage() {
   const act = async (fn: () => Promise<unknown>) => {
     setActionError(null);
     try { await fn(); load(); }
-    catch (e) { setActionError(e instanceof Error ? e.message : t.common.error); }
+    catch (e) { setActionError(e instanceof Error ? e.message : t.organize.common.error); }
   };
   const onFix = (id: number, value: string) => act(() => fixIssue(id, value));
   const onAccept = (id: number) => act(() => setIssueStatus(id, "accepted"));
@@ -89,7 +89,7 @@ export default function IssuesPage() {
   const dismissAllInfo = () => act(() => bulkIssues({ severity: "info", status: "dismissed" }));
   const onAcceptCovers = () => act(async () => {
     const r = await bulkIssues({ type: "missing_cover", status: "accepted" });
-    setAiNote(t.issues.acceptCoversNote(r.updated));
+    setAiNote(t.organize.issues.acceptCoversNote(r.updated));
   });
   const onAcceptGroup = (key: string) => act(() =>
     bulkIssues(groupBy === "severity"
@@ -103,13 +103,13 @@ export default function IssuesPage() {
     try {
       const r = await aiSuggestTags();
       if (!r.configured) {
-        setActionError(t.issues.aiNotConfigured);
+        setActionError(t.organize.issues.aiNotConfigured);
       } else {
         load();
-        setAiNote(t.issues.aiTagsNote(r.suggested, r.unresolved));
+        setAiNote(t.organize.issues.aiTagsNote(r.suggested, r.unresolved));
       }
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : t.common.error);
+      setActionError(e instanceof Error ? e.message : t.organize.common.error);
     } finally {
       setAiBusy(false);
     }
@@ -121,7 +121,7 @@ export default function IssuesPage() {
     setGenreBusy(true);
     try {
       const p = await genreReviewPreview();
-      if (!p.configured) setActionError(t.issues.aiNotConfigured);
+      if (!p.configured) setActionError(t.organize.issues.aiNotConfigured);
       else {
         setGenreFolder("");
         setGenreFiles(p.files);
@@ -129,7 +129,7 @@ export default function IssuesPage() {
         setGenreModalOpen(true);
       }
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : t.common.error);
+      setActionError(e instanceof Error ? e.message : t.organize.common.error);
     } finally {
       setGenreBusy(false);
     }
@@ -140,7 +140,7 @@ export default function IssuesPage() {
     try {
       await startGenreReview({ folder: genreFolder || null });
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : t.common.error);
+      setActionError(e instanceof Error ? e.message : t.organize.common.error);
     }
   };
 
@@ -177,13 +177,13 @@ export default function IssuesPage() {
     try {
       const r = await providerSuggest();
       if (!r.configured) {
-        setActionError(t.issues.providerNotConfigured);
+        setActionError(t.organize.issues.providerNotConfigured);
       } else {
         load();
-        setAiNote(t.issues.providerNote(r.suggested, r.covers, r.fingerprinted, r.unresolved, r.acoustid_available));
+        setAiNote(t.organize.issues.providerNote(r.suggested, r.covers, r.fingerprinted, r.unresolved, r.acoustid_available));
       }
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : t.common.error);
+      setActionError(e instanceof Error ? e.message : t.organize.common.error);
     } finally {
       setProviderBusy(false);
     }
@@ -204,7 +204,7 @@ export default function IssuesPage() {
       include_dismissed: inclDismissed,
       covers: rescanCovers,
       only_new: rescanOnlyNew,
-    }).catch((e) => setActionError(e instanceof Error ? e.message : t.common.error));
+    }).catch((e) => setActionError(e instanceof Error ? e.message : t.organize.common.error));
   };
 
   const onDetectRatings = async () => {
@@ -214,9 +214,9 @@ export default function IssuesPage() {
     try {
       const r = await detectRatings();
       load();
-      setAiNote(r.found > 0 ? t.issues.detectRatingsNote(r.found, r.created) : t.issues.detectRatingsNone);
+      setAiNote(r.found > 0 ? t.organize.issues.detectRatingsNote(r.found, r.created) : t.organize.issues.detectRatingsNone);
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : t.common.error);
+      setActionError(e instanceof Error ? e.message : t.organize.common.error);
     } finally {
       setRatingBusy(false);
     }
@@ -229,9 +229,9 @@ export default function IssuesPage() {
     setAiNote(null);
     try {
       const s = await startIntegrity();
-      if (!s.available) setActionError(t.issues.integrityUnavailable);
+      if (!s.available) setActionError(t.organize.issues.integrityUnavailable);
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : t.common.error);
+      setActionError(e instanceof Error ? e.message : t.organize.common.error);
     }
   };
 
@@ -241,13 +241,13 @@ export default function IssuesPage() {
     setActionError(null);
     setAiNote(null);
     startRescan({ fields: [], covers: true })
-      .catch((e) => setActionError(e instanceof Error ? e.message : t.common.error));
+      .catch((e) => setActionError(e instanceof Error ? e.message : t.organize.common.error));
   };
 
   const onAcceptHigh = () =>
     act(async () => {
       const r = await acceptStrongOverrides();
-      setAiNote(t.issues.acceptHighNote(r.updated));
+      setAiNote(t.organize.issues.acceptHighNote(r.updated));
     });
 
   // Il rescan gira nel job globale (barra in basso): quando passa running→done
@@ -259,12 +259,12 @@ export default function IssuesPage() {
       const r = rescan.result;
       setAiNote(
         r
-          ? t.issues.rescanNote(r.proposed_strong, r.proposed_medium, r.proposed_weak, r.scanned, r.acoustid_available, r.covers)
-          : t.issues.rescanDone,
+          ? t.organize.issues.rescanNote(r.proposed_strong, r.proposed_medium, r.proposed_weak, r.scanned, r.acoustid_available, r.covers)
+          : t.organize.issues.rescanDone,
       );
     }
     if (prevRescan.current === "running" && rescan.status === "error") {
-      setActionError(rescan.error || t.issues.rescanFailed);
+      setActionError(rescan.error || t.organize.issues.rescanFailed);
     }
     prevRescan.current = rescan.status;
   }, [rescan.status, rescan.result, rescan.error, load, t]);
@@ -277,10 +277,10 @@ export default function IssuesPage() {
   if (seenGenreReview !== genreReviewJob.status) {
     if (seenGenreReview === "running" && genreReviewJob.status === "done" && genreReviewJob.result) {
       const r = genreReviewJob.result;
-      setAiNote(t.issues.genreReviewNote(r.proposed, r.confirmed, r.unresolved));
+      setAiNote(t.organize.issues.genreReviewNote(r.proposed, r.confirmed, r.unresolved));
     }
     if (seenGenreReview === "running" && genreReviewJob.status === "error") {
-      setActionError(genreReviewJob.error || t.issues.genreReviewFailed);
+      setActionError(genreReviewJob.error || t.organize.issues.genreReviewFailed);
     }
     setSeenGenreReview(genreReviewJob.status);
   }
@@ -297,10 +297,10 @@ export default function IssuesPage() {
   const [seenIntegrity, setSeenIntegrity] = useState(integrity.status);
   if (seenIntegrity !== integrity.status) {
     if (seenIntegrity === "running" && integrity.status === "done" && integrity.result) {
-      setAiNote(t.issues.integrityNote(integrity.result.corrupt, integrity.result.checked));
+      setAiNote(t.organize.issues.integrityNote(integrity.result.corrupt, integrity.result.checked));
     }
     if (seenIntegrity === "running" && integrity.status === "error") {
-      setActionError(integrity.error || t.issues.integrityUnavailable);
+      setActionError(integrity.error || t.organize.issues.integrityUnavailable);
     }
     setSeenIntegrity(integrity.status);
   }
@@ -355,72 +355,72 @@ export default function IssuesPage() {
   // "maintenance" fa pulizia/verifica/riscrittura.
   const enrichSources = [
     { group: "enrich", onClick: onAiSuggest, busy: aiBusy,
-      label: aiBusy ? t.issues.aiBusy : t.issues.aiTagsBtn,
-      desc: t.issues.enrichAiTagsDesc, tag: t.issues.enrichAi },
+      label: aiBusy ? t.organize.issues.aiBusy : t.organize.issues.aiTagsBtn,
+      desc: t.organize.issues.enrichAiTagsDesc, tag: t.organize.issues.enrichAi },
     { group: "maintenance", onClick: onGenreReviewClick, busy: genreBusy || genreReviewRunning,
-      label: genreBusy || genreReviewRunning ? t.issues.aiBusy : t.issues.genreReviewBtn,
-      desc: t.issues.genreReviewDesc, tag: t.issues.enrichAi },
+      label: genreBusy || genreReviewRunning ? t.organize.issues.aiBusy : t.organize.issues.genreReviewBtn,
+      desc: t.organize.issues.genreReviewDesc, tag: t.organize.issues.enrichAi },
     { group: "enrich", onClick: onProviderSuggest, busy: providerBusy,
-      label: providerBusy ? t.issues.providerImportBusy : t.issues.providerSuggestBtn,
-      desc: t.issues.enrichProviderDesc, tag: t.issues.enrichProviderTag },
+      label: providerBusy ? t.organize.issues.providerImportBusy : t.organize.issues.providerSuggestBtn,
+      desc: t.organize.issues.enrichProviderDesc, tag: t.organize.issues.enrichProviderTag },
     { group: "maintenance", onClick: onFetchAllCovers, busy: rescanRunning,
-      label: rescanRunning ? t.issues.providerImportBusy : t.issues.fetchCoversBtn,
-      desc: t.issues.fetchCoversDesc, tag: t.issues.enrichProviderTag },
+      label: rescanRunning ? t.organize.issues.providerImportBusy : t.organize.issues.fetchCoversBtn,
+      desc: t.organize.issues.fetchCoversDesc, tag: t.organize.issues.enrichProviderTag },
     { group: "maintenance", onClick: onDetectRatings, busy: ratingBusy,
-      label: ratingBusy ? t.issues.aiBusy : t.issues.detectRatingsBtn,
-      desc: t.issues.detectRatingsDesc, tag: t.issues.enrichLocal },
+      label: ratingBusy ? t.organize.issues.aiBusy : t.organize.issues.detectRatingsBtn,
+      desc: t.organize.issues.detectRatingsDesc, tag: t.organize.issues.enrichLocal },
     { group: "maintenance", onClick: onIntegrityCheck, busy: integrity.status === "running",
-      label: integrity.status === "running" ? t.issues.providerImportBusy : t.issues.integrityBtn,
-      desc: t.issues.integrityDesc, tag: t.issues.integrityTag },
+      label: integrity.status === "running" ? t.organize.issues.providerImportBusy : t.organize.issues.integrityBtn,
+      desc: t.organize.issues.integrityDesc, tag: t.organize.issues.integrityTag },
   ];
 
   return (
     <PageLayout
       title="Issues"
       meta={`${filtered.length} / ${issues.length}`}
-      marginaliaTitle={t.issues.summary}
+      marginaliaTitle={t.organize.issues.summary}
       marginalia={<Marginalia total={issues.length} bySev={bySev} byType={byType} accepted={accepted} />}
       guide={<>
-        <p>{t.issues.guide1}</p>
-        <p>{t.issues.guide2pre}<b className="text-fg">{t.issues.guide2accept}</b>{t.issues.guide2mid}<b className="text-fg">{t.issues.guide2dismiss}</b>{t.issues.guide2post}</p>
-        <p><b className="text-fg">{t.issues.guide3label}</b>{t.issues.guide3post}</p>
+        <p>{t.organize.issues.guide1}</p>
+        <p>{t.organize.issues.guide2pre}<b className="text-fg">{t.organize.issues.guide2accept}</b>{t.organize.issues.guide2mid}<b className="text-fg">{t.organize.issues.guide2dismiss}</b>{t.organize.issues.guide2post}</p>
+        <p><b className="text-fg">{t.organize.issues.guide3label}</b>{t.organize.issues.guide3post}</p>
       </>}
     >
       <div className="flex flex-col gap-3">
-        {offline && <Alert>{t.common.backendOffline}</Alert>}
+        {offline && <Alert>{t.organize.common.backendOffline}</Alert>}
         {actionError && <Alert>{actionError}</Alert>}
         {aiNote && <Alert tone="info">{aiNote}</Alert>}
 
         {/* filtri: a tutta larghezza */}
         <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
           <Select value={sev} onChange={(e) => setSev(e.target.value)} className="h-8 text-xs">
-            <option value="">{t.issues.sevAll}</option>
+            <option value="">{t.organize.issues.sevAll}</option>
             <option value="error">error</option>
             <option value="warning">warning</option>
             <option value="info">info</option>
           </Select>
           <Select value={type} onChange={(e) => setType(e.target.value)} className="h-8 text-xs">
-            <option value="">{t.issues.typeAll}</option>
+            <option value="">{t.organize.issues.typeAll}</option>
             {types.map((ty) => <option key={ty} value={ty}>{ty}</option>)}
           </Select>
           <Select value={field} onChange={(e) => setField(e.target.value)} className="h-8 text-xs">
-            <option value="">{t.issues.fieldAll}</option>
+            <option value="">{t.organize.issues.fieldAll}</option>
             {fields.map((f) => <option key={f} value={f}>{f}</option>)}
           </Select>
           <Select value={status} onChange={(e) => setStatus(e.target.value)} className="h-8 text-xs">
-            <option value="open">{t.issues.statusOpen}</option>
-            <option value="accepted">{t.issues.statusAccepted}</option>
-            <option value="dismissed">{t.issues.statusDismissed}</option>
-            <option value="">{t.issues.statusAll}</option>
+            <option value="open">{t.organize.issues.statusOpen}</option>
+            <option value="accepted">{t.organize.issues.statusAccepted}</option>
+            <option value="dismissed">{t.organize.issues.statusDismissed}</option>
+            <option value="">{t.organize.issues.statusAll}</option>
           </Select>
           <Select value={location} onChange={(e) => setLocation(e.target.value as Location | "")} className="h-8 text-xs">
-            <option value="">{t.issues.allLocations}</option>
-            <option value="inbox">{t.files.inbox}</option>
-            <option value="library">{t.files.library}</option>
+            <option value="">{t.organize.issues.allLocations}</option>
+            <option value="inbox">{t.organize.files.inbox}</option>
+            <option value="library">{t.organize.files.library}</option>
           </Select>
           <Input
             value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder={t.issues.searchPlaceholder} className="h-8 text-xs"
+            placeholder={t.organize.issues.searchPlaceholder} className="h-8 text-xs"
           />
         </div>
 
@@ -429,8 +429,8 @@ export default function IssuesPage() {
             disclosure) invece di una toolbar sempre aperta. */}
         <section className="border border-border bg-surface">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border px-3 py-2">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted">{t.issues.enrichTitle}</span>
-            <span className="text-[10px] text-muted">{t.issues.enrichHint}</span>
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted">{t.organize.issues.enrichTitle}</span>
+            <span className="text-[10px] text-muted">{t.organize.issues.enrichHint}</span>
           </div>
           <div className="flex gap-1 border-b border-border px-3 py-2 text-[10px] uppercase tracking-wider">
             {(["enrich", "maintenance"] as const).map((m) => (
@@ -438,7 +438,7 @@ export default function IssuesPage() {
                 key={m} type="button" onClick={() => setEnrichMode(m)}
                 className={cn("border px-2 py-0.5 transition-colors",
                   enrichMode === m ? "border-fg text-fg" : "border-border text-faint hover:text-fg")}
-              >{m === "enrich" ? t.issues.modeEnrich : t.issues.modeMaintenance}</button>
+              >{m === "enrich" ? t.organize.issues.modeEnrich : t.organize.issues.modeMaintenance}</button>
             ))}
           </div>
           <ul className="divide-y divide-border">
@@ -465,25 +465,25 @@ export default function IssuesPage() {
               aria-expanded={forceOpen}
             >
               <span className="w-3 text-faint">{forceOpen ? "▾" : "▸"}</span>
-              {t.issues.forceLookupToggle}
+              {t.organize.issues.forceLookupToggle}
             </button>
             {forceOpen && (
               <div className="border-t border-border px-3 py-3">
-                <p className="mb-2.5 text-[11px] leading-relaxed text-fg">{t.issues.forceLookupHint}</p>
+                <p className="mb-2.5 text-[11px] leading-relaxed text-fg">{t.organize.issues.forceLookupHint}</p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
                   <div className="flex items-center gap-1.5">
                     <input
                       className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
-                      placeholder={t.issues.folderPlaceholder} value={rescanFolder}
+                      placeholder={t.organize.issues.folderPlaceholder} value={rescanFolder}
                       onChange={(e) => setRescanFolder(e.target.value)} />
                     {pickerOk && (
-                      <PathPickerButton kind="folder" start={rescanFolder} prompt={t.issues.forceLookupToggle}
+                      <PathPickerButton kind="folder" start={rescanFolder} prompt={t.organize.issues.forceLookupToggle}
                         onPick={(p) => { setActionError(null); setRescanFolder(p); }} onError={setActionError} />
                     )}
                   </div>
                   <input
                     className="h-8 w-40 border border-border bg-bg px-2 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
-                    placeholder={t.issues.currentGenrePlaceholder} value={rescanGenre}
+                    placeholder={t.organize.issues.currentGenrePlaceholder} value={rescanGenre}
                     onChange={(e) => setRescanGenre(e.target.value)} />
                   <div className="flex flex-wrap gap-2 text-[11px] text-fg">
                     {["genre", "album", "label", "year", "artist", "title"].map((f) => (
@@ -494,18 +494,18 @@ export default function IssuesPage() {
                     ))}
                     <label className="flex items-center gap-1 text-ok">
                       <input type="checkbox" checked={rescanCovers} onChange={(e) => setRescanCovers(e.target.checked)} />
-                      {t.issues.rescanCovers}
+                      {t.organize.issues.rescanCovers}
                     </label>
-                    <label className="flex items-center gap-1" title={t.issues.newFilesTitle}>
+                    <label className="flex items-center gap-1" title={t.organize.issues.newFilesTitle}>
                       <input type="checkbox" checked={rescanOnlyNew} onChange={(e) => setRescanOnlyNew(e.target.checked)} />
-                      {t.issues.rescanOnlyNew}
+                      {t.organize.issues.rescanOnlyNew}
                     </label>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => setRescanModal(true)} disabled={rescanRunning}>
-                    {rescanRunning && <Spinner />}{rescanRunning ? t.issues.providerImportBusy : t.issues.providerRescanBtn}
+                    {rescanRunning && <Spinner />}{rescanRunning ? t.organize.issues.providerImportBusy : t.organize.issues.providerRescanBtn}
                   </Button>
                 </div>
-                <p className="mt-2.5 text-[11px] leading-relaxed text-muted">{t.issues.rewriteReviewNote}</p>
+                <p className="mt-2.5 text-[11px] leading-relaxed text-muted">{t.organize.issues.rewriteReviewNote}</p>
               </div>
             )}
           </div>
@@ -515,24 +515,24 @@ export default function IssuesPage() {
         <Modal
           open={rescanModal}
           onClose={() => setRescanModal(false)}
-          title={t.issues.providerRescanBtn}
+          title={t.organize.issues.providerRescanBtn}
           footer={<>
-            <Button variant="ghost" size="sm" onClick={() => setRescanModal(false)}>{t.common.cancel}</Button>
-            <Button variant="primary" size="sm" onClick={onProviderRescan}>{t.issues.modalStart}</Button>
+            <Button variant="ghost" size="sm" onClick={() => setRescanModal(false)}>{t.organize.common.cancel}</Button>
+            <Button variant="primary" size="sm" onClick={onProviderRescan}>{t.organize.issues.modalStart}</Button>
           </>}
         >
           <p className="text-sm text-muted">
-            {t.issues.modalBodyPre}
-            {rescanFolder ? <>in <b className="text-fg-strong">{rescanFolder}</b></> : t.issues.modalBodyPresent}
-            {rescanGenre ? <>{t.issues.modalBodyGenrePre}<b className="text-fg-strong">{rescanGenre}</b></> : null}
-            {t.issues.modalBodyFieldsPre}<b className="text-fg-strong">{(rescanFields.length ? rescanFields : ["genre"]).join(", ")}</b>
-            {t.issues.modalBodyPost}
+            {t.organize.issues.modalBodyPre}
+            {rescanFolder ? <>in <b className="text-fg-strong">{rescanFolder}</b></> : t.organize.issues.modalBodyPresent}
+            {rescanGenre ? <>{t.organize.issues.modalBodyGenrePre}<b className="text-fg-strong">{rescanGenre}</b></> : null}
+            {t.organize.issues.modalBodyFieldsPre}<b className="text-fg-strong">{(rescanFields.length ? rescanFields : ["genre"]).join(", ")}</b>
+            {t.organize.issues.modalBodyPost}
           </p>
           <div className="mt-4 flex flex-col gap-3">
-            <Checkbox label={t.issues.reconsiderAccepted} checked={inclAccepted} onChange={setInclAccepted} />
-            <Checkbox label={t.issues.reconsiderDismissed} checked={inclDismissed} onChange={setInclDismissed} />
+            <Checkbox label={t.organize.issues.reconsiderAccepted} checked={inclAccepted} onChange={setInclAccepted} />
+            <Checkbox label={t.organize.issues.reconsiderDismissed} checked={inclDismissed} onChange={setInclDismissed} />
             <p className="text-xs text-faint">
-              {t.issues.reconsiderHint}
+              {t.organize.issues.reconsiderHint}
             </p>
           </div>
         </Modal>
@@ -540,35 +540,35 @@ export default function IssuesPage() {
         <Modal
           open={genreModalOpen}
           onClose={() => setGenreModalOpen(false)}
-          title={t.issues.genreReviewBtn}
+          title={t.organize.issues.genreReviewBtn}
           footer={<>
-            <Button variant="ghost" size="sm" onClick={() => setGenreModalOpen(false)}>{t.common.cancel}</Button>
+            <Button variant="ghost" size="sm" onClick={() => setGenreModalOpen(false)}>{t.organize.common.cancel}</Button>
             <Button
               variant="primary" size="sm" onClick={onGenreReviewStart}
               disabled={genreFiles === 0 || genrePreviewLoading}
             >
-              {t.issues.modalStart}
+              {t.organize.issues.modalStart}
             </Button>
           </>}
         >
-          <p className="text-sm text-muted">{t.issues.genreReviewConfirm(genreFiles)}</p>
+          <p className="text-sm text-muted">{t.organize.issues.genreReviewConfirm(genreFiles)}</p>
           <div className="mt-3">
-            <p className="mb-1 text-[11px] text-muted">{t.issues.genreReviewFolderLabel}</p>
+            <p className="mb-1 text-[11px] text-muted">{t.organize.issues.genreReviewFolderLabel}</p>
             <div className="flex items-center gap-1.5">
               <Input
                 value={genreFolder}
                 onChange={(e) => setGenreFolder(e.target.value)}
-                placeholder={t.issues.folderPlaceholder}
+                placeholder={t.organize.issues.folderPlaceholder}
                 className="h-8 text-xs"
               />
               {pickerOk && (
-                <PathPickerButton kind="folder" start={genreFolder} prompt={t.issues.genreReviewBtn}
+                <PathPickerButton kind="folder" start={genreFolder} prompt={t.organize.issues.genreReviewBtn}
                   onPick={(p) => { setActionError(null); setGenreFolder(p); }} onError={setActionError} />
               )}
             </div>
             <div className="mt-1.5 flex h-4 items-center gap-1.5 text-[11px] text-faint">
               {genrePreviewLoading && <Spinner className="h-3 w-3" />}
-              {!genrePreviewLoading && genreFiles === 0 && <span>{t.issues.genreReviewNoMatch}</span>}
+              {!genrePreviewLoading && genreFiles === 0 && <span>{t.organize.issues.genreReviewNoMatch}</span>}
             </div>
           </div>
         </Modal>
@@ -577,23 +577,23 @@ export default function IssuesPage() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             {openStrong > 0 && (
-              <Button variant="outline" size="sm" onClick={onAcceptHigh}>{t.issues.acceptHighBtn}</Button>
+              <Button variant="outline" size="sm" onClick={onAcceptHigh}>{t.organize.issues.acceptHighBtn}</Button>
             )}
             {openFixable > 0 && (
-              <Button variant="outline" size="sm" onClick={acceptAllFixable}>{t.issues.acceptFixableBtn}</Button>
+              <Button variant="outline" size="sm" onClick={acceptAllFixable}>{t.organize.issues.acceptFixableBtn}</Button>
             )}
             {openInfo > 0 && (
-              <Button variant="outline" size="sm" onClick={dismissAllInfo}>{t.issues.dismissInfoBtn}</Button>
+              <Button variant="outline" size="sm" onClick={dismissAllInfo}>{t.organize.issues.dismissInfoBtn}</Button>
             )}
             {openCovers > 0 && (
-              <Button variant="outline" size="sm" onClick={onAcceptCovers}>{t.issues.acceptCoversBtn}</Button>
+              <Button variant="outline" size="sm" onClick={onAcceptCovers}>{t.organize.issues.acceptCoversBtn}</Button>
             )}
           </div>
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setOnlyNew((v) => !v)}
-              title={t.issues.newFilesTitle}
+              title={t.organize.issues.newFilesTitle}
               aria-pressed={onlyNew}
               className={cn(
                 "h-8 border px-2.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
@@ -601,17 +601,17 @@ export default function IssuesPage() {
                   ? "border-fg-strong bg-fg-strong text-bg"
                   : "border-border-strong text-muted hover:text-fg",
               )}
-            >{t.issues.newFilesOnly}</button>
+            >{t.organize.issues.newFilesOnly}</button>
             <label className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted">
-              {t.issues.groupByLabel}
+              {t.organize.issues.groupByLabel}
               <Select
                 value={groupBy}
                 onChange={(e) => setGroupBy(e.target.value as GroupBy)}
                 className="h-8 w-28 text-[11px]"
               >
-                <option value="type">{t.issues.groupByType}</option>
-                <option value="severity">{t.issues.groupBySeverity}</option>
-                <option value="none">{t.issues.groupByNone}</option>
+                <option value="type">{t.organize.issues.groupByType}</option>
+                <option value="severity">{t.organize.issues.groupBySeverity}</option>
+                <option value="none">{t.organize.issues.groupByNone}</option>
               </Select>
             </label>
           </div>
@@ -620,8 +620,8 @@ export default function IssuesPage() {
         {!loaded ? (
           <Loading />
         ) : filtered.length === 0 && !offline ? (
-          <EmptyState title={t.issues.emptyTitle}>
-            {issues.length === 0 ? t.issues.emptyClean : t.issues.emptyFiltered}
+          <EmptyState title={t.organize.issues.emptyTitle}>
+            {issues.length === 0 ? t.organize.issues.emptyClean : t.organize.issues.emptyFiltered}
           </EmptyState>
         ) : (
           <IssuesTable
@@ -646,15 +646,15 @@ function Marginalia({ total, bySev, byType, accepted }: {
     <div className="flex flex-col gap-4 text-xs">
       <div>
         <div className="tnum text-2xl leading-none text-fg-strong">{total}</div>
-        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.issues.statIssues}</div>
+        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.organize.issues.statIssues}</div>
         <div className="mt-1 flex gap-3 text-[11px]">
-          <span className="text-danger">{bySev.error ?? 0} {t.files.sevErr}</span>
-          <span className="text-warning">{bySev.warning ?? 0} {t.files.sevWarn}</span>
-          <span className="text-muted">{bySev.info ?? 0} {t.files.sevInfo}</span>
+          <span className="text-danger">{bySev.error ?? 0} {t.organize.files.sevErr}</span>
+          <span className="text-warning">{bySev.warning ?? 0} {t.organize.files.sevWarn}</span>
+          <span className="text-muted">{bySev.info ?? 0} {t.organize.files.sevInfo}</span>
         </div>
       </div>
       <div>
-        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">{t.issues.byType}</div>
+        <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">{t.organize.issues.byType}</div>
         <div className="flex flex-col gap-1">
           {Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([ty, n]) => (
             <div key={ty} className="flex justify-between"><span className="text-muted">{ty}</span><span className="tnum text-fg">{n}</span></div>
@@ -662,8 +662,8 @@ function Marginalia({ total, bySev, byType, accepted }: {
         </div>
       </div>
       <div>
-        <div className="text-[10px] uppercase tracking-wider text-muted">{t.issues.acceptedLabel}</div>
-        <div className="mt-1 text-[11px] text-ok">{t.issues.acceptedNote(accepted)}</div>
+        <div className="text-[10px] uppercase tracking-wider text-muted">{t.organize.issues.acceptedLabel}</div>
+        <div className="mt-1 text-[11px] text-ok">{t.organize.issues.acceptedNote(accepted)}</div>
       </div>
     </div>
   );

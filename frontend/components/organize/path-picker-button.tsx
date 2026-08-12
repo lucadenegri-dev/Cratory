@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { pickerAvailability, pickPath } from "@/lib/organize/api";
 import { Button, Spinner } from "./ui";
-import { useT } from "@/lib/organize/i18n";
+import { useT } from "@/lib/i18n";
 
 /** Disponibilità del dialog nativo: fetch una volta al mount, errore = false
  *  (i pulsanti Sfoglia semplicemente non compaiono). */
@@ -43,7 +43,7 @@ export function PathPickerButton({ kind, start, prompt, onPick, onError }: {
 
   return (
     <Button type="button" size="sm" onClick={open} disabled={busy}>
-      {busy ? <Spinner /> : t.common.browseButton}
+      {busy ? <Spinner /> : t.organize.common.browseButton}
     </Button>
   );
 }

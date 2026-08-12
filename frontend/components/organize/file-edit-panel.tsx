@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { updateFileTags, type FileRow, type LibraryFacets, type EditableTags } from "@/lib/organize/api";
 import { Modal, Button, Input, Field, Alert } from "@/components/organize/ui";
-import { useT } from "@/lib/organize/i18n";
+import { useT } from "@/lib/i18n";
 
 const FIELDS: (keyof EditableTags)[] = [
   "artist", "title", "album", "album_artist", "genre", "year", "label", "track_no", "comment",
@@ -67,12 +67,12 @@ export function FileEditPanel({ row, facets, onClose, onSaved }: {
     <Modal
       open
       onClose={onClose}
-      title={t.files.editTitle}
+      title={t.organize.files.editTitle}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{t.common.cancel}</Button>
+          <Button variant="ghost" onClick={onClose}>{t.organize.common.cancel}</Button>
           <Button onClick={save} disabled={saving || changed.length === 0 || anyBadNum}>
-            {t.common.save}
+            {t.organize.common.save}
           </Button>
         </>
       }
@@ -84,7 +84,7 @@ export function FileEditPanel({ row, facets, onClose, onSaved }: {
           const opts = facetFor(f);
           const listId = `edit-${f}`;
           return (
-            <Field key={f} label={t.files.field[f]} hint={badNum(f) ? t.files.numHint : undefined}>
+            <Field key={f} label={t.organize.files.field[f]} hint={badNum(f) ? t.organize.files.numHint : undefined}>
               <Input
                 list={opts.length ? listId : undefined}
                 value={form[f]}

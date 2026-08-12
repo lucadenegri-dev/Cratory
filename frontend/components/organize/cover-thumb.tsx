@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { fileThumbUrl } from "@/lib/organize/api";
 import { cn } from "@/lib/cn";
-import { useT } from "@/lib/organize/i18n";
+import { useT } from "@/lib/i18n";
 
 export type CoverSource = "embedded" | "provider" | null;
 
@@ -36,7 +36,7 @@ export function CoverThumb({ fileId, size = 32, source }: {
     <img
       src={fileThumbUrl(fileId)}
       alt=""
-      title={source === "provider" ? t.common.coverProposed : undefined}
+      title={source === "provider" ? t.organize.common.coverProposed : undefined}
       width={size}
       height={size}
       loading="lazy"

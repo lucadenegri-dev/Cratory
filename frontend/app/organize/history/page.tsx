@@ -6,7 +6,7 @@ import { useJobs } from "@/components/organize/jobs-provider";
 import { PageLayout } from "@/components/organize/page-layout";
 import { Alert, EmptyState, Loading } from "@/components/organize/ui";
 import { cn } from "@/lib/cn";
-import { useT } from "@/lib/organize/i18n";
+import { useT } from "@/lib/i18n";
 
 export default function HistoryPage() {
   const t = useT();
@@ -34,7 +34,7 @@ export default function HistoryPage() {
       const res = await undoRun(id);
       if (res.error) setError(res.error);
     }
-    catch (e) { setError(e instanceof Error ? e.message : t.common.error); }
+    catch (e) { setError(e instanceof Error ? e.message : t.organize.common.error); }
     finally { setBusyId(null); load(); }
   };
 
@@ -44,36 +44,36 @@ export default function HistoryPage() {
   return (
     <PageLayout
       title="History"
-      meta={t.history.runsCount(runs.length)}
-      marginaliaTitle={t.common.summary}
+      meta={t.organize.history.runsCount(runs.length)}
+      marginaliaTitle={t.organize.common.summary}
       marginalia={
         <div className="flex flex-col gap-4 text-xs">
-          <div><div className="tnum text-2xl leading-none text-fg-strong">{applied}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.history.statApplied}</div></div>
-          <div><div className="tnum text-2xl leading-none text-fg-strong">{undone}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.history.statUndone}</div></div>
+          <div><div className="tnum text-2xl leading-none text-fg-strong">{applied}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.organize.history.statApplied}</div></div>
+          <div><div className="tnum text-2xl leading-none text-fg-strong">{undone}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-muted">{t.organize.history.statUndone}</div></div>
         </div>
       }
       guide={<>
-        <p>{t.history.guide1}</p>
-        <p>{t.history.guide2pre}<b className="text-fg">{t.history.guide2undo}</b>{t.history.guide2post}</p>
+        <p>{t.organize.history.guide1}</p>
+        <p>{t.organize.history.guide2pre}<b className="text-fg">{t.organize.history.guide2undo}</b>{t.organize.history.guide2post}</p>
       </>}
     >
       <div className="flex flex-col gap-4">
-        {offline && <Alert>{t.common.backendOffline}</Alert>}
+        {offline && <Alert>{t.organize.common.backendOffline}</Alert>}
         {error && <Alert>{error}</Alert>}
 
         {!loaded ? (
           <Loading />
         ) : runs.length === 0 && !offline ? (
-          <EmptyState title={t.history.emptyTitle}>{t.history.emptyBody}</EmptyState>
+          <EmptyState title={t.organize.history.emptyTitle}>{t.organize.history.emptyBody}</EmptyState>
         ) : (
           <div className="overflow-x-auto border border-border">
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="border-b border-border text-left text-[9px] uppercase tracking-wider text-faint">
-                  <th className="px-3 py-2 font-normal">{t.history.colRun}</th>
-                  <th className="px-3 py-2 font-normal">{t.history.colWhen}</th>
-                  <th className="px-3 py-2 text-right font-normal">{t.history.colOps}</th>
-                  <th className="px-3 py-2 font-normal">{t.history.colStatus}</th>
+                  <th className="px-3 py-2 font-normal">{t.organize.history.colRun}</th>
+                  <th className="px-3 py-2 font-normal">{t.organize.history.colWhen}</th>
+                  <th className="px-3 py-2 text-right font-normal">{t.organize.history.colOps}</th>
+                  <th className="px-3 py-2 font-normal">{t.organize.history.colStatus}</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -83,12 +83,12 @@ export default function HistoryPage() {
                     <td className="px-3 py-2 text-fg-strong">#{r.id}</td>
                     <td className="px-3 py-2 text-muted">{fmtDate(r.created_at)}</td>
                     <td className="tnum px-3 py-2 text-right text-fg">
-                      {r.kind === "manual_edit" ? t.history.manualEdit : r.n_ops}
+                      {r.kind === "manual_edit" ? t.organize.history.manualEdit : r.n_ops}
                     </td>
                     <td className="px-3 py-2">
                       <span className={cn("border border-border px-2 py-0.5 text-[9px] uppercase tracking-wider",
                         r.status === "applied" ? "text-ok" : "text-faint")}>
-                        {r.status === "applied" ? t.history.badgeApplied : t.history.badgeUndone}
+                        {r.status === "applied" ? t.organize.history.badgeApplied : t.organize.history.badgeUndone}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -97,9 +97,9 @@ export default function HistoryPage() {
                           disabled={busyId !== null}
                           onClick={() => onUndo(r.id)}
                           className="border border-border px-2 py-0.5 text-[10px] text-muted hover:bg-elevated disabled:opacity-40"
-                        >{t.history.undo}</button>
+                        >{t.organize.history.undo}</button>
                       ) : (
-                        <span className="text-faint">{t.common.empty}</span>
+                        <span className="text-faint">{t.organize.common.empty}</span>
                       )}
                     </td>
                   </tr>
