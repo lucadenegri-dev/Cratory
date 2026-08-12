@@ -46,6 +46,7 @@ export const en = {
   nav: {
     tagline: "DJ set workbench",
     groupDiscover: "Discover",
+    groupOrganize: "Organize",
     groupCollect: "Collect",
     groupPlay: "Play",
     dashboard: "Dashboard",

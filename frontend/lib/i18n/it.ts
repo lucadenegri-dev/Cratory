@@ -43,6 +43,7 @@ export const it: Dictionary = {
   nav: {
     tagline: "Workbench per DJ set",
     groupDiscover: "Scopri",
+    groupOrganize: "Organizza",
     groupCollect: "Colleziona",
     groupPlay: "Suona",
     dashboard: "Dashboard",

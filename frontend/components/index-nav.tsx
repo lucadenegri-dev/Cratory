@@ -10,7 +10,9 @@ import { useT, type Dictionary } from "@/lib/i18n";
 import { Clock } from "./clock";
 import { ThemeToggle } from "./theme-toggle";
 
-/* Il menu racconta la sequenza del flusso: Scopri → Colleziona → Suona. */
+/* Il menu racconta la sequenza del flusso: Scopri → Organizza → Colleziona →
+   Suona. Organize sta fra Scopri e Colleziona perché è lì che vive nella
+   catena: i file scaricati si sistemano prima di diventare libreria. */
 const navGroups = (t: Dictionary): { title: string | null; items: { href: string; label: string }[] }[] => [
   { title: null, items: [{ href: "/", label: t.nav.dashboard }] },
   {
@@ -19,6 +21,16 @@ const navGroups = (t: Dictionary): { title: string | null; items: { href: string
       { href: "/discovery", label: t.nav.discovery },
       { href: "/shazam", label: t.nav.shazam },
       { href: "/wishlist", label: t.nav.downloads },
+    ],
+  },
+  {
+    title: t.nav.groupOrganize,
+    items: [
+      { href: "/organize/files", label: t.organize.nav.files },
+      { href: "/organize/issues", label: t.organize.nav.issues },
+      { href: "/organize/duplicates", label: t.organize.nav.duplicates },
+      { href: "/organize/plan", label: t.organize.nav.plan },
+      { href: "/organize/history", label: t.organize.nav.history },
     ],
   },
   {
