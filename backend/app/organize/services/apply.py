@@ -11,19 +11,39 @@ from app.organize.integrations import cover_art, fsops, tagio
 from app.organize.models import AudioFile, DupMember, Issue, Plan, PlanOp, UndoJournal, utcnow
 from app.organize.schemas import ApplyResult
 from app.organize.services import conflict
+from app.organize.services.file_link import dentro
 from app.organize.services.planner import PlanOpComputed
 
 logger = logging.getLogger(__name__)
 
 
-def _root_path_per(location: str) -> str:
-    """La cartella che contiene fisicamente un file di quella collocazione.
+def _base_quarantena(f: AudioFile) -> str:
+    """La cartella dentro cui creare la `.quarantine` per questo file.
 
-    Base per `quarantine_path_for`: deve restare la cartella vera (libreria o
-    inbox), non `f.root_id` — che da F3b è solo schema morto derivato, non la
-    scelta dell'utente."""
-    return (runtime_settings.library_root() if location == "library"
+    Di norma è la radice della sua collocazione (libreria o inbox), non
+    `f.root_id` — che da F3b è solo schema morto derivato, non la scelta
+    dell'utente: così la quarantena rispecchia l'albero originale.
+
+    Ma quella radice può non contenere il file. Casi reali: la cartella non è
+    configurata (stringa vuota — `roots.radici` salta quella metà, è uno stato
+    legittimo), LIBRARY_ROOT è cambiata e non si è ancora ri-scansionato, oppure
+    la `location` viene dal fallback conservativo dello scanner. In tutti,
+    `os.path.relpath` produce una catena di ".." e il join in
+    `quarantine_path_for` porta il file FUORI da qualsiasi `.quarantine` — con
+    la base vuota, addirittura su un path relativo alla cwd del server.
+
+    Si ripiega allora sulla cartella del file stesso: la quarantena nasce
+    accanto al file, resta reversibile dal journal, e — ciò che conta più della
+    forma dell'albero — nulla finisce fuori da una `.quarantine`. Rifiutare
+    l'operazione sarebbe l'alternativa, ma fermerebbe l'intero piano a metà per
+    una configurazione che il resto del codice tratta come normale."""
+    base = (runtime_settings.library_root() if f.location == "library"
             else runtime_settings.slskd_download_dir())
+    if dentro(f.path, base):
+        return base
+    logger.warning("radice %r inutilizzabile come base di quarantena per %s "
+                   "(location=%s): uso la cartella del file", base, f.path, f.location)
+    return os.path.dirname(f.path)
 
 
 def _tag_value(tags, field):
@@ -126,7 +146,7 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
 
     def _do_delete(o):
         f = files[o.file_id]
-        q = fsops.quarantine_path_for(f.path, _root_path_per(f.location))
+        q = fsops.quarantine_path_for(f.path, _base_quarantena(f))
         _journal("DELETE", o.file_id, from_path=f.path, quarantine_path=q)  # journal PRIMA
         fsops.safe_move(f.path, q)                              # poi muta
         src_dirs.add(os.path.dirname(f.path))

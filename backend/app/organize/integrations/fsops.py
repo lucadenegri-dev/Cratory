@@ -79,7 +79,17 @@ def cleanup_empty_dirs(dirs, stop_roots) -> int:
 
 
 def quarantine_path_for(path: str, root_path: str) -> str:
+    """Il posto in cui mettere `path` dentro la `.quarantine` di `root_path`.
+
+    `root_path` deve contenere `path`: altrimenti `relpath` restituisce una
+    catena di ".." e il join finisce fuori dalla quarantena (con base vuota,
+    su un path relativo alla cwd). Chi chiama sceglie una base valida —
+    vedi `apply._base_quarantena`; qui la guardia è l'ultima rete."""
+    if not root_path:
+        raise FsOpError("base della quarantena non specificata")
     rel = os.path.relpath(path, root_path)
+    if rel.startswith(os.pardir + os.sep) or rel == os.pardir:
+        raise FsOpError(f"{path} non sta sotto la base di quarantena {root_path}")
     q = os.path.join(root_path, ".quarantine", rel)
     base, i = q, 1
     while os.path.exists(q):

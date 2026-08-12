@@ -17,10 +17,13 @@ from app.models import Track
 from app.organize.models import AudioFile
 
 
-def _dentro(path: str, radice: str) -> bool:
+def dentro(path: str, radice: str) -> bool:
     """True se `path` sta sotto `radice`. Confronto per componenti, non per
     prefisso di stringa: altrimenti `/Music/LibraryVecchia` risulterebbe dentro
-    `/Music/Library`."""
+    `/Music/Library`. Radice vuota (cartella non configurata) = mai dentro.
+
+    Pubblica perché serve anche all'Apply, che deve verificare il contenimento
+    prima di derivare la base della quarantena."""
     if not radice:
         return False
     try:
@@ -34,9 +37,9 @@ def deriva_location(path: str, *, library_root: str, inbox_root: str) -> str:
     """"library" o "inbox". Sollevare è voluto: un file fuori dalle due radici
     non dovrebbe esistere nell'indice, e inventargli una collocazione
     nasconderebbe una configurazione sbagliata."""
-    if _dentro(path, library_root):
+    if dentro(path, library_root):
         return "library"
-    if _dentro(path, inbox_root):
+    if dentro(path, inbox_root):
         return "inbox"
     raise ValueError(f"path fuori da entrambe le radici configurate: {path}")
 

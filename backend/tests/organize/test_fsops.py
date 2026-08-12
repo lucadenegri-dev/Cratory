@@ -43,6 +43,18 @@ def test_quarantine_path_preserves_relpath(tmp_path):
     assert q == str(root / ".quarantine" / "House" / "x.mp3")
 
 
+def test_quarantine_path_refuses_empty_base(tmp_path):
+    with pytest.raises(fsops.FsOpError):
+        fsops.quarantine_path_for(str(tmp_path / "x.mp3"), "")
+
+
+def test_quarantine_path_refuses_file_outside_base(tmp_path):
+    # relpath darebbe una catena di ".." e il join porterebbe il file FUORI
+    # dalla quarantena: ultima rete sotto apply._base_quarantena.
+    with pytest.raises(fsops.FsOpError):
+        fsops.quarantine_path_for(str(tmp_path / "fuori" / "x.mp3"), str(tmp_path / "lib"))
+
+
 def test_cleanup_removes_empty_chain_up_to_root(tmp_path):
     root = tmp_path / "lib"
     deep = root / "House" / "A"

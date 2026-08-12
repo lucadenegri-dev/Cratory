@@ -13,7 +13,7 @@ from app.organize.integrations import content_hash, tagio
 from app.organize.models import AudioFile, ScanRoot, utcnow
 from app.organize.schemas import ScanSummary
 from app.organize.services.file_link import deriva_location, stacca_file
-from app.organize.services.roots import root_id_per
+from app.organize.services.roots import radici
 
 logger = logging.getLogger(__name__)
 
@@ -96,17 +96,51 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
       NON le righe il cui contenuto è cambiato.  Anche una re-scansione su disco
       immutato produce ``updated == N`` (dove N è il numero di file già noti).
       Chunk 2 non deve interpretare ``updated`` come "contenuto modificato".
+
+    Root percorsa e root scritta sono due nozioni distinte: la prima è la
+    cartella che si sta camminando, la seconda si deriva dalla collocazione del
+    file (`_location_per`).  Coincidevano per costruzione finché le ScanRoot le
+    creava l'utente; da F3b no: con SLSKD_DOWNLOAD_DIR annidata dentro
+    LIBRARY_ROOT lo stesso file viene percorso due volte e deriva "library"
+    entrambe le volte.  Tutto ciò che è indicizzazione (lookup del già-noto,
+    `seen`, riconciliazione) va quindi agganciato all'id DERIVATO.
     """
     summary = ScanSummary(roots=[r.id for r in roots], started_at=utcnow())
-    work = [(root, p, e) for root in roots for p, e in _iter_audio_files(root.path)]
+    # Un path percorso da due root (inbox annidata nella libreria) è lo stesso
+    # file: da quando l'indicizzazione si aggancia alla collocazione derivata —
+    # che dipende solo dal path — la seconda passata sarebbe pura duplicazione.
+    work: list[tuple[str, str]] = []
+    visti: set[str] = set()
+    for root in roots:
+        for path, ext in _iter_audio_files(root.path):
+            if path in visti:
+                continue
+            visti.add(path)
+            work.append((path, ext))
     summary.found = len(work)
-    seen_by_root: dict[int, set[str]] = {r.id: set() for r in roots}
+    # Una sola risoluzione delle radici per l'intero scan: `radici()` costa due
+    # query più un flush, e chiamarla per file (via `root_id_per`) cambierebbe
+    # anche il MOMENTO del flush — gli insert pendenti finirebbero a disco a
+    # metà loop invece che al flush unico di fine ciclo.
+    id_per_location = {loc: r.id for loc, r in radici(db).items()}
+    # Pre-semina le collocazioni delle root percorse: senza, una root il cui
+    # walk non trova più nessun file non verrebbe riconciliata e i suoi file
+    # spariti non diventerebbero mai "missing".
+    seen_by_root: dict[int, set[str]] = {}
+    for root in roots:
+        root_id = id_per_location.get(_location_per(root.path))
+        if root_id is not None:
+            seen_by_root.setdefault(root_id, set())
     new_inserts: list[AudioFile] = []
-    for index, (root, path, ext) in enumerate(work):
-        seen_by_root[root.id].add(path)
+    for index, (path, ext) in enumerate(work):
+        location = _location_per(path)
+        root_id = id_per_location.get(location)
+        if root_id is None:
+            raise ValueError(f"cartella non configurata per location={location!r}")
+        seen_by_root.setdefault(root_id, set()).add(path)
         fields = _scan_file_fields(path, ext)
         existing = db.scalar(
-            select(AudioFile).where(AudioFile.root_id == root.id, AudioFile.path == path)
+            select(AudioFile).where(AudioFile.root_id == root_id, AudioFile.path == path)
         )
         if existing is None:
             # Stesso timestamp per entrambi: un file "nuovo" ha
@@ -114,8 +148,7 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
             # (base del filtro "solo file nuovi").
             now = utcnow()
             row = AudioFile(
-                root_id=root_id_per(db, _location_per(path)), path=path, status="present",
-                location=_location_per(path),
+                root_id=root_id, path=path, status="present", location=location,
                 first_seen_at=now, last_scanned_at=now, **fields,
             )
             db.add(row)
@@ -132,7 +165,7 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
         if on_progress is not None:
             on_progress(index + 1, summary.found, "scanning")
     db.flush()  # assegna gli id ai nuovi insert
-    _reconcile(db, roots, seen_by_root, new_inserts, summary)
+    _reconcile(db, seen_by_root, id_per_location, new_inserts, summary)
     for root in roots:
         root.last_scanned_at = utcnow()
     db.commit()
@@ -140,20 +173,22 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     return summary
 
 
-def _reconcile(db, roots, seen_by_root, new_inserts, summary) -> None:
+def _reconcile(db, seen_by_root, id_per_location, new_inserts, summary) -> None:
     """Marca i file spariti come missing; se l'hash combacia con un nuovo insert,
-    li tratta come spostamento (aggiorna il path della riga esistente)."""
-    inserts_by_key: dict[tuple[int, str], AudioFile] = {}
+    li tratta come spostamento (aggiorna il path della riga esistente).
+
+    L'indice degli insert è per solo content_hash, non per (root, hash): uno
+    spostamento può attraversare il confine inbox↔library (è esattamente ciò che
+    fa un Apply), e la riga da riusare sta nell'altra radice."""
+    inserts_by_hash: dict[str, AudioFile] = {}
     for row in new_inserts:
         if row.content_hash:
-            inserts_by_key.setdefault((row.root_id, row.content_hash), row)
-    for root in roots:
-        seen = seen_by_root[root.id]
-        all_rows = db.scalars(select(AudioFile).where(AudioFile.root_id == root.id)).all()
+            inserts_by_hash.setdefault(row.content_hash, row)
+    for root_id, seen in seen_by_root.items():
+        all_rows = db.scalars(select(AudioFile).where(AudioFile.root_id == root_id)).all()
         gone = [r for r in all_rows if r.path not in seen and r.status != "missing"]
         for row in gone:
-            key = (root.id, row.content_hash) if row.content_hash else None
-            cand = inserts_by_key.get(key) if key else None
+            cand = inserts_by_hash.get(row.content_hash) if row.content_hash else None
             if cand is not None and cand.id != row.id:
                 moved_path = cand.path
                 # Il file esce dall'indice: nessuna Track deve restare a
@@ -168,12 +203,12 @@ def _reconcile(db, roots, seen_by_root, new_inserts, summary) -> None:
                 # Il file si è spostato: può aver attraversato il confine
                 # inbox↔library (è esattamente ciò che fa un Apply).
                 row.location = _location_per(moved_path)
-                row.root_id = root_id_per(db, row.location)
+                row.root_id = id_per_location.get(row.location, row.root_id)
                 row.status = "present"
                 row.last_scanned_at = utcnow()
                 summary.moved += 1
                 summary.inserted -= 1
-                del inserts_by_key[key]
+                del inserts_by_hash[row.content_hash]
             else:
                 row.status = "missing"
                 summary.missing += 1
