@@ -109,20 +109,37 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     # Un path percorso da due root (inbox annidata nella libreria) è lo stesso
     # file: da quando l'indicizzazione si aggancia alla collocazione derivata —
     # che dipende solo dal path — la seconda passata sarebbe pura duplicazione.
-    work: list[tuple[str, str]] = []
+    work: list[tuple[str, str, str]] = []
     visti: set[str] = set()
     for root in roots:
         for path, ext in _iter_audio_files(root.path):
-            if path in visti:
+            # Chiave sul path REALE (symlink risolti) e normalizzato nelle
+            # maiuscole, non sulla stringa grezza: due cartelle configurate che
+            # raggiungono lo stesso albero per strade diverse — una
+            # SLSKD_DOWNLOAD_DIR symlinkata dentro la libreria, o una differenza
+            # di maiuscole su un filesystem case-insensitive — passerebbero
+            # indenni il confronto fra stringhe e indicizzerebbero lo stesso
+            # file due volte. In `work` resta il path originale: è quello che
+            # va scritto in DB.
+            chiave = os.path.normcase(os.path.realpath(path))
+            if chiave in visti:
                 continue
-            visti.add(path)
-            work.append((path, ext))
+            visti.add(chiave)
+            work.append((path, ext, _location_per(path)))
     summary.found = len(work)
     # Una sola risoluzione delle radici per l'intero scan: `radici()` costa due
     # query più un flush, e chiamarla per file (via `root_id_per`) cambierebbe
     # anche il MOMENTO del flush — gli insert pendenti finirebbero a disco a
     # metà loop invece che al flush unico di fine ciclo.
     id_per_location = {loc: r.id for loc, r in radici(db).items()}
+    # Fail-fast PRIMA del primo insert: una collocazione senza cartella
+    # configurata è un errore di configurazione, non del singolo file.
+    # Scoprirlo a metà loop lascerebbe al chiamante una Session con dentro gli
+    # AudioFile dei file già visitati (nessun commit li salva, ma restano
+    # pendenti).
+    mancanti = sorted({loc for _, _, loc in work if loc not in id_per_location})
+    if mancanti:
+        raise ValueError(f"cartella non configurata per location={mancanti[0]!r}")
     # Pre-semina le collocazioni delle root percorse: senza, una root il cui
     # walk non trova più nessun file non verrebbe riconciliata e i suoi file
     # spariti non diventerebbero mai "missing".
@@ -132,11 +149,8 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
         if root_id is not None:
             seen_by_root.setdefault(root_id, set())
     new_inserts: list[AudioFile] = []
-    for index, (path, ext) in enumerate(work):
-        location = _location_per(path)
-        root_id = id_per_location.get(location)
-        if root_id is None:
-            raise ValueError(f"cartella non configurata per location={location!r}")
+    for index, (path, ext, location) in enumerate(work):
+        root_id = id_per_location[location]
         seen_by_root.setdefault(root_id, set()).add(path)
         fields = _scan_file_fields(path, ext)
         existing = db.scalar(
@@ -173,22 +187,77 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     return summary
 
 
+def _abbina_spostamenti(gone_by_hash, inserts_by_hash) -> dict[int, AudioFile]:
+    """Abbinamenti riga-sparita → nuovo-insert, per content_hash.
+
+    Due passate. La prima accoppia dentro la stessa radice: un rename in
+    libreria deve fondersi col file rinominato, non con una copia identica
+    appena arrivata in inbox (quale delle due vinca, altrimenti, lo decide
+    l'ordine di walk). La seconda accoppia ciò che avanza attraversando il
+    confine — è il caso dell'Apply (inbox→library) e del suo undo, dove per
+    costruzione un candidato nella stessa radice non esiste.
+
+    In entrambe le passate si fonde solo un abbinamento 1:1. Se più righe
+    sparite o più insert si contendono lo stesso hash, nessun accoppiamento è
+    più informato degli altri: si rinuncia, le righe restano missing e gli
+    insert restano insert."""
+    coppie: dict[int, AudioFile] = {}
+    for h, gone in gone_by_hash.items():
+        liberi = list(inserts_by_hash.get(h, ()))
+        restanti = list(gone)
+        for root_id in sorted({r.root_id for r in restanti}):
+            g = [r for r in restanti if r.root_id == root_id]
+            i = [c for c in liberi if c.root_id == root_id]
+            if len(g) == 1 and len(i) == 1:
+                coppie[g[0].id] = i[0]
+                restanti.remove(g[0])
+                liberi.remove(i[0])
+        if len(restanti) == 1 and len(liberi) == 1:
+            coppie[restanti[0].id] = liberi[0]
+    return coppie
+
+
 def _reconcile(db, seen_by_root, id_per_location, new_inserts, summary) -> None:
     """Marca i file spariti come missing; se l'hash combacia con un nuovo insert,
     li tratta come spostamento (aggiorna il path della riga esistente).
 
-    L'indice degli insert è per solo content_hash, non per (root, hash): uno
+    L'abbinamento è per solo content_hash, non per (root, hash): uno
     spostamento può attraversare il confine inbox↔library (è esattamente ciò che
-    fa un Apply), e la riga da riusare sta nell'altra radice."""
-    inserts_by_hash: dict[str, AudioFile] = {}
+    fa un Apply), e la riga da riusare sta nell'altra radice.
+
+    Quella chiave larga però ha un prezzo. `content_hash` è l'hash dello stream
+    audio, stabile per costruzione a retag e rename, e trovare copie
+    byte-identiche fra inbox e libreria è uno degli scopi dell'applicazione:
+    due file con lo stesso hash sono la norma, non l'eccezione. Una fusione
+    sbagliata non perde righe e non orfana FK, ma fa sopravvivere la riga —
+    con id, first_seen_at, track_id e i figli Issue/DupMember/PlanOp/
+    UndoJournal — puntata su un ALTRO file fisico, mentre il file davvero
+    sparito non viene mai segnalato missing: un Issue già "accepted" o un
+    DupMember "remove" si risolverebbero poi sulla copia sbagliata.
+
+    Le guardie di `_abbina_spostamenti` stringono la maglia: preferenza per la
+    stessa radice, e fusione solo sugli abbinamenti 1:1. Resta accettato il
+    caso 1:1 che attraversa il confine, indistinguibile da un Apply o dal suo
+    undo."""
+    inserts_by_hash: dict[str, list[AudioFile]] = {}
     for row in new_inserts:
         if row.content_hash:
-            inserts_by_hash.setdefault(row.content_hash, row)
+            inserts_by_hash.setdefault(row.content_hash, []).append(row)
+    # Le righe sparite si raccolgono TUTTE prima di fondere: la guardia
+    # sull'ambiguità deve contare anche le righe delle altre radici.
+    gone_by_root: list[list[AudioFile]] = []
+    gone_by_hash: dict[str, list[AudioFile]] = {}
     for root_id, seen in seen_by_root.items():
         all_rows = db.scalars(select(AudioFile).where(AudioFile.root_id == root_id)).all()
         gone = [r for r in all_rows if r.path not in seen and r.status != "missing"]
+        gone_by_root.append(gone)
         for row in gone:
-            cand = inserts_by_hash.get(row.content_hash) if row.content_hash else None
+            if row.content_hash:
+                gone_by_hash.setdefault(row.content_hash, []).append(row)
+    coppie = _abbina_spostamenti(gone_by_hash, inserts_by_hash)
+    for gone in gone_by_root:
+        for row in gone:
+            cand = coppie.get(row.id)
             if cand is not None and cand.id != row.id:
                 moved_path = cand.path
                 # Il file esce dall'indice: nessuna Track deve restare a
@@ -208,7 +277,6 @@ def _reconcile(db, seen_by_root, id_per_location, new_inserts, summary) -> None:
                 row.last_scanned_at = utcnow()
                 summary.moved += 1
                 summary.inserted -= 1
-                del inserts_by_hash[row.content_hash]
             else:
                 row.status = "missing"
                 summary.missing += 1
