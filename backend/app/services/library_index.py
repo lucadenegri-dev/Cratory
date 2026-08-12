@@ -28,6 +28,10 @@ from app.models import ArchiveSeen, Track, utcnow
 from app.repositories import ci_equals, unreferenced_track_ids
 from app.services.audio_energy import analyze_file, recompute_energy
 from app.services.genre_norm import normalize_genre
+# Ponte fra il modello core e Organize: file_link è il solo modulo autorizzato a
+# scrivere primary_file_id/track_id, e resta minuscolo apposta per non aprire un
+# ciclo di import fra i due mondi.
+from app.organize.services.file_link import aggiorna_primary
 from app.services.manual_import import parse_line
 from app.services.local_import import scan_folder
 from app.services.track_status import refresh_status
@@ -291,6 +295,9 @@ def index_library(db: Session, *, root: str | Path,
             if track is not None:
                 _fill_identity(track, tags, path)
                 _discard(track, path=path, digest=digest)
+                # local_path punta ora al file in ARCHIVE_ROOT, che non è
+                # indicizzato da Organize: l'aggancio si azzera da sé.
+                aggiorna_primary(db, track)
                 refresh_status(track)
                 report["archived"] += 1
                 seen_paths.add(str(path.resolve()))
@@ -323,6 +330,7 @@ def index_library(db: Session, *, root: str | Path,
                 report["relinked"] += 1
         _fill_identity(track, tags, path)
         _own(track, path=path, digest=digest)
+        aggiorna_primary(db, track)
         if track.added_at is None:
             # Data d'ingresso in collezione: birthtime del file. Vale sia per le
             # tracce nuove sia come recupero per le storiche rimaste senza data.
@@ -375,6 +383,7 @@ def index_library(db: Session, *, root: str | Path,
             track.local_path = None
             track.local_format = None
             track.local_bitrate = None
+            track.primary_file_id = None  # senza local_path non c'è file da indicare
             refresh_status(track)
             report["lost"] += 1
 

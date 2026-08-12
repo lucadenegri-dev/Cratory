@@ -16,6 +16,7 @@ from app.integrations.local_files import (
     AUDIO_EXTENSIONS, LocalFilesError, audio_hash, read_audio_quality,
 )
 from app.models import Track
+from app.organize.services.file_link import aggiorna_primary
 from app.repositories import merge_tracks
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,9 @@ def attach_local_file(db: Session, track: Track, *, path: str,
     ).all()
     for dup in dupes:
         merge_tracks(db, track, dup)
+    # Dopo la fusione dei doppioni: la traccia superstite è quella che deve
+    # portare l'aggancio al file, se Organize l'ha già indicizzato.
+    aggiorna_primary(db, track)
     db.commit()
     db.refresh(track)
     return track
