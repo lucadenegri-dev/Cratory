@@ -29,13 +29,21 @@ def _riga(db, path: str, *, location: str = "library") -> AudioFile:
     return f
 
 
+def _collega(db):
+    """`seen_paths`/`seen_digests` sono ora keyword-only obbligatori (F4): una
+    chiamata isolata come queste, che non compone con `indicizza_archivio`/
+    `riconcilia_possessi`, passa insiemi vuoti dedicati — proprio come farebbe
+    da sola una singola fase di scan senza archivio configurato."""
+    return collega_tracce(db, seen_paths=set(), seen_digests=set())
+
+
 def test_crea_la_traccia_partendo_dalla_riga(db, fake_audio):
     make, _root = fake_audio
     p = make("Techno/N/N - New.mp3", digest="H7", artist="N", title="New")
     _riga(db, str(p.resolve()))
     db.commit()
 
-    report = collega_tracce(db)
+    report = _collega(db)
 
     assert report["created"] == 1
     t = db.scalar(select(Track).where(Track.audio_hash == "H7"))
@@ -49,7 +57,7 @@ def test_non_guarda_i_file_dell_inbox(db, fake_audio):
     _riga(db, str(p.resolve()), location="inbox")
     db.commit()
 
-    report = collega_tracce(db)
+    report = _collega(db)
 
     assert report["created"] == 0
     assert db.scalars(select(Track)).all() == []
@@ -62,7 +70,7 @@ def test_non_guarda_un_file_marcato_missing(db, fake_audio):
     f.status = "missing"
     db.commit()
 
-    assert collega_tracce(db)["created"] == 0
+    assert _collega(db)["created"] == 0
 
 
 def test_e_idempotente(db, fake_audio):
@@ -71,9 +79,9 @@ def test_e_idempotente(db, fake_audio):
     _riga(db, str(p.resolve()))
     db.commit()
 
-    collega_tracce(db)
+    _collega(db)
     db.commit()
-    secondo = collega_tracce(db)
+    secondo = _collega(db)
 
     assert secondo["created"] == 0
     assert len(db.scalars(select(Track)).all()) == 1
@@ -86,7 +94,7 @@ def test_aggancia_la_riga_alla_traccia(db, fake_audio):
     f = _riga(db, str(p.resolve()))
     db.commit()
 
-    collega_tracce(db)
+    _collega(db)
     db.commit()
 
     db.refresh(f)

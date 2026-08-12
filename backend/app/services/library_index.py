@@ -214,8 +214,7 @@ def _is_hidden_path(path: Path, root: str | Path) -> bool:
 
 
 def indicizza_archivio(db: Session, *, archive_root: str | Path,
-                       seen_paths: set[str] | None = None,
-                       seen_digests: set[str] | None = None,
+                       seen_paths: set[str], seen_digests: set[str],
                        on_progress=None) -> dict:
     """Passata separata sull'archivio delle scartate. SECONDA delle tre parti
     del giro d'indicizzazione (`collega_tracce` → questa → `riconcilia_possessi`).
@@ -236,11 +235,12 @@ def indicizza_archivio(db: Session, *, archive_root: str | Path,
     vince»: una copia in archivio di un audio già agganciato in libreria si
     conta come duplicato invece di ritrovare la traccia per audio_hash e
     scartarla, revocando il possesso appena assegnato.
+
+    Entrambi sono ora obbligatori (keyword-only, senza default): un default
+    silenzioso qui riprodurrebbe in muto i due difetti che l'ordine fisso
+    delle tre parti evita — ogni chiamante deve passare gli STESSI due insiemi
+    a tutte e tre.
     """
-    if seen_paths is None:
-        seen_paths = set()
-    if seen_digests is None:
-        seen_digests = set()
     archive_scanned = bool(archive_root and Path(archive_root).is_dir())
     archive_files: list[Path] = scan_folder(archive_root) if archive_scanned else []
     total = len(archive_files)
@@ -368,8 +368,7 @@ def indicizza_archivio(db: Session, *, archive_root: str | Path,
     return report
 
 
-def collega_tracce(db: Session, *, seen_paths: set[str] | None = None,
-                   seen_digests: set[str] | None = None,
+def collega_tracce(db: Session, *, seen_paths: set[str], seen_digests: set[str],
                    on_progress=None) -> dict:
     """Aggancia le tracce ai file già indicizzati dallo scanner. PRIMA delle tre
     parti del giro d'indicizzazione:
@@ -388,9 +387,12 @@ def collega_tracce(db: Session, *, seen_paths: set[str] | None = None,
     `seen_paths` e `seen_digests`: insiemi CONDIVISI, che questa passata riempie
     e le successive leggono — i path per la riconciliazione, i digest perché
     l'archivio riconosca come duplicato un audio già posseduto invece di
-    scartarlo. Passarli è obbligatorio quando si chiamerà più di una parte (il
-    wrapper `index_library` lo fa; da F4 in poi lo farà lo scanner, che chiamerà
-    queste tre direttamente e nello stesso ordine).
+    scartarlo. Entrambi sono keyword-only senza default: ometterli farebbe
+    nascere a ogni parte il proprio insieme locale vuoto, riproducendo in muto
+    (nessun test fallisce) sia il difetto della riconciliazione anticipata sia
+    quello del possesso che non vince sull'archivio. Il chiamante — il wrapper
+    `index_library`, e da F4 anche lo scanner — passa gli STESSI due insiemi a
+    tutte e tre.
 
     Fino a F4 questa funzione camminava LIBRARY_ROOT per conto proprio: due
     attraversamenti dello stesso disco, con la possibilità che i due indici
@@ -409,10 +411,6 @@ def collega_tracce(db: Session, *, seen_paths: set[str] | None = None,
     report = {"scanned": len(righe), "matched": 0, "created": 0, "relinked": 0,
               "duplicates": 0, "lost": 0, "orphans_removed": 0, "failed": 0,
               "unchanged": 0, "archived": 0, "errors": [], "created_ids": []}
-    if seen_paths is None:
-        seen_paths = set()
-    if seen_digests is None:
-        seen_digests = set()
     total = len(righe)
 
     # Passata 1 — incrementale: i file invariati (firma nota) reclamano subito

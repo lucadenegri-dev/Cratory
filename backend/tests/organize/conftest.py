@@ -51,12 +51,27 @@ def _fresh_db():
     Regola per chi scrive nuovi test: una ScanRoot propria va creata con
     id >= SCAN_ROOT_NEXT_ID (id 1 e 2 sono occupati da questa semina), o la
     UNIQUE constraint su ScanRoot.id fallisce.
+
+    `tracks.primary_file_id` e `audio_file.track_id` sono un ciclo di FK,
+    spezzato solo per l'ORDINE DI CREAZIONE da `use_alter=True` (vedi
+    `app/models.py`). Al DROP il ciclo torna intero: SQLite esegue un DELETE
+    implicito prima di droppare una tabella referenziata, e se un test
+    precedente ha lasciato una Track con `primary_file_id` ancora popolato
+    (F4: `collega_tracce`, chiamata ora anche da `scan()`, lo popola e lo
+    lascia così a fine test), `DROP TABLE audio_file` urta quella riga —
+    prima di F4 nessun test di questa cartella committava e finiva con
+    `primary_file_id` ancora impostato, quindi il ciclo non si era mai
+    richiuso qui. Si spegne la PRAGMA solo per la finestra drop+create.
     """
     import app.models  # noqa: F401
     import app.organize.models  # noqa: F401
 
-    Base.metadata.drop_all(engine)
-    Base.metadata.create_all(engine)
+    with engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        Base.metadata.drop_all(bind=conn)
+        Base.metadata.create_all(bind=conn)
+        conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+        conn.commit()
 
     from app.organize.models import ScanRoot
 

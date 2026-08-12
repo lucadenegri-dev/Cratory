@@ -104,7 +104,7 @@ def test_commit_incrementale_prima_della_riconciliazione(db, fake_audio, monkeyp
                                          original_unref(*a, **k))[1])
 
     seen_paths: set[str] = set()
-    report = li.collega_tracce(db, seen_paths=seen_paths)
+    report = li.collega_tracce(db, seen_paths=seen_paths, seen_digests=set())
     li.riconcilia_possessi(db, seen_paths=seen_paths, scanned=report["scanned"])
 
     assert report["created"] == 60

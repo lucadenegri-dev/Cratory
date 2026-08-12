@@ -96,9 +96,16 @@ def _no_real_library_scan(monkeypatch):
     sviluppatore, library_index_job.start_job_if_due): senza questo guard un test
     HTTP-level innescherebbe una scansione VERA della libreria musicale sul disco
     e scriverebbe sul DB reale (data/djassistant.db) invece che sul DB isolato del
-    test — lento (minuti su una libreria grande) e non isolato tra i test."""
+    test — lento (minuti su una libreria grande) e non isolato tra i test.
+
+    Da F4 blanka anche ARCHIVE_ROOT: `scanner.scan` (Organize) chiama ora la
+    fase 2 dell'indicizzazione, che legge `runtime_settings.archive_root()` allo
+    stesso modo del job — senza il guard, un test che invoca `scan()` senza
+    monkeypatchare esplicitamente la cartella cammina l'ARCHIVE_ROOT VERO
+    configurato nel .env dello sviluppatore."""
     from app.core.config import settings
     monkeypatch.setattr(settings, "library_root", "")
+    monkeypatch.setattr(settings, "archive_root", "")
 
 
 # I 5 job in background (analisi BPM/key, indicizzazione libreria, download
@@ -226,7 +233,8 @@ def collega_da_disco(db, semina_indice_libreria):
     def _run(root):
         semina_indice_libreria(root)
         seen_paths: set[str] = set()
-        report = li.collega_tracce(db, seen_paths=seen_paths)
+        seen_digests: set[str] = set()
+        report = li.collega_tracce(db, seen_paths=seen_paths, seen_digests=seen_digests)
         rec = li.riconcilia_possessi(db, seen_paths=seen_paths,
                                      scanned=report["scanned"])
         report["lost"] += rec["lost"]

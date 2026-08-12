@@ -30,10 +30,13 @@ def test_scan_inserts_rows(db, copy_fixture, tmp_path, monkeypatch):
 
 
 def test_progress_callback_called(db, copy_fixture, tmp_path, monkeypatch):
+    """Fase 1 (scanning) e fase 2 (linking, F4: `scan()` aggancia le tracce
+    subito dopo aver indicizzato) riportano entrambe al progresso."""
     root = _make_root(db, copy_fixture, tmp_path, [("a.mp3", "mp3")], monkeypatch)
     seen = []
     scan(db, [root], on_progress=lambda p, t, ph: seen.append((p, t, ph)))
-    assert seen == [(1, 1, "scanning")]
+    assert (1, 1, "scanning") in seen
+    assert (1, 1, "linking") in seen
 
 
 def test_rescan_is_idempotent(db, copy_fixture, tmp_path, monkeypatch):

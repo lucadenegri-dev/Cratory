@@ -180,6 +180,44 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
             on_progress(index + 1, summary.found, "scanning")
     db.flush()  # assegna gli id ai nuovi insert
     _reconcile(db, seen_by_root, id_per_location, new_inserts, summary)
+
+    # Fase 2: le tracce si agganciano ai file appena indicizzati. Una camminata
+    # sola sul disco (D5 della spec): prima era library_index a ripercorrerlo.
+    # Import differito: app/services/library_index.py importa già da
+    # app/organize/ (per aggiorna_primary), e un import a livello di modulo
+    # qui chiuderebbe il ciclo.
+    from app.services.library_index import collega_tracce, indicizza_archivio, riconcilia_possessi
+
+    def _progress_linking(processed: int, total: int) -> None:
+        if on_progress is not None:
+            on_progress(processed, total, "linking")
+
+    # Le tre parti del giro d'indicizzazione, nell'ordine obbligatorio (vedi i
+    # docstring in library_index.py): la libreria prima dell'archivio (a
+    # parità di audio il possesso vince), la riconciliazione per ultima
+    # (altrimenti una traccia il cui file è passato in ARCHIVE_ROOT viene
+    # cancellata invece che marcata scartata). `seen_paths`/`seen_digests`
+    # sono lo stato condiviso fra le tre e vanno passati identici a tutte.
+    seen_paths: set[str] = set()
+    seen_digests: set[str] = set()
+    link_report = collega_tracce(db, seen_paths=seen_paths, seen_digests=seen_digests,
+                                 on_progress=_progress_linking)
+
+    archive_root = runtime_settings.archive_root()
+    if archive_root:
+        arc_report = indicizza_archivio(db, archive_root=archive_root,
+                                        seen_paths=seen_paths, seen_digests=seen_digests,
+                                        on_progress=_progress_linking)
+        for key in ("archived", "failed", "unchanged", "duplicates"):
+            link_report[key] += arc_report[key]
+        link_report["errors"] += arc_report["errors"]
+
+    rec = riconcilia_possessi(db, seen_paths=seen_paths, scanned=link_report["scanned"])
+    link_report["lost"] += rec["lost"]
+    link_report["orphans_removed"] += rec["orphans_removed"]
+
+    summary.linking = link_report
+
     db.commit()
     summary.finished_at = utcnow()
     return summary
