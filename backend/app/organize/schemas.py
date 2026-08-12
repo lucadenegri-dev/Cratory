@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, field_validator
 
 
 class ScanSummary(BaseModel):
@@ -18,22 +18,6 @@ class ScanSummary(BaseModel):
     errors: int = 0
     started_at: datetime | None = None
     finished_at: datetime | None = None
-
-
-class ScanRootCreate(BaseModel):
-    path: str
-    label: str | None = None
-
-
-class ScanRootRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    path: str
-    label: str | None
-    last_scanned_at: datetime | None
-    file_count: int
-    missing_count: int = 0
 
 
 class AnalyzeSummary(BaseModel):
@@ -148,26 +132,14 @@ class KeeperBody(BaseModel):
     file_id: int
 
 
-class RootTargetRead(BaseModel):
-    id: int
-    path: str
-    label: str | None
-    target_root: str | None
-
-
 class SettingsRead(BaseModel):
     naming_template: str
     folder_template: str
-    roots: list[RootTargetRead]
 
 
 class SettingsUpdate(BaseModel):
     naming_template: str | None = None
     folder_template: str | None = None
-
-
-class RootTargetUpdate(BaseModel):
-    target_root: str | None = None
 
 
 class LanguageSetting(BaseModel):

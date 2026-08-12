@@ -49,7 +49,6 @@ from app.organize.routers import (
     providers as organize_providers,
     scan as organize_scan,
     settings as organize_settings,
-    sources as organize_sources,
 )
 
 logger = logging.getLogger("app.request")
@@ -121,7 +120,7 @@ app.include_router(soundcloud.router)
 app.include_router(settings_router.router)
 
 for _organize_router in (
-    organize_sources, organize_scan, organize_analyze, organize_issues,
+    organize_scan, organize_analyze, organize_issues,
     organize_duplicates, organize_settings, organize_plan, organize_apply,
     organize_history, organize_library, organize_files, organize_fingerprint,
     organize_providers, organize_picker, organize_genre_review,

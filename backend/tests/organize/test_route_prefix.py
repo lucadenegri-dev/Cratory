@@ -21,17 +21,17 @@ def _paths() -> set[str]:
 
 def test_rotte_organize_prefissate():
     paths = _paths()
-    assert "/api/organize/sources" in paths
     assert "/api/organize/issues" in paths
     assert "/api/organize/settings" in paths
     assert "/api/organize/plan" in paths
+    assert "/api/organize/duplicates" in paths
 
 
 def test_nessuna_rotta_organize_fuori_dal_prefisso():
     paths = _paths()
-    assert "/api/sources" not in paths
     assert "/api/issues" not in paths
     assert "/api/duplicates" not in paths
+    assert "/api/plan" not in paths
 
 
 def test_rotte_cratory_intatte():
@@ -48,6 +48,6 @@ def test_rotte_cratory_intatte():
 
 
 def test_endpoint_organize_risponde():
-    res = client.get("/api/organize/sources")
+    res = client.get("/api/organize/issues")
     assert res.status_code == 200
     assert isinstance(res.json(), list)
