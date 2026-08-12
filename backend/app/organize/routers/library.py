@@ -2,6 +2,7 @@
 Router sottile: query dirette, nessun servizio nuovo."""
 
 import os
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import case, func, or_, select
@@ -9,9 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.organize.core.http_errors import api_error
 from app.db import get_db
-from app.organize.models import AudioFile, DupGroup, DupMember, Issue, ScanRoot
+from app.organize.models import AudioFile, DupGroup, DupMember, Issue
 from app.organize.schemas import FileRow, LibraryFacets, LibraryStatsRead
 from app.organize.services import cover_cache, thumbs
+from app.organize.services.roots import radici
 
 router = APIRouter(prefix="/api/organize", tags=["library"])
 
@@ -40,7 +42,8 @@ def library_stats(db: Session = Depends(get_db)):
     dup_groups = db.scalar(
         select(func.count()).select_from(DupGroup).where(DupGroup.dismissed.is_(False))
     ) or 0
-    sources = db.scalar(select(func.count()).select_from(ScanRoot)) or 0
+    # Le "sorgenti" non sono più righe di tabella: sono le cartelle configurate.
+    sources = len(radici(db))
     return LibraryStatsRead(
         files_total=files_total,
         by_ext=by_ext,
@@ -64,7 +67,7 @@ _SORT_COLS = {
 
 def _file_row(f: AudioFile, n_issues: int, rank: int, dup_n: int, cover_n: int) -> FileRow:
     return FileRow(
-        id=f.id, root_id=f.root_id, path=f.path, ext=f.ext,
+        id=f.id, location=f.location, path=f.path, ext=f.ext,
         artist=f.artist, title=f.title, album=f.album, album_artist=f.album_artist,
         genre=f.genre, year=f.year, label=f.label, track_no=f.track_no,
         comment=f.comment, bitrate=f.bitrate, duration_s=f.duration_s,
@@ -117,7 +120,7 @@ def library_facets(db: Session = Depends(get_db)):
 @router.get("/files", response_model=list[FileRow])
 def list_files(
     db: Session = Depends(get_db),
-    root_id: int | None = None,
+    location: Literal["inbox", "library"] | None = None,
     status: str = "present",
     has_issues: bool | None = None,
     q: str | None = None,
@@ -162,8 +165,8 @@ def list_files(
     stmt = select(AudioFile, issue_count, worst_rank, in_dup, cover_proposal).where(
         AudioFile.status == status
     )
-    if root_id is not None:
-        stmt = stmt.where(AudioFile.root_id == root_id)
+    if location is not None:
+        stmt = stmt.where(AudioFile.location == location)
     if has_issues is True:
         stmt = stmt.where(issue_count > 0)
     elif has_issues is False:

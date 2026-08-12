@@ -6,13 +6,16 @@ from app.main import app
 from app.organize.models import AudioFile, ScanRoot
 
 
-def test_analyze_endpoint(tmp_path, copy_fixture):
+def test_analyze_endpoint(tmp_path, copy_fixture, monkeypatch):
     lib = tmp_path / "lib"
     copy_fixture("mp3", lib / "a.mp3")
+    # start_job deriva ora le radici da roots.radici(): la cartella del test
+    # deve essere quella configurata come LIBRARY_ROOT.
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "library_root", str(lib))
     with TestClient(app) as client:
-        root_id = client.post("/api/organize/sources", json={"path": str(lib)}).json()["id"]
         # scan popola audio_file; poi analyze ricalcola
-        client.post("/api/organize/scan", json={"root_ids": [root_id]})
+        client.post("/api/organize/scan", json={"locations": ["library"]})
         deadline = time.time() + 5
         while time.time() < deadline:
             if client.get("/api/organize/scan/status").json()["status"] in ("done", "error"):
@@ -127,8 +130,7 @@ def test_scan_job_runs_analysis(tmp_path, copy_fixture, monkeypatch):
         # vedere `lib` come LIBRARY_ROOT per adottare la sorgente appena creata.
         from app.core.config import settings
         monkeypatch.setattr(settings, "library_root", str(lib))
-        root_id = client.post("/api/organize/sources", json={"path": str(lib)}).json()["id"]
-        client.post("/api/organize/scan", json={"root_ids": [root_id]})
+        client.post("/api/organize/scan", json={"locations": ["library"]})
         deadline = time.time() + 5
         status = {}
         while time.time() < deadline:

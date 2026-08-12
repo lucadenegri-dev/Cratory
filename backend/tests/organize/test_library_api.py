@@ -2,7 +2,6 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.organize.models import AudioFile, DupGroup, DupMember, Issue, ScanRoot
-from tests.organize.conftest import SEEDED_SCAN_ROOT_IDS
 
 
 def _seed_stats(db):
@@ -30,7 +29,13 @@ def _seed_stats(db):
     db.commit()
 
 
-def test_library_stats(db):
+def test_library_stats(db, monkeypatch):
+    from app.core.config import settings
+
+    # "sources" ora conta le cartelle canoniche configurate (Settings), non più
+    # le righe ScanRoot: azzeriamo entrambe per un conteggio deterministico
+    # (library_root è già azzerato dalla guardia autouse _no_real_library_scan).
+    monkeypatch.setattr(settings, "slskd_download_dir", "")
     _seed_stats(db)
     with TestClient(app) as client:
         s = client.get("/api/organize/library/stats").json()
@@ -38,8 +43,7 @@ def test_library_stats(db):
         assert s["by_ext"] == {"flac": 1, "mp3": 1}
         assert s["issues_by_severity"] == {"error": 1, "warning": 1}  # la dismissed esclusa
         assert s["dup_groups"] == 1
-        # Le canoniche di conftest.SEEDED_SCAN_ROOT_IDS + quella creata da _seed_stats.
-        assert s["sources"] == len(SEEDED_SCAN_ROOT_IDS) + 1
+        assert s["sources"] == 0
 
 
 def test_list_files_basic_and_indicators(db):
@@ -59,8 +63,8 @@ def test_list_files_filters(db):
     with TestClient(app) as client:
         only_issues = client.get("/api/organize/files", params={"has_issues": True}).json()
         assert {r["id"] for r in only_issues} == {1, 2}
-        by_root = client.get("/api/organize/files", params={"root_id": 3}).json()
-        assert len(by_root) == 2
+        by_location = client.get("/api/organize/files", params={"location": "inbox"}).json()
+        assert len(by_location) == 2
         searched = client.get("/api/organize/files", params={"q": "a.flac"}).json()
         assert [r["id"] for r in searched] == [1]
         missing = client.get("/api/organize/files", params={"status": "missing"}).json()

@@ -48,7 +48,7 @@ class AnalyzeSummary(BaseModel):
 class IssueRead(BaseModel):
     id: int
     file_id: int
-    root_id: int
+    location: str
     type: str
     field: str | None
     severity: str
@@ -253,7 +253,7 @@ class LibraryStatsRead(BaseModel):
 
 class FileRow(BaseModel):
     id: int
-    root_id: int
+    location: str
     path: str
     ext: str
     artist: str | None

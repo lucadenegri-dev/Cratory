@@ -27,9 +27,8 @@ def test_job_runs_and_completes(db, copy_fixture, tmp_path, monkeypatch):
     root = ScanRoot(path=str(root_dir))
     db.add(root)
     db.commit()
-    root_id = root.id
 
-    scan_job.start_job([root_id])
+    scan_job.start_job(["library"])
     state = _wait_done()
     assert state["status"] == "done"
     assert state["result"]["inserted"] == 1
@@ -40,7 +39,7 @@ def test_double_start_is_rejected():
     # Forza lo stato running e verifica che start_job non lo sovrascriva.
     scan_job._state.update(status="running", processed=0, total=0)
     before = scan_job.job_state()
-    returned = scan_job.start_job([1])
+    returned = scan_job.start_job(["library"])
     assert returned["status"] == "running"
     assert scan_job.job_state()["started_at"] == before["started_at"]
     scan_job._state.update(status="idle")  # ripristina per gli altri test

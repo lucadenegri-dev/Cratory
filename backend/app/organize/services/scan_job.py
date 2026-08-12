@@ -35,7 +35,7 @@ def is_running() -> bool:
         return _state["status"] == "running"
 
 
-def _run(root_ids: list[int] | None) -> None:
+def _run(locations: list[str] | None) -> None:
     db = SessionLocal()
 
     def on_progress(processed: int, total: int, phase: str) -> None:
@@ -45,8 +45,9 @@ def _run(root_ids: list[int] | None) -> None:
     try:
         # Le radici non sono più righe scelte dall'utente: sono le due cartelle
         # di Settings, derivate (e create/riallineate se serve) da roots.radici.
-        tutte = list(radici(db).values())
-        roots = [r for r in tutte if r.id in root_ids] if root_ids else tutte
+        tutte = radici(db)
+        roots = ([tutte[loc] for loc in locations if loc in tutte] if locations
+                 else list(tutte.values()))
         summary = scan(db, roots, on_progress=on_progress)
         analysis_summary = analysis.recompute(db, on_progress=on_progress)
         result = summary.model_dump(mode="json")
@@ -65,7 +66,7 @@ def _run(root_ids: list[int] | None) -> None:
         db.close()
 
 
-def start_job(root_ids: list[int] | None = None) -> dict:
+def start_job(locations: list[str] | None = None) -> dict:
     with _lock:
         if _state["status"] == "running":
             return dict(_state)
@@ -74,5 +75,5 @@ def start_job(root_ids: list[int] | None = None) -> dict:
             result=None, error=None, started_at=utcnow().isoformat(), finished_at=None,
         )
         snapshot = dict(_state)
-    threading.Thread(target=_run, args=(root_ids,), daemon=True).start()
+    threading.Thread(target=_run, args=(locations,), daemon=True).start()
     return snapshot

@@ -70,12 +70,12 @@ def test_bulk_accept_skips_non_fixable(db):
         assert non_fixable["status"] == "open"
 
 
-def test_issue_read_has_root_id(db):
+def test_issue_read_has_location(db):
     _seed(db)
     with TestClient(app) as client:
         rows = client.get("/api/organize/issues").json()
-        assert all("root_id" in r for r in rows)
-        assert rows[0]["root_id"] == 1
+        assert all("location" in r for r in rows)
+        assert rows[0]["location"] == "inbox"
 
 
 def test_fix_sets_retag_and_accepts(db):

@@ -100,8 +100,7 @@ def test_scan_endpoint_end_to_end(tmp_path, copy_fixture, monkeypatch):
         # vedere `lib` come LIBRARY_ROOT per adottare la sorgente appena creata.
         from app.core.config import settings
         monkeypatch.setattr(settings, "library_root", str(lib))
-        root_id = client.post("/api/organize/sources", json={"path": str(lib)}).json()["id"]
-        started = client.post("/api/organize/scan", json={"root_ids": [root_id]})
+        started = client.post("/api/organize/scan", json={"locations": ["library"]})
         assert started.status_code == 200
 
         deadline = time.time() + 5

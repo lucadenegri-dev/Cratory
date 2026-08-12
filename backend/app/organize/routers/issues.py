@@ -1,6 +1,7 @@
 """Router ISSUES: lista filtrabile + cambio status (singolo e in blocco) + AI. Sottile."""
 
 import os
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
@@ -27,7 +28,7 @@ _RETAGGABLE = frozenset(EDITABLE_TAG_FIELDS)
 def _to_read(issue: Issue, file: AudioFile) -> IssueRead:
     cur = getattr(file, issue.field, None) if issue.field else None
     return IssueRead(
-        id=issue.id, file_id=issue.file_id, root_id=file.root_id, type=issue.type,
+        id=issue.id, file_id=issue.file_id, location=file.location, type=issue.type,
         field=issue.field, severity=issue.severity, detail=issue.detail,
         suggested_fix_json=issue.suggested_fix_json, status=issue.status,
         file_path=file.path, artist=file.artist, title=file.title,
@@ -38,7 +39,8 @@ def _to_read(issue: Issue, file: AudioFile) -> IssueRead:
 
 @router.get("", response_model=list[IssueRead])
 def list_issues(severity: str | None = None, type: str | None = None,
-                status: str | None = None, root_id: int | None = None,
+                status: str | None = None,
+                location: Literal["inbox", "library"] | None = None,
                 q: str | None = None, only_new: bool = False,
                 db: Session = Depends(get_db)):
     stmt = select(Issue, AudioFile).join(AudioFile, Issue.file_id == AudioFile.id)
@@ -48,8 +50,8 @@ def list_issues(severity: str | None = None, type: str | None = None,
         stmt = stmt.where(Issue.type == type)
     if status:
         stmt = stmt.where(Issue.status == status)
-    if root_id is not None:
-        stmt = stmt.where(AudioFile.root_id == root_id)
+    if location is not None:
+        stmt = stmt.where(AudioFile.location == location)
     if only_new:
         # "nuovo" = visto in una sola scansione (first_seen == last_scanned).
         stmt = stmt.where(AudioFile.first_seen_at == AudioFile.last_scanned_at)
