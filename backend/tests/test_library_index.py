@@ -387,3 +387,30 @@ def test_backfill_added_at_anche_sul_fast_path_incrementale(db, fake_audio, monk
     db.refresh(t)
     assert report["unchanged"] == 1
     assert t.added_at is not None and str(t.added_at).startswith("2026-06-27")
+
+
+def test_non_conia_una_track_per_un_path_gia_posseduto(db, fake_audio):
+    """Regressione (fine F3b): un Apply di Organize cambia mtime e size, quindi
+    il fast-path della passata 1 salta; l'hash ricalcolato non combacia piu' con
+    quello memorizzato, il file non porta l'ISRC e i rami per nome escludono le
+    tracce gia' possedute. Prima del fix si coniava una Track local_files per un
+    path che un'altra Track rivendicava gia'."""
+    from sqlalchemy import select
+
+    from app.models import Track
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    p = make("Trance/R/R - Aqua Viva.mp3", digest="H_NUOVO", artist="R", title="Aqua Viva")
+    t = Track(source_type="spotify", spotify_id="s1", isrc="BEZ350900033",
+              artist="R", title="Aqua Viva", has_local_file=True,
+              local_path=str(p.resolve()), audio_hash="H_VECCHIO")
+    db.add(t)
+    db.commit()
+
+    report = index_library(db, root=root)
+
+    assert report["created"] == 0
+    assert len(db.scalars(select(Track)).all()) == 1
+    db.refresh(t)
+    assert t.audio_hash == "H_NUOVO"      # l'identita' audio si aggiorna

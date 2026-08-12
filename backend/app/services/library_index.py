@@ -69,8 +69,22 @@ def _duration_ok(a: int | None, b: int | None, tol: int = 7) -> bool:
     return abs(a - b) <= tol
 
 
-def _find_track(db: Session, *, digest: str, tags: dict) -> tuple[Track | None, str]:
+def _find_track(db: Session, *, digest: str, tags: dict, path: str) -> tuple[Track | None, str]:
     """Match nell'ordine di affidabilità. Ritorna (track, come)."""
+    # Il path per primo: se una Track rivendica gia' QUESTO file, e' quella. La
+    # passata 1 usa lo stesso criterio per il fast-path (`known`), ma lo scarta
+    # appena mtime/size cambiano — cioe' dopo ogni Apply di Organize, che ritagga
+    # il file. Senza questo ramo la passata 2 coniava un doppione per un path che
+    # la passata 1 aveva gia' identificato: hash diverso, ISRC assente dai tag e
+    # rami per nome che escludono di proposito le tracce gia' possedute.
+    # Sta prima dell'hash di proposito: l'hash identifica l'AUDIO e sopravvive a
+    # uno spostamento, il path identifica QUESTO file. Quando i due dissentono
+    # vince il path, perche' e' l'unica delle due letture che non puo' creare un
+    # secondo proprietario dello stesso local_path.
+    hit = db.scalar(select(Track).where(Track.local_path == path,
+                                        Track.has_local_file.is_(True)))
+    if hit:
+        return hit, "path"
     hit = db.scalar(select(Track).where(Track.audio_hash == digest))
     if hit:
         return hit, "hash"
@@ -288,7 +302,7 @@ def index_library(db: Session, *, root: str | Path,
             continue
         seen_digests.add(digest)
         tags = read_tags(path)
-        track, how = _find_track(db, digest=digest, tags=tags)
+        track, how = _find_track(db, digest=digest, tags=tags, path=str(path.resolve()))
         if in_archive:
             # In archivio non si creano tracce nuove: un file mai visto da
             # Cratory che scarti non e' una wishlist da ricordare.
