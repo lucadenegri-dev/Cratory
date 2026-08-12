@@ -1,5 +1,6 @@
 """Motore Scanner deterministico: walk del FS, lettura, upsert in DB."""
 
+import logging
 import os
 from collections.abc import Iterator
 
@@ -10,7 +11,9 @@ from app.core.config import settings
 from app.organize.integrations import content_hash, tagio
 from app.organize.models import AudioFile, ScanRoot, utcnow
 from app.organize.schemas import ScanSummary
-from app.organize.services.file_link import stacca_file
+from app.organize.services.file_link import deriva_location, stacca_file
+
+logger = logging.getLogger(__name__)
 
 _TAG_FIELDS = (
     "bitrate", "sample_rate", "channels", "duration_s", "artist", "title", "album",
@@ -64,6 +67,23 @@ def _scan_file_fields(path: str, ext: str) -> dict:
     return fields
 
 
+def _location_per(path: str) -> str:
+    """Collocazione del file rispetto alle due cartelle di Settings.
+
+    Un path fuori da entrambe non è libreria canonica per definizione, quindi
+    "inbox" è la risposta conservativa; il warning serve a far emergere la
+    configurazione incoerente (una ScanRoot che non sta né in LIBRARY_ROOT né in
+    SLSKD_DOWNLOAD_DIR) invece di lasciarla passare muta. Con F3b, tolte le
+    ScanRoot, il caso sparisce.
+    """
+    try:
+        return deriva_location(path, library_root=settings.library_root,
+                               inbox_root=settings.slskd_download_dir)
+    except ValueError:
+        logger.warning("Path fuori dalle radici configurate, location=inbox: %s", path)
+        return "inbox"
+
+
 def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     """Scansiona le root date e aggiorna il DB.
 
@@ -93,6 +113,7 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
             now = utcnow()
             row = AudioFile(
                 root_id=root.id, path=path, status="present",
+                location=_location_per(path),
                 first_seen_at=now, last_scanned_at=now, **fields,
             )
             db.add(row)
@@ -142,6 +163,9 @@ def _reconcile(db, roots, seen_by_root, new_inserts, summary) -> None:
                 db.delete(cand)
                 db.flush()
                 row.path = moved_path
+                # Il file si è spostato: può aver attraversato il confine
+                # inbox↔library (è esattamente ciò che fa un Apply).
+                row.location = _location_per(moved_path)
                 row.status = "present"
                 row.last_scanned_at = utcnow()
                 summary.moved += 1
