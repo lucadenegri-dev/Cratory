@@ -6,7 +6,7 @@ import {
   providerSuggest, acceptStrongOverrides, detectRatings,
   type Issue, type Location,
 } from "@/lib/organize/api";
-import { useJobs } from "@/components/organize/jobs-provider";
+import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { IssuesTable, issueIsFixable, issueIsStrong, type GroupBy } from "@/components/organize/issues-table";
 import { Alert, Button, Checkbox, EmptyState, Input, Loading, Modal, Select, Spinner } from "@/components/ui";

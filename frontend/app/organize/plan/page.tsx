@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { buildPlan, getPlan, type Plan, type PlanStats, type ApplyResult } from "@/lib/organize/api";
-import { useJobs } from "@/components/organize/jobs-provider";
+import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { PlanOps } from "@/components/organize/plan-ops";
 import { ApplyModal } from "@/components/organize/apply-modal";

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { listDuplicates, setKeeper, dismissDuplicate, type DupGroup } from "@/lib/organize/api";
-import { useJobs } from "@/components/organize/jobs-provider";
+import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { DupGroupCard } from "@/components/organize/dup-group";
 import { Alert, EmptyState, Loading } from "@/components/ui";

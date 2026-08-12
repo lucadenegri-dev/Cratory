@@ -5,7 +5,7 @@ import {
   listFiles, libraryStats, libraryFacets,
   type FileRow, type LibraryStats, type LibraryFacets, type Location, type FileQuery,
 } from "@/lib/organize/api";
-import { useJobs } from "@/components/organize/jobs-provider";
+import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { FilesTable } from "@/components/organize/files-table";
 import { FileEditPanel } from "@/components/organize/file-edit-panel";

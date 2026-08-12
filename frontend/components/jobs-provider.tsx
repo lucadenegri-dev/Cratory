@@ -8,11 +8,26 @@ import {
   type AnalysisJobStatus, type DownloadStatus, type GenStatus, type LibraryIndexJob, type ShazamIdentifyState,
   type StreamingImportJobStatus,
 } from "@/lib/api";
+import {
+  applyStatus, startApply as apiStartApply,
+  providerRescanStatus, providerRescan as apiProviderRescan,
+  integrityStatus, integrityCheck as apiIntegrityCheck,
+  genreReviewStatus, genreReview as apiGenreReview,
+  startScan as apiStartScan,
+  type ApplyJobState, type GenreReviewBody, type GenreReviewJobState, type IntegrityJobState,
+  type Location, type ProviderRescanBody, type ProviderRescanJobState, type ScanJobState,
+} from "@/lib/organize/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import { EqMeter, Equalizer } from "./ui";
 
 type Outcome = "done" | "error";
+
+/** Stato neutro dei job Organize prima del primo poll. */
+const IDLE = {
+  status: "idle" as const, phase: null, processed: 0, total: 0,
+  result: null, error: null, started_at: null, finished_at: null,
+};
 
 type Job = {
   key: string;
@@ -51,12 +66,31 @@ type JobsApi = {
   generation: GenStatus | null;
   /** Stato raw dell'import/sync streaming per le pagine playlist. */
   streamingImport: StreamingImportJobStatus | null;
+
+  // --- Organize -------------------------------------------------------------
+  /** Lo stesso job di `libraryIndex`, con il nome che usano le pagine Organize:
+   *  da F4 scansione e indicizzazione sono un job solo, raggiungibile da due
+   *  endpoint. Qui si polla una volta e si espone con entrambi i nomi. */
+  scan: ScanJobState;
+  apply: ApplyJobState;
+  rescan: ProviderRescanJobState;
+  integrity: IntegrityJobState;
+  genreReviewJob: GenreReviewJobState;
+  startScan: (locations?: Location[]) => Promise<void>;
+  startApply: () => Promise<void>;
+  startRescan: (body: ProviderRescanBody) => Promise<void>;
+  startIntegrity: () => Promise<IntegrityJobState>;
+  startGenreReview: (body?: GenreReviewBody) => Promise<void>;
 };
 
 const JobsCtx = createContext<JobsApi>({
   refresh: () => {}, startClientJob: () => {}, updateClientJob: () => {},
   endClientJob: () => {}, download: null, libraryIndex: null, analysis: null,
   shazamIdentify: null, generation: null, streamingImport: null,
+  scan: IDLE, apply: IDLE, rescan: IDLE, integrity: { ...IDLE, available: true },
+  genreReviewJob: IDLE,
+  startScan: async () => {}, startApply: async () => {}, startRescan: async () => {},
+  startIntegrity: async () => ({ ...IDLE, available: true }), startGenreReview: async () => {},
 });
 
 export function useJobs() {
@@ -95,6 +129,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [shazamIdentify, setShazamIdentify] = useState<ShazamIdentifyState | null>(null);
   const [generation, setGeneration] = useState<GenStatus | null>(null);
   const [streamingImport, setStreamingImport] = useState<StreamingImportJobStatus | null>(null);
+  const [apply, setApply] = useState<ApplyJobState>(IDLE);
+  const [rescan, setRescan] = useState<ProviderRescanJobState>(IDLE);
+  const [integrity, setIntegrity] = useState<IntegrityJobState>({ ...IDLE, available: true });
+  const [genreReviewJob, setGenreReviewJob] = useState<GenreReviewJobState>(IDLE);
   const alive = useRef(true);
   const wasRunning = useRef<Set<string>>(new Set());
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -133,9 +171,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const [s, d, li, an, gen, si] = await Promise.allSettled([
+    const [s, d, li, an, gen, si, ap, re, ig, gr] = await Promise.allSettled([
       shazamIdentifyStatus(), downloadStatus(), libraryIndexStatus(), analysisStatus(), generateStatus(),
       streamingImportStatus(),
+      applyStatus(), providerRescanStatus(), integrityStatus(), genreReviewStatus(),
     ]);
 
     if (s.status === "fulfilled") {
@@ -160,8 +199,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     if (li.status === "fulfilled") {
       const v = li.value;
       if (alive.current) setLibraryIndex(v);
+      // `detail` porta la fase: da F4 il job attraversa scanning → linking →
+      // inspecting → deduping, ed è la sola riga della barra che lo racconta.
       track(v.status, {
-        key: "library-index", label: t.jobs.libraryIndex,
+        key: "library-index", label: t.jobs.libraryIndex, detail: v.phase ?? undefined,
         processed: v.processed, total: v.total, href: "/settings",
       }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
     }
@@ -199,6 +240,41 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         : v.result ? t.jobs.streamingImportSummary(v.result.name, v.result.created)
         : t.jobs.completed);
     }
+    // --- Organize. Niente riga per lo scan: è già `library-index` qui sopra,
+    // stesso job visto dall'altro endpoint (vedi LibraryIndexJob in api/types).
+    if (ap.status === "fulfilled") {
+      const v = ap.value;
+      if (alive.current) setApply(v);
+      track(v.status, {
+        key: "organize-apply", label: t.organize.jobs.apply, detail: v.phase ?? undefined,
+        processed: v.processed, total: v.total, href: "/organize/plan",
+      }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
+    }
+    if (re.status === "fulfilled") {
+      const v = re.value;
+      if (alive.current) setRescan(v);
+      track(v.status, {
+        key: "organize-rescan", label: t.organize.jobs.providerLookup, detail: v.phase ?? undefined,
+        processed: v.processed, total: v.total, href: "/organize/issues",
+      }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
+    }
+    if (ig.status === "fulfilled") {
+      const v = ig.value;
+      if (alive.current) setIntegrity(v);
+      track(v.status, {
+        key: "organize-integrity", label: t.organize.jobs.integrity, detail: v.phase ?? undefined,
+        processed: v.processed, total: v.total, href: "/organize/files",
+      }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
+    }
+    if (gr.status === "fulfilled") {
+      const v = gr.value;
+      if (alive.current) setGenreReviewJob(v);
+      track(v.status, {
+        key: "organize-genre-review", label: t.organize.jobs.genreReview, detail: v.phase ?? undefined,
+        processed: v.processed, total: v.total, href: "/organize/issues",
+      }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
+    }
+
     wasRunning.current = nowRunning;
     if (alive.current) setPolled(next);
   }, [pushOutcome, t]);
@@ -217,6 +293,44 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       const n = { ...c }; delete n[key]; return n;
     });
   }, []);
+
+  // --- Azioni Organize. Avviano e poi lasciano che sia il poller a raccontare
+  // il resto: lo stato lo scrive pollOnce, non il valore di ritorno.
+  const startScan = useCallback(async (locations?: Location[]) => {
+    await apiStartScan(locations);
+    refresh();
+  }, [refresh]);
+  const startApply = useCallback(async () => {
+    await apiStartApply();
+    refresh();
+  }, [refresh]);
+  const startRescan = useCallback(async (body: ProviderRescanBody) => {
+    await apiProviderRescan(body);
+    refresh();
+  }, [refresh]);
+  const startIntegrity = useCallback(async () => {
+    const g = await apiIntegrityCheck(false);
+    setIntegrity(g);
+    return g;
+  }, []);
+  const startGenreReview = useCallback(async (body: GenreReviewBody = {}) => {
+    await apiGenreReview(body);
+    refresh();
+  }, [refresh]);
+
+  /* Riavvio automatico della scansione a fine Apply. È un COMPORTAMENTO, non
+     un'API: nessun tipo lo protegge, e viveva nel provider di Organize che qui
+     è stato assorbito. Esiste perché un apply sposta e ritagga file sul disco,
+     quindi l'indice va riallineato. Si riconosce il fronte running→done e si
+     riscansiona solo se qualche operazione è davvero atterrata. */
+  const prevApplyStatus = useRef<ApplyJobState["status"]>(apply.status);
+  useEffect(() => {
+    const was = prevApplyStatus.current;
+    prevApplyStatus.current = apply.status;
+    if (was === "running" && apply.status === "done" && (apply.result?.applied_ops ?? 0) > 0) {
+      startScan().catch(() => { /* backend offline o scan già in corso (409) */ });
+    }
+  }, [apply.status, apply.result, startScan]);
 
   useEffect(() => {
     alive.current = true;
@@ -254,9 +368,15 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     () => ({
       refresh, startClientJob, updateClientJob, endClientJob,
       download, libraryIndex, analysis, shazamIdentify, generation, streamingImport,
+      // `scan` è lo stesso job di `libraryIndex`: un poll, due nomi. IDLE finché
+      // il primo poll non è tornato, così le pagine Organize non gestiscono null.
+      scan: libraryIndex ?? IDLE,
+      apply, rescan, integrity, genreReviewJob,
+      startScan, startApply, startRescan, startIntegrity, startGenreReview,
     }),
     [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, analysis, shazamIdentify,
-      generation, streamingImport],
+      generation, streamingImport, apply, rescan, integrity, genreReviewJob,
+      startScan, startApply, startRescan, startIntegrity, startGenreReview],
   );
 
   // Dedup per chiave: un job che riparte entro OUTCOME_MS può comparire sia in

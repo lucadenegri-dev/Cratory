@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { listHistory, undoRun, fmtDate, type HistoryItem } from "@/lib/organize/api";
-import { useJobs } from "@/components/organize/jobs-provider";
+import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, EmptyState, Loading } from "@/components/ui";
 import { cn } from "@/lib/cn";
