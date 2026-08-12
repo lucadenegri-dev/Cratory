@@ -10,9 +10,15 @@ class ScanSummary(BaseModel):
     roots: list[int]
     found: int = 0
     inserted: int = 0
-    # Righe ri-toccate (last_scanned_at aggiornato), NON righe con contenuto cambiato.
-    # Una re-scansione su disco immutato produce updated == N (file già noti).
+    # Righe ri-toccate perché rilette per intero (mtime/size cambiati, o riga
+    # nuova/con scan_error). NON conta i file saltati dal fast-path incremental:
+    # quelli sono in `unchanged`.
     updated: int = 0
+    # File il cui (path, size_bytes, mtime) combacia con la riga esistente:
+    # _scan_file_fields NON è stato richiamato, solo status/last_scanned_at
+    # sono stati ritoccati. Una re-scansione su disco immutato produce
+    # unchanged == N (file già noti) e updated == 0.
+    unchanged: int = 0
     moved: int = 0
     missing: int = 0
     errors: int = 0

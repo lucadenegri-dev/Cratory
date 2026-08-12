@@ -43,7 +43,11 @@ def test_rescan_is_idempotent(db, copy_fixture, tmp_path, monkeypatch):
     root = _make_root(db, copy_fixture, tmp_path, [("a.mp3", "mp3")], monkeypatch)
     scan(db, [root])
     summary = scan(db, [root])
-    assert summary.inserted == 0 and summary.updated == 1
+    # F4 Task 3b: un file invariato (stesso path/size_bytes/mtime, nessuno
+    # scan_error) prende il fast-path incrementale e finisce in `unchanged`,
+    # non in `updated` — vedi tests/organize/test_scanner_incrementale.py per
+    # la copertura dedicata di quel meccanismo.
+    assert summary.inserted == 0 and summary.updated == 0 and summary.unchanged == 1
     assert db.scalar(select(AudioFile)) is not None
     assert len(db.scalars(select(AudioFile)).all()) == 1
 

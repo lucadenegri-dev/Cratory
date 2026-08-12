@@ -34,12 +34,21 @@ def _iter_audio_files(root_path: str) -> Iterator[tuple[str, str]]:
                 yield os.path.join(dirpath, name), ext
 
 
-def _scan_file_fields(path: str, ext: str) -> dict:
-    """Campi aggiornabili di AudioFile per un file, con errori isolati per-file."""
+def _scan_file_fields(path: str, ext: str, mtime: float | None) -> dict:
+    """Campi aggiornabili di AudioFile per un file, con errori isolati per-file.
+
+    `mtime` è il tempo di modifica già letto dallo `stat()` del chiamante (fatto
+    per decidere se saltare questa stessa lettura): si passa qui per scriverlo
+    insieme agli altri campi della lettura completa, senza un secondo `stat()`.
+    Se lo `stat()` del chiamante è fallito (file sparito fra `os.walk` e qui),
+    arriva `None`: la riga risultante ha `mtime` NULL e verrà ritentata alla
+    prossima corsa (non combacia mai con nessuno stat valido).
+    """
     h, method = content_hash.compute(path, ext)
     fields = {
         "ext": ext.lstrip("."),
         "size_bytes": 0,
+        "mtime": mtime,
         "content_hash": h,
         "hash_method": method,
         "scan_error": None,
@@ -92,10 +101,12 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     Semantica di idempotenza:
     - Nessuna riga duplicata: ogni file sul disco corrisponde a esattamente una riga.
     - Nessun falso missing/moved: i file invariati restano "present".
-    - ``summary.updated`` conta le righe *ri-toccate* (``last_scanned_at`` aggiornato),
-      NON le righe il cui contenuto è cambiato.  Anche una re-scansione su disco
-      immutato produce ``updated == N`` (dove N è il numero di file già noti).
-      Chunk 2 non deve interpretare ``updated`` come "contenuto modificato".
+    - ``summary.updated`` conta le righe *rilette per intero* (mtime/size cambiati,
+      riga nuova con scan_error, o riga senza mtime perché mai passata da questo
+      meccanismo). Da F4 Task 3b una re-scansione su disco immutato NON produce
+      più ``updated == N``: i file invariati (stesso path/size_bytes/mtime,
+      nessuno scan_error) prendono il fast-path e finiscono in
+      ``summary.unchanged``, senza rileggere né rihashare il file.
 
     Root percorsa e root scritta sono due nozioni distinte: la prima è la
     cartella che si sta camminando, la seconda si deriva dalla collocazione del
@@ -151,11 +162,41 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     new_inserts: list[AudioFile] = []
     for index, (path, ext, location) in enumerate(work):
         root_id = id_per_location[location]
+        # Registrazione PRIMA di ogni decisione di skip: `seen_by_root` alimenta
+        # `_reconcile`, che marca "missing" ciò che non ha visto. Un file che
+        # prende il fast-path sotto deve comunque risultare visto, altrimenti
+        # ogni file invariato verrebbe dichiarato sparito.
         seen_by_root.setdefault(root_id, set()).add(path)
-        fields = _scan_file_fields(path, ext)
         existing = db.scalar(
             select(AudioFile).where(AudioFile.root_id == root_id, AudioFile.path == path)
         )
+        # stat() costa niente (a differenza della lettura completa più sotto):
+        # è il segnale incrementale. Se fallisce (file sparito fra os.walk e
+        # qui) si ricade sulla lettura completa, che isola lo stesso errore.
+        try:
+            st = os.stat(path)
+            stat_mtime, stat_size = st.st_mtime, st.st_size
+        except OSError:
+            stat_mtime, stat_size = None, None
+        unchanged = (
+            existing is not None
+            and existing.scan_error is None
+            and stat_mtime is not None
+            and existing.mtime == stat_mtime
+            and existing.size_bytes == stat_size
+        )
+        if unchanged:
+            # Path, size_bytes e mtime combaciano con l'ultima lettura completa:
+            # il contenuto non è cambiato, si salta content_hash.compute e la
+            # rilettura dei tag. content_hash resta quello già in riga (serve a
+            # _abbina_spostamenti anche per i file mai ri-hashati in questa corsa).
+            existing.status = "present"
+            existing.last_scanned_at = utcnow()
+            summary.unchanged += 1
+            if on_progress is not None:
+                on_progress(index + 1, summary.found, "scanning")
+            continue
+        fields = _scan_file_fields(path, ext, stat_mtime)
         if existing is None:
             # Stesso timestamp per entrambi: un file "nuovo" ha
             # first_seen_at == last_scanned_at finché non lo si ri-scansiona

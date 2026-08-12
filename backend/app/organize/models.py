@@ -58,6 +58,11 @@ class AudioFile(Base):
     channels: Mapped[int | None] = mapped_column(Integer)
     duration_s: Mapped[float | None] = mapped_column(Float)
     size_bytes: Mapped[int] = mapped_column(Integer)
+    # Tempo di modifica all'ultima lettura completa del file. Insieme a
+    # `size_bytes` è il segnale incrementale della fase 1: se path, dimensione e
+    # mtime coincidono, il contenuto non è cambiato e non serve rileggerlo.
+    # NULL = mai letto con questo meccanismo (prima corsa dopo la migrazione).
+    mtime: Mapped[float | None] = mapped_column(Float)
     content_hash: Mapped[str | None] = mapped_column(String, index=True)
     hash_method: Mapped[str] = mapped_column(String)
     artist: Mapped[str | None] = mapped_column(String)
