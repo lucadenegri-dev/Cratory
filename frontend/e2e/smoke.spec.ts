@@ -22,6 +22,8 @@ const ROUTES: { path: string; title: string | null }[] = [
   { path: "/sets", title: null },
   { path: "/transitions", title: null },
   { path: "/analysis", title: null },
+  // La rotta resta "/discovery" ma l'intestazione (e la voce di nav,
+  // `t.nav.discovery`) sono "Dig": e' il nome di prodotto del dig di Discovery.
   { path: "/discovery", title: "Dig" },
   { path: "/shazam", title: "Shazam" },
   { path: "/set-builder", title: "Set Builder" },
