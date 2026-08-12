@@ -250,7 +250,20 @@ def indicizza_archivio(db: Session, *, archive_root: str | Path,
             if on_progress is not None:
                 on_progress(done, total)
             continue
-        if archive_seen.get(resolved) == (stat.st_mtime, stat.st_size):
+        # Fast-path: una Track già scartata che punta a QUESTO file, con firma
+        # invariata, non va ri-hashata. `archive_seen` sotto copre solo i file
+        # SENZA match (la sua unica scrittura è nel ramo "nessuna traccia");
+        # senza questo controllo un file d'archivio già abbinato veniva
+        # ri-hashato a ogni run (perso nell'estrazione di questa passata da F4).
+        known = db.scalar(select(Track).where(Track.local_path == resolved))
+        if (known is not None and known.local_mtime == stat.st_mtime
+                and known.local_size == stat.st_size):
+            report["unchanged"] += 1
+            seen_paths.add(resolved)
+            done += 1
+            if on_progress is not None:
+                on_progress(done, total)
+        elif archive_seen.get(resolved) == (stat.st_mtime, stat.st_size):
             # File d'archivio senza traccia, ma già visto e invariato: niente ri-hash.
             report["unchanged"] += 1
             seen_paths.add(resolved)
@@ -337,12 +350,18 @@ def collega_tracce(db: Session, *, on_progress=None) -> dict:
               "unchanged": 0, "archived": 0, "errors": [], "created_ids": []}
     seen_paths: set[str] = set()
     seen_digests: set[str] = set()
+    total = len(righe)
 
-    for indice, riga in enumerate(righe):
-        # Commit incrementale (così i `continue` non lo saltano): persiste il
-        # blocco precedente prima di attaccare la riga successiva.
-        if indice and indice % COMMIT_EVERY == 0:
-            db.commit()
+    # Passata 1 — incrementale: i file invariati (firma nota) reclamano subito
+    # path e hash SENZA ri-hash. Va fatta per INTERA prima della passata 2:
+    # altrimenti una riga nuova con lo stesso audio di una invariata, se
+    # ordinata prima nel path, le ruberebbe il local_path — e la riga invariata,
+    # trovata dopo con `known` ormai spostato altrove, verrebbe ricalcolata e
+    # scambiata per un duplicato invece che per invariata (le due passate erano
+    # unite in una sola quando F4 ha riscritto questa funzione).
+    done = 0
+    pending: list[AudioFile] = []
+    for riga in righe:
         path = Path(riga.path)
         try:
             stat = path.stat()
@@ -351,13 +370,14 @@ def collega_tracce(db: Session, *, on_progress=None) -> dict:
             report["failed"] += 1
             report["errors"].append({"path": riga.path, "error": str(exc)})
             logger.warning("File saltato %s: %s", riga.path, exc)
+            done += 1
             if on_progress is not None:
-                on_progress(indice + 1, len(righe))
+                on_progress(done, total)
             continue
 
-        # Fast-path. Si parte da riga.track_id — la relazione che F3a ha reso
-        # esplicita — e solo in mancanza si ricade sulla ricerca per local_path,
-        # che è ciò che il codice faceva prima di avere la colonna.
+        # Si parte da riga.track_id — la relazione che F3a ha reso esplicita —
+        # e solo in mancanza si ricade sulla ricerca per local_path, che è ciò
+        # che il codice faceva prima di avere la colonna.
         known = db.get(Track, riga.track_id) if riga.track_id else None
         if known is None:
             known = db.scalar(select(Track).where(Track.local_path == riga.path))
@@ -371,10 +391,20 @@ def collega_tracce(db: Session, *, on_progress=None) -> dict:
                 # Recupero data anche sul fast-path: traccia storica senza data,
                 # lo stat è già in mano (nessun costo aggiuntivo).
                 known.added_at = _added_at_from_stat(stat)
+            done += 1
             if on_progress is not None:
-                on_progress(indice + 1, len(righe))
-            continue
+                on_progress(done, total)
+        else:
+            pending.append(riga)
 
+    # Passata 2 — flusso completo per le sole righe nuove o modificate.
+    for n_pending, riga in enumerate(pending):
+        # Commit incrementale a inizio giro (così i `continue` non lo saltano):
+        # persiste il blocco precedente prima di attaccare la riga successiva.
+        if n_pending and n_pending % COMMIT_EVERY == 0:
+            db.commit()
+        done += 1
+        path = Path(riga.path)
         # Flusso completo: qui e solo qui si paga ffmpeg.
         try:
             digest = audio_hash(path)
@@ -383,7 +413,7 @@ def collega_tracce(db: Session, *, on_progress=None) -> dict:
             report["errors"].append({"path": riga.path, "error": str(exc)})
             logger.warning("File saltato %s: %s", riga.path, exc)
             if on_progress is not None:
-                on_progress(indice + 1, len(righe))
+                on_progress(done, total)
             continue
         if digest in seen_digests:
             # Due file con lo stesso audio nello stesso run: il primo vince, gli altri
@@ -391,7 +421,7 @@ def collega_tracce(db: Session, *, on_progress=None) -> dict:
             report["duplicates"] += 1
             logger.warning("Audio duplicato nello stesso run: %s (digest gia' visto)", riga.path)
             if on_progress is not None:
-                on_progress(indice + 1, len(righe))
+                on_progress(done, total)
             continue
         seen_digests.add(digest)
         tags = read_tags(path)
@@ -416,7 +446,7 @@ def collega_tracce(db: Session, *, on_progress=None) -> dict:
         refresh_status(track)
         seen_paths.add(str(path.resolve()))
         if on_progress is not None:
-            on_progress(indice + 1, len(righe))
+            on_progress(done, total)
 
     # Anti-unmount (stesso principio dell'import locale): un indice vuoto (scan
     # non ancora passato, o radice smontata) non deve azzerare i possessi.
@@ -477,6 +507,13 @@ def index_library(db: Session, *, root: str | Path | None = None,
         report["failed"] += arc_report["failed"]
         report["unchanged"] += arc_report["unchanged"]
         report["errors"] += arc_report["errors"]
+    # Anti-unmount (stesso principio di `collega_tracce`): un indice di libreria
+    # vuoto (scan non ancora passato, o radice smontata) non deve nemmeno
+    # ricalcolare l'energia. Prima di F4 il return anticipato viveva qui nel
+    # wrapper e usciva anche da questo; ora che vive dentro `collega_tracce`,
+    # il segnale è `scanned == 0` nel suo report (righe AudioFile viste: nessuna).
+    if report["scanned"] == 0:
+        return report
     # Calibrazione energia: mappa gli energy_raw (0..1) in energy 0-100 per percentili
     # sull'INTERA libreria, così "100" è la traccia più energica dell'utente.
     report["energy_computed"] = recompute_energy(db)

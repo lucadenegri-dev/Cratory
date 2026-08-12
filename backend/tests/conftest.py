@@ -157,3 +157,70 @@ def fake_audio(monkeypatch, tmp_path):
     monkeypatch.setattr(li, "read_tags", lambda p: tags[str(p.resolve() if hasattr(p, 'resolve') else p)])
     monkeypatch.setattr(li, "read_audio_quality", lambda p: {"format": "mp3", "bitrate": 320})
     return make, tmp_path
+
+
+@pytest.fixture()
+def semina_indice_libreria(db):
+    """Semina in `AudioFile` una riga (`location='library'`, `status='present'`)
+    per ogni file audio sotto una radice, senza toccare le Track.
+
+    Perché esiste: da F4 `collega_tracce` legge le righe `AudioFile` che lo
+    scanner di Organize (`app/organize/services/scanner.py`) scrive quando
+    cammina il disco — non cammina più il disco lei stessa. Quello scanner non
+    gira nei test di questo modulo (`library_index`): questo helper riproduce
+    SOLO il suo passo di popolamento indice, riusando lo stesso walk
+    (`library_index.scan_folder`, così i test che lo monkeypatchano per
+    simulare file che spariscono a metà corsa continuano a funzionare
+    identici a prima di F4). I campi di qualità (`ext`/`size_bytes`/
+    `hash_method`) sono segnaposto, come già in `tests/test_collega_tracce.py`:
+    a `collega_tracce` non serve altro che path/location/status per agganciare
+    — hash e tag li rilegge dal file vero al momento dell'aggancio.
+
+    Upsert per (root_id, path), come lo scanner vero: un test che simula più
+    corse (scan+link, scan+link) chiamando l'helper più volte sullo stesso
+    file non deve urtare il vincolo di unicità.
+    """
+    from app.core import runtime_settings
+    from app.organize.models import AudioFile
+    from app.organize.services.roots import radici
+    from app.services import library_index as li
+    from sqlalchemy import select
+
+    def _run(root) -> None:
+        runtime_settings.apply(db, "library_root", str(root))
+        root_id = radici(db)["library"].id
+        for path in li.scan_folder(root):
+            resolved = str(path.resolve())
+            existing = db.scalar(select(AudioFile).where(
+                AudioFile.root_id == root_id, AudioFile.path == resolved))
+            if existing is not None:
+                existing.status = "present"
+                continue
+            db.add(AudioFile(
+                root_id=root_id, path=resolved, location="library",
+                status="present", ext=path.suffix.lstrip("."), size_bytes=0,
+                hash_method="test-stub",
+            ))
+        db.commit()
+
+    return _run
+
+
+@pytest.fixture()
+def collega_da_disco(db, semina_indice_libreria):
+    """Ponte fra i vecchi test 'index_library(db, root=...)' e la fase 2 attuale.
+
+    Fino a F4 `index_library`/`collega_tracce` camminavano `root` per conto
+    proprio. Ora `collega_tracce` legge solo le righe `AudioFile` già scritte
+    (dallo scanner di Organize, in produzione). Questo helper riproduce quel
+    solo passo di popolamento (`semina_indice_libreria`) e poi chiama
+    `collega_tracce`, che è la funzione sotto test — non un sostituto suo:
+    l'aggancio (hash, match, upsert, riconciliazione) resta interamente lì.
+    """
+    from app.services import library_index as li
+
+    def _run(root):
+        semina_indice_libreria(root)
+        return li.collega_tracce(db)
+
+    return _run

@@ -65,7 +65,7 @@ def test_file_in_archivio_scarta_la_traccia(db, fake_audio):
     assert t.local_path.endswith("Archived/A - T.mp3")
 
 
-def test_ritorno_in_libreria_riabilita(db, fake_audio):
+def test_ritorno_in_libreria_riabilita(db, fake_audio, semina_indice_libreria):
     from app.services.library_index import index_library
 
     make, root = fake_audio
@@ -76,6 +76,10 @@ def test_ritorno_in_libreria_riabilita(db, fake_audio):
     db.add(t); db.commit()
 
     make("Libreria/Techno/A - T.mp3", digest="H1")
+    # `index_library` non cammina più `lib`: lo semina prima, come farebbe lo
+    # scanner di Organize, così `collega_tracce` (chiamata da `index_library`)
+    # trova la riga e può ri-possedere il file tornato in libreria.
+    semina_indice_libreria(lib)
     index_library(db, root=lib, archive_root=arc)
 
     db.refresh(t)

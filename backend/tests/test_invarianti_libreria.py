@@ -33,18 +33,16 @@ def test_il_rilevatore_vede_un_duplicato_quando_c_e(db):
     assert doppi[0][0] == "/lib/a.flac"
 
 
-def test_l_indicizzazione_non_crea_un_duplicato_per_path(db, fake_audio):
+def test_l_indicizzazione_non_crea_un_duplicato_per_path(db, fake_audio, collega_da_disco):
     """L'invariante vero: non che i duplicati si vedano, ma che il codice non
     li produca. Stesse condizioni della regressione di fine F3b — traccia
     posseduta, file con hash diverso, nessun ISRC nei tag."""
-    from app.services.library_index import index_library
-
     make, root = fake_audio
     p = make("Trance/R/R - Aqua Viva.mp3", digest="H_NUOVO", artist="R", title="Aqua Viva")
     db.add(Track(source_type="spotify", spotify_id="s1", artist="R", title="Aqua Viva",
                  has_local_file=True, local_path=str(p.resolve()), audio_hash="H_VECCHIO"))
     db.commit()
 
-    index_library(db, root=root)
+    collega_da_disco(root)
 
     assert _duplicati_per_path(db) == []

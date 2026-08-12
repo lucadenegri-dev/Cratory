@@ -34,11 +34,10 @@ def fake_audio(monkeypatch, tmp_path):
     return make, tmp_path
 
 
-def test_file_sparito_tra_scan_e_stat_non_uccide_il_run(db, fake_audio, monkeypatch):
+def test_file_sparito_tra_scan_e_stat_non_uccide_il_run(db, fake_audio, monkeypatch, collega_da_disco):
     """Un file cancellato tra la scansione e lo stat() si salta e si conta come
     failed: il run completa e gli altri file vengono indicizzati."""
     from app.services import library_index as li
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     make("lib/A - T1.mp3", digest="H1", artist="A", title="T1")
@@ -53,7 +52,7 @@ def test_file_sparito_tra_scan_e_stat_non_uccide_il_run(db, fake_audio, monkeypa
 
     monkeypatch.setattr(li, "scan_folder", scan_poi_sparisce)
 
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     assert report["failed"] == 1
     assert any("Ghost" in e["path"] for e in report["errors"])
@@ -61,11 +60,10 @@ def test_file_sparito_tra_scan_e_stat_non_uccide_il_run(db, fake_audio, monkeypa
     assert report["scanned"] == 2
 
 
-def test_commit_incrementale_prima_della_riconciliazione(db, fake_audio, monkeypatch):
+def test_commit_incrementale_prima_della_riconciliazione(db, fake_audio, monkeypatch, collega_da_disco):
     """Con molti file nuovi (> soglia) almeno un commit avviene DURANTE il loop
     di scansione, cioè prima della riconciliazione finale (lost/orfani)."""
     from app.services import library_index as li
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     for i in range(60):
@@ -79,7 +77,7 @@ def test_commit_incrementale_prima_della_riconciliazione(db, fake_audio, monkeyp
     monkeypatch.setattr(li, "unreferenced_track_ids",
                         lambda *a, **k: (events.append("reconcile"), original_unref(*a, **k))[1])
 
-    report = index_library(db, root=root)
+    report = collega_da_disco(root)
 
     assert report["created"] == 60
     assert "reconcile" in events
@@ -87,12 +85,11 @@ def test_commit_incrementale_prima_della_riconciliazione(db, fake_audio, monkeyp
     assert "commit" in events[:events.index("reconcile")]
 
 
-def test_commit_incrementale_progresso_sopravvive_a_crash(db, fake_audio, monkeypatch):
+def test_commit_incrementale_progresso_sopravvive_a_crash(db, fake_audio, monkeypatch, collega_da_disco):
     """Crash simulato a metà scansione: i blocchi già committati restano nel DB
     (il lavoro non committato si perde, ma non tutto il run)."""
     from app.models import Track
     from app.services import library_index as li
-    from app.services.library_index import index_library
 
     make, root = fake_audio
     for i in range(60):
@@ -110,7 +107,7 @@ def test_commit_incrementale_progresso_sopravvive_a_crash(db, fake_audio, monkey
     monkeypatch.setattr(li, "audio_hash", hash_poi_crash)
 
     with pytest.raises(RuntimeError):
-        index_library(db, root=root)
+        collega_da_disco(root)
     db.rollback()  # scarta il lavoro non committato: resta solo il persistito
 
     persistite = db.query(Track).filter(Track.has_local_file.is_(True)).count()
