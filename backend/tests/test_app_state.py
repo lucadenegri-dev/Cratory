@@ -37,7 +37,6 @@ def test_job_scansione_persiste_last_index_at(monkeypatch, tmp_path):
     monkeypatch.setattr(scan_job, "SessionLocal", factory)
     monkeypatch.setattr(settings, "library_root", str(tmp_path))
     monkeypatch.setattr(settings, "archive_root", "")
-    monkeypatch.setattr(settings, "slskd_download_dir", "")
 
     scan_job._run(None)  # sincrono nel test, senza thread
 

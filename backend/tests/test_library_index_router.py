@@ -14,6 +14,24 @@ def test_409_senza_library_root(monkeypatch):
     assert r.json()["detail"]["code"] == "library_root_not_configured"
 
 
+def test_409_apply_in_corso(db):
+    """L'alias deve avere la STESSA guardia della rotta canonica
+    (POST /api/organize/scan, vedi test_scan_blocked_while_apply_running):
+    da F4 lanciano lo stesso job unico, che fa _reconcile — se un Apply sta
+    spostando file inbox->libreria, uno scan concorrente vede un albero mezzo
+    spostato e fonde 1:1 attraverso il confine (mis-merge, vedi docstring di
+    `_reconcile` in scanner.py)."""
+    from app.organize.services import apply_job
+
+    apply_job._state.update(status="running")
+    try:
+        r = client.post("/api/library/index")
+        assert r.status_code == 409
+        assert r.json()["detail"]["code"] == "apply_running"
+    finally:
+        apply_job._state.update(status="idle")
+
+
 def test_avvio_e_status(monkeypatch, tmp_path):
     """Da F4 Task 3 /api/library/index è un alias di scan_job: stesso job che
     serve /api/organize/scan, invocato con locations=None (tutte le radici)."""
@@ -35,7 +53,6 @@ def test_avvio_e_status(monkeypatch, tmp_path):
                         sessionmaker(bind=engine, expire_on_commit=False))
     monkeypatch.setattr(settings, "library_root", str(tmp_path))
     monkeypatch.setattr(settings, "archive_root", "")
-    monkeypatch.setattr(settings, "slskd_download_dir", "")
 
     class _SyncThread:
         """niente thread reale nel test: il job gira sincrono. scan_job non ha

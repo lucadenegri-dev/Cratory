@@ -19,10 +19,19 @@ def test_get_plan_404_when_absent(db):
 
 def test_post_then_get_plan(db, monkeypatch):
     from app.core.config import settings
+    from app.organize.services import scan_job
 
     # Da F3b la destinazione è planning.target_root() (settings.library_root),
     # non più ScanRoot.path: allinealo alla radice seminata da _seed().
     monkeypatch.setattr(settings, "library_root", "/lib")
+    # `with TestClient(app)` fa scattare il lifespan reale (main.py), che con
+    # library_root="/lib" appena impostato innescherebbe una VERA
+    # scan_job.start_job_if_due() in background — corsa con l'AudioFile
+    # seminata sotto: se il job la riconcilia (0 file trovati sotto "/lib")
+    # prima della POST, la segna "missing" e il piano non trova più nulla da
+    # spostare (flaky, dipendente dai tempi del thread). Non è l'auto-scan
+    # sotto test qui: va disinnescato.
+    monkeypatch.setattr(scan_job, "start_job_if_due", lambda: None)
     _seed(db)
     with TestClient(app) as client:
         created = client.post("/api/organize/plan")

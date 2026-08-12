@@ -103,10 +103,17 @@ def _no_real_library_scan(monkeypatch):
     fase 2 dell'indicizzazione, che legge `runtime_settings.archive_root()` allo
     stesso modo del job — senza il guard, un test che invoca `scan()` senza
     monkeypatchare esplicitamente la cartella cammina l'ARCHIVE_ROOT VERO
-    configurato nel .env dello sviluppatore."""
+    configurato nel .env dello sviluppatore.
+
+    Copre le TRE radici configurabili, non due: anche SLSKD_DOWNLOAD_DIR (la
+    cartella Inbox) va azzerata, altrimenti `radici(db)` la risolve comunque
+    dal .env reale dello sviluppatore e uno scan/link nei test cammina e hasha
+    quella cartella vera invece di una temporanea (vedi
+    test_db_isolation.py::test_guard_scan_azzera_tutte_e_tre_le_radici)."""
     from app.core.config import settings
     monkeypatch.setattr(settings, "library_root", "")
     monkeypatch.setattr(settings, "archive_root", "")
+    monkeypatch.setattr(settings, "slskd_download_dir", "")
 
 
 # I 5 job in background (analisi BPM/key, scansione+aggancio libreria, download

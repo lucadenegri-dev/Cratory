@@ -10,7 +10,7 @@ from app.services.file_search import path_within_roots, search_roots
 from app.db import get_db
 from app.integrations.local_files import read_cover
 from app.repositories import genres_overview, get_track, library_stats, list_tracks, update_track
-from app.organize.services import scan_job
+from app.organize.services import apply_job, scan_job
 from app.schemas import (
     GenreCountOut,
     LibraryStatsOut,
@@ -179,7 +179,12 @@ def start_library_index():
     canonica (LIBRARY_ROOT): il disco È la libreria. Endpoint invariato per il
     frontend (`startLibraryIndex` in frontend/lib/api.ts); da F4 il motore
     dietro non è più un job dedicato ma lo stesso scan+link di
-    POST /api/organize/scan."""
+    POST /api/organize/scan — stessa guardia di quella rotta canonica: uno
+    scan concorrente a un Apply in corso cammina un albero mezzo spostato e
+    `_reconcile` puo' fondere 1:1 attraverso il confine inbox/libreria
+    (mis-merge, vedi il docstring di `_reconcile` in scanner.py)."""
+    if apply_job.is_running():
+        raise api_error(409, "apply_running", "Apply in progress")
     if not runtime_settings.library_root():
         raise api_error(
             409, "library_root_not_configured",

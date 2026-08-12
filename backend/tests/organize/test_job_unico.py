@@ -38,7 +38,6 @@ def test_lo_stato_osservato_durante_la_corsa_copre_scanning_e_linking(db, fake_a
 
     make, root = fake_audio
     monkeypatch.setattr(settings, "library_root", str(root))
-    monkeypatch.setattr(settings, "slskd_download_dir", "")
     make("Techno/N/N - New.mp3", digest="H7", artist="N", title="New")
 
     spia = _SpyDict(scan_job._state)
@@ -59,7 +58,6 @@ def test_la_corsa_scrive_last_index_at(db, fake_audio, monkeypatch):
 
     make, root = fake_audio
     monkeypatch.setattr(settings, "library_root", str(root))
-    monkeypatch.setattr(settings, "slskd_download_dir", "")
     make("Techno/N/N - New.mp3", digest="H7", artist="N", title="New")
 
     scan_job._run(None)  # sincrono, senza thread
