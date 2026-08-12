@@ -124,6 +124,45 @@ def test_file_saltato_non_diventa_missing(db, copy_fixture, tmp_path, monkeypatc
     assert row.status == "present"
 
 
+def test_missing_torna_present_sul_fast_path(db, copy_fixture, tmp_path, monkeypatch):
+    """Radice smontata (o scan che non l'ha vista) lascia la riga a
+    status="missing" col file su disco invariato: al rimontaggio path/size/
+    mtime combaciano ancora, quindi è il fast-path l'UNICO percorso possibile
+    per questo file (nessuna corsa futura lo rileggerà mai). Se il fast-path
+    non riscrivesse status, la riga resterebbe "missing" per sempre e
+    collega_tracce (che filtra status == "present") perderebbe il file."""
+    root = _make_root(db, copy_fixture, tmp_path, [("a.mp3", "mp3")], monkeypatch)
+    scan(db, [root])
+    row = db.scalar(select(AudioFile))
+    row.status = "missing"
+    db.commit()
+
+    summary = scan(db, [root])
+
+    assert summary.unchanged == 1, "deve prendere il fast-path, non rileggere il file"
+    db.expire_all()
+    row = db.scalar(select(AudioFile))
+    assert row.status == "present"
+
+
+def test_last_scanned_at_aggiornato_sul_fast_path(db, copy_fixture, tmp_path, monkeypatch):
+    """Il filtro "solo file nuovi" (routers/issues.py, provider_rescan.py)
+    confronta first_seen_at == last_scanned_at. Un file invariato che prende
+    il fast-path deve comunque avanzare last_scanned_at, altrimenti resta
+    "nuovo" per sempre dopo il primo scan."""
+    root = _make_root(db, copy_fixture, tmp_path, [("a.mp3", "mp3")], monkeypatch)
+    scan(db, [root])
+    row = db.scalar(select(AudioFile))
+    assert row.first_seen_at == row.last_scanned_at, "precondizione: appena inserito, è 'nuovo'"
+
+    summary = scan(db, [root])
+
+    assert summary.unchanged == 1, "deve prendere il fast-path, non rileggere il file"
+    db.expire_all()
+    row = db.scalar(select(AudioFile))
+    assert row.first_seen_at != row.last_scanned_at, "non deve più risultare 'nuovo' dopo il secondo scan"
+
+
 def test_riga_con_mtime_null_viene_riletta(db, copy_fixture, tmp_path, monkeypatch):
     """Prima corsa dopo la migrazione: una riga pre-esistente con mtime NULL
     (mai scritta da questo meccanismo) va riletta anche se size_bytes combacia."""
