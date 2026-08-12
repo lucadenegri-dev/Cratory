@@ -13,6 +13,7 @@ from app.organize.models import (
 )
 from app.organize.schemas import ScanRootCreate, ScanRootRead
 from app.organize.services import cover_cache, thumbs
+from app.organize.services.file_link import stacca_file
 
 router = APIRouter(prefix="/api/organize/sources", tags=["sources"])
 
@@ -71,6 +72,17 @@ def _has_run_history(db: Session, file_ids: list[int]) -> bool:
     return in_journal is not None
 
 
+def _stacca_tracce_dai_file(db: Session, file_ids: list[int]) -> int:
+    """Azzera `Track.primary_file_id` per i file che stanno per sparire.
+
+    Qui gli AudioFile non si cancellano in blocco: se ne va la ScanRoot e la
+    cascade `all, delete-orphan` porta via i suoi file. Nessuno però azzera
+    `Track.primary_file_id`, che non ha relationship() da quel lato — e sul DB
+    migrato nemmeno il vincolo FK. Va fatto prima, a mano.
+    """
+    return sum(stacca_file(db, file_id) for file_id in file_ids)
+
+
 @router.delete("/{root_id}", status_code=204)
 def delete_source(root_id: int, db: Session = Depends(get_db)):
     root = db.get(ScanRoot, root_id)
@@ -98,6 +110,8 @@ def delete_source(root_id: int, db: Session = Depends(get_db)):
     # questo punto appartengono per forza a un piano draft (il guard sopra ha
     # già escluso le altre): sono usa-e-getta, vanno cancellate qui o la FK
     # plan_op.file_id scatterebbe comunque sulla delete dell'audio_file.
+    _stacca_tracce_dai_file(db, file_ids)
+
     if file_ids:
         group_ids = list(db.scalars(select(DupGroup.id).where(DupGroup.keeper_file_id.in_(file_ids))))
         db.execute(delete(Issue).where(Issue.file_id.in_(file_ids)))

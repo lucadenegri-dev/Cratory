@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.organize.integrations import content_hash, tagio
 from app.organize.models import AudioFile, ScanRoot, utcnow
 from app.organize.schemas import ScanSummary
+from app.organize.services.file_link import stacca_file
 
 _TAG_FIELDS = (
     "bitrate", "sample_rate", "channels", "duration_s", "artist", "title", "album",
@@ -132,6 +133,12 @@ def _reconcile(db, roots, seen_by_root, new_inserts, summary) -> None:
             cand = inserts_by_key.get(key) if key else None
             if cand is not None and cand.id != row.id:
                 moved_path = cand.path
+                # Il file esce dall'indice: nessuna Track deve restare a
+                # puntarlo. `cand` nasce in questo stesso scan, quindi di norma
+                # non è ancora agganciato — ma se è già stato flushato può
+                # esserlo, e la FK non ha chi la ordini. Costa una UPDATE.
+                if cand.id is not None:
+                    stacca_file(db, cand.id)
                 db.delete(cand)
                 db.flush()
                 row.path = moved_path
