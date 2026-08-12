@@ -138,7 +138,7 @@ def test_edit_leaves_no_phantom_retag(db, tmp_path, copy_fixture):
     ops = build_plan([db.get(AudioFile, 1)], accepted, removals=[],
                      settings_snapshot={"naming_template": "{artist} - {title}",
                                         "folder_template": ""},
-                     root_targets={})
+                     target_root="")
     assert not any(o.kind == "RETAG" for o in ops)
 
 

@@ -26,7 +26,7 @@ def test_apply_move_and_delete_with_reorder(db, tmp_path, copy_fixture):
     db.add(DupMember(group_id=1, file_id=1, action="keep"))
     db.add(DupMember(group_id=1, file_id=2, action="remove"))
     plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
+                "folder_template": "{genre}/{artist}", "target_root": str(root)})
     db.add(plan)
     dest = str(root / "House" / "A" / "A - T1.flac")
     db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=1,
@@ -52,7 +52,7 @@ def test_apply_cleans_emptied_source_dirs(db, tmp_path, copy_fixture):
     db.add(ScanRoot(id=3, path=str(root)))
     _af(db, 1, src, title="T1", genre="House")
     plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
+                "folder_template": "{genre}/{artist}", "target_root": str(root)})
     db.add(plan)
     dest = str(root / "House" / "A" / "A - T1.flac")
     db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=1,
@@ -73,7 +73,7 @@ def test_apply_retag(db, tmp_path, copy_fixture):
     db.add(ScanRoot(id=3, path=str(root)))
     _af(db, 1, f, artist="PINCO", title="T")
     plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "", "targets": {"3": str(root)}})  # folder vuoto → niente move
+                "folder_template": "", "target_root": str(root)})  # folder vuoto → niente move
     db.add(plan)
     db.add(PlanOp(plan_id=1, seq=0, kind="RETAG", file_id=1,
                   before_json={"artist": "PINCO"}, after_json={"artist": "Pinco"}, status="pending"))
@@ -93,7 +93,7 @@ def test_apply_retag_updates_db_row(db, tmp_path, copy_fixture):
     db.add(ScanRoot(id=3, path=str(root)))
     _af(db, 1, f, artist=None, title=None, genre="House")
     plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
+                "folder_template": "{genre}/{artist}", "target_root": str(root)})
     db.add(plan)
     db.add(PlanOp(plan_id=1, seq=0, kind="RETAG", file_id=1,
                   before_json={"artist": None, "title": None},

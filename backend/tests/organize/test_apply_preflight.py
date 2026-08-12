@@ -13,7 +13,7 @@ def _setup(db, tmp_path, *, before_path):
                      artist="A", title="T", genre="House"))
     plan = Plan(id=1, status="draft",
                 rules_json={"naming_template": "{artist} - {title}",
-                            "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
+                            "folder_template": "{genre}/{artist}", "target_root": str(root)})
     db.add(plan)
     db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=1,
                   before_json={"path": before_path},
@@ -35,7 +35,7 @@ def _seed_two_colliding(db, tmp_path, copy_fixture):
                      artist="A", title="T", genre="House"))
     plan = Plan(id=1, status="draft",
                 rules_json={"naming_template": "{artist} - {title}",
-                            "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
+                            "folder_template": "{genre}/{artist}", "target_root": str(root)})
     db.add(plan)
     dest = str(root / "House" / "A" / "A - T.flac")
     db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=1,
@@ -74,7 +74,7 @@ def test_disk_occupied_op_skipped_others_applied(db, tmp_path, copy_fixture):
                          artist="A", title=f"T{i}", genre="House"))
     plan = Plan(id=1, status="draft",
                 rules_json={"naming_template": "{artist} - {title}",
-                            "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
+                            "folder_template": "{genre}/{artist}", "target_root": str(root)})
     db.add(plan)
     dest2 = root / "House" / "A" / "A - T2.flac"
     db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=1,

@@ -17,7 +17,12 @@ def test_get_plan_404_when_absent(db):
         assert client.get("/api/organize/plan").status_code == 404
 
 
-def test_post_then_get_plan(db):
+def test_post_then_get_plan(db, monkeypatch):
+    from app.core.config import settings
+
+    # Da F3b la destinazione è planning.target_root() (settings.library_root),
+    # non più ScanRoot.path: allinealo alla radice seminata da _seed().
+    monkeypatch.setattr(settings, "library_root", "/lib")
     _seed(db)
     with TestClient(app) as client:
         created = client.post("/api/organize/plan")

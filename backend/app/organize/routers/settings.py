@@ -50,8 +50,15 @@ def put_language_route(body: LanguageSetting, db: Session = Depends(get_db)):
 
 @router.put("/roots/{root_id}/target", response_model=SettingsRead)
 def put_root_target(root_id: int, body: RootTargetUpdate, db: Session = Depends(get_db)):
+    # F3b (Task 1): la destinazione di un Apply è planning.target_root() (unica,
+    # da settings.library_root): questo target per-radice non è più letto da
+    # nessun piano. L'endpoint resta finché sources/frontend non vengono rimossi
+    # (task successivi), quindi scrive ancora la colonna ScanRoot.target_root.
     if body.target_root is not None and not os.path.isabs(body.target_root):
         raise api_error(400, "target_root_not_absolute", "target_root must be an absolute path")
-    if planning.set_root_target(db, root_id, body.target_root) is None:
+    root = db.get(ScanRoot, root_id)
+    if root is None:
         raise api_error(404, "source_not_found", "Root not found")
+    root.target_root = body.target_root
+    db.commit()
     return _read(db)

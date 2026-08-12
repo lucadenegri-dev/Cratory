@@ -48,20 +48,20 @@ def _inputs(db: Session, plan: Plan):
                                 AudioFile.scan_error.is_(None))).all()}
     snapshot = {"naming_template": plan.rules_json["naming_template"],
                 "folder_template": plan.rules_json["folder_template"]}
-    targets = {int(k): v for k, v in plan.rules_json.get("targets", {}).items()}
+    target_root = plan.rules_json.get("target_root")
     accepted = db.scalars(select(Issue).where(Issue.status == "accepted")).all()
     removals = {m.file_id for m in db.scalars(
         select(DupMember).where(DupMember.action == "remove")).all()}
-    return ops, files, snapshot, targets, accepted, removals
+    return ops, files, snapshot, target_root, accepted, removals
 
 
 def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
     started = utcnow()
-    ops, files, snapshot, targets, accepted, removals = _inputs(db, plan)
+    ops, files, snapshot, target_root, accepted, removals = _inputs(db, plan)
     op_computed = [PlanOpComputed(o.kind, o.file_id, o.before_json, o.after_json) for o in ops]
     # Gli op in conflitto (collisione DB o dest già esistente su disco) vengono
     # saltati, non bloccano più l'intero piano: il resto si applica.
-    conflicts = conflict.check(op_computed, files, accepted, removals, snapshot, targets,
+    conflicts = conflict.check(op_computed, files, accepted, removals, snapshot, target_root,
                                disk_occupied=conflict.disk_occupied(op_computed))
     skip_ids = {c.file_id for c in conflicts if c.kind in ("collision", "outside_root")}
     skipped = [o for o in ops if o.kind in ("RENAME", "MOVE") and o.file_id in skip_ids]
@@ -88,7 +88,9 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
     src_dirs: set = set()     # cartelle sorgente svuotabili, pulite a fine run
 
     def _cleanup_dirs():
-        roots = {r.path for r in db.scalars(select(ScanRoot)).all()} | set(targets.values())
+        roots = {r.path for r in db.scalars(select(ScanRoot)).all()}
+        if target_root:
+            roots.add(target_root)
         fsops.cleanup_empty_dirs(src_dirs, roots)
 
     def _journal(kind, file_id, from_path=None, to_path=None, prior_tags=None, quarantine_path=None):

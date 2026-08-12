@@ -45,7 +45,7 @@ def _build(db, tmp_path, copy_fixture):
     db.add(DupMember(group_id=1, file_id=1, action="keep"))
     db.add(DupMember(group_id=1, file_id=2, action="remove"))
     plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
+                "folder_template": "{genre}/{artist}", "target_root": str(root)})
     db.add(plan)
     # ops: RETAG keep (PINCO→Pinco), MOVE keep nello slot del rimosso, MOVE plain, DELETE rem
     keep_dest = str(root / "House" / "Pinco" / "Pinco - T.flac")

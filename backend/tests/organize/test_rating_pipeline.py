@@ -39,7 +39,7 @@ def test_build_plan_emits_rating_op(db, copy_fixture, tmp_path):
                 suggested_fix_json={"field": "rating", "action": "clear"})
     db.add(iss); db.commit()
     ops = planner.build_plan([f], [iss], set(),
-                             {"naming_template": "{artist}", "folder_template": ""}, {})
+                             {"naming_template": "{artist}", "folder_template": ""}, "")
     rating_ops = [o for o in ops if o.kind == "RATING"]
     assert len(rating_ops) == 1 and rating_ops[0].file_id == f.id
 
@@ -56,7 +56,7 @@ def test_build_plan_skips_rating_when_already_cleared(db, copy_fixture, tmp_path
                 suggested_fix_json={"field": "rating", "action": "clear"})
     db.add(iss); db.commit()
     ops = planner.build_plan([f], [iss], set(),
-                             {"naming_template": "{artist}", "folder_template": ""}, {})
+                             {"naming_template": "{artist}", "folder_template": ""}, "")
     assert [o for o in ops if o.kind == "RATING"] == []
 
 
@@ -78,7 +78,7 @@ def test_apply_rating_clears_has_rating_flag(db, copy_fixture, tmp_path):
     f, p = _rated_flac(db, copy_fixture, tmp_path)
     f.has_rating = True
     plan = Plan(status="draft", rules_json={
-        "naming_template": "{artist}", "folder_template": "", "targets": {}})
+        "naming_template": "{artist}", "folder_template": "", "target_root": ""})
     db.add(plan); db.flush()
     db.add(PlanOp(plan_id=plan.id, seq=0, kind="RATING", file_id=f.id,
                   before_json={"rating": "present"}, after_json={"action": "clear"},
@@ -92,7 +92,7 @@ def test_apply_rating_clears_has_rating_flag(db, copy_fixture, tmp_path):
 def test_rating_op_clears_and_undo_restores(db, copy_fixture, tmp_path):
     f, p = _rated_flac(db, copy_fixture, tmp_path)
     plan = Plan(status="draft", rules_json={
-        "naming_template": "{artist} - {title}", "folder_template": "", "targets": {}})
+        "naming_template": "{artist} - {title}", "folder_template": "", "target_root": ""})
     db.add(plan); db.flush()
     db.add(PlanOp(plan_id=plan.id, seq=0, kind="RATING", file_id=f.id,
                   before_json={"rating": "present"}, after_json={"action": "clear"},
@@ -113,7 +113,7 @@ def test_rating_op_skipped_when_no_rating(db, copy_fixture, tmp_path):
                   hash_method="full", status="present")
     db.add(f); db.flush()
     plan = Plan(status="draft", rules_json={
-        "naming_template": "{artist}", "folder_template": "", "targets": {}})
+        "naming_template": "{artist}", "folder_template": "", "target_root": ""})
     db.add(plan); db.flush()
     db.add(PlanOp(plan_id=plan.id, seq=0, kind="RATING", file_id=f.id,
                   before_json={"rating": "present"}, after_json={"action": "clear"},

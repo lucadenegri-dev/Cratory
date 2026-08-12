@@ -43,7 +43,7 @@ def disk_occupied(plan_ops) -> set[str]:
 
 
 def check(plan_ops, files_by_id, accepted_issues, removals, settings_snapshot,
-          root_targets, disk_occupied=None) -> list[ConflictComputed]:
+          target_root, disk_occupied=None) -> list[ConflictComputed]:
     removals = set(removals)
     on_disk = disk_occupied or set()
     conflicts: list[ConflictComputed] = []
@@ -66,7 +66,7 @@ def check(plan_ops, files_by_id, accepted_issues, removals, settings_snapshot,
             conflicts.append(ConflictComputed("collision", op.file_id,
                                               f"destinazione già esistente su disco: {dest}"))
         file = files_by_id.get(op.file_id)
-        target = root_targets.get(file.root_id) if file else None
+        target = target_root if file else None
         if target is not None and not _is_under(dest, target):
             conflicts.append(ConflictComputed("outside_root", op.file_id,
                                               f"destinazione fuori radice: {dest}"))
@@ -76,7 +76,7 @@ def check(plan_ops, files_by_id, accepted_issues, removals, settings_snapshot,
         if fid in removals:
             continue
         tags = planner.effective_tags(file, by_file.get(fid, []))
-        _dest, miss = planner.render_destination(file, tags, settings_snapshot, root_targets)
+        _dest, miss = planner.render_destination(file, tags, settings_snapshot, target_root)
         if miss is not None:
             conflicts.append(ConflictComputed("missing_template_data", fid,
                                               f"campo mancante per il template: {miss}"))

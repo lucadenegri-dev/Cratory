@@ -22,7 +22,7 @@ _SNAP = {"naming_template": "{artist} - {title}", "folder_template": ""}
 
 def test_cover_op_emitted_for_accepted_missing_cover():
     files = [_file(1, has_cover=False)]
-    ops = build_plan(files, [_cover_issue(1)], set(), _SNAP, {1: "/music"})
+    ops = build_plan(files, [_cover_issue(1)], set(), _SNAP, "/music")
     cover = [o for o in ops if o.kind == "COVER"]
     assert len(cover) == 1
     assert cover[0].file_id == 1
@@ -32,11 +32,11 @@ def test_cover_op_emitted_for_accepted_missing_cover():
 
 def test_no_cover_op_when_file_already_has_cover():
     files = [_file(1, has_cover=True)]
-    ops = build_plan(files, [_cover_issue(1)], set(), _SNAP, {1: "/music"})
+    ops = build_plan(files, [_cover_issue(1)], set(), _SNAP, "/music")
     assert [o for o in ops if o.kind == "COVER"] == []
 
 
 def test_no_cover_op_when_file_in_removals():
     files = [_file(1, has_cover=False)]
-    ops = build_plan(files, [_cover_issue(1)], {1}, _SNAP, {1: "/music"})
+    ops = build_plan(files, [_cover_issue(1)], {1}, _SNAP, "/music")
     assert [o for o in ops if o.kind == "COVER"] == []

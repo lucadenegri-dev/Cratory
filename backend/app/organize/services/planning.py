@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.organize.models import (
-    AudioFile, DupMember, Issue, Plan, PlanOp, ScanRoot, Settings, UndoJournal, utcnow,
+    AudioFile, DupMember, Issue, Plan, PlanOp, Settings, UndoJournal, utcnow,
 )
 from app.organize.schemas import ConflictRead, PlanOpRead, PlanRead, PlanStats
 from app.organize.services import conflict
@@ -54,18 +54,18 @@ def set_language(db: Session, value: str) -> Settings:
     return s
 
 
-def set_root_target(db: Session, root_id: int, target_root) -> ScanRoot | None:
-    root = db.get(ScanRoot, root_id)
-    if root is None:
-        return None
-    root.target_root = target_root
-    db.commit()
-    db.refresh(root)
-    return root
+def target_root() -> str:
+    """Destinazione di ogni operazione di Apply: la libreria.
 
+    Fino a F3b esisteva un target per ScanRoot (`root_targets`), ma le due
+    radici davano già la stessa destinazione — ed è strutturale: un file
+    dell'inbox arriva in libreria, un file della libreria ci resta e si
+    riorganizza dentro. Non c'è un secondo posto dove un Apply possa portare
+    qualcosa.
+    """
+    from app.core.config import settings
 
-def root_targets(db: Session) -> dict[int, str]:
-    return {r.id: (r.target_root or r.path) for r in db.scalars(select(ScanRoot)).all()}
+    return settings.library_root
 
 
 def _inputs(db):
@@ -81,12 +81,12 @@ def _inputs(db):
                  and (i.suggested_fix_json or {}).get("action") == "quarantine"}
     s = get_settings(db)
     snapshot = {"naming_template": s.naming_template, "folder_template": s.folder_template}
-    return files, accepted, removals, snapshot, root_targets(db)
+    return files, accepted, removals, snapshot, target_root()
 
 
 def create_plan(db: Session) -> PlanRead:
-    files, accepted, removals, snapshot, targets = _inputs(db)
-    computed = build_plan(files, accepted, removals, snapshot, targets)
+    files, accepted, removals, snapshot, target = _inputs(db)
+    computed = build_plan(files, accepted, removals, snapshot, target)
     for old in db.scalars(select(Plan).where(Plan.status == "draft")).all():
         # Una bozza con righe di undo journal non è una bozza: è un apply morto
         # prima di potersi marcare 'applied' (apply.py lo fa in fondo, sia sul
@@ -104,7 +104,7 @@ def create_plan(db: Session) -> PlanRead:
         else:
             db.delete(old)
     db.flush()
-    rules = {**snapshot, "targets": {str(k): v for k, v in targets.items()}}
+    rules = {**snapshot, "target_root": target}
     plan = Plan(status="draft", rules_json=rules)
     db.add(plan)
     db.flush()
@@ -121,10 +121,10 @@ def load_plan(db: Session) -> PlanRead | None:
         return None
     ops = db.scalars(select(PlanOp).where(PlanOp.plan_id == plan.id)
                      .order_by(PlanOp.seq)).all()
-    files, accepted, removals, snapshot, targets = _inputs(db)
+    files, accepted, removals, snapshot, target = _inputs(db)
     files_by_id = {f.id: f for f in files}
     op_computed = [PlanOpComputed(o.kind, o.file_id, o.before_json, o.after_json) for o in ops]
-    conflicts = conflict.check(op_computed, files_by_id, accepted, removals, snapshot, targets,
+    conflicts = conflict.check(op_computed, files_by_id, accepted, removals, snapshot, target,
                                disk_occupied=conflict.disk_occupied(op_computed))
     skip_ids = {c.file_id for c in conflicts if c.kind in ("collision", "outside_root")}
 

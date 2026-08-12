@@ -19,7 +19,7 @@ def _seed_cover_plan(db, copy_fixture, tmp_path):
     db.add(f)
     db.flush()
     plan = Plan(status="draft", rules_json={
-        "naming_template": "{artist} - {title}", "folder_template": "", "targets": {}})
+        "naming_template": "{artist} - {title}", "folder_template": "", "target_root": ""})
     db.add(plan)
     db.flush()
     db.add(PlanOp(plan_id=plan.id, seq=0, kind="COVER", file_id=f.id,

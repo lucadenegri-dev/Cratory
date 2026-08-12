@@ -22,7 +22,7 @@ def test_undo_restores_move_and_delete(db, tmp_path, copy_fixture):
     db.add(DupMember(group_id=1, file_id=1, action="keep"))
     db.add(DupMember(group_id=1, file_id=2, action="remove"))
     plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
-                "folder_template": "{genre}/{artist}", "targets": {"3": str(root)}})
+                "folder_template": "{genre}/{artist}", "target_root": str(root)})
     db.add(plan)
     dest = str(root / "House" / "A" / "A - T1.flac")
     db.add(PlanOp(plan_id=1, seq=0, kind="MOVE", file_id=1,

@@ -76,7 +76,7 @@ def effective_tags(file, fixes: list[dict]) -> dict:
 
 
 def render_destination(file, tags: dict, settings_snapshot: dict,
-                       root_targets: dict) -> tuple[str | None, str | None]:
+                       target_root: str) -> tuple[str | None, str | None]:
     folder_tpl = settings_snapshot.get("folder_template", "") or ""
     folder_part, miss = (_render(folder_tpl, tags) if folder_tpl else ("", None))
     if miss is not None:
@@ -84,13 +84,13 @@ def render_destination(file, tags: dict, settings_snapshot: dict,
     name_part, miss = _render(settings_snapshot["naming_template"], tags)
     if miss is not None:
         return None, miss
-    target_root = root_targets.get(file.root_id) or os.path.dirname(file.path)
-    dest_dir = os.path.join(target_root, folder_part) if folder_part else target_root
+    base = target_root or os.path.dirname(file.path)
+    dest_dir = os.path.join(base, folder_part) if folder_part else base
     return os.path.join(dest_dir, f"{name_part}.{file.ext}"), None
 
 
 def build_plan(files, accepted_issues, removals, settings_snapshot,
-               root_targets) -> list[PlanOpComputed]:
+               target_root) -> list[PlanOpComputed]:
     removals = set(removals)
     by_file = fixes_by_file(accepted_issues)
     files_by_id = {f.id: f for f in files}
@@ -117,7 +117,7 @@ def build_plan(files, accepted_issues, removals, settings_snapshot,
                 retag_ops.append(PlanOpComputed("RETAG", f.id, before, after))
 
         dest, _miss = render_destination(f, effective_tags(f, fixes),
-                                         settings_snapshot, root_targets)
+                                         settings_snapshot, target_root)
         if dest is None or same_fs_path(dest, f.path):
             continue
         kind = "RENAME" if os.path.dirname(dest) == os.path.dirname(f.path) else "MOVE"
