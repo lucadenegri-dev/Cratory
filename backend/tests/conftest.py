@@ -128,3 +128,32 @@ def _reset_job_states():
     _reset()
     yield
     _reset()
+
+
+@pytest.fixture()
+def fake_audio(monkeypatch, tmp_path):
+    """Crea file finti e monkeypatcha hash/tag/qualita' per renderli deterministici.
+
+    Condivisa: la usano i test dell'indicizzazione libreria e quelli sugli
+    invarianti (e servira' allo scanner unico di F4).
+    """
+    from app.services import library_index as li
+
+    hashes: dict[str, str] = {}
+    tags: dict[str, dict] = {}
+
+    def make(rel: str, *, digest: str, artist=None, title=None, isrc=None, genre=None, label=None):
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x")
+        hashes[str(p.resolve())] = digest
+        tags[str(p.resolve())] = {
+            "title": title, "artist": artist, "album": None, "year": None,
+            "duration_seconds": 200, "isrc": isrc, "genre": genre, "label": label,
+        }
+        return p
+
+    monkeypatch.setattr(li, "audio_hash", lambda p: hashes[str(p.resolve() if hasattr(p, 'resolve') else p)])
+    monkeypatch.setattr(li, "read_tags", lambda p: tags[str(p.resolve() if hasattr(p, 'resolve') else p)])
+    monkeypatch.setattr(li, "read_audio_quality", lambda p: {"format": "mp3", "bitrate": 320})
+    return make, tmp_path
