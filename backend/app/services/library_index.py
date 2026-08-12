@@ -214,19 +214,38 @@ def _is_hidden_path(path: Path, root: str | Path) -> bool:
 
 
 def indicizza_archivio(db: Session, *, archive_root: str | Path,
+                       seen_paths: set[str] | None = None,
+                       seen_digests: set[str] | None = None,
                        on_progress=None) -> dict:
-    """Passata separata sull'archivio delle scartate.
+    """Passata separata sull'archivio delle scartate. SECONDA delle tre parti
+    del giro d'indicizzazione (`collega_tracce` → questa → `riconcilia_possessi`).
 
     Resta separata di proposito: ARCHIVE_ROOT non è nessuna delle due radici
     dello scanner, e `AudioFile.location` ha due soli valori. I file d'archivio
     non entrano nell'indice: si limitano a marcare come scartate le tracce
     corrispondenti.
+
+    `seen_paths`: insieme CONDIVISO con le altre due parti, che questa passata
+    riempie coi path d'archivio abbinati a una traccia. È il contributo
+    dell'archivio all'unione su cui `riconcilia_possessi` decide chi è perso:
+    senza, una traccia il cui file è stato spostato qui verrebbe considerata
+    persa e cancellata.
+
+    `seen_digests`: insieme CONDIVISO con `collega_tracce`, che va chiamata
+    prima. È ciò che rende reale il principio «a parità di audio il possesso
+    vince»: una copia in archivio di un audio già agganciato in libreria si
+    conta come duplicato invece di ritrovare la traccia per audio_hash e
+    scartarla, revocando il possesso appena assegnato.
     """
+    if seen_paths is None:
+        seen_paths = set()
+    if seen_digests is None:
+        seen_digests = set()
     archive_scanned = bool(archive_root and Path(archive_root).is_dir())
     archive_files: list[Path] = scan_folder(archive_root) if archive_scanned else []
     total = len(archive_files)
-    report = {"scanned": total, "archived": 0, "failed": 0, "unchanged": 0, "errors": []}
-    seen_paths: set[str] = set()
+    report = {"scanned": total, "archived": 0, "failed": 0, "unchanged": 0,
+              "duplicates": 0, "errors": []}
     # Firme dei file d'archivio già visti che non corrispondono ad alcuna traccia:
     # senza questo, verrebbero ri-hashati (ffmpeg) a ogni run. {path: (mtime, size)}
     archive_seen: dict[str, tuple[float, int]] = {}
@@ -260,6 +279,14 @@ def indicizza_archivio(db: Session, *, archive_root: str | Path,
                 and known.local_size == stat.st_size):
             report["unchanged"] += 1
             seen_paths.add(resolved)
+            if known.audio_hash:
+                seen_digests.add(known.audio_hash)
+            if known.added_at is None:
+                # Recupero data anche sul fast-path: traccia storica senza data,
+                # lo stat è già in mano (nessun costo aggiuntivo). Stesso
+                # backfill del fast-path di `collega_tracce`: prima di F4 le due
+                # passate condividevano questo loop, e con lui questa riga.
+                known.added_at = _added_at_from_stat(stat)
             done += 1
             if on_progress is not None:
                 on_progress(done, total)
@@ -290,6 +317,16 @@ def indicizza_archivio(db: Session, *, archive_root: str | Path,
             if on_progress is not None:
                 on_progress(i, total)
             continue
+        if digest in seen_digests:
+            # Audio gia' visto in questo run — quasi sempre la stessa traccia
+            # posseduta in libreria: il possesso vince, la copia in archivio si
+            # conta soltanto (la dedup su disco e' compito di Sortory).
+            report["duplicates"] += 1
+            logger.warning("Audio duplicato nello stesso run: %s (digest gia' visto)", path)
+            if on_progress is not None:
+                on_progress(i, total)
+            continue
+        seen_digests.add(digest)
         tags = read_tags(path)
         track, how = _find_track(db, digest=digest, tags=tags, path=str(path.resolve()))
         # In archivio non si creano tracce nuove: un file mai visto da
@@ -331,8 +368,29 @@ def indicizza_archivio(db: Session, *, archive_root: str | Path,
     return report
 
 
-def collega_tracce(db: Session, *, on_progress=None) -> dict:
-    """Aggancia le tracce ai file già indicizzati dallo scanner.
+def collega_tracce(db: Session, *, seen_paths: set[str] | None = None,
+                   seen_digests: set[str] | None = None,
+                   on_progress=None) -> dict:
+    """Aggancia le tracce ai file già indicizzati dallo scanner. PRIMA delle tre
+    parti del giro d'indicizzazione:
+
+    1. `collega_tracce` — questa: la libreria, che NON riconcilia;
+    2. `indicizza_archivio` — la passata su ARCHIVE_ROOT;
+    3. `riconcilia_possessi` — i possessi che nessuna delle due ha visto.
+
+    L'ordine non è negoziabile in nessuno dei due sensi. La libreria viene prima
+    dell'archivio perché a parità di audio il possesso vince; la riconciliazione
+    viene per ultima perché un file spostato in ARCHIVE_ROOT è invisibile a
+    questa passata (la sua riga d'indice è `missing`) e lo ritrova solo la
+    seconda: riconciliare qui lo classificherebbe perso e, se la traccia non è
+    referenziata, la cancellerebbe — perdendo la memoria dello scarto.
+
+    `seen_paths` e `seen_digests`: insiemi CONDIVISI, che questa passata riempie
+    e le successive leggono — i path per la riconciliazione, i digest perché
+    l'archivio riconosca come duplicato un audio già posseduto invece di
+    scartarlo. Passarli è obbligatorio quando si chiamerà più di una parte (il
+    wrapper `index_library` lo fa; da F4 in poi lo farà lo scanner, che chiamerà
+    queste tre direttamente e nello stesso ordine).
 
     Fino a F4 questa funzione camminava LIBRARY_ROOT per conto proprio: due
     attraversamenti dello stesso disco, con la possibilità che i due indici
@@ -345,11 +403,16 @@ def collega_tracce(db: Session, *, on_progress=None) -> dict:
         .where(AudioFile.location == "library", AudioFile.status == "present")
         .order_by(AudioFile.path)
     ).all()
+    # `lost`/`orphans_removed` restano nel report a zero per non cambiarne la
+    # forma (il job li legge sempre): a riempirli è `riconcilia_possessi`, che
+    # il chiamante somma qui dopo la passata d'archivio.
     report = {"scanned": len(righe), "matched": 0, "created": 0, "relinked": 0,
               "duplicates": 0, "lost": 0, "orphans_removed": 0, "failed": 0,
               "unchanged": 0, "archived": 0, "errors": [], "created_ids": []}
-    seen_paths: set[str] = set()
-    seen_digests: set[str] = set()
+    if seen_paths is None:
+        seen_paths = set()
+    if seen_digests is None:
+        seen_digests = set()
     total = len(righe)
 
     # Passata 1 — incrementale: i file invariati (firma nota) reclamano subito
@@ -448,16 +511,32 @@ def collega_tracce(db: Session, *, on_progress=None) -> dict:
         if on_progress is not None:
             on_progress(done, total)
 
-    # Anti-unmount (stesso principio dell'import locale): un indice vuoto (scan
-    # non ancora passato, o radice smontata) non deve azzerare i possessi.
-    if not righe:
-        db.commit()
+    db.commit()
+    return report
+
+
+def riconcilia_possessi(db: Session, *, seen_paths: set[str], scanned: int) -> dict:
+    """TERZA e ultima parte del giro d'indicizzazione: i possessi il cui file non
+    è stato visto da NESSUNA delle due passate — cancellato, spostato fuori,
+    oppure finito in una cartella nascosta (esclusa dallo scanner).
+
+    Va chiamata dopo `collega_tracce` E `indicizza_archivio`, con l'unione dei
+    path che le due hanno visto (`seen_paths`, l'insieme condiviso che entrambe
+    riempiono). Chiamarla prima dell'archivio cancella le tracce appena spostate
+    in ARCHIVE_ROOT: alla fase 2 risultano perse, e solo la passata d'archivio
+    le ritrova per scartarle.
+
+    `scanned`: quante righe di libreria ha visto la fase 2. Zero ⇒ anti-unmount
+    (stesso principio dell'import locale): un indice vuoto — scan mai passato o
+    radice smontata — non deve azzerare i possessi, e qui non si tocca nulla.
+
+    L'audio_hash resta sempre: se il file ricompare, il riaggancio (anche a un
+    lead Spotify via ISRC/artista+titolo) è immediato.
+    """
+    report = {"lost": 0, "orphans_removed": 0}
+    if scanned == 0:
         return report
 
-    # Riconciliazione: possessi il cui file la scansione non ha visto — cancellato,
-    # spostato fuori, oppure finito in una cartella nascosta (esclusa dallo scanner).
-    # L'audio_hash resta: se il file ricompare, il riaggancio (anche a un lead Spotify
-    # via ISRC/artista+titolo) e' immediato.
     root = runtime_settings.library_root()
     owned = db.scalars(select(Track).where(Track.has_local_file.is_(True))).all()
     lost: list[Track] = []
@@ -495,23 +574,43 @@ def collega_tracce(db: Session, *, on_progress=None) -> dict:
 
 def index_library(db: Session, *, root: str | Path | None = None,
                   archive_root: str | Path | None = None, on_progress=None) -> dict:
-    """Compatibilità: chiama la fase 2 e, se configurato, l'archivio.
+    """Compatibilità: le tre parti del giro, nell'ordine obbligatorio.
+
+    1. `collega_tracce` (libreria, senza riconciliare) →
+    2. `indicizza_archivio` (ARCHIVE_ROOT, se configurato) →
+    3. `riconcilia_possessi` sull'UNIONE dei path visti dalle due.
+
+    Il perché dell'ordine sta nel docstring di `collega_tracce`; in breve: la
+    libreria prima dell'archivio (a parità di audio il possesso vince) e la
+    riconciliazione per ultima (altrimenti le tracce spostate in archivio
+    vengono cancellate prima che l'archivio le ritrovi). Da F4 in poi sarà lo
+    scanner a chiamare le tre direttamente: stesse tre, stesso ordine, stessi
+    `seen_paths`/`seen_digests` condivisi fra tutte.
 
     `root` non è più usato — la fase 2 parte dall'indice. Il parametro resta
     per non rompere i chiamanti finché il Task 3 non li sposta sul job unico.
     """
-    report = collega_tracce(db, on_progress=on_progress)
+    seen_paths: set[str] = set()
+    seen_digests: set[str] = set()
+    report = collega_tracce(db, seen_paths=seen_paths, seen_digests=seen_digests,
+                            on_progress=on_progress)
     if archive_root:
-        arc_report = indicizza_archivio(db, archive_root=archive_root, on_progress=on_progress)
+        arc_report = indicizza_archivio(db, archive_root=archive_root,
+                                        seen_paths=seen_paths, seen_digests=seen_digests,
+                                        on_progress=on_progress)
         report["archived"] += arc_report["archived"]
         report["failed"] += arc_report["failed"]
         report["unchanged"] += arc_report["unchanged"]
+        report["duplicates"] += arc_report["duplicates"]
         report["errors"] += arc_report["errors"]
-    # Anti-unmount (stesso principio di `collega_tracce`): un indice di libreria
-    # vuoto (scan non ancora passato, o radice smontata) non deve nemmeno
-    # ricalcolare l'energia. Prima di F4 il return anticipato viveva qui nel
-    # wrapper e usciva anche da questo; ora che vive dentro `collega_tracce`,
-    # il segnale è `scanned == 0` nel suo report (righe AudioFile viste: nessuna).
+    rec = riconcilia_possessi(db, seen_paths=seen_paths, scanned=report["scanned"])
+    report["lost"] += rec["lost"]
+    report["orphans_removed"] += rec["orphans_removed"]
+    # Anti-unmount, versione energia: un indice di libreria vuoto (scan non
+    # ancora passato, o radice smontata) non deve nemmeno ricalcolare l'energia.
+    # Prima di F4 il return anticipato copriva sia questo sia la riconciliazione;
+    # ora la riconciliazione si guarda da sé (`scanned=0`) e qui resta il solo
+    # ricalcolo.
     if report["scanned"] == 0:
         return report
     # Calibrazione energia: mappa gli energy_raw (0..1) in energy 0-100 per percentili

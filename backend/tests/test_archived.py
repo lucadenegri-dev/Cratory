@@ -65,6 +65,50 @@ def test_file_in_archivio_scarta_la_traccia(db, fake_audio):
     assert t.local_path.endswith("Archived/A - T.mp3")
 
 
+def test_file_spostato_in_archivio_non_viene_cancellato(db, fake_audio, semina_indice_libreria):
+    """Sposto un file da LIBRARY_ROOT ad ARCHIVE_ROOT: la traccia deve restare
+    viva e scartata, non sparire.
+
+    Copre il caso che `test_file_in_archivio_scarta_la_traccia` non vede, perche'
+    li' la libreria e' vuota e il run esce dall'anti-unmount prima di riconciliare.
+    Qui la libreria NON e' vuota (un file resta): se la riconciliazione girasse
+    prima della passata d'archivio, il possesso col vecchio local_path verrebbe
+    classificato `lost` e la traccia — orfana, in nessuna playlist — cancellata,
+    perdendo l'unica cosa che quella cartella serve a ricordare: lo scarto.
+    """
+    from app.organize.models import AudioFile
+    from app.organize.services.roots import radici
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    lib = root / "Libreria"; arc = root / "Archived"
+    lib.mkdir(); arc.mkdir()
+    make("Libreria/Techno/B - Resta.mp3", digest="H2", artist="B", title="Resta")
+    make("Archived/A - T.mp3", digest="H1", artist="A", title="T")
+    vecchio = lib / "Techno" / "A - T.mp3"   # dov'era prima dello spostamento
+    t = Track(source_type="local_files", title="T", artist="A", has_local_file=True,
+              local_path=str(vecchio), local_format="mp3", audio_hash="H1")
+    db.add(t); db.commit()
+    tid = t.id
+
+    # Lo scanner ha gia' fatto la sua passata: il file rimasto e' `present`, quello
+    # spostato fuori dalla libreria e' `missing` (la fase 2 non lo vedra' proprio).
+    semina_indice_libreria(lib)
+    db.add(AudioFile(root_id=radici(db)["library"].id, path=str(vecchio),
+                     location="library", status="missing", ext="mp3",
+                     size_bytes=0, hash_method="test-stub"))
+    db.commit()
+
+    report = index_library(db, root=lib, archive_root=arc)
+
+    assert report["orphans_removed"] == 0 and report["lost"] == 0
+    assert report["archived"] == 1
+    t = db.get(Track, tid)
+    assert t is not None, "la traccia spostata in archivio e' stata cancellata"
+    assert t.archived is True and t.has_local_file is False
+    assert t.local_path.endswith("Archived/A - T.mp3")
+
+
 def test_ritorno_in_libreria_riabilita(db, fake_audio, semina_indice_libreria):
     from app.services.library_index import index_library
 
@@ -125,6 +169,56 @@ def test_archivio_incrementale_niente_rehash(db, fake_audio, monkeypatch):
     monkeypatch.setattr(li, "audio_hash", lambda p: calls.append(p) or original(p))
     report = index_library(db, root=lib, archive_root=arc)
     assert calls == [] and report["unchanged"] >= 1
+
+
+def test_copia_in_archivio_non_ruba_il_possesso(db, fake_audio, semina_indice_libreria):
+    """Stesso audio in Libreria E in Archivio: vince il possesso, la copia in
+    archivio si conta come duplicato.
+
+    E' la ragione per cui la libreria va agganciata PRIMA dell'archivio, ma
+    l'ordine da solo non basta: senza l'insieme dei digest condiviso fra le due
+    passate, la copia in archivio ritrova la traccia per audio_hash e la scarta,
+    revocando il possesso appena assegnato.
+    """
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    lib = root / "Libreria"; arc = root / "Archived"
+    lib.mkdir(); arc.mkdir()
+    make("Libreria/A - T.mp3", digest="H1", artist="A", title="T")
+    make("Archived/A - T.mp3", digest="H1", artist="A", title="T")
+    semina_indice_libreria(lib)
+
+    report = index_library(db, root=lib, archive_root=arc)
+
+    t = db.query(Track).one()
+    assert t.has_local_file is True and t.archived is False
+    assert t.local_path.endswith("Libreria/A - T.mp3")
+    assert report["archived"] == 0 and report["duplicates"] == 1
+
+
+def test_archivio_fast_path_recupera_added_at(db, fake_audio):
+    """Traccia storica senza data d'ingresso: il fast-path d'archivio la recupera
+    dallo stat che ha gia' in mano, come fa quello di libreria (prima di F4 le due
+    passate condividevano il loop, e con lui questo backfill)."""
+    from app.services.library_index import index_library
+
+    make, root = fake_audio
+    lib = root / "Libreria"; arc = root / "Archived"
+    lib.mkdir(); arc.mkdir()
+    t = Track(source_type="spotify", spotify_id="s1", title="T", artist="A", audio_hash="H1")
+    db.add(t); db.commit()
+    make("Archived/A - T.mp3", digest="H1", artist="A", title="T")
+
+    index_library(db, root=lib, archive_root=arc)  # primo run: hash + scarto
+    db.refresh(t)
+    assert t.added_at is None                      # lo scarto da solo non la fissa
+
+    report = index_library(db, root=lib, archive_root=arc)  # secondo run: fast-path
+
+    db.refresh(t)
+    assert report["unchanged"] >= 1                # e' passata davvero dal fast-path
+    assert t.added_at is not None
 
 
 def _mk(db, i, **kw):

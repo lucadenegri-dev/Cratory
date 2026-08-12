@@ -213,14 +213,24 @@ def collega_da_disco(db, semina_indice_libreria):
     Fino a F4 `index_library`/`collega_tracce` camminavano `root` per conto
     proprio. Ora `collega_tracce` legge solo le righe `AudioFile` già scritte
     (dallo scanner di Organize, in produzione). Questo helper riproduce quel
-    solo passo di popolamento (`semina_indice_libreria`) e poi chiama
-    `collega_tracce`, che è la funzione sotto test — non un sostituto suo:
-    l'aggancio (hash, match, upsert, riconciliazione) resta interamente lì.
+    solo passo di popolamento (`semina_indice_libreria`) e poi chiama le
+    funzioni sotto test — non un sostituto loro: l'aggancio (hash, match,
+    upsert) e la riconciliazione restano interamente lì.
+
+    Senza archivio, il giro sono due delle tre parti nell'ordine obbligatorio
+    (`collega_tracce` → `riconcilia_possessi`) con lo stesso `seen_paths`
+    condiviso; il report è la somma dei due, come lo compone `index_library`.
     """
     from app.services import library_index as li
 
     def _run(root):
         semina_indice_libreria(root)
-        return li.collega_tracce(db)
+        seen_paths: set[str] = set()
+        report = li.collega_tracce(db, seen_paths=seen_paths)
+        rec = li.riconcilia_possessi(db, seen_paths=seen_paths,
+                                     scanned=report["scanned"])
+        report["lost"] += rec["lost"]
+        report["orphans_removed"] += rec["orphans_removed"]
+        return report
 
     return _run
