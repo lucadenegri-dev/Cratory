@@ -180,8 +180,6 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
             on_progress(index + 1, summary.found, "scanning")
     db.flush()  # assegna gli id ai nuovi insert
     _reconcile(db, seen_by_root, id_per_location, new_inserts, summary)
-    for root in roots:
-        root.last_scanned_at = utcnow()
     db.commit()
     summary.finished_at = utcnow()
     return summary

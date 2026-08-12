@@ -45,7 +45,8 @@ def _fresh_db():
     vecchio engine di Organize non aveva. Le fixture creano AudioFile con
     root_id 1/2 senza inserire la ScanRoot: qui le seminiamo una volta, così
     il vincolo è soddisfatto senza toccare 71 test.
-    F3 rimuove scan_root: queste righe se ne vanno con lei.
+    F3b lascia scan_root come schema morto (audio_file.root_id resta NOT
+    NULL con FK viva): questa semina resta necessaria, non se ne va.
 
     Regola per chi scrive nuovi test: una ScanRoot propria va creata con
     id >= SCAN_ROOT_NEXT_ID (id 1 e 2 sono occupati da questa semina), o la

@@ -17,8 +17,8 @@ def test_read_missing_is_none(tmp_path, monkeypatch):
 
 def test_read_race_between_exists_and_open_returns_none(tmp_path, monkeypatch):
     """Tra l'exists() e l'open() qualcuno può far sparire il file (es. una
-    drop_thumb concorrente durante la delete di una sorgente): non deve
-    diventare un 500, la richiesta della thumb gira su ogni riga di tabella."""
+    drop_thumb concorrente): non deve diventare un 500, la richiesta della
+    thumb gira su ogni riga di tabella."""
     from app.core.config import settings
     monkeypatch.setattr(settings, "cover_cache_dir", str(tmp_path / "cc"))
     cover_cache.save_thumb(7, b"\xff\xd8jpg")

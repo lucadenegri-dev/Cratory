@@ -8,12 +8,12 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core import runtime_settings
 from app.organize.core.http_errors import api_error
 from app.db import get_db
 from app.organize.models import AudioFile, DupGroup, DupMember, Issue
 from app.organize.schemas import FileRow, LibraryFacets, LibraryStatsRead
 from app.organize.services import cover_cache, thumbs
-from app.organize.services.roots import radici
 
 router = APIRouter(prefix="/api/organize", tags=["library"])
 
@@ -42,8 +42,13 @@ def library_stats(db: Session = Depends(get_db)):
     dup_groups = db.scalar(
         select(func.count()).select_from(DupGroup).where(DupGroup.dismissed.is_(False))
     ) or 0
-    # Le "sorgenti" non sono più righe di tabella: sono le cartelle configurate.
-    sources = len(radici(db))
+    # Le "sorgenti" non sono più righe di tabella: sono le cartelle configurate
+    # (Settings). Conteggio diretto, non via radici(db): quella funzione fa
+    # db.add/db.flush su ScanRoot per allineare lo schema morto, e non c'è
+    # motivo di aprire una transazione di scrittura per una semplice GET.
+    sources = sum(1 for cartella in
+                  (runtime_settings.library_root(), runtime_settings.slskd_download_dir())
+                  if cartella)
     return LibraryStatsRead(
         files_total=files_total,
         by_ext=by_ext,

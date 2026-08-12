@@ -6,12 +6,18 @@ from app.organize.models import AudioFile, DupGroup, DupMember, Issue, ScanRoot
 
 def _seed_stats(db):
     db.add(ScanRoot(id=3, path="/m", label="M"))
+    # location deliberatamente discriminante fra le righe: a.flac in library,
+    # b.mp3 e c.mp3 in inbox, cosi' i test sul filtro ?location= fallirebbero
+    # se il where venisse tolto (vedi Finding 1 della review F3b).
     db.add(AudioFile(id=1, root_id=3, path="/m/a.flac", ext="flac", size_bytes=1,
-                     hash_method="file", status="present", has_cover=False))
+                     hash_method="file", status="present", has_cover=False,
+                     location="library"))
     db.add(AudioFile(id=2, root_id=3, path="/m/b.mp3", ext="mp3", size_bytes=1,
-                     hash_method="file", status="present", has_cover=False))
+                     hash_method="file", status="present", has_cover=False,
+                     location="inbox"))
     db.add(AudioFile(id=3, root_id=3, path="/m/c.mp3", ext="mp3", size_bytes=1,
-                     hash_method="file", status="missing", has_cover=False))
+                     hash_method="file", status="missing", has_cover=False,
+                     location="inbox"))
     # Issue/DupGroup/DupMember non hanno una relationship() verso AudioFile:
     # senza un flush qui, l'ordine di flush degli INSERT non è garantito e con
     # foreign_keys=ON (engine unificato F2) può tentare l'INSERT di una riga
@@ -63,8 +69,10 @@ def test_list_files_filters(db):
     with TestClient(app) as client:
         only_issues = client.get("/api/organize/files", params={"has_issues": True}).json()
         assert {r["id"] for r in only_issues} == {1, 2}
-        by_location = client.get("/api/organize/files", params={"location": "inbox"}).json()
-        assert len(by_location) == 2
+        by_inbox = client.get("/api/organize/files", params={"location": "inbox"}).json()
+        assert [r["id"] for r in by_inbox] == [2]  # c.mp3 e' missing, escluso dal default status
+        by_library = client.get("/api/organize/files", params={"location": "library"}).json()
+        assert [r["id"] for r in by_library] == [1]
         searched = client.get("/api/organize/files", params={"q": "a.flac"}).json()
         assert [r["id"] for r in searched] == [1]
         missing = client.get("/api/organize/files", params={"status": "missing"}).json()

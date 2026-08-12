@@ -78,6 +78,28 @@ def test_issue_read_has_location(db):
         assert rows[0]["location"] == "inbox"
 
 
+def test_list_filtra_per_location(db):
+    """Il filtro ?location= deve escludere, non solo essere accettato: due file
+    con collocazione opposta, ognuno con un'issue propria."""
+    db.add(AudioFile(id=1, root_id=1, path="/m/in.mp3", ext="mp3", size_bytes=1,
+                     hash_method="file", status="present", has_cover=False,
+                     location="inbox"))
+    db.add(AudioFile(id=2, root_id=1, path="/m/lib.mp3", ext="mp3", size_bytes=1,
+                     hash_method="file", status="present", has_cover=False,
+                     location="library"))
+    db.flush()
+    db.add(Issue(file_id=1, type="missing_metadata", field="genre", severity="warning",
+                 detail="genre mancante", suggested_fix_json=None, status="open"))
+    db.add(Issue(file_id=2, type="missing_metadata", field="genre", severity="warning",
+                 detail="genre mancante", suggested_fix_json=None, status="open"))
+    db.commit()
+    with TestClient(app) as client:
+        inbox = client.get("/api/organize/issues", params={"location": "inbox"}).json()
+        assert [r["file_id"] for r in inbox] == [1]
+        library = client.get("/api/organize/issues", params={"location": "library"}).json()
+        assert [r["file_id"] for r in library] == [2]
+
+
 def test_fix_sets_retag_and_accepts(db):
     _seed(db)
     with TestClient(app) as client:
