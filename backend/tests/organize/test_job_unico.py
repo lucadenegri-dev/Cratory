@@ -67,3 +67,27 @@ def test_la_corsa_scrive_last_index_at(db, fake_audio, monkeypatch):
     # (il seed è già committato sopra).
     db.rollback()
     assert get_state(db, "last_index_at") is not None
+
+
+def test_la_corsa_sul_solo_inbox_non_scrive_last_index_at(db, fake_audio, monkeypatch):
+    """`last_index_at` è il gate dell'avvio automatico: significa «la libreria è
+    stata indicizzata di recente». Uno scan ristretto all'inbox non ha
+    camminato la libreria e non deve soddisfarlo, o rimanda di 15 minuti la
+    prima indicizzazione vera dopo il boot."""
+    from app.core.config import settings
+    from app.organize.services import scan_job
+    from app.services.app_state import get_state
+
+    make, root = fake_audio
+    monkeypatch.setattr(settings, "library_root", str(root / "lib"))
+    monkeypatch.setattr(settings, "slskd_download_dir", str(root / "inbox"))
+    make("lib/a.mp3", digest="H1", artist="A", title="A")
+    make("inbox/b.mp3", digest="H2", artist="B", title="B")
+
+    scan_job._run(["inbox"])  # sincrono, senza thread
+
+    db.rollback()
+    # Senza questo la corsa potrebbe essere fallita, e l'assenza della chiave
+    # non direbbe nulla.
+    assert scan_job.job_state()["status"] == "done", scan_job.job_state()["error"]
+    assert get_state(db, "last_index_at") is None

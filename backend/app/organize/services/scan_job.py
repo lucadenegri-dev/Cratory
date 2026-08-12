@@ -84,7 +84,15 @@ def _run(locations: list[str] | None) -> None:
         # Alimenta l'avvio automatico (start_job_if_due): senza questa scrittura
         # l'auto-indicizzazione ripartirebbe a ogni reload di uvicorn in sviluppo.
         # Assorbito da library_index_job (F4 Task 3), stessa chiave app_state.
-        set_state(db, "last_index_at", utcnow().isoformat())
+        #
+        # Solo se la libreria è stata davvero indicizzata: `summary.linking` è
+        # None quando lo scan non ha camminato LIBRARY_ROOT (es. `locations=
+        # ["inbox"]`, un clic dal filtro Inbox). Scrivere la data lì
+        # soddisferebbe un gate che dice «la libreria è stata indicizzata di
+        # recente» senza che lo sia, rimandando di AUTO_INDEX_MIN_INTERVAL_MIN
+        # la prima indicizzazione vera dopo il boot.
+        if summary.linking is not None:
+            set_state(db, "last_index_at", utcnow().isoformat())
         with _lock:
             _state.update(
                 status="done", phase=None, result=result,

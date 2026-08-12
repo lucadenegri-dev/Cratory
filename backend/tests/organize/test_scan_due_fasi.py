@@ -228,3 +228,33 @@ def test_file_spostato_in_libreria_riceve_la_traccia_nella_stessa_corsa(
     assert summary.linking["created"] == 1
     riga = db.scalar(select(AudioFile))
     assert riga.location == "library" and riga.track_id is not None
+
+
+def test_scan_del_solo_inbox_non_tocca_le_tracce(db, fake_audio, monkeypatch):
+    """`POST /api/organize/scan {"locations":["inbox"]}` — un clic dal filtro
+    Inbox — cammina solo l'inbox: le righe di libreria non vengono riconciliate
+    e restano `present`, quindi `scanned` non è zero e l'anti-unmount non
+    scatta nemmeno con la flush a posto. La fase di aggancio deve girare solo
+    se lo scan ha davvero camminato la radice della libreria.
+    """
+    make, root = fake_audio
+    lib, inbox = root / "lib", root / "inbox"
+    _due_radici(monkeypatch, lib, inbox)
+    make("lib/a.mp3", digest="H1", artist="A", title="A")
+    make("inbox/b.mp3", digest="H2", artist="B", title="B")
+
+    per_loc = radici(db)
+    scan(db, list(per_loc.values()))
+    db.commit()
+    assert len(db.scalars(select(Track)).all()) == 1
+
+    shutil.rmtree(lib)  # libreria non montata
+
+    summary = scan(db, [per_loc["inbox"]])
+    db.commit()
+
+    tracce = db.scalars(select(Track)).all()
+    assert len(tracce) == 1 and tracce[0].audio_hash == "H1", (
+        "uno scan del solo inbox ha creato o cancellato tracce"
+    )
+    assert summary.linking is None, "fase di aggancio eseguita senza camminare la libreria"

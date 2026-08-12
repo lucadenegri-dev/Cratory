@@ -237,9 +237,48 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
 
     # Fase 2: le tracce si agganciano ai file appena indicizzati. Una camminata
     # sola sul disco (D5 della spec): prima era library_index a ripercorrerlo.
-    # Import differito: app/services/library_index.py importa già da
-    # app/organize/ (per aggiorna_primary), e un import a livello di modulo
-    # qui chiuderebbe il ciclo.
+    #
+    # Gira SOLO se questo scan ha camminato la radice della libreria: le sue
+    # parti ragionano sull'INTERA libreria (riconciliano i possessi e cancellano
+    # le tracce orfane), e uno scan ristretto all'inbox
+    # (`POST /api/organize/scan {"locations":["inbox"]}`, un clic dal filtro
+    # Inbox in app/organize/files) non ha riconciliato nessuna riga di
+    # libreria: le lascerebbe `present`, `scanned` non sarebbe zero e
+    # l'anti-unmount di `riconcilia_possessi` non scatterebbe nemmeno con il
+    # flush qui sopra. `summary.linking` resta None: è il segnale, per il
+    # chiamante, che la libreria NON è stata indicizzata (scan_job ci gate la
+    # scrittura di `last_index_at`).
+    if _ha_camminato_la_libreria(roots):
+        summary.linking = _aggancia_le_tracce(db, on_progress)
+
+    db.commit()
+    summary.finished_at = utcnow()
+    return summary
+
+
+def _ha_camminato_la_libreria(roots: list[ScanRoot]) -> bool:
+    """True se fra le radici percorse c'è LIBRARY_ROOT in persona.
+
+    Confronto sul path reale (symlink risolti, maiuscole normalizzate) come la
+    dedup dei file, e NON su `_location_per(root.path)`: con
+    SLSKD_DOWNLOAD_DIR annidata dentro LIBRARY_ROOT anche la radice inbox
+    deriva "library", ma camminare l'inbox non è camminare la libreria."""
+    libreria = runtime_settings.library_root()
+    if not libreria:
+        return False
+
+    def chiave(path: str) -> str:
+        return os.path.normcase(os.path.realpath(path))
+
+    return chiave(libreria) in {chiave(r.path) for r in roots}
+
+
+def _aggancia_le_tracce(db: Session, on_progress) -> dict:
+    """Fase 2: le tracce si agganciano ai file che la fase 1 ha appena scritto.
+
+    Import differito: app/services/library_index.py importa già da
+    app/organize/ (per aggiorna_primary), e un import a livello di modulo
+    chiuderebbe il ciclo."""
     from app.services.library_index import (
         collega_tracce,
         indicizza_archivio,
@@ -287,11 +326,7 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
     if link_report["scanned"]:
         link_report["energy_computed"] = recompute_energy(db)
 
-    summary.linking = link_report
-
-    db.commit()
-    summary.finished_at = utcnow()
-    return summary
+    return link_report
 
 
 def _abbina_spostamenti(gone_by_hash, inserts_by_hash) -> dict[int, AudioFile]:
