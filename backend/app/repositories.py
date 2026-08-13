@@ -10,12 +10,24 @@ from app.models import DjSet, DjSetTrack, Playlist, PlaylistSyncEvent, Setlist, 
 from app.organize.models import AudioFile
 
 
+def _escape_like(value: str) -> str:
+    """Escapa `\\`, `%`, `_` per un uso sicuro in ILIKE (va sempre passato con
+    `escape="\\\\"`, vedi `ci_equals`/`ci_contains`)."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def ci_equals(column, value: str):
     """Match case-insensitive ESATTO. `ilike(value)` grezzo tratterebbe `%`/`_`
     del valore come wildcard LIKE: qui li escapiamo e fissiamo l'escape char, così
     un titolo tipo 'Track_01' o '50%' matcha solo se stesso."""
-    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return column.ilike(escaped, escape="\\")
+    return column.ilike(_escape_like(value), escape="\\")
+
+
+def ci_contains(column, value: str):
+    """Match case-insensitive per SOTTOSTRINGA (`%value%`). Stessa tecnica di
+    `ci_equals`: senza escape un `value` con `%`/`_` (es. un path o un titolo)
+    sovra-matcherebbe trattandoli come wildcard LIKE invece che caratteri letterali."""
+    return column.ilike(f"%{_escape_like(value)}%", escape="\\")
 
 
 @dataclass(frozen=True)

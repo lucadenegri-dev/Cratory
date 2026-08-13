@@ -212,7 +212,15 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
                   <Link2 size={14} /> {track.has_local_file ? t.tracks.replaceFile : t.tracks.linkFile}
                 </Button>
                 {track.has_local_file && track.local_path && (
-                  <Link href={`/organize/files?q=${encodeURIComponent(track.local_path)}`} className="inline-flex">
+                  // C2: has_local_file resta true finche' la traccia non viene
+                  // riagganciata: se il file e' sparito dal disco l'ultima
+                  // scansione lo marca status="missing", e il filtro di
+                  // default di FILES (solo "present") lo nasconderebbe
+                  // esattamente nel caso in cui questo link serve di piu'.
+                  <Link
+                    href={`/organize/files?q=${encodeURIComponent(track.local_path)}&status=present,missing`}
+                    className="inline-flex"
+                  >
                     <Button size="sm" variant="outline"><ExternalLink size={14} /> {t.tracks.openInOrganize}</Button>
                   </Link>
                 )}

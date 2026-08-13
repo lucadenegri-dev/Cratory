@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   listFiles, libraryStats, libraryFacets,
@@ -59,9 +59,26 @@ function FilesInner() {
   const [onlyIssues, setOnlyIssues] = useState(false);
   const [sort, setSort] = useState<NonNullable<FileQuery["sort"]>>("path");
   const [dir, setDir] = useState<NonNullable<FileQuery["dir"]>>("asc");
-  // Il cross-link dal dettaglio traccia arriva con ?q=<path del file>.
+  // Il cross-link dal dettaglio traccia arriva con ?q=<path del file>&status=
+  // present,missing (C2: il file cercato può essere sparito dal disco).
+  // Stesso pattern di app/library/page.tsx per ?genre=: lo stato iniziale
+  // viene dall'URL, ma un ref "seen" lo aggiorna anche quando il param
+  // CAMBIA a pagina già montata (secondo cross-link) — senza azzerarlo al
+  // mount né combattere con la digitazione dell'utente nella casella.
   const searchParams = useSearchParams();
-  const [q, setQ] = useState(() => searchParams.get("q") ?? "");
+  const qParam = searchParams.get("q") ?? "";
+  const statusParam = searchParams.get("status") ?? "";
+  const [q, setQ] = useState(qParam);
+  const [status, setStatus] = useState(statusParam);
+  const qParamSeen = useRef(qParam);
+  const statusParamSeen = useRef(statusParam);
+  useEffect(() => {
+    if (qParam === qParamSeen.current && statusParam === statusParamSeen.current) return;
+    qParamSeen.current = qParam;
+    statusParamSeen.current = statusParam;
+    setQ(qParam);
+    setStatus(statusParam);
+  }, [qParam, statusParam]);
   const [facets, setFacets] = useState<LibraryFacets | null>(null);
   const [tag, setTag] = useState<Record<string, string>>({
     genre: "", artist: "", album: "", label: "", ext: "", year: "",
@@ -97,6 +114,7 @@ function FilesInner() {
   const load = useCallback(() => {
     const query: FileQuery = {
       location: location || undefined,
+      status: status || undefined,
       has_issues: onlyIssues ? true : undefined,
       sort,
       dir,
@@ -114,7 +132,7 @@ function FilesInner() {
       .catch(() => setOffline(true))
       .finally(() => setLoaded(true));
     libraryStats().then(setStats).catch(() => setStats(null));
-  }, [location, onlyIssues, sort, dir, q, tag]);
+  }, [location, status, onlyIssues, sort, dir, q, tag]);
 
   useEffect(() => { libraryFacets().then(setFacets).catch(() => {}); }, []);
   useEffect(() => { load(); }, [load]);

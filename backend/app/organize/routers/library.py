@@ -14,6 +14,7 @@ from app.db import get_db
 from app.organize.models import AudioFile, DupGroup, DupMember, Issue
 from app.organize.schemas import FileRow, LibraryFacets, LibraryStatsRead
 from app.organize.services import cover_cache, thumbs
+from app.repositories import ci_contains
 
 router = APIRouter(prefix="/api/organize", tags=["library"])
 
@@ -127,6 +128,10 @@ def library_facets(db: Session = Depends(get_db)):
 def list_files(
     db: Session = Depends(get_db),
     location: Literal["inbox", "library"] | None = None,
+    # C2: valore singolo (default "present") o CSV di piu' status (es.
+    # "present,missing") per il cross-link dal dettaglio traccia, che deve
+    # trovare il file anche quando e' sparito dal disco — l'unico caso in cui
+    # il chiamante non puo' sapere in anticipo lo status corrente del file.
     status: str = "present",
     has_issues: bool | None = None,
     q: str | None = None,
@@ -168,9 +173,10 @@ def list_files(
         .scalar_subquery()
     )
 
-    stmt = select(AudioFile, issue_count, worst_rank, in_dup, cover_proposal).where(
-        AudioFile.status == status
-    )
+    stmt = select(AudioFile, issue_count, worst_rank, in_dup, cover_proposal)
+    statuses = [s for s in status.split(",") if s]
+    if statuses:
+        stmt = stmt.where(AudioFile.status.in_(statuses))
     if location is not None:
         stmt = stmt.where(AudioFile.location == location)
     if has_issues is True:
@@ -183,10 +189,12 @@ def list_files(
         if val is not None and val != "":
             stmt = stmt.where(col == val)
     if q:
-        like = f"%{q}%"
+        # C3: `q` puo' contenere `%`/`_` (tipico in un path di file) — senza
+        # escape verrebbero trattati come wildcard LIKE e sovra-matcherebbero
+        # (stessa tecnica di `ci_equals`, adattata alla sottostringa).
         stmt = stmt.where(
-            or_(AudioFile.path.ilike(like), AudioFile.artist.ilike(like),
-                AudioFile.title.ilike(like))
+            or_(ci_contains(AudioFile.path, q), ci_contains(AudioFile.artist, q),
+                ci_contains(AudioFile.title, q))
         )
     col = _SORT_COLS.get(sort, AudioFile.path)
     ordering = col.desc() if dir == "desc" else col.asc()
