@@ -159,3 +159,45 @@ def test_detail_lead_senza_file(db):
     db.commit()
     detail = tracks_router.get_track_detail(t.id, db=db)
     assert detail.file_artist is None and detail.file_title is None
+
+
+from app.repositories import all_playable_tracks, effective_genre, genres_overview
+
+
+def test_genres_overview_conta_il_genere_effettivo(db, make_owned):
+    # candidabile = con BPM (come da docstring di genres_overview)
+    make_owned(track_kw={"title": "T", "artist": "A", "genre": "Pop", "bpm": 128.0},
+               file_kw={"genre": "Techno"})
+    db.add(Track(source_type="spotify", title="L", artist="A",
+                 genre="House", bpm=124.0))
+    db.commit()
+    rows = genres_overview(db)
+    assert {r["genre"] for r in rows} == {"Techno", "House"}  # niente "Pop"
+
+
+def test_effective_genre_helper(db, make_owned):
+    t = make_owned(track_kw={"title": "T", "artist": "A", "genre": "Pop", "bpm": 128.0},
+                   file_kw={"genre": "Techno"})
+    (t_loaded,) = [x for x in all_playable_tracks(db) if x.id == t.id]
+    assert effective_genre(t_loaded) == "Techno"
+    lead = Track(source_type="spotify", title="L", artist="A", genre="House", bpm=124.0)
+    db.add(lead)
+    db.commit()
+    assert effective_genre(lead) == "House"
+
+
+def test_candidate_engine_filtra_sul_genere_effettivo(db, make_owned):
+    """DEVE fallire se candidate_engine confronta t.genre invece del genere
+    effettivo: la traccia è taggata Techno solo sul file (Track.genre="Pop")."""
+    from app.schemas import SetGenerationRequest
+    from app.services.candidate_engine import select_candidates
+
+    t = make_owned(track_kw={"title": "T", "artist": "A", "genre": "Pop",
+                             "bpm": 128.0, "camelot_key": "8A",
+                             "duration_seconds": 300},
+                   file_kw={"genre": "Techno"})
+    pool = select_candidates(db, SetGenerationRequest(genres=["Techno"]))
+    assert [x.id for x in pool] == [t.id]
+    # ...e il genere streaming, ora mascherato dal tag file, non matcha più:
+    pool = select_candidates(db, SetGenerationRequest(genres=["Pop"]))
+    assert pool == []

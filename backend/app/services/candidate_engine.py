@@ -8,7 +8,7 @@ import unicodedata
 from sqlalchemy.orm import Session
 
 from app.models import Track
-from app.repositories import all_playable_tracks, tracks_for_playlist
+from app.repositories import all_playable_tracks, effective_genre, tracks_for_playlist
 from app.schemas import SetGenerationRequest
 
 MIN_TRACK_SECONDS = 120  # esclude sample/oneshot del sampler Rekordbox
@@ -79,7 +79,8 @@ def select_candidates(db: Session, req: SetGenerationRequest) -> list[Track]:
             continue
         if bpm_lo is not None and t.bpm and not (bpm_lo <= t.bpm <= bpm_hi):
             continue
-        if wanted_genres and (not t.genre or t.genre.strip().lower() not in wanted_genres):
+        genere = effective_genre(t)
+        if wanted_genres and (not genere or genere.strip().lower() not in wanted_genres):
             continue
         candidates.append(t)
 

@@ -183,6 +183,16 @@ def get_primary_file(db: Session, track: Track) -> AudioFile | None:
     return db.get(AudioFile, track.primary_file_id)
 
 
+def effective_genre(track: Track) -> str | None:
+    """Genere effettivo lato Python (specchio di _EFFECTIVE_TAGS['genre'] per
+    il codice che lavora su oggetti ORM già caricati, es. candidate engine).
+    `track.files` è il backref dichiarato su AudioFile.track."""
+    pf = None
+    if track.primary_file_id:
+        pf = next((f for f in track.files if f.id == track.primary_file_id), None)
+    return pf.genre if pf is not None and pf.genre is not None else track.genre
+
+
 def update_track(db: Session, track: Track, data: dict) -> Track:
     """Applica una modifica manuale parziale a una traccia.
 
@@ -226,7 +236,9 @@ def all_playable_tracks(db: Session, *, owned_only: bool = False) -> list[Track]
     Con ``owned_only`` restringe alle tracce possedute (file su disco): e' il
     pool dell'editor quando il set e' nato "solo brani posseduti".
     """
-    stmt = select(Track).options(selectinload(Track.playlists)).where(Track.bpm.is_not(None))
+    stmt = select(Track).options(
+        selectinload(Track.playlists), selectinload(Track.files)
+    ).where(Track.bpm.is_not(None))
     if owned_only:
         stmt = stmt.where(Track.has_local_file.is_(True))
     return list(db.scalars(stmt).all())
@@ -277,13 +289,15 @@ def _energy_distribution(energies: list[int]) -> list[dict]:
 
 
 def genres_overview(db: Session) -> list[dict]:
-    """Generi presenti tra le tracce candidabili (con BPM), col conteggio, ordinati
-    per frequenza. Alimenta il multi-select del Set Builder."""
+    """Generi EFFETTIVI (tag del primary file, fallback streaming) tra le tracce
+    candidabili (con BPM), col conteggio, ordinati per frequenza. Alimenta il
+    multi-select del Set Builder e i link della dashboard."""
+    eff = _EFFECTIVE_TAGS["genre"]
     rows = db.execute(
-        select(Track.genre, func.count())
-        .where(Track.bpm.is_not(None), Track.genre.is_not(None), Track.genre != "")
-        .group_by(Track.genre)
-        .order_by(func.count().desc(), Track.genre)
+        _join_primary_file(select(eff, func.count()).select_from(Track))
+        .where(Track.bpm.is_not(None), eff.is_not(None), eff != "")
+        .group_by(eff)
+        .order_by(func.count().desc(), eff)
     ).all()
     return [{"genre": g, "count": n} for g, n in rows]
 
