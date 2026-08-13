@@ -36,6 +36,26 @@ def test_auto_link_preview_propone_solo_i_match(db, tmp_path, monkeypatch):
     assert by["Nowhere"]["hit"] is None  # nessun file combacia
 
 
+def test_auto_link_preview_label_format_with_fallback(db, tmp_path, monkeypatch):
+    """Caratterizza il campo 'label' ('Artista — Titolo', em dash) esposto da
+    auto_link_preview, fallback compreso quando artista/titolo mancano."""
+    from app.models import Track
+    monkeypatch.setattr(settings, "library_root", str(tmp_path))
+    monkeypatch.setattr(settings, "slskd_download_dir", "")
+    db.add(Track(platform="spotify", spotify_id="a3", source_type="spotify",
+                 artist="Daft Punk", title="Da Funk",
+                 last_download_outcome="not_found", has_local_file=False))
+    db.add(Track(platform="spotify", spotify_id="a4", source_type="spotify",
+                 artist=None, title=None,
+                 last_download_outcome="not_found", has_local_file=False))
+    db.commit()
+
+    props = auto_link_preview(db)
+    by_artist = {p["artist"]: p for p in props}
+    assert by_artist["Daft Punk"]["label"] == "Daft Punk — Da Funk"
+    assert by_artist[None]["label"] == "Artista sconosciuto — Senza titolo"
+
+
 def test_auto_link_endpoint(tmp_path, monkeypatch):
     (tmp_path / "Daft Punk - Da Funk.flac").write_bytes(b"x")
     monkeypatch.setattr(settings, "library_root", str(tmp_path))

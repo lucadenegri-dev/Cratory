@@ -22,6 +22,7 @@ from app.integrations.slskd import (
 from app.repositories import get_track, tracks_without_local_file
 from app.services.acquisition import attach_local_file
 from app.services.soulseek_select import auto_pick_candidates, search_candidates
+from app.services.track_label import track_label
 from app.integrations.soundcloud_audio import SoundCloudAudioError, download_track_audio
 
 logger = logging.getLogger(__name__)
@@ -49,12 +50,6 @@ _state: dict = {
     "started_at": None,
     "finished_at": None,
 }
-
-
-def _track_label(track) -> str:
-    artist = (track.artist or "").strip() or "Artista sconosciuto"
-    title = (track.title or "").strip() or "Senza titolo"
-    return f"{artist} — {title}"
 
 
 def job_state() -> dict:
@@ -265,7 +260,7 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
                 if track is None:
                     outcome = "failed"
                 else:
-                    _state["current_label"] = _track_label(track)
+                    _state["current_label"] = track_label(track)
                     try:
                         outcome, reason, path = _process_item(db, client, download_dir, track, chosen)
                     except SlskdError:
@@ -383,7 +378,7 @@ def _run_soundcloud(track_id: int) -> None:
         if track is None:
             _state.update(status="error", error="track_not_found")
             return
-        _state["current_label"] = _track_label(track)
+        _state["current_label"] = track_label(track)
         try:
             path = download_track_audio(track.url, runtime_settings.slskd_download_dir())
             quality = read_audio_quality(path)

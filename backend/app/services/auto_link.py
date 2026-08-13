@@ -15,12 +15,7 @@ from sqlalchemy.orm import Session
 from app.integrations.local_files import AUDIO_EXTENSIONS
 from app.repositories import tracks_download_pending
 from app.services.file_search import search_roots
-
-
-def _label(track) -> str:
-    artist = (track.artist or "").strip() or "Artista sconosciuto"
-    title = (track.title or "").strip() or "Senza titolo"
-    return f"{artist} — {title}"
+from app.services.track_label import track_label
 
 
 def _all_audio_files() -> list[tuple[str, Path]]:
@@ -55,7 +50,7 @@ def auto_link_preview(db: Session) -> list[dict]:
                     break
         out.append({
             "track_id": t.id,
-            "label": _label(t),
+            "label": track_label(t),
             "artist": t.artist,
             "title": t.title,
             "hit": hit,
