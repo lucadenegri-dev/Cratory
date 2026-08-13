@@ -32,6 +32,33 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-08-13 - Tag effettivi dal file in Library
+
+- **Risoluzione query-time**: `genre`/`album`/`label`/`year` di `GET /api/tracks` e
+  `GET /api/tracks/{id}` portano ora il valore EFFETTIVO — il tag del primary file
+  (`Track.primary_file_id` -> `AudioFile`) se non-NULL, altrimenti il valore
+  streaming — via `COALESCE` (`repositories._EFFECTIVE_TAGS`/`_join_primary_file`),
+  nessuna colonna derivata, nessuna migrazione. Stessa risoluzione per i filtri
+  genre/album/label, i sort genre/year, `genres_overview` (`GET /api/library/genres`)
+  e il candidate engine del Set Builder (`repositories.effective_genre`).
+- **Payload**: nuovi `primary_file_id` e flag di provenienza
+  `genre_from_file`/`album_from_file`/`label_from_file`/`year_from_file` su
+  `TrackOut`; il dettaglio (`TrackDetailOut`) aggiunge `file_artist`/`file_title`
+  (informativi, l'identità resta quella della `Track`).
+- **Edit dal modal**: `TrackEditModal` biforca sui quattro campi descrittivi — se la
+  traccia è posseduta (`primary_file_id` non nullo) scrivono i tag del file via
+  `POST /api/organize/files/{id}/tags` (l'unico writer di tag, invariato), altrimenti
+  restano su `PATCH /api/tracks/{id}` come prima; due percorsi di scrittura
+  indipendenti, l'errore dell'uno non maschera l'esito dell'altro.
+- **Cross-link**: `FileRow` espone `track_id` per collegare una riga di FILES alla
+  traccia agganciata; il dettaglio traccia linka a `/organize/files?q=<local_path>` e
+  segnala con un'icona quando artist/title del file divergono dall'identità della
+  traccia.
+- Tocchi: `repositories.py`, `serializers.py`, `schemas.py`, `routers/tracks.py`,
+  `organize/routers/library.py` (backend); `components/track-edit-modal.tsx`,
+  `app/tracks/[id]/page.tsx`, `app/organize/files/page.tsx` (frontend).
+- Spec: `docs/superpowers/specs/2026-08-13-library-tag-effettivi-design.md`.
+
 ## Milestone 2026-08-13 - Settings unificata post-fusione
 
 - **Un solo elenco servizi**: `GET /api/services/status` esteso a 7 voci (spotify,

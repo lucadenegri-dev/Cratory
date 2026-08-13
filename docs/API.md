@@ -241,8 +241,24 @@ POST  /api/tracks/{track_id}/link-file
 GET   /api/files/search
 POST  /api/library/index
 GET   /api/library/index/status
+GET   /api/library/genres
 GET   /api/stats
 ```
+
+For an owned track, `genre`/`album`/`label`/`year` in `GET /api/tracks` and
+`GET /api/tracks/{track_id}` carry the **effective** value: the tag on the linked file
+(`Track.primary_file_id` -> `AudioFile`, resolved query-time with `COALESCE`
+in `repositories._EFFECTIVE_TAGS`/`_join_primary_file` — no derived column, no
+migration) when non-NULL, otherwise the value imported from streaming. `TrackOut` also
+exposes `primary_file_id` and the boolean flags `genre_from_file`/`album_from_file`/
+`label_from_file`/`year_from_file` (`true` when that value came from the file).
+`TrackDetailOut` (detail only) additionally carries `file_artist`/`file_title`, the
+artist/title tags read from the file — informational only, track identity stays
+`Track.artist`/`Track.title`. Editing these four fields on an owned track is **not** a
+new endpoint: it goes through `POST /api/organize/files/{file_id}/tags` (see Organize
+below), the single writer of file tags, targeting the track's `primary_file_id`; a
+track with no owned file keeps editing them via `PATCH /api/tracks/{track_id}` as
+before.
 
 Filters supported by `GET /api/tracks`: artist, title, album, genre, label
 (`label`, exact match), rating (`rating`, `1`-`3` exact match; tracks with no vote are
@@ -257,6 +273,9 @@ limit/offset, and `in_playlist` (repeatable, e.g.
 to **any** of the given playlists (union), AND-combined with every other filter (e.g.
 paired with `genre` it narrows to tracks in any of those playlists that also match the
 genre) — for the tracks of a single playlist use `GET /api/playlists/{playlist_id}/tracks`.
+The `genre`/`album`/`label` filters and `sort=genre`/`sort=year` all match against the
+same effective value described above (file tag first, streaming fallback); so does the
+candidate engine behind the Set Builder's genre pool (`repositories.effective_genre`).
 
 `GET /api/tracks/{track_id}/cover` serves the artwork **embedded in the file** of an
 owned track, read on-demand from disk (not saved in the DB). Responds with the image
@@ -327,10 +346,35 @@ under 2 characters returns an empty list. Response: list of
   `picker_unavailable` outside macOS, 409 `picker_busy` if a dialog is already open.
   Used by the "Sfoglia…" button in Settings.
 
+`GET /api/library/genres` returns `{genre, count}[]` (`GenreCountOut`) for the
+**effective** genre (see above) among candidate tracks (BPM present), sorted by
+frequency then name: feeds the Set Builder's genre multi-select.
+
 `GET /api/stats` returns the deterministic library aggregates (`LibraryStatsOut`):
 counts, BPM/key coverage, `key_distribution` and `genre_distribution` (genre->count
 map; genres are merged case-insensitively keeping the most frequent spelling), BPM and
 energy histogram.
+
+## Organize (file tags)
+
+```text
+GET  /api/organize/files
+POST /api/organize/files/{file_id}/tags
+```
+
+`GET /api/organize/files` lists the audio files under `LIBRARY_ROOT`/inbox
+(`FileRow[]`, filters/pagination unchanged). `FileRow.track_id` is the `Track` the
+file is linked to as `primary_file_id`, if any (`null` for inbox files or files that
+are not any track's primary file): the FILES page uses it to link a row to the
+matching track detail page; the reverse cross-link (track detail -> FILES) opens
+`/organize/files?q=<file path>`.
+
+`POST /api/organize/files/{file_id}/tags` is the **single writer of text tags** on a
+file (`FileTagsUpdate`, partial update: only the fields present in the body are
+touched; an empty string clears the tag). This is also how `genre`/`album`/`label`/`year`
+get edited for an owned track (see "Tracks and library" above) — the frontend calls it
+against the track's `primary_file_id`, not a track-side PATCH. Response: the updated
+`FileRow`.
 
 ## Labels
 
