@@ -32,6 +32,7 @@ from app.integrations.spotify import (
     SpotifyWebClient,
 )
 from app.repositories import get_playlist, list_playlists
+from app.services.job_spawn import spawn as _spawn
 from app.services.playlist_import import (
     LIKED_PLAYLIST_NAME,
     import_playlist,
@@ -71,11 +72,6 @@ def job_state() -> dict:
 def is_running() -> bool:
     with _lock:
         return _state["status"] == "running"
-
-
-def _spawn(fn) -> None:
-    """Separato per i test (che lo rendono sincrono)."""
-    threading.Thread(target=fn, daemon=True).start()
 
 
 def _progress(done: int, total: int) -> None:

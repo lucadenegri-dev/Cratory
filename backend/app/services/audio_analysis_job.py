@@ -15,6 +15,7 @@ from app.db import SessionLocal
 from app.integrations import essentia_engine
 from app.models import Track, utcnow
 from app.services.audio_analysis import auto_apply_missing
+from app.services.job_spawn import spawn as _spawn
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,6 @@ def job_state() -> dict:
 
 def is_running() -> bool:
     return _state["status"] == "running"
-
-
-def _spawn(fn) -> None:
-    """Separato per i test (che lo rendono sincrono)."""
-    threading.Thread(target=fn, daemon=True).start()
 
 
 def _select_tracks(db, scope: str, track_ids: list[int] | None) -> list[Track]:
