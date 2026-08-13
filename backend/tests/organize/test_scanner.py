@@ -1,6 +1,8 @@
 from sqlalchemy import select
 
 from app.core.config import settings
+from app.models import Track
+from app.organize.integrations import tagio
 from app.organize.models import AudioFile, ScanRoot
 from app.organize.services.scanner import scan
 
@@ -151,6 +153,40 @@ def test_scan_skips_quarantine_and_hidden_dirs(db, copy_fixture, tmp_path, monke
     assert summary.found == 1
     rows = db.scalars(select(AudioFile)).all()
     assert len(rows) == 1 and rows[0].path.endswith("a.mp3")
+
+
+def test_scan_syncs_linked_track_genre_on_retag(db, copy_fixture, tmp_path, monkeypatch):
+    # Parte 2 della sincronizzazione: un tag genere cambiato FUORI dall'app
+    # (rilevato solo alla rilettura di una re-scansione) tiene Track.genre
+    # allineato per il file gia' agganciato.
+    root = _make_root(db, copy_fixture, tmp_path, [("a.flac", "flac")], monkeypatch)
+    path = str(tmp_path / "lib" / "a.flac")
+    tagio.write_tags(path, {"genre": "House", "artist": "X", "title": "Y"})
+    scan(db, [root])  # prima corsa: crea e aggancia la Track (genre="House")
+    track = db.scalar(select(Track).where(Track.local_path == path))
+    assert track is not None and track.genre == "House"
+
+    tagio.write_tags(path, {"genre": "Progressive House"})
+    scan(db, [root])  # seconda corsa: tag cambiato sul disco fra le due corse
+    db.refresh(track)
+    assert track.genre == "Progressive House"
+
+
+def test_scan_unlinked_file_genre_change_does_not_touch_any_track(db, copy_fixture, tmp_path, monkeypatch):
+    # Un file NON agganciato (track_id None) non deve esplodere né toccare
+    # nessuna traccia esistente.
+    root = _make_root(db, copy_fixture, tmp_path, [("a.flac", "flac")], monkeypatch)
+    path = str(tmp_path / "lib" / "a.flac")
+    other = Track(source_type="local_files", has_local_file=True, genre="Electronic")
+    db.add(other); db.commit()
+    row = AudioFile(root_id=root.id, path=path, ext="flac", size_bytes=1, mtime=1.0,
+                    content_hash="stale", hash_method="file", status="present",
+                    location="library", genre="House", track_id=None)
+    db.add(row); db.commit()
+    tagio.write_tags(path, {"genre": "Techno"})
+    scan(db, [root])  # non deve esplodere; nessuna traccia agganciata a questo file
+    db.refresh(other)
+    assert other.genre == "Electronic"
 
 
 def test_scan_reads_isrc(db, copy_fixture, tmp_path, monkeypatch):

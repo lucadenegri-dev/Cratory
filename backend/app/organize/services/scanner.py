@@ -9,11 +9,13 @@ from sqlalchemy.orm import Session
 
 from app.core import runtime_settings
 from app.core.config import settings
+from app.models import Track
 from app.organize.integrations import content_hash, tagio
 from app.organize.models import AudioFile, ScanRoot, utcnow
 from app.organize.schemas import LinkingReport, ScanSummary
 from app.organize.services.file_link import deriva_location, stacca_file
 from app.organize.services.roots import radici
+from app.services.genre_align import align_track_genre
 
 logger = logging.getLogger(__name__)
 
@@ -215,11 +217,26 @@ def scan(db: Session, roots: list[ScanRoot], on_progress=None) -> ScanSummary:
             new_inserts.append(row)
             summary.inserted += 1
         else:
+            old_genre = existing.genre
             for key, value in fields.items():
                 setattr(existing, key, value)
             existing.status = "present"
             existing.last_scanned_at = utcnow()
             summary.updated += 1
+            # Sincronizzazione Parte 2 (stessa regola condivisa del backfill e
+            # della modifica manuale, app.services.genre_align): un file gia'
+            # agganciato il cui tag genere e' cambiato FUORI dall'app (rilevato
+            # solo qui, dove il file e' stato davvero riletto — i file
+            # invariati prendono il fast-path sopra e non passano di qui, quindi
+            # questo non aggiunge costo proporzionale all'intera libreria, solo
+            # ai file di cui il tag genere e' effettivamente cambiato) tiene
+            # Track.genre allineato. Confronto sul valore grezzo prima
+            # dell'eventuale query: evita un SELECT per ogni file riletto la cui
+            # unica variazione era, es., bitrate o mtime.
+            if existing.track_id is not None and fields["genre"] != old_genre:
+                linked = db.get(Track, existing.track_id)
+                if linked is not None:
+                    align_track_genre(linked, fields["genre"], apply=True)
         if fields["scan_error"]:
             summary.errors += 1
         if on_progress is not None:
