@@ -1312,6 +1312,7 @@ export const en = {
       sevInfo: "info",
       formats: "Formats",
       dupTitle: "duplicate",
+      openTrack: "Open the track in the library",
       editTitle: "Edit tags",
       field: {
         artist: "Artist",

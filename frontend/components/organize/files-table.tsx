@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 import { fmtDuration, type FileRow, type FileQuery } from "@/lib/organize/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
@@ -65,6 +67,7 @@ export function FilesTable({
   onSort: (col: SortKey) => void;
   onEdit: (row: FileRow) => void;
 }) {
+  const t = useT();
   const headProps = { sort, dir, onSort };
   return (
     <div className="overflow-x-auto border border-border">
@@ -79,6 +82,7 @@ export function FilesTable({
             <SortHead label="Kbps" col="bitrate" align="right" {...headProps} />
             <SortHead label="Dur" col="duration" align="right" {...headProps} />
             <th className="px-3 py-2 text-center font-normal text-[9px] uppercase tracking-wider text-faint">!</th>
+            <th className="w-8 px-3 py-2" aria-label="track" />
           </tr>
         </thead>
         <tbody>
@@ -105,6 +109,18 @@ export function FilesTable({
               <td className="tnum px-3 py-1 text-right text-fg">{r.bitrate ?? "—"}</td>
               <td className="tnum px-3 py-1 text-right text-fg">{fmtDuration(r.duration_s)}</td>
               <td className="px-3 py-1 text-center"><Indicator row={r} /></td>
+              <td className="px-3 py-1 text-center">
+                {r.track_id != null && (
+                  <Link
+                    href={`/tracks/${r.track_id}`}
+                    onClick={(e) => e.stopPropagation()} // la riga apre l'editor tag
+                    className="text-faint hover:text-fg"
+                    title={t.organize.files.openTrack}
+                  >
+                    <ExternalLink size={13} />
+                  </Link>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

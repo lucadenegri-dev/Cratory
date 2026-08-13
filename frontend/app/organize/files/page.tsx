@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   listFiles, libraryStats, libraryFacets,
   type FileRow, type LibraryStats, type LibraryFacets, type Location, type FileQuery,
@@ -44,7 +45,7 @@ function FacetInput({ facet, placeholder, value, options, onChange }: {
   );
 }
 
-export default function FilesPage() {
+function FilesInner() {
   const t = useT();
   const { scan, startScan, refresh } = useJobs();
   const [rows, setRows] = useState<FileRow[]>([]);
@@ -58,7 +59,9 @@ export default function FilesPage() {
   const [onlyIssues, setOnlyIssues] = useState(false);
   const [sort, setSort] = useState<NonNullable<FileQuery["sort"]>>("path");
   const [dir, setDir] = useState<NonNullable<FileQuery["dir"]>>("asc");
-  const [q, setQ] = useState("");
+  // Il cross-link dal dettaglio traccia arriva con ?q=<path del file>.
+  const searchParams = useSearchParams();
+  const [q, setQ] = useState(() => searchParams.get("q") ?? "");
   const [facets, setFacets] = useState<LibraryFacets | null>(null);
   const [tag, setTag] = useState<Record<string, string>>({
     genre: "", artist: "", album: "", label: "", ext: "", year: "",
@@ -264,4 +267,8 @@ function ScanStat({ k, v, danger }: { k: string; v: string | number; danger?: bo
       <span className={`tnum ${danger ? "text-danger" : "text-fg"}`}>{v}</span>
     </span>
   );
+}
+
+export default function FilesPage() {
+  return <Suspense><FilesInner /></Suspense>;
 }

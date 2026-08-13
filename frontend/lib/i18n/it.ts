@@ -1310,6 +1310,7 @@ export const it: Dictionary = {
       sevInfo: "info",
       formats: "Formati",
       dupTitle: "doppione",
+      openTrack: "Apri la traccia in libreria",
       editTitle: "Modifica tag",
       field: {
         artist: "Artista",
