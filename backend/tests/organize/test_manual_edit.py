@@ -3,6 +3,7 @@ import os
 import pytest
 from sqlalchemy import select
 
+from app.models import Track
 from app.organize.integrations import tagio
 from app.organize.models import AudioFile, Issue, Plan, ScanRoot, UndoJournal
 from app.organize.services import manual_edit
@@ -210,6 +211,42 @@ def test_edit_flac_comment_still_works(db, tmp_path, copy_fixture):
     assert tagio.read_tags(f).comment == "kept"
     assert db.get(AudioFile, 1).comment == "kept"
     assert db.scalar(select(Plan)) is not None
+
+
+def test_edit_syncs_linked_track_genre(db, tmp_path, copy_fixture):
+    # Parte 2 della sincronizzazione: modificare il genere di un file agganciato
+    # tiene Track.genre allineato (stessa regola condivisa del backfill).
+    f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
+    track = Track(source_type="local_files", has_local_file=True, genre="Electronic")
+    db.add(track); db.commit()
+    file = _seed(db, f, genre="House", track_id=track.id)
+    manual_edit.edit_tags(db, file, {"genre": "Progressive House"})
+    db.refresh(track)
+    assert track.genre == "Progressive House"
+
+
+def test_edit_unlinked_file_does_not_touch_any_track(db, tmp_path, copy_fixture):
+    # Un file NON agganciato (track_id None) non deve esplodere né toccare
+    # nessuna traccia esistente.
+    f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
+    other = Track(source_type="local_files", has_local_file=True, genre="Electronic")
+    db.add(other); db.commit()
+    file = _seed(db, f, genre="House", track_id=None)
+    manual_edit.edit_tags(db, file, {"genre": "Techno"})
+    db.refresh(other)
+    assert other.genre == "Electronic"
+
+
+def test_edit_clearing_genre_tag_does_not_touch_linked_track(db, tmp_path, copy_fixture):
+    # Regola condivisa: tag svuotato non sovrascrive mai il genere della traccia.
+    f = copy_fixture("flac", tmp_path / "lib" / "x.flac")
+    tagio.write_tags(f, {"genre": "House"})
+    track = Track(source_type="local_files", has_local_file=True, genre="Electronic")
+    db.add(track); db.commit()
+    file = _seed(db, f, genre="House", track_id=track.id)
+    manual_edit.edit_tags(db, file, {"genre": ""})
+    db.refresh(track)
+    assert track.genre == "Electronic"
 
 
 def test_edit_verify_read_failure_is_controlled(db, tmp_path, copy_fixture, monkeypatch):

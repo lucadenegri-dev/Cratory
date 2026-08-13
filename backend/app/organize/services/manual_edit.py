@@ -10,9 +10,11 @@ import os
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models import Track
 from app.organize.integrations import tagio
 from app.organize.models import AudioFile, Issue, Plan, UndoJournal, utcnow
 from app.organize.services.planner import EDITABLE_TAG_FIELDS
+from app.services.genre_align import align_track_genre
 
 # Gli unici campi correggibili a mano: fonte unica in planner.EDITABLE_TAG_FIELDS.
 _EDITABLE = frozenset(EDITABLE_TAG_FIELDS)
@@ -142,6 +144,16 @@ def edit_tags(db: Session, file: AudioFile, changes: dict) -> None:
     journal.prior_tags_json = {f: prior[f] for f in changed}
     plan.rules_json = {**plan.rules_json, "fields": sorted(changed)}
     _reconcile_issues(db, file.id, changed)
+    # Sincronizzazione Parte 2 (regola condivisa col backfill e con lo scan):
+    # se questo file e' agganciato a una traccia e il genere e' fra i campi
+    # DAVVERO atterrati sul disco, tiene Track.genre allineato. Un tag genere
+    # svuotato (None fra `changed`) non tocca nulla: la regola non sovrascrive
+    # mai con un vuoto (il COALESCE di lettura ricadrebbe comunque sul valore
+    # streaming, ma lo specchio in tabella non deve perdere l'ultimo noto).
+    if "genre" in changed and file.track_id is not None:
+        linked = db.get(Track, file.track_id)
+        if linked is not None:
+            align_track_genre(linked, changed["genre"], apply=True)
     db.commit()
 
 
