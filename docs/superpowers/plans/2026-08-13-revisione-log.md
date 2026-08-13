@@ -108,7 +108,11 @@ for path, ops in spec['paths'].items():
 " | sort
 ```
 
-138 path unici / 148 coppie metodo+path (coerente con la baseline del Task 1):
+138 path unici / **149** coppie metodo+path. La baseline del Task 1 dice 148: la
+differenza e' `GET /api/health`, registrato con `@app.get` in `app/main.py:130` e non con
+`@router.*`, quindi invisibile al grep sui decoratori che ha prodotto il 148
+(`grep -rE "@router\.(get|post|put|patch|delete)" app | wc -l` -> 148 esatti). 148 + 1 = 149.
+Il Task 14, se riconta, deve aspettarsi 149.
 
 ```text
 ['GET'] /api/ai/status
@@ -260,7 +264,19 @@ stato fatto due volte, una per convenzione, piu' una terza passata sul suffisso 
 path param (`/undo`, `/fix`, `/keeper`, ...): nessun endpoint con path param e' rimasto a
 zero hit.
 
-7 endpoint senza call site nel frontend; verificati uno per uno su frontend, backend/tests,
+**Nota di metodo — difetto della passata 1, corretto dopo la review.** La passata 1
+cercava il prefisso statico come **sottostringa nuda** (`grep -F "/api/sets/generate"`), quindi
+ogni endpoint il cui path completo e' prefisso di un fratello vivo piu' lungo risultava
+invisibile: `/api/sets/generate` matchava su `/api/sets/generate-async`. La passata 3 copriva
+i path con `{param}` ma non quelli a suffisso piano. Ricontrollo rifatto su tutti i path non
+parametrici con match **ancorato al terminatore** (prefisso seguito da `"`, `` ` `` o `?`):
+una sola vittima, `POST /api/sets/generate`. Il difetto sbagliava in direzione "morto non
+trovato", mai in direzione "vivo dichiarato morto", quindi non intacca le classificazioni
+gia' fatte. (Attenzione se si ripete il controllo: anche il match ancorato ha falsi positivi,
+p.es. `/api/rekordbox/import` e' vivo ma il call site termina con `${`
+— `frontend/lib/api/misc.ts:57`.)
+
+8 endpoint senza call site nel frontend; verificati uno per uno su frontend, backend/tests,
 docs, script e possibili chiamanti esterni:
 
 - `GET /api/health` — **non un finding**: chiamante esterno/umano, documentato in
@@ -278,11 +294,18 @@ docs, script e possibili chiamanti esterni:
   cancellati di proposito, ma restano richiamabili via curl: **L3, candidati alla promozione
   a rimozione al checkpoint di Fase 1** (vedi L3 per l'evidenza a favore e contro).
 - `GET /api/rekordbox/pending`, `POST /api/organize/analyze` — dubbi, vedi L3.
+- `POST /api/sets/generate` — trovato solo dal ricontrollo ancorato: wrapper HTTP morto sopra
+  un servizio vivissimo, stessa forma di `/api/organize/analyze`. Vedi L3.
 
-**Nessun endpoint e' stato classificato L1.** La regola del piano ("in dubbio → L3, l'utente
-potrebbe chiamarlo via curl") copre tutti e quattro i casi: l'asimmetria del rischio e' netta,
-da L3 l'utente li promuove a rimozione con una riga di conversazione al checkpoint, da L1 se
-ne accorge quando gli si rompono.
+**Tutti gli endpoint sono finiti in L3, nessuno in L1** — ma per due ragioni diverse, da non
+confondere al checkpoint: `/api/downloads/search`, `/api/downloads/manual` e
+`/api/rekordbox/pending` sono L3 **per dubbio** (la regola "in dubbio → L3, l'utente potrebbe
+chiamarlo via curl": l'asimmetria del rischio e' netta, da L3 l'utente li promuove con una riga
+di conversazione, da L1 se ne accorge quando gli si rompono); `/api/organize/analyze` e
+`/api/sets/generate` sono L3 **per morte accertata ma superficie di prodotto** — sono wrapper
+HTTP dimostrabilmente non chiamati sopra servizi vivi, e cio' che li tiene fuori da L1 non e'
+l'incertezza sul fatto che siano morti ma il fatto che rimuovere un endpoint documentato sia
+una decisione di prodotto (e, per `analyze`, il vincolo su `organize/`).
 
 ### Step 4 — dipendenze pip
 
@@ -317,7 +340,7 @@ Simboli morti:
 
 - [L1] `app/schemas.py:472` — `class LocalDirEntry(BaseModel)` — grep su tutto il backend: **1 hit, la definizione**; 0 hit nel frontend; il suo consumatore `LocalBrowseResponse` non esiste piu'; nessun `response_model=`, nessun `list[LocalDirEntry]`. `PROGRESS.md:1209` registra che l'interfaccia gemella nel frontend era gia' stata cancellata come codice morto
 - [L1] `app/services/ai_curation.py:120` — `_safe_library_context()` — unico hit in `backend/app` e' la definizione, 0 test, 0 `getattr`; il chiamante previsto `ai_agent.py` non esiste piu'. **Cascata:** rimuovendola resta orfano anche l'import `library_stats` a `app/services/ai_curation.py:16` (usato solo a `:121`)
-- [L1] `app/services/local_import.py:55` — `build_normalized()` — unico hit in `backend/app` e' la definizione, **0 hit nei test**; il chiamante storico `import_local_folder` e' stato cancellato; i consumatori superstiti del modulo importano solo `scan_folder` (`library_index.py:39`, `pipeline.py:21`, `tests/test_local_import.py:10`). E' la causa dei 4 import morti qui sopra
+- [L1] `app/services/local_import.py:55` — `build_normalized()` — unico hit in `backend/app` e' la definizione, **0 hit nei test**; il chiamante storico `import_local_folder` e' stato cancellato; i consumatori superstiti del modulo importano solo `scan_folder` (`library_index.py:39`, `pipeline.py:21`, `tests/test_local_import.py:10`). E' la causa dei 4 import morti qui sopra. **Cascata completa per il Task 3:** rimuovendolo resta orfana anche la costante `PLATFORM` (`app/services/local_import.py:32`, usata solo a `:69` dentro `build_normalized`; `library_index.py:44` ne ha una copia propria indipendente, da **non** toccare). Inoltre nello stesso modulo `import logging` (`:11`) e `logger = logging.getLogger(__name__)` (`:30`) sono **gia' morti oggi**, indipendentemente da questa rimozione: `logger` non ha nessun uso nel file. Vanno via nella stessa passata, altrimenti il file resta con tre righe inerti
 - [L1] `app/services/audio_energy.py:113` — `backfill_energy()` — 0 chiamanti di produzione; gli unici usi sono `tests/test_audio_energy.py:141` (import) e `:155` (call), quindi test che coprono SOLO codice morto. `library_index.py:30` importa da questo modulo solo `analyze_file, recompute_energy`
 - [L1] `app/services/soulseek_select.py:251` — `best_for_auto()` — unico hit in `backend/app` e' la definizione; usi solo in `tests/test_soulseek_select.py` (import `:3`, chiamate `:38,45,76,91,108,131`). E' un wrapper di comodo su `rank_candidates`+`auto_pick_candidates` che la produzione scavalca (`soulseek_download_job.py:24`, `routers/downloads.py:18` importano le due primitive)
 
@@ -358,6 +381,7 @@ Endpoint senza chiamante ma non rimovibili d'ufficio:
 
 - [L3] `GET /api/rekordbox/pending` (`app/routers/rekordbox.py:15`) — 0 call site nel frontend (la UI legge lo stesso numero da `/api/analysis/overview` e `/api/pipeline`; `frontend/components/analysis/rekordbox-import-card.tsx:57` lo dice in un commento), coperto solo da `tests/test_rekordbox_api.py:64`, e `docs/API.md:31,83` ammette la duplicazione. **Non L1** perche' `docs/superpowers/specs/2026-07-12-analysis-page-design.md:114` decise esplicitamente di tenerlo, ed e' un `GET` banale richiamabile via curl: rimuoverlo ribalta una decisione presa
 - [L3] `POST /api/organize/analyze` (`app/organize/routers/analyze.py:11`) — 0 call site nel frontend (ho enumerato tutti i suffissi di `frontend/lib/organize/api.ts`: `/analyze` non c'e'), non documentato in nessun `.md`, coperto solo da `tests/organize/test_analyze_api.py:24,72,102`. Il **service** `analysis.recompute()` e' vivissimo (`organize/services/scan_job.py:71`, `integrity_job.py:45`): morto e' solo il wrapper HTTP. **Non L1** perche' e' in `organize/` ed e' un plausibile trigger manuale via curl per ricalcolare gli issue senza rifare la scansione del disco
+- [L3] `app/routers/sets.py:127` — `POST /api/sets/generate` (handler `generate`) — **stessa forma di `/api/organize/analyze`: wrapper HTTP morto sopra un servizio vivissimo.** 0 call site nel frontend, che usa solo la coppia asincrona (`frontend/app/set-builder/page.tsx:160` -> `/api/sets/generate-async`, `frontend/lib/api/sets.ts:6` -> `/api/sets/generate-status`); 0 copertura HTTP nei test (tutte le occorrenze `sets/generate` in `tests/` sono `-async`/`-status`; gli altri 20+ hit chiamano il **servizio** `generate_set`/`run_curated_generation` direttamente, non l'endpoint); grep ancorato `'/api/sets/generate"'` su frontend + tests + docs: 0 hit. Documentato in `docs/API.md:401`. **Non L1** perche' rimuovere un endpoint documentato e' una decisione di prodotto: e' plausibile che l'utente lo chiami via curl per una generazione sincrona senza polling. Se promosso, il servizio resta e va toccato solo il router
 - [L3] `app/routers/downloads.py:240` — `POST /api/downloads/search` (handler `search`) — **candidato alla promozione a rimozione: decisione utente al checkpoint di Fase 1.** A favore della rimozione: 0 call site nel frontend, e il wrapper `searchDownloads()` in `frontend/lib/api/downloads.ts` e' stato cancellato di proposito nel commit `a56b60e` ("feat(wishlist): link a slskd al posto della ricerca libera"), il cui messaggio dice "Rimosso il codice morto: ... wrapper API searchDownloads/downloadManual"; nella UI e' stato sostituito dal link esterno "Apri slskd" (`web_url` di `/api/slskd/status`); coperto solo da `tests/test_downloads_router.py:84,101,124,154`. Contro: l'utente ha rimosso i chiamanti **lasciando in piedi l'endpoint**, che e' un POST richiamabile a mano via curl su una app self-hosted, ed e' documentato per intero in `docs/API.md:722,751-755`. Regola del piano "in dubbio → L3": vince l'asimmetria del rischio. Da non confondere con `POST /api/downloads/candidates`, che e' vivo (`frontend/lib/api/downloads.ts:28`)
 - [L3] `app/routers/downloads.py:264` — `POST /api/downloads/manual` (handler `download_manual`) — **candidato alla promozione a rimozione: decisione utente al checkpoint di Fase 1**, inseparabile dal precedente (stesso commit `a56b60e` ha cancellato `downloadManual()`, stessa motivazione pro e contro; documentato in `docs/API.md:723,756-759`); 0 call site, coperto solo da `tests/test_downloads_router.py:161,176`. **Se promossi, cascata per il Task 3:** restano orfani `SearchIn` (`downloads.py:62`), `ManualDownloadIn` (`downloads.py:66`) e `start_manual_job()` (`app/services/soulseek_download_job.py:357`); **NON** rimuovere `_slskd_file` (`:98`) ne' `_candidate_out` (`:90`), che servono anche a `/track` (`:192`) e `/candidates` (`:166`); aggiornare `docs/API.md:722-758` e `docs/ARCHITECTURE.md:134,152-153` nella stessa passata (Task 11/12)
 
@@ -369,7 +393,7 @@ sono documentazione eseguibile di migrazioni passate o zavorra?):
 - [L3] `app/tools/cleanup_disk_first.py` — la docstring dice "una-tantum", `PROGRESS.md:1128` dice "One-off maintenance tool"; 0 importer, 0 test. Tutte le op che orchestra sono coperte in `tests/test_db_hygiene.py`
 - [L3] `app/tools/migrate_organize_db.py` — migrazione F2 (DB unico) gia' applicata; 0 importer, 1 test (`tests/test_migrate_organize_db.py:12`)
 - [L3] `app/tools/backfill_track_files.py:98` + `app/tools/merge_duplicate_tracks.py:70` — `_sessione()` con corpo identico (differisce solo la docstring). Estrazione meccanica in `app/tools/_common.py`, ma contingente: se i one-shot vengono cancellati il problema evapora
-- **Da NON toccare in `app/tools/`**: `clean_user_data.py` (unico tool documentato all'utente, `README.md:186`) e `merge_duplicate_tracks.py` (riparazione ricorrente, non one-shot; l'unico "riferimento" trovato dallo scan e' un commento in prosa a `backfill_track_files.py:101`)
+- [L3] **Da NON toccare in `app/tools/`**: `clean_user_data.py` (unico tool documentato all'utente, `README.md:186`) e `merge_duplicate_tracks.py` (riparazione ricorrente, non one-shot; l'unico "riferimento" trovato dallo scan e' un commento in prosa a `backfill_track_files.py:101`)
 
 Ridondanza architetturale profonda (fusione = decisione di design, esplicitamente fuori
 da una passata meccanica):
@@ -405,6 +429,7 @@ Endpoint senza chiamante ma non rimovibili d'ufficio:
 
 - [L3] `GET /api/rekordbox/pending` (`app/routers/rekordbox.py:15`) — 0 call site nel frontend (la UI legge lo stesso numero da `/api/analysis/overview` e `/api/pipeline`; `frontend/components/analysis/rekordbox-import-card.tsx:57` lo dice in un commento), coperto solo da `tests/test_rekordbox_api.py:64`, e `docs/API.md:31,83` ammette la duplicazione. **Non L1** perche' `docs/superpowers/specs/2026-07-12-analysis-page-design.md:114` decise esplicitamente di tenerlo, ed e' un `GET` banale richiamabile via curl: rimuoverlo ribalta una decisione presa
 - [L3] `POST /api/organize/analyze` (`app/organize/routers/analyze.py:11`) — 0 call site nel frontend (ho enumerato tutti i suffissi di `frontend/lib/organize/api.ts`: `/analyze` non c'e'), non documentato in nessun `.md`, coperto solo da `tests/organize/test_analyze_api.py:24,72,102`. Il **service** `analysis.recompute()` e' vivissimo (`organize/services/scan_job.py:71`, `integrity_job.py:45`): morto e' solo il wrapper HTTP. **Non L1** perche' e' in `organize/` ed e' un plausibile trigger manuale via curl per ricalcolare gli issue senza rifare la scansione del disco
+- [L3] `app/routers/sets.py:127` — `POST /api/sets/generate` (handler `generate`) — **stessa forma di `/api/organize/analyze`: wrapper HTTP morto sopra un servizio vivissimo.** 0 call site nel frontend, che usa solo la coppia asincrona (`frontend/app/set-builder/page.tsx:160` -> `/api/sets/generate-async`, `frontend/lib/api/sets.ts:6` -> `/api/sets/generate-status`); 0 copertura HTTP nei test (tutte le occorrenze `sets/generate` in `tests/` sono `-async`/`-status`; gli altri 20+ hit chiamano il **servizio** `generate_set`/`run_curated_generation` direttamente, non l'endpoint); grep ancorato `'/api/sets/generate"'` su frontend + tests + docs: 0 hit. Documentato in `docs/API.md:401`. **Non L1** perche' rimuovere un endpoint documentato e' una decisione di prodotto: e' plausibile che l'utente lo chiami via curl per una generazione sincrona senza polling. Se promosso, il servizio resta e va toccato solo il router
 - [L3] `app/routers/downloads.py:240` — `POST /api/downloads/search` (handler `search`) — **candidato alla promozione a rimozione: decisione utente al checkpoint di Fase 1.** A favore della rimozione: 0 call site nel frontend, e il wrapper `searchDownloads()` in `frontend/lib/api/downloads.ts` e' stato cancellato di proposito nel commit `a56b60e` ("feat(wishlist): link a slskd al posto della ricerca libera"), il cui messaggio dice "Rimosso il codice morto: ... wrapper API searchDownloads/downloadManual"; nella UI e' stato sostituito dal link esterno "Apri slskd" (`web_url` di `/api/slskd/status`); coperto solo da `tests/test_downloads_router.py:84,101,124,154`. Contro: l'utente ha rimosso i chiamanti **lasciando in piedi l'endpoint**, che e' un POST richiamabile a mano via curl su una app self-hosted, ed e' documentato per intero in `docs/API.md:722,751-755`. Regola del piano "in dubbio → L3": vince l'asimmetria del rischio. Da non confondere con `POST /api/downloads/candidates`, che e' vivo (`frontend/lib/api/downloads.ts:28`)
 - [L3] `app/routers/downloads.py:264` — `POST /api/downloads/manual` (handler `download_manual`) — **candidato alla promozione a rimozione: decisione utente al checkpoint di Fase 1**, inseparabile dal precedente (stesso commit `a56b60e` ha cancellato `downloadManual()`, stessa motivazione pro e contro; documentato in `docs/API.md:723,756-759`); 0 call site, coperto solo da `tests/test_downloads_router.py:161,176`. **Se promossi, cascata per il Task 3:** restano orfani `SearchIn` (`downloads.py:62`), `ManualDownloadIn` (`downloads.py:66`) e `start_manual_job()` (`app/services/soulseek_download_job.py:357`); **NON** rimuovere `_slskd_file` (`:98`) ne' `_candidate_out` (`:90`), che servono anche a `/track` (`:192`) e `/candidates` (`:166`); aggiornare `docs/API.md:722-758` e `docs/ARCHITECTURE.md:134,152-153` nella stessa passata (Task 11/12)
 
@@ -416,7 +441,7 @@ sono documentazione eseguibile di migrazioni passate o zavorra?):
 - [L3] `app/tools/cleanup_disk_first.py` — la docstring dice "una-tantum", `PROGRESS.md:1128` dice "One-off maintenance tool"; 0 importer, 0 test. Tutte le op che orchestra sono coperte in `tests/test_db_hygiene.py`
 - [L3] `app/tools/migrate_organize_db.py` — migrazione F2 (DB unico) gia' applicata; 0 importer, 1 test (`tests/test_migrate_organize_db.py:12`)
 - [L3] `app/tools/backfill_track_files.py:98` + `app/tools/merge_duplicate_tracks.py:70` — `_sessione()` con corpo identico (differisce solo la docstring). Estrazione meccanica in `app/tools/_common.py`, ma contingente: se i one-shot vengono cancellati il problema evapora
-- **Da NON toccare in `app/tools/`**: `clean_user_data.py` (unico tool documentato all'utente, `README.md:186`) e `merge_duplicate_tracks.py` (riparazione ricorrente, non one-shot; l'unico "riferimento" trovato dallo scan e' un commento in prosa a `backfill_track_files.py:101`)
+- [L3] **Da NON toccare in `app/tools/`**: `clean_user_data.py` (unico tool documentato all'utente, `README.md:186`) e `merge_duplicate_tracks.py` (riparazione ricorrente, non one-shot; l'unico "riferimento" trovato dallo scan e' un commento in prosa a `backfill_track_files.py:101`)
 
 Ridondanza architetturale profonda (fusione = decisione di design, esplicitamente fuori
 da una passata meccanica):
