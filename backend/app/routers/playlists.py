@@ -67,7 +67,7 @@ from app.schemas import (
 )
 from app.serializers import track_out
 from app.services import streaming_import_job
-from app.services.export_render import render_m3u8
+from app.services.export_render import fmt_duration, render_m3u8
 from app.services.gap_analysis import analyze_gaps
 from app.services.manual_import import import_manual_playlist
 from app.services.playlist_import import preview_liked_tracks
@@ -434,7 +434,7 @@ def export_playlist(
         for i, t in enumerate(tracks, start=1):
             label = f"{t.artist or '?'} — {t.title or '?'}"
             bpm = f"{t.bpm:.0f}" if t.bpm else "—"
-            dur = f"{t.duration_seconds // 60}:{t.duration_seconds % 60:02d}" if t.duration_seconds else "—"
+            dur = fmt_duration(t.duration_seconds)
             md.append(f"| {i} | {label} | {_genre(t) or '—'} | {bpm} | {t.camelot_key or '—'} | {dur} |")
         return PlainTextResponse("\n".join(md), media_type="text/markdown")
 

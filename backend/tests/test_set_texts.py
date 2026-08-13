@@ -87,6 +87,28 @@ def test_markdown_export_uses_mix_tip_not_raw_log(db):
     assert "beatmatch" in body or "pitch" in body or "mix armonico" in body  # consiglio di mix reale
 
 
+def test_markdown_export_formats_duration_with_fallback(db):
+    """Caratterizza la colonna Durata dell'export markdown: 'm:ss' quando presente,
+    fallback '—' quando duration_seconds è None (pin del comportamento condiviso
+    con l'export markdown delle playlist, vedi test_playlist_export.py)."""
+    from app.models import Setlist, SetlistTrack
+    from app.routers.sets import export
+    t1 = Track(source_type="spotify", title="Timed", artist="A", bpm=124.0,
+               camelot_key="8A", duration_seconds=200)
+    t2 = Track(source_type="spotify", title="NoDur", artist="B", bpm=125.0,
+               camelot_key="9A", duration_seconds=None)
+    db.add(t1); db.add(t2); db.flush()
+    sl = Setlist(name="SL")
+    db.add(sl); db.flush()
+    db.add(SetlistTrack(setlist_id=sl.id, track_id=t1.id, position=1))
+    db.add(SetlistTrack(setlist_id=sl.id, track_id=t2.id, position=2))
+    db.commit()
+
+    body = export(sl.id, format="markdown", db=db).body.decode()
+    assert "| 124 | 8A | 3:20 |" in body
+    assert "| 125 | 9A | — |" in body
+
+
 def test_generator_drops_fuzzy_duplicate(db):
     # stessa traccia in due grafie (spazi/case/trattini): il set non la mette due volte
     from app.services.set_generator import generate_set

@@ -39,7 +39,7 @@ from app.services.set_editor import (
     rename_set,
     replace_track,
 )
-from app.services.export_render import render_m3u8
+from app.services.export_render import fmt_duration, render_m3u8
 from app.services.scoring import classify_transition, mixing_tip, opening_track_label
 from app.services.set_generator import SetGenerationError, generate_set
 
@@ -159,12 +159,6 @@ def get_one(setlist_id: int, db: Session = Depends(get_db)):
     return setlist_out(setlist, get_language(db), db=db)
 
 
-def _fmt_dur(seconds: int | None) -> str:
-    if not seconds:
-        return "—"
-    return f"{seconds // 60}:{seconds % 60:02d}"
-
-
 @router.post("/{setlist_id}/export", response_class=PlainTextResponse)
 def export(
     setlist_id: int,
@@ -212,10 +206,10 @@ def export(
             prev = t
             md.append(
                 f"| {st.position} | {st.role or ''} | {label} | "
-                f"{t.bpm:.0f} | {t.camelot_key or '?'} | {_fmt_dur(t.duration_seconds)} | {note} |"
+                f"{t.bpm:.0f} | {t.camelot_key or '?'} | {fmt_duration(t.duration_seconds)} | {note} |"
                 if t.bpm else
                 f"| {st.position} | {st.role or ''} | {label} | — | "
-                f"{t.camelot_key or '?'} | {_fmt_dur(t.duration_seconds)} | {note} |"
+                f"{t.camelot_key or '?'} | {fmt_duration(t.duration_seconds)} | {note} |"
             )
         return PlainTextResponse("\n".join(md), media_type="text/markdown")
 

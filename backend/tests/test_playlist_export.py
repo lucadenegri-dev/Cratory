@@ -103,6 +103,25 @@ def test_export_markdown(db):
     assert "A — Uno" in body
 
 
+def test_export_markdown_formats_duration_with_fallback(db):
+    """Caratterizza la colonna Durata dell'export markdown: 'm:ss' quando presente,
+    fallback '—' quando duration_seconds è None (pin del comportamento condiviso
+    con l'export markdown dei set, vedi test_set_texts.py)."""
+    pl = _pl(db)
+    with_dur = Track(source_type="spotify", title="Timed", artist="A", genre="House",
+                      camelot_key="8A", duration_seconds=200)
+    no_dur = Track(source_type="spotify", title="NoDur", artist="A", genre="Techno",
+                    camelot_key="9A", duration_seconds=None)
+    db.add(with_dur); db.add(no_dur); db.flush()
+    add_track_to_playlist(db, with_dur, pl)
+    add_track_to_playlist(db, no_dur, pl)
+    db.commit()
+
+    body = _body(export_playlist(pl.id, "markdown", db))
+    assert "| House | — | 8A | 3:20 |" in body
+    assert "| Techno | — | 9A | — |" in body
+
+
 def test_export_formato_invalido_422():
     from fastapi.testclient import TestClient
     from app.db import get_db

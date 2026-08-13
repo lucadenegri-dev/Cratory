@@ -22,3 +22,9 @@ def render_m3u8(tracks: list[Track], total: int) -> str:
         m3u.append(f"#EXTINF:{secs},{t.artist or '?'} — {t.title or t.spotify_id or '?'}")
         m3u.append(t.local_path)
     return "\n".join(m3u)
+
+
+def fmt_duration(seconds: int | None) -> str:
+    if not seconds:
+        return "—"
+    return f"{seconds // 60}:{seconds % 60:02d}"
