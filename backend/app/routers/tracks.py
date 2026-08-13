@@ -9,7 +9,7 @@ from app.core.http_errors import api_error
 from app.services.file_search import path_within_roots, search_roots
 from app.db import get_db
 from app.integrations.local_files import read_cover
-from app.repositories import genres_overview, get_track, library_stats, list_tracks, update_track
+from app.repositories import FileTags, genres_overview, get_primary_file, get_track, library_stats, list_tracks, update_track
 from app.organize.services import apply_job, scan_job
 from app.schemas import (
     GenreCountOut,
@@ -25,6 +25,14 @@ from app.services.camelot import parse_camelot
 from app.services.genre_norm import normalize_genre
 
 router = APIRouter(prefix="/api", tags=["tracks"])
+
+
+def _detail_with_file_tags(db: Session, track) -> TrackDetailOut:
+    """Dettaglio con i tag del primary file (effettivi + file_artist/file_title)."""
+    pf = get_primary_file(db, track)
+    ft = FileTags(genre=pf.genre, album=pf.album, label=pf.label, year=pf.year,
+                  artist=pf.artist, title=pf.title) if pf else None
+    return track_detail_out(track, ft)
 
 
 @router.get("/tracks", response_model=TrackListOut)
@@ -72,7 +80,7 @@ def get_tracks(  # noqa: PLR0913
         in_playlist=in_playlist,
         incomplete_metadata=incomplete_metadata,
     )
-    return TrackListOut(total=total, items=[track_out(t) for t in rows])
+    return TrackListOut(total=total, items=[track_out(t, ft) for t, ft in rows])
 
 
 @router.get("/tracks/{track_id}", response_model=TrackDetailOut)
@@ -80,7 +88,7 @@ def get_track_detail(track_id: int, db: Session = Depends(get_db)):
     track = get_track(db, track_id)
     if track is None:
         raise api_error(404, "track_not_found", "Track not found")
-    return track_detail_out(track)
+    return _detail_with_file_tags(db, track)
 
 
 @router.get("/tracks/{track_id}/cover")
@@ -156,7 +164,7 @@ def patch_track(track_id: int, payload: TrackUpdateIn, db: Session = Depends(get
     if "genre" in data:
         data["genre"] = normalize_genre(data.get("genre"))
     track = update_track(db, track, data)
-    return track_detail_out(track)
+    return _detail_with_file_tags(db, track)
 
 
 @router.post("/tracks/{track_id}/link-file", response_model=TrackDetailOut)
@@ -170,7 +178,7 @@ def link_file(track_id: int, payload: TrackLinkFileIn, db: Session = Depends(get
     except LinkFileError as exc:
         raise api_error(400, "track_link_failed", f"Track link failed: {exc}",
                          reason=str(exc)) from exc
-    return track_detail_out(track)
+    return _detail_with_file_tags(db, track)
 
 
 @router.post("/library/index", status_code=202)

@@ -309,4 +309,4 @@ def test_import_popola_soundcloud_id_come_spotify(db):
     # il filtro has_soundcloud (repositories) ora trova la traccia importata
     total, found = list_tracks(db, has_soundcloud=True)
     assert total == 1
-    assert found[0].id == track.id
+    assert found[0][0].id == track.id

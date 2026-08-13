@@ -52,5 +52,5 @@ def test_lista_riflette_l_archiviazione(db):
     tracks.patch_track(t.id, TrackUpdateIn(archived=True), db)
     total_attive, attive = list_tracks(db, limit=0, offset=0)
     total_arch, archiviate = list_tracks(db, limit=0, offset=0, archived=True)
-    assert t.id not in [x.id for x in attive]
-    assert t.id in [x.id for x in archiviate]
+    assert t.id not in [x.id for x, _ in attive]
+    assert t.id in [x.id for x, _ in archiviate]

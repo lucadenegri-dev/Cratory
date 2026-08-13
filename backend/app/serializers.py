@@ -1,6 +1,7 @@
 """Conversione modelli ORM -> schemi Pydantic con campi derivati."""
 
 from app.models import Setlist, Track
+from app.repositories import FileTags
 from app.schemas import (
     AlternativeOut,
     SetlistOut,
@@ -17,7 +18,8 @@ def _spotify_url(track: Track) -> str | None:
     return f"https://open.spotify.com/track/{track.spotify_id}" if track.spotify_id else None
 
 
-def track_out(track: Track) -> TrackOut:
+def track_out(track: Track, file_tags: FileTags | None = None) -> TrackOut:
+    ft = file_tags or FileTags()
     return TrackOut(
         id=track.id,
         spotify_id=track.spotify_id,
@@ -26,14 +28,14 @@ def track_out(track: Track) -> TrackOut:
         platform=track.platform,
         title=track.title,
         artist=track.artist,
-        album=track.album,
-        genre=track.genre,
-        year=track.year,
+        album=ft.album if ft.album is not None else track.album,
+        genre=ft.genre if ft.genre is not None else track.genre,
+        year=ft.year if ft.year is not None else track.year,
         duration_seconds=track.duration_seconds,
         bpm=track.bpm,
         camelot_key=track.camelot_key,
         energy=track.energy,
-        label=track.label,
+        label=ft.label if ft.label is not None else track.label,
         status=track.status or "imported",
         url=track.url,
         isrc=track.isrc,
@@ -50,11 +52,18 @@ def track_out(track: Track) -> TrackOut:
         last_download_outcome=track.last_download_outcome,
         last_download_reason=track.last_download_reason,
         last_download_path=track.last_download_path,
+        primary_file_id=track.primary_file_id,
+        genre_from_file=ft.genre is not None,
+        album_from_file=ft.album is not None,
+        label_from_file=ft.label is not None,
+        year_from_file=ft.year is not None,
     )
 
 
-def track_detail_out(track: Track) -> TrackDetailOut:
-    return TrackDetailOut(**track_out(track).model_dump())
+def track_detail_out(track: Track, file_tags: FileTags | None = None) -> TrackDetailOut:
+    ft = file_tags or FileTags()
+    return TrackDetailOut(**track_out(track, file_tags).model_dump(),
+                          file_artist=ft.artist, file_title=ft.title)
 
 
 def setlist_out(setlist: Setlist, lang: str = "it") -> SetlistOut:

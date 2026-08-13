@@ -233,8 +233,10 @@ def test_lista_esclude_scartate_di_default(db):
     _mk(db, 1)
     _mk(db, 2, archived=True)
     total, rows = list_tracks(db)
+    rows = [t for t, _ in rows]
     assert total == 1 and rows[0].title == "T1"
     total, rows = list_tracks(db, archived=True)
+    rows = [t for t, _ in rows]
     assert total == 1 and rows[0].title == "T2"
 
 

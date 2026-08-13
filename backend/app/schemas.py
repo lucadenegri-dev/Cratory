@@ -50,6 +50,14 @@ class TrackOut(BaseModel):
     last_download_outcome: str | None = None
     last_download_reason: str | None = None
     last_download_path: str | None = None
+    # F-tag-effettivi: i campi genre/album/label/year qui sopra portano il
+    # valore EFFETTIVO (tag del primary file se non-NULL, altrimenti il valore
+    # streaming). I flag dicono da dove viene ogni valore.
+    primary_file_id: int | None = None
+    genre_from_file: bool = False
+    album_from_file: bool = False
+    label_from_file: bool = False
+    year_from_file: bool = False
 
 
 class TrackListOut(BaseModel):
@@ -58,7 +66,11 @@ class TrackListOut(BaseModel):
 
 
 class TrackDetailOut(TrackOut):
-    """Dettaglio traccia: oggi coincide con TrackOut (niente cue/beatgrid Rekordbox)."""
+    """Dettaglio traccia: aggiunge artist/title letti dal file (informativi,
+    l'identità resta quella della Track)."""
+
+    file_artist: str | None = None
+    file_title: str | None = None
 
 
 class TrackUpdateIn(BaseModel):

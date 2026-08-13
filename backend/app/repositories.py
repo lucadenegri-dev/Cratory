@@ -1,11 +1,13 @@
 """Query di accesso dati (layer repository)."""
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import DjSet, DjSetTrack, Playlist, PlaylistSyncEvent, Setlist, SetlistTrack, Track, playlist_tracks, utcnow
+from app.organize.models import AudioFile
 
 
 def ci_equals(column, value: str):
@@ -15,6 +17,36 @@ def ci_equals(column, value: str):
     escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return column.ilike(escaped, escape="\\")
 
+
+@dataclass(frozen=True)
+class FileTags:
+    """Tag letti dal primary file di una traccia (None = campo assente o
+    nessun file). Il fallback sui valori Track avviene nel serializer, che
+    da un None deriva anche il flag di provenienza."""
+
+    genre: str | None = None
+    album: str | None = None
+    label: str | None = None
+    year: int | None = None
+    artist: str | None = None
+    title: str | None = None
+
+
+def _join_primary_file(stmt):
+    """Aggancia il file rappresentante: da qui vengono i tag effettivi."""
+    return stmt.outerjoin(AudioFile, AudioFile.id == Track.primary_file_id)
+
+
+# Valore effettivo dei campi descrittivi: il tag del file vince, il valore
+# streaming della Track è il fallback. Riusato identico in select/filtri/sort
+# così ciò che si vede e ciò che si filtra coincidono sempre.
+_EFFECTIVE_TAGS = {
+    "genre": func.coalesce(AudioFile.genre, Track.genre),
+    "album": func.coalesce(AudioFile.album, Track.album),
+    "label": func.coalesce(AudioFile.label, Track.label),
+    "year": func.coalesce(AudioFile.year, Track.year),
+}
+
 # Colonne ordinabili dalla libreria (header cliccabili nel frontend).
 _SORT_COLUMNS = {
     "title": Track.title,
@@ -23,9 +55,9 @@ _SORT_COLUMNS = {
     "bpm": Track.bpm,
     "key": Track.camelot_key,
     "energy": Track.energy,
-    "genre": Track.genre,
+    "genre": _EFFECTIVE_TAGS["genre"],
     "duration": Track.duration_seconds,
-    "year": Track.year,
+    "year": _EFFECTIVE_TAGS["year"],
     "status": Track.status,
     "rating": Track.rating,
     "added_at": Track.added_at,
@@ -60,11 +92,11 @@ def _apply_track_filters(  # noqa: PLR0913
     if title:
         stmt = stmt.where(Track.title.ilike(f"%{title}%"))
     if album:
-        stmt = stmt.where(Track.album.ilike(f"%{album}%"))
+        stmt = stmt.where(_EFFECTIVE_TAGS["album"].ilike(f"%{album}%"))
     if genre:
-        stmt = stmt.where(Track.genre.ilike(f"%{genre}%"))
+        stmt = stmt.where(_EFFECTIVE_TAGS["genre"].ilike(f"%{genre}%"))
     if label:
-        stmt = stmt.where(Track.label == label)  # match esatto: drill-down dall'etichetta
+        stmt = stmt.where(_EFFECTIVE_TAGS["label"] == label)  # match esatto: drill-down dall'etichetta
     if source:
         stmt = stmt.where(Track.source_type == source)
     if status:
@@ -113,9 +145,12 @@ def _apply_track_filters(  # noqa: PLR0913
 def list_tracks(
     db: Session, *, limit: int = 100, offset: int = 0,
     sort: str | None = None, order: str = "asc", **filters,
-):
-    stmt = _apply_track_filters(select(Track), **filters)
-    total = db.scalar(select(func.count()).select_from(_apply_track_filters(select(Track.id), **filters).subquery()))
+) -> tuple[int, list[tuple[Track, FileTags]]]:
+    file_cols = (AudioFile.genre, AudioFile.album, AudioFile.label,
+                 AudioFile.year, AudioFile.artist, AudioFile.title)
+    stmt = _apply_track_filters(_join_primary_file(select(Track, *file_cols)), **filters)
+    total = db.scalar(select(func.count()).select_from(
+        _apply_track_filters(_join_primary_file(select(Track.id)), **filters).subquery()))
 
     column = _SORT_COLUMNS.get(sort or "")
     if column is not None:
@@ -125,10 +160,13 @@ def list_tracks(
     else:
         order_by = (Track.artist.is_(None), Track.artist, Track.title)
 
-    rows = db.scalars(
+    result = db.execute(
         # limit=0 -> None: nessun limite (tutte le tracce, per la vista griglia).
         stmt.options(selectinload(Track.playlists)).order_by(*order_by).limit(limit or None).offset(offset)
     ).all()
+    rows = [(row[0], FileTags(genre=row[1], album=row[2], label=row[3],
+                              year=row[4], artist=row[5], title=row[6]))
+            for row in result]
     return total or 0, rows
 
 
@@ -136,6 +174,13 @@ def get_track(db: Session, track_id: int) -> Track | None:
     return db.scalar(
         select(Track).options(selectinload(Track.playlists)).where(Track.id == track_id)
     )
+
+
+def get_primary_file(db: Session, track: Track) -> AudioFile | None:
+    """Il file rappresentante della traccia (fonte dei tag effettivi)."""
+    if not track.primary_file_id:
+        return None
+    return db.get(AudioFile, track.primary_file_id)
 
 
 def update_track(db: Session, track: Track, data: dict) -> Track:
