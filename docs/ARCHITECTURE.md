@@ -192,6 +192,13 @@ mutates them** — tags, renaming and organization remain the Organize section's
   tags fill only the empty identity fields, read-only (never overwrite
   BPM/key or manual corrections; Cratory never writes to the file). `label` too
   (ID3 `TPUB` / Vorbis `LABEL`) is read from the file and filled only if absent.
+  This one-time backfill at index time is separate from — and superseded, when a
+  file is owned, by — the **query-time effective value**: `genre`/`album`/`label`/`year`
+  are resolved live as `COALESCE(audio_file.field, track.field)` over the join on
+  `tracks.primary_file_id` (`repositories._EFFECTIVE_TAGS`), so a later edit to the
+  file's tags in Organize is reflected everywhere without touching the `Track` row or
+  re-running indexing. `artist`/`title` never follow the file this way — they stay the
+  streaming identity used for de-duplication and matching.
   The scan **always ignores hidden folders and files** (name starting with `.`, e.g.
   `.quarantine`, `.DS_Store`, `.git`): they are not library content, neither for the
   count nor for indexing. Incremental scan: a file with unchanged path+mtime+size

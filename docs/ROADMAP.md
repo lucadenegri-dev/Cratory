@@ -81,6 +81,17 @@ services · Organize) with inline actions on the service rows (Spotify OAuth, sl
 login, SoundCloud username, AcoustID fingerprint) — the standalone Soulseek/SoundCloud
 cards and Organize's duplicate provider list are gone.
 
+**Library shows the file's effective tags (2026-08-13):** for owned tracks, `genre`,
+`album`, `label` and `year` now resolve at query time to the physical file's tags first,
+falling back to the streaming value (COALESCE over `tracks.primary_file_id` -> `audio_file`,
+no derived column); `artist`/`title` stay the streaming identity. The rule applies
+everywhere those fields are shown or filtered — Library list/detail, playlists, set
+detail/alternatives, transitions, downloads, discovery, CSV/Markdown export, the genres
+overview — so what the user sees always matches what they filter on. `TrackEditModal`
+saves those four fields to the file via Organize's single writer
+(`POST /api/organize/files/{id}/tags`) for owned tracks, everything else via the usual
+track PATCH. The two sections cross-link both ways: track detail -> FILES row and back.
+
 Full chronological history lives in [PROGRESS.md](../PROGRESS.md).
 
 ## Product direction

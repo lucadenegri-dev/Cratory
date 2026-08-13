@@ -363,11 +363,13 @@ POST /api/organize/files/{file_id}/tags
 ```
 
 `GET /api/organize/files` lists the audio files under `LIBRARY_ROOT`/inbox
-(`FileRow[]`, filters/pagination unchanged). `FileRow.track_id` is the `Track` the
-file is linked to as `primary_file_id`, if any (`null` for inbox files or files that
-are not any track's primary file): the FILES page uses it to link a row to the
-matching track detail page; the reverse cross-link (track detail -> FILES) opens
-`/organize/files?q=<file path>`.
+(`FileRow[]`). `status` filters by file status (default `present`; accepts a
+comma-separated list, e.g. `present,missing`, to include more than one). `q` is a
+case-insensitive substring match on path/artist/title. `FileRow.track_id` is the track
+this file belongs to (`AudioFile.track_id`, `null` for files not linked to any track):
+the FILES page uses it to link a row to the matching track detail page; the reverse
+cross-link (track detail -> FILES) opens `/organize/files?q=<file path>&status=present,missing`
+so the row is found even if the file went missing from disk since the last scan.
 
 `POST /api/organize/files/{file_id}/tags` is the **single writer of text tags** on a
 file (`FileTagsUpdate`, partial update: only the fields present in the body are

@@ -44,8 +44,11 @@ BPM + genre — it is not sourced from any provider and cannot be edited by hand
 - Import BPM and Camelot key from a Rekordbox collection XML export
   (`POST /api/rekordbox/import`), matching owned tracks by path, then audio hash,
   then artist/title — never overwriting an existing value.
-- Manual corrections for BPM, Camelot key, genre and label (manual wins; `energy` is
-  derived only and not directly editable).
+- Manual corrections for BPM and Camelot key (manual wins; `energy` is derived only
+  and not directly editable). Genre, album, label and year follow the same edit form,
+  but for an owned track they save to the physical file's tags through Organize (the
+  single writer) instead of a database field — Library shows and filters on that
+  effective value, file first, streaming as the fallback.
 - Generate sets with a deterministic engine plus optional, validated AI.
 - Classify transitions as technically safe, creative risk, or good reset.
 - Discovery by taste: crate-dig by genre/label ("Scava"), switching between two
