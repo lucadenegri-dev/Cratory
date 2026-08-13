@@ -503,4 +503,120 @@ Schema DB (intoccabile per definizione nel piano):
 
 ## Riepiloghi checkpoint
 
-(vuota — compilata dai Task 5, 8 e 14 con i riepiloghi di checkpoint)
+### Checkpoint Fase 1 (Task 5)
+
+**Rimosso** — 13 simboli L1 (Task 3), doppia conferma su ciascuno (grep repo-wide + AST),
+raggruppabili in due famiglie:
+
+- *Import inutilizzati* (8, in 4 file): `Session`, `LocalFilesError`,
+  `identity_normalize`, `import_playlist` in `local_import.py`; `field` in
+  `mix_identify.py`; `settings` in `pipeline.py`; `DiscogsMetaClient` e
+  `MusicBrainzProvider` a livello di modulo in `organize/services/text_providers.py`
+  (i provider restano vivi, iniettati dentro le funzioni altrove).
+- *Funzioni/classi morte con cascata* (5 punti d'ingresso che trascinano ~8 simboli
+  orfani): `LocalDirEntry` (il suo consumatore frontend era gia' sparito);
+  `_safe_library_context()` (chiamante `ai_agent.py` non esiste piu') + import orfano
+  `library_stats`; `build_normalized()` (chiamante storico rimosso) + cascata
+  `PLATFORM`, `NormalizedTrack`, `read_tags`, `audio_hash`, `parse_line` +
+  `import logging`/`logger` gia' morti indipendentemente; `backfill_energy()`
+  (coperta solo da test che testavano lei sola); `best_for_auto()` (wrapper scavalcato
+  in produzione) + import orfano `Session` in `ai_curation.py`. Nessun gemello vivo
+  toccato (`PLATFORM` sopravvive in `library_index.py`, `read_tags` ha un gemello
+  indipendente in `organize/`).
+
+Effetto sui test: **1946 → 1944**. Due test cancellati perche' coprivano solo codice
+morto (`test_backfill_only_untouched_owned_tracks`,
+`test_best_for_auto_picks_strong_lossless`); altri quattro riscritti contro
+`rank_candidates` direttamente, stessa copertura comportamentale. Da dire con
+chiarezza: uno di questi (`test_best_for_auto_returns_none_below_threshold`) e' stato
+**inizialmente cancellato per errore**, con una motivazione sbagliata (si credeva
+coperto altrove — non lo era), poi **ripristinato in forma riscritta**
+(`test_nome_plausibile_ma_imperfetto_escluso`), corretto in review.
+
+**Consolidato** — 5 delle 6 duplicazioni L2 fuse (Task 4), nessuna tocca `organize/`:
+
+1. Render M3U8 (sets.py + playlists.py, output byte-identico) →
+   `app/services/export_render.py::render_m3u8()`. Coverage esistente sufficiente,
+   nessun test nuovo.
+2. `_http_error(SpotifyError)` byte-identico (playlists.py + spotify.py) →
+   `spotify_http_error()` in `app/core/http_errors.py`. Nessun test router
+   preesistente copriva la mappatura: **6 test** di caratterizzazione (3 codici x 2
+   siti) scritti e verificati verdi PRIMA del merge.
+3. `_label`/`_track_label` (auto_link.py + soulseek_download_job.py) →
+   `app/services/track_label.py::track_label()`. **1 test** aggiunto (il sito
+   auto_link asseriva solo `hit`, mai il campo `label`).
+4. `_spawn(fn)` (audio_analysis_job.py + streaming_import_job.py) →
+   `app/services/job_spawn.py::spawn()`. Nessun test nuovo: gia' monkeypatchato dai
+   test esistenti, verificato che l'import preserva la monkeypatchabilita'.
+5. `_fmt_dur` (sets.py) esteso anche al ramo markdown di playlists.py → stesso modulo,
+   `export_render.py::fmt_duration()`. **2 test** aggiunti (uno per sito): la coverage
+   precedente non asseriva mai la colonna Durata formattata.
+
+Totale **9 test di caratterizzazione** (6+1+2), tutti scritti e verificati verdi prima
+del rispettivo merge. Effetto sui test: **1944 → 1953**.
+
+Un sesto finding, `_norm` (discovery_dig.py + manual_import.py), e' stato
+**retrocesso a L3, non fuso**: la sua stessa condizione dichiarata ("fondere solo se
+il Task 4 crea comunque un modulo di util testuali") non si e' avverata — nessuno dei
+4 moduli creati per gli altri 5 finding e' un modulo di normalizzazione testuale
+(`export_render` = formattazione output, `track_label` = etichetta UI, `job_spawn` =
+avvio thread, l'estensione di `http_errors` = mappatura eccezioni). Gli altri 7 helper
+`_norm`-simili nel backend restano intoccati: sono semanticamente diversi, non
+ridondanti.
+
+**Segnalato** — lista L3, organizzata per tipo di decisione:
+
+*a) Pronti per un si'/no sulla rimozione* (wrapper HTTP morti sopra servizi vivi o
+funzionalita' gia' scollegata dal frontend):
+- `POST /api/downloads/search` + `POST /api/downloads/manual` — lo stesso commit
+  (`a56b60e`) ha gia' cancellato i wrapper frontend `searchDownloads()`/
+  `downloadManual()`, sostituiti dal link "Apri slskd", con messaggio di commit che
+  dice esplicitamente "codice morto". A favore della rimozione: 0 call site, l'intento
+  di dismissione e' scritto nero su bianco nel commit che ha tolto i chiamanti. Contro:
+  restano POST richiamabili via curl su un'app self-hosted, documentati per intero in
+  `docs/API.md`. Se rimossi: cascata su `SearchIn`, `ManualDownloadIn`,
+  `start_manual_job()` — **non** toccare `_slskd_file`/`_candidate_out` (condivisi con
+  `/track` e `/candidates`); aggiornare `docs/API.md` e `docs/ARCHITECTURE.md` nella
+  stessa passata.
+- `POST /api/sets/generate` — stessa forma: wrapper HTTP morto (0 call site, 0
+  copertura HTTP diretta nei test — tutte le occorrenze nei test chiamano il servizio,
+  non l'endpoint) sopra `generate_set`/`run_curated_generation`, vivissimi altrove. Il
+  frontend usa solo la coppia asincrona (`/sets/generate-async` + `-status`).
+  Documentato in `docs/API.md:401`. Contro: e' plausibile un uso via curl per
+  generazione sincrona senza polling. Se rimosso, il servizio resta: si tocca solo il
+  router.
+
+*b) Segnalati ma non promuovibili, per un vincolo gia' deciso altrove*:
+- `GET /api/rekordbox/pending` — 0 call site, ma tenuto per una decisione di design
+  esplicita e pregressa (spec 2026-07-12).
+- `POST /api/organize/analyze` — 0 call site, wrapper morto sopra
+  `analysis.recompute()` (vivissimo), ma sta in `organize/` (fuori scope L1) ed e' un
+  plausibile trigger manuale via curl.
+
+*c) Duplicazione core <-> organize/* (il piano vieta L2 dentro `organize/`: qui solo
+segnalazione, unificare e' una decisione di prodotto):
+- `genre_norm.py` e `native_picker.py` — copie byte-identiche, entrambe vive.
+- `core/http_errors.py` vs `organize/core/http_errors.py` — la versione organize e' un
+  superset (parametro `headers`).
+- `integrations/_http.py` — due fork divergenti (core ha il workaround TLS 1.2,
+  organize ha in piu' `post_with_retries`): nessuno e' sottoinsieme dell'altro.
+- `/api/files/pick*` vs `/api/organize/picker/*` — quattro endpoint quasi-verbatim,
+  entrambe le coppie vive e chiamate dal frontend.
+- `/api/settings/language` vs `/api/organize/settings/language` — due store di lingua
+  indipendenti con default diversi (it vs en); i client organize
+  (`getLanguage`/`setLanguage`) hanno 0 chiamanti nel frontend.
+
+*d) Ridondanza piu' profonda, note per dopo* (fuori da una passata meccanica):
+- 5 macchine a stati di job scritte a mano, ciascuna con disciplina di
+  lock/payload/start-guard diversa — solo `_spawn` estratto come L2.
+- Idioma "carica o 404" ripetuto ~40 volte nei router — il fix idiomatico (`Depends`)
+  romperebbe i test che chiamano gli handler direttamente.
+- `file_tags_for_tracks(db,[x.id]).get(x.id)` ripetuto 5 volte — manca un wrapper,
+  meccanico ma cosmetico.
+- Script one-shot in `app/tools/` (`align_genre_from_file`, `backfill_track_files`,
+  `cleanup_disk_first`, `migrate_organize_db`) — 0 importer, migrazioni gia'
+  applicate: documentazione eseguibile o zavorra? Decisione utente. **Non** toccare
+  `clean_user_data.py` (documentato all'utente in README) ne' `merge_duplicate_tracks.py`
+  (riparazione ricorrente, non one-shot).
+- ~100 colonne SQLAlchemy/campi Pydantic mai letti dal backend — schema DB intoccabile
+  per definizione nel piano, solo segnalazione.
