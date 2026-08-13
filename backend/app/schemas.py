@@ -466,13 +466,6 @@ class SoundCloudLikedSelectedRequest(BaseModel):
     limit: int | None = None
 
 
-# --- Import locale -----------------------------------------------------------
-
-
-class LocalDirEntry(BaseModel):
-    name: str
-    path: str
-    audio_file_count: int = 0
 # --- Etichette discografiche -------------------------------------------------
 
 
