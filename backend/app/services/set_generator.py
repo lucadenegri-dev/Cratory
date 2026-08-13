@@ -13,6 +13,7 @@ import statistics
 from sqlalchemy.orm import Session
 
 from app.models import Setlist, SetlistTrack, Track
+from app.repositories import effective_genres_for_tracks
 from app.schemas import SetGenerationRequest
 from app.services.camelot import camelot_compatibility
 from app.services.candidate_engine import select_candidates
@@ -22,6 +23,7 @@ from app.services.scoring import (
     TransitionScore,
     energy_progression_score,
     genre_families_of,
+    genre_of,
     genre_similarity_score,
     risk_from_score,
     score_transition,
@@ -65,21 +67,23 @@ def _near_reset(progress: float, points: tuple[float, ...]) -> bool:
     return any(abs(progress - p) <= RESET_WINDOW for p in points)
 
 
-def _is_reset(prev: Track, cand: Track) -> bool:
+def _is_reset(prev: Track, cand: Track,
+              genre_map: dict[int, str | None] | None = None) -> bool:
     """Stacco netto voluto: forte calo di energia o cambio di genere."""
     if (prev.energy is not None and cand.energy is not None
             and cand.energy - prev.energy <= -RESET_ENERGY_DROP):
         return True
-    return bool(prev.genre and cand.genre
-                and genre_similarity_score(prev.genre, cand.genre) < RESET_GENRE_SIMILARITY)
+    pg, cg = genre_of(prev, genre_map), genre_of(cand, genre_map)
+    return bool(pg and cg and genre_similarity_score(pg, cg) < RESET_GENRE_SIMILARITY)
 
 
-def _is_novel(prev: Track, cand: Track) -> bool:
+def _is_novel(prev: Track, cand: Track,
+             genre_map: dict[int, str | None] | None = None) -> bool:
     """Esplorazione: cambio di tonalità o di genere rispetto al brano precedente."""
     if prev.camelot_key and cand.camelot_key and prev.camelot_key != cand.camelot_key:
         return True
-    return bool(prev.genre and cand.genre
-                and genre_similarity_score(prev.genre, cand.genre) < RESET_GENRE_SIMILARITY + 15)
+    pg, cg = genre_of(prev, genre_map), genre_of(cand, genre_map)
+    return bool(pg and cg and genre_similarity_score(pg, cg) < RESET_GENRE_SIMILARITY + 15)
 
 
 class SetGenerationError(Exception):
@@ -164,6 +168,7 @@ def _candidate_score(
     peak_window: tuple[float, float] | None = None,
     mood_scores: dict[int, int] | None = None,
     genre_counts: dict[str, int] | None = None,
+    genre_map: dict[int, str | None] | None = None,
 ) -> tuple[float, TransitionScore]:
     ts = score_transition(prev, cand)
     transition_pts = float(ts.score)
@@ -179,7 +184,9 @@ def _candidate_score(
         total += feature_fit * _FEATURE_WEIGHT
     # Coerenza di genere: sempre attiva (50 = neutro quando il dato manca), così
     # una traccia senza genere non batte né perde contro una coerente per assenza.
-    total += (float(genre_similarity_score(prev.genre, cand.genre))
+    # I4: genere EFFETTIVO (genre_map se fornita, altrimenti Track.genre) — lo
+    # stesso valore che ha ammesso `cand` nel pool del candidate engine.
+    total += (float(genre_similarity_score(genre_of(prev, genre_map), genre_of(cand, genre_map)))
               * _GENRE_WEIGHT * profile.genre_coherence)
     # Aderenza all'arco di energia (termine dedicato): tira le tracce verso il target
     # di energia della posizione, così l'arco della strategia modella il set.
@@ -194,9 +201,10 @@ def _candidate_score(
     if artist_key and artist_counts.get(artist_key, 0) > 0:
         total -= 6.0 * artist_counts[artist_key]  # leggera spinta alla varieta'
     # Carattere della strategia: reset premiato nei punti giusti, novità per l'esplorazione.
-    if profile.reset_bonus and _near_reset(progress, profile.reset_points) and _is_reset(prev, cand):
+    if (profile.reset_bonus and _near_reset(progress, profile.reset_points)
+            and _is_reset(prev, cand, genre_map)):
         total += profile.reset_bonus
-    if profile.novelty_bonus and _is_novel(prev, cand):
+    if profile.novelty_bonus and _is_novel(prev, cand, genre_map):
         total += profile.novelty_bonus
     # Convergenza verso l'anchor in arrivo: la vicinanza (misurata come una
     # transizione verso l'anchor) pesa sempre di piu' man mano che il segmento
@@ -207,7 +215,7 @@ def _candidate_score(
     # Piano di genere del segmento: appartenere alla famiglia assegnata premia,
     # genere ignoto resta neutro, famiglia diversa non guadagna nulla.
     if plan_family is not None:
-        families = genre_families_of(cand.genre)
+        families = genre_families_of(genre_of(cand, genre_map))
         fit = 100.0 if plan_family in families else (50.0 if not families else 0.0)
         total += fit * _GENRE_PLAN_WEIGHT * profile.genre_coherence
     # Riserva delle bombe: spenderle lontano dal peak costa.
@@ -220,9 +228,10 @@ def _candidate_score(
     # Copertura dei generi richiesti (presence-only): quando ci sono generi espliciti
     # (form o compilati dall'AI), spingi quelli ancora assenti dal set, con boost
     # decrescente col numero di occorrenze gia' scelte. Senza req.genres e' inerte.
-    if req.genres and cand.genre:
+    cand_genre_eff = genre_of(cand, genre_map)
+    if req.genres and cand_genre_eff:
         wanted = {g.strip().lower() for g in req.genres if g and g.strip()}
-        cand_genre = cand.genre.strip().lower()
+        cand_genre = cand_genre_eff.strip().lower()
         if cand_genre in wanted:
             seen = (genre_counts or {}).get(cand_genre, 0)
             total += _REQUESTED_GENRE_BONUS / (1 + seen)
@@ -306,6 +315,7 @@ def _beam_search_span(
     peak_window: tuple[float, float] | None = None,
     mood_scores: dict[int, int] | None = None,
     genre_counts: dict[str, int] | None = None,
+    genre_map: dict[int, str | None] | None = None,
 ) -> list[tuple[Track, TransitionScore]]:
     """Riempe uno span di set col beam search; ritorna i soli filler (opener escluso).
 
@@ -347,7 +357,8 @@ def _beam_search_span(
                                desired_energy, converge_to=converge_to,
                                converge_ramp=ramp, plan_family=plan_family,
                                reserved_ids=reserved_ids, peak_window=peak_window,
-                               mood_scores=mood_scores, genre_counts=b["genres"]), t)
+                               mood_scores=mood_scores, genre_counts=b["genres"],
+                               genre_map=genre_map), t)
              for t in eligible),
             key=lambda it: (it[0][0], it[1].id), reverse=True,
         )[:BEAM_EXPANSIONS]
@@ -357,8 +368,9 @@ def _beam_search_span(
             if t.artist:
                 arts[t.artist.lower()] = arts.get(t.artist.lower(), 0) + 1
             genres = dict(b["genres"])
-            if t.genre:
-                gk = t.genre.strip().lower()
+            t_genre = genre_of(t, genre_map)
+            if t_genre:
+                gk = t_genre.strip().lower()
                 genres[gk] = genres.get(gk, 0) + 1
             secs = b["secs"] + (t.duration_seconds or 0)
             children.append({
@@ -392,12 +404,18 @@ def _beam_search_span(
 
 def generate_set(db: Session, req: SetGenerationRequest, *,
                  candidates: list[Track] | None = None,
+                 genre_map: dict[int, str | None] | None = None,
                  mood_scores: dict[int, int] | None = None,
                  anchor_hints: dict[str, list[int]] | None = None) -> Setlist:
     # candidates gia' filtrate (la curatela le ha selezionate una volta): evita
     # una seconda select_candidates identica. None = calcola qui, come sempre.
+    # I4: genre_map (id-traccia -> genere effettivo) viaggia con candidates. Se
+    # arrivano gia' pronte ma senza mappa, la risolviamo qui in blocco (una sola
+    # query) invece di lasciare la catena a valle ripiegare su Track.genre.
     if candidates is None:
-        candidates = select_candidates(db, req)
+        candidates, genre_map = select_candidates(db, req)
+    elif genre_map is None:
+        genre_map = effective_genres_for_tracks(db, [t.id for t in candidates])
     if len(candidates) < 3:
         if req.owned_only:
             raise SetGenerationError(
@@ -417,16 +435,18 @@ def generate_set(db: Session, req: SetGenerationRequest, *,
     target_seconds = req.target_duration_minutes * 60
     profile = strategy_profile(req.strategy)
     skeleton = build_skeleton(candidates, req, profile, start_bpm, end_bpm, target_seconds,
-                              mood_scores=mood_scores, anchor_hints=anchor_hints)
+                              mood_scores=mood_scores, anchor_hints=anchor_hints,
+                              genre_map=genre_map)
     peak_at: int | None = None
     if skeleton is None:
         first = _pick_first(candidates, req, start_bpm)
+        first_genre = genre_of(first, genre_map)
         chosen = [(first, None)] + _beam_search_span(
             first, candidates, req, profile, start_bpm, end_bpm, target_seconds,
             elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds,
             artist_counts={first.artist.lower(): 1} if first.artist else None,
-            genre_counts={first.genre.strip().lower(): 1} if first.genre else None,
-            mood_scores=mood_scores)
+            genre_counts={first_genre.strip().lower(): 1} if first_genre else None,
+            mood_scores=mood_scores, genre_map=genre_map)
     else:
         # Fase 2: riempi i segmenti tra un anchor e il successivo. Gli anchor
         # contano da subito in used/artist_counts, cosi' i filler non li rubano
@@ -443,8 +463,9 @@ def generate_set(db: Session, req: SetGenerationRequest, *,
             if a.track.artist:
                 key = a.track.artist.lower()
                 arts[key] = arts.get(key, 0) + 1
-            if a.track.genre:
-                gk = a.track.genre.strip().lower()
+            ag = genre_of(a.track, genre_map)
+            if ag:
+                gk = ag.strip().lower()
                 genres_seen[gk] = genres_seen.get(gk, 0) + 1
         secs = opening.track.duration_seconds or 0
         for seg in skeleton.segments:
@@ -455,14 +476,15 @@ def generate_set(db: Session, req: SetGenerationRequest, *,
                 converge_to=seg.end_anchor.track, used=used, artist_counts=arts,
                 plan_family=seg.family, reserved_ids=skeleton.reserved_ids,
                 peak_window=skeleton.peak_window, mood_scores=mood_scores,
-                genre_counts=genres_seen)
+                genre_counts=genres_seen, genre_map=genre_map)
             for t, _ in fillers:
                 used.add(t.id)
                 if t.artist:
                     key = t.artist.lower()
                     arts[key] = arts.get(key, 0) + 1
-                if t.genre:
-                    gk = t.genre.strip().lower()
+                tg = genre_of(t, genre_map)
+                if tg:
+                    gk = tg.strip().lower()
                     genres_seen[gk] = genres_seen.get(gk, 0) + 1
                 secs += t.duration_seconds or 0
             chosen.extend(fillers)

@@ -287,8 +287,8 @@ def test_candidate_engine_filtra_sul_genere_effettivo(db, make_owned):
                              "bpm": 128.0, "camelot_key": "8A",
                              "duration_seconds": 300},
                    file_kw={"genre": "Techno"})
-    pool = select_candidates(db, SetGenerationRequest(genres=["Techno"]))
+    pool, _ = select_candidates(db, SetGenerationRequest(genres=["Techno"]))
     assert [x.id for x in pool] == [t.id]
     # ...e il genere streaming, ora mascherato dal tag file, non matcha più:
-    pool = select_candidates(db, SetGenerationRequest(genres=["Pop"]))
+    pool, _ = select_candidates(db, SetGenerationRequest(genres=["Pop"]))
     assert pool == []

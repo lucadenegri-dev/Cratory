@@ -36,7 +36,7 @@ def test_candidates_filtered_by_genres_exact_match(db):
     _t(db, "Acid Techno")  # match ESATTO: non deve entrare filtrando "Techno"
     db.commit()
 
-    cands = select_candidates(db, SetGenerationRequest(genres=["Techno"], owned_only=True))
+    cands, _ = select_candidates(db, SetGenerationRequest(genres=["Techno"], owned_only=True))
     assert {t.genre for t in cands} == {"Techno"}
     assert len(cands) == 2
 
@@ -48,7 +48,7 @@ def test_candidates_multi_genre_union(db):
     _t(db, "Ambient")
     db.commit()
 
-    cands = select_candidates(db, SetGenerationRequest(genres=["Techno", "Electro"], owned_only=True))
+    cands, _ = select_candidates(db, SetGenerationRequest(genres=["Techno", "Electro"], owned_only=True))
     assert {t.genre for t in cands} == {"Techno", "Electro"}
 
 
@@ -57,5 +57,5 @@ def test_no_genre_filter_keeps_all(db):
     _t(db, "Techno")
     _t(db, "House")
     db.commit()
-    cands = select_candidates(db, SetGenerationRequest(genres=[], owned_only=True))
+    cands, _ = select_candidates(db, SetGenerationRequest(genres=[], owned_only=True))
     assert len(cands) == 2

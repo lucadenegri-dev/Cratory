@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 
 from app.models import Setlist, Track
-from app.repositories import FileTags, file_tags_for_tracks
+from app.repositories import FileTags, effective_genres_for_tracks, file_tags_for_tracks
 from app.schemas import (
     AlternativeOut,
     SetlistOut,
@@ -76,12 +76,17 @@ def setlist_out(setlist: Setlist, lang: str = "it", db: Session | None = None) -
     # opzionale: i chiamanti che non lo passano restano col fallback streaming,
     # com'era prima).
     ft_map = file_tags_for_tracks(db, [st.track_id for st in setlist.tracks]) if db is not None else {}
+    # I4: la classificazione del reset (classify_transition) deve leggere lo
+    # STESSO genere effettivo mostrato in `track` qui sotto, non lo streaming
+    # grezzo: altrimenti un set con quel brano "Progressive House" solo sul file
+    # può etichettare come reset una transizione che non lo è (o viceversa).
+    genre_map = effective_genres_for_tracks(db, [st.track_id for st in setlist.tracks]) if db is not None else None
     items = []
     prev = None
     for st in setlist.tracks:
         # score=transition_score persistito: evita di ricomputare score_transition
         # per ogni riga del set (None su set storici -> fallback interno).
-        cls = (classify_transition(prev, st.track, lang, score=st.transition_score)
+        cls = (classify_transition(prev, st.track, lang, score=st.transition_score, genre_map=genre_map)
                if prev is not None else None)
         items.append(SetlistTrackOut(
             position=st.position,

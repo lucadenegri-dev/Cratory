@@ -8,8 +8,9 @@ import unicodedata
 from sqlalchemy.orm import Session
 
 from app.models import Track
-from app.repositories import all_playable_tracks, effective_genre, tracks_for_playlist
+from app.repositories import all_playable_tracks, effective_genres_for_tracks, tracks_for_playlist
 from app.schemas import SetGenerationRequest
+from app.services.scoring import genre_of
 
 MIN_TRACK_SECONDS = 120  # esclude sample/oneshot del sampler Rekordbox
 BPM_WINDOW_TOLERANCE = 12.0
@@ -48,13 +49,25 @@ def _dedupe_fuzzy(tracks: list[Track]) -> list[Track]:
     return result
 
 
-def select_candidates(db: Session, req: SetGenerationRequest) -> list[Track]:
+def select_candidates(db: Session, req: SetGenerationRequest,
+                      ) -> tuple[list[Track], dict[int, str | None]]:
+    """Filtra il pool candidabile e risolve il genere EFFETTIVO una volta sola (I4):
+    ritorna, insieme alle candidate, la mappa id-traccia -> genere effettivo (tag
+    file col fallback streaming) in cui questa stessa funzione ha gia' filtrato.
+    La mappa copre l'intero pool interrogato (non solo le candidate superstiti):
+    chi la riceve puo' indicizzarla con l'id di qualunque traccia del pool senza
+    ricalcolare nulla. `generate_set` la riceve da qui (o la ricalcola lui stesso,
+    in blocco, se gli arrivano candidate gia' pronte) e la passa a valle: cosi'
+    tutta la catena di set building legge lo stesso genere che ha ammesso le
+    tracce nel pool, invece di ripiegare su `Track.genre` streaming."""
     # Nuovo flusso: se e' indicata una playlist, il set nasce SOLO da quelle tracce
     # (servono comunque BPM/key, quindi solo le tracce arricchite sono candidate).
     if req.playlist_id:
         tracks = [t for t in tracks_for_playlist(db, req.playlist_id) if t.bpm is not None]
     else:
         tracks = all_playable_tracks(db)
+    # Una query in blocco per l'intero pool, non una per traccia (N+1 di prima).
+    genre_map = effective_genres_for_tracks(db, [t.id for t in tracks])
     candidates: list[Track] = []
 
     bpm_lo = bpm_hi = None
@@ -79,7 +92,7 @@ def select_candidates(db: Session, req: SetGenerationRequest) -> list[Track]:
             continue
         if bpm_lo is not None and t.bpm and not (bpm_lo <= t.bpm <= bpm_hi):
             continue
-        genere = effective_genre(db, t)
+        genere = genre_of(t, genre_map)
         if wanted_genres and (not genere or genere.strip().lower() not in wanted_genres):
             continue
         candidates.append(t)
@@ -87,4 +100,4 @@ def select_candidates(db: Session, req: SetGenerationRequest) -> list[Track]:
     # Gli artisti seed non filtrano: garantiscono presenza, gestiti dal generator.
     _ = seeds
     # Duplicati fuzzy (stesso brano in grafie diverse): un set non deve ripeterlo.
-    return _dedupe_fuzzy(candidates)
+    return _dedupe_fuzzy(candidates), genre_map

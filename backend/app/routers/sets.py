@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.http_errors import api_error
 from app.db import SessionLocal, get_db
 from app.integrations.llm import LLMError, LLMNotConfigured, get_llm_client, llm_configured
-from app.repositories import file_tags_for_tracks, get_setlist, list_setlists
+from app.repositories import effective_genres_for_tracks, file_tags_for_tracks, get_setlist, list_setlists
 from app.schemas import (
     AddTrackRequest,
     AlternativesRequest,
@@ -182,10 +182,12 @@ def export(
         writer.writerow(["position", "role", "title", "artist", "bpm", "key", "duration_seconds",
                          "source", "spotify_id", "url", "transition_score", "risk_level",
                          "transition_class", "local_path"])
+        # I4: stesso genere effettivo di setlist_out per la classificazione del reset.
+        genre_map = effective_genres_for_tracks(db, [st.track_id for st in setlist.tracks])
         prev = None
         for st in setlist.tracks:
             t = st.track
-            cls = (classify_transition(prev, t, lang, score=st.transition_score).label
+            cls = (classify_transition(prev, t, lang, score=st.transition_score, genre_map=genre_map).label
                    if prev is not None else "")
             writer.writerow([st.position, st.role or "", t.title or "", t.artist or "", t.bpm or "",
                              t.camelot_key or "", t.duration_seconds or "", t.source_type,

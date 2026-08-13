@@ -225,6 +225,21 @@ def file_tags_for_tracks(db: Session, track_ids: Iterable[int]) -> dict[int, Fil
     }
 
 
+def effective_genres_for_tracks(db: Session, track_ids: Iterable[int]) -> dict[int, str | None]:
+    """Genere effettivo (tag del file, fallback streaming) per un lotto di tracce,
+    in UNA sola query: stessa espressione di `_EFFECTIVE_TAGS["genre"]` usata da
+    `list_tracks`/`genres_overview`, ma proiettata solo su id->genere. Pensata per
+    la catena di set building (candidate_engine, set_generator/set_skeleton), che
+    valuta il pool intero: senza questo, ogni `effective_genre(db, t)` per traccia
+    sarebbe una query in piu' (N+1, I4)."""
+    ids = list(track_ids)
+    if not ids:
+        return {}
+    eff = _EFFECTIVE_TAGS["genre"]
+    stmt = _join_primary_file(select(Track.id, eff)).where(Track.id.in_(ids))
+    return dict(db.execute(stmt).all())
+
+
 def get_primary_file(db: Session, track: Track) -> AudioFile | None:
     """Il file rappresentante della traccia (fonte dei tag effettivi)."""
     if not track.primary_file_id:

@@ -18,6 +18,7 @@ from app.repositories import library_stats
 from app.schemas import SetGenerationRequest
 from app.services.app_state import get_language
 from app.services.candidate_engine import select_candidates
+from app.services.scoring import genre_of
 from app.services.set_generator import generate_set
 
 logger = logging.getLogger(__name__)
@@ -100,7 +101,7 @@ def _rank_candidates(candidates: list[Track], req: SetGenerationRequest, budget:
     return seed_tracks + chosen[:rest_budget]
 
 
-def _candidate_payload(t: Track) -> dict:
+def _candidate_payload(t: Track, genre_map: dict[int, str | None] | None = None) -> dict:
     return {
         "id": t.id,
         "title": t.title or "",
@@ -108,17 +109,21 @@ def _candidate_payload(t: Track) -> dict:
         "bpm": round(t.bpm, 1) if t.bpm else None,
         "key": t.camelot_key or "",
         "duration_seconds": t.duration_seconds or 0,
-        "genre": t.genre or "",
+        # I4: genere EFFETTIVO nel payload mandato all'AI (tag file col fallback
+        # streaming), lo stesso che ha ammesso la traccia nel pool: altrimenti la
+        # curatela descrive "Electronic" un brano che il file dice "Progressive House".
+        "genre": genre_of(t, genre_map) or "",
         "energy": t.energy,
         "source": t.source_type,
     }
 
 
-def _compute_candidate_profile(candidates: list[Track]) -> dict:
+def _compute_candidate_profile(candidates: list[Track],
+                               genre_map: dict[int, str | None] | None = None) -> dict:
     """Profilo sintetico delle candidate: BPM arc, distribuzione chiavi, top generi, lacune."""
     bpms = [t.bpm for t in candidates if t.bpm is not None]
     keys = [t.camelot_key for t in candidates if t.camelot_key]
-    genres = [t.genre for t in candidates if t.genre]
+    genres = [g for g in (genre_of(t, genre_map) for t in candidates) if g]
     energies = [t.energy for t in candidates if t.energy is not None]
 
     return {
@@ -325,16 +330,18 @@ _WARN_ANCHOR_FOREIGN = {
 }
 
 
-def _mood_payload(req: SetGenerationRequest, batch: list[Track]) -> dict:
+def _mood_payload(req: SetGenerationRequest, batch: list[Track],
+                  genre_map: dict[int, str | None] | None = None) -> dict:
     return {
         "user_prompt": req.prompt or "",
         "constraints": {"strategy": req.strategy, "genres": req.genres,
                         "start_energy": req.start_energy, "end_energy": req.end_energy},
-        "candidate_tracks": [_candidate_payload(t) for t in batch],
+        "candidate_tracks": [_candidate_payload(t, genre_map) for t in batch],
     }
 
 
-def score_mood_fit(llm, req: SetGenerationRequest, candidates: list[Track], lang: str,
+def score_mood_fit(llm, req: SetGenerationRequest, candidates: list[Track], lang: str, *,
+                   genre_map: dict[int, str | None] | None = None,
                    ) -> tuple[dict[int, int], dict[int, list[str]], list[str]]:
     """Mood-fit per candidata, a lotti <= MOOD_BATCH_SIZE (mai oltre PER_CALL_CAP).
 
@@ -351,7 +358,7 @@ def score_mood_fit(llm, req: SetGenerationRequest, candidates: list[Track], lang
     for start in range(0, len(candidates), MOOD_BATCH_SIZE):
         batch = candidates[start:start + MOOD_BATCH_SIZE]
         try:
-            raw = llm.complete_json(system, _mood_payload(req, batch), MOOD_SCHEMA)
+            raw = llm.complete_json(system, _mood_payload(req, batch, genre_map), MOOD_SCHEMA)
             batch_scores: dict[int, int] = {}
             batch_tags: dict[int, list[str]] = {}
             batch_foreign = False
@@ -380,14 +387,15 @@ def score_mood_fit(llm, req: SetGenerationRequest, candidates: list[Track], lang
 
 
 def suggest_anchors(llm, req: SetGenerationRequest, candidates: list[Track],
-                    mood_scores: dict[int, int], lang: str,
+                    mood_scores: dict[int, int], lang: str, *,
+                    genre_map: dict[int, str | None] | None = None,
                     ) -> tuple[dict[str, list[int]], list[str]]:
     """Rosa di anchor suggeriti dall'AI (bonus in elezione, mai un vincolo)."""
     top = sorted(candidates, key=lambda t: (-mood_scores.get(t.id, 50), t.id))[:PER_CALL_CAP]
     payload = {
         "user_prompt": req.prompt or "",
         "constraints": {"strategy": req.strategy, "genres": req.genres},
-        "candidate_tracks": [_candidate_payload(t) for t in top],
+        "candidate_tracks": [_candidate_payload(t, genre_map) for t in top],
     }
     try:
         raw = llm.complete_json(ANCHOR_SYSTEM, payload, ANCHOR_SCHEMA)
@@ -486,7 +494,11 @@ def run_curated_generation(db, req: SetGenerationRequest, llm, on_phase=None):
     merged, compiled, w = compile_intent(llm, req, lang)
     warnings += w
 
-    candidates = select_candidates(db, merged)
+    # I4: select_candidates risolve il genere effettivo in blocco (una query) e lo
+    # ritorna insieme alle candidate; la mappa viaggia esplicita fino a generate_set
+    # e ai payload mandati all'AI, cosi' curatela e motore vedono lo stesso genere
+    # che ha ammesso le tracce nel pool.
+    candidates, genre_map = select_candidates(db, merged)
     compiled_fields = {k: v for k, v in compiled.items() if k != "intent_summary"}
     if compiled_fields and len(candidates) < 3:
         # I vincoli compilati dal prompt (mai messi dall'utente nel form) affamano
@@ -495,25 +507,25 @@ def run_curated_generation(db, req: SetGenerationRequest, llm, on_phase=None):
         warnings.append(_WARN_COMPILED_TOO_STRICT[lang])
         merged = req
         compiled = {"intent_summary": compiled.get("intent_summary", "")}
-        candidates = select_candidates(db, merged)
+        candidates, genre_map = select_candidates(db, merged)
     if len(candidates) < 3:
         # generate_set solleva l'errore giusto: inutile spendere chiamate AI
-        return generate_set(db, merged, candidates=candidates)
+        return generate_set(db, merged, candidates=candidates, genre_map=genre_map)
     pool = _rank_candidates(candidates, merged)  # budget = POOL_CAP
 
     phase("mood")
-    mood_scores, mood_tags, w = score_mood_fit(llm, merged, pool, lang)
+    mood_scores, mood_tags, w = score_mood_fit(llm, merged, pool, lang, genre_map=genre_map)
     warnings += w
     # I tag esistono solo per i giudizi arrivati davvero (gli score si riempiono
     # comunque col neutro 50): sono la prova che almeno un lotto e' andato a segno.
     mood_useful = bool(mood_tags)
 
     phase("anchors")
-    anchor_hints, w = suggest_anchors(llm, merged, pool, mood_scores, lang)
+    anchor_hints, w = suggest_anchors(llm, merged, pool, mood_scores, lang, genre_map=genre_map)
     warnings += w
 
     phase("building")
-    setlist = generate_set(db, merged, candidates=candidates,
+    setlist = generate_set(db, merged, candidates=candidates, genre_map=genre_map,
                            mood_scores=mood_scores if mood_useful else None,
                            anchor_hints=anchor_hints or None)
 

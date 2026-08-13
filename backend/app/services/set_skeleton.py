@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from app.models import Track
 from app.schemas import SetGenerationRequest
-from app.services.scoring import genre_families_of
+from app.services.scoring import genre_families_of, genre_of
 
 
 @dataclass(frozen=True)
@@ -147,16 +147,21 @@ class GenrePlan:
     calm: str
 
 
-def plan_genre_families(candidates: list[Track]) -> GenrePlan | None:
+def plan_genre_families(candidates: list[Track],
+                        genre_map: dict[int, str | None] | None = None) -> GenrePlan | None:
     """Sceglie famiglia principale (peak) e famiglia calma (resto del set).
 
     Ritorna None quando il piano non ha senso: pool monogenere (>=80%), nessuna
     seconda famiglia con quota >=15%, o generi tutti ignoti. In quel caso il
     generatore si comporta esattamente come oggi.
+
+    `genre_map` (I4) e' la mappa id-traccia -> genere effettivo risolta da
+    `candidate_engine.select_candidates`: default None, comportamento invariato
+    (legge `Track.genre`), per i chiamanti che non la passano (es. i test).
     """
     by_family: dict[str, list[Track]] = {}
     for t in candidates:
-        for fam in genre_families_of(t.genre):
+        for fam in genre_families_of(genre_of(t, genre_map)):
             by_family.setdefault(fam, []).append(t)
     if not by_family:
         return None
@@ -253,12 +258,16 @@ def build_skeleton(
     start_bpm: float, end_bpm: float, target_seconds: int,
     mood_scores: dict[int, int] | None = None,
     anchor_hints: dict[str, list[int]] | None = None,
+    genre_map: dict[int, str | None] | None = None,
 ) -> Skeleton | None:
     """Fase 1: elegge gli anchor e prepara segmenti, riserva e piano di genere.
 
     Ritorna None (fallback alla fase singola attuale) quando la struttura non ha
     spazio: pool piccolo, set atteso corto, o pool troppo stretto per eleggere
     anchor distinti nel rispetto del limite per artista.
+
+    `genre_map` (I4): vedi `plan_genre_families`, propagata anche al piano di
+    genere del peak (bonus di famiglia in `peak_score`).
     """
     if len(candidates) < _MIN_POOL_FOR_SKELETON:
         return None
@@ -270,7 +279,7 @@ def build_skeleton(
     impacts = impact_scores(candidates)
     reserve_size = max(1, round(len(candidates) * _RESERVE_SHARE))
     reserved = frozenset(sorted(impacts, key=lambda t: (-impacts[t], t))[:reserve_size])
-    plan = plan_genre_families(candidates)
+    plan = plan_genre_families(candidates, genre_map)
     seeds = [s.lower() for s in req.seed_artists]
 
     peak_pos = _peak_position(req, profile)
@@ -320,7 +329,7 @@ def build_skeleton(
         s = (impacts[t.id] * 100.0 * 0.6
              + _trajectory_fit(t.bpm, d_bpm) * 0.25
              + _arc_fit(t.energy, d_energy) * 0.15)
-        if plan and plan.principal in genre_families_of(t.genre):
+        if plan and plan.principal in genre_families_of(genre_of(t, genre_map)):
             s += _PEAK_FAMILY_BONUS
         return s + (_ANCHOR_SEED_BONUS if _is_seed(t, seeds) else 0.0) + curation_terms(t, "peak")
 

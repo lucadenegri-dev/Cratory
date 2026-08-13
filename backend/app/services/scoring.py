@@ -160,8 +160,22 @@ class TransitionClassification:
     reason: str
 
 
+def genre_of(track: Track, genre_map: dict[int, str | None] | None) -> str | None:
+    """Genere effettivo di una traccia per la catena del set builder: se `genre_map`
+    (id-traccia -> genere effettivo, tag file col fallback streaming, risolto in
+    blocco da `repositories.effective_genres_for_tracks`) e' fornita, la usa;
+    altrimenti ripiega su `track.genre` grezzo. `None` e' il default esplicito per
+    i chiamanti che non hanno ancora una mappa (fuori dal Set Builder, es.
+    /api/transitions): si comportano esattamente come prima di I4. Unico punto di
+    lettura del genere lungo la catena: nessun `.genre` diretto a valle di questo."""
+    if genre_map is None:
+        return track.genre
+    return genre_map.get(track.id, track.genre)
+
+
 def classify_transition(from_track: Track, to_track: Track, lang: str = "it",
-                        score: int | None = None) -> TransitionClassification:
+                        score: int | None = None,
+                        genre_map: dict[int, str | None] | None = None) -> TransitionClassification:
     """Classifica una transizione in technically_safe | creative_risk | good_reset.
 
     - technically_safe: BPM/key compatibili (score tecnico alto), rischio basso.
@@ -174,6 +188,10 @@ def classify_transition(from_track: Track, to_track: Track, lang: str = "it",
     tecnico gia' calcolato dal chiamante (es. il router transizioni), per non
     ricomputare score_transition sulla stessa coppia; None = calcolo interno.
     Il numero non dipende da `lang`, quindi il riuso e' sempre equivalente.
+    `genre_map` opzionale (I4): id-traccia -> genere effettivo, risolta a monte dal
+    chiamante che ha una sessione (es. `serializers.setlist_out`); None (default)
+    mantiene il comportamento di sempre, lettura di `.genre` streaming — nessun
+    chiamante esistente (/api/transitions, alternatives, ...) si rompe.
     """
     if score is None:
         score = score_transition(from_track, to_track).score
@@ -188,9 +206,10 @@ def classify_transition(from_track: Track, to_track: Track, lang: str = "it",
         energy_delta = to_track.energy - from_track.energy
     big_energy_drop = energy_delta is not None and energy_delta <= -RESET_ENERGY_DROP
 
+    from_genre, to_genre = genre_of(from_track, genre_map), genre_of(to_track, genre_map)
     genre_change = bool(
-        from_track.genre and to_track.genre
-        and genre_similarity_score(from_track.genre, to_track.genre) < RESET_GENRE_SIMILARITY
+        from_genre and to_genre
+        and genre_similarity_score(from_genre, to_genre) < RESET_GENRE_SIMILARITY
     )
 
     if big_energy_drop or genre_change:

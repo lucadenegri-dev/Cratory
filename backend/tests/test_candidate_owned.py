@@ -17,7 +17,7 @@ def test_default_solo_possedute(db):
     db.add(_track(2, owned=False))
     db.commit()
 
-    out = select_candidates(db, SetGenerationRequest())
+    out, _ = select_candidates(db, SetGenerationRequest())
     assert [t.title for t in out] == ["T1"]
 
 
@@ -26,7 +26,7 @@ def test_opt_out_include_lead(db):
     db.add(_track(2, owned=False))
     db.commit()
 
-    out = select_candidates(db, SetGenerationRequest(owned_only=False))
+    out, _ = select_candidates(db, SetGenerationRequest(owned_only=False))
     assert {t.title for t in out} == {"T1", "T2"}
 
 
