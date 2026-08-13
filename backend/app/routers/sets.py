@@ -125,27 +125,6 @@ def generate_status():
     return dict(_gen_state)
 
 
-@router.post("/generate", response_model=SetlistOut)
-def generate(req: SetGenerationRequest, db: Session = Depends(get_db)):
-    lang = get_language(db)
-    if _should_use_ai(req):
-        try:
-            setlist = run_curated_generation(db, req, get_llm_client())
-        except LLMNotConfigured as exc:
-            raise api_error(409, "ai_not_configured", f"AI not configured: {exc}",
-                             reason=str(exc)) from exc
-        except (LLMError, SetGenerationError) as exc:
-            raise api_error(422, "set_ai_generation_failed", f"AI set generation failed: {exc}",
-                             reason=str(exc)) from exc
-        return setlist_out(setlist, lang, db=db)
-    try:
-        setlist = generate_set(db, req)
-    except SetGenerationError as exc:
-        raise api_error(422, "set_generation_failed", f"Set generation failed: {exc}",
-                         reason=str(exc)) from exc
-    return setlist_out(setlist, lang, db=db)
-
-
 @router.get("", response_model=list[SetlistSummaryOut])
 def get_all(db: Session = Depends(get_db)):
     return [setlist_summary_out(s) for s in list_setlists(db)]

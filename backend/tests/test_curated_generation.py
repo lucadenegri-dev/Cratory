@@ -124,10 +124,17 @@ def test_compiled_constraints_too_strict_fallback_to_original_request(db, seed_t
     assert "genres" not in setlist.curation["compiled"]
 
 
-def test_router_uses_curated_pipeline(db, seed_tracks, monkeypatch):
-    # Il ramo use_ai del router deve puntare alla pipeline curata (niente
-    # TestClient: conftest non ha una fixture client, si chiama la funzione
-    # del router direttamente col db della fixture).
+def test_run_generation_uses_curated_pipeline_for_ai(db, seed_tracks, monkeypatch):
+    # Il ramo use_ai del job asincrono (_run_generation, dietro
+    # POST /api/sets/generate-async) deve puntare alla pipeline curata, non a
+    # generate_set direttamente. Stessa garanzia che copriva l'ormai rimosso
+    # endpoint sincrono POST /api/sets/generate (wrapper HTTP morto sopra lo
+    # stesso servizio, promosso a rimozione al checkpoint di Fase 1): qui la
+    # copertura si riscrive contro il codice sopravvissuto.
+    # Niente TestClient: conftest non ha una fixture client, si chiama la
+    # funzione del router direttamente col db della fixture.
+    import copy
+
     import app.routers.sets as sets_router
     from app.schemas import SetGenerationRequest
     from app.services.set_generator import generate_set
@@ -140,7 +147,17 @@ def test_router_uses_curated_pipeline(db, seed_tracks, monkeypatch):
 
     monkeypatch.setattr(sets_router, "run_curated_generation", fake_curated)
     monkeypatch.setattr(sets_router, "get_llm_client", lambda model=None: object())
+    monkeypatch.setattr(sets_router, "SessionLocal", lambda: db)
     seed_tracks(n=20)
-    out = sets_router.generate(
-        SetGenerationRequest(target_duration_minutes=30, use_ai=True, prompt="x"), db=db)
-    assert called.get("yes") and out.id
+
+    snapshot = copy.deepcopy(sets_router._gen_state)
+    try:
+        sets_router._run_generation(
+            SetGenerationRequest(target_duration_minutes=30, use_ai=True, prompt="x"),
+            use_ai=True)
+        assert called.get("yes")
+        assert sets_router._gen_state["status"] == "done"
+        assert sets_router._gen_state["setlist_id"]
+    finally:
+        sets_router._gen_state.clear()
+        sets_router._gen_state.update(snapshot)

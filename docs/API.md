@@ -398,7 +398,6 @@ removed.
 ## Set Builder and saved sets
 
 ```text
-POST   /api/sets/generate
 POST   /api/sets/generate-async
 GET    /api/sets/generate-status
 GET    /api/sets
@@ -414,7 +413,6 @@ POST   /api/sets/{setlist_id}/alternatives
 
 Generation:
 
-- `generate` returns the set immediately.
 - `generate-async` starts a job and the UI reads `generate-status`.
 - `use_ai`: `true` = AI curation (intent + mood-fit + anchor hints + narrative), `false` =
   pure deterministic engine, omitted = auto (AI if configured and a prompt is present).
