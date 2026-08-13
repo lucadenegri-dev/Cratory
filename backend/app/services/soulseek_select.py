@@ -248,15 +248,6 @@ def auto_pick_candidates(ranked: list[ScoredCandidate]) -> list[ScoredCandidate]
     return [c for c in ranked if c.confidence >= AUTO_PICK_MIN_CONFIDENCE]
 
 
-def best_for_auto(files, *, artist: str, title: str,
-                  pref: QualityPreference = QualityPreference(),
-                  expected_duration: int | None = None) -> ScoredCandidate | None:
-    ranked = rank_candidates(files, artist=artist, title=title, pref=pref,
-                             expected_duration=expected_duration)
-    eligible = auto_pick_candidates(ranked)
-    return eligible[0] if eligible else None
-
-
 def _clean_title(title: str) -> str:
     t = _PARENS_RE.sub(" ", title or "")
     t = _FEAT_RE.sub(" ", t)

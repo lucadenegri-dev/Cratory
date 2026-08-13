@@ -1,6 +1,6 @@
 from app.integrations.slskd import SlskdFile
 from app.services.soulseek_select import (
-    QualityPreference, ScoredCandidate, auto_pick_candidates, best_for_auto,
+    QualityPreference, ScoredCandidate, auto_pick_candidates,
     query_variants, rank_candidates, search_candidates,
 )
 
@@ -32,21 +32,6 @@ def test_weak_name_match_excluded():
     assert ranked == []
 
 
-def test_best_for_auto_returns_none_below_threshold():
-    # match parziale: nome plausibile ma non perfetto, solo mp3 a 256
-    files = [_f("daft - da funk (live bootleg rip).mp3", bitrate=256)]
-    best = best_for_auto(files, artist="Daft Punk", title="Da Funk")
-    # confidence sotto 0.7 -> niente auto-pick
-    assert best is None
-
-
-def test_best_for_auto_picks_strong_lossless():
-    files = [_f("Daft Punk - Da Funk.flac")]
-    best = best_for_auto(files, artist="Daft Punk", title="Da Funk")
-    assert best is not None
-    assert best.confidence >= 0.7
-
-
 def test_unknown_bitrate_lossy_not_excluded():
     # Soulseek spesso non riporta il bitrate in ricerca: un mp3 con bitrate ignoto
     # e nome coerente NON deve essere scartato (prima finiva tier 0 -> escluso).
@@ -73,9 +58,7 @@ def test_name_match_uses_basename_not_full_path():
     files = [_f("Music\\Arca\\Arca - KiCk i (2020) [FLAC]\\02  Time.flac")]
     ranked = rank_candidates(files, artist="Arca", title="Time")
     assert len(ranked) == 1
-    best = best_for_auto(files, artist="Arca", title="Time")
-    assert best is not None
-    assert best.confidence >= 0.7
+    assert ranked[0].confidence >= 0.7
 
 
 # --- Path nel punteggio: underscore e artista nella cartella padre --------------
@@ -88,8 +71,7 @@ def test_nome_file_con_underscore_riconosciuto():
     files = [_f("Daft_Punk_-_Digital_Love.flac")]
     ranked = rank_candidates(files, artist="Daft Punk", title="Digital Love")
     assert len(ranked) == 1
-    best = best_for_auto(files, artist="Daft Punk", title="Digital Love")
-    assert best is not None and best.confidence >= 0.7
+    assert ranked[0].confidence >= 0.7
 
 
 def test_naming_scene_con_underscore_e_trattini():
@@ -105,9 +87,10 @@ def test_artista_quasi_uguale_nella_cartella_padre():
     # intero appiattito dove il segnale affoga nel rumore.
     files = [_f("Chemical Brothers\\04 - Elektrobank (Album Version).mp3",
                 bitrate=320)]
-    best = best_for_auto(files, artist="The Chemical Brothers",
-                         title="Elektrobank")
-    assert best is not None and best.confidence >= 0.7
+    ranked = rank_candidates(files, artist="The Chemical Brothers",
+                             title="Elektrobank")
+    assert len(ranked) == 1
+    assert ranked[0].confidence >= 0.7
 
 
 # --- Durata attesa nel ranking (disk-first: la versione giusta, non solo il nome) ---
@@ -128,9 +111,10 @@ def test_durata_esatta_batte_qualita_superiore():
 def test_durata_ignota_resta_neutra():
     # Soulseek spesso non riporta length: l'ignoto non deve impedire l'auto-pick.
     files = [_f("Daft Punk - Da Funk.flac")]
-    best = best_for_auto(files, artist="Daft Punk", title="Da Funk",
-                         expected_duration=409)
-    assert best is not None
+    ranked = rank_candidates(files, artist="Daft Punk", title="Da Funk",
+                             expected_duration=409)
+    assert len(ranked) == 1
+    assert ranked[0].confidence >= 0.7
 
 
 def test_durata_sbagliata_abbassa_confidenza_sotto_auto_pick():
