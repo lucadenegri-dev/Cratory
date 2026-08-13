@@ -4,6 +4,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.core.config import settings
+from app.models import Track
 from app.organize.models import AudioFile, DupGroup, DupMember, Issue, Plan, PlanOp, ScanRoot, UndoJournal
 from app.organize.services.apply import apply_plan
 
@@ -109,6 +110,61 @@ def test_apply_retag_updates_db_row(db, tmp_path, copy_fixture):
     assert res.applied_ops == 1
     row = db.get(AudioFile, 1)
     assert row.artist == "Pinco" and row.title == "Bel Titolo"
+
+
+def test_apply_retag_syncs_linked_track_genre(db, tmp_path, copy_fixture):
+    # D1: un RETAG dell'Apply che tocca il genere di un file gia' agganciato
+    # deve allineare Track.genre con la stessa regola condivisa (genre_align),
+    # non solo la riga AudioFile — altrimenti la traccia resta col genere
+    # vecchio e la guardia di sincronizzazione dello scan non scatta piu'
+    # (l'Apply ha gia' aggiornato AudioFile.genre in sincrono col disco).
+    root = tmp_path / "lib"
+    f = copy_fixture("flac", root / "x.flac")
+    from app.organize.integrations import tagio
+    tagio.write_tags(f, {"genre": "Electronic"})
+    db.add(ScanRoot(id=3, path=str(root)))
+    track = Track(source_type="local_files", has_local_file=True, genre="Electronic")
+    db.add(track)
+    db.flush()
+    _af(db, 1, f, artist="A", title="T", genre="Electronic", track_id=track.id)
+    plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
+                "folder_template": "", "target_root": str(root)})
+    db.add(plan)
+    db.add(PlanOp(plan_id=1, seq=0, kind="RETAG", file_id=1,
+                  before_json={"genre": "Electronic"},
+                  after_json={"genre": "Progressive House"}, status="pending"))
+    db.commit()
+    res = apply_plan(db, plan)
+    assert res.applied_ops == 1
+    row = db.get(AudioFile, 1)
+    assert row.genre == "Progressive House"          # AudioFile allineato al disco (gia' prima)
+    db.refresh(track)
+    assert track.genre == "Progressive House"         # D1: Track allineata dalla stessa regola
+
+
+def test_apply_retag_genre_leaves_unlinked_file_track_untouched(db, tmp_path, copy_fixture):
+    # Un RETAG su un file NON agganciato a nessuna traccia non deve esplodere
+    # né toccare traccie estranee.
+    root = tmp_path / "lib"
+    f = copy_fixture("flac", root / "x.flac")
+    from app.organize.integrations import tagio
+    tagio.write_tags(f, {"genre": "Electronic"})
+    db.add(ScanRoot(id=3, path=str(root)))
+    other = Track(source_type="local_files", has_local_file=True, genre="Electronic")
+    db.add(other)
+    db.flush()
+    _af(db, 1, f, artist="A", title="T", genre="Electronic", track_id=None)
+    plan = Plan(id=1, status="draft", rules_json={"naming_template": "{artist} - {title}",
+                "folder_template": "", "target_root": str(root)})
+    db.add(plan)
+    db.add(PlanOp(plan_id=1, seq=0, kind="RETAG", file_id=1,
+                  before_json={"genre": "Electronic"},
+                  after_json={"genre": "Progressive House"}, status="pending"))
+    db.commit()
+    res = apply_plan(db, plan)
+    assert res.applied_ops == 1
+    db.refresh(other)
+    assert other.genre == "Electronic"
 
 
 def _piano_di_solo_delete(db, root, src, **kw):

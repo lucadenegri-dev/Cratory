@@ -7,12 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import runtime_settings
+from app.models import Track
 from app.organize.integrations import cover_art, fsops, tagio
 from app.organize.models import AudioFile, DupMember, Issue, Plan, PlanOp, UndoJournal, utcnow
 from app.organize.schemas import ApplyResult
 from app.organize.services import conflict
 from app.organize.services.file_link import dentro
 from app.organize.services.planner import PlanOpComputed
+from app.services.genre_align import align_track_genre
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +166,17 @@ def apply_plan(db: Session, plan: Plan, on_progress=None) -> ApplyResult:
             tagio.write_tags(f.path, o.after_json)              # poi muta
             for field, value in o.after_json.items():           # DB allineato al disco:
                 setattr(f, field, value)                        # niente RETAG fantasma pre-scan
+            # Sincronizzazione Parte 2 (stessa regola condivisa del backfill, della
+            # modifica manuale e dello scan, app.services.genre_align): un RETAG
+            # dell'Apply che tocca il genere di un file gia' agganciato deve tenere
+            # Track.genre allineato — altrimenti la guardia di sincronizzazione dello
+            # scan (fields["genre"] != old_genre) non scatta piu' (l'Apply ha gia'
+            # aggiornato AudioFile.genre in sincrono col disco) e la divergenza resta
+            # permanente. Quarto chiamante della stessa regola, non una quarta copia.
+            if "genre" in o.after_json and f.track_id is not None:
+                linked = db.get(Track, f.track_id)
+                if linked is not None:
+                    align_track_genre(linked, o.after_json["genre"], apply=True)
             o.status = "applied"
             db.commit()
             _progress()
