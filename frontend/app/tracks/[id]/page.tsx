@@ -114,8 +114,10 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
   // tag artista/titolo letti dal file collegato: solo per segnalare un disallineamento,
   // mai per sostituire l'identità.
   const norm = (s: string | null) => (s ?? "").trim().toLowerCase();
-  const fileArtistMismatch = track.file_artist != null && norm(track.file_artist) !== norm(track.artist);
-  const fileTitleMismatch = track.file_title != null && norm(track.file_title) !== norm(track.title);
+  // Discrepanza vera solo se ENTRAMBI i lati hanno valore: senza identità (null)
+  // la riga del file è informativa, non un warning.
+  const fileArtistMismatch = track.file_artist != null && norm(track.file_artist) !== "" && track.artist != null && norm(track.artist) !== "" && norm(track.file_artist) !== norm(track.artist);
+  const fileTitleMismatch = track.file_title != null && norm(track.file_title) !== "" && track.title != null && norm(track.title) !== "" && norm(track.file_title) !== norm(track.title);
 
   const marginalia = (
     <div className="space-y-4">
