@@ -28,7 +28,7 @@ function buildFields(t: Dictionary): { key: Key; label: string; type: FieldType;
     // Cratory, il file non viene toccato): riga intera, sopra ai valori tecnici.
     { key: "title", label: t.tracks.rowTitle, type: "text", full: true },
     { key: "artist", label: t.tracks.rowArtist, type: "text", full: true },
-    { key: "album", label: "Album", type: "text", full: true },
+    { key: "album", label: t.tracks.rowAlbum, type: "text", full: true },
     { key: "bpm", label: "BPM", type: "number", placeholder: "128", min: 1, max: 400 },
     { key: "camelot_key", label: t.tracks.fieldKeyLabel, type: "text", placeholder: "8A", hint: t.tracks.fieldKeyHint },
     { key: "genre", label: t.tracks.rowGenre, type: "text", placeholder: t.tracks.fieldGenrePlaceholder },

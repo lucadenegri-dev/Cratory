@@ -483,6 +483,7 @@ export const en = {
     unknownArtist: "Unknown artist",
     rowTitle: "Title",
     rowArtist: "Artist",
+    rowAlbum: "Album",
     rowGenre: "Genre",
     rowYear: "Year",
     rowDuration: "Duration",

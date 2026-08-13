@@ -482,6 +482,7 @@ export const it: Dictionary = {
     unknownArtist: "Artista sconosciuto",
     rowTitle: "Titolo",
     rowArtist: "Artista",
+    rowAlbum: "Album",
     rowGenre: "Genere",
     rowYear: "Anno",
     rowDuration: "Durata",
