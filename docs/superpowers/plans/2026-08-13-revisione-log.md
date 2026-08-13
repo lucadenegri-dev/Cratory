@@ -344,6 +344,42 @@ Simboli morti:
 - [L1] `app/services/audio_energy.py:113` — `backfill_energy()` — 0 chiamanti di produzione; gli unici usi sono `tests/test_audio_energy.py:141` (import) e `:155` (call), quindi test che coprono SOLO codice morto. `library_index.py:30` importa da questo modulo solo `analyze_file, recompute_energy`
 - [L1] `app/services/soulseek_select.py:251` — `best_for_auto()` — unico hit in `backend/app` e' la definizione; usi solo in `tests/test_soulseek_select.py` (import `:3`, chiamate `:38,45,76,91,108,131`). E' un wrapper di comodo su `rank_candidates`+`auto_pick_candidates` che la produzione scavalca (`soulseek_download_job.py:24`, `routers/downloads.py:18` importano le due primitive)
 
+**Esito Task 3 sui test dedicati** (righe originarie prima dell'esecuzione; annotato per il
+checkpoint di Fase 1 / verifica del Task 14):
+
+- `tests/test_audio_energy.py` — `test_backfill_only_untouched_owned_tracks` (`:139-160`):
+  **cancellato**, copriva solo `backfill_energy` (commit `31aec1a`).
+- `tests/test_soulseek_select.py` — `test_best_for_auto_picks_strong_lossless` (`:43-47`):
+  **cancellato**; lo scenario (match esatto lossless, confidence >= 0.7) resta comunque coperto
+  dal test riscritto `test_durata_ignota_resta_neutra`, che usa lo stesso file
+  `Daft Punk - Da Funk.flac` (commit `7f98173`).
+- `tests/test_soulseek_select.py` — `test_best_for_auto_returns_none_below_threshold` (`:35-40`):
+  **riscritto** come `test_nome_plausibile_ma_imperfetto_escluso`, contro `rank_candidates`
+  diretto (`ranked == []`, comportamento reale verificato eseguendo lo scorer). Prima cancellato
+  per errore nel commit `7f98173` con una motivazione sbagliata (si credeva coperto da
+  `test_auto_pick_candidates_vuota_se_tutti_sotto_soglia`, che pero' costruisce lo
+  `ScoredCandidate` a mano ed esercita solo il filtro, mai lo scorer); corretto in review nel
+  commit `a73e041`.
+- `tests/test_soulseek_select.py` — `test_name_match_uses_basename_not_full_path` (`:70-78`):
+  **riscritto** contro `rank_candidates` diretto, stessa asserzione sulla soglia di confidenza
+  (commit `7f98173`).
+- `tests/test_soulseek_select.py` — `test_nome_file_con_underscore_riconosciuto` (`:84-92`):
+  **riscritto**, idem (commit `7f98173`).
+- `tests/test_soulseek_select.py` — `test_artista_quasi_uguale_nella_cartella_padre` (`:102-110`):
+  **riscritto**, idem (commit `7f98173`).
+- `tests/test_soulseek_select.py` — `test_durata_ignota_resta_neutra` (`:128-133`):
+  **riscritto**, idem (commit `7f98173`).
+
+**Cascata `build_normalized`/`_safe_library_context` (righe sopra), completata oltre il testo
+qui scritto.** Verificato con la stessa metodologia (grep repo-wide, 0 hit, doppia conferma) e
+confermato dalla review indipendente del Task 3: orfani anche `NormalizedTrack`, `read_tags`,
+`audio_hash`, `parse_line` (`local_import.py`, usati solo dentro `build_normalized`, commit
+`afc06a4`) e `Session` (`ai_curation.py`, usato solo nella firma di `_safe_library_context`,
+commit `276a454`) — stesso meccanismo gia' descritto per `PLATFORM`/`library_stats`. Le
+definizioni restano vive altrove (`playlist_import.py:39`, `local_files.py`, `manual_import.py:30`)
+e i gemelli omonimi non sono stati toccati (`PLATFORM` sopravvive in `library_index.py:44`,
+`read_tags` ha un gemello vivo e indipendente in `app/organize/integrations/tagio.py:392`).
+
 (Nessun endpoint classificato L1: i due candidati piu' forti, `POST /api/downloads/search`
 e `POST /api/downloads/manual`, sono stati declassati a L3 — vedi sotto.)
 
