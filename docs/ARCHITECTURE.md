@@ -131,7 +131,6 @@ File acquisition via Soulseek (slskd), distinct from the temporary Shazam downlo
 Track in library (streaming identity)
   -> SlskdClient.search (slskd REST)
   -> deterministic selection (quality + name match + availability)
-     | free search -> manual selection (/api/downloads/search + /manual)
   -> auto-pick (playlist block) | mini-selector (Discovery)
   -> slskd enqueue + transfer polling
   -> attach_local_file: has_local_file + local_path/format/bitrate
@@ -149,8 +148,7 @@ YAML), so `services/slskd_shares.py` edits `shares.directories` in slskd's own c
 (round-trip via `ruamel.yaml`, `.bak` backup, permissions preserved) and forces a rescan.
 It is off by default; enabling it exposes the library's filenames to the network.
 
-Beyond auto-pick, `POST /api/downloads/search` offers free search on slskd with
-manual selection of the candidate (`POST /api/downloads/manual`). Outcomes to review
+Outcomes to review
 (`needs_review|not_found|failed`) stay in a "to fix" queue, persisted on
 `Track.last_download_outcome`/`last_download_reason` so they survive jobs and
 restarts (`GET /api/downloads/pending`, `DELETE /api/downloads/pending/{track_id}`,

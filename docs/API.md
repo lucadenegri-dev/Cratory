@@ -719,15 +719,13 @@ POST   /api/downloads/candidates
 POST /api/downloads/playlist/{playlist_id}
 POST /api/downloads/track
 POST   /api/downloads/track/soundcloud
-POST   /api/downloads/search
-POST   /api/downloads/manual
 ```
 
 File acquisition via the headless Soulseek daemon slskd, deterministic (zero AI):
 links a file to the existing `Track` (`has_local_file`/`local_path`/`local_format`/
 `local_bitrate`). Requires `SLSKD_URL` and `SLSKD_DOWNLOAD_DIR` configured; without
-them, all the search/download endpoints (`candidates`, `search`, `playlist/{id}`,
-`track`, `manual`, `retry-pending`) respond `409`. Still available:
+them, all the search/download endpoints (`candidates`, `playlist/{id}`,
+`track`, `retry-pending`) respond `409`. Still available:
 `GET status` (with `available=false`), `GET pending` and `DELETE pending/{track_id}`.
 
 `GET /api/downloads/pending` lists the "to sort out" ones (outcome `needs_review` /
@@ -747,16 +745,6 @@ deterministically (quality + name adherence + availability). Request: `artist`,
 right version in the ranking). Response: list of candidates with `username`,
 `filename`, `size`, `bitrate`, `length`, `format`, `name_score`, `quality_tier`,
 `confidence`.
-
-`POST /api/downloads/search` does a free search on Soulseek. Request: `{query}`.
-Empty query -> empty list. Response: same candidate list as `candidates` but without
-the name-adherence threshold (the user chooses by sight). `409` if slskd is not
-configured, `502` on slskd error.
-
-`POST /api/downloads/manual` (`202`) downloads a candidate chosen from the free search
-without linking it to a `Track` (the file lands in the slskd download folder).
-Request: `{candidate}` (same shape as `CandidateOut`). `409` if slskd is not configured
-or a job is already in progress.
 
 `POST /api/downloads/playlist/{playlist_id}` (`202`) starts the job for all the
 playlist tracks without a local file: for each it searches, automatically picks the

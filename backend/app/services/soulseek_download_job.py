@@ -349,11 +349,6 @@ def start_track_autopick_job(track_id: int) -> dict:
     return _start([(track_id, None)], None)
 
 
-def start_manual_job(chosen: SlskdFile) -> dict:
-    """Ricerca manuale: scarica il candidato scelto e lo cataloga in libreria."""
-    return _start([(None, chosen)], None)
-
-
 def start_soundcloud_track_job(track_id: int) -> dict:
     """Scarica via yt-dlp l'audio di una singola traccia SoundCloud e la collega.
 
