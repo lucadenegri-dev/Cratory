@@ -17,7 +17,8 @@ from app.integrations.local_files import (
 )
 from app.models import Track
 from app.organize.services.file_link import aggiorna_primary
-from app.repositories import merge_tracks
+from app.repositories import get_primary_file, merge_tracks
+from app.services.genre_align import align_track_genre
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,16 @@ def attach_local_file(db: Session, track: Track, *, path: str,
     # Dopo la fusione dei doppioni: la traccia superstite è quella che deve
     # portare l'aggancio al file, se Organize l'ha già indicizzato.
     aggiorna_primary(db, track)
+    # Stessa classe di difetto di D8 (collega_tracce), sul percorso
+    # dell'acquisizione: un lead che arriva con un genere streaming e ora
+    # possiede un file lo terrebbe per sempre, anche se il tag dice altro. Lo
+    # scan non ripara: quella riga AudioFile è stata INSERITA, non aggiornata,
+    # quindi la sua guardia sul tag cambiato non scatta mai per questo file.
+    # Se Organize non ha ancora scansionato il path, `aggiorna_primary` non
+    # trova nulla e qui non c'è niente da allineare: ci penserà lo scan.
+    primary = get_primary_file(db, track)
+    if primary is not None:
+        align_track_genre(track, primary.genre, apply=True)
     db.commit()
     db.refresh(track)
     return track

@@ -1,3 +1,5 @@
+from sqlalchemy import select
+
 from app.models import Track
 from app.repositories import tracks_without_local_file
 from app.services.acquisition import attach_local_file
@@ -99,3 +101,94 @@ def test_attach_hash_fallito_non_blocca(db, monkeypatch):
     out = acquisition.attach_local_file(db, t, path="/x/y.mp3")
     assert out.has_local_file is True
     assert out.audio_hash is None
+
+
+def _indicizza(db, path: str, *, genre: str | None) -> None:
+    """Un file gia' scansionato da Organize a quel path (cosi' `aggiorna_primary`
+    lo trova e l'aggancio nasce con un primary file)."""
+    from app.organize.models import AudioFile, ScanRoot
+
+    root = db.scalar(select(ScanRoot).where(ScanRoot.path == "/m"))
+    if root is None:
+        root = ScanRoot(path="/m")
+        db.add(root)
+        db.flush()
+    db.add(AudioFile(root_id=root.id, path=path, ext="mp3", size_bytes=1,
+                     hash_method="file", status="present", location="library",
+                     genre=genre))
+    db.commit()
+
+
+def test_acquisizione_allinea_il_genere_al_tag_del_file(db, monkeypatch):
+    """Stessa classe di D8, sul percorso dell'acquisizione (Soulseek, download
+    SoundCloud, collegamento manuale): un lead che arriva con un genere
+    streaming e acquisisce un file gia' indicizzato da Organize terrebbe quel
+    genere per sempre. Lo scan non ripara: la riga AudioFile e' stata INSERITA,
+    non aggiornata, quindi la sua guardia (`fields["genre"] != old_genre`) non
+    scatta mai per quel file."""
+    from app.services import acquisition
+
+    monkeypatch.setattr(acquisition, "audio_hash", lambda p: "HG1")
+    _indicizza(db, "/m/a.mp3", genre="Techno")
+    t = Track(source_type="spotify", title="X", artist="A", genre="Electronic")
+    db.add(t); db.commit()
+
+    out = acquisition.attach_local_file(db, t, path="/m/a.mp3", fmt="mp3", bitrate=320)
+
+    assert out.primary_file_id is not None  # l'aggancio c'e' davvero
+    assert out.genre == "Techno"
+
+
+def test_acquisizione_senza_file_indicizzato_non_tocca_il_genere(db, monkeypatch):
+    """Organize non ha ancora scansionato quel path: niente primary file, niente
+    da allineare. Il possesso resta valido e il genere streaming intatto — al
+    prossimo scan ci pensa la sincronizzazione normale."""
+    from app.services import acquisition
+
+    monkeypatch.setattr(acquisition, "audio_hash", lambda p: "HG2")
+    t = Track(source_type="spotify", title="X", artist="A", genre="Electronic")
+    db.add(t); db.commit()
+
+    out = acquisition.attach_local_file(db, t, path="/mai/scansionato.mp3", fmt="mp3")
+
+    assert out.primary_file_id is None
+    assert out.genre == "Electronic"
+    assert out.has_local_file is True
+
+
+def test_acquisizione_tag_vuoto_non_azzera_il_genere(db, monkeypatch):
+    """Il file e' indicizzato ma senza tag genere: la regola condivisa non
+    sovrascrive mai con il vuoto (il valore streaming resta l'unico che c'e')."""
+    from app.services import acquisition
+
+    monkeypatch.setattr(acquisition, "audio_hash", lambda p: "HG3")
+    _indicizza(db, "/m/b.mp3", genre=None)
+    t = Track(source_type="spotify", title="X", artist="A", genre="Electronic")
+    db.add(t); db.commit()
+
+    out = acquisition.attach_local_file(db, t, path="/m/b.mp3", fmt="mp3")
+
+    assert out.primary_file_id is not None
+    assert out.genre == "Electronic"
+
+
+def test_acquisizione_non_tocca_identita_ne_altri_campi(db, monkeypatch):
+    """Perimetro: solo `genre`. Titolo, artista, album, etichetta e anno della
+    traccia restano quelli di Cratory anche se il file dice altro."""
+    from app.organize.models import AudioFile
+    from app.services import acquisition
+
+    monkeypatch.setattr(acquisition, "audio_hash", lambda p: "HG4")
+    _indicizza(db, "/m/c.mp3", genre="Techno")
+    f = db.scalar(select(AudioFile).where(AudioFile.path == "/m/c.mp3"))
+    f.artist, f.title, f.album, f.label, f.year = "File A", "File T", "File Alb", "File Lab", 1999
+    db.commit()
+    t = Track(source_type="spotify", title="Titolo", artist="Artista", genre="Electronic",
+              album="Album", label="Etichetta", year=2020)
+    db.add(t); db.commit()
+
+    out = acquisition.attach_local_file(db, t, path="/m/c.mp3", fmt="mp3")
+
+    assert out.genre == "Techno"
+    assert (out.title, out.artist) == ("Titolo", "Artista")
+    assert (out.album, out.label, out.year) == ("Album", "Etichetta", 2020)

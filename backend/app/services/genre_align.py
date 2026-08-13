@@ -4,11 +4,20 @@ Perimetro deliberatamente stretto: SOLO `genre`. Non tocca `title`/`artist`
 (identita' della traccia, de-duplicazione e matching streaming) ne'
 `album`/`label`/`year` (fuori dallo scope richiesto).
 
-Una sola funzione, usata da tre chiamanti — nessuno dei quali la duplica:
+Una sola funzione, usata da tutti i punti in cui il tag di un file puo'
+cambiare o un aggancio puo' nascere — nessuno dei quali la duplica:
 - il backfill retroattivo (`app.services.db_hygiene.align_owned_genre_from_file`);
 - la modifica manuale dei tag in Organize (`app.organize.services.manual_edit`);
+- l'Apply dei piani di Organize (`app.organize.services.apply`, operazioni RETAG);
 - la scansione (`app.organize.services.scanner`), quando rilegge un tag
-  cambiato fuori dall'app su un file gia' agganciato a una traccia.
+  cambiato fuori dall'app su un file gia' agganciato a una traccia;
+- l'indicizzazione libreria (`app.services.library_index.collega_tracce`) e
+  l'acquisizione (`app.services.acquisition.attach_local_file`: Soulseek,
+  download SoundCloud, collegamento manuale), cioe' i due momenti in cui una
+  traccia acquisisce un file. Servono entrambi perche' li' la riga `AudioFile`
+  viene INSERITA, non aggiornata: la guardia dello scan sul tag cambiato non
+  scatta mai per quel file, e senza questa chiamata un lead che arriva con un
+  genere streaming se lo terrebbe per sempre.
 
 Il `COALESCE` di lettura (`app.repositories._EFFECTIVE_TAGS`) resta invariato:
 `Track.genre` e' uno specchio di comodo per il dato in tabella, non la fonte
