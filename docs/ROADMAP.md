@@ -92,6 +92,22 @@ saves those four fields to the file via Organize's single writer
 (`POST /api/organize/files/{id}/tags`) for owned tracks, everything else via the usual
 track PATCH. The two sections cross-link both ways: track detail -> FILES row and back.
 
+**Effective genre threaded through the whole set-building chain, and `Track.genre` kept
+as a mirror (2026-08-13):** the candidate engine resolves a `genre_map` (id -> effective
+genre, one query per pool, `repositories.effective_genres_for_tracks`) and every
+downstream deterministic step — the requested-genre bonus, `set_skeleton`'s genre
+family plan, `classify_transition`'s reset detection, the AI curation payload — reads it
+via `scoring.genre_of` instead of raw `Track.genre`; callers outside the Set Builder
+keep the old streaming-only behavior (no `genre_map` passed). Separately, `Track.genre`
+is now actively kept in sync with the primary file's tag (one shared rule,
+`services/genre_align.align_track_genre`, also recomputes derived `energy`) from five
+call sites: the one-off backfill (`tools/align_genre_from_file.py`), Organize's manual
+tag edit, Organize's scan, Organize's Apply (a RETAG that touches genre) and library
+indexing (a lead acquiring a file) — closing the gaps where the mirror could silently
+drift back out of sync after the initial backfill. The COALESCE read path
+(`repositories._EFFECTIVE_TAGS`) stays the sole source of truth; the mirror is a
+convenience for code that still reads `Track.genre` directly.
+
 Full chronological history lives in [PROGRESS.md](../PROGRESS.md).
 
 ## Product direction

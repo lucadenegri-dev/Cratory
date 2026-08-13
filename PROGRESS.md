@@ -32,6 +32,39 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-08-13 - Genere effettivo nel Set Builder + specchio Track.genre
+
+- **Genere effettivo lungo tutta la catena di set building (I4)**: il candidate engine
+  risolve una `genre_map` (id traccia -> genere effettivo, `repositories.
+  effective_genres_for_tracks`, una query per l'intero pool) e la passa a valle; il
+  bonus dei generi richiesti, il piano di famiglie di `set_skeleton`, `classify_
+  transition` (reset detection) e il payload della curatela AI leggono tutti la stessa
+  mappa via `scoring.genre_of` invece di `Track.genre` streaming. I chiamanti fuori dal
+  Set Builder (`/api/transitions`, alternatives, l'editor) restano sul comportamento
+  precedente (nessuna mappa passata).
+- **`Track.genre` allineato al tag del file (specchio di comodo)**: nuova regola
+  condivisa `services/genre_align.align_track_genre` (confronto normalizzato + case-
+  insensitive, mai sovrascrive con un tag vuoto, ricalcola `energy` derivata). Backfill
+  retroattivo una-tantum (`tools/align_genre_from_file.py` /
+  `db_hygiene.align_owned_genre_from_file`, dry-run di default) più due agganci di
+  sincronizzazione continua: la modifica manuale dei tag in Organize e la scansione
+  (quando un tag genere cambia fuori dall'app su un file già agganciato). Il `COALESCE`
+  di lettura (`repositories._EFFECTIVE_TAGS`) resta l'unica fonte di verità; lo specchio
+  serve solo al codice che legge ancora `Track.genre` direttamente.
+- **Correzioni della review (fix-D)**: l'Apply di Organize (RETAG che tocca il genere)
+  e l'indicizzazione libreria (un lead con genere già valorizzato che acquisisce un
+  file) erano rimasti fuori dalla sincronizzazione — due chiamanti in più della stessa
+  regola condivisa, non due copie. `setlist_out` deriva `genre_map` da `ft_map` invece
+  di un secondo giro di query. Rimossa `ai_curation._compute_candidate_profile`, mai
+  chiamata (copertura apparente del passaggio di `genre_map`). Vedi
+  `.superpowers/sdd/fix-d-report.md` per il dettaglio dei nove rilievi.
+- Tocchi: `services/candidate_engine.py`, `services/scoring.py`, `services/set_skeleton.py`,
+  `services/set_generator.py`, `services/ai_curation.py`, `services/genre_align.py`,
+  `services/library_index.py`, `serializers.py`, `repositories.py`,
+  `organize/services/apply.py`, `organize/services/manual_edit.py`,
+  `organize/services/scanner.py`, `tools/align_genre_from_file.py`.
+- Rif.: `.superpowers/sdd/work-a-brief.md`, `work-b-brief.md`, `fix-d-brief.md`.
+
 ## Milestone 2026-08-13 - Tag effettivi dal file in Library
 
 - **Risoluzione query-time**: `genre`/`album`/`label`/`year` di `GET /api/tracks` e

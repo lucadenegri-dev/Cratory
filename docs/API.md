@@ -376,7 +376,11 @@ file (`FileTagsUpdate`, partial update: only the fields present in the body are
 touched; an empty string clears the tag). This is also how `genre`/`album`/`label`/`year`
 get edited for an owned track (see "Tracks and library" above) — the frontend calls it
 against the track's `primary_file_id`, not a track-side PATCH. Response: the updated
-`FileRow`.
+`FileRow`. Side effect when the field is `genre` and the file is linked to a track
+(`track_id` not null): `tracks.genre` is kept as a mirror of the new tag (same shared
+rule as the scan and the one-off backfill, see `docs/ARCHITECTURE.md`), and the track's
+`energy` is recomputed from it. `album`/`label`/`year` and `artist`/`title` never touch
+the `Track` row this way.
 
 ## Labels
 

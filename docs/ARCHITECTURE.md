@@ -191,14 +191,30 @@ mutates them** — tags, renaming and organization remain the Organize section's
   nor merge a track with its remix of a different duration. The file's
   tags fill only the empty identity fields, read-only (never overwrite
   BPM/key or manual corrections; Cratory never writes to the file). `label` too
-  (ID3 `TPUB` / Vorbis `LABEL`) is read from the file and filled only if absent.
+  (ID3 `TPUB` / Vorbis `LABEL`) is read from the file and filled only if absent. `genre`
+  gets an extra pass on top of "fill only if empty": right after a lead acquires a file
+  (even one with a pre-existing streaming genre) it also runs through the shared
+  `align_track_genre` rule below, so it does not stay stuck on a stale streaming value.
   This one-time backfill at index time is separate from — and superseded, when a
   file is owned, by — the **query-time effective value**: `genre`/`album`/`label`/`year`
   are resolved live as `COALESCE(audio_file.field, track.field)` over the join on
   `tracks.primary_file_id` (`repositories._EFFECTIVE_TAGS`), so a later edit to the
-  file's tags in Organize is reflected everywhere without touching the `Track` row or
-  re-running indexing. `artist`/`title` never follow the file this way — they stay the
-  streaming identity used for de-duplication and matching.
+  file's tags in Organize is reflected everywhere without re-running indexing. For
+  `album`/`label`/`year` this never touches the `Track` row — the COALESCE is the only
+  place the value is computed. `genre` is the one exception: `tracks.genre` is ALSO kept
+  as a convenience mirror of the file's tag, one shared rule
+  (`app/services/genre_align.py`, `align_track_genre`) called from five sites — the
+  one-off backfill (`backend/app/tools/align_genre_from_file.py` /
+  `db_hygiene.align_owned_genre_from_file`, next to `cleanup_disk_first` below), Organize's
+  manual tag edit, Organize's scan (tag changed outside the app), Organize's Apply (a
+  RETAG that touches genre) and library indexing (a lead acquiring a file). Writing the
+  mirror also recomputes the derived `energy` (`apply_estimated_energy`, since it depends
+  on bpm+genre — a set's energy arc can visibly shift after an Organize genre edit or a
+  re-scan; never overwrites `energy_source == "computed"`). The COALESCE read path stays
+  authoritative regardless of the mirror's state: the rule compares after light
+  normalization (case, dashes/underscores), so the mirror can lag the tag's literal text
+  without `GET /api/tracks` ever showing a wrong value. `artist`/`title` never follow the
+  file this way — they stay the streaming identity used for de-duplication and matching.
   The scan **always ignores hidden folders and files** (name starting with `.`, e.g.
   `.quarantine`, `.DS_Store`, `.git`): they are not library content, neither for the
   count nor for indexing. Incremental scan: a file with unchanged path+mtime+size
@@ -340,7 +356,8 @@ backend/app/
   serializers.py  ORM -> Pydantic, derived fields
   integrations/   external clients behind interfaces
   core/           config, logging
-  tools/          maintenance scripts (e.g. clean_user_data, cleanup_disk_first)
+  tools/          maintenance scripts (e.g. clean_user_data, cleanup_disk_first,
+                  align_genre_from_file)
 ```
 
 Routers must contain no business logic. External integrations must be
@@ -362,14 +379,23 @@ Responsibilities:
   family are coherent even without a common token, super-genres ("Electronic")
   are neutral, different families count as a break. In the set generator genre
   coherence is a dedicated ranking term (like the energy arc), modulated per
-  strategy (`StrategyProfile.genre_coherence`: exploratory strategies reduce it);
+  strategy (`StrategyProfile.genre_coherence`: exploratory strategies reduce it).
+  Every genre read along this chain — similarity/coherence here, the requested-genre
+  bonus and the genre arc below, the AI curation payload — resolves the **effective**
+  genre (owned track: the primary file's tag; otherwise streaming), not `Track.genre`
+  directly: the candidate engine resolves a `genre_map` once per pool
+  (`repositories.effective_genres_for_tracks`, one query) and threads it through as a
+  plain argument (`scoring.genre_of`); callers outside the Set Builder that build no
+  pool-wide map (`/api/transitions`, alternatives, the set editor) keep reading
+  `Track.genre` streaming, unchanged;
 - transition classification;
 - deterministic set generation in two phases (`services/set_skeleton.py` +
   `services/set_generator.py`). Phase 1 (`build_skeleton`) elects opening/peak/closing/reset
   anchors per strategy, reserves the top 15% of candidates by impact score (0.7 energy
   percentile + 0.3 BPM percentile) for the peak segment only, and plans a genre arc (dominant
-  family at peak, a calmer family elsewhere; degenerates to no plan above an 80% dominant share
-  or without a second family at 15%+). Phase 2 fills each segment with the same beam search
+  family at peak, a calmer family elsewhere, on the effective genre above; degenerates to no
+  plan above an 80% dominant share or without a second family at 15%+). Phase 2 fills each
+  segment with the same beam search
   (span-budgeted: `_beam_search_span`), converging toward the incoming anchor and following the
   segment's genre plan, with a penalty for spending a reserved track outside the peak window.
   Falls back to the previous
