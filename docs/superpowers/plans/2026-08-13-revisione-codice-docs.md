@@ -316,8 +316,15 @@ Ogni candidata va doppio-confermata a mano (le chiavi possono essere raggiunte d
 Per ogni file flaggato da knip fuori dalle convenzioni App Router:
 
 ```bash
-cd "$WT/frontend" && grep -rn "<NomeComponente\|nome-file-senza-estensione" app components lib tests e2e
+cd "$WT/frontend" && grep -rnE "<NomeComponente[^A-Za-z0-9]|\bNomeComponente\b" app components lib tests e2e
 ```
+
+**Ancorare SEMPRE la fine del nome** (`\b`, o una classe di caratteri che escluda
+lettere e cifre). Un grep non ancorato su un nome che è prefisso di un altro
+(`TrackCard` dentro `TrackCardCompact`) trova le occorrenze del fratello vivo e fa
+sembrare vivo un simbolo morto. È lo stesso difetto che in Fase 1 ha nascosto
+`POST /api/sets/generate` dietro `/api/sets/generate-async`: sbaglia in direzione
+prudente (roba morta non trovata, mai roba viva cancellata), ma lascia sporco.
 
 Zero hit reali → L1. Componenti quasi-fotocopia individuati leggendo i file → L2. Classificare nel log, stesso formato della Fase 1.
 
