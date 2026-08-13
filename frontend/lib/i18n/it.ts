@@ -83,6 +83,38 @@ export const it: Dictionary = {
     identifyBusy: "Identificazione…",
     fpResult: (identified: number, below: number, notFound: number, errors: number, total: number) =>
       `${identified} identificati, ${below} sotto soglia, ${notFound} non trovati${errors > 0 ? `, ${errors} errori` : ""} (su ${total}).`,
+    // Categoria e descrizione per riga della lista servizi: il backend le manda
+    // in italiano, qui vivono in entrambe le lingue (fallback: testo backend).
+    servicesMeta: {
+      spotify: {
+        category: "Streaming",
+        detail: "Import playlist, brani salvati e creazione playlist. Richiede login OAuth.",
+      },
+      anthropic: {
+        category: "AI",
+        detail: "Una chiave sola per tutta l'AI: Set Agent, suggerimenti artista/titolo e revisione generi in Organize (modello via AI_MODEL).",
+      },
+      discogs: {
+        category: "Discovery · Metadati",
+        detail: "Crate digging per il Discovery (genere/stile, etichetta) e label/genere/anno per i tag di Organize. Funziona senza token; DISCOGS_TOKEN alza il rate limit e mostra le copertine.",
+      },
+      musicbrainz: {
+        category: "Metadati",
+        detail: "Identità del brano + label, genere (via tag) e anno per i tag di Organize. Nessuna chiave richiesta (~1 richiesta/secondo).",
+      },
+      acoustid: {
+        category: "Fingerprint",
+        detail: "Identità acustica del file → MBID (match MusicBrainz esatto, alta confidenza). Richiede la chiave AcoustID e il binario fpcalc.",
+      },
+      slskd: {
+        category: "Download",
+        detail: "Acquisizione file via Soulseek: scarica le tracce di una playlist e collega il file alla libreria. SLSKD_API_KEY opzionale.",
+      },
+      soundcloud: {
+        category: "Download",
+        detail: "Import dei like e download per-traccia via yt-dlp. L'username si imposta qui nella riga.",
+      },
+    } as Record<string, { category: string; detail: string }>,
     reconnectButton: "Ricollega",
     connectButton: "Collega",
     redirectUriPrefix: "Redirect URI da incollare",
@@ -185,16 +217,12 @@ export const it: Dictionary = {
     stageDiscoverSub: "playlist importate",
     stageAcquire: "Acquisisci",
     stageAcquireSub: (active: boolean, pending: number) => (active ? `download attivi · ${pending} in coda` : "in wishlist"),
-    stageOrganize: "Organizza ⤴",
-    stageOrganizeSub: "Organizza le tracce che possiedi e i loro tag in Sortory",
+    stageOrganize: "Organizza",
+    stageOrganizeSub: "Organizza le tracce che possiedi e i loro tag (file in inbox)",
     stageAnalyze: "Analizza",
     stageAnalyzeSub: "Analizza BPM & KEY o importa da Rekordbox",
     stagePlay: "Suona",
     stagePlaySub: "pronte per un set",
-    inboxNotConfigured: "Inbox non configurata: imposta SLSKD_DOWNLOAD_DIR nel .env del backend.",
-    inboxWaiting: (n: number) =>
-      `${n} file audio in inbox in attesa di tagging e riorganizzazione (Sortory); poi torna qui e indicizza.`,
-    openOrganize: "Vai a Organizza",
   },
   analysis: {
     pageTitle: "Analisi",

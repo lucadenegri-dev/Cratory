@@ -40,9 +40,9 @@ export function ServicesList({ services, spotify }: {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-sm font-semibold uppercase tracking-wide text-fg-strong">{s.name}</span>
-                  <span className="text-[10px] uppercase tracking-wider text-faint">{s.category}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-faint">{t.settings.servicesMeta[s.key]?.category ?? s.category}</span>
                 </div>
-                <p className="mt-1 text-sm text-muted">{s.detail}</p>
+                <p className="mt-1 text-sm text-muted">{t.settings.servicesMeta[s.key]?.detail ?? s.detail}</p>
                 <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-faint">
                   {s.env.map((e) => <code key={e} className="rounded-none bg-elevated px-1">{e}</code>)}
                   {s.optional_env.map((e) => (

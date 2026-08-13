@@ -86,6 +86,36 @@ export const en = {
     identifyBusy: "Identifying…",
     fpResult: (identified: number, below: number, notFound: number, errors: number, total: number) =>
       `${identified} identified, ${below} below threshold, ${notFound} not found${errors > 0 ? `, ${errors} errors` : ""} (of ${total}).`,
+    servicesMeta: {
+      spotify: {
+        category: "Streaming",
+        detail: "Playlist import, saved tracks and playlist creation. Requires OAuth login.",
+      },
+      anthropic: {
+        category: "AI",
+        detail: "One key for all the AI: Set Agent, artist/title suggestions and genre review in Organize (model via AI_MODEL).",
+      },
+      discogs: {
+        category: "Discovery · Metadata",
+        detail: "Crate digging for Discovery (genre/style, label) and label/genre/year for Organize's tags. Works without a token; DISCOGS_TOKEN raises the rate limit and shows record covers.",
+      },
+      musicbrainz: {
+        category: "Metadata",
+        detail: "Track identity + label, genre (via tags) and year for Organize's tags. No key required (~1 request/second).",
+      },
+      acoustid: {
+        category: "Fingerprint",
+        detail: "Acoustic identity of the file → MBID (exact MusicBrainz match, high confidence). Requires the AcoustID key and the fpcalc binary.",
+      },
+      slskd: {
+        category: "Download",
+        detail: "File acquisition via Soulseek: downloads a playlist's tracks and links the file to the library. SLSKD_API_KEY optional.",
+      },
+      soundcloud: {
+        category: "Download",
+        detail: "Likes import and per-track downloads via yt-dlp. The username is set right here on this row.",
+      },
+    } as Record<string, { category: string; detail: string }>,
     reconnectButton: "Reconnect",
     connectButton: "Connect",
     redirectUriPrefix: "Paste this redirect URI",
@@ -188,16 +218,12 @@ export const en = {
     stageDiscoverSub: "playlists imported",
     stageAcquire: "Acquire",
     stageAcquireSub: (active: boolean, pending: number) => (active ? `downloads active · ${pending} queued` : "in wishlist"),
-    stageOrganize: "Organize ⤴",
-    stageOrganizeSub: "Organize your tracks and their tags in Sortory",
+    stageOrganize: "Organize",
+    stageOrganizeSub: "Organize your tracks and their tags (files in the inbox)",
     stageAnalyze: "Analyze",
     stageAnalyzeSub: "Analyze BPM & KEY or import from Rekordbox",
     stagePlay: "Play",
     stagePlaySub: "ready for a set",
-    inboxNotConfigured: "Inbox not configured: set SLSKD_DOWNLOAD_DIR in the backend .env.",
-    inboxWaiting: (n: number) =>
-      `${n} ${n === 1 ? "audio file" : "audio files"} in inbox are waiting for tagging and reorganization (Sortory); then come back here and index.`,
-    openOrganize: "Go to Organize",
   },
   analysis: {
     pageTitle: "Analysis",

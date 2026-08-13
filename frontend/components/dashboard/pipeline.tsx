@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -9,15 +8,15 @@ import { useT } from "@/lib/i18n";
 import { Card } from "@/components/ui";
 
 /* Una fase della striscia: numero vivo + etichetta, "accesa" (pallino) se c'è
-   lavoro pendente. Fasi con href navigano (Analizza -> /analysis); Organizza
-   apre un pannello inline (link alla sezione Organize). */
+   lavoro pendente. Ogni fase naviga alla sua pagina; Organizza porta dritta a
+   FILES (era un pannello inline quando Organize era un'app separata). */
 type StageDef = {
   key: string;
   label: string;
   value: string;
   sub: string;
   hot: boolean;
-  href?: string;
+  href: string;
 };
 
 function StageCell({ s }: { s: StageDef }) {
@@ -35,7 +34,6 @@ function StageCell({ s }: { s: StageDef }) {
 
 export function PipelineStrip({ p }: { p: PipelineStatus }) {
   const t = useT();
-  const [organizeOpen, setOrganizeOpen] = useState(false);
 
   const stages: StageDef[] = [
     {
@@ -51,6 +49,7 @@ export function PipelineStrip({ p }: { p: PipelineStatus }) {
       key: "organizza", label: t.dashboard.stageOrganize,
       value: p.inbox_files === null ? "—" : String(p.inbox_files),
       sub: t.dashboard.stageOrganizeSub, hot: (p.inbox_files ?? 0) > 0,
+      href: "/organize/files",
     },
     {
       key: "analizza", label: t.dashboard.stageAnalyze, value: String(p.analyze_pending),
@@ -62,49 +61,18 @@ export function PipelineStrip({ p }: { p: PipelineStatus }) {
     },
   ];
 
-  const onStageClick = (key: string) => {
-    if (key === "organizza") setOrganizeOpen((v) => !v);
-  };
-
   return (
     <Card>
       <div className="flex items-stretch overflow-x-auto">
         {stages.map((s, i) => (
           <div key={s.key} className="flex flex-1 items-center">
             {i > 0 && <ChevronRight size={14} className="shrink-0 text-faint" aria-hidden />}
-            {s.href ? (
-              <Link href={s.href} className="flex-1 transition-colors hover:bg-elevated">
-                <StageCell s={s} />
-              </Link>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onStageClick(s.key)}
-                className="flex-1 transition-colors hover:bg-elevated"
-              >
-                <StageCell s={s} />
-              </button>
-            )}
+            <Link href={s.href} className="flex-1 transition-colors hover:bg-elevated">
+              <StageCell s={s} />
+            </Link>
           </div>
         ))}
       </div>
-      {organizeOpen && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted">
-          <span>
-            {p.inbox_files === null
-              ? t.dashboard.inboxNotConfigured
-              : t.dashboard.inboxWaiting(p.inbox_files)}
-          </span>
-          {/* Non è più un'altra app da aprire in una tab nuova: Organize è una
-              sezione di questa, e il link è navigazione interna. */}
-          <Link
-            href="/organize/files"
-            className="inline-flex shrink-0 items-center gap-1.5 text-fg-strong hover:underline"
-          >
-            {t.dashboard.openOrganize} <ChevronRight size={12} />
-          </Link>
-        </div>
-      )}
     </Card>
   );
 }
