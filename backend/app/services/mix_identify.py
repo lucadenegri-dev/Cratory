@@ -19,7 +19,7 @@ import math
 import os
 import subprocess
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from app.integrations.shazam import AudioRecognizer, RecognizerError

@@ -15,7 +15,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import runtime_settings
-from app.core.config import settings
 from app.models import Playlist, Track
 from app.services import soulseek_download_job
 from app.services.local_import import scan_folder
