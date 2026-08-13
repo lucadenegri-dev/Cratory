@@ -119,13 +119,27 @@ Ogni voce è un CANDIDATO. Falsi positivi noti da scartare subito: handler FastA
 ```bash
 cd "$WT/backend" && "$MAIN/backend/.venv/bin/python" -c "
 from app.main import app
-for r in app.routes:
-    if hasattr(r, 'methods'):
-        print(sorted(r.methods), r.path)
-" | sort
+spec = app.openapi()
+rows = []
+for path, ops in spec['paths'].items():
+    for method in ops:
+        if method.lower() in ('get','post','put','delete','patch'):
+            rows.append(f'{method.upper():6} {path}')
+print('\n'.join(sorted(rows)))
+print('TOTALE:', len(rows))
+"
 ```
 
-Expected: ~148 righe `['GET'] /api/...`. Salvare l'output nel log.
+Expected: 149 righe `GET    /api/...` + il totale. Salvare l'output nel log.
+
+Nota (verificata durante l'esecuzione): NON iterare `app.routes` cercando
+`.methods` — su questa versione di FastAPI restituisce 31 wrapper
+`_IncludedRouter` privi di `.methods` e il censimento collassa a 5 righe.
+`app.openapi()` è la fonte affidabile. I 149 endpoint sono 148 decoratori
+`@router.*` più `GET /api/health`, registrato con `@app.get` in
+`app/main.py:130`: per questo la metrica grep della baseline dice 148. La
+baseline continua a usare il grep (confronto omogeneo in Task 14), il
+censimento usa openapi (verità sugli endpoint).
 
 - [ ] **Step 3: incrocio endpoint ↔ chiamate frontend**
 
@@ -473,7 +487,25 @@ cd "$WT" && git add docs/ARCHITECTURE.md docs/DESIGN.md docs/DEPENDENCIES.md && 
 **Files:**
 - Modify: `docs/API.md`
 
-- [ ] **Step 1: rigenerare il censimento endpoint** (stesso comando del Task 2 Step 2, ora post-pulizia) e confrontarlo con `docs/API.md`: ogni endpoint documentato deve esistere, ogni endpoint esistente deve essere documentato (o esplicitamente marcato interno).
+- [ ] **Step 1: rigenerare il censimento endpoint** e confrontarlo con `docs/API.md`: ogni endpoint documentato deve esistere, ogni endpoint esistente deve essere documentato (o esplicitamente marcato interno).
+
+```bash
+cd "$WT/backend" && "$MAIN/backend/.venv/bin/python" -c "
+from app.main import app
+spec = app.openapi()
+rows = []
+for path, ops in spec['paths'].items():
+    for method in ops:
+        if method.lower() in ('get','post','put','delete','patch'):
+            rows.append(f'{method.upper():6} {path}')
+print('\n'.join(sorted(rows)))
+print('TOTALE:', len(rows))
+"
+```
+
+Usare QUESTO comando: iterare `app.routes` cercando `.methods` non funziona su
+questa versione di FastAPI (restituisce 5 righe invece di 149 — vedi la nota nel
+Task 2 Step 2). Al via della revisione gli endpoint erano 149.
 
 - [ ] **Step 2: riscrivere** — raggruppare per area (playlists, tracks, sets, discovery, organize, …), per ogni endpoint: metodo, path, una riga di scopo, parametri non ovvi. Le regole di dominio importanti (sovrascrittura BPM/key, apply rekordbox) restano ma come regole del presente. Via i "changelog" interni alla doc.
 
