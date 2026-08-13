@@ -4,6 +4,7 @@ import time
 
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.main import app
 from app.organize.models import AudioFile
 from app.organize.services import genre_review_job
@@ -17,7 +18,7 @@ def _seed(db, fid, **kw):
 
 
 def test_start_without_key_not_configured(db, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(settings, "ai_api_key", "")
     with TestClient(app) as client:
         r = client.post("/api/organize/genre-review").json()
         assert r["configured"] is False
@@ -31,7 +32,7 @@ def test_start_without_key_not_configured(db, monkeypatch):
 
 
 def test_start_passes_body_to_job(db, monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(settings, "ai_api_key", "test")
     captured = {}
 
     def fake_start(folder=None, genre=None, redo=False):
@@ -53,7 +54,7 @@ def test_status_returns_job_state(db):
 
 
 def test_preview_counts_candidates(db, monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(settings, "ai_api_key", "test")
     _seed(db, 1, artist="A", title="T")
     with TestClient(app) as client:
         r = client.get("/api/organize/genre-review/preview").json()
@@ -64,7 +65,7 @@ def test_job_runs_review_and_finishes(db, monkeypatch):
     """start_job → thread → review mockata → stato done col risultato."""
     from app.organize.services import genre_review as gr_service
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(settings, "ai_api_key", "test")
     result = {"configured": True, "files": 0, "proposed": 0, "confirmed": 0,
               "unresolved": 0, "skipped": 0}
     monkeypatch.setattr(gr_service, "review", lambda *a, **k: result)

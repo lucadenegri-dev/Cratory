@@ -2,7 +2,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -42,7 +42,13 @@ class Settings(BaseSettings):
     # slskd: percorso del suo file di config, editato dal flag "Condividi libreria"
     # (slskd non espone le share via API a runtime). Default = posizione standard.
     slskd_config_path: str = "~/.config/slskd/slskd.yml"
-    ai_api_key: str = ""
+    # Chiave AI unica per tutta l'app (Set Agent + tag/generi di Organize).
+    # ANTHROPIC_API_KEY e' il nome standard dell'SDK; AI_API_KEY resta letta
+    # come fallback per gli .env scritti prima della fusione.
+    ai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("ANTHROPIC_API_KEY", "AI_API_KEY"),
+    )
     ai_model: str = ""
     # Modello di default: claude-opus-4-8 (vedi integrations/llm.py).
     # Effort/thinking bassi tengono bassa la latenza: con effort alto + thinking

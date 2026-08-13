@@ -68,7 +68,7 @@ class AnthropicLLMClient(LLMClient):
     def __init__(self, model: str | None = None) -> None:
         if not settings.ai_api_key:
             raise LLMNotConfigured(
-                "AI_API_KEY mancante in backend/.env: impostare la chiave API Anthropic "
+                "ANTHROPIC_API_KEY mancante in backend/.env: impostare la chiave API Anthropic "
                 "per usare l'AI Set Agent."
             )
         try:

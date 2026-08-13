@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.main import app
 from app.organize.models import AudioFile, Issue
 from app.organize.services import ai_tags
@@ -18,7 +19,7 @@ def _seed_missing(db, file_id, path, fields):
 
 def test_ai_suggest_sets_fixes_without_accepting(db, monkeypatch):
     _seed_missing(db, 1, "/m/rataxes - acid face.mp3", ("artist", "title"))
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(settings, "ai_api_key", "test")
     monkeypatch.setattr(ai_tags, "suggest",
                         lambda names: [{"artist": "rataxes", "title": "acid face"}])
     with TestClient(app) as client:
@@ -34,7 +35,7 @@ def test_ai_suggest_sets_fixes_without_accepting(db, monkeypatch):
 
 
 def test_ai_suggest_no_key(db, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(settings, "ai_api_key", "")
     with TestClient(app) as client:
         r = client.post("/api/organize/issues/ai-suggest").json()
         assert r["configured"] is False
@@ -43,7 +44,7 @@ def test_ai_suggest_no_key(db, monkeypatch):
 
 def test_ai_suggest_unresolved(db, monkeypatch):
     _seed_missing(db, 2, "/m/codice_strano.mp3", ("artist",))
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(settings, "ai_api_key", "test")
     monkeypatch.setattr(ai_tags, "suggest", lambda names: [{"artist": None, "title": None}])
     with TestClient(app) as client:
         r = client.post("/api/organize/issues/ai-suggest").json()
@@ -58,7 +59,7 @@ def test_ai_suggest_skips_already_suggested(db, monkeypatch):
                  suggested_fix_json={"field": "artist", "action": "retag", "to": "Z"},
                  status="open"))
     db.commit()
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(settings, "ai_api_key", "test")
     called = {"n": 0}
 
     def _fake(names):

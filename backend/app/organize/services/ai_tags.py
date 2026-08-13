@@ -3,10 +3,11 @@ modulo si carica senza il pacchetto `anthropic`; solo suggest() lo richiede.
 Mockabile nei test (monkeypatch su ai_tags.suggest)."""
 
 import logging
-import os
 import re
 
 from pydantic import BaseModel
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class _Guesses(BaseModel):
 
 
 def is_configured() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return bool(settings.ai_api_key)
 
 
 def suggest(filenames: list[str]) -> list[dict]:
@@ -42,7 +43,7 @@ def suggest(filenames: list[str]) -> list[dict]:
         return []
     from anthropic import Anthropic  # import lazy
 
-    client = Anthropic()
+    client = Anthropic(api_key=settings.ai_api_key)
     out: list[dict] = []
     for i in range(0, len(filenames), _CHUNK):
         chunk = filenames[i:i + _CHUNK]
@@ -357,7 +358,7 @@ def review_genres(items: list[dict], *, max_web_searches: int = 3,
         return []
     from anthropic import Anthropic  # import lazy
 
-    client = Anthropic()
+    client = Anthropic(api_key=settings.ai_api_key)
     lines = []
     for j, it in enumerate(items):
         parts = [f"{it.get('artist') or '?'} - {it.get('title') or '?'}"]

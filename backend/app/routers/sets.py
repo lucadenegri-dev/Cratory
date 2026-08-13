@@ -103,8 +103,8 @@ def generate_async(req: SetGenerationRequest):
     """Avvia la generazione in background e ritorna subito. Seguire /generate-status."""
     use_ai = _should_use_ai(req)
     if use_ai and not llm_configured():
-        raise api_error(409, "ai_not_configured", "AI not configured: AI_API_KEY missing.",
-                         reason="AI_API_KEY mancante")
+        raise api_error(409, "ai_not_configured", "AI not configured: ANTHROPIC_API_KEY missing.",
+                         reason="ANTHROPIC_API_KEY mancante")
     with _gen_lock:
         if _gen_state["status"] == "running":
             # Mai inghiottire una richiesta nuova nel job in corso: quel job puo' avere
