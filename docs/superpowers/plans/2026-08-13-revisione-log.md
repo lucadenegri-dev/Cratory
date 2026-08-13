@@ -392,7 +392,13 @@ Nessun L2 tocca `app/organize/` (vincolo del piano).
 - [L2] `app/services/auto_link.py:20` (`_label`) + `app/services/soulseek_download_job.py:54` (`_track_label`) — corpi identici (3 righe), differisce solo il nome. Entrambi coperti: `tests/test_auto_link.py` e `tests/test_soulseek_download_job.py` (asserisce `current_label`). La localizzazione delle stringhe italiane hard-coded e' fuori scope: fondere, non tradurre
 - [L2] `app/services/audio_analysis_job.py:39` + `app/services/streaming_import_job.py:76` — `_spawn(fn)` identico, docstring compresa. Entrambi monkeypatchati dai test (`test_audio_analysis_job.py:22`, `test_streaming_import_job.py:24`, `test_job_double_start.py:215`, ...). Fusione meccanica in un helper condiviso
 - [L2] `app/routers/sets.py:161` (`_fmt_dur`) + `app/routers/playlists.py:436` (stessa espressione inline, stesso fallback `"—"`) — chiamare `_fmt_dur` anche dal ramo markdown delle playlist. Il resto dei rami CSV/markdown/testo e' genuinamente diverso e **non** va fuso
-- [L2] `app/services/discovery_dig.py:43` + `app/services/manual_import.py:26` — `_norm(value)` one-liner identico. Entrambi coperti (`test_discovery_dig.py`, `test_manual_import.py`). Valore marginale (2 righe, moduli scorrelati): fondere solo se il Task 4 crea comunque un modulo di util testuali. **ATTENZIONE:** gli altri 7 helper `_norm`-simili nel backend sono tutti diversi e portanti (`candidate_engine.py:19` NFKD+ASCII, `library_index.py:53` strip `feat.`/`(Original Mix)`, `soulseek_select.py:73` `&`->`and`, `playlist_import.py:107` casefold alnum, `preview.py:38` ritorna un set, `rekordbox_import.py:76` NFC+normpath, `scoring.py:594`) — **non** toccarli
+
+**Esito Task 4:** 5 dei 6 finding L2 fusi (vedi commit `refactor(revisione): consolida ...`
+uno per finding, `.superpowers/sdd/task-4-report.md` per il dettaglio). Il sesto
+(`_norm` discovery_dig/manual_import) e' stato **retrocesso a L3**, vedi sotto — non
+per un ostacolo emerso a meta' fusione, ma perche' la sua stessa condizione dichiarata
+("fondere solo se il Task 4 crea comunque un modulo di util testuali") non si e'
+verificata.
 
 ### Candidati scartati (falsi positivi, per tracciabilita')
 
@@ -402,6 +408,10 @@ Nessun L2 tocca `app/organize/` (vincolo del piano).
 - Tutti gli handler dei router — referenziati solo dai decorator
 
 ### Findings L3 — segnalazione, nessuna azione automatica
+
+Retrocesso dal Task 4 (era L2, non fuso):
+
+- [L3] `app/services/discovery_dig.py:43` (`_norm`) + `app/services/manual_import.py:26` (`_norm`) — one-liner identico (`(value or "").strip().lower()`), entrambi coperti (`test_discovery_dig.py`, `test_manual_import.py`). Il finding L2 originale condizionava esplicitamente la fusione ("fondere solo se il Task 4 crea comunque un modulo di util testuali"): il Task 4 non ha creato un simile modulo per nessuno degli altri cinque finding (`export_render.py` e' formattazione di export, non normalizzazione testuale; `http_errors.py` e' HTTP; `track_label.py` e' un'etichetta d'interfaccia; `job_spawn.py` e' avvio thread) — la precondizione non si e' avverata, quindi nessuna fusione. Resta valida l'ATTENZIONE originale: gli altri 7 helper `_norm`-simili nel backend sono tutti diversi e portanti (`candidate_engine.py:19` NFKD+ASCII, `library_index.py:53` strip `feat.`/`(Original Mix)`, `soulseek_select.py:73` `&`->`and`, `playlist_import.py:107` casefold alnum, `preview.py:38` ritorna un set, `rekordbox_import.py:76` NFC+normpath, `scoring.py:594`) — **non** toccarli
 
 Duplicazione core <-> `app/organize/` (il piano vieta L2 in `organize/`: qui solo L1 o L3;
 nessuno di questi e' morto, quindi tutti L3 — richiedono una decisione dell'utente):
