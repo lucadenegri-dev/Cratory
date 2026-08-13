@@ -10,21 +10,16 @@ import csv
 import io
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.http_errors import api_error
+from app.core.http_errors import api_error, spotify_http_error
 from app.db import get_db
 from app.models import Playlist, PlaylistSyncEvent, Track
 from app.models import playlist_tracks as playlist_tracks_table
-from app.integrations.spotify import (
-    SpotifyError,
-    SpotifyNotConfigured,
-    SpotifyNotConnected,
-    SpotifyWebClient,
-)
+from app.integrations.spotify import SpotifyError, SpotifyWebClient
 from app.repositories import (
     FileTags,
     add_track_to_playlist,
@@ -76,14 +71,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/playlists", tags=["playlists"])
 
 
-def _http_error(exc: SpotifyError) -> HTTPException:
-    if isinstance(exc, SpotifyNotConfigured):
-        return api_error(409, "spotify_not_configured", str(exc), reason=str(exc))
-    if isinstance(exc, SpotifyNotConnected):
-        return api_error(401, "spotify_not_connected", str(exc), reason=str(exc))
-    return api_error(502, "spotify_error", str(exc), reason=str(exc))
-
-
 # L'auto-enrichment delle tracce appena importate non e' piu' responsabilita' di
 # Cratory: il motore di enrichment (feature/genere) vive ora in Sortory.
 
@@ -100,7 +87,7 @@ def spotify_available(db: Session = Depends(get_db)):
         raw = client.list_user_playlists()
         me_id = client.current_user_id()
     except SpotifyError as exc:
-        raise _http_error(exc) from exc
+        raise spotify_http_error(exc) from exc
     finally:
         client.close()
     out: list[SpotifyPlaylistRef] = []
@@ -152,7 +139,7 @@ def liked_preview(db: Session = Depends(get_db)):
     try:
         items = client.get_liked_tracks()
     except SpotifyError as exc:
-        raise _http_error(exc) from exc
+        raise spotify_http_error(exc) from exc
     finally:
         client.close()
     return [LikedTrackPreview(**p) for p in preview_liked_tracks(db, items)]

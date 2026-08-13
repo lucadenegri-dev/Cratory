@@ -1,18 +1,17 @@
 import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.http_errors import api_error
+from app.core.http_errors import api_error, spotify_http_error
 from app.db import get_db
 from app.integrations.spotify import (
     SpotifyError,
     SpotifyNotConfigured,
-    SpotifyNotConnected,
     SpotifyWebClient,
     build_authorize_url,
     make_state,
@@ -44,14 +43,6 @@ def _consume_state(state: str | None) -> bool:
     return issued is not None and (time.monotonic() - issued) <= _STATE_TTL_SECONDS
 
 
-def _http_error(exc: SpotifyError) -> HTTPException:
-    if isinstance(exc, SpotifyNotConfigured):
-        return api_error(409, "spotify_not_configured", str(exc), reason=str(exc))
-    if isinstance(exc, SpotifyNotConnected):
-        return api_error(401, "spotify_not_connected", str(exc), reason=str(exc))
-    return api_error(502, "spotify_error", str(exc), reason=str(exc))
-
-
 @router.get("/status")
 def status(db: Session = Depends(get_db)):
     configured = bool(settings.spotify_client_id and settings.spotify_client_secret)
@@ -77,7 +68,7 @@ def login():
     try:
         return RedirectResponse(build_authorize_url(state))
     except SpotifyNotConfigured as exc:
-        raise _http_error(exc) from exc
+        raise spotify_http_error(exc) from exc
 
 
 @router.get("/callback")
@@ -124,7 +115,7 @@ def create_playlist(req: CreatePlaylistRequest, db: Session = Depends(get_db)):
     try:
         url = client.create_playlist(req.name or setlist.name, track_ids)
     except SpotifyError as exc:
-        raise _http_error(exc) from exc
+        raise spotify_http_error(exc) from exc
     finally:
         client.close()
     skipped = len(setlist.tracks) - len(track_ids)
