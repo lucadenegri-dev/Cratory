@@ -32,6 +32,15 @@ def test_weak_name_match_excluded():
     assert ranked == []
 
 
+def test_nome_plausibile_ma_imperfetto_escluso():
+    # match parziale: nome plausibile ma non perfetto (bootleg rip), solo mp3 a 256.
+    # name_score sotto la soglia minima (_MIN_NAME_SCORE): lo scorer esclude il
+    # candidato del tutto, non lo lascia entrare a bassa confidenza.
+    files = [_f("daft - da funk (live bootleg rip).mp3", bitrate=256)]
+    ranked = rank_candidates(files, artist="Daft Punk", title="Da Funk")
+    assert ranked == []
+
+
 def test_unknown_bitrate_lossy_not_excluded():
     # Soulseek spesso non riporta il bitrate in ricerca: un mp3 con bitrate ignoto
     # e nome coerente NON deve essere scartato (prima finiva tier 0 -> escluso).
