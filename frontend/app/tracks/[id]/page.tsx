@@ -14,6 +14,7 @@ import { TrackPlayButton } from "@/components/track-play-button";
 import { AddToPlaylistMenu } from "@/components/add-to-playlist-menu";
 import { RatingDiamond } from "@/components/rating-diamond";
 import { useT } from "@/lib/i18n";
+import { cn } from "@/lib/cn";
 
 function TransitionList({ title, items, emptyLabel }: { title: string; items: TransitionCandidate[]; emptyLabel: string }) {
   return (
@@ -88,13 +89,33 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
+  // Badge "dal file" sui campi descrittivi che vengono dal tag del file collegato
+  // (invece che dai metadati streaming): artist/title della traccia restano
+  // l'identità Cratory e non passano di qui.
+  const fromFile = (v: React.ReactNode, flag: boolean) =>
+    flag ? (
+      <span className="inline-flex items-center gap-2">
+        {v}
+        <Badge tone="neutral">{t.tracks.fromFile}</Badge>
+      </span>
+    ) : v;
+
   const rows: Array<[string, React.ReactNode]> = [
-    ["Album", track.album ?? "—"], [t.tracks.rowGenre, track.genre ?? "—"], [t.tracks.rowYear, track.year ?? "—"],
+    [t.tracks.rowAlbum, fromFile(track.album ?? "—", track.album_from_file)],
+    [t.tracks.rowGenre, fromFile(track.genre ?? "—", track.genre_from_file)],
+    [t.tracks.rowYear, fromFile(track.year ?? "—", track.year_from_file)],
     ["BPM", track.bpm?.toFixed(2) ?? "—"], ["Key (Camelot)", track.camelot_key ?? "—"], [t.tracks.rowDuration, fmtDuration(track.duration_seconds)],
-    [t.tracks.rowEnergy, track.energy ?? "—"], [t.tracks.rowLabel, track.label ?? "—"],
+    [t.tracks.rowEnergy, track.energy ?? "—"], [t.tracks.rowLabel, fromFile(track.label ?? "—", track.label_from_file)],
     [t.tracks.rowSource, track.source_type], ["ISRC", track.isrc ?? "—"], [t.tracks.rowStatus, track.status],
     ["Playlist", track.playlists.length ? track.playlists.map((p) => p.name).join(", ") : "—"],
   ];
+
+  // Confronto informativo fra l'identità della traccia (artist/title Cratory) e i
+  // tag artista/titolo letti dal file collegato: solo per segnalare un disallineamento,
+  // mai per sostituire l'identità.
+  const norm = (s: string | null) => (s ?? "").trim().toLowerCase();
+  const fileArtistMismatch = track.file_artist != null && norm(track.file_artist) !== norm(track.artist);
+  const fileTitleMismatch = track.file_title != null && norm(track.file_title) !== norm(track.title);
 
   const marginalia = (
     <div className="space-y-4">
@@ -171,6 +192,11 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
                 <Button size="sm" variant="outline" onClick={() => setLinking(true)}>
                   <Link2 size={14} /> {track.has_local_file ? t.tracks.replaceFile : t.tracks.linkFile}
                 </Button>
+                {track.has_local_file && track.local_path && (
+                  <Link href={`/organize/files?q=${encodeURIComponent(track.local_path)}`} className="inline-flex">
+                    <Button size="sm" variant="outline"><ExternalLink size={14} /> {t.tracks.openInOrganize}</Button>
+                  </Link>
+                )}
               </div>
             }
           />
@@ -200,6 +226,24 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
                   <td className="px-4 py-2 text-muted">{t.tracks.rowFormat}</td>
                   <td className="px-4 py-2 tnum text-right">
                     {track.local_format.toUpperCase()}{track.local_bitrate ? ` · ${track.local_bitrate} kbps` : ""}
+                  </td>
+                </tr>
+              )}
+              {track.file_artist != null && (
+                <tr className="border-b border-border/50 last:border-0">
+                  <td className="px-4 py-2 text-muted">{t.tracks.rowFileArtist}</td>
+                  <td className={cn("px-4 py-2 text-right", fileArtistMismatch && "text-warning")}
+                      title={fileArtistMismatch ? t.tracks.fileMismatchTitle : undefined}>
+                    {track.file_artist}{fileArtistMismatch ? " ⚠" : ""}
+                  </td>
+                </tr>
+              )}
+              {track.file_title != null && (
+                <tr className="border-b border-border/50 last:border-0">
+                  <td className="px-4 py-2 text-muted">{t.tracks.rowFileTitle}</td>
+                  <td className={cn("px-4 py-2 text-right", fileTitleMismatch && "text-warning")}
+                      title={fileTitleMismatch ? t.tracks.fileMismatchTitle : undefined}>
+                    {track.file_title}{fileTitleMismatch ? " ⚠" : ""}
                   </td>
                 </tr>
               )}

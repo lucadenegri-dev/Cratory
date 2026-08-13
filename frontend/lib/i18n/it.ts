@@ -545,6 +545,11 @@ export const it: Dictionary = {
     createdPlaylist: (name: string) => `Creata ${name}`,
     ratingLabel: "Voto",
     ratingLevelTitle: (level: number) => `Vota ${level} su 3`,
+    fromFile: "dal file",
+    rowFileArtist: "Artista (file)",
+    rowFileTitle: "Titolo (file)",
+    fileMismatchTitle: "Diverso dall'identità della traccia",
+    openInOrganize: "Apri in Organize",
   },
   playlists: {
     pageTitle: "Playlist",

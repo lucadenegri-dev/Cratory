@@ -546,6 +546,11 @@ export const en = {
     createdPlaylist: (name: string) => `Created ${name}`,
     ratingLabel: "Rating",
     ratingLevelTitle: (level: number) => `Rate ${level} of 3`,
+    fromFile: "from file",
+    rowFileArtist: "Artist (file)",
+    rowFileTitle: "Title (file)",
+    fileMismatchTitle: "Differs from the track identity",
+    openInOrganize: "Open in Organize",
   },
   playlists: {
     pageTitle: "Playlist",
