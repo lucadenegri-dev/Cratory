@@ -101,7 +101,7 @@ export const en = {
     configSubtitle: "Paths and URLs — override backend/.env at runtime, no backend restart.",
     fieldLibraryRoot: "Library folder (LIBRARY_ROOT)",
     fieldArchiveRoot: "Archive folder (ARCHIVE_ROOT)",
-    fieldDownloadsDir: "slskd downloads folder (SLSKD_DOWNLOAD_DIR)",
+    fieldDownloadsDir: "Shared downloads folder — Organize's Inbox (SLSKD_DOWNLOAD_DIR)",
     fieldSlskdUrl: "slskd URL (SLSKD_URL)",
     fieldSlskdConfig: "slskd config file (for sharing)",
     overrideBadge: "override .env",

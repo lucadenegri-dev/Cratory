@@ -98,7 +98,7 @@ export const it: Dictionary = {
     configSubtitle: "Percorsi e URL — sovrascrivono backend/.env a runtime, senza riavviare il backend.",
     fieldLibraryRoot: "Cartella libreria (LIBRARY_ROOT)",
     fieldArchiveRoot: "Cartella archivio (ARCHIVE_ROOT)",
-    fieldDownloadsDir: "Cartella download slskd (SLSKD_DOWNLOAD_DIR)",
+    fieldDownloadsDir: "Cartella download condivisa — Inbox di Organize (SLSKD_DOWNLOAD_DIR)",
     fieldSlskdUrl: "URL slskd (SLSKD_URL)",
     fieldSlskdConfig: "File config slskd (per la condivisione)",
     overrideBadge: "override .env",
