@@ -105,6 +105,57 @@ def _track(db, **kw) -> Track:
     return t
 
 
+def test_labels_overview_conta_letichetta_effettiva_dal_file(db):
+    """F1: labels_overview deve aggregare sul valore EFFETTIVO (tag del primary
+    file quando la traccia ne ha uno), come fa GET /api/tracks?label=<label>
+    (drill-down dalla pagina etichette, _EFFECTIVE_TAGS["label"]). Il nuovo
+    modal di modifica scrive l'etichetta solo sul file, e una ri-scansione non
+    ripara mai Track.label (library_index.py valorizza solo se vuoto): senza
+    questa correzione l'aggregato sottoconta e un'etichetta presente solo nei
+    tag file non compare affatto."""
+    from app.organize.models import AudioFile, ScanRoot
+
+    root = ScanRoot(path="/tmp/lib-labels")
+    db.add(root)
+    db.flush()
+
+    # Track.label="Streaming Label" mascherato dal tag file "File Label".
+    t1 = Track(source_type="spotify", title="T1", artist="A1", label="Streaming Label")
+    db.add(t1)
+    db.flush()
+    f1 = AudioFile(root_id=root.id, track_id=t1.id, path="/tmp/lib-labels/1.mp3",
+                   ext=".mp3", size_bytes=1, hash_method="stream", status="present",
+                   location="library", label="File Label", genre="Techno")
+    db.add(f1)
+    db.flush()
+    t1.primary_file_id = f1.id
+    t1.has_local_file = True
+
+    # Etichetta presente SOLO sul file (Track.label vuoto).
+    t2 = Track(source_type="spotify", title="T2", artist="A2")
+    db.add(t2)
+    db.flush()
+    f2 = AudioFile(root_id=root.id, track_id=t2.id, path="/tmp/lib-labels/2.mp3",
+                   ext=".mp3", size_bytes=1, hash_method="stream", status="present",
+                   location="library", label="Only On File")
+    db.add(f2)
+    db.flush()
+    t2.primary_file_id = f2.id
+    t2.has_local_file = True
+    db.commit()
+
+    overview = labels_overview(db)
+    by_label = {o["label"]: o for o in overview}
+
+    assert "File Label" in by_label
+    assert by_label["File Label"]["track_count"] == 1
+    assert by_label["File Label"]["genres"] == ["Techno"]  # genere effettivo, non Track.genre
+    assert "Streaming Label" not in by_label  # mascherata dal tag file
+
+    assert "Only On File" in by_label
+    assert by_label["Only On File"]["track_count"] == 1
+
+
 def test_labels_overview_aggregates_counts_and_info(db):
     _track(db, spotify_id="s1", title="A", artist="Artist 1", genre="idm", year=2018, label="Warp")
     _track(db, spotify_id="s2", title="B", artist="Artist 2", genre="electronic", year=2020, label="Warp")

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.integrations.spotify import SpotifyError
 from app.models import Track
+from app.repositories import _EFFECTIVE_TAGS, _join_primary_file
 
 _MAX_GENRES_PER_LABEL = 6
 
@@ -95,26 +96,38 @@ def album_label(client, album_id: str) -> str | None:
 
 
 def labels_overview(db: Session) -> list[dict]:
-    """Aggrega la libreria per etichetta. Ritorna una lista ordinata per conteggio desc.
+    """Aggrega la libreria per etichetta EFFETTIVA (tag del primary file quando la
+    traccia ne ha uno, altrimenti streaming). Ritorna una lista ordinata per
+    conteggio desc.
+
+    Il drill-down dalla pagina etichette chiama GET /api/tracks?label=<label>,
+    che filtra sullo stesso valore effettivo (_apply_track_filters,
+    _EFFECTIVE_TAGS["label"]): aggregare qui sulla sola colonna streaming
+    (Track.label) produrrebbe conteggi diversi da quelli del drill-down, e le
+    etichette scritte solo sul file (il nuovo modal di modifica scrive lì) non
+    comparirebbero affatto (F1).
 
     Ogni voce: label, track_count, artist_count, generi distinti (cap), range anni.
     """
-    tracks = db.scalars(
-        select(Track).where(Track.label.is_not(None), Track.label != "")
+    eff_label = _EFFECTIVE_TAGS["label"]
+    eff_genre = _EFFECTIVE_TAGS["genre"]
+    rows = db.execute(
+        _join_primary_file(select(Track, eff_label, eff_genre))
+        .where(eff_label.is_not(None), eff_label != "")
     ).all()
 
     # Merge a read-time delle varianti dello stesso label (es. "Warp Records
     # Limited" e "Warp Records Ltd" -> "Warp Records"): nessuna migrazione dati.
-    buckets: dict[str, list[Track]] = {}
-    for t in tracks:
-        key = _clean_label(t.label) or t.label
-        buckets.setdefault(key, []).append(t)
+    buckets: dict[str, list[tuple[Track, str | None]]] = {}
+    for t, label_val, genre_val in rows:
+        key = _clean_label(label_val) or label_val
+        buckets.setdefault(key, []).append((t, genre_val))
 
     out: list[dict] = []
     for label, items in buckets.items():
-        artists = {t.artist for t in items if t.artist}
-        genres = {t.genre for t in items if t.genre}
-        years = [t.year for t in items if t.year]
+        artists = {t.artist for t, _ in items if t.artist}
+        genres = {g for _, g in items if g}
+        years = [t.year for t, _ in items if t.year]
         out.append({
             "label": label,
             "track_count": len(items),
