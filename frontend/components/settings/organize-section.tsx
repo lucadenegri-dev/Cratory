@@ -1,17 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  getSettings, updateSettings, runFingerprint, listProviders,
-  type Settings, type FingerprintResult, type ProviderInfo,
-} from "@/lib/organize/api";
+import { getSettings, updateSettings, type Settings } from "@/lib/organize/api";
 import { Alert, Button, Loading } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
-/* La sezione Organize della pagina Impostazioni: template di rinomina e stato
-   dei provider di metadati. Viene dalla pagina /organize/settings, assorbita in
-   F5; lo switcher di lingua che stava lì è sparito come duplicato — quello di
-   Cratory, più in alto in questa stessa pagina, fa la stessa cosa. */
+/* La sezione Organize della pagina Impostazioni: i soli template di rinomina.
+   Viene dalla pagina /organize/settings, assorbita in F5; lo switcher di lingua
+   che stava lì è sparito come duplicato, e la lista provider è confluita nella
+   lista "Servizi esterni" più in alto in questa stessa pagina (una fonte sola,
+   /api/services/status). */
 
 // Valori d'esempio per l'anteprima client-side (approssimata: la resa reale con
 // sanitizzazione è lato planner).
@@ -42,9 +40,6 @@ export function OrganizeSection() {
   const [error, setError] = useState<string | null>(null);
   const [naming, setNaming] = useState("");
   const [folder, setFolder] = useState("");
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [fpResult, setFpResult] = useState<FingerprintResult | null>(null);
-  const [fpBusy, setFpBusy] = useState(false);
 
   const load = useCallback(() => {
     getSettings()
@@ -56,19 +51,11 @@ export function OrganizeSection() {
       .finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { listProviders().then(setProviders).catch(() => {}); }, []);
 
   const saveTemplates = async () => {
     setError(null);
     try { setSettings(await updateSettings({ naming_template: naming, folder_template: folder })); }
     catch (e) { setError(e instanceof Error ? e.message : t.organize.common.error); }
-  };
-  const onIdentify = async () => {
-    setError(null);
-    setFpBusy(true);
-    try { setFpResult(await runFingerprint()); }
-    catch (e) { setError(e instanceof Error ? e.message : t.organize.common.error); }
-    finally { setFpBusy(false); }
   };
 
   return (
@@ -117,71 +104,8 @@ export function OrganizeSection() {
 
             <p className="text-xs text-faint">{t.organize.settings.foldersNote}</p>
           </section>
-
-          <ProviderList
-            providers={providers} fpResult={fpResult} fpBusy={fpBusy} onIdentify={onIdentify}
-          />
         </>
       )}
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: ProviderInfo["status"] }) {
-  const t = useT();
-  const label = status === "configured" ? t.organize.settings.statusConfigured : status === "connected" ? t.organize.settings.statusConnected : t.organize.settings.statusMissing;
-  return (
-    <span className={`shrink-0 text-[10px] uppercase tracking-wider ${status === "missing" ? "text-faint" : "text-ok"}`}>
-      {label}
-    </span>
-  );
-}
-
-function ProviderList({ providers, fpResult, fpBusy, onIdentify }: {
-  providers: ProviderInfo[];
-  fpResult: FingerprintResult | null;
-  fpBusy: boolean;
-  onIdentify: () => void;
-}) {
-  const t = useT();
-  return (
-    <section>
-      <h2 className="text-sm font-medium text-fg-strong">{t.organize.settings.providerTitle}</h2>
-      <p className="mt-1 text-xs text-faint">{t.organize.settings.providerHintPre}<span className="font-mono">backend/.env</span>{t.organize.settings.providerHintPost}</p>
-      <div className="mt-3 flex flex-col">
-        {providers.map((p, i) => (
-          <div key={p.key} className="border-t border-border py-4 first:border-t-0">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span className="tnum text-[11px] text-faint">{String(i + 1).padStart(2, "0")}</span>
-                  <span className="text-sm font-medium uppercase tracking-wide text-fg-strong">{p.name}</span>
-                  <span className="text-[10px] uppercase tracking-wider text-muted">{t.organize.settings.providersMeta[p.key]?.category ?? p.category}</span>
-                </div>
-                <p className="mt-1 max-w-xl text-xs text-faint">{t.organize.settings.providersMeta[p.key]?.description ?? p.description}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  {p.env_vars.map((v) => (
-                    <code key={v} className="border border-border bg-bg px-1.5 py-0.5 font-mono text-[10px] text-muted">{v}</code>
-                  ))}
-                  <a href={p.docs_url} target="_blank" rel="noreferrer" className="text-[10px] text-muted underline-offset-2 hover:text-fg hover:underline">docs ↗</a>
-                  {p.key === "acoustid" && p.status === "configured" && (
-                    <button
-                      onClick={onIdentify} disabled={fpBusy}
-                      className="border border-border px-1.5 py-0.5 text-[10px] text-fg hover:bg-elevated disabled:opacity-40"
-                    >{fpBusy ? t.organize.settings.identifyBusy : t.organize.settings.identifyNow}</button>
-                  )}
-                </div>
-                {p.key === "acoustid" && fpResult && (
-                  <p className="mt-1.5 text-[10px] text-faint">
-                    {t.organize.settings.fpResult(fpResult.identified, fpResult.below_threshold, fpResult.not_found, fpResult.errors, fpResult.total)}
-                  </p>
-                )}
-              </div>
-              <StatusBadge status={p.status} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }

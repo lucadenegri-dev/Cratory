@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  errText, getConfigSettings, patchConfigSettings, setLibraryShare,
+  errText, getConfigSettings, patchConfigSettings, setLibraryShare, startLibraryIndex,
   type ConfigPatch, type ConfigSettings,
 } from "@/lib/api";
 import { Alert, Badge, Button, CardHeader, Checkbox, Field, Input, Loading, Spinner } from "@/components/ui";
 import { PathPickerButton, usePickerAvailability } from "@/components/path-picker-button";
+import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
 
 const CONFIG_FIELDS = [
@@ -128,7 +129,52 @@ export function ConfigCard() {
           <p className="mt-1.5 text-xs text-muted">{t.settings.shareLibraryHint}</p>
           {shareMsg && <p className="mt-1.5 text-xs text-fg">{shareMsg}</p>}
         </div>
+
+        <div className="border-t border-border pt-4">
+          <LibraryIndexSection />
+        </div>
       </div>
+    </div>
+  );
+}
+
+/* Indicizzazione della libreria canonica: vive dentro la card dei percorsi
+   perche' LIBRARY_ROOT e "Indicizza ora" sono la stessa cosa vista da due
+   lati (il path e l'azione che lo legge). Stato dal poller globale
+   (JobsProvider): niente polling locale. */
+function LibraryIndexSection() {
+  const t = useT();
+  const { libraryIndex: libJob, refresh } = useJobs();
+  const [libError, setLibError] = useState<string | null>(null);
+
+  const runIndex = () => {
+    setLibError(null);
+    startLibraryIndex().then(() => refresh()).catch((e) => setLibError(String(e.message ?? e)));
+  };
+
+  const busy = libJob?.status === "running";
+
+  return (
+    <div className="space-y-3 text-sm">
+      <div>
+        <div className="text-sm font-semibold uppercase tracking-wide text-fg-strong">{t.settings.canonicalLibraryTitle}</div>
+        <p className="mt-1 text-sm text-muted">{t.settings.canonicalLibraryBody}</p>
+      </div>
+      {libError && <Alert tone="danger">⚠ {libError}</Alert>}
+      {libJob?.status === "error" && <Alert tone="danger">⚠ {libJob.error ?? t.settings.indexFailedFallback}</Alert>}
+      <Button size="sm" onClick={runIndex} disabled={busy}>{busy ? t.settings.indexingLabel : t.settings.indexNowButton}</Button>
+      {busy && (
+        <p className="tnum text-sm text-muted">{t.settings.indexingProgress(libJob.processed, libJob.total)}</p>
+      )}
+      {libJob?.status === "done" && libJob.result?.linking && (
+        <p className="text-sm text-fg">
+          {t.settings.indexResultSummary(
+            libJob.result.linking.scanned, libJob.result.linking.matched, libJob.result.linking.created,
+            libJob.result.linking.duplicates, libJob.result.linking.relinked, libJob.result.linking.lost,
+            libJob.result.linking.failed,
+          )}
+        </p>
+      )}
     </div>
   );
 }

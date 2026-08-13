@@ -7,14 +7,10 @@ import type { Settings } from "@/lib/organize/api";
 
 const getSettings = vi.fn<() => Promise<Settings>>();
 const updateSettings = vi.fn();
-const listProviders = vi.fn(async () => []);
-const runFingerprint = vi.fn();
 
 vi.mock("@/lib/organize/api", () => ({
   getSettings: (...a: unknown[]) => getSettings(...(a as [])),
   updateSettings: (...a: unknown[]) => updateSettings(...(a as [])),
-  listProviders: (...a: unknown[]) => listProviders(...(a as [])),
-  runFingerprint: (...a: unknown[]) => runFingerprint(...(a as [])),
 }));
 
 const { OrganizeSection } = await import("@/components/settings/organize-section");
@@ -39,6 +35,18 @@ describe("Impostazioni unica", () => {
     const page = readFileSync(resolve(__dirname, "../app/settings/page.tsx"), "utf8");
     expect(page).toContain("<OrganizeSection />");
     expect(page).toMatch(/groupOrganize[\s\S]{0,120}<OrganizeSection \/>/);
+  });
+
+  it("la pagina usa la lista servizi unificata, senza card sciolte", () => {
+    const page = readFileSync(resolve(__dirname, "../app/settings/page.tsx"), "utf8");
+    expect(page).toContain("<ServicesList");
+    expect(page).not.toMatch(/SoulseekCard|SoundCloudCard|LibraryIndexCard/);
+  });
+
+  it("OrganizeSection non ha più la lista provider (vive nei Servizi esterni)", () => {
+    const section = readFileSync(
+      resolve(__dirname, "../components/settings/organize-section.tsx"), "utf8");
+    expect(section).not.toMatch(/ProviderList|listProviders|StatusBadge/);
   });
 
   it("carica i template e li mostra", async () => {
