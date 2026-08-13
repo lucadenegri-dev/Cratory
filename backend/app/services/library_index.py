@@ -28,6 +28,7 @@ from app.integrations.local_files import (
 from app.models import ArchiveSeen, Track, utcnow
 from app.repositories import ci_equals, unreferenced_track_ids
 from app.services.audio_energy import analyze_file, recompute_energy
+from app.services.genre_align import align_track_genre
 from app.services.genre_norm import normalize_genre
 # Ponte fra il modello core e Organize: file_link/AudioFile sono gli unici
 # agganci a Organize da qui, e restano minuscoli apposta per non aprire un
@@ -498,6 +499,13 @@ def collega_tracce(db: Session, *, seen_paths: set[str], seen_digests: set[str],
             if track.local_path != str(path.resolve()):
                 report["relinked"] += 1
         _fill_identity(track, tags, path)
+        # D8: `_fill_identity` riempie il genere SOLO se vuoto ("mai
+        # sovrascrivere"), quindi un lead che possiede gia' un genere
+        # (streaming) e ora acquisisce un file lo terrebbe per sempre, anche
+        # se il tag dice altro — la stessa regola condivisa (genre_align) che
+        # l'Apply/scan/modifica manuale usano per un file gia' agganciato si
+        # applica anche qui, al momento in cui l'aggancio nasce.
+        align_track_genre(track, tags.get("genre"), apply=True)
         _own(track, path=path, digest=digest)
         aggiorna_primary(db, track)
         if track.added_at is None:

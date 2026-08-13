@@ -102,6 +102,29 @@ def test_non_sovrascrive_identita_esistente(db, fake_audio, collega_da_disco):
     assert t.title == "Titolo Corretto" and t.genre == "Techno"
 
 
+def test_lead_con_genere_si_allinea_al_tag_del_file_quando_acquisisce_un_possesso(
+        db, fake_audio, collega_da_disco):
+    """D8: `_fill_identity` riempie il genere SOLO se vuoto ("mai
+    sovrascrivere"), quindi da sola non basta quando il lead arriva gia' con
+    un genere (streaming): senza la regola condivisa resterebbe "Electronic"
+    per sempre anche se il file dice "Techno". Stessa regola di
+    genre_align.align_track_genre gia' usata da Apply/scan/modifica manuale,
+    applicata qui al momento in cui l'aggancio nasce."""
+    from app.models import Track
+
+    make, root = fake_audio
+    t = Track(source_type="spotify", isrc="ISRC001", title="X", artist="A",
+             genre="Electronic")
+    db.add(t); db.commit()
+
+    make("f.mp3", digest="H9", isrc="ISRC001", genre="Techno")
+    collega_da_disco(root)
+
+    db.refresh(t)
+    assert t.has_local_file is True
+    assert t.genre == "Techno"
+
+
 def test_duplicati_stesso_run_primo_vince(db, fake_audio, collega_da_disco):
     """Stesso audio in due file: il primo vince, il secondo si conta come duplicato."""
     from sqlalchemy import select
