@@ -72,6 +72,14 @@ snapshots per event) and export in four formats (`m3u8|csv|text|markdown`).
 `slskd_download_dir` (folder pick) and `slskd_config_path` (file pick),
 same button in the "Collega file locale" modal next to the "percorso esatto" input (file pick only) —
 availability gated by `usePickerAvailability()` hook, shared by both contexts.
+**Settings unified post-fusion (2026-08-13):** one external-services source
+(`GET /api/services/status`, 7 entries with `optional_env`/`optional_ok`;
+`/api/organize/providers` removed), one AI key (`ANTHROPIC_API_KEY`, with `AI_API_KEY`
+still read as fallback) shared by the Set Agent and Organize's tag/genre AI, and the
+`/settings` page reorganized into 4 groups (Language · Paths & library · External
+services · Organize) with inline actions on the service rows (Spotify OAuth, slskd
+login, SoundCloud username, AcoustID fingerprint) — the standalone Soulseek/SoundCloud
+cards and Organize's duplicate provider list are gone.
 
 Full chronological history lives in [PROGRESS.md](../PROGRESS.md).
 

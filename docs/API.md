@@ -771,9 +771,20 @@ GET /api/ai/status
 GET /api/services/status
 ```
 
-`/api/services/status` returns the aggregate state of the integrations: Spotify, AI,
-Discogs (`connected` = `DISCOGS_TOKEN` present; works even without a token, the token
-raises the rate limit), slskd and related services.
+`/api/services/status` returns the aggregate state of ALL external integrations, in
+order: `spotify, anthropic, discogs, musicbrainz, acoustid, slskd, soundcloud` (one
+list for the whole app — the former `/api/organize/providers` was absorbed here and
+removed). Unified field semantics for every entry:
+
+- `configured` (bool): the **required** configuration is present (intrinsically `true`
+  for services that work without a key, e.g. Discogs and MusicBrainz);
+- `connected` (bool | null): live session state where it exists (Spotify OAuth),
+  `null` where the concept does not apply. For slskd the live state stays on
+  `GET /api/slskd/status`, polled by the UI row (no HTTP call to the daemon here);
+- `env` (list): required variables; `optional_env` (list): optional variables
+  (e.g. `DISCOGS_TOKEN`), rendered by the UI as "recommended" instead of making the
+  service look unconfigured; `optional_ok` (bool | null): `true`/`false` = optional
+  variables present/absent, `null` = the service has none.
 
 ## Settings
 

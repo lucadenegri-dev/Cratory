@@ -136,9 +136,13 @@ Recommended providers (Discovery only — none of these feed BPM/key/genre):
 
 ```text
 DISCOGS_TOKEN=
-AI_API_KEY=
+ANTHROPIC_API_KEY=
 AI_MODEL=
 ```
+
+`ANTHROPIC_API_KEY` is the single AI key for the whole app (Set Agent + Organize
+tag/genre suggestions); `AI_API_KEY` is still read as a fallback for `.env` files
+written before the fusion.
 
 File acquisition (optional):
 

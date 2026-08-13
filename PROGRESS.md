@@ -32,6 +32,28 @@ the new paradigm; mix identification via Shazam integrated (phase 1; co-occurren
 backlog); SoundCloud import (playlists/secret links + selective likes) via yt-dlp; the
 app is now bilingual IT/EN (language toggle in Settings).
 
+## Milestone 2026-08-13 - Settings unificata post-fusione
+
+- **Un solo elenco servizi**: `GET /api/services/status` esteso a 7 voci (spotify,
+  anthropic, discogs, musicbrainz, acoustid, slskd, soundcloud) con semantica unica
+  (`configured` = configurazione necessaria presente; `connected` = sessione viva o
+  null; nuovi `optional_env`/`optional_ok` per i token facoltativi, resi come
+  "token consigliato"). `GET /api/organize/providers` rimosso (router, schema
+  `ProviderInfo`, client `listProviders`): era un duplicato con semantica invertita.
+- **Chiave AI unica**: `ANTHROPIC_API_KEY` (standard SDK) con fallback su
+  `AI_API_KEY` per gli `.env` pre-fusione; `organize/services/ai_tags.py` legge
+  `settings.ai_api_key` invece di `os.environ` e passa la chiave esplicitamente ai
+  client `Anthropic(...)`. Messaggi d'errore aggiornati (`sets.py`, `llm.py`).
+- **Pagina `/settings` a 4 gruppi**: Lingua · Percorsi e libreria (ConfigCard ha
+  assorbito l'indicizzazione: LIBRARY_ROOT e "Indicizza ora" adiacenti) · Servizi
+  esterni (nuovo `components/settings/services-list.tsx`, azioni inline: OAuth
+  Spotify, connect/disconnect slskd con polling di transizione, username SoundCloud,
+  "Identifica ora" AcoustID) · Organize (soli template di rinomina). Spariti i
+  blocchi autonomi `SoulseekCard`/`SoundCloudCard`/`LibraryIndexCard` e la
+  `ProviderList` di Organize; pulizia i18n IT/EN delle chiavi orfane.
+- Spec: `docs/superpowers/specs/2026-08-13-settings-unificata-design.md`; piano:
+  `docs/superpowers/plans/2026-08-13-settings-unificata.md`.
+
 ## Milestone 2026-08-08 - Data di aggiunta tracce in Library e dettaglio playlist
 
 - **Library**: colonna "Aggiunta" ordinabile (`Track.added_at`, primo import in
