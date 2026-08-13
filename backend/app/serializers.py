@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 
 from app.models import Setlist, Track
-from app.repositories import FileTags, effective_genres_for_tracks, file_tags_for_tracks
+from app.repositories import FileTags, file_tags_for_tracks
 from app.schemas import (
     AlternativeOut,
     SetlistOut,
@@ -80,7 +80,11 @@ def setlist_out(setlist: Setlist, lang: str = "it", db: Session | None = None) -
     # STESSO genere effettivo mostrato in `track` qui sotto, non lo streaming
     # grezzo: altrimenti un set con quel brano "Progressive House" solo sul file
     # può etichettare come reset una transizione che non lo è (o viceversa).
-    genre_map = effective_genres_for_tracks(db, [st.track_id for st in setlist.tracks]) if db is not None else None
+    # D4: derivata da `ft_map` (già una query in blocco, riga sopra) invece di
+    # un secondo giro di query — stessa espressione di `_EFFECTIVE_TAGS["genre"]`
+    # (tag file se presente, altrimenti lo streaming), calcolata qui in Python.
+    genre_map = ({st.track_id: ft_map.get(st.track_id, FileTags()).genre or st.track.genre
+                 for st in setlist.tracks} if db is not None else None)
     items = []
     prev = None
     for st in setlist.tracks:

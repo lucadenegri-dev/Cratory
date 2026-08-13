@@ -193,6 +193,71 @@ def _count_queries(engine, fn):
     return count
 
 
+# --- D5: setlist_out ed export CSV devono passare il genere effettivo -----
+# --- a classify_transition (innesti di I4 rimasti scoperti da test) --------
+
+
+def _set_con_reset_solo_via_tag_file(db, root):
+    """Setlist di due tracce: BPM/key deboli (niente technically_safe) e
+    genere STREAMING identico ("Techno") su entrambe, cosi' senza genre_map
+    la transizione e' `creative_risk`. La seconda traccia e' posseduta con un
+    tag file "Ambient": SOLO passando il genere effettivo la classificazione
+    diventa `good_reset` (stesso schema di
+    test_classify_transition_without_genre_map_keeps_streaming_behavior in
+    test_i4_effective_genre_set_chain.py, qui end-to-end via l'API)."""
+    setlist = Setlist(name="S")
+    db.add(setlist)
+    db.flush()
+    prev = Track(source_type="manual", title="Prev", artist="A", bpm=128,
+                 camelot_key="8A", energy=70, genre="Techno")
+    db.add(prev)
+    db.flush()
+    cand = _make_owned(
+        db, root,
+        track_kw={"title": "Cand", "artist": "B", "bpm": 150, "camelot_key": "2B",
+                 "energy": 68, "genre": "Techno"},
+        file_kw={"genre": "Ambient"},
+    )
+    db.add(SetlistTrack(setlist_id=setlist.id, track_id=prev.id, position=1))
+    db.add(SetlistTrack(setlist_id=setlist.id, track_id=cand.id, position=2))
+    db.commit()
+    return setlist
+
+
+def test_setlist_out_passa_il_genere_effettivo_a_classify_transition(client_db):
+    """DEVE fallire se setlist_out tornasse a costruire `genre_map` solo se
+    `db` produce risultati (o smettesse di passarla): la classificazione
+    resterebbe `creative_risk` (lo streaming e' identico su entrambe le
+    tracce) invece di `good_reset` (il tag file della seconda e' "Ambient")."""
+    client, db, _engine = client_db
+    root = _root(db)
+    setlist = _set_con_reset_solo_via_tag_file(db, root)
+
+    r = client.get(f"/api/sets/{setlist.id}")
+    assert r.status_code == 200
+    items = r.json()["tracks"]
+    assert items[1]["transition_class"] == "good_reset"
+
+
+def test_export_csv_passa_il_genere_effettivo_a_classify_transition(client_db):
+    """Stesso innesto (D5) ma per l'export CSV (`routers/sets.py`), che non ha
+    `ft_map` e ricalcola `genre_map` con una query propria (legittima, D4)."""
+    import csv
+    import io
+
+    client, db, _engine = client_db
+    root = _root(db)
+    setlist = _set_con_reset_solo_via_tag_file(db, root)
+
+    r = client.post(f"/api/sets/{setlist.id}/export", params={"format": "csv"})
+    assert r.status_code == 200
+    rows = list(csv.reader(io.StringIO(r.text)))
+    header, data_rows = rows[0], rows[1:]
+    idx = header.index("transition_class")
+    second_row = [row for row in data_rows if row[header.index("title")] == "Cand"][0]
+    assert second_row[idx] == "good_reset"
+
+
 def test_playlist_tracks_non_ha_n_piu_1_query(client_db):
     """DEVE fallire se il fix per I3 risolve i tag file traccia-per-traccia
     (es. `get_primary_file` dentro un ciclo) invece che con una query batch:
