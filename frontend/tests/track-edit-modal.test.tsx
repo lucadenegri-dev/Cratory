@@ -17,6 +17,7 @@ vi.mock("@/lib/organize/api", () => ({
 import { apiGet, updateTrack } from "@/lib/api";
 import { updateFileTags } from "@/lib/organize/api";
 import { TrackEditModal } from "@/components/track-edit-modal";
+import { it as itDict } from "@/lib/i18n/it";
 
 function makeTrack(overrides: Record<string, unknown> = {}) {
   return {
@@ -63,5 +64,43 @@ describe("TrackEditModal — routing del salvataggio", () => {
     fireEvent.submit(document.getElementById("track-edit-form")!);
     await waitFor(() => expect(updateTrack).toHaveBeenCalledWith(1, { genre: "House" }));
     expect(updateFileTags).not.toHaveBeenCalled();
+  });
+});
+
+describe("TrackEditModal — indipendenza degli errori tra i due percorsi (C5)", () => {
+  it("updateFileTags fallisce: updateTrack viene chiamato comunque e il modal resta aperto", async () => {
+    vi.mocked(updateFileTags).mockRejectedValueOnce(new Error("boom"));
+    const onClose = vi.fn();
+    render(<TrackEditModal track={makeTrack({ primary_file_id: 42 })} open
+                           onClose={onClose} onSaved={() => {}} />);
+    // genre (campo file) e bpm (campo track) cambiano insieme: due patch indipendenti.
+    fireEvent.change(screen.getByDisplayValue("Pop"), { target: { value: "Techno" } });
+    fireEvent.change(screen.getByDisplayValue("128"), { target: { value: "130" } });
+    fireEvent.submit(document.getElementById("track-edit-form")!);
+
+    // Il percorso file fallisce ma non deve impedire l'invio del percorso track:
+    // sono due try/catch indipendenti, non un blocco unico che si ferma al primo errore.
+    await waitFor(() => expect(updateTrack).toHaveBeenCalledWith(1, { bpm: 130 }));
+    await waitFor(() => expect(screen.getByText(/Tag file/)).toBeTruthy());
+    // L'utente non deve perdere le modifiche: il modal non si chiude quando c'è un errore.
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("entrambi i percorsi falliscono: il messaggio riporta entrambi i prefissi", async () => {
+    vi.mocked(updateFileTags).mockRejectedValueOnce(new Error("file down"));
+    vi.mocked(updateTrack).mockRejectedValueOnce(new Error("track down"));
+    const onClose = vi.fn();
+    render(<TrackEditModal track={makeTrack({ primary_file_id: 42 })} open
+                           onClose={onClose} onSaved={() => {}} />);
+    fireEvent.change(screen.getByDisplayValue("Pop"), { target: { value: "Techno" } });
+    fireEvent.change(screen.getByDisplayValue("128"), { target: { value: "130" } });
+    fireEvent.submit(document.getElementById("track-edit-form")!);
+
+    await waitFor(() => {
+      const alert = screen.getByText(new RegExp(itDict.tracks.fileTagsErrorPrefix));
+      expect(alert.textContent).toContain(itDict.tracks.fileTagsErrorPrefix);
+      expect(alert.textContent).toContain(itDict.tracks.trackErrorPrefix);
+    });
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
