@@ -20,7 +20,7 @@ from app.integrations.bandcamp import BandcampClient, BandcampError
 from app.integrations.discogs import DiscogsClient, DiscogsError
 from app.integrations.itunes import ItunesClient
 from app.models import Track
-from app.repositories import add_track_to_playlist
+from app.repositories import add_track_to_playlist, file_tags_for_tracks
 from app.schemas import (
     DiscogsVideoOut,
     DiscoveryAddRequest,
@@ -307,7 +307,11 @@ def add_to_library(req: DiscoveryAddRequest, db: Session = Depends(get_db)):
         title=req.title, artist=req.artist, isrc=req.isrc,
         duration_seconds=req.duration_seconds, url=req.url, artwork_url=req.album_art_url,
     )
-    return DiscoveryAddResponse(created=created, track=track_out(track))
+    # M6: import_single_track puo' ripiegare su una traccia GIA' posseduta
+    # (match artista+titolo): senza i tag file mostrava il genere streaming
+    # anche per una traccia con un genere curato sul file.
+    ft = file_tags_for_tracks(db, [track.id]).get(track.id)
+    return DiscoveryAddResponse(created=created, track=track_out(track, ft))
 
 
 @router.post("/save-for-later", response_model=DiscoverySaveForLaterResponse)
@@ -323,4 +327,5 @@ def save_for_later(req: DiscoverySaveForLaterRequest, db: Session = Depends(get_
     add_track_to_playlist(db, track, playlist, added_by="cratory")
     db.commit()
     db.refresh(track)
-    return DiscoverySaveForLaterResponse(created=created, track=track_out(track))
+    ft = file_tags_for_tracks(db, [track.id]).get(track.id)
+    return DiscoverySaveForLaterResponse(created=created, track=track_out(track, ft))

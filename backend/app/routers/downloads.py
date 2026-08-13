@@ -11,7 +11,7 @@ from app.integrations.slskd import (
     SlskdError, SlskdFile, get_slskd_client, slskd_configured,
 )
 from app.integrations.soundcloud import soundcloud_available
-from app.repositories import get_track, tracks_download_pending
+from app.repositories import file_tags_for_tracks, get_track, tracks_download_pending
 from app.services import soulseek_download_job as job
 from app.schemas import TrackOut
 from app.serializers import track_out
@@ -114,7 +114,9 @@ def download_pending(db: Session = Depends(get_db)):
 
     Persistite sulla Track: sopravvivono a job, sessioni e riavvii.
     """
-    return [track_out(t) for t in tracks_download_pending(db)]
+    tracks = tracks_download_pending(db)
+    ft_map = file_tags_for_tracks(db, [t.id for t in tracks])
+    return [track_out(t, ft_map.get(t.id)) for t in tracks]
 
 
 @router.delete("/pending/{track_id}", response_model=TrackOut)
@@ -127,7 +129,7 @@ def ignore_pending(track_id: int, db: Session = Depends(get_db)):
     track.last_download_reason = None
     db.commit()
     db.refresh(track)
-    return track_out(track)
+    return track_out(track, file_tags_for_tracks(db, [track.id]).get(track.id))
 
 
 @router.post("/retry-pending", status_code=202)
@@ -289,7 +291,7 @@ def keep_review(req: ReviewActionIn, db: Session = Depends(get_db)):
     except NoReviewFileError as exc:
         raise api_error(409, "download_review_error", f"Download review error: {exc}",
                          reason=str(exc)) from exc
-    return track_out(track)
+    return track_out(track, file_tags_for_tracks(db, [track.id]).get(track.id))
 
 
 @router.post("/discard-review", response_model=TrackOut)
@@ -298,7 +300,8 @@ def discard_review(req: ReviewActionIn, db: Session = Depends(get_db)):
     track = get_track(db, req.track_id)
     if track is None:
         raise api_error(404, "track_not_found", "Track not found.")
-    return track_out(discard_downloaded(db, track))
+    discarded = discard_downloaded(db, track)
+    return track_out(discarded, file_tags_for_tracks(db, [discarded.id]).get(discarded.id))
 
 
 @router.get("/auto-link", response_model=list[AutoLinkProposal])

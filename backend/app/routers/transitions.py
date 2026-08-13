@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.http_errors import api_error
 from app.db import get_db
 from app.models import Track
-from app.repositories import all_playable_tracks, get_track
+from app.repositories import all_playable_tracks, file_tags_for_tracks, get_track
 from app.schemas import TransitionCandidateOut, TransitionScoreOut
 from app.serializers import track_out
 from app.services.app_state import get_language
@@ -48,7 +48,12 @@ def _ranked(db: Session, track_id: int, *, limit: int,
             continue
         results.append((out.score, other, out))
     results.sort(key=lambda item: item[0], reverse=True)
-    return [TransitionCandidateOut(track=track_out(t), score=s) for _, t, s in results[:limit]]
+    top = results[:limit]
+    # M6: genere/album/label/anno effettivi anche qui — una query in piu' sui
+    # soli candidati mostrati (il ranking sulla libreria intera resta invariato,
+    # solo la serializzazione finale del top-N legge i tag file).
+    ft_map = file_tags_for_tracks(db, [t.id for _, t, _ in top])
+    return [TransitionCandidateOut(track=track_out(t, ft_map.get(t.id)), score=s) for _, t, s in top]
 
 
 _LENSES = {"technically_safe", "good_reset", "creative_risk"}

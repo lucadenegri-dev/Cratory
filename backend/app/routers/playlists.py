@@ -26,11 +26,13 @@ from app.integrations.spotify import (
     SpotifyWebClient,
 )
 from app.repositories import (
+    FileTags,
     add_track_to_playlist,
     all_playable_tracks,
     delete_playlist,
     delete_playlist_track,
     delete_playlist_tracks,
+    file_tags_for_tracks,
     get_playlist,
     list_playlists,
     recount_playlist,
@@ -306,7 +308,8 @@ def reorder_track(playlist_id: int, req: PlaylistReorderRequest, db: Session = D
     if result is None:
         raise api_error(404, "track_not_in_playlist", "Track is not in this playlist")
     db.commit()
-    return [track_out(t) for t in result]
+    ft_map = file_tags_for_tracks(db, [t.id for t in result])
+    return [track_out(t, ft_map.get(t.id)) for t in result]
 
 
 @router.put("/{playlist_id}/order", response_model=list[TrackOut])
@@ -321,7 +324,8 @@ def set_order(playlist_id: int, req: PlaylistOrderRequest, db: Session = Depends
         raise api_error(422, "order_mismatch",
                         "track_ids must be an exact permutation of the playlist members")
     db.commit()
-    return [track_out(t) for t in result]
+    ft_map = file_tags_for_tracks(db, [t.id for t in result])
+    return [track_out(t, ft_map.get(t.id)) for t in result]
 
 
 @router.patch("/{playlist_id}", response_model=PlaylistOut)
@@ -401,6 +405,14 @@ def export_playlist(
     if playlist is None:
         raise api_error(404, "playlist_not_found", "Playlist not found")
     tracks = tracks_for_playlist(db, playlist_id)  # già in ordine playlist
+    # M6: genere effettivo (tag file se la traccia e' posseduta, altrimenti
+    # streaming) anche negli export testuali, stessa regola della Library e
+    # della vista playlist qui sopra — una sola query in piu' per l'export.
+    ft_map = file_tags_for_tracks(db, [t.id for t in tracks])
+
+    def _genre(t: Track) -> str | None:
+        ft = ft_map.get(t.id) or FileTags()
+        return ft.genre if ft.genre is not None else t.genre
 
     if format == "csv":
         buf = io.StringIO()
@@ -408,7 +420,7 @@ def export_playlist(
         writer.writerow(["position", "title", "artist", "genre", "bpm", "key", "energy",
                          "duration_seconds", "rating", "owned", "local_path", "url"])
         for i, t in enumerate(tracks, start=1):
-            writer.writerow([i, t.title or "", t.artist or "", t.genre or "", t.bpm or "",
+            writer.writerow([i, t.title or "", t.artist or "", _genre(t) or "", t.bpm or "",
                              t.camelot_key or "", t.energy or "", t.duration_seconds or "",
                              t.rating or "", "1" if t.has_local_file else "0",
                              t.local_path or "", t.url or ""])
@@ -422,7 +434,7 @@ def export_playlist(
             label = f"{t.artist or '?'} — {t.title or '?'}"
             bpm = f"{t.bpm:.0f}" if t.bpm else "—"
             dur = f"{t.duration_seconds // 60}:{t.duration_seconds % 60:02d}" if t.duration_seconds else "—"
-            md.append(f"| {i} | {label} | {t.genre or '—'} | {bpm} | {t.camelot_key or '—'} | {dur} |")
+            md.append(f"| {i} | {label} | {_genre(t) or '—'} | {bpm} | {t.camelot_key or '—'} | {dur} |")
         return PlainTextResponse("\n".join(md), media_type="text/markdown")
 
     if format == "text":
@@ -454,9 +466,16 @@ def playlist_tracks(playlist_id: int, db: Session = Depends(get_db)):
         select(playlist_tracks_table.c.track_id, playlist_tracks_table.c.added_at)
         .where(playlist_tracks_table.c.playlist_id == playlist_id)
     ).all())
+    members = tracks_for_playlist(db, playlist_id)
+    # I3: senza questo i tag mostrati qui erano quelli streaming mentre
+    # TrackEditModal (che precompila da questo stesso payload) salva sul file
+    # via /api/organize/files/{primary_file_id}/tags — un utente che "correggeva"
+    # il genere che vedeva qui sovrascriveva silenziosamente un tag del file mai
+    # mostrato. Una sola query in piu' per l'intera playlist (non per traccia).
+    ft_map = file_tags_for_tracks(db, [t.id for t in members])
     out = []
-    for i, t in enumerate(tracks_for_playlist(db, playlist_id), start=1):
-        row = track_out(t)
+    for i, t in enumerate(members, start=1):
+        row = track_out(t, ft_map.get(t.id))
         row.playlist_position = i
         row.playlist_added_at = added_map.get(t.id)
         out.append(row)

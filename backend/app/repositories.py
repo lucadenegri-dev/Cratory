@@ -188,6 +188,31 @@ def get_track(db: Session, track_id: int) -> Track | None:
     )
 
 
+def file_tags_for_tracks(db: Session, track_ids: Iterable[int]) -> dict[int, FileTags]:
+    """Tag del primary file per un lotto di tracce, in UNA sola query.
+
+    Riusa `_join_primary_file` e le stesse colonne di `list_tracks`, cosi' la
+    semantica (NULLIF, fallback None) resta identica ovunque. Il dict copre
+    ogni id richiesto (anche le tracce senza file, con ``FileTags()`` vuoti):
+    i chiamanti possono indicizzare con `[track.id]` senza controllare
+    l'assenza. Pensato per i percorsi che serializzano N tracce con
+    `track_out` (playlist, transizioni, set, wishlist...): senza questo, ogni
+    chiamata a `get_primary_file` per traccia sarebbe una query in piu' (N+1).
+    """
+    ids = list(track_ids)
+    if not ids:
+        return {}
+    file_cols = (AudioFile.genre, AudioFile.album, AudioFile.label,
+                 AudioFile.year, AudioFile.artist, AudioFile.title)
+    stmt = _join_primary_file(select(Track.id, *file_cols)).where(Track.id.in_(ids))
+    rows = db.execute(stmt).all()
+    return {
+        row[0]: FileTags(genre=_nz(row[1]), album=_nz(row[2]), label=_nz(row[3]),
+                         year=row[4], artist=_nz(row[5]), title=_nz(row[6]))
+        for row in rows
+    }
+
+
 def get_primary_file(db: Session, track: Track) -> AudioFile | None:
     """Il file rappresentante della traccia (fonte dei tag effettivi)."""
     if not track.primary_file_id:

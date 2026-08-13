@@ -136,13 +136,13 @@ def generate(req: SetGenerationRequest, db: Session = Depends(get_db)):
         except (LLMError, SetGenerationError) as exc:
             raise api_error(422, "set_ai_generation_failed", f"AI set generation failed: {exc}",
                              reason=str(exc)) from exc
-        return setlist_out(setlist, lang)
+        return setlist_out(setlist, lang, db=db)
     try:
         setlist = generate_set(db, req)
     except SetGenerationError as exc:
         raise api_error(422, "set_generation_failed", f"Set generation failed: {exc}",
                          reason=str(exc)) from exc
-    return setlist_out(setlist, lang)
+    return setlist_out(setlist, lang, db=db)
 
 
 @router.get("", response_model=list[SetlistSummaryOut])
@@ -155,7 +155,7 @@ def get_one(setlist_id: int, db: Session = Depends(get_db)):
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
         raise api_error(404, "set_not_found", "Set not found")
-    return setlist_out(setlist, get_language(db))
+    return setlist_out(setlist, get_language(db), db=db)
 
 
 def _fmt_dur(seconds: int | None) -> str:
@@ -262,7 +262,7 @@ def _edit_error(exc: SetEditError) -> HTTPException:
 @router.patch("/{setlist_id}", response_model=SetlistOut)
 def rename(setlist_id: int, req: SetRenameRequest, db: Session = Depends(get_db)):
     try:
-        return setlist_out(rename_set(db, setlist_id, req.name), get_language(db))
+        return setlist_out(rename_set(db, setlist_id, req.name), get_language(db), db=db)
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
@@ -278,7 +278,7 @@ def delete(setlist_id: int, db: Session = Depends(get_db)):
 @router.delete("/{setlist_id}/tracks/{position}", response_model=SetlistOut)
 def delete_track(setlist_id: int, position: int, db: Session = Depends(get_db)):
     try:
-        return setlist_out(remove_track(db, setlist_id, position), get_language(db))
+        return setlist_out(remove_track(db, setlist_id, position), get_language(db), db=db)
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
@@ -286,7 +286,7 @@ def delete_track(setlist_id: int, position: int, db: Session = Depends(get_db)):
 @router.post("/{setlist_id}/tracks", response_model=SetlistOut)
 def add(setlist_id: int, req: AddTrackRequest, db: Session = Depends(get_db)):
     try:
-        return setlist_out(add_track(db, setlist_id, req.track_id, req.position), get_language(db))
+        return setlist_out(add_track(db, setlist_id, req.track_id, req.position), get_language(db), db=db)
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
@@ -298,7 +298,7 @@ def move(setlist_id: int, position: int, req: MoveTrackRequest, db: Session = De
             setlist = move_track_to(db, setlist_id, position, req.to)
         else:
             setlist = move_track(db, setlist_id, position, req.direction)
-        return setlist_out(setlist, get_language(db))
+        return setlist_out(setlist, get_language(db), db=db)
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 
@@ -306,7 +306,7 @@ def move(setlist_id: int, position: int, req: MoveTrackRequest, db: Session = De
 @router.post("/{setlist_id}/tracks/{position}/replace", response_model=SetlistOut)
 def replace(setlist_id: int, position: int, req: ReplaceTrackRequest, db: Session = Depends(get_db)):
     try:
-        return setlist_out(replace_track(db, setlist_id, position, req.track_id), get_language(db))
+        return setlist_out(replace_track(db, setlist_id, position, req.track_id), get_language(db), db=db)
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 

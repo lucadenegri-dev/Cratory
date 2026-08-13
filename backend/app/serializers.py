@@ -1,7 +1,9 @@
 """Conversione modelli ORM -> schemi Pydantic con campi derivati."""
 
+from sqlalchemy.orm import Session
+
 from app.models import Setlist, Track
-from app.repositories import FileTags
+from app.repositories import FileTags, file_tags_for_tracks
 from app.schemas import (
     AlternativeOut,
     SetlistOut,
@@ -66,9 +68,14 @@ def track_detail_out(track: Track, file_tags: FileTags | None = None) -> TrackDe
                           file_artist=ft.artist, file_title=ft.title)
 
 
-def setlist_out(setlist: Setlist, lang: str = "it") -> SetlistOut:
+def setlist_out(setlist: Setlist, lang: str = "it", db: Session | None = None) -> SetlistOut:
     # F10: classifichiamo ogni transizione dal brano precedente (deterministico,
     # ricalcolato in lettura dai dati delle due tracce: nessuna colonna in DB).
+    # M6: genere/album/label/anno effettivi (tag file) anche nel dettaglio set,
+    # non solo in Library — una sola query in piu' per l'intero set (`db` e'
+    # opzionale: i chiamanti che non lo passano restano col fallback streaming,
+    # com'era prima).
+    ft_map = file_tags_for_tracks(db, [st.track_id for st in setlist.tracks]) if db is not None else {}
     items = []
     prev = None
     for st in setlist.tracks:
@@ -79,7 +86,7 @@ def setlist_out(setlist: Setlist, lang: str = "it") -> SetlistOut:
         items.append(SetlistTrackOut(
             position=st.position,
             role=st.role,
-            track=track_out(st.track),
+            track=track_out(st.track, ft_map.get(st.track_id)),
             transition_score=st.transition_score,
             transition_reason=st.transition_reason,
             transition_note=st.transition_note,
