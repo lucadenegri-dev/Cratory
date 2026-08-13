@@ -316,6 +316,11 @@ export interface ServiceStatus {
   connected: boolean | null;  // null = il servizio non ha un concetto di "login"
   detail: string;
   env: string[];
+  /** Variabili facoltative (es. DISCOGS_TOKEN): la loro assenza non rende il
+   *  servizio "non configurato", solo "token consigliato". */
+  optional_env: string[];
+  /** true/false = facoltative presenti/assenti; null = il servizio non ne ha. */
+  optional_ok: boolean | null;
   docs: string;
 }
 

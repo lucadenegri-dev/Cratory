@@ -193,20 +193,6 @@ export function updateFileTags(fileId: number, changes: Partial<EditableTags>) {
   return apiSend<FileRow>("POST", `/files/${fileId}/tags`, changes);
 }
 
-// --- PROVIDERS --------------------------------------------------------------
-export interface ProviderInfo {
-  key: string;
-  name: string;
-  category: string;
-  description: string;
-  env_vars: string[];
-  docs_url: string;
-  status: "configured" | "connected" | "missing";
-}
-export function listProviders() {
-  return apiGet<ProviderInfo[]>("/providers");
-}
-
 // --- ISSUES -----------------------------------------------------------------
 export interface Issue {
   id: number;
