@@ -67,6 +67,7 @@ from app.schemas import (
 )
 from app.serializers import track_out
 from app.services import streaming_import_job
+from app.services.export_render import render_m3u8
 from app.services.gap_analysis import analyze_gaps
 from app.services.manual_import import import_manual_playlist
 from app.services.playlist_import import preview_liked_tracks
@@ -447,15 +448,7 @@ def export_playlist(
 
     # m3u8 (default): solo tracce con file locale
     owned = [t for t in tracks if t.local_path]
-    skipped = len(tracks) - len(owned)
-    m3u = ["#EXTM3U"]
-    if skipped:
-        m3u.append(f"# {skipped} tracce senza file locale non incluse")
-    for t in owned:
-        secs = int(t.duration_seconds) if t.duration_seconds else -1
-        m3u.append(f"#EXTINF:{secs},{t.artist or '?'} — {t.title or t.spotify_id or '?'}")
-        m3u.append(t.local_path)
-    return PlainTextResponse("\n".join(m3u), media_type="audio/x-mpegurl")
+    return PlainTextResponse(render_m3u8(owned, len(tracks)), media_type="audio/x-mpegurl")
 
 
 @router.get("/{playlist_id}/tracks", response_model=list[TrackOut])

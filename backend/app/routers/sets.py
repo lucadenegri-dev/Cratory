@@ -39,6 +39,7 @@ from app.services.set_editor import (
     rename_set,
     replace_track,
 )
+from app.services.export_render import render_m3u8
 from app.services.scoring import classify_transition, mixing_tip, opening_track_label
 from app.services.set_generator import SetGenerationError, generate_set
 
@@ -223,17 +224,8 @@ def export(
         # Una traccia senza file su disco non può stare in una playlist Rekordbox: la
         # escludiamo e segnaliamo il conteggio con un commento (le righe '#' non-direttiva
         # sono ignorate da Rekordbox).
-        owned = [st for st in setlist.tracks if st.track.local_path]
-        skipped = len(setlist.tracks) - len(owned)
-        m3u = ["#EXTM3U"]
-        if skipped:
-            m3u.append(f"# {skipped} tracce senza file locale non incluse")
-        for st in owned:
-            t = st.track
-            secs = int(t.duration_seconds) if t.duration_seconds else -1
-            m3u.append(f"#EXTINF:{secs},{t.artist or '?'} — {t.title or t.spotify_id or '?'}")
-            m3u.append(t.local_path)
-        return PlainTextResponse("\n".join(m3u), media_type="audio/x-mpegurl")
+        owned = [st.track for st in setlist.tracks if st.track.local_path]
+        return PlainTextResponse(render_m3u8(owned, len(setlist.tracks)), media_type="audio/x-mpegurl")
 
     lines = [f"# {setlist.name}", ""]
     if setlist.global_explanation:
