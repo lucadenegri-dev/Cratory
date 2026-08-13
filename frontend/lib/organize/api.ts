@@ -53,6 +53,7 @@ export interface FileRow {
   location: Location;
   path: string;
   ext: string;
+  track_id: number | null;
   artist: string | null;
   title: string | null;
   album: string | null;

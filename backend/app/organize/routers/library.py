@@ -73,6 +73,7 @@ _SORT_COLS = {
 def _file_row(f: AudioFile, n_issues: int, rank: int, dup_n: int, cover_n: int) -> FileRow:
     return FileRow(
         id=f.id, location=f.location, path=f.path, ext=f.ext,
+        track_id=f.track_id,
         artist=f.artist, title=f.title, album=f.album, album_artist=f.album_artist,
         genre=f.genre, year=f.year, label=f.label, track_no=f.track_no,
         comment=f.comment, bitrate=f.bitrate, duration_s=f.duration_s,

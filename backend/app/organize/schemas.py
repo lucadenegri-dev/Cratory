@@ -273,6 +273,8 @@ class FileRow(BaseModel):
     location: str
     path: str
     ext: str
+    # Traccia agganciata (per il cross-link "apri traccia" dalla pagina FILES).
+    track_id: int | None = None
     artist: str | None
     title: str | None
     album: str | None = None

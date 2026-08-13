@@ -72,3 +72,26 @@ def test_library_facets_distinct_sorted(db):
     assert f["year"] == [2002, 2021, 2023]
     assert f["label"] == ["Diynamic", "Tracid Traxxx"]
     assert "ANNA" in f["artist"] and "Kai Tracid" in f["artist"]
+
+
+def test_filerow_espone_track_id(db):
+    from app.models import Track
+
+    root = ScanRoot(path="/m2")
+    db.add(root)
+    db.flush()
+    t = Track(source_type="spotify", title="T", artist="A")
+    db.add(t)
+    db.flush()
+    db.add_all([
+        AudioFile(root_id=root.id, path="/m2/linked.mp3", ext="mp3", size_bytes=1,
+                  hash_method="file", status="present", title="Linked", track_id=t.id),
+        AudioFile(root_id=root.id, path="/m2/loose.mp3", ext="mp3", size_bytes=1,
+                  hash_method="file", status="present", title="Loose"),
+    ])
+    db.commit()
+    rows = client.get("/api/organize/files").json()
+    linked = next(r for r in rows if r["title"] == "Linked")
+    loose = next(r for r in rows if r["title"] == "Loose")
+    assert linked["track_id"] == t.id
+    assert loose["track_id"] is None
