@@ -16,6 +16,26 @@ import { RatingDiamond } from "@/components/rating-diamond";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
+/**
+ * Normalizza una stringa: trim e lowercase. Null diventa stringa vuota.
+ */
+function normalizeTag(s: string | null): string {
+  return (s ?? "").trim().toLowerCase();
+}
+
+/**
+ * Verifica se il valore letto dal file differisce dall'identità della traccia.
+ * Discrepanza vera solo se ENTRAMBI i lati hanno valore (non null e non vuoto
+ * dopo trim): un campo mancante sulla traccia non è una discrepanza, sono
+ * dati mancanti; mancante nel file è normale (tag a volte incompleti).
+ */
+function tagDiffersFromIdentity(fileValue: string | null, trackValue: string | null): boolean {
+  if (fileValue == null || trackValue == null) return false;
+  const normalizedFile = normalizeTag(fileValue);
+  const normalizedTrack = normalizeTag(trackValue);
+  return normalizedFile !== "" && normalizedTrack !== "" && normalizedFile !== normalizedTrack;
+}
+
 function TransitionList({ title, items, emptyLabel }: { title: string; items: TransitionCandidate[]; emptyLabel: string }) {
   return (
     <Card>
@@ -113,11 +133,8 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
   // Confronto informativo fra l'identità della traccia (artist/title Cratory) e i
   // tag artista/titolo letti dal file collegato: solo per segnalare un disallineamento,
   // mai per sostituire l'identità.
-  const norm = (s: string | null) => (s ?? "").trim().toLowerCase();
-  // Discrepanza vera solo se ENTRAMBI i lati hanno valore: senza identità (null)
-  // la riga del file è informativa, non un warning.
-  const fileArtistMismatch = track.file_artist != null && norm(track.file_artist) !== "" && track.artist != null && norm(track.artist) !== "" && norm(track.file_artist) !== norm(track.artist);
-  const fileTitleMismatch = track.file_title != null && norm(track.file_title) !== "" && track.title != null && norm(track.title) !== "" && norm(track.file_title) !== norm(track.title);
+  const fileArtistMismatch = tagDiffersFromIdentity(track.file_artist, track.artist);
+  const fileTitleMismatch = tagDiffersFromIdentity(track.file_title, track.title);
 
   const marginalia = (
     <div className="space-y-4">
