@@ -27,6 +27,11 @@ export interface Track {
   local_path: string | null;
   local_format: string | null;
   local_bitrate: number | null;
+  primary_file_id: number | null;
+  genre_from_file: boolean;
+  album_from_file: boolean;
+  label_from_file: boolean;
+  year_from_file: boolean;
   archived: boolean;
   rating: number | null;
   last_download_outcome: string | null;
@@ -173,7 +178,10 @@ export interface DiscoveryGenres {
   styles: string[];
 }
 
-export type TrackDetail = Track;
+export interface TrackDetail extends Track {
+  file_artist: string | null;
+  file_title: string | null;
+}
 
 /** Campi modificabili a mano da libreria / gestione playlist. */
 export interface TrackUpdate {

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Save } from "lucide-react";
-import { updateTrack, type Track, type TrackUpdate } from "@/lib/api";
+import { apiGet, updateTrack, type Track, type TrackDetail, type TrackUpdate } from "@/lib/api";
+import { updateFileTags, type EditableTags } from "@/lib/organize/api";
 import { Modal, Button, Field, Input, Alert, Spinner } from "@/components/ui";
 import { TrackCover } from "@/components/track-cover";
 import { useT, type Dictionary } from "@/lib/i18n";
@@ -15,7 +16,11 @@ const CAMELOT_KEYS = [
 type FieldType = "number" | "int" | "text";
 type Key = keyof TrackUpdate;
 
-const FIELD_KEYS: Key[] = ["title", "artist", "bpm", "camelot_key", "genre", "label", "year"];
+const FIELD_KEYS: Key[] = ["title", "artist", "album", "bpm", "camelot_key", "genre", "label", "year"];
+
+// Campi descrittivi: su una traccia posseduta scrivono i TAG DEL FILE via
+// l'endpoint Organize (single writer); sul lead restano campi della Track.
+const FILE_FIELDS = new Set<Key>(["genre", "album", "label", "year"]);
 
 function buildFields(t: Dictionary): { key: Key; label: string; type: FieldType; hint?: string; min?: number; max?: number; placeholder?: string; full?: boolean }[] {
   return [
@@ -23,6 +28,7 @@ function buildFields(t: Dictionary): { key: Key; label: string; type: FieldType;
     // Cratory, il file non viene toccato): riga intera, sopra ai valori tecnici.
     { key: "title", label: t.tracks.rowTitle, type: "text", full: true },
     { key: "artist", label: t.tracks.rowArtist, type: "text", full: true },
+    { key: "album", label: "Album", type: "text", full: true },
     { key: "bpm", label: "BPM", type: "number", placeholder: "128", min: 1, max: 400 },
     { key: "camelot_key", label: t.tracks.fieldKeyLabel, type: "text", placeholder: "8A", hint: t.tracks.fieldKeyHint },
     { key: "genre", label: t.tracks.rowGenre, type: "text", placeholder: t.tracks.fieldGenrePlaceholder },
@@ -47,13 +53,13 @@ export function TrackEditModal({ track, open, onClose, onSaved }: {
   track: Track | null;
   open: boolean;
   onClose: () => void;
-  onSaved: (t: Track) => void;
+  onSaved: (t: TrackDetail) => void;
 }) {
   if (!open || !track) return null;
   return <EditForm key={track.id} track={track} onClose={onClose} onSaved={onSaved} />;
 }
 
-function EditForm({ track, onClose, onSaved }: { track: Track; onClose: () => void; onSaved: (t: Track) => void }) {
+function EditForm({ track, onClose, onSaved }: { track: Track; onClose: () => void; onSaved: (t: TrackDetail) => void }) {
   const t = useT();
   const FIELDS = buildFields(t);
   const [initial] = useState(() => initialForm(track));
@@ -66,29 +72,43 @@ function EditForm({ track, onClose, onSaved }: { track: Track; onClose: () => vo
 
   async function save() {
     if (camelotInvalid) return;
-    const patch: TrackUpdate = {};
+    const toFile = track.primary_file_id != null;
+    const trackPatch: TrackUpdate = {};
+    const filePatch: Partial<EditableTags> = {};
     for (const { key, type } of FIELDS) {
       const raw = form[key].trim();
       if (raw === initial[key].trim()) continue; // invia solo i campi cambiati
-      if (raw === "") {
-        (patch as Record<string, unknown>)[key] = null;
+      if (toFile && FILE_FIELDS.has(key)) {
+        (filePatch as Record<string, string>)[key] = raw; // "" svuota il tag
+      } else if (raw === "") {
+        (trackPatch as Record<string, unknown>)[key] = null;
       } else if (type === "text") {
-        (patch as Record<string, unknown>)[key] = key === "camelot_key" ? raw.toUpperCase() : raw;
+        (trackPatch as Record<string, unknown>)[key] = key === "camelot_key" ? raw.toUpperCase() : raw;
       } else {
-        (patch as Record<string, unknown>)[key] = Number(raw);
+        (trackPatch as Record<string, unknown>)[key] = Number(raw);
       }
     }
-    if (Object.keys(patch).length === 0) { onClose(); return; }
+    if (Object.keys(trackPatch).length === 0 && Object.keys(filePatch).length === 0) { onClose(); return; }
     setBusy(true);
     setError(null);
-    try {
-      onSaved(await updateTrack(track.id, patch));
-      onClose();
-    } catch (e) {
-      setError(String((e as Error).message ?? e));
-    } finally {
-      setBusy(false);
+    // Due percorsi di scrittura indipendenti: l'errore di uno non deve
+    // mascherare l'esito dell'altro.
+    const errors: string[] = [];
+    if (Object.keys(filePatch).length > 0) {
+      try { await updateFileTags(track.primary_file_id!, filePatch); }
+      catch (e) { errors.push(`${t.tracks.fileTagsErrorPrefix}: ${String((e as Error).message ?? e)}`); }
     }
+    if (Object.keys(trackPatch).length > 0) {
+      try { await updateTrack(track.id, trackPatch); }
+      catch (e) { errors.push(`${t.tracks.trackErrorPrefix}: ${String((e as Error).message ?? e)}`); }
+    }
+    try {
+      // Ricarica gli effettivi (il salvataggio file risponde un FileRow, non una Track).
+      onSaved(await apiGet<TrackDetail>(`/api/tracks/${track.id}`));
+    } catch { /* la lista si riallineerà da sola al prossimo load */ }
+    setBusy(false);
+    if (errors.length > 0) setError(errors.join(" — "));
+    else onClose();
   }
 
   return (
@@ -119,6 +139,9 @@ function EditForm({ track, onClose, onSaved }: { track: Track; onClose: () => vo
       <p className="mb-4 text-xs text-muted">
         {t.tracks.manualValuesHint}
       </p>
+      {track.primary_file_id != null && (
+        <p className="-mt-2 mb-4 text-xs text-muted">{t.tracks.fileTagsHint}</p>
+      )}
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 

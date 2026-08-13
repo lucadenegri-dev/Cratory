@@ -6,6 +6,7 @@ import type {
   DownloadStatus,
   LocalFileHit,
   Track,
+  TrackDetail,
 } from "./types";
 
 export function downloadTrackAuto(trackId: number) {
@@ -58,7 +59,8 @@ export function searchLocalFiles(q: string) {
 
 /** Collega manualmente un file su disco alla traccia (possesso senza download). */
 export function linkLocalFile(trackId: number, path: string) {
-  return apiPost<Track>(`/api/tracks/${trackId}/link-file`, { path });
+  // Risponde con il dettaglio (file_artist/file_title inclusi), non la riga lista.
+  return apiPost<TrackDetail>(`/api/tracks/${trackId}/link-file`, { path });
 }
 
 // --- Revisione file dubbio (needs_review-per-durata) --------------------------
