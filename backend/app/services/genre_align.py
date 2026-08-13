@@ -15,6 +15,13 @@ Il `COALESCE` di lettura (`app.repositories._EFFECTIVE_TAGS`) resta invariato:
 di verita' delle letture. Un tag file vuoto o assente non tocca mai la
 traccia (il valore streaming resta l'unico che c'e', ed e' cio' che il
 COALESCE mostra).
+
+Lo specchio non converge mai byte-per-byte col tag: il confronto (sotto) e'
+`normalize_genre(...).casefold()` contro `track.genre`, quindi trattini,
+underscore e maiuscole/minuscole si appianano ("Tech-House" sul file resta
+"Tech House" in `tracks.genre`). Innocuo per la lettura (il COALESCE mostra
+comunque il tag alla lettera quando c'e' un file), ma non leggere
+`tracks.genre` aspettandosi il testo esatto del tag.
 """
 from __future__ import annotations
 
