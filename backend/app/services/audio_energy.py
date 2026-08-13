@@ -110,36 +110,6 @@ def percentile_ranks(values: list[float]) -> list[int]:
     return out
 
 
-def backfill_energy(db, *, analyzer=None, limit: int | None = None) -> int:
-    """Analizza i file posseduti senza `energy_raw` (backfill una-tantum sui brani
-    già indicizzati, che la passata incrementale salterebbe). Resumable: riparte da
-    dove si era fermato. Ricalibra a fine giro. Ritorna quanti file ha analizzato."""
-    from sqlalchemy import select
-
-    from app.models import Track
-
-    run = analyzer or analyze_file
-    query = select(Track).where(
-        Track.has_local_file.is_(True),
-        Track.local_path.isnot(None),
-        Track.energy_raw.is_(None),
-    )
-    if limit:
-        query = query.limit(limit)
-    done = 0
-    for track in db.scalars(query).all():
-        try:
-            raw = run(track.local_path, track.duration_seconds)
-        except Exception:
-            raw = None
-        if raw is not None:
-            track.energy_raw = raw
-            done += 1
-    db.commit()
-    recompute_energy(db)
-    return done
-
-
 def recompute_energy(db) -> int:
     """Ricalibra `energy` (0-100) per percentili su tutte le tracce con `energy_raw`.
     Lascia intatte quelle senza feature calcolate (lead senza file: restano col proxy).

@@ -135,26 +135,3 @@ def test_proxy_applies_and_marks_estimated():
     # senza bpm non fa nulla
     assert apply_estimated_energy(Track(source_type="spotify")) is False
 
-
-def test_backfill_only_untouched_owned_tracks(db):
-    from app.models import Track
-    from app.services.audio_energy import backfill_energy
-    owned_new = Track(source_type="spotify", title="new", has_local_file=True,
-                      local_path="/x/a.mp3", duration_seconds=200)
-    owned_done = Track(source_type="spotify", title="done", has_local_file=True,
-                       local_path="/x/b.mp3", energy_raw=0.5, duration_seconds=200)
-    lead = Track(source_type="spotify", title="lead")  # nessun file: da ignorare
-    db.add_all([owned_new, owned_done, lead])
-    db.commit()
-
-    calls = []
-    def fake(path, dur):
-        calls.append(path)
-        return 0.7
-
-    done = backfill_energy(db, analyzer=fake)
-    assert calls == ["/x/a.mp3"]         # solo la posseduta senza energy_raw
-    assert done == 1
-    assert owned_new.energy_raw == 0.7
-    assert owned_new.energy_source == "computed"  # calibrata a fine backfill
-    assert lead.energy_raw is None
