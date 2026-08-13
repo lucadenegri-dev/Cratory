@@ -9,7 +9,7 @@ from app.core.http_errors import api_error
 from app.services.file_search import path_within_roots, search_roots
 from app.db import get_db
 from app.integrations.local_files import read_cover
-from app.repositories import FileTags, genres_overview, get_primary_file, get_track, library_stats, list_tracks, update_track
+from app.repositories import FileTags, _nz, genres_overview, get_primary_file, get_track, library_stats, list_tracks, update_track
 from app.organize.services import apply_job, scan_job
 from app.schemas import (
     GenreCountOut,
@@ -30,8 +30,8 @@ router = APIRouter(prefix="/api", tags=["tracks"])
 def _detail_with_file_tags(db: Session, track) -> TrackDetailOut:
     """Dettaglio con i tag del primary file (effettivi + file_artist/file_title)."""
     pf = get_primary_file(db, track)
-    ft = FileTags(genre=pf.genre, album=pf.album, label=pf.label, year=pf.year,
-                  artist=pf.artist, title=pf.title) if pf else None
+    ft = FileTags(genre=_nz(pf.genre), album=_nz(pf.album), label=_nz(pf.label), year=pf.year,
+                  artist=_nz(pf.artist), title=_nz(pf.title)) if pf else None
     return track_detail_out(track, ft)
 
 

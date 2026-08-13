@@ -89,17 +89,83 @@ def test_filtro_genre_matcha_ancora_il_valore_track_senza_file(db):
 
 
 def test_sort_genre_usa_il_valore_effettivo(db, make_owned):
-    # senza file, genre "A"; con file, tag "Z" che maschera genre "B"
-    db.add(Track(source_type="spotify", title="T1", artist="A", genre="Alpha"))
+    """F6: fixture in cui l'ordine sulla colonna streaming CONTRADDICE quello
+    sul valore effettivo, così il test è vacuo solo se legge davvero
+    _EFFECTIVE_TAGS['genre'], non Track.genre. Gli attesi sono scritti a mano,
+    non derivati dalle righe restituite (a differenza della versione precedente
+    di questo test, dimostrata vacua: fixture che si ordinavano ugualmente con
+    entrambe le colonne — vedi verifica di non-vacuità nel report).
+
+    A: Track.genre="Mango", senza file (effettivo = "Mango").
+    B: Track.genre="Zebra" (mascherato), tag file genre="Apple" (effettivo = "Apple").
+    Streaming grezzo (Track.genre per entrambe): "Mango"(A) < "Zebra"(B) -> asc A, B.
+    Effettivo: "Apple"(B) < "Mango"(A) -> asc B, A. Le due colonne discordano davvero.
+    """
+    a = Track(source_type="spotify", title="TA", artist="A", genre="Mango")  # senza file
+    db.add(a)
     db.commit()
-    make_owned(track_kw={"title": "T2", "artist": "A", "genre": "Beta"},
-               file_kw={"genre": "Zulu"})
+    b = make_owned(track_kw={"title": "TB", "artist": "A", "genre": "Zebra"},
+                   file_kw={"genre": "Apple"})
     _, rows = list_tracks(db, sort="genre", order="asc")
-    generi_effettivi = [tags.genre or t.genre for t, tags in rows]
-    assert generi_effettivi == ["Alpha", "Zulu"]
+    assert [t.id for t, _ in rows] == [b.id, a.id]
     _, rows = list_tracks(db, sort="genre", order="desc")
-    generi_effettivi = [tags.genre or t.genre for t, tags in rows]
-    assert generi_effettivi == ["Zulu", "Alpha"]
+    assert [t.id for t, _ in rows] == [a.id, b.id]
+
+
+def test_sort_year_usa_il_valore_effettivo(db, make_owned):
+    """F6: copertura mancante per sort=year, stessa forma del test del genere
+    sopra (streaming e effettivo in disaccordo, attesi scritti a mano)."""
+    a = Track(source_type="spotify", title="TA", artist="A", year=1990)  # senza file
+    db.add(a)
+    db.commit()
+    b = make_owned(track_kw={"title": "TB", "artist": "A", "year": 2000},
+                   file_kw={"year": 1980})
+    # effettivo: A=1990, B=1980 -> asc B, A
+    # streaming darebbe invece asc A, B (1990 < 2000): le due colonne discordano.
+    _, rows = list_tracks(db, sort="year", order="asc")
+    assert [t.id for t, _ in rows] == [b.id, a.id]
+    _, rows = list_tracks(db, sort="year", order="desc")
+    assert [t.id for t, _ in rows] == [a.id, b.id]
+
+
+def test_filtro_album_matcha_il_tag_del_file(db, make_owned):
+    """Copertura mancante (F6): il filtro album, come genre/label, deve leggere
+    il valore effettivo."""
+    make_owned(track_kw={"title": "T", "artist": "A", "album": "Streaming Album"},
+               file_kw={"album": "File Album"})
+    total, rows = list_tracks(db, album="file album")
+    assert total == 1 and len(rows) == 1
+    total, _ = list_tracks(db, album="streaming album")
+    assert total == 0  # mascherato dal file: non matcha più
+
+
+def test_filtro_label_matcha_il_tag_del_file(db, make_owned):
+    """Copertura mancante (F6): il filtro label, come genre, deve leggere il
+    valore effettivo (match esatto, non substring)."""
+    make_owned(track_kw={"title": "T", "artist": "A", "label": "Streaming Label"},
+               file_kw={"label": "File Label"})
+    total, rows = list_tracks(db, label="File Label")
+    assert total == 1 and len(rows) == 1
+    total, _ = list_tracks(db, label="Streaming Label")
+    assert total == 0  # mascherato dal file: non matcha più
+
+
+def test_tag_vuoto_non_null_sul_file_non_sconfigge_il_fallback(db, make_owned):
+    """F3: un frame ID3 presente ma vuoto (es. TCON="") viene salvato così
+    com'è dallo scanner (AudioFile.genre=""). Senza NULLIF, COALESCE("", x)
+    ritorna "" (una stringa vuota, non NULL) e il fallback streaming sparisce
+    dietro un valore vuoto che si porta comunque dietro il badge "dal file"."""
+    make_owned(track_kw={"title": "T", "artist": "A", "genre": "Pop"},
+               file_kw={"genre": ""})
+    _, rows = list_tracks(db)
+    (track, tags) = rows[0]
+    assert tags.genre is None  # non "": il valore streaming resta visibile
+
+    out = track_out(track, tags)
+    assert out.genre == "Pop" and out.genre_from_file is False  # niente badge "dal file"
+
+    total, _ = list_tracks(db, genre="pop")
+    assert total == 1  # il filtro effettivo continua a matchare lo streaming
 
 
 def test_get_primary_file(db, make_owned):
@@ -179,11 +245,36 @@ def test_effective_genre_helper(db, make_owned):
     t = make_owned(track_kw={"title": "T", "artist": "A", "genre": "Pop", "bpm": 128.0},
                    file_kw={"genre": "Techno"})
     (t_loaded,) = [x for x in all_playable_tracks(db) if x.id == t.id]
-    assert effective_genre(t_loaded) == "Techno"
+    assert effective_genre(db, t_loaded) == "Techno"
     lead = Track(source_type="spotify", title="L", artist="A", genre="House", bpm=124.0)
     db.add(lead)
     db.commit()
-    assert effective_genre(lead) == "House"
+    assert effective_genre(db, lead) == "House"
+
+
+def test_effective_genre_risolve_per_id_anche_se_track_files_non_lo_contiene(db, make_owned):
+    """F4: due tracce condividono un file fisico; `aggiorna_primary` imposta
+    `primary_file_id` su entrambe senza azzerare la perdente, quindi il
+    `primary_file_id` di `loser` punta a un file il cui `track_id` (il
+    backref `track.files`) ormai appartiene a `winner`. `effective_genre`
+    deve comunque risolvere il file per id (come fa la query SQL via
+    `_EFFECTIVE_TAGS`/`_join_primary_file`), non filtrando `track.files`."""
+    loser = make_owned(track_kw={"title": "L", "artist": "A", "genre": "Pop"},
+                       file_kw={"genre": "Techno"})
+    shared_file_id = loser.primary_file_id
+    winner = make_owned(track_kw={"title": "W", "artist": "A", "genre": "House"},
+                        file_kw={"genre": "Ambient"})
+    # Simula l'ultimo aggiorna_primary: il file condiviso passa a `winner` (sia
+    # come track_id del file sia come primary_file_id), ma `loser` non viene
+    # azzerato e resta puntato allo stesso file id.
+    from app.organize.models import AudioFile
+    shared_file = db.get(AudioFile, shared_file_id)
+    shared_file.track_id = winner.id
+    winner.primary_file_id = shared_file_id
+    db.commit()
+    db.refresh(loser)
+
+    assert effective_genre(db, loser) == "Techno"  # non "Pop": il file esiste ancora, solo per id
 
 
 def test_candidate_engine_filtra_sul_genere_effettivo(db, make_owned):

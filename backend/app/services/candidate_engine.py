@@ -79,7 +79,7 @@ def select_candidates(db: Session, req: SetGenerationRequest) -> list[Track]:
             continue
         if bpm_lo is not None and t.bpm and not (bpm_lo <= t.bpm <= bpm_hi):
             continue
-        genere = effective_genre(t)
+        genere = effective_genre(db, t)
         if wanted_genres and (not genere or genere.strip().lower() not in wanted_genres):
             continue
         candidates.append(t)

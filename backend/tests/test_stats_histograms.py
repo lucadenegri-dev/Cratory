@@ -53,3 +53,50 @@ def test_stats_with_local_file(db):
     db.add(Track(source_type="spotify", title="W", artist="B"))
     db.commit()
     assert library_stats(db)["with_local_file"] == 1
+
+
+def test_genre_distribution_usa_il_valore_effettivo(db):
+    """F2: genre_distribution deve contare il genere EFFETTIVO (tag del file
+    quando la traccia ne ha uno), come /api/library/genres e come il filtro
+    /library?genre=<g> a cui la dashboard e la pagina etichette linkano
+    quelle barre. Aggregare sulla sola colonna streaming (Track.genre)
+    produce un numero diverso da quello che il click sulla barra restituisce."""
+    from app.models import Track
+    from app.organize.models import AudioFile, ScanRoot
+    from app.repositories import library_stats
+
+    root = ScanRoot(path="/tmp/lib-genre-dist")
+    db.add(root)
+    db.flush()
+
+    # Track.genre="Pop" mascherato dal tag file "Techno": non deve contare come Pop.
+    t1 = Track(source_type="spotify", title="T1", artist="A1", genre="Pop")
+    db.add(t1)
+    db.flush()
+    f1 = AudioFile(root_id=root.id, track_id=t1.id, path="/tmp/lib-genre-dist/1.mp3",
+                   ext=".mp3", size_bytes=1, hash_method="stream", status="present",
+                   location="library", genre="Techno")
+    db.add(f1)
+    db.flush()
+    t1.primary_file_id = f1.id
+    t1.has_local_file = True
+
+    # Genere presente SOLO sul file (Track.genre vuoto): deve comunque comparire.
+    t2 = Track(source_type="spotify", title="T2", artist="A2")
+    db.add(t2)
+    db.flush()
+    f2 = AudioFile(root_id=root.id, track_id=t2.id, path="/tmp/lib-genre-dist/2.mp3",
+                   ext=".mp3", size_bytes=1, hash_method="stream", status="present",
+                   location="library", genre="Techno")
+    db.add(f2)
+    db.flush()
+    t2.primary_file_id = f2.id
+    t2.has_local_file = True
+
+    # Traccia senza file: il genere streaming resta l'unica fonte.
+    db.add(Track(source_type="spotify", title="T3", artist="A3", genre="House"))
+    db.commit()
+
+    dist = library_stats(db)["genre_distribution"]
+    assert dist == {"Techno": 2, "House": 1}
+    assert "Pop" not in dist  # mascherato dal tag file, non deve comparire

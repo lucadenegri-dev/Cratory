@@ -40,12 +40,24 @@ def _join_primary_file(stmt):
 # Valore effettivo dei campi descrittivi: il tag del file vince, il valore
 # streaming della Track è il fallback. Riusato identico in select/filtri/sort
 # così ciò che si vede e ciò che si filtra coincidono sempre.
+# NULLIF sulle colonne stringa del file: un frame ID3 presente ma vuoto (es.
+# TCON="") viene salvato così com'è dallo scanner e non deve "vincere" sul
+# COALESCE mascherando un valore streaming valido con una stringa vuota (F3).
 _EFFECTIVE_TAGS = {
-    "genre": func.coalesce(AudioFile.genre, Track.genre),
-    "album": func.coalesce(AudioFile.album, Track.album),
-    "label": func.coalesce(AudioFile.label, Track.label),
-    "year": func.coalesce(AudioFile.year, Track.year),
+    "genre": func.coalesce(func.nullif(AudioFile.genre, ""), Track.genre),
+    "album": func.coalesce(func.nullif(AudioFile.album, ""), Track.album),
+    "label": func.coalesce(func.nullif(AudioFile.label, ""), Track.label),
+    "year": func.coalesce(AudioFile.year, Track.year),  # Integer: niente stringa vuota
 }
+
+
+def _nz(value: str | None) -> str | None:
+    """Normalizza '' a None. Stessa regola di NULLIF sopra, ma per i valori
+    letti in Python (FileTags): un tag file presente ma vuoto non deve
+    comparire come "dal file" (vedi genre_from_file/album_from_file/... nel
+    serializer, che derivano il flag da ``ft.x is not None``)."""
+    return value or None
+
 
 # Colonne ordinabili dalla libreria (header cliccabili nel frontend).
 _SORT_COLUMNS = {
@@ -164,8 +176,8 @@ def list_tracks(
         # limit=0 -> None: nessun limite (tutte le tracce, per la vista griglia).
         stmt.options(selectinload(Track.playlists)).order_by(*order_by).limit(limit or None).offset(offset)
     ).all()
-    rows = [(row[0], FileTags(genre=row[1], album=row[2], label=row[3],
-                              year=row[4], artist=row[5], title=row[6]))
+    rows = [(row[0], FileTags(genre=_nz(row[1]), album=_nz(row[2]), label=_nz(row[3]),
+                              year=row[4], artist=_nz(row[5]), title=_nz(row[6])))
             for row in result]
     return total or 0, rows
 
@@ -183,14 +195,24 @@ def get_primary_file(db: Session, track: Track) -> AudioFile | None:
     return db.get(AudioFile, track.primary_file_id)
 
 
-def effective_genre(track: Track) -> str | None:
+def effective_genre(db: Session, track: Track) -> str | None:
     """Genere effettivo lato Python (specchio di _EFFECTIVE_TAGS['genre'] per
     il codice che lavora su oggetti ORM già caricati, es. candidate engine).
-    `track.files` è il backref dichiarato su AudioFile.track."""
-    pf = None
-    if track.primary_file_id:
-        pf = next((f for f in track.files if f.id == track.primary_file_id), None)
-    return pf.genre if pf is not None and pf.genre is not None else track.genre
+
+    Risolve il primary file per id (``get_primary_file``), non filtrando
+    ``track.files``: quel backref è popolato da ``AudioFile.track_id`` e
+    contiene solo i file il cui `track_id` punta a QUESTA traccia. Se due
+    tracce condividono uno stesso file fisico, `aggiorna_primary` imposta
+    `primary_file_id` su entrambe senza azzerare la perdente (F4): in quel
+    caso `track.primary_file_id` può puntare a un file il cui `track_id` è
+    ormai l'ALTRA traccia, e il vecchio filtro su `track.files` non lo
+    trovava più — silenziosamente ripiegando sul genere streaming mentre la
+    query SQL (`_EFFECTIVE_TAGS`, che fa il join per id senza guardare
+    `track_id`) restituiva il genere del file. `get_primary_file` risolve per
+    id esattamente come la query, eliminando la divergenza.
+    """
+    pf = get_primary_file(db, track)
+    return pf.genre if pf is not None and pf.genre else track.genre
 
 
 def update_track(db: Session, track: Track, data: dict) -> Track:
@@ -318,15 +340,20 @@ def library_stats(db: Session) -> dict:
             .group_by(Track.camelot_key)
         ).all()
     )
-    # Distribuzione generi per la stat di dashboard. I tag su disco hanno grafie
-    # incoerenti ("Ambient"/"ambient"): li fondiamo case-insensitive tenendo come
-    # etichetta la grafia più frequente. È solo presentazione — il valore
-    # autorevole resta il tag sul file (scritto da Sortory), non lo tocchiamo.
+    # Distribuzione generi per la stat di dashboard, sul genere EFFETTIVO (tag
+    # del file quando la traccia ne ha uno, altrimenti streaming): la dashboard
+    # e la pagina etichette linkano queste barre a /library?genre=<g>, che
+    # filtra sul valore effettivo (_apply_track_filters) — se qui si
+    # raggruppasse su Track.genre i numeri divergerebbero da quello che il
+    # click produce (F2). I tag su disco hanno grafie incoerenti
+    # ("Ambient"/"ambient"): li fondiamo case-insensitive tenendo come
+    # etichetta la grafia più frequente. È solo presentazione.
+    eff_genre = _EFFECTIVE_TAGS["genre"]
     _genre_variants: dict[str, dict[str, int]] = {}
     for label, n in db.execute(
-        select(Track.genre, func.count())
-        .where(Track.genre.is_not(None), Track.genre != "")
-        .group_by(Track.genre)
+        _join_primary_file(select(eff_genre, func.count()).select_from(Track))
+        .where(eff_genre.is_not(None), eff_genre != "")
+        .group_by(eff_genre)
     ):
         _genre_variants.setdefault(label.casefold(), {})[label] = n
     genre_distribution = {
