@@ -177,9 +177,26 @@ def test_classify_transition_without_genre_map_keeps_streaming_behavior():
 
 
 def test_select_candidates_resolves_genre_in_one_query_not_per_track(db, make_owned):
-    """Conta le query SQL eseguite durante `select_candidates`: deve restare
-    costante (poche query fisse) al crescere del pool, non proporzionale al
-    numero di tracce (N+1 di prima, `effective_genre(db, t)` in un ciclo)."""
+    """Conta le query SQL eseguite durante `select_candidates`, in particolare
+    quelle che toccano `audio_file` (la tabella da cui si risolve il genere del
+    file): devono restare esattamente 2 (l'eager load `selectinload(Track.files)`
+    di `all_playable_tracks` + la query in blocco di `effective_genres_for_tracks`),
+    sia col pool piccolo sia con quello grande, non proporzionali al numero di
+    tracce (N+1 di prima, `effective_genre(db, t)` in un ciclo per traccia).
+
+    D2: il conteggio TOTALE di query (controllo secondario sotto) non basta a
+    smascherare l'N+1: `all_playable_tracks` fa `selectinload(Track.files)`
+    (repositories.py), quindi un `db.get(AudioFile, ...)` per traccia dentro un
+    ciclo pesca dall'identity map della sessione e non emette SQL — un N+1
+    "mascherato dalla cache di sessione" che il conteggio totale non vede,
+    perche' resta invariato in entrambi i casi. Contare le query su
+    `audio_file` (o, in alternativa, le chiamate a `get_primary_file`) e' cio'
+    che effettivamente lo intercetta.
+
+    Verifica di non-vacuita' (nel report): con la risoluzione per-traccia
+    temporaneamente ripristinata (un `effective_genre(db, t)` per traccia
+    invece della query in blocco), quest'asserzione E' rossa — vedi
+    .superpowers/sdd/fix-d-report.md."""
     from app.services.candidate_engine import select_candidates
 
     def _seed(n: int, start: int) -> None:
@@ -202,17 +219,29 @@ def test_select_candidates_resolves_genre_in_one_query_not_per_track(db, make_ow
         queries.clear()
         select_candidates(db, SetGenerationRequest())
         small_count = len(queries)
+        small_audio_file_queries = sum(1 for q in queries if "audio_file" in q)
 
         _seed(60, 1000)
         queries.clear()
         select_candidates(db, SetGenerationRequest())
         big_count = len(queries)
+        big_audio_file_queries = sum(1 for q in queries if "audio_file" in q)
     finally:
         event.remove(engine, "before_cursor_execute", _count)
 
-    # Stesso numero di query indipendentemente dal numero di tracce nel pool:
-    # se `effective_genre` fosse ancora chiamata per traccia, big_count
-    # crescerebbe con la dimensione del pool (N+1).
+    # Asserzione primaria (D2): stesso numero (fisso, non proporzionale al
+    # pool) di query che toccano `audio_file` per risolvere il genere. Se
+    # `effective_genre(db, t)` tornasse a essere chiamata per traccia dentro
+    # un ciclo, qui si vedrebbe una query `audio_file` IN PIU' per traccia
+    # (o, se la session identity map la maschera del tutto, zero query in piu'
+    # ma comunque un `db.get(AudioFile, ...)` per traccia rilevabile solo
+    # instrumentando `get_primary_file` — vedi la verifica di non-vacuita' nel
+    # report). In ogni caso il conteggio qui sotto smaschera la versione che
+    # NON e' mascherata dall'identity map: se cresce col pool, e' N+1.
+    assert small_audio_file_queries == big_audio_file_queries
+    assert small_audio_file_queries == 2
+    # Controllo secondario: il conteggio TOTALE resta costante (non prova da
+    # solo l'assenza di N+1, vedi la nota sull'identity map sopra).
     assert small_count == big_count
     assert small_count <= 6  # poche query fisse (tracks + eager load + genere in blocco)
 
