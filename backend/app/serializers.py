@@ -119,9 +119,9 @@ def setlist_out(setlist: Setlist, lang: str = "it", db: Session | None = None) -
     )
 
 
-def alternative_out(alt) -> AlternativeOut:
+def alternative_out(alt, file_tags: FileTags | None = None) -> AlternativeOut:
     return AlternativeOut(
-        track=track_out(alt.track),
+        track=track_out(alt.track, file_tags),
         score_prev=alt.score_prev,
         score_next=alt.score_next,
         reason=alt.reason,

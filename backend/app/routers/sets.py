@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.http_errors import api_error
 from app.db import SessionLocal, get_db
 from app.integrations.llm import LLMError, LLMNotConfigured, get_llm_client, llm_configured
-from app.repositories import get_setlist, list_setlists
+from app.repositories import file_tags_for_tracks, get_setlist, list_setlists
 from app.schemas import (
     AddTrackRequest,
     AlternativesRequest,
@@ -321,8 +321,12 @@ def alternatives(setlist_id: int, req: AlternativesRequest, db: Session = Depend
     except AlternativesError as exc:
         raise api_error(422, "alternatives_error", f"Alternatives error: {exc}",
                          reason=str(exc)) from exc
+    # C1: stesso difetto di I3/M6 (commit 3eef90f) sull'ultimo payload rimasto
+    # sui valori streaming — le Alternative di un set mostravano il genere
+    # streaming mentre il resto dell'app mostra ormai quello effettivo.
+    ft_map = file_tags_for_tracks(db, [a.track.id for a in alts])
     return AlternativesResponse(
         position=req.position,
         mode=req.mode,
-        alternatives=[alternative_out(a) for a in alts],
+        alternatives=[alternative_out(a, ft_map.get(a.track.id)) for a in alts],
     )
