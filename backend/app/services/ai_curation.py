@@ -8,7 +8,6 @@ con un errore. Regola: pool <= POOL_CAP, ogni chiamata vede <= PER_CALL_CAP.
 """
 
 import logging
-from collections import Counter
 
 from sqlalchemy.orm import Session
 
@@ -115,32 +114,6 @@ def _candidate_payload(t: Track, genre_map: dict[int, str | None] | None = None)
         "genre": genre_of(t, genre_map) or "",
         "energy": t.energy,
         "source": t.source_type,
-    }
-
-
-def _compute_candidate_profile(candidates: list[Track],
-                               genre_map: dict[int, str | None] | None = None) -> dict:
-    """Profilo sintetico delle candidate: BPM arc, distribuzione chiavi, top generi, lacune."""
-    bpms = [t.bpm for t in candidates if t.bpm is not None]
-    keys = [t.camelot_key for t in candidates if t.camelot_key]
-    genres = [g for g in (genre_of(t, genre_map) for t in candidates) if g]
-    energies = [t.energy for t in candidates if t.energy is not None]
-
-    return {
-        "candidate_count": len(candidates),
-        "bpm_range": {
-            "min": round(min(bpms), 1),
-            "max": round(max(bpms), 1),
-            "mean": round(sum(bpms) / len(bpms), 1),
-        } if bpms else {},
-        "key_distribution": dict(Counter(keys).most_common()),
-        "top_genres": [g for g, _ in Counter(genres).most_common(5)],
-        "avg_energy": round(sum(energies) / len(energies)) if energies else None,
-        "missing": {
-            "bpm": len(candidates) - len(bpms),
-            "key": len(candidates) - len(keys),
-            "genre": len(candidates) - len(genres),
-        },
     }
 
 
