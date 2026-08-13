@@ -9,11 +9,8 @@ con un errore. Regola: pool <= POOL_CAP, ogni chiamata vede <= PER_CALL_CAP.
 
 import logging
 
-from sqlalchemy.orm import Session
-
 from app.integrations.llm import LLMError
 from app.models import Track
-from app.repositories import library_stats
 from app.schemas import SetGenerationRequest
 from app.services.app_state import get_language
 from app.services.candidate_engine import select_candidates
@@ -114,16 +111,6 @@ def _candidate_payload(t: Track, genre_map: dict[int, str | None] | None = None)
         "genre": genre_of(t, genre_map) or "",
         "energy": t.energy,
         "source": t.source_type,
-    }
-
-
-def _safe_library_context(db: Session) -> dict:
-    stats = library_stats(db)
-    return {
-        "total_tracks": stats["total_tracks"],
-        "bpm_min": stats["bpm_min"],
-        "bpm_max": stats["bpm_max"],
-        "key_distribution": stats["key_distribution"],
     }
 
 
