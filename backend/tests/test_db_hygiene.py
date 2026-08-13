@@ -1,9 +1,12 @@
 """Pulizia una-tantum disk-first (services/db_hygiene.py):
 - azzeramento residui legacy sui lead,
-- riallineamento delle possedute al disco.
+- riallineamento delle possedute al disco,
+- allineamento retroattivo di Track.genre al genere del primary file.
 """
 from app.models import Track
+from app.organize.models import AudioFile, ScanRoot
 from app.services.db_hygiene import (
+    align_owned_genre_from_file,
     dedupe_by_audio_hash,
     purge_lead_residue,
     realign_owned_from_disk,
@@ -118,6 +121,81 @@ def test_realign_owned_conta_file_mancante(db, tmp_path):
     _owned(db, tmp_path / "non-esiste.mp3", title="T", artist="A")
     rep = realign_owned_from_disk(db, apply=True)
     assert rep["missing_file"] == 1
+
+
+def _owned_with_primary_file(db, *, track_genre=None, file_genre=None, **track_kw):
+    """Traccia posseduta con un primary file agganciato: fabbrica minima per i
+    test di `align_owned_genre_from_file`, che legge il genere dal file gia'
+    indicizzato (AudioFile), non dal disco."""
+    root = ScanRoot(path="/tmp/lib")
+    db.add(root); db.flush()
+    t = Track(source_type="local_files", has_local_file=True, genre=track_genre, **track_kw)
+    db.add(t); db.flush()
+    f = AudioFile(root_id=root.id, track_id=t.id, path=f"/tmp/lib/{t.id}.mp3",
+                  ext="mp3", size_bytes=1, hash_method="stream", status="present",
+                  location="library", genre=file_genre)
+    db.add(f); db.flush()
+    t.primary_file_id = f.id
+    db.commit()
+    return t
+
+
+def test_align_owned_genre_allinea_divergente(db):
+    t = _owned_with_primary_file(db, track_genre="Electronic", file_genre="Progressive House")
+    rep = align_owned_genre_from_file(db, apply=True)
+    db.refresh(t)
+    assert t.genre == "Progressive House"
+    assert rep["changed_tracks"] == 1
+    assert rep["sample"] == [{"id": t.id, "genre_before": "Electronic", "genre_after": "Progressive House"}]
+
+
+def test_align_owned_genre_file_vuoto_non_tocca(db):
+    t = _owned_with_primary_file(db, track_genre="Electronic", file_genre=None)
+    rep = align_owned_genre_from_file(db, apply=True)
+    db.refresh(t)
+    assert t.genre == "Electronic"
+    assert rep["changed_tracks"] == 0
+
+
+def test_align_owned_genre_lead_senza_file_non_tocca(db):
+    t = _lead(db, genre="Techno")
+    rep = align_owned_genre_from_file(db, apply=True)
+    db.refresh(t)
+    assert t.genre == "Techno"
+    assert rep["changed_tracks"] == 0
+
+
+def test_align_owned_genre_dry_run_non_scrive(db):
+    t = _owned_with_primary_file(db, track_genre="Electronic", file_genre="Progressive House")
+    rep = align_owned_genre_from_file(db, apply=False)
+    db.refresh(t)                                       # rilettura dal DB: niente scrittura
+    assert t.genre == "Electronic"
+    assert rep["changed_tracks"] == 1
+    assert rep["sample"][0]["genre_after"] == "Progressive House"
+
+
+def test_align_owned_genre_ricalcola_energia(db):
+    t = _owned_with_primary_file(db, track_genre="Electronic", file_genre="Techno", bpm=128.0)
+    before_energy = t.energy
+    align_owned_genre_from_file(db, apply=True)
+    db.refresh(t)
+    assert t.genre == "Techno"
+    assert t.energy != before_energy
+    assert t.energy_source == "estimated"
+
+
+def test_align_owned_genre_non_tocca_title_artist(db):
+    # invariante di perimetro: solo genre, mai identita' (title/artist restano
+    # quelli streaming anche quando il file ha valori diversi).
+    t = _owned_with_primary_file(db, track_genre="Electronic", file_genre="Techno",
+                                  title="Streaming Title", artist="Streaming Artist")
+    f = db.get(AudioFile, t.primary_file_id)
+    f.artist, f.title = "File Artist", "File Title"
+    db.commit()
+    align_owned_genre_from_file(db, apply=True)
+    db.refresh(t)
+    assert t.title == "Streaming Title" and t.artist == "Streaming Artist"
+    assert t.genre == "Techno"
 
 
 def test_dedupe_by_audio_hash_fonde_stesso_file(db):

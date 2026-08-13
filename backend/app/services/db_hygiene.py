@@ -18,8 +18,9 @@ from sqlalchemy.orm import Session
 
 from app.integrations.local_files import read_tags
 from app.models import Track
-from app.repositories import merge_tracks
+from app.repositories import get_primary_file, merge_tracks
 from app.services.energy import apply_estimated_energy
+from app.services.genre_align import align_track_genre
 from app.services.genre_norm import normalize_genre
 from app.services.manual_import import parse_line
 
@@ -126,3 +127,40 @@ def realign_owned_from_disk(db: Session, *, apply: bool) -> dict:
     if apply:
         db.commit()
     return {"changed_tracks": changed_tracks, "changed_fields": changed_fields, "missing_file": missing_file}
+
+
+def align_owned_genre_from_file(db: Session, *, apply: bool, sample_limit: int = 20) -> dict:
+    """Allineamento retroattivo di `Track.genre` al genere del PRIMARY FILE
+    (`AudioFile.genre`, gia' indicizzato da Organize — non rilegge il disco:
+    a differenza di `realign_owned_from_disk` sopra, non e' un secondo I/O per
+    traccia). Perimetro: solo `genre`, mai `title`/`artist`/`album`/`label`/`year`
+    (vedi `app.services.genre_align`, la regola condivisa con la sincronizzazione
+    di Organize). Dry-run di default (`apply=False`): calcola senza scrivere.
+
+    Tracce senza file (lead, wishlist) o senza primary file assegnato: mai
+    considerate (restano fuori dalla query `owned`/dal filtro `pf is None`).
+    Tag file vuoto o assente: la traccia non viene toccata (regola in
+    `align_track_genre`).
+
+    Ritorna `{changed_tracks, sample}`: `sample` sono le prime `sample_limit`
+    modifiche (`id`, genere prima, genere dopo), utile a un dry-run leggibile
+    perche' l'utente possa giudicare prima di applicare.
+    """
+    changed_tracks = 0
+    sample: list[dict] = []
+    owned = db.scalars(
+        select(Track).where(Track.has_local_file.is_(True), Track.primary_file_id.is_not(None))
+    ).all()
+    for t in owned:
+        pf = get_primary_file(db, t)
+        if pf is None:
+            continue
+        before = t.genre
+        new_genre = align_track_genre(t, pf.genre, apply=apply)
+        if new_genre is not None:
+            changed_tracks += 1
+            if len(sample) < sample_limit:
+                sample.append({"id": t.id, "genre_before": before, "genre_after": new_genre})
+    if apply:
+        db.commit()
+    return {"changed_tracks": changed_tracks, "sample": sample}
