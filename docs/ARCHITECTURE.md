@@ -1,560 +1,670 @@
 # Architecture
 
-Cratory is a local/self-hosted, single-user web app that turns streaming playlists
-and an on-disk library into operational DJ material: set drafts, gap analysis,
-discovery and a corpus of identified mixes.
+Cratory is a local, single-user web app that turns streaming playlists and a folder of
+audio files into operational DJ material: set drafts, gap analysis, crate digging, an
+organized library on disk, and a corpus of identified mixes.
+
+This document describes how the system is put together. `docs/API.md` has the endpoint
+contracts; `docs/DEPENDENCIES.md` has the packages and external services.
 
 ## Principles
 
-- The deterministic engine handles facts, scores, de-duplication, roles, ranking and validation.
-- The AI handles language, narrative, prompt interpretation and explanations.
-- **BPM and Camelot/key have two deterministic sources**: the Rekordbox XML import
-  (primary) and in-app analysis via Essentia (`services/audio_analysis`,
-  `integrations/essentia_engine`), the deterministic alternative. Cratory never
-  estimates, invents or asks an AI for BPM/key. Every value carries an explicit
-  source (`bpm_source`/`key_source`: `manual` > `rekordbox` > `cratory`): Rekordbox
-  import fills empty values and reclaims `cratory` ones by default (protects
-  `manual`), `?overwrite=true` wins over everything; in-app analysis writes
-  `analysis_*` and reaches the canonical fields only through an explicit apply
-  (auto-apply fills only the empty ones).
-- **`energy` is always derived** (deterministic, from BPM+genre or computed from the
-  audio file): it is not a provider datum nor a manually editable field.
-- **Cratory reads audio files but never writes them.** Tags, renaming and on-disk
-  organization remain the Organize section's job; the textual enrichment of metadata
-  (title/artist/album/label/genre) belongs to it too.
-- Spotify provides no mixing features: it serves identity, metadata, import/export.
-- The remaining external providers (Discogs, Bandcamp, Spotify) serve **Discovery
-  only**, for taste and crate-digging, not the feature pipeline.
-- The AI never receives the whole library: the Set Builder AI curation stage caps the pool it
-  sees at 200 candidates, in per-call batches of at most 60.
-- Every AI call is schema-constrained (JSON Schema for the LLM response, Pydantic for the
-  merged request); ids outside the candidates sent or values outside declared bounds are
-  discarded with a warning, never surfaced or saved as fact. Any AI call that fails degrades
-  to the deterministic default with a warning — never an error.
-- The app is not a DJ deck (no waveform/cue/queue — that stays with the Set Builder/
-  Rekordbox) and does not transcode or persist third-party audio. "The app does not play
-  audio" no longer holds in absolute terms: Cratory plays its **own owned library**,
-  read-only, for quick audition — see "Playback (quick audition)" below. It does not keep
-  *other* audio files, with one declared exception: persistent acquisition via
-  Soulseek/slskd, linked to an existing `Track`
-  (`has_local_file`/`local_path`/`local_format`/`local_bitrate`). This stays distinct from the
-  Shazam module, which downloads audio only temporarily for fingerprinting and
-  does not keep it.
-- An additional, narrowly-scoped exception: the Discovery dig plays an **ephemeral
-  third-party preview** to evaluate a lead before acquiring it — a 30s iTunes clip, the
-  YouTube video Discogs associates with the release as a fallback, or, when the lead
-  comes from Bandcamp, the real per-track stream Bandcamp already hands back inside the
-  dig result itself (no separate resolution call). Nothing is downloaded or kept in any
-  case; the audio is streamed from the provider and discarded. The same shared docked
-  player also plays owned tracks (see below).
+**The deterministic engine decides, the model explains.** Import, normalization,
+de-duplication, scoring, roles, sequencing, gap analysis, discovery ranking and validation
+are ordinary Python. The LLM interprets a free-text prompt, judges mood-fit, suggests
+anchors and writes prose. It never sequences a tracklist.
 
-## Main flow
+**The AI never sees the whole library.** The curation stage works on a pool capped at 200
+candidates (`POOL_CAP`), and no single LLM call sees more than 60 of them (`PER_CALL_CAP`);
+mood-fit runs in batches of 50. Every response is parsed into a Pydantic schema and
+checked: ids outside the batch that was sent, and values outside declared bounds, are
+dropped with a warning. A failed AI call degrades to the deterministic default with a
+warning on the setlist — never to an error.
 
-```text
-Spotify / manual import
-  -> Playlist Importer
-  -> normalization + de-duplication
-  -> SQLite
-  -> Library Explorer / Gap Analysis
-  -> Candidate Engine
-  -> optional AI curation (intent compilation, mood-fit, anchor hints)
-  -> deterministic two-phase Set Builder (always sequences the tracklist)
-  -> optional AI narrative (title, explanation, missing-library suggestions)
-  -> Set Editor / Export / Discovery write-back
-```
+**BPM and key are measured, never guessed.** Two deterministic sources: the Rekordbox XML
+export (primary) and in-app Essentia analysis (the alternative for tracks not yet analyzed
+in Rekordbox). Every value carries its provenance in `bpm_source`/`key_source` —
+`manual` > `rekordbox` > `cratory` — so the two sources and manual corrections never
+silently clobber each other. Cratory never asks an LLM or a streaming provider for BPM or
+key. Beatgrid and cue points are out of scope; there is no live Rekordbox integration.
 
-In parallel, the BPM/key source:
+**`energy` is derived, never supplied.** Either estimated from BPM + genre
+(`services/energy.py`) or computed from the audio itself (`services/audio_energy.py`:
+RMS, spectral centroid, spectral flux, calibrated by percentile against the user's own
+library). `energy_source` says which. It is not a provider field and not hand-editable.
 
-```text
-Rekordbox (user analysis)
-  -> File > Export Collection in xml format
-  -> POST /api/rekordbox/import
-  -> path match (NFC) -> audio_hash (gated on basename) -> artist+title
-  -> bpm/camelot_key filled only if absent (never overwritten)
-  -> energy recomputed deterministically
-```
+**The library is the disk.** Ownership (`has_local_file`) is the state of a folder that
+Cratory indexes, not a side effect of any single acquisition path. A streaming playlist is
+a list of leads.
 
-Discovery is a single branch oriented toward **taste** (not technical compatibility,
-which stays with the Set Builder): crate digging (Scava) via two sources behind a
-shared `DigSource` protocol (`backend/app/services/dig_sources/`) — Discogs and
-Bandcamp, chosen per dig.
+**Cratory reads audio files; only Organize writes them.** Tag editing, renaming and on-disk
+layout belong to `/organize`, which is the single writer. Everything else — indexing,
+cover extraction, playback, hashing, analysis — opens files read-only.
 
-```text
-seed: genre or label
-  -> DigSource.probe: how tall the pile is, how far this source reaches into it
-  -> engine picks a (offset, count) window from `depth` in ITEMS, not pages
-     (0.0 = the seed's classics, 1.0 = the bottom of what the source reaches)
-  -> DigSource.fetch translates the window into its own pagination:
-     Discogs jumps to page numbers, Bandcamp walks a cursor sequentially
-  -> unowned leads, dedup vs library + variant dedup
-  -> taste-only ranking inside the window (familiarity + label + style), per-artist cap
-  -> add to library
-```
+**Streaming provides identity, not mixing data.** Spotify and SoundCloud supply title,
+artist, album, cover, duration, ISRC, URLs and playlist membership. The remaining external
+providers (Discogs, Bandcamp, iTunes) serve Discovery only. Spotify `/recommendations` must
+not be used: for new apps, or an app in development mode, it returns 403/404.
 
-The engine only ever reasons in items, never in a provider's own pagination unit —
-that boundary is what made a second source possible without the engine knowing who is
-behind it (`probe`/`fetch`/`to_lead`, `backend/app/services/dig_sources/__init__.py`).
-Bandcamp trades three signals for reach, all measured against the live API: no
-have/want (no rarity signal, so `rare_wanted`/`deep_cut` never fire for it), no styles
-in the result list (only in the release detail, so `style_match` never fires and its
-score weight redistributes into artist/label), and a capped `reach` of 3,000 items
-(`BANDCAMP_REACH`) — not a Bandcamp limit but a cost choice, since depth on Bandcamp
-costs requests (a sequential cursor walk) rather than a page jump, and the pile itself
-can be far larger (e.g. techno ≈ 434,000 releases on Bandcamp). In exchange, Bandcamp
-hands back a real per-track stream inside the dig result (no iTunes/YouTube preview
-resolution needed for those leads) and a richer release-detail panel (real tags, price,
-exact release date). Its one inferred field is `format_badge` (Single/EP/Album),
-derived from track count — Discogs declares the format on the release itself, Bandcamp
-does not declare one at all.
-
-Gap Analysis stays a deterministic read of a playlist's gaps, but the old Discovery
-section that suggested tracks starting from gaps has been removed.
-
-Mix identification:
-
-```text
-SoundCloud/Mixcloud/YouTube URL
-  -> yt-dlp temporary download
-  -> ffmpeg audio segments
-  -> Shazam recognizer
-  -> dedup consecutive matches
-  -> DjSet + DjSetTrack
-```
-
-Tracks identified in mixes do not enter the main library: they stay a separate corpus
-for future analysis and suggestions. This is the only fingerprinting Cratory
-performs: it identifies the tracks of an external mix via Shazam, not the library's tracks.
-
-File acquisition via Soulseek (slskd), distinct from the temporary Shazam download:
-
-```text
-Track in library (streaming identity)
-  -> SlskdClient.search (slskd REST)
-  -> deterministic selection (quality + name match + availability)
-  -> auto-pick (playlist block) | mini-selector (Discovery)
-  -> slskd enqueue + transfer polling
-  -> attach_local_file: has_local_file + local_path/format/bitrate
-```
-
-It is deterministic (zero AI), single-job (one download at a time) and best-effort: an
-error on one track does not stop the job. It requires slskd configured; without it, the
-endpoints respond `409`. The file stays linked to the `Track` as a local reference,
-it is not re-uploaded or redistributed by the app.
-
-**Library sharing (opt-in).** Historically slskd was used purely as a downloader. A
-"Condividi libreria" flag in Settings now lets the user opt in to sharing `LIBRARY_ROOT`
-on Soulseek. slskd doesn't accept share changes via API at runtime (shares live in its
-YAML), so `services/slskd_shares.py` edits `shares.directories` in slskd's own config
-(round-trip via `ruamel.yaml`, `.bak` backup, permissions preserved) and forces a rescan.
-It is off by default; enabling it exposes the library's filenames to the network.
-
-Outcomes to review
-(`needs_review|not_found|failed`) stay in a "to fix" queue, persisted on
-`Track.last_download_outcome`/`last_download_reason` so they survive jobs and
-restarts (`GET /api/downloads/pending`, `DELETE /api/downloads/pending/{track_id}`,
-`POST /api/downloads/retry-pending`). A file already on disk can also be
-linked manually from the track detail (`POST /api/tracks/{track_id}/link-file`,
-search by name in `LIBRARY_ROOT` and in the slskd download folder via
-`GET /api/files/search`), with the same `attach_local_file`/`audio_hash`
-as acquisition.
-
-## Disk-first
-
-The library is the disk: a track's ownership (`has_local_file`) is not a
-side-effect of Soulseek acquisition alone, but the state of a canonical
-folder that Cratory actively indexes. **Cratory reads audio files but never
-mutates them** — tags, renaming and organization remain the Organize section's exclusive job.
-
-- **`LIBRARY_ROOT`**: the organized folder (managed by the Organize section) that Cratory
-  indexes from Settings -> "Library (disk)". Empty = indexing disabled.
-  Indexing also starts automatically at every app startup (background job,
-  if `LIBRARY_ROOT` is configured), as well as on-demand.
-- **`ARCHIVE_ROOT`**: the archive of discarded tracks (DJPlayer PASSED), scanned
-  together with the library. A match in the archive marks the Track `archived=True` and
-  removes ownership, without creating new tracks; ownership in the Library always
-  wins over the discard and re-enables the track.
-- **`audio_hash`**: SHA-256 of the first seconds of audio decoded via ffmpeg (mono,
-  22050 Hz, s16le) — stable across rename and retag, unlike path or ID3/MP4 tags.
-  Computed both by library indexing and by Soulseek acquisition
-  (`attach_local_file`) and by the fallback match of the Rekordbox import, so the
-  paths converge on the same identifier.
-- **`library_index`** (`backend/app/services/library_index.py`, deterministic):
-  for each file under `LIBRARY_ROOT` it computes the hash and looks for a match in the order
-  `audio_hash -> legacy digest (historical local imports, in platform_track_id) ->
-  ISRC -> exact fuzzy artist+title -> normalized fuzzy`; if it finds nothing it creates
-  a new `Track`. The **normalized fuzzy** match hooks titles with different suffixes
-  but the same track (stripping `feat./ft.`, `(Original Mix)`, `- ... Remix`, diacritics and
-  punctuation) by comparing normalized artist+title, but **only on leads without a
-  file** and with a **duration guard** (±7s): it does not steal the file from an owned track
-  nor merge a track with its remix of a different duration. The file's
-  tags fill only the empty identity fields, read-only (never overwrite
-  BPM/key or manual corrections; Cratory never writes to the file). `label` too
-  (ID3 `TPUB` / Vorbis `LABEL`) is read from the file and filled only if absent. `genre`
-  gets an extra pass on top of "fill only if empty": right after a lead acquires a file
-  (even one with a pre-existing streaming genre) it also runs through the shared
-  `align_track_genre` rule below, so it does not stay stuck on a stale streaming value.
-  This one-time backfill at index time is separate from — and superseded, when a
-  file is owned, by — the **query-time effective value**: `genre`/`album`/`label`/`year`
-  are resolved live as `COALESCE(audio_file.field, track.field)` over the join on
-  `tracks.primary_file_id` (`repositories._EFFECTIVE_TAGS`), so a later edit to the
-  file's tags in Organize is reflected everywhere without re-running indexing. For
-  `album`/`label`/`year` this never touches the `Track` row — the COALESCE is the only
-  place the value is computed. `genre` is the one exception: `tracks.genre` is ALSO kept
-  as a convenience mirror of the file's tag, one shared rule
-  (`app/services/genre_align.py`, `align_track_genre`) called from five sites —
-  Organize's manual tag edit, Organize's scan (tag changed outside the app), Organize's Apply (a
-  RETAG that touches genre), library indexing (a lead acquiring a file) and acquisition
-  (`attach_local_file`: Soulseek, SoundCloud download, manual file link — the `AudioFile` row
-  is inserted rather than updated there, so the scan's changed-tag guard never fires). Writing the
-  mirror also recomputes the derived `energy` (`apply_estimated_energy`, since it depends
-  on bpm+genre — a set's energy arc can visibly shift after an Organize genre edit or a
-  re-scan; never overwrites `energy_source == "computed"`). The COALESCE read path stays
-  authoritative regardless of the mirror's state: the rule compares after light
-  normalization (case, dashes/underscores), so the mirror can lag the tag's literal text
-  without `GET /api/tracks` ever showing a wrong value. `artist`/`title` never follow the
-  file this way — they stay the streaming identity used for de-duplication and matching.
-  The scan **always ignores hidden folders and files** (name starting with `.`, e.g.
-  `.quarantine`, `.DS_Store`, `.git`): they are not library content, neither for the
-  count nor for indexing. Incremental scan: a file with unchanged path+mtime+size
-  is not re-hashed. Reconciliation: an ownership whose file the scan
-  **did not see** — deleted, moved outside `LIBRARY_ROOT`, or
-  ended up in a hidden folder (e.g. `.quarantine`) — is unlinked
-  (`has_local_file=False`, `local_path` cleared) but keeps `audio_hash`, so the
-  re-link is immediate if the file reappears (even for an existing Spotify lead via
-  ISRC or artist+title). If the unlinked track is not in any playlist nor in a saved
-  set it is **deleted** (no ghost leads, `orphans_removed` counter);
-  otherwise it stays as a lead without a file (`lost` counter). Anti-unmount guard: a
-  zero-file scan (empty root, wrong path, unmounted disk) does not touch existing
-  ownerships. `duplicates` counts files with the same hash seen in the same run (the
-  first wins; on-disk dedup remains the Organize section's job). Exposed via
-  `POST /api/library/index` (202, async job) and `GET /api/library/index/status`;
-  responds `409` if `LIBRARY_ROOT` is not configured.
-- **Cover art:** the owned track's artwork is served on-demand from the file
-  (`GET /api/tracks/{id}/cover`, embedded artwork read on the fly, not saved in DB;
-  covers FLAC/OGG, ID3 APIC, MP4 `covr`). The Spotify cover (`album_art_url`) takes
-  precedence when present; the frontend falls back to the endpoint only for owned tracks
-  without a streaming cover.
-- **Playback (quick audition):** an owned track's audio is streamed read-only, on-demand,
-  via `GET /api/tracks/{id}/audio` (`FileResponse`, HTTP Range/seek supported, `404` if not
-  found/owned/allowed/present — see `docs/API.md`). Same path-safety guard as the rest of
-  disk-first: the resolved path must sit inside `search_roots()` (`LIBRARY_ROOT` + the slskd
-  download dir), checked via `path_within_roots`. Frontend: a single shared docked player
-  (one track at a time, no queue) generalized from the Discovery preview player, so it plays
-  either a third-party Discovery preview or an owned local track; `TrackPlayButton` is the
-  reusable play control on track rows, mounted app-wide. No transcoding (unsupported
-  browser formats just fail to play) and no DJ-deck features (waveform/cue/queue stay with
-  the Set Builder/Rekordbox).
-- **Orphan leads and cleanup.** An "orphan lead" is a track without a file on disk that
-  belongs to no playlist nor a saved set: it has no more reason to
-  exist. They are removed in two places, with the shared helper `delete_orphan_leads`
-  / `unreferenced_track_ids` (in `repositories.py`): when a **playlist is deleted**
-  (`DELETE /api/playlists/{id}` returns `{deleted_tracks}`) and during **index
-  reconciliation** (see above).
-- **Merging duplicates (same track in two rows).** The helper `merge_tracks(keep, drop)`
-  (in `repositories.py`) moves playlist/set membership onto `keep`, fills its
-  empty fields from `drop` (keep stays authoritative on what it already has) and deletes `drop`.
-  Used by the **manual linking of a file** (`attach_local_file`): it merges a track that
-  already owns that same file (same `audio_hash`/`local_path`), so two rows do not remain.
-  With this and the normalized fuzzy match the manual match should rarely be necessary.
-- Ownership also feeds the Set Builder: `SetGenerationRequest.owned_only` (default
-  `True`) filters the Candidate Engine's candidates to only tracks with a local file;
-  the choice is persisted on `Setlist.owned_only` and respected by the editor too
-  (alternatives, track replacement — 422 if the replacement is not owned and the set
-  was born "owned only").
-
-## BPM/key sources: Rekordbox import + in-app analysis
-
-Cratory does not estimate or invent BPM/key, and never asks an AI for them: the two
-deterministic sources are the Rekordbox XML export (primary) and an in-app Essentia
-analysis (alternative, for tracks the user has not yet analyzed in Rekordbox). Every
-value on `Track` carries an explicit provenance, `bpm_source`/`key_source` (`manual`
-> `rekordbox` > `cratory`), so the two sources and manual corrections never silently
-clobber each other. Beatgrid, cue and other Rekordbox fields stay out of scope.
-
-### Rekordbox import
-
-- **`POST /api/rekordbox/import`** (multipart, field `file`): parses the XML
-  (`defusedxml`, anti-XXE) and for each `TRACK` looks for the matching owned
-  `Track` in the order: **NFC-normalized path** (macOS/Rekordbox can
-  decode `Location` in NFD) -> fallback **`audio_hash`**, gated on the
-  path basename to avoid an expensive ffmpeg decode on rows not ours ->
-  **fuzzy artist+title**. On a match, it is **source-aware**: by default it fills
-  empty `bpm`/`camelot_key` and reclaims values currently sourced from the in-app
-  analysis (`cratory`), but protects `manual` corrections; `?overwrite=true` wins
-  over every existing value regardless of source (a value absent in the XML never
-  clears the one already in the library). Every write is marked `bpm_source`/
-  `key_source = "rekordbox"`. It recomputes `energy` deterministically when the BPM
-  is set, and updates the track state. Responds with the counts (`in_file`,
-  `matched`, `unmatched`, `bpm_set`, `key_set`, `energy_set`). `400` on an empty file
-  or invalid/unsafe XML. Implementation: `backend/app/services/rekordbox_import.py`
-  (pure parser + `apply_collection`), router `backend/app/routers/rekordbox.py`.
-- **`GET /api/rekordbox/pending`**: counts the owned tracks (`has_local_file`)
-  still without BPM or without key — the number the user still has to "analyze in
-  Rekordbox and import". Also exposed in `GET /api/pipeline` as
-  `analyze_pending`.
-
-### In-app analysis (Essentia)
-
-The Analysis page (`/analysis`) offers a deterministic alternative to Rekordbox for
-owned tracks: local BPM/key extraction via Essentia, without leaving Cratory.
-
-- **`integrations/essentia_engine.py`**: thin, lazily-imported adapter (the app
-  starts and runs fine without the dependency installed; `is_available()` gates the
-  router's `503`). `analyze(path)` decodes the file (`MonoLoader`), runs
-  `RhythmExtractor2013` (method `multifeature`) for BPM and `KeyExtractor` (profile
-  `edma`, tuned for electronic music) for key, converting the result to the
-  project's canonical Camelot notation. Pinned to `essentia==2.1b6.dev1389`
-  (AGPL-3.0) — see `docs/DEPENDENCIES.md`. `analyze_subprocess(path)` runs the same
-  analysis in a short-lived child process (`essentia_worker.py`): Essentia is C++
-  and holds the GIL for seconds per real track, so running it in the job thread of
-  the single-worker server would freeze every concurrent request — the subprocess
-  isolates that CPU-bound work (same rationale as ffmpeg in the library index), and
-  the job calls this variant, not `analyze`.
-- **`services/audio_analysis.py`**: the only bridge from `analysis_*` to the
-  canonical `bpm`/`camelot_key`. `diverges(track)` flags a mismatch (BPM compared
-  at 1-decimal precision, key exact match). `apply_analysis` copies the analyzed
-  values unconditionally (source becomes `cratory`); `auto_apply_missing` copies
-  only into empty canonical fields (no conflict possible, used by the job). Also
-  recomputes `energy` and refreshes track status on any write.
-- **`services/audio_analysis_job.py`**: background job (same in-memory
-  single-job-with-lock pattern as `library_index_job`). Selects owned tracks with a
-  local file (`scope="missing"` = without BPM or key, `scope="all"` or explicit
-  `track_ids` = every candidate), analyzes each with `essentia_engine.analyze_subprocess`,
-  writes `analysis_bpm`/`analysis_camelot`/`analyzed_at` (or `analysis_error` on a
-  decode failure, without stopping the batch), then calls `auto_apply_missing`.
-  Commits per track so progress survives an interruption.
-- **`routers/analysis.py`** (`/api/analysis/*`): `overview` (coverage by source),
-  `start` (202, `503` if Essentia missing, `409` if already running), `status`,
-  `divergences` (canonical vs analyzed, with Camelot-wheel compatibility), `apply`
-  (writes the selection into the canonical fields; `mode="all"` requires
-  `force=true`). Full contract in `docs/API.md`.
+**Third-party audio is streamed, not kept.** Mix identification downloads temporarily and
+deletes; Discovery previews stream from the provider and are discarded. Two deliberate
+exceptions save a file and link it to a track already in the library: Soulseek acquisition
+and the per-track SoundCloud download. Cratory is not a DJ deck — no waveform, no cue, no
+queue — but it does play the files you own, read-only, through one shared docked player.
 
 ## Backend layers
 
 ```text
 backend/app/
-  routers/        FastAPI endpoints, HTTP only and error mapping
-  services/       deterministic application logic and orchestration
-  repositories.py SQLAlchemy queries and DB mutations
-  models.py       SQLAlchemy models
-  db.py           session/engine, ensure_schema and idempotent migrations
-  schemas.py      Pydantic request/response
-  serializers.py  ORM -> Pydantic, derived fields
-  integrations/   external clients behind interfaces
-  core/           config, logging
-  tools/          maintenance scripts (clean_user_data, merge_duplicate_tracks)
+  main.py            FastAPI app: lifespan (ensure_schema, runtime settings, startup
+                     library scan), CORS, request logging, router mounting
+  db.py              engine/session, ensure_schema + idempotent migrations
+  models.py          SQLAlchemy models (core)
+  schemas.py         Pydantic request/response
+  serializers.py     ORM -> Pydantic, derived fields
+  repositories.py    queries and DB mutations, incl. the effective-tag COALESCE
+
+  core/
+    config.py            pydantic-settings Settings + logging setup
+    runtime_settings.py  Settings-UI overrides cached over the .env values
+    http_errors.py       api_error(): structured {code, message, params} details
+
+  routers/           HTTP only, no business logic
+    tracks.py (/api: tracks, library/index, stats, genres)  playlists.py
+    sets.py  transitions.py  labels.py  analysis.py  rekordbox.py
+    discovery.py  dj_sets.py (/api/shazam)  downloads.py  files.py
+    slskd.py  soundcloud.py  spotify.py  ai.py  pipeline.py  services.py
+    settings.py
+
+  services/          deterministic logic and orchestration
+    import        playlist_import  manual_import  local_import  streaming_import_job
+    identity      library_index  auto_link  file_search  genre_align  genre_norm
+                  track_status  camelot
+    bpm/key       rekordbox_import  audio_analysis  audio_analysis_job
+    scoring       scoring  energy  audio_energy  candidate_engine
+    set building  set_skeleton  set_generator  set_editor  alternatives
+                  ai_curation  export_render
+    discovery     discovery_dig  dig_sources/{__init__,discogs,bandcamp}  preview
+    acquisition   acquisition  soulseek_select  soulseek_download_job
+                  download_review  slskd_shares
+    mixes         mix_identify  mix_identify_job
+    misc          gap_analysis  labels  pipeline  rating  app_state
+                  track_label  job_spawn  native_picker
+
+  integrations/      external clients behind injectable interfaces
+    spotify  soundcloud  soundcloud_audio  discogs  bandcamp  itunes
+    slskd  shazam  llm  essentia_engine  essentia_worker  local_files  _http
+
+  tools/             maintenance scripts
+    clean_user_data  merge_duplicate_tracks
+
+  organize/          the /organize section, its own namespace under /api/organize/*
+    models.py        ScanRoot, AudioFile, Issue, DupGroup, DupMember, Settings,
+                     Plan, PlanOp, UndoJournal
+    schemas.py       Pydantic schemas for the section
+    core/            http_errors.py
+    routers/         scan  analyze  issues  duplicates  plan  apply  history
+                     library  files  fingerprint  genre_review  settings
+    services/        scanner  scan_job  inspector  dedup  planner  planning
+                     conflict  apply  apply_job  undo  manual_edit  file_link
+                     roots  analysis  covers  cover_cache  thumbs  ratings
+                     fingerprint  integrity  integrity_job  match_distance
+                     genre_review  genre_review_job  provider_rescan
+                     provider_rescan_job  text_providers  ai_tags
+    integrations/    tagio  fsops  acoustid  musicbrainz  discogs_meta
+                     cover_art  content_hash  integrity  _http
 ```
 
-Routers must contain no business logic. External integrations must be
-injectable or isolatable, so tests can use fake clients without a network.
+Two rules hold across the tree. Routers contain no business logic — they map HTTP to a
+service call and map exceptions to status codes through `api_error`. External integrations
+take an injectable client (usually `httpx`), so the test suite runs without a network.
 
-## Deterministic engine
+`app/organize` imports from the core (`app.models.Track`, `app.core`, `app.services.genre_align`);
+the core never imports from `app.organize`. The one relationship that spans the boundary,
+`AudioFile.track`, is declared on the Organize side with a backref, so `app/models.py` stays
+independent. `ensure_schema()` pulls in the Organize models with a deferred import.
 
-Responsibilities:
+Background jobs follow one pattern: a module-level lock, in-memory status, and a daemon
+thread started through `services/job_spawn.spawn` (which tests monkeypatch to run
+synchronously). One job of a kind at a time; a second start returns `409`. CPU-bound work
+that would hold the GIL — ffmpeg decoding, Essentia analysis — runs in a subprocess.
 
-- playlist import and manual import;
-- de-duplication with priority `ISRC -> platform_track_id -> artist+title+duration -> fuzzy`;
-- Rekordbox import (BPM/key, source-aware overwrite) and in-app Essentia analysis
-  (BPM/key alternative, apply bridge), and recomputation of derived `energy`;
-- track state (`imported`, `ready_for_set`);
-- BPM, Camelot, energy, genre and duration scores (the contract also includes a mood
-  coherence score, today always neutral: `Track` no longer has a mood field since
-  the enrichment engine was retired). Genre similarity uses a deterministic
-  map of families (techno/house/breaks/chill/...): subgenres of the same
-  family are coherent even without a common token, super-genres ("Electronic")
-  are neutral, different families count as a break. In the set generator genre
-  coherence is a dedicated ranking term (like the energy arc), modulated per
-  strategy (`StrategyProfile.genre_coherence`: exploratory strategies reduce it).
-  Every genre read along this chain — similarity/coherence here, the requested-genre
-  bonus and the genre arc below, the AI curation payload — resolves the **effective**
-  genre (owned track: the primary file's tag; otherwise streaming), not `Track.genre`
-  directly: the candidate engine resolves a `genre_map` once per pool
-  (`repositories.effective_genres_for_tracks`, one query) and threads it through as a
-  plain argument (`scoring.genre_of`); callers outside the Set Builder that build no
-  pool-wide map (`/api/transitions`, alternatives, the set editor) keep reading
-  `Track.genre` streaming, unchanged;
-- transition classification;
-- deterministic set generation in two phases (`services/set_skeleton.py` +
-  `services/set_generator.py`). Phase 1 (`build_skeleton`) elects opening/peak/closing/reset
-  anchors per strategy, reserves the top 15% of candidates by impact score (0.7 energy
-  percentile + 0.3 BPM percentile) for the peak segment only, and plans a genre arc (dominant
-  family at peak, a calmer family elsewhere, on the effective genre above; degenerates to no
-  plan above an 80% dominant share or without a second family at 15%+). Phase 2 fills each
-  segment with the same beam search
-  (span-budgeted: `_beam_search_span`), converging toward the incoming anchor and following the
-  segment's genre plan, with a penalty for spending a reserved track outside the peak window.
-  Falls back to the previous
-  single-phase beam search when the pool is under 8 candidates or the expected set is under 6
-  tracks. Fully deterministic, same external interface regardless of AI curation;
-- **AI curation** (phase 2 of the two-phase plan, `services/ai_curation.py`, optional, on when
-  `use_ai` is truthy): read-only on the pool, it never sequences tracks. Up to four LLM calls
-  run before the deterministic engine, pool cap 200 and per-call cap 60 throughout:
-  1. **intent compilation** — the free prompt is translated into `SetGenerationRequest`
-     overrides, but only for fields the user left unset (`model_fields_set` is the
-     discriminant; `owned_only`/`sources` are never compilable). The compiled `start_bpm`/
-     `end_bpm`/`start_energy`/`end_energy` are set-arc preferences on the request, not
-     track-level BPM/key — rule 2 (never ask an AI for track BPM/key) stays intact;
-  2. **mood-fit** in batches of 50 — a 0-100 score plus up to 3 tags per candidate; candidates
-     a batch fails to judge default to the neutral 50 (they neither win nor lose);
-  3. **anchor hints** — up to 3 track ids per role (opening/peak/closing) among the
-     mood-fit leaders;
-  4. **narrative** (after the set is built) — title, global explanation and up to 3
-     missing-library suggestions over the finished tracklist.
+## The library is the disk
 
-  Mood-fit and anchor hints feed the deterministic engine as two extra, non-binding terms:
-  a ×0.30 weight in `_candidate_score` (fill stage) and a ×0.2 weight plus a +12 bonus in the
-  anchor election (`build_skeleton`) — the AI nudges scores, it never picks a track directly.
-  Any AI call that fails degrades to the deterministic default with a warning on the setlist
-  (`Setlist.curation.warnings`), never an error; if every call fails or produces nothing usable,
-  `generated_by` stays `algorithmic` (otherwise `algorithmic+ai_curation`; historical sets may
-  still read `ai`). The former "AI orders the tracklist" path (`generate_ai_set()`,
-  `services/ai_agent.py`, `services/validation.py`'s `validate_ai_set()`, schemas
-  `AITrackChoice`/`AISetResponse`) has been retired entirely — see
-  `docs/archive/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`;
-- role assignment across the set arc;
-- candidate filtering feeding the AI curation stage (pool cap 200, per-call cap 60);
-- gap analysis;
-- discovery ranking;
-- schema-bound AI output (foreign ids and out-of-bounds values discarded with a warning, never
-  surfaced as fact).
+A track is *owned* when a file for it exists under `LIBRARY_ROOT`. Ownership survives
+renames, moves and retagging because identity is anchored to the audio, not the path.
 
-After editing in the workbench, roles are re-derived positionally by `assign_roles` (peak at ~70%); for strategies with non-standard peak placement (e.g., closing), the peak label may shift relative to the anchor elected at generation time; persistent peak alignment across edits remains a future improvement (out of AI curation's scope).
+- **`LIBRARY_ROOT`** — the organized folder, set in Settings → "Library (disk)". Empty
+  disables indexing (`409`).
+- **`SLSKD_DOWNLOAD_DIR`** — the inbox, walked by the same scan. A file here is an
+  `AudioFile` with `location = "inbox"`; a file under `LIBRARY_ROOT` is `location =
+  "library"`. There is no third case.
+- **`ARCHIVE_ROOT`** — the archive of discarded tracks, scanned alongside the library. A
+  match there sets `archived=True` and drops ownership, without creating tracks; ownership
+  in the library always wins and re-enables the track. Archive files matching no track are
+  remembered in `archive_seen` (path, mtime, size) so they are not re-hashed every run.
+- **`audio_hash`** — SHA-256 of the first seconds of the decoded audio stream (ffmpeg, mono,
+  22050 Hz, s16le). Stable across rename and retag, unlike a path or an ID3 tag. Computed by
+  library indexing, by acquisition (`attach_local_file`) and by the Rekordbox import's
+  fallback match, so all three paths converge on the same identifier.
 
-The absence of BPM/key does not block the system: the track stays `imported` (not
-usable by the Set Builder until they arrive from a Rekordbox import) and partial
-scores use neutral values where possible.
+### One scan, two doors
 
-## AI
+There is a single scan job, `organize/services/scan_job.py`, reachable two ways:
+`POST /api/organize/scan` (optionally scoped with `locations: ["inbox"|"library"]`) and
+`POST /api/library/index`, its whole-library alias kept for the frontend's "Index" button.
+Both return 202 and are polled through their own `/status` route. It also runs once at
+startup, through `start_job_if_due()`, which skips if the last run finished less than 15
+minutes ago — otherwise every uvicorn reload would re-index in development.
 
-The AI can:
+The scan and Organize's apply are mutually exclusive: each returns `409` while the other is
+running. A scan during an apply would walk a half-moved tree, and reconciliation could then
+merge a file 1:1 across the inbox/library boundary.
 
-- interpret free prompts into request constraints (intent compilation — only for fields the
-  user left open);
-- score the mood-fit of candidates and suggest anchor tracks (opening/peak/closing) — hints
-  the deterministic engine may use, never a selection it is bound to;
-- propose a narrative direction (title, explanation, missing-library suggestions);
-- explain choices and transitions;
-- comment on Discovery candidates.
+**Phase 1** (`organize/services/scanner.py`) walks the roots, reads tags and upserts
+`AudioFile` rows. **Phase 2** (`_aggancia_le_tracce`, delegating to
+`services/library_index.py`) attaches tracks to the files phase 1 just wrote —
+`collega_tracce`, `indicizza_archivio`, `riconcilia_possessi`, plus the energy recompute. The
+import is deferred inside the function, because `library_index.py` already imports from
+`app/organize` and a module-level import would close the cycle.
 
-The AI cannot:
+For each file, phase 2 computes the hash and looks for a track to attach it to, in order:
+`audio_hash` → legacy digest (historical local imports, stored in `platform_track_id`) →
+ISRC → exact fuzzy artist+title → normalized fuzzy. Nothing matched means a new `Track`.
 
-- invent track_id;
-- invent BPM/key/ISRC/sources;
-- select tracks outside the candidates it received;
-- sequence the tracklist — that is always the deterministic engine's job;
-- overwrite constraints the user set explicitly in the form;
-- touch BPM/key/energy.
+The **normalized fuzzy** step catches the same track under a different suffix — it strips
+`feat./ft.`, `(Original Mix)`, `- … Remix`, diacritics and punctuation before comparing —
+but only against **leads without a file**, and only within a **±7s duration guard**. It
+therefore cannot steal a file from an owned track, nor merge a track with a remix of a
+different length.
 
-There is a single AI axis: AI curation on or off (`use_ai`). The curation has one
-character — musical — so there is no technical/creative distinction: the mood/anchor/
-narrative system prompts are unique. The earlier `mode` field was retired once its only
-surviving effect (model selection) no longer justified a user-facing toggle.
+Tags from the file fill empty identity fields only. They never overwrite BPM, key or a
+manual correction, and nothing is ever written back. `label` (ID3 `TPUB` / Vorbis `LABEL`)
+follows the same fill-if-empty rule.
 
-## Internationalization (i18n IT/EN)
+Hidden folders and files (leading `.` — `.quarantine`, `.DS_Store`, `.git`) are always
+skipped, for the count as well as for indexing. The scan is incremental: unchanged
+path+mtime+size means no re-hash.
 
-Cratory is bilingual Italian/English. The language is a persistent setting
-(key `language` in `AppState`, default `it`), chosen by a toggle in Settings;
-no per-locale routing (single-user app, no SEO). Endpoint `GET/PUT
-/api/settings/language`.
+**Reconciliation.** An ownership whose file the scan did not see — deleted, moved out of the
+root, or moved into a hidden folder such as `.quarantine` — is unlinked (`has_local_file=False`,
+`local_path` cleared) but keeps its `audio_hash`, so re-linking is instant if the file
+reappears. If the unlinked track belongs to no playlist and no saved set it is deleted
+outright (`orphans_removed`); otherwise it survives as a lead (`lost`). A scan that sees
+**zero** files — unmounted disk, wrong path — touches no existing ownership. `duplicates`
+counts same-hash files seen in one run; the first wins, and on-disk de-duplication is
+Organize's job.
 
-Three surfaces, three strategies:
+### Effective tags
 
-- **Frontend UI**: a home-grown TypeScript dictionary in `frontend/lib/i18n/`.
-  `en.ts` is the source of truth for the keys; `it.ts` is typed `: Dictionary`
-  (`= typeof en`), so a missing or extra key is a compile error.
-  `I18nProvider`/`useT()` expose the active dictionary; `runtime.ts` keeps the
-  language state accessible outside React (used by `lib/api.ts`) without import cycles.
-- **Backend errors**: language-agnostic. Every `HTTPException` goes through
-  `api_error(status, code, message, **params)` (`app/core/http_errors.py`) with a structured
-  `detail` `{code, message, params?}`; the frontend translates the `code` from the
-  `errors` namespace of the dictionary (`translateApiError`), with the English `message` as fallback.
-- **Generated phrases + AI output**: produced by the backend directly in the selected
-  language. Enum labels (e.g. transition classification) stay codes
-  translated by the frontend; composed phrases (reason/mixing tip/overview in
-  `services/scoring.py`, job phases and AI curation texts in `services/ai_curation.py`)
-  come from per-language catalogs indexed by `get_language(db)` at the entry point.
-  The AI system prompts stay in Italian as instructions to the model: only the
-  directive on the output language is parametric.
+For an owned track, the authoritative text tag is the one in the file, not the one imported
+from streaming. `repositories._EFFECTIVE_TAGS` resolves `genre`, `album`, `label` and `year`
+at query time as `COALESCE(audio_file.field, track.field)` over the join on
+`tracks.primary_file_id`. Edit a tag in Organize and every read reflects it, with no
+re-indexing.
 
-Known limitation: the `transition_reason` values persisted in the DB at set generation
-time stay in the language active at that moment (the future display language is not
-known at generation time).
+`genre` is the one field also mirrored onto `tracks.genre`, as a convenience for code paths
+that hold a `Track` and no pool-wide map. One shared rule maintains the mirror —
+`services/genre_align.align_track_genre` — called from exactly five sites: Organize's manual
+tag edit, Organize's scan (tag changed outside the app), Organize's apply (a RETAG touching
+genre), library indexing (a lead acquiring a file), and acquisition (`attach_local_file`,
+where the `AudioFile` row is inserted rather than updated, so the scan's changed-tag guard
+never fires). Writing the mirror also recomputes the derived `energy`, since it depends on
+BPM + genre — a set's energy arc can visibly shift after a genre edit. The COALESCE read
+path stays authoritative regardless of the mirror's state; the rule compares after light
+normalization (case, dashes, underscores), so the mirror may lag the literal text without
+any endpoint ever returning a wrong value.
+
+`artist` and `title` never follow the file: they are the streaming identity used for
+de-duplication and matching.
+
+### Serving files
+
+- **Cover art** — `GET /api/tracks/{id}/cover` reads embedded artwork on the fly (FLAC/OGG
+  pictures, ID3 `APIC`, MP4 `covr`); nothing is cached in the DB. A Spotify
+  `album_art_url` takes precedence when present, and the frontend falls back to the endpoint
+  only for owned tracks without one.
+- **Playback** — `GET /api/tracks/{id}/audio` streams the local file with `FileResponse`
+  (HTTP Range/seek supported). The resolved path must sit inside `search_roots()`
+  (`LIBRARY_ROOT` plus the slskd download folder), checked by `path_within_roots`; anything
+  else is a `404`. No transcoding: a format the browser cannot decode simply does not play.
+  The frontend mounts one shared docked player app-wide — one track at a time, no queue —
+  which also plays Discovery previews; `TrackPlayButton` is the reusable play control on
+  track rows.
+
+### Housekeeping helpers
+
+Both live in `repositories.py` and are shared by several call sites:
+
+- `delete_orphan_leads` / `unreferenced_track_ids` — a lead with no file, no playlist and no
+  saved set has no reason to exist. Removed when a playlist is deleted
+  (`DELETE /api/playlists/{id}` returns `{deleted_tracks}`) and during index reconciliation.
+- `merge_tracks(keep, drop)` — moves playlist and set membership onto `keep`, fills its empty
+  fields from `drop`, deletes `drop`. Used by manual file linking, which merges a track that
+  already owns the same file (same `audio_hash`/`local_path`) instead of leaving two rows.
+
+## Import and de-duplication
+
+```text
+Spotify / SoundCloud / pasted text
+  -> playlist_import: normalization
+  -> de-duplication: ISRC -> platform_track_id -> artist+title+duration -> fuzzy
+  -> Track (status: imported)
+  -> BPM + key arrive -> status: ready_for_set
+```
+
+A track can belong to several playlists: membership lives on the `playlist_tracks`
+association table with a per-playlist `added_at`, and an import adds membership without
+overwriting. Each import or sync records its diff in `PlaylistSyncEvent` as a textual
+snapshot (artist/title), because a removed track may itself disappear as an orphan lead.
+
+Spotify sync prunes tracks removed upstream; SoundCloud sync is always additive, since the
+SoundCloud path has no ISRC and de-duplicates on `platform_track_id` alone. Long imports run
+through `services/streaming_import_job.py`.
+
+Missing BPM/key does not block anything: the track stays `imported` — the Set Builder will
+not use it — and partial scores fall back to neutral values.
+
+## BPM and key
+
+### Rekordbox import
+
+`POST /api/rekordbox/import` (multipart, field `file`) parses the collection XML with
+`defusedxml` and, for each `TRACK` element, looks for the owned `Track` in this order:
+
+1. **NFC-normalized path** — macOS and Rekordbox can write `Location` in NFD.
+2. **`audio_hash`**, gated on the path basename so an ffmpeg decode is not paid for rows
+   that are not ours.
+3. **fuzzy artist+title**.
+
+On a match the write is source-aware: by default it fills empty `bpm`/`camelot_key` and
+reclaims values currently sourced from in-app analysis (`cratory`), while protecting
+`manual` corrections. `?overwrite=true` wins over any source. A value absent from the XML
+never clears one already in the library. Every write stamps `bpm_source`/`key_source =
+"rekordbox"`, recomputes `energy` when BPM is set, and refreshes the track status. The
+response carries the counts (`in_file`, `matched`, `unmatched`, `bpm_set`, `key_set`,
+`energy_set`); an empty or unsafe XML is a `400`.
+
+`GET /api/rekordbox/pending` counts owned tracks still missing BPM or key — the backlog the
+user still has to analyze in Rekordbox. The same number appears in `GET /api/pipeline` as
+`analyze_pending`.
+
+Implementation: `services/rekordbox_import.py` (a pure parser plus `apply_collection`),
+router `routers/rekordbox.py`.
+
+### In-app analysis (Essentia)
+
+The `/analysis` page extracts BPM and key locally, without leaving Cratory.
+
+- **`integrations/essentia_engine.py`** — a thin, lazily-imported adapter. The app starts and
+  runs fine without Essentia installed; `is_available()` gates the router's `503`.
+  `analyze(path)` decodes with `MonoLoader`, runs `RhythmExtractor2013` (`multifeature`) for
+  BPM and `KeyExtractor` (profile `edma`, tuned for electronic music) for key, converting to
+  the project's Camelot notation. `analyze_subprocess(path)` runs the same work in a
+  short-lived child process (`essentia_worker.py`): Essentia is C++ and holds the GIL for
+  seconds per track, which would freeze concurrent requests on a single-worker server. The
+  job calls the subprocess variant.
+- **`services/audio_analysis.py`** — the only bridge from the `analysis_*` staging fields to
+  the canonical ones. `diverges(track)` flags a mismatch (BPM at one decimal, key exact).
+  `apply_analysis` copies unconditionally (source becomes `cratory`); `auto_apply_missing`
+  copies only into empty canonical fields, so no conflict is possible. Both recompute
+  `energy` and refresh the status.
+- **`services/audio_analysis_job.py`** — the background job. Selects owned tracks
+  (`scope="missing"` = missing BPM or key, `scope="all"` or explicit `track_ids` = every
+  candidate), analyzes each, writes `analysis_bpm`/`analysis_camelot`/`analyzed_at` — or
+  `analysis_error` on a decode failure, without stopping the batch — then calls
+  `auto_apply_missing`. It commits per track, so progress survives an interruption.
+- **`routers/analysis.py`** — `overview` (coverage by source), `start` (202; `503` without
+  Essentia, `409` if already running), `status`, `divergences` (canonical vs analyzed, with
+  Camelot-wheel compatibility), `apply` (`mode="all"` requires `force=true`).
+
+## Set building
+
+```text
+filters + prompt
+  -> Candidate Engine (owned_only, sources, genre, BPM/key/energy windows)
+  -> [optional] AI curation: intent compilation, mood-fit, anchor hints
+  -> Phase 1  build_skeleton: anchors, peak reserve, genre arc
+  -> Phase 2  beam search per segment
+  -> assign_roles
+  -> [optional] AI narrative: title, explanation, missing-library suggestions
+  -> Setlist + SetlistTrack
+```
+
+### Deterministic scoring
+
+`services/scoring.py` scores BPM, Camelot, energy, genre and duration. The contract also
+carries a mood-coherence score, today always neutral — `Track` has no mood field. Genre
+similarity uses a deterministic family map (techno / house / breaks / chill / …):
+subgenres of one family are coherent even without a shared token, super-genres like
+"Electronic" are neutral, different families count as a break. In the generator, genre
+coherence is a ranking term of its own, modulated per strategy
+(`StrategyProfile.genre_coherence` — exploratory strategies lower it).
+
+Every genre read along this chain resolves the **effective** genre, not `Track.genre`: the
+candidate engine builds a `genre_map` once per pool
+(`repositories.effective_genres_for_tracks`, one query) and threads it through as a plain
+argument (`scoring.genre_of`). Callers outside the Set Builder that build no pool-wide map
+— `/api/transitions`, alternatives, the set editor — read the streaming `Track.genre`.
+
+### Two-phase generation
+
+**Phase 1, `services/set_skeleton.py`.** Elects opening / peak / closing / reset anchors
+according to the strategy, reserves the top 15% of candidates by impact score (0.7 × energy
+percentile + 0.3 × BPM percentile) for the peak segment alone, and plans a genre arc: the
+dominant family at the peak, a calmer family elsewhere, computed on the effective genre. The
+arc degenerates to no plan above an 80% dominant share, or when no second family reaches
+15%. `build_skeleton` returns `None` — and the generator falls back to the older
+single-phase beam search — when the pool is under 8 candidates (`_MIN_POOL_FOR_SKELETON`) or
+the expected set is under 6 tracks (`_MIN_EXPECTED_TRACKS`, target duration over the median
+track length).
+
+**Phase 2, `services/set_generator.py`.** Fills each segment with a span-budgeted beam search
+(`_beam_search_span`) that converges toward the incoming anchor, follows the segment's genre
+plan, and penalizes spending a reserved track outside the peak window. Fully deterministic;
+the external interface is identical whether or not AI curation ran.
+
+After an edit in the workbench, roles are re-derived positionally by `assign_roles` (peak at
+~70%). For strategies whose peak sits elsewhere — a descending/closing arc puts it at ~20% —
+the label can drift from the anchor elected at generation time.
+
+### AI curation (`services/ai_curation.py`)
+
+Optional, enabled by a truthy `use_ai`. It is read-only on the pool and never sequences.
+Up to four LLM calls, all under the 200/60 caps:
+
+1. **Intent compilation** — the free prompt becomes `SetGenerationRequest` overrides, but
+   only for fields the user left unset (`model_fields_set` is the discriminant;
+   `owned_only` and `sources` are never compilable). The compiled `start_bpm`/`end_bpm`/
+   `start_energy`/`end_energy` are set-arc preferences on the request, not per-track BPM or
+   key — the "never ask an AI for BPM/key" rule is intact.
+2. **Mood-fit**, in batches of 50 — a 0–100 score plus up to 3 tags per candidate.
+   Candidates a batch fails to judge default to 50, so they neither win nor lose.
+3. **Anchor hints** — up to 3 track ids per role (opening / peak / closing) among the
+   mood-fit leaders.
+4. **Narrative**, after the set is built — title, global explanation, and up to 3
+   missing-library suggestions.
+
+Mood-fit and anchor hints enter the deterministic engine as two non-binding extra terms: a
+×0.30 weight in `_candidate_score` at the fill stage, and a ×0.2 weight plus a +12 bonus in
+the anchor election. The AI nudges scores; it never picks a track. Failures land in
+`Setlist.curation.warnings`. If every call fails or produces nothing usable, `generated_by`
+stays `algorithmic`; otherwise it becomes `algorithmic+ai_curation` (sets generated before
+the two-phase rework may still read `ai`).
+
+There is a single AI axis — on or off. The curation has one character, musical, so the
+mood/anchor/narrative system prompts are unique and there is no technical/creative toggle.
+
+### Around the generator
+
+`services/set_editor.py` and `services/alternatives.py` back the workbench: reorder, remove,
+replace a track, list alternatives for a slot. A set born `owned_only` keeps the guarantee —
+`Setlist.owned_only` is persisted and the editor answers `422` to a replacement that is not
+owned. `services/export_render.py` renders text, CSV, Markdown and M3U8 (the M3U8 lists local
+paths and notes how many tracks were skipped for lack of a file); `routers/spotify.py` pushes
+a set back as a Spotify playlist.
+
+`services/gap_analysis.py` reads a playlist for structural holes (no openers, no peak,
+missing BPM bridges, flat energy, harmonic dead ends). `/api/transitions` classifies a pair
+of tracks on its own. `services/labels.py` aggregates the library per record label, reading
+the label from the effective tag.
+
+## Discovery
+
+Discovery works by **taste**, not by technical compatibility — that stays with the Set
+Builder. The dig ("Scava") seeds on a genre or a label and reaches into one of two sources.
+
+```text
+seed: genre or label
+  -> DigSource.probe: how tall the pile is, how far this source reaches into it
+  -> the engine picks an (offset, count) window from `depth`, in ITEMS
+     (0.0 = the seed's classics, 1.0 = the bottom of what the source reaches)
+  -> DigSource.fetch translates that window into the provider's own pagination:
+     Discogs jumps to a page number, Bandcamp walks a cursor
+  -> DigSource.to_lead maps raw results; unowned leads only, deduped against the
+     library and against variants of each other
+  -> taste ranking inside the window (familiarity + label + style), per-artist cap
+  -> POST /api/discovery/add (into the library as a lead) or /save-for-later
+```
+
+The engine reasons only in items, never in a provider's pagination unit. That boundary —
+`probe` / `fetch` / `to_lead` in `services/dig_sources/__init__.py` — is what let a second
+source arrive without the engine learning anything about it.
+
+**Bandcamp trades three signals for reach**, all measured against the live API: no have/want
+counts (no rarity signal, so `rare_wanted` and `deep_cut` never fire), no styles in the
+result list (only in the release detail, so `style_match` never fires and its weight
+redistributes into artist and label), and a `reach` capped at 3,000 items
+(`BANDCAMP_REACH`). The cap is a cost choice, not a Bandcamp limit: depth there costs a
+sequential cursor walk rather than a page jump, and the pile itself can be far larger. In
+exchange Bandcamp hands back a real per-track stream inside the dig result — no preview
+resolution needed for those leads — and a richer release detail (real tags, price, exact
+release date). Its one inferred field is `format_badge` (Single/EP/Album), derived from the
+track count; Discogs declares the format on the release.
+
+**Previews** (`services/preview.py`) are a pure function with injected network callables:
+iTunes Search for a clean 30-second clip, falling back to the YouTube video Discogs
+associates with the release, and nothing if neither resolves. Bandcamp leads skip the chain
+entirely. Nothing is downloaded or kept; the same docked player handles previews and owned
+tracks.
+
+## Acquisition
+
+```text
+Track in the library (a lead)
+  -> SlskdClient.search (slskd REST)
+  -> soulseek_select ranks deterministically: quality + name match + availability
+  -> auto-pick above a confidence floor, or the user picks a candidate by hand
+     (POST /api/downloads/track/auto vs /track; /playlist/{id} for a whole block)
+  -> slskd enqueue + transfer polling
+  -> attach_local_file: has_local_file + local_path/format/bitrate + audio_hash
+```
+
+Zero AI, one job at a time, best-effort: a failure on one track does not stop the job. It
+requires slskd to be configured, and the endpoints answer `409` without it. The file becomes
+a local reference on the existing `Track`; the app neither re-uploads nor redistributes it.
+
+Outcomes needing attention (`needs_review` | `not_found` | `failed`) go to a "to fix" queue
+persisted on `Track.last_download_outcome`/`last_download_reason`, so it survives jobs and
+restarts (`GET /api/downloads/pending`, `DELETE /api/downloads/pending/{track_id}`,
+`POST /api/downloads/retry-pending`). A duration mismatch also keeps
+`last_download_path`, so `services/download_review.py` can offer "keep anyway / discard".
+
+A file already on disk can be linked by hand from the track detail
+(`POST /api/tracks/{track_id}/link-file`, searching by name in `LIBRARY_ROOT` and in the
+slskd download folder via `GET /api/files/search`), through the same
+`attach_local_file`/`audio_hash` path as acquisition.
+
+**Per-track SoundCloud download** (`integrations/soundcloud_audio.py`) is the second
+save-a-file exception: yt-dlp extracts an MP3 into the same shared download folder
+(`SLSKD_DOWNLOAD_DIR`) and links it to the existing track. Single track only, from the
+detail page, never a batch. Tags are untouched.
+
+**Library sharing** is opt-in and off by default. slskd does not accept share changes over
+its API at runtime — shares live in its YAML — so `services/slskd_shares.py` edits
+`shares.directories` in slskd's own config (round-trip through `ruamel.yaml` to preserve
+comments and formatting, `.bak` backup, permissions kept) and forces a rescan. Enabling it
+exposes the library's filenames to the network.
+
+## Mix identification
+
+```text
+SoundCloud / Mixcloud / YouTube URL
+  -> yt-dlp temporary download
+  -> ffmpeg audio segments
+  -> Shazam recognizer
+  -> consecutive matches deduped
+  -> DjSet + DjSetTrack
+```
+
+Tracks identified in a mix do **not** enter the main library: they are a separate corpus for
+later analysis and suggestions. This is the only fingerprinting Cratory does — on someone
+else's mix, never on the library. The downloaded audio is temporary and deleted.
+
+## Organize
+
+`/organize` is the section that owns the disk. It is the only writer of tags, filenames and
+folder layout, and every mutation is journaled so it can be undone.
+
+```text
+scan        walk LIBRARY_ROOT + SLSKD_DOWNLOAD_DIR, read tags, upsert AudioFile,
+            then link files to Tracks — the same job as POST /api/library/index,
+            see "One scan, two doors"
+analyze     recompute over the rows already in the DB, no filesystem walk:
+            inspector -> Issue rows (missing_required_tag, missing_metadata,
+                         junk_tag, dirty_genre, inconsistent_casing,
+                         filename_tag_mismatch, low_quality, corrupt_file, …)
+            dedup     -> DupGroup + DupMember, with a proposed keeper
+            the merge preserves decisions the user already made
+plan        planner turns issues, dedup keepers and overrides into PlanOp rows:
+            RETAG | RENAME | MOVE | DELETE | COVER, against the naming and folder
+            templates ({artist} - {title}, {genre}/{artist})
+            conflict runs the pre-flight: stale snapshots, colliding targets
+apply       executes op by op, writing an UndoJournal entry for each; DELETE moves
+            the file into a .quarantine folder instead of unlinking it
+undo        replays the journal of a run backwards: retag from prior_tags_json,
+            move back, restore from quarantine, strip an added cover
+```
+
+Two roots and no more: `organize/services/roots.py` derives them from Settings —
+`LIBRARY_ROOT` ("library") and `SLSKD_DOWNLOAD_DIR` ("inbox"). The `scan_root` table
+survives as dead schema, because `audio_file.root_id` is NOT NULL inside a unique constraint
+that SQLite cannot drop; `roots.py` is the only place that writes it.
+
+Alongside the main loop: acoustic fingerprinting through AcoustID/MusicBrainz
+(`AudioFile.mbid`), text-metadata proposals from MusicBrainz and Discogs
+(`services/text_providers.py`, `provider_rescan`), cover lookup and thumbnail caching
+(`covers`, `cover_cache`, `thumbs`), a file-integrity check (`integrity`), a genre review
+pass, and two AI-assisted helpers (`services/ai_tags.py`: "resolve with AI" on an issue, and
+the genre review). Each degrades cleanly when its key or binary is missing.
+
+Every mutation that touches a `genre` also calls `align_track_genre`, keeping the
+`tracks.genre` mirror and the derived `energy` in step (see "Effective tags").
 
 ## Data model
 
-Main entities:
+Core (`app/models.py`):
 
-- `Playlist`: playlist imported from Spotify or manual import.
-- `Track`: library track, with streaming identity, editorial metadata,
-  BPM/Camelot (from Rekordbox import or in-app Essentia analysis), derived
-  `energy` and state. Provenance of BPM/key: `bpm_source`/`key_source`
-  (`manual`/`rekordbox`/`cratory`, null if the value itself is null), hierarchy
-  `manual` > `rekordbox` > `cratory` (see "BPM/key sources"). In-app analysis
-  staging fields, written only by the analysis job and never read by the rest of
-  the app: `analysis_bpm`, `analysis_camelot`, `analyzed_at`, `analysis_error`
-  (reach the canonical fields only via the apply step). Local file
-  ownership (`LIBRARY_ROOT` indexing, Soulseek acquisition or manual
-  link-file): `has_local_file`, `local_path`, `local_format`,
-  `local_bitrate`, `audio_hash` (see "Disk-first"). Other fields: `archived` (file
-  ended up in the archive of discarded tracks), `local_mtime`/`local_size` (incremental
-  scan), `last_download_outcome`/`last_download_reason` (download "to
-  fix" queue).
-- `playlist_tracks`: M2M association table (Playlist <-> Track) with `added_at`
-  per-playlist. A track can belong to multiple playlists; the import adds
-  membership without overwriting.
-- `Setlist`: generated set, prompt, strategy, global explanation, `owned_only` ("owned only"
-  guarantee, see "Disk-first"), `generated_by` (`algorithmic` | `algorithmic+ai_curation`;
-  historical sets may read `ai`), `validation` (AI warnings + missing-library suggestions,
-  `{}` for a non-AI set) and `curation` (AI curation metadata: `intent_summary`, `compiled`
-  constraints, `warnings`; `{}` for a non-curated set).
-- `SetlistTrack`: position, role, score, transition notes, AI reason, risk and `mood_tags`
-  (up to 3 tags from the AI mood-fit judgement, empty when curation did not run or did not
-  produce usable tags).
-- `SpotifyToken`: Spotify OAuth tokens persisted for the local user.
-- `DjSet`: external mix identified via Shazam, separate from the library.
-- `DjSetTrack`: track identified within a `DjSet`.
-- `AppState`: persistent key-value for application state (e.g. `last_index_at`).
+- **`Track`** — the central row. Streaming identity (`platform`, `platform_track_id`,
+  `isrc`, `url`, `spotify_id`, `soundcloud_id`, `source_type`); editorial metadata
+  (`title`, `artist`, `album`, `genre`, `year`, `label`, `duration_seconds`,
+  `album_art_url`); `bpm`/`camelot_key` with `bpm_source`/`key_source`; the analysis staging
+  fields `analysis_bpm`, `analysis_camelot`, `analyzed_at`, `analysis_error`, written only by
+  the analysis job and read only by the apply step; `energy` with `energy_raw` and
+  `energy_source` (`computed` | `estimated`); ownership (`has_local_file`, `local_path`,
+  `local_format`, `local_bitrate`, `local_mtime`, `local_size`, `audio_hash`,
+  `primary_file_id` → the representative `AudioFile`); `archived`; a 1–3 personal `rating`
+  (a 3 puts the track in the special `kind='rating_top'` playlist, kept in sync inside the
+  same transaction by `services/rating.py`); the
+  download queue fields `last_download_outcome`, `last_download_reason`,
+  `last_download_path`; and `status` (`imported` | `ready_for_set`).
+- **`Playlist`** and **`playlist_tracks`** — the M2M association carries a per-playlist
+  `added_at`. **`PlaylistSyncEvent`** stores each import's diff as a textual snapshot.
+- **`Setlist`** — prompt, strategy, explanation, `owned_only`, `generated_by`,
+  `validation` (AI warnings and missing-library suggestions; `{}` without AI) and `curation`
+  (`intent_summary`, compiled constraints, warnings; `{}` without curation).
+  **`SetlistTrack`** — position, role, score, transition notes, AI reason, risk, `mood_tags`.
+- **`DjSet`** / **`DjSetTrack`** — an identified external mix and its tracks; a corpus kept
+  apart from the library.
+- **`SpotifyToken`** — OAuth tokens for the local user (`kind='user'` or `'client'`).
+- **`AppState`** — persistent key/value for app state (`language`, `last_index_at`, …).
+- **`ArchiveSeen`** — (path, mtime, size) of archive files matching no track, so the
+  incremental pass can skip re-hashing them.
 
-Legacy Rekordbox fields such as beatgrid, cue, `rekordbox_track_id`, `play_count` and
-`tonality` are out of the model. There is no longer an internal enrichment engine nor
-an audio provider cache: `energy` is a derived field (`services/energy`), not
-an external cacheable datum. Also removed were the last remnants
-of the legacy enrichment (the `LastFmTagProvider`, `MusicFeatureProvider` providers) and the
-unused `Track.release_date` column (dropped with an FK-safe migration). The
-pre-M2M columns `Track.playlist_id`/`playlist_name` remain in the schema — they are not
-droppable on SQLite due to a baked-in FK on `playlist_id` — but are dead and empty
-(membership lives on `playlist_tracks`).
+Organize (`app/organize/models.py`):
+
+- **`AudioFile`** — one physical file: path, `location` (`library` | `inbox`), technical
+  fields (ext, bitrate, sample rate, channels, duration, size, mtime), `content_hash`, the
+  nine editable text tags, `isrc`, `mbid`, `has_cover`, `has_rating`, `status`, integrity
+  results, and `track_id` → the `Track` it is a copy of (NULL while unrecognized). A `Track`
+  can have several files; `Track.primary_file_id` names the representative one.
+- **`Issue`**, **`DupGroup`** / **`DupMember`**, **`Plan`** / **`PlanOp`**,
+  **`UndoJournal`**, **`Settings`** (naming and folder templates), **`ScanRoot`** (dead
+  schema, see above).
+
+Scope notes: beatgrid, cue points, `rekordbox_track_id`, `play_count` and `tonality` are not
+in the model — Cratory imports BPM and key, nothing else, from Rekordbox. The pre-M2M columns
+`Track.playlist_id` and `Track.playlist_name` are still in the schema but dead and empty:
+SQLite cannot drop `playlist_id` without rebuilding `tracks`, because of a baked-in FK, and
+the project avoids that.
 
 ## Integrations
 
-| Integration | State | Notes |
+| Integration | State | Boundary |
 |---|---|---|
-| Spotify | active | OAuth, import, Discovery resolver, playlist export |
-| Discogs | active | Discovery "Scava" crate digging by genre/label; works without a token, `DISCOGS_TOKEN` raises the rate limit |
-| Bandcamp | active | Discovery "Scava" second dig source (genre/label), behind the same `DigSource` seam as Discogs; internal, undocumented endpoints, no key/token; contract-tested with `@pytest.mark.network` (excluded from the default suite) |
-| LLM | active if configured | structured and validated outputs |
-| Shazam | active if dependencies present | ffmpeg, yt-dlp, shazamio; fingerprinting of external mixes, not of the library |
-| slskd (Soulseek) | active if configured | download via REST API; `SLSKD_URL`/`SLSKD_API_KEY`/`SLSKD_DOWNLOAD_DIR` |
-| Rekordbox | manual (via XML export) | BPM/key source: `POST /api/rekordbox/import`; no external API/dependency, only file parsing |
-| Essentia (`integrations/essentia_engine`) | active if installed | in-app deterministic BPM/key analysis for owned tracks (`/api/analysis/*`); lazy import (app runs without it, `is_available()` gates the `503`), pinned `essentia==2.1b6.dev1389` (cp311 macosx-arm64 wheel), AGPL-3.0 (ok for personal self-hosted use, no redistribution) |
-| SoundCloud | active if dependencies present | yt-dlp (metadata only, never audio) for playlists/secret links and likes: flat like preview (fast), import/sync with full per-track extraction (uploader/duration/artwork, ~1s per track); no ISRC (not exposed), dedup on `platform_track_id`; sync always additive (never prune, unlike Spotify) |
-| PostgreSQL | backlog | SQLite is enough for single-user |
+| Spotify | active | OAuth, playlist import and export, Discovery identity resolver. No BPM/key; `/recommendations` unusable. |
+| SoundCloud | active if yt-dlp present | Playlists, secret links and likes via yt-dlp, **metadata only** — flat preview for speed, full per-track extraction (uploader, duration, artwork) on import. No ISRC, so dedup falls back to `platform_track_id`; sync is always additive. |
+| SoundCloud (audio) | active if yt-dlp present | Per-track MP3 download from the detail page — the one place SoundCloud audio is saved. |
+| Discogs | active | Discovery dig by genre/label, plus release detail and the YouTube preview fallback. Works without a token; `DISCOGS_TOKEN` raises the rate limit and adds covers. Also a text-metadata provider inside Organize. |
+| Bandcamp | active | Second dig source behind the same `DigSource` seam. Internal, undocumented endpoints, no key. Contract-tested under `@pytest.mark.network`, excluded from the default suite. |
+| iTunes Search | active | 30-second preview clips for dig leads. Public, no key. |
+| Rekordbox | manual, via XML | BPM/key source. No API and no dependency — a file upload and a parser. |
+| Essentia | active if installed | In-app deterministic BPM/key analysis. Lazy import: the app runs without it and `is_available()` gates the `503`. Pinned `essentia==2.1b6.dev1389`, AGPL-3.0. |
+| Shazam | active if deps present | ffmpeg + yt-dlp + shazamio. Fingerprints an external mix, never the library. |
+| slskd (Soulseek) | active if configured | Acquisition over the local daemon's REST API, plus the opt-in share flag. `SLSKD_URL` / `SLSKD_API_KEY` / `SLSKD_DOWNLOAD_DIR`. |
+| AcoustID + MusicBrainz | active if configured | Organize only: acoustic fingerprint → `AudioFile.mbid`, and text-metadata proposals. Needs the `fpcalc` binary and `ACOUSTID_API_KEY`. |
+| Anthropic (LLM) | active if configured | Set curation and Organize's tag/genre helpers. One key, `ANTHROPIC_API_KEY` (`AI_API_KEY` is read as a legacy alias). Schema-constrained output. |
 
-The remaining external providers (Discogs, Bandcamp, Spotify) serve **Discovery
-only**: none of them provides BPM/key/mood/energy anymore. The textual
-enrichment of metadata (title/artist/album/label/genre) is the Organize section's
-job, not Cratory's. Spotify `/recommendations` must not be used: for
-new apps or in development mode it can return 403/404.
+None of the external providers supplies BPM, key, mood or energy. Text metadata and tagging
+are Organize's job.
+
+Shared plumbing: `integrations/_http.py` retries transient transport failures (TLS handshake
+drops, resets, timeouts) with backoff before letting the provider's exception through, so a
+flaky network becomes "not found" for one track rather than a dead job.
+
+## Internationalization
+
+Cratory is bilingual, Italian and English. The language is a persistent setting (key
+`language` in `AppState`, default `it`), toggled in Settings; there is no per-locale routing
+— single user, no SEO. Endpoints `GET`/`PUT /api/settings/language`.
+
+Three surfaces, three strategies:
+
+- **Frontend UI** — a hand-rolled TypeScript dictionary in `frontend/lib/i18n/`. `en.ts` is
+  the source of truth for the key set; `it.ts` is typed `: Dictionary` (`= typeof en`), so a
+  missing or extra key is a compile error. `I18nProvider`/`useT()` expose the active
+  dictionary, and `runtime.ts` keeps the language readable outside React (for `lib/api.ts`)
+  without an import cycle.
+- **Backend errors** — language-agnostic. Every `HTTPException` goes through
+  `api_error(status, code, message, **params)` (`app/core/http_errors.py`), producing a
+  structured `detail` of `{code, message, params?}`; the frontend translates `code` from the
+  dictionary's `errors` namespace, with the English `message` as the fallback.
+- **Generated phrases and AI output** — produced by the backend directly in the selected
+  language. Enum labels stay codes, translated on the frontend; composed phrases (reason,
+  mixing tip and overview in `services/scoring.py`, job phases and curation text in
+  `services/ai_curation.py`) come from per-language catalogs indexed by `get_language(db)` at
+  the entry point. The AI system prompts stay in Italian as instructions to the model; only
+  the directive about the output language is parametric.
+
+Known limitation: `transition_reason` values are persisted at generation time in whatever
+language was active then — the future display language is not knowable in advance.
+
+## Frontend
+
+Next.js 16 with the App Router, React 19, Tailwind 4. `frontend/CLAUDE.md` documents the
+Next 16 breaking changes; read it before touching pages or routing.
+
+`app/layout.tsx` mounts, in order: the DM Mono font variable, an inline no-FOUC script that
+restores the theme and language from `localStorage`, `I18nProvider`, `PlayerProvider`,
+`EditorialShell` (the three-zone shell: index / content / marginalia) and the app-wide
+`DockedPlayer`. Pages live under `app/` (dashboard, playlists, library, tracks, set-builder,
+sets, transitions, analysis, discovery, wishlist, labels, shazam, organize, settings); the
+typed API client is split by area under `lib/api/`, with `lib/organize/api.ts` for the
+Organize surface. `docs/DESIGN.md` holds the design system.
 
 ## Persistence and migrations
 
-SQLite remains the operational database:
+SQLite, one file:
 
 ```text
 backend/data/djassistant.db
 ```
 
-`ensure_schema()` creates tables and applies idempotent migrations (including the
-FK-safe ones that dropped the columns of the old enrichment engine). There is no
-Alembic. For a product rename, do not automatically rename the DB: plan
-a migration or keep the legacy path for compatibility.
+The filename is legacy and deliberately kept. Relative SQLite paths in `DATABASE_URL` are
+resolved against `backend/`, never against the process working directory, so the app cannot
+scatter stray databases.
+
+`ensure_schema()` creates the tables — core and Organize share one `Base` and one engine —
+and applies idempotent migrations, including the FK-safe rewrites needed where SQLite cannot
+drop a column in place. There is no Alembic. If the product is ever renamed, do not rename
+the database automatically: either plan a migration or keep the legacy path.
