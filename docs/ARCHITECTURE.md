@@ -400,9 +400,10 @@ mood/anchor/narrative system prompts are unique and there is no technical/creati
 `services/set_editor.py` and `services/alternatives.py` back the workbench: reorder, remove,
 replace a track, list alternatives for a slot. A set born `owned_only` keeps the guarantee —
 `Setlist.owned_only` is persisted and the editor answers `422` to a replacement that is not
-owned. `services/export_render.py` renders text, CSV, Markdown and M3U8 (the M3U8 lists local
-paths and notes how many tracks were skipped for lack of a file); `routers/spotify.py` pushes
-a set back as a Spotify playlist.
+owned. `POST /api/sets/{id}/export` serves four formats — `text`, `csv`, `markdown`, `m3u8`;
+the M3U8 comes from `services/export_render.render_m3u8`, which lists local paths and notes
+how many tracks were skipped for lack of a file. `routers/spotify.py` pushes a set back as a
+Spotify playlist.
 
 `services/gap_analysis.py` reads a playlist for structural holes (no openers, no peak,
 missing BPM bridges, flat energy, harmonic dead ends). `/api/transitions` classifies a pair
@@ -646,8 +647,9 @@ Next 16 breaking changes; read it before touching pages or routing.
 
 `app/layout.tsx` mounts, in order: the DM Mono font variable, an inline no-FOUC script that
 restores the theme and language from `localStorage`, `I18nProvider`, `PlayerProvider`,
-`EditorialShell` (the three-zone shell: index / content / marginalia) and the app-wide
-`DockedPlayer`. Pages live under `app/` (dashboard, playlists, library, tracks, set-builder,
+`EditorialShell` (the hairline shell: a sticky 180px INDEX nav beside the content) and the
+app-wide `DockedPlayer`. `PageLayout` adds the page title and the optional 240px MARGINALIA
+column on top of that. Pages live under `app/` (dashboard, playlists, library, tracks, set-builder,
 sets, transitions, analysis, discovery, wishlist, labels, shazam, organize, settings); the
 typed API client is split by area under `lib/api/`, with `lib/organize/api.ts` for the
 Organize surface. `docs/DESIGN.md` holds the design system.
