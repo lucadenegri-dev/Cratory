@@ -6,7 +6,6 @@ Perimetro deliberatamente stretto: SOLO `genre`. Non tocca `title`/`artist`
 
 Una sola funzione, usata da tutti i punti in cui il tag di un file puo'
 cambiare o un aggancio puo' nascere — nessuno dei quali la duplica:
-- il backfill retroattivo (`app.services.db_hygiene.align_owned_genre_from_file`);
 - la modifica manuale dei tag in Organize (`app.organize.services.manual_edit`);
 - l'Apply dei piani di Organize (`app.organize.services.apply`, operazioni RETAG);
 - la scansione (`app.organize.services.scanner`), quando rilegge un tag
@@ -47,10 +46,9 @@ def align_track_genre(track: Track, file_genre: str | None, *, apply: bool) -> s
     Altrimenti ritorna None e non tocca nulla.
 
     Con `apply=True` scrive `track.genre` e ricalcola l'energia derivata
-    (`apply_estimated_energy`: `energy` dipende da bpm+genere), esattamente
-    come gia' fa `db_hygiene.realign_owned_from_disk` per il suo perimetro piu'
-    ampio. Con `apply=False` (dry-run) non scrive nulla: il chiamante puo'
-    comunque leggere qui il valore "dopo" per un campione leggibile.
+    (`apply_estimated_energy`: `energy` dipende da bpm+genere). Con
+    `apply=False` (dry-run) non scrive nulla: il chiamante puo' comunque
+    leggere qui il valore "dopo" per un campione leggibile.
     """
     normalized = normalize_genre(file_genre)
     if not normalized:
