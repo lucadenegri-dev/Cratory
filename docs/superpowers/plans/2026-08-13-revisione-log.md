@@ -972,9 +972,12 @@ chiave* (qui la chiave morta e' il sintomo, non il difetto):
   nuove, non un ripristino.
 - `lib/api/format.ts` — due bug i18n distinti, non codice morto: `fmtDate` (e,
   scoperto solo ora nel dettaglio, anche `fmtDateShort`, stesso bug non nominata dal
-  finding originale) cablava `it-IT` a prescindere dalla lingua attiva (~17 call site
-  in tutto), e `trackLabel()` ricadeva su `"Artista sconosciuto"`/`"Senza titolo"`
-  sempre in italiano (~18 call site in 7 file). ~~Il fix non e' meccanico: `format.ts`
+  finding originale) cablava `it-IT` a prescindere dalla lingua attiva (8 call site
+  `fmtDate` + 2 `fmtDateShort`, ricontati con grep al Task 8c — il finding originale
+  sopra stimava "~10+" solo per `fmtDate`), e `trackLabel()` ricadeva su
+  `"Artista sconosciuto"`/`"Senza titolo"` sempre in italiano (12 call site in 6 file,
+  contro la stima originale di "~14 in 7 file": due file avevano piu' di una chiamata
+  ciascuno). ~~Il fix non e' meccanico: `format.ts`
   non puo' importare il dizionario (`lib/i18n/runtime.ts` vieta l'import inverso da
   `lib/api`).~~ **Correzione (Task 8c): premessa sbagliata.** Il divieto in
   `lib/i18n/runtime.ts` e' unidirezionale (vieta import **da** `lib/api` dentro
