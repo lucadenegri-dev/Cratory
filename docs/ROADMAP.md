@@ -187,3 +187,12 @@ cleanup, and each was explicitly left alone this time.
   (which tracks tend to get mixed together) — not started.
 - **PostgreSQL.** Low priority: SQLite is enough for personal, single-user use; only
   worth revisiting for an eventual multi-user setup.
+
+### Documentation editing note
+
+Two kinds of doc residue keep surviving review in this codebase: a parenthetical added to
+sound helpful, riding along on a sentence whose main claim is correct so nobody re-checks
+the aside; and a "see X" cross-reference, which is a claim about X and needs to be followed,
+not just left plausible-looking. When editing `ARCHITECTURE.md`/`API.md`/`DEPENDENCIES.md`/
+`ROADMAP.md`, check parentheticals and cross-references on their own, separately from the
+sentence they're attached to.

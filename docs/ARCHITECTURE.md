@@ -137,8 +137,8 @@ spotify.py:100       self.http = httpx.Client(timeout=20)
 
 The other 8 build their own client (`spotify.py:98-100`, `llm.py:68,81`, `shazam.py:155`)
 or have no HTTP/process client to inject at all (`soundcloud.py`, `soundcloud_audio.py`,
-`essentia_engine.py`, `essentia_worker.py`, `local_files.py` are function modules, not
-classes). Their tests still avoid the network, but by other means per module — e.g.
+`essentia_engine.py`, `essentia_worker.py`, `local_files.py` expose no client class). Their
+tests still avoid the network, but by other means per module — e.g.
 `monkeypatch.setattr(client, "http", ...)` after construction for `spotify.py`, a scripted
 implementation of the `LLMClient` interface for `llm.py`, `monkeypatch.setattr("shazamio.Shazam", ...)`
 for `shazam.py` — not a constructor parameter. Routers mostly map HTTP to a service call and
