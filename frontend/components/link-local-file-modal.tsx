@@ -4,22 +4,17 @@ import { useState } from "react";
 import { FolderOpen, Link2, Search } from "lucide-react";
 import { Alert, Button, Input, Loading, Modal, Spinner } from "@/components/ui";
 import {
-  errText, linkLocalFile, searchLocalFiles,
+  errText, fmtSize, linkLocalFile, searchLocalFiles,
   type LocalFileHit, type TrackDetail,
 } from "@/lib/api";
 import { useT, type Dictionary } from "@/lib/i18n";
 import { PathPickerButton, usePickerAvailability } from "@/components/path-picker-button";
 
-export type LinkTarget = { id: number; artist: string | null; title: string | null };
-
-function fmtSize(bytes: number | null): string {
-  if (!bytes) return "";
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
 function sourceLabel(t: Dictionary): Record<string, string> {
   return { library: t.tracks.sourceLibrary, downloads: t.tracks.sourceDownloads };
 }
+
+export type LinkTarget = { id: number; artist: string | null; title: string | null };
 
 /** Wrapper: monta il dialog solo con un target e lo rigenera per ogni traccia. */
 export function LinkLocalFileModal({ target, onClose, onLinked }: {

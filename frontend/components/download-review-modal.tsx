@@ -5,16 +5,11 @@ import { Check, Download as DownloadIcon, Trash2 } from "lucide-react";
 import { Alert, Button, Loading, Modal, Spinner } from "@/components/ui";
 import {
   discardReview, downloadCandidates, downloadReview, downloadTrack, errText, fmtDuration,
-  keepReview, type DownloadCandidate, type DownloadReview,
+  fmtSize, keepReview, type DownloadCandidate, type DownloadReview,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 
 export type ReviewTarget = { track_id: number; artist: string | null; title: string | null };
-
-function fmtSize(bytes: number | null): string {
-  if (!bytes) return "";
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
 
 /** Wrapper: monta il dialog solo con un target e lo rigenera per ogni traccia. */
 export function DownloadReviewModal({ target, onClose, onPicked }: {

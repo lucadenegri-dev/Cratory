@@ -3,13 +3,8 @@
 import { useEffect, useState } from "react";
 import { FolderOpen, Link2 } from "lucide-react";
 import { Alert, Button, Loading, Modal, Spinner } from "@/components/ui";
-import { autoLinkPreview, errText, linkLocalFile, type AutoLinkProposal } from "@/lib/api";
+import { autoLinkPreview, errText, fmtSize, linkLocalFile, type AutoLinkProposal } from "@/lib/api";
 import { useT, type Dictionary } from "@/lib/i18n";
-
-function fmtSize(bytes: number | null): string {
-  if (!bytes) return "";
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
 
 function sourceLabel(t: Dictionary): Record<string, string> {
   return { library: t.tracks.sourceLibrary, downloads: t.tracks.sourceDownloads };

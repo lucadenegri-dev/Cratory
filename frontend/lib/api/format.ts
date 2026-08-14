@@ -6,6 +6,11 @@ export function trackLabel(t: Track): string {
   return `${artist} — ${title}`;
 }
 
+export function fmtSize(bytes: number | null): string {
+  if (!bytes) return "";
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export function fmtDuration(seconds: number | null | undefined): string {
   if (!seconds) return "—";
   const m = Math.floor(seconds / 60);
