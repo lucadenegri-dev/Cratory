@@ -1,5 +1,5 @@
 import type { Track } from "./types";
-import { getCurrentLanguage } from "@/lib/i18n/runtime";
+import { DICTIONARIES, getCurrentLanguage } from "@/lib/i18n/runtime";
 
 // Locale per le date: "it" -> it-IT, "en" -> en-GB (non en-US). Scelta
 // deliberata, non l'inglese "neutro": l'utenza e' italiana anche quando
@@ -11,8 +11,9 @@ function dateLocale(): string {
 }
 
 export function trackLabel(t: Track): string {
-  const artist = t.artist?.trim() || "Artista sconosciuto";
-  const title = t.title?.trim() || "Senza titolo";
+  const dict = DICTIONARIES[getCurrentLanguage()];
+  const artist = t.artist?.trim() || dict.tracks.unknownArtist;
+  const title = t.title?.trim() || dict.tracks.untitledHeading;
   return `${artist} — ${title}`;
 }
 

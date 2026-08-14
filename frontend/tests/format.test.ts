@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fmtDate, fmtDateShort, fmtSize } from "@/lib/api/format";
+import { fmtDate, fmtDateShort, fmtSize, trackLabel } from "@/lib/api/format";
 import { setCurrentLanguage } from "@/lib/i18n/runtime";
+import type { Track } from "@/lib/api/types";
 
 afterEach(() => {
   // I test cambiano la lingua attiva globale (stato fuori-React in lib/i18n/runtime.ts):
@@ -81,5 +82,27 @@ describe("fmtDateShort", () => {
     expect(fmtDateShort(iso)).toBe("05/03/26");
     setCurrentLanguage("en");
     expect(fmtDateShort(iso)).toBe("05/03/26");
+  });
+});
+
+describe("trackLabel", () => {
+  const withValues = { artist: "Marco Faraone", title: "Real Freak" } as unknown as Track;
+  const withoutValues = { artist: null, title: null } as unknown as Track;
+
+  it("con artista/titolo presenti e' identico nelle due lingue", () => {
+    setCurrentLanguage("it");
+    expect(trackLabel(withValues)).toBe("Marco Faraone — Real Freak");
+    setCurrentLanguage("en");
+    expect(trackLabel(withValues)).toBe("Marco Faraone — Real Freak");
+  });
+
+  it("in italiano il fallback e' 'Artista sconosciuto' / 'Senza titolo'", () => {
+    setCurrentLanguage("it");
+    expect(trackLabel(withoutValues)).toBe("Artista sconosciuto — Senza titolo");
+  });
+
+  it("in inglese il fallback e' 'Unknown artist' / 'Untitled', non l'italiano", () => {
+    setCurrentLanguage("en");
+    expect(trackLabel(withoutValues)).toBe("Unknown artist — Untitled");
   });
 });
