@@ -561,6 +561,31 @@ destrutturato** (verificato: zero `= t.downloads`, `t.downloads[`, template lite
 - [L1] `organize.plan.applyingLabel` (en 1479 / it 1476) — 0 hit; `app/organize/plan/page.tsx:55` calcola `applying` ma rende solo `computing` (`:83`), il progresso dell'apply vive nella barra job globale
 - [L1] `organize.issues.forceProvider` (en 1373 / it 1371) — 0 hit; sostituita da `forceLookupToggle`/`forceLookupHint` (`app/organize/issues/page.tsx:468,472`)
 
+**Seconda passata i18n — 15 chiavi in piu', trovate rigenerando le candidate coi percorsi
+qualificati.** La prima passata usava lo script del brief, che cerca il **nome della foglia
+nudo** (`rf"\.{k}\b"`): una chiave morta il cui nome foglia e' omonimo di una chiave viva in
+un altro namespace **non diventa mai candidata**, quindi la doppia conferma non ci gira
+nemmeno sopra. E' la trappola del prefisso un livello piu' su — non `TrackCard` dentro
+`TrackCardCompact`, ma `organize.common.close` nascosto dietro `t.common.close`. Rilevatore
+rifatto sui **percorsi dotted completi** (foglie estratte eseguendo `en.ts` con `tsx`, non
+con una regex), alias-aware ed escludendo le famiglie a indicizzazione dinamica: 1411 foglie,
+173 escluse perche' dinamiche, **52 candidate qualificate** contro le 34 della prima passata.
+Le 18 nuove sono le 15 qui sotto piu' `organize.common.never`/`organize.nav.themePaper`/
+`themeDark`, gia' classificate L3. Verificati anche **tutti** gli alias di sotto-oggetto
+esistenti nel repo (sono 6: `isc`, `isf`, `im`, `likes`, `liked`, `g` — tutti su
+`playlists.import*` e `setBuilder.guide`, nessuno sui namespace toccati qui) e le
+destrutturazioni da `t.` (zero). Ogni chiave sotto e' a **0 hit** per
+`t.<percorso.completo>` in `app components lib tests e2e` con `/usr/bin/grep`.
+
+- [L1] `common.close` (en 36 / it 33) e `common.all` (en 40 / it 37) — 0 hit. Sono i due omonimi che la prima passata si e' persa: il nome `close` e' vivo come `t.player.close`/`t.organize.*`, `all` come `t.organize.common.all` (`app/organize/files/page.tsx:165`). Enumerazione esaustiva dei `t.common.*` vivi: `cancel, confirm, delete, error, inProgress, loading, save, search` — invariata rispetto alla prima passata, che infatti aveva gia' individuato `none` e `retry` nello stesso oggetto
+- [L1] `organize.common.loading` (en 1213 / it 1211), `browseButton` (1215/1213), `close` (1217/1215), `confirm` (1218/1216), `delete` (1219/1217), `search` (1220/1218), `inProgress` (1229/1227) — 7 chiavi, tutte a 0 hit, tutte con un gemello vivo di primo livello che le nasconde al grep sul nome nudo (`t.common.loading`, `t.settings.browseButton`, `t.common.confirm`, ...). **Trappola verificata:** i test che asseriscono `"Sfoglia…"` (`tests/link-local-file-modal.test.tsx`, `tests/settings-config-card.test.tsx`) rendono `t.settings.browseButton` (it.ts:139) via `components/path-picker-button.tsx:47`, **non** la copia organize (it.ts:1213): restano verdi. Con queste, di `organize.common` muoiono 9 membri su 18; restano vivi `all, backendOffline, cancel, coverProposed, empty, error, guide, save, summary`
+- [L1] `organize.nav.tagline` (en 1241 / it 1239), `organize.nav.settings` (1247/1245), `organize.nav.toggleTheme` (1248/1246) — 0 hit. Sono **residuo pre-fusione**: la shell autonoma di Sortory (tagline, link alle impostazioni, toggle tema) e' stata assorbita, e `tests/organize-cluster-morto.test.ts` gia' asserisce che `components/organize/{editorial-shell,index-nav,clock,theme-toggle}.tsx` non esistono piu'. Di `organize.nav` sopravvivono solo le 5 voci di sezione (`files, issues, duplicates, plan, history`). **Perche' queste tre sono L1 e `themePaper`/`themeDark` no:** `tagline` e `toggleTheme` hanno un **gemello di primo livello vivo** — `t.nav.tagline` (`components/index-nav.tsx:91`) e `t.nav.toggleTheme` (`components/theme-toggle.tsx:32`) — quindi la copia organize-scoped e' puro doppione senza nessuna decisione appesa; `themePaper`/`themeDark` un gemello di primo livello **non ce l'hanno**, ed e' esattamente li' che vive la decisione (vedi L3 sotto). `organize.nav.settings` non ha nemmeno un consumatore possibile: la pagina `/organize/settings` non esiste piu' (fusione F5, cfr. `e2e/smoke.spec.ts:35-36`)
+- [L1] `organize.settings.languageLabel` (en 1253 / it 1251), `languageIt` (1254/1252), `languageEn` (1255/1253) — 0 hit. Il selettore di lingua e' uno solo e sta nella pagina unificata, che usa `t.settings.languageLabel` (`app/settings/page.tsx:45`). Combacia con la Fase 1, che aveva gia' rilevato come i client `getLanguage`/`setLanguage` di organize non abbiano chiamanti (qui rimossi come L1): **muoiono insieme le chiavi e il client** dello store di lingua organize-scoped
+
+Effetto cumulativo sul test guardiano `tests/i18n-organize.test.ts:24` (`> 100` foglie sotto
+`organize`): 312 prima, **288 dopo** le 24 rimozioni organize-scoped di questa sezione. Ampio
+margine. Nessun test asserisce i valori letterali delle 15 chiavi (controllati EN e IT).
+
 ### Findings L2 — consolidamento (Task 8)
 
 Due helper **byte-identici** (verificati con `diff`, nessuna differenza), trovati con un
