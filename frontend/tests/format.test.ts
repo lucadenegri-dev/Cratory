@@ -63,18 +63,27 @@ describe("fmtDateShort", () => {
 
   it("passa la locale it-IT quando la lingua attiva e' it", () => {
     const spy = vi.spyOn(Date.prototype, "toLocaleDateString");
-    setCurrentLanguage("it");
-    fmtDateShort(iso);
-    expect(spy).toHaveBeenCalledWith("it-IT", expect.anything());
-    spy.mockRestore();
+    try {
+      setCurrentLanguage("it");
+      fmtDateShort(iso);
+      expect(spy).toHaveBeenCalledWith("it-IT", expect.anything());
+    } finally {
+      // In un finally: se l'expect sopra fallisce, lo spy va comunque
+      // ripristinato, altrimenti resta attivo per il resto del file e
+      // confonde la diagnosi del test successivo.
+      spy.mockRestore();
+    }
   });
 
   it("passa la locale en-GB quando la lingua attiva e' en (non it-IT fisso)", () => {
     const spy = vi.spyOn(Date.prototype, "toLocaleDateString");
-    setCurrentLanguage("en");
-    fmtDateShort(iso);
-    expect(spy).toHaveBeenCalledWith("en-GB", expect.anything());
-    spy.mockRestore();
+    try {
+      setCurrentLanguage("en");
+      fmtDateShort(iso);
+      expect(spy).toHaveBeenCalledWith("en-GB", expect.anything());
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("il valore di ritorno resta dd/mm/yy in entrambe le lingue (nessuna regressione visiva)", () => {
