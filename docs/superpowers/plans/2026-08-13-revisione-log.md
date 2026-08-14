@@ -441,6 +441,33 @@ sono documentazione eseguibile di migrazioni passate o zavorra?):
 - [L3 — **evaporato, Task 5b**] `app/tools/backfill_track_files.py:98` + `app/tools/merge_duplicate_tracks.py:70` — `_sessione()` con corpo identico (differisce solo la docstring). Estrazione meccanica in `app/tools/_common.py`, ma contingente: se i one-shot vengono cancellati il problema evapora. Confermato: `backfill_track_files.py` e' stato rimosso al Task 5b, quindi non c'e' piu' duplicazione da estrarre — `merge_duplicate_tracks.py` e' l'unico sopravvissuto con `_sessione()`
 - [L3] **Da NON toccare in `app/tools/`**: `clean_user_data.py` (unico tool documentato all'utente, `README.md:186`) e `merge_duplicate_tracks.py` (riparazione ricorrente, non one-shot; l'unico "riferimento" trovato dallo scan e' un commento in prosa a `backfill_track_files.py:101`, ora orfano — lo script citato non esiste piu'). Confermato intoccato al Task 5b
 
+Emerso dalla review del Task 5b (codice morto di seconda generazione, conseguenza
+diretta delle rimozioni sopra — nessuno di questi era nella cascata autorizzata, quindi
+non toccato in quella passata):
+
+- [L3] `app/services/db_hygiene.py`: `dedupe_by_audio_hash` (:41), `purge_lead_residue`
+  (:64), `realign_owned_from_disk` (:102) e `align_owned_genre_from_file` (:132) hanno
+  **zero chiamanti di produzione** da quando `app/tools/cleanup_disk_first.py` e
+  `app/tools/align_genre_from_file.py` sono stati rimossi (Task 5b): le uniche
+  referenze rimaste in `backend/app/` sono due righe di docstring
+  (`app/services/genre_align.py:9` cita `align_owned_genre_from_file` come "il backfill
+  retroattivo"; `app/services/db_hygiene.py:135` cita `realign_owned_from_disk` a
+  confronto). Ogni chiamata reale e' nei test (`tests/test_db_hygiene.py`), che restano
+  verdi e non se ne accorgono: la suite non segnala codice morto, lo segnala solo
+  l'assenza di importer in `app/`. Non rimosso in questa passata: fuori dalla cascata
+  autorizzata per il Task 5b, che elencava solo i quattro script CLI
+- [L3] `app/services/soulseek_download_job.py:246` — il ramo `if track_id is None:`
+  dentro `_run()` (con `_process_manual()`) e' diventato irraggiungibile in produzione
+  dopo la rimozione di `start_manual_job()` (Task 5b, unico chiamante che passava
+  `track_id=None`). **Non e' orfano di test**: `tests/test_soulseek_download_job.py:157`
+  (`test_manual_download_lascia_il_file_senza_catalogare`) chiama
+  `job._run([(None, file)], None)` direttamente ed e' vivo e verde — asserisce che il
+  download manuale lascia il file sul disco senza catalogarlo in Cratory. Questo rende
+  ancora piu' netta la decisione di non toccarlo nella cascata del Task 5b (era fuori
+  scope autorizzato, e cancellarlo avrebbe portato via un test vivo): ma chi fara' la
+  prossima passata mirata su questo file deve sapere che il ramo morto viaggia insieme
+  a un test che lo esercita, non da solo
+
 Ridondanza architetturale profonda (fusione = decisione di design, esplicitamente fuori
 da una passata meccanica):
 
@@ -488,6 +515,33 @@ sono documentazione eseguibile di migrazioni passate o zavorra?):
 - [L3 — **PROMOSSO E RIMOSSO, Task 5b**] `app/tools/migrate_organize_db.py` — migrazione F2 (DB unico) gia' applicata; 0 importer, 1 test (`tests/test_migrate_organize_db.py:12`). **Decisione dell'utente al checkpoint: rimuovere.** Script e i suoi 14 test cancellati (coprivano solo la CLI stessa)
 - [L3 — **evaporato, Task 5b**] `app/tools/backfill_track_files.py:98` + `app/tools/merge_duplicate_tracks.py:70` — `_sessione()` con corpo identico (differisce solo la docstring). Estrazione meccanica in `app/tools/_common.py`, ma contingente: se i one-shot vengono cancellati il problema evapora. Confermato: `backfill_track_files.py` e' stato rimosso al Task 5b, quindi non c'e' piu' duplicazione da estrarre — `merge_duplicate_tracks.py` e' l'unico sopravvissuto con `_sessione()`
 - [L3] **Da NON toccare in `app/tools/`**: `clean_user_data.py` (unico tool documentato all'utente, `README.md:186`) e `merge_duplicate_tracks.py` (riparazione ricorrente, non one-shot; l'unico "riferimento" trovato dallo scan e' un commento in prosa a `backfill_track_files.py:101`, ora orfano — lo script citato non esiste piu'). Confermato intoccato al Task 5b
+
+Emerso dalla review del Task 5b (codice morto di seconda generazione, conseguenza
+diretta delle rimozioni sopra — nessuno di questi era nella cascata autorizzata, quindi
+non toccato in quella passata):
+
+- [L3] `app/services/db_hygiene.py`: `dedupe_by_audio_hash` (:41), `purge_lead_residue`
+  (:64), `realign_owned_from_disk` (:102) e `align_owned_genre_from_file` (:132) hanno
+  **zero chiamanti di produzione** da quando `app/tools/cleanup_disk_first.py` e
+  `app/tools/align_genre_from_file.py` sono stati rimossi (Task 5b): le uniche
+  referenze rimaste in `backend/app/` sono due righe di docstring
+  (`app/services/genre_align.py:9` cita `align_owned_genre_from_file` come "il backfill
+  retroattivo"; `app/services/db_hygiene.py:135` cita `realign_owned_from_disk` a
+  confronto). Ogni chiamata reale e' nei test (`tests/test_db_hygiene.py`), che restano
+  verdi e non se ne accorgono: la suite non segnala codice morto, lo segnala solo
+  l'assenza di importer in `app/`. Non rimosso in questa passata: fuori dalla cascata
+  autorizzata per il Task 5b, che elencava solo i quattro script CLI
+- [L3] `app/services/soulseek_download_job.py:246` — il ramo `if track_id is None:`
+  dentro `_run()` (con `_process_manual()`) e' diventato irraggiungibile in produzione
+  dopo la rimozione di `start_manual_job()` (Task 5b, unico chiamante che passava
+  `track_id=None`). **Non e' orfano di test**: `tests/test_soulseek_download_job.py:157`
+  (`test_manual_download_lascia_il_file_senza_catalogare`) chiama
+  `job._run([(None, file)], None)` direttamente ed e' vivo e verde — asserisce che il
+  download manuale lascia il file sul disco senza catalogarlo in Cratory. Questo rende
+  ancora piu' netta la decisione di non toccarlo nella cascata del Task 5b (era fuori
+  scope autorizzato, e cancellarlo avrebbe portato via un test vivo): ma chi fara' la
+  prossima passata mirata su questo file deve sapere che il ramo morto viaggia insieme
+  a un test che lo esercita, non da solo
 
 Ridondanza architetturale profonda (fusione = decisione di design, esplicitamente fuori
 da una passata meccanica):
