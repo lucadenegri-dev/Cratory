@@ -27,7 +27,7 @@ themes:
     fg-strong: "#15140f"
     danger: "#a83a22"
 typography:
-  ui-font: "var(--font-ui) = var(--font-mono-ui) [DM Mono], ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace"
+  ui-font: "var(--font-mono-ui), ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace"
   brand:
     fontWeight: 600
     textTransform: "uppercase"
@@ -239,10 +239,10 @@ figures that align like a typeset index.
 
 The system is built from **filets and type**, not fills and shadows. Depth comes from 1px
 hairline borders and a tight neutral stack. The only color token in the system is a single
-restrained red, reserved for errors and destructive actions; three brand/affordance hues are
-hardcoded in exactly one file (see The Monochrome Rule). Everything else — Camelot keys, mix
-status, transition quality, risk — is rendered in monochrome, distinguished by weight,
-position, and uppercase labels.
+restrained red, reserved for errors and destructive actions. A handful of hues are hardcoded
+outside the token set — some deliberate, some deviations the rule does not sanction; they are
+enumerated under The Monochrome Rule. Camelot keys, mix status and transition quality are
+rendered in monochrome, distinguished by weight, position, and uppercase labels.
 
 This system explicitly rejects: consumer-music-app warmth (soft pastels, oversized rounded
 artwork); generic SaaS dashboards (gradients, hero-metric templates, identical card grids);
@@ -252,8 +252,10 @@ typographic, archival instrument.
 **Key characteristics:**
 - One monospace (DM Mono) for the entire interface — chrome, labels, body, and data
 - Hairline grid: a three-zone editorial shell (INDEX / CONTENT / MARGINALIA) divided by 1px rules
-- Square geometry everywhere (`--radius: 0`); the only round shapes are the pipeline strip's
-  "hot" status dot and the play overlay on cover thumbnails
+- Square geometry everywhere. `--radius: 0` in the theme means even a bare `rounded`
+  compiles to `border-radius: 0`, so squareness is the default you get by accident as well as
+  on purpose. Roundness has to be asked for explicitly with `rounded-full`, and only two
+  things ask: the pipeline strip's "hot" status dot and the play overlay on cover thumbnails
 - Near-monochrome: one `danger` red token, for errors and destructive actions
 - Two themes — **dark** (default, near-black) and **paper** (warm cream) — toggled at
   runtime, persisted in `localStorage`, no FOUC (an inline script in `app/layout.tsx` sets
@@ -310,18 +312,40 @@ indicator.
 transition quality, risk levels and provider states are rendered in neutrals —
 distinguished by weight, uppercase labels, and position, never by color.
 
-Three hardcoded hues exist outside the token set, all of them in one file,
-`components/track-state-icons.tsx`:
+The rule describes the intent. The code does not fully honour it. These are the hues
+hardcoded outside the token set today — found by grepping `#[0-9a-fA-F]{6}` across
+`frontend/**/*.{ts,tsx}`, which is the check to re-run before trusting this table:
 
 | Hue | Where | Standing |
 |---|---|---|
-| Spotify green `#1DB954` / hover `#1ed760` | the "open on Spotify" glyph | brand affordance, deliberate |
-| SoundCloud orange `#ff5500` / hover `#ff7700` | the "open on SoundCloud" glyph | brand affordance, deliberate |
-| Amber `#b8863f` | the `HardDrive` icon marking an owned file | **open deviation** — this is a status color, which the rule as written forbids. Either it gets promoted to a documented token with a stated reason, or it goes back to `fg-strong`. |
+| Spotify green `#1DB954` / hover `#1ed760` | `track-state-icons.tsx:39`, the "open on Spotify" glyph | brand affordance, deliberate |
+| SoundCloud orange `#ff5500` / hover `#ff7700` | `track-state-icons.tsx:50`, the "open on SoundCloud" glyph | brand affordance, deliberate |
+| Amber `#b8863f` | `track-state-icons.tsx:25`, the `HardDrive` icon marking an owned file | **open deviation** — a status color, which the rule forbids |
+| Olive `#8a8065`, amber `#cfa14a`, terracotta `#d8593f` | `rating-diamond.tsx:9-13`, `RATING_COLORS`, the fill of the rating diamond at levels 1/2/3 | **open deviation, the largest one** — a three-step warm scale encoding a quality judgement, which is the exact thing the rule says never happens |
 
 A brand glyph is a recognisable affordance, not a state; it is scoped strictly to its link
-and is never used as a status, quality, or state color anywhere else. Nothing else earns a
-hue.
+and is never used as a status, quality or state color anywhere else. That reasoning does not
+extend to the other two, which encode state and quality directly.
+
+Two things make the rating scale worse than the amber, beyond being a bigger deviation:
+
+- `#d8593f` is the **dark-theme `danger` value copied as a literal** rather than read from
+  the token. So it does not theme: on paper, `danger` becomes `#a83a22` and the level-3
+  diamond stays dark-theme terracotta. It also silently spends the one color the system
+  reserves for errors on a *good* rating — the inverse of what The One-Red Rule means it to
+  say.
+- It breaks the "components read tokens, never literals" rule in §6, which exists precisely
+  to make a theme switch total.
+
+Resolving either deviation is a product decision, not a cleanup: promote the hue to a
+documented token with a stated reason, or return the element to the neutral stack. Both are
+listed here rather than quietly normalized, so that whoever decides is deciding on the record.
+
+Achromatic exception, for completeness: two cover-art play overlays
+(`library-track-grid.tsx:56`, `discovery-lead-grid.tsx:138`) use `bg-black/60` → `/80` with
+`text-white`, and two dimmed backdrops (`ui.tsx:393` the modal, `organize/issues-table.tsx:81`)
+use `bg-black/70`. Black and white scrims over photographic artwork sit outside the neutral
+token stack but carry no hue, so the rule is untouched.
 
 **The One-Red Rule.** Red means error or destruction, except for the intentional warm accent
 of the DJ loaders. A low score, a "risky" transition, or a warning state is *not* an error
@@ -398,6 +422,7 @@ Shared primitives live in `frontend/components/ui.tsx`.
 - **SegmentedControl / Chip / Combobox / DropdownMenu:** the compact controls for filters and pickers, same square hairline grammar.
 - **KeyBadge:** renders the Camelot in monochrome — a valid key (1–12 + A/B) in tabular `fg-strong`, an absent or malformed key in `faint` with a dash. No color for wheel or energy.
 - **Track status icons (`TrackStateIcons`):** the per-row status in Library and playlist detail is a group of compact icons with an explanatory `title`, not text badges — play control, ready-for-set = `CircleCheck` (`fg-strong`), owned file = `HardDrive`, discarded = `Archive` (`faint`), plus the Spotify and SoundCloud "open on" glyphs. See the hue table under The Monochrome Rule.
+- **RatingDiamond:** the 1–3 personal rating, rendered as a `polygon` diamond — unrated is an outlined `currentColor` diamond, a rating fills it. Clicking opens a small popover of the three levels, anchored above-right and outside the row's flow, on an `elevated` panel with a hairline and `shadow-lg` (a floating layer, per §4). The fill colors are the system's largest open deviation — see the hue table under The Monochrome Rule.
 
 ### Cards / containers
 - **Background:** `surface` on the `bg` floor; **1px `border` hairline, `radius: 0`, no shadow.**
@@ -444,7 +469,10 @@ Shared primitives live in `frontend/components/ui.tsx`.
 
 ### Don't:
 - **Don't** introduce any color other than `danger`, and only for errors/destruction.
-- **Don't** add rounded corners; `radius: 0` (The Hairline Rule).
+- **Don't** add rounded corners; `radius: 0` (The Hairline Rule). Write `rounded-none` when
+  you want to be explicit — that is what 43 of the 44 square call sites do. A bare `rounded`
+  also renders square here, but it reads like an intent to round: the one occurrence
+  (`rating-diamond.tsx:81`) is worth normalizing.
 - **Don't** put a shadow on a surface — only on a layer that floats over content.
 - **Don't** color-code keys or mix quality (The Monochrome Rule).
 - **Don't** introduce a second type family or a non-mono face in UI chrome (The Mono Rule).
