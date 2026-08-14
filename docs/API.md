@@ -183,7 +183,11 @@ order in one call and requires `track_ids` to be an exact permutation of the cur
 members (`422 order_mismatch`). Both are limited to playlists whose order belongs to
 the user — kinds `manual` and `shazam` — and answer `409 playlist_not_reorderable`
 otherwise. Order is persisted in `playlist_tracks.position`, not a client-side sort.
-Both return the reordered track list, same shape as `GET .../tracks`.
+
+Both return the reordered members in the new order. The rows are `TrackOut`, but
+unlike `GET .../tracks` they leave `playlist_position` and `playlist_added_at`
+unset — read the position from the array index, or re-fetch the tracks endpoint if
+you need `playlist_added_at`.
 
 `PATCH /api/playlists/{playlist_id}` renames the playlist and sets
 `name_locked=true` (exposed in the response): from then on a sync re-reads
@@ -271,20 +275,28 @@ against the track's `primary_file_id`. A track with no owned file edits them thr
 
 ### Listing and filtering
 
-`GET /api/tracks` filters on artist, title, album, genre, label (exact),
-`rating` (`1`-`3` exact; unrated tracks never match), `archived` (default `false`),
-`source` (`spotify|soundcloud|manual|local_files`), `status`
-(`imported|ready_for_set`), `bpm_min`/`bpm_max`, `key`, `duration_min`/
-`duration_max`, `has_spotify`, `has_soundcloud`, `has_local_file`,
-`incomplete_metadata`, and `in_playlist` — repeatable
-(`?in_playlist=1&in_playlist=2`), matching tracks in **any** of those playlists and
-AND-combined with the other filters. For the members of a single playlist use
-`GET /api/playlists/{playlist_id}/tracks` instead, which also gives position.
+`GET /api/tracks` filters on:
+
+- **substring, case-insensitive**: `artist`, `title`, `album`, `genre`.
+- **exact**: `label` (the drill-down from the labels page), `source`
+  (`spotify|soundcloud|manual|local_files`), `status` (`imported|ready_for_set`),
+  `rating` (`1`-`3`; unrated tracks never match this filter).
+- **exact but case-insensitive**: `key` (so `7a` finds `7A`).
+- **range**: `bpm_min`/`bpm_max`, `duration_min`/`duration_max`.
+- **boolean**: `has_spotify`, `has_soundcloud`, `has_local_file`,
+  `incomplete_metadata`, `archived` (default `false` — archived tracks are excluded
+  unless you ask for them).
+- `in_playlist` — repeatable (`?in_playlist=1&in_playlist=2`), matching tracks in
+  **any** of those playlists, AND-combined with every other filter. For the members
+  of a single playlist use `GET /api/playlists/{playlist_id}/tracks` instead, which
+  also gives position.
 
 `sort` accepts `title|artist|source|bpm|key|energy|genre|duration|year|status|
 rating|added_at` with `order=asc|desc`; `rating IS NULL` always sorts last
 regardless of `order`, and `added_at` is the first library import. `limit` defaults
-to 100, max 500, and `limit=0` means no pagination.
+to 100, max 500, and `limit=0` means no pagination; `offset` (default 0) pages
+through the rest. The response carries `total` alongside `items`, so `total` is the
+unpaginated match count.
 
 ### Writing
 
@@ -341,8 +353,9 @@ processed, total, result, error, started_at, finished_at}` — not a flat report
 `phase` is `scanning | linking | inspecting | deduping | null`. `result` is the scan
 summary (`found`, `inserted`, `updated`, `unchanged`, `moved`, `missing`, `errors`)
 plus `result.linking` with the linking counters (`scanned`, `matched`, `created`,
-`relinked`, `unchanged`, `duplicates`, `lost`, `archived`, `orphans_removed`,
-`energy_computed`, the `archive_*` counterparts and `errors[]`) and
+`relinked`, `unchanged`, `duplicates`, `failed`, `lost`, `archived`,
+`orphans_removed`, `energy_computed`, the `archive_*` counterparts and `errors[]`)
+and
 `result.analysis` with the issue/duplicate recount. **`result.linking` is `null`**
 when the run did not walk the library root: a scan restricted to the inbox stops
 after the walk and deliberately leaves the tracks alone.
@@ -381,7 +394,7 @@ POST   /api/sets/{setlist_id}/alternatives
 ### Generation
 
 Generation is always the async job: `POST /api/sets/generate-async` returns
-`{status, phase, using_ai}` immediately and the UI polls
+`200` with `{status, phase, using_ai}` immediately — **not `202`** — and the UI polls
 `GET /api/sets/generate-status` for `phase`, `setlist_id` and `error`. A second
 start while one runs is `409 set_generation_in_progress` — never folded into the
 running job, which may be using a different engine.
@@ -398,7 +411,8 @@ silently to the deterministic default with a warning — never a 4xx/5xx.
 
 `owned_only` (default `true`) generates from owned tracks only. The flag persists on
 the saved set and the editor enforces it: `alternatives` excludes leads from the
-pool, and `replace` with a track that has no local file answers `422`.
+pool, and **both** the insert (`POST .../tracks`) and the `replace` refuse a track
+with no local file, with `422`.
 
 Track `rating` feeds a small deterministic tie-break into the generator's scoring
 (2.0 per level, max 6.0): a higher vote nudges a track ahead of an equally
@@ -491,14 +505,17 @@ Camelot key.
 `POST /api/rekordbox/import` takes the XML exported from Rekordbox
 (`File > Export Collection in xml format`) as multipart `file`. For each track in
 the XML it looks for the matching owned `Track` in this order: NFC-normalized path →
-`audio_hash` fallback (gated on the basename) → fuzzy artist+title.
+`audio_hash` fallback (gated on the basename) → exact artist+title, compared
+lowercased. There is no fuzzy matching: a track whose artist or title differs by
+more than case will not match on that last level.
 
 By default the import **fills empty values and reclaims values currently sourced
 from the in-app analysis (`cratory`), but never overwrites `manual`**. With
 `?overwrite=true` the Rekordbox re-analysis wins over every existing value whatever
 its source. In both modes a value absent from the XML never clears the one already
-in the library. Every write marks the source `rekordbox` and recomputes `energy`
-when the BPM changed.
+in the library. Every write marks the source `rekordbox`. `energy` is recomputed for
+**every matched track**, not only the ones whose BPM changed — it is only the
+`energy_set` counter that is conditional on the value actually moving.
 
 Response `{in_file, matched, unmatched, bpm_set, key_set, energy_set}`, where the
 `_set` counters count only values that actually changed. `400 rekordbox_empty_file`
@@ -693,9 +710,11 @@ File acquisition through the headless Soulseek daemon slskd, fully deterministic
 (`has_local_file`/`local_path`/`local_format`/`local_bitrate`) rather than creating
 a new one.
 
-`SLSKD_URL` and `SLSKD_DOWNLOAD_DIR` must both be configured, or every
-search/download route answers `409 slskd_not_configured`. Still available without
-them: `GET /status` (with `available: false`), `GET /pending`,
+`SLSKD_URL` and `SLSKD_DOWNLOAD_DIR` must both be configured, or the five
+Soulseek-backed routes — `candidates`, `playlist/{id}`, `track`, `track/auto`,
+`retry-pending` — answer `409 slskd_not_configured`. `track/soundcloud` does not
+touch slskd and has its own preconditions (see below). Available regardless:
+`GET /status` (with `available: false`), `GET /pending`,
 `DELETE /pending/{track_id}`, `GET /auto-link` and the review endpoints.
 
 **One download job at a time**, shared by all five start routes:
