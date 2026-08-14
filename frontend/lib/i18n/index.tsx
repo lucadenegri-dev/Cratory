@@ -8,7 +8,7 @@ import { it } from "./it";
 import { DICTIONARIES, STORAGE_KEY, setCurrentLanguage, type Language } from "./runtime";
 
 export type { Dictionary, Language };
-export { getCurrentLanguage, translateApiError, translateGap } from "./runtime";
+export { translateGap } from "./runtime";
 
 const I18nContext = createContext<{
   lang: Language;
