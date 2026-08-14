@@ -1023,3 +1023,25 @@ dell'utente al checkpoint di Fase 2: rimuovere entrambi):
   `tests/test_soulseek_download_job.py:157`) che lo chiama direttamente: non e'
   orfano di copertura, solo di chiamante di produzione. **PROMOSSO E RIMOSSO, Task
   8b**: rimossi il ramo, l'helper `_process_manual()` e l'unico test che lo copriva.
+
+**Emerso dalla review del Task 8b (codice morto di terza generazione — solo
+segnalazione, non rimosso, fuori scope):**
+- [L3] `app/services/genre_align.py:41` — `align_track_genre(track, file_genre, *,
+  apply: bool)`, il ramo `apply=False` (dry-run: calcola il nuovo genere senza
+  scriverlo) non ha piu' ne' chiamante di produzione ne' test. Verificato con
+  `/usr/bin/grep -rn "align_track_genre(" backend/app backend/tests`: tutti e cinque
+  i call site di produzione superstiti (`app/organize/services/scanner.py:239`,
+  `manual_edit.py:156`, `apply.py:179`, `app/services/library_index.py:508`,
+  `app/services/acquisition.py:68` — lo stesso elenco appena corretto in
+  `docs/ARCHITECTURE.md`/`docs/ROADMAP.md`) passano `apply=True`; il nuovo test
+  aggiunto in questa stessa passata (`tests/test_library_index.py`,
+  `test_align_track_genre_ricalcola_energia`) chiama anch'esso `apply=True`. Il
+  parametro esisteva per il backfill CLI one-shot (`db_hygiene.align_owned_genre_from_file`,
+  che esponeva un flag dry-run leggibile prima di scrivere): quel wrapper e' stato
+  rimosso in questa stessa revisione (Task 8b, sopra), quindi `apply=False` e'
+  diventato irraggiungibile insieme a lui — terza generazione dello stesso schema
+  gia' visto per gli script CLI (Task 5b) e per `db_hygiene.py` (Task 8b sopra). Non
+  rimosso: fuori dallo scope autorizzato per questa passata (che elencava solo le
+  quattro cancellazioni L3 gia' promosse), e la funzione resta una API pubblica a
+  parametro singolo — toglierlo e' una scelta di design del contratto, non una
+  pulizia meccanica
