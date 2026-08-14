@@ -1,114 +1,83 @@
 # Cratory
 
-> A personal, self-hosted workbench that turns streaming playlists into thought-out DJ sets.
-> (Formerly "DJ Assistant"; legacy technical names like `djassistant.db` are kept for local compatibility.)
+> A self-hosted workbench for preparing DJ sets out of a music library you actually own.
 
-Cratory is a personal, local/self-hosted, single-user web app for DJ set preparation. It
-imports Spotify playlists (or pasted tracklists), normalizes and de-duplicates tracks,
-indexes your on-disk library, imports BPM/Camelot key from a Rekordbox collection export,
-derives track energy deterministically, analyzes library gaps, generates explained set
-drafts, and helps you discover music that fits your taste. Text metadata enrichment
-(title/artist/album/label/genre) and disk tagging are handled by its **Organize**
-section — once a separate app, Sortory, absorbed into Cratory by the F1-F6 fusion.
+Cratory is a single-user web app that sits between your streaming accounts and your record
+bag. It imports playlists from Spotify and SoundCloud, matches them against the music you
+already have on disk, fills in BPM and key from Rekordbox or from its own analysis, and
+builds set drafts out of tracks you can actually play. It runs entirely on your machine,
+against a SQLite file and your own music folder.
 
-It is **not a SaaS** — and that is a design choice, not a limitation. Spotify's Web API
-forbids a public multi-tenant Spotify app (development mode caps at 5 users; extended
-quota needs a launched organization with 250k+ monthly users), so Cratory leans the other
-way on purpose: a single-user tool where the value is product quality, not scale. It never
-plays audio. It never stores audio either, with one declared exception: optional, explicit
-file acquisition via Soulseek (through a local [slskd](https://github.com/slskd/slskd)
-daemon), linked to an existing library track. The Shazam module remains separate — it
-downloads audio only temporarily to fingerprint external mixes, and persists only the
-identified tracklist.
+The distinction it is built around: **a streaming playlist is a list of leads, your disk is
+the library.** A track you found on Spotify is a candidate to acquire; only a file you own
+can go into a set.
 
-**Disk-first:** the library is the disk. Cratory indexes your canonical music
-folder (`LIBRARY_ROOT`), re-links files by audio hash after Organize
-renames/moves them, and builds sets from tracks you actually own. Streaming
-playlists are *leads* — candidates to acquire — not the library. The index
-re-runs automatically on every app startup and scans incrementally; an optional
-archive folder (`ARCHIVE_ROOT`) marks discarded tracks. Cratory only *reads* files
-to index them — outside Organize it never writes tags nor moves anything on
-disk.
+## What it does
 
-**BPM/key come from Rekordbox, not from providers.** Cratory never estimates or
-invents mixing features: you analyze your library in Rekordbox and export the
-collection (`File > Export Collection in xml format`); Cratory imports that XML to
-fill in BPM and Camelot key on tracks you already own, without ever overwriting a
-value that's already set. `energy` is always a deterministic value derived from
-BPM + genre — it is not sourced from any provider and cannot be edited by hand.
+**Library and imports**
 
-## Features
+- Import playlists and liked tracks from Spotify and SoundCloud, or paste a tracklist as text.
+- De-duplicate on the way in: ISRC → platform id → artist/title/duration → fuzzy match.
+- Index your music folder. Ownership comes from the disk and survives renames and moves via
+  audio hash. Owned tracks play in-app, read-only, through a shared docked player — for a
+  quick audition, not for mixing.
 
-- Import Spotify playlists, liked tracks, and pasted tracklists.
-- De-duplicate by `ISRC → platform id → artist/title/duration → fuzzy match`.
-- Import BPM and Camelot key from a Rekordbox collection XML export
-  (`POST /api/rekordbox/import`), matching owned tracks by path, then audio hash,
-  then artist/title — never overwriting an existing value.
-- Manual corrections for BPM and Camelot key (manual wins; `energy` is derived only
-  and not directly editable). Genre, album, label and year follow the same edit form,
-  but for an owned track they save to the physical file's tags through Organize (the
-  single writer) instead of a database field — Library shows and filters on that
-  effective value, file first, streaming as the fallback.
-- Generate sets with a deterministic engine plus optional, validated AI.
-- Classify transitions as technically safe, creative risk, or good reset.
-- Discovery by taste: crate-dig by genre/label ("Scava"), switching between two
-  crates — Discogs (depth and a real rarity signal) and Bandcamp (buyable, with a real
-  listen) — plus the Spotify resolver; none of them feed track features, Discovery
-  only.
-- Identify mix tracklists via Shazam/yt-dlp/ffmpeg into a corpus kept separate from the
-  library — the only audio fingerprinting Cratory does (of external mixes, not of your
-  library).
-- Acquire files for tracks you already own the rights to via Soulseek (slskd), with
-  deterministic candidate ranking and per-playlist or per-track download, plus free
-  search with manual pick and a persistent "to fix" queue (retry/ignore).
-- Link a file already on disk to a track from the track detail (searches `LIBRARY_ROOT`
-  and the slskd download folder).
+**BPM and key**
 
-## Architecture at a glance
+- Import a Rekordbox collection XML, or analyze files in-app with Essentia. Every value
+  carries its source (`manual` > `rekordbox` > `cratory`); in-app results land in staging
+  fields and reach the canonical ones only through an explicit apply. `energy` is derived.
 
-![Cratory architecture](docs/architettura.svg)
+**Set building**
 
-A **deterministic engine** owns the facts: import, de-duplication, scoring, roles, gap
-analysis, discovery ranking and validation. The **AI layer** owns language: prompt
-interpretation, narrative direction and explanations. The AI never sees the whole
-library — the Candidate Engine passes it at most 60 candidates — and every AI output is
-validated against Pydantic schemas before it is shown or saved. BPM and key are never
-invented: they come only from a Rekordbox import or explicit manual correction; `energy`
-is always derived deterministically from BPM and genre.
+- A deterministic generator builds the tracklist in two phases — a skeleton first, then a
+  beam search per segment — from owned tracks only.
+- Each transition is classified as technically safe, a creative risk, or a good reset. Gap
+  analysis reads a playlist for structural holes: no openers, no peak, missing BPM bridges,
+  flat energy, harmonic dead ends.
+- Export as text, CSV, Markdown or M3U8 (for Rekordbox), or push the set to Spotify as a playlist.
 
-Full picture in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**Discovery and acquisition**
 
-## Tech stack
+- Dig by genre or label through Discogs or Bandcamp, ranked by taste rather than by technical
+  fit, with an ephemeral preview so you can hear a lead before committing to it.
+- A wishlist tracks everything you don't own yet, with buy links. Optional acquisition through
+  your own slskd (Soulseek) daemon, or a per-track SoundCloud download, links the file back to
+  the track already in your library.
+- Identify the tracklist of a mix from a URL (yt-dlp → ffmpeg → Shazam), into a corpus kept
+  separate from the library.
 
-```text
-Backend:   Python, FastAPI, SQLAlchemy, Pydantic
-Frontend:  Next.js 16, React, Tailwind / design system
-Database:  SQLite (local); PostgreSQL in backlog
-AI:        LLM behind an interface, outputs validated with Pydantic
-External:  Spotify, Discogs + Bandcamp (Discovery only), Shazam, slskd, Rekordbox (XML import)
-```
+**Organize** — the one part of Cratory that writes to disk: scan for tag problems, group
+duplicates, build a rename/move/retag plan, review it, apply it, undo it. Metadata proposals
+come from MusicBrainz/AcoustID, Discogs and cover-art lookups.
+
+## Two rules that shape everything
+
+**The AI never sequences.** Import, de-duplication, scoring, roles, gap analysis, discovery
+ranking and validation are ordinary deterministic code. The model interprets what you asked
+for, judges mood-fit and writes explanations. It never sees the whole library — the candidate
+engine caps its pool at 200 tracks, 60 per call — and every response is validated against a
+Pydantic schema before anything is shown or saved: invented ids and out-of-bounds values are
+dropped with a warning, and a failed call degrades to the deterministic default.
+
+**BPM and key are measured, never guessed.** They come from a Rekordbox export or from in-app
+Essentia analysis — both deterministic, both with explicit provenance. Cratory never asks a
+model or a streaming provider for them.
 
 ## Quickstart
 
-Prerequisites: Python 3.12+, Node.js 20+. The Shazam module also needs system `ffmpeg`
-plus the `yt-dlp` and `shazamio` Python dependencies (in `backend/requirements.txt`). File
-acquisition needs a separately running [slskd](https://github.com/slskd/slskd) instance
-(not bundled). BPM/key import needs a Rekordbox collection exported as XML
-(`File > Export Collection in xml format`) — no extra dependency, it's just a file upload.
-Full dependency list in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
-
-Backend:
+Prerequisites: **Python 3.11** and **Node.js 20.9+**. Python 3.11 specifically — the pinned
+Essentia build behind in-app BPM/key analysis only ships wheels for CPython 3.11. `ffmpeg` is
+needed for mix identification, `fpcalc` (chromaprint) for Organize's acoustic fingerprinting.
 
 ```bash
 cd backend
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate      # Windows: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
-
-Frontend:
 
 ```bash
 cd frontend
@@ -116,123 +85,68 @@ npm install
 npm run dev
 ```
 
-Local URLs: app at `http://localhost:3000`, API docs at `http://localhost:8000/docs`,
-health at `http://localhost:8000/api/health`.
+App on `http://localhost:3000`, API docs on `http://localhost:8000/docs`, health check on
+`http://localhost:8000/api/health`. The frontend proxies `/api/*` through to the backend, so
+there is nothing to configure on that side.
 
-Shortcut: `./start-dev.sh` (macOS/Linux) or `start-dev.bat` (Windows) starts backend +
-frontend, plus a local slskd (`:5030`) when available. There is no second app to
-start: Organize is a section of this one.
+Shortcut: `./start-dev.sh` (macOS/Linux) or `start-dev.bat` (Windows) brings up both, plus a
+local slskd on `:5030` if one is installed.
 
 ## Configuration
 
-Variables live in `backend/.env` (start from `backend/.env.example`).
+Everything lives in `backend/.env`, copied from `backend/.env.example`. The app starts fine
+with that file untouched; each key switches a feature on.
 
-Minimum for Spotify import:
+| Key | Enables |
+|---|---|
+| `LIBRARY_ROOT` | Indexing your music folder. Without it nothing is ever owned. |
+| `SPOTIFY_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | Spotify import and playlist export (connect from Settings) |
+| `ANTHROPIC_API_KEY` | AI set curation and Organize's tag suggestions — one key for both |
+| `DISCOGS_TOKEN` | Raises the Discogs rate limit and adds cover art; digging works without it |
+| `SLSKD_URL` / `_API_KEY` / `_DOWNLOAD_DIR` | Soulseek acquisition via your own slskd instance |
+| `ACOUSTID_API_KEY` | Acoustic fingerprint lookups in Organize (needs `fpcalc` too) |
+| `ARCHIVE_ROOT` | A folder of discarded tracks, recognized alongside the library |
 
-```text
-SPOTIFY_CLIENT_ID=
-SPOTIFY_CLIENT_SECRET=
-SPOTIFY_REDIRECT_URI=http://127.0.0.1:8000/api/spotify/callback
-```
-
-Recommended providers (Discovery only — none of these feed BPM/key/genre):
-
-```text
-DISCOGS_TOKEN=
-ANTHROPIC_API_KEY=
-AI_MODEL=
-```
-
-`ANTHROPIC_API_KEY` is the single AI key for the whole app (Set Agent + Organize
-tag/genre suggestions); `AI_API_KEY` is still read as a fallback for `.env` files
-written before the fusion.
-
-File acquisition (optional):
-
-```text
-SLSKD_URL=
-SLSKD_API_KEY=
-SLSKD_DOWNLOAD_DIR=
-```
-
-Disk-first library indexing (optional):
-
-```text
-LIBRARY_ROOT=
-ARCHIVE_ROOT=
-```
-
-Spotify provides track identity, editorial metadata, covers, duration, ISRC, URLs and
-playlists — not reliable mixing BPM/key. `DISCOGS_TOKEN` is optional: Discovery "Scava"
-works without it; the token only raises the rate limit. `SLSKD_URL`/`SLSKD_DOWNLOAD_DIR`
-point to your own running slskd instance; without them, file acquisition stays disabled
-and the rest of the app is unaffected. `LIBRARY_ROOT` points to your canonical, organized
-music folder (the one Organize manages); leave it empty to keep library indexing
-disabled — Settings → "Library (disk)" triggers `POST /api/library/index` once it is
-set (the index also re-runs automatically at every app startup, incremental scan),
-matching files to tracks by audio hash (falling back to legacy digest, ISRC, then
-fuzzy artist+title) and marking them as owned (`has_local_file`). `ARCHIVE_ROOT` is an
-optional discarded-tracks folder (DJPlayer's PASSED bin) recognized alongside the
-library.
-
-## Database
-
-The canonical local database is `backend/data/djassistant.db` (the legacy name is kept on
-purpose). Relative SQLite paths in `DATABASE_URL` resolve against `backend/`, so the app
-doesn't create stray databases per working directory. To wipe user data:
+The database is `backend/data/djassistant.db` — a legacy filename, kept on purpose. Relative
+SQLite paths in `DATABASE_URL` resolve against `backend/`, so the app never scatters stray
+databases per working directory. To wipe user data:
 
 ```bash
-cd backend
-python -m app.tools.clean_user_data library --include-backups
+cd backend && python -m app.tools.clean_user_data library --include-backups   # --dry-run to preview
 ```
 
-The `library` mode clears playlists, tracks and sets while preserving Spotify tokens;
-`all` also removes tokens unless `--preserve-tokens` is passed.
-
-## Workflow
-
-The dashboard opens with a five-stage pipeline strip — **Discover → Acquire →
-Organize⤴ → Analyze⤴ → Play** — that shows where you are and what's next.
-Organize is a section of this app; Analyze hands off to Rekordbox for BPM/key
-analysis and loops back with an import. Indexing the library (scanning
-`LIBRARY_ROOT`) runs from the "Index" button in the left nav (or automatically at
-startup), so it isn't a strip stage.
-
-Typical run: start backend + frontend → in Settings, connect Spotify → import a playlist
-or paste a tracklist → use Organize to tag and organize new files onto disk
-→ index the library (Settings → "Library (disk)", or let it auto-run at startup) →
-analyze new tracks in Rekordbox and import the collection XML to fill in BPM/key →
-generate a set (deterministic engine, optionally AI-curated) → review transitions, warnings and alternatives →
-export or create a Spotify playlist → use Discovery ("Scava" by genre/label via
-Discogs or Bandcamp) to find tracks that fit your taste → optionally acquire files for tracks you own
-via Soulseek (Downloads page, per-playlist or per-track from Discovery), once slskd is
-running and configured.
-
-**A note on responsible use.** Cratory is a personal, self-hosted tool, not a public
-service. The optional Soulseek acquisition feature is a thin client over your own slskd
-instance — it does not host, share, or redistribute anything. What you search for and
-download, and whether you have the right to acquire it, is entirely your responsibility.
+`library` clears playlists, tracks and sets but keeps your Spotify tokens; `all` drops those too.
 
 ## Tests
 
 ```bash
 cd backend && python -m pytest tests
-cd frontend && npm run lint && npm run build
+cd frontend && npm run lint && npm run test:unit && npm run build
 ```
+
+`npm run test:e2e` runs the Playwright suite, which spins up its own backend on `:8211`
+against a throwaway database.
 
 ## Documentation
 
-| Document | Purpose |
+| Document | What's in it |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Principles, pipeline, backend layers, data model, integrations |
-| [docs/API.md](docs/API.md) | Current FastAPI REST contracts |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Status, naming, backlog, next steps — the source of truth for project state |
-| [docs/DESIGN.md](docs/DESIGN.md) | Product context + design system ("editorial archive") |
-| [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | All runtime/build dependencies and external services |
-| [PROGRESS.md](PROGRESS.md) | Current state summary (diary archived in [docs/archive/](docs/archive/PROGRESS-diario-completo.md)) |
-| [CLAUDE.md](CLAUDE.md) | Guide for the AI collaborator |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Principles, pipelines, backend layers, data model, integrations |
+| [docs/API.md](docs/API.md) | The REST contracts, endpoint by endpoint |
+| [docs/DESIGN.md](docs/DESIGN.md) | Product thinking and the "editorial archive" design system |
+| [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | Every dependency and external service, and why it's there |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Backlog, open questions, what's next |
 
-## Status
+## Scope, and a note on responsible use
 
-Core is settled; documentation has been reworked; the next open front is Discovery quality.
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the current state and backlog.
+Cratory is not a DJ deck — no waveforms, no cues, no queue; that stays in Rekordbox — and it
+is not a service. Single-user is a design choice: Spotify's API rules out a public
+multi-tenant app, so the project leans the other way and optimizes for one person's library
+instead of for scale. Audio it doesn't own is never kept — mix identification and discovery
+previews both stream and discard. The one deliberate exception is acquisition, which saves a
+file and links it to a track already in your library.
+
+Acquisition is a thin client over your own slskd instance: it hosts, shares and redistributes
+nothing. What you search for, what you download, and whether you have the right to it, is
+entirely your responsibility. No license file is included; this is a personal tool, not a
+package to depend on.
