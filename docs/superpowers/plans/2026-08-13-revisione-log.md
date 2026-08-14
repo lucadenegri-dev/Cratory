@@ -482,7 +482,112 @@ Schema DB (intoccabile per definizione nel piano):
 
 ## Fase 2 — Findings frontend
 
-(vuota — compilata dal Task 6, rilevamento frontend)
+Rilevata dal Task 6. Tutte le conferme sono state rifatte con `/usr/bin/grep`: vedi
+l'avvertenza sotto, il `grep` della shell e' inaffidabile su questi pattern.
+
+### ATTENZIONE metodologica — il `grep` della shell falsa gli zeri
+
+In questa shell `grep` e' una **funzione che avvolge ugrep** (`type grep` ->
+`shell function from ~/.claude/shell-snapshots/...`), e ugrep **non onora `^`/`$`
+annidati dentro un gruppo di alternanza**. Il pattern ancorato prescritto dal brief,
+`(^|[^A-Za-z0-9_])NOME([^A-Za-z0-9_]|$)`, restituisce **zero anche quando il simbolo
+c'e'**: verificato su `none`, che il wrapper non trova nemmeno dentro `lib/i18n/en.ts`
+mentre `/usr/bin/grep` lo trova a `:41`, `:1222`, `:1406`. E' lo stesso "falso zero"
+di cui avvisa il piano, per un'altra causa. **Chi fa i Task 7-8 usi `/usr/bin/grep`
+(o `command grep`) per ogni controgrep ancorato.** Le conferme di questa sezione sono
+state tutte rieseguite col binario vero.
+
+### Step 1-2 — knip e depcheck
+
+`npx knip` (nessun config, plugin Next auto-rilevato): **0 file inutilizzati**,
+**0 dipendenze inutilizzate**, 10 export inutilizzati, 21 tipi esportati inutilizzati,
+1 "duplicate export". Nessun falso positivo App Router da scartare: knip riconosce da
+solo `page.tsx`/`layout.tsx`/`route.ts`/i config/`e2e/**`.
+
+`npx depcheck`: due sole segnalazioni, **entrambe falsi positivi**, e knip non le
+conferma (la regola del brief richiede che le flagghino tutti e due):
+`@tailwindcss/postcss` e' il plugin dichiarato in `postcss.config.mjs:3`, `tailwindcss`
+e' importato da `app/globals.css:1` (`@import "tailwindcss"`). **Nessun finding sulle
+dipendenze npm.** Controllati anche gli altri config dove i plugin non si importano:
+`@vitejs/plugin-react` + `jsdom` (`vitest.config.ts:2,8`), `eslint-config-next`
+(`eslint.config.mjs:2-3`).
+
+Controprova indipendente sui file orfani: per ogni file di `components/` e `lib/` ho
+cercato un importatore (path assoluto `@/...` e relativo). Nessun orfano — concorde con knip.
+
+### Findings L1 — rimozione (Task 7)
+
+Export morti di `lib/organize/api.ts` (knip + controgrep ancorato con `/usr/bin/grep` su
+`app components lib tests e2e`: **unica occorrenza la definizione**; nessun import
+namespace `import * as` nel frontend, quindi non esiste accesso dinamico `api["nome"]`):
+
+- [L1] `lib/organize/api.ts:164` — `scanJobStatus()` — knip: unused export; grep ancorato: 1 hit, la definizione. `components/jobs-provider.tsx:16` importa `startScan` ma **non** lo stato: la riga scan della barra job non esiste apposta (commento a `jobs-provider.tsx:243`: e' lo stesso job di `library-index`, letto dall'altro endpoint)
+- [L1] `lib/organize/api.ts:514` — `getLanguage()` — knip: unused export; grep ancorato: 1 hit. **Gia' segnalato dalla Fase 1** (vedi L3 `GET|PUT /api/settings/language` sotto): la UI usa solo `/api/settings/language` via `lib/i18n/index.tsx:37,58`
+- [L1] `lib/organize/api.ts:517` — `setLanguage()` — identico al precedente
+- [L1] `lib/organize/api.ts:534` — `fingerprintStatus()` — knip: unused export; grep ancorato: 1 hit. `components/settings/services-list.tsx:11` importa solo `runFingerprint`. **Cascata per il Task 7:** resta orfana anche `interface FingerprintStatus` (`lib/organize/api.ts:522`), il cui unico uso e' l'annotazione di ritorno a `:535` (knip la flagga gia' oggi fra i tipi inutilizzati)
+- [L1] `lib/organize/api.ts:561` — `pickerAvailability()` — knip: unused export; **doppione morto** di `lib/api/settings.ts:20` (stessa docstring parola per parola, cambia solo il path: `/picker/availability` sotto la base organize vs `/api/files/pick/availability`). L'unico consumatore, `components/path-picker-button.tsx:4`, importa da `@/lib/api` (barrel `lib/api.ts:15` -> `./api/settings`). Coerente con la consolidazione gia' fatta: `tests/componenti-unici.test.tsx` asserisce che `components/organize/path-picker-button.tsx` non esiste piu'
+- [L1] `lib/organize/api.ts:565` — `pickPath()` — identico al precedente, doppione di `lib/api/settings.ts:25`
+
+Re-export morto:
+
+- [L1] `lib/i18n/index.tsx:11` — `export { getCurrentLanguage, translateApiError, translateGap } from "./runtime";` — **due dei tre nomi non hanno nessun consumatore da qui**: i due call site reali importano direttamente da `./runtime` (`lib/api/client.ts:1`, `lib/organize/api.ts:1`). Enumerati tutti i `from "@/lib/i18n"` del repo: prendono `useT`/`useI18n`/`I18nProvider`/`type Dictionary`/`type Language` e, in due file soli, `translateGap` (`app/playlists/[id]/page.tsx:30`, `components/dashboard/gaps-list.tsx:3`). Azione: **restringere la riga a `translateGap`**, non cancellarla
+
+Keyword `export` superflua (il simbolo e' vivo, lo e' solo dentro il proprio file):
+
+- [L1] `components/confidence-badge.tsx:7` — `export const DUBIOUS_CONFIDENCE_THRESHOLD = 60` — knip: unused export; grep ancorato: 2 hit, la definizione e l'uso a `:13` **nello stesso file**. Nessun test lo importa. Via solo la keyword `export`, la costante resta
+
+Chiavi i18n morte. **Vanno rimosse in coppia da `en.ts` e `it.ts`** (`it.ts` si tipizza
+con `typeof en`: una rimozione a senso unico rompe `npm run build`). `tests/i18n-organize.test.ts:24`
+pretende `> 100` foglie sotto `organize` — oggi sono **312**, le 9 rimozioni qui sotto
+non lo avvicinano nemmeno. Prima di classificarle ho enumerato **tutti** gli accessi
+dinamici al dizionario esistenti nel repo (`/usr/bin/grep -rnE "\bt\.[a-zA-Z.]*\["`
+piu' `DICTIONARIES[...]`): sono solo `errors[code]` e `gaps[gapType]` (`lib/i18n/runtime.ts:28,41`),
+`setBuilder.presets[p.key]`, `setBuilder.strategies[s.key]`, `sets.modes[...]`,
+`transitions.lenses[l.key]`, `transitionLabels[...]`, `settings.servicesMeta[s.key]`,
+`organize.files.field[f]`, piu' `discovery[...]` con chiavi letterali. **Nessuno dei
+namespace toccati qui sotto e' indicizzato dinamicamente, e nessuno e' aliasato o
+destrutturato** (verificato: zero `= t.downloads`, `t.downloads[`, template literal
+`` `filter${ `` ecc.).
+
+- [L1] `lib/i18n/en.ts` + `it.ts`, namespace `downloads` — **18 chiavi** superstiti della vecchia pagina `/downloads`, cancellata nel commit `26e35c3` ("feat(wishlist): nav e redirect — /downloads diventa /wishlist, vecchia pagina rimossa") e sostituita da `app/wishlist/page.tsx`, che usa il namespace `wishlist`. Grep ancorato con `/usr/bin/grep`: 0 hit per `downloads.<chiave>` in `app components lib tests e2e`. en.ts/it.ts: `pageTitle` 392/391, `acquisitionHeading` 394/393, `singleDownloadHeading` 395/394, `filterByOutcomeAria` 396/395, `filterAll` 397/396, `filterNeedsReview` 398/397, `filterNotFound` 399/398, `filterFailed` 400/399, `outcomeNotFound` 401/400, `outcomeNeedsReview` 402/401, `outcomeFailed` 403/402, `emptyTitle` 418/417, `emptyBody` 419/418, `reviewButton` 420/419, `chooseFileButton` 421/420, `linkFileButton` 422/421, `ignoreButton` 423/422, `ignoreConfirm` 424/423. **Restano vive e NON si toccano** nello stesso namespace: `notConfigured` (`app/wishlist/page.tsx:150`), `failedReason` (`components/wishlist-row.tsx:50`), `linkAllButton` (`page.tsx:174`), `retryAllButton` (`page.tsx:171`) e tutto il sotto-oggetto `review.*` (11 membri, `components/download-review-modal.tsx:84-149`). **Trappola:** `downloads.filterAll` (397) e' omonimo ma distinto da `organize.files.filterAll` (1296), che e' un finding separato qui sotto; e `default:` dentro `failedReason` (en.ts:413) **non e' una chiave** — e' la clausola di uno `switch`, un falso positivo dell'estrattore: rimuoverla rompe il tipo di ritorno della funzione
+- [L1] `common.none` (en 41 / it 38) e `common.retry` (en 43 / it 40) — 0 hit `common.none`/`common.retry`. Enumerazione esaustiva di `t.common.*` realmente usati: `cancel, confirm, delete, error, inProgress, loading, save, search`. (Il nome nudo `none` ha 107 hit e `retry` 1, ma sono classi CSS `select-none`/`pointer-events-none`, union di tipi e il path `/api/downloads/retry-pending` — nessun accesso al dizionario: e' esattamente il caso in cui il grep sul nome nudo mente)
+- [L1] `discovery.closePreview` (en 840 / it 840) — 0 hit. La chiusura dell'anteprima e' passata al player condiviso, che usa `t.player.close` (`components/docked-player.tsx:99`)
+- [L1] `playlists.marginaliaOptions` (en 559 / it 558) — 0 hit; le marginalia in uso sono `marginaliaSource`/`marginaliaNotes`/`marginaliaDetails`
+- [L1] `settings.soulseekReconnect` (en 157 / it 156) — 0 hit; `components/settings/services-list.tsx:154,158` rende solo `soulseekDisconnect`/`soulseekConnect`, un pulsante "riconnetti" non esiste. Da non confondere con `t.settings.reconnectButton` (en.ts:64), che e' vivo e serve ai servizi OAuth
+- [L1] `organize.common.none` (en 1222 / it 1220) e `organize.common.retry` (en 1224 / it 1222) — 0 hit. `t.organize.common.*` realmente usati: `all, backendOffline, cancel, coverProposed, empty, error, guide, save, summary`
+- [L1] `organize.jobs.scan` (en 1234 / it 1232) — 0 hit. `t.organize.jobs.*` usati: `apply, genreReview, integrity, providerLookup`. La riga scan nella barra job non esiste per scelta (`components/jobs-provider.tsx:243`)
+- [L1] `organize.files.filterAll` (en 1296 / it 1294) — 0 hit; il `<Select>` che la usava e' stato rifatto e ora rende `t.organize.common.all` (`app/organize/files/page.tsx:165`). Il gemello `filterIssues` (en 1297) e' invece **vivo** (`app/organize/files/page.tsx:206`) e non si tocca
+- [L1] `organize.files.sortPath/sortArtist/sortTitle/sortBitrate/sortDuration` (en 1298-1302 / it 1296-1300) — 0 hit. Erano le `<option>` di un `<Select>` di ordinamento previsto da `docs/superpowers/plans/2026-07-16-unify-sources-files.md:374-379`, poi sostituito da intestazioni di colonna cliccabili (`components/organize/files-table.tsx:78-83`). I valori sono nella forma `"sort: path"`/`"ordina: path"`, che non e' il testo di un'intestazione: non sono la traduzione mancante del nuovo controllo, sono le etichette di un controllo che non c'e' piu'. (Che le nuove intestazioni siano inglesi hard-coded e' un buco i18n separato, segnalato L3 sotto)
+- [L1] `organize.plan.applyingLabel` (en 1479 / it 1476) — 0 hit; `app/organize/plan/page.tsx:55` calcola `applying` ma rende solo `computing` (`:83`), il progresso dell'apply vive nella barra job globale
+- [L1] `organize.issues.forceProvider` (en 1373 / it 1371) — 0 hit; sostituita da `forceLookupToggle`/`forceLookupHint` (`app/organize/issues/page.tsx:468,472`)
+
+### Findings L2 — consolidamento (Task 8)
+
+Due helper **byte-identici** (verificati con `diff`, nessuna differenza), trovati con un
+rilevatore di corpi di funzione duplicati, non da knip:
+
+- [L2] `components/auto-link-modal.tsx:9` + `components/download-review-modal.tsx:14` + `components/link-local-file-modal.tsx:15` — `fmtSize(bytes)` in **tre copie identiche** (3 righe: `if (!bytes) return ""; return \`${(bytes/1024/1024).toFixed(1)} MB\`;`). Destinazione naturale `lib/api/format.ts`, che ospita gia' `fmtDuration`/`fmtDate`/`fmtDateShort`. **Caveat onesto, stessa disciplina del finding `_http_error` della Fase 1:** nessun test asserisce l'output ("MB" non compare in `tests/link-local-file-modal.test.tsx`, e gli altri due componenti non hanno test dedicati). Il Task 8 aggiunga un test sull'helper condiviso prima di fondere
+- [L2] `components/auto-link-modal.tsx:14` + `components/link-local-file-modal.tsx:20` — `sourceLabel(t: Dictionary)` in **due copie identiche** (mappa `{ library, downloads }` dalle chiavi `t.tracks.sourceLibrary`/`sourceDownloads`; entrambi i file la chiamano una volta, `:32` e `:41`). Prende un `Dictionary`, quindi **non** va in `format.ts` con `fmtSize`: e' una mappa i18n, sta accanto ai componenti o in un modulo di etichette. Stesso caveat sui test. **Trappola di grep:** `t.discovery.sourceLabel` (`components/discovery-dig-bar.tsx:88`) e' una chiave i18n omonima e **non c'entra nulla**
+
+### Candidati scartati (falsi positivi, per tracciabilita')
+
+- **Tutti e 21 i "tipi esportati inutilizzati" di knip** (`lib/api/types.ts` × 11, `lib/organize/api.ts` × 8, `lib/player.tsx` × 2) — **falsi positivi**: ognuno e' usato **dentro il proprio file** come mattone di un altro tipo esportato (es. `SyncTrackRef` -> `types.ts:66,67`; `EnergyBucket` -> `:461`; `DupMember` -> `organize/api.ts:393`; `PreviewItem` -> `player.tsx:34`). Non sono codice morto: e' la convenzione di un modulo di tipi, dove nominare ogni nodo dell'albero serve a chi destruttura la risposta. Unica eccezione, gia' in L1 come cascata: `FingerprintStatus`, il cui unico uso e' la funzione morta `fingerprintStatus()`
+- `components/ui.tsx:309` `Spinner` (knip: "duplicate export" con `Equalizer`) — **falso positivo**: e' un alias di compatibilita' dichiarato tale dal commento a `:308` ("i consumer che importano Spinner restano invariati"), usato da ~30 file. Rinominarli tutti in `Equalizer` sarebbe churn cosmetico, non pulizia
+- `@tailwindcss/postcss` e `tailwindcss` (depcheck) — usati nei config/CSS, vedi Step 1-2
+- `components/track-cover.tsx` / `playlist-cover.tsx` / `organize/cover-thumb.tsx` — sembrano una famiglia ma sono **genuinamente diversi** (sorgenti dati, catene di fallback e convenzioni di dimensionamento differenti). Nessuna fusione
+- `components/spotify-glyph.tsx` / `soundcloud-glyph.tsx` — stesso involucro SVG, `path` diverso. Fonderli in un `<BrandGlyph path=...>` perderebbe i nomi parlanti: non e' un miglioramento
+
+### Findings L3 — segnalazione, nessuna azione automatica
+
+- [L3] `lib/api/client.ts:13` — `export class ApiError` — knip: unused export; grep ancorato: 3 hit, tutti in `lib/api/client.ts` (definizione `:13`, `this.name` `:19`, `throw` `:50`). Nessun `instanceof ApiError` nel frontend. Meccanicamente togliere la keyword `export` e' a rischio zero (lo impone `tsc`), ma **la classe e' la superficie d'errore pubblica del client API** — porta `status` e `code` proprio "per i call site che vogliono distinguerli" (docstring `:11-12`) ed e' ri-esportata dal barrel `lib/api.ts:3`. Depubblicarla e' una decisione sull'API interna, non pulizia
+- [L3] `lib/i18n/en.ts` + `it.ts`, namespace `errors` — **8 codici errore senza piu' nessun emettitore nel backend**. Sono raggiunti dinamicamente (`DICTIONARIES[lang].errors[code]`, `lib/i18n/runtime.ts:28`), quindi nessun controllo statico li vede: la prova e' l'incrocio col backend, dove hanno **0 hit in tutto `backend/`** (`app/` e `tests/`), e il `git log -S` che mostra chi li emetteva. `discovery_not_found` (en 1587 / it 1584): unico emettitore il ramo `expand` di Discovery, rimosso in `bc89328`. `set_ai_generation_failed` (1592/1589) e `set_generation_failed` (1593/1590): unico emettitore `POST /api/sets/generate`, **rimosso dal Task 5b di questa stessa revisione** (commit `3dc62a1`) — sono codice morto di seconda generazione, come le funzioni di `db_hygiene.py` gia' segnalate in Fase 1. `source_path_invalid` (1616/1613), `source_already_present` (1617/1614), `source_not_found` (1618/1615), `source_has_run_history` (1619/1616), `target_root_not_absolute` (1620/1617): li emetteva `app/organize/routers/sources.py`, cancellato in `5336c6f` ("feat(f3b): via l'API delle sorgenti e il target per-radice") — il file **non esiste piu'**. **Non L1** per la regola del piano (famiglia indicizzata dinamicamente -> L3) e perche' il catalogo errori e' anche documentazione della superficie API; ma qui l'evidenza e' piu' forte del solito zero statico: non c'e' nessun emettitore possibile. Se promossi, rimuovere le coppie en+it in lockstep
+- [L3] `organize.nav.themePaper` (en 1249 / it 1247) e `organize.nav.themeDark` (en 1250 / it 1248) — 0 hit, ma **non sono cruft: sono un passo di piano mai eseguito**. `docs/superpowers/plans/2026-07-11-i18n-it-en-sortory.md:646` prescrive letteralmente di sostituire `{theme === "dark" ? "Paper" : "Dark"}` con `{theme === "dark" ? t.nav.themePaper : t.nav.themeDark}`; `components/theme-toggle.tsx:36` ha ancora la stringa hard-coded. Cancellare le chiavi chiude il buco i18n al contrario. Decisione: cablare il toggle **oppure** rimuovere le chiavi
+- [L3] `organize.common.never` (en 1225 / it 1223) — 0 hit, stesso schema: `lib/organize/api.ts:552` scrive a mano `lang === "it" ? "mai" : "never"`, cioe' **esattamente i due valori della chiave**. La chiave non e' morta, e' scavalcata da un hard-code. Decisione: usare la chiave in `fmtDate` oppure rimuoverla
+- [L3] `components/organize/files-table.tsx:78-83` — le intestazioni ordinabili della tabella FILES hanno le etichette **inglesi hard-coded** (`<SortHead label="Path" …>`, `"Artist"`, `"Title"`, `"Fmt"`, `"Kbps"`, `"Dur"`) mentre tutto il resto della pagina e' tradotto. Non e' codice morto ed e' indipendente dalla rimozione delle vecchie `sortPath…` (L1 sopra, che sono etichette di `<option>`, forma diversa): se si vuole tradurre, servono chiavi nuove
+- [L3] `lib/organize/api.ts:110-157` (`handle`/`apiGet`/`apiSend`) vs `lib/api/client.ts:30-100` — **due client HTTP paralleli** nello stesso frontend, con lo stesso scheletro (stesso `handle` con `translateApiError`, stesso commento "Niente `new URL(...)`", stessa costruzione manuale della query string — `lib/organize/api.ts:139-141` cita esplicitamente `lib/api/client.ts`). Ma **non sono sovrapponibili**: la versione core lancia `ApiError` con `status`/`code`, supporta `AbortSignal`, i parametri array e `apiUpload`; quella organize lancia un `Error` nudo e non ha niente di tutto cio'. Unificare significa decidere quale semantica d'errore vince per tutte le pagine Organize — decisione di design, non fusione meccanica. Coperto da `tests/organize-api-base.test.ts`
+- [L3] `lib/api/format.ts:9` (`fmtDuration`) + `:17` (`fmtDate`) vs `lib/organize/api.ts:543` (`fmtDuration`) + `:550` (`fmtDate`) — **omonimi con comportamento diverso, entrambi vivi**. `fmtDuration`: la copia organize fa `Math.round(seconds)` prima di dividere, quella core no (sui float sputa secondi decimali). `fmtDate`: la copia organize e' consapevole della lingua (`getCurrentLanguage()`, locale `it-IT`/`en-GB`) e include ora e minuti; quella core **cabla `it-IT` a prescindere dalla lingua attiva** e mostra solo la data. Fondere richiede di scegliere il comportamento vincente per ogni call site — decisione di prodotto. **Nota a parte, e' un bug i18n vero:** `lib/api/format.ts:20` rende date in italiano anche con la UI in inglese (call site: `app/page.tsx:82`, `app/playlists/page.tsx:151`, `app/library/page.tsx:306`, `app/shazam/page.tsx:150`, ...)
+- [L3] `app/playlists/import-spotify/liked/page.tsx` (160 righe) vs `app/playlists/import-soundcloud/likes/page.tsx` (159 righe) — **quasi fotocopie**: normalizzando i nomi di piattaforma il `diff` si riduce a ~15 righe (il campo di ricerca e' `artist` vs `uploader`, la chiave `spotify_id` vs `track_id`, due note di marginalia in piu' su SoundCloud, e una `clearSelection` estratta da una parte e inline dall'altra). Tutta l'impalcatura — stato, preview, filtro, selezione, import, tabella — e' identica. **Non L2** perche' nessuna delle due pagine ha copertura: non sono in `ROUTES` di `e2e/smoke.spec.ts` e non hanno test unitari; estrarre un componente condiviso e parametrizzarlo su due modelli dati diversi e' un refactor a occhi chiusi
+- [L3] Endpoint backend che restano senza chiamante frontend **se** il Task 7 esegue le rimozioni L1 qui sopra: `GET /api/organize/scan/status` (perdeva `scanJobStatus`), `GET /api/organize/fingerprint/status` (`fingerprintStatus`), `GET|PUT /api/organize/settings/language` (`getLanguage`/`setLanguage`), `GET /api/organize/picker/availability` + `POST /api/organize/picker/pick` (`pickerAvailability`/`pickPath`). Le ultime due famiglie sono **gia' segnalate in Fase 1** come duplicazione core <-> `organize/`; le prime due sono nuove. Nessuna azione qui: sono nel backend, e il piano vieta L1/L2 dentro `app/organize/`. Da valutare insieme, non uno alla volta
 
 ## Segnalazioni (livello 3)
 
@@ -554,6 +659,29 @@ da una passata meccanica):
 Schema DB (intoccabile per definizione nel piano):
 
 - [L3] Le ~100 voci di `vulture --min-confidence 60` su `app/models.py`, `app/organize/models.py`, `app/schemas.py`, `app/organize/schemas.py` sono colonne SQLAlchemy e campi Pydantic dichiarativi. Alcune sono effettivamente scritte e mai lette dal backend (es. `Track.playlist_name`, `analysis_error`, i vari `updated_at`), ma lo schema non si tocca e il frontend puo' leggerle via i response model: nessuna azione, solo segnalazione
+
+### Frontend (Task 6) — copia dei findings L3 della Fase 2
+
+Superficie API interna:
+
+- [L3] `lib/api/client.ts:13` — `export class ApiError` — knip: unused export; grep ancorato: 3 hit, tutti in `lib/api/client.ts` (definizione `:13`, `this.name` `:19`, `throw` `:50`). Nessun `instanceof ApiError` nel frontend. Meccanicamente togliere la keyword `export` e' a rischio zero (lo impone `tsc`), ma **la classe e' la superficie d'errore pubblica del client API** — porta `status` e `code` proprio "per i call site che vogliono distinguerli" (docstring `:11-12`) ed e' ri-esportata dal barrel `lib/api.ts:3`. Depubblicarla e' una decisione sull'API interna, non pulizia
+
+Chiavi i18n che richiedono una decisione (non semplice cruft):
+
+- [L3] `lib/i18n/en.ts` + `it.ts`, namespace `errors` — **8 codici errore senza piu' nessun emettitore nel backend**. Sono raggiunti dinamicamente (`DICTIONARIES[lang].errors[code]`, `lib/i18n/runtime.ts:28`), quindi nessun controllo statico li vede: la prova e' l'incrocio col backend, dove hanno **0 hit in tutto `backend/`** (`app/` e `tests/`), e il `git log -S` che mostra chi li emetteva. `discovery_not_found` (en 1587 / it 1584): unico emettitore il ramo `expand` di Discovery, rimosso in `bc89328`. `set_ai_generation_failed` (1592/1589) e `set_generation_failed` (1593/1590): unico emettitore `POST /api/sets/generate`, **rimosso dal Task 5b di questa stessa revisione** (commit `3dc62a1`) — sono codice morto di seconda generazione, come le funzioni di `db_hygiene.py` gia' segnalate in Fase 1. `source_path_invalid` (1616/1613), `source_already_present` (1617/1614), `source_not_found` (1618/1615), `source_has_run_history` (1619/1616), `target_root_not_absolute` (1620/1617): li emetteva `app/organize/routers/sources.py`, cancellato in `5336c6f` ("feat(f3b): via l'API delle sorgenti e il target per-radice") — il file **non esiste piu'**. **Non L1** per la regola del piano (famiglia indicizzata dinamicamente -> L3) e perche' il catalogo errori e' anche documentazione della superficie API; ma qui l'evidenza e' piu' forte del solito zero statico: non c'e' nessun emettitore possibile. Se promossi, rimuovere le coppie en+it in lockstep
+- [L3] `organize.nav.themePaper` (en 1249 / it 1247) e `organize.nav.themeDark` (en 1250 / it 1248) — 0 hit, ma **non sono cruft: sono un passo di piano mai eseguito**. `docs/superpowers/plans/2026-07-11-i18n-it-en-sortory.md:646` prescrive letteralmente di sostituire `{theme === "dark" ? "Paper" : "Dark"}` con `{theme === "dark" ? t.nav.themePaper : t.nav.themeDark}`; `components/theme-toggle.tsx:36` ha ancora la stringa hard-coded. Cancellare le chiavi chiude il buco i18n al contrario. Decisione: cablare il toggle **oppure** rimuovere le chiavi
+- [L3] `organize.common.never` (en 1225 / it 1223) — 0 hit, stesso schema: `lib/organize/api.ts:552` scrive a mano `lang === "it" ? "mai" : "never"`, cioe' **esattamente i due valori della chiave**. La chiave non e' morta, e' scavalcata da un hard-code. Decisione: usare la chiave in `fmtDate` oppure rimuoverla
+- [L3] `components/organize/files-table.tsx:78-83` — le intestazioni ordinabili della tabella FILES hanno le etichette **inglesi hard-coded** (`<SortHead label="Path" …>`, `"Artist"`, `"Title"`, `"Fmt"`, `"Kbps"`, `"Dur"`) mentre tutto il resto della pagina e' tradotto. Non e' codice morto ed e' indipendente dalla rimozione delle vecchie `sortPath…` (L1 in Fase 2, che sono etichette di `<option>`, forma diversa): se si vuole tradurre, servono chiavi nuove
+
+Duplicazione frontend che non e' una fusione meccanica:
+
+- [L3] `lib/organize/api.ts:110-157` (`handle`/`apiGet`/`apiSend`) vs `lib/api/client.ts:30-100` — **due client HTTP paralleli** nello stesso frontend, con lo stesso scheletro (stesso `handle` con `translateApiError`, stesso commento "Niente `new URL(...)`", stessa costruzione manuale della query string — `lib/organize/api.ts:139-141` cita esplicitamente `lib/api/client.ts`). Ma **non sono sovrapponibili**: la versione core lancia `ApiError` con `status`/`code`, supporta `AbortSignal`, i parametri array e `apiUpload`; quella organize lancia un `Error` nudo e non ha niente di tutto cio'. Unificare significa decidere quale semantica d'errore vince per tutte le pagine Organize — decisione di design, non fusione meccanica. Coperto da `tests/organize-api-base.test.ts`
+- [L3] `lib/api/format.ts:9` (`fmtDuration`) + `:17` (`fmtDate`) vs `lib/organize/api.ts:543` (`fmtDuration`) + `:550` (`fmtDate`) — **omonimi con comportamento diverso, entrambi vivi**. `fmtDuration`: la copia organize fa `Math.round(seconds)` prima di dividere, quella core no (sui float sputa secondi decimali). `fmtDate`: la copia organize e' consapevole della lingua (`getCurrentLanguage()`, locale `it-IT`/`en-GB`) e include ora e minuti; quella core **cabla `it-IT` a prescindere dalla lingua attiva** e mostra solo la data. Fondere richiede di scegliere il comportamento vincente per ogni call site — decisione di prodotto. **Nota a parte, e' un bug i18n vero:** `lib/api/format.ts:20` rende date in italiano anche con la UI in inglese (call site: `app/page.tsx:82`, `app/playlists/page.tsx:151`, `app/library/page.tsx:306`, `app/shazam/page.tsx:150`, ...)
+- [L3] `app/playlists/import-spotify/liked/page.tsx` (160 righe) vs `app/playlists/import-soundcloud/likes/page.tsx` (159 righe) — **quasi fotocopie**: normalizzando i nomi di piattaforma il `diff` si riduce a ~15 righe (il campo di ricerca e' `artist` vs `uploader`, la chiave `spotify_id` vs `track_id`, due note di marginalia in piu' su SoundCloud, e una `clearSelection` estratta da una parte e inline dall'altra). Tutta l'impalcatura — stato, preview, filtro, selezione, import, tabella — e' identica. **Non L2** perche' nessuna delle due pagine ha copertura: non sono in `ROUTES` di `e2e/smoke.spec.ts` e non hanno test unitari; estrarre un componente condiviso e parametrizzarlo su due modelli dati diversi e' un refactor a occhi chiusi
+
+Ricadute sul backend delle rimozioni L1 del Task 7:
+
+- [L3] Endpoint backend che restano senza chiamante frontend **se** il Task 7 esegue le rimozioni L1 della Fase 2: `GET /api/organize/scan/status` (perdeva `scanJobStatus`), `GET /api/organize/fingerprint/status` (`fingerprintStatus`), `GET|PUT /api/organize/settings/language` (`getLanguage`/`setLanguage`), `GET /api/organize/picker/availability` + `POST /api/organize/picker/pick` (`pickerAvailability`/`pickPath`). Le ultime due famiglie sono **gia' segnalate in Fase 1** come duplicazione core <-> `organize/`; le prime due sono nuove. Nessuna azione qui: sono nel backend, e il piano vieta L1/L2 dentro `app/organize/`. Da valutare insieme, non uno alla volta
 
 ## Riepiloghi checkpoint
 
