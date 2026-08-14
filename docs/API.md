@@ -73,8 +73,9 @@ Jobs also exclude each other across areas where the data would tear: a scan
 refuses to start while an Organize apply is running (`409 apply_running`) and vice
 versa (`409 scan_running`), because scanning a half-moved tree mis-merges rows.
 
-**Layering.** Routers are HTTP only. Scoring, dedup, ranking, rate limiting, retry
-and caching live in `services/` and `integrations/`.
+**Layering.** Scoring, dedup, ranking, rate limiting, retry and caching live in
+`services/` and `integrations/`. Routers are mostly HTTP-only, but not as a hard
+rule — see `CLAUDE.md`'s stack-and-layout list for the named exceptions.
 
 ## Health and pipeline
 

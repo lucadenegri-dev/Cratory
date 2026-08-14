@@ -93,7 +93,7 @@ backend/app/
   routers/       mostly HTTP-only, but not a hard rule — a few carry real
                  logic (best-transition ranking in transitions.py,
                  ISRC/artist+title matching in dj_sets.py, one rule per
-                 export format in sets.py): tracks, playlists, sets,
+                 export format in sets.py and playlists.py): tracks, playlists, sets,
                  transitions, labels, analysis, rekordbox, discovery,
                  dj_sets (=/api/shazam), downloads, files, slskd,
                  soundcloud, spotify, ai, pipeline, services, settings —

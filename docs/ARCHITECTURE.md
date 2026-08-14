@@ -71,7 +71,10 @@ backend/app/
     runtime_settings.py  Settings-UI overrides cached over the .env values
     http_errors.py       api_error(): structured {code, message, params} details
 
-  routers/           HTTP only, no business logic
+  routers/           mostly HTTP only — a few carry real logic (best-transition
+                     ranking in transitions.py, ISRC/artist+title matching in
+                     dj_sets.py, one export-format rule per branch in sets.py
+                     and playlists.py); see CLAUDE.md's stack-and-layout list
     tracks.py (/api: tracks, library/index, stats, genres)  playlists.py
     sets.py  transitions.py  labels.py  analysis.py  rekordbox.py
     discovery.py  dj_sets.py (/api/shazam)  downloads.py  files.py
@@ -117,9 +120,10 @@ backend/app/
                      cover_art  content_hash  integrity  _http
 ```
 
-Two rules hold across the tree. Routers contain no business logic — they map HTTP to a
-service call and map exceptions to status codes through `api_error`. External integrations
-take an injectable client (usually `httpx`), so the test suite runs without a network.
+One rule holds across the tree: external integrations take an injectable client (usually
+`httpx`), so the test suite runs without a network. Routers mostly map HTTP to a service
+call and exceptions to status codes through `api_error`, but not as a hard rule — see the
+`routers/` list above for the named exceptions.
 
 `app/organize` imports from the core (`app.models.Track`, `app.core`, `app.services.genre_align`);
 the core never imports from `app.organize`. The one relationship that spans the boundary,
@@ -127,9 +131,12 @@ the core never imports from `app.organize`. The one relationship that spans the 
 independent. `ensure_schema()` pulls in the Organize models with a deferred import.
 
 Background jobs follow one pattern: a module-level lock, in-memory status, and a daemon
-thread started through `services/job_spawn.spawn` (which tests monkeypatch to run
-synchronously). One job of a kind at a time; a second start returns `409`. CPU-bound work
-that would hold the GIL — ffmpeg decoding, Essentia analysis — runs in a subprocess.
+thread. Most spawn that thread with a bare `threading.Thread`; only the two single-user
+jobs (BPM/key analysis, streaming import/sync) go through `services/job_spawn.spawn`, a
+thin wrapper tests monkeypatch to run synchronously. Each job is single-instance, but the
+guard on a second start is per job — see `docs/API.md`'s jobs table rather than assuming
+`409` here. CPU-bound work that would hold the GIL — ffmpeg decoding, Essentia analysis —
+runs in a subprocess.
 
 ## The library is the disk
 
@@ -155,7 +162,8 @@ renames, moves and retagging because identity is anchored to the audio, not the 
 There is a single scan job, `organize/services/scan_job.py`, reachable two ways:
 `POST /api/organize/scan` (optionally scoped with `locations: ["inbox"|"library"]`) and
 `POST /api/library/index`, its whole-library alias kept for the frontend's "Index" button.
-Both return 202 and are polled through their own `/status` route. It also runs once at
+Each has its own start status code and its own `/status` route — see the jobs table in
+`docs/API.md` rather than assuming a convention here. It also runs once at
 startup, through `start_job_if_due()`, which skips if the last run finished less than 15
 minutes ago — otherwise every uvicorn reload would re-index in development.
 
