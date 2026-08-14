@@ -463,7 +463,12 @@ non toccato in quella passata):
   comportamento condiviso — `merge_tracks`, `align_track_genre`,
   `apply_estimated_energy` — resta coperto altrove). `db_hygiene.py` e' rimasto senza
   contenuto operativo: la decisione se cancellare il modulo stesso e' stata lasciata
-  aperta, non presa d'ufficio
+  aperta, non presa d'ufficio. **Risolto, stesso Task 8b:** decisione dell'utente,
+  cancellare il file — 18 righe di sola docstring senza importatori sono precisamente
+  il residuo storico che questa revisione esiste per togliere, e quell'informazione
+  appartiene al git log (messaggio di commit), non a un modulo importabile. Riverificato
+  prima della cancellazione che non ci fossero importatori dinamici o per stringa
+  (`importlib`/`import_module`, letterali `"db_hygiene"`): nessuno trovato
 - [L3 — **PROMOSSO E RIMOSSO, Task 8b**] `app/services/soulseek_download_job.py:246` — il ramo `if track_id is None:`
   dentro `_run()` (con `_process_manual()`) e' diventato irraggiungibile in produzione
   dopo la rimozione di `start_manual_job()` (Task 5b, unico chiamante che passava
@@ -699,7 +704,12 @@ non toccato in quella passata):
   comportamento condiviso — `merge_tracks`, `align_track_genre`,
   `apply_estimated_energy` — resta coperto altrove). `db_hygiene.py` e' rimasto senza
   contenuto operativo: la decisione se cancellare il modulo stesso e' stata lasciata
-  aperta, non presa d'ufficio
+  aperta, non presa d'ufficio. **Risolto, stesso Task 8b:** decisione dell'utente,
+  cancellare il file — 18 righe di sola docstring senza importatori sono precisamente
+  il residuo storico che questa revisione esiste per togliere, e quell'informazione
+  appartiene al git log (messaggio di commit), non a un modulo importabile. Riverificato
+  prima della cancellazione che non ci fossero importatori dinamici o per stringa
+  (`importlib`/`import_module`, letterali `"db_hygiene"`): nessuno trovato
 - [L3 — **PROMOSSO E RIMOSSO, Task 8b**] `app/services/soulseek_download_job.py:246` — il ramo `if track_id is None:`
   dentro `_run()` (con `_process_manual()`) e' diventato irraggiungibile in produzione
   dopo la rimozione di `start_manual_job()` (Task 5b, unico chiamante che passava
@@ -1001,7 +1011,11 @@ dell'utente al checkpoint di Fase 2: rimuovere entrambi):
   le funzioni direttamente. **PROMOSSO E RIMOSSO, Task 8b**: le quattro funzioni e i
   loro helper/costanti esclusivi rimossi, i 16 test dedicati cancellati con loro (il
   comportamento condiviso che esercitavano — `merge_tracks`, `align_track_genre`,
-  `apply_estimated_energy` — resta coperto da altri file di test).
+  `apply_estimated_energy` — resta coperto da altri file di test). Il file, rimasto
+  senza contenuto operativo, e' stato poi cancellato del tutto nello stesso Task 8b
+  (decisione dell'utente, dopo riverifica che non ci fossero importatori dinamici o
+  per stringa): la sua docstring, che tracciava dove fosse finita la logica
+  orchestrata, e' confluita nel messaggio del commit di cancellazione.
 - `app/services/soulseek_download_job.py:246` — il ramo `if track_id is None:` dentro
   `_run()` e' irraggiungibile in produzione dopo la rimozione di `start_manual_job()`
   (Task 5b), ma viaggia insieme a un test vivo e verde
