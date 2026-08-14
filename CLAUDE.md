@@ -90,7 +90,10 @@ Backend layers:
 
 ```text
 backend/app/
-  routers/       HTTP only, no business logic: tracks, playlists, sets,
+  routers/       mostly HTTP-only, but not a hard rule — a few carry real
+                 logic (best-transition ranking in transitions.py,
+                 ISRC/artist+title matching in dj_sets.py, one rule per
+                 export format in sets.py): tracks, playlists, sets,
                  transitions, labels, analysis, rekordbox, discovery,
                  dj_sets (=/api/shazam), downloads, files, slskd,
                  soundcloud, spotify, ai, pipeline, services, settings —
@@ -121,12 +124,14 @@ backend/app/
 ```
 
 No enrichment chain outside Organize: BPM/key come from Rekordbox/Essentia, text
-metadata from Organize's own providers. Cratory's own (non-Organize) integrations
-beyond those are Discovery's: Discogs and Bandcamp (dig "Scava", two sources behind
-the `DigSource` protocol) and Spotify (identity resolver). Organize keeps separate
-clients of its own for text-metadata enrichment (Discogs, MusicBrainz, AcoustID)
-under `organize/integrations/` — a different client from the one Discovery uses, not
-the same object reused across the boundary.
+metadata from Organize's own providers under `organize/integrations/`. Discovery's
+own providers are Discogs and Bandcamp (dig "Scava", two sources behind the
+`DigSource` protocol), plus Spotify as an identity resolver; Discogs is queried a
+second time, through Organize's own separate client, for text-metadata proposals —
+never the same client object across the boundary. `backend/app/integrations/` also
+holds clients that are neither Discovery's nor enrichment's — SoundCloud, slskd,
+Shazam, the LLM client, local file serving — for import, acquisition, mix
+identification and AI curation.
 
 Discovery works by taste, not by technical compatibility (that stays with the Set Builder):
 the dig "Scava" uses Discogs or Bandcamp by genre/label, with Spotify only as an identity

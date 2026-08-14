@@ -43,7 +43,9 @@ cover extraction, playback, hashing, analysis — opens files read-only.
 
 **Streaming provides identity, not mixing data.** Spotify and SoundCloud supply title,
 artist, album, cover, duration, ISRC, URLs and playlist membership. The remaining external
-providers (Discogs, Bandcamp, iTunes) serve Discovery only. Spotify `/recommendations` must
+providers (Discogs, Bandcamp, iTunes) serve Discovery; Discogs is also queried by
+Organize, through its own separate client, for text-metadata proposals. Spotify
+`/recommendations` must
 not be used: for new apps, or an app in development mode, it returns 403/404.
 
 **Third-party audio is streamed, not kept.** Mix identification downloads temporarily and
