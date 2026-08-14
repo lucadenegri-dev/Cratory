@@ -165,13 +165,25 @@ def test_align_track_genre_ricalcola_energia(db):
 
 def test_align_track_genre_file_vuoto_non_tocca(db):
     """Guardia di `genre_align.align_track_genre` (righe 54-55): se il tag genere
-    del file normalizza a vuoto (`None`, stringa vuota, o solo spazi/trattini —
-    tutto cio' che `normalize_genre` riduce a niente), la funzione ritorna `None`
-    e non tocca `track.genre` ne' l'energia derivata. E' la guardia simmetrica a
-    quella coperta da `test_align_track_genre_ricalcola_energia` qui sopra: quel
-    test prova che un tag valido *aggiorna* genere+energia, questo prova che un
-    tag vuoto lascia *entrambi* al valore di streaming — un file non taggato non
+    del file normalizza a vuoto, la funzione ritorna `None` e non tocca
+    `track.genre` ne' l'energia derivata. E' la guardia simmetrica a quella
+    coperta da `test_align_track_genre_ricalcola_energia` qui sopra: quel test
+    prova che un tag valido *aggiorna* genere+energia, questo prova che un tag
+    vuoto lascia *entrambi* al valore di streaming — un file non taggato non
     deve azzerare un genere gia' noto.
+
+    Esercita un solo input rappresentativo, "  -  " (solo spazi/trattini): la
+    guardia agisce sull'output di `normalize_genre`, non sull'input grezzo, e
+    `test_normalize_genre` (`tests/test_genre_chain.py`) prova gia', separatamente,
+    che None/""/"   " normalizzano tutti a `None` come "  -  " — non rifatto qui.
+
+    Genere seminato 'Techno', non 'Electronic': `estimate_energy(128, None, ...)`
+    vale 72 per 'Techno' contro 60 per 'Electronic' *e* per un genere svuotato
+    (None/''/'Electronic' cadono nella stessa fascia "neutra" della curva).
+    Con 'Electronic' l'assert `t.energy == seeded_energy` non distinguerebbe
+    "energia non toccata" da "energia ricalcolata contro un genere svuotato" —
+    esattamente il mutante che la guardia deve impedire, e che con 'Electronic'
+    passerebbe comunque (verificato disattivando la guardia, vedi commit).
 
     L'energia parte gia' seminata (stesso motivo del test sopra: partire da
     `energy=None` renderebbe "non tocca" indistinguibile da "non ha ricalcolato
@@ -180,15 +192,15 @@ def test_align_track_genre_file_vuoto_non_tocca(db):
     from app.services.energy import estimate_energy
     from app.services.genre_align import align_track_genre
 
-    seeded_energy = estimate_energy(128.0, None, "Electronic")
-    t = Track(source_type="spotify", genre="Electronic", bpm=128.0,
+    seeded_energy = estimate_energy(128.0, None, "Techno")
+    t = Track(source_type="spotify", genre="Techno", bpm=128.0,
               energy=seeded_energy, energy_source="estimated")
     db.add(t); db.commit()
 
     result = align_track_genre(t, "  -  ", apply=True)
 
     assert result is None
-    assert t.genre == "Electronic"
+    assert t.genre == "Techno"
     assert t.energy == seeded_energy
     assert t.energy_source == "estimated"
 
