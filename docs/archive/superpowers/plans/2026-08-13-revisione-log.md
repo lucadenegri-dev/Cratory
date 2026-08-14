@@ -1132,3 +1132,263 @@ il caso portato da native_picker non aggiunge una `def test_` nuova, allarga un
 test esistente con un loop) = **1888**. Frontend invariato in tutta la passata: lint
 0 errori/4 warning pre-esistenti, build 27/27 route, test:unit 186/186. Report
 completo: `.superpowers/sdd/task-8d-report.md`.
+
+## Task 14 — Verifica finale e rapporto di consegna
+
+Chiusura della revisione: 80 commit dalla baseline (`27a0f9d`) a qui, quattro fasi
+(pulizia backend, pulizia frontend, archiviazione, riscrittura docs vive), ogni task
+rivisto indipendentemente. Questa sezione non tocca codice ne' docs vive: misura,
+confronta, registra.
+
+### Verifica finale — tutto verde
+
+Rieseguiti tutti i comandi del piano, nessuna correzione applicata (non era lo scopo
+di questo task):
+
+- **Backend** (`pytest tests -q`, venv `$MAIN/backend/.venv`): **1888 passed, 4
+  deselected in 28.22s** — combacia esatto con l'atteso e con l'ultima verifica del
+  Task 8d.
+- **Frontend lint**: **0 errori, 4 warning pre-esistenti** (`app/library/page.tsx:135`
+  react-hooks/exhaustive-deps, `app/shazam/[id]/page.tsx:166` +
+  `app/shazam/page.tsx:140` + `components/track-cover.tsx:29` no-img-element) — gli
+  stessi quattro della baseline, nessuno nuovo.
+- **Frontend build** (Next.js 16.2.9, Turbopack): compilazione ok, TypeScript ok,
+  **27/27 route generate**.
+- **Frontend test:unit** (vitest): **34 file, 186/186 test passati**.
+- **Link check** su tutte le `.md` vive (script del Task 9 brief, Step 5, root +
+  `docs/*.md` ricorsivo esclusi `archive/` e `node_modules/`): **OK: nessun
+  riferimento rotto**.
+
+Nessun rosso da segnalare. Stato: **DONE**, non DONE_WITH_CONCERNS.
+
+### Confronto con la baseline (Fase 0)
+
+Stesso comando del Task 1 Step 5, rieseguito oggi:
+
+| Metrica | Baseline (13/08) | Oggi (14/08) | Differenza |
+| --- | --- | --- | --- |
+| File `.py` (`backend/app`) | 154 | 149 | -5 |
+| Righe `.py` | 23962 | 22758 | -1204 |
+| File `.ts`/`.tsx` (app/components/lib) | 107 | 108 | +1 |
+| Righe `.ts`/`.tsx` | 18395 | 18252 | -143 |
+| Endpoint, grep `@router\.` (come da baseline) | 148 | 140 | -8 |
+| Endpoint, censimento OpenAPI reale | 149 | 141 | -8 |
+| Dipendenze pip | 18 | 18 | 0 |
+| Dipendenze npm | 19 | 19 | 0 |
+| Righe docs vive (README+PROGRESS+CLAUDE+`docs/*.md`) | 4509 | 3173 | -1336 |
+| Test backend | 1946 passed | 1888 passed, 4 deselected | -58 |
+| Test frontend unit | 173 passed | 186 passed | +13 |
+
+Due numeri hanno bisogno di una nota, altrimenti confondono chi legge dopo:
+
+**Endpoint — due conteggi diversi, entrambi corretti, per due domande diverse.** Il
+grep `@router\.(get|post|put|delete|patch)` conta solo i decorator sui router
+inclusi; **non vede** `GET /api/health`, registrato con `@app.get` direttamente su
+`app/main.py:129`. Per questo la baseline "vera" (Task 2, censimento sullo schema
+OpenAPI di `app.openapi()`) era **149**, non 148, e oggi e' **141**, non 140 — la
+differenza fra i due conteggi (+1 su entrambi i lati) e' sempre e solo `/api/health`.
+Il numero che conta per "quanti endpoint ha oggi Cratory" e' 141 (verificato di
+nuovo ora: `spec['paths']` ha 131 path unici, 141 coppie metodo+path). Gli otto
+endpoint in meno rispetto a 149 sono le rimozioni decise ai due checkpoint:
+`POST /api/downloads/search`, `POST /api/downloads/manual`,
+`POST /api/sets/generate` (Task 5b), `GET /api/organize/fingerprint/status`,
+`GET|PUT /api/organize/settings/language`,
+`GET /api/organize/picker/availability`, `POST /api/organize/picker/pick`
+(Task 8d, Gruppo B) — sette nomi, otto coppie metodo+path perche' la coppia
+`settings/language` conta GET e PUT separatamente.
+
+**Righe di docs vive — il calo non e' tutto riscrittura.** Il comando del Task 1
+gira su `docs/*.md` non ricorsivo: alla baseline quel glob catturava anche
+`docs/AUDIT-2026-07-05.md` (280 righe), spostato sotto `docs/archive/` al Task 9 e
+quindi oggi fuori dal glob per costruzione, non perche' qualcuno l'abbia accorciato.
+Scorporando quel file, il confronto onesto per doc e' questo (righe, baseline ->
+oggi): README 238->153, PROGRESS 1470->40 (ridotto a riassunto, diario spostato in
+`docs/archive/PROGRESS-diario-completo.md`), CLAUDE.md 159->180 (cresciuto: guida
+percorsi aggiornati + le due eccezioni sui router/provider corrette al Task 13),
+API.md 885->1331 (cresciuto: 41 endpoint prima non documentati, vedi sotto),
+ARCHITECTURE.md 575->674, DEPENDENCIES.md 126->126 (invariato), DESIGN.md 372->480,
+ROADMAP.md 404->189 (ridotto: via la cronologia F1-F6, dentro le 16 voci di
+backlog di questa revisione).
+
+**Dipendenze — zero mosse, verificato per contenuto, non solo per conteggio.**
+`diff` fra `backend/requirements.txt` e `frontend/package.json` alla baseline
+(`27a0f9d`) e oggi: **nessuna differenza**, file identici. Questa revisione non ha
+tolto ne' aggiunto nessuna dipendenza: il Task 2 aveva gia' verificato zero
+dipendenze pip morte (i tre "zero" apparenti erano `uvicorn` da CLI,
+`python-multipart` usato internamente da FastAPI, `yaml` sostituito da
+`ruamel.yaml`), e il Task 6 zero dipendenze npm morte via knip+depcheck.
+
+### Cosa e' stato tolto e consolidato, per fase
+
+**Fase 1 — backend** (Task 2-5, checkpoint Task 5b): 13 simboli L1 rimossi (8 import
+morti in 4 file, 5 funzioni/classi morte con le rispettive cascate di orfani — es.
+`build_normalized()` ha trascinato via 4 import piu' `PLATFORM`, `NormalizedTrack`,
+`read_tags`, `audio_hash`, `parse_line`); 5 duplicazioni L2 fuse in altrettanti
+moduli condivisi nuovi (`export_render.py`, `http_errors.py` esteso,
+`track_label.py`, `job_spawn.py`), 9 test di caratterizzazione scritti prima di
+ogni merge. Al checkpoint l'utente ha promosso a rimozione: 3 endpoint HTTP morti
+sopra servizi vivissimi (`POST /api/sets/generate`, `POST /api/downloads/search`,
+`POST /api/downloads/manual`) e 4 script one-shot in `app/tools/` con migrazioni
+gia' applicate (`align_genre_from_file.py`, `backfill_track_files.py`,
+`cleanup_disk_first.py`, `migrate_organize_db.py`).
+
+**Fase 2 — frontend** (Task 6-8, checkpoint Task 8b): 23 finding L1 rimossi — 49
+chiavi i18n morte (in coppia EN/IT) e 7 export/re-export morti; zero file orfani e
+zero dipendenze npm morte confermati da knip+depcheck. 2 duplicazioni L2 fuse
+(`fmtSize` in tre copie -> `lib/api/format.ts`; `sourceLabel` in due copie -> nuovo
+`lib/track-source.ts`), 4 test di caratterizzazione. Al checkpoint l'utente ha
+promosso a rimozione: il namespace i18n `errors` (8 codici senza piu' emettitore
+nel backend), le due chiavi `themePaper`/`themeDark` (accettando l'hard-code sui
+nomi propri del design system), il modulo `db_hygiene.py` intero (4 funzioni gia'
+orfane + il file stesso, rimasto guscio vuoto) e un ramo morto in
+`soulseek_download_job.py`. Nella stessa fase, due bug i18n veri (non codice
+morto) sono stati corretti su decisione dell'utente (Task 8c): `fmtDate`/
+`fmtDateShort` cablavano `it-IT` a prescindere dalla lingua attiva, `trackLabel()`
+ricadeva su italiano hard-coded.
+
+**Fase 2b — Task 8d**: parte meccanica della duplicazione strutturale core <->
+`organize/` catalogata in Fase 1. `genre_norm.py` e `native_picker.py`, byte-identici
+nei due alberi, fusi eliminando per intero la copia `organize/` (nessun modulo
+ponte lasciato in giro). Rimossi 3 dei 4 endpoint HTTP `organize/` rimasti orfani
+dopo le rimozioni L1 del frontend (`fingerprint/status`, la coppia
+`settings/language`, la coppia `picker/*`); il quarto (`scan/status`) lasciato per
+un chiamante reale nei test backend. Le duplicazioni piu' profonde — i due client
+HTTP paralleli, i due store di lingua con default diversi, le cinque macchine a
+stati scritte a mano, l'idioma "carica o 404" ripetuto ~40 volte — sono rimaste
+segnalate, non toccate: fondere ciascuna significa scegliere un comportamento
+vincente per l'intera classe di call site, decisione di prodotto/design esplicitamente
+fuori da una passata meccanica.
+
+**Fase 3 — archiviazione** (Task 9): spostati sotto `docs/archive/` il diario
+completo (`PROGRESS.md` -> `PROGRESS-diario-completo.md`), l'audit chiuso
+(`AUDIT-2026-07-05.md`), la documentazione storica di Sortory
+(`CLAUDE-sortory-storico.md`, `README-sortory-storico.md`) e l'intera
+`docs/superpowers/` (spec e piani di sviluppo, incluso il piano e il log di
+questa stessa revisione). `PROGRESS.md` ridotto a un riassunto di stato per area
+(~30 righe); indice `docs/archive/README.md` creato.
+
+**Fase 4 — docs vive riscritte** (Task 10-13): README.md, ARCHITECTURE.md,
+DESIGN.md, DEPENDENCIES.md, API.md, ROADMAP.md, CLAUDE.md riscritti sull'albero
+reale post-pulizia, al presente, per un lettore che apre il progetto oggi — via
+la cronologia F1-F6, i lotti, "fusione", le giustificazioni di decisioni passate
+(quella storia resta in `docs/archive/` e nel git log).
+
+### L'esito piu' rilevante: 41 endpoint su 141 non erano documentati
+
+Il Task 12 ha ricensito `docs/API.md` contro lo schema OpenAPI reale, nei due
+sensi. **Prima della riscrittura: 100 endpoint documentati e 41 esistenti ma non
+documentati affatto** — zero endpoint documentati-ma-inesistenti (nessun
+"fantasma"). I 41 mancanti, per area: **30 nell'intera superficie Organize**
+(scan/analyze/issues/duplicates/plan/apply/history/library/fingerprint/
+genre-review — il vecchio documento copriva solo 2 dei suoi endpoint), 5 in
+Downloads, 2 in Playlists, 1 in Sets. Dopo la riscrittura: **141 censiti, 141
+documentati in blocco di codice scansionabile, 0 mancanti, 0 fantasma** — API.md
+e' passato da 871 a 1331 righe, crescita quasi interamente spiegata dai 41
+endpoint prima assenti (Organize da sola ~230 righe nuove), densita' per endpoint
+invariata (~8.7 righe).
+
+### Cosa questa revisione ha sbagliato e corretto in corsa
+
+Cinque episodi, riportati per intero perche' sono la parte piu' utile per chi
+legge dopo:
+
+1. **Un endpoint morto mancato da un grep non ancorato.** La prima passata
+   d'incrocio endpoint <-> call site frontend (Fase 1, Task 2) cercava il prefisso
+   del path come sottostringa nuda: `POST /api/sets/generate` risultava "vivo"
+   perche' il suo path e' prefisso di `/api/sets/generate-async`, che ha davvero
+   un chiamante. Un ricontrollo con match ancorato al terminatore (`"`, `` ` ``
+   o `?` dopo il prefisso) su tutti i path non parametrici ha isolato quest'unica
+   vittima: wrapper HTTP morto sopra un servizio vivissimo, poi promosso a
+   rimozione al checkpoint di Fase 1 (Task 5b). Il difetto sbagliava sempre in
+   direzione "morto non trovato", mai "vivo dichiarato morto" — non ha intaccato
+   nessuna classificazione gia' fatta, ma senza il ricontrollo l'endpoint sarebbe
+   rimasto in piedi.
+2. **Quindici chiavi i18n invisibili a una ricerca sul solo nome foglia.** La
+   prima passata di rilevamento (Fase 2, Task 6) cercava il nome nudo della
+   foglia (`rf"\.{k}\b"`): una chiave morta il cui nome e' omonimo di una chiave
+   viva in un altro namespace non diventava mai candidata (es.
+   `organize.common.close`, nascosta dietro `t.common.close` vivo). Rifatto il
+   rilevatore sui percorsi dotted completi (foglie estratte eseguendo `en.ts`,
+   non con una regex, alias-aware): da 34 candidate qualificate a 52, quindici
+   in piu' — poi rimosse in coppia EN/IT allo stesso Task 7.
+3. **Un test cancellato per un motivo sbagliato, poi ripristinato.**
+   `test_best_for_auto_returns_none_below_threshold` e' stato cancellato nel
+   commit `7f98173` credendolo coperto da un altro test
+   (`test_auto_pick_candidates_vuota_se_tutti_sotto_soglia`) che in realta'
+   costruiva lo `ScoredCandidate` a mano e non esercitava mai lo scorer che il
+   test cancellato proteggeva. Ripristinato in forma riscritta
+   (`test_nome_plausibile_ma_imperfetto_escluso`, contro `rank_candidates`
+   diretto) nel commit `a73e041`, corretto in review al checkpoint di Fase 1.
+4. **Un test che restava verde con la logica riordinata nel modo sbagliato.**
+   `test_align_track_genre_ricalcola_energia` (ripristinato dopo la cancellazione
+   di `db_hygiene.py` al Task 8b) asseriva `t.energy != before_energy` con
+   `before_energy` che partiva da `None`: la condizione si riduceva a un
+   controllo di non-nullita'. Il revisore ha rotto `genre_align.py` in tre modi
+   per sondarlo — rimuovere il ricalcolo (rosso, giusto), non scrivere
+   `energy_source` (rosso, giusto), spostare il ricalcolo dell'energia PRIMA
+   della scrittura del nuovo genere (**verde, sbagliato**: l'energia finiva
+   calcolata sul genere vecchio e il test non se ne accorgeva). Corretto
+   seminando l'energia sul genere vecchio fin dall'inizio e asserendo sul
+   valore atteso dal genere nuovo, entrambi derivati da `estimate_energy()`
+   invece di costanti cablate (commit `ac81126` + `bccd6cd`): il test ora
+   protegge l'invariante ("l'energia riflette il genere nuovo"), non il fatto
+   che un valore sia stato scritto.
+5. **Tre affermazioni universali false nei documenti, una introdotta mentre se
+   ne correggevano altre due.** Al Task 13, rileggendo CLAUDE.md e
+   ARCHITECTURE.md contro il codice, sono emerse due affermazioni false:
+   "`AudioFile` vive nel `models.py` del core" (falso: sta in
+   `organize/models.py:51`) e "i provider esterni servono solo Discovery"
+   (falso: Organize ha un client Discogs separato sotto `organize/integrations/`
+   per le proposte di metadati testuali). Correggendole nello stesso giro, il
+   subagente ha pero' **introdotto una terza affermazione universale falsa**:
+   "i router sono solo HTTP, nessuna logica di business" — falsa per
+   `transitions.py` (ranking della miglior transizione), `dj_sets.py` (matching
+   ISRC/artista+titolo) e `sets.py` (una regola per formato di export). La
+   review l'ha rilevata e corretta nominando le tre eccezioni reali invece di
+   tornare a una frase vaga (commit `a39f4d3`). Non e' un episodio isolato: lo
+   stesso schema — un'affermazione comoda da scrivere, universale, falsa per
+   almeno un caso — era gia' comparso due volte nella stessa fase (Task 11: la
+   regola monocromatica del design system aveva perso `rating-diamond.tsx`
+   perche' il grep cercava solo classi Tailwind con valore arbitrario; Task 12:
+   "ogni errore ha `detail.code`" e' falso per i 422 di validazione di FastAPI,
+   che tornano una lista, non l'oggetto `{code,message}`). La correzione giusta
+   in tutti e tre i casi non e' stata aggiustare il numero o il caso mancante,
+   ma **togliere l'affermazione universale e sostituirla con un artefatto
+   verificabile** (una tabella col comando che la genera, un elenco per
+   endpoint letto dallo schema OpenAPI, due forme d'errore con un esempio
+   ciascuna).
+
+### Cosa resta aperto
+
+`docs/ROADMAP.md`, sezione `## Backlog`, porta **16 voci** importate dai finding
+L3 di questa revisione mai promossi a rimozione/fusione, raggruppate per taglia
+della decisione (non per area): **4** rimandate a un ciclo di design proprio
+(duplicazione `fmtDuration`/`fmtDate`, i due client HTTP paralleli, i due store
+di lingua, le due pagine quasi-fotocopia import Spotify/SoundCloud liked); **3**
+che richiedono una decisione di merge (i due `http_errors.py`, le cinque
+macchine a stati di job, l'idioma "carica o 404" ripetuto ~40 volte); **7**
+pulizie one-line (chiave i18n `organize.common.never` scavalcata da un
+hard-code, intestazioni FILES non tradotte, `export class ApiError` senza
+`instanceof`, wrapper `file_tags_for_track` mancante, un bug di locale non
+seguito in `playlists/[id]/page.tsx:588`, lo schema Pydantic `LanguageSetting`
+orfano in `organize/`, il ramo `apply=False` morto di `align_track_genre`); **2**
+di backlog di prodotto (Shazam fase 2, PostgreSQL — bassa priorita'). Dettaglio
+ed evidenza di ciascuna voce sono nella sezione "Segnalazioni (livello 3)" di
+questo stesso log, non duplicati qui.
+
+### In sintesi, per chi ha due minuti
+
+Tutto verde (backend 1888/1888, frontend lint/build/unit test puliti, zero link
+rotti). Il backend ha perso 5 file e ~1200 righe, il frontend e' rimasto quasi
+della stessa taglia (+1 file, -143 righe: la pulizia i18n ha tolto testo, il
+consolidamento ha aggiunto moduli piccoli); 8 endpoint HTTP morti o orfani sono
+spariti (149 -> 141, verificato sullo schema OpenAPI reale, non sul grep);
+nessuna dipendenza toccata, ne' pip ne' npm. La documentazione viva e' passata da
+9 file/4509 righe a 7 file attivi/3173 righe piu' un archivio ordinato — con la
+scoperta piu' rilevante di tutta la revisione dentro API.md: **41 endpoint su
+141 non erano documentati affatto**, oggi lo sono tutti. Restano aperte 16
+decisioni, nessuna urgente, elencate in `docs/ROADMAP.md`. La revisione ha
+sbagliato cinque volte in corsa (un endpoint morto mancato dal grep, quindici
+chiavi i18n invisibili al primo giro, un test cancellato a torto, un test debole
+smascherato solo rompendo il codice apposta, un'affermazione falsa introdotta
+mentre se ne correggevano due) — e le ha corrette tutte prima di chiudere.
