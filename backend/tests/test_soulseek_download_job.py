@@ -154,24 +154,6 @@ def test_fallback_tries_next_user_when_first_fails(patch_job, monkeypatch):
     db.close()
 
 
-def test_manual_download_lascia_il_file_senza_catalogare(patch_job):
-    # Ricerca manuale (track_id None): scarica il file sul disco ma NON lo cataloga
-    # in Cratory. Entra in libreria via Sortory (sposta in LIBRARY_ROOT) +
-    # indicizzazione: niente playlist "Soulseek", niente traccia local_files qui.
-    from sqlalchemy import select
-
-    from app.models import Playlist, Track
-    TestSession, fake = patch_job
-    file = fake.search("", "")[0]  # bob\Da Funk.flac (il file esiste in download_dir)
-    job._run([(None, file)], None)
-    st = job.job_state()
-    assert st["downloaded"] == 1  # download riuscito
-    db = TestSession()
-    assert db.scalars(select(Track).where(Track.platform == "local_files")).all() == []
-    assert db.scalars(select(Playlist).where(Playlist.name == "Soulseek")).all() == []
-    db.close()
-
-
 def test_durata_incoerente_va_in_needs_review(patch_job):
     # Il file scaricato ha durata ~2s ma la traccia ne attende 300: quasi
     # certamente la versione sbagliata → resta in inbox, la Track NON e' posseduta.

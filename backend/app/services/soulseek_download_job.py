@@ -186,14 +186,6 @@ def _attempt_download(db, client, download_dir, track, file: SlskdFile,
     return "downloaded", None, None
 
 
-def _process_manual(client, download_dir, file: SlskdFile) -> str:
-    """Ricerca manuale: scarica il file sul disco (inbox slskd). NON lo cataloga in
-    Cratory: entra in libreria via Sortory (sposta i file in LIBRARY_ROOT) +
-    indicizzazione, come un qualsiasi file posseduto. Niente playlist 'Soulseek'."""
-    path, _ = _download_candidate(client, download_dir, file)
-    return "downloaded" if path else "failed"
-
-
 def _process_item(db, client, download_dir, track,
                   chosen: SlskdFile | None) -> tuple[str, str | None, str | None]:
     expected = track.duration_seconds
@@ -240,36 +232,22 @@ def _run(items: list[tuple[int, SlskdFile | None]], playlist_id: int | None) -> 
         download_dir = runtime_settings.slskd_download_dir()
         _state.update(total=len(items), playlist_id=playlist_id)
         for i, (track_id, chosen) in enumerate(items, start=1):
-            track = None
             reason = None
             path = None
-            if track_id is None:  # ricerca manuale: scarica + cataloga in libreria
-                _state["current_label"] = (
-                    Path(chosen.filename.replace("\\", "/")).name if chosen else None
-                )
-                try:
-                    outcome = _process_manual(client, download_dir, chosen) if chosen else "failed"
-                except SlskdError:
-                    raise  # daemon giu'/disconnesso: le restanti fallirebbero tutte uguali
-                except Exception:  # noqa: BLE001 — un fallimento non ferma il job
-                    logger.exception("Download Soulseek manuale fallito")
-                    outcome = "failed"
-                title = chosen.filename if chosen else None
+            track = get_track(db, track_id)
+            if track is None:
+                outcome = "failed"
             else:
-                track = get_track(db, track_id)
-                if track is None:
+                _state["current_label"] = track_label(track)
+                try:
+                    outcome, reason, path = _process_item(db, client, download_dir, track, chosen)
+                except SlskdError:
+                    raise  # daemon giu'/disconnesso: fail-fast col messaggio in _state.error
+                except Exception:  # noqa: BLE001 — un fallimento non ferma il job
+                    logger.exception("Download Soulseek fallito per track_id=%s", track_id)
                     outcome = "failed"
-                else:
-                    _state["current_label"] = track_label(track)
-                    try:
-                        outcome, reason, path = _process_item(db, client, download_dir, track, chosen)
-                    except SlskdError:
-                        raise  # daemon giu'/disconnesso: fail-fast col messaggio in _state.error
-                    except Exception:  # noqa: BLE001 — un fallimento non ferma il job
-                        logger.exception("Download Soulseek fallito per track_id=%s", track_id)
-                        outcome = "failed"
-                        reason = "error"
-                title = getattr(track, "title", None)
+                    reason = "error"
+            title = getattr(track, "title", None)
             _state[outcome] = _state.get(outcome, 0) + 1
             if track is not None:
                 # Persisti l'esito sulla traccia: la sezione "da sistemare"
