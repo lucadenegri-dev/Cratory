@@ -23,24 +23,26 @@ meant for `curl` and logs. Error codes are named inline below wherever more than
 one thing can go wrong on the same route.
 
 **Jobs and polling.** Anything that can take longer than a request runs as a
-background job: the start endpoint returns the initial job state (`202` in the core
-routers, plain `200` under `/api/organize`), and a paired status endpoint is polled
-until `status` leaves `running`. Each job is single-instance — a second start while
-one is running gets `409` or the state of the running job, never a queue slot. The
-pairs:
+background job: the start endpoint returns the initial job state, and a paired
+status endpoint is polled until `status` leaves `running`. Each job is
+single-instance — a second start while one is running gets `409` or the state of the
+running job, never a queue slot.
+
+**The success code of a start endpoint is per endpoint, not a convention** — some
+return `202`, some `200`. The table below is the authority; do not assume `202`.
 
 | Job | Start | Status |
 | --- | --- | --- |
-| Library scan / index | `POST /api/organize/scan`, `POST /api/library/index` | `GET /api/organize/scan/status`, `GET /api/library/index/status` |
-| Organize apply | `POST /api/organize/apply` | `GET /api/organize/apply/status` |
-| Streaming import/sync | `POST /api/playlists/import`, `/import/liked/selected`, `/{id}/sync`, `/sync-all`, `POST /api/soundcloud/import`, `/import/likes` | `GET /api/playlists/import/status` |
-| Set generation | `POST /api/sets/generate-async` | `GET /api/sets/generate-status` |
-| BPM/key analysis | `POST /api/analysis/start` | `GET /api/analysis/status` |
-| Soulseek / SoundCloud download | `POST /api/downloads/playlist/{id}`, `/track`, `/track/auto`, `/track/soundcloud`, `/retry-pending` | `GET /api/downloads/status` |
-| Mix identification | `POST /api/shazam/identify` | `GET /api/shazam/identify-status` |
-| Provider rescan | `POST /api/organize/issues/provider-rescan` | `GET /api/organize/issues/provider-rescan/status` |
-| Integrity check | `POST /api/organize/issues/integrity-check` | `GET /api/organize/issues/integrity-check/status` |
-| AI genre review | `POST /api/organize/genre-review` | `GET /api/organize/genre-review/status` |
+| Library scan / index | `POST /api/organize/scan` (**200**), `POST /api/library/index` (**202**) | `GET /api/organize/scan/status`, `GET /api/library/index/status` |
+| Organize apply | `POST /api/organize/apply` (**200**) | `GET /api/organize/apply/status` |
+| Streaming import/sync | `POST /api/playlists/import`, `/import/liked/selected`, `/{id}/sync`, `/sync-all`, `POST /api/soundcloud/import`, `/import/likes` (all **202**) | `GET /api/playlists/import/status` |
+| Set generation | `POST /api/sets/generate-async` (**200**) | `GET /api/sets/generate-status` |
+| BPM/key analysis | `POST /api/analysis/start` (**202**) | `GET /api/analysis/status` |
+| Soulseek / SoundCloud download | `POST /api/downloads/playlist/{id}`, `/track`, `/track/auto`, `/track/soundcloud`, `/retry-pending` (all **202**) | `GET /api/downloads/status` |
+| Mix identification | `POST /api/shazam/identify` (**200**) | `GET /api/shazam/identify-status` |
+| Provider rescan | `POST /api/organize/issues/provider-rescan` (**200**) | `GET /api/organize/issues/provider-rescan/status` |
+| Integrity check | `POST /api/organize/issues/integrity-check` (**200**) | `GET /api/organize/issues/integrity-check/status` |
+| AI genre review | `POST /api/organize/genre-review` (**200**) | `GET /api/organize/genre-review/status` |
 
 Jobs also exclude each other across areas where the data would tear: a scan
 refuses to start while an Organize apply is running (`409 apply_running`) and vice
@@ -105,7 +107,8 @@ POST   /api/playlists/{playlist_id}/tracks/remove
 
 ### Import and sync from streaming
 
-All five entry points feed one shared job slot; a second start gets
+The four entry points here, plus the two SoundCloud ones, feed **one shared job
+slot** — six routes, one job. A second start gets
 `409 streaming_import_already_running`. Progress and the final report come from
 `GET /api/playlists/import/status` (`status`, `kind`, `phase` = `fetching` |
 `importing`, `processed`/`total`, `current_label`, `result`, `sync_all`, `error`,
@@ -128,9 +131,21 @@ when `playlist_id` is the literal string `"liked"`.
 its source. **Spotify prunes, SoundCloud does not**: Spotify adds new tracks and
 unlinks removed ones (the tracks stay in the library), while SoundCloud is always
 additive so a taken-down track never unlinks anything. Memberships Cratory created
-itself (`added_by='cratory'`) are never pruned on either platform. `409` for a
-SoundCloud "likes" playlist or one with no stored `url` — likes only grow through
-the selective flow.
+itself (`added_by='cratory'`) are never pruned on either platform.
+
+**Only Spotify and SoundCloud playlists can be synced at all** — a manual, Shazam,
+Discovery or Top playlist has no source to realign with. Four ways this call is
+refused:
+
+- `404 playlist_not_found` — no such playlist.
+- `409 playlist_platform_not_syncable` — the playlist is not from Spotify or
+  SoundCloud.
+- `409 playlist_not_syncable` — a Spotify playlist with no
+  `platform_playlist_id` (liked playlists are exempt from this check).
+- `409 soundcloud_playlist_not_syncable` — a SoundCloud "likes" playlist, or one
+  with no stored `url`. Likes only grow through the selective flow.
+
+The same rule decides which playlists `sync-all` picks up.
 
 `POST /api/playlists/sync-all` realigns every imported Spotify and SoundCloud
 playlist in one job; liked playlists are excluded on both platforms. A playlist
@@ -631,8 +646,8 @@ no URL is taken from the client and followed by the backend, so there is no SSRF
 surface and no host allowlist to keep correct. A malformed id is
 `400 discovery_bad_id`. Each row carries position, title, duration and — Bandcamp
 only — `stream_url`. `videos` (YouTube videos Discogs associates with the release)
-is populated for Discogs only. Discogs release payloads are cached in memory for 10
-minutes.
+is populated for Discogs only. **This endpoint is not cached**: reopening the same
+release hits the provider again.
 
 `GET /api/discovery/preview?artist=&title=&discogs_id=&level=` resolves an
 **ephemeral** audio preview for a lead that has no `stream_url` of its own, so it
@@ -642,6 +657,11 @@ source_url, matched_title}`: iTunes Search is primary (30s clip), with the YouTu
 video Discogs associates with the release as fallback. Provider errors resolve to
 `kind: "none"` with `200` — a missing preview is not an error. Nothing is persisted.
 Bandcamp genre-seed leads skip this endpoint entirely.
+
+The Discogs release payloads fetched by the fallback **are** cached in memory for 10
+minutes, so previewing several tracks off one card costs a single provider call.
+That cache is local to this endpoint and does not serve
+`GET /api/discovery/release`.
 
 ### Acquiring
 
@@ -1054,10 +1074,37 @@ the body are touched, and an empty string clears a tag. Editable fields are
 track — the frontend calls it against the track's `primary_file_id`, not a track-side
 PATCH. Returns the updated file row.
 
-One side effect worth knowing: when the edited field is `genre` and the file is
-linked to a track, `tracks.genre` is kept as a mirror of the new tag and the track's
-`energy` is recomputed from it. `album`/`label`/`year` and `artist`/`title` never
-touch the `Track` row this way.
+**This is the one Organize write that does not wait for an apply.** It writes the
+tags to disk immediately, and journals itself as a synthetic `Plan` +
+`UndoJournal` RETAG — so a manual edit shows up in `GET /api/organize/history` and
+is undone through `POST /api/organize/history/{plan_id}/undo` like any other run.
+Fields already equal to the stored value are ignored, and an edit where nothing
+differs is a no-op that creates no run.
+
+**The DB is aligned to what actually landed on disk, not to what you sent.** After
+writing, the file is re-read: some formats silently drop some fields (`comment` on
+mp3 is the standard case), and the row keeps the on-disk value for those. If nothing
+at all landed, the run is deleted rather than left in history as a misleading no-op
+undo.
+
+Open issues on the fields just edited are auto-accepted, with their suggestion
+rewritten to `source: "manual"` — a hand correction outranks any provider or AI
+proposal.
+
+Side effect on the linked `Track`: when `genre` is among the fields that actually
+landed and the file is linked, `tracks.genre` mirrors the new tag and the track's
+`energy` is recomputed. **Clearing the genre does not clear the mirror** — the rule
+never overwrites with an empty value, so the last known genre survives on the
+`Track` row. `album`/`label`/`year` and `artist`/`title` never touch `Track` this
+way.
+
+Errors: `404 file_not_found`; `400 field_not_editable` (a field outside the list
+above, with `params.fields`); `400 value_invalid` (`year`/`track_no` not a
+non-negative number, with `params.field`/`params.reason`); `409 file_not_writable`
+(the file is missing, has a scan error, or its tags cannot be read);
+`500 tag_write_failed` (the write failed — the run is rolled back);
+`500 tag_verify_failed` (the disk changed but could not be re-read, so the DB is
+left unaligned until the next scan reconciles it).
 
 ### Issues
 
@@ -1081,7 +1128,8 @@ An issue is one detected problem on one file, with a `type`, a `field`, a
 `severity`, and possibly a `suggested_fix_json` (`{field, action, to, source?,
 confidence?}`). Its `status` is `open`, `accepted` or `dismissed` — **only
 `accepted` issues become plan operations**, so accepting is the act that stages a
-change; nothing is written to disk until the apply.
+change, and nothing on this path reaches the disk until the apply. (The one write
+that bypasses the plan entirely is the manual tag edit above.)
 
 `GET /api/organize/issues` filters on `severity`, `type`, `status`, `location`, `q`
 (path/artist/title) and `only_new` (files seen in exactly one scan). Each row
