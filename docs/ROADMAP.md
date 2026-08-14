@@ -86,10 +86,19 @@ biggest first — not by area. Evidence and file references for each item are in
 
 ### Deferred to their own design cycle
 
-These three showed up during the review as real duplication, but merging any of them
+These four showed up during the review as real duplication, but merging any of them
 means picking a winning behavior for an entire class of call sites — not a mechanical
 cleanup, and each was explicitly left alone this time.
 
+- **`fmtDuration`/`fmtDate` duplication.** `frontend/lib/api/format.ts:9` and `:17`
+  vs `frontend/lib/organize/api.ts:543` and `:550` are two live implementations of
+  each, with different behavior — not just different code. `fmtDuration`: the
+  Organize copy rounds the seconds before dividing; the core one doesn't, so it
+  spits out decimal seconds on a float. `fmtDate`: the Organize copy is
+  language-aware (locale from `getCurrentLanguage()`, shows hours and minutes); the
+  core one wasn't. Task 8c fixed the core copy's *locale bug* (it ignored the
+  active language entirely) but explicitly left this structural duplication alone.
+  Merging means picking one behavior — rounding, and date format — per call site.
 - **Two parallel HTTP clients.** The frontend has `frontend/lib/api/client.ts`
   (typed `ApiError` with `status`/`code`, `AbortSignal` support, array query params,
   `apiUpload`) and `frontend/lib/organize/api.ts`'s own `handle`/`apiGet`/`apiSend`
