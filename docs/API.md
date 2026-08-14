@@ -16,11 +16,36 @@ what a call does to the data, and the rules that decide whether a write lands.
 
 ## Conventions
 
-**Errors.** Every deliberate error is `HTTPException` with a structured `detail`:
-`{code, message, params?}`. `code` is a stable identifier (`playlist_not_found`,
-`slskd_not_configured`, …) that the frontend translates; `message` is English and
-meant for `curl` and logs. Error codes are named inline below wherever more than
-one thing can go wrong on the same route.
+**Errors come in two shapes, and a client has to handle both.**
+
+*Errors a handler raises deliberately* go through `api_error` and carry a structured
+object:
+
+```json
+{"detail": {"code": "playlist_not_found", "message": "Playlist not found",
+            "params": {"…": "optional"}}}
+```
+
+`code` is a stable identifier the frontend translates; `message` is English, for
+`curl` and logs. These are the errors named inline throughout this document.
+
+*Request validation failures* never reach a handler, so they never get that shape.
+The backend registers no `RequestValidationError` handler, so Pydantic and `Query`
+rejections keep FastAPI's default form — a **list**, with no `code` at all:
+
+```json
+{"detail": [{"type": "extra_forbidden", "loc": ["body", "energy"],
+             "msg": "Extra inputs are not permitted", "input": 50}]}
+```
+
+Every `422` this document attributes to a schema or a query-parameter pattern is of
+the second kind: `energy` rejected by `extra="forbid"`, a `language` outside
+`it`/`en`, a `sort` outside its whitelist, a `rating` outside `1`-`3`, the move
+request's "exactly one of `direction`/`to`". The `422`s raised in handler code —
+`analysis_force_required`, `analysis_apply_empty`, `invalid_camelot_key`,
+`order_mismatch`, `tracks_not_found`, `invalid_setting`, and the rest — are of the
+first. **Do not parse `detail.code` unconditionally**: check whether `detail` is an
+object or a list first.
 
 **Jobs and polling.** Anything that can take longer than a request runs as a
 background job: the start endpoint returns the initial job state, and a paired
@@ -355,8 +380,7 @@ summary (`found`, `inserted`, `updated`, `unchanged`, `moved`, `missing`, `error
 plus `result.linking` with the linking counters (`scanned`, `matched`, `created`,
 `relinked`, `unchanged`, `duplicates`, `failed`, `lost`, `archived`,
 `orphans_removed`, `energy_computed`, the `archive_*` counterparts and `errors[]`)
-and
-`result.analysis` with the issue/duplicate recount. **`result.linking` is `null`**
+and `result.analysis` with the issue/duplicate recount. **`result.linking` is `null`**
 when the run did not walk the library root: a scan restricted to the inbox stops
 after the walk and deliberately leaves the tracks alone.
 
@@ -717,8 +741,11 @@ touch slskd and has its own preconditions (see below). Available regardless:
 `GET /status` (with `available: false`), `GET /pending`,
 `DELETE /pending/{track_id}`, `GET /auto-link` and the review endpoints.
 
-**One download job at a time**, shared by all five start routes:
-`409 download_already_running`. An error on one track does not stop the others.
+**One download job at a time**, shared by the five routes that start one —
+`playlist/{id}`, `track`, `track/auto`, `track/soundcloud`, `retry-pending` (a
+different set from the slskd-gated five above, which includes `candidates` and
+excludes `track/soundcloud`). A second start is `409 download_already_running`. An
+error on one track does not stop the others.
 `GET /api/downloads/status` returns `available` plus the job state (`status`,
 `processed`, `total`, `downloaded`, `needs_review`, `not_found`, `failed`,
 `playlist_id`, `items[]`, `current_label`, `error`, timestamps).
@@ -831,8 +858,14 @@ playlist from a saved set; tracks without a `spotify_id` are skipped. Response
 `{playlist_url, tracks_added, tracks_skipped}`. `404 set_not_found`,
 `422 set_no_spotify_tracks` when none of the tracks are on Spotify.
 
-Spotify errors map consistently across every Spotify-backed route:
-`409 spotify_not_configured`, `401 spotify_not_connected`, `502 spotify_error`.
+Spotify failures map to `409 spotify_not_configured`, `401 spotify_not_connected`
+and `502 spotify_error` on the routes that raise at all — the playlist import and
+sync routes, and `create-playlist`. Two do not raise:
+
+- `GET /api/spotify/callback` always redirects, never returning an error status.
+- `GET /api/spotify/status` and `GET /api/services/status` swallow the failure into
+  `user_connected: false` (`connected: false` in the aggregate) rather than raising,
+  so a UI polling them does not have to treat a dead session as a hard error.
 
 ## SoundCloud
 
