@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.organize.models import AudioFile, Issue, utcnow
-from app.organize.services.genre_norm import normalize_genre
+from app.services.genre_norm import normalize_genre
 
 GENRE_REVIEW_TYPE = "genre_review"
 # Issue "da inspector" che il job può riempire invece di crearne una nuova.

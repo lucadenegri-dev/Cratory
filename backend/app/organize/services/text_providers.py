@@ -5,7 +5,7 @@ I provider sono iniettabili → test senza rete; in produzione li costruisce il 
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.organize.services.genre_norm import normalize_genre
+from app.services.genre_norm import normalize_genre
 from app.organize.services.match_distance import grade_confidence
 
 

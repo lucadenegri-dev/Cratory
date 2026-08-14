@@ -12,6 +12,8 @@ from app.services.genre_norm import normalize_genre
     ("dnb", "Drum & Bass"),
     ("Deep House", "Deep House"),
     ("EDM", "EDM"),
+    ("  IDM ", "IDM"),  # alias via whitespace: portato da tests/organize/test_genre_norm.py
+                        # (Task 8d, review) prima di cancellarlo come doppione
     ("", None),
     ("   ", None),
     (None, None),
