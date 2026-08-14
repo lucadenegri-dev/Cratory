@@ -40,13 +40,15 @@ Read in this order:
 2. `docs/ARCHITECTURE.md` - principles, pipeline, data and integrations.
 3. `docs/API.md` - current endpoints.
 4. `docs/ROADMAP.md` - status, naming, backlog and next steps (state source of truth).
-5. `PROGRESS.md` - chronological diary to resume work.
+5. `PROGRESS.md` - current state summary; full chronological diary in
+   `docs/archive/PROGRESS-diario-completo.md`.
 6. `docs/DESIGN.md` - product context and the "editorial archive" design system.
 7. `docs/DEPENDENCIES.md` - dependencies and external services reference.
 
-`docs/organize/` keeps Sortory's own documentation from when it was a separate
-app: historical reference, not operational. The fusion that absorbed it is
-specified in `docs/superpowers/specs/2026-08-11-fusione-sortory-cratory-design.md`.
+Sortory's own documentation from when it was a separate app is historical reference,
+not operational, and lives in `docs/archive/` (see `docs/archive/README.md`). The
+fusion that absorbed it into Cratory's `/organize` section is specified in
+`docs/archive/superpowers/specs/2026-08-11-fusione-sortory-cratory-design.md`.
 
 ## Non-negotiable rules
 

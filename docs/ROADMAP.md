@@ -108,7 +108,7 @@ where the mirror could silently drift back out of sync after the initial backfil
 (`repositories._EFFECTIVE_TAGS`) stays the sole source of truth; the mirror is a
 convenience for code that still reads `Track.genre` directly.
 
-Full chronological history lives in [PROGRESS.md](../PROGRESS.md).
+Full chronological history lives in [docs/archive/PROGRESS-diario-completo.md](archive/PROGRESS-diario-completo.md).
 
 ## Product direction
 
@@ -156,7 +156,7 @@ source").
   window to fetch from it; `novelty`/`demand`/`recency` left the score (inside one
   window `want` is roughly constant, so they could not discriminate leads anyway) and
   taste ranks inside the window unconditionally, not as a mode. Cost: 4-5 Discogs
-  requests per dig. See `docs/API.md` (Discovery) and PROGRESS.md for detail.
+  requests per dig. See `docs/API.md` (Discovery) and `docs/archive/PROGRESS-diario-completo.md` for detail.
 - **Dig second source: Bandcamp** — DONE (2026-07-23). Added behind a `DigSource`
   protocol (`Seed`/`Pile`/`probe`/`fetch`/`to_lead`,
   `backend/app/services/dig_sources/`): the engine now reasons in items and each source
@@ -179,8 +179,8 @@ source").
   `test_window_stays_within_two_pages_of_the_retired_page_formula`. Bandcamp's
   endpoints are internal and undocumented: if they change, only the Bandcamp source
   breaks (`DigSource` isolates it), diagnosed with the `@pytest.mark.network` contract
-  test. See `docs/superpowers/specs/2026-07-22-dig-bandcamp-design.md`, `docs/API.md`,
-  `docs/ARCHITECTURE.md`, `docs/DEPENDENCIES.md` and PROGRESS.md for detail.
+  test. See `docs/archive/superpowers/specs/2026-07-22-dig-bandcamp-design.md`, `docs/API.md`,
+  `docs/ARCHITECTURE.md`, `docs/DEPENDENCIES.md` and `docs/archive/PROGRESS-diario-completo.md` for detail.
 - **Set Builder: two-phase generator + AI curation** — DONE (2026-07-19), both phases.
   Phase 1: `generate_set()` plans a skeleton first (opening/peak/closing/reset anchors elected
   per strategy, a bomb reserve — top 15% by impact score — freed only in the peak window, a
@@ -197,12 +197,12 @@ source").
   never an error. `use_ai` semantics: `true` = AI curation on, `false` = purely deterministic,
   absent = auto. `generated_by` is now `algorithmic` | `algorithmic+ai_curation` (historical
   sets may read `ai`). Fully deterministic sequencing throughout, same external API. See
-  `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`,
-  `docs/ARCHITECTURE.md` and PROGRESS.md for detail.
+  `docs/archive/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`,
+  `docs/ARCHITECTURE.md` and `docs/archive/PROGRESS-diario-completo.md` for detail.
 - **Wishlist redesign** — DONE (2026-07-19). `/downloads` → `/wishlist`: every non-owned
   track with its download outcome, playlist provenance, buy links (Bandcamp/Beatport/
   Discogs) and reversible archiving via `PATCH /api/tracks/{id}` (`archived`). See
-  `docs/API.md` and PROGRESS.md for detail.
+  `docs/API.md` and `docs/archive/PROGRESS-diario-completo.md` for detail.
 - **Dig refactor** — DONE (2026-07-19). Navigazione: la voce Discovery è rinominata "Dig"
   (route `/discovery` invariata) e la Wishlist passa nel gruppo "Discover" (Dig · Shazam ·
   Wishlist). La ricerca Soulseek libera è in testa alla pagina Wishlist. Rimosso Juno
@@ -221,7 +221,7 @@ source").
 - **PostgreSQL.** Low priority: SQLite is enough for personal use (only needed for an
   eventual multi-user setup).
 
-### Audit backlog — **CLEARED 2026-07-12** (historical; per-ID detail in [docs/AUDIT-2026-07-05.md](AUDIT-2026-07-05.md))
+### Audit backlog — **CLEARED 2026-07-12** (historical; per-ID detail in [docs/archive/AUDIT-2026-07-05.md](archive/AUDIT-2026-07-05.md))
 
 **The 2026-07-05 audit backlog is done.** Every actionable item was either implemented (all
 verified: TDD on the backend, live browser checks on the UI), resolved by decision (A7

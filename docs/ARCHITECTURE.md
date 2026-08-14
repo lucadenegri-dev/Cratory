@@ -410,7 +410,7 @@ Responsibilities:
   still read `ai`). The former "AI orders the tracklist" path (`generate_ai_set()`,
   `services/ai_agent.py`, `services/validation.py`'s `validate_ai_set()`, schemas
   `AITrackChoice`/`AISetResponse`) has been retired entirely — see
-  `docs/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`;
+  `docs/archive/superpowers/specs/2026-07-19-set-builder-two-phase-ai-curation-design.md`;
 - role assignment across the set arc;
 - candidate filtering feeding the AI curation stage (pool cap 200, per-call cap 60);
 - gap analysis;

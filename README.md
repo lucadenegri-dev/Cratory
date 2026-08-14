@@ -229,7 +229,7 @@ cd frontend && npm run lint && npm run build
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Status, naming, backlog, next steps — the source of truth for project state |
 | [docs/DESIGN.md](docs/DESIGN.md) | Product context + design system ("editorial archive") |
 | [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | All runtime/build dependencies and external services |
-| [PROGRESS.md](PROGRESS.md) | Chronological work diary |
+| [PROGRESS.md](PROGRESS.md) | Current state summary (diary archived in [docs/archive/](docs/archive/PROGRESS-diario-completo.md)) |
 | [CLAUDE.md](CLAUDE.md) | Guide for the AI collaborator |
 
 ## Status

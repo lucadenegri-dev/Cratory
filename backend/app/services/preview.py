@@ -2,7 +2,7 @@
 
 Catena deterministica: iTunes (clip 30s pulita) -> video YouTube della release
 Discogs -> nessuna. Le dipendenze di rete sono INIETTATE come callable, così il
-service è testabile senza rete. Vedi docs/superpowers/specs/2026-07-16-discovery-preview-audio-design.md
+service è testabile senza rete. Vedi docs/archive/superpowers/specs/2026-07-16-discovery-preview-audio-design.md
 """
 
 import logging

@@ -4,7 +4,7 @@ slskd non consente di cambiare le share via API a runtime (solo `listenPort`/
 `listenIpAddress`, ed effimeri): l'unica via persistente è lo YAML. Cratory lo
 edita in round-trip (preserva commenti/ordine/permessi del file con credenziali),
 con backup, e poi forza un rescan sul demone. Vedi
-`docs/superpowers/specs/2026-07-23-settings-editor-and-library-sharing-design.md`.
+`docs/archive/superpowers/specs/2026-07-23-settings-editor-and-library-sharing-design.md`.
 """
 from __future__ import annotations
 
