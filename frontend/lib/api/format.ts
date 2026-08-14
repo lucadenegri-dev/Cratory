@@ -1,4 +1,14 @@
 import type { Track } from "./types";
+import { getCurrentLanguage } from "@/lib/i18n/runtime";
+
+// Locale per le date: "it" -> it-IT, "en" -> en-GB (non en-US). Scelta
+// deliberata, non l'inglese "neutro": l'utenza e' italiana anche quando
+// legge la UI in inglese, quindi l'ordine giorno/mese/anno resta quello
+// atteso (en-US userebbe mese/giorno/anno). Stessa mappatura gia' in uso
+// per l'omonimo `fmtDate` di lib/organize/api.ts.
+function dateLocale(): string {
+  return getCurrentLanguage() === "it" ? "it-IT" : "en-GB";
+}
 
 export function trackLabel(t: Track): string {
   const artist = t.artist?.trim() || "Artista sconosciuto";
@@ -22,7 +32,7 @@ export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
+  return d.toLocaleDateString(dateLocale(), { day: "2-digit", month: "short", year: "numeric" });
 }
 
 // Variante compatta per le tabelle tracce (vincolo: niente scroll orizzontale).
@@ -30,5 +40,5 @@ export function fmtDateShort(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "2-digit" });
+  return d.toLocaleDateString(dateLocale(), { day: "2-digit", month: "2-digit", year: "2-digit" });
 }
