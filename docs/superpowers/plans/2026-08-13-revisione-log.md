@@ -851,3 +851,130 @@ segnalazione, unificare e' una decisione di prodotto):
   lista L3 sopra); `clean_user_data.py`/`merge_duplicate_tracks.py` confermati intoccati.
 - ~100 colonne SQLAlchemy/campi Pydantic mai letti dal backend — schema DB intoccabile
   per definizione nel piano, solo segnalazione.
+
+### Checkpoint Fase 2 (Task 8)
+
+**Rimosso** — 23 findings L1 (Task 7), doppia conferma su ciascuno (grep ancorato con
+`/usr/bin/grep`, non il wrapper della shell): **49 chiavi i18n morte** e **7
+export/re-export morti**, rimossi in coppia da `en.ts`/`it.ts` dove pertinente (mai a
+senso unico: `it.ts` si tipizza su `typeof en`). Effetto sul test guardiano
+`tests/i18n-organize.test.ts`: le foglie del dizionario passano da **1411 a 1362** per
+locale (verificato ora, simmetrico EN/IT), quelle del solo namespace `organize` da
+**312 a 288** — ampio margine sopra la soglia `> 100` che il test impone. (Nota: il
+report del Task 7 aveva scritto 1366 foglie finali; il numero corretto, ricontato ora
+sui file effettivi, e' 1362 — differenza di 4, nessun impatto sulle rimozioni ne' sui
+test, solo un refuso nel report.)
+
+Nessun file orfano e nessuna dipendenza npm morta: **zero** in entrambi i casi (`npx
+knip`: 0 file inutilizzati, 0 dipendenze inutilizzate; `npx depcheck` segnalava due
+falsi positivi — `@tailwindcss/postcss` e `tailwindcss`, entrambi usati nei config —
+smentiti anche da knip). E' un risultato reale, non un buco della ricerca: vale la pena
+dirlo esplicitamente perche' un frontend che ha appena assorbito Sortory (fusione F1-F6)
+avrebbe potuto facilmente portarsi dietro pacchi di file morti, e non e' cosi'.
+
+**Consolidato** — 2 delle 2 duplicazioni L2 fuse (Task 8), nessuna richiedeva
+retrocessione:
+
+1. `fmtSize(bytes)`, tre copie byte-identiche (`auto-link-modal.tsx`,
+   `download-review-modal.tsx`, `link-local-file-modal.tsx`) → spostata in
+   `lib/api/format.ts`, accanto a `fmtDuration`/`fmtDate`/`fmtDateShort`. Nessun test
+   preesistente asseriva l'output (ne' "MB" ne' il ramo byte falsy): **2 test** di
+   caratterizzazione scritti in `tests/format.test.ts` (valori arrotondati a una
+   cifra decimale, incluso un valore non tondo; `0`/`null` → stringa vuota) e
+   verificati verdi PRIMA di toccare i tre siti.
+2. `sourceLabel(t: Dictionary)`, due copie identiche (`auto-link-modal.tsx`,
+   `link-local-file-modal.tsx`) → **non** in `format.ts` (prende un `Dictionary`, e'
+   una mappa i18n, non un formattatore): nuovo modulo `lib/track-source.ts`, stesso
+   posto di `lib/wishlist-status.ts` (precedente diretto nel repo per un piccolo
+   helper di dominio label-mapping). **2 test** in `tests/track-source.test.ts`, uno
+   per dizionario (EN e IT), verificati verdi prima della fusione. Attenzione alla
+   trappola di grep gia' segnalata dal Task 6: `t.discovery.sourceLabel`
+   (`components/discovery-dig-bar.tsx:88`) e' una chiave i18n omonima e non
+   c'entra — non toccata.
+
+Totale **4 test di caratterizzazione**, tutti scritti e verificati verdi prima del
+rispettivo merge. Effetto sui test: **173 → 177**. Nessuna retrocessione a L3: entrambi
+i finding erano davvero meccanici come previsto dal log (corpi byte-identici, stessa
+firma, stessi due chiamanti). Nella stessa passata, corretta anche la riga vuota persa
+nella review del Task 7 in `lib/organize/api.ts:511` (separatore di sezione
+`SETTINGS`/`FINGERPRINT`, coerente col resto del file).
+
+**Segnalato** — 10 finding L3 frontend (Task 6), organizzati per tipo di decisione:
+
+*a) Chiavi/simboli in attesa di un si'/no sulla rimozione* (morti per grep statico, ma
+con una ragione per esitare):
+- Namespace `errors`, 8 codici — raggiunti solo dinamicamente
+  (`DICTIONARIES[lang].errors[code]`), quindi invisibili a qualunque controllo
+  statico; **qui l'evidenza e' piu' forte del solito "zero grep"**: incrociati col
+  backend, hanno 0 emettitori possibili, non solo 0 hit oggi. Tre gruppi: 2 chiavi il
+  cui unico emettitore (`POST /api/sets/generate`) e' stato rimosso da questa stessa
+  revisione (Task 5b); 5 chiavi il cui emettitore (`app/organize/routers/sources.py`)
+  non esiste piu' nel codice, cancellato in `5336c6f`; 1 chiave il cui emettitore e'
+  stato rimosso in `bc89328`. A favore della rimozione: zero possibilita' di
+  riemissione senza riscrivere il backend. Contro: il catalogo `errors` e' anche
+  documentazione della superficie API, e la regola del piano manda le famiglie
+  indicizzate dinamicamente a L3 per costruzione.
+- `export class ApiError` (`lib/api/client.ts`) — 0 `instanceof` nel frontend, ma e'
+  la superficie d'errore pubblica del client (porta `status`/`code`), ri-esportata dal
+  barrel `lib/api.ts`. Depubblicarla e' una decisione sull'API interna, non pulizia.
+
+*b) Il problema inverso: buchi i18n, stringa hard-coded dove dovrebbe esserci una
+chiave* (qui la chiave morta e' il sintomo, non il difetto):
+- `organize.nav.themePaper`/`themeDark` — il buco esiste davvero:
+  `theme-toggle.tsx:36` rende ancora `"Paper"`/`"Dark"` hard-coded in inglese. Ma le
+  due chiavi organize-scoped non sono la soluzione (il componente unificato legge il
+  `nav` di primo livello, che non le ha): la decisione e' aggiungerle li' o accettare
+  l'hard-code e cancellare i residui. **Pende dal lato "rimuovere"**, e' l'ultima coda
+  della shell Organize pre-fusione.
+- `organize.common.never` — scavalcata da un hard-code equivalente
+  (`lang === "it" ? "mai" : "never"` in `lib/organize/api.ts:552`): usare la chiave in
+  `fmtDate` o cancellarla.
+- Intestazioni ordinabili di `components/organize/files-table.tsx:78-83` — inglese
+  hard-coded (`"Path"`, `"Artist"`, ...) mentre il resto della pagina e' tradotto; non
+  e' collegata alle vecchie chiavi `sortPath...` gia' rimosse come L1 (quelle erano
+  etichette di un `<Select>` che non c'e' piu', forma diversa). Servirebbero chiavi
+  nuove, non un ripristino.
+- `lib/api/format.ts` — due bug i18n distinti, non codice morto: `fmtDate` cabla
+  `it-IT` a prescindere dalla lingua attiva (~10+ call site), e `trackLabel()` ricade
+  su `"Artista sconosciuto"`/`"Senza titolo"` sempre in italiano (~14 call site in 7
+  file). Il fix non e' meccanico: `format.ts` non puo' importare il dizionario
+  (`lib/i18n/runtime.ts` vieta l'import inverso da `lib/api`).
+
+*c) Duplicazione strutturale core <-> `organize/`* (fondere e' una decisione di
+design, non un merge meccanico — stesso principio gia' visto in Fase 1 per
+`genre_norm.py`/`native_picker.py`):
+- `lib/organize/api.ts` (`handle`/`apiGet`/`apiSend`) vs `lib/api/client.ts` — due
+  client HTTP paralleli con lo stesso scheletro (stesso commento sorgente, stessa
+  costruzione della query string), ma non sovrapponibili: solo la versione core ha
+  `ApiError` tipizzato, `AbortSignal`, parametri array, `apiUpload`.
+- `fmtDuration`/`fmtDate` — omonimi **con comportamento diverso**, entrambi vivi, tra
+  `lib/api/format.ts` e `lib/organize/api.ts`: `fmtDuration` organize arrotonda prima
+  di dividere, quella core no sui float; `fmtDate` organize e' consapevole della
+  lingua e mostra ora/minuti, quella core no (e' anche il bug i18n del gruppo b).
+- `app/playlists/import-spotify/liked/page.tsx` vs
+  `app/playlists/import-soundcloud/likes/page.tsx` — quasi fotocopie (il diff si
+  riduce a ~15 righe normalizzando i nomi piattaforma), ma **senza copertura**: non
+  in `e2e/smoke.spec.ts`, nessun test unitario. Estrarre un componente condiviso
+  parametrizzato su due modelli dati diversi e' un refactor a occhi chiusi, non
+  incluso in questa fase.
+- Endpoint backend rimasti senza chiamante frontend **a causa** delle rimozioni L1 di
+  questa fase (`GET /api/organize/scan/status`, `GET /api/organize/fingerprint/status`
+  nuovi; `GET|PUT /api/organize/settings/language`,
+  `GET /api/organize/picker/availability` + `POST /api/organize/picker/pick` gia'
+  segnalati in Fase 1 come duplicazione core<->organize) — nessuna azione qui, il
+  piano vieta L1/L2 dentro `app/organize/`: da valutare insieme alla duplicazione di
+  Fase 1, non uno alla volta.
+
+**Riportato dalla Fase 1, ancora in attesa di decisione** (codice morto di seconda
+generazione emerso dalla review del Task 5b, mai autorizzato in quella cascata):
+- `app/services/db_hygiene.py`: `dedupe_by_audio_hash`, `purge_lead_residue`,
+  `realign_owned_from_disk`, `align_owned_genre_from_file` — zero chiamanti di
+  produzione da quando gli script CLI che li invocavano sono stati rimossi (Task 5b);
+  restano coperti da `tests/test_db_hygiene.py`, che non se ne accorge perche' chiama
+  le funzioni direttamente.
+- `app/services/soulseek_download_job.py:246` — il ramo `if track_id is None:` dentro
+  `_run()` e' irraggiungibile in produzione dopo la rimozione di `start_manual_job()`
+  (Task 5b), ma viaggia insieme a un test vivo e verde
+  (`test_manual_download_lascia_il_file_senza_catalogare`,
+  `tests/test_soulseek_download_job.py:157`) che lo chiama direttamente: non e'
+  orfano di copertura, solo di chiamante di produzione.
