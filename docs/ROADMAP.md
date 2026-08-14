@@ -90,8 +90,8 @@ These four showed up during the review as real duplication, but merging any of t
 means picking a winning behavior for an entire class of call sites — not a mechanical
 cleanup, and each was explicitly left alone this time.
 
-- **`fmtDuration`/`fmtDate` duplication.** `frontend/lib/api/format.ts:9` and `:17`
-  vs `frontend/lib/organize/api.ts:543` and `:550` are two live implementations of
+- **`fmtDuration`/`fmtDate` duplication.** `frontend/lib/api/format.ts:25` and `:32`
+  vs `frontend/lib/organize/api.ts:526` and `:534` are two live implementations of
   each, with different behavior — not just different code. `fmtDuration`: the
   Organize copy rounds the seconds before dividing; the core one doesn't, so it
   spits out decimal seconds on a float. `fmtDate`: the Organize copy is
@@ -151,7 +151,7 @@ cleanup, and each was explicitly left alone this time.
 
 ### One-line cleanups
 
-- `organize.common.never` (i18n key) is dead — `frontend/lib/organize/api.ts:552`
+- `organize.common.never` (i18n key) is dead — `frontend/lib/organize/api.ts:536`
   already hardcodes the same two values (`lang === "it" ? "mai" : "never"`). Wire
   the key into that call site, or delete it.
 - `frontend/components/organize/files-table.tsx:78-83` — the FILES table's
