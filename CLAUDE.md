@@ -39,7 +39,7 @@ Read in this order:
 1. `README.md` - overview, setup and workflow (showcase, in English).
 2. `docs/ARCHITECTURE.md` - principles, pipeline, data and integrations.
 3. `docs/API.md` - current endpoints.
-4. `docs/ROADMAP.md` - status, naming, backlog and next steps (state source of truth).
+4. `docs/ROADMAP.md` - current state per area and the real open backlog (state source of truth).
 5. `PROGRESS.md` - current state summary; full chronological diary in
    `docs/archive/PROGRESS-diario-completo.md`.
 6. `docs/DESIGN.md` - product context and the "editorial archive" design system.
@@ -90,9 +90,11 @@ Backend layers:
 
 ```text
 backend/app/
-  routers/       HTTP only: playlists, tracks, transitions, sets, spotify,
-                 rekordbox, ai, discovery, services, labels, dj_sets,
-                 downloads, files, pipeline
+  routers/       HTTP only, no business logic: tracks, playlists, sets,
+                 transitions, labels, analysis, rekordbox, discovery,
+                 dj_sets (=/api/shazam), downloads, files, slskd,
+                 soundcloud, spotify, ai, pipeline, services, settings —
+                 full list and grouping in docs/ARCHITECTURE.md
   services/      deterministic logic and orchestration
   repositories.py
   models.py
@@ -101,18 +103,30 @@ backend/app/
   serializers.py
   integrations/
   core/
+  tools/         maintenance scripts: clean_user_data, merge_duplicate_tracks
   organize/      the ex-Sortory section, under its own namespace:
-                 models.py (Issue, DupGroup, Plan, PlanOp, UndoJournal),
-                 routers/ (scan, issues, duplicates, plan, apply, history, …),
-                 services/ (scanner, planner, apply, dedup, undo, inspector, …),
-                 integrations/ (tagio, fsops, acoustid, musicbrainz, …).
-                 `AudioFile` lives in the core `models.py`: the library reads it
-                 too. Its HTTP surface is entirely under `/api/organize/*`.
+                 models.py (AudioFile, Issue, DupGroup, DupMember, Plan,
+                 PlanOp, UndoJournal, Settings, ScanRoot),
+                 routers/ (scan, analyze, issues, duplicates, plan, apply,
+                 history, …), services/ (scanner, planner, apply, dedup,
+                 undo, inspector, …), integrations/ (tagio, fsops,
+                 acoustid, musicbrainz, …).
+                 `AudioFile` lives here, not in the core `models.py` — the
+                 core `Track` reaches it through `primary_file_id` and the
+                 effective-tag COALESCE in `repositories.py`, and the one
+                 relationship that crosses the boundary (`AudioFile.track`)
+                 is declared on the Organize side with a backref, so
+                 `app/models.py` stays independent. Its HTTP surface is
+                 entirely under `/api/organize/*`.
 ```
 
-No enrichment chain: BPM/key from Rekordbox, text metadata from the Organize section.
-The remaining external providers serve **Discovery only**: Discogs and Bandcamp (dig
-"Scava", two sources behind the `DigSource` protocol), Spotify (resolver).
+No enrichment chain outside Organize: BPM/key come from Rekordbox/Essentia, text
+metadata from Organize's own providers. Cratory's own (non-Organize) integrations
+beyond those are Discovery's: Discogs and Bandcamp (dig "Scava", two sources behind
+the `DigSource` protocol) and Spotify (identity resolver). Organize keeps separate
+clients of its own for text-metadata enrichment (Discogs, MusicBrainz, AcoustID)
+under `organize/integrations/` — a different client from the one Discovery uses, not
+the same object reused across the boundary.
 
 Discovery works by taste, not by technical compatibility (that stays with the Set Builder):
 the dig "Scava" uses Discogs or Bandcamp by genre/label, with Spotify only as an identity
