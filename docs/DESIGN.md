@@ -342,10 +342,11 @@ documented token with a stated reason, or return the element to the neutral stac
 listed here rather than quietly normalized, so that whoever decides is deciding on the record.
 
 Achromatic exception, for completeness: two cover-art play overlays
-(`library-track-grid.tsx:56`, `discovery-lead-grid.tsx:138`) use `bg-black/60` → `/80` with
-`text-white`, and two dimmed backdrops (`ui.tsx:393` the modal, `organize/issues-table.tsx:81`)
-use `bg-black/70`. Black and white scrims over photographic artwork sit outside the neutral
-token stack but carry no hue, so the rule is untouched.
+(`library-track-grid.tsx:56`, `discovery-lead-grid.tsx:138`) use `bg-black/60` with
+`text-white`; only the first darkens to `/80` on hover. Two dimmed backdrops
+(`ui.tsx:393` the modal, `organize/issues-table.tsx:81`) use `bg-black/70`. Black and white
+scrims over photographic artwork sit outside the neutral token stack but carry no hue, so
+the rule is untouched.
 
 **The One-Red Rule.** Red means error or destruction, except for the intentional warm accent
 of the DJ loaders. A low score, a "risky" transition, or a warning state is *not* an error
