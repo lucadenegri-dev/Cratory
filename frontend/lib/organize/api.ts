@@ -508,6 +508,7 @@ export function updateSettings(body: {
 }) {
   return apiSend<Settings>("PUT", "/settings", body);
 }
+
 // --- FINGERPRINT --------------------------------------------------------------
 export interface FingerprintResult {
   configured: boolean;
