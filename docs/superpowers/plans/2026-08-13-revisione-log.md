@@ -445,7 +445,7 @@ Emerso dalla review del Task 5b (codice morto di seconda generazione, conseguenz
 diretta delle rimozioni sopra — nessuno di questi era nella cascata autorizzata, quindi
 non toccato in quella passata):
 
-- [L3] `app/services/db_hygiene.py`: `dedupe_by_audio_hash` (:41), `purge_lead_residue`
+- [L3 — **PROMOSSO E RIMOSSO, Task 8b**] `app/services/db_hygiene.py`: `dedupe_by_audio_hash` (:41), `purge_lead_residue`
   (:64), `realign_owned_from_disk` (:102) e `align_owned_genre_from_file` (:132) hanno
   **zero chiamanti di produzione** da quando `app/tools/cleanup_disk_first.py` e
   `app/tools/align_genre_from_file.py` sono stati rimossi (Task 5b): le uniche
@@ -455,8 +455,16 @@ non toccato in quella passata):
   confronto). Ogni chiamata reale e' nei test (`tests/test_db_hygiene.py`), che restano
   verdi e non se ne accorgono: la suite non segnala codice morto, lo segnala solo
   l'assenza di importer in `app/`. Non rimosso in questa passata: fuori dalla cascata
-  autorizzata per il Task 5b, che elencava solo i quattro script CLI
-- [L3] `app/services/soulseek_download_job.py:246` — il ramo `if track_id is None:`
+  autorizzata per il Task 5b, che elencava solo i quattro script CLI. **Decisione
+  dell'utente al checkpoint di Fase 2: rimuovere.** Rimosse le quattro funzioni e i loro
+  helper/costanti esclusivi (`_dedupe_keeper`, `_disk_values`, `LEAD_RESIDUE_FIELDS`,
+  `DISK_FIELDS`); aggiornata la prosa di `genre_align.py` che le citava. I 16 test di
+  `tests/test_db_hygiene.py` cancellati (esercitavano solo queste funzioni; il
+  comportamento condiviso — `merge_tracks`, `align_track_genre`,
+  `apply_estimated_energy` — resta coperto altrove). `db_hygiene.py` e' rimasto senza
+  contenuto operativo: la decisione se cancellare il modulo stesso e' stata lasciata
+  aperta, non presa d'ufficio
+- [L3 — **PROMOSSO E RIMOSSO, Task 8b**] `app/services/soulseek_download_job.py:246` — il ramo `if track_id is None:`
   dentro `_run()` (con `_process_manual()`) e' diventato irraggiungibile in produzione
   dopo la rimozione di `start_manual_job()` (Task 5b, unico chiamante che passava
   `track_id=None`). **Non e' orfano di test**: `tests/test_soulseek_download_job.py:157`
@@ -466,7 +474,10 @@ non toccato in quella passata):
   ancora piu' netta la decisione di non toccarlo nella cascata del Task 5b (era fuori
   scope autorizzato, e cancellarlo avrebbe portato via un test vivo): ma chi fara' la
   prossima passata mirata su questo file deve sapere che il ramo morto viaggia insieme
-  a un test che lo esercita, non da solo
+  a un test che lo esercita, non da solo. **Decisione dell'utente al checkpoint di Fase
+  2: rimuovere.** Rimossi il ramo, l'helper `_process_manual()` (senza piu' chiamanti) e
+  l'unico test che lo copriva — le sue asserzioni riguardavano solo il comportamento del
+  percorso manuale, gia' morto in produzione dal Task 5b, nessuna sopravvive altrove
 
 Ridondanza architetturale profonda (fusione = decisione di design, esplicitamente fuori
 da una passata meccanica):
@@ -624,8 +635,8 @@ rilevatore di corpi di funzione duplicati, non da knip:
 ### Findings L3 — segnalazione, nessuna azione automatica
 
 - [L3] `lib/api/client.ts:13` — `export class ApiError` — knip: unused export; grep ancorato: 3 hit, tutti in `lib/api/client.ts` (definizione `:13`, `this.name` `:19`, `throw` `:50`). Nessun `instanceof ApiError` nel frontend. Meccanicamente togliere la keyword `export` e' a rischio zero (lo impone `tsc`), ma **la classe e' la superficie d'errore pubblica del client API** — porta `status` e `code` proprio "per i call site che vogliono distinguerli" (docstring `:11-12`) ed e' ri-esportata dal barrel `lib/api.ts:3`. Depubblicarla e' una decisione sull'API interna, non pulizia
-- [L3] `lib/i18n/en.ts` + `it.ts`, namespace `errors` — **8 codici errore senza piu' nessun emettitore nel backend**. Sono raggiunti dinamicamente (`DICTIONARIES[lang].errors[code]`, `lib/i18n/runtime.ts:28`), quindi nessun controllo statico li vede: la prova e' l'incrocio col backend, dove hanno **0 hit in tutto `backend/`** (`app/` e `tests/`), e il `git log -S` che mostra chi li emetteva. `discovery_not_found` (en 1587 / it 1584): unico emettitore il ramo `expand` di Discovery, rimosso in `bc89328`. `set_ai_generation_failed` (1592/1589) e `set_generation_failed` (1593/1590): unico emettitore `POST /api/sets/generate`, **rimosso dal Task 5b di questa stessa revisione** (commit `3dc62a1`) — sono codice morto di seconda generazione, come le funzioni di `db_hygiene.py` gia' segnalate in Fase 1. `source_path_invalid` (1616/1613), `source_already_present` (1617/1614), `source_not_found` (1618/1615), `source_has_run_history` (1619/1616), `target_root_not_absolute` (1620/1617): li emetteva `app/organize/routers/sources.py`, cancellato in `5336c6f` ("feat(f3b): via l'API delle sorgenti e il target per-radice") — il file **non esiste piu'**. **Non L1** per la regola del piano (famiglia indicizzata dinamicamente -> L3) e perche' il catalogo errori e' anche documentazione della superficie API; ma qui l'evidenza e' piu' forte del solito zero statico: non c'e' nessun emettitore possibile. Se promossi, rimuovere le coppie en+it in lockstep
-- [L3] `organize.nav.themePaper` (en 1249 / it 1247) e `organize.nav.themeDark` (en 1250 / it 1248) — 0 hit, e **il buco i18n che dovrebbero tappare esiste davvero**: `components/theme-toggle.tsx:36` rende ancora `{theme === "dark" ? "Paper" : "Dark"}` hard-coded. Ma la via d'uscita **non** e' quella scritta in `docs/superpowers/plans/2026-07-11-i18n-it-en-sortory.md:646` (`{theme === "dark" ? t.nav.themePaper : t.nav.themeDark}`): quello snippet e' di quando Organize aveva un dizionario proprio, e oggi **non compilerebbe**. Il componente e' quello unificato e legge gia' il `nav` di **primo livello** (`t.nav.toggleTheme`, `theme-toggle.tsx:32` -> `en.ts:66`), e il `nav` di primo livello `themePaper`/`themeDark` **non ce li ha**: le uniche due copie esistenti sono queste, organize-scoped, che il componente non puo' raggiungere. La decisione e' quindi: **aggiungere le due chiavi al `nav` di primo livello** (e cablare il toggle li'), **oppure cancellare i residui organize-scoped** e accettare l'hard-code. Nota che sono le ultime due superstiti della coda pre-fusione di `organize.nav`: le altre tre (`tagline`, `settings`, `toggleTheme`) sono gia' L1 sopra, perche' un gemello vivo di primo livello ce l'hanno. Questo pende dal lato "rimuovere"
+- [L3 — **PROMOSSO E RIMOSSO, Task 8b**] `lib/i18n/en.ts` + `it.ts`, namespace `errors` — **8 codici errore senza piu' nessun emettitore nel backend**. Sono raggiunti dinamicamente (`DICTIONARIES[lang].errors[code]`, `lib/i18n/runtime.ts:28`), quindi nessun controllo statico li vede: la prova e' l'incrocio col backend, dove hanno **0 hit in tutto `backend/`** (`app/` e `tests/`), e il `git log -S` che mostra chi li emetteva. `discovery_not_found` (en 1587 / it 1584): unico emettitore il ramo `expand` di Discovery, rimosso in `bc89328`. `set_ai_generation_failed` (1592/1589) e `set_generation_failed` (1593/1590): unico emettitore `POST /api/sets/generate`, **rimosso dal Task 5b di questa stessa revisione** (commit `3dc62a1`) — sono codice morto di seconda generazione, come le funzioni di `db_hygiene.py` gia' segnalate in Fase 1. `source_path_invalid` (1616/1613), `source_already_present` (1617/1614), `source_not_found` (1618/1615), `source_has_run_history` (1619/1616), `target_root_not_absolute` (1620/1617): li emetteva `app/organize/routers/sources.py`, cancellato in `5336c6f` ("feat(f3b): via l'API delle sorgenti e il target per-radice") — il file **non esiste piu'**. **Non L1** per la regola del piano (famiglia indicizzata dinamicamente -> L3) e perche' il catalogo errori e' anche documentazione della superficie API; ma qui l'evidenza e' piu' forte del solito zero statico: non c'e' nessun emettitore possibile. Se promossi, rimuovere le coppie en+it in lockstep. **Decisione dell'utente al checkpoint di Fase 2: rimuovere.** Riverificato con `/usr/bin/grep` su `backend/app` e `backend/tests`: zero emettitori residui per ciascuno degli 8 codici. Rimosse le coppie en+it in lockstep
+- [L3 — **PROMOSSO E RIMOSSO, Task 8b**] `organize.nav.themePaper` (en 1249 / it 1247) e `organize.nav.themeDark` (en 1250 / it 1248) — 0 hit, e **il buco i18n che dovrebbero tappare esiste davvero**: `components/theme-toggle.tsx:36` rende ancora `{theme === "dark" ? "Paper" : "Dark"}` hard-coded. Ma la via d'uscita **non** e' quella scritta in `docs/superpowers/plans/2026-07-11-i18n-it-en-sortory.md:646` (`{theme === "dark" ? t.nav.themePaper : t.nav.themeDark}`): quello snippet e' di quando Organize aveva un dizionario proprio, e oggi **non compilerebbe**. Il componente e' quello unificato e legge gia' il `nav` di **primo livello** (`t.nav.toggleTheme`, `theme-toggle.tsx:32` -> `en.ts:66`), e il `nav` di primo livello `themePaper`/`themeDark` **non ce li ha**: le uniche due copie esistenti sono queste, organize-scoped, che il componente non puo' raggiungere. La decisione e' quindi: **aggiungere le due chiavi al `nav` di primo livello** (e cablare il toggle li'), **oppure cancellare i residui organize-scoped** e accettare l'hard-code. Nota che sono le ultime due superstiti della coda pre-fusione di `organize.nav`: le altre tre (`tagline`, `settings`, `toggleTheme`) sono gia' L1 sopra, perche' un gemello vivo di primo livello ce l'hanno. Questo pende dal lato "rimuovere". **Decisione dell'utente al checkpoint di Fase 2: rimuovere le chiavi, mantenere l'hard-code.** Cancellate `themePaper`/`themeDark` da entrambi i locale; `components/theme-toggle.tsx:36` intoccato per scelta esplicita — sono nomi propri del design system, non testo da tradurre
 - [L3] `organize.common.never` (en 1225 / it 1223) — 0 hit, stesso schema: `lib/organize/api.ts:552` scrive a mano `lang === "it" ? "mai" : "never"`, cioe' **esattamente i due valori della chiave**. La chiave non e' morta, e' scavalcata da un hard-code. Decisione: usare la chiave in `fmtDate` oppure rimuoverla
 - [L3] `components/organize/files-table.tsx:78-83` — le intestazioni ordinabili della tabella FILES hanno le etichette **inglesi hard-coded** (`<SortHead label="Path" …>`, `"Artist"`, `"Title"`, `"Fmt"`, `"Kbps"`, `"Dur"`) mentre tutto il resto della pagina e' tradotto. Non e' codice morto ed e' indipendente dalla rimozione delle vecchie `sortPath…` (L1 sopra, che sono etichette di `<option>`, forma diversa): se si vuole tradurre, servono chiavi nuove
 - [L3] `lib/organize/api.ts:110-157` (`handle`/`apiGet`/`apiSend`) vs `lib/api/client.ts:30-100` — **due client HTTP paralleli** nello stesso frontend, con lo stesso scheletro (stesso `handle` con `translateApiError`, stesso commento "Niente `new URL(...)`", stessa costruzione manuale della query string — `lib/organize/api.ts:139-141` cita esplicitamente `lib/api/client.ts`). Ma **non sono sovrapponibili**: la versione core lancia `ApiError` con `status`/`code`, supporta `AbortSignal`, i parametri array e `apiUpload`; quella organize lancia un `Error` nudo e non ha niente di tutto cio'. Unificare significa decidere quale semantica d'errore vince per tutte le pagine Organize — decisione di design, non fusione meccanica. Coperto da `tests/organize-api-base.test.ts`
@@ -670,7 +681,7 @@ Emerso dalla review del Task 5b (codice morto di seconda generazione, conseguenz
 diretta delle rimozioni sopra — nessuno di questi era nella cascata autorizzata, quindi
 non toccato in quella passata):
 
-- [L3] `app/services/db_hygiene.py`: `dedupe_by_audio_hash` (:41), `purge_lead_residue`
+- [L3 — **PROMOSSO E RIMOSSO, Task 8b**] `app/services/db_hygiene.py`: `dedupe_by_audio_hash` (:41), `purge_lead_residue`
   (:64), `realign_owned_from_disk` (:102) e `align_owned_genre_from_file` (:132) hanno
   **zero chiamanti di produzione** da quando `app/tools/cleanup_disk_first.py` e
   `app/tools/align_genre_from_file.py` sono stati rimossi (Task 5b): le uniche
@@ -680,8 +691,16 @@ non toccato in quella passata):
   confronto). Ogni chiamata reale e' nei test (`tests/test_db_hygiene.py`), che restano
   verdi e non se ne accorgono: la suite non segnala codice morto, lo segnala solo
   l'assenza di importer in `app/`. Non rimosso in questa passata: fuori dalla cascata
-  autorizzata per il Task 5b, che elencava solo i quattro script CLI
-- [L3] `app/services/soulseek_download_job.py:246` — il ramo `if track_id is None:`
+  autorizzata per il Task 5b, che elencava solo i quattro script CLI. **Decisione
+  dell'utente al checkpoint di Fase 2: rimuovere.** Rimosse le quattro funzioni e i loro
+  helper/costanti esclusivi (`_dedupe_keeper`, `_disk_values`, `LEAD_RESIDUE_FIELDS`,
+  `DISK_FIELDS`); aggiornata la prosa di `genre_align.py` che le citava. I 16 test di
+  `tests/test_db_hygiene.py` cancellati (esercitavano solo queste funzioni; il
+  comportamento condiviso — `merge_tracks`, `align_track_genre`,
+  `apply_estimated_energy` — resta coperto altrove). `db_hygiene.py` e' rimasto senza
+  contenuto operativo: la decisione se cancellare il modulo stesso e' stata lasciata
+  aperta, non presa d'ufficio
+- [L3 — **PROMOSSO E RIMOSSO, Task 8b**] `app/services/soulseek_download_job.py:246` — il ramo `if track_id is None:`
   dentro `_run()` (con `_process_manual()`) e' diventato irraggiungibile in produzione
   dopo la rimozione di `start_manual_job()` (Task 5b, unico chiamante che passava
   `track_id=None`). **Non e' orfano di test**: `tests/test_soulseek_download_job.py:157`
@@ -691,7 +710,10 @@ non toccato in quella passata):
   ancora piu' netta la decisione di non toccarlo nella cascata del Task 5b (era fuori
   scope autorizzato, e cancellarlo avrebbe portato via un test vivo): ma chi fara' la
   prossima passata mirata su questo file deve sapere che il ramo morto viaggia insieme
-  a un test che lo esercita, non da solo
+  a un test che lo esercita, non da solo. **Decisione dell'utente al checkpoint di Fase
+  2: rimuovere.** Rimossi il ramo, l'helper `_process_manual()` (senza piu' chiamanti) e
+  l'unico test che lo copriva — le sue asserzioni riguardavano solo il comportamento del
+  percorso manuale, gia' morto in produzione dal Task 5b, nessuna sopravvive altrove
 
 Ridondanza architetturale profonda (fusione = decisione di design, esplicitamente fuori
 da una passata meccanica):
@@ -713,8 +735,8 @@ Superficie API interna:
 
 Chiavi i18n che richiedono una decisione (non semplice cruft):
 
-- [L3] `lib/i18n/en.ts` + `it.ts`, namespace `errors` — **8 codici errore senza piu' nessun emettitore nel backend**. Sono raggiunti dinamicamente (`DICTIONARIES[lang].errors[code]`, `lib/i18n/runtime.ts:28`), quindi nessun controllo statico li vede: la prova e' l'incrocio col backend, dove hanno **0 hit in tutto `backend/`** (`app/` e `tests/`), e il `git log -S` che mostra chi li emetteva. `discovery_not_found` (en 1587 / it 1584): unico emettitore il ramo `expand` di Discovery, rimosso in `bc89328`. `set_ai_generation_failed` (1592/1589) e `set_generation_failed` (1593/1590): unico emettitore `POST /api/sets/generate`, **rimosso dal Task 5b di questa stessa revisione** (commit `3dc62a1`) — sono codice morto di seconda generazione, come le funzioni di `db_hygiene.py` gia' segnalate in Fase 1. `source_path_invalid` (1616/1613), `source_already_present` (1617/1614), `source_not_found` (1618/1615), `source_has_run_history` (1619/1616), `target_root_not_absolute` (1620/1617): li emetteva `app/organize/routers/sources.py`, cancellato in `5336c6f` ("feat(f3b): via l'API delle sorgenti e il target per-radice") — il file **non esiste piu'**. **Non L1** per la regola del piano (famiglia indicizzata dinamicamente -> L3) e perche' il catalogo errori e' anche documentazione della superficie API; ma qui l'evidenza e' piu' forte del solito zero statico: non c'e' nessun emettitore possibile. Se promossi, rimuovere le coppie en+it in lockstep
-- [L3] `organize.nav.themePaper` (en 1249 / it 1247) e `organize.nav.themeDark` (en 1250 / it 1248) — 0 hit, e **il buco i18n che dovrebbero tappare esiste davvero**: `components/theme-toggle.tsx:36` rende ancora `{theme === "dark" ? "Paper" : "Dark"}` hard-coded. Ma la via d'uscita **non** e' quella scritta in `docs/superpowers/plans/2026-07-11-i18n-it-en-sortory.md:646` (`{theme === "dark" ? t.nav.themePaper : t.nav.themeDark}`): quello snippet e' di quando Organize aveva un dizionario proprio, e oggi **non compilerebbe**. Il componente e' quello unificato e legge gia' il `nav` di **primo livello** (`t.nav.toggleTheme`, `theme-toggle.tsx:32` -> `en.ts:66`), e il `nav` di primo livello `themePaper`/`themeDark` **non ce li ha**: le uniche due copie esistenti sono queste, organize-scoped, che il componente non puo' raggiungere. La decisione e' quindi: **aggiungere le due chiavi al `nav` di primo livello** (e cablare il toggle li'), **oppure cancellare i residui organize-scoped** e accettare l'hard-code. Nota che sono le ultime due superstiti della coda pre-fusione di `organize.nav`: le altre tre (`tagline`, `settings`, `toggleTheme`) sono gia' L1 sopra, perche' un gemello vivo di primo livello ce l'hanno. Questo pende dal lato "rimuovere"
+- [L3 — **PROMOSSO E RIMOSSO, Task 8b**] `lib/i18n/en.ts` + `it.ts`, namespace `errors` — **8 codici errore senza piu' nessun emettitore nel backend**. Sono raggiunti dinamicamente (`DICTIONARIES[lang].errors[code]`, `lib/i18n/runtime.ts:28`), quindi nessun controllo statico li vede: la prova e' l'incrocio col backend, dove hanno **0 hit in tutto `backend/`** (`app/` e `tests/`), e il `git log -S` che mostra chi li emetteva. `discovery_not_found` (en 1587 / it 1584): unico emettitore il ramo `expand` di Discovery, rimosso in `bc89328`. `set_ai_generation_failed` (1592/1589) e `set_generation_failed` (1593/1590): unico emettitore `POST /api/sets/generate`, **rimosso dal Task 5b di questa stessa revisione** (commit `3dc62a1`) — sono codice morto di seconda generazione, come le funzioni di `db_hygiene.py` gia' segnalate in Fase 1. `source_path_invalid` (1616/1613), `source_already_present` (1617/1614), `source_not_found` (1618/1615), `source_has_run_history` (1619/1616), `target_root_not_absolute` (1620/1617): li emetteva `app/organize/routers/sources.py`, cancellato in `5336c6f` ("feat(f3b): via l'API delle sorgenti e il target per-radice") — il file **non esiste piu'**. **Non L1** per la regola del piano (famiglia indicizzata dinamicamente -> L3) e perche' il catalogo errori e' anche documentazione della superficie API; ma qui l'evidenza e' piu' forte del solito zero statico: non c'e' nessun emettitore possibile. Se promossi, rimuovere le coppie en+it in lockstep. **Decisione dell'utente al checkpoint di Fase 2: rimuovere.** Riverificato con `/usr/bin/grep` su `backend/app` e `backend/tests`: zero emettitori residui per ciascuno degli 8 codici. Rimosse le coppie en+it in lockstep
+- [L3 — **PROMOSSO E RIMOSSO, Task 8b**] `organize.nav.themePaper` (en 1249 / it 1247) e `organize.nav.themeDark` (en 1250 / it 1248) — 0 hit, e **il buco i18n che dovrebbero tappare esiste davvero**: `components/theme-toggle.tsx:36` rende ancora `{theme === "dark" ? "Paper" : "Dark"}` hard-coded. Ma la via d'uscita **non** e' quella scritta in `docs/superpowers/plans/2026-07-11-i18n-it-en-sortory.md:646` (`{theme === "dark" ? t.nav.themePaper : t.nav.themeDark}`): quello snippet e' di quando Organize aveva un dizionario proprio, e oggi **non compilerebbe**. Il componente e' quello unificato e legge gia' il `nav` di **primo livello** (`t.nav.toggleTheme`, `theme-toggle.tsx:32` -> `en.ts:66`), e il `nav` di primo livello `themePaper`/`themeDark` **non ce li ha**: le uniche due copie esistenti sono queste, organize-scoped, che il componente non puo' raggiungere. La decisione e' quindi: **aggiungere le due chiavi al `nav` di primo livello** (e cablare il toggle li'), **oppure cancellare i residui organize-scoped** e accettare l'hard-code. Nota che sono le ultime due superstiti della coda pre-fusione di `organize.nav`: le altre tre (`tagline`, `settings`, `toggleTheme`) sono gia' L1 sopra, perche' un gemello vivo di primo livello ce l'hanno. Questo pende dal lato "rimuovere". **Decisione dell'utente al checkpoint di Fase 2: rimuovere le chiavi, mantenere l'hard-code.** Cancellate `themePaper`/`themeDark` da entrambi i locale; `components/theme-toggle.tsx:36` intoccato per scelta esplicita — sono nomi propri del design system, non testo da tradurre
 - [L3] `organize.common.never` (en 1225 / it 1223) — 0 hit, stesso schema: `lib/organize/api.ts:552` scrive a mano `lang === "it" ? "mai" : "never"`, cioe' **esattamente i due valori della chiave**. La chiave non e' morta, e' scavalcata da un hard-code. Decisione: usare la chiave in `fmtDate` oppure rimuoverla
 - [L3] `components/organize/files-table.tsx:78-83` — le intestazioni ordinabili della tabella FILES hanno le etichette **inglesi hard-coded** (`<SortHead label="Path" …>`, `"Artist"`, `"Title"`, `"Fmt"`, `"Kbps"`, `"Dur"`) mentre tutto il resto della pagina e' tradotto. Non e' codice morto ed e' indipendente dalla rimozione delle vecchie `sortPath…` (L1 in Fase 2, che sono etichette di `<option>`, forma diversa): se si vuole tradurre, servono chiavi nuove
 
@@ -913,7 +935,9 @@ con una ragione per esitare):
   stato rimosso in `bc89328`. A favore della rimozione: zero possibilita' di
   riemissione senza riscrivere il backend. Contro: il catalogo `errors` e' anche
   documentazione della superficie API, e la regola del piano manda le famiglie
-  indicizzate dinamicamente a L3 per costruzione.
+  indicizzate dinamicamente a L3 per costruzione. **PROMOSSO E RIMOSSO, Task 8b**:
+  decisione utente, rimosse le 8 coppie en+it dopo riconferma con `/usr/bin/grep`
+  che nessun codice le emette piu'.
 - `export class ApiError` (`lib/api/client.ts`) — 0 `instanceof` nel frontend, ma e'
   la superficie d'errore pubblica del client (porta `status`/`code`), ri-esportata dal
   barrel `lib/api.ts`. Depubblicarla e' una decisione sull'API interna, non pulizia.
@@ -925,7 +949,9 @@ chiave* (qui la chiave morta e' il sintomo, non il difetto):
   due chiavi organize-scoped non sono la soluzione (il componente unificato legge il
   `nav` di primo livello, che non le ha): la decisione e' aggiungerle li' o accettare
   l'hard-code e cancellare i residui. **Pende dal lato "rimuovere"**, e' l'ultima coda
-  della shell Organize pre-fusione.
+  della shell Organize pre-fusione. **PROMOSSO E RIMOSSO, Task 8b**: decisione utente,
+  cancellate le due chiavi, `theme-toggle.tsx:36` intoccato (hard-code mantenuto per
+  scelta — sono nomi propri del design system).
 - `organize.common.never` — scavalcata da un hard-code equivalente
   (`lang === "it" ? "mai" : "never"` in `lib/organize/api.ts:552`): usare la chiave in
   `fmtDate` o cancellarla.
@@ -965,16 +991,21 @@ design, non un merge meccanico — stesso principio gia' visto in Fase 1 per
   piano vieta L1/L2 dentro `app/organize/`: da valutare insieme alla duplicazione di
   Fase 1, non uno alla volta.
 
-**Riportato dalla Fase 1, ancora in attesa di decisione** (codice morto di seconda
-generazione emerso dalla review del Task 5b, mai autorizzato in quella cascata):
+**Riportato dalla Fase 1, promosso e rimosso al Task 8b** (codice morto di seconda
+generazione emerso dalla review del Task 5b, mai autorizzato in quella cascata; decisione
+dell'utente al checkpoint di Fase 2: rimuovere entrambi):
 - `app/services/db_hygiene.py`: `dedupe_by_audio_hash`, `purge_lead_residue`,
   `realign_owned_from_disk`, `align_owned_genre_from_file` — zero chiamanti di
   produzione da quando gli script CLI che li invocavano sono stati rimossi (Task 5b);
   restano coperti da `tests/test_db_hygiene.py`, che non se ne accorge perche' chiama
-  le funzioni direttamente.
+  le funzioni direttamente. **PROMOSSO E RIMOSSO, Task 8b**: le quattro funzioni e i
+  loro helper/costanti esclusivi rimossi, i 16 test dedicati cancellati con loro (il
+  comportamento condiviso che esercitavano — `merge_tracks`, `align_track_genre`,
+  `apply_estimated_energy` — resta coperto da altri file di test).
 - `app/services/soulseek_download_job.py:246` — il ramo `if track_id is None:` dentro
   `_run()` e' irraggiungibile in produzione dopo la rimozione di `start_manual_job()`
   (Task 5b), ma viaggia insieme a un test vivo e verde
   (`test_manual_download_lascia_il_file_senza_catalogare`,
   `tests/test_soulseek_download_job.py:157`) che lo chiama direttamente: non e'
-  orfano di copertura, solo di chiamante di produzione.
+  orfano di copertura, solo di chiamante di produzione. **PROMOSSO E RIMOSSO, Task
+  8b**: rimossi il ramo, l'helper `_process_manual()` e l'unico test che lo copriva.
