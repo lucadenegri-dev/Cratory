@@ -120,10 +120,30 @@ backend/app/
                      cover_art  content_hash  integrity  _http
 ```
 
-One rule holds across the tree: external integrations take an injectable client (usually
-`httpx`), so the test suite runs without a network. Routers mostly map HTTP to a service
-call and exceptions to status codes through `api_error`, but not as a hard rule — see the
-`routers/` list above for the named exceptions.
+Not every integration takes an injectable client — 4 of the 12 modules in
+`app/integrations/` do:
+
+```
+$ grep -n 'http: httpx.Client | None = None' backend/app/integrations/*.py
+bandcamp.py:41
+discogs.py:46
+itunes.py:25
+slskd.py:55
+$ grep -n '= httpx.Client(\|anthropic.Anthropic(\|_OneShotHTTPClient()' backend/app/integrations/*.py
+llm.py:81            self.client = anthropic.Anthropic(...)
+shazam.py:155        self._shazam = Shazam(http_client=_OneShotHTTPClient())
+spotify.py:100       self.http = httpx.Client(timeout=20)
+```
+
+The other 8 build their own client (`spotify.py:98-100`, `llm.py:68,81`, `shazam.py:155`)
+or have no HTTP/process client to inject at all (`soundcloud.py`, `soundcloud_audio.py`,
+`essentia_engine.py`, `essentia_worker.py`, `local_files.py` are function modules, not
+classes). Their tests still avoid the network, but by other means per module — e.g.
+`monkeypatch.setattr(client, "http", ...)` after construction for `spotify.py`, a scripted
+implementation of the `LLMClient` interface for `llm.py`, `monkeypatch.setattr("shazamio.Shazam", ...)`
+for `shazam.py` — not a constructor parameter. Routers mostly map HTTP to a service call and
+exceptions to status codes through `api_error`, but not as a hard rule — see the `routers/`
+list above for the named exceptions.
 
 `app/organize` imports from the core (`app.models.Track`, `app.core`, `app.services.genre_align`);
 the core never imports from `app.organize`. The one relationship that spans the boundary,
@@ -134,9 +154,19 @@ Background jobs follow one pattern: a module-level lock, in-memory status, and a
 thread. Most spawn that thread with a bare `threading.Thread`; only the two single-user
 jobs (BPM/key analysis, streaming import/sync) go through `services/job_spawn.spawn`, a
 thin wrapper tests monkeypatch to run synchronously. Each job is single-instance, but the
-guard on a second start is per job — see `docs/API.md`'s jobs table rather than assuming
-`409` here. CPU-bound work that would hold the GIL — ffmpeg decoding, Essentia analysis —
-runs in a subprocess.
+guard on a second start splits into two families, and `docs/API.md`'s jobs table doesn't
+say which is which (it only carries the start endpoint's success code):
+analysis (`analysis_already_running`), streaming import/sync
+(`streaming_import_already_running`), Soulseek/SoundCloud download
+(`download_already_running`) and set generation (`set_generation_in_progress`) reject a
+second start with `409`, checked in the router before `start_job` runs
+(e.g. `routers/analysis.py:59-60`); library scan/index, organize apply, mix
+identification, provider rescan, integrity check and AI genre review instead let
+`start_job` notice the module-level lock is held and hand back the *current* running
+job's state with no error (`if _state["status"] == "running": return dict(_state)`,
+e.g. `organize/services/scan_job.py:112-113`) — a second `POST` is harmless, just not an
+error. CPU-bound work that would hold the GIL — ffmpeg decoding, Essentia analysis — runs
+in a subprocess.
 
 ## The library is the disk
 
@@ -560,8 +590,17 @@ Core (`app/models.py`):
   `isrc`, `url`, `spotify_id`, `soundcloud_id`, `source_type`); editorial metadata
   (`title`, `artist`, `album`, `genre`, `year`, `label`, `duration_seconds`,
   `album_art_url`); `bpm`/`camelot_key` with `bpm_source`/`key_source`; the analysis staging
-  fields `analysis_bpm`, `analysis_camelot`, `analyzed_at`, `analysis_error`, written only by
-  the analysis job and read only by the apply step; `energy` with `energy_raw` and
+  fields, all written only by the analysis job (`audio_analysis_job.py`) — `analysis_bpm` and
+  `analysis_camelot` are read by the divergence check and the `/divergences` display
+  (`services/audio_analysis.py: diverges`, `divergence_row`) and copied into the canonical
+  `bpm`/`camelot_key` by the apply step (`apply_analysis`, `auto_apply_missing`);
+  `analyzed_at` is read by the `/overview` counts and the apply endpoint's `mode="all"`
+  selection; `analysis_error` (set at `audio_analysis_job.py:62,65`) is read by nothing —
+  not exposed in any schema, not read by any router, service, or serializer, verified with
+  `grep -rn analysis_error backend/app frontend/app frontend/components frontend/lib` (only
+  the model declaration, the job's two writes, and an `essentia_engine.py` docstring) — it
+  exists to be visible in a DB inspection after a failed batch, not to drive behavior;
+  `energy` with `energy_raw` and
   `energy_source` (`computed` | `estimated`); ownership (`has_local_file`, `local_path`,
   `local_format`, `local_bitrate`, `local_mtime`, `local_size`, `audio_hash`,
   `primary_file_id` → the representative `AudioFile`); `archived`; a 1–3 personal `rating`

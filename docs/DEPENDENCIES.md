@@ -27,7 +27,7 @@ external services that features rely on. `backend/requirements.txt` and
 - `python-dotenv>=1.0` — imported directly by `app/main.py`. `pydantic-settings` reads `.env` into `Settings` fields (`ai_api_key` among them), and all three Anthropic clients pass `settings.ai_api_key` explicitly — the SDK never reads `os.environ` itself. But `pydantic-settings`'s `env_file` only populates `Settings`, not the process's actual environment, and one value is still read straight from `os.environ`: `FPCALC` (`organize/integrations/acoustid.py`, the Chromaprint binary override). `load_dotenv()` runs at import time so a `FPCALC` set in `.env` reaches `os.environ` too. It already arrived as a transitive dependency of `pydantic-settings`; it is listed explicitly because our code imports it.
 
 **HTTP client**
-- `httpx>=0.27` — every outbound call (Spotify, SoundCloud, Discogs, Bandcamp, iTunes, slskd, MusicBrainz). Also FastAPI's test client. Provider classes take an injectable client, so the suite runs without a network.
+- `httpx>=0.27` — every outbound call (Spotify, SoundCloud, Discogs, Bandcamp, iTunes, slskd, MusicBrainz). Also FastAPI's test client. Not every provider class takes an injectable client — `docs/ARCHITECTURE.md`'s integrations section lists which do and which build their own, so the suite avoids the network by different means per module.
 
 **AI**
 - `anthropic>=0.69,<1.0` — the LLM client behind `integrations/llm.py`. One key for the whole app: `ANTHROPIC_API_KEY` (`AI_API_KEY` is still read as a legacy alias for older `.env` files).

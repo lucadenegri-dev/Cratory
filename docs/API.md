@@ -295,9 +295,11 @@ candidate engine's genre pool. Callers should not expect the streaming value to
 show through anywhere.
 
 **Editing those four fields on an owned track does not go through the track API.**
-The single writer of file tags is `POST /api/organize/files/{file_id}/tags`, called
-against the track's `primary_file_id`. A track with no owned file edits them through
-`PATCH /api/tracks/{track_id}` as usual.
+For a manual, ad-hoc edit, the endpoint is `POST /api/organize/files/{file_id}/tags`,
+called against the track's `primary_file_id` — `tagio.write_tags` also has two other
+callers that are not manual edits: Organize's apply (a RETAG op) and undo (restoring
+`prior_tags_json`); see `docs/ARCHITECTURE.md`'s Organize section. A track with no owned
+file edits them through `PATCH /api/tracks/{track_id}` as usual.
 
 ### Listing and filtering
 
