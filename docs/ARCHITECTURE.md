@@ -201,9 +201,11 @@ mutates them** — tags, renaming and organization remain the Organize section's
   `album`/`label`/`year` this never touches the `Track` row — the COALESCE is the only
   place the value is computed. `genre` is the one exception: `tracks.genre` is ALSO kept
   as a convenience mirror of the file's tag, one shared rule
-  (`app/services/genre_align.py`, `align_track_genre`) called from four sites —
+  (`app/services/genre_align.py`, `align_track_genre`) called from five sites —
   Organize's manual tag edit, Organize's scan (tag changed outside the app), Organize's Apply (a
-  RETAG that touches genre) and library indexing (a lead acquiring a file). Writing the
+  RETAG that touches genre), library indexing (a lead acquiring a file) and acquisition
+  (`attach_local_file`: Soulseek, SoundCloud download, manual file link — the `AudioFile` row
+  is inserted rather than updated there, so the scan's changed-tag guard never fires). Writing the
   mirror also recomputes the derived `energy` (`apply_estimated_energy`, since it depends
   on bpm+genre — a set's energy arc can visibly shift after an Organize genre edit or a
   re-scan; never overwrites `energy_source == "computed"`). The COALESCE read path stays
@@ -247,23 +249,13 @@ mutates them** — tags, renaming and organization remain the Organize section's
   exist. They are removed in two places, with the shared helper `delete_orphan_leads`
   / `unreferenced_track_ids` (in `repositories.py`): when a **playlist is deleted**
   (`DELETE /api/playlists/{id}` returns `{deleted_tracks}`) and during **index
-  reconciliation** (see above). `backend/app/services/db_hygiene.py` also provides a
-  one-off DB-to-disk alignment (merges same-file duplicates, deletes orphan leads,
-  clears the residual legacy fields on leads — `genre`/`bpm`/`camelot_key`/`energy`, with
-  no writer in the current flow — and **re-reads owned tracks from disk**, making it
-  authoritative on disk-derivable fields; never touches BPM/key from Rekordbox nor the
-  Spotify cover, read-only access to the files) — but it currently has no entry point in
-  the app: the CLI that invoked it (`app/tools/cleanup_disk_first.py`) was removed as
-  dead code, so today the functions are reachable only from `tests/test_db_hygiene.py`.
+  reconciliation** (see above).
 - **Merging duplicates (same track in two rows).** The helper `merge_tracks(keep, drop)`
   (in `repositories.py`) moves playlist/set membership onto `keep`, fills its
   empty fields from `drop` (keep stays authoritative on what it already has) and deletes `drop`.
-  Used in two places: the **manual linking of a file** (`attach_local_file`)
-  merges a track that already owns that same file (same `audio_hash`/
-  `local_path`), so two rows do not remain; and the **dedup by `audio_hash`**
-  (`dedupe_by_audio_hash` in `db_hygiene`) merges rows that share the same file, keeping the one
-  with streaming identity (`spotify_id`/`isrc`). With these and the normalized fuzzy match
-  the manual match should rarely be necessary.
+  Used by the **manual linking of a file** (`attach_local_file`): it merges a track that
+  already owns that same file (same `audio_hash`/`local_path`), so two rows do not remain.
+  With this and the normalized fuzzy match the manual match should rarely be necessary.
 - Ownership also feeds the Set Builder: `SetGenerationRequest.owned_only` (default
   `True`) filters the Candidate Engine's candidates to only tracks with a local file;
   the choice is persisted on `Setlist.owned_only` and respected by the editor too

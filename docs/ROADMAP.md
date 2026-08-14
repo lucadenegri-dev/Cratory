@@ -100,10 +100,11 @@ family plan, `classify_transition`'s reset detection, the AI curation payload �
 via `scoring.genre_of` instead of raw `Track.genre`; callers outside the Set Builder
 keep the old streaming-only behavior (no `genre_map` passed). Separately, `Track.genre`
 is now actively kept in sync with the primary file's tag (one shared rule,
-`services/genre_align.align_track_genre`, also recomputes derived `energy`) from four
+`services/genre_align.align_track_genre`, also recomputes derived `energy`) from five
 call sites: Organize's manual tag edit, Organize's scan, Organize's Apply (a RETAG that
-touches genre) and library indexing (a lead acquiring a file) — closing the gaps where
-the mirror could silently drift back out of sync after the initial backfill. The COALESCE read path
+touches genre), library indexing (a lead acquiring a file) and acquisition
+(`attach_local_file`: Soulseek, SoundCloud download, manual file link) — closing the gaps
+where the mirror could silently drift back out of sync after the initial backfill. The COALESCE read path
 (`repositories._EFFECTIVE_TAGS`) stays the sole source of truth; the mirror is a
 convenience for code that still reads `Track.genre` directly.
 
