@@ -201,9 +201,8 @@ mutates them** — tags, renaming and organization remain the Organize section's
   `album`/`label`/`year` this never touches the `Track` row — the COALESCE is the only
   place the value is computed. `genre` is the one exception: `tracks.genre` is ALSO kept
   as a convenience mirror of the file's tag, one shared rule
-  (`app/services/genre_align.py`, `align_track_genre`) called from five sites — the
-  one-off backfill (`db_hygiene.align_owned_genre_from_file`), Organize's
-  manual tag edit, Organize's scan (tag changed outside the app), Organize's Apply (a
+  (`app/services/genre_align.py`, `align_track_genre`) called from four sites —
+  Organize's manual tag edit, Organize's scan (tag changed outside the app), Organize's Apply (a
   RETAG that touches genre) and library indexing (a lead acquiring a file). Writing the
   mirror also recomputes the derived `energy` (`apply_estimated_energy`, since it depends
   on bpm+genre — a set's energy arc can visibly shift after an Organize genre edit or a
@@ -248,13 +247,14 @@ mutates them** — tags, renaming and organization remain the Organize section's
   exist. They are removed in two places, with the shared helper `delete_orphan_leads`
   / `unreferenced_track_ids` (in `repositories.py`): when a **playlist is deleted**
   (`DELETE /api/playlists/{id}` returns `{deleted_tracks}`) and during **index
-  reconciliation** (see above). For a one-off alignment of the DB
-  to the disk-first paradigm, `backend/app/services/db_hygiene.py` merges same-file
-  duplicates, deletes orphan leads, clears the residual legacy fields on leads
-  (`genre`/`bpm`/`camelot_key`/`energy`, with no writer in the current flow) and
-  **re-reads owned tracks from disk**, making it authoritative on disk-derivable
-  fields (never touches BPM/key from Rekordbox nor the Spotify cover; read-only
-  access to the files).
+  reconciliation** (see above). `backend/app/services/db_hygiene.py` also provides a
+  one-off DB-to-disk alignment (merges same-file duplicates, deletes orphan leads,
+  clears the residual legacy fields on leads — `genre`/`bpm`/`camelot_key`/`energy`, with
+  no writer in the current flow — and **re-reads owned tracks from disk**, making it
+  authoritative on disk-derivable fields; never touches BPM/key from Rekordbox nor the
+  Spotify cover, read-only access to the files) — but it currently has no entry point in
+  the app: the CLI that invoked it (`app/tools/cleanup_disk_first.py`) was removed as
+  dead code, so today the functions are reachable only from `tests/test_db_hygiene.py`.
 - **Merging duplicates (same track in two rows).** The helper `merge_tracks(keep, drop)`
   (in `repositories.py`) moves playlist/set membership onto `keep`, fills its
   empty fields from `drop` (keep stays authoritative on what it already has) and deletes `drop`.
