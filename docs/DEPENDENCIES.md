@@ -24,7 +24,7 @@ external services that features rely on. `backend/requirements.txt` and
 - `sqlalchemy>=2.0,<3.0` — ORM over SQLite. One `Base` and one engine for both the core and the Organize models.
 - `pydantic>=2.9,<3.0` — request/response schemas, and the validation gate every AI output passes before it is shown or saved.
 - `pydantic-settings>=2.6,<3.0` — typed settings loaded from `backend/.env`.
-- `python-dotenv>=1.0` — imported directly by `app/main.py`. `pydantic-settings` reads the `.env` into `Settings`, but the Anthropic SDK reads `ANTHROPIC_API_KEY` straight out of `os.environ`, so `load_dotenv()` runs at import time to put it there. It already arrived as a transitive dependency of `pydantic-settings`; it is listed explicitly because our code imports it.
+- `python-dotenv>=1.0` — imported directly by `app/main.py`. `pydantic-settings` reads `.env` into `Settings` fields (`ai_api_key` among them), and all three Anthropic clients pass `settings.ai_api_key` explicitly — the SDK never reads `os.environ` itself. But `pydantic-settings`'s `env_file` only populates `Settings`, not the process's actual environment, and one value is still read straight from `os.environ`: `FPCALC` (`organize/integrations/acoustid.py`, the Chromaprint binary override). `load_dotenv()` runs at import time so a `FPCALC` set in `.env` reaches `os.environ` too. It already arrived as a transitive dependency of `pydantic-settings`; it is listed explicitly because our code imports it.
 
 **HTTP client**
 - `httpx>=0.27` — every outbound call (Spotify, SoundCloud, Discogs, Bandcamp, iTunes, slskd, MusicBrainz). Also FastAPI's test client. Provider classes take an injectable client, so the suite runs without a network.

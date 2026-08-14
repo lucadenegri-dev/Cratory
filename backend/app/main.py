@@ -4,8 +4,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
-# serve all'SDK Anthropic, che legge ANTHROPIC_API_KEY da os.environ:
-# pydantic-settings non la carica (non è un campo di Settings).
+# pydantic-settings carica .env dentro Settings (incluso ai_api_key, passato
+# esplicito ai client Anthropic), ma non tocca l'os.environ di processo. Serve
+# comunque per FPCALC, letto direttamente da os.environ in
+# organize/integrations/acoustid.py.
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from fastapi import FastAPI, Request
