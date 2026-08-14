@@ -10,12 +10,6 @@ from app.organize.services.fingerprint import fingerprint_files
 router = APIRouter(prefix="/api/organize/fingerprint", tags=["fingerprint"])
 
 
-@router.get("/status", response_model=dict)
-def status():
-    return {"configured": acoustid.acoustid_configured(),
-            "fpcalc": acoustid.fpcalc_available()}
-
-
 @router.post("", response_model=dict)
 def run(db: Session = Depends(get_db)):
     if not acoustid.acoustid_configured() or not acoustid.fpcalc_available():

@@ -44,7 +44,6 @@ from app.organize.routers import (
     history as organize_history,
     issues as organize_issues,
     library as organize_library,
-    picker as organize_picker,
     plan as organize_plan,
     scan as organize_scan,
     settings as organize_settings,
@@ -122,7 +121,7 @@ for _organize_router in (
     organize_scan, organize_analyze, organize_issues,
     organize_duplicates, organize_settings, organize_plan, organize_apply,
     organize_history, organize_library, organize_files, organize_fingerprint,
-    organize_picker, organize_genre_review,
+    organize_genre_review,
 ):
     app.include_router(_organize_router.router)
 

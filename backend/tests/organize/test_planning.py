@@ -10,6 +10,17 @@ def test_get_settings_seeds_defaults(db):
     assert s.folder_template == "{genre}/{artist}"
 
 
+def test_get_language_helper(db):
+    """Store lingua di organize (colonna Settings.language, default EN, valori
+    ignoti degradano a EN): il servizio resta anche dopo la rimozione della
+    superficie HTTP /api/organize/settings/language (Task 8d)."""
+    assert planning.get_language(db) == "en"          # default
+    planning.set_language(db, "it")
+    assert planning.get_language(db) == "it"
+    planning.set_language(db, "garbage")
+    assert planning.get_language(db) == "en"          # valore ignoto -> default
+
+
 def test_update_settings(db):
     planning.get_settings(db)
     s = planning.update_settings(db, folder_template="{genre}")
