@@ -1068,9 +1068,19 @@ Eseguita la parte meccanica autorizzata dall'utente della duplicazione core <->
 l'esito). Riassunto:
 
 **Gruppo A — moduli byte-identici fusi** (`genre_norm.py`, `native_picker.py`):
-byte-identita' riverificata prima del merge (invariata dalla Fase 1), direzione core
-canonico <- `organize/` importa (coerente con `organize/` namespace assorbito).
-Dettagli e motivazione tecnica nelle voci L3 dedicate qui sopra.
+byte-identita' riverificata prima del merge (invariata dalla Fase 1). **Esito
+finale**: per entrambi non resta nessun modulo ponte in `app/organize/` — sono stati
+cancellati per intero, non solo svuotati in un re-export. `genre_norm.py`: i due
+importatori di produzione (`genre_review.py`, `text_providers.py`) ripuntati
+direttamente ad `app.services.genre_norm`. `native_picker.py`: il tentativo
+intermedio con un alias di `sys.modules` (per far convivere due file di test che
+monkeypatchavano il proprio percorso di import) e' stato ritirato in review, perche'
+l'unico importatore rimasto dietro quell'alias era il test doppione stesso — tolto
+anche quello, insieme al file. Risultato per entrambi: una sola implementazione nel
+core, `organize/` importa da li' dove serve ancora (coerente con `organize/`
+namespace assorbito), zero moduli intermedi. Dettagli e motivazione tecnica
+(compreso il perche' del tentativo con l'alias e perche' e' stato ritirato) nelle
+voci L3 dedicate qui sopra.
 
 **Gruppo B — endpoint HTTP organize orfani**: rimossi 3 su 4 (`GET
 /api/organize/fingerprint/status`, `GET|PUT /api/organize/settings/language`, `GET
