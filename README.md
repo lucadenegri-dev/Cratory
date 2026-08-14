@@ -67,7 +67,8 @@ model or a streaming provider for them.
 ## Quickstart
 
 Prerequisites: **Python 3.11** and **Node.js 20.9+**. Python 3.11 specifically — the pinned
-Essentia build behind in-app BPM/key analysis only ships wheels for CPython 3.11. `ffmpeg` is
+Essentia build behind in-app BPM/key analysis only ships a CPython 3.11 wheel, and only for
+macOS arm64 at that — coverage on other platforms is patchy. `ffmpeg` is
 needed for mix identification, `fpcalc` (chromaprint) for Organize's acoustic fingerprinting.
 
 ```bash
