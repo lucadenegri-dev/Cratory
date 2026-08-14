@@ -7,12 +7,9 @@ import {
   errText, fmtSize, linkLocalFile, searchLocalFiles,
   type LocalFileHit, type TrackDetail,
 } from "@/lib/api";
-import { useT, type Dictionary } from "@/lib/i18n";
+import { useT } from "@/lib/i18n";
 import { PathPickerButton, usePickerAvailability } from "@/components/path-picker-button";
-
-function sourceLabel(t: Dictionary): Record<string, string> {
-  return { library: t.tracks.sourceLibrary, downloads: t.tracks.sourceDownloads };
-}
+import { sourceLabel } from "@/lib/track-source";
 
 export type LinkTarget = { id: number; artist: string | null; title: string | null };
 

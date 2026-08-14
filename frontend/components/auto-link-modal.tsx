@@ -4,11 +4,8 @@ import { useEffect, useState } from "react";
 import { FolderOpen, Link2 } from "lucide-react";
 import { Alert, Button, Loading, Modal, Spinner } from "@/components/ui";
 import { autoLinkPreview, errText, fmtSize, linkLocalFile, type AutoLinkProposal } from "@/lib/api";
-import { useT, type Dictionary } from "@/lib/i18n";
-
-function sourceLabel(t: Dictionary): Record<string, string> {
-  return { library: t.tracks.sourceLibrary, downloads: t.tracks.sourceDownloads };
-}
+import { useT } from "@/lib/i18n";
+import { sourceLabel } from "@/lib/track-source";
 
 /** Wrapper: monta il dialog solo da aperto e lo rigenera a ogni apertura. */
 export function AutoLinkModal({ open, onClose, onLinked }: {
