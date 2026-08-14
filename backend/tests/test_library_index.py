@@ -163,6 +163,36 @@ def test_align_track_genre_ricalcola_energia(db):
     assert t.energy_source == "estimated"
 
 
+def test_align_track_genre_file_vuoto_non_tocca(db):
+    """Guardia di `genre_align.align_track_genre` (righe 54-55): se il tag genere
+    del file normalizza a vuoto (`None`, stringa vuota, o solo spazi/trattini —
+    tutto cio' che `normalize_genre` riduce a niente), la funzione ritorna `None`
+    e non tocca `track.genre` ne' l'energia derivata. E' la guardia simmetrica a
+    quella coperta da `test_align_track_genre_ricalcola_energia` qui sopra: quel
+    test prova che un tag valido *aggiorna* genere+energia, questo prova che un
+    tag vuoto lascia *entrambi* al valore di streaming — un file non taggato non
+    deve azzerare un genere gia' noto.
+
+    L'energia parte gia' seminata (stesso motivo del test sopra: partire da
+    `energy=None` renderebbe "non tocca" indistinguibile da "non ha ricalcolato
+    nulla perche' non c'era nulla da ricalcolare")."""
+    from app.models import Track
+    from app.services.energy import estimate_energy
+    from app.services.genre_align import align_track_genre
+
+    seeded_energy = estimate_energy(128.0, None, "Electronic")
+    t = Track(source_type="spotify", genre="Electronic", bpm=128.0,
+              energy=seeded_energy, energy_source="estimated")
+    db.add(t); db.commit()
+
+    result = align_track_genre(t, "  -  ", apply=True)
+
+    assert result is None
+    assert t.genre == "Electronic"
+    assert t.energy == seeded_energy
+    assert t.energy_source == "estimated"
+
+
 def test_duplicati_stesso_run_primo_vince(db, fake_audio, collega_da_disco):
     """Stesso audio in due file: il primo vince, il secondo si conta come duplicato."""
     from sqlalchemy import select
