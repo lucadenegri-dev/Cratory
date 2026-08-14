@@ -1206,8 +1206,6 @@ export const it: Dictionary = {
       duplicates: "Duplicates",
       plan: "Plan",
       history: "History",
-      themePaper: "Paper",
-      themeDark: "Dark",
     },
     settings: {
       organization: "Organizzazione",

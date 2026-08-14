@@ -1208,8 +1208,6 @@ export const en = {
       duplicates: "Duplicates",
       plan: "Plan",
       history: "History",
-      themePaper: "Paper",
-      themeDark: "Dark",
     },
     settings: {
       organization: "Organization",
