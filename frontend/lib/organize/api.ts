@@ -1,4 +1,4 @@
-import { getCurrentLanguage, translateApiError, type Language } from "@/lib/i18n/runtime";
+import { getCurrentLanguage, translateApiError } from "@/lib/i18n/runtime";
 
 /* Base relativa = stesso host della pagina: le chiamate /api/organize/* passano
    dal rewrite di next.config.ts verso il backend (come lib/api/client.ts), così
@@ -160,9 +160,6 @@ async function apiSend<T>(method: string, path: string, body?: unknown): Promise
 // --- SCAN (job) -------------------------------------------------------------
 export function startScan(locations?: Location[]) {
   return apiSend<ScanJobState>("POST", "/scan", { locations: locations ?? null });
-}
-export function scanJobStatus() {
-  return apiGet<ScanJobState>("/scan/status");
 }
 
 // --- FILES + STATS ----------------------------------------------------------
@@ -511,18 +508,7 @@ export function updateSettings(body: {
 }) {
   return apiSend<Settings>("PUT", "/settings", body);
 }
-export function getLanguage() {
-  return apiGet<{ language: Language }>("/settings/language");
-}
-export function setLanguage(language: Language) {
-  return apiSend<{ language: Language }>("PUT", "/settings/language", { language });
-}
-
 // --- FINGERPRINT --------------------------------------------------------------
-export interface FingerprintStatus {
-  configured: boolean;
-  fpcalc: boolean;
-}
 export interface FingerprintResult {
   configured: boolean;
   identified: number;
@@ -530,9 +516,6 @@ export interface FingerprintResult {
   not_found: number;
   errors: number;
   total: number;
-}
-export function fingerprintStatus() {
-  return apiGet<FingerprintStatus>("/fingerprint/status");
 }
 export function runFingerprint() {
   return apiSend<FingerprintResult>("POST", "/fingerprint");
@@ -556,14 +539,3 @@ export function fmtDate(iso: string | null | undefined): string {
   return d.toLocaleString(locale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-// --- PICKER -----------------------------------------------------------------
-/** Il dialog nativo di scelta percorso è disponibile? (solo backend su macOS) */
-export function pickerAvailability() {
-  return apiGet<{ available: boolean }>("/picker/availability");
-}
-/** Apre il dialog nativo sulla macchina del backend; path null = annullato. */
-export function pickPath(kind: "folder" | "file", start?: string, prompt?: string) {
-  return apiSend<{ path: string | null }>("POST", "/picker/pick", {
-    kind, start: start || null, prompt: prompt || null,
-  });
-}
