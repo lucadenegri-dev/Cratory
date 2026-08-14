@@ -124,6 +124,9 @@ def test_build_script_prompt_con_escape_dei_doppi_apici():
 
 
 def test_build_script_contiene_timeout_esplicito_a_300s():
-    script = np.build_script("folder", None, None)
-    assert "with timeout of 300 seconds" in script
-    assert "end timeout" in script
+    # entrambi i kind: caso portato dal doppione tests/organize/test_native_picker.py
+    # (Task 8d, review) prima di cancellarlo — il core testava solo "folder"
+    for kind in ("folder", "file"):
+        script = np.build_script(kind, None, None)
+        assert "with timeout of 300 seconds" in script
+        assert "end timeout" in script
