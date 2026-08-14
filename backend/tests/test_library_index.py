@@ -125,6 +125,30 @@ def test_lead_con_genere_si_allinea_al_tag_del_file_quando_acquisisce_un_possess
     assert t.genre == "Techno"
 
 
+def test_align_track_genre_ricalcola_energia(db):
+    """Contratto di `genre_align.align_track_genre` (docstring, righe 48-49):
+    con `apply=True`, oltre a scrivere `track.genre`, ricalcola l'energia
+    derivata perche' `energy` dipende da bpm+genere. `energy_source` diventa
+    'estimated' (mai 'computed', riservato all'analisi Essentia). Chiamata
+    diretta sulla funzione condivisa da tutti e cinque i call site di
+    produzione (scanner/manual_edit/apply/library_index/acquisition): nessuno
+    di quei call site asserisce sull'energia, solo su `genre`."""
+    from app.models import Track
+    from app.services.genre_align import align_track_genre
+
+    t = Track(source_type="local_files", has_local_file=True,
+              genre="Electronic", bpm=128.0)
+    db.add(t); db.commit()
+    before_energy = t.energy
+
+    new_genre = align_track_genre(t, "Techno", apply=True)
+
+    assert new_genre == "Techno"
+    assert t.genre == "Techno"
+    assert t.energy != before_energy
+    assert t.energy_source == "estimated"
+
+
 def test_duplicati_stesso_run_primo_vince(db, fake_audio, collega_da_disco):
     """Stesso audio in due file: il primo vince, il secondo si conta come duplicato."""
     from sqlalchemy import select
