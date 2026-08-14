@@ -132,20 +132,34 @@ def test_align_track_genre_ricalcola_energia(db):
     'estimated' (mai 'computed', riservato all'analisi Essentia). Chiamata
     diretta sulla funzione condivisa da tutti e cinque i call site di
     produzione (scanner/manual_edit/apply/library_index/acquisition): nessuno
-    di quei call site asserisce sull'energia, solo su `genre`."""
+    di quei call site asserisce sull'energia, solo su `genre`.
+
+    L'energia parte gia' seminata sul genere VECCHIO (non su None): altrimenti
+    `t.energy != before_energy` si riduce a un controllo di non-nullita' e
+    passerebbe anche se il ricalcolo leggesse il genere sbagliato (es. un
+    riordino che ricalcola prima di scrivere `track.genre`) — l'invariante
+    da proteggere e' che l'energia rifletta il genere NUOVO, non che sia
+    stata scritta. Derivare entrambi i valori da `estimate_energy` invece di
+    cablare le costanti tiene il test agganciato all'invariante, non alla
+    formula. Effetto collaterale utile: seminare l'energia copre anche il
+    ritorno anticipato di `apply_estimated_energy` quando il valore
+    ricalcolato coincide con quello gia' presente (`energy.py:24`) — un
+    percorso irraggiungibile partendo da `energy=None`."""
     from app.models import Track
+    from app.services.energy import estimate_energy
     from app.services.genre_align import align_track_genre
 
     t = Track(source_type="local_files", has_local_file=True,
-              genre="Electronic", bpm=128.0)
+              genre="Electronic", bpm=128.0,
+              energy=estimate_energy(128.0, None, "Electronic"),
+              energy_source="estimated")
     db.add(t); db.commit()
-    before_energy = t.energy
 
     new_genre = align_track_genre(t, "Techno", apply=True)
 
     assert new_genre == "Techno"
     assert t.genre == "Techno"
-    assert t.energy != before_energy
+    assert t.energy == estimate_energy(128.0, None, "Techno")  # segue il genere NUOVO
     assert t.energy_source == "estimated"
 
 
