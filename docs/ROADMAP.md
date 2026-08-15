@@ -49,8 +49,15 @@ endpoints, `docs/API.md`.
   playlist provenance and buy links (Bandcamp, Beatport, Discogs); archiving is
   reversible. Acquisition runs through the user's own slskd (Soulseek) daemon —
   deterministic ranking by quality, name match and availability, auto-pick above a
-  confidence floor or a manual pick, one job at a time, best-effort per track — or a
-  per-track SoundCloud download via yt-dlp. Both link the file back to the existing
+  confidence floor or a manual pick, one job at a time, best-effort per track. A
+  per-track **integrated Soulseek search** (`POST /api/downloads/search`, opened
+  from the wishlist row menu or the track detail page) covers what the auto-pick
+  misses: the user's literal query goes to slskd once, the raw results come back
+  unfiltered — low bitrate and weak name matches included — with the auto-pick's
+  query variants offered as one-click suggestions, and the same ranking used only
+  to order them and to mark the ones the auto-pick would have accepted. Picking a
+  file downloads it through the same one-at-a-time job. Alternatively, a per-track
+  SoundCloud download via yt-dlp. All of them link the file back to the existing
   `Track` (`has_local_file`/`local_path`/`local_format`/`local_bitrate`); tagging
   stays Organize's job. A file already on disk can also be linked by hand from the
   track detail page.
@@ -175,6 +182,14 @@ cleanup, and each was explicitly left alone this time.
   no importer left after the Organize language-endpoint removal above. Distinct
   from the same-named, still-live `LanguageSetting` in
   `backend/app/routers/settings.py`.
+- `downloadCandidates` in `frontend/lib/api/downloads.ts:27` has no caller left: the
+  integrated Soulseek search replaced the last one (the deleted `DownloadReviewModal`
+  built its list from it), so `POST /api/downloads/candidates` is now unreachable from
+  the frontend. Same shape as the `POST /api/downloads/search` case decided on
+  2026-08-13: the endpoint stays curl-able on a self-hosted app and is documented in
+  `docs/API.md:725`, so verify and remove — wrapper, endpoint, tests
+  (`backend/tests/test_downloads_router.py`) and docs — in a dedicated pass, not
+  in passing.
 - `backend/app/services/genre_align.py:41` — `align_track_genre(..., apply: bool)`'s
   `apply=False` (dry-run) branch has no caller or test left since the CLI that used
   it was removed in this review; the five surviving call sites all pass
@@ -183,6 +198,18 @@ cleanup, and each was explicitly left alone this time.
 
 ### Product backlog
 
+- **Acquisition sub-projects B and C, then the auto-pick recall fix.** The integrated
+  Soulseek search (spec `docs/superpowers/specs/2026-08-15-ricerca-soulseek-integrata-design.md`,
+  sub-project A) attacked the loudest symptom of "I'll just search Soulseek by hand";
+  the other three were scoped out of it on purpose and exist only inside that spec.
+  **(B) A real download queue** — today one job runs at a time and a second start is
+  refused, so picking files for several tracks means waiting between each.
+  **(C) A richer wishlist row with the attempt history** — the row carries only the
+  last outcome (`last_download_outcome`/`last_download_reason`), so what has already
+  been tried for a track, and with which query, is lost. **The auto-pick cascade's
+  recall fix** comes last on purpose: the cascade produces `not_found` for tracks that
+  do exist on Soulseek, but which variants actually fail is a question C's data
+  answers — fixing it blind would just be a different guess.
 - **Shazam phase 2.** Use the `DjSetTrack` corpus for co-occurrence suggestions
   (which tracks tend to get mixed together) — not started.
 - **PostgreSQL.** Low priority: SQLite is enough for personal, single-user use; only
