@@ -44,16 +44,34 @@ const ROUTES: { path: string; title: string | null }[] = [
 ];
 
 // Rumore noto e innocuo che puo' comparire in dev mode: whitelist esplicita,
-// tenuta minima e motivata caso per caso (si parte stretti).
-const CONSOLE_WHITELIST: RegExp[] = [
+// tenuta minima e motivata caso per caso (si parte stretti). `text` da solo
+// basta per i casi generici (es. HMR); quando serve restringere anche alla
+// risorsa (es. un 404 "atteso" su un solo endpoint) si aggiunge `url`, che
+// deve matchare `msg.location().url` — altrimenti la entry matcherebbe QUALUNQUE
+// "Failed to load resource" con lo stesso status, su qualunque rotta.
+const CONSOLE_WHITELIST: { text: RegExp; url?: RegExp }[] = [
   // HMR websocket del dev server: gioco di timing tra chiusura pagina e polling
   // Playwright su networkidle, non un errore applicativo. Non comparirebbe in
   // `next build` + `next start` (produzione).
-  /webpack-hmr/,
+  { text: /webpack-hmr/ },
+  // GET /api/organize/plan risponde 404 "plan_draft_missing" DI PROPOSITO quando
+  // non esiste ancora un piano in bozza (backend/app/organize/routers/plan.py), e
+  // la pagina lo gestisce esplicitamente (app/organize/plan/page.tsx, il `.catch`
+  // con il commento "404 = nessun draft"). Con il DB vuoto della suite e2e questo
+  // e' lo stato normale, non un errore applicativo — solo il log automatico del
+  // browser per una risorsa fallita. Il testo del messaggio non identifica la
+  // risorsa (qualunque 404 su qualunque rotta produce lo stesso testo), quindi
+  // si restringe anche sulla URL: cosi' un 404 su un endpoint diverso continua
+  // a far fallire il test.
+  { text: /Failed to load resource.*404/, url: /\/api\/organize\/plan$/ },
 ];
 
-function isWhitelisted(text: string): boolean {
-  return CONSOLE_WHITELIST.some((re) => re.test(text));
+function isWhitelisted(text: string, url?: string): boolean {
+  return CONSOLE_WHITELIST.some((entry) => {
+    if (!entry.text.test(text)) return false;
+    if (entry.url && !(url && entry.url.test(url))) return false;
+    return true;
+  });
 }
 
 async function collectConsoleErrors(page: Page): Promise<string[]> {
@@ -61,10 +79,13 @@ async function collectConsoleErrors(page: Page): Promise<string[]> {
   page.on("console", (msg: ConsoleMessage) => {
     if (msg.type() !== "error") return;
     const text = msg.text();
-    if (isWhitelisted(text)) return;
+    if (isWhitelisted(text, msg.location().url)) return;
     errors.push(text);
   });
   page.on("pageerror", (err) => {
+    // Le eccezioni JS non hanno location (nessuna risorsa di rete coinvolta):
+    // la entry con `url` non puo' comunque matchare (url e' undefined qui), e
+    // le entry solo-`text` (es. HMR) continuano a funzionare come prima.
     if (!isWhitelisted(err.message)) errors.push(err.message);
   });
   return errors;
