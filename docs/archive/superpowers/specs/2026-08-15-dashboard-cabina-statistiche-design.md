@@ -13,11 +13,16 @@ di più: deve essere molto curato, non necessariamente fedele allo sketch
 proposto dall'utente. Tutto il ritratto statistico della libreria migra in una
 pagina dedicata **`/statistics`**, raggiunta da un link nella dashboard.
 
-## Dashboard
+## Home (ex Dashboard)
 
-Ordine verticale: link `STATISTICHE →` (right-aligned, sopra il frontespizio —
-la pagina non ha header `PageLayout`, quindi niente slot `action`) →
-frontespizio (4 `Figure big`) → striscia pipeline → `AsciiDj` centrato.
+La pagina si chiama **Home** in nav (l'etichetta `nav.dashboard` vale "Home"
+in entrambe le lingue; la chiave resta `dashboard` perché `index-nav.tsx` ha
+lavoro non committato di un'altra sessione — rinominarla è un refactor a sé).
+
+Ordine verticale: link `STATISTICHE →` (right-aligned in cima — la pagina non
+ha header `PageLayout`, quindi niente slot `action`) → striscia pipeline →
+`AsciiDj` centrato → frontespizio (4 `Figure big`) che chiude la pagina come
+un colophon in cifre.
 
 Spariscono: banco «Lavoro aperto», colophon, polling (la pagina torna
 un'istantanea al primo caricamento). Restano identici: `Alert` d'errore,
@@ -48,11 +53,16 @@ salgono nell'aria. Dimensione "abbastanza grande": scala responsive fino a
 
 **La cabina è cliccabile**: con `onActivate` il componente è un `<button>`
 (aria-label i18n) con un suggerimento visibile sotto la scena
-(`dashboard.djHint`). La dashboard vi attacca "suona una traccia a caso":
-offset casuale su `stats.with_local_file`, una chiamata
-`GET /api/tracks?has_local_file=true&limit=1&offset=…`, e la traccia parte
-nel player docked (`usePlayer().play({kind:"local-track",…})`). Senza
-possedute il click non fa nulla.
+(`dashboard.djHint`). La Home vi attacca "suona una traccia a caso"
+**dalla playlist Top**: `findTopPlaylist` (in `lib/random-track.ts`) risolve
+la playlist per nome — case-insensitive, match esatto, mai per sottostringa —
+così l'id non è cablato; poi
+`GET /api/tracks?has_local_file=true&limit=0&in_playlist=<id>` (limit 0 = tutte)
+e `pickRandom` scelgono la traccia, che parte nel player docked
+(`usePlayer().play({kind:"local-track",…})`). Senza playlist Top si ripiega
+su tutta la libreria posseduta; senza possedute il click non fa nulla.
+Entrambi gli helper sono puri e testati (`pickRandom` accetta un generatore
+iniettabile).
 
 Colori: aria in `text-faint`, scena in `text-fg`. Un solo accento: la `O`
 del colpo di cassa dei woofer in `danger`, citando la grammatica decorativa

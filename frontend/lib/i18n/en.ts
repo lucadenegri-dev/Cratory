@@ -45,7 +45,8 @@ export const en = {
     groupOrganize: "Organize",
     groupCollect: "Collect",
     groupPlay: "Play",
-    dashboard: "Dashboard",
+    // La chiave resta `dashboard` (la usa index-nav): cambia solo l'etichetta.
+    dashboard: "Home",
     discovery: "Dig",
     shazam: "Shazam",
     library: "Library",

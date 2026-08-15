@@ -4,46 +4,53 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Music, ArrowRight } from "lucide-react";
 import {
-  apiGet, getPipeline,
-  type LibraryStats, type SetlistSummary, type PipelineStatus, type Track,
+  apiGet, getPipeline, listImportedPlaylists,
+  type LibraryStats, type SetlistSummary, type PipelineStatus, type Track, type Playlist,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
+import { findTopPlaylist, pickRandom } from "@/lib/random-track";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
 import { Card, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { Figure } from "@/components/dashboard/figure";
 import { AsciiDj } from "@/components/dashboard/ascii-dj";
 
-/** «La Cabina»: le due griglie di orientamento e il DJ. Il ritratto statistico
- *  della libreria vive in /statistics, raggiunta dal link in alto. */
-export default function Dashboard() {
+/** La Home: la striscia del ciclo, la consolle che suona e le quattro misure
+ *  in chiusura. Il ritratto statistico della libreria vive in /statistics. */
+export default function Home() {
   const t = useT();
   const player = usePlayer();
   const [stats, setStats] = useState<LibraryStats | null>(null);
   const [sets, setSets] = useState<SetlistSummary[] | null>(null);
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     apiGet<LibraryStats>("/api/stats").then((s) => { setStats(s); setError(null); }).catch((e) => setError(String(e.message ?? e)));
     getPipeline().then(setPipeline).catch(() => setPipeline(null));
     apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch(() => setSets([]));
+    // Serve solo a risolvere la playlist "Top" da cui pesca la consolle.
+    listImportedPlaylists().then(setPlaylists).catch(() => setPlaylists([]));
   }, []);
 
   const empty = stats != null && stats.total_tracks === 0;
 
-  /* Il click sulla consolle: una traccia posseduta a caso nel player docked.
-     Offset casuale sul conteggio dei posseduti, una sola chiamata. */
+  /* Il click sulla consolle: una traccia a caso dalla playlist "Top", fra
+     quelle possedute (solo quelle hanno un file da suonare). Se la playlist
+     non esiste si ripiega su tutta la libreria posseduta. `limit: 0` = tutte,
+     così la scelta è casuale davvero e basta una chiamata. */
   const playRandom = () => {
-    const owned = stats?.with_local_file ?? 0;
-    if (owned === 0) return;
-    const offset = Math.floor(Math.random() * owned);
+    if ((stats?.with_local_file ?? 0) === 0) return;
+    const top = findTopPlaylist(playlists);
     apiGet<{ total: number; items: Track[] }>("/api/tracks", {
-      has_local_file: true, limit: 1, offset,
+      has_local_file: true,
+      limit: 0,
+      ...(top ? { in_playlist: [top.id] } : {}),
     })
       .then((r) => {
-        const track = r.items[0];
+        const track = pickRandom(r.items);
         if (!track) return;
         player.play({
           kind: "local-track",
@@ -90,8 +97,16 @@ export default function Dashboard() {
             </Link>
           </div>
 
-          {/* Frontespizio: le quattro misure come apertura tipografica. */}
-          <div className="grid grid-cols-2 border-l border-t border-border sm:grid-cols-4">
+          {/* Striscia di orientamento: le fasi del ciclo con contatori vivi. */}
+          {pipeline && <PipelineStrip p={pipeline} />}
+
+          {/* La consolle: puro carattere, in tutti i sensi. Premuta, suona. */}
+          <div className="mt-10 flex justify-center overflow-x-auto">
+            <AsciiDj onActivate={playRandom} label={t.dashboard.djPlayRandom} hint={t.dashboard.djHint} />
+          </div>
+
+          {/* Le quattro misure chiudono la pagina, come un colophon in cifre. */}
+          <div className="mt-10 grid grid-cols-2 border-l border-t border-border sm:grid-cols-4">
             <Figure big label={t.dashboard.figureDiscovered} value={stats.total_tracks} />
             <Figure
               big
@@ -109,18 +124,6 @@ export default function Dashboard() {
             />
             <Figure big label={t.dashboard.figurePlaylists} value={stats.playlists} />
             <Figure big label={t.dashboard.figureSets} value={sets ? sets.length : "—"} />
-          </div>
-
-          {/* Striscia di orientamento: le fasi del ciclo con contatori vivi. */}
-          {pipeline && (
-            <div className="mt-6">
-              <PipelineStrip p={pipeline} />
-            </div>
-          )}
-
-          {/* La consolle: puro carattere, in tutti i sensi. Premuta, suona. */}
-          <div className="mt-12 flex justify-center overflow-x-auto">
-            <AsciiDj onActivate={playRandom} label={t.dashboard.djPlayRandom} hint={t.dashboard.djHint} />
           </div>
         </>
       )}

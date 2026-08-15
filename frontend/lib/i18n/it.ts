@@ -42,7 +42,8 @@ export const it: Dictionary = {
     groupOrganize: "Organizza",
     groupCollect: "Colleziona",
     groupPlay: "Suona",
-    dashboard: "Dashboard",
+    // La chiave resta `dashboard` (la usa index-nav): cambia solo l'etichetta.
+    dashboard: "Home",
     discovery: "Dig",
     shazam: "Shazam",
     library: "Libreria",
