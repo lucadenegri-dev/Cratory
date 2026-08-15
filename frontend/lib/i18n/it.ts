@@ -228,7 +228,7 @@ export const it: Dictionary = {
       n === 1 ? "1 traccia posseduta non è pronta per il set." : `${n} tracce possedute non sono pronte per il set.`,
     ledeNotReadyCta: "Mostrala in Libreria",
     ledeNotReadyCtaPlural: "Mostrale in Libreria",
-    ledeHint: "Pronta significa che ha sia BPM sia tonalità: senza, il Set Builder non può calcolarne le transizioni.",
+    ledeHint: "Pronta = BPM + tonalità presenti.",
 
     // Card sorgenti: la gerarchia dichiarata invece che sottintesa (regola 2 di CLAUDE.md)
     precedenceLabel: "Precedenza",
@@ -262,24 +262,16 @@ export const it: Dictionary = {
       n === 1
         ? "Analizza l'unica traccia senza BPM o tonalità, e riempie solo ciò che è vuoto."
         : `Analizza le ${n} tracce senza BPM o tonalità, e riempie solo ciò che è vuoto.`,
-    // Solo quando esistono tracce a cui manca UN campo su due: il job scrive
-    // sempre entrambi i valori analizzati, quindi il campo già presente può
-    // essere contraddetto anche con scope=missing. Senza quelle tracce la
-    // divergenza è impossibile e la frase sarebbe rumore.
-    scopeHintMissingHalf: (n: number) =>
-      n === 1
-        ? " Di queste, 1 ha già l'altro campo: se l'analisi lo contraddice, la differenza compare in Divergenze."
-        : ` Di queste, ${n} hanno già l'altro campo: se l'analisi lo contraddice, la differenza compare in Divergenze.`,
     scopeHintAll: (n: number) =>
-      `Rianalizza tutte le ${n} tracce possedute, comprese quelle già complete. Nulla di ciò che è già presente viene sovrascritto: ogni differenza compare in Divergenze, dove decidi tu.`,
+      `Rianalizza tutte le ${n} tracce possedute; le differenze finiscono in Divergenze.`,
     scopeMissing: "Solo tracce senza BPM/key",
     scopeAll: "Tutte le tracce possedute",
     startButton: "Avvia analisi",
-    startedNote: "Analisi avviata: progresso nella barra in basso. I campi vuoti si riempiono da soli; i conflitti compaiono qui sotto.",
+    startedNote: "Analisi avviata: progresso nella barra in basso.",
 
     // Divergenze: armate solo quando c'è davvero qualcosa da riconciliare
     divergencesHeading: "Divergenze",
-    divergencesEmpty: "Nessuna divergenza: l'analisi in-app coincide con i valori attuali.",
+    divergencesEmpty: "Nessuna divergenza.",
     divergencesCount: (n: number) => (n === 1 ? "1 conflitto da riconciliare" : `${n} conflitti da riconciliare`),
     colTrack: "Traccia",
     colCurrent: "Attuale",

@@ -229,7 +229,7 @@ export const en = {
       n === 1 ? "1 owned track is not ready for set." : `${n} owned tracks are not ready for set.`,
     ledeNotReadyCta: "Show it in Library",
     ledeNotReadyCtaPlural: "Show them in Library",
-    ledeHint: "Ready means it has both BPM and key: without them the Set Builder cannot work out its transitions.",
+    ledeHint: "Ready = BPM + key present.",
 
     // Sources card: the hierarchy, stated instead of implied (CLAUDE.md rule 2)
     precedenceLabel: "Precedence",
@@ -263,24 +263,16 @@ export const en = {
       n === 1
         ? "Analyzes the 1 track missing BPM or key, and fills only what is empty."
         : `Analyzes the ${n} tracks missing BPM or key, and fills only what is empty.`,
-    // Solo quando esistono tracce a cui manca UN campo su due: il job scrive
-    // sempre entrambi i valori analizzati, quindi il campo già presente può
-    // essere contraddetto anche con scope=missing. Senza quelle tracce la
-    // divergenza è impossibile e la frase sarebbe rumore.
-    scopeHintMissingHalf: (n: number) =>
-      n === 1
-        ? " 1 of them already has the other field: if the analysis contradicts it, the difference shows up under Divergences."
-        : ` ${n} of them already have the other field: if the analysis contradicts it, the difference shows up under Divergences.`,
     scopeHintAll: (n: number) =>
-      `Re-analyzes all ${n} owned tracks, including the complete ones. Nothing already there is overwritten: every difference shows up under Divergences, for you to decide.`,
+      `Re-analyzes all ${n} owned tracks; differences land under Divergences.`,
     scopeMissing: "Only tracks missing BPM/key",
     scopeAll: "All owned tracks",
     startButton: "Start analysis",
-    startedNote: "Analysis started: progress in the bottom bar. Empty fields are filled automatically; conflicts appear below.",
+    startedNote: "Analysis started: progress in the bottom bar.",
 
     // Divergences: armed only when there is something to reconcile
     divergencesHeading: "Divergences",
-    divergencesEmpty: "No divergences: in-app analysis matches the current values.",
+    divergencesEmpty: "No divergences.",
     divergencesCount: (n: number) => (n === 1 ? "1 conflict to reconcile" : `${n} conflicts to reconcile`),
     colTrack: "Track",
     colCurrent: "Current",

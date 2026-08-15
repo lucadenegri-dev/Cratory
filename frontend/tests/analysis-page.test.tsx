@@ -128,23 +128,6 @@ describe("pagina Analisi", () => {
     expect(screen.queryByText(/analizza l'unica traccia/i)).toBeNull();
   });
 
-  it("tace sulle divergenze da scope=missing quando non possono nascere", async () => {
-    // missing_bpm=1, missing_key=1, pending=1 => l'unica non pronta manca di
-    // ENTRAMBI i campi: non c'e' nulla da contraddire, e dirlo sarebbe rumore.
-    mount([]);
-    await screen.findByText(/riempie solo ciò che è vuoto/i);
-    expect(screen.queryByText(/compare in Divergenze/i)).toBeNull();
-  });
-
-  it("avverte delle divergenze da scope=missing quando una traccia ha già l'altro campo", async () => {
-    // missing_bpm=2, missing_key=1, pending=2 => 2*2-2-1 = 1 traccia a cui manca
-    // un campo su due: il job scrive comunque entrambi gli analysis_*, quindi
-    // il campo presente puo' essere contraddetto anche con scope=missing.
-    mount([], { missing_bpm: 2, missing_key: 1, rekordbox_pending: 2, ready_for_set: 410 });
-    await screen.findByText(/di queste, 1 ha già l'altro campo/i);
-    expect(screen.getByText(/compare in Divergenze/i)).toBeTruthy();
-  });
-
   it("non dichiara 100% di copertura con una traccia ancora non pronta", async () => {
     mount([]);
     // 411/412 = 99,75: Math.round diceva "100%" sopra l'unica cosa da fare.
@@ -182,7 +165,7 @@ describe("pagina Analisi", () => {
     const details = container.querySelector("details");
     expect(details).toBeTruthy();
     expect(details!.open).toBe(false);
-    // la card resta montata (import possibile una volta aperto il details)
-    expect(screen.getByTestId("rekordbox-card")).toBeTruthy();
+    // la card resta montata DENTRO il details (import possibile una volta aperto)
+    expect(within(details!).getByTestId("rekordbox-card")).toBeTruthy();
   });
 });

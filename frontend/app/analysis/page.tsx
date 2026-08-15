@@ -166,15 +166,6 @@ export default function AnalysisPage() {
   // farebbe dire "100%" con una traccia ancora non pronta (411/412 = 99,75).
   const notReady = overview ? overview.owned - overview.ready_for_set : 0;
 
-  // Tracce a cui manca UN campo su due. scope='missing' seleziona le TRACCE cui
-  // manca almeno un campo, e il job scrive sempre entrambi gli analysis_*: solo
-  // su queste il campo già presente può essere contraddetto (-> divergenza).
-  // Inclusione-esclusione sui conteggi che l'overview già espone:
-  //   pending = |manca bpm ∪ manca key| = missing_bpm + missing_key - |entrambi|
-  //   => esattamente uno = pending - |entrambi| = 2*pending - missing_bpm - missing_key
-  const missingHalf = overview
-    ? Math.max(0, 2 * overview.rekordbox_pending - overview.missing_bpm - overview.missing_key)
-    : 0;
   const coveragePct = overview && overview.owned
     ? (notReady === 0 ? 100 : Math.min(99, Math.floor((overview.ready_for_set / overview.owned) * 100)))
     : 0;
@@ -260,14 +251,9 @@ export default function AnalysisPage() {
             </div>
             {/* L'hint segue lo scope: le due voci non fanno la stessa cosa. */}
             <p className="mt-2 max-w-[68ch] text-xs text-muted">
-              {scope === "missing" ? (
-                <>
-                  {t.analysis.scopeHintMissing(notReady)}
-                  {missingHalf > 0 && t.analysis.scopeHintMissingHalf(missingHalf)}
-                </>
-              ) : (
-                t.analysis.scopeHintAll(overview?.owned ?? 0)
-              )}
+              {scope === "missing"
+                ? t.analysis.scopeHintMissing(notReady)
+                : t.analysis.scopeHintAll(overview?.owned ?? 0)}
             </p>
           </section>
         </Card>
