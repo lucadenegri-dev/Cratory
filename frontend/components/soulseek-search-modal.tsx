@@ -173,8 +173,11 @@ function SearchDialog({ target, onClose, onPicked }: {
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
             <span>{t.downloads.search.variantsHint}</span>
             {variants.filter((v) => v !== query).map((v) => (
-              <button key={v} type="button" onClick={() => runVariant(v)}
-                className="border border-border px-1.5 py-px text-[11px] text-muted hover:text-fg">
+              // Disabilitati durante una ricerca come il bottone «Cerca»: ogni
+              // click e' una richiesta sincrona da ~15s al backend, e impilarle
+              // non porta nulla a schermo (vince comunque l'ultima lanciata).
+              <button key={v} type="button" onClick={() => runVariant(v)} disabled={searching}
+                className="border border-border px-1.5 py-px text-[11px] text-muted hover:text-fg disabled:opacity-50">
                 {v}
               </button>
             ))}
