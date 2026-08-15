@@ -399,17 +399,11 @@ export const it: Dictionary = {
     linkAllButton: "Collega tutte",
     retryAllButton: "Riprova tutte",
     review: {
-      modalTitle: "Rivedi il download",
       expectedDuration: (d: string) => `durata attesa ${d}`,
       fileAlreadyDownloaded: "File già scaricato",
       vsExpected: "vs atteso",
       keepAnywayButton: "Tieni comunque",
       discardButton: "Scarta",
-      replaceWithHeading: "Oppure sostituisci con",
-      chooseFileHeading: "Scegli un file",
-      searchingCandidates: "Cerco i candidati su Soulseek…",
-      noCandidates: "Nessun candidato in questo momento: riprova più tardi (dipende da chi è online).",
-      downloadButton: "Scarica",
     },
     search: {
       modalTitle: "Cerca su Soulseek",

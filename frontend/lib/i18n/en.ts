@@ -400,17 +400,11 @@ export const en = {
     linkAllButton: "Link all",
     retryAllButton: "Retry all",
     review: {
-      modalTitle: "Review the download",
       expectedDuration: (d: string) => `expected duration ${d}`,
       fileAlreadyDownloaded: "File already downloaded",
       vsExpected: "vs expected",
       keepAnywayButton: "Keep anyway",
       discardButton: "Discard",
-      replaceWithHeading: "Or replace with",
-      chooseFileHeading: "Choose a file",
-      searchingCandidates: "Looking for candidates on Soulseek…",
-      noCandidates: "No candidates right now: try again later (depends on who's online).",
-      downloadButton: "Download",
     },
     search: {
       modalTitle: "Search on Soulseek",
