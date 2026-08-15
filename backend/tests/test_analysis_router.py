@@ -123,7 +123,11 @@ def test_dismiss_nasconde_da_divergences_e_overview(client):
 def test_dismiss_riappare_se_nuova_analisi_diversa(client):
     c, S = client
     _seed_divergent(S)
-    c.post("/api/analysis/dismiss", json={"track_ids": [1]})
+    r = c.post("/api/analysis/dismiss", json={"track_ids": [1]})
+    assert r.status_code == 200 and r.json()["dismissed"] == 1
+    # subito dopo lo scarto la riga sparisce: senza questo controllo il test
+    # sarebbe vacuo, indifferente al fatto che il dismiss sia avvenuto o meno
+    assert c.get("/api/analysis/divergences").json() == []
     with S() as s:
         t = s.get(Track, 1)
         t.analysis_bpm = 131.0  # nuova analisi, esito diverso dallo snapshot
