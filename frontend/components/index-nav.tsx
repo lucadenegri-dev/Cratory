@@ -10,9 +10,9 @@ import { useT, type Dictionary } from "@/lib/i18n";
 import { Clock } from "./clock";
 import { ThemeToggle } from "./theme-toggle";
 
-/* Il menu racconta la sequenza del flusso: Scopri → Organizza → Colleziona →
-   Suona. Organize sta fra Scopri e Colleziona perché è lì che vive nella
-   catena: i file scaricati si sistemano prima di diventare libreria. */
+/* Il menu racconta la sequenza del flusso: Scopri → Colleziona → Organizza →
+   Suona. Colleziona sta fra Scopri e Organizza: prima la libreria e le sue
+   liste, poi il lavoro sui file. */
 const navGroups = (t: Dictionary): { title: string | null; items: { href: string; label: string }[] }[] => [
   { title: null, items: [{ href: "/", label: t.nav.dashboard }] },
   {
@@ -24,6 +24,14 @@ const navGroups = (t: Dictionary): { title: string | null; items: { href: string
     ],
   },
   {
+    title: t.nav.groupCollect,
+    items: [
+      { href: "/library", label: t.nav.library },
+      { href: "/playlists", label: t.nav.playlists },
+      { href: "/labels", label: t.nav.labels },
+    ],
+  },
+  {
     title: t.nav.groupOrganize,
     items: [
       { href: "/organize/files", label: t.organize.nav.files },
@@ -31,14 +39,6 @@ const navGroups = (t: Dictionary): { title: string | null; items: { href: string
       { href: "/organize/duplicates", label: t.organize.nav.duplicates },
       { href: "/organize/plan", label: t.organize.nav.plan },
       { href: "/organize/history", label: t.organize.nav.history },
-    ],
-  },
-  {
-    title: t.nav.groupCollect,
-    items: [
-      { href: "/library", label: t.nav.library },
-      { href: "/playlists", label: t.nav.playlists },
-      { href: "/labels", label: t.nav.labels },
     ],
   },
   {

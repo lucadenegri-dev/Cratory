@@ -23,10 +23,10 @@ describe("gruppo Organize nella nav", () => {
     expect(nav).not.toContain('"/organize/settings"');
   });
 
-  it("il gruppo sta fra Scopri e Colleziona", () => {
+  it("il gruppo sta fra Colleziona e Suona", () => {
     const i = (s: string) => nav.indexOf(s);
-    expect(i("groupDiscover")).toBeGreaterThan(-1);
-    expect(i("groupDiscover")).toBeLessThan(i("groupOrganize"));
-    expect(i("groupOrganize")).toBeLessThan(i("groupCollect"));
+    expect(i("groupCollect")).toBeGreaterThan(-1);
+    expect(i("groupCollect")).toBeLessThan(i("groupOrganize"));
+    expect(i("groupOrganize")).toBeLessThan(i("groupPlay"));
   });
 });
