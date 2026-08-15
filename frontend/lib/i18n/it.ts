@@ -415,6 +415,7 @@ export const it: Dictionary = {
       downloadThis: "Scarica questo",
       jobRunning: "Un download è già in corso: attendi che finisca.",
       autoOkBadge: "affidabile",
+      openSlskd: "Apri la web UI di slskd",
       queueInfo: (n: number) => `coda ${n}`,
       noSlot: "senza slot",
       vsExpected: "vs atteso",

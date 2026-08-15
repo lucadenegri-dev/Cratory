@@ -416,6 +416,7 @@ export const en = {
       downloadThis: "Download this",
       jobRunning: "A download is already running: wait for it to finish.",
       autoOkBadge: "reliable",
+      openSlskd: "Open the slskd web UI",
       queueInfo: (n: number) => `queue ${n}`,
       noSlot: "no slot",
       vsExpected: "vs expected",

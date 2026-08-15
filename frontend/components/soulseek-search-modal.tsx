@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Download as DownloadIcon, Search, Trash2 } from "lucide-react";
+import { Check, Download as DownloadIcon, ExternalLink, Search, Trash2 } from "lucide-react";
 import { Alert, Badge, Button, Input, Loading, Modal, Spinner } from "@/components/ui";
 import { useJobs } from "@/components/jobs-provider";
 import {
   discardReview, downloadReview, downloadTrack, errText, fmtDuration, fmtSize,
-  keepReview, soulseekSearch, type DownloadCandidate, type DownloadReview,
+  keepReview, slskdStatus, soulseekSearch, type DownloadCandidate, type DownloadReview,
   type SoulseekSearchFile,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -55,6 +55,10 @@ function SearchDialog({ target, onClose, onPicked }: {
   const [review, setReview] = useState<DownloadReview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Per il link di scampo dentro l'avviso d'errore: se slskd non risponde, la
+  // sua web UI e' la via d'uscita, e il link in fondo alla pagina wishlist e'
+  // dietro a questo modal. web_url resta valorizzato anche a demone giu'.
+  const [slskdWebUrl, setSlskdWebUrl] = useState<string | null>(null);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
@@ -86,6 +90,7 @@ function SearchDialog({ target, onClose, onPicked }: {
   // con la query precompilata. La ricerca non aspetta la review: partono insieme.
   useEffect(() => {
     downloadReview(target.track_id).then((r) => alive.current && setReview(r)).catch(() => undefined);
+    slskdStatus().then((s) => alive.current && setSlskdWebUrl(s.web_url)).catch(() => undefined);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Soulseek è l'external system: l'effect avvia subito la ricerca sul target aperto, non deriva da altro state locale
     void search(`${target.artist ?? ""} ${target.title ?? ""}`.trim());
   }, [target, search]);
@@ -113,7 +118,17 @@ function SearchDialog({ target, onClose, onPicked }: {
           )}
         </p>
         {!canDownload && <Alert tone="info">{t.downloads.search.jobRunning}</Alert>}
-        {error && <Alert tone="danger">⚠ {error}</Alert>}
+        {error && (
+          <Alert tone="danger">
+            ⚠ {error}
+            {slskdWebUrl && (
+              <a href={slskdWebUrl} target="_blank" rel="noopener noreferrer"
+                className="ml-2 inline-flex items-center gap-1 underline">
+                <ExternalLink size={12} /> {t.downloads.search.openSlskd}
+              </a>
+            )}
+          </Alert>
+        )}
 
         {/* File dubbio gia' scaricato: Tieni/Scarta (endpoint review invariati). */}
         {dl && (
@@ -168,7 +183,10 @@ function SearchDialog({ target, onClose, onPicked }: {
 
         {/* Risultati grezzi: il ranking ordina e marca, non esclude. */}
         {searching && results === null && <Loading label={t.downloads.search.searching} />}
-        {results?.length === 0 && !searching && (
+        {/* Niente empty state sotto un errore: la lista e' vuota perche' la
+            ricerca e' fallita, e «prova una variante piu' corta» manderebbe
+            l'utente a riformulare la query mentre il problema e' il demone. */}
+        {results?.length === 0 && !searching && !error && (
           <p className="py-6 text-center text-sm text-muted">{t.downloads.search.noResults}</p>
         )}
         {results && results.length > 0 && (

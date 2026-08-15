@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   soulseekSearch: vi.fn(),
   downloadReview: vi.fn(),
   downloadTrack: vi.fn(),
+  slskdStatus: vi.fn(),
 }));
 
 // Si sostituiscono solo le funzioni usate dal modal; il resto del modulo resta vero
@@ -24,6 +25,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   soulseekSearch: mocks.soulseekSearch,
   downloadReview: mocks.downloadReview,
   downloadTrack: mocks.downloadTrack,
+  slskdStatus: mocks.slskdStatus,
 }));
 
 const target = { track_id: 1, artist: "Aphex Twin", title: "Xtal" };
@@ -34,6 +36,7 @@ beforeEach(() => {
     expected: { artist: "Aphex Twin", title: "Xtal", duration_seconds: 294 },
     downloaded: null, reason: null,
   });
+  mocks.slskdStatus.mockResolvedValue({ web_url: "http://localhost:5030" });
   mocks.soulseekSearch.mockResolvedValue({
     variants: ["Aphex Twin Xtal", "Aphex Twin"],
     results: [file(), file({ username: "user2", filename: "b1 rip.mp3", bitrate: 128,
@@ -111,6 +114,18 @@ describe("SoulseekSearchModal", () => {
 
     expect(screen.queryByText("older.flac")).toBeNull();
     expect(screen.getByText("newer.flac")).toBeTruthy();
+  });
+
+  it("su errore di ricerca niente empty state, ma il link alla web UI di slskd", async () => {
+    // Demone giu': suggerire «prova una variante piu' corta» sarebbe un consiglio
+    // sbagliato, e la via d'uscita e' la web UI di slskd (il link della pagina
+    // wishlist e' dietro al modal aperto).
+    mocks.soulseekSearch.mockRejectedValue(new Error("slskd error: connection refused"));
+    render(<SoulseekSearchModal target={target} onClose={vi.fn()} onPicked={vi.fn()} />);
+    expect(await screen.findByText(/connection refused/)).toBeTruthy();
+    expect(screen.queryByText(/Nessun risultato per questa query/)).toBeNull();
+    const link = await screen.findByRole("link", { name: /Apri la web UI di slskd/ });
+    expect(link.getAttribute("href")).toBe("http://localhost:5030");
   });
 
   it("blocco Tieni/Scarta presente quando c'e' un file dubbio", async () => {
