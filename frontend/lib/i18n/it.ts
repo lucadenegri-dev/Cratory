@@ -255,9 +255,8 @@ export const it: Dictionary = {
     analysisHeading: "Analisi in-app",
     engineUnavailable: "Essentia non è installata nel backend: installa la versione pinnata da backend/requirements.txt e riavvia.",
     scopeLabel: "Ambito",
-    // Le due voci non fanno la stessa cosa e l'hint deve dirlo. In entrambi i
-    // casi i valori presenti restano, ma cambia cosa viene analizzato — e con
-    // scope=missing una divergenza può comunque nascere sul campo già pieno.
+    // Spiega che questo ambito analizza solo le tracce senza BPM o
+    // tonalità, e riempie solo ciò che è vuoto.
     scopeHintMissing: (n: number) =>
       n === 1
         ? "Analizza l'unica traccia senza BPM o tonalità, e riempie solo ciò che è vuoto."

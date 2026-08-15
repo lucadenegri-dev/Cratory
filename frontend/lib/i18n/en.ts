@@ -256,9 +256,8 @@ export const en = {
     analysisHeading: "In-app analysis",
     engineUnavailable: "Essentia is not installed in the backend: install the pinned version from backend/requirements.txt and restart.",
     scopeLabel: "Scope",
-    // Le due voci non fanno la stessa cosa e l'hint deve dirlo. In entrambi i
-    // casi i valori presenti restano, ma cambia cosa viene analizzato — e con
-    // scope=missing una divergenza può comunque nascere sul campo già pieno.
+    // Spiega che questo ambito analizza solo le tracce senza BPM o
+    // tonalità, e riempie solo ciò che è vuoto.
     scopeHintMissing: (n: number) =>
       n === 1
         ? "Analyzes the 1 track missing BPM or key, and fills only what is empty."
