@@ -13,12 +13,14 @@ const applyAnalysis = vi.fn();
 const startAnalysis = vi.fn();
 const analysisOverview = vi.fn();
 const analysisDivergences = vi.fn();
+const dismissAnalysis = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   analysisOverview: (...a: unknown[]) => analysisOverview(...a),
   analysisDivergences: (...a: unknown[]) => analysisDivergences(...a),
   applyAnalysis: (...a: unknown[]) => applyAnalysis(...a),
   startAnalysis: (...a: unknown[]) => startAnalysis(...a),
+  dismissAnalysis: (...a: unknown[]) => dismissAnalysis(...a),
   errText: (e: unknown) => String((e as Error)?.message ?? e),
 }));
 
@@ -65,6 +67,7 @@ describe("pagina Analisi", () => {
     startAnalysis.mockReset().mockResolvedValue({});
     analysisOverview.mockReset();
     analysisDivergences.mockReset();
+    dismissAnalysis.mockReset().mockResolvedValue({ dismissed: 1 });
   });
   afterEach(cleanup);
 
@@ -125,23 +128,6 @@ describe("pagina Analisi", () => {
     expect(screen.queryByText(/analizza l'unica traccia/i)).toBeNull();
   });
 
-  it("tace sulle divergenze da scope=missing quando non possono nascere", async () => {
-    // missing_bpm=1, missing_key=1, pending=1 => l'unica non pronta manca di
-    // ENTRAMBI i campi: non c'e' nulla da contraddire, e dirlo sarebbe rumore.
-    mount([]);
-    await screen.findByText(/riempie solo ciò che è vuoto/i);
-    expect(screen.queryByText(/compare in Divergenze/i)).toBeNull();
-  });
-
-  it("avverte delle divergenze da scope=missing quando una traccia ha già l'altro campo", async () => {
-    // missing_bpm=2, missing_key=1, pending=2 => 2*2-2-1 = 1 traccia a cui manca
-    // un campo su due: il job scrive comunque entrambi gli analysis_*, quindi
-    // il campo presente puo' essere contraddetto anche con scope=missing.
-    mount([], { missing_bpm: 2, missing_key: 1, rekordbox_pending: 2, ready_for_set: 410 });
-    await screen.findByText(/di queste, 1 ha già l'altro campo/i);
-    expect(screen.getByText(/compare in Divergenze/i)).toBeTruthy();
-  });
-
   it("non dichiara 100% di copertura con una traccia ancora non pronta", async () => {
     mount([]);
     // 411/412 = 99,75: Math.round diceva "100%" sopra l'unica cosa da fare.
@@ -153,5 +139,38 @@ describe("pagina Analisi", () => {
     mount([], { owned: 412, ready_for_set: 412, missing_bpm: 0, missing_key: 0 });
     await screen.findByText(/411\/412 · 99%|412\/412 · 100%/);
     expect(screen.getByText(/412\/412 · 100%/)).toBeTruthy();
+  });
+
+  it("ignora una riga senza conferma: dismiss chiamato, canonici intatti, tabella ricaricata", async () => {
+    mount([MIXED], { divergent: 1 });
+    const row = (await screen.findByText(/Floating Points/)).closest("tr")!;
+    fireEvent.click(within(row).getByRole("button", { name: /^ignora$/i }));
+    // «Ignora» tiene il valore attuale: niente modale, niente apply.
+    await waitFor(() => expect(dismissAnalysis).toHaveBeenCalledWith([1]));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(applyAnalysis).not.toHaveBeenCalled();
+    // Senza il reload post-dismiss la riga scartata resterebbe visibile in
+    // tabella: il mount iniziale chiama analysisDivergences una volta, onDismiss
+    // deve richiamarla una seconda volta per far sparire la riga.
+    await waitFor(() => expect(analysisDivergences).toHaveBeenCalledTimes(2));
+  });
+
+  it("ignora selezionate manda tutti gli id scelti e ricarica la tabella", async () => {
+    mount([MIXED, CRATORY_ONLY], { divergent: 2 });
+    await screen.findByText(/Floating Points/);
+    fireEvent.click(screen.getByRole("checkbox", { name: /seleziona tutte/i }));
+    fireEvent.click(screen.getByRole("button", { name: /ignora selezionate \(2\)/i }));
+    await waitFor(() => expect(dismissAnalysis).toHaveBeenCalledWith([1, 2]));
+    await waitFor(() => expect(analysisDivergences).toHaveBeenCalledTimes(2));
+  });
+
+  it("l'import Rekordbox è ripiegato: details chiuso di default", async () => {
+    const { container } = mount([]);
+    await screen.findByText(/nessuna divergenza/i);
+    const details = container.querySelector("details");
+    expect(details).toBeTruthy();
+    expect(details!.open).toBe(false);
+    // la card resta montata DENTRO il details (import possibile una volta aperto)
+    expect(within(details!).getByTestId("rekordbox-card")).toBeTruthy();
   });
 });

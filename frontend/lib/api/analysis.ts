@@ -24,3 +24,7 @@ export async function applyAnalysis(body: {
 }) {
   return apiPost<{ applied: number; skipped: number }>("/api/analysis/apply", body);
 }
+
+export async function dismissAnalysis(trackIds: number[]) {
+  return apiPost<{ dismissed: number }>("/api/analysis/dismiss", { track_ids: trackIds });
+}

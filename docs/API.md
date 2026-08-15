@@ -556,6 +556,7 @@ POST /api/analysis/start
 GET  /api/analysis/status
 GET  /api/analysis/divergences
 POST /api/analysis/apply
+POST /api/analysis/dismiss
 ```
 
 Deterministic analysis of owned tracks through a local Essentia adapter — the
@@ -586,6 +587,7 @@ is per track so progress survives an interruption.
 the canonical value: `track_id`, artist/title, `bpm`, `bpm_source`, `analysis_bpm`,
 `bpm_delta`, `camelot_key`, `key_source`, `analysis_camelot`, `key_compatibility`
 (`same|compatible|weak|unknown`, the same Camelot-wheel rule as transitions).
+Dismissed divergences are excluded.
 
 `POST /api/analysis/apply` copies `analysis_*` into the canonical fields for a
 selection. Body `{track_ids?, mode?: "divergent"|"all", force?}`: explicit
@@ -594,6 +596,18 @@ selection. Body `{track_ids?, mode?: "divergent"|"all", force?}`: explicit
 `manual`** — and therefore requires `force=true`. `422 analysis_force_required`
 without it, `422 analysis_apply_empty` if neither `track_ids` nor `mode` is given.
 Response `{applied, skipped}`.
+
+`POST /api/analysis/dismiss` marks divergences as seen-and-ignored: body
+`{track_ids}` snapshots each track's current values on BOTH sides — the
+analyzed `analysis_bpm`/`analysis_camelot` and the canonical `bpm`/
+`camelot_key` at the moment of dismissal. A dismissed divergence disappears
+from `/divergences`, from the overview `divergent` count and from
+`mode="divergent"` apply; it reappears when EITHER side later stops matching
+its snapshot (BPM compared at 1 decimal, key exact) — a new analysis run with
+a different result, but also a manual edit or a Rekordbox import that changes
+the canonical `bpm`/`camelot_key` after the dismissal.
+`mode="all"` + `force` still rewrites dismissed tracks. `422
+analysis_dismiss_empty` on an empty list. Response `{dismissed}`.
 
 ## Discovery
 

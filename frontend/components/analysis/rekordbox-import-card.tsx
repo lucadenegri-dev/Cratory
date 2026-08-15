@@ -3,11 +3,12 @@
 import { useRef, useState } from "react";
 import { importRekordbox, type RekordboxImportReport } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Alert, Badge, Checkbox, Field, Spinner } from "@/components/ui";
+import { Alert, Checkbox, Field, Spinner } from "@/components/ui";
 
 /** Sezione "import rekordbox.xml": riempie BPM/key mancanti e ricalcola l'energia.
- *  È la sorgente PRIMARIA (regola 2 di CLAUDE.md), quindi vive in cima alla card
- *  Sorgenti, non come card di pari rango accanto all'analisi in-app.
+ *  È la sorgente PRIMARIA per autorità (regola 2 di CLAUDE.md), ma un'operazione
+ *  rara: vive ripiegata in fondo alla pagina Analisi, dentro un <details> (il
+ *  titolo lo dà il <summary> della pagina, non un h4 qui dentro).
  *  Di default non sovrascrive i valori manuali; sui valori 'cratory' vince sempre
  *  (backend: rekordbox_import.py:132), quindi l'analisi in-app non blocca Rekordbox.
  *  Il toggle "sovrascrivi" estende la vittoria anche a manuali e rekordbox. */
@@ -47,13 +48,6 @@ export function RekordboxImportCard({ onImported }: { onImported: () => void }) 
 
   return (
     <section className="px-5 py-4">
-      <div className="mb-2 flex items-center gap-2">
-        <h4 className="text-sm font-semibold uppercase tracking-wider text-fg-strong">
-          {t.analysis.rekordboxHeading}
-        </h4>
-        <Badge tone="primary">{t.analysis.rekordboxPrimaryTag}</Badge>
-      </div>
-
       {/* Niente conteggio "in attesa" qui: rekordbox_pending è calcolato come
           `bpm is None or not camelot_key`, cioè esattamente le tracce non pronte
           già annunciate dal lede. Stesso numero, stesse tracce, due nomi. */}

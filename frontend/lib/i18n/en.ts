@@ -45,7 +45,8 @@ export const en = {
     groupOrganize: "Organize",
     groupCollect: "Collect",
     groupPlay: "Play",
-    dashboard: "Dashboard",
+    // La chiave resta `dashboard` (la usa index-nav): cambia solo l'etichetta.
+    dashboard: "Home",
     discovery: "Dig",
     shazam: "Shazam",
     library: "Library",
@@ -192,22 +193,6 @@ export const en = {
     figureOwned: "Tracks owned",
     figurePlaylists: "Playlists",
     figureSets: "Saved sets",
-    libraryShape: "Library shape",
-    bpmHistogram: "BPM histogram",
-    topKeys: "Most common keys",
-    recentActivity: "Recent activity",
-    recentSets: "Recent sets",
-    viewAllMasculine: "All →",
-    viewAllFeminine: "All →",
-    noSetsYet: "No sets yet.",
-    recentPlaylistsHeading: "Recently imported playlists",
-    noPlaylistsYet: "No playlists yet.",
-    catalog: "Catalog",
-    topGenres: "Most common genres",
-    topLabels: "Top labels",
-    libraryGaps: "Library gaps",
-    noStructuralGaps: "No structural gaps",
-    tracksAbbrev: (n: number) => `${n} tracks`,
     trackCount: (n: number) => (n === 1 ? "1 track" : `${n} tracks`),
     stageDiscover: "Discover",
     stageDiscoverSub: "playlists imported",
@@ -219,6 +204,22 @@ export const en = {
     stageAnalyzeSub: "Analyze BPM & KEY or import from Rekordbox",
     stagePlay: "Play",
     stagePlaySub: "ready for a set",
+    statsLink: "Statistics",
+    djPlayRandom: "Play a random track",
+    djHint: "hit the booth · one random track",
+  },
+  stats: {
+    title: "Statistics",
+    bpm: "BPM histogram",
+    keys: "Keys",
+    genres: "Genres",
+    labels: "Labels",
+    energy: "Energy",
+    sources: "Sources",
+    coverage: "Coverage",
+    coverageBpm: "With BPM",
+    coverageKey: "With key",
+    coverageReady: "Ready for a set",
   },
   analysis: {
     pageTitle: "Analysis",
@@ -229,20 +230,17 @@ export const en = {
       n === 1 ? "1 owned track is not ready for set." : `${n} owned tracks are not ready for set.`,
     ledeNotReadyCta: "Show it in Library",
     ledeNotReadyCtaPlural: "Show them in Library",
-    ledeHint: "Ready means it has both BPM and key: without them the Set Builder cannot work out its transitions.",
+    ledeHint: "Ready = BPM + key present.",
 
     // Sources card: the hierarchy, stated instead of implied (CLAUDE.md rule 2)
-    sourcesHeading: "BPM / Key sources",
-    sourcesSubtitle: "Rekordbox is the primary source; in-app analysis covers what it left out.",
     precedenceLabel: "Precedence",
     precedenceValue: "manual > rekordbox > cratory",
+    rekordboxSummary: "Rekordbox import — primary source",
     sourceManual: "manual",
     sourceRekordbox: "rekordbox",
     sourceCratory: "cratory",
 
     // Rekordbox import (primary) — migrated from t.dashboard.*
-    rekordboxHeading: "Rekordbox import",
-    rekordboxPrimaryTag: "Primary",
     rekordboxIntroPrefix: "Analyze your tracks in Rekordbox (beatgrid/key), then import the collection's ",
     rekordboxIntroSuffix: " file here to complete BPM and key.",
     fileInputLabel: "rekordbox.xml file",
@@ -259,31 +257,22 @@ export const en = {
     analysisHeading: "In-app analysis",
     engineUnavailable: "Essentia is not installed in the backend: install the pinned version from backend/requirements.txt and restart.",
     scopeLabel: "Scope",
-    // Le due voci non fanno la stessa cosa e l'hint deve dirlo. In entrambi i
-    // casi i valori presenti restano, ma cambia cosa viene analizzato — e con
-    // scope=missing una divergenza può comunque nascere sul campo già pieno.
+    // Spiega che questo ambito analizza solo le tracce senza BPM o
+    // tonalità, e riempie solo ciò che è vuoto.
     scopeHintMissing: (n: number) =>
       n === 1
         ? "Analyzes the 1 track missing BPM or key, and fills only what is empty."
         : `Analyzes the ${n} tracks missing BPM or key, and fills only what is empty.`,
-    // Solo quando esistono tracce a cui manca UN campo su due: il job scrive
-    // sempre entrambi i valori analizzati, quindi il campo già presente può
-    // essere contraddetto anche con scope=missing. Senza quelle tracce la
-    // divergenza è impossibile e la frase sarebbe rumore.
-    scopeHintMissingHalf: (n: number) =>
-      n === 1
-        ? " 1 of them already has the other field: if the analysis contradicts it, the difference shows up under Divergences."
-        : ` ${n} of them already have the other field: if the analysis contradicts it, the difference shows up under Divergences.`,
     scopeHintAll: (n: number) =>
-      `Re-analyzes all ${n} owned tracks, including the complete ones. Nothing already there is overwritten: every difference shows up under Divergences, for you to decide.`,
+      `Re-analyzes all ${n} owned tracks; differences land under Divergences.`,
     scopeMissing: "Only tracks missing BPM/key",
     scopeAll: "All owned tracks",
     startButton: "Start analysis",
-    startedNote: "Analysis started: progress in the bottom bar. Empty fields are filled automatically; conflicts appear below.",
+    startedNote: "Analysis started: progress in the bottom bar.",
 
     // Divergences: armed only when there is something to reconcile
     divergencesHeading: "Divergences",
-    divergencesEmpty: "No divergences: in-app analysis matches the current values.",
+    divergencesEmpty: "No divergences.",
     divergencesCount: (n: number) => (n === 1 ? "1 conflict to reconcile" : `${n} conflicts to reconcile`),
     colTrack: "Track",
     colCurrent: "Current",
@@ -296,6 +285,9 @@ export const en = {
     compatUnknown: "—",
     selectAll: "Select all",
     applyRow: "Apply",
+    ignoreRow: "Ignore",
+    ignoreSelected: (n: number) => `Ignore selected (${n})`,
+    ignoredSummary: (n: number) => (n === 1 ? "1 divergence ignored" : `${n} divergences ignored`),
     applyAllDivergent: (n: number) => `Apply all divergent (${n})`,
     applySelected: (n: number) => `Apply selected (${n})`,
     applySelectedProtected: (n: number) =>

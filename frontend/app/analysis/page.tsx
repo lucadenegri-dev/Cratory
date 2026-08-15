@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import {
-  analysisDivergences, analysisOverview, applyAnalysis, errText, startAnalysis,
+  analysisDivergences, analysisOverview, applyAnalysis, dismissAnalysis, errText, startAnalysis,
   type AnalysisDivergence, type AnalysisOverview,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -102,6 +103,20 @@ export default function AnalysisPage() {
     }
   };
 
+  // «Ignora» non sovrascrive nulla (il canonico resta): niente conferma.
+  const onDismiss = async (ids: number[]) => {
+    setBusy(true); setError(null);
+    try {
+      const r = await dismissAnalysis(ids);
+      setNotice(t.analysis.ignoredSummary(r.dismissed));
+      await reload();
+    } catch (e) {
+      setError(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // Applicare sovrascrive la provenienza attuale con 'cratory'. Contiamo quante
   // righe calpesterebbero un valore manuale o Rekordbox (per l'avviso) e quante
   // specificamente manuale (per la conferma: il manuale è la massima autorità).
@@ -151,15 +166,6 @@ export default function AnalysisPage() {
   // farebbe dire "100%" con una traccia ancora non pronta (411/412 = 99,75).
   const notReady = overview ? overview.owned - overview.ready_for_set : 0;
 
-  // Tracce a cui manca UN campo su due. scope='missing' seleziona le TRACCE cui
-  // manca almeno un campo, e il job scrive sempre entrambi gli analysis_*: solo
-  // su queste il campo già presente può essere contraddetto (-> divergenza).
-  // Inclusione-esclusione sui conteggi che l'overview già espone:
-  //   pending = |manca bpm ∪ manca key| = missing_bpm + missing_key - |entrambi|
-  //   => esattamente uno = pending - |entrambi| = 2*pending - missing_bpm - missing_key
-  const missingHalf = overview
-    ? Math.max(0, 2 * overview.rekordbox_pending - overview.missing_bpm - overview.missing_key)
-    : 0;
   const coveragePct = overview && overview.owned
     ? (notReady === 0 ? 100 : Math.min(99, Math.floor((overview.ready_for_set / overview.owned) * 100)))
     : 0;
@@ -220,31 +226,12 @@ export default function AnalysisPage() {
           )
         )}
 
-        {/* Sorgenti: una card sola, con la precedenza dichiarata. Rekordbox è la
-            primaria (regola 2 di CLAUDE.md), l'analisi in-app è l'alternativa
-            sotto un filetto — non una card di pari rango. */}
+        {/* Analisi in-app: l'azione che si usa davvero, quindi in cima.
+            Rekordbox resta la fonte primaria per autorità (precedenza), ma è
+            un'operazione rara: vive ripiegata in fondo. */}
         <Card>
-          <CardHeader
-            title={t.analysis.sourcesHeading}
-            subtitle={t.analysis.sourcesSubtitle}
-          />
-
-          {/* La gerarchia su una riga sua: è la regola che governa tutta la card,
-              non una nota a margine della testata. */}
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border bg-surface-2 px-5 py-2.5">
-            <span className="text-[10px] uppercase tracking-wider text-muted">{t.analysis.precedenceLabel}</span>
-            <span className="whitespace-nowrap text-xs font-semibold text-fg-strong">{t.analysis.precedenceValue}</span>
-          </div>
-
-          <RekordboxImportCard onImported={reload} />
-
-          <section className="border-t border-border px-5 py-4">
-            {/* Nessun badge qui: il rango lo dicono già l'ordine, la striscia
-                della precedenza e il "PRIMARY" sopra. Un badge "ALTERNATIVE"
-                sarebbe rumore — e il badge neutro non passa AA (4.28:1). */}
-            <h4 className="mb-2 text-sm font-semibold uppercase tracking-wider text-fg-strong">
-              {t.analysis.analysisHeading}
-            </h4>
+          <CardHeader title={t.analysis.analysisHeading} />
+          <section className="px-5 py-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-72">
                 <Field label={t.analysis.scopeLabel}>
@@ -262,19 +249,11 @@ export default function AnalysisPage() {
                 {t.analysis.startButton}
               </Button>
             </div>
-            {/* L'hint dice PRIMA del click cosa farà davvero l'analisi, e segue
-                lo scope: le due voci non hanno lo stesso raggio d'azione.
-                Sotto i controlli e non dentro il Field, così non sfalsa
-                l'allineamento del bottone. */}
+            {/* L'hint segue lo scope: le due voci non fanno la stessa cosa. */}
             <p className="mt-2 max-w-[68ch] text-xs text-muted">
-              {scope === "missing" ? (
-                <>
-                  {t.analysis.scopeHintMissing(notReady)}
-                  {missingHalf > 0 && t.analysis.scopeHintMissingHalf(missingHalf)}
-                </>
-              ) : (
-                t.analysis.scopeHintAll(overview?.owned ?? 0)
-              )}
+              {scope === "missing"
+                ? t.analysis.scopeHintMissing(notReady)
+                : t.analysis.scopeHintAll(overview?.owned ?? 0)}
             </p>
           </section>
         </Card>
@@ -291,6 +270,13 @@ export default function AnalysisPage() {
               action={
                 <div className="flex flex-col items-end gap-1.5">
                   <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      size="sm" variant="ghost"
+                      disabled={busy || selected.size === 0}
+                      onClick={() => onDismiss([...selected])}
+                    >
+                      {t.analysis.ignoreSelected(selected.size)}
+                    </Button>
                     <Button
                       size="sm" variant="outline"
                       disabled={busy || selected.size === 0}
@@ -370,13 +356,22 @@ export default function AnalysisPage() {
                         </Badge>
                       </td>
                       <td className="px-4 py-2 text-right">
-                        <Button
-                          size="sm" variant="ghost"
-                          disabled={busy}
-                          onClick={() => onApply({ track_ids: [r.track_id] })}
-                        >
-                          {t.analysis.applyRow}
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm" variant="ghost"
+                            disabled={busy}
+                            onClick={() => onDismiss([r.track_id])}
+                          >
+                            {t.analysis.ignoreRow}
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost"
+                            disabled={busy}
+                            onClick={() => onApply({ track_ids: [r.track_id] })}
+                          >
+                            {t.analysis.applyRow}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -397,6 +392,21 @@ export default function AnalysisPage() {
             </div>
           </Card>
         )}
+
+        {/* Import Rekordbox: fonte primaria (precedenza), uso raro — ripiegato. */}
+        <details className="group border border-border">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
+            <span>{t.analysis.rekordboxSummary}</span>
+            <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-border">
+            <p className="px-5 pt-3 text-[10px] uppercase tracking-wider text-muted">
+              {t.analysis.precedenceLabel}{": "}
+              <span className="font-semibold text-fg-strong">{t.analysis.precedenceValue}</span>
+            </p>
+            <RekordboxImportCard onImported={reload} />
+          </div>
+        </details>
       </div>
 
       <ConfirmModal

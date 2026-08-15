@@ -42,7 +42,8 @@ export const it: Dictionary = {
     groupOrganize: "Organizza",
     groupCollect: "Colleziona",
     groupPlay: "Suona",
-    dashboard: "Dashboard",
+    // La chiave resta `dashboard` (la usa index-nav): cambia solo l'etichetta.
+    dashboard: "Home",
     discovery: "Dig",
     shazam: "Shazam",
     library: "Libreria",
@@ -191,22 +192,6 @@ export const it: Dictionary = {
     figureOwned: "Tracce possedute",
     figurePlaylists: "Playlist",
     figureSets: "Set salvati",
-    libraryShape: "Forma della libreria",
-    bpmHistogram: "Istogramma BPM",
-    topKeys: "Tonalità più frequenti",
-    recentActivity: "Attività recente",
-    recentSets: "Ultimi set",
-    viewAllMasculine: "Tutti →",
-    viewAllFeminine: "Tutte →",
-    noSetsYet: "Nessun set ancora.",
-    recentPlaylistsHeading: "Ultime playlist importate",
-    noPlaylistsYet: "Nessuna playlist ancora.",
-    catalog: "Catalogo",
-    topGenres: "Generi più frequenti",
-    topLabels: "Top etichette",
-    libraryGaps: "Gap della libreria",
-    noStructuralGaps: "Nessun gap strutturale",
-    tracksAbbrev: (n: number) => `${n} tr.`,
     trackCount: (n: number) => (n === 1 ? "1 traccia" : `${n} tracce`),
     stageDiscover: "Scopri",
     stageDiscoverSub: "playlist importate",
@@ -218,6 +203,22 @@ export const it: Dictionary = {
     stageAnalyzeSub: "Analizza BPM & KEY o importa da Rekordbox",
     stagePlay: "Suona",
     stagePlaySub: "pronte per un set",
+    statsLink: "Statistiche",
+    djPlayRandom: "Suona una traccia a caso",
+    djHint: "premi la consolle · una traccia a caso",
+  },
+  stats: {
+    title: "Statistiche",
+    bpm: "Istogramma BPM",
+    keys: "Tonalità",
+    genres: "Generi",
+    labels: "Label",
+    energy: "Energia",
+    sources: "Fonti",
+    coverage: "Copertura",
+    coverageBpm: "Con BPM",
+    coverageKey: "Con tonalità",
+    coverageReady: "Pronte per un set",
   },
   analysis: {
     pageTitle: "Analisi",
@@ -228,20 +229,17 @@ export const it: Dictionary = {
       n === 1 ? "1 traccia posseduta non è pronta per il set." : `${n} tracce possedute non sono pronte per il set.`,
     ledeNotReadyCta: "Mostrala in Libreria",
     ledeNotReadyCtaPlural: "Mostrale in Libreria",
-    ledeHint: "Pronta significa che ha sia BPM sia tonalità: senza, il Set Builder non può calcolarne le transizioni.",
+    ledeHint: "Pronta = BPM + tonalità presenti.",
 
     // Card sorgenti: la gerarchia dichiarata invece che sottintesa (regola 2 di CLAUDE.md)
-    sourcesHeading: "Sorgenti BPM / Key",
-    sourcesSubtitle: "Rekordbox è la fonte primaria; l'analisi in-app copre ciò che non ha coperto.",
     precedenceLabel: "Precedenza",
     precedenceValue: "manuale > rekordbox > cratory",
+    rekordboxSummary: "Import Rekordbox — fonte primaria",
     sourceManual: "manuale",
     sourceRekordbox: "rekordbox",
     sourceCratory: "cratory",
 
     // Import Rekordbox (primario) — migrate da t.dashboard.*
-    rekordboxHeading: "Import Rekordbox",
-    rekordboxPrimaryTag: "Primaria",
     rekordboxIntroPrefix: "Analizza le tracce in Rekordbox (beatgrid/tonalità), poi importa qui il file ",
     rekordboxIntroSuffix: " della collezione per completare BPM e tonalità.",
     fileInputLabel: "File rekordbox.xml",
@@ -258,31 +256,22 @@ export const it: Dictionary = {
     analysisHeading: "Analisi in-app",
     engineUnavailable: "Essentia non è installata nel backend: installa la versione pinnata da backend/requirements.txt e riavvia.",
     scopeLabel: "Ambito",
-    // Le due voci non fanno la stessa cosa e l'hint deve dirlo. In entrambi i
-    // casi i valori presenti restano, ma cambia cosa viene analizzato — e con
-    // scope=missing una divergenza può comunque nascere sul campo già pieno.
+    // Spiega che questo ambito analizza solo le tracce senza BPM o
+    // tonalità, e riempie solo ciò che è vuoto.
     scopeHintMissing: (n: number) =>
       n === 1
         ? "Analizza l'unica traccia senza BPM o tonalità, e riempie solo ciò che è vuoto."
         : `Analizza le ${n} tracce senza BPM o tonalità, e riempie solo ciò che è vuoto.`,
-    // Solo quando esistono tracce a cui manca UN campo su due: il job scrive
-    // sempre entrambi i valori analizzati, quindi il campo già presente può
-    // essere contraddetto anche con scope=missing. Senza quelle tracce la
-    // divergenza è impossibile e la frase sarebbe rumore.
-    scopeHintMissingHalf: (n: number) =>
-      n === 1
-        ? " Di queste, 1 ha già l'altro campo: se l'analisi lo contraddice, la differenza compare in Divergenze."
-        : ` Di queste, ${n} hanno già l'altro campo: se l'analisi lo contraddice, la differenza compare in Divergenze.`,
     scopeHintAll: (n: number) =>
-      `Rianalizza tutte le ${n} tracce possedute, comprese quelle già complete. Nulla di ciò che è già presente viene sovrascritto: ogni differenza compare in Divergenze, dove decidi tu.`,
+      `Rianalizza tutte le ${n} tracce possedute; le differenze finiscono in Divergenze.`,
     scopeMissing: "Solo tracce senza BPM/key",
     scopeAll: "Tutte le tracce possedute",
     startButton: "Avvia analisi",
-    startedNote: "Analisi avviata: progresso nella barra in basso. I campi vuoti si riempiono da soli; i conflitti compaiono qui sotto.",
+    startedNote: "Analisi avviata: progresso nella barra in basso.",
 
     // Divergenze: armate solo quando c'è davvero qualcosa da riconciliare
     divergencesHeading: "Divergenze",
-    divergencesEmpty: "Nessuna divergenza: l'analisi in-app coincide con i valori attuali.",
+    divergencesEmpty: "Nessuna divergenza.",
     divergencesCount: (n: number) => (n === 1 ? "1 conflitto da riconciliare" : `${n} conflitti da riconciliare`),
     colTrack: "Traccia",
     colCurrent: "Attuale",
@@ -295,6 +284,9 @@ export const it: Dictionary = {
     compatUnknown: "—",
     selectAll: "Seleziona tutte",
     applyRow: "Applica",
+    ignoreRow: "Ignora",
+    ignoreSelected: (n: number) => `Ignora selezionate (${n})`,
+    ignoredSummary: (n: number) => (n === 1 ? "1 divergenza ignorata" : `${n} divergenze ignorate`),
     applyAllDivergent: (n: number) => `Applica tutte le divergenti (${n})`,
     applySelected: (n: number) => `Applica selezionate (${n})`,
     applySelectedProtected: (n: number) =>

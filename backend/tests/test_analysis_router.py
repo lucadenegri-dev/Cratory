@@ -1,5 +1,6 @@
 """Router /api/analysis: start (503/409/202), overview, divergences, apply."""
 import pytest
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -108,3 +109,72 @@ def test_apply_vuoto_422(client):
     c, _ = client
     r = c.post("/api/analysis/apply", json={})
     assert r.status_code == 422
+
+
+def test_dismiss_nasconde_da_divergences_e_overview(client):
+    c, S = client
+    _seed_divergent(S)
+    r = c.post("/api/analysis/dismiss", json={"track_ids": [1]})
+    assert r.status_code == 200 and r.json()["dismissed"] == 1
+    assert c.get("/api/analysis/divergences").json() == []
+    assert c.get("/api/analysis/overview").json()["divergent"] == 0
+
+
+def test_dismiss_riappare_se_nuova_analisi_diversa(client):
+    c, S = client
+    _seed_divergent(S)
+    r = c.post("/api/analysis/dismiss", json={"track_ids": [1]})
+    assert r.status_code == 200 and r.json()["dismissed"] == 1
+    # subito dopo lo scarto la riga sparisce: senza questo controllo il test
+    # sarebbe vacuo, indifferente al fatto che il dismiss sia avvenuto o meno
+    assert c.get("/api/analysis/divergences").json() == []
+    with S() as s:
+        t = s.get(Track, 1)
+        t.analysis_bpm = 131.0  # nuova analisi, esito diverso dallo snapshot
+        s.commit()
+    rows = c.get("/api/analysis/divergences").json()
+    assert len(rows) == 1 and rows[0]["analysis_bpm"] == 131.0
+
+
+def test_apply_divergent_salta_le_scartate(client):
+    c, S = client
+    _seed_divergent(S)
+    c.post("/api/analysis/dismiss", json={"track_ids": [1]})
+    r = c.post("/api/analysis/apply", json={"mode": "divergent"})
+    assert r.status_code == 200 and r.json() == {"applied": 0, "skipped": 0}
+    with S() as s:
+        assert s.get(Track, 1).bpm == 128.0  # canonico intatto
+
+
+def test_force_all_riscrive_anche_le_scartate(client):
+    c, S = client
+    _seed_divergent(S)
+    with S() as s:  # mode='all' filtra su analyzed_at
+        s.get(Track, 1).analyzed_at = datetime.now(timezone.utc)
+        s.commit()
+    c.post("/api/analysis/dismiss", json={"track_ids": [1]})
+    r = c.post("/api/analysis/apply", json={"mode": "all", "force": True})
+    assert r.status_code == 200 and r.json()["applied"] == 1
+    with S() as s:
+        assert s.get(Track, 1).bpm == 130.0
+
+
+def test_dismiss_riappare_se_cambia_il_canonico(client):
+    c, S = client
+    _seed_divergent(S)
+    r = c.post("/api/analysis/dismiss", json={"track_ids": [1]})
+    assert r.status_code == 200 and r.json()["dismissed"] == 1
+    assert c.get("/api/analysis/divergences").json() == []
+    with S() as s:
+        t = s.get(Track, 1)
+        t.bpm = 140.0  # PATCH manuale/import Rekordbox: mai valutato dall'utente
+        s.commit()
+    rows = c.get("/api/analysis/divergences").json()
+    assert len(rows) == 1 and rows[0]["bpm"] == 140.0
+
+
+def test_dismiss_vuoto_422(client):
+    c, _ = client
+    r = c.post("/api/analysis/dismiss", json={"track_ids": []})
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "analysis_dismiss_empty"

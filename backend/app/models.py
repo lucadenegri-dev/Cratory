@@ -115,6 +115,18 @@ class Track(Base):
     analysis_camelot: Mapped[str | None] = mapped_column(String)
     analyzed_at: Mapped[datetime | None] = mapped_column(DateTime)
     analysis_error: Mapped[str | None] = mapped_column(String)
+    # Scarto divergenze (pagina Analisi): snapshot di ENTRAMBI i lati al
+    # momento dello scarto, l'analizzato (analysis_bpm/analysis_camelot, sotto)
+    # e il canonico (bpm/camelot_key, qui sotto). La divergenza resta nascosta
+    # finche' entrambi i lati coincidono ancora col loro snapshot (is_dismissed);
+    # se cambia anche uno solo dei due - una nuova analisi (Essentia e'
+    # deterministico: senza questo lato riprodurrebbe lo stesso esito per
+    # sempre) oppure il canonico via PATCH manuale o import Rekordbox - la
+    # divergenza riappare da sola.
+    analysis_dismissed_bpm: Mapped[float | None] = mapped_column(Float)
+    analysis_dismissed_camelot: Mapped[str | None] = mapped_column(String)
+    analysis_dismissed_of_bpm: Mapped[float | None] = mapped_column(Float)
+    analysis_dismissed_of_camelot: Mapped[str | None] = mapped_column(String)
     # Stato traccia: imported | ready_for_set
     status: Mapped[str] = mapped_column(String, default="imported", index=True)
     album_art_url: Mapped[str | None] = mapped_column(Text)  # artwork_url (cover album)
