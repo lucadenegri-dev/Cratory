@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/api", () => ({
@@ -8,6 +8,7 @@ vi.mock("@/lib/api", () => ({
   trackCoverSrc: () => null,
   trackAudioUrl: (id: number) => `/api/tracks/${id}/audio`,
   discoverySaveForLater: vi.fn(),
+  updateTrack: vi.fn(),
 }));
 
 import { discoveryPreview } from "@/lib/api";
@@ -24,7 +25,12 @@ function Harness() {
       <button onClick={() => p.play({ kind: "discovery-preview", item: { key: "b", artist: "Artist", title: "Other", sourceId: "42", source: "discogs", level: "track", label: "Other" } })}>
         play-b
       </button>
+      <button onClick={() => p.play({ kind: "local-track", track: { id: 5, title: "T", artist: "A" } })}>
+        play-local
+      </button>
+      <button onClick={() => p.stop()}>stop</button>
       <span data-testid="status">{p.status}</span>
+      <span data-testid="audible">{String(p.audible)}</span>
     </div>
   );
 }
@@ -110,5 +116,116 @@ describe("preview player", () => {
     expect(screen.getByTestId("preview-iframe")).toBeTruthy();
     expect(screen.queryByTestId("preview-audio")).toBeNull();
     expect(screen.getByTestId("status").textContent).toBe("playing");
+  });
+});
+
+/* `audible` è lo stato che la Home usa per animare la consolle: deve seguire il
+   suono che esce davvero, non ciò che è caricato nel dock. */
+describe("audible: il suono che esce davvero", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("parte falso e resta falso finché l'elemento audio non suona", async () => {
+    renderAll();
+    expect(screen.getByTestId("audible").textContent).toBe("false");
+    await act(async () => {
+      screen.getByText("play-local").click();
+    });
+    // Il dock ha montato l'audio (status=playing) ma nessun evento è ancora partito.
+    expect(screen.getByTestId("status").textContent).toBe("playing");
+    expect(screen.getByTestId("audible").textContent).toBe("false");
+  });
+
+  it("segue play/pause/ended dell'elemento audio locale", async () => {
+    renderAll();
+    await act(async () => {
+      screen.getByText("play-local").click();
+    });
+    const audio = screen.getByTestId("local-audio");
+
+    await act(async () => {
+      fireEvent.play(audio);
+    });
+    expect(screen.getByTestId("audible").textContent).toBe("true");
+
+    await act(async () => {
+      fireEvent.pause(audio);
+    });
+    expect(screen.getByTestId("audible").textContent).toBe("false");
+
+    await act(async () => {
+      fireEvent.play(audio);
+      fireEvent.ended(audio);
+    });
+    expect(screen.getByTestId("audible").textContent).toBe("false");
+  });
+
+  it("segue play/pause anche sull'audio della preview discovery", async () => {
+    (discoveryPreview as ReturnType<typeof vi.fn>).mockResolvedValue({
+      kind: "itunes", audio_url: "http://p", youtube_video_id: null, source_url: "http://v", matched_title: "Acid Trip",
+    });
+    renderAll();
+    await act(async () => {
+      screen.getByText("play-a").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("preview-audio")).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.play(screen.getByTestId("preview-audio"));
+    });
+    expect(screen.getByTestId("audible").textContent).toBe("true");
+
+    await act(async () => {
+      fireEvent.pause(screen.getByTestId("preview-audio"));
+    });
+    expect(screen.getByTestId("audible").textContent).toBe("false");
+  });
+
+  it("l'iframe YouTube conta come audibile: non espone eventi, ma è in autoplay", async () => {
+    (discoveryPreview as ReturnType<typeof vi.fn>).mockResolvedValue({
+      kind: "youtube", audio_url: null, youtube_video_id: "abcdefghijk", source_url: "http://y", matched_title: "Artist - Acid Trip",
+    });
+    renderAll();
+    await act(async () => {
+      screen.getByText("play-a").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("preview-iframe")).toBeTruthy());
+    expect(screen.getByTestId("audible").textContent).toBe("true");
+  });
+
+  it("chiudere il dock (stop) azzera audible", async () => {
+    renderAll();
+    await act(async () => {
+      screen.getByText("play-local").click();
+    });
+    await act(async () => {
+      fireEvent.play(screen.getByTestId("local-audio"));
+    });
+    expect(screen.getByTestId("audible").textContent).toBe("true");
+
+    await act(async () => {
+      screen.getByText("stop").click();
+    });
+    expect(screen.getByTestId("audible").textContent).toBe("false");
+  });
+
+  it("cambiare traccia azzera audible finché la nuova non parte", async () => {
+    renderAll();
+    await act(async () => {
+      screen.getByText("play-local").click();
+    });
+    await act(async () => {
+      fireEvent.play(screen.getByTestId("local-audio"));
+    });
+    expect(screen.getByTestId("audible").textContent).toBe("true");
+
+    (discoveryPreview as ReturnType<typeof vi.fn>).mockReturnValue(new Promise(() => {}));
+    await act(async () => {
+      screen.getByText("play-a").click();
+    });
+    expect(screen.getByTestId("audible").textContent).toBe("false");
   });
 });

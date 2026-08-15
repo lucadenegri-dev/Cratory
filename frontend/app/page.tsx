@@ -100,9 +100,16 @@ export default function Home() {
           {/* Striscia di orientamento: le fasi del ciclo con contatori vivi. */}
           {pipeline && <PipelineStrip p={pipeline} />}
 
-          {/* La consolle: puro carattere, in tutti i sensi. Premuta, suona. */}
+          {/* La consolle: puro carattere, in tutti i sensi. Premuta, suona.
+              Si muove solo mentre dall'app esce davvero del suono (`audible`,
+              non `status`: in pausa il dock resta "playing"). */}
           <div className="mt-10 flex justify-center overflow-x-auto">
-            <AsciiDj onActivate={playRandom} label={t.dashboard.djPlayRandom} hint={t.dashboard.djHint} />
+            <AsciiDj
+              animate={player.audible}
+              onActivate={playRandom}
+              label={t.dashboard.djPlayRandom}
+              hint={t.dashboard.djHint}
+            />
           </div>
 
           {/* Le quattro misure chiudono la pagina, come un colophon in cifre.

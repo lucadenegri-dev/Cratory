@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AsciiDj, djFrame, DJ_ROWS, DJ_COLS, DJ_AIR_ROWS } from "@/components/dashboard/ascii-dj";
@@ -56,5 +56,45 @@ describe("AsciiDj (guscio)", () => {
     fireEvent.click(btn);
     expect(spy).toHaveBeenCalledOnce();
     expect(screen.getByText("premi")).toBeTruthy();
+  });
+
+  /* La consolle si muove solo quando in app sta suonando qualcosa: `animate`
+     è il rubinetto. Il caso `true` è il denominatore — senza, il test su
+     `false` sarebbe verde anche con l'animazione rotta del tutto. */
+  it("con animate la scena avanza da sola nel tempo", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<AsciiDj animate />);
+      const before = container.textContent;
+      act(() => { vi.advanceTimersByTime(1500); });
+      expect(container.textContent).not.toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("con animate={false} la scena resta ferma", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<AsciiDj animate={false} />);
+      const before = container.textContent;
+      act(() => { vi.advanceTimersByTime(5000); });
+      expect(container.textContent).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("riprendendo, la scena riparte da dove si era fermata (non salta a capo)", () => {
+    vi.useFakeTimers();
+    try {
+      const { container, rerender } = render(<AsciiDj animate />);
+      act(() => { vi.advanceTimersByTime(1500); });
+      const running = container.textContent;
+      rerender(<AsciiDj animate={false} />);
+      expect(container.textContent).toBe(running);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

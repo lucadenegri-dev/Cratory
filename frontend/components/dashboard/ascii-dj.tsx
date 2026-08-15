@@ -146,19 +146,24 @@ function WooferRow({ line }: { line: string }) {
 }
 
 /** La cabina animata. Con `onActivate` diventa un bottone (etichetta `label`,
- *  suggerimento visibile `hint` sotto la scena). */
-export function AsciiDj({ onActivate, label, hint }: {
+ *  suggerimento visibile `hint` sotto la scena). `animate` è il rubinetto: la
+ *  dashboard lo lega al suono che esce davvero dal player, così la consolle si
+ *  muove solo mentre c'è musica. A rubinetto chiuso la scena resta dov'era —
+ *  come un fermo immagine, non un ritorno a capo. */
+export function AsciiDj({ onActivate, label, hint, animate = true }: {
   onActivate?: () => void;
   label?: string;
   hint?: string;
+  animate?: boolean;
 }) {
   const reduced = usePrefersReducedMotion();
   const [tick, setTick] = useState(0);
+  const running = animate && !reduced;
   useEffect(() => {
-    if (reduced) return;
+    if (!running) return;
     const id = setInterval(() => setTick((t) => (t + 1) % 100000), 500);
     return () => clearInterval(id);
-  }, [reduced]);
+  }, [running]);
 
   const lines = djFrame(reduced ? 0 : tick);
 

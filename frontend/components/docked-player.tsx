@@ -10,7 +10,7 @@ import { useT } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
 
 export function DockedPlayer() {
-  const { active, status, data, stop } = usePlayer();
+  const { active, status, data, stop, setAudible } = usePlayer();
   const t = useT();
   // Stati effimeri del dock: errore di riproduzione locale (formato non
   // supportato / file sparito) e stato dell'azione ADD per la preview discovery.
@@ -34,6 +34,14 @@ export function DockedPlayer() {
     setLocalError(false);
     setSavingAdd(false);
   }
+
+  /* Gli eventi dell'elemento audio, riportati al player: sono l'unica fonte
+     onesta del "sta suonando" (autoplay bloccato, pausa, fine traccia). */
+  const audioEvents = {
+    onPlay: () => setAudible(true),
+    onPause: () => setAudible(false),
+    onEnded: () => setAudible(false),
+  };
 
   if (!active || status === "idle") return null;
 
@@ -111,7 +119,8 @@ export function DockedPlayer() {
             src={trackAudioUrl(active.track.id)}
             controls
             autoPlay
-            onError={() => setLocalError(true)}
+            {...audioEvents}
+            onError={() => { setLocalError(true); setAudible(false); }}
             className="w-full"
           />
         ))}
@@ -121,7 +130,7 @@ export function DockedPlayer() {
           {status === "loading" && <div className="py-2 text-xs text-faint">{t.discovery.previewLoading}</div>}
           {status === "unavailable" && <div className="py-2 text-xs text-faint">{t.discovery.noPreview}</div>}
           {status === "playing" && data?.kind === "itunes" && data.audio_url && (
-            <audio data-testid="preview-audio" src={data.audio_url} controls autoPlay className="w-full" />
+            <audio data-testid="preview-audio" src={data.audio_url} controls autoPlay {...audioEvents} className="w-full" />
           )}
           {status === "playing" && data?.kind === "youtube" && data.youtube_video_id && (
             <div className="aspect-video w-full overflow-hidden">

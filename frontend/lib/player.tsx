@@ -40,8 +40,15 @@ type Ctx = {
   active: PlaybackSource | null;
   status: Status;
   data: DiscoveryPreview | null;
+  /** Vero solo quando dall'app esce davvero del suono. `status` dice cosa è
+   *  caricato nel dock, non se sta suonando: in pausa resta "playing". Lo
+   *  alimenta il dock con gli eventi play/pause/ended dell'elemento audio; la
+   *  Home ci attacca l'animazione della consolle. */
+  audible: boolean;
   play: (source: PlaybackSource) => void;
   stop: () => void;
+  /** Riservato al dock: pubblica lo stato reale dell'elemento audio. */
+  setAudible: (v: boolean) => void;
 };
 
 const PlayerCtx = createContext<Ctx | null>(null);
@@ -50,12 +57,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState<PlaybackSource | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [data, setData] = useState<DiscoveryPreview | null>(null);
+  const [elementPlaying, setAudible] = useState(false);
   const reqId = useRef(0);
 
   const play = useCallback((source: PlaybackSource) => {
     const id = ++reqId.current; // invalida qualunque risoluzione preview in volo
     setActive(source);
     setData(null);
+    setAudible(false); // la nuova sorgente è muta finché il suo elemento non parte
     if (source.kind === "local-track") {
       setStatus("playing"); // stream diretto: nessuna risoluzione async
       return;
@@ -93,9 +102,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setActive(null);
     setStatus("idle");
     setData(null);
+    setAudible(false);
   }, []);
 
-  return <PlayerCtx.Provider value={{ active, status, data, play, stop }}>{children}</PlayerCtx.Provider>;
+  /* L'iframe YouTube non espone eventi senza caricare la sua API: quando è
+     montato sta suonando in autoplay, quindi lo si conta come audibile. */
+  const audible = elementPlaying || (status === "playing" && data?.kind === "youtube");
+
+  return (
+    <PlayerCtx.Provider value={{ active, status, data, audible, play, stop, setAudible }}>
+      {children}
+    </PlayerCtx.Provider>
+  );
 }
 
 export function usePlayer(): Ctx {
