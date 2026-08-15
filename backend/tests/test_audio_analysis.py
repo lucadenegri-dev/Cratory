@@ -1,7 +1,8 @@
 """Regole deterministiche di divergenza e apply dell'analisi in-app."""
 from app.models import Track
 from app.services.audio_analysis import (apply_analysis, auto_apply_missing,
-                                         divergence_row, diverges)
+                                         dismiss_divergence, divergence_row,
+                                         diverges, is_dismissed, open_divergence)
 
 
 def _t(**kw):
@@ -62,3 +63,36 @@ def test_divergence_row_completa():
     row = divergence_row(t)
     assert row["track_id"] == 7 and row["bpm_delta"] == 2.5
     assert row["key_compatibility"] == "compatible"  # 8A vs 8B: relativa
+
+
+def test_mai_scartata_non_e_dismissed():
+    t = _t(bpm=128.0, camelot_key="8A", analysis_bpm=130.0, analysis_camelot="9A")
+    assert is_dismissed(t) is False
+    assert open_divergence(t) is True
+
+
+def test_dismiss_nasconde_e_riappare_solo_se_il_bpm_cambia():
+    t = _t(bpm=128.0, camelot_key="8A", analysis_bpm=130.0, analysis_camelot="9A")
+    dismiss_divergence(t)
+    assert is_dismissed(t) is True and open_divergence(t) is False
+    # ri-analisi identica a 1 decimale (rumore analizzatore): resta scartata
+    t.analysis_bpm = 130.04
+    assert open_divergence(t) is False
+    # ri-analisi con esito diverso oltre 1 decimale: riappare da sola
+    t.analysis_bpm = 131.0
+    assert open_divergence(t) is True
+
+
+def test_dismiss_riappare_se_cambia_la_key():
+    t = _t(bpm=128.0, camelot_key="8A", analysis_bpm=128.0, analysis_camelot="9A")
+    dismiss_divergence(t)
+    assert open_divergence(t) is False
+    t.analysis_camelot = "10A"
+    assert open_divergence(t) is True
+
+
+def test_dismiss_con_un_solo_campo_analizzato():
+    # Solo la key e' stata analizzata: lo snapshot BPM None==None deve reggere.
+    t = _t(bpm=None, camelot_key="8A", analysis_bpm=None, analysis_camelot="9A")
+    dismiss_divergence(t)
+    assert is_dismissed(t) is True and open_divergence(t) is False

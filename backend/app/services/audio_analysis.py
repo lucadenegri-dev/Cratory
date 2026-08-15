@@ -4,7 +4,10 @@ Il job (audio_analysis_job) scrive SOLO analysis_*; queste funzioni sono l'unico
 ponte verso i campi canonici bpm/camelot_key, sempre con source='cratory'.
 Gerarchia fonti: manual > rekordbox > cratory. L'autorizzazione a sovrascrivere
 sta nella SELEZIONE delle tracce (router/UI), non qui: apply_analysis applica e
-basta, auto_apply_missing riempie solo i vuoti (nessun conflitto possibile)."""
+basta, auto_apply_missing riempie solo i vuoti (nessun conflitto possibile).
+
+Lo scarto (dismiss_divergence) non tocca ne' i canonici ne' analysis_*: salva
+solo lo snapshot dismissed_*; is_dismissed lo confronta con l'analisi corrente."""
 
 from app.services.camelot import camelot_compatibility
 from app.services.energy import apply_estimated_energy
@@ -18,6 +21,30 @@ def diverges(track) -> bool:
     key_div = (bool(track.analysis_camelot) and bool(track.camelot_key)
                and track.analysis_camelot != track.camelot_key)
     return bpm_div or key_div
+
+
+def dismiss_divergence(track) -> None:
+    """Fotografa l'esito corrente dell'analisi come «visto e ignorato»."""
+    track.analysis_dismissed_bpm = track.analysis_bpm
+    track.analysis_dismissed_camelot = track.analysis_camelot
+
+
+def is_dismissed(track) -> bool:
+    """True se lo snapshot scartato coincide con l'analisi corrente, alla
+    stessa precisione di diverges(): BPM a 1 decimale (None==None), key esatta
+    (vuoto==vuoto). Una nuova analisi con esito diverso lo invalida da sola."""
+    bpm_same = (
+        (track.analysis_bpm is None) == (track.analysis_dismissed_bpm is None)
+        and (track.analysis_bpm is None
+             or round(track.analysis_bpm, 1) == round(track.analysis_dismissed_bpm, 1))
+    )
+    key_same = (track.analysis_camelot or None) == (track.analysis_dismissed_camelot or None)
+    return bpm_same and key_same
+
+
+def open_divergence(track) -> bool:
+    """Divergenza aperta: diverge dal canonico E non e' stata scartata."""
+    return diverges(track) and not is_dismissed(track)
 
 
 def _apply(track, bpm_ok: bool, key_ok: bool) -> bool:

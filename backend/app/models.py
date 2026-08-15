@@ -115,6 +115,11 @@ class Track(Base):
     analysis_camelot: Mapped[str | None] = mapped_column(String)
     analyzed_at: Mapped[datetime | None] = mapped_column(DateTime)
     analysis_error: Mapped[str | None] = mapped_column(String)
+    # Scarto divergenze (pagina Analisi): snapshot dei valori analysis_* che
+    # l'utente ha scelto di ignorare. La divergenza resta nascosta finche'
+    # l'analisi riproduce questo esito; se cambia, riappare (is_dismissed).
+    analysis_dismissed_bpm: Mapped[float | None] = mapped_column(Float)
+    analysis_dismissed_camelot: Mapped[str | None] = mapped_column(String)
     # Stato traccia: imported | ready_for_set
     status: Mapped[str] = mapped_column(String, default="imported", index=True)
     album_art_url: Mapped[str | None] = mapped_column(Text)  # artwork_url (cover album)
