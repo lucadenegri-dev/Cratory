@@ -111,10 +111,6 @@ export function playlistGaps(id: number, opts?: { signal?: AbortSignal }) {
   return apiGet<GapAnalysis>(`/api/playlists/${id}/gaps`, undefined, opts);
 }
 
-export function libraryGaps() {
-  return apiGet<GapAnalysis>("/api/playlists/library/gaps");
-}
-
 export function createPlaylistFromTracks(name: string, trackIds: number[]) {
   return apiPost<Playlist>("/api/playlists/create-from-tracks", { name, track_ids: trackIds });
 }
