@@ -175,4 +175,14 @@ describe("pagina Analisi", () => {
     fireEvent.click(screen.getByRole("button", { name: /ignora selezionate \(2\)/i }));
     await waitFor(() => expect(dismissAnalysis).toHaveBeenCalledWith([1, 2]));
   });
+
+  it("l'import Rekordbox è ripiegato: details chiuso di default", async () => {
+    const { container } = mount([]);
+    await screen.findByText(/nessuna divergenza/i);
+    const details = container.querySelector("details");
+    expect(details).toBeTruthy();
+    expect(details!.open).toBe(false);
+    // la card resta montata (import possibile una volta aperto il details)
+    expect(screen.getByTestId("rekordbox-card")).toBeTruthy();
+  });
 });

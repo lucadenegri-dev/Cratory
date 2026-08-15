@@ -232,17 +232,14 @@ export const en = {
     ledeHint: "Ready means it has both BPM and key: without them the Set Builder cannot work out its transitions.",
 
     // Sources card: the hierarchy, stated instead of implied (CLAUDE.md rule 2)
-    sourcesHeading: "BPM / Key sources",
-    sourcesSubtitle: "Rekordbox is the primary source; in-app analysis covers what it left out.",
     precedenceLabel: "Precedence",
     precedenceValue: "manual > rekordbox > cratory",
+    rekordboxSummary: "Rekordbox import — primary source",
     sourceManual: "manual",
     sourceRekordbox: "rekordbox",
     sourceCratory: "cratory",
 
     // Rekordbox import (primary) — migrated from t.dashboard.*
-    rekordboxHeading: "Rekordbox import",
-    rekordboxPrimaryTag: "Primary",
     rekordboxIntroPrefix: "Analyze your tracks in Rekordbox (beatgrid/key), then import the collection's ",
     rekordboxIntroSuffix: " file here to complete BPM and key.",
     fileInputLabel: "rekordbox.xml file",

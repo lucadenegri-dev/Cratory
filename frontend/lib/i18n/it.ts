@@ -231,17 +231,14 @@ export const it: Dictionary = {
     ledeHint: "Pronta significa che ha sia BPM sia tonalità: senza, il Set Builder non può calcolarne le transizioni.",
 
     // Card sorgenti: la gerarchia dichiarata invece che sottintesa (regola 2 di CLAUDE.md)
-    sourcesHeading: "Sorgenti BPM / Key",
-    sourcesSubtitle: "Rekordbox è la fonte primaria; l'analisi in-app copre ciò che non ha coperto.",
     precedenceLabel: "Precedenza",
     precedenceValue: "manuale > rekordbox > cratory",
+    rekordboxSummary: "Import Rekordbox — fonte primaria",
     sourceManual: "manuale",
     sourceRekordbox: "rekordbox",
     sourceCratory: "cratory",
 
     // Import Rekordbox (primario) — migrate da t.dashboard.*
-    rekordboxHeading: "Import Rekordbox",
-    rekordboxPrimaryTag: "Primaria",
     rekordboxIntroPrefix: "Analizza le tracce in Rekordbox (beatgrid/tonalità), poi importa qui il file ",
     rekordboxIntroSuffix: " della collezione per completare BPM e tonalità.",
     fileInputLabel: "File rekordbox.xml",

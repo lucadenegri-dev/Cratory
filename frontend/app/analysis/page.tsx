@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import {
   analysisDivergences, analysisOverview, applyAnalysis, dismissAnalysis, errText, startAnalysis,
   type AnalysisDivergence, type AnalysisOverview,
@@ -234,31 +235,12 @@ export default function AnalysisPage() {
           )
         )}
 
-        {/* Sorgenti: una card sola, con la precedenza dichiarata. Rekordbox è la
-            primaria (regola 2 di CLAUDE.md), l'analisi in-app è l'alternativa
-            sotto un filetto — non una card di pari rango. */}
+        {/* Analisi in-app: l'azione che si usa davvero, quindi in cima.
+            Rekordbox resta la fonte primaria per autorità (precedenza), ma è
+            un'operazione rara: vive ripiegata in fondo. */}
         <Card>
-          <CardHeader
-            title={t.analysis.sourcesHeading}
-            subtitle={t.analysis.sourcesSubtitle}
-          />
-
-          {/* La gerarchia su una riga sua: è la regola che governa tutta la card,
-              non una nota a margine della testata. */}
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border bg-surface-2 px-5 py-2.5">
-            <span className="text-[10px] uppercase tracking-wider text-muted">{t.analysis.precedenceLabel}</span>
-            <span className="whitespace-nowrap text-xs font-semibold text-fg-strong">{t.analysis.precedenceValue}</span>
-          </div>
-
-          <RekordboxImportCard onImported={reload} />
-
-          <section className="border-t border-border px-5 py-4">
-            {/* Nessun badge qui: il rango lo dicono già l'ordine, la striscia
-                della precedenza e il "PRIMARY" sopra. Un badge "ALTERNATIVE"
-                sarebbe rumore — e il badge neutro non passa AA (4.28:1). */}
-            <h4 className="mb-2 text-sm font-semibold uppercase tracking-wider text-fg-strong">
-              {t.analysis.analysisHeading}
-            </h4>
+          <CardHeader title={t.analysis.analysisHeading} />
+          <section className="px-5 py-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-72">
                 <Field label={t.analysis.scopeLabel}>
@@ -276,10 +258,7 @@ export default function AnalysisPage() {
                 {t.analysis.startButton}
               </Button>
             </div>
-            {/* L'hint dice PRIMA del click cosa farà davvero l'analisi, e segue
-                lo scope: le due voci non hanno lo stesso raggio d'azione.
-                Sotto i controlli e non dentro il Field, così non sfalsa
-                l'allineamento del bottone. */}
+            {/* L'hint segue lo scope: le due voci non fanno la stessa cosa. */}
             <p className="mt-2 max-w-[68ch] text-xs text-muted">
               {scope === "missing" ? (
                 <>
@@ -427,6 +406,21 @@ export default function AnalysisPage() {
             </div>
           </Card>
         )}
+
+        {/* Import Rekordbox: fonte primaria (precedenza), uso raro — ripiegato. */}
+        <details className="group border border-border">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
+            <span>{t.analysis.rekordboxSummary}</span>
+            <ChevronDown size={15} className="text-faint transition-transform duration-200 group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-border">
+            <p className="px-5 pt-3 text-[10px] uppercase tracking-wider text-muted">
+              {t.analysis.precedenceLabel}{": "}
+              <span className="font-semibold text-fg-strong">{t.analysis.precedenceValue}</span>
+            </p>
+            <RekordboxImportCard onImported={reload} />
+          </div>
+        </details>
       </div>
 
       <ConfirmModal
