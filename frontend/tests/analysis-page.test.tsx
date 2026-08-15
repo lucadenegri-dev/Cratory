@@ -141,7 +141,7 @@ describe("pagina Analisi", () => {
     expect(screen.getByText(/412\/412 · 100%/)).toBeTruthy();
   });
 
-  it("ignora una riga senza conferma: dismiss chiamato, canonici intatti", async () => {
+  it("ignora una riga senza conferma: dismiss chiamato, canonici intatti, tabella ricaricata", async () => {
     mount([MIXED], { divergent: 1 });
     const row = (await screen.findByText(/Floating Points/)).closest("tr")!;
     fireEvent.click(within(row).getByRole("button", { name: /^ignora$/i }));
@@ -149,14 +149,19 @@ describe("pagina Analisi", () => {
     await waitFor(() => expect(dismissAnalysis).toHaveBeenCalledWith([1]));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(applyAnalysis).not.toHaveBeenCalled();
+    // Senza il reload post-dismiss la riga scartata resterebbe visibile in
+    // tabella: il mount iniziale chiama analysisDivergences una volta, onDismiss
+    // deve richiamarla una seconda volta per far sparire la riga.
+    await waitFor(() => expect(analysisDivergences).toHaveBeenCalledTimes(2));
   });
 
-  it("ignora selezionate manda tutti gli id scelti", async () => {
+  it("ignora selezionate manda tutti gli id scelti e ricarica la tabella", async () => {
     mount([MIXED, CRATORY_ONLY], { divergent: 2 });
     await screen.findByText(/Floating Points/);
     fireEvent.click(screen.getByRole("checkbox", { name: /seleziona tutte/i }));
     fireEvent.click(screen.getByRole("button", { name: /ignora selezionate \(2\)/i }));
     await waitFor(() => expect(dismissAnalysis).toHaveBeenCalledWith([1, 2]));
+    await waitFor(() => expect(analysisDivergences).toHaveBeenCalledTimes(2));
   });
 
   it("l'import Rekordbox è ripiegato: details chiuso di default", async () => {

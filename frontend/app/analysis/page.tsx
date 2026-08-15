@@ -271,7 +271,7 @@ export default function AnalysisPage() {
                 <div className="flex flex-col items-end gap-1.5">
                   <div className="flex flex-wrap justify-end gap-2">
                     <Button
-                      size="sm" variant="outline"
+                      size="sm" variant="ghost"
                       disabled={busy || selected.size === 0}
                       onClick={() => onDismiss([...selected])}
                     >
