@@ -1,6 +1,8 @@
 # Dashboard «Il Registro» — design
 
-Data: 2026-08-15 · Stato: approvato a voce, in attesa di revisione scritta
+Data: 2026-08-15 · Stato: **superato** da
+`2026-08-15-dashboard-cabina-statistiche-design.md` — implementato, visto
+nell'app e rivisto in giornata: banco e colophon escono dalla dashboard.
 
 ## Obiettivo
 
