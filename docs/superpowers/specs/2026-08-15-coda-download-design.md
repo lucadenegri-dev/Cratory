@@ -121,7 +121,11 @@ Un router nuovo, **`backend/app/routers/download_queue.py`**, sotto
 
 - `GET` la coda: item divisi per stato, con fase e byte di chi sta scaricando.
 - `POST` per accodare: body con una **lista** di `track_ids` (il singolo è il
-  caso da uno) più il candidato scelto quando arriva dal modal. Risponde con
+  caso da uno), un `kind` che vale per l'intero lotto (default `soulseek_auto`;
+  `soundcloud` va chiesto esplicitamente) e il candidato scelto quando arriva
+  dal modal. Il candidato è ammesso **solo** con esattamente un `track_id` e
+  implica `kind=soulseek_chosen`: un candidato è per definizione la scelta su
+  una traccia sola, e accettarlo con una lista sarebbe ambiguo. Risponde con
   quanti accodati e quanti saltati per deduplica, così l'interfaccia può dire
   «12 accodate, 3 erano già in coda».
 - `DELETE` di un item: annulla, valido sia da `queued` sia da `running`.
