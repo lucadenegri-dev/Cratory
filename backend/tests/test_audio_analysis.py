@@ -96,3 +96,32 @@ def test_dismiss_con_un_solo_campo_analizzato():
     t = _t(bpm=None, camelot_key="8A", analysis_bpm=None, analysis_camelot="9A")
     dismiss_divergence(t)
     assert is_dismissed(t) is True and open_divergence(t) is False
+
+
+def test_dismiss_riappare_se_cambia_il_bpm_canonico():
+    # Snapshot cieco al lato canonico: un PATCH manuale o un import Rekordbox
+    # dopo lo scarto crea una divergenza mai vista dall'utente, che deve
+    # riapparire anche se l'analisi non e' cambiata affatto.
+    t = _t(bpm=128.0, camelot_key="8A", analysis_bpm=130.0, analysis_camelot="9A")
+    dismiss_divergence(t)
+    assert open_divergence(t) is False
+    t.bpm = 129.5  # PATCH manuale o import Rekordbox, oltre 1 decimale
+    assert open_divergence(t) is True
+
+
+def test_dismiss_riappare_se_cambia_la_key_canonica():
+    t = _t(bpm=128.0, camelot_key="8A", analysis_bpm=130.0, analysis_camelot="9A")
+    dismiss_divergence(t)
+    assert open_divergence(t) is False
+    t.camelot_key = "10A"
+    assert open_divergence(t) is True
+
+
+def test_dismiss_bpm_canonico_entro_un_decimale_non_riapre():
+    # Stessa tolleranza usata per l'analisi: rumore/arrotondamento entro 1
+    # decimale sul canonico non deve riaprire la divergenza scartata.
+    t = _t(bpm=128.0, camelot_key="8A", analysis_bpm=130.0, analysis_camelot="9A")
+    dismiss_divergence(t)
+    assert open_divergence(t) is False
+    t.bpm = 128.04
+    assert open_divergence(t) is False

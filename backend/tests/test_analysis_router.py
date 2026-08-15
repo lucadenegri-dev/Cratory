@@ -159,6 +159,20 @@ def test_force_all_riscrive_anche_le_scartate(client):
         assert s.get(Track, 1).bpm == 130.0
 
 
+def test_dismiss_riappare_se_cambia_il_canonico(client):
+    c, S = client
+    _seed_divergent(S)
+    r = c.post("/api/analysis/dismiss", json={"track_ids": [1]})
+    assert r.status_code == 200 and r.json()["dismissed"] == 1
+    assert c.get("/api/analysis/divergences").json() == []
+    with S() as s:
+        t = s.get(Track, 1)
+        t.bpm = 140.0  # PATCH manuale/import Rekordbox: mai valutato dall'utente
+        s.commit()
+    rows = c.get("/api/analysis/divergences").json()
+    assert len(rows) == 1 and rows[0]["bpm"] == 140.0
+
+
 def test_dismiss_vuoto_422(client):
     c, _ = client
     r = c.post("/api/analysis/dismiss", json={"track_ids": []})

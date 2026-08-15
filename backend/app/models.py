@@ -120,6 +120,12 @@ class Track(Base):
     # l'analisi riproduce questo esito; se cambia, riappare (is_dismissed).
     analysis_dismissed_bpm: Mapped[float | None] = mapped_column(Float)
     analysis_dismissed_camelot: Mapped[str | None] = mapped_column(String)
+    # Stesso scarto, ma lato canonico: senza questo lo snapshot resta cieco a un
+    # PATCH manuale o un import Rekordbox successivo, che creerebbe una nuova
+    # divergenza mai vista dall'utente e permanentemente invisibile (Essentia e'
+    # deterministico: ri-analizzare lo stesso file riproduce lo stesso esito).
+    analysis_dismissed_of_bpm: Mapped[float | None] = mapped_column(Float)
+    analysis_dismissed_of_camelot: Mapped[str | None] = mapped_column(String)
     # Stato traccia: imported | ready_for_set
     status: Mapped[str] = mapped_column(String, default="imported", index=True)
     album_art_url: Mapped[str | None] = mapped_column(Text)  # artwork_url (cover album)

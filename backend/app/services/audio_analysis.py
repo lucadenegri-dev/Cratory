@@ -6,40 +6,60 @@ Gerarchia fonti: manual > rekordbox > cratory. L'autorizzazione a sovrascrivere
 sta nella SELEZIONE delle tracce (router/UI), non qui: apply_analysis applica e
 basta, auto_apply_missing riempie solo i vuoti (nessun conflitto possibile).
 
-Lo scarto (dismiss_divergence) non tocca ne' i canonici ne' analysis_*: salva
-solo lo snapshot dismissed_*; is_dismissed lo confronta con l'analisi corrente."""
+Lo scarto (dismiss_divergence) non tocca i valori veri (ne' i canonici ne'
+analysis_*): salva uno snapshot di ENTRAMBI i lati (analizzato e canonico);
+is_dismissed richiede che entrambi coincidano ancora col loro snapshot, cosi'
+un PATCH manuale o un import Rekordbox successivo alla scarto non resta
+invisibile per sempre dietro un esito Essentia deterministico e immutato."""
 
 from app.services.camelot import camelot_compatibility
 from app.services.energy import apply_estimated_energy
 from app.services.track_status import refresh_status
 
 
+def _bpm_matches(a: float | None, b: float | None) -> bool:
+    """Confronto BPM None-safe a 1 decimale, la precisione usata ovunque in
+    questo modulo (diverges, _apply, is_dismissed su entrambi i lati)."""
+    if a is None or b is None:
+        return a is None and b is None
+    return round(a, 1) == round(b, 1)
+
+
 def diverges(track) -> bool:
     """True se l'analisi differisce dal canonico (BPM a 1 decimale, key esatta)."""
     bpm_div = (track.analysis_bpm is not None and track.bpm is not None
-               and round(track.analysis_bpm, 1) != round(track.bpm, 1))
+               and not _bpm_matches(track.analysis_bpm, track.bpm))
     key_div = (bool(track.analysis_camelot) and bool(track.camelot_key)
                and track.analysis_camelot != track.camelot_key)
     return bpm_div or key_div
 
 
 def dismiss_divergence(track) -> None:
-    """Fotografa l'esito corrente dell'analisi come «visto e ignorato»."""
+    """Fotografa l'esito corrente come «visto e ignorato»: sia il lato
+    analizzato sia il lato canonico, cosi' una mutazione futura di uno solo
+    dei due riapre la divergenza."""
     track.analysis_dismissed_bpm = track.analysis_bpm
     track.analysis_dismissed_camelot = track.analysis_camelot
+    track.analysis_dismissed_of_bpm = track.bpm
+    track.analysis_dismissed_of_camelot = track.camelot_key
 
 
 def is_dismissed(track) -> bool:
-    """True se lo snapshot scartato coincide con l'analisi corrente, alla
-    stessa precisione di diverges(): BPM a 1 decimale (None==None), key esatta
-    (vuoto==vuoto). Una nuova analisi con esito diverso lo invalida da sola."""
-    bpm_same = (
-        (track.analysis_bpm is None) == (track.analysis_dismissed_bpm is None)
-        and (track.analysis_bpm is None
-             or round(track.analysis_bpm, 1) == round(track.analysis_dismissed_bpm, 1))
-    )
+    """True se lo snapshot scartato coincide ANCORA con lo stato corrente su
+    entrambi i lati, alla stessa precisione di diverges(): BPM a 1 decimale
+    (None==None), key esatta (vuoto==vuoto). Una nuova analisi con esito
+    diverso, o una mutazione del canonico (PATCH, import Rekordbox), invalida
+    lo scarto da sola. Una traccia mai analizzata e mai scartata non e'
+    "dismissed": senza questa guardia il default None/None combacerebbe con
+    None/None per costruzione, un trabocchetto per un futuro chiamante che non
+    passi per open_divergence (che gia' filtra su diverges())."""
+    if track.analysis_bpm is None and not track.analysis_camelot:
+        return False
+    bpm_same = _bpm_matches(track.analysis_bpm, track.analysis_dismissed_bpm)
     key_same = (track.analysis_camelot or None) == (track.analysis_dismissed_camelot or None)
-    return bpm_same and key_same
+    bpm_of_same = _bpm_matches(track.bpm, track.analysis_dismissed_of_bpm)
+    key_of_same = (track.camelot_key or None) == (track.analysis_dismissed_of_camelot or None)
+    return bpm_same and key_same and bpm_of_same and key_of_same
 
 
 def open_divergence(track) -> bool:

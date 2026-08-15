@@ -356,7 +356,8 @@ The `/analysis` page extracts BPM and key locally, without leaving Cratory.
   `auto_apply_missing`. It commits per track, so progress survives an interruption.
 - **`routers/analysis.py`** — `overview` (coverage by source), `start` (202; `503` without
   Essentia, `409` if already running), `status`, `divergences` (canonical vs analyzed, with
-  Camelot-wheel compatibility), `apply` (`mode="all"` requires `force=true`).
+  Camelot-wheel compatibility), `apply` (`mode="all"` requires `force=true`), `dismiss`
+  (marks divergences seen-and-ignored, see `services/audio_analysis.py`).
 
 ## Set building
 
@@ -600,6 +601,10 @@ Core (`app/models.py`):
   `grep -rn analysis_error backend/app frontend/app frontend/components frontend/lib` (only
   the model declaration, the job's two writes, and an `essentia_engine.py` docstring) — it
   exists to be visible in a DB inspection after a failed batch, not to drive behavior;
+  `analysis_dismissed_bpm`/`analysis_dismissed_camelot` and
+  `analysis_dismissed_of_bpm`/`analysis_dismissed_of_camelot` — the dismiss snapshot
+  (`services/audio_analysis.py: dismiss_divergence`, `is_dismissed`), one pair per side
+  (analyzed, canonical) so a later change to either reopens the divergence;
   `energy` with `energy_raw` and
   `energy_source` (`computed` | `estimated`); ownership (`has_local_file`, `local_path`,
   `local_format`, `local_bitrate`, `local_mtime`, `local_size`, `audio_hash`,

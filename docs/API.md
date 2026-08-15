@@ -598,10 +598,14 @@ without it, `422 analysis_apply_empty` if neither `track_ids` nor `mode` is give
 Response `{applied, skipped}`.
 
 `POST /api/analysis/dismiss` marks divergences as seen-and-ignored: body
-`{track_ids}` snapshots each track's current `analysis_*` values. A dismissed
-divergence disappears from `/divergences`, from the overview `divergent` count
-and from `mode="divergent"` apply; it reappears only when a new analysis run
-produces a different result (BPM compared at 1 decimal, key exact).
+`{track_ids}` snapshots each track's current values on BOTH sides — the
+analyzed `analysis_bpm`/`analysis_camelot` and the canonical `bpm`/
+`camelot_key` at the moment of dismissal. A dismissed divergence disappears
+from `/divergences`, from the overview `divergent` count and from
+`mode="divergent"` apply; it reappears when EITHER side later stops matching
+its snapshot (BPM compared at 1 decimal, key exact) — a new analysis run with
+a different result, but also a manual edit or a Rekordbox import that changes
+the canonical `bpm`/`camelot_key` after the dismissal.
 `mode="all"` + `force` still rewrites dismissed tracks. `422
 analysis_dismiss_empty` on an empty list. Response `{dismissed}`.
 
