@@ -716,6 +716,18 @@ class AnalysisApplyOut(BaseModel):
     skipped: int
 
 
+class AnalysisDismissIn(BaseModel):
+    """Scarto divergenze: fotografa analysis_* come «visto e ignorato»."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    track_ids: list[int]
+
+
+class AnalysisDismissOut(BaseModel):
+    dismissed: int
+
+
 class LibraryStatsOut(BaseModel):
     total_tracks: int
     playlists: int = 0
