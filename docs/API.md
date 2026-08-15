@@ -767,12 +767,14 @@ failure is `502 slskd_error`.
 `POST /api/downloads/search` is the manual-search counterpart used by the wishlist's
 per-track search modal: one slskd search with the literal query the user typed — no
 variant cascade (that stays exclusive to auto-pick) and no confidence threshold (the
-ranking guides sort order and badges, it never excludes a result); only files with an
-unrecognized, non-audio extension are dropped. Body `{query, track_id?}`. Without
-`track_id` it returns raw results; with it, each result also carries
-`score`/`confidence`/`auto_ok` (ranked against the Track's artist/title/expected
-duration) and the response's `variants` list the same queries the auto-pick cascade
-would try, as clickable suggestions. Errors: `409 slskd_not_configured`,
+ranking guides sort order and badges, it never excludes a result). Body
+`{query, track_id?}`. Without `track_id` it returns slskd's raw results unfiltered,
+non-audio files included; with it, results pass through `rank_candidates`
+(`QualityPreference(min_bitrate=1)`), which drops files with an unrecognized
+extension and lossy files reporting bitrate 0, and each surviving result also
+carries `score`/`confidence`/`auto_ok` (ranked against the Track's artist/title/
+expected duration); the response's `variants` list the same queries the auto-pick
+cascade would try, as clickable suggestions. Errors: `409 slskd_not_configured`,
 `404 track_not_found`, `502 slskd_error`.
 
 `POST /api/downloads/playlist/{playlist_id}` (`202`) runs the whole playlist: for

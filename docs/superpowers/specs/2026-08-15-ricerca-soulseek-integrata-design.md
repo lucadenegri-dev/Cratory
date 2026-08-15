@@ -77,9 +77,11 @@ Endpoint nuovo: **`POST /api/downloads/search`**, body `{ query, track_id? }`.
 
 Riuso senza modifiche di logica: `rank_candidates` e `query_variants` sono già
 pubbliche e parametrizzabili; `POST /api/downloads/track`, review/keep/discard
-invariati. `/api/downloads/candidates` resta (lo usa Discovery); il nuovo modal
-non lo usa — se a fine lavoro risulta orfano ovunque, va segnalato, non rimosso
-in questo sotto-progetto.
+invariati. `/api/downloads/candidates` resta; il nuovo modal non lo usa. L'uso
+da parte di Discovery non è verificato nel codice: il wrapper frontend
+`downloadCandidates` (`frontend/lib/api/downloads.ts`) risulta già senza
+chiamanti in tutto `frontend/` (grep verificato), Discovery incluso — la
+pulizia resta rimandata, non va rimosso in questo sotto-progetto.
 
 ## Componenti frontend
 
