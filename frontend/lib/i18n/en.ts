@@ -296,6 +296,9 @@ export const en = {
     compatUnknown: "—",
     selectAll: "Select all",
     applyRow: "Apply",
+    ignoreRow: "Ignore",
+    ignoreSelected: (n: number) => `Ignore selected (${n})`,
+    ignoredSummary: (n: number) => (n === 1 ? "1 divergence ignored" : `${n} divergences ignored`),
     applyAllDivergent: (n: number) => `Apply all divergent (${n})`,
     applySelected: (n: number) => `Apply selected (${n})`,
     applySelectedProtected: (n: number) =>

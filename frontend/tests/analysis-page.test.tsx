@@ -13,12 +13,14 @@ const applyAnalysis = vi.fn();
 const startAnalysis = vi.fn();
 const analysisOverview = vi.fn();
 const analysisDivergences = vi.fn();
+const dismissAnalysis = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   analysisOverview: (...a: unknown[]) => analysisOverview(...a),
   analysisDivergences: (...a: unknown[]) => analysisDivergences(...a),
   applyAnalysis: (...a: unknown[]) => applyAnalysis(...a),
   startAnalysis: (...a: unknown[]) => startAnalysis(...a),
+  dismissAnalysis: (...a: unknown[]) => dismissAnalysis(...a),
   errText: (e: unknown) => String((e as Error)?.message ?? e),
 }));
 
@@ -65,6 +67,7 @@ describe("pagina Analisi", () => {
     startAnalysis.mockReset().mockResolvedValue({});
     analysisOverview.mockReset();
     analysisDivergences.mockReset();
+    dismissAnalysis.mockReset().mockResolvedValue({ dismissed: 1 });
   });
   afterEach(cleanup);
 
@@ -153,5 +156,23 @@ describe("pagina Analisi", () => {
     mount([], { owned: 412, ready_for_set: 412, missing_bpm: 0, missing_key: 0 });
     await screen.findByText(/411\/412 · 99%|412\/412 · 100%/);
     expect(screen.getByText(/412\/412 · 100%/)).toBeTruthy();
+  });
+
+  it("ignora una riga senza conferma: dismiss chiamato, canonici intatti", async () => {
+    mount([MIXED], { divergent: 1 });
+    const row = (await screen.findByText(/Floating Points/)).closest("tr")!;
+    fireEvent.click(within(row).getByRole("button", { name: /^ignora$/i }));
+    // «Ignora» tiene il valore attuale: niente modale, niente apply.
+    await waitFor(() => expect(dismissAnalysis).toHaveBeenCalledWith([1]));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(applyAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("ignora selezionate manda tutti gli id scelti", async () => {
+    mount([MIXED, CRATORY_ONLY], { divergent: 2 });
+    await screen.findByText(/Floating Points/);
+    fireEvent.click(screen.getByRole("checkbox", { name: /seleziona tutte/i }));
+    fireEvent.click(screen.getByRole("button", { name: /ignora selezionate \(2\)/i }));
+    await waitFor(() => expect(dismissAnalysis).toHaveBeenCalledWith([1, 2]));
   });
 });

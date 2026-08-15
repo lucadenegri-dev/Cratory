@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  analysisDivergences, analysisOverview, applyAnalysis, errText, startAnalysis,
+  analysisDivergences, analysisOverview, applyAnalysis, dismissAnalysis, errText, startAnalysis,
   type AnalysisDivergence, type AnalysisOverview,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -94,6 +94,20 @@ export default function AnalysisPage() {
     try {
       const r = await applyAnalysis(body);
       setNotice(t.analysis.appliedSummary(r.applied, r.skipped));
+      await reload();
+    } catch (e) {
+      setError(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // «Ignora» non sovrascrive nulla (il canonico resta): niente conferma.
+  const onDismiss = async (ids: number[]) => {
+    setBusy(true); setError(null);
+    try {
+      const r = await dismissAnalysis(ids);
+      setNotice(t.analysis.ignoredSummary(r.dismissed));
       await reload();
     } catch (e) {
       setError(errText(e));
@@ -294,6 +308,13 @@ export default function AnalysisPage() {
                     <Button
                       size="sm" variant="outline"
                       disabled={busy || selected.size === 0}
+                      onClick={() => onDismiss([...selected])}
+                    >
+                      {t.analysis.ignoreSelected(selected.size)}
+                    </Button>
+                    <Button
+                      size="sm" variant="outline"
+                      disabled={busy || selected.size === 0}
                       onClick={onApplySelected}
                     >
                       {t.analysis.applySelected(selected.size)}
@@ -370,13 +391,22 @@ export default function AnalysisPage() {
                         </Badge>
                       </td>
                       <td className="px-4 py-2 text-right">
-                        <Button
-                          size="sm" variant="ghost"
-                          disabled={busy}
-                          onClick={() => onApply({ track_ids: [r.track_id] })}
-                        >
-                          {t.analysis.applyRow}
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm" variant="ghost"
+                            disabled={busy}
+                            onClick={() => onDismiss([r.track_id])}
+                          >
+                            {t.analysis.ignoreRow}
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost"
+                            disabled={busy}
+                            onClick={() => onApply({ track_ids: [r.track_id] })}
+                          >
+                            {t.analysis.applyRow}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -295,6 +295,9 @@ export const it: Dictionary = {
     compatUnknown: "—",
     selectAll: "Seleziona tutte",
     applyRow: "Applica",
+    ignoreRow: "Ignora",
+    ignoreSelected: (n: number) => `Ignora selezionate (${n})`,
+    ignoredSummary: (n: number) => (n === 1 ? "1 divergenza ignorata" : `${n} divergenze ignorate`),
     applyAllDivergent: (n: number) => `Applica tutte le divergenti (${n})`,
     applySelected: (n: number) => `Applica selezionate (${n})`,
     applySelectedProtected: (n: number) =>
