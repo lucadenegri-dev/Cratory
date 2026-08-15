@@ -4,12 +4,13 @@ import Link from "next/link";
 import { Suspense, use, useEffect, useState } from "react";
 import { useBackLink } from "@/lib/back-link";
 import { ArrowLeft, Check, Download, ExternalLink, Link2, ArrowRightLeft, Pencil } from "lucide-react";
-import { apiGet, downloadTrackAuto, downloadTrackSoundcloud, fmtDuration, transitions, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
+import { apiGet, downloadTrackSoundcloud, fmtDuration, transitions, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Loading, Spinner } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { TrackCover } from "@/components/track-cover";
 import { LinkLocalFileModal } from "@/components/link-local-file-modal";
+import { SoulseekSearchModal, type SoulseekSearchTarget } from "@/components/soulseek-search-modal";
 import { TrackPlayButton } from "@/components/track-play-button";
 import { AddToPlaylistMenu } from "@/components/add-to-playlist-menu";
 import { RatingDiamond } from "@/components/rating-diamond";
@@ -66,8 +67,10 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [linking, setLinking] = useState(false);
-  const [dlState, setDlState] = useState<"idle" | "running" | "queued">("idle");
-  const [dlError, setDlError] = useState<string | null>(null);
+  // Target del modal di ricerca Soulseek: creato una sola volta nel click
+  // handler (mai un literal inline nel JSX), l'effect di apertura del modal
+  // dipende dall'identita' dell'oggetto per non far ripartire ricerca/fetch.
+  const [slskSearch, setSlskSearch] = useState<SoulseekSearchTarget | null>(null);
   const [scState, setScState] = useState<"idle" | "running" | "queued">("idle");
   const [scError, setScError] = useState<string | null>(null);
 
@@ -82,19 +85,6 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
 
   if (error) return <PageLayout title={t.tracks.pageTitle}><Alert tone="danger">⚠ {error}</Alert></PageLayout>;
   if (!track) return <PageLayout title={t.tracks.pageTitle}><Loading /></PageLayout>;
-
-  const searchSoulseek = async () => {
-    setDlState("running");
-    setDlError(null);
-    try {
-      await downloadTrackAuto(track.id);
-      // Il job bar globale (jobs provider) aggancia il progresso da solo.
-      setDlState("queued");
-    } catch (e) {
-      setDlError(String((e as { message?: string })?.message ?? e));
-      setDlState("idle");
-    }
-  };
 
   const downloadSoundcloud = async () => {
     setScState("running");
@@ -195,10 +185,9 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
             action={
               <div className="flex items-center gap-2">
                 {!track.has_local_file && (
-                  <Button size="sm" variant={dlState === "queued" ? "ghost" : "outline"} onClick={searchSoulseek} disabled={dlState !== "idle"}>
-                    {dlState === "queued" ? <><Check size={14} /> {t.tracks.soulseekQueued}</>
-                      : dlState === "running" ? <Spinner />
-                      : <><Download size={14} /> {t.tracks.searchSoulseek}</>}
+                  <Button size="sm" variant="outline"
+                    onClick={() => setSlskSearch({ track_id: track.id, artist: track.artist, title: track.title })}>
+                    <Download size={14} /> {t.tracks.searchSoulseek}
                   </Button>
                 )}
                 {!track.has_local_file && track.platform === "soundcloud" && track.url && (
@@ -227,7 +216,6 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
               </div>
             }
           />
-          {dlError && <p className="border-b border-border/50 px-4 py-2 text-xs text-danger">⚠ {dlError}</p>}
           {scError && <p className="border-b border-border/50 px-4 py-2 text-xs text-danger">⚠ {scError}</p>}
           <table className="w-full text-sm">
             <tbody>
@@ -294,6 +282,9 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
         onClose={() => setLinking(false)}
         onLinked={(t) => setTrack(t)}
       />
+
+      <SoulseekSearchModal target={slskSearch} onClose={() => setSlskSearch(null)}
+        onPicked={() => { setSlskSearch(null); refresh(); }} />
     </PageLayout>
   );
 }

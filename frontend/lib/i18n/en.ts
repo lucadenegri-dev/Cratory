@@ -525,7 +525,6 @@ export const en = {
     exactPathPlaceholder: "/absolute/path/to/file.mp3",
     linkAction: "Link",
     searchSoulseek: "Search on Soulseek",
-    soulseekQueued: "Search started",
     downloadSoundcloud: "Download from SoundCloud",
     soundcloudQueued: "Download started",
     addToPlaylist: "Add to playlist",
