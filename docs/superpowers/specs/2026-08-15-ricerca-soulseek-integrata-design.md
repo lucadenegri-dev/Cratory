@@ -32,9 +32,9 @@ fix del recall della cascata auto-pick (informato dai dati di C).
 
 Punti d'ingresso del modal:
 
-- riga wishlist: il bottone primario contestuale per `review` e
-  `downloaded_unlinked` apre il nuovo modal; nel menù `…` la voce
-  "Cerca su Soulseek" è disponibile per **tutti** gli stati;
+- riga wishlist: il bottone primario per `review` apre il nuovo modal;
+  `downloaded_unlinked` mantiene «Collega file» come primaria (il file è già su
+  disco); per tutti gli stati il menù `…` offre "Cerca su Soulseek";
 - dettaglio traccia: stessa azione dove oggi c'è la revisione.
 
 Dentro il modal, dall'alto in basso:
@@ -90,8 +90,9 @@ in questo sotto-progetto.
   automatica. Tabella risultati scrollabile in `Modal size="lg"`.
 - **`lib/api`**: `soulseekSearch(query, trackId?)` con tipo
   `SoulseekSearchResult`.
-- **`wishlist-row.tsx`**: `review`/`downloaded_unlinked` aprono il nuovo modal;
-  voce "Cerca su Soulseek" nel menù `…` per tutti gli stati.
+- **`wishlist-row.tsx`**: `review` apre il nuovo modal come primaria;
+  `downloaded_unlinked` mantiene «Collega file» come primaria; voce "Cerca su
+  Soulseek" nel menù `…` per tutti gli stati.
 - **`wishlist/page.tsx`**: monta il nuovo modal al posto di
   `DownloadReviewModal`; blocco "Apri slskd" spostato in fondo.
 - **`tracks/[id]/page.tsx`**: stessa azione al posto della revisione attuale.

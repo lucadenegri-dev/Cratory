@@ -29,7 +29,10 @@ described in `CLAUDE.md`.
   tracklists; co-occurrence suggestions are backlog.
 - **Downloads/Wishlist**: every non-owned track with its download outcome, playlist
   provenance and buy links; acquisition via Soulseek (slskd) or a per-track
-  SoundCloud/yt-dlp download links a file back to the existing track.
+  SoundCloud/yt-dlp download links a file back to the existing track. A per-track
+  manual Soulseek search (raw slskd results, no variant cascade, no confidence
+  filter) lives in a single modal reachable from the wishlist row and the track
+  detail page, replacing the old review-only modal.
 
 Settings are unified across sections: one external-services endpoint, one AI key
 (`ANTHROPIC_API_KEY`), a single `/settings` page.

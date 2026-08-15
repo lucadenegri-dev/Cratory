@@ -723,6 +723,7 @@ POST   /api/downloads/retry-pending
 DELETE /api/downloads/pending/{track_id}
 GET    /api/downloads/auto-link
 POST   /api/downloads/candidates
+POST   /api/downloads/search
 POST   /api/downloads/playlist/{playlist_id}
 POST   /api/downloads/track
 POST   /api/downloads/track/auto
@@ -737,10 +738,11 @@ File acquisition through the headless Soulseek daemon slskd, fully deterministic
 (`has_local_file`/`local_path`/`local_format`/`local_bitrate`) rather than creating
 a new one.
 
-`SLSKD_URL` and `SLSKD_DOWNLOAD_DIR` must both be configured, or the five
-Soulseek-backed routes — `candidates`, `playlist/{id}`, `track`, `track/auto`,
-`retry-pending` — answer `409 slskd_not_configured`. `track/soundcloud` does not
-touch slskd and has its own preconditions (see below). Available regardless:
+`SLSKD_URL` and `SLSKD_DOWNLOAD_DIR` must both be configured, or the six
+Soulseek-backed routes — `candidates`, `search`, `playlist/{id}`, `track`,
+`track/auto`, `retry-pending` — answer `409 slskd_not_configured`.
+`track/soundcloud` does not touch slskd and has its own preconditions (see
+below). Available regardless:
 `GET /status` (with `available: false`), `GET /pending`,
 `DELETE /pending/{track_id}`, `GET /auto-link` and the review endpoints.
 
@@ -761,6 +763,17 @@ deterministically on quality, name adherence and availability. Request `artist`,
 rewards the right version). Each candidate has `username`, `filename`, `size`,
 `bitrate`, `length`, `format`, `name_score`, `quality_tier`, `confidence`. Provider
 failure is `502 slskd_error`.
+
+`POST /api/downloads/search` is the manual-search counterpart used by the wishlist's
+per-track search modal: one slskd search with the literal query the user typed — no
+variant cascade (that stays exclusive to auto-pick) and no confidence threshold (the
+ranking guides sort order and badges, it never excludes a result); only files with an
+unrecognized, non-audio extension are dropped. Body `{query, track_id?}`. Without
+`track_id` it returns raw results; with it, each result also carries
+`score`/`confidence`/`auto_ok` (ranked against the Track's artist/title/expected
+duration) and the response's `variants` list the same queries the auto-pick cascade
+would try, as clickable suggestions. Errors: `409 slskd_not_configured`,
+`404 track_not_found`, `502 slskd_error`.
 
 `POST /api/downloads/playlist/{playlist_id}` (`202`) runs the whole playlist: for
 each track without a local file it searches, auto-picks the best candidate above a
