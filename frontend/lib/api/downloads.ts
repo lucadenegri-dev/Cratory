@@ -5,6 +5,7 @@ import type {
   DownloadReview,
   DownloadStatus,
   LocalFileHit,
+  SoulseekSearchResult,
   Track,
   TrackDetail,
 } from "./types";
@@ -43,6 +44,12 @@ export function retryPending() {
 
 export function downloadTrack(trackId: number, candidate: DownloadCandidate) {
   return apiPost<DownloadStatus>("/api/downloads/track", { track_id: trackId, candidate });
+}
+
+/** Ricerca manuale Soulseek con la query letterale (nessuna cascata di varianti). */
+export function soulseekSearch(query: string, trackId?: number) {
+  return apiPost<SoulseekSearchResult>("/api/downloads/search",
+    { query, track_id: trackId ?? undefined });
 }
 
 /** "Ignora": azzera l'esito download, la traccia esce dall'archivio da sistemare. */

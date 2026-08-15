@@ -674,6 +674,25 @@ export type DownloadCandidate = {
   confidence: number;
 };
 
+/** Un file dai risultati della ricerca Soulseek manuale (POST /api/downloads/search). */
+export type SoulseekSearchFile = {
+  username: string;
+  filename: string;
+  size: number | null;
+  bitrate: number | null;
+  length: number | null;
+  format: string | null;
+  has_free_slot: boolean;
+  queue_length: number | null;
+  upload_speed: number | null;
+  // Presenti solo se la ricerca aveva un track_id: guida, mai esclusione.
+  score: number | null;
+  confidence: number | null;
+  auto_ok: boolean;
+};
+
+export type SoulseekSearchResult = { variants: string[]; results: SoulseekSearchFile[] };
+
 /** Esito di un singolo download Soulseek (stessi valori di Track.last_download_outcome). */
 export type DownloadOutcome = "downloaded" | "needs_review" | "not_found" | "failed";
 
