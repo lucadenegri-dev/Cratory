@@ -17,7 +17,7 @@ const SCENE = [
   " #########\\                                                      #########\\",
   " #(=====)# |                           ///                       #(=====)# |",
   " ######### |                         _(oo)_                      ######### |",
-  " #-------# |                        // \\/ //                     #-------# |",
+  " #-------# |                        //    //                     #-------# |",
   " #|  -  |# |          -- __________//____//__________--          #|  -  |# |",
   " #|( O )|# |    --  --  /-/\\-  -+/ -+- -+- /-/\\-  -+/| --  --    #|( O )|# |",
   " #|  -  |# |  --  --   / /( o ) / ^^^ /// / /( o ) / /   --  --  #|  -  |# |",
@@ -44,7 +44,6 @@ const AT = {
   tweetL: SCENE[1].indexOf("(=====)"),
   tweetR: SCENE[1].lastIndexOf("(=====)"),
   face: SCENE[2].indexOf("(oo)"),
-  hands: SCENE[3].indexOf("\\/"),
   woofL: SCENE[5].indexOf("( O )"),
   woofR: SCENE[5].lastIndexOf("( O )"),
   platL: SCENE[6].indexOf("( o )"),
@@ -99,14 +98,12 @@ export function djFrame(tick: number): string[] {
   const thump = tick % 2 === 0;              // il colpo di cassa
   const blink = tick % 7 === 6;
   const wink = tick % 23 === 11;
-  const scratch = tick % 8 === 5;            // la mano che incrocia sul piatto
   const scene = SCENE.slice();
 
   scene[1] = splice(scene[1], AT.hair, tick % 4 < 2 ? "///" : "\\\\\\");
   scene[1] = splice(scene[1], AT.tweetL, thump ? "(-=-=-)" : "(=====)");
   scene[1] = splice(scene[1], AT.tweetR, thump ? "(-=-=-)" : "(=====)");
   scene[2] = splice(scene[2], AT.face, blink ? "(--)" : wink ? "(o-)" : "(oo)");
-  scene[3] = splice(scene[3], AT.hands, scratch ? "/\\" : "\\/");
   scene[5] = splice(scene[5], AT.woofL, thump ? "( O )" : "( o )");
   scene[5] = splice(scene[5], AT.woofR, thump ? "( O )" : "( o )");
   scene[6] = splice(scene[6], AT.platL, `( ${SPIN[tick % 4]} )`);
@@ -166,7 +163,7 @@ export function AsciiDj({ onActivate, label, hint }: {
   const lines = djFrame(reduced ? 0 : tick);
 
   const art = (
-    <div aria-hidden="true" className="select-none text-[8px] sm:text-xs md:text-sm xl:text-base">
+    <div aria-hidden="true" className="select-none text-[9px] sm:text-sm md:text-base lg:text-lg xl:text-xl 2xl:text-2xl">
       <div className="text-faint">
         {lines.slice(0, DJ_AIR_ROWS).map((l, i) => <pre key={i} className="leading-[1.15]">{l}</pre>)}
       </div>

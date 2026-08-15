@@ -105,25 +105,30 @@ export default function Home() {
             <AsciiDj onActivate={playRandom} label={t.dashboard.djPlayRandom} hint={t.dashboard.djHint} />
           </div>
 
-          {/* Le quattro misure chiudono la pagina, come un colophon in cifre. */}
-          <div className="mt-10 grid grid-cols-2 border-l border-t border-border sm:grid-cols-4">
-            <Figure big label={t.dashboard.figureDiscovered} value={stats.total_tracks} />
-            <Figure
-              big
-              label={t.dashboard.figureOwned}
-              value={(
-                <>
-                  {stats.with_local_file}
-                  {stats.total_tracks > 0 && (
-                    <span className="ml-2 text-sm font-normal text-muted">
-                      {Math.round((stats.with_local_file / stats.total_tracks) * 100)}%
-                    </span>
-                  )}
-                </>
-              )}
-            />
-            <Figure big label={t.dashboard.figurePlaylists} value={stats.playlists} />
-            <Figure big label={t.dashboard.figureSets} value={sets ? sets.length : "—"} />
+          {/* Le quattro misure chiudono la pagina, come un colophon in cifre.
+              Stesso involucro della striscia sopra (Card: fondo surface e
+              bordo pieno); il margine negativo fa uscire i filetti di chiusura
+              delle celle di bordo, che `overflow-hidden` ritaglia — così le
+              divisioni interne restano da 1px a ogni breakpoint. */}
+          <div className="mt-10 overflow-hidden border border-border bg-surface">
+            <div className="-mb-px -mr-px grid grid-cols-2 sm:grid-cols-4">
+              <Figure label={t.dashboard.figureDiscovered} value={stats.total_tracks} />
+              <Figure
+                label={t.dashboard.figureOwned}
+                value={(
+                  <>
+                    {stats.with_local_file}
+                    {stats.total_tracks > 0 && (
+                      <span className="ml-1.5 text-[10px] font-normal text-muted">
+                        {Math.round((stats.with_local_file / stats.total_tracks) * 100)}%
+                      </span>
+                    )}
+                  </>
+                )}
+              />
+              <Figure label={t.dashboard.figurePlaylists} value={stats.playlists} />
+              <Figure label={t.dashboard.figureSets} value={sets ? sets.length : "—"} />
+            </div>
           </div>
         </>
       )}
