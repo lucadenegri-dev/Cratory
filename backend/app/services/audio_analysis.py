@@ -59,6 +59,11 @@ def is_dismissed(track) -> bool:
     key_same = (track.analysis_camelot or None) == (track.analysis_dismissed_camelot or None)
     bpm_of_same = _bpm_matches(track.bpm, track.analysis_dismissed_of_bpm)
     key_of_same = (track.camelot_key or None) == (track.analysis_dismissed_of_camelot or None)
+    # I quattro confronti sono in AND: un cambio sul canonico riapre lo scarto
+    # anche quando tocca il lato che da solo non potrebbe divergere (es. il BPM
+    # canonico si riempie dopo uno scarto su una divergenza di sola key). Non e'
+    # un bug: e' deliberato, ed erra verso la visibilita', la direzione sicura
+    # in assenza di una UI di recupero per le righe scartate.
     return bpm_same and key_same and bpm_of_same and key_of_same
 
 
@@ -75,8 +80,7 @@ def _apply(track, bpm_ok: bool, key_ok: bool) -> bool:
     # declassa silenziosamente bpm_source (manual/rekordbox -> cratory). Se il
     # canonico e' vuoto scrive comunque (auto_apply_missing / campo mancante).
     if (bpm_ok and track.analysis_bpm is not None
-            and (track.bpm is None
-                 or round(track.analysis_bpm, 1) != round(track.bpm, 1))):
+            and not _bpm_matches(track.analysis_bpm, track.bpm)):
         track.bpm = track.analysis_bpm
         track.bpm_source = "cratory"
         changed = True

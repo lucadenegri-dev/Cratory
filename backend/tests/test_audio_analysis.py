@@ -117,6 +117,15 @@ def test_dismiss_riappare_se_cambia_la_key_canonica():
     assert open_divergence(t) is True
 
 
+def test_mai_analizzata_non_e_dismissed():
+    # Traccia del tutto vuota: mai analizzata, mai scartata. Senza la guardia
+    # in cima a is_dismissed, il default None/None su tutti e quattro i campi
+    # combacerebbe per costruzione con uno snapshot altrettanto vuoto, dando
+    # "dismissed" a una traccia che non e' mai passata per dismiss_divergence.
+    t = _t()
+    assert is_dismissed(t) is False
+
+
 def test_dismiss_bpm_canonico_entro_un_decimale_non_riapre():
     # Stessa tolleranza usata per l'analisi: rumore/arrotondamento entro 1
     # decimale sul canonico non deve riaprire la divergenza scartata.

@@ -99,8 +99,10 @@ def apply(payload: AnalysisApplyIn, db: Session = Depends(get_db)):
 
 @router.post("/dismiss", response_model=AnalysisDismissOut)
 def dismiss(payload: AnalysisDismissIn, db: Session = Depends(get_db)):
-    """Scarta le divergenze: il canonico va bene, l'analisi e' ignorata finche'
-    una nuova analisi non produce un esito diverso dallo snapshot."""
+    """Scarta le divergenze: la coppia analizzata e la coppia canonica vengono
+    fotografate insieme; la divergenza resta nascosta finche' ENTRAMBE
+    coincidono ancora con lo snapshot, e riappare se una nuova analisi o un
+    cambio del canonico (PATCH, import Rekordbox) altera anche solo un lato."""
     if not payload.track_ids:
         raise api_error(422, "analysis_dismiss_empty", "Provide track_ids.")
     ids = set(payload.track_ids)
