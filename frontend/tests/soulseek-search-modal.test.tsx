@@ -79,6 +79,40 @@ describe("SoulseekSearchModal", () => {
     expect(await screen.findByText(/\+3s/)).toBeTruthy();
   });
 
+  it("scarta la risposta di una ricerca obsoleta che risolve dopo quella piu' recente", async () => {
+    let resolveFirst!: (v: { variants: string[]; results: SoulseekSearchFile[] }) => void;
+    let resolveSecond!: (v: { variants: string[]; results: SoulseekSearchFile[] }) => void;
+    const first = new Promise<{ variants: string[]; results: SoulseekSearchFile[] }>((res) => { resolveFirst = res; });
+    const second = new Promise<{ variants: string[]; results: SoulseekSearchFile[] }>((res) => { resolveSecond = res; });
+    mocks.soulseekSearch.mockReturnValueOnce(first).mockReturnValueOnce(second);
+
+    render(<SoulseekSearchModal target={target} onClose={vi.fn()} onPicked={vi.fn()} />);
+    // Ricerca automatica all'apertura: prima chiamata, resta sospesa (simula il backend lento).
+    await waitFor(() => expect(mocks.soulseekSearch).toHaveBeenCalledTimes(1));
+
+    // L'utente riedita la query e ripreme Cerca (invio nel form) prima che la
+    // prima risposta arrivi: il pulsante e' disabilitato durante `searching`,
+    // ma il campo query resta editabile e il submit del form no.
+    const input = screen.getByLabelText("Query di ricerca Soulseek");
+    fireEvent.change(input, { target: { value: "Aphex Twin Xtal remix" } });
+    fireEvent.submit(input.closest("form")!);
+    await waitFor(() => expect(mocks.soulseekSearch).toHaveBeenCalledTimes(2));
+
+    // La seconda ricerca (la piu' recente lanciata) risolve per prima.
+    resolveSecond({ variants: [], results: [file({ username: "newer", filename: "newer.flac" })] });
+    expect(await screen.findByText("newer.flac")).toBeTruthy();
+
+    // La prima ricerca (obsoleta) risolve dopo: non deve sovrascrivere ne' i
+    // risultati mostrati ne' riaccendere lo stato di ricerca.
+    resolveFirst({ variants: [], results: [file({ username: "older", filename: "older.flac" })] });
+    await waitFor(() => expect(mocks.soulseekSearch).toHaveBeenCalledTimes(2));
+    // Lascia fluire i microtask della risposta obsoleta prima di verificare.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(screen.queryByText("older.flac")).toBeNull();
+    expect(screen.getByText("newer.flac")).toBeTruthy();
+  });
+
   it("blocco Tieni/Scarta presente quando c'e' un file dubbio", async () => {
     mocks.downloadReview.mockResolvedValue({
       expected: { artist: "Aphex Twin", title: "Xtal", duration_seconds: 294 },

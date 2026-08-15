@@ -58,18 +58,27 @@ function SearchDialog({ target, onClose, onPicked }: {
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
+  // Generazione della ricerca in corso: l'apertura lancia subito una ricerca
+  // automatica e l'utente puo' rilanciarne un'altra (variante o riedit) prima
+  // che la prima risponda. Le promesse possono risolversi fuori ordine (il
+  // backend attende fino a 15s per ricerca): senza un contatore vincerebbe
+  // l'ultima a *risolversi*, non l'ultima *lanciata*, e i risultati vecchi
+  // sovrascriverebbero quelli della query che l'utente vede nel campo.
+  const searchGen = useRef(0);
+
   const search = useCallback(async (q: string) => {
+    const gen = ++searchGen.current;
     setSearching(true);
     setError(null);
     try {
       const r = await soulseekSearch(q, target.track_id);
-      if (!alive.current) return;
+      if (!alive.current || gen !== searchGen.current) return;
       setResults(r.results);
       if (r.variants.length > 0) setVariants(r.variants);
     } catch (e) {
-      if (alive.current) { setError(errText(e)); setResults([]); }
+      if (alive.current && gen === searchGen.current) { setError(errText(e)); setResults([]); }
     } finally {
-      if (alive.current) setSearching(false);
+      if (alive.current && gen === searchGen.current) setSearching(false);
     }
   }, [target.track_id]);
 
