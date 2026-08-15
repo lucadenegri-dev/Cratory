@@ -11,6 +11,12 @@ const nextConfig: NextConfig = {
   // serve una distDir separata per non collidere sul lock. NEXT_DIST_DIR è
   // settata solo dal webServer di Playwright.
   ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
+  // Next 16 blocca come cross-origin le richieste dev (websocket HMR inclusa)
+  // che non arrivano dall'host con cui il server e' stato avviato. La suite E2E
+  // gira su 127.0.0.1: senza questo, l'HMR fallisce e con essa il flush degli
+  // useEffect dopo l'hydration — la pagina resta un guscio statico e nessuna
+  // chiamata /api/* parte. Vale solo in sviluppo.
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   async rewrites() {
     return [
       {
