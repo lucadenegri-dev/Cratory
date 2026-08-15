@@ -110,6 +110,10 @@ def test_con_track_id_arricchisce_senza_escludere(monkeypatch):
     assert top["auto_ok"] is True                            # flac nome+durata giusti
     bad = next(f for f in body["results"] if f["username"] == "bad-name")
     assert bad["auto_ok"] is False
+    # Nome e durata giusti ma 128 kbps: l'auto-pick lo scarterebbe per qualita',
+    # quindi niente badge «affidabile» — pur restando visibile nella lista.
+    low = next(f for f in body["results"] if f["username"] == "low-q")
+    assert low["auto_ok"] is False
 
 
 def test_con_track_id_include_le_varianti(monkeypatch):

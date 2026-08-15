@@ -16,8 +16,8 @@ from app.services import soulseek_download_job as job
 from app.schemas import TrackOut
 from app.serializers import track_out
 from app.services.soulseek_select import (
-    AUTO_PICK_MIN_CONFIDENCE, QualityPreference, query_variants, rank_candidates,
-    search_candidates,
+    AUTO_PICK_MIN_CONFIDENCE, QualityPreference, auto_pick_quality_ok, query_variants,
+    rank_candidates, search_candidates,
 )
 from app.services.download_review import (
     NoReviewFileError, discard_downloaded, keep_downloaded, review_detail,
@@ -121,7 +121,11 @@ def _search_file_out(f: SlskdFile, *, score: float | None = None,
         length=f.length, format=f.extension or None, has_free_slot=f.has_free_slot,
         queue_length=f.queue_length, upload_speed=f.upload_speed,
         score=score, confidence=confidence,
-        auto_ok=confidence is not None and confidence >= AUTO_PICK_MIN_CONFIDENCE,
+        # Il badge promette «l'auto-pick l'avrebbe accettato»: entrambe le sue
+        # barriere, confidenza E qualita' (qui la confidenza arriva da un
+        # ranking con soglia bitrate rilassata, che da sola mentirebbe).
+        auto_ok=(confidence is not None and confidence >= AUTO_PICK_MIN_CONFIDENCE
+                 and auto_pick_quality_ok(f)),
     )
 
 

@@ -248,6 +248,17 @@ def auto_pick_candidates(ranked: list[ScoredCandidate]) -> list[ScoredCandidate]
     return [c for c in ranked if c.confidence >= AUTO_PICK_MIN_CONFIDENCE]
 
 
+def auto_pick_quality_ok(file: SlskdFile) -> bool:
+    """Il file supererebbe la barriera di qualita' dell'auto-pick?
+
+    La ricerca manuale ordina con una preferenza rilassata (min_bitrate=1) per
+    non escludere nulla dalla lista: quella confidenza da sola direbbe
+    «affidabile» anche di un 128 kbps che l'auto-pick vero, con la preferenza
+    di default, scarta a tier 0 prima ancora di guardare il nome.
+    """
+    return _quality_tier(file, QualityPreference()) > 0
+
+
 def _clean_title(title: str) -> str:
     t = _PARENS_RE.sub(" ", title or "")
     t = _FEAT_RE.sub(" ", t)
