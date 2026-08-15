@@ -772,8 +772,11 @@ ranking guides sort order and badges, it never excludes a result). Body
 non-audio files included; with it, results pass through `rank_candidates`
 (`QualityPreference(min_bitrate=1)`), which drops files with an unrecognized
 extension and lossy files reporting bitrate 0, and each surviving result also
-carries `score`/`confidence`/`auto_ok` (ranked against the Track's artist/title/
-expected duration); the response's `variants` list the same queries the auto-pick
+carries `score`/`confidence` (ranked against the Track's artist/title/expected
+duration) plus `auto_ok`, true only for the results the auto-pick would have
+accepted — both of its bars, the confidence floor and the default
+`QualityPreference()` quality tier, not the relaxed one used to rank here; the
+response's `variants` list the same queries the auto-pick
 cascade would try, as clickable suggestions. Errors: `409 slskd_not_configured`,
 `404 track_not_found`, `502 slskd_error`.
 
