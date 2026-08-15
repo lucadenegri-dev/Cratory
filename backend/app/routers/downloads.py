@@ -15,7 +15,10 @@ from app.repositories import file_tags_for_tracks, get_track, tracks_download_pe
 from app.services import soulseek_download_job as job
 from app.schemas import TrackOut
 from app.serializers import track_out
-from app.services.soulseek_select import search_candidates
+from app.services.soulseek_select import (
+    AUTO_PICK_MIN_CONFIDENCE, QualityPreference, query_variants, rank_candidates,
+    search_candidates,
+)
 from app.services.download_review import (
     NoReviewFileError, discard_downloaded, keep_downloaded, review_detail,
 )
@@ -75,6 +78,51 @@ class AutoLinkProposal(BaseModel):
     artist: str | None = None
     title: str | None = None
     hit: AutoLinkHit | None = None
+
+
+# Ricerca manuale: budget pieno come il job in background (l'utente sta
+# guardando uno spinner e preferisce risultati completi ai 5s di /candidates).
+MANUAL_SEARCH_MAX_WAIT = 15.0
+
+
+class SearchIn(BaseModel):
+    query: str
+    # Con track_id i risultati vengono arricchiti con score/confidenza
+    # (artista/titolo/durata attesa della Track) e la risposta include le
+    # varianti di query dell'auto-pick come suggerimenti.
+    track_id: int | None = None
+
+
+class SearchFileOut(BaseModel):
+    username: str
+    filename: str
+    size: int | None = None
+    bitrate: int | None = None
+    length: int | None = None
+    format: str | None = None
+    has_free_slot: bool = True
+    queue_length: int | None = None
+    upload_speed: int | None = None
+    # Presenti solo con contesto traccia: guidano ordinamento e badge, MAI esclusioni.
+    score: float | None = None
+    confidence: float | None = None
+    auto_ok: bool = False
+
+
+class SearchOut(BaseModel):
+    variants: list[str]
+    results: list[SearchFileOut]
+
+
+def _search_file_out(f: SlskdFile, *, score: float | None = None,
+                     confidence: float | None = None) -> SearchFileOut:
+    return SearchFileOut(
+        username=f.username, filename=f.filename, size=f.size, bitrate=f.bitrate,
+        length=f.length, format=f.extension or None, has_free_slot=f.has_free_slot,
+        queue_length=f.queue_length, upload_speed=f.upload_speed,
+        score=score, confidence=confidence,
+        auto_ok=confidence is not None and confidence >= AUTO_PICK_MIN_CONFIDENCE,
+    )
 
 
 def _candidate_out(c) -> CandidateOut:
@@ -154,6 +202,44 @@ def candidates(req: CandidatesIn):
     finally:
         client.close()
     return [_candidate_out(c) for c in ranked]
+
+
+@router.post("/search", response_model=SearchOut)
+def search(req: SearchIn, db: Session = Depends(get_db)):
+    """Ricerca manuale Soulseek: UNA ricerca con la query letterale dell'utente.
+
+    Niente cascata di varianti (resta esclusiva dell'auto-pick) e niente filtro
+    a soglia: comanda l'utente, il ranking e' solo una guida. Restano fuori i
+    soli file non-audio (estensione sconosciuta).
+    """
+    if not slskd_configured():
+        raise api_error(409, "slskd_not_configured",
+                        "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
+    track = None
+    if req.track_id is not None:
+        track = get_track(db, req.track_id)
+        if track is None:
+            raise api_error(404, "track_not_found", "Track not found.")
+    client = get_slskd_client()
+    try:
+        files = client.search(req.query, "", max_wait=MANUAL_SEARCH_MAX_WAIT,
+                              search_timeout_ms=int((MANUAL_SEARCH_MAX_WAIT - 1.0) * 1000))
+    except SlskdError as exc:
+        raise api_error(502, "slskd_error", f"slskd error: {exc}", reason=str(exc)) from exc
+    finally:
+        client.close()
+    if track is None:
+        return SearchOut(variants=[], results=[_search_file_out(f) for f in files])
+    # min_bitrate=1: anche la bassa qualita' deve comparire (tier>0);
+    # min_name_score=0.0: anche i nomi pessimi. Il ranking ordina, non esclude.
+    ranked = rank_candidates(files, artist=track.artist or "", title=track.title or "",
+                             pref=QualityPreference(min_bitrate=1), min_name_score=0.0,
+                             expected_duration=track.duration_seconds)
+    return SearchOut(
+        variants=query_variants(track.artist or "", track.title or ""),
+        results=[_search_file_out(c.file, score=c.score, confidence=c.confidence)
+                 for c in ranked],
+    )
 
 
 @router.post("/playlist/{playlist_id}", status_code=202)
