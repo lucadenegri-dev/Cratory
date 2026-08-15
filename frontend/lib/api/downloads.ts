@@ -24,12 +24,6 @@ export function downloadStatus() {
   return apiGet<DownloadStatus>("/api/downloads/status");
 }
 
-export function downloadCandidates(artist: string, title: string, durationSeconds?: number | null) {
-  // La durata attesa (se nota) premia nel ranking la versione giusta.
-  return apiPost<DownloadCandidate[]>("/api/downloads/candidates",
-    { artist, title, duration_seconds: durationSeconds ?? undefined });
-}
-
 export function startPlaylistDownload(playlistId: number) {
   return apiPost<DownloadStatus>(`/api/downloads/playlist/${playlistId}`);
 }
