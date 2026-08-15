@@ -83,6 +83,13 @@ da parte di Discovery non è verificato nel codice: il wrapper frontend
 chiamanti in tutto `frontend/` (grep verificato), Discovery incluso — la
 pulizia resta rimandata, non va rimosso in questo sotto-progetto.
 
+> Aggiornamento post-merge (2026-08-15): la pulizia rimandata è stata poi
+> eseguita in una passata dedicata. Confermato che nessuno chiamava
+> `/api/downloads/candidates` — Discovery passa da `/api/downloads/track/auto` —
+> quindi wrapper, endpoint, i suoi quattro test e la voce in `docs/API.md` sono
+> stati rimossi. La cascata di varianti resta viva in `search_candidates`, che
+> serve l'auto-pick del job in background.
+
 ## Componenti frontend
 
 - **`frontend/components/soulseek-search-modal.tsx`** (nuovo): target

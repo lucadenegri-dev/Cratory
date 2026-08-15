@@ -17,7 +17,7 @@ from app.schemas import TrackOut
 from app.serializers import track_out
 from app.services.soulseek_select import (
     AUTO_PICK_MIN_CONFIDENCE, QualityPreference, auto_pick_quality_ok, query_variants,
-    rank_candidates, search_candidates,
+    rank_candidates,
 )
 from app.services.download_review import (
     NoReviewFileError, discard_downloaded, keep_downloaded, review_detail,
@@ -38,13 +38,6 @@ class CandidateOut(BaseModel):
     name_score: float = 0.0
     quality_tier: int = 0
     confidence: float = 0.0
-
-
-class CandidatesIn(BaseModel):
-    artist: str
-    title: str
-    # Durata attesa (dalla Track): premia la versione giusta nel ranking.
-    duration_seconds: int | None = None
 
 
 class TrackDownloadIn(BaseModel):
@@ -80,8 +73,9 @@ class AutoLinkProposal(BaseModel):
     hit: AutoLinkHit | None = None
 
 
-# Ricerca manuale: budget pieno come il job in background (l'utente sta
-# guardando uno spinner e preferisce risultati completi ai 5s di /candidates).
+# Ricerca manuale: budget pieno come il job in background, non quello ridotto
+# della cascata (l'utente sta guardando uno spinner e preferisce risultati
+# completi a una risposta rapida e mezza vuota).
 MANUAL_SEARCH_MAX_WAIT = 15.0
 
 
@@ -126,14 +120,6 @@ def _search_file_out(f: SlskdFile, *, score: float | None = None,
         # ranking con soglia bitrate rilassata, che da sola mentirebbe).
         auto_ok=(confidence is not None and confidence >= AUTO_PICK_MIN_CONFIDENCE
                  and auto_pick_quality_ok(f)),
-    )
-
-
-def _candidate_out(c) -> CandidateOut:
-    return CandidateOut(
-        username=c.file.username, filename=c.file.filename, size=c.file.size,
-        bitrate=c.file.bitrate, length=c.file.length, format=c.file.extension or None,
-        name_score=c.name_score, quality_tier=c.quality_tier, confidence=c.confidence,
     )
 
 
@@ -188,24 +174,6 @@ def retry_pending():
 @router.get("/status")
 def status():
     return {"available": slskd_configured(), **job.job_state()}
-
-
-@router.post("/candidates", response_model=list[CandidateOut])
-def candidates(req: CandidatesIn):
-    if not slskd_configured():
-        raise api_error(409, "slskd_not_configured",
-                        "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
-    client = get_slskd_client()
-    try:
-        # Cascata di varianti di query: la letterale spesso esclude file validi.
-        ranked = search_candidates(client, artist=req.artist,
-                                   title=req.title,
-                                   expected_duration=req.duration_seconds)
-    except SlskdError as exc:
-        raise api_error(502, "slskd_error", f"slskd error: {exc}", reason=str(exc)) from exc
-    finally:
-        client.close()
-    return [_candidate_out(c) for c in ranked]
 
 
 @router.post("/search", response_model=SearchOut)

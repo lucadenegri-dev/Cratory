@@ -299,7 +299,7 @@ def test_search_candidates_cascata_si_ferma_alla_prima_utile():
 
 
 def test_search_candidates_usa_un_budget_di_attesa_ridotto():
-    # /api/downloads/candidates attendeva fino a ~45s (3 varianti x 15s di
+    # Senza budget esplicito la cascata attenderebbe ~45s (3 varianti x 15s di
     # max_wait): il budget per variante deve restare basso cosi' il totale
     # nel caso peggiore si aggira sui 15s.
     from app.services import soulseek_select as select_mod

@@ -182,14 +182,6 @@ cleanup, and each was explicitly left alone this time.
   no importer left after the Organize language-endpoint removal above. Distinct
   from the same-named, still-live `LanguageSetting` in
   `backend/app/routers/settings.py`.
-- `downloadCandidates` in `frontend/lib/api/downloads.ts:27` has no caller left: the
-  integrated Soulseek search replaced the last one (the deleted `DownloadReviewModal`
-  built its list from it), so `POST /api/downloads/candidates` is now unreachable from
-  the frontend. Same shape as the `POST /api/downloads/search` case decided on
-  2026-08-13: the endpoint stays curl-able on a self-hosted app and is documented in
-  `docs/API.md:725`, so verify and remove — wrapper, endpoint, tests
-  (`backend/tests/test_downloads_router.py`) and docs — in a dedicated pass, not
-  in passing.
 - `backend/app/services/genre_align.py:41` — `align_track_genre(..., apply: bool)`'s
   `apply=False` (dry-run) branch has no caller or test left since the CLI that used
   it was removed in this review; the five surviving call sites all pass

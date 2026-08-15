@@ -1,4 +1,3 @@
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -23,86 +22,6 @@ def test_status_reports_unavailable_when_not_configured(monkeypatch):
     r = client.get("/api/downloads/status")
     assert r.status_code == 200
     assert r.json()["available"] is False
-
-
-def test_candidates_409_when_not_configured(monkeypatch):
-    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: False)
-    r = client.post("/api/downloads/candidates", json={"artist": "A", "title": "B"})
-    assert r.status_code == 409
-
-
-def test_candidates_returns_ranked(monkeypatch):
-    from app.integrations.slskd import SlskdFile
-
-    class _C:
-        def search(self, a, t, **k):
-            return [SlskdFile(username="u", filename="A - B.flac", size=1, bitrate=None,
-                              length=None, has_free_slot=True, queue_length=0)]
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
-    monkeypatch.setattr(downloads_router, "get_slskd_client", lambda: _C())
-    r = client.post("/api/downloads/candidates", json={"artist": "A", "title": "B"})
-    assert r.status_code == 200
-    body = r.json()
-    assert body and body[0]["format"] == "flac"
-    assert "confidence" in body[0]
-
-
-def test_candidates_closes_the_slskd_client(monkeypatch):
-    from app.integrations.slskd import SlskdFile
-
-    created = {}
-
-    class _C:
-        def __init__(self):
-            self.closed = False
-
-        def search(self, a, t, **k):
-            return [SlskdFile(username="u", filename="A - B.flac", size=1, bitrate=None,
-                              length=None, has_free_slot=True, queue_length=0)]
-
-        def close(self):
-            self.closed = True
-
-    def _make():
-        c = _C()
-        created["client"] = c
-        return c
-
-    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
-    monkeypatch.setattr(downloads_router, "get_slskd_client", _make)
-    r = client.post("/api/downloads/candidates", json={"artist": "A", "title": "B"})
-    assert r.status_code == 200
-    assert created["client"].closed is True
-
-
-def test_candidates_usa_durata_attesa(monkeypatch):
-    # Con la durata attesa nel body, la versione con la durata giusta vince
-    # anche contro un formato migliore con durata sbagliata.
-    from app.integrations.slskd import SlskdFile
-
-    class _C:
-        def search(self, a, t, **k):
-            return [
-                SlskdFile(username="u1", filename="A - B.flac", size=1, bitrate=None,
-                          length=500, has_free_slot=True, queue_length=0),
-                SlskdFile(username="u2", filename="A - B.mp3", size=1, bitrate=320,
-                          length=300, has_free_slot=True, queue_length=0),
-            ]
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
-    monkeypatch.setattr(downloads_router, "get_slskd_client", lambda: _C())
-    r = client.post("/api/downloads/candidates",
-                    json={"artist": "A", "title": "B", "duration_seconds": 300})
-    assert r.status_code == 200
-    body = r.json()
-    assert body[0]["format"] == "mp3"
 
 
 def test_track_auto_starts_autopick_job(monkeypatch):

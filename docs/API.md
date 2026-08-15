@@ -736,7 +736,6 @@ GET    /api/downloads/pending
 POST   /api/downloads/retry-pending
 DELETE /api/downloads/pending/{track_id}
 GET    /api/downloads/auto-link
-POST   /api/downloads/candidates
 POST   /api/downloads/search
 POST   /api/downloads/playlist/{playlist_id}
 POST   /api/downloads/track
@@ -752,9 +751,9 @@ File acquisition through the headless Soulseek daemon slskd, fully deterministic
 (`has_local_file`/`local_path`/`local_format`/`local_bitrate`) rather than creating
 a new one.
 
-`SLSKD_URL` and `SLSKD_DOWNLOAD_DIR` must both be configured, or the six
-Soulseek-backed routes — `candidates`, `search`, `playlist/{id}`, `track`,
-`track/auto`, `retry-pending` — answer `409 slskd_not_configured`.
+`SLSKD_URL` and `SLSKD_DOWNLOAD_DIR` must both be configured, or the five
+Soulseek-backed routes — `search`, `playlist/{id}`, `track`, `track/auto`,
+`retry-pending` — answer `409 slskd_not_configured`.
 `track/soundcloud` does not touch slskd and has its own preconditions (see
 below). Available regardless:
 `GET /status` (with `available: false`), `GET /pending`,
@@ -762,24 +761,17 @@ below). Available regardless:
 
 **One download job at a time**, shared by the five routes that start one —
 `playlist/{id}`, `track`, `track/auto`, `track/soundcloud`, `retry-pending` (a
-different set from the slskd-gated five above, which includes `candidates` and
-excludes `track/soundcloud`). A second start is `409 download_already_running`. An
-error on one track does not stop the others.
+different set from the slskd-gated five above, which includes `search` — that one
+only queries — and excludes `track/soundcloud`). A second start is
+`409 download_already_running`. An error on one track does not stop the others.
 `GET /api/downloads/status` returns `available` plus the job state (`status`,
 `processed`, `total`, `downloaded`, `needs_review`, `not_found`, `failed`,
 `playlist_id`, `items[]`, `current_label`, `error`, timestamps).
 
 ### Starting a download
 
-`POST /api/downloads/candidates` searches slskd and returns candidates ranked
-deterministically on quality, name adherence and availability. Request `artist`,
-`title`, optional `duration_seconds` (the duration expected from the `Track`, which
-rewards the right version). Each candidate has `username`, `filename`, `size`,
-`bitrate`, `length`, `format`, `name_score`, `quality_tier`, `confidence`. Provider
-failure is `502 slskd_error`.
-
-`POST /api/downloads/search` is the manual-search counterpart used by the wishlist's
-per-track search modal: one slskd search with the literal query the user typed — no
+`POST /api/downloads/search` is how a candidate is found by hand, and backs the
+wishlist's per-track search modal: one slskd search with the literal query the user typed — no
 variant cascade (that stays exclusive to auto-pick) and no confidence threshold (the
 ranking guides sort order and badges, it never excludes a result). Body
 `{query, track_id?}`. Without `track_id` it returns slskd's raw results unfiltered,

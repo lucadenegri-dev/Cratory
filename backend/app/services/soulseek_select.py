@@ -29,10 +29,12 @@ _LOW_QUALITY_CONFIDENCE_CAP = 0.65
 
 # Budget di attesa per variante di query nella cascata di search_candidates.
 # query_variants() produce al massimo 6 varianti: con il default di SlskdClient
-# (max_wait=15.0) il caso peggiore per /api/downloads/candidates (sincrono
-# sulla request HTTP) esploderebbe; questo default lo tiene a ~30s (6x5s), e
-# solo quando OGNI variante torna a vuoto. Il job in background non ha vincoli
-# di latenza e passa il suo budget pieno (SEARCH_MAX_WAIT).
+# (max_wait=15.0) il caso peggiore esploderebbe a ~90s; questo default lo tiene
+# a ~30s (6x5s), e solo quando OGNI variante torna a vuoto. Nato per un endpoint
+# sincrono sulla request HTTP (`POST /api/downloads/candidates`, rimosso quando
+# la ricerca manuale e' passata a `/search`): resta il default prudente per
+# qualunque chiamante che non dichiari il proprio budget. Il job in background
+# non ha vincoli di latenza e passa il suo (SEARCH_MAX_WAIT).
 CANDIDATE_SEARCH_MAX_WAIT = 5.0
 
 # Token di versione: per un DJ il radio edit al posto dell'extended e' un fallimento
