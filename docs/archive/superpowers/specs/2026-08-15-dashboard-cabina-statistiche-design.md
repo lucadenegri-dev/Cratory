@@ -36,17 +36,29 @@ Un componente `frontend/components/dashboard/ascii-dj.tsx` in due strati:
    avanza il tick con `setInterval` (~500ms, cleanup allo smontaggio) e con
    `prefers-reduced-motion` resta sul fotogramma 0 statico.
 
-La scena (soggetta a raffinamento visivo in browser, che fa parte del lavoro):
-DJ con cuffie dietro una console — due piatti che girano (marcatore che cicla
-`| / - \`, fasi sfalsate), occhi che sbattono ogni pochi secondi, EQ del mixer
-che pulsa, crossfader che scivola, note (`♪ ♫ ·`) che salgono e svaniscono
-nell'aria sopra la scena.
+**Revisione (stesso giorno):** la scena è l'arte fornita dall'utente — la
+cabina completa con due casse ai lati e il DJ dietro la console in
+prospettiva. Le parti animate sono localizzate con `indexOf` sul template e
+sostituite a lunghezza costante: woofer che pompano (`( O )`/`( o )`),
+tweeter che vibrano, piatti che girano (`| / - \`, fasi sfalsate), forma
+d'onda del mixer che ondeggia, capelli al vento, blink/strizzata d'occhio,
+mano che incrocia sul piatto, note (`° * ·`, glifi coperti da DM Mono) che
+salgono nell'aria. Dimensione "abbastanza grande": scala responsive fino a
+`text-base` su schermi larghi, `overflow-x-auto` sotto `sm`.
 
-Colori per zone (righe fisse → classi): aria in `text-faint`, corpo in
-`text-muted`/`text-fg`, parti vive in `text-fg-strong`. Un solo accento: i
-picchi dell'EQ del mixer in `danger`, citando la grammatica decorativa dei DJ
-loader (`Equalizer`/`EqMeter`) già sancita dal design system — è l'unica
-estensione, un carattere per volta, rimovibile con una classe.
+**La cabina è cliccabile**: con `onActivate` il componente è un `<button>`
+(aria-label i18n) con un suggerimento visibile sotto la scena
+(`dashboard.djHint`). La dashboard vi attacca "suona una traccia a caso":
+offset casuale su `stats.with_local_file`, una chiamata
+`GET /api/tracks?has_local_file=true&limit=1&offset=…`, e la traccia parte
+nel player docked (`usePlayer().play({kind:"local-track",…})`). Senza
+possedute il click non fa nulla.
+
+Colori: aria in `text-faint`, scena in `text-fg`. Un solo accento: la `O`
+del colpo di cassa dei woofer in `danger`, citando la grammatica decorativa
+dei DJ loader (`Equalizer`/`EqMeter`) già sancita dal design system — è
+l'unica estensione, un carattere per volta, rimovibile con una classe.
+Con `prefers-reduced-motion` la scena resta sul fotogramma 0.
 
 ## Pagina /statistics
 

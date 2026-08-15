@@ -203,6 +203,8 @@ export const it: Dictionary = {
     stagePlay: "Suona",
     stagePlaySub: "pronte per un set",
     statsLink: "Statistiche",
+    djPlayRandom: "Suona una traccia a caso",
+    djHint: "premi la consolle · una traccia a caso",
   },
   stats: {
     title: "Statistiche",

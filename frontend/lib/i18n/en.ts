@@ -204,6 +204,8 @@ export const en = {
     stagePlay: "Play",
     stagePlaySub: "ready for a set",
     statsLink: "Statistics",
+    djPlayRandom: "Play a random track",
+    djHint: "hit the booth · one random track",
   },
   stats: {
     title: "Statistics",

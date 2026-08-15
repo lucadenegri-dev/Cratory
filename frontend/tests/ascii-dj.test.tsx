@@ -1,5 +1,5 @@
-import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AsciiDj, djFrame, DJ_ROWS, DJ_COLS, DJ_AIR_ROWS } from "@/components/dashboard/ascii-dj";
 
@@ -42,5 +42,19 @@ describe("AsciiDj (guscio)", () => {
     const art = container.querySelector('[aria-hidden="true"]');
     expect(art).toBeTruthy();
     expect(art!.querySelectorAll("pre").length).toBeGreaterThan(0);
+  });
+
+  it("senza onActivate non è un bottone: solo decorazione", () => {
+    render(<AsciiDj />);
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("con onActivate è un bottone etichettato che al click chiama il gestore", () => {
+    const spy = vi.fn();
+    render(<AsciiDj onActivate={spy} label="Suona una traccia a caso" hint="premi" />);
+    const btn = screen.getByRole("button", { name: "Suona una traccia a caso" });
+    fireEvent.click(btn);
+    expect(spy).toHaveBeenCalledOnce();
+    expect(screen.getByText("premi")).toBeTruthy();
   });
 });

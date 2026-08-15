@@ -5,9 +5,10 @@ import Link from "next/link";
 import { Music, ArrowRight } from "lucide-react";
 import {
   apiGet, getPipeline,
-  type LibraryStats, type SetlistSummary, type PipelineStatus,
+  type LibraryStats, type SetlistSummary, type PipelineStatus, type Track,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { usePlayer } from "@/lib/player";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
 import { Card, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -18,6 +19,7 @@ import { AsciiDj } from "@/components/dashboard/ascii-dj";
  *  della libreria vive in /statistics, raggiunta dal link in alto. */
 export default function Dashboard() {
   const t = useT();
+  const player = usePlayer();
   const [stats, setStats] = useState<LibraryStats | null>(null);
   const [sets, setSets] = useState<SetlistSummary[] | null>(null);
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
@@ -30,6 +32,32 @@ export default function Dashboard() {
   }, []);
 
   const empty = stats != null && stats.total_tracks === 0;
+
+  /* Il click sulla consolle: una traccia posseduta a caso nel player docked.
+     Offset casuale sul conteggio dei posseduti, una sola chiamata. */
+  const playRandom = () => {
+    const owned = stats?.with_local_file ?? 0;
+    if (owned === 0) return;
+    const offset = Math.floor(Math.random() * owned);
+    apiGet<{ total: number; items: Track[] }>("/api/tracks", {
+      has_local_file: true, limit: 1, offset,
+    })
+      .then((r) => {
+        const track = r.items[0];
+        if (!track) return;
+        player.play({
+          kind: "local-track",
+          track: {
+            id: track.id,
+            title: track.title ?? "",
+            artist: track.artist ?? "",
+            albumArtUrl: track.album_art_url ?? null,
+            rating: track.rating ?? null,
+          },
+        });
+      })
+      .catch(() => {});
+  };
 
   return (
     <PageLayout>
@@ -90,9 +118,9 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Il DJ: puro carattere, in tutti i sensi. */}
-          <div className="mt-12 flex justify-center">
-            <AsciiDj />
+          {/* La consolle: puro carattere, in tutti i sensi. Premuta, suona. */}
+          <div className="mt-12 flex justify-center overflow-x-auto">
+            <AsciiDj onActivate={playRandom} label={t.dashboard.djPlayRandom} hint={t.dashboard.djHint} />
           </div>
         </>
       )}
