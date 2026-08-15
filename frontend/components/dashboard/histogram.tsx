@@ -6,10 +6,26 @@ import { useT } from "@/lib/i18n";
 import type { BpmBin } from "@/lib/api";
 
 /** Istogramma monocromatico interattivo: passando il mouse evidenzia il bin e
- *  mostra range BPM + conteggio sopra le barre. */
-export function Histogram({ bins }: { bins: BpmBin[] }) {
+ *  mostra range BPM + conteggio sopra le barre. In variante `spark` è una
+ *  sparkline inline muta, per la riga BPM del colophon. */
+export function Histogram({ bins, variant = "full" }: { bins: BpmBin[]; variant?: "full" | "spark" }) {
   const t = useT();
   const [hover, setHover] = useState<number | null>(null);
+  if (variant === "spark") {
+    if (bins.length === 0) return null;
+    const peak = Math.max(...bins.map((b) => b.count), 1);
+    return (
+      <span aria-hidden="true" className="inline-flex h-3.5 items-end gap-px align-middle">
+        {bins.map((b, i) => (
+          <span
+            key={i}
+            className={b.count === peak ? "w-1 bg-fg" : "w-1 bg-faint"}
+            style={{ height: `${Math.max(15, Math.round((b.count / peak) * 100))}%` }}
+          />
+        ))}
+      </span>
+    );
+  }
   if (bins.length === 0) return <p className="text-sm text-faint">—</p>;
   const max = Math.max(...bins.map((b) => b.count), 1);
   const lo = bins[0].from;
