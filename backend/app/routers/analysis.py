@@ -12,10 +12,12 @@ from app.core.http_errors import api_error
 from app.db import get_db
 from app.integrations import essentia_engine
 from app.models import Track
-from app.schemas import (AnalysisApplyIn, AnalysisApplyOut, AnalysisDivergenceOut,
+from app.schemas import (AnalysisApplyIn, AnalysisApplyOut, AnalysisDismissIn,
+                         AnalysisDismissOut, AnalysisDivergenceOut,
                          AnalysisJobStatus, AnalysisOverviewOut, AnalysisStartIn)
 from app.services import audio_analysis_job
-from app.services.audio_analysis import apply_analysis, divergence_row, diverges
+from app.services.audio_analysis import (apply_analysis, dismiss_divergence,
+                                         divergence_row, open_divergence)
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
@@ -46,7 +48,7 @@ def overview(db: Session = Depends(get_db)):
         bpm_by_source=by_source("bpm_source"),
         key_by_source=by_source("key_source"),
         analyzed=sum(1 for t in owned if t.analyzed_at is not None),
-        divergent=sum(1 for t in owned if diverges(t)),
+        divergent=sum(1 for t in owned if open_divergence(t)),
         rekordbox_pending=sum(1 for t in owned if t.bpm is None or not t.camelot_key),
     )
 
@@ -68,14 +70,15 @@ def status():
 
 @router.get("/divergences", response_model=list[AnalysisDivergenceOut])
 def divergences(db: Session = Depends(get_db)):
-    return [divergence_row(t) for t in _owned(db) if diverges(t)]
+    return [divergence_row(t) for t in _owned(db) if open_divergence(t)]
 
 
 @router.post("/apply", response_model=AnalysisApplyOut)
 def apply(payload: AnalysisApplyIn, db: Session = Depends(get_db)):
     """Applica i valori analizzati. track_ids/mode='divergent' = scelta esplicita
-    dell'utente dalla tabella; mode='all' riscrive TUTTE le analizzate (qualunque
-    fonte, anche manual) e richiede force=true come conferma."""
+    dell'utente dalle divergenze APERTE (le scartate restano fuori); mode='all'
+    riscrive TUTTE le analizzate, scartate comprese (qualunque fonte, anche
+    manual) e richiede force=true come conferma."""
     if payload.mode == "all" and not payload.force:
         raise api_error(422, "analysis_force_required",
                         "mode='all' rewrites every analyzed track: pass force=true.")
@@ -86,9 +89,25 @@ def apply(payload: AnalysisApplyIn, db: Session = Depends(get_db)):
         ids = set(payload.track_ids)
         targets = [t for t in owned if t.id in ids]
     elif payload.mode == "divergent":
-        targets = [t for t in owned if diverges(t)]
+        targets = [t for t in owned if open_divergence(t)]
     else:  # mode == "all"
         targets = [t for t in owned if t.analyzed_at is not None]
     applied = sum(1 for t in targets if apply_analysis(t))
     db.commit()
     return AnalysisApplyOut(applied=applied, skipped=len(targets) - applied)
+
+
+@router.post("/dismiss", response_model=AnalysisDismissOut)
+def dismiss(payload: AnalysisDismissIn, db: Session = Depends(get_db)):
+    """Scarta le divergenze: la coppia analizzata e la coppia canonica vengono
+    fotografate insieme; la divergenza resta nascosta finche' ENTRAMBE
+    coincidono ancora con lo snapshot, e riappare se una nuova analisi o un
+    cambio del canonico (PATCH, import Rekordbox) altera anche solo un lato."""
+    if not payload.track_ids:
+        raise api_error(422, "analysis_dismiss_empty", "Provide track_ids.")
+    ids = set(payload.track_ids)
+    targets = [t for t in _owned(db) if t.id in ids]
+    for t in targets:
+        dismiss_divergence(t)
+    db.commit()
+    return AnalysisDismissOut(dismissed=len(targets))
