@@ -15,7 +15,7 @@ const base = {
   last_download_outcome: null, last_download_reason: null, last_download_path: null,
 } as unknown as Track;
 
-const noop = { onDownload: vi.fn(), onReview: vi.fn(), onLinkFile: vi.fn(), onClearOutcome: vi.fn(), onArchive: vi.fn(), onRestore: vi.fn() };
+const noop = { onDownload: vi.fn(), onSearch: vi.fn(), onLinkFile: vi.fn(), onClearOutcome: vi.fn(), onArchive: vi.fn(), onRestore: vi.fn() };
 
 // Valore realistico di `from` come lo calcola WishlistInner (path + query dei
 // filtri vivi, vedi app/wishlist/page.tsx): la riga non lo ricostruisce piu' da
@@ -43,7 +43,7 @@ describe("WishlistRow", () => {
     expect(screen.getByText("Riprova")).toBeTruthy();
     rerender(<WishlistRow track={{ ...base, last_download_outcome: "needs_review" } as Track} downloadsAvailable from={from} {...noop} />);
     fireEvent.click(screen.getByText("Rivedi"));
-    expect(noop.onReview).toHaveBeenCalled();
+    expect(noop.onSearch).toHaveBeenCalled();
   });
 
   it("scaricata-non-collegata: primaria = Collega file", () => {
@@ -82,5 +82,12 @@ describe("WishlistRow", () => {
     fireEvent.click(screen.getByText("Ripristina"));
     expect(noop.onRestore).toHaveBeenCalled();
     expect(screen.queryByText("Scarica")).toBeNull();
+  });
+
+  it("menu …: «Cerca su Soulseek» disponibile per ogni stato e chiama onSearch", () => {
+    render(<WishlistRow track={base} downloadsAvailable from={from} {...noop} />);
+    fireEvent.click(screen.getByLabelText("Altre azioni"));
+    fireEvent.click(screen.getByText("Cerca su Soulseek"));
+    expect(noop.onSearch).toHaveBeenCalled();
   });
 });

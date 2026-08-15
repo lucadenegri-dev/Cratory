@@ -449,6 +449,7 @@ export const en = {
     reviewButton: "Review",
     buyButton: "Buy",
     moreActionsAria: "More actions",
+    searchSoulseek: "Search on Soulseek",
     linkFileButton: "Link file",
     clearOutcomeButton: "Clear outcome",
     archiveButton: "Archive",
@@ -462,7 +463,7 @@ export const en = {
     archivedEmptyBody: "Tracks you archive from the wishlist will show up here.",
     soulseekHeading: "Soulseek",
     soulseekOpen: "Open slskd",
-    soulseekHint: "If a track won't download directly from Cratory, search and grab it yourself in slskd — it often works better.",
+    soulseekHint: "Fallback: if slskd is unreachable or you want its own UI, open it here.",
     bulkHeading: "Bulk actions",
   },
   tracks: {

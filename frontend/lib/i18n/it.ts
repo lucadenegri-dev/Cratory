@@ -448,6 +448,7 @@ export const it: Dictionary = {
     reviewButton: "Rivedi",
     buyButton: "Compra",
     moreActionsAria: "Altre azioni",
+    searchSoulseek: "Cerca su Soulseek",
     linkFileButton: "Collega file",
     clearOutcomeButton: "Azzera esito",
     archiveButton: "Archivia",
@@ -461,7 +462,7 @@ export const it: Dictionary = {
     archivedEmptyBody: "Le tracce che archivi dalla wishlist compariranno qui.",
     soulseekHeading: "Soulseek",
     soulseekOpen: "Apri slskd",
-    soulseekHint: "Se una traccia non si scarica direttamente da Cratory, cercala e scaricala tu da slskd: spesso funziona meglio.",
+    soulseekHint: "Riserva: se slskd non risponde o vuoi la sua interfaccia, aprila da qui.",
     bulkHeading: "Azioni di gruppo",
   },
   tracks: {

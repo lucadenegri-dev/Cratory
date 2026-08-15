@@ -16,7 +16,7 @@ export type WishlistRowProps = {
   downloadsAvailable: boolean;     // slskd configurato e nessun job in corso
   from: string;                    // origine per i link indietro (path+query vivi della pagina, vedi wishlist/page.tsx)
   onDownload: (t: Track) => void;  // auto-pick (mai tentata / riprova)
-  onReview: (t: Track) => void;    // apre DownloadReviewModal
+  onSearch: (t: Track) => void;    // apre SoulseekSearchModal (primaria per review, voce menu per tutti)
   onLinkFile: (t: Track) => void;  // apre LinkLocalFileModal
   onClearOutcome: (t: Track) => void;
   onArchive: (t: Track) => void;   // la conferma sta nella pagina
@@ -35,7 +35,7 @@ const MAX_CHIPS = 2;
 
 export function WishlistRow({
   track, archived, downloadsAvailable, from,
-  onDownload, onReview, onLinkFile, onClearOutcome, onArchive, onRestore,
+  onDownload, onSearch, onLinkFile, onClearOutcome, onArchive, onRestore,
 }: WishlistRowProps) {
   const t = useT();
   const status = wishlistStatus(track);
@@ -72,7 +72,7 @@ export function WishlistRow({
         );
       case "review":
         return (
-          <Button size="sm" onClick={() => onReview(track)}>
+          <Button size="sm" onClick={() => onSearch(track)}>
             <Search size={13} /> {t.wishlist.reviewButton}
           </Button>
         );
@@ -130,6 +130,7 @@ export function WishlistRow({
             ariaLabel={t.wishlist.moreActionsAria}
             variant="ghost"
             items={[
+              { key: "soulseek", label: t.wishlist.searchSoulseek, onSelect: () => onSearch(track) },
               { key: "link", label: t.wishlist.linkFileButton, onSelect: () => onLinkFile(track) },
               { key: "clear", label: t.wishlist.clearOutcomeButton, disabled: status === "never", onSelect: () => onClearOutcome(track) },
               { key: "archive", label: t.wishlist.archiveButton, onSelect: () => onArchive(track) },

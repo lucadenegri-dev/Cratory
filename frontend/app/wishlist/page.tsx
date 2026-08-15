@@ -8,7 +8,7 @@ import { Alert, Button, Card, Checkbox, EmptyState, Input, Loading, Select } fro
 import { ButtonLink } from "@/components/button-link";
 import { useJobs } from "@/components/jobs-provider";
 import { WishlistRow } from "@/components/wishlist-row";
-import { DownloadReviewModal, type ReviewTarget } from "@/components/download-review-modal";
+import { SoulseekSearchModal, type SoulseekSearchTarget } from "@/components/soulseek-search-modal";
 import { LinkLocalFileModal, type LinkTarget } from "@/components/link-local-file-modal";
 import { AutoLinkModal } from "@/components/auto-link-modal";
 import { ConfirmModal } from "@/components/confirm-modal";
@@ -52,7 +52,7 @@ function WishlistInner() {
   // slskd non e' configurato -> il blocco non compare.
   const [slskdWebUrl, setSlskdWebUrl] = useState<string | null>(null);
 
-  const [review, setReview] = useState<ReviewTarget | null>(null);
+  const [searchTarget, setSearchTarget] = useState<SoulseekSearchTarget | null>(null);
   const [linking, setLinking] = useState<LinkTarget | null>(null);
   const [autoLink, setAutoLink] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState<Track | null>(null);
@@ -150,19 +150,6 @@ function WishlistInner() {
         {!available && <Alert tone="info">{t.downloads.notConfigured}</Alert>}
         {error && <Alert tone="danger">⚠ {error}</Alert>}
 
-        {/* Soulseek: link alla web UI di slskd per cercare/scaricare a mano.
-            Reso solo se SLSKD_URL e' configurato (web_url != null); compare anche
-            quando il demone e' irraggiungibile — che e' proprio quando serve. */}
-        {slskdWebUrl && (
-          <section>
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.wishlist.soulseekHeading}</div>
-            <ButtonLink href={slskdWebUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">
-              <ExternalLink size={14} /> {t.wishlist.soulseekOpen}
-            </ButtonLink>
-            <p className="mt-2 text-sm text-faint">{t.wishlist.soulseekHint}</p>
-          </section>
-        )}
-
         {/* Azioni di gruppo */}
         <section>
           <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.wishlist.bulkHeading}</div>
@@ -229,7 +216,7 @@ function WishlistInner() {
                   <WishlistRow key={tr.id} track={tr} archived={showArchived}
                     downloadsAvailable={downloadsAvailable} from={from}
                     onDownload={onDownload}
-                    onReview={(x) => setReview({ track_id: x.id, artist: x.artist, title: x.title })}
+                    onSearch={(x) => setSearchTarget({ track_id: x.id, artist: x.artist, title: x.title })}
                     onLinkFile={(x) => setLinking({ id: x.id, artist: x.artist, title: x.title })}
                     onClearOutcome={onClearOutcome}
                     onArchive={setConfirmArchive}
@@ -239,10 +226,25 @@ function WishlistInner() {
             </Card>
           )}
         </section>
+
+        {/* Soulseek: link alla web UI di slskd, ora una riserva. La ricerca
+            manuale per traccia vive nel modal aperto da WishlistRow; questo
+            blocco resta solo per quando slskd non risponde o serve la sua UI.
+            Reso solo se SLSKD_URL e' configurato (web_url != null); compare anche
+            quando il demone e' irraggiungibile — che e' proprio quando serve. */}
+        {slskdWebUrl && (
+          <section>
+            <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.wishlist.soulseekHeading}</div>
+            <ButtonLink href={slskdWebUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">
+              <ExternalLink size={14} /> {t.wishlist.soulseekOpen}
+            </ButtonLink>
+            <p className="mt-2 text-sm text-faint">{t.wishlist.soulseekHint}</p>
+          </section>
+        )}
       </div>
 
-      <DownloadReviewModal target={review} onClose={() => setReview(null)}
-        onPicked={() => { refresh(); setReview(null); load(); }} />
+      <SoulseekSearchModal target={searchTarget} onClose={() => setSearchTarget(null)}
+        onPicked={() => { refresh(); setSearchTarget(null); load(); }} />
       <LinkLocalFileModal target={linking} onClose={() => setLinking(null)}
         onLinked={() => { setLinking(null); load(); }} />
       <AutoLinkModal open={autoLink} onClose={() => setAutoLink(false)} onLinked={() => load()} />
