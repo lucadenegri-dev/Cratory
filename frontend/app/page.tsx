@@ -1,57 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Music, ArrowRight } from "lucide-react";
 import {
-  apiGet, getLabels, getPipeline, downloadStatus, downloadPending,
-  type LibraryStats, type LabelStats, type SetlistSummary, type PipelineStatus,
-  type DownloadStatus, type Track,
+  apiGet, getPipeline,
+  type LibraryStats, type SetlistSummary, type PipelineStatus,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
 import { Card, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { Figure } from "@/components/dashboard/figure";
-import { Colophon } from "@/components/dashboard/colophon";
-import { OpenWork, queuesActive } from "@/components/dashboard/open-work";
+import { AsciiDj } from "@/components/dashboard/ascii-dj";
 
+/** «La Cabina»: le due griglie di orientamento e il DJ. Il ritratto statistico
+ *  della libreria vive in /statistics, raggiunta dal link in alto. */
 export default function Dashboard() {
   const t = useT();
   const [stats, setStats] = useState<LibraryStats | null>(null);
-  const [labels, setLabels] = useState<LabelStats[]>([]);
   const [sets, setSets] = useState<SetlistSummary[] | null>(null);
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
-  const [download, setDownload] = useState<DownloadStatus | null>(null);
-  const [pending, setPending] = useState<Track[]>([]);
-  const [leads, setLeads] = useState<Track[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(() => {
+  useEffect(() => {
     apiGet<LibraryStats>("/api/stats").then((s) => { setStats(s); setError(null); }).catch((e) => setError(String(e.message ?? e)));
     getPipeline().then(setPipeline).catch(() => setPipeline(null));
-    getLabels().then(setLabels).catch(() => {});
     apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch(() => setSets([]));
-    downloadStatus().then(setDownload).catch(() => setDownload(null));
-    downloadPending().then(setPending).catch(() => setPending([]));
-    apiGet<{ total: number; items: Track[] }>("/api/tracks", {
-      sort: "added_at", order: "desc", has_local_file: false, limit: 5,
-    }).then((r) => setLeads(r.items)).catch(() => setLeads([]));
   }, []);
-  useEffect(load, [load]);
-
-  /* Vivo solo sulle code: finché un download gira, download e pipeline si
-     riaggiornano; le cifre del frontespizio restano l'istantanea iniziale,
-     così la pagina respira senza sfarfallare. */
-  const active = queuesActive(download, pipeline);
-  useEffect(() => {
-    if (!active) return;
-    const id = setInterval(() => {
-      downloadStatus().then(setDownload).catch(() => {});
-      getPipeline().then(setPipeline).catch(() => {});
-    }, 5000);
-    return () => clearInterval(id);
-  }, [active]);
 
   const empty = stats != null && stats.total_tracks === 0;
 
@@ -78,6 +54,14 @@ export default function Dashboard() {
 
       {stats && !empty && (
         <>
+          {/* Link alle statistiche: la pagina non ha header PageLayout, quindi
+              il rimando sta qui, quieto e right-aligned sopra il frontespizio. */}
+          <div className="mb-2 flex justify-end">
+            <Link href="/statistics" className="text-[10px] uppercase tracking-wider text-muted transition-colors hover:text-fg">
+              {t.dashboard.statsLink} →
+            </Link>
+          </div>
+
           {/* Frontespizio: le quattro misure come apertura tipografica. */}
           <div className="grid grid-cols-2 border-l border-t border-border sm:grid-cols-4">
             <Figure big label={t.dashboard.figureDiscovered} value={stats.total_tracks} />
@@ -106,11 +90,10 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Il banco: il lavoro aperto sulla catena di acquisizione. */}
-          <OpenWork download={download} pending={pending} inboxFiles={pipeline?.inbox_files ?? null} leads={leads} />
-
-          {/* Il colophon: il ritratto della libreria in righe tipografiche. */}
-          <Colophon stats={stats} labels={labels} />
+          {/* Il DJ: puro carattere, in tutti i sensi. */}
+          <div className="mt-12 flex justify-center">
+            <AsciiDj />
+          </div>
         </>
       )}
     </PageLayout>
