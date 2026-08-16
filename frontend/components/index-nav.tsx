@@ -21,6 +21,7 @@ const navGroups = (t: Dictionary): { title: string | null; items: { href: string
       { href: "/discovery", label: t.nav.discovery },
       { href: "/shazam", label: t.nav.shazam },
       { href: "/wishlist", label: t.nav.downloads },
+      { href: "/downloads", label: t.nav.queue },
     ],
   },
   {

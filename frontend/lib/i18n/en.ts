@@ -54,6 +54,9 @@ export const en = {
     playlists: "Playlists",
     labels: "Labels",
     downloads: "Wishlist",
+    // Voce distinta dalla wishlist: la wishlist e' cosa manca, la coda e' cosa
+    // sta scendendo adesso.
+    queue: "Queue",
     sets: "Sets",
     transitions: "Transitions",
     settings: "Settings",

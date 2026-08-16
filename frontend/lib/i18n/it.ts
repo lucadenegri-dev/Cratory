@@ -51,6 +51,9 @@ export const it: Dictionary = {
     playlists: "Playlists",
     labels: "Etichette",
     downloads: "Wishlist",
+    // Voce distinta dalla wishlist: la wishlist e' cosa manca, la coda e' cosa
+    // sta scendendo adesso.
+    queue: "Coda",
     sets: "Set",
     transitions: "Transizioni",
     settings: "Impostazioni",

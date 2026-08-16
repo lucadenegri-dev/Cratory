@@ -191,7 +191,9 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       const pending = v.needs_review + v.not_found + v.failed;
       track(v.status, {
         key: "download", label: t.jobs.soulseekDownload, detail: v.current_label ?? undefined,
-        processed: v.processed, total: v.total, href: "/wishlist",
+        // La riga della barra porta alla coda, non alla wishlist: e' li' che si
+        // vede cosa sta scendendo, si annulla e si riordina.
+        processed: v.processed, total: v.total, href: "/downloads",
       }, v.status === "error"
         ? (v.error ?? t.common.error)
         : t.jobs.downloadSummary(v.downloaded, pending));
