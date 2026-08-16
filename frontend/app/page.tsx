@@ -15,9 +15,11 @@ import { Card, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { Figure } from "@/components/dashboard/figure";
 import { AsciiDj } from "@/components/dashboard/ascii-dj";
+import { AsciiWordmark } from "@/components/dashboard/ascii-wordmark";
 
-/** La Home: la striscia del ciclo, la consolle che suona e le quattro misure
- *  in chiusura. Il ritratto statistico della libreria vive in /statistics. */
+/** La Home: il frontespizio (il nome in grande e la consolle che suona), poi
+ *  la striscia del ciclo e le quattro misure in chiusura. Il ritratto
+ *  statistico della libreria vive in /statistics. */
 export default function Home() {
   const t = useT();
   const player = usePlayer();
@@ -68,6 +70,12 @@ export default function Home() {
 
   return (
     <PageLayout>
+      {/* Il frontespizio sta in cima sempre: anche a libreria vuota e mentre
+          carica, la Home ha una testata. Sotto cambia solo il contenuto. */}
+      <div className="mb-8">
+        <AsciiWordmark />
+      </div>
+
       {error && <div className="mb-6"><Alert tone="danger">{t.dashboard.backendDown(error)}</Alert></div>}
 
       {!stats && !error && <Loading />}
@@ -89,21 +97,11 @@ export default function Home() {
 
       {stats && !empty && (
         <>
-          {/* Link alle statistiche: la pagina non ha header PageLayout, quindi
-              il rimando sta qui, quieto e right-aligned sopra il frontespizio. */}
-          <div className="mb-2 flex justify-end">
-            <Link href="/statistics" className="text-[10px] uppercase tracking-wider text-muted transition-colors hover:text-fg">
-              {t.dashboard.statsLink} →
-            </Link>
-          </div>
-
-          {/* Striscia di orientamento: le fasi del ciclo con contatori vivi. */}
-          {pipeline && <PipelineStrip p={pipeline} />}
-
-          {/* La consolle: puro carattere, in tutti i sensi. Premuta, suona.
-              Si muove solo mentre dall'app esce davvero del suono (`audible`,
-              non `status`: in pausa il dock resta "playing"). */}
-          <div className="mt-10 flex justify-center overflow-x-auto">
+          {/* La consolle chiude il frontespizio, sotto il nome: puro carattere,
+              in tutti i sensi. Premuta, suona. Si muove solo mentre dall'app
+              esce davvero del suono (`audible`, non `status`: in pausa il dock
+              resta "playing"). */}
+          <div className="flex justify-center overflow-x-auto">
             <AsciiDj
               animate={player.audible}
               onActivate={playRandom}
@@ -111,6 +109,18 @@ export default function Home() {
               hint={t.dashboard.djHint}
             />
           </div>
+
+          {/* Link alle statistiche: la pagina non ha header PageLayout, quindi
+              il rimando sta qui, quieto e right-aligned in testa alle due
+              sezioni di dati a cui appartiene — non sopra il frontespizio. */}
+          <div className="mb-2 mt-10 flex justify-end">
+            <Link href="/statistics" className="text-[10px] uppercase tracking-wider text-muted transition-colors hover:text-fg">
+              {t.dashboard.statsLink} →
+            </Link>
+          </div>
+
+          {/* Striscia di orientamento: le fasi del ciclo con contatori vivi. */}
+          {pipeline && <PipelineStrip p={pipeline} />}
 
           {/* Le quattro misure chiudono la pagina, come un colophon in cifre.
               Stesso involucro della striscia sopra (Card: fondo surface e
