@@ -1,5 +1,5 @@
 """Job di identificazione mix via Shazam (mix_identify_job): ZERO coverage prima
-di questo file. Pattern preso da test_soulseek_download_job.py/test_library_index_router.py
+di questo file. Pattern preso da test_library_index_router.py
 (stato globale in memoria, SessionLocal monkeypatchata, job eseguito in-thread nei test
 chiamando direttamente _run_job/start_job, niente thread reale)."""
 

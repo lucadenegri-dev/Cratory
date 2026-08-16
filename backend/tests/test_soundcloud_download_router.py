@@ -8,7 +8,7 @@ from app.db import Base
 from app.main import app
 from app.models import Track
 from app.routers import downloads as downloads_router
-from app.services import soulseek_download_job as job
+from app.services import download_queue as q
 
 client = TestClient(app)
 
@@ -24,7 +24,7 @@ def _ok(monkeypatch):
     monkeypatch.setattr(downloads_router, "soundcloud_available", lambda: True)
     monkeypatch.setattr(downloads_router, "_ffmpeg_available", lambda: True)
     monkeypatch.setattr(settings, "slskd_download_dir", "/dl")
-    monkeypatch.setattr(job, "is_running", lambda: False)
+    monkeypatch.setattr(downloads_router, "fill", lambda: None)
 
 
 def test_409_when_ytdlp_missing(monkeypatch):
@@ -51,14 +51,6 @@ def test_409_when_dir_not_configured(monkeypatch):
     assert r.json()["detail"]["code"] == "download_dir_not_configured"
 
 
-def test_409_when_already_running(monkeypatch):
-    _ok(monkeypatch)
-    monkeypatch.setattr(job, "is_running", lambda: True)
-    r = client.post("/api/downloads/track/soundcloud", json={"track_id": 1})
-    assert r.status_code == 409
-    assert r.json()["detail"]["code"] == "download_already_running"
-
-
 def test_404_when_track_missing(monkeypatch):
     _ok(monkeypatch)
     monkeypatch.setattr(downloads_router, "SessionLocal", _factory())
@@ -79,7 +71,9 @@ def test_422_when_not_a_soundcloud_track(monkeypatch):
     assert r.json()["detail"]["code"] == "not_a_soundcloud_track"
 
 
-def test_202_starts_job(monkeypatch):
+def test_accoda_un_item_soundcloud(monkeypatch):
+    """Il `kind` e' l'unica cosa che distingue questo download: dice al runner
+    di passare da yt-dlp invece che da slskd."""
     _ok(monkeypatch)
     factory = _factory()
     db = factory()
@@ -88,10 +82,8 @@ def test_202_starts_job(monkeypatch):
     db.add(t)
     db.commit()
     monkeypatch.setattr(downloads_router, "SessionLocal", factory)
-    started = []
-    monkeypatch.setattr(job, "start_soundcloud_track_job",
-                        lambda tid: started.append(tid) or {"status": "running"})
     r = client.post("/api/downloads/track/soundcloud", json={"track_id": t.id})
-    assert r.status_code == 202
-    assert r.json()["available"] is True
-    assert started == [t.id]
+    assert r.status_code == 200
+    assert r.json() == {"enqueued": 1, "skipped": 0}
+    (item,) = q.list_items(factory())
+    assert (item.track_id, item.kind) == (t.id, "soundcloud")

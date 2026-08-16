@@ -101,16 +101,16 @@ def run_item(item_id: int) -> None:
         db.close()
 
 
-# --- Logica di trasferimento assorbita da soulseek_download_job.py ---------
+# --- Logica di trasferimento assorbita dal job monolitico ------------------
 #
-# Copiata alla lettera dal job storico (che resta in piedi fino al Task 7).
-# Le uniche differenze sono le tre modifiche per far arrivare l'annullo fin
-# dentro il ciclo di attesa: il parametro `should_cancel`, inoltrato da
-# `_process_item` a `_attempt_download` a `_wait_for_download`, e l'esito
-# "cancelled" che risale senza essere scavalcato dal fallback su un altro
-# utente. Il resto — cascata di varianti, soglie di confidenza, guardia sulla
-# durata, timeout — e' identico: e' il codice coperto dai test di regressione
-# del job originale.
+# Copiata alla lettera dal job storico, ora eliminato. Le uniche differenze
+# sono le tre modifiche per far arrivare l'annullo fin dentro il ciclo di
+# attesa: il parametro `should_cancel`, inoltrato da `_process_item` a
+# `_attempt_download` a `_wait_for_download`, e l'esito "cancelled" che risale
+# senza essere scavalcato dal fallback su un altro utente. Il resto — cascata
+# di varianti, soglie di confidenza, guardia sulla durata, timeout — e'
+# identico: e' il codice coperto da tests/test_download_runner_soulseek.py,
+# che sono i test di regressione del job originale.
 
 POLL_INTERVAL = 2.0
 STALL_TIMEOUT = 60.0           # transfer InProgress ma bytesTransferred fermo da tanto: ci si arrende

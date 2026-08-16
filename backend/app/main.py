@@ -72,6 +72,10 @@ async def lifespan(app: FastAPI):
     # è un thread daemon; con la scansione incrementale il costo è minimo.
     if runtime_settings.library_root():
         scan_job.start_job_if_due()
+    # Coda download: gli item rimasti `running` da un riavvio tornano in coda,
+    # e se c'e' lavoro il pool riparte da solo.
+    from app.services import download_dispatcher
+    download_dispatcher.boot()
     yield
 
 

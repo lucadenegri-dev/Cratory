@@ -15,8 +15,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import runtime_settings
-from app.models import Playlist, Track
-from app.services import soulseek_download_job
+from app.models import DownloadQueueItem, Playlist, Track
+from app.services.download_queue import ACTIVE_STATES
 from app.services.local_import import scan_folder
 
 # La striscia di orientamento fa polling ogni 2s: senza cache ogni poll
@@ -48,6 +48,14 @@ def _count_audio_files(
     return count
 
 
+def count_active_queue_items(db: Session) -> int:
+    """Quanti item della coda download sono ancora vivi (in attesa o in corso)."""
+    return db.scalar(
+        select(func.count()).select_from(DownloadQueueItem)
+        .where(DownloadQueueItem.state.in_(ACTIVE_STATES))
+    ) or 0
+
+
 def pipeline_snapshot(
     db: Session, *, ttl: float = INBOX_CACHE_TTL_SECONDS, clock: Callable[[], float] = time.monotonic,
 ) -> dict:
@@ -67,8 +75,11 @@ def pipeline_snapshot(
 
     inbox_files = _count_audio_files(runtime_settings.slskd_download_dir(), ttl=ttl, clock=clock)
 
-    download = soulseek_download_job.job_state()
-    download_active = download["status"] == "running"
+    # "Sto scaricando?" non e' piu' lo stato di un job unico ma il contenuto
+    # della coda: attivo se c'e' almeno un item vivo (in attesa o in corso), e
+    # il residuo e' il numero di quegli item — gia' un "quanto manca", quindi
+    # niente piu' sottrazione totale-processati.
+    download_left = count_active_queue_items(db)
 
     return {
         "playlists": db.scalar(select(func.count()).select_from(Playlist)) or 0,
@@ -80,7 +91,7 @@ def pipeline_snapshot(
         "with_local_file": with_local_file,
         "analyze_pending": analyze_pending,
         "ready_for_set": count(Track.status == "ready_for_set"),
-        "download_active": download_active,
-        "download_pending": max(download["total"] - download["processed"], 0) if download_active else 0,
+        "download_active": download_left > 0,
+        "download_pending": download_left,
         "inbox_files": inbox_files,
     }

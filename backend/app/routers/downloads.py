@@ -11,10 +11,13 @@ from app.integrations.slskd import (
     SlskdError, SlskdFile, get_slskd_client, slskd_configured,
 )
 from app.integrations.soundcloud import soundcloud_available
-from app.repositories import file_tags_for_tracks, get_track, tracks_download_pending
-from app.services import soulseek_download_job as job
+from app.repositories import (
+    file_tags_for_tracks, get_track, tracks_download_pending, tracks_without_local_file,
+)
 from app.schemas import TrackOut
 from app.serializers import track_out
+from app.services import download_queue as dlqueue
+from app.services.download_dispatcher import fill
 from app.services.soulseek_select import (
     AUTO_PICK_MIN_CONFIDENCE, QualityPreference, auto_pick_quality_ok, query_variants,
     rank_candidates,
@@ -23,6 +26,7 @@ from app.services.download_review import (
     NoReviewFileError, discard_downloaded, keep_downloaded, review_detail,
 )
 from app.services.auto_link import auto_link_preview
+from app.services.track_label import track_label
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
@@ -123,12 +127,6 @@ def _search_file_out(f: SlskdFile, *, score: float | None = None,
     )
 
 
-def _slskd_file(c: CandidateOut) -> SlskdFile:
-    return SlskdFile(username=c.username, filename=c.filename, size=c.size,
-                     bitrate=c.bitrate, length=c.length, has_free_slot=True,
-                     queue_length=None)
-
-
 def _ffmpeg_available() -> bool:
     """ffmpeg presente? Serve al postprocessor MP3 di yt-dlp."""
     import shutil
@@ -160,20 +158,67 @@ def ignore_pending(track_id: int, db: Session = Depends(get_db)):
     return track_out(track, file_tags_for_tracks(db, [track.id]).get(track.id))
 
 
-@router.post("/retry-pending", status_code=202)
+@router.post("/retry-pending")
 def retry_pending():
-    """Ritenta l'auto-pick su tutte le "da sistemare". 409 se un job e' in corso."""
+    """Ritenta l'auto-pick su tutte le "da sistemare": le accoda tutte.
+
+    Nessun 409 da "download gia' in corso": la coda assorbe il lotto e la
+    deduplica di `enqueue` salta quelle gia' in attesa o in lavorazione, quindi
+    ripremere il pulsante non raddoppia il lavoro.
+    """
     if not slskd_configured():
         raise api_error(409, "slskd_not_configured",
                         "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
-    if job.is_running():
-        raise api_error(409, "download_already_running", "A download is already running.")
-    return job.start_retry_job()
+    db = SessionLocal()
+    try:
+        added, skipped = dlqueue.enqueue(
+            db, [t.id for t in tracks_download_pending(db)])
+    finally:
+        db.close()
+    if added:
+        fill()
+    return {"enqueued": added, "skipped": skipped}
 
 
 @router.get("/status")
 def status():
-    return {"available": slskd_configured(), **job.job_state()}
+    """Forma invariata: la barra globale del frontend legge queste chiavi.
+
+    `total`/`processed` contano gli item non annullati: la barra deve
+    raccontare il lavoro accodato, non lo storico ripulito.
+    """
+    db = SessionLocal()
+    try:
+        items = [i for i in dlqueue.list_items(db) if i.state != "cancelled"]
+        by_outcome = {"downloaded": 0, "needs_review": 0, "not_found": 0, "failed": 0}
+        for i in items:
+            if i.outcome in by_outcome:
+                by_outcome[i.outcome] += 1
+        running = [i for i in items if i.state == "running"]
+        done = [i for i in items if i.state == "done"]
+        label = None
+        if running:
+            track = get_track(db, running[0].track_id)
+            label = track_label(track) if track is not None else None
+        return {
+            "available": slskd_configured(),
+            "status": "running" if running or any(i.state == "queued" for i in items)
+                      else ("done" if items else "idle"),
+            "processed": len(done),
+            "total": len(items),
+            **by_outcome,
+            # Non piu' significativo: la coda mescola item di provenienze
+            # diverse, non c'e' piu' "la playlist del job in corso".
+            "playlist_id": None,
+            "items": [{"track_id": i.track_id, "artist": None, "title": None,
+                       "outcome": i.outcome, "reason": i.error} for i in done],
+            # Non c'e' piu' un errore di job: un fallimento e' dell'item, e
+            # viaggia nel suo `reason`.
+            "error": None,
+            "current_label": label,
+        }
+    finally:
+        db.close()
 
 
 @router.post("/search", response_model=SearchOut)
@@ -214,56 +259,75 @@ def search(req: SearchIn, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/playlist/{playlist_id}", status_code=202)
+@router.post("/playlist/{playlist_id}")
 def download_playlist(playlist_id: int):
+    """Accoda in auto-pick tutte le tracce della playlist senza file locale."""
     if not slskd_configured():
         raise api_error(409, "slskd_not_configured",
                         "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
-    if job.is_running():
-        raise api_error(409, "download_already_running", "A download is already running.")
-    return {"available": True, **job.start_playlist_job(playlist_id)}
+    db = SessionLocal()
+    try:
+        added, skipped = dlqueue.enqueue(
+            db, [t.id for t in tracks_without_local_file(db, playlist_id)])
+    finally:
+        db.close()
+    if added:
+        fill()
+    return {"enqueued": added, "skipped": skipped}
 
 
-@router.post("/track", status_code=202)
+@router.post("/track")
 def download_track(req: TrackDownloadIn):
+    """Accoda una traccia col candidato che l'utente ha scelto lui.
+
+    Il candidato viaggia nel `payload` dell'item: e' cosi' che il runner sa di
+    non dover rifare l'auto-pick (e di dover saltare il guard sulla durata,
+    che protegge la scelta automatica, non quella umana).
+    """
     if not slskd_configured():
         raise api_error(409, "slskd_not_configured",
                         "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
-    if job.is_running():
-        raise api_error(409, "download_already_running", "A download is already running.")
     db = SessionLocal()
     try:
         if get_track(db, req.track_id) is None:
             raise api_error(404, "track_not_found", "Track not found.")
+        added, skipped = dlqueue.enqueue(db, [req.track_id], kind="soulseek_chosen",
+                                         payload=req.candidate.model_dump())
     finally:
         db.close()
-    return {"available": True, **job.start_track_job(req.track_id, _slskd_file(req.candidate))}
+    if added:
+        fill()
+    return {"enqueued": added, "skipped": skipped}
 
 
-@router.post("/track/auto", status_code=202)
+@router.post("/track/auto")
 def download_track_auto(req: TrackAutopickIn):
-    """Download immediato in auto-pick di una singola traccia (es. 'Scarica
-    ora' dalla tracklist di un lead Discovery): nessun candidato scelto
-    dall'utente, stessa cascata di ricerca del job playlist."""
+    """Accoda una traccia in auto-pick (es. 'Scarica ora' dalla tracklist di un
+    lead Discovery): nessun candidato scelto dall'utente, la cascata di ricerca
+    la fa il runner. Nessun vincolo di concorrenza: ci pensa la coda."""
     if not slskd_configured():
         raise api_error(409, "slskd_not_configured",
                         "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
-    if job.is_running():
-        raise api_error(409, "download_already_running", "A download is already running.")
     db = SessionLocal()
     try:
         if get_track(db, req.track_id) is None:
             raise api_error(404, "track_not_found", "Track not found.")
+        added, skipped = dlqueue.enqueue(db, [req.track_id], kind="soulseek_auto")
     finally:
         db.close()
-    return {"available": True, **job.start_track_autopick_job(req.track_id)}
+    if added:
+        fill()
+    return {"enqueued": added, "skipped": skipped}
 
 
-@router.post("/track/soundcloud", status_code=202)
+@router.post("/track/soundcloud")
 def download_track_soundcloud(req: TrackSoundcloudIn):
-    """Scarica via yt-dlp l'audio di una singola traccia SoundCloud (dal dettaglio
-    traccia) e la collega come file posseduto. Stessa barra/job del download
-    Soulseek: un solo download alla volta."""
+    """Accoda il download via yt-dlp dell'audio di una traccia SoundCloud (dal
+    dettaglio traccia), che il runner collega poi come file posseduto.
+
+    Stessa coda del download Soulseek — non piu' "uno alla volta": cambia solo
+    il `kind` dell'item, che dice al runner di passare da yt-dlp e non da slskd.
+    """
     if not soundcloud_available():
         raise api_error(409, "ytdlp_unavailable", "yt-dlp not available on the backend.")
     if not _ffmpeg_available():
@@ -271,8 +335,6 @@ def download_track_soundcloud(req: TrackSoundcloudIn):
     if not runtime_settings.slskd_download_dir():
         raise api_error(409, "download_dir_not_configured",
                         "Download dir not configured (SLSKD_DOWNLOAD_DIR).")
-    if job.is_running():
-        raise api_error(409, "download_already_running", "A download is already running.")
     db = SessionLocal()
     try:
         track = get_track(db, req.track_id)
@@ -280,9 +342,12 @@ def download_track_soundcloud(req: TrackSoundcloudIn):
             raise api_error(404, "track_not_found", "Track not found.")
         if track.platform != "soundcloud" or not track.url:
             raise api_error(422, "not_a_soundcloud_track", "Track has no SoundCloud URL.")
-        return {"available": True, **job.start_soundcloud_track_job(track.id)}
+        added, skipped = dlqueue.enqueue(db, [track.id], kind="soundcloud")
     finally:
         db.close()
+    if added:
+        fill()
+    return {"enqueued": added, "skipped": skipped}
 
 
 @router.get("/review/{track_id}")

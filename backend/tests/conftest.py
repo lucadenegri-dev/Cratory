@@ -22,8 +22,7 @@ from app.db import Base  # noqa: E402
 import app.models  # noqa: E402,F401 — registra tutte le tabelle su Base.metadata prima di create_all
 from app.organize.services import scan_job  # noqa: E402
 from app.services import (  # noqa: E402
-    audio_analysis_job, mix_identify_job, soulseek_download_job,
-    streaming_import_job,
+    audio_analysis_job, mix_identify_job, streaming_import_job,
 )
 
 CAMELOT_KEYS = [
@@ -116,17 +115,18 @@ def _no_real_library_scan(monkeypatch):
     monkeypatch.setattr(settings, "slskd_download_dir", "")
 
 
-# I 5 job in background (analisi BPM/key, scansione+aggancio libreria, download
-# Soulseek, identificazione mix Shazam, import/sync streaming) tengono lo stato
-# in un dict globale di modulo (app locale mono-utente, niente sessione HTTP per
-# il polling). Un test che lascia lo stato a "running" (es. i test della guardia
+# I 4 job in background (analisi BPM/key, scansione+aggancio libreria,
+# identificazione mix Shazam, import/sync streaming) tengono lo stato in un dict
+# globale di modulo (app locale mono-utente, niente sessione HTTP per il
+# polling). Un test che lascia lo stato a "running" (es. i test della guardia
 # doppio-avvio in test_job_double_start.py) contaminerebbe qualsiasi test
 # successivo che legge job_state() o chiama start_job() aspettandosi lo stato
 # iniziale "idle". Da F4 Task 3 la scansione+indicizzazione e' un job solo
-# (scan_job), non piu' due (library_index_job e' assorbito).
+# (scan_job), non piu' due (library_index_job e' assorbito). Il download
+# Soulseek non e' piu' in lista: non e' piu' un job con stato globale ma una
+# coda persistita sul DB, che i test isolano gia' col loro engine.
 _JOB_STATE_MODULES = [
-    audio_analysis_job, scan_job, mix_identify_job, soulseek_download_job,
-    streaming_import_job,
+    audio_analysis_job, scan_job, mix_identify_job, streaming_import_job,
 ]
 _PRISTINE_JOB_STATES = [copy.deepcopy(m._state) for m in _JOB_STATE_MODULES]
 

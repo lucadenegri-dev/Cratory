@@ -20,6 +20,44 @@ def test_snapshot_vuoto(db):
     assert snap["inbox_files"] is None
 
 
+def test_download_active_segue_la_coda_non_piu_un_job(db):
+    """La striscia diceva "sto scaricando?" leggendo lo stato del job unico;
+    ora lo legge dalla coda. Vivi = in attesa o in corso: i conclusi e gli
+    annullati non devono tenere accesa la spia."""
+    from app.models import DownloadQueueItem, Track
+
+    t = Track(source_type="manual", title="T", artist="A")
+    db.add(t)
+    db.commit()
+    db.add_all([
+        DownloadQueueItem(track_id=t.id, kind="soulseek_auto", state="queued"),
+        DownloadQueueItem(track_id=t.id, kind="soulseek_auto", state="running"),
+        DownloadQueueItem(track_id=t.id, kind="soulseek_auto", state="done",
+                          outcome="downloaded"),
+        DownloadQueueItem(track_id=t.id, kind="soulseek_auto", state="cancelled"),
+    ])
+    db.commit()
+
+    snap = pipeline_snapshot(db)
+    assert snap["download_active"] is True
+    assert snap["download_pending"] == 2   # solo queued + running
+
+
+def test_download_active_falso_con_la_coda_tutta_conclusa(db):
+    from app.models import DownloadQueueItem, Track
+
+    t = Track(source_type="manual", title="T", artist="A")
+    db.add(t)
+    db.commit()
+    db.add(DownloadQueueItem(track_id=t.id, kind="soulseek_auto", state="done",
+                             outcome="downloaded"))
+    db.commit()
+
+    snap = pipeline_snapshot(db)
+    assert snap["download_active"] is False
+    assert snap["download_pending"] == 0
+
+
 def test_conteggi_db(db, seed_tracks):
     seed_tracks(10)
     snap = pipeline_snapshot(db)

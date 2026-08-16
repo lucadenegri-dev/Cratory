@@ -1,3 +1,12 @@
+"""Regressione della logica di trasferimento Soulseek, ora dentro il runner.
+
+Erano i test del vecchio job monolitico: la logica e' stata assorbita
+invariata da `download_runner.py`, quindi la copertura si e' spostata con lei.
+Cambia solo COME si mette in moto il lavoro — un item di coda invece di una
+lista di tuple nel job monolitico: `_esegui` fa da ponte, cosi' le asserzioni
+restano quelle di prima. Sono la prova che l'assorbimento non ha cambiato
+comportamento.
+"""
 import math
 import struct
 import wave
@@ -9,8 +18,9 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 from app.db import Base
 from app.integrations.slskd import SlskdFile
-from app.models import Track
-from app.services import soulseek_download_job as job
+from app.models import DownloadQueueItem, Track
+from app.services import download_queue as queue
+from app.services import download_runner as job
 
 
 def _write_wav(path, *, freq=440, secs=0.2, rate=22050):
@@ -61,11 +71,51 @@ def patch_job(monkeypatch, tmp_path):
     monkeypatch.setattr(job, "HARD_TIMEOUT", 1.0)
     fake = _FakeClient("bob\\Da Funk.flac")
     monkeypatch.setattr(job, "get_slskd_client", lambda: fake)
-    # reset stato globale (contatori e items sono cumulativi tra una chiamata
-    # e l'altra di _run, quindi vanno azzerati esplicitamente a ogni test)
-    job._state.update(status="idle", processed=0, total=0, downloaded=0,
-                      needs_review=0, not_found=0, failed=0, items=[])
+    # Nessuno stato globale da azzerare: i contatori vivono ora sugli item di
+    # coda, che nascono e muoiono dentro il DB isolato di ogni test.
     return TestSession, fake
+
+
+def _esegui(TestSession, items) -> dict:
+    """Ponte con la vecchia forma di questi test, che chiamavano
+    `job._run([(track_id, candidato), ...], playlist_id)` e leggevano i
+    contatori da `job.job_state()`.
+
+    Oggi ogni elemento e' un item di coda a se': lo si accoda col `kind` che
+    corrisponde alla presenza (o meno) di un candidato scelto, lo si rivendica
+    e lo si esegue con `run_item`. Il dizionario ricomposto qui ha le stesse
+    chiavi che aveva `job_state()`, cosi' le asserzioni di questi test restano
+    identiche a prima dell'assorbimento.
+    """
+    db = TestSession()
+    st: dict = {"processed": 0, "downloaded": 0, "needs_review": 0,
+                "not_found": 0, "failed": 0, "items": []}
+    try:
+        for track_id, chosen in items:
+            payload = None if chosen is None else {
+                "username": chosen.username, "filename": chosen.filename,
+                "size": chosen.size, "bitrate": chosen.bitrate,
+                "length": chosen.length,
+            }
+            kind = "soulseek_auto" if chosen is None else "soulseek_chosen"
+            queue.enqueue(db, [track_id], kind=kind, payload=payload)
+            claimed = queue.claim_next(db)
+            job.run_item(claimed.id)
+            db.expire_all()   # l'esito e' stato scritto da un'altra sessione
+            item = db.get(DownloadQueueItem, claimed.id)
+            track = db.get(Track, track_id)
+            st["processed"] += 1
+            st[item.outcome] = st.get(item.outcome, 0) + 1
+            st["items"].append({
+                "track_id": track_id,
+                "artist": getattr(track, "artist", None),
+                "title": getattr(track, "title", None),
+                "outcome": item.outcome,
+                "reason": item.error,
+            })
+    finally:
+        db.close()
+    return st
 
 
 def test_track_job_downloads_and_links(patch_job):
@@ -79,10 +129,8 @@ def test_track_job_downloads_and_links(patch_job):
     db.close()
 
     chosen = fake.search("Daft Punk", "Da Funk")[0]
-    job._run([(track_id, chosen)], None)  # esegue in-thread (sincrono) per il test
+    st = _esegui(TestSession, [(track_id, chosen)])
 
-    st = job.job_state()
-    assert st["status"] == "done"
     assert st["downloaded"] == 1
     db = TestSession()
     t2 = db.get(Track, track_id)
@@ -101,8 +149,7 @@ def test_playlist_auto_pick_uses_search(patch_job):
     track_id = t.id
     db.close()
 
-    job._run([(track_id, None)], playlist_id=99)  # None -> auto-pick via search
-    st = job.job_state()
+    st = _esegui(TestSession, [(track_id, None)])  # None -> auto-pick via search
     assert st["downloaded"] == 1
     assert len(fake.enqueued) == 1
 
@@ -144,8 +191,7 @@ def test_fallback_tries_next_user_when_first_fails(patch_job, monkeypatch):
     track_id = t.id
     db.close()
 
-    job._run([(track_id, None)], None)
-    st = job.job_state()
+    st = _esegui(TestSession, [(track_id, None)])
     assert st["downloaded"] == 1
     # prima ha provato baduser (fallito), poi e' passato a gooduser (riuscito)
     assert client.enqueued == ["baduser", "gooduser"]
@@ -170,8 +216,7 @@ def test_durata_incoerente_va_in_needs_review(patch_job):
     track_id = t.id
     db.close()
 
-    job._run([(track_id, None)], None)
-    st = job.job_state()
+    st = _esegui(TestSession, [(track_id, None)])
     assert st["needs_review"] == 1
     assert st["downloaded"] == 0
     assert "durata" in (st["items"][0]["reason"] or "")
@@ -207,8 +252,8 @@ def test_chosen_in_sottocartella_con_mismatch_durata_viene_comunque_collegato(pa
     db.close()
 
     chosen = fake.search("Luke Slater", "Loved")[0]
-    job._run([(track_id, chosen)], None)  # chosen != None: percorso di start_track_job
-    st = job.job_state()
+    # chosen != None: percorso del candidato scelto dall'utente (soulseek_chosen)
+    st = _esegui(TestSession, [(track_id, chosen)])
     assert st["downloaded"] == 1
     assert st["needs_review"] == 0
     db = TestSession()
@@ -236,8 +281,7 @@ def test_chosen_manuale_con_mismatch_durata_non_va_in_needs_review(patch_job):
     db.close()
 
     chosen = fake.search("Daft Punk", "Da Funk")[0]
-    job._run([(track_id, chosen)], None)
-    st = job.job_state()
+    st = _esegui(TestSession, [(track_id, chosen)])
     assert st["downloaded"] == 1
     assert st["needs_review"] == 0
     db = TestSession()
@@ -262,8 +306,7 @@ def test_autopick_con_mismatch_durata_resta_needs_review(patch_job):
     track_id = t.id
     db.close()
 
-    job._run([(track_id, None)], None)  # chosen None: auto-pick via search
-    st = job.job_state()
+    st = _esegui(TestSession, [(track_id, None)])  # chosen None: auto-pick via search
     assert st["needs_review"] == 1
     assert st["downloaded"] == 0
     db = TestSession()
@@ -289,8 +332,7 @@ def test_chosen_manuale_con_durata_coerente_viene_collegato(patch_job):
     db.close()
 
     chosen = fake.search("Daft Punk", "Da Funk")[0]
-    job._run([(track_id, chosen)], None)
-    st = job.job_state()
+    st = _esegui(TestSession, [(track_id, chosen)])
     assert st["downloaded"] == 1
     db = TestSession()
     t2 = db.get(Track, track_id)
@@ -312,8 +354,7 @@ def test_durata_coerente_viene_collegata(patch_job):
     track_id = t.id
     db.close()
 
-    job._run([(track_id, None)], None)
-    st = job.job_state()
+    st = _esegui(TestSession, [(track_id, None)])
     assert st["downloaded"] == 1
     db = TestSession()
     t2 = db.get(Track, track_id)
@@ -322,34 +363,12 @@ def test_durata_coerente_viene_collegata(patch_job):
     db.close()
 
 
-def test_current_label_esposto_durante_la_lavorazione(patch_job):
-    # La barra job del frontend mostra la traccia in lavorazione: lo stato
-    # espone current_label ("Artista — Titolo") mentre si processa, None a riposo.
-    TestSession, fake = patch_job
-    seen = []
-    orig_search = fake.search
-
-    def search_and_capture(artist, title, **kw):
-        seen.append(job.job_state().get("current_label"))
-        return orig_search(artist, title, **kw)
-
-    fake.search = search_and_capture
-    db = TestSession()
-    t = Track(platform="spotify", spotify_id="s11", source_type="spotify",
-              title="Da Funk", artist="Daft Punk")
-    db.add(t)
-    db.commit()
-    track_id = t.id
-    db.close()
-
-    job._run([(track_id, None)], None)
-    assert seen == ["Daft Punk — Da Funk"]
-    assert job.job_state()["current_label"] is None
-
-
-def test_slskd_giu_ferma_il_job_con_errore_chiaro(patch_job, monkeypatch):
-    # Daemon disconnesso dalla rete Soulseek: inutile macinare N tracce che
-    # fallirebbero tutte uguali → il job si ferma con un errore leggibile.
+def test_slskd_giu_fallisce_l_item_con_un_errore_leggibile(patch_job, monkeypatch):
+    # Daemon disconnesso dalla rete Soulseek. Il vecchio job fermava l'INTERO
+    # lotto ("inutile macinare N tracce che fallirebbero tutte uguali"): la
+    # coda non ha piu' un lotto da fermare, ogni item vive per conto suo. Resta
+    # il pezzo che serve all'utente: il motivo del daemon arriva leggibile fino
+    # alla traccia, non viene inghiottito in un generico "error".
     from app.integrations.slskd import SlskdError
 
     class DownClient:
@@ -362,20 +381,20 @@ def test_slskd_giu_ferma_il_job_con_errore_chiaro(patch_job, monkeypatch):
     TestSession, _ = patch_job
     monkeypatch.setattr(job, "get_slskd_client", lambda: DownClient())
     db = TestSession()
-    ids = []
-    for i in range(2):
-        t = Track(platform="spotify", spotify_id=f"down{i}", source_type="spotify",
-                  title=f"T{i}", artist="A")
-        db.add(t)
-        db.commit()
-        ids.append(t.id)
+    t = Track(platform="spotify", spotify_id="down0", source_type="spotify",
+              title="T0", artist="A")
+    db.add(t)
+    db.commit()
+    track_id = t.id
     db.close()
 
-    job._run([(ids[0], None), (ids[1], None)], None)
-    st = job.job_state()
-    assert st["status"] == "error"
-    assert "Disconnected" in (st["error"] or "")
-    assert st["processed"] < 2  # si e' fermato alla prima, niente accanimento
+    st = _esegui(TestSession, [(track_id, None)])
+
+    assert st["failed"] == 1
+    assert "Disconnected" in (st["items"][0]["reason"] or "")
+    db = TestSession()
+    assert "Disconnected" in (db.get(Track, track_id).last_download_reason or "")
+    db.close()
 
 
 # --- Auto-pick: confidenza valutata su tutti i candidati, non solo il primo ----
@@ -407,9 +426,8 @@ def test_auto_pick_preferisce_candidato_confidente_a_score_inferiore(patch_job, 
     monkeypatch.setattr(job, "search_candidates", lambda *a, **kw: ranked)
     track_id = _make_track(TestSession, "conf1")
 
-    job._run([(track_id, None)], None)
+    st = _esegui(TestSession, [(track_id, None)])
 
-    st = job.job_state()
     assert st["downloaded"] == 1
     assert st["needs_review"] == 0
     assert [f.username for f in fake.enqueued] == ["gooduser"]
@@ -423,9 +441,8 @@ def test_auto_pick_nessun_confidente_va_in_needs_review(patch_job, monkeypatch):
     monkeypatch.setattr(job, "search_candidates", lambda *a, **kw: ranked)
     track_id = _make_track(TestSession, "conf2")
 
-    job._run([(track_id, None)], None)
+    st = _esegui(TestSession, [(track_id, None)])
 
-    st = job.job_state()
     assert st["needs_review"] == 1
     assert st["items"][0]["reason"] == "confidenza sotto soglia per l'auto-pick"
     assert fake.enqueued == []
@@ -446,7 +463,7 @@ def test_job_usa_il_budget_di_attesa_pieno_per_la_ricerca(patch_job, monkeypatch
     monkeypatch.setattr(job, "search_candidates", fake_search)
     track_id = _make_track(TestSession, "budget1")
 
-    job._run([(track_id, None)], None)
+    _esegui(TestSession, [(track_id, None)])
 
     assert captured.get("max_wait") == job.SEARCH_MAX_WAIT
     assert job.SEARCH_MAX_WAIT > CANDIDATE_SEARCH_MAX_WAIT
@@ -460,22 +477,10 @@ def test_auto_pick_primo_confidente_resta_scelto(patch_job, monkeypatch):
     monkeypatch.setattr(job, "search_candidates", lambda *a, **kw: ranked)
     track_id = _make_track(TestSession, "conf3")
 
-    job._run([(track_id, None)], None)
+    st = _esegui(TestSession, [(track_id, None)])
 
-    st = job.job_state()
     assert st["downloaded"] == 1
     assert [f.username for f in fake.enqueued] == ["topuser"]
-
-
-def test_start_track_autopick_job_builds_correct_items(monkeypatch):
-    captured = {}
-    monkeypatch.setattr(
-        job, "_start",
-        lambda items, pid: captured.update(items=items, playlist_id=pid) or {"status": "running"},
-    )
-    job.start_track_autopick_job(42)
-    assert captured["items"] == [(42, None)]
-    assert captured["playlist_id"] is None
 
 
 def test_chosen_transfer_failed_sets_reason(patch_job, monkeypatch):
@@ -493,7 +498,7 @@ def test_chosen_transfer_failed_sets_reason(patch_job, monkeypatch):
     db.add(t); db.commit(); track_id = t.id; db.close()
 
     chosen = client.search("Daft Punk", "Da Funk")[0]
-    job._run([(track_id, chosen)], None)
+    _esegui(TestSession, [(track_id, chosen)])
 
     db = TestSession(); t2 = db.get(Track, track_id)
     assert t2.last_download_outcome == "failed"
@@ -516,7 +521,7 @@ def test_enqueue_exception_sets_reason(patch_job, monkeypatch):
     db.add(t); db.commit(); track_id = t.id; db.close()
 
     chosen = client.search("Daft Punk", "Da Funk")[0]
-    job._run([(track_id, chosen)], None)
+    _esegui(TestSession, [(track_id, chosen)])
 
     db = TestSession(); t2 = db.get(Track, track_id)
     assert t2.last_download_outcome == "failed"
@@ -540,7 +545,7 @@ def test_queue_timeout_sets_reason(patch_job, monkeypatch):
     db.add(t); db.commit(); track_id = t.id; db.close()
 
     chosen = client.search("Daft Punk", "Da Funk")[0]
-    job._run([(track_id, chosen)], None)
+    _esegui(TestSession, [(track_id, chosen)])
 
     db = TestSession(); t2 = db.get(Track, track_id)
     assert t2.last_download_reason == "queue_timeout"
@@ -753,7 +758,7 @@ def test_cascade_all_failed_surfaces_specific_reason(patch_job, monkeypatch):
               title="Da Funk", artist="Daft Punk")
     db.add(t); db.commit(); track_id = t.id; db.close()
 
-    job._run([(track_id, None)], None)  # None -> cascata via search
+    _esegui(TestSession, [(track_id, None)])  # None -> cascata via search
 
     db = TestSession(); t2 = db.get(Track, track_id)
     assert t2.last_download_outcome == "failed"
