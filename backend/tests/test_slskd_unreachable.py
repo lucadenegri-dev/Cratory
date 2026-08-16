@@ -36,16 +36,17 @@ class _RefusedHttp:
 
 class _StatusHttp:
     """Il daemon e' vivo e risponde: nessun errore di trasporto, solo uno
-    status code (dato dal test)."""
+    status code (dato dal test) e, se serve, il corpo della risposta."""
 
-    def __init__(self, status):
+    def __init__(self, status, text=""):
         self.status = status
+        self.text = text
 
     def post(self, url, json=None):
-        return _Resp(self.status)
+        return _Resp(self.status, self.text)
 
 
-def _enqueue_and_capture(http) -> SlskdError:
+def _enqueue_and_capture(http: object) -> SlskdError:
     client = SlskdClient(url="http://slskd.local:5030", api_key="k", http=http)
     file = SlskdFile(username="bob", filename="x.flac", size=1, bitrate=None,
                      length=None, has_free_slot=True, queue_length=None)
@@ -71,11 +72,33 @@ def test_401_403_e_5xx_di_un_daemon_vivo_sono_irraggiungibili(status):
     assert slskd_unreachable(exc) is True
 
 
-@pytest.mark.parametrize("status", [409, 404, 422])
-def test_409_e_altri_4xx_restano_un_fallimento_della_richiesta(status):
-    """Il 409 "must be connected" (e altri 4xx non elencati nella tabella)
-    riguardano la singola richiesta/traccia, non il daemon: l'item deve
-    concludersi `failed`, non tornare in coda all'infinito."""
+@pytest.mark.parametrize("status", [404, 422])
+def test_gli_altri_4xx_restano_un_fallimento_della_richiesta(status):
+    """I 4xx non elencati nella tabella riguardano la singola richiesta/traccia,
+    non il daemon: l'item deve concludersi `failed`, non tornare in coda."""
     exc = _enqueue_and_capture(_StatusHttp(status))
     assert exc.status_code == status
+    assert slskd_unreachable(exc) is False
+
+
+@pytest.mark.parametrize("corpo", [
+    "must be connected (currently: Disconnected)",
+    "The server must be connected to perform this action.",
+    "Currently: Disconnected",
+])
+def test_il_409_da_rete_soulseek_scollegata_e_infrastruttura(corpo):
+    """Il 409 che slskd manda a daemon vivo ma non collegato alla rete Soulseek
+    e' la condizione piu' frequente dopo un riavvio o un blip di rete, e non ha
+    niente a che vedere con la traccia. Trattarlo come colpa della traccia,
+    con 300 item in coda, li marca tutti `failed` e scrive l'esito su 300
+    tracce."""
+    exc = _enqueue_and_capture(_StatusHttp(409, corpo))
+    assert exc.status_code == 409
+    assert slskd_unreachable(exc) is True
+
+
+def test_un_409_che_non_parla_di_connessione_resta_della_richiesta():
+    """La lettura del testo non deve diventare "ogni 409 e' infrastruttura":
+    un conflitto vero (es. lo stesso file gia' in coda) riguarda la richiesta."""
+    exc = _enqueue_and_capture(_StatusHttp(409, "file already queued"))
     assert slskd_unreachable(exc) is False

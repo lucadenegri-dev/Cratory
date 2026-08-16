@@ -256,6 +256,17 @@ def slskd_configured() -> bool:
     return bool(runtime_settings.slskd_url() and runtime_settings.slskd_download_dir())
 
 
+# Frammenti che, dentro un 409, dicono "il daemon e' vivo ma non e' collegato
+# alla rete Soulseek". slskd risponde cosi' a POST /searches in quello stato:
+# "must be connected (currently: Disconnected)". E' la condizione piu' frequente
+# dopo un riavvio o un blip di rete, e non ha niente a che vedere con la singola
+# traccia. Il confronto e' su piu' frammenti perche' il testo esatto e' di
+# slskd, non nostro: se cambia formulazione, e' probabile che almeno uno regga.
+# La rete di sicurezza per i casi che sfuggono comunque sta nel dispatcher
+# (N fallimenti consecutivi con lo stesso motivo aprono l'interruttore).
+_NON_COLLEGATO = ("must be connected", "not connected", "disconnected")
+
+
 def slskd_unreachable(exc: BaseException) -> bool:
     """Vero se l'errore dice "il daemon non risponde o e' malconfigurato",
     falso se dice "questa traccia/richiesta non va bene cosi'".
@@ -272,8 +283,13 @@ def slskd_unreachable(exc: BaseException) -> bool:
       (chiave API sbagliata o ruotata) e ogni 5xx sono un daemon vivo che
       risponde male — infrastruttura quanto una connessione rifiutata, e con
       lo stesso danno se non trattati come tale (un riaggancio che ripesca un
-      daemon rotto brucerebbe l'intera coda). Il 409 "must be connected"
-      resta invece un fallimento vero della singola richiesta.
+      daemon rotto brucerebbe l'intera coda). Il 409 e' il caso ambiguo: da
+      solo direbbe "questa richiesta non va bene", ma quello che slskd manda su
+      `POST /searches` a daemon scollegato ("must be connected (currently:
+      Disconnected)") e' infrastruttura pura — con 300 item in coda, trattarlo
+      come colpa della traccia li marcherebbe tutti `failed` e scriverebbe
+      l'esito su 300 tracce. Si guarda quindi il testo (vedi `_NON_COLLEGATO`);
+      gli altri 409 restano un fallimento della singola richiesta.
 
     `SlskdNotConfigured` (URL mancante) e' anch'essa infrastruttura: mai
     colpa della traccia.
@@ -288,6 +304,9 @@ def slskd_unreachable(exc: BaseException) -> bool:
     if isinstance(exc.__cause__, httpx.TransportError):
         return True
     status = getattr(exc, "status_code", None)
+    if status == 409:
+        testo = str(exc).lower()
+        return any(frammento in testo for frammento in _NON_COLLEGATO)
     return status is not None and (status in (401, 403) or status >= 500)
 
 

@@ -525,7 +525,8 @@ track's own active item, so re-submitting the same track — a second click, a r
 `retry-pending` — is a no-op rather than a duplicate download.
 
 If slskd stops responding mid-item — connection refused, but also 401/403 or any 5xx from a
-daemon that answers but is unwell — `download_runner` raises, the item goes back to `queued`
+daemon that answers but is unwell, and the `409 "must be connected"` of a live daemon that is
+not logged into the Soulseek network — `download_runner` raises, the item goes back to `queued`
 untouched (no outcome written), and the dispatcher trips a circuit breaker: for 60s, items
 that need slskd are not claimed at all (a `soundcloud`-kind item, which never touches
 slskd, is unaffected and keeps running). A background thread in the dispatcher retries every
@@ -533,7 +534,11 @@ slskd, is unaffected and keeps running). A background thread in the dispatcher r
 because nothing else calls `fill()` on an idle pool; every enqueue endpoint only does so on a
 *successful* enqueue. On backend restart, any item still `running` — its worker thread is
 gone — is put back to `queued` by `requeue_stale()` rather than left stranded; `boot()` does
-this, then fills the pool and starts the retry loop.
+this, then fills the pool and starts the retry loop. Behind that classification sits a blunt
+safety net: five consecutive items failing for the *same* reason trip the breaker too, even
+when nobody recognised the failure as infrastructural — a daemon that always fails the same
+way is not a problem with the individual tracks, and 300 queued items should not be burnt
+one at a time to find that out.
 
 It requires slskd to be configured for the slskd-backed routes, which answer `409` without
 it; SoundCloud download has its own preconditions instead. The file becomes a local

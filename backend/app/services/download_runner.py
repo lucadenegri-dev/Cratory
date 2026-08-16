@@ -125,8 +125,14 @@ def _run_soundcloud(db, item: DownloadQueueItem, track: Track,
     return "downloaded", None, None
 
 
-def run_item(item_id: int) -> None:
+def run_item(item_id: int) -> tuple[str, str | None] | None:
     """Esegue un item. Un fallimento chiude l'item, non il pool.
+
+    Ritorna `(esito, motivo)` se l'item e' stato concluso, `None` se non c'era
+    nulla da fare (annullato, gia' concluso). Non serve al runner: lo legge il
+    dispatcher per contare i fallimenti consecutivi e aprire l'interruttore
+    quando sono troppi e sempre uguali — un daemon che sbaglia sempre allo
+    stesso modo non e' un problema delle singole tracce.
 
     Unica eccezione che esce di qui: `SlskdUnreachable`, quando l'errore non
     riguarda la traccia ma il daemon che non risponde. In quel caso l'item e'
@@ -137,11 +143,11 @@ def run_item(item_id: int) -> None:
     try:
         item = db.get(DownloadQueueItem, item_id)
         if item is None or item.state != "running":
-            return  # annullato prima di partire, o gia' concluso
+            return None  # annullato prima di partire, o gia' concluso
         track = db.get(Track, item.track_id)
         if track is None:
             queue.finish(db, item_id, "failed", "track_not_found")
-            return
+            return "failed", "track_not_found"
         queue.set_progress(db, item_id, "searching")
         try:
             if item.kind == "soundcloud":
@@ -165,7 +171,7 @@ def run_item(item_id: int) -> None:
         # Annullato mentre lavorava: l'item resta `cancelled` e la traccia NON
         # riceve un esito — non e' andata male, e' stata fermata.
         if outcome == "cancelled" or queue.is_cancelled(db, item_id):
-            return
+            return None
         # L'esito va anche sulla traccia: e' la fonte dei tab della wishlist.
         track = db.get(Track, item.track_id)
         if track is not None:
@@ -174,6 +180,7 @@ def run_item(item_id: int) -> None:
             track.last_download_path = path
             db.commit()
         queue.finish(db, item_id, outcome, reason)
+        return outcome, reason
     finally:
         db.close()
 

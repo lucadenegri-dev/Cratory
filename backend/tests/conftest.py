@@ -75,11 +75,16 @@ def _ferma_il_riaggancio_della_coda():
     Azzera anche l'interruttore su slskd (`_slskd_blocked_until`): è un global
     di modulo come il thread, e un test che lo lascia aperto (es. uno scenario
     di daemon irraggiungibile) congelerebbe la coda del test successivo, che
-    si aspetta l'interruttore chiuso di default."""
+    si aspetta l'interruttore chiuso di default. Stessa ragione per il
+    contatore dei fallimenti consecutivi: lasciato a quattro da un test, il
+    primo fallimento del successivo aprirebbe l'interruttore."""
     yield
     from app.services import download_dispatcher
     download_dispatcher.stop_retry_loop()
     download_dispatcher._slskd_blocked_until = 0.0
+    download_dispatcher._slskd_blocked_reason = None
+    download_dispatcher._consecutive_failures = 0
+    download_dispatcher._last_failure_reason = None
 
 
 @pytest.fixture()

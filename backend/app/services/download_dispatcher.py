@@ -32,11 +32,29 @@ SLSKD_COOLDOWN = 60.0
 # nemmeno un nuovo accodamento sarebbe possibile).
 RETRY_INTERVAL = 30.0
 
+# Quanti fallimenti consecutivi con lo STESSO motivo bastano ad aprire
+# l'interruttore anche se nessuno li ha classificati come infrastruttura.
+# E' la rete di sicurezza dietro `slskd_unreachable`: quella riconosce i modi
+# noti in cui il daemon dice "non sono in grado" (connessione rifiutata,
+# 401/403, 5xx, il 409 da rete Soulseek scollegata), ma un modo nuovo o una
+# formulazione diversa la scavalcherebbe e brucerebbe tutta la coda una traccia
+# alla volta. Cinque: abbastanza da non scattare su una manciata di tracce
+# introvabili di fila (motivi diversi non contano, e "not_found" non e' un
+# fallimento), abbastanza poco da fermare l'emorragia quando la coda ne ha 300.
+CONSECUTIVE_FAILURE_LIMIT = 5
+
 _lock = threading.Lock()
 _active = 0
 # Scadenza dell'interruttore, sull'orologio monotono: finche' non e' passata,
 # gli item che dipendono da slskd non vengono rivendicati. 0.0 = chiuso.
 _slskd_blocked_until = 0.0
+# Perche' e' stato aperto, in forma di codice per il frontend (che lo traduce).
+_slskd_blocked_reason: str | None = None
+
+# Contatore della rete di sicurezza sopra: quante volte di fila si e' fallito e
+# per quale motivo.
+_consecutive_failures = 0
+_last_failure_reason: str | None = None
 
 _retry_lock = threading.Lock()
 _retry_stop = threading.Event()
@@ -71,23 +89,62 @@ def slskd_ready() -> bool:
         return time.monotonic() >= _slskd_blocked_until
 
 
-def _trip_slskd_breaker() -> None:
+def _trip_slskd_breaker(reason: str = "unreachable") -> None:
     """Apre l'interruttore per `SLSKD_COOLDOWN` secondi.
 
     Una scadenza letta a ogni `claim_next`, invece di un flag da azzerare con
     un evento esplicito: cosi' l'interruttore si richiude da solo allo
     scadere, senza che nessuno debba accorgersi che il daemon e' tornato — il
     prossimo item lavorato e' la verifica.
+
+    `reason` e' un codice, non una frase: lo espone `GET /api/downloads/queue`
+    e lo traduce il frontend, nelle sue due lingue.
     """
-    global _slskd_blocked_until
+    global _slskd_blocked_until, _slskd_blocked_reason
     with _lock:
         _slskd_blocked_until = time.monotonic() + SLSKD_COOLDOWN
-    logger.warning("slskd irraggiungibile: coda in pausa per %.0fs", SLSKD_COOLDOWN)
+        _slskd_blocked_reason = reason
+    logger.warning("Coda in pausa per %.0fs (%s)", SLSKD_COOLDOWN, reason)
+
+
+def _record_outcome(outcome: str | None, reason: str | None) -> bool:
+    """Aggiorna il contatore dei fallimenti consecutivi. True se va aperto
+    l'interruttore.
+
+    Non lo apre da sola: `_trip_slskd_breaker` prende lo stesso lock.
+    Qualunque esito diverso da `failed` azzera il contatore — una traccia che
+    scende dimostra che il daemon lavora.
+    """
+    global _consecutive_failures, _last_failure_reason
+    with _lock:
+        if outcome != "failed":
+            _consecutive_failures = 0
+            _last_failure_reason = None
+            return False
+        if reason == _last_failure_reason:
+            _consecutive_failures += 1
+        else:
+            _last_failure_reason = reason
+            _consecutive_failures = 1
+        if _consecutive_failures < CONSECUTIVE_FAILURE_LIMIT:
+            return False
+        # Azzerato subito: dopo il raffreddamento la coda riparte con la
+        # lavagna pulita, altrimenti il primo fallimento successivo la
+        # rimetterebbe in pausa all'istante.
+        _consecutive_failures = 0
+        _last_failure_reason = None
+        return True
 
 
 def _work(item_id: int) -> None:
     try:
-        run_item(item_id)
+        esito = run_item(item_id)
+        if esito is not None and _record_outcome(*esito):
+            # Cinque fallimenti di fila per lo stesso motivo: nessuno li ha
+            # riconosciuti come infrastruttura, ma un daemon che sbaglia sempre
+            # allo stesso modo non e' un problema delle singole tracce. Meglio
+            # una pausa di troppo che 300 tracce bruciate.
+            _trip_slskd_breaker("repeated_failures")
     except SlskdUnreachable as exc:
         # L'item e' gia' tornato `queued` (lo fa il runner) e la traccia non ha
         # ricevuto esito: qui si apre l'interruttore, cosi' il pool smette di

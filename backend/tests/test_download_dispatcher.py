@@ -38,6 +38,8 @@ def _attendi_thread_del_dispatcher(monkeypatch):
     `_active`, e un test che lo lascia aperto congelerebbe il successivo."""
     d.stop_retry_loop()
     d._slskd_blocked_until = 0.0
+    d._consecutive_failures = 0
+    d._last_failure_reason = None
     threads: list[threading.Thread] = []
     lock = threading.Lock()
 
@@ -54,6 +56,8 @@ def _attendi_thread_del_dispatcher(monkeypatch):
         th.join(timeout=5)
     d._active = 0
     d._slskd_blocked_until = 0.0
+    d._consecutive_failures = 0
+    d._last_failure_reason = None
 
 
 def _setup(monkeypatch, n_items, slots=3, slskd_available=True):
@@ -283,14 +287,43 @@ class _ClientSpento:
         pass
 
 
-class _ClientChe409:
-    """Daemon vivo che risponde male. `raise_for_status` costruisce l'errore
-    dal solo status code, senza causa httpx: e' un fallimento vero della
-    traccia, non dell'infrastruttura, e come tale deve restare."""
+class _ClientChe409Scollegato:
+    """Daemon vivo ma non collegato alla rete Soulseek: e' cio' che slskd
+    risponde a `POST /searches` dopo un riavvio o un blip di rete. Lo status
+    da solo direbbe "richiesta sbagliata", ma il testo dice chiaramente che il
+    problema e' il daemon — e con 300 item in coda trattarlo come colpa della
+    traccia le brucia tutte."""
 
     def search(self, artist, title, **kw):
         exc = SlskdError('slskd 409: "must be connected (currently: Disconnected)"')
         exc.status_code = 409
+        raise exc
+
+    def close(self):
+        pass
+
+
+class _ClientChe409Conflitto:
+    """L'altro 409: un conflitto vero sulla singola richiesta (il file e' gia'
+    in coda da quell'utente). Riguarda la traccia, non l'infrastruttura."""
+
+    def search(self, artist, title, **kw):
+        exc = SlskdError('slskd 409: "file already queued"')
+        exc.status_code = 409
+        raise exc
+
+    def close(self):
+        pass
+
+
+class _ClientCheFallisceSempreUguale:
+    """Daemon vivo che risponde in un modo che nessuno ha classificato come
+    infrastruttura, sempre lo stesso. E' il caso che la rete di sicurezza dei
+    fallimenti consecutivi deve prendere."""
+
+    def search(self, artist, title, **kw):
+        exc = SlskdError("slskd 418: sono una teiera")
+        exc.status_code = 418
         raise exc
 
     def close(self):
@@ -390,14 +423,40 @@ def test_daemon_vivo_ma_401_o_5xx_mette_in_pausa_la_coda(monkeypatch, client_cls
     assert d.slskd_ready() is False                    # interruttore aperto
 
 
+def test_il_409_da_rete_soulseek_scollegata_non_brucia_la_coda(monkeypatch):
+    """Il rilievo: il 409 "must be connected" e' daemon vivo ma non collegato
+    alla rete Soulseek — la condizione piu' frequente dopo un riavvio o un blip
+    di rete. Prima della correzione i worker marcavano `failed` ogni item e
+    scrivevano l'esito su ogni traccia; con 300 in coda, 300 tracce bruciate
+    per un daemon da riconnettere. Adesso apre l'interruttore come le altre
+    condizioni di infrastruttura."""
+    factory = _setup(monkeypatch, n_items=3, slots=1, slskd_available=True)
+    monkeypatch.setattr(runner, "SessionLocal", factory)
+    monkeypatch.setattr(runner, "get_slskd_client", lambda: _ClientChe409Scollegato())
+    d.fill()
+    threading.Event().wait(0.4)
+
+    db = factory()
+    items = q.list_items(db)
+    assert len(items) == 3
+    assert all(i.state == "queued" for i in items)     # non bruciati a done/failed
+    assert all(i.outcome is None for i in items)
+    assert all(i.attempts == 0 for i in items)
+    tracks = db.query(Track).all()
+    assert all(t.last_download_outcome is None for t in tracks)
+    db.close()
+    assert d.slskd_ready() is False                    # interruttore aperto
+
+
 def test_un_errore_della_singola_traccia_resta_un_fallimento_vero(monkeypatch):
-    """L'altra faccia: un daemon vivo che rifiuta la richiesta riguarda quella
-    traccia, non l'infrastruttura. L'item deve concludersi `failed` con il
-    motivo leggibile, come prima — non essere rinviato all'infinito — e
-    l'interruttore deve restare chiuso, cosi' la coda continua a scorrere."""
+    """L'altra faccia: un daemon vivo che rifiuta *quella* richiesta riguarda
+    quella traccia. L'item deve concludersi `failed` col motivo leggibile — non
+    essere rinviato all'infinito — e l'interruttore deve restare chiuso, cosi'
+    la coda continua a scorrere. Due item soli: sotto la soglia della rete di
+    sicurezza sui fallimenti consecutivi, che qui non deve entrare in gioco."""
     factory = _setup(monkeypatch, n_items=2, slots=1, slskd_available=True)
     monkeypatch.setattr(runner, "SessionLocal", factory)
-    monkeypatch.setattr(runner, "get_slskd_client", lambda: _ClientChe409())
+    monkeypatch.setattr(runner, "get_slskd_client", lambda: _ClientChe409Conflitto())
     d.fill()
     threading.Event().wait(0.5)
 
@@ -407,9 +466,51 @@ def test_un_errore_della_singola_traccia_resta_un_fallimento_vero(monkeypatch):
     assert all(i.outcome == "failed" for i in items)
     tracks = db.query(Track).all()
     assert all(t.last_download_outcome == "failed" for t in tracks)
-    assert all("Disconnected" in (t.last_download_reason or "") for t in tracks)
+    assert all("already queued" in (t.last_download_reason or "") for t in tracks)
     db.close()
     assert d.slskd_ready() is True                       # nessun interruttore aperto
+
+
+def test_troppi_fallimenti_uguali_di_fila_aprono_comunque_l_interruttore(monkeypatch):
+    """La rete di sicurezza dietro la classificazione: un modo di fallire che
+    nessuno ha previsto scavalcherebbe `slskd_unreachable` e brucerebbe tutta
+    la coda una traccia alla volta. Alla soglia l'interruttore si apre lo
+    stesso, e gli item che restano non vengono nemmeno rivendicati."""
+    n = d.CONSECUTIVE_FAILURE_LIMIT + 3
+    factory = _setup(monkeypatch, n_items=n, slots=1, slskd_available=True)
+    monkeypatch.setattr(runner, "SessionLocal", factory)
+    monkeypatch.setattr(runner, "get_slskd_client",
+                        lambda: _ClientCheFallisceSempreUguale())
+    d.fill()
+    threading.Event().wait(0.6)
+
+    db = factory()
+    items = q.list_items(db)
+    bruciati = [i for i in items if i.state == "done"]
+    risparmiati = [i for i in items if i.state == "queued"]
+    # La soglia va rispettata in entrambi i versi: si brucia fino a li' (non
+    # meno, altrimenti la classificazione normale non funzionerebbe piu') e non
+    # oltre (e' tutto il punto della rete).
+    assert len(bruciati) == d.CONSECUTIVE_FAILURE_LIMIT
+    assert len(risparmiati) == n - d.CONSECUTIVE_FAILURE_LIMIT
+    db.close()
+    assert d.slskd_ready() is False
+
+
+def test_un_successo_azzera_il_contatore_dei_fallimenti(monkeypatch):
+    """Motivi diversi, o un download riuscito in mezzo, non devono sommarsi:
+    una manciata di tracce introvabili sparse non e' un daemon rotto."""
+    assert d._record_outcome("failed", "x") is False
+    assert d._record_outcome("failed", "x") is False
+    assert d._record_outcome("downloaded", None) is False
+    for _ in range(d.CONSECUTIVE_FAILURE_LIMIT - 1):
+        assert d._record_outcome("failed", "x") is False
+    assert d._record_outcome("failed", "x") is True
+
+
+def test_motivi_diversi_non_si_sommano(monkeypatch):
+    for i in range(d.CONSECUTIVE_FAILURE_LIMIT * 2):
+        assert d._record_outcome("failed", f"motivo-{i}") is False
 
 
 def test_a_interruttore_aperto_un_item_soundcloud_parte_comunque(monkeypatch):

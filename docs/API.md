@@ -797,11 +797,16 @@ user-picked `candidate` (from `search`, or the batch `POST
 worker to skip both the search cascade and the auto-pick's duration guard.
 
 If slskd becomes unreachable mid-queue — refused connection, but also
-401/403 (a bad or rotated API key) and any 5xx — the item in flight is put
+401/403 (a bad or rotated API key), any 5xx, and the `409 "must be connected
+(currently: Disconnected)"` of a live daemon that is not logged into the
+Soulseek network — the item in flight is put
 back to `queued` untouched, with no outcome written, and a circuit breaker
 opens for 60 seconds: while it is open, items that need slskd are not
 claimed at all (an item with `kind="soundcloud"`, which never touches slskd,
-keeps running regardless). A background loop retries every 30 seconds so the
+keeps running regardless). Other 409s (a genuine conflict on that one
+request) stay a failure of that track. As a backstop for failure modes
+nobody classified, five consecutive items failing for the same reason trip
+the breaker as well. A background loop retries every 30 seconds so the
 queue reopens on its own once slskd comes back, with no gesture from the
 user required. On backend restart, any item still `running` — its worker is
 gone — is put back to `queued` rather than left stranded.
