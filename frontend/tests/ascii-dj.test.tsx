@@ -1,7 +1,9 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AsciiDj, djFrame, DJ_ROWS, DJ_COLS, DJ_AIR_ROWS } from "@/components/dashboard/ascii-dj";
+import {
+  AsciiDj, djFrame, DJ_ROWS, DJ_COLS, DJ_AIR_ROWS, DJ_REST_TICK, DJ_WOOFER_ROW,
+} from "@/components/dashboard/ascii-dj";
 
 describe("djFrame (core puro)", () => {
   it("dimensioni fisse su molti tick: mai un salto di layout", () => {
@@ -34,8 +36,42 @@ describe("djFrame (core puro)", () => {
   });
 });
 
+/* La cabina apre la Home, subito sotto il frontespizio, e sta ferma finché non
+   parte la musica: la posa a riposo non deve mostrare un colpo di cassa.
+   Ogni asserzione ha il suo denominatore sul tick in battere — senza, sarebbe
+   verde anche se la posa in battere sparisse del tutto. */
+describe("posa a riposo", () => {
+  it("a riposo i woofer sono piccoli, al tick dopo battono", () => {
+    expect(djFrame(DJ_REST_TICK)[DJ_WOOFER_ROW]).toContain("( o )");
+    expect(djFrame(DJ_REST_TICK)[DJ_WOOFER_ROW]).not.toContain("( O )");
+    expect(djFrame(DJ_REST_TICK + 1)[DJ_WOOFER_ROW]).toContain("( O )");
+  });
+
+  it("a riposo i tweeter sono distesi, al tick dopo compressi", () => {
+    expect(djFrame(DJ_REST_TICK).join("\n")).toContain("(=====)");
+    expect(djFrame(DJ_REST_TICK).join("\n")).not.toContain("(-=-=-)");
+    expect(djFrame(DJ_REST_TICK + 1).join("\n")).toContain("(-=-=-)");
+  });
+});
+
 describe("AsciiDj (guscio)", () => {
   afterEach(cleanup);
+
+  it("appena montata non batte la cassa: nessuna 'O' in danger finché non suona", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<AsciiDj animate={false} />);
+      expect(container.querySelectorAll(".text-danger").length).toBe(0);
+
+      // Denominatore: quando suona, il colpo di cassa arriva e si colora.
+      cleanup();
+      const playing = render(<AsciiDj animate />).container;
+      act(() => { vi.advanceTimersByTime(500); });
+      expect(playing.querySelectorAll(".text-danger").length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("renderizza il fotogramma in pre monospace, decorativo per gli screen reader", () => {
     const { container } = render(<AsciiDj />);

@@ -15,9 +15,11 @@ import { Card, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { Figure } from "@/components/dashboard/figure";
 import { AsciiDj } from "@/components/dashboard/ascii-dj";
+import { AsciiWordmark } from "@/components/dashboard/ascii-wordmark";
 
-/** La Home: la striscia del ciclo, la consolle che suona e le quattro misure
- *  in chiusura. Il ritratto statistico della libreria vive in /statistics. */
+/** La Home: il frontespizio (il nome in grande e la consolle che suona), poi
+ *  la striscia del ciclo e le quattro misure in chiusura. Il ritratto
+ *  statistico della libreria vive in /statistics. */
 export default function Home() {
   const t = useT();
   const player = usePlayer();
@@ -68,6 +70,18 @@ export default function Home() {
 
   return (
     <PageLayout>
+      {/* Il frontespizio sta in cima sempre: anche a libreria vuota e mentre
+          carica, la Home ha una testata. Sotto cambia solo il contenuto.
+          Stessa cornice delle lastre sotto ma un gradino avanti: fondo
+          `elevated` e bordo `border-strong` lo staccano dalla serie restando
+          in fila. Il sistema è piatto e non ha ombre, quindi il primo piano
+          si fa col contrasto, non con la profondità. */}
+      <Card className="mb-3 border-border-strong bg-elevated">
+        <div className="px-3 py-2">
+          <AsciiWordmark />
+        </div>
+      </Card>
+
       {error && <div className="mb-6"><Alert tone="danger">{t.dashboard.backendDown(error)}</Alert></div>}
 
       {!stats && !error && <Loading />}
@@ -89,9 +103,28 @@ export default function Home() {
 
       {stats && !empty && (
         <>
+          {/* La consolle chiude il frontespizio, sotto il nome: puro carattere,
+              in tutti i sensi. Premuta, suona. Si muove solo mentre dall'app
+              esce davvero del suono (`audible`, non `status`: in pausa il dock
+              resta "playing").
+              Incorniciata nello stesso involucro delle due sezioni sotto
+              (Card: bordo pieno e fondo surface): le tre lastre si leggono
+              come una serie invece che come un disegno sospeso nel vuoto. */}
+          <Card>
+            <div className="flex justify-center overflow-x-auto px-3 py-1">
+              <AsciiDj
+                animate={player.audible}
+                onActivate={playRandom}
+                label={t.dashboard.djPlayRandom}
+                hint={t.dashboard.djHint}
+              />
+            </div>
+          </Card>
+
           {/* Link alle statistiche: la pagina non ha header PageLayout, quindi
-              il rimando sta qui, quieto e right-aligned sopra il frontespizio. */}
-          <div className="mb-2 flex justify-end">
+              il rimando sta qui, quieto e right-aligned in testa alle due
+              sezioni di dati a cui appartiene — non sopra il frontespizio. */}
+          <div className="mb-0.5 mt-1.5 flex justify-end">
             <Link href="/statistics" className="text-[10px] uppercase tracking-wider text-muted transition-colors hover:text-fg">
               {t.dashboard.statsLink} →
             </Link>
@@ -100,24 +133,12 @@ export default function Home() {
           {/* Striscia di orientamento: le fasi del ciclo con contatori vivi. */}
           {pipeline && <PipelineStrip p={pipeline} />}
 
-          {/* La consolle: puro carattere, in tutti i sensi. Premuta, suona.
-              Si muove solo mentre dall'app esce davvero del suono (`audible`,
-              non `status`: in pausa il dock resta "playing"). */}
-          <div className="mt-10 flex justify-center overflow-x-auto">
-            <AsciiDj
-              animate={player.audible}
-              onActivate={playRandom}
-              label={t.dashboard.djPlayRandom}
-              hint={t.dashboard.djHint}
-            />
-          </div>
-
           {/* Le quattro misure chiudono la pagina, come un colophon in cifre.
               Stesso involucro della striscia sopra (Card: fondo surface e
               bordo pieno); il margine negativo fa uscire i filetti di chiusura
               delle celle di bordo, che `overflow-hidden` ritaglia — così le
               divisioni interne restano da 1px a ogni breakpoint. */}
-          <div className="mt-10 overflow-hidden border border-border bg-surface">
+          <div className="-mt-px overflow-hidden border border-border bg-surface">
             <div className="-mb-px -mr-px grid grid-cols-2 sm:grid-cols-4">
               <Figure label={t.dashboard.figureDiscovered} value={stats.total_tracks} />
               <Figure
