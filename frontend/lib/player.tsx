@@ -45,10 +45,18 @@ type Ctx = {
    *  alimenta il dock con gli eventi play/pause/ended dell'elemento audio; la
    *  Home ci attacca l'animazione della consolle. */
   audible: boolean;
-  play: (source: PlaybackSource) => void;
+  /** `context` è lo snapshot ordinato della lista di provenienza (solo tracce
+   *  possedute): abilita prev/next e l'auto-avanzamento. Assente = niente
+   *  continuità. Snapshot, non riferimento vivo: filtri successivi della lista
+   *  non toccano l'ascolto in corso. */
+  play: (source: PlaybackSource, context?: LocalTrack[]) => void;
   stop: () => void;
   /** Riservato al dock: pubblica lo stato reale dell'elemento audio. */
   setAudible: (v: boolean) => void;
+  hasPrev: boolean;
+  hasNext: boolean;
+  prev: () => void;
+  next: () => void;
 };
 
 const PlayerCtx = createContext<Ctx | null>(null);
@@ -58,17 +66,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<Status>("idle");
   const [data, setData] = useState<DiscoveryPreview | null>(null);
   const [elementPlaying, setAudible] = useState(false);
+  const [context, setContext] = useState<LocalTrack[] | null>(null);
   const reqId = useRef(0);
 
-  const play = useCallback((source: PlaybackSource) => {
+  const play = useCallback((source: PlaybackSource, ctx?: LocalTrack[]) => {
     const id = ++reqId.current; // invalida qualunque risoluzione preview in volo
     setActive(source);
     setData(null);
     setAudible(false); // la nuova sorgente è muta finché il suo elemento non parte
     if (source.kind === "local-track") {
+      // Snapshot del contesto: presente solo se non vuoto. Un play senza
+      // contesto azzera quello precedente (l'ascolto continuo riparte solo
+      // da una lista).
+      setContext(ctx && ctx.length > 0 ? ctx : null);
       setStatus("playing"); // stream diretto: nessuna risoluzione async
       return;
     }
+    setContext(null); // le preview discovery si valutano una alla volta
     // discovery-preview: risoluzione async della sorgente di terzi (iTunes/YouTube).
     // Il fallback Discogs (get_release lato backend) vuole un id numerico: su Bandcamp
     // "band_id:item_id" non lo è, quindi niente discogsId fuori da source === "discogs".
@@ -103,14 +117,36 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setStatus("idle");
     setData(null);
     setAudible(false);
+    setContext(null);
   }, []);
+
+  // Posizione nel contesto, derivata dall'id attivo: se la traccia attiva non
+  // viene dal contesto (o non c'è contesto) l'indice è -1 e prev/next spariscono.
+  const idx =
+    context && active?.kind === "local-track"
+      ? context.findIndex((tr) => tr.id === active.track.id)
+      : -1;
+  const hasPrev = idx > 0;
+  const hasNext = idx >= 0 && context != null && idx < context.length - 1;
+
+  const next = useCallback(() => {
+    if (context && idx >= 0 && idx < context.length - 1) {
+      play({ kind: "local-track", track: context[idx + 1] }, context);
+    }
+  }, [context, idx, play]);
+
+  const prev = useCallback(() => {
+    if (context && idx > 0) {
+      play({ kind: "local-track", track: context[idx - 1] }, context);
+    }
+  }, [context, idx, play]);
 
   /* L'iframe YouTube non espone eventi senza caricare la sua API: quando è
      montato sta suonando in autoplay, quindi lo si conta come audibile. */
   const audible = elementPlaying || (status === "playing" && data?.kind === "youtube");
 
   return (
-    <PlayerCtx.Provider value={{ active, status, data, audible, play, stop, setAudible }}>
+    <PlayerCtx.Provider value={{ active, status, data, audible, play, stop, setAudible, hasPrev, hasNext, prev, next }}>
       {children}
     </PlayerCtx.Provider>
   );
