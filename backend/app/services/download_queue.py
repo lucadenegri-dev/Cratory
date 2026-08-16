@@ -104,16 +104,23 @@ def claim_next(db: Session) -> DownloadQueueItem | None:
         return candidate
 
 
-def finish(db: Session, item_id: int, outcome: str, error: str | None = None) -> None:
-    item = db.get(DownloadQueueItem, item_id)
-    if item is None:
-        return
-    item.state = "done"
-    item.outcome = outcome
-    item.error = error
-    item.phase = None
-    item.finished_at = _now()
+def finish(db: Session, item_id: int, outcome: str, error: str | None = None) -> bool:
+    """Conclude un item `running`. False se nel frattempo e' stato annullato
+    (o e' gia' concluso) da un'altra sessione: senza questo controllo un
+    worker ignaro dell'annullo dell'utente resuscita l'item a `done`."""
+    # synchronize_session="fetch" (a differenza di "False" altrove nel file):
+    # qui, a differenza di cancel/claim_next, e' comune che il chiamante
+    # continui a usare lo stesso oggetto ORM subito dopo (es. per serializzare
+    # la risposta) senza un refresh esplicito — "fetch" aggiorna l'identity
+    # map cosi' l'oggetto in memoria riflette lo stato appena scritto.
+    updated = (db.query(DownloadQueueItem)
+               .filter(DownloadQueueItem.id == item_id,
+                       DownloadQueueItem.state == "running")
+               .update({"state": "done", "outcome": outcome, "error": error,
+                        "phase": None, "finished_at": _now()},
+                       synchronize_session="fetch"))
     db.commit()
+    return updated == 1
 
 
 def cancel(db: Session, item_id: int) -> bool:

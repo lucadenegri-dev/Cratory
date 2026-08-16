@@ -86,12 +86,36 @@ def test_finish_scrive_stato_ed_esito():
     _seed(factory, 1)
     db = factory()
     item = q.claim_next(db)
-    q.finish(db, item.id, "needs_review", error="durata non corrisponde")
+    assert q.finish(db, item.id, "needs_review", error="durata non corrisponde") is True
     db.refresh(item)
     assert item.state == "done"
     assert item.outcome == "needs_review"
     assert item.error == "durata non corrisponde"
     assert item.finished_at is not None
+
+
+def test_finish_non_resuscita_un_item_annullato_da_un_altra_sessione():
+    """Riproduce il rilievo: claim -> cancel da un'altra sessione -> finish.
+
+    Un worker rivendica l'item, l'utente lo annulla da un'altra sessione
+    mentre il worker sta ancora scaricando; quando il worker ignaro chiama
+    finish() l'item deve restare cancelled, non tornare done/downloaded.
+    """
+    factory = _factory()
+    _seed(factory, 1)
+    db = factory()
+    item = q.claim_next(db)
+    altra = factory()
+    assert q.cancel(altra, item.id) is True
+    altra.close()
+
+    assert q.finish(db, item.id, "downloaded") is False
+
+    verifica = factory()
+    ricaricato = verifica.get(DownloadQueueItem, item.id)
+    assert ricaricato.state == "cancelled"
+    assert ricaricato.outcome is None
+    verifica.close()
 
 
 def test_cancel_da_queued_e_da_running():
@@ -119,6 +143,22 @@ def test_move_to_top_porta_l_item_in_testa():
     assert q.list_items(db)[0].id == ultimo.id
     # e il prossimo claim prende proprio lui
     assert q.claim_next(db).id == ultimo.id
+
+
+def test_move_to_top_rifiuta_un_item_non_in_attesa():
+    """'In cima' vale solo per un item in coda: running o concluso restano fermi."""
+    factory = _factory()
+    _seed(factory, 3)
+    db = factory()
+    ordine_prima = [i.id for i in q.list_items(db)]
+
+    in_corso = q.claim_next(db)             # il primo, ora running
+    assert q.move_to_top(db, in_corso.id) is False
+    assert [i.id for i in q.list_items(db)] == ordine_prima
+
+    assert q.finish(db, in_corso.id, "downloaded") is True
+    assert q.move_to_top(db, in_corso.id) is False
+    assert [i.id for i in q.list_items(db)] == ordine_prima
 
 
 def test_requeue_stale_rimette_in_coda_i_running_orfani():
