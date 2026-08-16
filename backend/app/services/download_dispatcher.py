@@ -141,15 +141,20 @@ def fill() -> None:
 
 
 def _retry_loop() -> None:
-    """Richiama `fill()` a intervalli regolari, ma solo a pool fermo.
+    """Richiama `fill()` a intervalli regolari, ma solo se c'e' almeno uno
+    slot libero.
 
-    A pool non fermo non servirebbe: ogni worker richiama gia' `fill()` quando
-    libera il suo slot. Su coda vuota e' innocuo — `fill()` riserva uno slot,
+    Non "tutti liberi": se il pool e' pieno ogni worker richiama gia' `fill()`
+    quando libera il proprio slot, quindi il riaggancio non servirebbe — ma se
+    UNO slot restasse occupato per errore (un worker che non richiama `fill()`
+    alla fine, un bug), pretendere che siano *tutti* liberi lo zittirebbe per
+    sempre, proprio quando il riaggancio serve a rimettere in moto una coda
+    altrimenti ferma. Su coda vuota e' innocuo — `fill()` riserva uno slot,
     non trova nulla da rivendicare e lo rilascia subito.
     """
     while not _retry_stop.wait(RETRY_INTERVAL):
         try:
-            if active_count() == 0:
+            if active_count() < runtime_settings.download_slots():
                 fill()
         except Exception:  # noqa: BLE001 — un giro storto non deve uccidere il loop
             logger.exception("Riaggancio periodico della coda fallito")

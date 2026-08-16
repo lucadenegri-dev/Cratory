@@ -77,6 +77,11 @@ async def lifespan(app: FastAPI):
     from app.services import download_dispatcher
     download_dispatcher.boot()
     yield
+    # E' un thread daemon: muore comunque col processo. Ma senza fermarlo qui
+    # puo' svegliarsi durante lo shutdown, rivendicare un item (`running`) e
+    # non finire mai di lavorarlo — lo si ferma esplicitamente, come i test
+    # gia' fanno tra un test e l'altro (vedi conftest.py).
+    download_dispatcher.stop_retry_loop()
 
 
 app = FastAPI(title="Cratory", version="0.9.0", lifespan=lifespan)

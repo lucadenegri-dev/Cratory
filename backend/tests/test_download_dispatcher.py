@@ -177,9 +177,23 @@ def test_boot_non_brucia_la_coda_se_slskd_non_e_configurato(monkeypatch):
     fallisce all'istante: gli item finivano tutti `done`/`failed` e le
     tracce si beccavano un `last_download_outcome="failed"` con dentro una
     stringa tecnica come motivo — una coda intera bruciata a un riavvio
-    ordinario col daemon spento. Uso apposta il vero `run_item` (non un
-    finto): e' proprio la sua interazione con slskd spento che il rilievo
-    contesta, un `run_item` finto non la eserciterebbe.
+    ordinario col daemon spento.
+
+    Dopo l'arrivo dell'interruttore (rilievo separato) questo test non
+    discriminava piu': mutare solo il gate (`slskd_configured`) non basta a
+    dimostrare che `claim_next` esclude l'item PRIMA che `run_item` tocchi
+    slskd, perche' se per regressione l'item venisse comunque rivendicato,
+    `get_slskd_client()` vero leggerebbe lo `SLSKD_URL` reale del `.env` dello
+    sviluppatore — spesso valorizzato (slskd locale su :5030, vedi memoria di
+    progetto) — aprirebbe un client reale, fallirebbe la ricerca contro un
+    daemon spento o irraggiungibile, e l'interruttore rimetterebbe comunque
+    l'item `queued`: stesso stato osservabile di oggi, ma passando da una
+    VERA chiamata di rete invece che dall'esclusione a monte che il rilievo
+    originale voleva verificare. Si sostituisce percio' `get_slskd_client`
+    con qualcosa che fa fallire il test se viene invocato: cosi' l'assenza di
+    chiamate di rete e' garantita, e la regressione (item rivendicato quando
+    non dovrebbe) fa fallire il test sul posto giusto, non per un effetto
+    collaterale dell'interruttore.
 
     Dopo la correzione gli item restano `queued`, intatti — pronti a
     ripartire da soli non appena slskd torna disponibile e qualcosa
@@ -197,6 +211,13 @@ def test_boot_non_brucia_la_coda_se_slskd_non_e_configurato(monkeypatch):
     # `run_item`, usato apposta qui, apre le sue sessioni tramite il
     # `SessionLocal` del modulo `download_runner`, che va ripuntato a parte.
     monkeypatch.setattr(runner, "SessionLocal", factory)
+
+    def _client_non_atteso():
+        raise AssertionError(
+            "get_slskd_client() chiamato: claim_next avrebbe dovuto escludere "
+            "l'item PRIMA, senza toccare slskd — nessuna chiamata di rete attesa qui.")
+
+    monkeypatch.setattr(runner, "get_slskd_client", _client_non_atteso)
     d.boot()
     threading.Event().wait(0.3)
     db = factory()
@@ -268,7 +289,37 @@ class _ClientChe409:
     traccia, non dell'infrastruttura, e come tale deve restare."""
 
     def search(self, artist, title, **kw):
-        raise SlskdError('slskd 409: "must be connected (currently: Disconnected)"')
+        exc = SlskdError('slskd 409: "must be connected (currently: Disconnected)"')
+        exc.status_code = 409
+        raise exc
+
+    def close(self):
+        pass
+
+
+class _ClientChe401:
+    """Daemon vivo ma con chiave API sbagliata o ruotata: `raise_for_status`
+    attacca `.status_code=401` all'errore (nessuna causa httpx, come il 409),
+    ma qui e' infrastruttura — la chiave sbagliata blocca OGNI richiesta, non
+    solo quella traccia."""
+
+    def search(self, artist, title, **kw):
+        exc = SlskdError('slskd 401: "unauthorized"')
+        exc.status_code = 401
+        raise exc
+
+    def close(self):
+        pass
+
+
+class _ClientChe500:
+    """Daemon vivo ma che risponde 500 (es. appena riavviato, stato interno
+    non ancora pronto): come 401, e' infrastruttura, non colpa della traccia."""
+
+    def search(self, artist, title, **kw):
+        exc = SlskdError('slskd 500: "internal error"')
+        exc.status_code = 500
+        raise exc
 
     def close(self):
         pass
@@ -305,6 +356,34 @@ def test_daemon_irraggiungibile_lascia_gli_item_in_coda(monkeypatch):
     assert all(i.attempts == 0 for i in items)
     tracks = db.query(Track).all()
     assert len(tracks) == 3
+    assert all(t.last_download_outcome is None for t in tracks)
+    assert all(t.last_download_reason is None for t in tracks)
+    db.close()
+    assert d.slskd_ready() is False                    # interruttore aperto
+
+
+@pytest.mark.parametrize("client_cls", [_ClientChe401, _ClientChe500])
+def test_daemon_vivo_ma_401_o_5xx_mette_in_pausa_la_coda(monkeypatch, client_cls):
+    """Il rilievo: un daemon vivo che risponde 401 (chiave API sbagliata o
+    ruotata) o un 5xx qualsiasi e' infrastruttura tanto quanto una connessione
+    rifiutata — non colpa della traccia. Prima della correzione questi due
+    casi cadevano nel ramo "colpa della traccia" (nessuna causa httpx, come il
+    409): il riaggancio periodico che ripesca un daemon in questo stato
+    avrebbe bruciato l'intera coda invece di mettersi in pausa. Gemello di
+    `test_daemon_irraggiungibile_lascia_gli_item_in_coda`, stesse asserzioni."""
+    factory = _setup(monkeypatch, n_items=3, slots=1, slskd_available=True)
+    monkeypatch.setattr(runner, "SessionLocal", factory)
+    monkeypatch.setattr(runner, "get_slskd_client", lambda: client_cls())
+    d.fill()
+    threading.Event().wait(0.4)
+
+    db = factory()
+    items = q.list_items(db)
+    assert len(items) == 3
+    assert all(i.state == "queued" for i in items)     # non bruciati a done/failed
+    assert all(i.outcome is None for i in items)
+    assert all(i.attempts == 0 for i in items)
+    tracks = db.query(Track).all()
     assert all(t.last_download_outcome is None for t in tracks)
     assert all(t.last_download_reason is None for t in tracks)
     db.close()

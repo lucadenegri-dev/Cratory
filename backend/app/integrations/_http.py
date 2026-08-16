@@ -102,11 +102,23 @@ def raise_for_status(
 
     Non fa nulla (torna None) per le risposte <400: il chiamante prosegue con
     `response.json()` o la propria logica successiva.
+
+    L'eccezione sollevata porta anche `.status_code` (l'intero HTTP, stesso
+    valore di `response.status_code`): un attributo in piu' sull'istanza, non
+    un tipo nuovo ne' un messaggio diverso. Serve a chi deve distinguere
+    un'infrastruttura che risponde male (401/403/5xx) da un fallimento vero
+    della singola richiesta (es. il 409 di slskd) senza fare parsing del
+    messaggio — vedi `slskd_unreachable` in `app/integrations/slskd.py`, che
+    e' l'unico chiamante che oggi legge questo attributo.
     """
     if response.status_code == 429 and rate_limit_message is not None:
-        raise error_cls(rate_limit_message)
+        exc = error_cls(rate_limit_message)
+        exc.status_code = response.status_code
+        raise exc
     if response.status_code >= 400:
-        raise error_cls(f"{name} {response.status_code}{context}: {response.text[:text_preview]}")
+        exc = error_cls(f"{name} {response.status_code}{context}: {response.text[:text_preview]}")
+        exc.status_code = response.status_code
+        raise exc
 
 
 def parse_json(response: httpx.Response, error_cls: type[Exception], *, message: str):

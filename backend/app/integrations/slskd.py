@@ -257,26 +257,38 @@ def slskd_configured() -> bool:
 
 
 def slskd_unreachable(exc: BaseException) -> bool:
-    """Vero se l'errore dice "il daemon non risponde", falso se dice "questa
-    traccia non si scarica".
+    """Vero se l'errore dice "il daemon non risponde o e' malconfigurato",
+    falso se dice "questa traccia/richiesta non va bene cosi'".
 
     I tipi di questo modulo non bastano a distinguerli: `SlskdError` copre sia
-    la connessione che non si apre sia un 4xx/5xx di un daemon vivo e vegeto
-    (il 409 "must be connected" e' un fallimento vero della traccia, non
-    dell'infrastruttura). L'unico segnale onesto, senza inventare eccezioni
-    nuove, e' la *causa*: gli errori di trasporto httpx (connessione rifiutata,
-    DNS, timeout) risalgono come `__cause__` sia dai verbi POST/PUT/DELETE qui
-    sopra sia dal retry di `_http._request_with_retries` usato dalle GET,
-    mentre `raise_for_status` costruisce l'errore dal solo status code e resta
-    senza causa. `SlskdNotConfigured` (URL mancante) e' anch'essa
-    infrastruttura: mai colpa della traccia.
+    la connessione che non si apre sia un 4xx/5xx di un daemon vivo e vegeto.
+    Due segnali, nessuno dei quali richiede eccezioni nuove:
+
+    - la *causa*: gli errori di trasporto httpx (connessione rifiutata, DNS,
+      timeout) risalgono come `__cause__` sia dai verbi POST/PUT/DELETE qui
+      sopra sia dal retry di `_http._request_with_retries` usato dalle GET;
+    - lo *status code*, che `raise_for_status` attacca come `.status_code`
+      sull'eccezione che solleva (vedi `_http.raise_for_status`): 401/403
+      (chiave API sbagliata o ruotata) e ogni 5xx sono un daemon vivo che
+      risponde male — infrastruttura quanto una connessione rifiutata, e con
+      lo stesso danno se non trattati come tale (un riaggancio che ripesca un
+      daemon rotto brucerebbe l'intera coda). Il 409 "must be connected"
+      resta invece un fallimento vero della singola richiesta.
+
+    `SlskdNotConfigured` (URL mancante) e' anch'essa infrastruttura: mai
+    colpa della traccia.
 
     Chi la usa: la coda download, per decidere se un item va fallito o
     rimesso in attesa (`services/download_runner.py`).
     """
     if isinstance(exc, SlskdNotConfigured):
         return True
-    return isinstance(exc, SlskdError) and isinstance(exc.__cause__, httpx.TransportError)
+    if not isinstance(exc, SlskdError):
+        return False
+    if isinstance(exc.__cause__, httpx.TransportError):
+        return True
+    status = getattr(exc, "status_code", None)
+    return status is not None and (status in (401, 403) or status >= 500)
 
 
 def get_slskd_client() -> SlskdClient:

@@ -50,10 +50,16 @@ def _ferma_il_riaggancio_della_coda():
     ne lascia quindi uno in volo. Sopravvissuto al proprio test, quel thread
     rivendicherebbe righe della coda nel DB condiviso dagli altri (o, peggio, nel
     `SessionLocal` monkeypatchato dai test del dispatcher). Si spegne qui, dopo
-    ogni test, così nessuno lo eredita."""
+    ogni test, così nessuno lo eredita.
+
+    Azzera anche l'interruttore su slskd (`_slskd_blocked_until`): è un global
+    di modulo come il thread, e un test che lo lascia aperto (es. uno scenario
+    di daemon irraggiungibile) congelerebbe la coda del test successivo, che
+    si aspetta l'interruttore chiuso di default."""
     yield
     from app.services import download_dispatcher
     download_dispatcher.stop_retry_loop()
+    download_dispatcher._slskd_blocked_until = 0.0
 
 
 @pytest.fixture()
