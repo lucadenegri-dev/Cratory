@@ -90,8 +90,8 @@ backend/app/
     set building  set_skeleton  set_generator  set_editor  alternatives
                   ai_curation  export_render
     discovery     discovery_dig  dig_sources/{__init__,discogs,bandcamp}  preview
-    acquisition   acquisition  soulseek_select  soulseek_download_job
-                  download_review  slskd_shares
+    acquisition   acquisition  soulseek_select  download_queue  download_dispatcher
+                  download_runner  download_review  slskd_shares
     mixes         mix_identify  mix_identify_job
     misc          gap_analysis  labels  pipeline  rating  app_state
                   track_label  job_spawn  native_picker
@@ -157,16 +157,20 @@ thin wrapper tests monkeypatch to run synchronously. Each job is single-instance
 guard on a second start splits into two families, and `docs/API.md`'s jobs table doesn't
 say which is which (it only carries the start endpoint's success code):
 analysis (`analysis_already_running`), streaming import/sync
-(`streaming_import_already_running`), Soulseek/SoundCloud download
-(`download_already_running`) and set generation (`set_generation_in_progress`) reject a
-second start with `409`, checked in the router before `start_job` runs
-(e.g. `routers/analysis.py:59-60`); library scan/index, organize apply, mix
-identification, provider rescan, integrity check and AI genre review instead let
-`start_job` notice the module-level lock is held and hand back the *current* running
+(`streaming_import_already_running`) and set generation
+(`set_generation_in_progress`) reject a second start with `409`, checked in the router
+before `start_job` runs (e.g. `routers/analysis.py:59-60`); library scan/index, organize
+apply, mix identification, provider rescan, integrity check and AI genre review instead
+let `start_job` notice the module-level lock is held and hand back the *current* running
 job's state with no error (`if _state["status"] == "running": return dict(_state)`,
 e.g. `organize/services/scan_job.py:112-113`) — a second `POST` is harmless, just not an
 error. CPU-bound work that would hold the GIL — ffmpeg decoding, Essentia analysis — runs
 in a subprocess.
+
+Soulseek/SoundCloud download does not fit either family any more: it moved from a
+single-instance job to a persistent queue (see "Acquisition" below) with an N-wide
+worker pool, so there is no "already running" to reject — every start endpoint enqueues
+and answers `200`.
 
 ## The library is the disk
 
@@ -494,23 +498,58 @@ tracks.
 
 ```text
 Track in the library (a lead)
-  -> SlskdClient.search (slskd REST)
-  -> soulseek_select ranks deterministically: quality + name match + availability
-  -> auto-pick above a confidence floor, or the user picks a candidate by hand
-     (POST /api/downloads/track/auto vs /track; /playlist/{id} for a whole block)
-  -> slskd enqueue + transfer polling
+  -> POST /api/downloads/queue (or one of the shortcut routes) enqueues a
+     DownloadQueueItem — the persistent SQLite queue, services/download_queue.py
+  -> download_dispatcher.fill() claims items into an N-wide worker pool
+     (N = download_slots, Settings, default 3, hot-reloaded)
+  -> download_runner.run_item: SlskdClient.search (slskd REST)
+     -> soulseek_select ranks deterministically: quality + name match + availability
+     -> auto-pick above a confidence floor, or the candidate the user chose by hand
+     -> slskd enqueue + transfer polling
   -> attach_local_file: has_local_file + local_path/format/bitrate + audio_hash
 ```
 
-Zero AI, one job at a time, best-effort: a failure on one track does not stop the job. It
-requires slskd to be configured, and the endpoints answer `409` without it. The file becomes
-a local reference on the existing `Track`; the app neither re-uploads nor redistributes it.
+Three modules, one job each: `download_queue` is data only — enqueue, claim, finish,
+cancel, requeue — no thread and no network, so it is tested in memory. `download_dispatcher`
+owns the worker pool: it decides *when* to work — how many slots are occupied, when the
+slskd circuit breaker is open, when the periodic retry loop should re-poke a stalled pool
+— but not *how* to download. `download_runner` (`run_item`) is the *how*: search, auto-pick,
+transfer polling, exactly the logic the old single job used, now driving one item instead
+of a whole batch. Zero AI throughout; best-effort — a failure on one item never blocks the
+others, since each item is independent instead of steps in one sequential job.
+
+An item is `queued` → `running` → `done` (or `cancelled` at any point before finishing); a
+`done` item also carries an `outcome` in the same vocabulary the `Track` fields already
+used (`downloaded`/`needs_review`/`not_found`/`failed`). Enqueuing deduplicates against a
+track's own active item, so re-submitting the same track — a second click, a repeated
+`retry-pending` — is a no-op rather than a duplicate download.
+
+If slskd stops responding mid-item — connection refused, but also 401/403 or any 5xx from a
+daemon that answers but is unwell — `download_runner` raises, the item goes back to `queued`
+untouched (no outcome written), and the dispatcher trips a circuit breaker: for 60s, items
+that need slskd are not claimed at all (a `soundcloud`-kind item, which never touches
+slskd, is unaffected and keeps running). A background thread in the dispatcher retries every
+30s so a queue paused by a dead daemon reopens on its own once it comes back — necessary
+because nothing else calls `fill()` on an idle pool; every enqueue endpoint only does so on a
+*successful* enqueue. On backend restart, any item still `running` — its worker thread is
+gone — is put back to `queued` by `requeue_stale()` rather than left stranded; `boot()` does
+this, then fills the pool and starts the retry loop.
+
+It requires slskd to be configured for the slskd-backed routes, which answer `409` without
+it; SoundCloud download has its own preconditions instead. The file becomes a local
+reference on the existing `Track`; the app neither re-uploads nor redistributes it.
 
 Outcomes needing attention (`needs_review` | `not_found` | `failed`) go to a "to fix" queue
-persisted on `Track.last_download_outcome`/`last_download_reason`, so it survives jobs and
-restarts (`GET /api/downloads/pending`, `DELETE /api/downloads/pending/{track_id}`,
+persisted on `Track.last_download_outcome`/`last_download_reason`, so it survives queue
+churn and restarts (`GET /api/downloads/pending`, `DELETE /api/downloads/pending/{track_id}`,
 `POST /api/downloads/retry-pending`). A duration mismatch also keeps
 `last_download_path`, so `services/download_review.py` can offer "keep anyway / discard".
+
+`GET /api/downloads/status`, kept for the frontend's existing global bar, derives its
+aggregates from the queue rather than from a single job's state, and only for the current
+"round" (a persisted marker, not the whole history — see `docs/API.md`). The `/downloads`
+page (`GET /api/downloads/queue`) is the fuller view: every item, its `phase` and byte
+progress while `running`, and per-item actions (cancel, move to top).
 
 A file already on disk can be linked by hand from the track detail
 (`POST /api/tracks/{track_id}/link-file`, searching by name in `LIBRARY_ROOT` and in the
@@ -622,7 +661,18 @@ Core (`app/models.py`):
 - **`DjSet`** / **`DjSetTrack`** — an identified external mix and its tracks; a corpus kept
   apart from the library.
 - **`SpotifyToken`** — OAuth tokens for the local user (`kind='user'` or `'client'`).
-- **`AppState`** — persistent key/value for app state (`language`, `last_index_at`, …).
+- **`DownloadQueueItem`** — one acquisition job in the persistent download queue (see
+  "Acquisition"): `track_id`, `kind` (`soulseek_auto` | `soulseek_chosen` | `soundcloud`),
+  `payload` (JSON, only for `soulseek_chosen` — the user-picked candidate), `state`
+  (`queued` | `running` | `done` | `cancelled`), `outcome` (only meaningful once `done`,
+  same vocabulary as `Track.last_download_outcome`), `position` (queue order), `attempts`,
+  `phase`/`bytes_done`/`bytes_total` (live progress while `running`), `error`,
+  `enqueued_at`/`started_at`/`finished_at`. `state` and `outcome` are kept apart on purpose:
+  a downloaded-but-suspect file is `state='done', outcome='needs_review'`, never a hybrid
+  state.
+- **`AppState`** — persistent key/value for app state (`language`, `last_index_at`, …), also
+  where `download_slots` and the queue's current-round marker
+  (`downloads_queue_round_start_id`) live.
 - **`ArchiveSeen`** — (path, mtime, size) of archive files matching no track, so the
   incremental pass can skip re-hashing them.
 

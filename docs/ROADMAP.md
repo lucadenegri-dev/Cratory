@@ -47,20 +47,27 @@ endpoints, `docs/API.md`.
   identity resolver; `/recommendations` is never used.
 - **Acquisition & Wishlist.** Every non-owned track carries its download outcome,
   playlist provenance and buy links (Bandcamp, Beatport, Discogs); archiving is
-  reversible. Acquisition runs through the user's own slskd (Soulseek) daemon —
-  deterministic ranking by quality, name match and availability, auto-pick above a
-  confidence floor or a manual pick, one job at a time, best-effort per track. A
+  reversible. The wishlist supports multi-select, for batch actions alongside the
+  existing per-row ones. Acquisition runs through the user's own slskd (Soulseek)
+  daemon — deterministic ranking by quality, name match and availability,
+  auto-pick above a confidence floor or a manual pick — through a **persistent
+  download queue** with its own page (`/downloads`), replacing the old
+  one-job-at-a-time model: a worker pool `download_slots` wide (Settings, default
+  3, hot-reloaded) downloads several tracks in parallel, best-effort per item, with
+  a circuit breaker that pauses slskd-dependent work — and reopens it on its own
+  once the daemon answers again — if slskd becomes unreachable, and a queue that
+  survives a backend restart (in-flight items resume as `queued`, not lost). A
   per-track **integrated Soulseek search** (`POST /api/downloads/search`, opened
   from the wishlist row menu or the track detail page) covers what the auto-pick
   misses: the user's literal query goes to slskd once, the raw results come back
   unfiltered — low bitrate and weak name matches included — with the auto-pick's
   query variants offered as one-click suggestions, and the same ranking used only
   to order them and to mark the ones the auto-pick would have accepted. Picking a
-  file downloads it through the same one-at-a-time job. Alternatively, a per-track
-  SoundCloud download via yt-dlp. All of them link the file back to the existing
-  `Track` (`has_local_file`/`local_path`/`local_format`/`local_bitrate`); tagging
-  stays Organize's job. A file already on disk can also be linked by hand from the
-  track detail page.
+  file enqueues it on the same queue, single track or a batch. Alternatively, a
+  per-track SoundCloud download via yt-dlp. All of them link the file back to the
+  existing `Track` (`has_local_file`/`local_path`/`local_format`/`local_bitrate`);
+  tagging stays Organize's job. A file already on disk can also be linked by hand
+  from the track detail page.
 - **Playlists.** Import and sync from Spotify and SoundCloud (playlists, secret
   links, selective likes), plus manual playlists and a bulk "Sync all" background job
   (a failing playlist is reported and skipped, never fatal to the rest). Rename with
@@ -139,16 +146,20 @@ cleanup, and each was explicitly left alone this time.
   two `api_error()` implementations; the Organize one is a superset (an extra
   `headers` param used for thumbnail `Cache-Control`). Merging means adopting the
   superset inside `organize/`.
-- Five hand-rolled job state machines (`backend/app/services/audio_analysis_job.py`,
+- Four hand-rolled job state machines (`backend/app/services/audio_analysis_job.py`,
   `backend/app/services/streaming_import_job.py`,
-  `backend/app/services/soulseek_download_job.py`,
   `backend/app/services/mix_identify_job.py`, `backend/app/routers/sets.py`'s
   async-generate job) each with their own locking discipline, status-payload shape
   and start-guard semantics (three return the current state on a second start;
   `routers/sets.py` deliberately raises `409` instead, with a comment explaining
   why). A shared base class needs those three questions answered first; only the
   `_spawn()` helper has been factored out so far
-  (`backend/app/services/job_spawn.py`).
+  (`backend/app/services/job_spawn.py`). Soulseek/SoundCloud download used to be a
+  fifth (`soulseek_download_job.py`) but no longer fits the pattern at all: it
+  moved to a persistent queue with a parallel worker pool
+  (`backend/app/services/download_queue.py`, `download_dispatcher.py`,
+  `download_runner.py`) instead of a single-instance job, so it dropped out of
+  this list rather than needing the same merge decision.
 - The "load or 404" idiom is repeated roughly 40 times across
   `backend/app/routers/` (`playlists.py`, `tracks.py`, `sets.py`, `dj_sets.py`,
   `downloads.py`, `transitions.py`, `spotify.py`). The idiomatic fix
@@ -190,12 +201,15 @@ cleanup, and each was explicitly left alone this time.
 
 ### Product backlog
 
-- **Acquisition sub-projects B and C, then the auto-pick recall fix.** The integrated
+- **Acquisition sub-project C, then the auto-pick recall fix.** The integrated
   Soulseek search (spec `docs/superpowers/specs/2026-08-15-ricerca-soulseek-integrata-design.md`,
-  sub-project A) attacked the loudest symptom of "I'll just search Soulseek by hand";
-  the other three were scoped out of it on purpose and exist only inside that spec.
-  **(B) A real download queue** — today one job runs at a time and a second start is
-  refused, so picking files for several tracks means waiting between each.
+  sub-project A) attacked the loudest symptom of "I'll just search Soulseek by hand".
+  **Sub-project B, a persistent parallel download queue** (spec
+  `docs/superpowers/specs/2026-08-15-coda-download-design.md`) is done: see
+  "Acquisition & Wishlist" above and `docs/ARCHITECTURE.md`'s Acquisition section —
+  a worker pool replaced the old one-job-at-a-time model, with a `/downloads` page,
+  a `download_slots` setting and multi-select in the wishlist. One sub-project is
+  left, scoped out of sub-project A's spec on purpose and existing only inside it:
   **(C) A richer wishlist row with the attempt history** — the row carries only the
   last outcome (`last_download_outcome`/`last_download_reason`), so what has already
   been tried for a track, and with which query, is lost. **The auto-pick cascade's

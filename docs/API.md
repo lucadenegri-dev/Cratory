@@ -744,6 +744,12 @@ POST   /api/downloads/track/soundcloud
 GET    /api/downloads/review/{track_id}
 POST   /api/downloads/keep-review
 POST   /api/downloads/discard-review
+GET    /api/downloads/queue
+POST   /api/downloads/queue
+DELETE /api/downloads/queue/{item_id}
+POST   /api/downloads/queue/{item_id}/top
+POST   /api/downloads/queue/cancel-queued
+DELETE /api/downloads/queue/done
 ```
 
 File acquisition through the headless Soulseek daemon slskd, fully deterministic
@@ -759,14 +765,82 @@ below). Available regardless:
 `GET /status` (with `available: false`), `GET /pending`,
 `DELETE /pending/{track_id}`, `GET /auto-link` and the review endpoints.
 
-**One download job at a time**, shared by the five routes that start one —
-`playlist/{id}`, `track`, `track/auto`, `track/soundcloud`, `retry-pending` (a
-different set from the slskd-gated five above, which includes `search` — that one
-only queries — and excludes `track/soundcloud`). A second start is
-`409 download_already_running`. An error on one track does not stop the others.
-`GET /api/downloads/status` returns `available` plus the job state (`status`,
-`processed`, `total`, `downloaded`, `needs_review`, `not_found`, `failed`,
-`playlist_id`, `items[]`, `current_label`, `error`, timestamps).
+### The queue
+
+A persistent SQLite queue (`DownloadQueueItem`) replaced the old single
+in-memory job. All five routes that start a download — `playlist/{id}`,
+`track`, `track/auto`, `track/soundcloud`, `retry-pending` (a different set
+from the slskd-gated five above, which includes `search` — that one only
+queries — and excludes `track/soundcloud`) — enqueue instead of running
+inline and answer `200 {enqueued, skipped}`. **No endpoint answers
+`409 download_already_running` any more** — that response no longer exists.
+A pool of worker threads, `download_slots` wide (Settings, default 3,
+range 1–10, re-read on every fill so a change applies without a restart),
+pulls items off the queue and downloads them in parallel; an error on one
+item never blocks the others.
+
+An item's lifecycle is `queued → running → done`, or `cancelled` at any point
+before it finishes. A `done` item also carries an `outcome` — `downloaded`,
+`needs_review`, `not_found` or `failed`, the same vocabulary
+`Track.last_download_outcome` already used; a `cancelled` item has no
+outcome. Enqueuing deduplicates: a track that already has an active item
+(`queued` or `running`) is skipped, not duplicated, so re-clicking a download
+button or re-running `retry-pending` on an already-queued track never
+doubles the work. A track whose only item already finished (`done` or
+`cancelled`) can be enqueued again — that is how retrying works. A
+user-picked `candidate` (from `search`, or the batch `POST
+/api/downloads/queue` below) travels as the item's payload and tells the
+worker to skip both the search cascade and the auto-pick's duration guard.
+
+If slskd becomes unreachable mid-queue — refused connection, but also
+401/403 (a bad or rotated API key) and any 5xx — the item in flight is put
+back to `queued` untouched, with no outcome written, and a circuit breaker
+opens for 60 seconds: while it is open, items that need slskd are not
+claimed at all (an item with `kind="soundcloud"`, which never touches slskd,
+keeps running regardless). A background loop retries every 30 seconds so the
+queue reopens on its own once slskd comes back, with no gesture from the
+user required. On backend restart, any item still `running` — its worker is
+gone — is put back to `queued` rather than left stranded.
+
+`GET /api/downloads/status` keeps its historical response shape for the
+frontend's global bar, but its aggregates (`status`, `processed`, `total`,
+`downloaded`, `needs_review`, `not_found`, `failed`, `items[]`,
+`current_label`) now come from the queue, and describe only the current
+"round" — the items enqueued since the queue last had nothing active —
+tracked via a persisted marker, **not** the entire history ever enqueued
+(at rest the bar keeps showing the last finished round, not a reset to
+zero). `playlist_id` is always `null` now (the queue mixes items from
+different sources — there is no single "job's playlist" any more) and
+`error` is always `null` (a failure now belongs to an item and travels in
+that item's own `reason`, not to the job as a whole).
+
+`GET /api/downloads/queue` lists every non-purged item, oldest first by
+position, plus `{slots, active}` — `download_slots` and how many workers
+are currently busy. It powers the `/downloads` page.
+
+`POST /api/downloads/queue` is the general, batch-capable enqueue endpoint:
+body `{track_ids: [...], kind?, candidate?}`. `candidate` is only valid with
+exactly one `track_id` (`422 candidate_needs_one_track` otherwise) and
+forces `kind` to `soulseek_chosen`; without a candidate, `kind` defaults to
+`soulseek_auto` and also accepts `soundcloud`. Response `{enqueued,
+skipped}` — skipped covers both tracks deduplicated as above and
+`track_id`s that no longer exist.
+
+`DELETE /api/downloads/queue/{item_id}` cancels a `queued` or `running`
+item (`404 queue_item_not_found`, `409 queue_item_not_active` if it already
+finished). Cancelling a running item reaches into its transfer wait loop, so
+it does not have to wait out a slow peer to stop.
+
+`POST /api/downloads/queue/{item_id}/top` moves a still-`queued` item to the
+front of the line (`404 queue_item_not_found`,
+`409 queue_item_not_queued` if it is not waiting).
+
+`POST /api/downloads/queue/cancel-queued` cancels every `queued` item in one
+call. Response `{cancelled}`.
+
+`DELETE /api/downloads/queue/done` clears the `done` history — both
+successes and failures. `cancelled` items are left alone: an annulment is a
+recent, deliberate user action. Response `{removed}`.
 
 ### Starting a download
 
@@ -783,27 +857,37 @@ duration) plus `auto_ok`, true only for the results the auto-pick would have
 accepted — both of its bars, the confidence floor and the default
 `QualityPreference()` quality tier, not the relaxed one used to rank here; the
 response's `variants` list the same queries the auto-pick
-cascade would try, as clickable suggestions. Errors: `409 slskd_not_configured`,
+cascade would try, as clickable suggestions. This endpoint only searches — it
+never enqueues. Errors: `409 slskd_not_configured`,
 `404 track_not_found`, `502 slskd_error`.
 
-`POST /api/downloads/playlist/{playlist_id}` (`202`) runs the whole playlist: for
-each track without a local file it searches, auto-picks the best candidate above a
-confidence threshold, and downloads.
+The remaining four routes below all enqueue rather than running inline (see
+"The queue" above) and share its response shape, `200 {enqueued, skipped}`.
 
-`POST /api/downloads/track` (`202`) downloads one track with a candidate the user
-picked explicitly (body `track_id` + `candidate`, the same shape `candidates`
-returned).
+`POST /api/downloads/playlist/{playlist_id}` enqueues, in auto-pick, every
+track in the playlist without a local file.
 
-`POST /api/downloads/track/auto` (`202`) downloads one track with no candidate
-chosen — same search cascade and auto-pick as the playlist job. Body `{track_id}`.
+`POST /api/downloads/track` enqueues one track with a candidate the user
+picked explicitly (body `track_id` + `candidate`, the same shape `search`'s
+results have) — `kind="soulseek_chosen"`, which skips the auto-pick's
+duration guard. The frontend's Soulseek search modal now posts the same
+candidate through the batch `POST /api/downloads/queue` instead (above);
+this single-track route is unchanged and still covered by its own tests, but
+no longer has an in-app caller.
 
-`POST /api/downloads/track/soundcloud` (`202`) is the non-Soulseek exception: it
-downloads a single SoundCloud track's audio through yt-dlp, extracts it to MP3 into
-the same `SLSKD_DOWNLOAD_DIR`, and links it to the `Track`. It reuses the same job
-and progress bar. The track must have `platform == "soundcloud"` and a `url`
-(`422 not_a_soundcloud_track`). Errors: `409 ytdlp_unavailable`,
-`409 ffmpeg_unavailable`, `409 download_dir_not_configured`,
-`409 download_already_running`, `404 track_not_found`.
+`POST /api/downloads/track/auto` enqueues one track with no candidate
+chosen — same search cascade and auto-pick as the playlist route. Body
+`{track_id}`.
+
+`POST /api/downloads/track/soundcloud` is the non-Soulseek exception: it
+enqueues an item that downloads a single SoundCloud track's audio through
+yt-dlp, extracts it to MP3 into the same `SLSKD_DOWNLOAD_DIR`, and links it
+to the `Track`. It shares the same queue and worker pool — `kind="soundcloud"`
+is the one item kind that does not depend on slskd, so it keeps running even
+while the slskd circuit breaker is open. The track must have
+`platform == "soundcloud"` and a `url` (`422 not_a_soundcloud_track`).
+Errors: `409 ytdlp_unavailable`, `409 ffmpeg_unavailable`,
+`409 download_dir_not_configured`, `404 track_not_found`.
 
 ### The "to sort out" queue
 
@@ -1024,6 +1108,7 @@ PUT   /api/settings/language
 GET   /api/settings/config
 PATCH /api/settings/config
 PUT   /api/settings/share-library
+PUT   /api/settings/download-slots
 ```
 
 `GET /api/services/status` is the single aggregate state of **all** external
@@ -1055,7 +1140,8 @@ are read through a cache in `core/runtime_settings`.
 `library_root`, `archive_root`, `slskd_download_dir`, `slskd_url` and
 `slskd_config_path`, each as `{value, source: "env"|"db", valid, detail}` — `source`
 tells you whether the effective value is a DB override or the `.env` default. Plus
-`share_library` (bool) and `warning` (a soft note). Overrides live in `AppState`
+`share_library` (bool), `download_slots` (int, already clamped to 1–10 — see
+below) and `warning` (a soft note). Overrides live in `AppState`
 under `cfg.*`; read sites call `runtime_settings.<field>()`, so a change takes
 effect on the next scan, slskd client or file search.
 
@@ -1075,6 +1161,16 @@ permissions, with a `.bak` backup — and forces a rescan. Response
 `{share_library, applied_to_yaml, rescan}`, with `rescan: false` when the daemon is
 down (the share then applies at its next start). `409 share_precondition` when the
 slskd config is missing or not writable, or when enabling without a `library_root`.
+
+`PUT /api/settings/download-slots` `{"slots": int}` sets how many downloads the
+queue's worker pool runs at once (default 3). The setter rejects an
+out-of-range value outright — `422 invalid_setting` (`params.field: "slots"`)
+outside 1–10 — since the user just typed a specific number; the getter
+(`download_slots` in `GET /api/settings/config`, and `slots` in
+`GET /api/downloads/queue`) instead clamps a stored value into range rather
+than raising, so a stray bad value already in the DB can never wedge the
+pool. Response `{download_slots}`. Takes effect immediately, no restart: the
+dispatcher re-reads it on every pass at filling its slots.
 
 ## Organize
 

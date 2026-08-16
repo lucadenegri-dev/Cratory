@@ -32,7 +32,13 @@ described in `CLAUDE.md`.
   SoundCloud/yt-dlp download links a file back to the existing track. A per-track
   manual Soulseek search (raw slskd results, no variant cascade, no confidence
   filter) lives in a single modal reachable from the wishlist row and the track
-  detail page, replacing the old review-only modal.
+  detail page, replacing the old review-only modal. Acquisition runs on a
+  persistent SQLite queue, not a single in-memory job: a worker pool
+  (`download_slots`, default 3, adjustable in Settings) downloads several tracks
+  at once, a circuit breaker pauses and later resumes slskd-dependent work on its
+  own if the daemon goes unreachable, and the queue survives a backend restart. Its
+  own page, `/downloads`, replaces the redirect that used to send that route back
+  to the wishlist; the wishlist itself gained multi-select for batch downloads.
 
 Settings are unified across sections: one external-services endpoint, one AI key
 (`ANTHROPIC_API_KEY`), a single `/settings` page.
