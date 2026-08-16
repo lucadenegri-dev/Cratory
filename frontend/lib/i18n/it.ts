@@ -419,6 +419,7 @@ export const it: Dictionary = {
     runningHeading: "In corso",
     waitingHeading: "In attesa",
     doneHeading: "Fatte",
+    cancelledHeading: "Annullate",
     emptyTitle: "Coda vuota",
     emptyBody: "Accoda tracce dalla wishlist: le trovi qui mentre scendono.",
     phaseSearching: "cerco su Soulseek…",

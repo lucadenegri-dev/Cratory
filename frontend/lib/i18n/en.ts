@@ -420,6 +420,7 @@ export const en = {
     runningHeading: "Running",
     waitingHeading: "Waiting",
     doneHeading: "Done",
+    cancelledHeading: "Cancelled",
     emptyTitle: "Queue empty",
     emptyBody: "Queue tracks from the wishlist: you'll see them here as they come down.",
     phaseSearching: "searching Soulseek…",

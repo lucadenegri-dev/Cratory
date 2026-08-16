@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import DownloadsPage from "@/app/downloads/page";
 import type { QueueItem } from "@/lib/api";
 
@@ -66,5 +66,44 @@ describe("pagina /downloads", () => {
     mocks.downloadQueue.mockResolvedValue({ slots: 3, active: 0, items: [] });
     render(<DownloadsPage />);
     expect(await screen.findByText("Coda vuota")).toBeTruthy();
+  });
+
+  it("la barra di avanzamento e' esposta come progressbar con i valori ARIA", async () => {
+    render(<DownloadsPage />);
+    await screen.findByText("Aphex Twin — Xtal");
+    const bar = screen.getByRole("progressbar");
+    expect(bar.getAttribute("aria-valuenow")).toBe("50");
+    expect(bar.getAttribute("aria-valuemin")).toBe("0");
+    expect(bar.getAttribute("aria-valuemax")).toBe("100");
+  });
+
+  it("ricarica la coda anche quando l'azione fallisce", async () => {
+    mocks.cancelQueueItem.mockRejectedValue(new Error("Conflitto: gia' concluso"));
+    render(<DownloadsPage />);
+    await screen.findByText("B — Due");
+    fireEvent.click(screen.getAllByText("Annulla")[0]);
+    await waitFor(() => expect(mocks.cancelQueueItem).toHaveBeenCalledWith(1));
+    // Un giro in piu' oltre al caricamento iniziale: la coda va ricaricata
+    // anche se l'azione e' fallita, non solo sul successo.
+    await waitFor(() => expect(mocks.downloadQueue).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Conflitto: gia' concluso/)).toBeTruthy();
+  });
+
+  it("«Svuota lo storico» non fa sparire gli item annullati, mostrati a parte", async () => {
+    mocks.downloadQueue.mockResolvedValue({ slots: 3, active: 0, items: [
+      item({ id: 3, state: "done", outcome: "downloaded", label: "C — Tre", position: 0 }),
+      item({ id: 4, state: "cancelled", label: "D — Quattro", position: 1 }),
+    ] });
+    mocks.clearQueueDone.mockResolvedValue({ removed: 1 });
+    render(<DownloadsPage />);
+    await screen.findByText("D — Quattro");
+    fireEvent.click(screen.getByText("Svuota lo storico"));
+    await waitFor(() => expect(mocks.clearQueueDone).toHaveBeenCalled());
+    // L'annullato resta visibile, e vive in una fascia a parte dalla "Fatte"
+    // svuotabile: il bottone non deve trovarsi nella stessa sezione.
+    expect(await screen.findByText("D — Quattro")).toBeTruthy();
+    const cancelledSection = screen.getByText("Annullate").closest("section");
+    expect(cancelledSection).not.toBeNull();
+    expect(within(cancelledSection as HTMLElement).queryByText("Svuota lo storico")).toBeNull();
   });
 });

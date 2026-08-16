@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Download as DownloadIcon, X } from "lucide-react";
 import { PageLayout } from "@/components/page-layout";
-import { Alert, Badge, Button, Card, EmptyState, Loading } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, EqMeter, Loading } from "@/components/ui";
 import {
   cancelQueueItem, cancelQueued, clearQueueDone, downloadQueue, errText,
   moveQueueItemTop, type QueueItem, type QueueSnapshot,
@@ -37,11 +37,7 @@ function QueueRow({ item, t, busy, onTop, onCancel }: {
         <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
           {item.phase === "searching" && <span>{t.queue.phaseSearching}</span>}
           {item.phase === "downloading" && <span>{t.queue.phaseDownloading}</span>}
-          {pct !== null && (
-            <span className="inline-block h-1 w-24 bg-border" aria-hidden="true">
-              <span className="block h-full bg-fg" style={{ width: `${pct}%` }} />
-            </span>
-          )}
+          {pct !== null && <EqMeter value={pct} className="h-1.5 w-24" />}
           {item.attempts > 1 && <span>{t.queue.attemptsLabel(item.attempts)}</span>}
           {item.error && <span className="truncate">{item.error}</span>}
         </div>
@@ -140,14 +136,29 @@ export default function DownloadsPage() {
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
-    try { await fn(); await load(); } catch (e) { setError(errText(e)); }
-    finally { if (alive.current) setBusy(false); }
+    let actionError: string | null = null;
+    try { await fn(); } catch (e) { actionError = errText(e); }
+    // La coda va ricaricata anche quando l'azione fallisce (es. 409 perche'
+    // l'item e' gia' stato concluso nel frattempo): altrimenti resta a
+    // schermo uno stato superato accanto al messaggio d'errore. load()
+    // azzera error in caso di successo, quindi lo riapplichiamo dopo se
+    // l'azione e' effettivamente fallita.
+    await load();
+    if (actionError && alive.current) setError(actionError);
+    if (alive.current) setBusy(false);
   };
 
   const items = snap?.items ?? [];
   const running = items.filter((i) => i.state === "running");
   const waiting = items.filter((i) => i.state === "queued");
-  const history = items.filter((i) => i.state === "done" || i.state === "cancelled");
+  // Sezioni separate, non un'unica fascia "Fatte": lo storico dei conclusi
+  // e quello degli annullati vivono su endpoint diversi (svuota-storico
+  // rimuove solo i "done", per design — un annullo resta a schermo finche'
+  // l'utente non lo tocca), quindi devono anche essere due liste distinte —
+  // altrimenti il bottone "Svuota lo storico" lascerebbe a schermo roba
+  // che sembrava dover sparire.
+  const done = items.filter((i) => i.state === "done");
+  const cancelled = items.filter((i) => i.state === "cancelled");
 
   const onTop = (id: number) => act(() => moveQueueItemTop(id));
   const onCancel = (id: number) => act(() => cancelQueueItem(id));
@@ -173,7 +184,7 @@ export default function DownloadsPage() {
               {t.queue.cancelAllButton}
             </Button>
           } />
-        <QueueSection heading={t.queue.doneHeading} rows={history} t={t} busy={busy}
+        <QueueSection heading={t.queue.doneHeading} rows={done} t={t} busy={busy}
           onTop={onTop} onCancel={onCancel}
           action={
             <Button size="sm" variant="outline" disabled={busy}
@@ -181,6 +192,8 @@ export default function DownloadsPage() {
               {t.queue.clearDoneButton}
             </Button>
           } />
+        <QueueSection heading={t.queue.cancelledHeading} rows={cancelled} t={t} busy={busy}
+          onTop={onTop} onCancel={onCancel} />
       </div>
     </PageLayout>
   );
