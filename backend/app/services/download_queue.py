@@ -6,12 +6,24 @@ scaricare) così si testa in memoria, senza slskd e senza aspettare.
 from __future__ import annotations
 
 import json
+import threading
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.models import DownloadQueueItem, Track
 
 ACTIVE_STATES = ("queued", "running")
+
+# La rivendicazione e' serializzata in-processo: l'app gira in un solo uvicorn,
+# quindi un lock qui basta. L'UPDATE resta comunque condizionato a
+# state='queued' come seconda cintura: con due processi il perdente si
+# accorgerebbe di aver perso la gara invece di scaricare la stessa traccia.
+_claim_lock = threading.Lock()
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def list_items(db: Session) -> list[DownloadQueueItem]:
@@ -67,3 +79,111 @@ def enqueue(db: Session, track_ids: list[int], kind: str = "soulseek_auto",
         added += 1
     db.commit()
     return added, skipped
+
+
+def claim_next(db: Session) -> DownloadQueueItem | None:
+    """Prende il primo item in attesa e lo marca `running`. None se non c'e'
+    lavoro o se un altro worker ha vinto la gara."""
+    with _claim_lock:
+        candidate = (db.query(DownloadQueueItem)
+                     .filter(DownloadQueueItem.state == "queued")
+                     .order_by(DownloadQueueItem.position, DownloadQueueItem.id)
+                     .first())
+        if candidate is None:
+            return None
+        updated = (db.query(DownloadQueueItem)
+                   .filter(DownloadQueueItem.id == candidate.id,
+                           DownloadQueueItem.state == "queued")
+                   .update({"state": "running", "started_at": _now(),
+                            "attempts": DownloadQueueItem.attempts + 1},
+                           synchronize_session=False))
+        db.commit()
+        if updated != 1:
+            return None
+        db.refresh(candidate)
+        return candidate
+
+
+def finish(db: Session, item_id: int, outcome: str, error: str | None = None) -> None:
+    item = db.get(DownloadQueueItem, item_id)
+    if item is None:
+        return
+    item.state = "done"
+    item.outcome = outcome
+    item.error = error
+    item.phase = None
+    item.finished_at = _now()
+    db.commit()
+
+
+def cancel(db: Session, item_id: int) -> bool:
+    """Annulla un item in attesa o in corso. False se e' gia' concluso."""
+    updated = (db.query(DownloadQueueItem)
+               .filter(DownloadQueueItem.id == item_id,
+                       DownloadQueueItem.state.in_(ACTIVE_STATES))
+               .update({"state": "cancelled", "finished_at": _now(), "phase": None},
+                       synchronize_session=False))
+    db.commit()
+    return updated == 1
+
+
+def cancel_all_queued(db: Session) -> int:
+    updated = (db.query(DownloadQueueItem)
+               .filter(DownloadQueueItem.state == "queued")
+               .update({"state": "cancelled", "finished_at": _now()},
+                       synchronize_session=False))
+    db.commit()
+    return updated
+
+
+def move_to_top(db: Session, item_id: int) -> bool:
+    item = db.get(DownloadQueueItem, item_id)
+    if item is None or item.state != "queued":
+        return False
+    first = (db.query(DownloadQueueItem)
+             .order_by(DownloadQueueItem.position).first())
+    item.position = (first.position - 1) if first else 0
+    db.commit()
+    return True
+
+
+def clear_done(db: Session) -> int:
+    """Svuota lo storico delle concluse con successo o meno (`done`).
+    Gli annullati restano: sono un gesto recente dell'utente."""
+    removed = (db.query(DownloadQueueItem)
+               .filter(DownloadQueueItem.state == "done")
+               .delete(synchronize_session=False))
+    db.commit()
+    return removed
+
+
+def requeue_stale(db: Session) -> int:
+    """All'avvio: gli item rimasti `running` non hanno piu' un worker vivo."""
+    updated = (db.query(DownloadQueueItem)
+               .filter(DownloadQueueItem.state == "running")
+               .update({"state": "queued", "started_at": None, "phase": None,
+                        "bytes_done": None, "bytes_total": None},
+                       synchronize_session=False))
+    db.commit()
+    return updated
+
+
+def set_progress(db: Session, item_id: int, phase: str | None,
+                 bytes_done: int | None = None,
+                 bytes_total: int | None = None) -> None:
+    item = db.get(DownloadQueueItem, item_id)
+    if item is None:
+        return
+    item.phase = phase
+    item.bytes_done = bytes_done
+    item.bytes_total = bytes_total
+    db.commit()
+
+
+def is_cancelled(db: Session, item_id: int) -> bool:
+    """Letto dal worker fra una fase e l'altra: l'annullo arriva da un'altra
+    sessione, quindi si interroga il DB e non l'oggetto in memoria."""
+    db.expire_all()
+    state = (db.query(DownloadQueueItem.state)
+             .filter(DownloadQueueItem.id == item_id).scalar())
+    return state == "cancelled"
