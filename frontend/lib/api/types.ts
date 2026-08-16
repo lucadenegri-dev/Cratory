@@ -754,3 +754,25 @@ export interface RekordboxImportReport {
   key_set: number;
   energy_set: number;
 }
+
+// --- Coda di acquisizione (/api/downloads/queue) ---------------------------
+
+export type QueueItemState = "queued" | "running" | "done" | "cancelled";
+export type QueueItemOutcome = "downloaded" | "needs_review" | "not_found" | "failed";
+
+export type QueueItem = {
+  id: number;
+  track_id: number;
+  label: string;
+  kind: "soulseek_auto" | "soulseek_chosen" | "soundcloud";
+  state: QueueItemState;
+  outcome: QueueItemOutcome | null;
+  phase: "searching" | "downloading" | null;
+  bytes_done: number | null;
+  bytes_total: number | null;
+  attempts: number;
+  error: string | null;
+  position: number;
+};
+
+export type QueueSnapshot = { slots: number; active: number; items: QueueItem[] };

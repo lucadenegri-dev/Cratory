@@ -8,6 +8,7 @@ export * from "./api/playlists";
 export * from "./api/sets";
 export * from "./api/discovery";
 export * from "./api/downloads";
+export * from "./api/download-queue";
 export * from "./api/shazam";
 export * from "./api/analysis";
 export * from "./api/misc";
