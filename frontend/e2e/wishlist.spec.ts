@@ -1,18 +1,15 @@
 import { test, expect } from "@playwright/test";
 
 // Wishlist (spec 2026-07-19): pagina delle tracce non possedute. Con DB vuoto
-// verifichiamo montaggio, tab di stato e redirect dalla vecchia rotta.
+// verifichiamo montaggio e tab di stato. /downloads non redirige piu' a
+// /wishlist: dalla coda persistente (B) e' la pagina della coda dei download,
+// vedi e2e/downloads-queue.spec.ts.
 
 test("monta con empty state e tab di stato", async ({ page }) => {
   await page.goto("/wishlist");
   await expect(page.getByRole("heading", { name: "Wishlist" })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Tutte/ })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Mai tentate/ })).toBeVisible();
-});
-
-test("/downloads reindirizza a /wishlist", async ({ page }) => {
-  await page.goto("/downloads");
-  await expect(page).toHaveURL(/\/wishlist$/);
 });
 
 // Percorso felice della ricerca Soulseek integrata (Task 6). La e2e avvia il
@@ -47,9 +44,10 @@ test("ricerca Soulseek integrata: apri dal menu riga, cerca, scarica", async ({ 
       upload_speed: null, score: 120, confidence: 0.9, auto_ok: true,
     }] } }));
   const downloadCalls: unknown[] = [];
-  await page.route("**/api/downloads/track", async (route) => {
+  await page.route("**/api/downloads/queue", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
     downloadCalls.push(route.request().postDataJSON());
-    await route.fulfill({ status: 202, json: { available: true, status: "running" } });
+    await route.fulfill({ json: { enqueued: 1, skipped: 0 } });
   });
 
   await page.goto("/wishlist");
@@ -58,6 +56,6 @@ test("ricerca Soulseek integrata: apri dal menu riga, cerca, scarica", async ({ 
   await expect(page.getByText("Xtal.flac")).toBeVisible();
   await page.getByText("Scarica questo").click();
   await expect.poll(() => downloadCalls.length).toBe(1);
-  expect(downloadCalls[0]).toMatchObject({ track_id: 1,
+  expect(downloadCalls[0]).toMatchObject({ track_ids: [1],
     candidate: { username: "user1", filename: "Music\\Aphex Twin\\Xtal.flac" } });
 });
