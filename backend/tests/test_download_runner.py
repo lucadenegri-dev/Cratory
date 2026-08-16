@@ -248,6 +248,87 @@ def test_soundcloud_dichiara_la_fase_di_download(factory, monkeypatch):
     assert ("downloading", None, None) in scritte
 
 
+# --- Risoluzione del file scaricato -----------------------------------------
+#
+# Con un download alla volta bastava il basename; con tre worker sulla stessa
+# cartella condivisa il piu' recente e' spesso di un altro, e agganciare il file
+# sbagliato non e' cosmetico: `attach_local_file` puo' fondere due tracce
+# distinte cancellandone una.
+
+
+def _scrivi(root, rel: str, *, mtime: float | None = None):
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"x")
+    if mtime is not None:
+        import os
+        os.utime(p, (mtime, mtime))
+    return p
+
+
+def test_resolve_preferisce_il_percorso_remoto_al_file_piu_recente(tmp_path):
+    """Due worker, stesso basename: quello dell'altro e' piu' recente, ma il
+    percorso remoto del candidato dice quale e' il proprio."""
+    mio = _scrivi(tmp_path, "bob/Album X/A1.flac", mtime=1000)
+    _scrivi(tmp_path, "alice/Album Y/A1.flac", mtime=9000)  # piu' recente, di un altro
+    got = runner._resolve_local_path(str(tmp_path), "bob\\Album X\\A1.flac")
+    assert got == str(mio.resolve())
+
+
+def test_resolve_ignora_maiuscole_nel_percorso(tmp_path):
+    """I peer Soulseek sono spesso Windows: il confronto non puo' essere
+    sensibile alle maiuscole."""
+    mio = _scrivi(tmp_path, "bob/album x/A1.flac", mtime=1000)
+    _scrivi(tmp_path, "alice/Album Y/A1.flac", mtime=9000)
+    got = runner._resolve_local_path(str(tmp_path), "bob\\Album X\\A1.flac")
+    assert got == str(mio.resolve())
+
+
+def test_resolve_preferisce_il_file_comparso_dopo_l_inizio(tmp_path):
+    """Quando il percorso non distingue (slskd appiattisce la cartella), a
+    parita' di tutto vince il file comparso durante questo lavoro."""
+    _scrivi(tmp_path, "vecchio/A1.flac", mtime=1000)
+    nuovo = _scrivi(tmp_path, "nuovo/A1.flac", mtime=5000)
+    got = runner._resolve_local_path(str(tmp_path), "bob\\A1.flac", started_at=4000)
+    assert got == str(nuovo.resolve())
+
+
+def test_resolve_non_dichiara_mancante_un_file_troppo_vecchio(tmp_path):
+    """L'ora d'inizio e' una preferenza, non un filtro: se slskd conservasse
+    l'mtime del peer, filtrare darebbe "file_missing" su un file che c'e'."""
+    unico = _scrivi(tmp_path, "bob/A1.flac", mtime=1000)
+    got = runner._resolve_local_path(str(tmp_path), "bob\\A1.flac", started_at=9999)
+    assert got == str(unico.resolve())
+
+
+def test_resolve_senza_corrispondenze_resta_none(tmp_path):
+    assert runner._resolve_local_path(str(tmp_path), "bob\\assente.flac") is None
+
+
+def test_download_candidate_non_aggancia_il_file_di_un_altro_worker(tmp_path, monkeypatch):
+    """Il giro intero: il candidato porta con se' il proprio percorso remoto,
+    e il file agganciato e' il suo anche se un altro worker ne ha appena
+    depositato uno omonimo."""
+    from app.integrations.slskd import SlskdFile
+
+    monkeypatch.setattr(runner, "POLL_INTERVAL", 0.0)
+    mio = _scrivi(tmp_path, "bob/Album X/01 Intro.mp3", mtime=1000)
+    _scrivi(tmp_path, "alice/Album Y/01 Intro.mp3", mtime=9000)
+
+    class _Client:
+        def enqueue_download(self, file):
+            pass
+
+        def transfer_state(self, username, filename):
+            return {"id": "t1", "state": "Completed, Succeeded"}
+
+    file = SlskdFile(username="bob", filename="bob\\Album X\\01 Intro.mp3", size=1,
+                     bitrate=None, length=None, has_free_slot=True, queue_length=0)
+    path, reason = runner._download_candidate(_Client(), str(tmp_path), file)
+    assert reason is None
+    assert path == str(mio.resolve())
+
+
 def test_wait_for_download_si_arrende_se_l_item_viene_annullato(monkeypatch):
     """Il ciclo di attesa del transfer interroga `should_cancel` a ogni giro:
     senza questo, annullare una traccia in corso non avrebbe effetto fino alla

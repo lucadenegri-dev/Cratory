@@ -204,17 +204,60 @@ MAX_ATTEMPTS = 4               # quanti candidati (utenti diversi) provare per t
 SEARCH_MAX_WAIT = 15.0         # il job e' in background: attesa piena per variante, non il budget ridotto di /candidates
 
 
-def _resolve_local_path(download_dir: str, filename: str) -> str | None:
-    base = Path(filename.replace("\\", "/")).name
+def _coda_condivisa(locale: Path, remoto: tuple[str, ...]) -> int:
+    """Quanti componenti finali di percorso hanno in comune il file su disco e
+    il percorso remoto del candidato. Confronto senza maiuscole/minuscole: i
+    peer Soulseek sono spesso Windows."""
+    parti_locali = [p.lower() for p in locale.parts]
+    parti_remote = [p.lower() for p in remoto]
+    condivisi = 0
+    for a, b in zip(reversed(parti_locali), reversed(parti_remote)):
+        if a != b:
+            break
+        condivisi += 1
+    return condivisi
+
+
+def _resolve_local_path(download_dir: str, filename: str,
+                        started_at: float | None = None) -> str | None:
+    """Trova su disco il file appena scaricato per un candidato.
+
+    Cercare il solo basename e prendere il piu' recente era accettabile con un
+    download alla volta. Con tre worker in parallelo sulla stessa cartella
+    condivisa il piu' recente e' spesso di qualcun altro, e i nomi che
+    collidono sono ordinari nei rip da vinile (`A1.flac`, `01 Intro.mp3`): si
+    aggancia il file sbagliato, e `attach_local_file` puo' fondere due tracce
+    distinte cancellandone una.
+
+    Si sceglie quindi guardando, in ordine: quanti componenti finali di
+    percorso il file condivide col percorso remoto del candidato (`bob\\Album
+    X\\A1.flac` distingue il proprio `A1.flac` da quello di un altro album
+    scaricato nello stesso momento), se e' comparso dopo l'inizio di questo
+    lavoro, e infine l'mtime come prima.
+
+    L'ora d'inizio e' un criterio di preferenza, non un filtro: se slskd
+    conservasse l'mtime del peer o l'orologio fosse storto, filtrare darebbe un
+    "file_missing" su un file che invece c'e'.
+    """
+    parti_remote = tuple(Path(filename.replace("\\", "/")).parts)
+    base = parti_remote[-1] if parti_remote else ""
     root = Path(download_dir)
-    if not root.exists():
+    if not base or not root.exists():
         return None
     matches = [p for p in root.rglob(base) if p.is_file()]
     if not matches:
         return None
+
+    def chiave(p: Path) -> tuple:
+        mtime = p.stat().st_mtime
+        recente = started_at is None or mtime >= started_at
+        return (_coda_condivisa(p, parti_remote), recente, mtime)
+
+    scelto = max(matches, key=chiave)
     if len(matches) > 1:
-        logger.warning("Più file con basename %r in %s: scelgo il più recente", base, download_dir)
-    return str(max(matches, key=lambda p: p.stat().st_mtime).resolve())
+        logger.warning("Più file con basename %r in %s: scelgo %s (percorso remoto %r)",
+                       base, download_dir, scelto, filename)
+    return str(scelto.resolve())
 
 
 def _cancel_abandoned_transfer(client, username: str, info: dict) -> None:
@@ -308,6 +351,10 @@ def _download_candidate(client, download_dir, file: SlskdFile,
 
     Ritorna (path, motivo): (path, None) se ok, (None, <code>) se fallisce.
     """
+    # Segnato prima dell'accodamento: serve a `_resolve_local_path` per
+    # preferire un file comparso durante QUESTO tentativo a uno che era gia' li'
+    # (magari di un altro worker, con lo stesso nome).
+    inizio = time.time()
     try:
         client.enqueue_download(file)
     except Exception as exc:  # noqa: BLE001 — un candidato che non parte non ferma il fallback
@@ -330,7 +377,7 @@ def _download_candidate(client, download_dir, file: SlskdFile,
                                          on_progress=on_progress)
     if outcome != "completed":
         return None, reason
-    path = _resolve_local_path(download_dir, file.filename)
+    path = _resolve_local_path(download_dir, file.filename, started_at=inizio)
     if not path:
         return None, "file_missing"
     return path, None
