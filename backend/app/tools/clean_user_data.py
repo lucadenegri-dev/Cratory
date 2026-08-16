@@ -24,6 +24,14 @@ from app.db import engine, ensure_schema
 DATA_TABLES = ("setlist_tracks", "setlists", "download_queue_items",
                "playlist_tracks", "tracks", "playlists")
 TOKEN_TABLES = ("spotify_tokens",)
+# Il quarto figlio di `tracks` e' `audio_file`, ma quella e' una tabella di
+# Organize (fuori perimetro: questo strumento pulisce solo i dati utente del
+# lato Cratory) e la sua riga rappresenta un file letto dal disco, non un dato
+# da buttare. Va solo sganciata (`track_id = NULL`, stessa politica di
+# `repositories.detach_track_dependencies`) prima della `DELETE FROM tracks`,
+# altrimenti la produzione (foreign key accese) va in IntegrityError su
+# qualunque libreria che Organize abbia gia' scansionato — lo stato normale.
+UNLINK_COLUMNS = {"audio_file": "track_id"}
 
 
 def _sqlite_path() -> Path:
@@ -62,6 +70,8 @@ def clean(mode: str, *, preserve_tokens: bool, include_backups: bool, dry_run: b
     with engine.begin() as conn:
         before = _counts(conn, DATA_TABLES + TOKEN_TABLES)
         if not dry_run:
+            for table, column in UNLINK_COLUMNS.items():
+                conn.execute(text(f"UPDATE {table} SET {column} = NULL"))
             for table in tables:
                 conn.execute(text(f"DELETE FROM {table}"))
     if not dry_run:

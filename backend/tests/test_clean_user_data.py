@@ -16,6 +16,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import Base
 from app.models import DownloadQueueItem, Playlist, Track, playlist_tracks
+from app.organize.models import AudioFile, ScanRoot
 from app.tools import clean_user_data
 
 
@@ -44,13 +45,22 @@ def _semina(db):
     db.execute(playlist_tracks.insert().values(playlist_id=pl.id, track_id=t.id))
     db.add(DownloadQueueItem(track_id=t.id, kind="soulseek_auto", state="done",
                              outcome="downloaded", position=0))
+    # Il quarto figlio di `tracks`: Organize aggancia i file scansionati alla
+    # traccia via `audio_file.track_id`. E' lo stato normale di un'installazione
+    # (`organize/services/file_link.py` lo popola), quindi va seminato anche qui.
+    root = ScanRoot(path="/lib")
+    db.add(root)
+    db.flush()
+    db.add(AudioFile(root_id=root.id, track_id=t.id, path="/lib/t.mp3", ext="mp3",
+                     size_bytes=1, hash_method="sha1"))
     db.commit()
     return t, pl
 
 
 def test_pulizia_libreria_svuota_anche_i_figli_di_tracks(db_su_file):
-    """Con una membership playlist e uno storico di coda addosso, la pulizia
-    deve completare e lasciare il database vuoto."""
+    """Con una membership playlist, uno storico di coda e un file Organize
+    agganciato, la pulizia deve completare e lasciare il database vuoto —
+    tranne `audio_file`, che non e' dato Cratory: va solo sganciato."""
     _semina(db_su_file)
 
     report = clean_user_data.clean("library", preserve_tokens=True,
@@ -60,6 +70,11 @@ def test_pulizia_libreria_svuota_anche_i_figli_di_tracks(db_su_file):
     for tabella in ("tracks", "playlists", "playlist_tracks", "download_queue_items"):
         resto = db_su_file.execute(text(f"SELECT COUNT(*) FROM {tabella}")).scalar_one()
         assert resto == 0, f"{tabella} non e' stata svuotata"
+    # audio_file resta (fuori perimetro di questo strumento) ma sganciata.
+    assert db_su_file.execute(
+        text("SELECT COUNT(*) FROM audio_file")).scalar_one() == 1
+    assert db_su_file.execute(
+        text("SELECT track_id FROM audio_file")).scalar_one() is None
 
 
 def test_dry_run_non_cancella_nulla(db_su_file):
