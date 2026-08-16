@@ -9,7 +9,7 @@ export function EditorialShell({ children }: { children: ReactNode }) {
         <aside className="border-b border-border lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:border-b-0 lg:border-r">
           <IndexNav />
         </aside>
-        <main className="min-w-0">{children}</main>
+        <main className="min-w-0" style={{ paddingBottom: "var(--player-bar-height, 0px)" }}>{children}</main>
       </div>
     </JobsProvider>
   );
