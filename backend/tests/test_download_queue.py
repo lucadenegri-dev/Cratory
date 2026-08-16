@@ -62,11 +62,28 @@ def test_enqueue_riaccoda_una_traccia_gia_finita():
     db = _db()
     t = _tracks(db, 1)[0]
     q.enqueue(db, [t.id])
+    vecchio = q.list_items(db)[0]
     db.query(DownloadQueueItem).update({"state": "done", "outcome": "not_found"})
     db.commit()
     added, skipped = q.enqueue(db, [t.id])
     assert (added, skipped) == (1, 0)
-    assert len(q.list_items(db)) == 2
+    items = q.list_items(db)
+    assert len(items) == 2
+    # la position del nuovo item deve superare quella dell'item concluso: se
+    # _next_position() calcolasse il massimo sui soli item attivi, una coda
+    # di soli item conclusi darebbe position=0, in collisione silenziosa.
+    nuovo = next(i for i in items if i.id != vecchio.id)
+    assert nuovo.position > vecchio.position
+
+
+def test_enqueue_stesso_id_due_volte_nello_stesso_lotto():
+    # id duplicato nello stesso lotto: va accodato una volta sola, l'altra
+    # va contata fra i saltati (non un'eccezione, non un doppio insert).
+    db = _db()
+    t = _tracks(db, 1)[0]
+    added, skipped = q.enqueue(db, [t.id, t.id])
+    assert (added, skipped) == (1, 1)
+    assert len(q.list_items(db)) == 1
 
 
 def test_enqueue_conserva_kind_e_payload():

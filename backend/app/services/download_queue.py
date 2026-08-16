@@ -38,16 +38,29 @@ def enqueue(db: Session, track_ids: list[int], kind: str = "soulseek_auto",
     added = skipped = 0
     position = _next_position(db)
     encoded = json.dumps(payload) if payload else None
+
+    # Due query in blocco al posto di due per traccia: un lotto di 300 non
+    # deve fare ~600 round-trip. Gli esiti restano identici, calcolati poi
+    # in memoria sul lotto.
+    existing_ids = set()
+    busy_ids = set()
+    if track_ids:
+        existing_ids = {row[0] for row in
+                         db.query(Track.id).filter(Track.id.in_(track_ids)).all()}
+        busy_ids = {row[0] for row in
+                    db.query(DownloadQueueItem.track_id)
+                    .filter(DownloadQueueItem.track_id.in_(track_ids),
+                            DownloadQueueItem.state.in_(ACTIVE_STATES)).all()}
+
+    seen_in_batch: set[int] = set()
     for track_id in track_ids:
-        if db.get(Track, track_id) is None:
+        if track_id not in existing_ids:
             skipped += 1
             continue
-        busy = (db.query(DownloadQueueItem.id)
-                .filter(DownloadQueueItem.track_id == track_id,
-                        DownloadQueueItem.state.in_(ACTIVE_STATES)).first())
-        if busy:
+        if track_id in busy_ids or track_id in seen_in_batch:
             skipped += 1
             continue
+        seen_in_batch.add(track_id)
         db.add(DownloadQueueItem(track_id=track_id, kind=kind, payload=encoded,
                                  state="queued", position=position))
         position += 1
