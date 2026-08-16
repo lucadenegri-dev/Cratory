@@ -6,8 +6,10 @@ import { useT } from "@/lib/i18n";
 import type { BpmBin } from "@/lib/api";
 
 /** Istogramma monocromatico interattivo: passando il mouse evidenzia il bin e
- *  mostra range BPM + conteggio sopra le barre. */
-export function Histogram({ bins }: { bins: BpmBin[] }) {
+ *  mostra range BPM + conteggio sopra le barre. `height` (classe Tailwind)
+ *  perché lo stesso grafico vive in due scale: il riquadro della dashboard e la
+ *  banda a piena larghezza di /statistics. */
+export function Histogram({ bins, height = "h-14" }: { bins: BpmBin[]; height?: string }) {
   const t = useT();
   const [hover, setHover] = useState<number | null>(null);
   if (bins.length === 0) return <p className="text-sm text-faint">—</p>;
@@ -22,7 +24,7 @@ export function Histogram({ bins }: { bins: BpmBin[] }) {
           <span className="tnum">{active.from.toFixed(0)}–{active.to.toFixed(0)} BPM · {t.dashboard.trackCount(active.count)}</span>
         )}
       </div>
-      <div className="flex h-14 items-end gap-1">
+      <div className={cn("flex items-end gap-1", height)}>
         {bins.map((b, i) => (
           <button
             key={i}
@@ -40,7 +42,7 @@ export function Histogram({ bins }: { bins: BpmBin[] }) {
           />
         ))}
       </div>
-      <div className="mt-1 flex justify-between text-[10px] text-faint">
+      <div className="mt-1 flex justify-between text-[10px] text-muted">
         <span className="tnum">{lo.toFixed(0)}</span>
         <span className="tnum">{hi.toFixed(0)}</span>
       </div>

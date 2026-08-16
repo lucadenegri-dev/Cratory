@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { StatisticsView } from "@/components/statistics/statistics-view";
@@ -45,16 +45,46 @@ describe("statistics view", () => {
     expect(screen.getByText("Ostgut Ton").closest("a")?.getAttribute("href")).toBe("/labels/Ostgut%20Ton");
   });
 
-  it("la copertura mostra le percentuali giuste sul totale", () => {
+  // La copertura non e' piu' tre barre di percentuale (erano tutte e tre
+  // praticamente uguali): e' il rapporto assoluto piu' il buco su cui agire.
+  it("la copertura mostra il rapporto pronte/totali e il residuo cliccabile", () => {
     render(<StatisticsView stats={stats()} labels={[]} />);
-    expect(screen.getByText("90%")).toBeTruthy();  // 180/200 con BPM
-    expect(screen.getByText("80%")).toBeTruthy();  // 160/200 con tonalità
-    expect(screen.getByText("75%")).toBeTruthy();  // 150/200 pronte
+    const band = screen.getByText("Copertura").closest("section") as HTMLElement;
+    expect(within(band).getByText("150")).toBeTruthy();    // ready_for_set
+    expect(within(band).getByText("/ 200")).toBeTruthy();  // total_tracks
+    const gap = within(band).getByText("50 senza BPM o tonalità →");  // 200 - 150
+    expect(gap.closest("a")?.getAttribute("href")).toBe("/library?incomplete=1");
   });
 
-  it("l'energia etichetta i bucket come intervallo from–to", () => {
+  it("la barra di copertura riporta la percentuale come progressbar", () => {
     render(<StatisticsView stats={stats()} labels={[]} />);
-    expect(screen.getByText("0.5–1")).toBeTruthy();
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("75");
+  });
+
+  it("l'energia mostra i conteggi dei bucket e gli estremi dell'asse", () => {
+    render(<StatisticsView stats={stats()} labels={[]} />);
+    expect(screen.getByText("60")).toBeTruthy();
+    expect(screen.getByText("140")).toBeTruthy();
+  });
+
+  // Le 24 tonalita' vivono in una matrice 12 x A/B: ogni cella e' un link al
+  // filtro di libreria per quella tonalita', anche quando vale zero.
+  it("la matrice Camelot rende tutte le 24 posizioni e linka alla libreria", () => {
+    render(<StatisticsView stats={stats()} labels={[]} />);
+    expect(screen.getByLabelText("8A · 30 tracce").getAttribute("href")).toBe("/library?key=8A");
+    expect(screen.getByLabelText("11B · 10 tracce").getAttribute("href")).toBe("/library?key=11B");
+    expect(screen.getByLabelText("6B · 0 tracce")).toBeTruthy();
+  });
+
+  // Le label sono spezzate in due colonne: senza una scala condivisa la prima
+  // della seconda colonna disegnerebbe una barra lunga quanto la piu' alta.
+  it("le barre delle label condividono la scala fra le due colonne", () => {
+    const rows = Array.from({ length: 10 }, (_, i) => label(`L${i}`, 100 - i * 10));
+    const { container } = render(<StatisticsView stats={stats()} labels={rows} />);
+    const first = container.querySelector('a[href="/labels/L0"] span span') as HTMLElement;
+    const sixth = container.querySelector('a[href="/labels/L5"] span span') as HTMLElement;
+    expect(first.style.width).toBe("100%");
+    expect(sixth.style.width).toBe("50%");   // 50/100, non 50/50
   });
 
   it("una sezione senza dati si omette, le altre restano", () => {
