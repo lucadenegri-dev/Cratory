@@ -375,12 +375,16 @@ def _download_candidate(client, download_dir, file: SlskdFile,
         logger.exception("enqueue fallito user=%s", file.username)
         return None, "enqueue_rejected"
     if on_progress is not None:
-        # La fase cambia PRIMA dell'attesa, non dopo: e' l'attesa a durare. Il
-        # totale arriva dal candidato, cosi' la barra ha una scala fin dal
-        # primo giro, prima ancora che il daemon riporti un byte. Azzerare i
-        # byte fatti serve anche al fallback su un altro utente: il nuovo
-        # tentativo riparte da zero, non dai byte del precedente.
-        on_progress("downloading", 0, file.size)
+        # La fase cambia PRIMA dell'attesa, non dopo: e' l'attesa a durare. I
+        # byte restano invece vuoti finche' il daemon non ne riporta uno vero:
+        # scrivere subito (0, file.size) fa comparire una barra ferma a zero
+        # per tutto il trasferimento se `bytesTransferred` non viene mai
+        # esposto — che si legge come "bloccato", cioe' peggio di nessuna barra.
+        # La fase «scarico» da sola dice gia' che sta succedendo qualcosa
+        # (stessa scelta di `_run_soundcloud`, dove yt-dlp non riporta nulla).
+        # Il None serve anche al fallback su un altro utente: ripulisce i byte
+        # del tentativo precedente invece di lasciarli a schermo.
+        on_progress("downloading", None, None)
     outcome, reason = _wait_for_download(client, file, should_cancel=should_cancel,
                                          on_progress=on_progress)
     if outcome != "completed":

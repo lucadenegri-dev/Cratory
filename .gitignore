@@ -27,6 +27,7 @@ node_modules/
 out/
 
 # Playwright / Vitest
+backend/test-results/
 frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/

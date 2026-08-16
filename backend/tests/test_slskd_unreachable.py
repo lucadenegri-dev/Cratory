@@ -102,3 +102,22 @@ def test_un_409_che_non_parla_di_connessione_resta_della_richiesta():
     un conflitto vero (es. lo stesso file gia' in coda) riguarda la richiesta."""
     exc = _enqueue_and_capture(_StatusHttp(409, "file already queued"))
     assert slskd_unreachable(exc) is False
+
+
+@pytest.mark.parametrize("corpo", [
+    "User bob is disconnected",
+    "Peer soulseeker99 is not connected",
+])
+def test_un_peer_scollegato_e_colpa_del_candidato_non_del_daemon(corpo):
+    """Un peer offline non e' infrastruttura: e' il candidato che non va.
+
+    Sbagliare in questo verso non ha rete di sicurezza. Un item classificato
+    "infrastruttura" torna in coda con `attempts` DECREMENTATO, quindi non
+    fallisce mai; il dispatcher mette in pausa il pool, il riaggancio lo
+    ripesca, e si ricomincia — all'infinito. Il verso opposto (un motivo
+    d'infrastruttura non riconosciuto) e' invece coperto dall'interruttore per
+    fallimenti consecutivi del dispatcher, che conta solo i fallimenti veri.
+    Per questo i frammenti riconosciuti devono parlare del SERVER e di nient'altro.
+    """
+    exc = _enqueue_and_capture(_StatusHttp(409, corpo))
+    assert slskd_unreachable(exc) is False

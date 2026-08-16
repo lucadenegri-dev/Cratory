@@ -185,7 +185,10 @@ def test_progress_writer_scrive_davvero_sull_item(factory):
 
 def test_download_candidate_dichiara_la_fase_prima_di_attendere(monkeypatch):
     """L'attesa e' la parte che dura: la fase va scritta prima di entrarci, non
-    dopo esserne usciti."""
+    dopo esserne usciti — ma senza byte, cosi' la barra compare solo quando puo'
+    muoversi davvero. Con (0, size) scritti qui, un daemon che non espone
+    `bytesTransferred` lascerebbe una barra ferma a zero per tutto il
+    trasferimento: si legge come "bloccato"."""
     from app.integrations.slskd import SlskdFile
 
     monkeypatch.setattr(runner, "POLL_INTERVAL", 0.0)
@@ -204,9 +207,37 @@ def test_download_candidate_dichiara_la_fase_prima_di_attendere(monkeypatch):
                      length=None, has_free_slot=True, queue_length=0)
     runner._download_candidate(_Client(), "/nessuna-cartella", file,
                                on_progress=lambda *a: progressi.append(a))
-    assert progressi[0] == ("downloading", 0, 4000)
+    assert progressi[0] == ("downloading", None, None)
     # Al primo giro di poll la fase era gia' scritta.
-    assert fasi_viste_dal_poll[0] == [("downloading", 0, 4000)]
+    assert fasi_viste_dal_poll[0] == [("downloading", None, None)]
+
+
+def test_nessuna_barra_se_il_daemon_non_riporta_i_byte(monkeypatch):
+    """Un daemon che non espone `bytesTransferred` non deve produrre una barra:
+    senza totale il frontend non la disegna affatto, e resta la sola fase
+    «scarico» — onesta, invece di uno 0% immobile per mezz'ora."""
+    from app.integrations.slskd import SlskdFile
+
+    monkeypatch.setattr(runner, "POLL_INTERVAL", 0.0)
+    stati = [
+        {"id": "t1", "state": "InProgress"},          # nessun bytesTransferred
+        {"id": "t1", "state": "InProgress"},
+        {"id": "t1", "state": "Completed, Succeeded"},
+    ]
+    progressi: list[tuple] = []
+
+    class _Client:
+        def enqueue_download(self, file):
+            pass
+
+        def transfer_state(self, username, filename):
+            return stati.pop(0)
+
+    file = SlskdFile(username="u", filename="X.flac", size=4000, bitrate=None,
+                     length=None, has_free_slot=True, queue_length=0)
+    runner._download_candidate(_Client(), "/nessuna-cartella", file,
+                               on_progress=lambda *a: progressi.append(a))
+    assert all(totale is None for _, _, totale in progressi), progressi
 
 
 def test_wait_for_download_riporta_i_byte_letti_dal_poll(monkeypatch):

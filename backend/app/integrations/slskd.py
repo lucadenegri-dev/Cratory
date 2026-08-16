@@ -260,11 +260,19 @@ def slskd_configured() -> bool:
 # alla rete Soulseek". slskd risponde cosi' a POST /searches in quello stato:
 # "must be connected (currently: Disconnected)". E' la condizione piu' frequente
 # dopo un riavvio o un blip di rete, e non ha niente a che vedere con la singola
-# traccia. Il confronto e' su piu' frammenti perche' il testo esatto e' di
-# slskd, non nostro: se cambia formulazione, e' probabile che almeno uno regga.
-# La rete di sicurezza per i casi che sfuggono comunque sta nel dispatcher
-# (N fallimenti consecutivi con lo stesso motivo aprono l'interruttore).
-_NON_COLLEGATO = ("must be connected", "not connected", "disconnected")
+# traccia.
+#
+# I frammenti devono parlare del SERVER e di nient'altro: `disconnected` e
+# `not connected` da soli catturavano anche un 409 su un PEER offline ("user
+# bob is disconnected"), che e' colpa del candidato. I due errori non si
+# equivalgono. Classificare per difetto (un motivo d'infrastruttura non
+# riconosciuto) ha una rete di sicurezza: l'item fallisce, e N fallimenti
+# consecutivi con lo stesso motivo aprono l'interruttore del dispatcher.
+# Classificare per eccesso non ne ha nessuna: l'item torna in coda con
+# `attempts` DECREMENTATO, quindi non fallisce mai, il pool va in pausa, il
+# riaggancio lo ripesca e si ricomincia — all'infinito, senza che nulla lo
+# conti. Meglio quindi mancare una formulazione nuova che allargare la rete.
+_NON_COLLEGATO = ("must be connected", "currently: disconnected")
 
 
 def slskd_unreachable(exc: BaseException) -> bool:
