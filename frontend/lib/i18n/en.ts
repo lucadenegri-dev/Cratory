@@ -143,6 +143,7 @@ export const en = {
     shareOff: "Sharing turned off.",
     downloadSlotsLabel: "Parallel downloads",
     downloadSlotsHint: "How many tracks to download at once. The right value depends on your connection and how busy slskd is.",
+    downloadSlotsInvalid: "Invalid value (must be a number between 1 and 10): reverted to the current one.",
     soundcloudYtdlpUnavailable: "yt-dlp not available in the backend: SoundCloud import won't work.",
     usernameLabel: "SoundCloud username",
     usernamePlaceholder: "e.g. luca-denegri",

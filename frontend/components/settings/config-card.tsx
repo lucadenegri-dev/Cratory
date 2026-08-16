@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   errText, getConfigSettings, patchConfigSettings, setDownloadSlots, setLibraryShare, startLibraryIndex,
   type ConfigPatch, type ConfigSettings,
@@ -145,16 +145,35 @@ export function ConfigCard() {
 }
 
 /** Quanti download Soulseek in parallelo (B-Task 6: la coda ha un pool di N
- *  slot). Salva su blur, non a ogni tasto; ignora un valore invariato o
- *  fuori scala 1-10 (il backend risponderebbe 422 con un numero che l'utente
- *  ha appena digitato). */
+ *  slot). Salva su blur, non a ogni tasto; un valore invariato non fa
+ *  scrivere nulla, un valore fuori scala 1-10 non fa scrivere nulla (il
+ *  backend risponderebbe 422) e riporta il campo al valore in vigore
+ *  invece di restare bloccato su quello invalido. Si riallinea anche se
+ *  `value` cambia da fuori (reload di altri campi), tranne mentre l'utente
+ *  ci sta digitando dentro. */
 function DownloadSlotsSection({ value, reload }: { value: number; reload: () => void }) {
   const t = useT();
   const [slots, setSlots] = useState(value);
   const [error, setError] = useState<string | null>(null);
+  // true mentre l'utente ha il focus sul campo: il riallineamento dal
+  // valore esterno (rilievo minor) deve saltare in quella finestra, per
+  // non cancellare quello che sta digitando.
+  const editingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editingRef.current) setSlots(value);
+  }, [value]);
 
   const save = async () => {
-    if (slots === value || slots < 1 || slots > 10) return;
+    if (slots === value) return;
+    if (!Number.isInteger(slots) || slots < 1 || slots > 10) {
+      // Scrittura scartata (il backend risponderebbe 422): il campo non
+      // deve restare bloccato sul valore invalido, torna a quello in
+      // vigore (rilievo important).
+      setSlots(value);
+      setError(t.settings.downloadSlotsInvalid);
+      return;
+    }
     try {
       await setDownloadSlots(slots);
       setError(null);
@@ -173,7 +192,8 @@ function DownloadSlotsSection({ value, reload }: { value: number; reload: () => 
         <Input type="number" min={1} max={10} className="h-8 w-20"
           value={slots}
           onChange={(e) => setSlots(Number(e.target.value))}
-          onBlur={() => void save()} />
+          onFocus={() => { editingRef.current = true; }}
+          onBlur={() => { editingRef.current = false; void save(); }} />
       </label>
     </div>
   );

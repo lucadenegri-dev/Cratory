@@ -8,13 +8,14 @@ const getConfigSettings = vi.fn();
 const patchConfigSettings = vi.fn();
 const pickerAvailability = vi.fn();
 const pickPath = vi.fn();
+const setDownloadSlots = vi.fn();
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   getConfigSettings: (...a: unknown[]) => getConfigSettings(...a),
   patchConfigSettings: (...a: unknown[]) => patchConfigSettings(...a),
   setLibraryShare: vi.fn(),
-  setDownloadSlots: vi.fn(),
+  setDownloadSlots: (...a: unknown[]) => setDownloadSlots(...a),
   pickerAvailability: (...a: unknown[]) => pickerAvailability(...a),
   pickPath: (...a: unknown[]) => pickPath(...a),
 }));
@@ -84,5 +85,88 @@ describe("ConfigCard + picker", () => {
       fireEvent.click(screen.getAllByRole("button", { name: "Sfoglia…" })[0]);
     });
     expect(screen.getByText(/già aperto/)).toBeTruthy();
+  });
+});
+
+const spinValue = (el: HTMLElement) => (el as HTMLInputElement).value;
+
+describe("ConfigCard + download slots", () => {
+  it("valore svuotato: nessuna scrittura e il campo torna al valore in vigore", async () => {
+    await mount(true);
+    const input = screen.getByRole("spinbutton");
+    expect(spinValue(input)).toBe("3");
+
+    fireEvent.change(input, { target: { value: "" } });
+    await act(async () => {
+      fireEvent.blur(input);
+    });
+
+    expect(setDownloadSlots).not.toHaveBeenCalled();
+    expect(spinValue(input)).toBe("3");
+    expect(screen.getByText(/ripristinato/)).toBeTruthy();
+  });
+
+  it("valore fuori scala (>10): nessuna scrittura e il campo torna al valore in vigore", async () => {
+    await mount(true);
+    const input = screen.getByRole("spinbutton");
+
+    fireEvent.change(input, { target: { value: "15" } });
+    await act(async () => {
+      fireEvent.blur(input);
+    });
+
+    expect(setDownloadSlots).not.toHaveBeenCalled();
+    expect(spinValue(input)).toBe("3");
+    expect(screen.getByText(/ripristinato/)).toBeTruthy();
+  });
+
+  it("valore valido: scrive il numero digitato", async () => {
+    await mount(true);
+    setDownloadSlots.mockResolvedValue({ download_slots: 7 });
+    const input = screen.getByRole("spinbutton");
+
+    fireEvent.change(input, { target: { value: "7" } });
+    await act(async () => {
+      fireEvent.blur(input);
+    });
+
+    expect(setDownloadSlots).toHaveBeenCalledWith(7);
+    expect(screen.queryByText(/ripristinato/)).toBeNull();
+  });
+
+  it("il campo si riallinea quando il valore arriva da fuori (reload dopo il salvataggio di un altro campo)", async () => {
+    await mount(true);
+    expect(spinValue(screen.getByRole("spinbutton"))).toBe("3");
+
+    patchConfigSettings.mockResolvedValue({ ...CONFIG, library_root: field("/Users/x/Music2"), download_slots: 8 });
+    fireEvent.change(screen.getByDisplayValue("/Users/x/Music"), { target: { value: "/Users/x/Music2" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Salva" }));
+    });
+
+    expect(spinValue(screen.getByRole("spinbutton"))).toBe("8");
+  });
+
+  it("il riallineamento dall'esterno non cancella quello che l'utente sta digitando", async () => {
+    await mount(true);
+    const input = screen.getByRole("spinbutton");
+
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "5" } });
+
+    patchConfigSettings.mockResolvedValue({ ...CONFIG, library_root: field("/Users/x/Music2"), download_slots: 8 });
+    fireEvent.change(screen.getByDisplayValue("/Users/x/Music"), { target: { value: "/Users/x/Music2" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Salva" }));
+    });
+
+    // il reload esterno (download_slots: 8) non deve stomp-are la digitazione in corso
+    expect(spinValue(input)).toBe("5");
+
+    setDownloadSlots.mockResolvedValue({ download_slots: 5 });
+    await act(async () => {
+      fireEvent.blur(input);
+    });
+    expect(setDownloadSlots).toHaveBeenCalledWith(5);
   });
 });

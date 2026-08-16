@@ -142,6 +142,7 @@ export const it: Dictionary = {
     shareOff: "Condivisione disattivata.",
     downloadSlotsLabel: "Download in parallelo",
     downloadSlotsHint: "Quante tracce scaricare insieme. Il valore giusto dipende dalla tua connessione e da quanto è carico slskd.",
+    downloadSlotsInvalid: "Valore non valido (serve un numero tra 1 e 10): ripristinato quello in vigore.",
     soundcloudYtdlpUnavailable: "yt-dlp non disponibile nel backend: l'import SoundCloud non funzionerà.",
     usernameLabel: "Username SoundCloud",
     usernamePlaceholder: "es. luca-denegri",
