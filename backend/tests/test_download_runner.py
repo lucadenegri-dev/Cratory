@@ -305,6 +305,22 @@ def test_resolve_senza_corrispondenze_resta_none(tmp_path):
     assert runner._resolve_local_path(str(tmp_path), "bob\\assente.flac") is None
 
 
+def test_resolve_trova_un_nome_con_parentesi_quadre(tmp_path):
+    """Il nome del file non e' un pattern: `[SOMA123]` e' un catalogo, non una
+    classe di caratteri. Cercandolo come glob non si trova nulla e il download
+    riuscito finisce comunque `failed` con "file mancante"."""
+    mio = _scrivi(tmp_path, "bob/Album X/A2 [SOMA123].flac", mtime=1000)
+    got = runner._resolve_local_path(str(tmp_path), "bob\\Album X\\A2 [SOMA123].flac")
+    assert got == str(mio.resolve())
+
+
+def test_resolve_non_confonde_un_nome_glob_con_cio_che_matcherebbe(tmp_path):
+    """Contro-prova dell'altro verso: trattato come pattern, `01 - Track [ab].mp3`
+    matcherebbe `01 - Track a.mp3`. Il nome va confrontato per uguaglianza."""
+    _scrivi(tmp_path, "bob/01 - Track a.mp3", mtime=9000)
+    assert runner._resolve_local_path(str(tmp_path), "bob\\01 - Track [ab].mp3") is None
+
+
 def test_download_candidate_non_aggancia_il_file_di_un_altro_worker(tmp_path, monkeypatch):
     """Il giro intero: il candidato porta con se' il proprio percorso remoto,
     e il file agganciato e' il suo anche se un altro worker ne ha appena

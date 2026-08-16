@@ -244,7 +244,15 @@ def _resolve_local_path(download_dir: str, filename: str,
     root = Path(download_dir)
     if not base or not root.exists():
         return None
-    matches = [p for p in root.rglob(base) if p.is_file()]
+    # Si cammina l'albero e si confronta il NOME, invece di passare `base` come
+    # pattern a `rglob`: il nome di un file non e' un glob. `A2 [SOMA123].flac`
+    # (il numero di catalogo, ordinario nei rilasci techno) diventerebbe una
+    # classe di caratteri e non troverebbe mai se stesso — download riuscito,
+    # traccia marcata `failed` con "file mancante", file mai agganciato. E nel
+    # verso opposto `01 - Track [ab].mp3` aggancerebbe `01 - Track a.mp3`, che e'
+    # il file di qualcun altro. Il costo e' lo stesso: `rglob` cammina comunque
+    # tutto l'albero.
+    matches = [p for p in root.rglob("*") if p.name == base and p.is_file()]
     if not matches:
         return None
 
