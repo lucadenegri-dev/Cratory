@@ -177,8 +177,11 @@ export function AsciiDj({ onActivate, label, hint, animate = true }: {
 
   const lines = djFrame(reduced ? DJ_REST_TICK : tick);
 
+  /* La scala sale per breakpoint ma di un passo più bassa di quanto sarebbe
+     naturale in alto: la Home deve stare in una schermata senza scrollare, e
+     con 12 righe la scena è l'elemento da cui si recupera più altezza. */
   const art = (
-    <div aria-hidden="true" className="select-none text-[9px] sm:text-sm md:text-base lg:text-lg xl:text-xl 2xl:text-2xl">
+    <div aria-hidden="true" className="select-none text-[9px] sm:text-sm md:text-base lg:text-base xl:text-lg 2xl:text-xl">
       <div className="text-faint">
         {lines.slice(0, DJ_AIR_ROWS).map((l, i) => <pre key={i} className="leading-[1.15]">{l}</pre>)}
       </div>

@@ -95,3 +95,37 @@ Nuovo `frontend/tests/ascii-wordmark.test.tsx`:
 - il guscio espone l'`h1` accessibile e marca l'arte come decorativa.
 
 Ogni asserzione va provata rompendo il codice prima di dichiararla verde.
+
+## Revisione del 2026-08-16: la Home sta in una schermata
+
+Due richieste arrivate dopo la prima consegna, che spostano quel che qui sopra
+era dato per fuori scope.
+
+**La cabina prende una cornice.** Lo stesso involucro delle due sezioni sotto
+(`Card`: bordo pieno e fondo `surface`). Le tre lastre — cabina, striscia,
+cifre — si leggono come una serie invece che come un disegno sospeso nel vuoto.
+
+**Tutto deve stare senza scrollare.** La pagina misurava 785px di contenuto a
+1280 di larghezza; ora ne misura 663, e regge 648 a 1024 e 707 a 1920. Da dove
+vengono i 122px:
+
+- gli stacchi verticali si stringono (`mb-8`→`mb-3` sotto il frontespizio,
+  `mt-10`→`mt-1.5` sopra il link statistiche);
+- le due sezioni combaciano su un bordo solo (`-mt-px` invece di `mt-10`):
+  affiancate a 8px lasciavano un filetto doppio, e ora si leggono come un
+  blocco continuo;
+- il frontespizio e la cabina scendono di un passo nella scala tipografica dai
+  breakpoint alti. La cabina è 12 righe: è l'elemento da cui si recupera più
+  altezza.
+
+Le tre righe d'aria in cima alla scena (`DJ_AIR_ROWS`) restano come sono, pur
+essendo il "margine" più grosso della cabina: ridurle cambierebbe la salita
+delle note, cioè il comportamento della cabina e non la sua impaginazione.
+
+**La posa a riposo.** Ferma, la cabina stava al tick 0, che è in battere:
+tweeter compressi e la `O` grande in `danger`, la posa di un colpo mentre non
+esce alcun suono. Con la cabina in cima alla pagina l'incoerenza si vede.
+`DJ_REST_TICK = 1`, dispari di proposito, vale per il tick iniziale e per il
+congelamento con `prefers-reduced-motion`. L'aria non si svuota su nessun tick
+— le note nascono sui pari e ne resta sempre una viva — ma un glifo che
+fluttua non stona: stonava la cassa.

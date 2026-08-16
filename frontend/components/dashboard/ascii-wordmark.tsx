@@ -83,7 +83,7 @@ export function AsciiWordmark() {
       <h1 className="sr-only">Cratory</h1>
       <div
         aria-hidden="true"
-        className="select-none text-[13px] text-fg-strong sm:text-xl md:text-2xl lg:text-3xl 2xl:text-4xl"
+        className="select-none text-[13px] text-fg-strong sm:text-lg md:text-xl lg:text-2xl 2xl:text-3xl"
       >
         {WORDMARK_LINES.map((line, i) => (
           <pre key={i} className="leading-[0.95]">{line}</pre>
