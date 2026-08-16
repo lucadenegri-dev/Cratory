@@ -8,6 +8,7 @@ qui sotto.
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 
@@ -87,6 +88,24 @@ def slskd_ready() -> bool:
     """Falso finche' l'interruttore e' aperto (raffreddamento in corso)."""
     with _lock:
         return time.monotonic() >= _slskd_blocked_until
+
+
+def breaker_state() -> tuple[bool, str | None, int | None]:
+    """(in pausa, motivo, secondi al prossimo tentativo).
+
+    Esiste per l'interfaccia: senza, una coda in pausa e' indistinguibile da una
+    coda lenta — item «in attesa» senza spiegazione e nessuna superficie che
+    dica «la coda e' ferma perche' il daemon non risponde, riprovo fra poco».
+    Il motivo e' un codice, non una frase: la traduzione e' del frontend.
+
+    A interruttore chiuso ritorna `(False, None, None)`: nessun residuo del
+    motivo precedente, che a coda ripartita sarebbe solo confondente.
+    """
+    with _lock:
+        rimanenti = _slskd_blocked_until - time.monotonic()
+        if rimanenti <= 0:
+            return False, None, None
+        return True, _slskd_blocked_reason, int(math.ceil(rimanenti))
 
 
 def _trip_slskd_breaker(reason: str = "unreachable") -> None:

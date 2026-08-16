@@ -776,4 +776,16 @@ export type QueueItem = {
   position: number;
 };
 
-export type QueueSnapshot = { slots: number; active: number; items: QueueItem[] };
+/** Interruttore su slskd: `reason` è un codice, la frase la mette il frontend. */
+export type QueuePause = {
+  paused: boolean;
+  reason: string | null;
+  retry_in_seconds: number | null;
+};
+
+export type QueueSnapshot = {
+  slots: number;
+  active: number;
+  pause: QueuePause;
+  items: QueueItem[];
+};

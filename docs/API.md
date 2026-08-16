@@ -825,7 +825,17 @@ that item's own `reason`, not to the job as a whole).
 
 `GET /api/downloads/queue` lists every non-purged item, oldest first by
 position, plus `{slots, active}` — `download_slots` and how many workers
-are currently busy. It powers the `/downloads` page.
+are currently busy — and `pause: {paused, reason, retry_in_seconds}`, the
+state of the slskd circuit breaker. `reason` is a code
+(`unreachable` | `repeated_failures`) the frontend translates, and at rest
+the whole object is `{false, null, null}` rather than a stale reason.
+Without it a paused queue is indistinguishable from a slow one: items sit
+`queued` forever with nothing to explain why. It powers the `/downloads`
+page, which shows the pause at the top. Note that `available` in
+`GET /api/downloads/status` deliberately keeps meaning "slskd is
+configured", not "the queue is running": it gates the download buttons, and
+enqueuing while the breaker is open is fine — those items run when it
+closes.
 
 `POST /api/downloads/queue` is the general, batch-capable enqueue endpoint:
 body `{track_ids: [...], kind?, candidate?}`. `candidate` is only valid with

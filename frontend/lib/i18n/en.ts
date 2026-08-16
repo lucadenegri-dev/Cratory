@@ -428,6 +428,16 @@ export const en = {
     cancelledHeading: "Cancelled",
     emptyTitle: "Queue empty",
     emptyBody: "Queue tracks from the wishlist: you'll see them here as they come down.",
+    pausedTitle: "Queue paused",
+    pausedReason: (code: string | null): string => {
+      switch (code) {
+        case "unreachable": return "slskd is not answering, or is not connected to the Soulseek network.";
+        case "repeated_failures": return "Too many downloads failed in a row for the same reason.";
+        default: return "The download daemon is unreachable.";
+      }
+    },
+    pausedRetry: (seconds: number) => `Retrying in ${seconds} seconds.`,
+    pausedRetrySoon: "Retrying shortly.",
     phaseSearching: "searching Soulseek…",
     phaseDownloading: "downloading",
     cancelButton: "Cancel",

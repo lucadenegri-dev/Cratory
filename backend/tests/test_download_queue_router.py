@@ -77,6 +77,28 @@ def test_get_espone_slot_attivi_ed_etichetta(factory):
     assert body["items"][0]["state"] == "queued"
 
 
+def test_get_dice_se_la_coda_e_in_pausa_e_perche(factory):
+    """La pagina non ha altro modo di distinguere una coda in pausa da una
+    coda lenta: senza questo, item «in attesa» all'infinito senza spiegazione."""
+    from app.services import download_dispatcher as d
+
+    body = client.get("/api/downloads/queue").json()
+    assert body["pause"] == {"paused": False, "reason": None, "retry_in_seconds": None}
+
+    d._trip_slskd_breaker()
+    pausa = client.get("/api/downloads/queue").json()["pause"]
+    assert pausa["paused"] is True
+    assert pausa["reason"] == "unreachable"
+    assert 0 < pausa["retry_in_seconds"] <= d.SLSKD_COOLDOWN
+
+
+def test_il_motivo_della_pausa_distingue_i_due_casi(factory):
+    from app.services import download_dispatcher as d
+
+    d._trip_slskd_breaker("repeated_failures")
+    assert client.get("/api/downloads/queue").json()["pause"]["reason"] == "repeated_failures"
+
+
 def test_delete_annulla_un_item(factory):
     ids = _tracks(factory, 1)
     client.post("/api/downloads/queue", json={"track_ids": ids})

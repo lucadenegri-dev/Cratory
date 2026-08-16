@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import DownloadsPage from "@/app/downloads/page";
-import type { QueueItem } from "@/lib/api";
+import type { QueueItem, QueueSnapshot } from "@/lib/api";
 
 afterEach(cleanup);
 
@@ -9,6 +9,12 @@ const item = (over: Partial<QueueItem> = {}): QueueItem => ({
   id: 1, track_id: 10, label: "Aphex Twin — Xtal", kind: "soulseek_auto",
   state: "queued", outcome: null, phase: null, bytes_done: null,
   bytes_total: null, attempts: 0, error: null, position: 0, ...over,
+});
+
+const snapshot = (over: Partial<QueueSnapshot> = {}): QueueSnapshot => ({
+  slots: 3, active: 0,
+  pause: { paused: false, reason: null, retry_in_seconds: null },
+  items: [], ...over,
 });
 
 const mocks = vi.hoisted(() => ({
@@ -26,11 +32,11 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.downloadQueue.mockResolvedValue({ slots: 3, active: 1, items: [
+  mocks.downloadQueue.mockResolvedValue(snapshot({ active: 1, items: [
     item({ id: 1, state: "running", phase: "downloading", bytes_done: 50, bytes_total: 100 }),
     item({ id: 2, state: "queued", label: "B — Due", position: 1 }),
     item({ id: 3, state: "done", outcome: "downloaded", label: "C — Tre", position: 2 }),
-  ] });
+  ] }));
 });
 
 describe("pagina /downloads", () => {
@@ -63,7 +69,7 @@ describe("pagina /downloads", () => {
   });
 
   it("coda vuota: empty state", async () => {
-    mocks.downloadQueue.mockResolvedValue({ slots: 3, active: 0, items: [] });
+    mocks.downloadQueue.mockResolvedValue(snapshot());
     render(<DownloadsPage />);
     expect(await screen.findByText("Coda vuota")).toBeTruthy();
   });
@@ -89,11 +95,39 @@ describe("pagina /downloads", () => {
     expect(await screen.findByText(/Conflitto: gia' concluso/)).toBeTruthy();
   });
 
+  /* Con l'interruttore aperto la coda resta ferma e gli item «in attesa» non si
+     muovono: senza una riga che lo dica, l'utente vede solo una coda che non
+     scende e nessuna spiegazione. */
+  it("in pausa: dice che è ferma, perché, e fra quanto riprova", async () => {
+    mocks.downloadQueue.mockResolvedValue(snapshot({
+      pause: { paused: true, reason: "unreachable", retry_in_seconds: 42 },
+      items: [item({ id: 2, state: "queued", label: "B — Due" })],
+    }));
+    render(<DownloadsPage />);
+    expect(await screen.findByText("Coda in pausa")).toBeTruthy();
+    expect(screen.getByText(/slskd non risponde/)).toBeTruthy();
+    expect(screen.getByText(/42 secondi/)).toBeTruthy();
+  });
+
+  it("in pausa per troppi fallimenti: il motivo è quello, non il daemon muto", async () => {
+    mocks.downloadQueue.mockResolvedValue(snapshot({
+      pause: { paused: true, reason: "repeated_failures", retry_in_seconds: 10 },
+    }));
+    render(<DownloadsPage />);
+    expect(await screen.findByText(/Troppi download falliti/)).toBeTruthy();
+  });
+
+  it("a coda non in pausa non compare nessun avviso", async () => {
+    render(<DownloadsPage />);
+    await screen.findByText("Aphex Twin — Xtal");
+    expect(screen.queryByText("Coda in pausa")).toBeNull();
+  });
+
   it("«Svuota lo storico» non fa sparire gli item annullati, mostrati a parte", async () => {
-    mocks.downloadQueue.mockResolvedValue({ slots: 3, active: 0, items: [
+    mocks.downloadQueue.mockResolvedValue(snapshot({ items: [
       item({ id: 3, state: "done", outcome: "downloaded", label: "C — Tre", position: 0 }),
       item({ id: 4, state: "cancelled", label: "D — Quattro", position: 1 }),
-    ] });
+    ] }));
     mocks.clearQueueDone.mockResolvedValue({ removed: 1 });
     render(<DownloadsPage />);
     await screen.findByText("D — Quattro");

@@ -427,6 +427,16 @@ export const it: Dictionary = {
     cancelledHeading: "Annullate",
     emptyTitle: "Coda vuota",
     emptyBody: "Accoda tracce dalla wishlist: le trovi qui mentre scendono.",
+    pausedTitle: "Coda in pausa",
+    pausedReason: (code: string | null): string => {
+      switch (code) {
+        case "unreachable": return "slskd non risponde, o non è collegato alla rete Soulseek.";
+        case "repeated_failures": return "Troppi download falliti di fila per lo stesso motivo.";
+        default: return "Il daemon dei download non è raggiungibile.";
+      }
+    },
+    pausedRetry: (seconds: number) => `Riprovo fra ${seconds} secondi.`,
+    pausedRetrySoon: "Riprovo a momenti.",
     phaseSearching: "cerco su Soulseek…",
     phaseDownloading: "scarico",
     cancelButton: "Annulla",

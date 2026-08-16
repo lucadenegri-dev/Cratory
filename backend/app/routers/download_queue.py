@@ -10,7 +10,7 @@ from app.core.http_errors import api_error
 from app.db import get_db
 from app.models import DownloadQueueItem, Track
 from app.services import download_queue as queue
-from app.services.download_dispatcher import active_count, fill
+from app.services.download_dispatcher import active_count, breaker_state, fill
 from app.services.track_label import track_label
 
 router = APIRouter(prefix="/api/downloads/queue", tags=["downloads"])
@@ -52,9 +52,24 @@ class QueueItemOut(BaseModel):
     position: int
 
 
+class QueuePauseOut(BaseModel):
+    """Lo stato dell'interruttore su slskd, per la testa della pagina /downloads.
+
+    Senza, una coda in pausa e' indistinguibile da una coda lenta: item «in
+    attesa» senza spiegazione, e nessun posto dove leggere che il daemon non
+    risponde e si riproverà fra poco. `reason` e' un codice
+    (`unreachable` | `repeated_failures`), tradotto dal frontend.
+    """
+
+    paused: bool
+    reason: str | None = None
+    retry_in_seconds: int | None = None
+
+
 class QueueOut(BaseModel):
     slots: int
     active: int
+    pause: QueuePauseOut
     items: list[QueueItemOut]
 
 
@@ -73,9 +88,11 @@ def read_queue(db: Session = Depends(get_db)):
     labels = {t.id: track_label(t) for t in
               db.query(Track).filter(Track.id.in_([i.track_id for i in items])).all()} \
         if items else {}
+    paused, reason, retry_in = breaker_state()
     return QueueOut(
         slots=runtime_settings.download_slots(),
         active=active_count(),
+        pause=QueuePauseOut(paused=paused, reason=reason, retry_in_seconds=retry_in),
         items=[_item_out(i, labels.get(i.track_id, "?")) for i in items],
     )
 

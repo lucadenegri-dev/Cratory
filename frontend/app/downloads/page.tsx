@@ -6,7 +6,7 @@ import { PageLayout } from "@/components/page-layout";
 import { Alert, Badge, Button, Card, EmptyState, EqMeter, Loading } from "@/components/ui";
 import {
   cancelQueueItem, cancelQueued, clearQueueDone, downloadQueue, errText,
-  moveQueueItemTop, type QueueItem, type QueueSnapshot,
+  moveQueueItemTop, type QueueItem, type QueuePause, type QueueSnapshot,
 } from "@/lib/api";
 import { useT, type Dictionary } from "@/lib/i18n";
 
@@ -92,6 +92,21 @@ function QueueSection({ heading, rows, t, busy, onTop, onCancel, action }: {
   );
 }
 
+/* La coda in pausa era invisibile: item «in attesa» all'infinito e nessun posto
+   dove leggere il perché. Sta in testa alla pagina perché è la cosa che spiega
+   tutto il resto di quello che si vede sotto. */
+function PauseBanner({ pause, t }: { pause: QueuePause; t: Dictionary }) {
+  if (!pause.paused) return null;
+  const secondi = pause.retry_in_seconds;
+  return (
+    <Alert tone="warning">
+      <strong>{t.queue.pausedTitle}</strong>{" "}
+      {t.queue.pausedReason(pause.reason)}{" "}
+      {secondi && secondi > 0 ? t.queue.pausedRetry(secondi) : t.queue.pausedRetrySoon}
+    </Alert>
+  );
+}
+
 export default function DownloadsPage() {
   const t = useT();
   const [snap, setSnap] = useState<QueueSnapshot | null>(null);
@@ -168,6 +183,7 @@ export default function DownloadsPage() {
       meta={snap ? t.queue.slotsInUse(snap.active, snap.slots) : undefined}>
       <div className="space-y-6">
         {error && <Alert tone="danger">⚠ {error}</Alert>}
+        {snap?.pause && <PauseBanner pause={snap.pause} t={t} />}
         {snap === null && <Loading />}
         {snap !== null && items.length === 0 && (
           <EmptyState icon={<DownloadIcon size={28} />} title={t.queue.emptyTitle}>
