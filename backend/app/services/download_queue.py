@@ -178,6 +178,30 @@ def finish(db: Session, item_id: int, outcome: str, error: str | None = None) ->
     return updated == 1
 
 
+def requeue(db: Session, item_id: int) -> bool:
+    """Rimette in attesa un item `running` senza contarlo come fallito.
+
+    Serve quando l'ostacolo non riguarda la traccia ma l'infrastruttura (slskd
+    irraggiungibile): l'item torna `queued` intatto e nessun esito viene
+    scritto sulla traccia, cosi' il tentativo puo' essere rifatto identico
+    quando il daemon torna. `attempts` viene riportato indietro perche'
+    `claim_next` lo aveva gia' incrementato: un daemon spento per un'ora non
+    deve gonfiare il contatore dei tentativi di decine di unita' mai avvenute.
+
+    False se nel frattempo l'item e' stato annullato o concluso da un'altra
+    sessione: come `finish`, un item annullato dall'utente non deve resuscitare.
+    """
+    updated = (db.query(DownloadQueueItem)
+               .filter(DownloadQueueItem.id == item_id,
+                       DownloadQueueItem.state == "running")
+               .update({"state": "queued", "started_at": None, "phase": None,
+                        "bytes_done": None, "bytes_total": None,
+                        "attempts": DownloadQueueItem.attempts - 1},
+                       synchronize_session=False))
+    db.commit()
+    return updated == 1
+
+
 def cancel(db: Session, item_id: int) -> bool:
     """Annulla un item in attesa o in corso. False se e' gia' concluso."""
     updated = (db.query(DownloadQueueItem)

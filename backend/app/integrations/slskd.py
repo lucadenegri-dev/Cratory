@@ -250,7 +250,33 @@ class SlskdClient(ClosableHttpClient):
 
 
 def slskd_configured() -> bool:
+    """Vero se URL e cartella di download sono valorizzati. Attenzione: dice
+    che slskd e' *impostato*, non che il daemon sia acceso — per quello vedi
+    `slskd_unreachable`, che lo scopre solo provando."""
     return bool(runtime_settings.slskd_url() and runtime_settings.slskd_download_dir())
+
+
+def slskd_unreachable(exc: BaseException) -> bool:
+    """Vero se l'errore dice "il daemon non risponde", falso se dice "questa
+    traccia non si scarica".
+
+    I tipi di questo modulo non bastano a distinguerli: `SlskdError` copre sia
+    la connessione che non si apre sia un 4xx/5xx di un daemon vivo e vegeto
+    (il 409 "must be connected" e' un fallimento vero della traccia, non
+    dell'infrastruttura). L'unico segnale onesto, senza inventare eccezioni
+    nuove, e' la *causa*: gli errori di trasporto httpx (connessione rifiutata,
+    DNS, timeout) risalgono come `__cause__` sia dai verbi POST/PUT/DELETE qui
+    sopra sia dal retry di `_http._request_with_retries` usato dalle GET,
+    mentre `raise_for_status` costruisce l'errore dal solo status code e resta
+    senza causa. `SlskdNotConfigured` (URL mancante) e' anch'essa
+    infrastruttura: mai colpa della traccia.
+
+    Chi la usa: la coda download, per decidere se un item va fallito o
+    rimesso in attesa (`services/download_runner.py`).
+    """
+    if isinstance(exc, SlskdNotConfigured):
+        return True
+    return isinstance(exc, SlskdError) and isinstance(exc.__cause__, httpx.TransportError)
 
 
 def get_slskd_client() -> SlskdClient:

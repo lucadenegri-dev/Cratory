@@ -14,7 +14,7 @@ from app.core import runtime_settings
 from app.db import SessionLocal
 from app.integrations.local_files import read_audio_quality, read_tags
 from app.integrations.slskd import (
-    SlskdFile, classify_transfer_state, get_slskd_client,
+    SlskdFile, classify_transfer_state, get_slskd_client, slskd_unreachable,
 )
 from app.integrations.soundcloud_audio import SoundCloudAudioError, download_track_audio
 from app.models import DownloadQueueItem, Track
@@ -23,6 +23,19 @@ from app.services.acquisition import attach_local_file
 from app.services.soulseek_select import auto_pick_candidates, search_candidates
 
 logger = logging.getLogger(__name__)
+
+
+class SlskdUnreachable(Exception):
+    """Il daemon slskd non risponde: l'item NON e' fallito, e' stato rimesso in
+    attesa (`queued`) e la traccia non ha ricevuto alcun esito.
+
+    E' l'unica eccezione che `run_item` lascia uscire, ed e' un segnale
+    indirizzato al dispatcher: chi la riceve apre l'interruttore del pool,
+    cosi' gli altri item che dipendono da slskd non vengono nemmeno
+    rivendicati finche' il daemon non torna. Vive qui e non nel client
+    (`integrations/slskd.py`) perche' non descrive un errore di quel client —
+    lo classifica: dice cosa ne fa la coda.
+    """
 
 
 def _candidate_from_payload(payload: dict | None) -> SlskdFile | None:
@@ -64,7 +77,13 @@ def _run_soundcloud(db, item: DownloadQueueItem, track: Track,
 
 
 def run_item(item_id: int) -> None:
-    """Esegue un item. Non solleva mai: un fallimento chiude l'item, non il pool."""
+    """Esegue un item. Un fallimento chiude l'item, non il pool.
+
+    Unica eccezione che esce di qui: `SlskdUnreachable`, quando l'errore non
+    riguarda la traccia ma il daemon che non risponde. In quel caso l'item e'
+    gia' tornato `queued` e la traccia non ha ricevuto esito: e' il dispatcher
+    a raccogliere il segnale e a mettere in pausa il pool.
+    """
     db = SessionLocal()
     try:
         item = db.get(DownloadQueueItem, item_id)
@@ -83,6 +102,15 @@ def run_item(item_id: int) -> None:
                 outcome, reason, path = _run_soulseek(db, item, track, chosen)
         except Exception as exc:  # noqa: BLE001 — un item rotto non ferma la coda
             db.rollback()
+            if slskd_unreachable(exc):
+                # Non e' colpa della traccia: il daemon e' spento o irraggiungibile.
+                # L'item torna in attesa, identico, e la traccia NON riceve un
+                # `last_download_outcome="failed"` con dentro un "Connection
+                # refused" — un daemon giu' non deve bruciare la coda.
+                queue.requeue(db, item_id)
+                logger.warning("Item di coda %s rinviato, slskd irraggiungibile: %s",
+                               item_id, exc)
+                raise SlskdUnreachable(str(exc)) from exc
             logger.exception("Item di coda %s fallito", item_id)
             outcome, reason, path = "failed", str(exc) or "error", None
         # Annullato mentre lavorava: l'item resta `cancelled` e la traccia NON
@@ -218,7 +246,13 @@ def _download_candidate(client, download_dir, file: SlskdFile,
     """
     try:
         client.enqueue_download(file)
-    except Exception:  # noqa: BLE001 — un candidato che non parte non ferma il fallback
+    except Exception as exc:  # noqa: BLE001 — un candidato che non parte non ferma il fallback
+        if slskd_unreachable(exc):
+            # Il daemon e' caduto fra la ricerca e l'accodamento: provare gli
+            # altri candidati e' inutile (falliranno tutti uguale) e li
+            # brucerebbe come "enqueue_rejected". Risale a run_item, che rimette
+            # l'item in coda.
+            raise
         logger.exception("enqueue fallito user=%s", file.username)
         return None, "enqueue_rejected"
     outcome, reason = _wait_for_download(client, file, should_cancel=should_cancel)

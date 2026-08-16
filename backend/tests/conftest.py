@@ -42,6 +42,20 @@ def _reset_runtime_settings():
     runtime_settings._overrides = {}
 
 
+@pytest.fixture(autouse=True)
+def _ferma_il_riaggancio_della_coda():
+    """Il riaggancio periodico della coda download è un thread daemon che
+    richiama `fill()` all'infinito. Lo accende `download_dispatcher.boot()`, che
+    parte dal lifespan reale di `main.py`: ogni test che usa `with TestClient(app)`
+    ne lascia quindi uno in volo. Sopravvissuto al proprio test, quel thread
+    rivendicherebbe righe della coda nel DB condiviso dagli altri (o, peggio, nel
+    `SessionLocal` monkeypatchato dai test del dispatcher). Si spegne qui, dopo
+    ogni test, così nessuno lo eredita."""
+    yield
+    from app.services import download_dispatcher
+    download_dispatcher.stop_retry_loop()
+
+
 @pytest.fixture()
 def db():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False})

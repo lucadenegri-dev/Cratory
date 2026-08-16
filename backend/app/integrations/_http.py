@@ -72,7 +72,12 @@ def _request_with_retries(send, method: str, url: str, *, error_cls, retries, ba
                     method, url, attempt + 1, retries + 1, exc, wait,
                 )
                 time.sleep(wait)
-    raise error_cls(f"connessione fallita dopo {retries + 1} tentativi ({last_exc})")
+    # `from last_exc`: il tipo e il messaggio non cambiano, ma l'errore del
+    # provider conserva la causa httpx. Serve a chi deve distinguere "l'host non
+    # risponde" da "l'host ha risposto male" senza leggere stringhe: vedi
+    # `slskd_unreachable`, che sull'esito di questa distinzione decide se
+    # bruciare un item della coda download o rimetterlo in attesa.
+    raise error_cls(f"connessione fallita dopo {retries + 1} tentativi ({last_exc})") from last_exc
 
 
 def raise_for_status(

@@ -1,5 +1,7 @@
 import threading
+import time
 
+import httpx
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -7,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core import runtime_settings as rs
 from app.db import Base
+from app.integrations.slskd import SlskdError
 from app.models import Track
 from app.services import download_dispatcher as d
 from app.services import download_queue as q
@@ -24,7 +27,17 @@ def _attendi_thread_del_dispatcher(monkeypatch):
     durante il join, la lista cresce e l'iterazione li raccoglie comunque —
     e si attende la loro fine a fine test (timeout cosi' un thread bloccato
     non appende la suite), poi si azzera `_active` perche' nessun test lasci
-    slot occupati o lavoro in volo per il successivo."""
+    slot occupati o lavoro in volo per il successivo.
+
+    Stesso trattamento per il riaggancio periodico (`start_retry_loop`), che
+    non nasce da `spawn` ma da un `threading.Thread` proprio (serve l'handle
+    per fermarlo): lo si spegne PRIMA del test, cosi' un loop acceso da un
+    altro file di test non rivendica gli item di questo, e DOPO, prima dei
+    join, cosi' smette di generare nuovi worker mentre li si attende. Si
+    azzera anche l'interruttore su slskd: e' un global di modulo come
+    `_active`, e un test che lo lascia aperto congelerebbe il successivo."""
+    d.stop_retry_loop()
+    d._slskd_blocked_until = 0.0
     threads: list[threading.Thread] = []
     lock = threading.Lock()
 
@@ -36,9 +49,11 @@ def _attendi_thread_del_dispatcher(monkeypatch):
 
     monkeypatch.setattr(d, "spawn", _spawn_tracciato)
     yield
+    d.stop_retry_loop()
     for th in threads:
         th.join(timeout=5)
     d._active = 0
+    d._slskd_blocked_until = 0.0
 
 
 def _setup(monkeypatch, n_items, slots=3, slskd_available=True):
@@ -224,3 +239,188 @@ def test_fill_su_coda_vuota_non_fa_nulla(monkeypatch):
     monkeypatch.setattr(d, "run_item", lambda item_id: None)
     d.fill()
     assert d.active_count() == 0
+
+
+# --- L'interruttore su slskd e il riaggancio periodico ---------------------
+
+
+class _ClientSpento:
+    """slskd configurato (URL in `.env`, cartella impostata) ma il processo non
+    c'e': httpx alza `ConnectError` e il client la avvolge in `SlskdError`
+    con `raise ... from exc`, esattamente come `SlskdClient._post`. E' lo
+    scenario reale dell'utente, che tiene slskd in locale e l'URL sempre
+    valorizzato: quello che manca, quando manca, e' il daemon."""
+
+    def search(self, artist, title, **kw):
+        try:
+            raise httpx.ConnectError("[Errno 61] Connection refused")
+        except httpx.ConnectError as exc:
+            raise SlskdError(
+                "slskd POST /searches fallita: [Errno 61] Connection refused") from exc
+
+    def close(self):
+        pass
+
+
+class _ClientChe409:
+    """Daemon vivo che risponde male. `raise_for_status` costruisce l'errore
+    dal solo status code, senza causa httpx: e' un fallimento vero della
+    traccia, non dell'infrastruttura, e come tale deve restare."""
+
+    def search(self, artist, title, **kw):
+        raise SlskdError('slskd 409: "must be connected (currently: Disconnected)"')
+
+    def close(self):
+        pass
+
+
+def test_daemon_irraggiungibile_lascia_gli_item_in_coda(monkeypatch):
+    """Il danno del rilievo 1: tre item accodati, URL valido ma porta chiusa.
+
+    Prima della correzione la guardia guardava solo `slskd_configured()` — vera,
+    l'URL c'e' — quindi gli item venivano rivendicati e bruciati uno dopo
+    l'altro: tutti `failed`, e le tracce con un `last_download_outcome="failed"`
+    che riportava "[Errno 61] Connection refused" come motivo. Dopo: gli item
+    restano `queued`, le tracce non ricevono alcun esito, e l'interruttore si
+    apre cosi' i successivi non vengono nemmeno rivendicati.
+
+    `slots=1` come nel test gemello su slskd non configurato: un solo worker
+    alla volta sul `run_item` vero, che qui serve davvero (e' la sua
+    interazione con slskd spento a essere in discussione).
+    """
+    factory = _setup(monkeypatch, n_items=3, slots=1, slskd_available=True)
+    monkeypatch.setattr(runner, "SessionLocal", factory)
+    monkeypatch.setattr(runner, "get_slskd_client", lambda: _ClientSpento())
+    d.fill()
+    threading.Event().wait(0.4)
+
+    db = factory()
+    items = q.list_items(db)
+    assert len(items) == 3
+    assert all(i.state == "queued" for i in items)     # non bruciati a done/failed
+    assert all(i.outcome is None for i in items)
+    # Il tentativo rinviato non e' un tentativo: `claim_next` aveva incrementato
+    # `attempts`, `requeue` lo riporta indietro (con un daemon spento per un'ora
+    # il contatore crescerebbe di decine di unita' mai avvenute).
+    assert all(i.attempts == 0 for i in items)
+    tracks = db.query(Track).all()
+    assert len(tracks) == 3
+    assert all(t.last_download_outcome is None for t in tracks)
+    assert all(t.last_download_reason is None for t in tracks)
+    db.close()
+    assert d.slskd_ready() is False                    # interruttore aperto
+
+
+def test_un_errore_della_singola_traccia_resta_un_fallimento_vero(monkeypatch):
+    """L'altra faccia: un daemon vivo che rifiuta la richiesta riguarda quella
+    traccia, non l'infrastruttura. L'item deve concludersi `failed` con il
+    motivo leggibile, come prima — non essere rinviato all'infinito — e
+    l'interruttore deve restare chiuso, cosi' la coda continua a scorrere."""
+    factory = _setup(monkeypatch, n_items=2, slots=1, slskd_available=True)
+    monkeypatch.setattr(runner, "SessionLocal", factory)
+    monkeypatch.setattr(runner, "get_slskd_client", lambda: _ClientChe409())
+    d.fill()
+    threading.Event().wait(0.5)
+
+    db = factory()
+    items = q.list_items(db)
+    assert [i.state for i in items] == ["done", "done"]   # conclusi entrambi
+    assert all(i.outcome == "failed" for i in items)
+    tracks = db.query(Track).all()
+    assert all(t.last_download_outcome == "failed" for t in tracks)
+    assert all("Disconnected" in (t.last_download_reason or "") for t in tracks)
+    db.close()
+    assert d.slskd_ready() is True                       # nessun interruttore aperto
+
+
+def test_a_interruttore_aperto_un_item_soundcloud_parte_comunque(monkeypatch):
+    """Gemello di `test_slskd_spento_non_blocca_un_item_soundcloud`, ma per la
+    pausa dell'interruttore invece che per la mancata configurazione: yt-dlp
+    non passa da slskd, quindi un daemon giu' non deve fermarlo."""
+    factory = _setup(monkeypatch, n_items=0, slots=3, slskd_available=True)
+    db = factory()
+    t_sc = Track(source_type="manual", artist="A", title="SC",
+                 url="https://soundcloud.com/a/b")
+    t_sl = Track(source_type="manual", artist="B", title="SL")
+    db.add_all([t_sc, t_sl])
+    db.commit()
+    q.enqueue(db, [t_sc.id], kind="soundcloud")
+    q.enqueue(db, [t_sl.id], kind="soulseek_auto")
+    db.close()
+
+    d._trip_slskd_breaker()
+    eseguiti = []
+    monkeypatch.setattr(d, "run_item", lambda item_id: eseguiti.append(item_id))
+    d.fill()
+    threading.Event().wait(0.2)
+
+    db = factory()
+    items = {i.track_id: i for i in q.list_items(db)}
+    assert eseguiti == [items[t_sc.id].id]            # solo il soundcloud e' partito
+    assert items[t_sl.id].state == "queued"           # il soulseek resta intatto
+    db.close()
+
+
+def test_dopo_il_raffreddamento_l_interruttore_si_richiude(monkeypatch):
+    """L'interruttore e' una pausa, non un blocco definitivo: scaduto il
+    raffreddamento l'item viene ritentato, senza che nessuno debba dichiarare
+    che il daemon e' tornato."""
+    factory = _setup(monkeypatch, n_items=1, slots=1, slskd_available=True)
+    monkeypatch.setattr(d, "SLSKD_COOLDOWN", 0.15)    # niente attese vere nei test
+    eseguiti = []
+    monkeypatch.setattr(d, "run_item", lambda item_id: eseguiti.append(item_id))
+
+    d._trip_slskd_breaker()
+    d.fill()
+    threading.Event().wait(0.05)
+    assert eseguiti == []                             # in pausa: nulla rivendicato
+
+    time.sleep(0.2)                                   # raffreddamento scaduto
+    d.fill()
+    threading.Event().wait(0.2)
+
+    db = factory()
+    item_id = q.list_items(db)[0].id
+    db.close()
+    assert eseguiti == [item_id]                      # ritentato
+
+
+def test_il_riaggancio_periodico_rimette_in_moto_una_coda_ferma(monkeypatch):
+    """Il rilievo 2: `fill()` lo chiamano solo gli endpoint di download e
+    `boot()`. Una coda ferma perche' slskd era giu' ripartirebbe solo
+    accodando qualcosa — ma il frontend spegne i pulsanti finche' /status dice
+    `running`, e gli item congelati lo tengono `running` per sempre.
+
+    Qui nessuno accoda e nessuno chiama `fill()` dopo il ritorno del daemon:
+    solo il riaggancio periodico puo' far ripartire l'item. Senza di lui
+    `eseguiti` resta vuoto per sempre.
+    """
+    factory = _setup(monkeypatch, n_items=1, slots=1, slskd_available=False)
+    monkeypatch.setattr(d, "RETRY_INTERVAL", 0.05)
+    eseguiti = []
+    monkeypatch.setattr(d, "run_item", lambda item_id: eseguiti.append(item_id))
+
+    d.boot()                                    # fill() non trova nulla di lavorabile
+    threading.Event().wait(0.2)
+    assert eseguiti == []
+
+    monkeypatch.setattr(d, "slskd_configured", lambda: True)   # il daemon torna
+    threading.Event().wait(0.6)
+
+    db = factory()
+    item_id = q.list_items(db)[0].id
+    db.close()
+    assert eseguiti == [item_id]
+
+
+def test_il_riaggancio_periodico_non_si_avvia_due_volte(monkeypatch):
+    """`boot()` viene chiamato piu' volte nello stesso processo (reload di
+    uvicorn, test): due loop significherebbero due `fill()` concorrenti a ogni
+    intervallo."""
+    _setup(monkeypatch, n_items=0)
+    monkeypatch.setattr(d, "run_item", lambda item_id: None)
+    d.boot()
+    primo = d._retry_thread
+    d.boot()
+    assert d._retry_thread is primo
+    assert primo is not None and primo.is_alive()
