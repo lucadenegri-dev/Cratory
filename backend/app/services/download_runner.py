@@ -47,6 +47,47 @@ def _candidate_from_payload(payload: dict | None) -> SlskdFile | None:
                      queue_length=None)
 
 
+# Salto minimo, in byte, perche' valga la pena riscrivere il progresso quando
+# la dimensione totale non e' nota (senza totale non c'e' una percentuale su
+# cui ragionare). Un mega: sotto, nessuno se ne accorgerebbe.
+_PROGRESS_MIN_STEP_BYTES = 1024 * 1024
+
+
+def _progress_writer(db, item_id: int):
+    """Ritorna una `write(fase, byte_fatti, byte_totali)` che scrive sull'item
+    solo quando cambia qualcosa di visibile.
+
+    Il ciclo di poll gira ogni `POLL_INTERVAL` secondi, per ogni worker: girare
+    la scrittura pari pari sul DB significherebbe una commit ogni due secondi a
+    testa per tutta la durata di un trasferimento (mezz'ora, sui lossless da
+    peer lenti), quasi sempre per ridisegnare la stessa identica barra. La
+    barra si muove per punti percentuali interi, quindi si scrive solo quando
+    la percentuale mostrata cambierebbe davvero — al massimo cento scritture
+    per download, invece di novecento.
+    """
+    last: dict = {"phase": None, "done": None, "total": None}
+
+    def significativo(nuovo: int | None, totale: int | None) -> bool:
+        precedente = last["done"]
+        if nuovo is None:
+            return precedente is not None
+        if precedente is None:
+            return True
+        if totale:
+            return nuovo * 100 // totale != precedente * 100 // totale
+        return abs(nuovo - precedente) >= _PROGRESS_MIN_STEP_BYTES
+
+    def write(phase: str | None, bytes_done: int | None = None,
+              bytes_total: int | None = None) -> None:
+        if (phase == last["phase"] and bytes_total == last["total"]
+                and not significativo(bytes_done, bytes_total)):
+            return
+        queue.set_progress(db, item_id, phase, bytes_done, bytes_total)
+        last.update(phase=phase, done=bytes_done, total=bytes_total)
+
+    return write
+
+
 def _run_soulseek(db, item: DownloadQueueItem, track: Track,
                   chosen: SlskdFile | None) -> tuple[str, str | None, str | None]:
     """Ritorna (esito, motivo, path_dubbio), come il job storico.
@@ -54,18 +95,26 @@ def _run_soulseek(db, item: DownloadQueueItem, track: Track,
     `should_cancel` viene interrogato dal ciclo di attesa del transfer: senza,
     annullare una traccia gia' in corso non avrebbe effetto fino alla fine del
     trasferimento — che su un lossless da un peer lento sono minuti.
+
+    `on_progress` e' l'altra meta': senza, la fase resterebbe "searching" per
+    tutta la durata del trasferimento e la barra per-traccia non avrebbe mai un
+    numero da mostrare.
     """
     client = get_slskd_client()
     try:
         download_dir = runtime_settings.slskd_download_dir()
         return _process_item(db, client, download_dir, track, chosen,
-                             should_cancel=lambda: queue.is_cancelled(db, item.id))
+                             should_cancel=lambda: queue.is_cancelled(db, item.id),
+                             on_progress=_progress_writer(db, item.id))
     finally:
         client.close()
 
 
 def _run_soundcloud(db, item: DownloadQueueItem, track: Track,
                     chosen: SlskdFile | None) -> tuple[str, str | None, str | None]:
+    # yt-dlp non riporta avanzamento a Cratory: la fase si puo' dire, i byte no.
+    # Meglio "scarico" senza barra che "Ricerca..." per tutta la durata.
+    queue.set_progress(db, item.id, "downloading")
     try:
         path = download_track_audio(track.url, runtime_settings.slskd_download_dir())
     except SoundCloudAudioError as exc:
@@ -177,7 +226,8 @@ def _cancel_abandoned_transfer(client, username: str, info: dict) -> None:
                        username, transfer_id, exc_info=True)
 
 
-def _wait_for_download(client, file: SlskdFile, should_cancel=None) -> tuple[str, str | None]:
+def _wait_for_download(client, file: SlskdFile, should_cancel=None,
+                       on_progress=None) -> tuple[str, str | None]:
     """Attende l'esito di un transfer. Ritorna (esito, motivo).
 
     Se il transfer sta scaricando ("InProgress") si guarda `bytesTransferred`: finche'
@@ -196,6 +246,11 @@ def _wait_for_download(client, file: SlskdFile, should_cancel=None) -> tuple[str
     in corso conosce gia' il suo id) e prima di processarlo ulteriormente: e'
     cosi' che l'annullo dell'utente arriva dentro un'attesa che altrimenti
     durerebbe fino al prossimo timeout — minuti, su un lossless da un peer lento.
+
+    `on_progress`, se passato, riceve i byte trasferiti a ogni giro: e' lo
+    stesso `bytesTransferred` gia' letto qui per rilevare lo stallo, quindi
+    non costa una chiamata in piu' al daemon. Il totale lo porta il candidato
+    (`file.size`), noto da prima di cominciare.
     """
     waited = 0.0
     queued = 0.0
@@ -217,6 +272,8 @@ def _wait_for_download(client, file: SlskdFile, should_cancel=None) -> tuple[str
             queued = 0.0
             transferred = info.get("bytesTransferred")
             if isinstance(transferred, (int, float)):
+                if on_progress is not None:
+                    on_progress("downloading", int(transferred), file.size)
                 if last_bytes is not None and transferred <= last_bytes:
                     stalled += POLL_INTERVAL
                     if stalled >= STALL_TIMEOUT:
@@ -239,7 +296,7 @@ def _wait_for_download(client, file: SlskdFile, should_cancel=None) -> tuple[str
 
 
 def _download_candidate(client, download_dir, file: SlskdFile,
-                        should_cancel=None) -> tuple[str | None, str | None]:
+                        should_cancel=None, on_progress=None) -> tuple[str | None, str | None]:
     """Accoda un candidato, attende l'esito e risolve il path locale.
 
     Ritorna (path, motivo): (path, None) se ok, (None, <code>) se fallisce.
@@ -255,7 +312,15 @@ def _download_candidate(client, download_dir, file: SlskdFile,
             raise
         logger.exception("enqueue fallito user=%s", file.username)
         return None, "enqueue_rejected"
-    outcome, reason = _wait_for_download(client, file, should_cancel=should_cancel)
+    if on_progress is not None:
+        # La fase cambia PRIMA dell'attesa, non dopo: e' l'attesa a durare. Il
+        # totale arriva dal candidato, cosi' la barra ha una scala fin dal
+        # primo giro, prima ancora che il daemon riporti un byte. Azzerare i
+        # byte fatti serve anche al fallback su un altro utente: il nuovo
+        # tentativo riparte da zero, non dai byte del precedente.
+        on_progress("downloading", 0, file.size)
+    outcome, reason = _wait_for_download(client, file, should_cancel=should_cancel,
+                                         on_progress=on_progress)
     if outcome != "completed":
         return None, reason
     path = _resolve_local_path(download_dir, file.filename)
@@ -267,7 +332,7 @@ def _download_candidate(client, download_dir, file: SlskdFile,
 def _attempt_download(db, client, download_dir, track, file: SlskdFile,
                       expected_duration: int | None = None,
                       enforce_duration: bool = True,
-                      should_cancel=None) -> tuple[str, str | None, str | None]:
+                      should_cancel=None, on_progress=None) -> tuple[str, str | None, str | None]:
     """Scarica un candidato e lo collega a una Track. Ritorna (esito, motivo, path_dubbio).
 
     Verifica post-download (solo se `enforce_duration`): se la durata reale del
@@ -277,7 +342,9 @@ def _attempt_download(db, client, download_dir, track, file: SlskdFile,
     per l'auto-pick, che non ha supervisione umana: quando l'utente ha scelto lui
     il candidato (review modal), la sua scelta va rispettata e il guard va saltato.
     """
-    path, reason = _download_candidate(client, download_dir, file, should_cancel=should_cancel)
+    path, reason = _download_candidate(client, download_dir, file,
+                                       should_cancel=should_cancel,
+                                       on_progress=on_progress)
     if not path:
         # _wait_for_download ritorna reason=None solo per "completed" (gia'
         # escluso, essendoci un path) o per "cancelled": e' l'unico modo in
@@ -298,14 +365,15 @@ def _attempt_download(db, client, download_dir, track, file: SlskdFile,
 
 def _process_item(db, client, download_dir, track,
                   chosen: SlskdFile | None,
-                  should_cancel=None) -> tuple[str, str | None, str | None]:
+                  should_cancel=None, on_progress=None) -> tuple[str, str | None, str | None]:
     expected = track.duration_seconds
     # Discovery/singola: candidato gia' scelto dall'utente, un solo tentativo.
     # La scelta esplicita dell'utente prevale sul guard di coerenza durata
     # (pensato per proteggere l'auto-pick, senza supervisione umana).
     if chosen is not None:
         return _attempt_download(db, client, download_dir, track, chosen, expected,
-                                 enforce_duration=False, should_cancel=should_cancel)
+                                 enforce_duration=False, should_cancel=should_cancel,
+                                 on_progress=on_progress)
 
     # Cascata di varianti di query (la letterale spesso esclude file validi).
     ranked = search_candidates(client, artist=track.artist or "",
@@ -329,7 +397,8 @@ def _process_item(db, client, download_dir, track,
         tried.add(cand.file.username)
         outcome, reason, path = _attempt_download(db, client, download_dir, track,
                                                   cand.file, expected,
-                                                  should_cancel=should_cancel)
+                                                  should_cancel=should_cancel,
+                                                  on_progress=on_progress)
         if outcome == "cancelled":
             # Un annullo non deve essere scavalcato dal fallback su un altro utente.
             return outcome, reason, path

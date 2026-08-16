@@ -120,6 +120,134 @@ def test_annullo_durante_il_lavoro_ferma_e_non_scrive_esito(factory, monkeypatch
     assert db.get(Track, track_id).last_download_outcome is None
 
 
+# --- Fase e byte per-traccia -------------------------------------------------
+#
+# La fascia "in corso" della pagina /downloads e' la ragione d'essere della
+# pagina: senza queste scritture un FLAC da un peer lento resta «Ricerca…» per
+# venti minuti, senza barra.
+
+
+def _spia_progressi(monkeypatch):
+    scritte: list[tuple] = []
+    monkeypatch.setattr(
+        runner.queue, "set_progress",
+        lambda db, item_id, phase, bytes_done=None, bytes_total=None:
+            scritte.append((phase, bytes_done, bytes_total)))
+    return scritte
+
+
+def test_progress_writer_scrive_solo_quando_la_barra_si_muove(monkeypatch):
+    """Il poll gira ogni due secondi per worker: scrivere ad ogni giro sarebbe
+    una commit ogni due secondi per ridisegnare la stessa barra."""
+    scritte = _spia_progressi(monkeypatch)
+    write = runner._progress_writer(None, 1)
+    write("downloading", 0, 1000)
+    write("downloading", 5, 1000)     # sempre 0%: niente
+    write("downloading", 9, 1000)     # sempre 0%: niente
+    write("downloading", 20, 1000)    # 2%: si vede
+    write("downloading", 1000, 1000)  # 100%: si vede
+    assert scritte == [
+        ("downloading", 0, 1000), ("downloading", 20, 1000),
+        ("downloading", 1000, 1000),
+    ]
+
+
+def test_progress_writer_senza_totale_usa_un_salto_assoluto(monkeypatch):
+    """slskd non espone sempre la dimensione: senza totale non c'e' percentuale
+    su cui ragionare, si guarda quanto e' avanzato in assoluto."""
+    scritte = _spia_progressi(monkeypatch)
+    write = runner._progress_writer(None, 1)
+    write("downloading", 0, None)
+    write("downloading", 1000, None)                      # meno di un mega: niente
+    write("downloading", 4 * 1024 * 1024, None)           # quattro mega: si vede
+    assert scritte == [("downloading", 0, None), ("downloading", 4 * 1024 * 1024, None)]
+
+
+def test_progress_writer_scrive_sempre_un_cambio_di_fase(monkeypatch):
+    """Il cambio di fase non passa dalla soglia: e' l'informazione principale."""
+    scritte = _spia_progressi(monkeypatch)
+    write = runner._progress_writer(None, 1)
+    write("searching")
+    write("downloading", 0, None)
+    assert scritte == [("searching", None, None), ("downloading", 0, None)]
+
+
+def test_progress_writer_scrive_davvero_sull_item(factory):
+    """Senza spie: la riga sul DB deve portare fase e byte, perche' e' quella
+    che l'endpoint della coda serve alla pagina."""
+    item_id, _ = _queued(factory)
+    db = factory()
+    write = runner._progress_writer(db, item_id)
+    write("downloading", 512, 1024)
+    item = factory().get(DownloadQueueItem, item_id)
+    assert (item.phase, item.bytes_done, item.bytes_total) == ("downloading", 512, 1024)
+
+
+def test_download_candidate_dichiara_la_fase_prima_di_attendere(monkeypatch):
+    """L'attesa e' la parte che dura: la fase va scritta prima di entrarci, non
+    dopo esserne usciti."""
+    from app.integrations.slskd import SlskdFile
+
+    monkeypatch.setattr(runner, "POLL_INTERVAL", 0.0)
+    fasi_viste_dal_poll = []
+    progressi: list[tuple] = []
+
+    class _Client:
+        def enqueue_download(self, file):
+            pass
+
+        def transfer_state(self, username, filename):
+            fasi_viste_dal_poll.append(list(progressi))
+            return {"id": "t1", "state": "Completed, Succeeded"}
+
+    file = SlskdFile(username="u", filename="X.flac", size=4000, bitrate=None,
+                     length=None, has_free_slot=True, queue_length=0)
+    runner._download_candidate(_Client(), "/nessuna-cartella", file,
+                               on_progress=lambda *a: progressi.append(a))
+    assert progressi[0] == ("downloading", 0, 4000)
+    # Al primo giro di poll la fase era gia' scritta.
+    assert fasi_viste_dal_poll[0] == [("downloading", 0, 4000)]
+
+
+def test_wait_for_download_riporta_i_byte_letti_dal_poll(monkeypatch):
+    """I byte arrivano dallo stesso `bytesTransferred` gia' letto per rilevare
+    lo stallo: nessuna chiamata in piu' al daemon."""
+    from app.integrations.slskd import SlskdFile
+
+    monkeypatch.setattr(runner, "POLL_INTERVAL", 0.0)
+    stati = [
+        {"id": "t1", "state": "InProgress", "bytesTransferred": 100},
+        {"id": "t1", "state": "InProgress", "bytesTransferred": 900},
+        {"id": "t1", "state": "Completed, Succeeded"},
+    ]
+    progressi: list[tuple] = []
+
+    class _Client:
+        def transfer_state(self, username, filename):
+            return stati.pop(0)
+
+    file = SlskdFile(username="u", filename="X.flac", size=1000, bitrate=None,
+                     length=None, has_free_slot=True, queue_length=0)
+    outcome, _ = runner._wait_for_download(_Client(), file,
+                                            on_progress=lambda *a: progressi.append(a))
+    assert outcome == "completed"
+    assert progressi == [("downloading", 100, 1000), ("downloading", 900, 1000)]
+
+
+def test_soundcloud_dichiara_la_fase_di_download(factory, monkeypatch):
+    """yt-dlp non riporta avanzamento, ma la fase si puo' dire lo stesso:
+    meglio «scarico» senza barra che «Ricerca…» per tutta la durata."""
+    item_id, _ = _queued(factory, kind="soundcloud")
+    scritte = _spia_progressi(monkeypatch)
+    monkeypatch.setattr(runner, "download_track_audio", lambda url, d: "/dl/x.mp3")
+    monkeypatch.setattr(runner, "read_audio_quality",
+                        lambda p: {"format": "mp3", "bitrate": 320})
+    monkeypatch.setattr(runner, "attach_local_file",
+                        lambda db, track, **kw: track)
+    runner.run_item(item_id)
+    assert ("downloading", None, None) in scritte
+
+
 def test_wait_for_download_si_arrende_se_l_item_viene_annullato(monkeypatch):
     """Il ciclo di attesa del transfer interroga `should_cancel` a ogni giro:
     senza questo, annullare una traccia in corso non avrebbe effetto fino alla
