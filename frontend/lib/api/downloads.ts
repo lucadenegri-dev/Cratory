@@ -1,7 +1,6 @@
 import { apiDelete, apiGet, apiPost } from "./client";
 import type {
   AutoLinkProposal,
-  DownloadCandidate,
   DownloadReview,
   DownloadStatus,
   LocalFileHit,
@@ -34,10 +33,6 @@ export function downloadPending(opts?: { signal?: AbortSignal }) {
 
 export function retryPending() {
   return apiPost<DownloadStatus>("/api/downloads/retry-pending");
-}
-
-export function downloadTrack(trackId: number, candidate: DownloadCandidate) {
-  return apiPost<DownloadStatus>("/api/downloads/track", { track_id: trackId, candidate });
 }
 
 /** Ricerca manuale Soulseek con la query letterale (nessuna cascata di varianti). */
