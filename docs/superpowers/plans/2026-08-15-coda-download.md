@@ -12,8 +12,8 @@
 
 ## Global Constraints
 
-- Directory di lavoro: `/Users/lucadenegri/Develop/DJProject01` (checkout principale, branch `master`). Tutti i path sono relativi a questa radice.
-- **Altre sessioni lavorano sullo stesso checkout.** Prima di ogni commit: `git status --porcelain`, e stageare SOLO i file del task. Mai `git add -A`.
+- Directory di lavoro: `/Users/lucadenegri/Develop/DJProject01/.claude/worktrees/wishlist-section-org-105213` (worktree isolato, branch `claude/coda-download`, nato da `master`). Tutti i path sono relativi a questa radice. Il nome della cartella è ereditato da un lavoro precedente: è il worktree giusto, ignora il nome.
+- **Altre sessioni lavorano sul checkout principale**, non qui: il worktree serve proprio a non incrociarle. Prima di ogni commit comunque `git status --porcelain`, e stageare SOLO i file del task. Mai `git add -A`. `backend/.venv` è un symlink locale non tracciato: non committarlo mai.
 - Test backend: `cd backend && .venv/bin/python -m pytest tests/<file> -v`
 - Test frontend: `cd frontend && npx vitest run <file>` · lint `npm run lint` · tipi `npx tsc --noEmit` · e2e `npx playwright test`
 - Commit in italiano nello stile del repo. MAI `Co-Authored-By: Claude`.
