@@ -320,3 +320,44 @@ class ArchiveSeen(Base):
     path: Mapped[str] = mapped_column(String, primary_key=True)
     mtime: Mapped[float] = mapped_column(Float)
     size: Mapped[int] = mapped_column(Integer)
+
+
+class DownloadQueueItem(Base):
+    """Un lavoro di acquisizione in coda: una traccia, un modo di scaricarla.
+
+    `state` e' il ciclo di vita (il lavoro e' stato eseguito?), `outcome` il
+    risultato (com'e' andata) — tenuti separati per non avere due verita' sullo
+    stesso fatto: una traccia scaricata ma con durata sospetta e'
+    `state='done', outcome='needs_review'`, senza stati ibridi.
+
+    L'esito viene comunque scritto anche su `Track.last_download_outcome`, che
+    resta la fonte per i tab della wishlist: la coda racconta come sta andando
+    adesso, la traccia com'e' finita.
+    """
+
+    __tablename__ = "download_queue_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    track_id: Mapped[int] = mapped_column(ForeignKey("tracks.id"), index=True)
+    # soulseek_auto (cascata di varianti) | soulseek_chosen (candidato scelto
+    # dall'utente, in payload) | soundcloud (yt-dlp da track.url)
+    kind: Mapped[str] = mapped_column(String)
+    payload: Mapped[str | None] = mapped_column(Text)  # JSON, solo per soulseek_chosen
+    state: Mapped[str] = mapped_column(String, index=True, default="queued",
+                                       server_default="queued")
+    outcome: Mapped[str | None] = mapped_column(String)
+    # Ordine della coda: crescente. "In cima" assegna un valore piu' basso del minimo.
+    position: Mapped[int] = mapped_column(Integer, index=True, default=0)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    phase: Mapped[str | None] = mapped_column(String)  # searching | downloading
+    bytes_done: Mapped[int | None] = mapped_column(Integer)
+    bytes_total: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)
+    enqueued_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    def payload_dict(self) -> dict | None:
+        import json
+
+        return json.loads(self.payload) if self.payload else None
