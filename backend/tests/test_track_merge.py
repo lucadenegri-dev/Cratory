@@ -137,3 +137,25 @@ def test_merge_noop_su_stessa_traccia(db):
     db.add(t); db.commit()
     assert merge_tracks(db, t, t) is t
     assert db.query(Track).count() == 1
+
+
+def test_merge_conserva_added_by_della_membership_trasferita(db):
+    # added_by='cratory' protegge la membership dal prune del sync di
+    # services/playlist_import.py: se il merge la resetta a NULL, il sync
+    # successivo pota dalla playlist una traccia aggiunta da Discovery.
+    pa = _pl(db, "A")
+    keep = Track(source_type="spotify", title="K", artist="X")  # non membro di pa
+    drop = Track(source_type="local_files", title="D", artist="X")
+    db.add_all([keep, drop]); db.flush()
+    db.execute(playlist_tracks.insert().values(
+        playlist_id=pa.id, track_id=drop.id, added_by="cratory"))
+    db.commit()
+
+    merge_tracks(db, keep, drop); db.commit()
+
+    added_by = db.execute(
+        select(playlist_tracks.c.added_by).where(
+            playlist_tracks.c.playlist_id == pa.id, playlist_tracks.c.track_id == keep.id,
+        )
+    ).scalar_one()
+    assert added_by == "cratory"

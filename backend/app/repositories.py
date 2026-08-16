@@ -695,13 +695,19 @@ def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
         )
     }
     shared_pids: list[int] = []
-    for pid, added, pos in db.execute(
-        select(playlist_tracks.c.playlist_id, playlist_tracks.c.added_at, playlist_tracks.c.position)
+    for pid, added, pos, added_by in db.execute(
+        select(playlist_tracks.c.playlist_id, playlist_tracks.c.added_at,
+               playlist_tracks.c.position, playlist_tracks.c.added_by)
         .where(playlist_tracks.c.track_id == drop.id)
     ).all():
         if pid not in keep_pls:
+            # added_by va trasferito insieme al resto: 'cratory' protegge la
+            # membership dal prune del sync (services/playlist_import.py). Se
+            # si perdesse qui, la traccia sopravviverebbe alla fusione ma
+            # sparirebbe dalla playlist al prossimo sync.
             db.execute(playlist_tracks.insert().values(
-                playlist_id=pid, track_id=keep.id, added_at=added, position=pos))
+                playlist_id=pid, track_id=keep.id, added_at=added, position=pos,
+                added_by=added_by))
         else:
             shared_pids.append(pid)
     db.execute(playlist_tracks.delete().where(playlist_tracks.c.track_id == drop.id))
