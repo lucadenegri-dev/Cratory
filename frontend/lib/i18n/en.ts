@@ -875,6 +875,7 @@ export const en = {
     previous: "Previous track",
     next: "Next track",
     seek: "Seek",
+    openTrack: "Open the track page",
     close: "Close player",
     unsupportedFormat: "Format not playable in the browser",
   },
