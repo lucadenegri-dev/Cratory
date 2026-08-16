@@ -28,6 +28,10 @@ def factory(monkeypatch):
 
     app.dependency_overrides[get_db] = _db
     monkeypatch.setattr(router_mod, "fill", lambda: None)   # niente thread nei test
+    # slskd finto-configurato: questi test coprono la meccanica della coda, non
+    # il gate sulla configurazione (che ha i suoi test qui sotto), e senza
+    # questo dipenderebbero dal .env della macchina che li lancia.
+    monkeypatch.setattr(router_mod, "slskd_configured", lambda: True)
     yield f
     app.dependency_overrides.clear()
 
@@ -123,6 +127,36 @@ def test_cancel_queued_e_clear_done(factory):
     client.post("/api/downloads/queue", json={"track_ids": ids})
     assert client.post("/api/downloads/queue/cancel-queued").json() == {"cancelled": 2}
     assert client.delete("/api/downloads/queue/done").json() == {"removed": 0}
+
+
+def test_senza_slskd_l_accodamento_soulseek_e_rifiutato(factory, monkeypatch):
+    """Come i suoi fratelli in routers/downloads.py: senza slskd quegli item
+    non partirebbero mai, e accodarli riempie la coda di lavoro morto."""
+    monkeypatch.setattr(router_mod, "slskd_configured", lambda: False)
+    ids = _tracks(factory, 1)
+    r = client.post("/api/downloads/queue", json={"track_ids": ids})
+    assert r.status_code == 409
+    assert client.get("/api/downloads/queue").json()["items"] == []
+
+
+def test_senza_slskd_un_item_soundcloud_passa_comunque(factory, monkeypatch):
+    """yt-dlp non passa da slskd: il gate non deve valere anche per lui."""
+    monkeypatch.setattr(router_mod, "slskd_configured", lambda: False)
+    ids = _tracks(factory, 1)
+    r = client.post("/api/downloads/queue",
+                    json={"track_ids": ids, "kind": "soundcloud"})
+    assert r.status_code == 200
+
+
+def test_un_kind_inventato_e_rifiutato(factory):
+    """Non validato, un `kind` arbitrario non dava errore: finiva sulla via
+    slskd, perche' il runner manda a yt-dlp solo "soundcloud" e tratta tutto
+    il resto come Soulseek."""
+    ids = _tracks(factory, 1)
+    r = client.post("/api/downloads/queue",
+                    json={"track_ids": ids, "kind": "bittorrent"})
+    assert r.status_code == 422
+    assert client.get("/api/downloads/queue").json()["items"] == []
 
 
 def test_404_su_item_inesistente(factory):

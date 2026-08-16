@@ -7,8 +7,9 @@ import { test, expect, type Page, type ConsoleMessage } from "@playwright/test";
  *
  * "/downloads/issues" non esiste piu': la pagina e' stata unificata in
  * "/downloads" (vedi docs/archive/superpowers/plans/2026-07-09-download-unificato.md),
- * poi rinominata in "/wishlist" (2026-07-19): "/downloads" ora e' solo un
- * redirect 307, non una rotta.
+ * poi rinominata in "/wishlist" (2026-07-19). "/downloads" e' tornata a essere
+ * una rotta vera — la coda dei download — e non piu' un redirect, quindi va
+ * nell'elenco qui sotto come tutte le altre.
  *
  * "/" (dashboard) e' l'unica rotta senza <h1> di PageLayout (nessun `title`
  * passato): per quella verifichiamo solo che <main> renderizzi contenuto.
@@ -19,6 +20,7 @@ const ROUTES: { path: string; title: string | null }[] = [
   { path: "/playlists", title: null },
   { path: "/labels", title: null },
   { path: "/wishlist", title: "Wishlist" },
+  { path: "/downloads", title: "Download" },
   { path: "/sets", title: null },
   { path: "/transitions", title: null },
   { path: "/analysis", title: null },

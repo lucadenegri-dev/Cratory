@@ -568,8 +568,8 @@ def test_dopo_il_raffreddamento_l_interruttore_si_richiude(monkeypatch):
 def test_il_riaggancio_periodico_rimette_in_moto_una_coda_ferma(monkeypatch):
     """Il rilievo 2: `fill()` lo chiamano solo gli endpoint di download e
     `boot()`. Una coda ferma perche' slskd era giu' ripartirebbe solo
-    accodando qualcosa — ma il frontend spegne i pulsanti finche' /status dice
-    `running`, e gli item congelati lo tengono `running` per sempre.
+    accodando qualcos'altro — un gesto che l'utente non ha ragione di fare,
+    visto che quello che ha gia' accodato non e' andato da nessuna parte.
 
     Qui nessuno accoda e nessuno chiama `fill()` dopo il ritorno del daemon:
     solo il riaggancio periodico puo' far ripartire l'item. Senza di lui

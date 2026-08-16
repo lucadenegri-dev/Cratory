@@ -27,10 +27,11 @@ logger = logging.getLogger(__name__)
 SLSKD_COOLDOWN = 60.0
 
 # Ogni quanto il riaggancio periodico riprova a riempire gli slot. E' l'unica
-# cosa che rimette in moto una coda ferma senza un gesto dell'utente: senza,
-# una coda fermata da un daemon spento resterebbe ferma per sempre (il frontend
-# spegne i pulsanti di download finche' /status dice `running`, quindi
-# nemmeno un nuovo accodamento sarebbe possibile).
+# cosa che rimette in moto una coda ferma senza un gesto dell'utente: gli
+# endpoint chiamano `fill()` solo su un nuovo accodamento, quindi senza il
+# riaggancio una coda fermata da un daemon spento resterebbe ferma finche'
+# l'utente non accoda dell'altro — e non c'e' ragione perche' debba farlo,
+# visto che quello che ha gia' accodato non e' andato da nessuna parte.
 RETRY_INTERVAL = 30.0
 
 # Quanti fallimenti consecutivi con lo STESSO motivo bastano ad aprire
@@ -194,8 +195,8 @@ def fill() -> None:
     (`start_retry_loop`), che richiama questa funzione a pool fermo. Senza di
     lui ne' la riconfigurazione a caldo ne' il daemon che torna basterebbero,
     perche' nessuno chiamerebbe piu' `fill()` — gli endpoint di download lo
-    fanno solo su un nuovo accodamento, che il frontend impedisce finche'
-    /status resta `running`.
+    fanno solo su un nuovo accodamento, e l'utente che ha gia' accodato non ha
+    ragione di accodare dell'altro per sbloccare cio' che ha gia' chiesto.
     """
     while _reserve():
         db = SessionLocal()

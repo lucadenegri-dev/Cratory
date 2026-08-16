@@ -307,7 +307,10 @@ function WishlistInner() {
           })()}
           {!showArchived && (
             <div className="mb-2">
+              {/* `canEnqueue`: stesso gate del «Scarica» di riga — senza slskd
+                  quelle tracce non partirebbero mai (e il backend risponde 409). */}
               <SelectionBar count={selected.size} busy={enqueuing}
+                canEnqueue={downloadsAvailable}
                 onEnqueue={onEnqueueSelected} onClear={clearSelection} />
             </div>
           )}

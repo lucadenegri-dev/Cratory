@@ -1,6 +1,8 @@
 """HTTP per la coda di acquisizione. Nessuna logica di business qui."""
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -8,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core import runtime_settings
 from app.core.http_errors import api_error
 from app.db import get_db
+from app.integrations.slskd import slskd_configured
 from app.models import DownloadQueueItem, Track
 from app.services import download_queue as queue
 from app.services.download_dispatcher import active_count, breaker_state, fill
@@ -24,9 +27,16 @@ class CandidateIn(BaseModel):
     length: int | None = None
 
 
+# I tre soli modi di scaricare che il runner sa eseguire. Vincolati qui, non
+# lasciati stringa libera: un `kind` arbitrario non finiva in errore, finiva
+# sulla via slskd (il runner manda a yt-dlp solo "soundcloud" e tratta tutto
+# il resto come Soulseek) — silenziosamente, e sbagliato.
+QueueKind = Literal["soulseek_auto", "soulseek_chosen", "soundcloud"]
+
+
 class EnqueueIn(BaseModel):
     track_ids: list[int]
-    kind: str = "soulseek_auto"
+    kind: QueueKind = "soulseek_auto"
     # Solo con esattamente un track_id: un candidato e' per definizione la
     # scelta su una traccia sola, con una lista sarebbe ambiguo.
     candidate: CandidateIn | None = None
@@ -106,6 +116,12 @@ def enqueue(req: EnqueueIn, db: Session = Depends(get_db)):
         raise api_error(422, "candidate_needs_one_track",
                         "Un candidato vale per una sola traccia.")
     kind = "soulseek_chosen" if req.candidate is not None else req.kind
+    # Come i suoi fratelli in `routers/downloads.py`: senza slskd quegli item
+    # non partiranno mai, e accodarli in silenzio riempie la coda di lavoro
+    # morto. Non vale per `soundcloud`, che passa da yt-dlp e non da slskd.
+    if kind != "soundcloud" and not slskd_configured():
+        raise api_error(409, "slskd_not_configured",
+                        "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     payload = req.candidate.model_dump() if req.candidate is not None else None
     esito = queue.enqueue(db, req.track_ids, kind=kind, payload=payload)
     if esito.added or esito.replaced:

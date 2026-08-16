@@ -850,9 +850,13 @@ closes.
 body `{track_ids: [...], kind?, candidate?}`. `candidate` is only valid with
 exactly one `track_id` (`422 candidate_needs_one_track` otherwise) and
 forces `kind` to `soulseek_chosen`; without a candidate, `kind` defaults to
-`soulseek_auto` and also accepts `soundcloud`. Response `{enqueued,
-skipped}` — skipped covers both tracks deduplicated as above and
-`track_id`s that no longer exist.
+`soulseek_auto` and also accepts `soundcloud`. Those three are the only
+accepted values — anything else is a `422`, not a silent trip down the slskd
+path. Like its siblings it answers `409 slskd_not_configured` for the
+slskd-backed kinds when slskd is not set up (`soundcloud` goes through
+yt-dlp and is exempt). Response `{enqueued, skipped, replaced}` — skipped
+covers both tracks deduplicated as above and `track_id`s that no longer
+exist.
 
 `DELETE /api/downloads/queue/{item_id}` cancels a `queued` or `running`
 item (`404 queue_item_not_found`, `409 queue_item_not_active` if it already
