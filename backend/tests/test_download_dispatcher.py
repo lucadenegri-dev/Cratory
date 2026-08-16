@@ -1,14 +1,43 @@
 import threading
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core import runtime_settings as rs
 from app.db import Base
-from app.models import DownloadQueueItem, Track
+from app.models import Track
 from app.services import download_dispatcher as d
 from app.services import download_queue as q
+
+
+@pytest.fixture(autouse=True)
+def _attendi_thread_del_dispatcher(monkeypatch):
+    """Ogni test lancia thread daemon veri (`d.spawn`, anche a cascata da
+    `_work`/`fill`). Senza attenderli, un thread puo' sopravvivere al
+    `monkeypatch` del proprio test e, dopo lo smontaggio, chiamare il vero
+    `download_runner.run_item` sul DB di sessione condiviso dagli altri test
+    (vedi test_boot_ricuce_i_running_e_riparte per come si crea questo DB).
+    Si intercetta lo spawn per tracciare ogni thread — anche quelli nati
+    durante il join, la lista cresce e l'iterazione li raccoglie comunque —
+    e si attende la loro fine a fine test (timeout cosi' un thread bloccato
+    non appende la suite), poi si azzera `_active` perche' nessun test lasci
+    slot occupati o lavoro in volo per il successivo."""
+    threads: list[threading.Thread] = []
+    lock = threading.Lock()
+
+    def _spawn_tracciato(fn):
+        th = threading.Thread(target=fn, daemon=True)
+        with lock:
+            threads.append(th)
+        th.start()
+
+    monkeypatch.setattr(d, "spawn", _spawn_tracciato)
+    yield
+    for th in threads:
+        th.join(timeout=5)
+    d._active = 0
 
 
 def _setup(monkeypatch, n_items, slots=3):
@@ -99,16 +128,18 @@ def test_rilegge_gli_slot_dalle_impostazioni_senza_riavvio(monkeypatch):
 def test_boot_ricuce_i_running_e_riparte(monkeypatch):
     factory = _setup(monkeypatch, n_items=2, slots=2)
     db = factory()
-    q.claim_next(db)                          # simula un riavvio a meta'
+    rimasto_running = q.claim_next(db)        # simula un riavvio a meta'
     db.close()
     eseguiti = []
     monkeypatch.setattr(d, "run_item", lambda item_id: eseguiti.append(item_id))
     d.boot()
     threading.Event().wait(0.3)
     assert len(eseguiti) == 2                 # entrambi ripresi
-    db = factory()
-    assert all(i.state == "queued" or i.state == "running"
-               for i in db.query(DownloadQueueItem).all()) or True
+    # non solo il conteggio: proprio l'item rimasto "running" dal riavvio
+    # precedente deve essere stato ricucito (rimesso "queued" da
+    # requeue_stale) e ripescato da fill() — senza la ricucitura resterebbe
+    # "running" per sempre e non finirebbe mai in `eseguiti`.
+    assert rimasto_running.id in eseguiti
 
 
 def test_fill_su_coda_vuota_non_fa_nulla(monkeypatch):
