@@ -26,7 +26,7 @@ from app.integrations.local_files import (
     read_tags,
 )
 from app.models import ArchiveSeen, Track, utcnow
-from app.repositories import ci_equals, unreferenced_track_ids
+from app.repositories import ci_equals, detach_track_dependencies, unreferenced_track_ids
 from app.services.audio_energy import analyze_file, recompute_energy
 from app.services.genre_align import align_track_genre
 from app.services.genre_norm import normalize_genre
@@ -561,6 +561,12 @@ def riconcilia_possessi(db: Session, *, seen_paths: set[str], scanned: int) -> d
     # tolto. Decidiamo PRIMA di mutare, cosi' gli orfani si cancellano via ORM senza
     # conflitti di stato.
     unref = set(unreferenced_track_ids(db, [t.id for t in lost]))
+    # Gli orfani portano con se' figli che l'ORM non pulisce (lo storico della
+    # coda download: nessuna `relationship`, FK senza cascade, foreign key
+    # accese). Senza questo, una traccia scaricata dalla coda e poi spostata
+    # fuori dalla libreria fa esplodere l'INTERO giro d'indicizzazione con un
+    # IntegrityError, non solo la sua riga.
+    detach_track_dependencies(db, [t.id for t in lost if t.id in unref])
     for track in lost:
         if track.id in unref:
             db.delete(track)

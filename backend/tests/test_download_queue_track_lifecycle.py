@@ -139,6 +139,47 @@ def test_merge_sposta_l_item_attivo_se_la_traccia_superstite_non_ne_ha(db):
     assert db.get(DownloadQueueItem, attivo.id).track_id == keep.id
 
 
+def test_riconcilia_possessi_cancella_un_orfano_con_storico_in_coda(db, monkeypatch):
+    """Lo scenario che fa piu' danno: una traccia scaricata dalla coda (quindi con
+    storico) il cui file viene poi spostato fuori dalla libreria. La fase 3
+    dell'indicizzazione la trova persa e, non essendo in nessuna playlist/set, la
+    cancella — ma l'IntegrityError della FK non affonda solo quella riga: fa
+    esplodere l'INTERO giro d'indicizzazione."""
+    from app.services import library_index as li
+
+    monkeypatch.setattr(li.runtime_settings, "library_root", lambda: "/libreria")
+    t = _tr(db, "scaricata")
+    t.has_local_file = True
+    t.local_path = "/libreria/mai-esistito.mp3"  # spostato fuori: p.exists() e' False
+    _item(db, t, state="done", outcome="downloaded")
+    db.commit()
+
+    report = li.riconcilia_possessi(db, seen_paths=set(), scanned=1)
+
+    assert report["orphans_removed"] == 1
+    assert db.query(Track).count() == 0
+    assert db.query(DownloadQueueItem).count() == 0
+
+
+def test_riconcilia_possessi_non_tocca_lo_storico_di_una_traccia_che_resta(db, monkeypatch):
+    """Contro-prova: una traccia persa ma ancora in una playlist resta come lead,
+    e il suo storico di coda non va toccato."""
+    from app.services import library_index as li
+
+    monkeypatch.setattr(li.runtime_settings, "library_root", lambda: "/libreria")
+    pl, t = _pl(db), _tr(db, "in playlist")
+    add_track_to_playlist(db, t, pl)
+    t.has_local_file = True
+    t.local_path = "/libreria/mai-esistito.mp3"
+    superstite = _item(db, t, state="done", outcome="downloaded")
+    db.commit()
+
+    report = li.riconcilia_possessi(db, seen_paths=set(), scanned=1)
+
+    assert report == {"lost": 1, "orphans_removed": 0}
+    assert [i.id for i in db.query(DownloadQueueItem).all()] == [superstite.id]
+
+
 def test_cancella_lead_orfano_ancora_puntato_da_un_audiofile(db):
     """Difetto della stessa famiglia, preesistente alla coda ed emerso
     accendendo le foreign key: `AudioFile.track_id` (lato Organize) punta a

@@ -14,10 +14,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Track, playlist_tracks
+from app.repositories import merge_tracks
 
 
 def trova_duplicati_per_path(db: Session) -> list[tuple[str, list[int]]]:
@@ -36,7 +37,15 @@ def trova_duplicati_per_path(db: Session) -> list[tuple[str, list[int]]]:
 
 
 def fondi(db: Session, *, tenere_id: int, scartare_id: int) -> dict[str, int]:
-    """Sposta le membership di `scartare_id` su `tenere_id`, poi lo cancella.
+    """Sposta su `tenere_id` cio' che era attaccato a `scartare_id`, poi lo cancella.
+
+    Delega a `repositories.merge_tracks`, che e' la fusione vera dell'app (la usa
+    anche il runner della coda quando il file appena scaricato collide per hash
+    con un'altra traccia). Farsi qui una seconda fusione ridotta significava
+    dimenticarsene pezzi: spostava solo le membership playlist, quindi una
+    traccia usata in un set salvato o con storico nella coda download non si
+    poteva fondere affatto — la DELETE finiva in IntegrityError sulle FK
+    `setlist_tracks.track_id` / `download_queue_items.track_id`.
 
     Non fa commit: il chiamante decide la transazione.
     """
@@ -46,23 +55,18 @@ def fondi(db: Session, *, tenere_id: int, scartare_id: int) -> dict[str, int]:
     if tenere is None or scartare is None:
         raise ValueError(f"traccia inesistente: {tenere_id if tenere is None else scartare_id}")
 
+    # Contato PRIMA della fusione: dopo, le righe di `scartare` non esistono
+    # piu' e non si distinguerebbero le spostate da quelle gia' di `tenere`.
+    # Stessa regola di merge_tracks: si sposta solo cio' che non c'e' gia'.
     gia_presenti = set(db.scalars(
         select(playlist_tracks.c.playlist_id).where(playlist_tracks.c.track_id == tenere_id)
     ))
-    spostate = 0
-    righe = db.execute(
-        select(playlist_tracks).where(playlist_tracks.c.track_id == scartare_id)
-    ).mappings().all()
-    for riga in righe:
-        if riga["playlist_id"] in gia_presenti:
-            continue  # la PK composta (playlist_id, track_id) è già occupata
-        db.execute(insert(playlist_tracks).values(
-            playlist_id=riga["playlist_id"], track_id=tenere_id,
-            added_at=riga["added_at"], added_by=riga["added_by"], position=riga["position"],
-        ))
-        spostate += 1
-    db.execute(delete(playlist_tracks).where(playlist_tracks.c.track_id == scartare_id))
-    db.delete(scartare)
+    da_spostare = set(db.scalars(
+        select(playlist_tracks.c.playlist_id).where(playlist_tracks.c.track_id == scartare_id)
+    ))
+    spostate = len(da_spostare - gia_presenti)
+
+    merge_tracks(db, tenere, scartare)
     db.flush()
     return {"playlist_spostate": spostate}
 

@@ -69,3 +69,42 @@ def test_rifiuta_di_fondere_una_traccia_con_se_stessa(db, coppia):
     a, _, _, _ = coppia
     with pytest.raises(ValueError, match="con se stessa"):
         fondi(db, tenere_id=a.id, scartare_id=a.id)
+
+
+def test_fusione_sposta_lo_storico_di_coda(db, coppia):
+    """`download_queue_items.track_id` e' una FK verso `tracks.id` senza cascade e
+    le foreign key sono accese: lo storico di coda dello scarto va spostato, non
+    lasciato a bloccare la DELETE."""
+    from app.models import DownloadQueueItem
+
+    a, b, _, _ = coppia
+    storico = DownloadQueueItem(track_id=b.id, kind="soulseek_auto", state="done",
+                                outcome="downloaded", position=0)
+    db.add(storico)
+    db.commit()
+
+    fondi(db, tenere_id=a.id, scartare_id=b.id)
+    db.commit()
+
+    assert db.get(Track, b.id) is None
+    assert db.get(DownloadQueueItem, storico.id).track_id == a.id
+
+
+def test_fusione_sposta_la_membership_di_un_set_salvato(db, coppia):
+    """Difetto preesistente alla coda: lo strumento spostava solo le membership
+    playlist, quindi una traccia usata in un set salvato non si poteva fondere
+    (`setlist_tracks.track_id` e' una FK verso `tracks.id`)."""
+    from app.models import Setlist, SetlistTrack
+
+    a, b, _, _ = coppia
+    s = Setlist(name="Warmup")
+    db.add(s)
+    db.flush()
+    db.add(SetlistTrack(setlist_id=s.id, track_id=b.id, position=0))
+    db.commit()
+
+    fondi(db, tenere_id=a.id, scartare_id=b.id)
+    db.commit()
+
+    assert db.get(Track, b.id) is None
+    assert [r.track_id for r in db.query(SetlistTrack).all()] == [a.id]

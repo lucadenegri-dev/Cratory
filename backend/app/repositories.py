@@ -748,31 +748,49 @@ def unreferenced_track_ids(db: Session, candidate_ids: Iterable[int] | None = No
     return list(db.scalars(stmt))
 
 
+def detach_track_dependencies(db: Session, ids: Iterable[int]) -> None:
+    """Sbroglia cio' che impedisce di cancellare le tracce `ids`. Non committa.
+
+    Nessuna delle tabelle che puntano a `tracks.id` ha ON DELETE CASCADE e in
+    produzione le foreign key sono accese: chi cancella una Track deve staccare
+    prima i figli, o la DELETE va in IntegrityError. Sta qui, in una funzione
+    sola, perche' i punti di cancellazione sono piu' d'uno (`delete_orphan_leads`
+    in blocco, `riconcilia_possessi` via ORM) e un elenco duplicato invecchia
+    male: la prossima tabella che punta a `tracks` va aggiunta in un posto solo.
+
+    NON copre le membership playlist/set: quelle non sono "figli da buttare" ma
+    esattamente cio' che rende una traccia non-orfana, e i due chiamanti
+    cancellano per definizione tracce che non ne hanno.
+    """
+    ids = list(ids)
+    if not ids:
+        return
+    # Lo storico di coda muore con la traccia (come PlaylistSyncEvent in
+    # `delete_playlist`): un item `done`/`cancelled` di una traccia che non
+    # esiste piu' non racconta nulla a nessuno.
+    db.execute(
+        delete(DownloadQueueItem).where(DownloadQueueItem.track_id.in_(ids)),
+        execution_options={"synchronize_session": False},
+    )
+    # Il puntatore dal lato Organize: `AudioFile.track_id` e' nullable, e quando
+    # una traccia si cancella via ORM (`db.delete`) SQLAlchemy lo azzera da solo
+    # — ma solo per le righe che la sessione ha caricato, e mai per una DELETE in
+    # blocco. Azzerarlo qui copre entrambi i casi. Capita per davvero: un file
+    # sparito dal disco lascia la traccia come lead (`has_local_file=False`)
+    # senza staccare la riga `AudioFile`.
+    db.execute(
+        update(AudioFile).where(AudioFile.track_id.in_(ids)).values(track_id=None),
+        execution_options={"synchronize_session": False},
+    )
+
+
 def delete_orphan_leads(db: Session, candidate_ids: Iterable[int] | None = None) -> int:
     """Cancella i lead orfani (vedi `orphan_lead_ids`) e ritorna quanti. Non committa
     (lo fa il chiamante)."""
     ids = orphan_lead_ids(db, candidate_ids)
     if not ids:
         return 0
-    # Lo storico di coda muore col lead (FK senza cascade su SQLite, come per
-    # PlaylistSyncEvent in `delete_playlist`): un item `done`/`cancelled` di una
-    # traccia che non esiste piu' non racconta nulla a nessuno, e finche' resta
-    # la DELETE della traccia va in IntegrityError.
-    db.execute(
-        delete(DownloadQueueItem).where(DownloadQueueItem.track_id.in_(ids)),
-        execution_options={"synchronize_session": False},
-    )
-    # Anche il puntatore dal lato Organize: `AudioFile.track_id` e' nullable, e
-    # quando una traccia si cancella via ORM (`db.delete`, come fa
-    # `riconcilia_possessi`) SQLAlchemy lo azzera da solo. Qui la DELETE e' in
-    # blocco, quindi l'ORM non se ne occupa e il vincolo la blocca. Capita per
-    # davvero: un file sparito dal disco lascia la traccia come lead
-    # (`has_local_file=False`) senza staccare la riga `AudioFile`, e quel lead,
-    # tolto dall'ultima playlist, passa di qui.
-    db.execute(
-        update(AudioFile).where(AudioFile.track_id.in_(ids)).values(track_id=None),
-        execution_options={"synchronize_session": False},
-    )
+    detach_track_dependencies(db, ids)
     db.execute(
         delete(Track).where(Track.id.in_(ids)),
         execution_options={"synchronize_session": False},

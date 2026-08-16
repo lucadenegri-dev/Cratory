@@ -15,7 +15,14 @@ from sqlalchemy import text
 from app.core.config import BACKEND_DIR, settings
 from app.db import engine, ensure_schema
 
-DATA_TABLES = ("setlist_tracks", "setlists", "tracks", "playlists")
+# L'ordine e' vincolante: le foreign key sono accese (app.db._make_engine) e
+# nessuna delle tabelle che punta a `tracks.id` ha ON DELETE CASCADE, quindi ogni
+# figlio va svuotato prima del padre o la DELETE va in IntegrityError. I due
+# figli che mancavano erano `playlist_tracks` (difetto di sempre: lo strumento
+# falliva su qualsiasi libreria con una playlist dentro) e `download_queue_items`
+# (lo storico della coda, che sopravvive al download).
+DATA_TABLES = ("setlist_tracks", "setlists", "download_queue_items",
+               "playlist_tracks", "tracks", "playlists")
 TOKEN_TABLES = ("spotify_tokens",)
 
 
