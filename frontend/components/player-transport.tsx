@@ -36,7 +36,7 @@ function fmtTime(s: number): string {
 /** Trasporto custom sul motore <audio> nascosto: play/pause, prev/next (solo con
  *  contesto), seek con tempi. Riusato identico per traccia locale, clip iTunes e
  *  stream Bandcamp; l'iframe YouTube non passa di qui. */
-export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prevNext, mediaMeta }: Props) {
+export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prevNext }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [paused, setPaused] = useState(true);
   const [position, setPosition] = useState(0);
