@@ -108,17 +108,17 @@ def finish(db: Session, item_id: int, outcome: str, error: str | None = None) ->
     """Conclude un item `running`. False se nel frattempo e' stato annullato
     (o e' gia' concluso) da un'altra sessione: senza questo controllo un
     worker ignaro dell'annullo dell'utente resuscita l'item a `done`."""
-    # synchronize_session="fetch" (a differenza di "False" altrove nel file):
-    # qui, a differenza di cancel/claim_next, e' comune che il chiamante
-    # continui a usare lo stesso oggetto ORM subito dopo (es. per serializzare
-    # la risposta) senza un refresh esplicito — "fetch" aggiorna l'identity
-    # map cosi' l'oggetto in memoria riflette lo stato appena scritto.
+    # synchronize_session=False come le sorelle (cancel, cancel_all_queued,
+    # clear_done, requeue_stale): il modulo non garantisce che un oggetto ORM
+    # gia' in identity map rifletta lo stato appena scritto dall'UPDATE in
+    # blocco. Chi deve rileggerlo dopo una mutazione fa un db.refresh(...)
+    # esplicito, come gia' i chiamanti di cancel() in questo file.
     updated = (db.query(DownloadQueueItem)
                .filter(DownloadQueueItem.id == item_id,
                        DownloadQueueItem.state == "running")
                .update({"state": "done", "outcome": outcome, "error": error,
                         "phase": None, "finished_at": _now()},
-                       synchronize_session="fetch"))
+                       synchronize_session=False))
     db.commit()
     return updated == 1
 

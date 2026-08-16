@@ -182,6 +182,7 @@ def test_cancel_all_queued_e_clear_done():
     db = factory()
     fatto = q.claim_next(db)
     q.finish(db, fatto.id, "downloaded")
+    db.refresh(fatto)
     assert q.cancel_all_queued(db) == 2
     assert {i.state for i in q.list_items(db)} == {"done", "cancelled"}
     assert q.clear_done(db) == 1        # rimuove solo le done
