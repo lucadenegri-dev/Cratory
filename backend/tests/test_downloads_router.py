@@ -97,10 +97,11 @@ def test_status_espone_le_stesse_chiavi_del_vecchio_job(monkeypatch):
     """Contratto col frontend: ne' una chiave in piu' ne' una in meno.
 
     Le chiavi sono quelle che il vecchio `_state` del job monolitico esponeva
-    (meno `started_at`/`finished_at`, che il job teneva ma non serializzava
-    nella barra), piu' `available`. Un'aggiunta silenziosa qui non romperebbe
-    nulla; una rimozione romperebbe la barra globale senza che un test se ne
-    accorga.
+    (meno `started_at`/`finished_at`: il job le teneva e le serializzava
+    anche lui, ma nessun consumatore le leggeva, quindi sono state lasciate
+    cadere di proposito nel passaggio alla coda), piu' `available`.
+    Un'aggiunta silenziosa qui non romperebbe nulla; una rimozione
+    romperebbe la barra globale senza che un test se ne accorga.
     """
     _, factory = _engine()
     monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)

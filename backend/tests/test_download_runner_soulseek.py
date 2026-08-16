@@ -83,12 +83,18 @@ def _esegui(TestSession, items) -> dict:
 
     Oggi ogni elemento e' un item di coda a se': lo si accoda col `kind` che
     corrisponde alla presenza (o meno) di un candidato scelto, lo si rivendica
-    e lo si esegue con `run_item`. Il dizionario ricomposto qui ha le stesse
-    chiavi che aveva `job_state()`, cosi' le asserzioni di questi test restano
-    identiche a prima dell'assorbimento.
+    e lo si esegue con `run_item`. Il dizionario ricomposto qui NON e' un
+    mirror completo di `job_state()`: tiene solo le chiavi che le asserzioni
+    di questi test leggono davvero — i contatori per esito e
+    `items[].{track_id,outcome,reason}`. `job_state()` aveva anche
+    `processed` e `items[].{artist,title}`, ma nessun test qui li asserisce:
+    ricostruirli sarebbe stata finzione (un `processed` calcolato da questo
+    helper, non dal runner; `artist`/`title` letti dalla Track, non prodotti
+    dall'esito del download), quindi sono stati tolti invece di rischiare
+    che un test futuro ci si affidi credendoli reali.
     """
     db = TestSession()
-    st: dict = {"processed": 0, "downloaded": 0, "needs_review": 0,
+    st: dict = {"downloaded": 0, "needs_review": 0,
                 "not_found": 0, "failed": 0, "items": []}
     try:
         for track_id, chosen in items:
@@ -103,13 +109,9 @@ def _esegui(TestSession, items) -> dict:
             job.run_item(claimed.id)
             db.expire_all()   # l'esito e' stato scritto da un'altra sessione
             item = db.get(DownloadQueueItem, claimed.id)
-            track = db.get(Track, track_id)
-            st["processed"] += 1
             st[item.outcome] = st.get(item.outcome, 0) + 1
             st["items"].append({
                 "track_id": track_id,
-                "artist": getattr(track, "artist", None),
-                "title": getattr(track, "title", None),
                 "outcome": item.outcome,
                 "reason": item.error,
             })

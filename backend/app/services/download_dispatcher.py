@@ -10,6 +10,7 @@ import threading
 
 from app.core import runtime_settings
 from app.db import SessionLocal
+from app.integrations.slskd import slskd_configured
 from app.services import download_queue as queue
 from app.services.download_runner import run_item
 from app.services.job_spawn import spawn
@@ -53,11 +54,22 @@ def _work(item_id: int) -> None:
 
 
 def fill() -> None:
-    """Riempie gli slot liberi finche' c'e' lavoro in attesa."""
+    """Riempie gli slot liberi finche' c'e' lavoro in attesa lavorabile.
+
+    Se slskd non e' configurato (URL o download dir mancanti), gli item che
+    ne dipendono NON vengono nemmeno rivendicati: `claim_next` li esclude a
+    livello di query, quindi restano `queued` invece di essere marcati
+    `running` e bruciati all'istante da `run_item` (che chiamerebbe slskd e
+    fallirebbe subito). Solo un item `kind="soundcloud"`, che non passa da
+    slskd, puo' comunque partire. Riletto a ogni iterazione come gli slot,
+    cosi' un riavvio col daemon spento lascia la coda intatta e la
+    riconfigurazione a caldo del servizio la fa ripartire senza bisogno di
+    un altro riavvio.
+    """
     while _reserve():
         db = SessionLocal()
         try:
-            item = queue.claim_next(db)
+            item = queue.claim_next(db, slskd_available=slskd_configured())
         except Exception:
             # Uno slot appena riservato non deve restare occupato per sempre
             # se la rivendicazione esplode (DB non raggiungibile, ecc.): senza

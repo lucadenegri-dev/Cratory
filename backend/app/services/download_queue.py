@@ -81,12 +81,24 @@ def enqueue(db: Session, track_ids: list[int], kind: str = "soulseek_auto",
     return added, skipped
 
 
-def claim_next(db: Session) -> DownloadQueueItem | None:
+def claim_next(db: Session, *, slskd_available: bool = True) -> DownloadQueueItem | None:
     """Prende il primo item in attesa e lo marca `running`. None se non c'e'
-    lavoro o se un altro worker ha vinto la gara."""
+    lavoro lavorabile ora, o se un altro worker ha vinto la gara.
+
+    `slskd_available=False` esclude dalla ricerca gli item che dipendono da
+    slskd per scaricare (tutti tranne `kind="soundcloud"`): il filtro e' nella
+    query stessa, quindi un item cosi' escluso non viene mai marcato
+    `running` ne' toccato in alcun modo — resta `queued`, intatto, finche'
+    slskd non torna disponibile. E' il chiamante (il dispatcher, che decide
+    QUANDO lavorare) a calcolare il flag; qui e' solo un filtro sui dati, cosi'
+    il modulo resta testabile senza slskd vero (vedi il docstring in cima al
+    file).
+    """
     with _claim_lock:
-        candidate = (db.query(DownloadQueueItem)
-                     .filter(DownloadQueueItem.state == "queued")
+        query = db.query(DownloadQueueItem).filter(DownloadQueueItem.state == "queued")
+        if not slskd_available:
+            query = query.filter(DownloadQueueItem.kind == "soundcloud")
+        candidate = (query
                      .order_by(DownloadQueueItem.position, DownloadQueueItem.id)
                      .first())
         if candidate is None:
