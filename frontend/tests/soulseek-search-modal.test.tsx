@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SoulseekSearchModal } from "@/components/soulseek-search-modal";
-import type { SoulseekSearchFile } from "@/lib/api";
+import type { DownloadStatus, SoulseekSearchFile } from "@/lib/api";
 
 afterEach(cleanup);
 
@@ -14,7 +14,7 @@ const file = (over: Partial<SoulseekSearchFile> = {}): SoulseekSearchFile => ({
 const mocks = vi.hoisted(() => ({
   soulseekSearch: vi.fn(),
   downloadReview: vi.fn(),
-  downloadTrack: vi.fn(),
+  enqueueDownloads: vi.fn(),
   slskdStatus: vi.fn(),
 }));
 
@@ -24,14 +24,30 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   soulseekSearch: mocks.soulseekSearch,
   downloadReview: mocks.downloadReview,
-  downloadTrack: mocks.downloadTrack,
+  enqueueDownloads: mocks.enqueueDownloads,
   slskdStatus: mocks.slskdStatus,
 }));
 
 const target = { track_id: 1, artist: "Aphex Twin", title: "Xtal" };
 
+// La coda parallela (B) fa restare /api/downloads/status a "running" per
+// tutta la vita della coda, non piu' per un singolo download: il vecchio
+// gate `available && !running` del modal spegneva "Scarica questo" appena
+// una qualsiasi traccia era in coda. Stesso gate gia' rimosso dalla pagina
+// wishlist (vedi tests/wishlist-download-gate.test.tsx) e per lo stesso
+// motivo.
+const downloadStatus = (over: Partial<DownloadStatus> = {}): DownloadStatus => ({
+  available: true, status: "idle", processed: 0, total: 0, downloaded: 0,
+  needs_review: 0, not_found: 0, failed: 0, playlist_id: null, items: [],
+  error: null, current_label: null, ...over,
+});
+
+const jobsMock = vi.hoisted(() => ({ useJobs: vi.fn() }));
+vi.mock("@/components/jobs-provider", () => ({ useJobs: jobsMock.useJobs }));
+
 beforeEach(() => {
   vi.clearAllMocks();
+  jobsMock.useJobs.mockReturnValue({ download: downloadStatus(), refresh: vi.fn() });
   mocks.downloadReview.mockResolvedValue({
     expected: { artist: "Aphex Twin", title: "Xtal", duration_seconds: 294 },
     downloaded: null, reason: null,
@@ -62,15 +78,36 @@ describe("SoulseekSearchModal", () => {
       .toBe("Aphex Twin");
   });
 
-  it("«Scarica questo» chiama downloadTrack col candidato giusto e poi onPicked", async () => {
-    mocks.downloadTrack.mockResolvedValue({});
+  it("«Scarica questo» accoda il candidato scelto", async () => {
+    mocks.enqueueDownloads.mockResolvedValue({ enqueued: 1, skipped: 0 });
     const onPicked = vi.fn();
     render(<SoulseekSearchModal target={target} onClose={vi.fn()} onPicked={onPicked} />);
     await screen.findByText("Xtal.flac");
     fireEvent.click(screen.getAllByText("Scarica questo")[0]);
-    await waitFor(() => expect(mocks.downloadTrack).toHaveBeenCalledWith(1,
-      expect.objectContaining({ username: "user1", filename: "Music\\Aphex Twin\\Xtal.flac" })));
+    await waitFor(() => expect(mocks.enqueueDownloads).toHaveBeenCalledWith([1],
+      expect.objectContaining({
+        candidate: expect.objectContaining({ username: "user1" }),
+      })));
     await waitFor(() => expect(onPicked).toHaveBeenCalled());
+  });
+
+  it("la coda in lavorazione (status=running) non spegne «Scarica questo»", async () => {
+    // Stesso motivo del gate della wishlist: /api/downloads/status resta
+    // "running" per tutta la vita della coda parallela, non piu' per un
+    // singolo download in corso.
+    jobsMock.useJobs.mockReturnValue({ download: downloadStatus({ status: "running" }), refresh: vi.fn() });
+    render(<SoulseekSearchModal target={target} onClose={vi.fn()} onPicked={vi.fn()} />);
+    await screen.findByText("Xtal.flac");
+    const btn = screen.getAllByText("Scarica questo")[0].closest("button") as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+  });
+
+  it("slskd non configurato (available=false) disabilita «Scarica questo»", async () => {
+    jobsMock.useJobs.mockReturnValue({ download: downloadStatus({ available: false }), refresh: vi.fn() });
+    render(<SoulseekSearchModal target={target} onClose={vi.fn()} onPicked={vi.fn()} />);
+    await screen.findByText("Xtal.flac");
+    const btn = screen.getAllByText("Scarica questo")[0].closest("button") as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
   });
 
   it("mostra il delta durata rispetto all'attesa", async () => {

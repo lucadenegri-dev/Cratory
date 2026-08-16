@@ -14,6 +14,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   getConfigSettings: (...a: unknown[]) => getConfigSettings(...a),
   patchConfigSettings: (...a: unknown[]) => patchConfigSettings(...a),
   setLibraryShare: vi.fn(),
+  setDownloadSlots: vi.fn(),
   pickerAvailability: (...a: unknown[]) => pickerAvailability(...a),
   pickPath: (...a: unknown[]) => pickPath(...a),
 }));
@@ -33,6 +34,7 @@ const CONFIG: ConfigSettings = {
   slskd_url: field("http://localhost:5030"),
   slskd_config_path: field(""),
   share_library: false,
+  download_slots: 3,
   warning: null,
 };
 

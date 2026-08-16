@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  errText, getConfigSettings, patchConfigSettings, setLibraryShare, startLibraryIndex,
+  errText, getConfigSettings, patchConfigSettings, setDownloadSlots, setLibraryShare, startLibraryIndex,
   type ConfigPatch, type ConfigSettings,
 } from "@/lib/api";
 import { Alert, Badge, Button, CardHeader, Checkbox, Field, Input, Loading, Spinner } from "@/components/ui";
@@ -42,9 +42,11 @@ export function ConfigCard() {
     setWarning(c.warning);
   }, []);
 
-  useEffect(() => {
+  const reloadConfig = useCallback(() => {
     getConfigSettings().then(hydrate).catch((e) => setError(errText(e)));
   }, [hydrate]);
+
+  useEffect(reloadConfig, [reloadConfig]);
 
   const FIELD_LABEL: Record<ConfigFieldKey, string> = {
     library_root: t.settings.fieldLibraryRoot,
@@ -130,10 +132,49 @@ export function ConfigCard() {
           {shareMsg && <p className="mt-1.5 text-xs text-fg">{shareMsg}</p>}
         </div>
 
+        <div className="border-t border-border">
+          <DownloadSlotsSection value={config.download_slots} reload={reloadConfig} />
+        </div>
+
         <div className="border-t border-border pt-4">
           <LibraryIndexSection />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Quanti download Soulseek in parallelo (B-Task 6: la coda ha un pool di N
+ *  slot). Salva su blur, non a ogni tasto; ignora un valore invariato o
+ *  fuori scala 1-10 (il backend risponderebbe 422 con un numero che l'utente
+ *  ha appena digitato). */
+function DownloadSlotsSection({ value, reload }: { value: number; reload: () => void }) {
+  const t = useT();
+  const [slots, setSlots] = useState(value);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    if (slots === value || slots < 1 || slots > 10) return;
+    try {
+      await setDownloadSlots(slots);
+      setError(null);
+      reload();
+    } catch (e) { setError(errText(e)); }
+  };
+
+  return (
+    <div>
+      {error && <div className="px-5 pt-3"><Alert tone="danger">⚠ {error}</Alert></div>}
+      <label className="flex items-center gap-3 px-5 py-3 text-sm">
+        <span className="flex-1">
+          {t.settings.downloadSlotsLabel}
+          <span className="mt-0.5 block text-xs text-faint">{t.settings.downloadSlotsHint}</span>
+        </span>
+        <Input type="number" min={1} max={10} className="h-8 w-20"
+          value={slots}
+          onChange={(e) => setSlots(Number(e.target.value))}
+          onBlur={() => void save()} />
+      </label>
     </div>
   );
 }

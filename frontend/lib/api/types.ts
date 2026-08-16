@@ -528,6 +528,7 @@ export interface ConfigSettings {
   slskd_url: FieldState;
   slskd_config_path: FieldState;
   share_library: boolean;
+  download_slots: number;
   /** Avviso soft (es. share non ri-applicata dopo un cambio di libreria). */
   warning: string | null;
 }

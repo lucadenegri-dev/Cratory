@@ -16,6 +16,11 @@ export function setLibraryShare(enabled: boolean) {
   return apiPut<ShareLibraryResult>("/api/settings/share-library", { enabled });
 }
 
+/** Quanti download Soulseek in parallelo (1-10, il backend risponde 422 fuori scala). */
+export function setDownloadSlots(slots: number) {
+  return apiPut<{ download_slots: number }>("/api/settings/download-slots", { slots });
+}
+
 /** Il dialog nativo di scelta percorso è disponibile? (solo backend su macOS) */
 export function pickerAvailability() {
   return apiGet<{ available: boolean }>("/api/files/pick/availability");

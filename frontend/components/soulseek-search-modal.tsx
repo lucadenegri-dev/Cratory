@@ -5,7 +5,7 @@ import { Check, Download as DownloadIcon, ExternalLink, Search, Trash2 } from "l
 import { Alert, Badge, Button, Input, Loading, Modal, Spinner } from "@/components/ui";
 import { useJobs } from "@/components/jobs-provider";
 import {
-  discardReview, downloadReview, downloadTrack, errText, fmtDuration, fmtSize,
+  discardReview, downloadReview, enqueueDownloads, errText, fmtDuration, fmtSize,
   keepReview, slskdStatus, soulseekSearch, type DownloadCandidate, type DownloadReview,
   type SoulseekSearchFile,
 } from "@/lib/api";
@@ -44,9 +44,10 @@ function SearchDialog({ target, onClose, onPicked }: {
 }) {
   const t = useT();
   const { download: jobStatus, refresh } = useJobs();
-  const running = jobStatus?.status === "running";
-  const available = jobStatus?.available ?? true;
-  const canDownload = available && !running;
+  // La coda parallela (B) fa restare /api/downloads/status a "running" per
+  // tutta la vita della coda, non piu' per un singolo download: qui non si
+  // guarda piu' `status`, solo se slskd e' configurato del tutto.
+  const canDownload = jobStatus?.available ?? true;
 
   const [query, setQuery] = useState(`${target.artist ?? ""} ${target.title ?? ""}`.trim());
   const [variants, setVariants] = useState<string[]>([]);
@@ -117,7 +118,6 @@ function SearchDialog({ target, onClose, onPicked }: {
             <span className="ml-2 text-xs text-faint">{t.downloads.review.expectedDuration(fmtDuration(expDur))}</span>
           )}
         </p>
-        {!canDownload && <Alert tone="info">{t.downloads.search.jobRunning}</Alert>}
         {error && (
           <Alert tone="danger">
             ⚠ {error}
@@ -217,7 +217,7 @@ function SearchDialog({ target, onClose, onPicked }: {
                   </div>
                   {f.auto_ok && <Badge tone="neutral">{t.downloads.search.autoOkBadge}</Badge>}
                   <Button size="sm" variant="outline" disabled={busy || !canDownload}
-                    onClick={() => act(() => downloadTrack(target.track_id, toCandidate(f)))}>
+                    onClick={() => act(() => enqueueDownloads([target.track_id], { candidate: toCandidate(f) }))}>
                     {busy ? <Spinner /> : <DownloadIcon size={13} />} {t.downloads.search.downloadThis}
                   </Button>
                 </li>
