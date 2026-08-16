@@ -8,12 +8,13 @@ import { Alert, Button, Card, Checkbox, EmptyState, Input, Loading, Select } fro
 import { ButtonLink } from "@/components/button-link";
 import { useJobs } from "@/components/jobs-provider";
 import { WishlistRow } from "@/components/wishlist-row";
+import { SelectionBar } from "@/components/wishlist-selection-bar";
 import { SoulseekSearchModal, type SoulseekSearchTarget } from "@/components/soulseek-search-modal";
 import { LinkLocalFileModal, type LinkTarget } from "@/components/link-local-file-modal";
 import { AutoLinkModal } from "@/components/auto-link-modal";
 import { ConfirmModal } from "@/components/confirm-modal";
 import {
-  apiGet, downloadTrackAuto, errText, ignoreDownload, retryPending,
+  apiGet, downloadTrackAuto, enqueueDownloads, errText, ignoreDownload, retryPending,
   slskdStatus, trackLabel, updateTrack, type Track,
 } from "@/lib/api";
 import { statusTab, wishlistStatus, type WishlistTab } from "@/lib/wishlist-status";
@@ -46,6 +47,20 @@ function WishlistInner() {
 
   const [items, setItems] = useState<Track[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+
+  // Selezione multipla per l'accodamento a lotti (solo vista non archiviata,
+  // vedi WishlistRow più sotto). Set<id>, non Set<Track>: le righe vengono
+  // ricreate a ogni fetch, l'identità dell'oggetto Track non è stabile.
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [enqueuing, setEnqueuing] = useState(false);
+  const toggleSelect = useCallback((tr: Track) => {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(tr.id)) next.delete(tr.id); else next.add(tr.id);
+      return next;
+    });
+  }, []);
 
   // Link alla web UI di slskd (= SLSKD_URL, esposto da /api/slskd/status): per
   // cercare/scaricare a mano quando il download da Cratory non riesce. null se
@@ -101,6 +116,12 @@ function WishlistInner() {
   }, [tab, query, playlistFilter, showArchived]);
   const from = queryString ? `${pathname}?${queryString}` : pathname;
 
+  // Le righe selezionate potrebbero non essere più visibili sotto un filtro
+  // diverso: si svuota la selezione a ogni cambio di tab/ricerca/playlist/archiviate.
+  // Fatto nei setter dei filtri (sotto), non in un useEffect: setState sincrono
+  // dentro un effect è vietato dal lint del React Compiler di questo repo.
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+
   // Stato -> URL (replace + debounce, default fuori dall'URL).
   useEffect(() => {
     if (queryString === searchParams.toString()) return;
@@ -144,11 +165,27 @@ function WishlistInner() {
   const onRestore = (tr: Track) => act(() => updateTrack(tr.id, { archived: false }), () => load());
   const retryAll = () => act(() => retryPending(), refresh);
 
+  const onEnqueueSelected = async () => {
+    setError(null);
+    setEnqueuing(true);
+    try {
+      const res = await enqueueDownloads([...selected]);
+      setInfo(t.wishlist.enqueued(res.enqueued, res.skipped));
+      setSelected(new Set());
+      refresh();
+    } catch (e) {
+      setError(errText(e));
+    } finally {
+      setEnqueuing(false);
+    }
+  };
+
   return (
     <PageLayout title={t.wishlist.pageTitle} meta={items?.length || undefined}>
       <div className="space-y-6">
         {!available && <Alert tone="info">{t.downloads.notConfigured}</Alert>}
         {error && <Alert tone="danger">⚠ {error}</Alert>}
+        {info && <Alert tone="info">{info}</Alert>}
 
         {/* Azioni di gruppo */}
         <section>
@@ -169,19 +206,21 @@ function WishlistInner() {
             <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={t.wishlist.filterAria}>
               {TAB_KEYS.map((k) => (
                 <Button key={k} size="sm" role="tab" aria-selected={tab === k}
-                  variant={tab === k ? "primary" : "outline"} onClick={() => setTab(k)}>
+                  variant={tab === k ? "primary" : "outline"} onClick={() => { setTab(k); clearSelection(); }}>
                   {TAB_LABEL[k]} ({count(k)})
                 </Button>
               ))}
             </div>
-            <Input className="h-8 w-56" value={query} onChange={(e) => setQuery(e.target.value)}
+            <Input className="h-8 w-56" value={query}
+              onChange={(e) => { setQuery(e.target.value); clearSelection(); }}
               placeholder={t.wishlist.searchPlaceholder} />
-            <Select className="h-8" value={playlistFilter} onChange={(e) => setPlaylistFilter(e.target.value)}>
+            <Select className="h-8" value={playlistFilter}
+              onChange={(e) => { setPlaylistFilter(e.target.value); clearSelection(); }}>
               <option value="">{t.wishlist.playlistAllOption}</option>
               {playlistOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
             </Select>
             <Checkbox label={t.wishlist.showArchivedLabel} checked={showArchived}
-              onChange={(v) => { setShowArchived(v); setItems(null); }} />
+              onChange={(v) => { setShowArchived(v); setItems(null); clearSelection(); }} />
           </div>
 
           {items === null && <Loading />}
@@ -209,6 +248,12 @@ function WishlistInner() {
               </EmptyState>
             );
           })()}
+          {!showArchived && (
+            <div className="mb-2">
+              <SelectionBar count={selected.size} busy={enqueuing}
+                onEnqueue={onEnqueueSelected} onClear={clearSelection} />
+            </div>
+          )}
           {rows.length > 0 && (
             <Card>
               <ul className="divide-y divide-border text-sm">
@@ -220,7 +265,8 @@ function WishlistInner() {
                     onLinkFile={(x) => setLinking({ id: x.id, artist: x.artist, title: x.title })}
                     onClearOutcome={onClearOutcome}
                     onArchive={setConfirmArchive}
-                    onRestore={onRestore} />
+                    onRestore={onRestore}
+                    {...(showArchived ? {} : { selected: selected.has(tr.id), onToggleSelect: toggleSelect })} />
                 ))}
               </ul>
             </Card>

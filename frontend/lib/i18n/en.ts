@@ -474,6 +474,12 @@ export const en = {
     soulseekOpen: "Open slskd",
     soulseekHint: "Fallback: if slskd is unreachable or you want its own UI, open it here.",
     bulkHeading: "Bulk actions",
+    enqueueSelected: (n: number) => `Queue ${n} tracks`,
+    selectedCount: (n: number) => `${n} selected`,
+    clearSelection: "Clear selection",
+    selectRowAria: "Select this track",
+    enqueued: (added: number, skipped: number) => skipped
+      ? `${added} queued, ${skipped} already in the queue` : `${added} queued`,
   },
   tracks: {
     pageTitle: "Track",

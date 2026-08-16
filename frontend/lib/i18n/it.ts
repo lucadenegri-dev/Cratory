@@ -473,6 +473,12 @@ export const it: Dictionary = {
     soulseekOpen: "Apri slskd",
     soulseekHint: "Riserva: se slskd non risponde o vuoi la sua interfaccia, aprila da qui.",
     bulkHeading: "Azioni di gruppo",
+    enqueueSelected: (n: number) => `Accoda ${n} tracce`,
+    selectedCount: (n: number) => `${n} selezionate`,
+    clearSelection: "Deseleziona",
+    selectRowAria: "Seleziona questa traccia",
+    enqueued: (added: number, skipped: number) => skipped
+      ? `${added} accodate, ${skipped} erano già in coda` : `${added} accodate`,
   },
   tracks: {
     pageTitle: "Traccia",

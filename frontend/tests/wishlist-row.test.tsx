@@ -90,4 +90,18 @@ describe("WishlistRow", () => {
     fireEvent.click(screen.getByText("Cerca su Soulseek"));
     expect(noop.onSearch).toHaveBeenCalled();
   });
+
+  it("la checkbox compare solo con onToggleSelect e riporta la selezione", () => {
+    const onToggleSelect = vi.fn();
+    const { rerender, container } = render(
+      <WishlistRow track={base} downloadsAvailable from={from} {...noop} />);
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+
+    rerender(<WishlistRow track={base} downloadsAvailable from={from} {...noop}
+      selected onToggleSelect={onToggleSelect} />);
+    const box = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    fireEvent.click(box);
+    expect(onToggleSelect).toHaveBeenCalled();
+  });
 });

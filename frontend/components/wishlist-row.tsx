@@ -21,6 +21,10 @@ export type WishlistRowProps = {
   onClearOutcome: (t: Track) => void;
   onArchive: (t: Track) => void;   // la conferma sta nella pagina
   onRestore: (t: Track) => void;
+  /** Selezione multipla: la checkbox compare solo quando onToggleSelect e' passata
+   *  (la vista archiviate non seleziona, vedi app/wishlist/page.tsx). */
+  selected?: boolean;
+  onToggleSelect?: (t: Track) => void;
 };
 
 const BADGE_TONE: Record<WishlistStatus, "warning" | "danger" | "neutral"> = {
@@ -36,6 +40,7 @@ const MAX_CHIPS = 2;
 export function WishlistRow({
   track, archived, downloadsAvailable, from,
   onDownload, onSearch, onLinkFile, onClearOutcome, onArchive, onRestore,
+  selected, onToggleSelect,
 }: WishlistRowProps) {
   const t = useT();
   const status = wishlistStatus(track);
@@ -88,6 +93,15 @@ export function WishlistRow({
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        {onToggleSelect && (
+          <input
+            type="checkbox"
+            aria-label={t.wishlist.selectRowAria}
+            checked={!!selected}
+            onChange={() => onToggleSelect(track)}
+            className="h-4 w-4 shrink-0 accent-[var(--color-fg)]"
+          />
+        )}
         {/* Stesso target del titolo: allarga la superficie di click per il mouse,
             ma resta fuori dall'ordine di tab così tastiera e screen reader vedono
             un solo link per traccia. I chip di provenienza sono già <Link>, quindi
