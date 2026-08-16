@@ -21,6 +21,7 @@ from app.routers import (
     analysis,
     discovery,
     dj_sets,
+    download_queue,
     downloads,
     files,
     labels,
@@ -112,6 +113,7 @@ app.include_router(dj_sets.router)
 app.include_router(services.router)
 app.include_router(slskd.router)
 app.include_router(downloads.router)
+app.include_router(download_queue.router)
 app.include_router(files.router)
 app.include_router(pipeline.router)
 app.include_router(rekordbox.router)
