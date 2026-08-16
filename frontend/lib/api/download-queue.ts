@@ -1,5 +1,5 @@
 import { apiDelete, apiGet, apiPost } from "./client";
-import type { DownloadCandidate, QueueSnapshot } from "./types";
+import type { DownloadCandidate, EnqueueOutcome, QueueSnapshot } from "./types";
 
 export function downloadQueue(opts?: { signal?: AbortSignal }) {
   return apiGet<QueueSnapshot>("/api/downloads/queue", undefined, opts);
@@ -8,7 +8,7 @@ export function downloadQueue(opts?: { signal?: AbortSignal }) {
 /** Accoda un lotto. Il candidato vale solo con una traccia sola (lo impone il backend). */
 export function enqueueDownloads(trackIds: number[],
                                  opts?: { kind?: string; candidate?: DownloadCandidate }) {
-  return apiPost<{ enqueued: number; skipped: number }>("/api/downloads/queue", {
+  return apiPost<EnqueueOutcome>("/api/downloads/queue", {
     track_ids: trackIds, kind: opts?.kind, candidate: opts?.candidate,
   });
 }

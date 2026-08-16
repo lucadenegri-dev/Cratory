@@ -796,6 +796,15 @@ user-picked `candidate` (from `search`, or the batch `POST
 /api/downloads/queue` below) travels as the item's payload and tells the
 worker to skip both the search cascade and the auto-pick's duration guard.
 
+One exception to the dedup, because the more specific request must not lose
+to the more generic one that got there first: an enqueue carrying an explicit
+`candidate` on a track whose active item is still `queued` **replaces** that
+item's payload instead of being skipped, and is reported as `replaced` rather
+than `enqueued` or `skipped`. On an item already `running` it is skipped —
+the worker has its candidate and swapping it underneath would do nothing — and
+the caller is expected to say so. Every enqueue endpoint therefore answers
+`{enqueued, skipped, replaced}`.
+
 If slskd becomes unreachable mid-queue — refused connection, but also
 401/403 (a bad or rotated API key), any 5xx, and the `409 "must be connected
 (currently: Disconnected)"` of a live daemon that is not logged into the

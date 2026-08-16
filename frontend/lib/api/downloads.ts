@@ -3,18 +3,21 @@ import type {
   AutoLinkProposal,
   DownloadReview,
   DownloadStatus,
+  EnqueueOutcome,
   LocalFileHit,
   SoulseekSearchResult,
   Track,
   TrackDetail,
 } from "./types";
 
+// Accodano, non avviano un job: la risposta è l'esito dell'accodamento
+// (`DownloadStatus` era rimasto dai tempi del job monolitico).
 export function downloadTrackAuto(trackId: number) {
-  return apiPost<DownloadStatus>("/api/downloads/track/auto", { track_id: trackId });
+  return apiPost<EnqueueOutcome>("/api/downloads/track/auto", { track_id: trackId });
 }
 
 export function downloadTrackSoundcloud(trackId: number) {
-  return apiPost<DownloadStatus>("/api/downloads/track/soundcloud", { track_id: trackId });
+  return apiPost<EnqueueOutcome>("/api/downloads/track/soundcloud", { track_id: trackId });
 }
 
 // --- Download (Soulseek/slskd) ----------------------------------------------

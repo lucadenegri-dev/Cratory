@@ -56,6 +56,9 @@ function SearchDialog({ target, onClose, onPicked }: {
   const [review, setReview] = useState<DownloadReview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Esito non-errore di «Scarica questo»: scelta sostituita, o scartata perché
+  // la traccia è già in scaricamento.
+  const [notice, setNotice] = useState<string | null>(null);
   // Per il link di scampo dentro l'avviso d'errore: se slskd non risponde, la
   // sua web UI e' la via d'uscita, e il link in fondo alla pagina wishlist e'
   // dietro a questo modal. web_url resta valorizzato anche a demone giu'.
@@ -101,8 +104,34 @@ function SearchDialog({ target, onClose, onPicked }: {
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try { await fn(); refresh(); onPicked(); } catch (e) { setError(errText(e)); }
     finally { if (alive.current) setBusy(false); }
+  };
+
+  /* «Scarica questo» non è come le altre azioni: il backend può SALTARE la
+     richiesta (la traccia è già in scaricamento) o SOSTITUIRE il candidato di
+     un item già in attesa. Chiudere il modal in tutti e tre i casi, com'era,
+     fa credere all'utente che la sua scelta sia stata presa anche quando è
+     stata scartata — e l'auto-pick continua per conto suo. */
+  const pick = async (f: SoulseekSearchFile) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await enqueueDownloads([target.track_id], { candidate: toCandidate(f) });
+      refresh();
+      if (res.skipped > 0 && res.enqueued === 0 && res.replaced === 0) {
+        setNotice(t.downloads.search.alreadyRunning);
+        return;   // niente onPicked: il modal resta aperto sul messaggio
+      }
+      if (res.replaced > 0) setNotice(t.downloads.search.replacedChoice);
+      onPicked();
+    } catch (e) {
+      setError(errText(e));
+    } finally {
+      if (alive.current) setBusy(false);
+    }
   };
 
   const expDur = review?.expected.duration_seconds ?? null;
@@ -129,6 +158,7 @@ function SearchDialog({ target, onClose, onPicked }: {
             )}
           </Alert>
         )}
+        {notice && <Alert tone="info">{notice}</Alert>}
 
         {/* File dubbio gia' scaricato: Tieni/Scarta (endpoint review invariati). */}
         {dl && (
@@ -217,7 +247,7 @@ function SearchDialog({ target, onClose, onPicked }: {
                   </div>
                   {f.auto_ok && <Badge tone="neutral">{t.downloads.search.autoOkBadge}</Badge>}
                   <Button size="sm" variant="outline" disabled={busy || !canDownload}
-                    onClick={() => act(() => enqueueDownloads([target.track_id], { candidate: toCandidate(f) }))}>
+                    onClick={() => void pick(f)}>
                     {busy ? <Spinner /> : <DownloadIcon size={13} />} {t.downloads.search.downloadThis}
                   </Button>
                 </li>

@@ -411,6 +411,11 @@ export const it: Dictionary = {
       searching: "Cerco su Soulseek… (fino a ~15 secondi)",
       noResults: "Nessun risultato per questa query. Prova una variante più corta qui sopra.",
       downloadThis: "Scarica questo",
+      // La scelta esplicita su un item ancora in attesa ne sostituisce il
+      // carico; su uno già in corso non si può, e va detto invece di chiudere
+      // il modal come se avesse funzionato.
+      replacedChoice: "Scelta applicata: l'item già in coda userà questo file.",
+      alreadyRunning: "Questa traccia è già in scaricamento: la scelta non è stata applicata. Annullala dalla coda e riprova.",
       autoOkBadge: "affidabile",
       openSlskd: "Apri la web UI di slskd",
       queueInfo: (n: number) => `coda ${n}`,
@@ -494,6 +499,11 @@ export const it: Dictionary = {
     selectRowAria: "Seleziona questa traccia",
     enqueued: (added: number, skipped: number) => skipped
       ? `${added} accodate, ${skipped} erano già in coda` : `${added} accodate`,
+    // Esiti dei due percorsi a traccia singola (riga e modal di ricerca): la
+    // barra di selezione multipla li mostrava già, questi no — e una richiesta
+    // scartata in silenzio è indistinguibile da una riuscita.
+    enqueuedOne: "Accodata.",
+    enqueueAlreadyQueued: "Era già in coda: non è stata accodata due volte.",
   },
   tracks: {
     pageTitle: "Traccia",

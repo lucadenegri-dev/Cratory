@@ -48,9 +48,9 @@ def test_post_accoda_un_lotto_e_riporta_i_saltati(factory):
     ids = _tracks(factory, 3)
     r = client.post("/api/downloads/queue", json={"track_ids": ids})
     assert r.status_code == 200
-    assert r.json() == {"enqueued": 3, "skipped": 0}
+    assert r.json() == {"enqueued": 3, "skipped": 0, "replaced": 0}
     r2 = client.post("/api/downloads/queue", json={"track_ids": ids})
-    assert r2.json() == {"enqueued": 0, "skipped": 3}
+    assert r2.json() == {"enqueued": 0, "skipped": 3, "replaced": 0}
 
 
 def test_post_con_candidato_accetta_una_sola_traccia(factory):

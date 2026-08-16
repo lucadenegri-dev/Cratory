@@ -207,7 +207,13 @@ function WishlistInner() {
     setInfo(null);
     try { await fn(); after?.(); } catch (e) { setError(errText(e)); }
   };
-  const onDownload = (tr: Track) => act(() => downloadTrackAuto(tr.id), refresh);
+  // Come la barra di selezione multipla, dice com'è andata: la deduplica può
+  // saltare la richiesta, e senza un messaggio è indistinguibile da una
+  // riuscita — il bottone si preme, non succede nulla di visibile.
+  const onDownload = (tr: Track) => act(async () => {
+    const res = await downloadTrackAuto(tr.id);
+    setInfo(res.enqueued > 0 ? t.wishlist.enqueuedOne : t.wishlist.enqueueAlreadyQueued);
+  }, refresh);
   const onClearOutcome = (tr: Track) => act(() => ignoreDownload(tr.id), () => load());
   const onArchive = (tr: Track) => act(() => updateTrack(tr.id, { archived: true }), () => load());
   const onRestore = (tr: Track) => act(() => updateTrack(tr.id, { archived: false }), () => load());
@@ -219,6 +225,8 @@ function WishlistInner() {
     setEnqueuing(true);
     try {
       const res = await enqueueDownloads([...selected]);
+      // `replaced` non può capitare qui (nessun candidato esplicito in un
+      // lotto), quindi il messaggio resta a due numeri.
       setInfo(t.wishlist.enqueued(res.enqueued, res.skipped));
       setSelected(new Set());
       refresh();

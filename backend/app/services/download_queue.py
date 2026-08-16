@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import threading
 from datetime import datetime, timezone
+from typing import NamedTuple
 
 from sqlalchemy.orm import Session
 
@@ -66,15 +67,39 @@ def _has_active_items(db: Session) -> bool:
             .first() is not None)
 
 
+class EnqueueResult(NamedTuple):
+    """Cos'e' successo a un lotto di accodamento.
+
+    Tre esiti e non due perche' una richiesta con candidato esplicito su una
+    traccia gia' in attesa non e' ne' "aggiunta" ne' "scartata": sostituisce.
+    Chiamarla `added` mentirebbe (nessuna riga nuova), chiamarla `skipped`
+    anche (la richiesta ha avuto effetto).
+    """
+
+    added: int
+    skipped: int
+    replaced: int = 0
+
+
 def enqueue(db: Session, track_ids: list[int], kind: str = "soulseek_auto",
-            payload: dict | None = None) -> tuple[int, int]:
-    """Accoda le tracce indicate. Ritorna (accodati, saltati).
+            payload: dict | None = None) -> EnqueueResult:
+    """Accoda le tracce indicate. Ritorna (accodati, saltati, sostituiti).
 
     Si salta una traccia che ha gia' un item attivo (`queued`/`running`):
     senza questo, "accoda la playlist" due volte raddoppia la coda. Gli item
     conclusi (`done`/`cancelled`) non bloccano — e' il caso "riprova".
     Un `track_id` inesistente viene contato fra i saltati, non fa errore: un
     lotto non deve fallire per una traccia sparita nel frattempo.
+
+    Eccezione alla deduplica: se questa chiamata porta un candidato scelto
+    dall'utente (`payload`) e l'item attivo di quella traccia e' ancora in
+    attesa (`queued`), il candidato ne SOSTITUISCE il carico invece di essere
+    scartato. Il percorso e' reale: si accodano venti tracce in auto-pick, se
+    ne apre una nel modal di ricerca, si sceglie a mano il file giusto — e la
+    richiesta piu' specifica non deve perdere contro quella piu' generica
+    arrivata prima. Su un item gia' `running` non si tocca nulla: il worker ha
+    gia' preso il suo candidato e cambiarglielo sotto non avrebbe effetto; li'
+    si salta, ed e' compito del chiamante dirlo all'utente.
 
     Se la coda non ha nulla di attivo (ne' `queued` ne' `running`) PRIMA di
     questa chiamata, e questa chiamata accoda davvero qualcosa, comincia un
@@ -84,7 +109,7 @@ def enqueue(db: Session, track_ids: list[int], kind: str = "soulseek_auto",
     (nessun aggiornamento del marcatore: lo status quo del giro basta, dato
     che gli id crescono e la query del giro e' "id >= marcatore").
     """
-    added = skipped = 0
+    added = skipped = replaced = 0
     position = _next_position(db)
     encoded = json.dumps(payload) if payload else None
     starting_new_round = not _has_active_items(db)
@@ -94,19 +119,30 @@ def enqueue(db: Session, track_ids: list[int], kind: str = "soulseek_auto",
     # in memoria sul lotto.
     existing_ids = set()
     busy_ids = set()
+    attesa_per_traccia: dict[int, DownloadQueueItem] = {}
     if track_ids:
         existing_ids = {row[0] for row in
                          db.query(Track.id).filter(Track.id.in_(track_ids)).all()}
-        busy_ids = {row[0] for row in
-                    db.query(DownloadQueueItem.track_id)
-                    .filter(DownloadQueueItem.track_id.in_(track_ids),
-                            DownloadQueueItem.state.in_(ACTIVE_STATES)).all()}
+        attivi = (db.query(DownloadQueueItem)
+                  .filter(DownloadQueueItem.track_id.in_(track_ids),
+                          DownloadQueueItem.state.in_(ACTIVE_STATES)).all())
+        busy_ids = {i.track_id for i in attivi}
+        attesa_per_traccia = {i.track_id: i for i in attivi if i.state == "queued"}
 
     seen_in_batch: set[int] = set()
     new_items: list[DownloadQueueItem] = []
     for track_id in track_ids:
         if track_id not in existing_ids:
             skipped += 1
+            continue
+        in_attesa = attesa_per_traccia.get(track_id)
+        if payload is not None and in_attesa is not None and track_id not in seen_in_batch:
+            # La scelta esplicita dell'utente prende il posto di quella
+            # generica gia' in attesa, invece di essere scartata in silenzio.
+            in_attesa.kind = kind
+            in_attesa.payload = encoded
+            seen_in_batch.add(track_id)
+            replaced += 1
             continue
         if track_id in busy_ids or track_id in seen_in_batch:
             skipped += 1
@@ -121,7 +157,7 @@ def enqueue(db: Session, track_ids: list[int], kind: str = "soulseek_auto",
     db.commit()
     if new_items and starting_new_round:
         app_state.set_state(db, ROUND_START_KEY, str(min(i.id for i in new_items)))
-    return added, skipped
+    return EnqueueResult(added, skipped, replaced)
 
 
 def claim_next(db: Session, *, slskd_available: bool = True) -> DownloadQueueItem | None:

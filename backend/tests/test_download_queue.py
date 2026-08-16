@@ -27,7 +27,7 @@ def _tracks(db, n):
 def test_enqueue_crea_un_item_per_traccia_in_ordine():
     db = _db()
     tracks = _tracks(db, 3)
-    added, skipped = q.enqueue(db, [t.id for t in tracks])
+    added, skipped, _ = q.enqueue(db, [t.id for t in tracks])
     assert (added, skipped) == (3, 0)
     items = q.list_items(db)
     assert [i.track_id for i in items] == [t.id for t in tracks]
@@ -42,7 +42,7 @@ def test_enqueue_non_duplica_una_traccia_gia_in_coda():
     db = _db()
     t = _tracks(db, 1)[0]
     q.enqueue(db, [t.id])
-    added, skipped = q.enqueue(db, [t.id])
+    added, skipped, _ = q.enqueue(db, [t.id])
     assert (added, skipped) == (0, 1)
     assert len(q.list_items(db)) == 1
 
@@ -53,7 +53,7 @@ def test_enqueue_non_duplica_una_traccia_in_corso():
     q.enqueue(db, [t.id])
     db.query(DownloadQueueItem).update({"state": "running"})
     db.commit()
-    added, skipped = q.enqueue(db, [t.id])
+    added, skipped, _ = q.enqueue(db, [t.id])
     assert (added, skipped) == (0, 1)
 
 
@@ -65,7 +65,7 @@ def test_enqueue_riaccoda_una_traccia_gia_finita():
     vecchio = q.list_items(db)[0]
     db.query(DownloadQueueItem).update({"state": "done", "outcome": "not_found"})
     db.commit()
-    added, skipped = q.enqueue(db, [t.id])
+    added, skipped, _ = q.enqueue(db, [t.id])
     assert (added, skipped) == (1, 0)
     items = q.list_items(db)
     assert len(items) == 2
@@ -81,7 +81,7 @@ def test_enqueue_stesso_id_due_volte_nello_stesso_lotto():
     # va contata fra i saltati (non un'eccezione, non un doppio insert).
     db = _db()
     t = _tracks(db, 1)[0]
-    added, skipped = q.enqueue(db, [t.id, t.id])
+    added, skipped, _ = q.enqueue(db, [t.id, t.id])
     assert (added, skipped) == (1, 1)
     assert len(q.list_items(db)) == 1
 
@@ -99,6 +99,65 @@ def test_enqueue_conserva_kind_e_payload():
 
 def test_enqueue_ignora_track_id_inesistenti():
     db = _db()
-    added, skipped = q.enqueue(db, [999])
+    added, skipped, _ = q.enqueue(db, [999])
     assert (added, skipped) == (0, 1)
     assert q.list_items(db) == []
+
+
+# --- La scelta esplicita dell'utente contro la deduplica ---------------------
+#
+# Percorso reale: si accodano venti tracce in auto-pick, se ne apre una nel
+# modal di ricerca, si sceglie a mano il file giusto. Prima, quella richiesta
+# veniva scartata in silenzio e l'auto-pick continuava a pescare per conto suo.
+
+CAND = {"username": "u", "filename": "il-file-giusto.flac", "size": 1,
+        "bitrate": None, "length": 300}
+
+
+def test_un_candidato_esplicito_sostituisce_l_item_in_attesa():
+    db = _db()
+    t = _tracks(db, 1)[0]
+    q.enqueue(db, [t.id])                       # auto-pick, in attesa
+    esito = q.enqueue(db, [t.id], kind="soulseek_chosen", payload=CAND)
+    assert (esito.added, esito.skipped, esito.replaced) == (0, 0, 1)
+    items = q.list_items(db)
+    assert len(items) == 1                      # sostituito, non duplicato
+    assert items[0].kind == "soulseek_chosen"
+    assert items[0].payload_dict() == CAND
+
+
+def test_la_sostituzione_non_perde_il_posto_in_coda():
+    """Sostituire il carico non e' riaccodare: l'item resta dov'era."""
+    db = _db()
+    a, b, c = _tracks(db, 3)
+    q.enqueue(db, [a.id, b.id, c.id])
+    posizione_prima = q.list_items(db)[1].position
+    q.enqueue(db, [b.id], kind="soulseek_chosen", payload=CAND)
+    items = q.list_items(db)
+    assert [i.track_id for i in items] == [a.id, b.id, c.id]
+    assert items[1].position == posizione_prima
+
+
+def test_su_un_item_gia_in_corso_il_candidato_viene_saltato():
+    """Il worker ha gia' preso il suo candidato: cambiarglielo sotto non
+    avrebbe effetto, quindi si salta — e il chiamante deve dirlo all'utente."""
+    db = _db()
+    t = _tracks(db, 1)[0]
+    q.enqueue(db, [t.id])
+    db.query(DownloadQueueItem).update({"state": "running"})
+    db.commit()
+    esito = q.enqueue(db, [t.id], kind="soulseek_chosen", payload=CAND)
+    assert (esito.added, esito.skipped, esito.replaced) == (0, 1, 0)
+    assert q.list_items(db)[0].kind == "soulseek_auto"   # invariato
+
+
+def test_senza_candidato_la_deduplica_resta_quella_di_prima():
+    """L'auto-pick non ha nulla di piu' specifico da dire: se c'e' gia' un item
+    attivo si salta, come sempre — altrimenti «riprova tutte» ripristinerebbe
+    l'auto-pick sopra le scelte fatte a mano."""
+    db = _db()
+    t = _tracks(db, 1)[0]
+    q.enqueue(db, [t.id], kind="soulseek_chosen", payload=CAND)
+    esito = q.enqueue(db, [t.id])
+    assert (esito.added, esito.skipped, esito.replaced) == (0, 1, 0)
+    assert q.list_items(db)[0].payload_dict() == CAND

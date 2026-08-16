@@ -99,7 +99,7 @@ def test_retry_pending_accoda_le_da_sistemare(monkeypatch):
     try:
         r = TestClient(app).post("/api/downloads/retry-pending")
         assert r.status_code == 200
-        assert r.json() == {"enqueued": 1, "skipped": 0}
+        assert r.json() == {"enqueued": 1, "skipped": 0, "replaced": 0}
         assert [i.track_id for i in q.list_items(factory())] == [t.id]
     finally:
         app.dependency_overrides.pop(get_db, None)

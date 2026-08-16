@@ -43,7 +43,7 @@ def test_track_auto_accoda_invece_di_avviare_un_job(monkeypatch):
 
     r = client.post("/api/downloads/track/auto", json={"track_id": t.id})
     assert r.status_code == 200
-    assert r.json() == {"enqueued": 1, "skipped": 0}
+    assert r.json() == {"enqueued": 1, "skipped": 0, "replaced": 0}
     assert [i.kind for i in q.list_items(factory())] == ["soulseek_auto"]
 
 
@@ -290,7 +290,7 @@ def test_track_chosen_accoda_col_candidato_nel_payload(monkeypatch):
                       "size": 10, "bitrate": 320, "length": 300},
     })
     assert r.status_code == 200
-    assert r.json() == {"enqueued": 1, "skipped": 0}
+    assert r.json() == {"enqueued": 1, "skipped": 0, "replaced": 0}
     (item,) = q.list_items(factory())
     assert item.kind == "soulseek_chosen"
     assert item.payload_dict()["username"] == "bob"
@@ -322,7 +322,7 @@ def test_playlist_accoda_solo_le_tracce_senza_file_locale(monkeypatch):
 
     r = client.post(f"/api/downloads/playlist/{p.id}")
     assert r.status_code == 200
-    assert r.json() == {"enqueued": 1, "skipped": 0}
+    assert r.json() == {"enqueued": 1, "skipped": 0, "replaced": 0}
     assert [i.track_id for i in q.list_items(factory())] == [manca.id]
 
 
@@ -342,8 +342,8 @@ def test_accodare_due_volte_la_stessa_traccia_la_salta(monkeypatch):
 
     first = client.post("/api/downloads/track/auto", json={"track_id": t.id})
     second = client.post("/api/downloads/track/auto", json={"track_id": t.id})
-    assert first.json() == {"enqueued": 1, "skipped": 0}
-    assert second.json() == {"enqueued": 0, "skipped": 1}
+    assert first.json() == {"enqueued": 1, "skipped": 0, "replaced": 0}
+    assert second.json() == {"enqueued": 0, "skipped": 1, "replaced": 0}
 
 
 def test_niente_fill_se_non_si_e_accodato_nulla(monkeypatch):

@@ -776,6 +776,14 @@ export type QueueItem = {
   position: number;
 };
 
+/** Esito di un accodamento.
+ *
+ *  `replaced` è il terzo caso: una richiesta con candidato esplicito su una
+ *  traccia già in attesa ne sostituisce il carico invece di essere scartata.
+ *  Va distinto dagli altri due, altrimenti l'utente sceglie a mano un file e
+ *  nulla, a schermo, gli conferma che verrà usato quello. */
+export type EnqueueOutcome = { enqueued: number; skipped: number; replaced: number };
+
 /** Interruttore su slskd: `reason` è un codice, la frase la mette il frontend. */
 export type QueuePause = {
   paused: boolean;

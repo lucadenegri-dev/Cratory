@@ -78,8 +78,32 @@ describe("SoulseekSearchModal", () => {
       .toBe("Aphex Twin");
   });
 
+  /* La deduplica può scartare la richiesta (traccia già in scaricamento) o
+     sostituire il candidato di un item già in attesa. Chiudere il modal in
+     tutti e tre i casi faceva credere che la scelta fosse stata presa anche
+     quando era stata buttata via. */
+  it("scelta scartata perché già in scaricamento: lo dice e non chiude", async () => {
+    mocks.enqueueDownloads.mockResolvedValue({ enqueued: 0, skipped: 1, replaced: 0 });
+    const onPicked = vi.fn();
+    render(<SoulseekSearchModal target={target} onClose={vi.fn()} onPicked={onPicked} />);
+    await screen.findByText("Xtal.flac");
+    fireEvent.click(screen.getAllByText("Scarica questo")[0]);
+    expect(await screen.findByText(/già in scaricamento/)).toBeTruthy();
+    expect(onPicked).not.toHaveBeenCalled();
+  });
+
+  it("scelta applicata su un item in attesa: lo conferma", async () => {
+    mocks.enqueueDownloads.mockResolvedValue({ enqueued: 0, skipped: 0, replaced: 1 });
+    const onPicked = vi.fn();
+    render(<SoulseekSearchModal target={target} onClose={vi.fn()} onPicked={onPicked} />);
+    await screen.findByText("Xtal.flac");
+    fireEvent.click(screen.getAllByText("Scarica questo")[0]);
+    expect(await screen.findByText(/userà questo file/)).toBeTruthy();
+    await waitFor(() => expect(onPicked).toHaveBeenCalled());
+  });
+
   it("«Scarica questo» accoda il candidato scelto", async () => {
-    mocks.enqueueDownloads.mockResolvedValue({ enqueued: 1, skipped: 0 });
+    mocks.enqueueDownloads.mockResolvedValue({ enqueued: 1, skipped: 0, replaced: 0 });
     const onPicked = vi.fn();
     render(<SoulseekSearchModal target={target} onClose={vi.fn()} onPicked={onPicked} />);
     await screen.findByText("Xtal.flac");

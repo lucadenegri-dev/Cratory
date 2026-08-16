@@ -84,6 +84,6 @@ def test_accoda_un_item_soundcloud(monkeypatch):
     monkeypatch.setattr(downloads_router, "SessionLocal", factory)
     r = client.post("/api/downloads/track/soundcloud", json={"track_id": t.id})
     assert r.status_code == 200
-    assert r.json() == {"enqueued": 1, "skipped": 0}
+    assert r.json() == {"enqueued": 1, "skipped": 0, "replaced": 0}
     (item,) = q.list_items(factory())
     assert (item.track_id, item.kind) == (t.id, "soundcloud")

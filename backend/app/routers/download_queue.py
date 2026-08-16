@@ -35,6 +35,9 @@ class EnqueueIn(BaseModel):
 class EnqueueOut(BaseModel):
     enqueued: int
     skipped: int
+    # Item gia' in attesa il cui candidato e' stato sostituito da quello di
+    # questa richiesta: ne' aggiunti ne' scartati (vedi `queue.EnqueueResult`).
+    replaced: int = 0
 
 
 class QueueItemOut(BaseModel):
@@ -104,10 +107,11 @@ def enqueue(req: EnqueueIn, db: Session = Depends(get_db)):
                         "Un candidato vale per una sola traccia.")
     kind = "soulseek_chosen" if req.candidate is not None else req.kind
     payload = req.candidate.model_dump() if req.candidate is not None else None
-    added, skipped = queue.enqueue(db, req.track_ids, kind=kind, payload=payload)
-    if added:
+    esito = queue.enqueue(db, req.track_ids, kind=kind, payload=payload)
+    if esito.added or esito.replaced:
         fill()
-    return EnqueueOut(enqueued=added, skipped=skipped)
+    return EnqueueOut(enqueued=esito.added, skipped=esito.skipped,
+                      replaced=esito.replaced)
 
 
 @router.delete("/done")

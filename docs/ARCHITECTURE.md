@@ -522,7 +522,9 @@ An item is `queued` → `running` → `done` (or `cancelled` at any point before
 `done` item also carries an `outcome` in the same vocabulary the `Track` fields already
 used (`downloaded`/`needs_review`/`not_found`/`failed`). Enqueuing deduplicates against a
 track's own active item, so re-submitting the same track — a second click, a repeated
-`retry-pending` — is a no-op rather than a duplicate download.
+`retry-pending` — is a no-op rather than a duplicate download. With one exception: an
+enqueue carrying a user-picked candidate replaces the payload of an item still waiting,
+rather than losing to the auto-pick that got queued first.
 
 If slskd stops responding mid-item — connection refused, but also 401/403 or any 5xx from a
 daemon that answers but is unwell, and the `409 "must be connected"` of a live daemon that is

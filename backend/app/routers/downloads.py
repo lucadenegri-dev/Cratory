@@ -127,6 +127,19 @@ def _search_file_out(f: SlskdFile, *, score: float | None = None,
     )
 
 
+def _enqueue_out(esito) -> dict:
+    """Forma di risposta comune a tutti gli endpoint che accodano.
+
+    `replaced` e' il terzo esito, non un dettaglio: una richiesta con candidato
+    esplicito su una traccia gia' in attesa sostituisce il carico dell'item
+    invece di essere scartata, e il frontend deve poterlo dire — altrimenti
+    l'utente sceglie a mano un file e nulla, a schermo, gli conferma che la
+    sua scelta e' quella che verra' usata.
+    """
+    return {"enqueued": esito.added, "skipped": esito.skipped,
+            "replaced": esito.replaced}
+
+
 def _ffmpeg_available() -> bool:
     """ffmpeg presente? Serve al postprocessor MP3 di yt-dlp."""
     import shutil
@@ -171,13 +184,13 @@ def retry_pending():
                         "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     db = SessionLocal()
     try:
-        added, skipped = dlqueue.enqueue(
+        esito = dlqueue.enqueue(
             db, [t.id for t in tracks_download_pending(db)])
     finally:
         db.close()
-    if added:
+    if esito.added or esito.replaced:
         fill()
-    return {"enqueued": added, "skipped": skipped}
+    return _enqueue_out(esito)
 
 
 @router.get("/status")
@@ -270,13 +283,13 @@ def download_playlist(playlist_id: int):
                         "slskd not configured (SLSKD_URL/SLSKD_DOWNLOAD_DIR).")
     db = SessionLocal()
     try:
-        added, skipped = dlqueue.enqueue(
+        esito = dlqueue.enqueue(
             db, [t.id for t in tracks_without_local_file(db, playlist_id)])
     finally:
         db.close()
-    if added:
+    if esito.added or esito.replaced:
         fill()
-    return {"enqueued": added, "skipped": skipped}
+    return _enqueue_out(esito)
 
 
 @router.post("/track")
@@ -294,13 +307,13 @@ def download_track(req: TrackDownloadIn):
     try:
         if get_track(db, req.track_id) is None:
             raise api_error(404, "track_not_found", "Track not found.")
-        added, skipped = dlqueue.enqueue(db, [req.track_id], kind="soulseek_chosen",
-                                         payload=req.candidate.model_dump())
+        esito = dlqueue.enqueue(db, [req.track_id], kind="soulseek_chosen",
+                                payload=req.candidate.model_dump())
     finally:
         db.close()
-    if added:
+    if esito.added or esito.replaced:
         fill()
-    return {"enqueued": added, "skipped": skipped}
+    return _enqueue_out(esito)
 
 
 @router.post("/track/auto")
@@ -315,12 +328,12 @@ def download_track_auto(req: TrackAutopickIn):
     try:
         if get_track(db, req.track_id) is None:
             raise api_error(404, "track_not_found", "Track not found.")
-        added, skipped = dlqueue.enqueue(db, [req.track_id], kind="soulseek_auto")
+        esito = dlqueue.enqueue(db, [req.track_id], kind="soulseek_auto")
     finally:
         db.close()
-    if added:
+    if esito.added or esito.replaced:
         fill()
-    return {"enqueued": added, "skipped": skipped}
+    return _enqueue_out(esito)
 
 
 @router.post("/track/soundcloud")
@@ -345,12 +358,12 @@ def download_track_soundcloud(req: TrackSoundcloudIn):
             raise api_error(404, "track_not_found", "Track not found.")
         if track.platform != "soundcloud" or not track.url:
             raise api_error(422, "not_a_soundcloud_track", "Track has no SoundCloud URL.")
-        added, skipped = dlqueue.enqueue(db, [track.id], kind="soundcloud")
+        esito = dlqueue.enqueue(db, [track.id], kind="soundcloud")
     finally:
         db.close()
-    if added:
+    if esito.added or esito.replaced:
         fill()
-    return {"enqueued": added, "skipped": skipped}
+    return _enqueue_out(esito)
 
 
 @router.get("/review/{track_id}")

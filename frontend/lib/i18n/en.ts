@@ -412,6 +412,11 @@ export const en = {
       searching: "Searching Soulseek… (up to ~15 seconds)",
       noResults: "No results for this query. Try a shorter variant above.",
       downloadThis: "Download this",
+      // La scelta esplicita su un item ancora in attesa ne sostituisce il
+      // carico; su uno già in corso non si può, e va detto invece di chiudere
+      // il modal come se avesse funzionato.
+      replacedChoice: "Choice applied: the item already queued will use this file.",
+      alreadyRunning: "This track is already downloading: the choice was not applied. Cancel it from the queue and try again.",
       autoOkBadge: "reliable",
       openSlskd: "Open the slskd web UI",
       queueInfo: (n: number) => `queue ${n}`,
@@ -495,6 +500,11 @@ export const en = {
     selectRowAria: "Select this track",
     enqueued: (added: number, skipped: number) => skipped
       ? `${added} queued, ${skipped} already in the queue` : `${added} queued`,
+    // Esiti dei due percorsi a traccia singola (riga e modal di ricerca): la
+    // barra di selezione multipla li mostrava già, questi no — e una richiesta
+    // scartata in silenzio è indistinguibile da una riuscita.
+    enqueuedOne: "Queued.",
+    enqueueAlreadyQueued: "It was already in the queue: not queued twice.",
   },
   tracks: {
     pageTitle: "Track",
