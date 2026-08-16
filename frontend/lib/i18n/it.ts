@@ -822,6 +822,7 @@ export const it: Dictionary = {
     previous: "Traccia precedente",
     next: "Traccia successiva",
     seek: "Posizione",
+    openTrack: "Apri la scheda della traccia",
     close: "Chiudi player",
     unsupportedFormat: "Formato non riproducibile nel browser",
   },

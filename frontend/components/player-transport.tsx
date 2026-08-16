@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 
 import { useT } from "@/lib/i18n";
@@ -72,6 +72,7 @@ export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prev
   // Stream senza durata nota (metadata non ancora arrivati, o live): il seek
   // non ha senso e resta disabilitato.
   const seekable = Number.isFinite(duration) && duration > 0;
+  const pct = seekable ? Math.min(100, Math.max(0, (position / duration) * 100)) : 0;
 
   const toggle = () => {
     const el = audioRef.current;
@@ -81,38 +82,13 @@ export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prev
   };
 
   return (
-    <div className="flex w-full items-center gap-3">
-      {prevNext && (
-        <button
-          type="button"
-          aria-label={t.player.previous}
-          disabled={!prevNext.hasPrev}
-          onClick={prevNext.onPrev}
-          className="shrink-0 text-faint transition-colors hover:text-fg disabled:opacity-40 disabled:hover:text-faint"
-        >
-          <SkipBack size={15} />
-        </button>
-      )}
-      <button
-        type="button"
-        aria-label={paused ? t.player.play : t.player.pause}
-        onClick={toggle}
-        className="shrink-0 text-fg transition-colors hover:text-fg-strong"
-      >
-        {paused ? <Play size={17} /> : <Pause size={17} />}
-      </button>
-      {prevNext && (
-        <button
-          type="button"
-          aria-label={t.player.next}
-          disabled={!prevNext.hasNext}
-          onClick={prevNext.onNext}
-          className="shrink-0 text-faint transition-colors hover:text-fg disabled:opacity-40 disabled:hover:text-faint"
-        >
-          <SkipForward size={15} />
-        </button>
-      )}
-      <span className="tnum shrink-0 text-[11px] text-faint">{fmtTime(position)}</span>
+    <>
+      {/* La timeline non vive nella riga: e' il filetto superiore del pannello.
+          Assoluta e centrata sul bordo (l'unico antenato posizionato e'
+          .player-panel), cosi' il seek prende tutta la larghezza della barra e
+          il progresso si legge da qualunque punto. Il vestito sta in
+          globals.css (.seek); qui resta un range nativo, con tastiera e
+          semantica intatte. */}
       <input
         type="range"
         aria-label={t.player.seek}
@@ -128,9 +104,49 @@ export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prev
           el.currentTime = v;
           setPosition(v);
         }}
-        className="h-1 min-w-0 flex-1 cursor-pointer appearance-none bg-border text-fg accent-current disabled:cursor-default"
+        style={{ "--p": `${pct}%` } as CSSProperties}
+        className="seek absolute inset-x-0 top-0 -translate-y-1/2"
       />
-      <span className="tnum shrink-0 text-[11px] text-faint">{seekable ? fmtTime(duration) : "–:––"}</span>
+      <div className="flex items-center gap-2.5 sm:gap-3">
+        {prevNext && (
+          <button
+            type="button"
+            aria-label={t.player.previous}
+            disabled={!prevNext.hasPrev}
+            onClick={prevNext.onPrev}
+            className="shrink-0 p-1 text-muted transition-colors hover:text-fg-strong focus-visible:outline focus-visible:outline-1 focus-visible:outline-fg disabled:opacity-40 disabled:hover:text-muted"
+          >
+            <SkipBack size={15} />
+          </button>
+        )}
+        {/* Play/pausa e' l'azione primaria della barra: prende il peso di un
+            bottone quadrato bordato, prev/next restano glifi nudi. */}
+        <button
+          type="button"
+          aria-label={paused ? t.player.play : t.player.pause}
+          onClick={toggle}
+          className="grid h-8 w-8 shrink-0 place-items-center border border-border-strong text-fg-strong transition-colors hover:bg-elevated focus-visible:outline focus-visible:outline-1 focus-visible:outline-fg"
+        >
+          {paused ? <Play size={16} /> : <Pause size={16} />}
+        </button>
+        {prevNext && (
+          <button
+            type="button"
+            aria-label={t.player.next}
+            disabled={!prevNext.hasNext}
+            onClick={prevNext.onNext}
+            className="shrink-0 p-1 text-muted transition-colors hover:text-fg-strong focus-visible:outline focus-visible:outline-1 focus-visible:outline-fg disabled:opacity-40 disabled:hover:text-muted"
+          >
+            <SkipForward size={15} />
+          </button>
+        )}
+        {/* Tempi appaiati come in un indice: trascorso in ink, totale in muted. */}
+        <span className="tnum hidden shrink-0 text-[11px] text-muted sm:inline">
+          <span className="text-fg">{fmtTime(position)}</span>
+          {" / "}
+          <span>{seekable ? fmtTime(duration) : "–:––"}</span>
+        </span>
+      </div>
       <audio
         ref={audioRef}
         data-testid={testId}
@@ -154,6 +170,6 @@ export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prev
         onDurationChange={(e) => setDuration(e.currentTarget.duration)}
         className="hidden"
       />
-    </div>
+    </>
   );
 }

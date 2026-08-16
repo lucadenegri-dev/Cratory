@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Check, Plus, X } from "lucide-react";
 
 import { discoverySaveForLater, trackAudioUrl } from "@/lib/api";
@@ -95,63 +96,95 @@ export function DockedPlayer() {
     }
   };
 
+  // Traccia posseduta = ha una scheda: cover e titolo ci portano. Le preview
+  // discovery non sono in libreria, quindi restano testo.
+  const trackHref = active.kind === "local-track" ? `/tracks/${active.track.id}` : null;
+
   return (
-    // `bottom` dinamico: se la barra job globale è visibile pubblica la sua
-    // altezza in `--jobs-bar-height`, così la barra player le sta sopra invece
-    // di sovrapporsi; senza barra job il fallback 0px la tiene sul fondo.
+    // Telaio di posizionamento: `bottom` dinamico (se la barra job globale è
+    // visibile pubblica la sua altezza in `--jobs-bar-height`, così il player le
+    // sta sopra invece di sovrapporsi) e, da lg in su, i confini della colonna
+    // contenuti — parte al bordo destro della nav (180px, come
+    // lg:grid-cols-[180px_1fr] in editorial-shell) e si ferma alla colonna
+    // marginale quando la pagina ne ha una (--content-aside-width, pubblicata da
+    // PageLayout; 0px dove la colonna non c'è). Sotto lg le colonne sono
+    // impilate: tutta larghezza. Il padding del telaio è lo stacco del pannello
+    // fluttuante; `pointer-events-none` evita che quella cornice trasparente
+    // rubi i click al contenuto sotto.
     <div
       ref={barRef}
       style={{ bottom: "var(--jobs-bar-height, 0px)" }}
-      // Da lg in su la barra vive nella colonna centrale dei contenuti: parte
-      // al bordo destro della nav (180px, come lg:grid-cols-[180px_1fr] in
-      // editorial-shell) e si ferma alla colonna marginale quando la pagina
-      // ne ha una (--content-aside-width, pubblicata da PageLayout; 0px dove
-      // la colonna non c'è). Sotto lg le colonne sono impilate: tutta larghezza.
-      className="fixed left-0 right-0 z-[60] border-t border-border-strong bg-surface lg:left-[180px] lg:right-[var(--content-aside-width,0px)]"
+      className="pointer-events-none fixed left-0 right-0 z-[60] p-2 sm:p-3 lg:left-[180px] lg:right-[var(--content-aside-width,0px)]"
     >
-      {/* Il video YouTube non sta in una barra orizzontale: riquadro compatto
-          ancorato sopra la barra, a destra, con i controlli dell'iframe.
-          Condizioni inline (non un boolean precalcolato): TypeScript narra
-          `active` e `data` solo dentro la catena di guardie. */}
-      {active.kind === "discovery-preview" && status === "playing" && data?.kind === "youtube" && data.youtube_video_id && (
-        <div className="absolute bottom-full right-4 mb-2 w-64 max-w-[calc(100vw-2rem)] border border-border-strong bg-surface">
-          <div className="aspect-video w-full overflow-hidden">
-            <iframe
-              data-testid="preview-iframe"
-              className="h-full w-full"
-              src={`https://www.youtube-nocookie.com/embed/${data.youtube_video_id}?autoplay=1`}
-              title={active.item.title}
-              allow="autoplay; encrypted-media"
-              allowFullScreen
-            />
+      {/* Il pannello: bordato sui quattro lati, un gradino tonale sopra il
+          contenuto (elevated) e l'ombra concessa dalla Hairline Rule ai livelli
+          che fluttuano sopra ciò che non possiedono. `relative` è il riferimento
+          della timeline (assoluta) e del riquadro video. */}
+      <div className="player-panel player-in pointer-events-auto relative border border-border-strong bg-elevated shadow-[var(--c-shadow-float)]">
+        {/* Il video YouTube non sta in una barra orizzontale: riquadro compatto
+            ancorato sopra la barra, a destra, con i controlli dell'iframe.
+            Condizioni inline (non un boolean precalcolato): TypeScript narra
+            `active` e `data` solo dentro la catena di guardie. */}
+        {active.kind === "discovery-preview" && status === "playing" && data?.kind === "youtube" && data.youtube_video_id && (
+          <div className="absolute bottom-full right-3 mb-2 w-64 max-w-[calc(100vw-2rem)] border border-border-strong bg-elevated shadow-[var(--c-shadow-float)]">
+            <div className="aspect-video w-full overflow-hidden">
+              <iframe
+                data-testid="preview-iframe"
+                className="h-full w-full"
+                src={`https://www.youtube-nocookie.com/embed/${data.youtube_video_id}?autoplay=1`}
+                title={active.item.title}
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="flex items-center gap-3 px-3 py-2 sm:gap-4 sm:px-4 sm:py-2.5">
-        {/* Zona sinistra: cover, titolo/artista, rating. Flessibile (flex-1):
-            titolo e artista prendono tutto lo spazio disponibile e troncano
-            solo come ultima risorsa. */}
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <TrackCover key={activeKey ?? "x"} track={coverArt} className="h-10 w-10 sm:h-14 sm:w-14" iconSize={18} />
-          <div className="min-w-0">
-            <div className="truncate text-sm text-fg">{title}</div>
-            <div className="truncate text-xs text-faint">{artist}</div>
+        <div className="flex items-center gap-3 px-3 py-2.5 sm:gap-4 sm:px-4 sm:py-3">
+          {/* Zona sinistra: cover, titolo/artista, rating. Flessibile (flex-1):
+              titolo e artista prendono tutto lo spazio disponibile e troncano
+              solo come ultima risorsa. */}
+          <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
+            {trackHref ? (
+              // Secondo bersaglio verso la stessa scheda: fuori dal giro di
+              // tabulazione, così la tastiera incontra un solo link.
+              <Link href={trackHref} tabIndex={-1} aria-hidden className="shrink-0">
+                <TrackCover key={activeKey ?? "x"} track={coverArt} className="h-11 w-11 sm:h-14 sm:w-14" iconSize={18} />
+              </Link>
+            ) : (
+              <TrackCover key={activeKey ?? "x"} track={coverArt} className="h-11 w-11 sm:h-14 sm:w-14" iconSize={18} />
+            )}
+            <div className="min-w-0">
+              {trackHref ? (
+                <Link
+                  href={trackHref}
+                  title={t.player.openTrack}
+                  className="block truncate text-sm text-fg-strong underline-offset-[3px] transition-colors hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-fg"
+                >
+                  {title}
+                </Link>
+              ) : (
+                <div className="truncate text-sm text-fg-strong">{title}</div>
+              )}
+              <div className="truncate text-xs text-muted">{artist}</div>
+            </div>
+            {/* Il voto è un'azione da scrivania: sotto sm lo spazio va al
+                titolo, che altrimenti si riduce a due lettere. */}
+            {active.kind === "local-track" && (
+              <span className="hidden shrink-0 sm:inline-flex">
+                <RatingDiamond trackId={active.track.id} rating={active.track.rating ?? null} />
+              </span>
+            )}
           </div>
-          {active.kind === "local-track" && (
-            <RatingDiamond trackId={active.track.id} rating={active.track.rating ?? null} />
-          )}
-        </div>
 
-        {/* Zona centro: trasporto (o messaggi di stato). Larghezza massima
-            contenuta: su schermi larghi il binario di seek non diventa
-            chilometrico. YouTube non ha trasporto: audio e controlli stanno
-            nell'iframe sopra la barra. */}
-        <div className="flex min-w-0 flex-1 justify-center">
-          <div className="w-full max-w-2xl">
+          {/* Zona centro: trasporto (o messaggi di stato). Il seek non è più
+              qui: vive sul filetto superiore del pannello, quindi al centro
+              resta il gruppo compatto dei comandi. YouTube non ha trasporto:
+              audio e controlli stanno nell'iframe sopra la barra. */}
+          <div className="flex shrink-0 items-center justify-center">
             {active.kind === "local-track" &&
               (localError ? (
-                <div className="text-xs text-faint">{t.player.unsupportedFormat}</div>
+                <div className="text-xs text-muted">{t.player.unsupportedFormat}</div>
               ) : (
                 <PlayerTransport
                   key={activeKey ?? "x"}
@@ -171,8 +204,8 @@ export function DockedPlayer() {
               ))}
             {active.kind === "discovery-preview" && (
               <>
-                {status === "loading" && <div className="text-xs text-faint">{t.discovery.previewLoading}</div>}
-                {status === "unavailable" && <div className="text-xs text-faint">{t.discovery.noPreview}</div>}
+                {status === "loading" && <div className="text-xs text-muted">{t.discovery.previewLoading}</div>}
+                {status === "unavailable" && <div className="text-xs text-muted">{t.discovery.noPreview}</div>}
                 {status === "playing" && data?.kind === "itunes" && data.audio_url && (
                   <PlayerTransport
                     key={activeKey ?? "x"}
@@ -185,25 +218,32 @@ export function DockedPlayer() {
               </>
             )}
           </div>
-        </div>
 
-        {/* Zona destra: ADD per i lead discovery, chiudi. */}
-        <div className="flex shrink-0 items-center gap-1">
-          {addInput && (
+          {/* Zona destra: ADD per i lead discovery, chiudi. Da sm in su prende
+              la stessa larghezza flessibile della zona sinistra, così il
+              trasporto resta otticamente al centro della barra; sotto sm resta
+              alla sua misura e lo spazio va tutto al titolo. */}
+          <div className="flex shrink-0 items-center justify-end gap-2 sm:min-w-0 sm:flex-1">
+            {addInput && (
+              <button
+                type="button"
+                onClick={onAdd}
+                disabled={savingAdd || isAdded}
+                aria-label={t.discovery.add}
+                className="flex items-center gap-1 border border-border-strong px-2 py-1 text-[10px] uppercase tracking-wider text-muted transition-colors hover:bg-surface-2 hover:text-fg-strong focus-visible:outline focus-visible:outline-1 focus-visible:outline-fg disabled:opacity-60"
+              >
+                {isAdded ? <Check size={13} /> : <Plus size={12} />}
+                <span className="hidden sm:inline">{t.discovery.add}</span>
+              </button>
+            )}
             <button
-              type="button"
-              onClick={onAdd}
-              disabled={savingAdd || isAdded}
-              aria-label={t.discovery.add}
-              className="flex items-center gap-1 border border-border-strong px-1.5 py-0.5 text-[11px] uppercase tracking-wider text-faint transition-colors hover:text-fg disabled:opacity-60"
+              aria-label={t.player.close}
+              onClick={stop}
+              className="p-1.5 text-muted transition-colors hover:text-fg-strong focus-visible:outline focus-visible:outline-1 focus-visible:outline-fg"
             >
-              {isAdded ? <Check size={13} /> : <Plus size={12} />}
-              <span className="hidden sm:inline">{t.discovery.add}</span>
+              <X size={16} />
             </button>
-          )}
-          <button aria-label={t.player.close} onClick={stop} className="p-1 text-faint hover:text-fg">
-            <X size={16} />
-          </button>
+          </div>
         </div>
       </div>
     </div>

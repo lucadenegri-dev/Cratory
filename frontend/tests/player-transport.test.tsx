@@ -51,6 +51,17 @@ describe("PlayerTransport", () => {
     expect(screen.getByText("1:05")).toBeTruthy();
   });
 
+  it("il riempimento della timeline segue la posizione", () => {
+    const { audio } = renderTransport();
+    const seek = screen.getByLabelText("Posizione") as HTMLInputElement;
+    // Senza durata nota non c'e' progresso da mostrare.
+    expect(seek.style.getPropertyValue("--p")).toBe("0%");
+    setDuration(audio, 200);
+    Object.defineProperty(audio, "currentTime", { configurable: true, value: 50, writable: true });
+    fireEvent.timeUpdate(audio);
+    expect(seek.style.getPropertyValue("--p")).toBe("25%");
+  });
+
   it("il seek imposta currentTime sull'elemento", () => {
     const { audio } = renderTransport();
     setDuration(audio, 200);
