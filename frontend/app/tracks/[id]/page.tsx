@@ -73,6 +73,9 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
   const [slskSearch, setSlskSearch] = useState<SoulseekSearchTarget | null>(null);
   const [scState, setScState] = useState<"idle" | "running" | "queued">("idle");
   const [scError, setScError] = useState<string | null>(null);
+  // Esito della scelta esplicita nel modal Soulseek: il modal si smonta
+  // chiudendosi, quindi e' questa pagina a restare a mostrarlo.
+  const [slskNotice, setSlskNotice] = useState<string | null>(null);
 
   useEffect(() => {
     apiGet<TrackDetail>(`/api/tracks/${id}`).then(setTrack).catch((e) => setError(String(e.message ?? e)));
@@ -217,6 +220,7 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
             }
           />
           {scError && <p className="border-b border-border/50 px-4 py-2 text-xs text-danger">⚠ {scError}</p>}
+          {slskNotice && <p className="border-b border-border/50 px-4 py-2 text-xs text-muted">{slskNotice}</p>}
           <table className="w-full text-sm">
             <tbody>
               <tr className="border-b border-border/50 last:border-0">
@@ -284,7 +288,7 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
       />
 
       <SoulseekSearchModal target={slskSearch} onClose={() => setSlskSearch(null)}
-        onPicked={() => { setSlskSearch(null); refresh(); }} />
+        onPicked={(notice) => { setSlskNotice(notice ?? null); setSlskSearch(null); refresh(); }} />
     </PageLayout>
   );
 }

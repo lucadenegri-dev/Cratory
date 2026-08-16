@@ -13,11 +13,18 @@ import { useT } from "@/lib/i18n";
 
 export type SoulseekSearchTarget = { track_id: number; artist: string | null; title: string | null };
 
-/** Wrapper: monta il dialog solo con un target e lo rigenera per ogni traccia. */
+/** Wrapper: monta il dialog solo con un target e lo rigenera per ogni traccia.
+ *
+ *  `onPicked` riceve un eventuale esito da raccontare all'utente. Il modal non
+ *  puo' mostrarlo da solo: i genitori chiudono il dialog dentro `onPicked`, e
+ *  un messaggio scritto nello stato del modal sparirebbe nello stesso ciclo di
+ *  rendering in cui viene scritto. Chi resta a schermo e' la pagina, quindi e'
+ *  la pagina che lo mostra — nello stesso avviso in cui gia' racconta l'esito
+ *  dell'accodamento a lotti. */
 export function SoulseekSearchModal({ target, onClose, onPicked }: {
   target: SoulseekSearchTarget | null;
   onClose: () => void;
-  onPicked: () => void;
+  onPicked: (notice?: string) => void;
 }) {
   if (!target) return null;
   return <SearchDialog key={target.track_id} target={target} onClose={onClose} onPicked={onPicked} />;
@@ -40,7 +47,7 @@ function baseName(filename: string): string {
 function SearchDialog({ target, onClose, onPicked }: {
   target: SoulseekSearchTarget;
   onClose: () => void;
-  onPicked: () => void;
+  onPicked: (notice?: string) => void;
 }) {
   const t = useT();
   const { download: jobStatus, refresh } = useJobs();
@@ -56,8 +63,9 @@ function SearchDialog({ target, onClose, onPicked }: {
   const [review, setReview] = useState<DownloadReview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Esito non-errore di «Scarica questo»: scelta sostituita, o scartata perché
-  // la traccia è già in scaricamento.
+  // Esito non-errore di «Scarica questo» mostrato QUI dentro: solo il caso in
+  // cui il modal resta aperto (scelta scartata perché la traccia è già in
+  // scaricamento). Gli esiti che chiudono il dialog viaggiano su `onPicked`.
   const [notice, setNotice] = useState<string | null>(null);
   // Per il link di scampo dentro l'avviso d'errore: se slskd non risponde, la
   // sua web UI e' la via d'uscita, e il link in fondo alla pagina wishlist e'
@@ -125,8 +133,9 @@ function SearchDialog({ target, onClose, onPicked }: {
         setNotice(t.downloads.search.alreadyRunning);
         return;   // niente onPicked: il modal resta aperto sul messaggio
       }
-      if (res.replaced > 0) setNotice(t.downloads.search.replacedChoice);
-      onPicked();
+      // L'esito viaggia col callback, non nello stato locale: `onPicked` smonta
+      // questo componente, e un `setNotice` qui non arriverebbe mai a schermo.
+      onPicked(res.replaced > 0 ? t.downloads.search.replacedChoice : undefined);
     } catch (e) {
       setError(errText(e));
     } finally {

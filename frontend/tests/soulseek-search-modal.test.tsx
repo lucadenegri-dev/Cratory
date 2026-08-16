@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SoulseekSearchModal } from "@/components/soulseek-search-modal";
@@ -44,6 +45,23 @@ const downloadStatus = (over: Partial<DownloadStatus> = {}): DownloadStatus => (
 
 const jobsMock = vi.hoisted(() => ({ useJobs: vi.fn() }));
 vi.mock("@/components/jobs-provider", () => ({ useJobs: jobsMock.useJobs }));
+
+/** Genitore ridotto all'osso ma fedele a wishlist/dettaglio traccia: `onPicked`
+ *  smonta davvero il dialog e mostra l'esito nell'avviso della pagina. Serve a
+ *  provare che il messaggio sopravviva alla chiusura — con una callback finta
+ *  che non smonta niente, il test resterebbe verde anche col messaggio scritto
+ *  nello stato del modal, cioe' con l'utente che non vede nulla. */
+function PaginaFinta() {
+  const [aperto, setAperto] = useState<typeof target | null>(target);
+  const [avviso, setAvviso] = useState<string | null>(null);
+  return (
+    <>
+      {avviso && <div data-testid="avviso-pagina">{avviso}</div>}
+      <SoulseekSearchModal target={aperto} onClose={() => setAperto(null)}
+        onPicked={(notice) => { setAvviso(notice ?? null); setAperto(null); }} />
+    </>
+  );
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -92,14 +110,31 @@ describe("SoulseekSearchModal", () => {
     expect(onPicked).not.toHaveBeenCalled();
   });
 
-  it("scelta applicata su un item in attesa: lo conferma", async () => {
+  /* L'esito «scelta applicata» deve sopravvivere alla chiusura del modal: le
+     pagine reali smontano il dialog dentro `onPicked`, quindi un messaggio
+     scritto nello stato del modal sparisce nello stesso ciclo di rendering in
+     cui viene scritto. Si monta quindi un genitore che si comporta come la
+     pagina — chiude il dialog e mostra l'esito nel proprio avviso — invece di
+     una callback finta che non smonta nulla. */
+  it("scelta applicata su un item in attesa: l'esito arriva al genitore, che resta a mostrarlo", async () => {
     mocks.enqueueDownloads.mockResolvedValue({ enqueued: 0, skipped: 0, replaced: 1 });
-    const onPicked = vi.fn();
-    render(<SoulseekSearchModal target={target} onClose={vi.fn()} onPicked={onPicked} />);
+    render(<PaginaFinta />);
     await screen.findByText("Xtal.flac");
     fireEvent.click(screen.getAllByText("Scarica questo")[0]);
-    expect(await screen.findByText(/userà questo file/)).toBeTruthy();
-    await waitFor(() => expect(onPicked).toHaveBeenCalled());
+
+    // Il modal se n'è andato (come sulla pagina vera) e il messaggio è rimasto.
+    await waitFor(() => expect(screen.queryByText("Xtal.flac")).toBeNull());
+    expect(screen.getByTestId("avviso-pagina").textContent).toMatch(/userà questo file/);
+  });
+
+  it("accodamento pulito: nessun avviso da mostrare al genitore", async () => {
+    mocks.enqueueDownloads.mockResolvedValue({ enqueued: 1, skipped: 0, replaced: 0 });
+    render(<PaginaFinta />);
+    await screen.findByText("Xtal.flac");
+    fireEvent.click(screen.getAllByText("Scarica questo")[0]);
+
+    await waitFor(() => expect(screen.queryByText("Xtal.flac")).toBeNull());
+    expect(screen.queryByTestId("avviso-pagina")).toBeNull();
   });
 
   it("«Scarica questo» accoda il candidato scelto", async () => {

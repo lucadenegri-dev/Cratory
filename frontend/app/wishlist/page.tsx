@@ -349,8 +349,10 @@ function WishlistInner() {
         )}
       </div>
 
+      {/* `notice` e' l'esito che il modal non puo' mostrare da solo (chiudendosi
+          si smonta): finisce nello stesso avviso dell'accodamento a lotti. */}
       <SoulseekSearchModal target={searchTarget} onClose={() => setSearchTarget(null)}
-        onPicked={() => { setInfo(null); refresh(); setSearchTarget(null); load(); }} />
+        onPicked={(notice) => { setInfo(notice ?? null); refresh(); setSearchTarget(null); load(); }} />
       <LinkLocalFileModal target={linking} onClose={() => setLinking(null)}
         onLinked={() => { setInfo(null); setLinking(null); load(); }} />
       <AutoLinkModal open={autoLink} onClose={() => setAutoLink(false)} onLinked={() => { setInfo(null); load(); }} />
