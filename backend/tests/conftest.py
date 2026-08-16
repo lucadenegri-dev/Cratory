@@ -5,7 +5,8 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -24,6 +25,25 @@ from app.organize.services import scan_job  # noqa: E402
 from app.services import (  # noqa: E402
     audio_analysis_job, mix_identify_job, streaming_import_job,
 )
+
+@event.listens_for(Engine, "connect")
+def _accendi_le_foreign_key(dbapi_conn, _record):
+    """Accende `PRAGMA foreign_keys=ON` su OGNI engine dei test.
+
+    La produzione lo accende in `app.db._make_engine`, ma i test costruiscono
+    engine SQLite a mano — la fixture `db` qui sotto e una sessantina di moduli
+    che si fanno il proprio `create_engine("sqlite://")`. SQLite ha i vincoli
+    spenti di default: l'intera suite girava quindi senza FK mentre la
+    produzione le ha accese, e una FK dimenticata (una tabella nuova che punta
+    a `tracks` e impedisce di cancellare una traccia) passava verde qui per poi
+    dare 500 all'utente. L'ascoltatore e' registrato sulla classe `Engine`,
+    non su una singola istanza, proprio per coprire anche gli engine costruiti
+    nei singoli moduli di test senza doverli riscrivere uno per uno.
+    """
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
 
 CAMELOT_KEYS = [
     "1A", "2A", "3A", "4A", "5A", "6A", "7A", "8A", "9A", "10A", "11A", "12A",
@@ -64,6 +84,9 @@ def _ferma_il_riaggancio_della_coda():
 
 @pytest.fixture()
 def db():
+    # Le foreign key sono accese dall'ascoltatore su `Engine` in cima al file,
+    # non qui: cosi' valgono anche per gli engine che i singoli moduli di test
+    # si costruiscono da soli.
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine, expire_on_commit=False)()

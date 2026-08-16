@@ -50,9 +50,12 @@ def test_tracks_minimale_recupera_tutte_le_colonne_del_modello():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE tracks RENAME TO _t"))
+        # DROP + CREATE, non RENAME->CREATE->DROP: vedi la nota in
+        # `test_audio_hash_column.py` — col RENAME e le foreign key accese i
+        # figli (`playlist_tracks`, `download_queue_items`, …) resterebbero a
+        # puntare alla tabella temporanea, poi droppata.
+        conn.execute(text("DROP TABLE tracks"))
         conn.execute(text("CREATE TABLE tracks (id INTEGER PRIMARY KEY, source_type VARCHAR)"))
-        conn.execute(text("DROP TABLE _t"))
         conn.execute(text("INSERT INTO tracks (id, source_type) VALUES (1, 'spotify')"))
     ensure_schema(engine)
 
@@ -90,9 +93,8 @@ def test_additions_su_tutte_le_tabelle_del_modello():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE setlists RENAME TO _s"))
+        conn.execute(text("DROP TABLE setlists"))  # come sopra: mai RENAME con le FK accese
         conn.execute(text("CREATE TABLE setlists (id INTEGER PRIMARY KEY, name VARCHAR)"))
-        conn.execute(text("DROP TABLE _s"))
     ensure_schema(engine)
     info = _table_info(engine, "setlists")
     model_cols = set(Base.metadata.tables["setlists"].columns.keys())

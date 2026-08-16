@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import DjSet, DjSetTrack, Playlist, PlaylistSyncEvent, Setlist, SetlistTrack, Track, playlist_tracks, utcnow
+from app.models import (
+    DjSet, DjSetTrack, DownloadQueueItem, Playlist, PlaylistSyncEvent, Setlist,
+    SetlistTrack, Track, playlist_tracks, utcnow,
+)
 from app.organize.models import AudioFile
 
 
@@ -632,6 +635,52 @@ _MERGE_BACKFILL_FIELDS = (
 )
 
 
+# Stati in cui un item di coda e' ancora "vivo" (in attesa o in corso). Duplica
+# di proposito `download_queue.ACTIVE_STATES` invece di importarlo: quel modulo
+# importa `repositories` a valle, e il ciclo di import non vale il risparmio di
+# due stringhe. Se cambiano li', vanno cambiati anche qui.
+_QUEUE_ACTIVE_STATES = ("queued", "running")
+
+
+def _merge_download_queue_items(db: Session, keep: Track, drop: Track) -> None:
+    """Sposta su `keep` gli item di coda di `drop`, che sta per essere cancellata.
+
+    `DownloadQueueItem.track_id` e' una FK verso `tracks.id` senza cascade e in
+    produzione le foreign key sono accese: lasciando le righe attaccate a
+    `drop`, la `db.delete(drop)` di `merge_tracks` andrebbe in IntegrityError.
+    E' un percorso che il runner puo' innescare da solo — il file appena
+    scaricato collide per hash con un'altra traccia e `attach_local_file`
+    fonde — quindi la coda romperebbe sé stessa.
+
+    Lo storico (`done`/`cancelled`) si sposta e basta: raccontano tentativi
+    fatti su un brano che ora vive nella riga superstite. Un item *attivo* di
+    `drop` viene invece cancellato se `keep` ne ha gia' uno attivo: spostarlo
+    lascerebbe due item vivi sulla stessa traccia, cioe' due download paralleli
+    dello stesso brano — esattamente cio' che la deduplica di `enqueue` esiste
+    per impedire. Si cancella quello di `drop` (non quello di `keep`) perche'
+    `keep` e' la riga che sopravvive e il suo item potrebbe gia' essere
+    `running`, con un worker attaccato.
+    """
+    keep_has_active = db.scalar(
+        select(DownloadQueueItem.id).where(
+            DownloadQueueItem.track_id == keep.id,
+            DownloadQueueItem.state.in_(_QUEUE_ACTIVE_STATES),
+        )
+    ) is not None
+    if keep_has_active:
+        db.execute(
+            delete(DownloadQueueItem).where(
+                DownloadQueueItem.track_id == drop.id,
+                DownloadQueueItem.state.in_(_QUEUE_ACTIVE_STATES),
+            )
+        )
+    db.execute(
+        update(DownloadQueueItem)
+        .where(DownloadQueueItem.track_id == drop.id)
+        .values(track_id=keep.id)
+    )
+
+
 def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
     """Fonde `drop` dentro `keep` (stesso brano in due righe): sposta le membership
     playlist/set su keep, riempie i campi vuoti di keep con quelli di drop (keep
@@ -666,6 +715,7 @@ def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
     db.execute(
         update(SetlistTrack).where(SetlistTrack.track_id == drop.id).values(track_id=keep.id)
     )
+    _merge_download_queue_items(db, keep, drop)
     # Backfill dei soli campi vuoti di keep.
     for f in _MERGE_BACKFILL_FIELDS:
         if getattr(keep, f) in (None, "") and getattr(drop, f) not in (None, ""):
@@ -704,6 +754,25 @@ def delete_orphan_leads(db: Session, candidate_ids: Iterable[int] | None = None)
     ids = orphan_lead_ids(db, candidate_ids)
     if not ids:
         return 0
+    # Lo storico di coda muore col lead (FK senza cascade su SQLite, come per
+    # PlaylistSyncEvent in `delete_playlist`): un item `done`/`cancelled` di una
+    # traccia che non esiste piu' non racconta nulla a nessuno, e finche' resta
+    # la DELETE della traccia va in IntegrityError.
+    db.execute(
+        delete(DownloadQueueItem).where(DownloadQueueItem.track_id.in_(ids)),
+        execution_options={"synchronize_session": False},
+    )
+    # Anche il puntatore dal lato Organize: `AudioFile.track_id` e' nullable, e
+    # quando una traccia si cancella via ORM (`db.delete`, come fa
+    # `riconcilia_possessi`) SQLAlchemy lo azzera da solo. Qui la DELETE e' in
+    # blocco, quindi l'ORM non se ne occupa e il vincolo la blocca. Capita per
+    # davvero: un file sparito dal disco lascia la traccia come lead
+    # (`has_local_file=False`) senza staccare la riga `AudioFile`, e quel lead,
+    # tolto dall'ultima playlist, passa di qui.
+    db.execute(
+        update(AudioFile).where(AudioFile.track_id.in_(ids)).values(track_id=None),
+        execution_options={"synchronize_session": False},
+    )
     db.execute(
         delete(Track).where(Track.id.in_(ids)),
         execution_options={"synchronize_session": False},
