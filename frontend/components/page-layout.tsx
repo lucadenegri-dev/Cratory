@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useT } from "@/lib/i18n";
 
 /* Impaginazione comune a tutte le pagine. Ha due slot opzionali che vengono da
@@ -28,6 +28,19 @@ export function PageLayout({
 }) {
   const t = useT();
   const hasAside = marginalia != null || guide != null;
+
+  // La pagina con colonna marginale (240px, la stessa di lg:grid-cols sotto)
+  // lo pubblica in una CSS var globale: la barra player si ferma al bordo
+  // della colonna invece di passarci sotto (pattern di --jobs-bar-height).
+  // Al cambio pagina il cleanup della vecchia gira prima dell'effect della
+  // nuova, quindi il valore è sempre quello della pagina corrente.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--content-aside-width", hasAside ? "240px" : "0px");
+    return () => {
+      document.documentElement.style.setProperty("--content-aside-width", "0px");
+    };
+  }, [hasAside]);
+
   return (
     <div className={hasAside ? "lg:grid lg:grid-cols-[1fr_240px]" : ""}>
       <section className="min-w-0 px-5 py-5 lg:px-6 lg:py-6">

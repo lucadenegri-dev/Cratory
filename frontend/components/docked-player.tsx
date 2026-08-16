@@ -102,10 +102,12 @@ export function DockedPlayer() {
     <div
       ref={barRef}
       style={{ bottom: "var(--jobs-bar-height, 0px)" }}
-      // Da lg in su la barra parte al bordo destro della nav (180px, la stessa
-      // larghezza di lg:grid-cols-[180px_1fr] in editorial-shell): vive nella
-      // colonna dei contenuti, non sotto l'indice.
-      className="fixed left-0 right-0 z-[60] border-t border-border-strong bg-surface lg:left-[180px]"
+      // Da lg in su la barra vive nella colonna centrale dei contenuti: parte
+      // al bordo destro della nav (180px, come lg:grid-cols-[180px_1fr] in
+      // editorial-shell) e si ferma alla colonna marginale quando la pagina
+      // ne ha una (--content-aside-width, pubblicata da PageLayout; 0px dove
+      // la colonna non c'è). Sotto lg le colonne sono impilate: tutta larghezza.
+      className="fixed left-0 right-0 z-[60] border-t border-border-strong bg-surface lg:left-[180px] lg:right-[var(--content-aside-width,0px)]"
     >
       {/* Il video YouTube non sta in una barra orizzontale: riquadro compatto
           ancorato sopra la barra, a destra, con i controlli dell'iframe.
