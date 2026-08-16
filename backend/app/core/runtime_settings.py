@@ -72,6 +72,26 @@ def share_library() -> bool:
     return _overrides.get("share_library") == "1"
 
 
+DOWNLOAD_SLOTS_DEFAULT = 3
+DOWNLOAD_SLOTS_MIN = 1
+DOWNLOAD_SLOTS_MAX = 10
+
+
+def download_slots() -> int:
+    """Quanti download in parallelo (solo DB, default 3).
+
+    Letto a ogni riempimento del pool, non all'avvio: cambiarlo ha effetto
+    senza riavviare. Un valore illeggibile o fuori scala non deve poter
+    bloccare la coda, quindi si riporta nei limiti invece di sollevare.
+    """
+    raw = _overrides.get("download_slots")
+    try:
+        value = int(raw) if raw else DOWNLOAD_SLOTS_DEFAULT
+    except ValueError:
+        return DOWNLOAD_SLOTS_DEFAULT
+    return max(DOWNLOAD_SLOTS_MIN, min(value, DOWNLOAD_SLOTS_MAX))
+
+
 def source(key: str) -> str:
     """`'db'` se c'è un override non vuoto in cache, altrimenti `'env'`."""
     return "db" if _overrides.get(key) else "env"

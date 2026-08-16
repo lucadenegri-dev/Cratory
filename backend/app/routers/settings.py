@@ -62,6 +62,7 @@ class ConfigSettings(BaseModel):
     slskd_url: FieldState
     slskd_config_path: FieldState
     share_library: bool
+    download_slots: int
     warning: str | None = None
 
 
@@ -118,6 +119,7 @@ def _snapshot(warning: str | None = None) -> ConfigSettings:
     return ConfigSettings(
         **{k: _field_state(k) for k in _FIELD_KEYS},
         share_library=rs.share_library(),
+        download_slots=rs.download_slots(),
         warning=warning,
     )
 
@@ -187,3 +189,24 @@ def set_share_library(req: ShareLibrarySetting, db: Session = Depends(get_db)):
         applied_to_yaml=result["applied_to_yaml"],
         rescan=result["rescan"],
     )
+
+
+class DownloadSlotsSetting(BaseModel):
+    slots: int
+
+
+class DownloadSlotsResult(BaseModel):
+    download_slots: int
+
+
+@router.put("/download-slots", response_model=DownloadSlotsResult)
+def put_download_slots(req: DownloadSlotsSetting, db: Session = Depends(get_db)):
+    """Quanti download in parallelo. Fuori scala e' un errore esplicito qui
+    (l'utente ha digitato un numero), mentre il getter si limita a riportare
+    nei limiti un valore gia' persistito."""
+    if not (rs.DOWNLOAD_SLOTS_MIN <= req.slots <= rs.DOWNLOAD_SLOTS_MAX):
+        raise api_error(422, "invalid_setting",
+                        f"slots deve stare fra {rs.DOWNLOAD_SLOTS_MIN} e {rs.DOWNLOAD_SLOTS_MAX}",
+                        field="slots")
+    rs.apply(db, "download_slots", str(req.slots))
+    return DownloadSlotsResult(download_slots=rs.download_slots())
