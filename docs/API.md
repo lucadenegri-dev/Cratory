@@ -51,7 +51,11 @@ object or a list first.
 background job: the start endpoint returns the initial job state, and a paired
 status endpoint is polled until `status` leaves `running`. Each job is
 single-instance — a second start while one is running gets `409` or the state of the
-running job, never a queue slot.
+running job, never a queue slot — **except Soulseek/SoundCloud download**, which
+runs on a real queue instead (see "The queue" under Downloads): its start
+endpoints enqueue and answer `200 {enqueued, skipped}`, several instances run at
+once, and `GET /api/downloads/status` reports the queue's current round rather
+than a single job's state.
 
 **The success code of a start endpoint is per endpoint, not a convention** — some
 return `202`, some `200`. The table below is the authority; do not assume `202`.
@@ -63,7 +67,7 @@ return `202`, some `200`. The table below is the authority; do not assume `202`.
 | Streaming import/sync | `POST /api/playlists/import`, `/import/liked/selected`, `/{id}/sync`, `/sync-all`, `POST /api/soundcloud/import`, `/import/likes` (all **202**) | `GET /api/playlists/import/status` |
 | Set generation | `POST /api/sets/generate-async` (**200**) | `GET /api/sets/generate-status` |
 | BPM/key analysis | `POST /api/analysis/start` (**202**) | `GET /api/analysis/status` |
-| Soulseek / SoundCloud download | `POST /api/downloads/playlist/{id}`, `/track`, `/track/auto`, `/track/soundcloud`, `/retry-pending` (all **202**) | `GET /api/downloads/status` |
+| Soulseek / SoundCloud download (queue, not single-instance) | `POST /api/downloads/playlist/{id}`, `/track`, `/track/auto`, `/track/soundcloud`, `/retry-pending` (all **200**, `{enqueued, skipped}`) | `GET /api/downloads/status` |
 | Mix identification | `POST /api/shazam/identify` (**200**) | `GET /api/shazam/identify-status` |
 | Provider rescan | `POST /api/organize/issues/provider-rescan` (**200**) | `GET /api/organize/issues/provider-rescan/status` |
 | Integrity check | `POST /api/organize/issues/integrity-check` (**200**) | `GET /api/organize/issues/integrity-check/status` |
@@ -895,9 +899,10 @@ Failed and doubtful downloads persist their outcome on the `Track`
 (`needs_review` / `not_found` / `failed`), so they survive job, session and restart.
 
 `GET /api/downloads/pending` lists them (not owned, not discarded).
-`POST /api/downloads/retry-pending` (`202`) retries the auto-pick across all of
-them. `DELETE /api/downloads/pending/{track_id}` is the "ignore" action: it clears
-the outcome and takes the track out of the archive.
+`POST /api/downloads/retry-pending` (`200`, `{enqueued, skipped}`) retries the
+auto-pick across all of them, enqueuing rather than running inline (see "The
+queue" above). `DELETE /api/downloads/pending/{track_id}` is the "ignore"
+action: it clears the outcome and takes the track out of the archive.
 
 `GET /api/downloads/auto-link` is read-only: for every pending track it returns the
 best matching local file it can find, `{track_id, label, artist, title, hit}` with

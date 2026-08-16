@@ -23,7 +23,7 @@ export function SoulseekSearchModal({ target, onClose, onPicked }: {
   return <SearchDialog key={target.track_id} target={target} onClose={onClose} onPicked={onPicked} />;
 }
 
-/** DownloadCandidate per POST /api/downloads/track: score/tier non servono al
+/** DownloadCandidate per POST /api/downloads/queue: score/tier non servono al
  *  download (il backend ricostruisce SlskdFile dai soli campi identita'). */
 function toCandidate(f: SoulseekSearchFile): DownloadCandidate {
   return {

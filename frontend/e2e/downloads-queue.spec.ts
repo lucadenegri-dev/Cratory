@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // La coda con API stubbate: il test non dipende da slskd né dal DB.
-test("la pagina /downloads mostra le tre fasce della coda", async ({ page }) => {
+test("la pagina /downloads mostra intestazione, slot occupati ed etichette per item in corso e in attesa", async ({ page }) => {
   await page.route("**/api/downloads/queue", (route) =>
     route.fulfill({ json: { slots: 3, active: 1, items: [
       { id: 1, track_id: 10, label: "Aphex Twin — Xtal", kind: "soulseek_auto",
