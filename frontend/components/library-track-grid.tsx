@@ -24,13 +24,13 @@ export function LibraryTrackGrid({
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3">
       {tracks.map((tr) => (
-        <LibraryTrackCard key={tr.id} track={tr} onEdit={onEdit} trackLinkQuery={trackLinkQuery} />
+        <LibraryTrackCard key={tr.id} track={tr} context={tracks} onEdit={onEdit} trackLinkQuery={trackLinkQuery} />
       ))}
     </div>
   );
 }
 
-function LibraryTrackCard({ track, onEdit, trackLinkQuery }: { track: Track; onEdit: (t: Track) => void; trackLinkQuery: string }) {
+function LibraryTrackCard({ track, context, onEdit, trackLinkQuery }: { track: Track; context: Track[]; onEdit: (t: Track) => void; trackLinkQuery: string }) {
   const t = useT();
   // Badge BPM·Key: solo i valori presenti, uniti con " · " (es. "128 · 7A").
   const meta = [track.bpm != null ? track.bpm.toFixed(0) : null, track.camelot_key ?? null]
@@ -53,6 +53,7 @@ function LibraryTrackCard({ track, onEdit, trackLinkQuery }: { track: Track; onE
           dentro <a>): compare su hover, solo per le tracce possedute. */}
       <TrackPlayButton
         track={track}
+        context={context}
         className="absolute left-1 top-1 rounded-full bg-black/60 p-1.5 text-white opacity-0 transition hover:bg-black/80 focus-visible:opacity-100 group-hover:opacity-100"
       />
       {/* Pencil fuori dal Link (niente <button> dentro <a>): overlay su hover. */}

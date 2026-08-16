@@ -3,23 +3,39 @@
 import { Pause, Play } from "lucide-react";
 
 import { useT } from "@/lib/i18n";
-import { usePlayer } from "@/lib/player";
+import { usePlayer, type LocalTrack } from "@/lib/player";
+
+type PlayableRow = {
+  id: number;
+  title: string | null;
+  artist: string | null;
+  has_local_file?: boolean | null;
+  album_art_url?: string | null;
+  rating?: number | null;
+};
 
 type Props = {
-  track: {
-    id: number;
-    title: string | null;
-    artist: string | null;
-    has_local_file?: boolean | null;
-    album_art_url?: string | null;
-    rating?: number | null;
-  };
+  track: PlayableRow;
+  /** Lista ordinata da cui parte l'ascolto (griglia libreria, set): abilita
+   *  prev/next e auto-avanzamento nel player. Viene filtrata alle possedute e
+   *  passata come snapshot. */
+  context?: PlayableRow[];
   className?: string;
 };
 
+function toLocal(tr: PlayableRow): LocalTrack {
+  return {
+    id: tr.id,
+    title: tr.title ?? "",
+    artist: tr.artist ?? "",
+    albumArtUrl: tr.album_art_url ?? null,
+    rating: tr.rating ?? null,
+  };
+}
+
 /** Play/pausa dell'audizione rapida di una traccia posseduta. Non renderizza
  *  nulla se la traccia non ha un file locale. Riusabile in ogni riga-traccia. */
-export function TrackPlayButton({ track, className }: Props) {
+export function TrackPlayButton({ track, context, className }: Props) {
   const player = usePlayer();
   const t = useT();
   if (!track.has_local_file) return null;
@@ -31,16 +47,8 @@ export function TrackPlayButton({ track, className }: Props) {
     if (isActive) {
       player.stop();
     } else {
-      player.play({
-        kind: "local-track",
-        track: {
-          id: track.id,
-          title: track.title ?? "",
-          artist: track.artist ?? "",
-          albumArtUrl: track.album_art_url ?? null,
-          rating: track.rating ?? null,
-        },
-      });
+      const ctx = context?.filter((tr) => tr.has_local_file).map(toLocal);
+      player.play({ kind: "local-track", track: toLocal(track) }, ctx);
     }
   };
 
