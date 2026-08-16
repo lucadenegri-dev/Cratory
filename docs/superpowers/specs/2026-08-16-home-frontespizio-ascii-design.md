@@ -122,6 +122,26 @@ Le tre righe d'aria in cima alla scena (`DJ_AIR_ROWS`) restano come sono, pur
 essendo il "margine" più grosso della cabina: ridurle cambierebbe la salita
 delle note, cioè il comportamento della cabina e non la sua impaginazione.
 
+**Anche il frontespizio prende la cornice, un gradino avanti.** Stessa `Card`
+delle lastre sotto, ma con fondo `elevated` e bordo `border-strong`: viene
+avanti per contrasto restando in fila, perché il sistema è piatto e non ha
+ombre. Contrasto del testo sul nuovo fondo: 13.6:1 in entrambi i temi.
+
+Due conseguenze misurate, entrambe corrette:
+
+- sul telefono la cornice toglie 24px di larghezza utile e la scritta a 13px
+  non ci stava più (320px contro 309 disponibili): scesa a 12px, che fa 295px;
+- `overflow-x-auto` da solo promuove anche l'asse verticale ad `auto`, e
+  siccome l'interlinea sta sotto l'unità l'inchiostro deborda di un paio di
+  pixel: bastava a far comparire una barra di scorrimento verticale dentro la
+  cornice. Risolto con `overflow-y-hidden` esplicito più un rientro in `em`
+  sull'arte — non si ritaglia nulla, si toglie solo la barra.
+
+Il contenuto resta sotto il viewport da 1024 in su (648px a 1024, 689 a 1280,
+707 a 1920). Nella fascia 768–1023 la nav passa in orizzontale e si prende
+~85px: lì la pagina eccede di 21px. Non compensato: recuperarli chiederebbe di
+rimpicciolire la cabina a 14px in quella sola fascia, e non vale il prezzo.
+
 **La posa a riposo.** Ferma, la cabina stava al tick 0, che è in battere:
 tweeter compressi e la `O` grande in `danger`, la posa di un colpo mentre non
 esce alcun suono. Con la cabina in cima alla pagina l'incoerenza si vede.

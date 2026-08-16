@@ -71,10 +71,16 @@ export default function Home() {
   return (
     <PageLayout>
       {/* Il frontespizio sta in cima sempre: anche a libreria vuota e mentre
-          carica, la Home ha una testata. Sotto cambia solo il contenuto. */}
-      <div className="mb-3">
-        <AsciiWordmark />
-      </div>
+          carica, la Home ha una testata. Sotto cambia solo il contenuto.
+          Stessa cornice delle lastre sotto ma un gradino avanti: fondo
+          `elevated` e bordo `border-strong` lo staccano dalla serie restando
+          in fila. Il sistema è piatto e non ha ombre, quindi il primo piano
+          si fa col contrasto, non con la profondità. */}
+      <Card className="mb-3 border-border-strong bg-elevated">
+        <div className="px-3 py-2">
+          <AsciiWordmark />
+        </div>
+      </Card>
 
       {error && <div className="mb-6"><Alert tone="danger">{t.dashboard.backendDown(error)}</Alert></div>}
 
