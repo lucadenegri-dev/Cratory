@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 
 import { useT } from "@/lib/i18n";
@@ -36,12 +36,38 @@ function fmtTime(s: number): string {
 /** Trasporto custom sul motore <audio> nascosto: play/pause, prev/next (solo con
  *  contesto), seek con tempi. Riusato identico per traccia locale, clip iTunes e
  *  stream Bandcamp; l'iframe YouTube non passa di qui. */
-export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prevNext }: Props) {
+export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prevNext, mediaMeta }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [paused, setPaused] = useState(true);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const t = useT();
+
+  // Now Playing di sistema: metadata e comandi remoti (tasti multimediali,
+  // lock screen). Feature facoltativa: dove mediaSession/MediaMetadata mancano
+  // (browser vecchi, jsdom) non succede nulla. prev/next registrati solo con
+  // contesto e solo verso i bordi disponibili; allo smontaggio si azzera tutto
+  // per non lasciare comandi appesi a un elemento morto.
+  useEffect(() => {
+    if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
+    const ms = navigator.mediaSession;
+    ms.metadata = new MediaMetadata({
+      title: mediaMeta?.title ?? "",
+      artist: mediaMeta?.artist ?? "",
+      artwork: mediaMeta?.artworkUrl ? [{ src: mediaMeta.artworkUrl }] : [],
+    });
+    ms.setActionHandler("play", () => void audioRef.current?.play());
+    ms.setActionHandler("pause", () => audioRef.current?.pause());
+    ms.setActionHandler("previoustrack", prevNext?.hasPrev ? () => prevNext.onPrev() : null);
+    ms.setActionHandler("nexttrack", prevNext?.hasNext ? () => prevNext.onNext() : null);
+    return () => {
+      ms.metadata = null;
+      ms.setActionHandler("play", null);
+      ms.setActionHandler("pause", null);
+      ms.setActionHandler("previoustrack", null);
+      ms.setActionHandler("nexttrack", null);
+    };
+  }, [mediaMeta, prevNext]);
 
   // Stream senza durata nota (metadata non ancora arrivati, o live): il seek
   // non ha senso e resta disabilitato.
