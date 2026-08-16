@@ -23,6 +23,17 @@ import { useT } from "@/lib/i18n";
 type Tab = "all" | WishlistTab;
 const TAB_KEYS: Tab[] = ["all", "never", "review", "not_found", "failed"];
 
+// Condivisa fra `rows` (sotto) e la potatura della selezione dentro load():
+// stessa nozione di "visibile nella vista corrente" nei due punti, per non
+// disallinearle in futuro.
+function matchesFilters(tr: Track, tab: Tab, playlistFilter: string, query: string): boolean {
+  if (tab !== "all" && statusTab(wishlistStatus(tr)) !== tab) return false;
+  if (playlistFilter && !tr.playlists.some((p) => String(p.id) === playlistFilter)) return false;
+  const q = query.trim().toLowerCase();
+  if (q && !`${tr.artist ?? ""} ${tr.title ?? ""}`.toLowerCase().includes(q)) return false;
+  return true;
+}
+
 function WishlistInner() {
   const t = useT();
   const TAB_LABEL: Record<Tab, string> = {
@@ -74,6 +85,15 @@ function WishlistInner() {
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
+  // Ultimi tab/playlistFilter/query per la potatura della selezione dentro
+  // load() (sotto): load() ha come unica dipendenza showArchived per restare
+  // client-side sui filtri (nessun refetch a ogni tab/ricerca/playlist), quindi
+  // legge i filtri correnti da qui invece che dalle dipendenze della useCallback.
+  // Assegnazione di un ref in un effect, non uno setState: nessun problema col
+  // lint del React Compiler citato sopra.
+  const filtersRef = useRef({ tab, playlistFilter, query });
+  useEffect(() => { filtersRef.current = { tab, playlistFilter, query }; }, [tab, playlistFilter, query]);
+
   const load = useCallback((signal?: AbortSignal) => {
     // limit=0 = tutte (l'endpoint pagina solo se richiesto): filtri e contatori
     // sono client-side, oggi ~55 tracce. `archived=true` restituisce SOLO le
@@ -83,7 +103,31 @@ function WishlistInner() {
       archived: showArchived ? "true" : undefined,
       sort: "artist", order: "asc", limit: 0,
     }, { signal })
-      .then((r) => { if (alive.current) { setItems(r.items); setError(null); } })
+      .then((r) => {
+        if (!alive.current) return;
+        setItems(r.items);
+        setError(null);
+        // Le azioni di riga (archivia, azzera esito, download riuscito che rende
+        // la traccia "owned", collega file, scelta da ricerca Soulseek) possono
+        // far uscire una traccia dalla vista corrente senza che l'utente tocchi
+        // un filtro — e tutte ricaricano da qui. Si pota la selezione sulle
+        // righe ancora visibili: altrimenti "Accoda" spedirebbe id per tracce
+        // che l'utente non vede più selezionate (nel caso dell'archiviazione,
+        // un id esplicitamente escluso — il backend non filtra per
+        // archived/has_local_file in fase di accodamento).
+        setSelected((prev) => {
+          if (prev.size === 0) return prev;
+          const f = filtersRef.current;
+          const visible = new Set(
+            r.items.filter((tr) => matchesFilters(tr, f.tab, f.playlistFilter, f.query)).map((tr) => tr.id));
+          let changed = false;
+          const next = new Set<number>();
+          for (const id of prev) {
+            if (visible.has(id)) next.add(id); else changed = true;
+          }
+          return changed ? next : prev;
+        });
+      })
       .catch((e) => { if (e?.name !== "AbortError" && alive.current) setError(errText(e)); });
   }, [showArchived]);
 
@@ -117,10 +161,11 @@ function WishlistInner() {
   const from = queryString ? `${pathname}?${queryString}` : pathname;
 
   // Le righe selezionate potrebbero non essere più visibili sotto un filtro
-  // diverso: si svuota la selezione a ogni cambio di tab/ricerca/playlist/archiviate.
+  // diverso: si svuota la selezione (e il messaggio d'accodamento, ormai
+  // riferito a un'altra vista) a ogni cambio di tab/ricerca/playlist/archiviate.
   // Fatto nei setter dei filtri (sotto), non in un useEffect: setState sincrono
   // dentro un effect è vietato dal lint del React Compiler di questo repo.
-  const clearSelection = useCallback(() => setSelected(new Set()), []);
+  const clearSelection = useCallback(() => { setSelected(new Set()); setInfo(null); }, []);
 
   // Stato -> URL (replace + debounce, default fuori dall'URL).
   useEffect(() => {
@@ -147,21 +192,19 @@ function WishlistInner() {
     return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [items]);
 
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return (items ?? []).filter((tr) => {
-      if (tab !== "all" && statusTab(wishlistStatus(tr)) !== tab) return false;
-      if (playlistFilter && !tr.playlists.some((p) => String(p.id) === playlistFilter)) return false;
-      if (q && !`${tr.artist ?? ""} ${tr.title ?? ""}`.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [items, tab, playlistFilter, query]);
+  const rows = useMemo(
+    () => (items ?? []).filter((tr) => matchesFilters(tr, tab, playlistFilter, query)),
+    [items, tab, playlistFilter, query],
+  );
 
   const count = useCallback((k: Tab) => (items ?? []).filter(
     (tr) => k === "all" || statusTab(wishlistStatus(tr)) === k).length, [items]);
 
   const act = async (fn: () => Promise<unknown>, after?: () => void) => {
     setError(null);
+    // Come l'errore: un messaggio d'accodamento vecchio non deve sopravvivere
+    // alla prossima azione (rilievo review — restava a schermo a oltranza).
+    setInfo(null);
     try { await fn(); after?.(); } catch (e) { setError(errText(e)); }
   };
   const onDownload = (tr: Track) => act(() => downloadTrackAuto(tr.id), refresh);
@@ -172,6 +215,7 @@ function WishlistInner() {
 
   const onEnqueueSelected = async () => {
     setError(null);
+    setInfo(null);
     setEnqueuing(true);
     try {
       const res = await enqueueDownloads([...selected]);
@@ -295,10 +339,10 @@ function WishlistInner() {
       </div>
 
       <SoulseekSearchModal target={searchTarget} onClose={() => setSearchTarget(null)}
-        onPicked={() => { refresh(); setSearchTarget(null); load(); }} />
+        onPicked={() => { setInfo(null); refresh(); setSearchTarget(null); load(); }} />
       <LinkLocalFileModal target={linking} onClose={() => setLinking(null)}
-        onLinked={() => { setLinking(null); load(); }} />
-      <AutoLinkModal open={autoLink} onClose={() => setAutoLink(false)} onLinked={() => load()} />
+        onLinked={() => { setInfo(null); setLinking(null); load(); }} />
+      <AutoLinkModal open={autoLink} onClose={() => setAutoLink(false)} onLinked={() => { setInfo(null); load(); }} />
       <ConfirmModal open={confirmArchive !== null}
         message={confirmArchive ? t.wishlist.archiveConfirm(trackLabel(confirmArchive)) : ""}
         onConfirm={() => { const tr = confirmArchive; setConfirmArchive(null); if (tr) onArchive(tr); }}

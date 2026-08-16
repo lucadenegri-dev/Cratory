@@ -18,7 +18,10 @@ export function SelectionBar({ count, onEnqueue, onClear, busy }: SelectionBarPr
   if (count === 0) return null;
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border border-border-strong bg-elevated px-4 py-2.5 text-sm">
-      <span className="text-fg-strong">{t.wishlist.selectedCount(count)}</span>
+      {/* role="status" (=> aria-live="polite" implicito, ridondato esplicitamente
+          per coerenza col resto del repo) annuncia il conteggio a chi usa uno
+          screen reader senza cambiare l'aspetto visivo. */}
+      <span className="text-fg-strong" role="status" aria-live="polite">{t.wishlist.selectedCount(count)}</span>
       <span className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" onClick={onClear}>{t.wishlist.clearSelection}</Button>
         <Button size="sm" disabled={busy} onClick={onEnqueue}>
