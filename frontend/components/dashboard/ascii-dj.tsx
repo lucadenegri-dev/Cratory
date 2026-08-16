@@ -32,6 +32,16 @@ export const DJ_ROWS = DJ_AIR_ROWS + SCENE.length;
    danger, citando la grammatica decorativa dei DJ loader (Equalizer/EqMeter). */
 export const DJ_WOOFER_ROW = DJ_AIR_ROWS + 5;
 
+/* Il tick su cui la cabina sta ferma quando non suona nulla. Dispari di
+   proposito: il colpo di cassa cade sui tick pari (`thump`), quindi lo zero
+   mostrerebbe tweeter compressi e la 'O' grande in rosso — la posa di un colpo
+   mentre non esce alcun suono. Da quando la cabina apre la Home, subito sotto
+   il frontespizio, è la prima cosa che si guarda e l'incoerenza si nota.
+   L'aria non si svuota su nessun tick (le note nascono sui pari e ne resta
+   sempre almeno una viva), ma un glifo che fluttua non stona: stonava la
+   cassa. */
+export const DJ_REST_TICK = 1;
+
 const SPIN = ["|", "/", "-", "\\"] as const;
 /* Solo glifi presenti in DM Mono: le note musicali unicode (♪ ♫) cadono sul
    font di fallback con larghezza diversa e disallineano le colonne. */
@@ -157,7 +167,7 @@ export function AsciiDj({ onActivate, label, hint, animate = true }: {
   animate?: boolean;
 }) {
   const reduced = usePrefersReducedMotion();
-  const [tick, setTick] = useState(0);
+  const [tick, setTick] = useState(DJ_REST_TICK);
   const running = animate && !reduced;
   useEffect(() => {
     if (!running) return;
@@ -165,7 +175,7 @@ export function AsciiDj({ onActivate, label, hint, animate = true }: {
     return () => clearInterval(id);
   }, [running]);
 
-  const lines = djFrame(reduced ? 0 : tick);
+  const lines = djFrame(reduced ? DJ_REST_TICK : tick);
 
   const art = (
     <div aria-hidden="true" className="select-none text-[9px] sm:text-sm md:text-base lg:text-lg xl:text-xl 2xl:text-2xl">
