@@ -13,7 +13,7 @@ import { withFrom } from "@/lib/back-link";
 export type WishlistRowProps = {
   track: Track;
   archived?: boolean;              // vista "mostra archiviate": solo Ripristina + Compra
-  downloadsAvailable: boolean;     // slskd configurato e nessun job in corso
+  downloadsAvailable: boolean;     // slskd configurato (vedi app/wishlist/page.tsx)
   from: string;                    // origine per i link indietro (path+query vivi della pagina, vedi wishlist/page.tsx)
   onDownload: (t: Track) => void;  // auto-pick (mai tentata / riprova)
   onSearch: (t: Track) => void;    // apre SoulseekSearchModal (primaria per review, voce menu per tutti)

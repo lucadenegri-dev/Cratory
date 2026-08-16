@@ -131,9 +131,14 @@ function WishlistInner() {
     return () => clearTimeout(timer);
   }, [queryString, pathname, router, searchParams]);
 
+  // Da quando la coda (B) è parallela, /status resta "running" per tutta la
+  // vita della coda, non più per un singolo download: gatare i bottoni su
+  // `running` spegnerebbe TUTTI i download appena se ne accoda uno, il
+  // contrario di quello che serve a una coda. Il gate resta solo su
+  // `available` — slskd non configurato affatto — l'unico caso dove offrire
+  // il download non avrebbe comunque senso.
   const available = jobStatus?.available ?? true;
-  const running = jobStatus?.status === "running";
-  const downloadsAvailable = available && !running;
+  const downloadsAvailable = available;
 
   // Filtro playlist: opzioni derivate dalle tracce (solo playlist rappresentate).
   const playlistOptions = useMemo(() => {
