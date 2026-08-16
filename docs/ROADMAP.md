@@ -86,9 +86,8 @@ endpoints, `docs/API.md`.
 
 ## Backlog
 
-Real open items from the code and docs review closed on 2026-08-13, plus anything
-surfaced since (dated inline). Grouped by size — biggest first — not by area. Evidence
-and file references for the review's own items are in
+Real open items from the code and docs review closed on 2026-08-13. Grouped by size —
+biggest first — not by area. Evidence and file references for each item are in
 `docs/archive/superpowers/plans/2026-08-13-revisione-log.md` (section "Segnalazioni
 (livello 3)") if more detail is needed than what's here.
 
@@ -159,16 +158,6 @@ cleanup, and each was explicitly left alone this time.
 
 ### One-line cleanups
 
-- **(2026-08-15)** `GET /api/playlists/library/gaps`
-  (`backend/app/routers/playlists.py:485`) has no caller left. The dashboard column that
-  showed library-wide gaps was dropped earlier, and its two orphans went with it — the
-  `libraryGaps` wrapper in `frontend/lib/api/playlists.ts` and
-  `frontend/components/dashboard/gaps-list.tsx`. The route itself is live and tested
-  (`backend/tests/test_playlist_gaps_router.py` guards it against being swallowed by
-  `/{playlist_id}/gaps`), and `analyze_gaps` stays in use by the per-playlist endpoint,
-  which `frontend/app/playlists/[id]/page.tsx` still calls — so this is a choice between
-  deleting the library-wide route and putting library gaps back on a page, not a
-  mechanical cleanup.
 - `organize.common.never` (i18n key) is dead — `frontend/lib/organize/api.ts:536`
   already hardcodes the same two values (`lang === "it" ? "mai" : "never"`). Wire
   the key into that call site, or delete it.

@@ -106,7 +106,6 @@ DELETE /api/playlists/{playlist_id}
 GET    /api/playlists/{playlist_id}/tracks
 GET    /api/playlists/{playlist_id}/sync-log
 GET    /api/playlists/{playlist_id}/gaps
-GET    /api/playlists/library/gaps
 POST   /api/playlists/{playlist_id}/export
 ```
 
@@ -242,8 +241,9 @@ recent import/sync diffs newest first: `{id, created_at, added, removed}` where 
 two lists are `{id, artist, title}` snapshots, readable even after a track was
 deleted as an orphan. Only syncs that changed the membership set record an event.
 
-`GET /api/playlists/{playlist_id}/gaps` and `GET /api/playlists/library/gaps` run
-the deterministic gap analysis over one playlist or the whole library.
+`GET /api/playlists/{playlist_id}/gaps` runs the deterministic gap analysis over one
+playlist. There is no library-wide scope: the analysis looks for the holes that matter
+inside the source of a single set.
 
 `POST /api/playlists/{playlist_id}/export?format=` exports in playlist order:
 `m3u8` (default, importable in Rekordbox — only tracks with a local file, the

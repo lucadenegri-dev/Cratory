@@ -187,20 +187,14 @@ _CHECKS = (
     _check_genre_spread,
 )
 
-# A livello di LIBRERIA i controlli di coerenza genere non hanno senso: una
-# collezione che spazia su molti generi e' sana (crate digging), non un difetto.
-# Restano validi per le playlist, che sono la fonte di un singolo set.
-_LIBRARY_SKIP = {_check_genre_spread}
 
-
-def analyze_gaps(tracks: list[Track], scope: str = "playlist") -> list[dict]:
+def analyze_gaps(tracks: list[Track]) -> list[dict]:
     """Ritorna la lista dei findings (dizionari pronti per la response).
 
-    `scope`: "playlist" (default) o "library" — la libreria salta i controlli
-    pensati per la coerenza di una singola playlist (vedi _LIBRARY_SKIP).
+    L'analisi guarda una playlist alla volta: e' la fonte di un singolo set, e
+    i controlli di coerenza genere hanno senso solo a quella scala.
     """
     if not tracks:
         return []
-    checks = [c for c in _CHECKS if scope != "library" or c not in _LIBRARY_SKIP]
-    findings = [check(tracks) for check in checks]
+    findings = [check(tracks) for check in _CHECKS]
     return [asdict(g) for g in findings if g is not None]

@@ -493,7 +493,6 @@ class GapOut(BaseModel):
 
 
 class GapAnalysisResponse(BaseModel):
-    scope: str  # playlist | library
     track_count: int
     gaps: list[GapOut] = []
 

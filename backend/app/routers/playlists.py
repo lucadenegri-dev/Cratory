@@ -23,7 +23,6 @@ from app.integrations.spotify import SpotifyError, SpotifyWebClient
 from app.repositories import (
     FileTags,
     add_track_to_playlist,
-    all_playable_tracks,
     delete_playlist,
     delete_playlist_track,
     delete_playlist_tracks,
@@ -482,16 +481,6 @@ def playlist_sync_log(playlist_id: int, limit: int = Query(default=20, ge=1, le=
     ]
 
 
-@router.get("/library/gaps", response_model=GapAnalysisResponse)
-def library_gaps(db: Session = Depends(get_db)):
-    tracks = all_playable_tracks(db)
-    gaps = analyze_gaps(tracks, scope="library")
-    return GapAnalysisResponse(
-        scope="library", track_count=len(tracks),
-        gaps=[GapOut(**g) for g in gaps],
-    )
-
-
 @router.get("/{playlist_id}/gaps", response_model=GapAnalysisResponse)
 def playlist_gaps(playlist_id: int, db: Session = Depends(get_db)):
     if get_playlist(db, playlist_id) is None:
@@ -499,6 +488,6 @@ def playlist_gaps(playlist_id: int, db: Session = Depends(get_db)):
     tracks = tracks_for_playlist(db, playlist_id)
     gaps = analyze_gaps(tracks)
     return GapAnalysisResponse(
-        scope="playlist", track_count=len(tracks),
+        track_count=len(tracks),
         gaps=[GapOut(**g) for g in gaps],
     )

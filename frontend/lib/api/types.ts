@@ -119,7 +119,6 @@ export interface Gap {
 }
 
 export interface GapAnalysis {
-  scope: string;
   track_count: number;
   gaps: Gap[];
 }
