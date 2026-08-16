@@ -142,6 +142,93 @@ def test_status_ignora_gli_annullati(monkeypatch):
     assert body["status"] == "running"  # resta un item in attesa
 
 
+def test_status_racconta_solo_il_giro_corrente(monkeypatch):
+    """Accodo 2, ne concludo 1: la barra dice 1 su 2 (non 1 su tutto lo storico)."""
+    from app.models import Track
+    from app.services import download_queue as q
+
+    _, factory = _engine()
+    db = factory()
+    a = Track(source_type="manual", title="A", artist="X")
+    b = Track(source_type="manual", title="B", artist="Y")
+    db.add_all([a, b])
+    db.commit()
+    q.enqueue(db, [a.id, b.id])
+    item = q.claim_next(db)
+    q.finish(db, item.id, "downloaded")
+
+    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
+    monkeypatch.setattr(downloads_router, "SessionLocal", factory)
+
+    body = client.get("/api/downloads/status").json()
+    assert body["total"] == 2
+    assert body["processed"] == 1
+
+
+def test_status_un_nuovo_giro_non_eredita_lo_storico(monkeypatch):
+    """La coda si svuota, poi accodo 1 nuovo: la barra dice 0 su 1, non 1 su 3
+    (il rilievo: i contatori sommavano TUTTI gli item mai accodati e non
+    annullati, non solo quelli del giro in corso)."""
+    from app.models import Track
+    from app.services import download_queue as q
+
+    _, factory = _engine()
+    db = factory()
+    a = Track(source_type="manual", title="A", artist="X")
+    b = Track(source_type="manual", title="B", artist="Y")
+    c = Track(source_type="manual", title="C", artist="Z")
+    db.add_all([a, b, c])
+    db.commit()
+
+    # Primo giro: 2 tracce, entrambe concluse -> la coda torna ferma.
+    q.enqueue(db, [a.id, b.id])
+    for _ in range(2):
+        item = q.claim_next(db)
+        q.finish(db, item.id, "downloaded")
+
+    # Secondo giro: una sola traccia nuova, accodata a coda ferma.
+    q.enqueue(db, [c.id])
+
+    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
+    monkeypatch.setattr(downloads_router, "SessionLocal", factory)
+
+    body = client.get("/api/downloads/status").json()
+    assert body["total"] == 1        # non 3: il primo giro non conta piu'
+    assert body["processed"] == 0
+    assert body["status"] == "running"  # il nuovo item e' in attesa
+
+
+def test_status_a_coda_ferma_riporta_l_ultimo_giro_non_zero(monkeypatch):
+    """A coda ferma dopo un giro concluso, la barra riporta i totali di
+    QUEL giro — non zero (nulla di attivo) e non lo storico intero."""
+    from app.models import Track
+    from app.services import download_queue as q
+
+    _, factory = _engine()
+    db = factory()
+    a = Track(source_type="manual", title="A", artist="X")
+    b = Track(source_type="manual", title="B", artist="Y")
+    db.add_all([a, b])
+    db.commit()
+
+    q.enqueue(db, [a.id, b.id])
+    first = q.claim_next(db)
+    q.finish(db, first.id, "downloaded")
+    second = q.claim_next(db)
+    q.finish(db, second.id, "not_found")
+    # Coda ferma: nessun item queued/running.
+
+    monkeypatch.setattr(downloads_router, "slskd_configured", lambda: True)
+    monkeypatch.setattr(downloads_router, "SessionLocal", factory)
+
+    body = client.get("/api/downloads/status").json()
+    assert body["status"] == "done"
+    assert body["total"] == 2
+    assert body["processed"] == 2
+    assert body["downloaded"] == 1
+    assert body["not_found"] == 1
+
+
 def test_status_mostra_l_etichetta_dell_item_in_corso(monkeypatch):
     from app.models import Track
     from app.services import download_queue as q

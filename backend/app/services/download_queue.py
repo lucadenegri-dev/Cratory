@@ -12,8 +12,15 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.models import DownloadQueueItem, Track
+from app.services import app_state
 
 ACTIVE_STATES = ("queued", "running")
+
+# Marcatore persistente del "giro corrente" (vedi `current_round_items`):
+# l'id del primo item del giro in corso, o dell'ultimo concluso a coda ferma.
+# Persistito (non solo in memoria) perche' l'app puo' riavviarsi con la coda
+# ferma e la barra deve comunque raccontare l'ultimo giro, non azzerarsi.
+ROUND_START_KEY = "downloads_queue_round_start_id"
 
 # La rivendicazione e' serializzata in-processo: l'app gira in un solo uvicorn,
 # quindi un lock qui basta. L'UPDATE resta comunque condizionato a
@@ -31,10 +38,32 @@ def list_items(db: Session) -> list[DownloadQueueItem]:
             .order_by(DownloadQueueItem.position, DownloadQueueItem.id).all())
 
 
+def current_round_items(db: Session) -> list[DownloadQueueItem]:
+    """Gli item del "giro" corrente — o dell'ultimo concluso, a coda ferma.
+
+    Usata da `/api/downloads/status` per la barra globale, che deve
+    raccontare solo il giro in corso (le tracce accodate da quando la coda,
+    l'ultima volta, non aveva nulla di attivo), non l'intero storico ne' uno
+    zero posticcio a coda ferma. Esclude sempre gli annullati, come
+    `list_items` filtrato faceva prima dell'introduzione del giro.
+    """
+    start_id_raw = app_state.get_state(db, ROUND_START_KEY)
+    query = db.query(DownloadQueueItem).filter(DownloadQueueItem.state != "cancelled")
+    if start_id_raw is not None:
+        query = query.filter(DownloadQueueItem.id >= int(start_id_raw))
+    return query.order_by(DownloadQueueItem.position, DownloadQueueItem.id).all()
+
+
 def _next_position(db: Session) -> int:
     last = (db.query(DownloadQueueItem)
             .order_by(DownloadQueueItem.position.desc()).first())
     return (last.position + 1) if last else 0
+
+
+def _has_active_items(db: Session) -> bool:
+    return (db.query(DownloadQueueItem.id)
+            .filter(DownloadQueueItem.state.in_(ACTIVE_STATES))
+            .first() is not None)
 
 
 def enqueue(db: Session, track_ids: list[int], kind: str = "soulseek_auto",
@@ -46,10 +75,19 @@ def enqueue(db: Session, track_ids: list[int], kind: str = "soulseek_auto",
     conclusi (`done`/`cancelled`) non bloccano — e' il caso "riprova".
     Un `track_id` inesistente viene contato fra i saltati, non fa errore: un
     lotto non deve fallire per una traccia sparita nel frattempo.
+
+    Se la coda non ha nulla di attivo (ne' `queued` ne' `running`) PRIMA di
+    questa chiamata, e questa chiamata accoda davvero qualcosa, comincia un
+    nuovo "giro" (vedi `current_round_items`): il marcatore del giro si
+    sposta sul primo item appena inserito. Se invece la coda aveva gia'
+    lavoro attivo, gli item di questo lotto si aggiungono al giro in corso
+    (nessun aggiornamento del marcatore: lo status quo del giro basta, dato
+    che gli id crescono e la query del giro e' "id >= marcatore").
     """
     added = skipped = 0
     position = _next_position(db)
     encoded = json.dumps(payload) if payload else None
+    starting_new_round = not _has_active_items(db)
 
     # Due query in blocco al posto di due per traccia: un lotto di 300 non
     # deve fare ~600 round-trip. Gli esiti restano identici, calcolati poi
@@ -65,6 +103,7 @@ def enqueue(db: Session, track_ids: list[int], kind: str = "soulseek_auto",
                             DownloadQueueItem.state.in_(ACTIVE_STATES)).all()}
 
     seen_in_batch: set[int] = set()
+    new_items: list[DownloadQueueItem] = []
     for track_id in track_ids:
         if track_id not in existing_ids:
             skipped += 1
@@ -73,11 +112,15 @@ def enqueue(db: Session, track_ids: list[int], kind: str = "soulseek_auto",
             skipped += 1
             continue
         seen_in_batch.add(track_id)
-        db.add(DownloadQueueItem(track_id=track_id, kind=kind, payload=encoded,
-                                 state="queued", position=position))
+        item = DownloadQueueItem(track_id=track_id, kind=kind, payload=encoded,
+                                 state="queued", position=position)
+        db.add(item)
+        new_items.append(item)
         position += 1
         added += 1
     db.commit()
+    if new_items and starting_new_round:
+        app_state.set_state(db, ROUND_START_KEY, str(min(i.id for i in new_items)))
     return added, skipped
 
 

@@ -184,12 +184,15 @@ def retry_pending():
 def status():
     """Forma invariata: la barra globale del frontend legge queste chiavi.
 
-    `total`/`processed` contano gli item non annullati: la barra deve
-    raccontare il lavoro accodato, non lo storico ripulito.
+    `total`/`processed` raccontano solo il "giro" corrente (le tracce
+    accodate da quando la coda, l'ultima volta, non aveva nulla di attivo),
+    non l'intero storico mai accodato — vedi `download_queue.current_round_items`.
+    A coda ferma restano quelli dell'ultimo giro concluso, non zero. Gli item
+    annullati non contano mai.
     """
     db = SessionLocal()
     try:
-        items = [i for i in dlqueue.list_items(db) if i.state != "cancelled"]
+        items = dlqueue.current_round_items(db)
         by_outcome = {"downloaded": 0, "needs_review": 0, "not_found": 0, "failed": 0}
         for i in items:
             if i.outcome in by_outcome:
