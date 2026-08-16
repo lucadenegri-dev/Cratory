@@ -19,8 +19,9 @@ can go into a set.
 - Import playlists and liked tracks from Spotify and SoundCloud, or paste a tracklist as text.
 - De-duplicate on the way in: ISRC → platform id → artist/title/duration → fuzzy match.
 - Index your music folder. Ownership comes from the disk and survives renames and moves via
-  audio hash. Owned tracks play in-app, read-only, through a shared docked player — for a
-  quick audition, not for mixing.
+  audio hash. Owned tracks play in-app, read-only, through a shared bottom player bar
+  (custom transport with seek, prev/next over the originating list, auto-advance on
+  owned tracks, OS media keys via Media Session) — for a quick audition, not for mixing.
 
 **BPM and key**
 

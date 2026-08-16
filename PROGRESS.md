@@ -12,7 +12,8 @@ described in `CLAUDE.md`.
   re-linked by `audio_hash`); streaming playlists (Spotify, SoundCloud) are leads.
   Owned tracks show the physical file's effective tags (genre/album/label/year,
   resolved from the primary file) and are playable read-only, one at a time, through
-  the shared docked player.
+  the shared bottom player bar (custom transport with seek, prev/next over the
+  originating list, auto-advance on owned tracks, OS Media Session).
 - **Set Builder**: a deterministic two-phase generator (skeleton first, then beam
   search per segment) always builds the tracklist from owned tracks only; an optional
   AI curation stage judges mood-fit and suggests anchors, never sequences.

@@ -15,8 +15,9 @@ endpoints, `docs/API.md`.
   kept as a mirror of that effective tag by `services/genre_align.align_track_genre`,
   called from every write path (Organize's manual edit, scan, apply, library indexing,
   acquisition). Owned tracks are playable, read-only, one at a time, through a shared
-  docked player (`GET /api/tracks/{id}/audio`) — playback never touches the file or
-  its tags.
+  bottom player bar (`GET /api/tracks/{id}/audio`; custom transport with seek,
+  prev/next over the originating list, auto-advance on owned tracks, Media Session) —
+  playback never touches the file or its tags.
 - **BPM & key.** Two deterministic sources with explicit provenance
   (`bpm_source`/`key_source`: `manual` > `rekordbox` > `cratory`): a Rekordbox XML
   import (`POST /api/rekordbox/import`, three-level match — NFC-normalized path →
