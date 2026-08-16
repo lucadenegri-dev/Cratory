@@ -91,7 +91,7 @@ describe("selezione multipla nella wishlist: potatura quando una riga esce dalla
     // La traccia archiviata e' sparita dalla vista...
     await waitFor(() => expect(screen.queryByText("Marco Faraone — Real Freak")).toBeNull());
     // ...e la selezione si e' potata di conseguenza (non piu' "2 selezionate").
-    expect(screen.getByText("1 selezionate")).toBeTruthy();
+    expect(screen.getByText("1 selezionata")).toBeTruthy();
 
     fireEvent.click(screen.getByText(/^Accoda/));
     await waitFor(() => expect(mocks.enqueueDownloads).toHaveBeenCalledWith([2]));

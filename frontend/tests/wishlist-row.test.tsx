@@ -52,10 +52,12 @@ describe("WishlistRow", () => {
     expect(noop.onLinkFile).toHaveBeenCalled();
   });
 
-  it("downloadsAvailable=false disabilita solo il download, Compra resta attivo", () => {
+  // I link ai negozi sono una sezione del menu «…» (un solo dropdown per riga,
+  // vedi wishlist-row.tsx), non piu' un secondo bottone a piena evidenza.
+  it("downloadsAvailable=false disabilita solo il download, i link ai negozi restano attivi", () => {
     render(<WishlistRow track={base} downloadsAvailable={false} from={from} {...noop} />);
     expect((screen.getByText("Scarica").closest("button") as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByText("Compra"));
+    fireEvent.click(screen.getByLabelText("Altre azioni"));
     expect(screen.getByText("Bandcamp").closest("a")?.getAttribute("href"))
       .toBe("https://bandcamp.com/search?q=Marco%20Faraone%20Real%20Freak");
   });

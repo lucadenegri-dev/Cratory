@@ -440,6 +440,10 @@ export type MenuItem = {
   onSelect?: () => void;
   href?: string;          // alternativa a onSelect: link esterno in nuova tab
   disabled?: boolean;
+  /** Intestazione di gruppo, non una voce: filetto sopra + label uppercase,
+   *  non selezionabile. Serve ai menu che raccolgono famiglie diverse di voci
+   *  (wishlist: azioni sulla traccia + link ai negozi) senza aprirne due. */
+  section?: boolean;
 };
 
 export function DropdownMenu({ label, items, disabled, size = "sm", variant = "outline", ariaLabel }: {
@@ -469,7 +473,10 @@ export function DropdownMenu({ label, items, disabled, size = "sm", variant = "o
     };
   }, [open]);
 
-  const itemClass = "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-muted hover:bg-elevated hover:text-fg disabled:opacity-50";
+  // `whitespace-nowrap`: il menu si dimensiona sulla voce piu' lunga invece di
+  // mandarla a capo dentro `min-w-40` (una voce spezzata su due righe e' l'unica
+  // cosa che rompe la griglia di un menu).
+  const itemClass = "flex w-full items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left text-sm text-muted hover:bg-elevated hover:text-fg disabled:opacity-50";
 
   return (
     <div ref={rootRef} className="relative inline-block">
@@ -488,8 +495,16 @@ export function DropdownMenu({ label, items, disabled, size = "sm", variant = "o
       {open && (
         <div id={menuId} role="menu"
           className="absolute right-0 top-full z-30 mt-1 min-w-40 border border-border-strong bg-surface py-1">
-          {items.map((it) =>
-            it.href ? (
+          {items.map((it, i) =>
+            it.section ? (
+              <div key={it.key}
+                className={cn(
+                  "px-3 py-1 text-[10px] uppercase tracking-wider text-muted",
+                  i > 0 && "mt-1 border-t border-border pt-2",
+                )}>
+                {it.label}
+              </div>
+            ) : it.href ? (
               <a key={it.key} role="menuitem" href={it.href} target="_blank" rel="noopener noreferrer"
                 aria-disabled={it.disabled}
                 className={cn(itemClass, it.disabled && "pointer-events-none opacity-50")}

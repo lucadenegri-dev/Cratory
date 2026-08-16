@@ -19,6 +19,7 @@ import {
 } from "@/lib/api";
 import { statusTab, wishlistStatus, type WishlistTab } from "@/lib/wishlist-status";
 import { useT } from "@/lib/i18n";
+import { cn } from "@/lib/cn";
 
 type Tab = "all" | WishlistTab;
 const TAB_KEYS: Tab[] = ["all", "never", "review", "not_found", "failed"];
@@ -237,49 +238,76 @@ function WishlistInner() {
     }
   };
 
+  // Colonna marginale: filtri e azioni di gruppo escono da sopra la lista e si
+  // incolonnano a destra come nelle altre pagine-elenco (library, playlists,
+  // labels). La colonna contenuto resta titolo + lista, senza chrome interposto.
+  const marginalia = (
+    <div className="space-y-5">
+      <div role="tablist" aria-label={t.wishlist.filterAria} className="-mx-1.5">
+        {TAB_KEYS.map((k) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k}
+            onClick={() => { setTab(k); clearSelection(); }}
+            className={cn(
+              "flex w-full items-baseline gap-2 px-1.5 py-1 text-xs transition-colors",
+              tab === k ? "text-fg-strong" : "text-muted hover:text-fg",
+            )}>
+            <span className={cn("truncate", tab === k && "underline underline-offset-4")}>{TAB_LABEL[k]}</span>
+            <span className={cn("tnum ml-auto", tab === k ? "text-fg" : "text-muted")}>{count(k)}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        <Input className="h-9" value={query}
+          onChange={(e) => { setQuery(e.target.value); clearSelection(); }}
+          placeholder={t.wishlist.searchPlaceholder} />
+        <Select className="h-9" value={playlistFilter}
+          onChange={(e) => { setPlaylistFilter(e.target.value); clearSelection(); }}>
+          <option value="">{t.wishlist.playlistAllOption}</option>
+          {playlistOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </Select>
+        <div className="pt-1">
+          <Checkbox label={t.wishlist.showArchivedLabel} checked={showArchived}
+            onChange={(v) => { setShowArchived(v); setItems(null); clearSelection(); }} />
+        </div>
+      </div>
+
+      <div className="border-t border-border pt-4">
+        <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.wishlist.bulkHeading}</div>
+        <div className="space-y-2">
+          <Button size="sm" variant="outline" className="w-full justify-start"
+            onClick={retryAll} disabled={!downloadsAvailable}>
+            <DownloadIcon size={13} /> {t.downloads.retryAllButton}
+          </Button>
+          <Button size="sm" variant="outline" className="w-full justify-start" onClick={() => setAutoLink(true)}>
+            <Link2 size={13} /> {t.downloads.linkAllButton}
+          </Button>
+          {/* Riserva: la ricerca manuale per traccia vive nel modal aperto dalla
+              riga, questo link resta per quando slskd non risponde o serve la sua
+              UI. Reso solo se SLSKD_URL e' configurato (web_url != null) — e
+              compare anche col demone irraggiungibile, che e' quando serve. */}
+          {slskdWebUrl && (
+            <ButtonLink href={slskdWebUrl} target="_blank" rel="noopener noreferrer"
+              variant="outline" size="sm" block className="justify-start">
+              <ExternalLink size={13} /> {t.wishlist.soulseekOpen}
+            </ButtonLink>
+          )}
+        </div>
+        {slskdWebUrl && <p className="mt-2 text-[11px] leading-relaxed text-muted">{t.wishlist.soulseekHint}</p>}
+      </div>
+    </div>
+  );
+
   return (
-    <PageLayout title={t.wishlist.pageTitle} meta={items?.length || undefined}>
-      <div className="space-y-6">
+    <PageLayout title={t.wishlist.pageTitle}
+      meta={items === null ? undefined : rows.length === items.length ? items.length : `${rows.length}/${items.length}`}
+      marginaliaTitle={t.wishlist.statusTitle} marginalia={marginalia}>
+      <div className="space-y-4">
         {!available && <Alert tone="info">{t.downloads.notConfigured}</Alert>}
         {error && <Alert tone="danger">⚠ {error}</Alert>}
         {info && <Alert tone="info">{info}</Alert>}
 
-        {/* Azioni di gruppo */}
         <section>
-          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.wishlist.bulkHeading}</div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={retryAll} disabled={!downloadsAvailable}>
-              <DownloadIcon size={13} /> {t.downloads.retryAllButton}
-            </Button>
-            <Button variant="outline" onClick={() => setAutoLink(true)}>
-              <Link2 size={13} /> {t.downloads.linkAllButton}
-            </Button>
-          </div>
-        </section>
-
-        {/* Filtri */}
-        <section>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={t.wishlist.filterAria}>
-              {TAB_KEYS.map((k) => (
-                <Button key={k} size="sm" role="tab" aria-selected={tab === k}
-                  variant={tab === k ? "primary" : "outline"} onClick={() => { setTab(k); clearSelection(); }}>
-                  {TAB_LABEL[k]} ({count(k)})
-                </Button>
-              ))}
-            </div>
-            <Input className="h-8 w-56" value={query}
-              onChange={(e) => { setQuery(e.target.value); clearSelection(); }}
-              placeholder={t.wishlist.searchPlaceholder} />
-            <Select className="h-8" value={playlistFilter}
-              onChange={(e) => { setPlaylistFilter(e.target.value); clearSelection(); }}>
-              <option value="">{t.wishlist.playlistAllOption}</option>
-              {playlistOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-            </Select>
-            <Checkbox label={t.wishlist.showArchivedLabel} checked={showArchived}
-              onChange={(v) => { setShowArchived(v); setItems(null); clearSelection(); }} />
-          </div>
-
           {items === null && <Loading />}
           {items !== null && rows.length === 0 && (() => {
             // Tre casi distinti (title e body condividono la stessa logica): lista
@@ -305,7 +333,7 @@ function WishlistInner() {
               </EmptyState>
             );
           })()}
-          {!showArchived && (
+          {!showArchived && selected.size > 0 && (
             <div className="mb-2">
               {/* `canEnqueue`: stesso gate del «Scarica» di riga — senza slskd
                   quelle tracce non partirebbero mai (e il backend risponde 409). */}
@@ -332,21 +360,6 @@ function WishlistInner() {
             </Card>
           )}
         </section>
-
-        {/* Soulseek: link alla web UI di slskd, ora una riserva. La ricerca
-            manuale per traccia vive nel modal aperto da WishlistRow; questo
-            blocco resta solo per quando slskd non risponde o serve la sua UI.
-            Reso solo se SLSKD_URL e' configurato (web_url != null); compare anche
-            quando il demone e' irraggiungibile — che e' proprio quando serve. */}
-        {slskdWebUrl && (
-          <section>
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">{t.wishlist.soulseekHeading}</div>
-            <ButtonLink href={slskdWebUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">
-              <ExternalLink size={14} /> {t.wishlist.soulseekOpen}
-            </ButtonLink>
-            <p className="mt-2 text-sm text-faint">{t.wishlist.soulseekHint}</p>
-          </section>
-        )}
       </div>
 
       {/* `notice` e' l'esito che il modal non puo' mostrare da solo (chiudendosi
