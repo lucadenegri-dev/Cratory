@@ -870,7 +870,11 @@ export const it: Dictionary = {
   },
   player: {
     play: "Ascolta",
+    pause: "Pausa",
     stop: "Ferma",
+    previous: "Traccia precedente",
+    next: "Traccia successiva",
+    seek: "Posizione",
     close: "Chiudi player",
     unsupportedFormat: "Formato non riproducibile nel browser",
   },

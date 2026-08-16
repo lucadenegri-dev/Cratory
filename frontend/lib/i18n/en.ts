@@ -870,7 +870,11 @@ export const en = {
   },
   player: {
     play: "Play",
+    pause: "Pause",
     stop: "Stop",
+    previous: "Previous track",
+    next: "Next track",
+    seek: "Seek",
     close: "Close player",
     unsupportedFormat: "Format not playable in the browser",
   },

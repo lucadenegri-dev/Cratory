@@ -9,12 +9,13 @@ import { useT } from "@/lib/i18n";
 
 /** Stato di una traccia come icone compatte, condiviso da Libreria e dettaglio
  *  Playlist: pronta per il set, file su disco (blu = posseduta), scartata, e link
- *  Spotify (glifo verde). */
-export function TrackStateIcons({ track }: { track: Track }) {
+ *  Spotify (glifo verde). `context` è la lista ordinata della tabella ospite:
+ *  passa al play e abilita prev/next e auto-avanzamento nel player. */
+export function TrackStateIcons({ track, context }: { track: Track; context?: Track[] }) {
   const t = useT();
   return (
     <div className="flex items-center gap-2 text-faint">
-      <TrackPlayButton track={track} />
+      <TrackPlayButton track={track} context={context} />
       {track.status === "ready_for_set" && (
         <span title={t.tracks.readyTooltip}>
           <CircleCheck size={14} className="text-fg-strong" />

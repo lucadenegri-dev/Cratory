@@ -304,7 +304,7 @@ function LibraryInner() {
                 <td className={`${cell} max-w-[10rem] truncate text-muted`}>{tr.genre ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
                 <td className={`${cell} tnum whitespace-nowrap text-xs text-muted`} title={tr.added_at ? fmtDate(tr.added_at) : undefined}>{fmtDateShort(tr.added_at)}</td>
-                <td className={cell}><TrackStateIcons track={tr} /></td>
+                <td className={cell}><TrackStateIcons track={tr} context={items ?? []} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
                     <RatingDiamond

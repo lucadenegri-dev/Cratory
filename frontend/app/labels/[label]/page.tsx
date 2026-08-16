@@ -117,7 +117,7 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
                 <td className={`${cell} tnum`}>{tr.bpm?.toFixed(0) ?? "—"}</td>
                 <td className={`${cell} tnum`}><KeyBadge camelot={tr.camelot_key} /></td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
-                <td className={cell}><TrackStateIcons track={tr} /></td>
+                <td className={cell}><TrackStateIcons track={tr} context={tracks} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => setEditing(tr)} title={t.library.editValuesTitle} className="text-faint transition-colors hover:text-fg-strong"><Pencil size={14} /></button>

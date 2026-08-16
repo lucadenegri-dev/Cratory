@@ -403,7 +403,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                     : <p className="mt-1 text-xs text-muted">{t.sets.openingTrackLabel}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5">
-                  <TrackPlayButton track={st.track} className="px-1 text-faint hover:text-fg" />
+                  <TrackPlayButton track={st.track} context={setlist.tracks.map((s) => s.track)} className="px-1 text-faint hover:text-fg" />
                   <IconBtn title={t.sets.moveUpTitle} disabled={st.position === 1} onClick={() => move(st.position, "up")}><ArrowUp size={15} /></IconBtn>
                   <IconBtn title={t.sets.moveDownTitle} disabled={st.position === n} onClick={() => move(st.position, "down")}><ArrowDown size={15} /></IconBtn>
                   <IconBtn title={t.sets.alternativesTitle} onClick={() => loadAlternatives(st.position, "safer")}><Replace size={15} /></IconBtn>

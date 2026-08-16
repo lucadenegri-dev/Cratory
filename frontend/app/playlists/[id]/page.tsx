@@ -734,7 +734,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                 <td className={`${cell} tnum text-muted`}>{tr.energy ?? "—"}</td>
                 <td className={`${cell} tnum text-muted`}>{fmtDuration(tr.duration_seconds)}</td>
                 <td className={`${cell} tnum whitespace-nowrap text-xs text-muted`} title={tr.playlist_added_at ? fmtDate(tr.playlist_added_at) : undefined}>{fmtDateShort(tr.playlist_added_at)}</td>
-                <td className={cell}><TrackStateIcons track={tr} /></td>
+                <td className={cell}><TrackStateIcons track={tr} context={pageTracks} /></td>
                 <td className={cell}>
                   <div className="flex items-center justify-end gap-2">
                     <RatingDiamond
