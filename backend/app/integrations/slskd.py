@@ -15,7 +15,6 @@ from pathlib import Path
 import httpx
 
 from app.core import runtime_settings
-from app.core.config import settings
 from app.integrations._http import ClosableHttpClient, get_with_retries, raise_for_status
 
 logger = logging.getLogger(__name__)
@@ -54,7 +53,7 @@ class SlskdClient(ClosableHttpClient):
     def __init__(self, url: str | None = None, api_key: str | None = None,
                  http: httpx.Client | None = None):
         self.url = (url if url is not None else runtime_settings.slskd_url()).rstrip("/")
-        self.api_key = api_key if api_key is not None else settings.slskd_api_key
+        self.api_key = api_key if api_key is not None else runtime_settings.slskd_api_key()
         if not self.url:
             raise SlskdNotConfigured("SLSKD_URL mancante in backend/.env.")
         headers = {"Accept": "application/json"}

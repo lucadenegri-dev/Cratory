@@ -9,6 +9,7 @@ import json
 import logging
 from typing import Any
 
+from app.core import runtime_settings
 from app.core.config import settings
 from app.integrations import LLMClient
 
@@ -66,10 +67,11 @@ class LLMNotConfigured(LLMError):
 
 class AnthropicLLMClient(LLMClient):
     def __init__(self, model: str | None = None) -> None:
-        if not settings.ai_api_key:
+        api_key = runtime_settings.ai_api_key()
+        if not api_key:
             raise LLMNotConfigured(
-                "ANTHROPIC_API_KEY mancante in backend/.env: impostare la chiave API Anthropic "
-                "per usare l'AI Set Agent."
+                "Chiave Anthropic mancante: impostarla dalla configurazione guidata "
+                "(/setup) o come ANTHROPIC_API_KEY in backend/.env."
             )
         try:
             import anthropic  # import lazy: il pacchetto serve solo con l'AI attiva
@@ -79,9 +81,9 @@ class AnthropicLLMClient(LLMClient):
         self._anthropic = anthropic
         # timeout esplicito: meglio un errore chiaro che un handler appeso
         self.client = anthropic.Anthropic(
-            api_key=settings.ai_api_key, timeout=settings.ai_timeout_seconds
+            api_key=api_key, timeout=settings.ai_timeout_seconds
         )
-        self.model = model or settings.ai_model or DEFAULT_MODEL
+        self.model = model or runtime_settings.ai_model() or DEFAULT_MODEL
         self.effort = settings.ai_effort
         self.thinking = settings.ai_thinking
 
@@ -131,4 +133,4 @@ def get_llm_client(model: str | None = None) -> LLMClient:
 
 
 def llm_configured() -> bool:
-    return bool(settings.ai_api_key)
+    return bool(runtime_settings.ai_api_key())

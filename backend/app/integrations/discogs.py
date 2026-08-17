@@ -19,7 +19,7 @@ from typing import Any
 
 import httpx
 
-from app.core.config import settings
+from app.core import runtime_settings
 from app.integrations._http import ClosableHttpClient, get_json
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class DiscogsError(Exception):
 
 class DiscogsClient(ClosableHttpClient):
     def __init__(self, token: str | None = None, http: httpx.Client | None = None):
-        self.token = token if token is not None else (settings.discogs_token or None)
+        self.token = token if token is not None else (runtime_settings.discogs_token() or None)
         headers = {"User-Agent": _USER_AGENT}
         if self.token:
             headers["Authorization"] = f"Discogs token={self.token}"

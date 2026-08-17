@@ -18,7 +18,7 @@ from typing import Any, Callable
 
 import httpx
 
-from app.core.config import settings
+from app.core import runtime_settings
 from app.organize.integrations._http import post_with_retries
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class AcoustIDNotConfigured(AcoustIDError):
 
 
 def acoustid_configured() -> bool:
-    return bool(settings.acoustid_api_key)
+    return bool(runtime_settings.acoustid_api_key())
 
 
 def fpcalc_available() -> bool:
@@ -134,13 +134,15 @@ class AcoustIDClient:
 
 
 def get_acoustid_client() -> AcoustIDClient:
-    if not settings.acoustid_api_key:
+    api_key = runtime_settings.acoustid_api_key()
+    if not api_key:
         raise AcoustIDNotConfigured(
-            "ACOUSTID_API_KEY mancante in backend/.env: chiave gratuita su acoustid.org."
+            "Chiave AcoustID mancante: impostarla dalla configurazione guidata "
+            "(/setup) o come ACOUSTID_API_KEY in backend/.env."
         )
     if not fpcalc_available():
         raise AcoustIDNotConfigured(
             "Binario fpcalc (Chromaprint) non trovato: installa chromaprint "
             "(brew install chromaprint) o imposta la env FPCALC."
         )
-    return AcoustIDClient(settings.acoustid_api_key)
+    return AcoustIDClient(api_key)

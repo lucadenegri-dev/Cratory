@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 from sqlalchemy.orm import Session
 
+from app.core import runtime_settings
 from app.core.config import settings
 from app.integrations import SpotifyClient
 from app.integrations._http import ClosableHttpClient, raise_for_status
@@ -65,12 +66,14 @@ class SpotifyNotConnected(SpotifyError):
 
 
 def _require_credentials() -> tuple[str, str]:
-    if not settings.spotify_client_id or not settings.spotify_client_secret:
+    client_id = runtime_settings.spotify_client_id()
+    client_secret = runtime_settings.spotify_client_secret()
+    if not client_id or not client_secret:
         raise SpotifyNotConfigured(
-            "Credenziali Spotify mancanti: impostare SPOTIFY_CLIENT_ID e "
-            "SPOTIFY_CLIENT_SECRET nel file backend/.env (app su developer.spotify.com)."
+            "Credenziali Spotify mancanti: impostarle dalla configurazione guidata "
+            "(/setup) o in backend/.env (app su developer.spotify.com)."
         )
-    return settings.spotify_client_id, settings.spotify_client_secret
+    return client_id, client_secret
 
 
 def build_authorize_url(state: str) -> str:

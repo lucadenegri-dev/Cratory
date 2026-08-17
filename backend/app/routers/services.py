@@ -17,7 +17,6 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core import runtime_settings
-from app.core.config import settings
 from app.db import get_db
 from app.integrations.soundcloud import soundcloud_available
 from app.integrations.spotify import SpotifyWebClient
@@ -28,7 +27,8 @@ router = APIRouter(prefix="/api/services", tags=["services"])
 
 @router.get("/status")
 def services_status(db: Session = Depends(get_db)):
-    spotify_configured = bool(settings.spotify_client_id and settings.spotify_client_secret)
+    spotify_configured = bool(runtime_settings.spotify_client_id()
+                              and runtime_settings.spotify_client_secret())
     user_connected = False
     if spotify_configured:
         client = SpotifyWebClient(db)
@@ -48,9 +48,9 @@ def services_status(db: Session = Depends(get_db)):
             },
             {
                 "key": "anthropic", "name": "Anthropic — AI", "category": "AI",
-                "configured": bool(settings.ai_api_key), "connected": None,
+                "configured": bool(runtime_settings.ai_api_key()), "connected": None,
                 "detail": "Una chiave sola per tutta l'AI: Set Agent (modello: "
-                          f"{settings.ai_model or 'claude-opus-4-8'}), suggerimenti "
+                          f"{runtime_settings.ai_model() or 'claude-opus-4-8'}), suggerimenti "
                           "artista/titolo e revisione generi in Organize.",
                 "env": ["ANTHROPIC_API_KEY"],
                 "optional_env": ["AI_MODEL"], "optional_ok": True,
@@ -65,7 +65,7 @@ def services_status(db: Session = Depends(get_db)):
                           "label/genere/anno per i tag di Organize. Funziona senza "
                           "token; DISCOGS_TOKEN alza il rate limit e mostra le copertine.",
                 "env": [], "optional_env": ["DISCOGS_TOKEN"],
-                "optional_ok": bool(settings.discogs_token),
+                "optional_ok": bool(runtime_settings.discogs_token()),
                 "docs": "https://www.discogs.com/settings/developers",
             },
             {

@@ -6,6 +6,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core import runtime_settings
 from app.core.config import settings
 from app.core.http_errors import api_error, spotify_http_error
 from app.db import get_db
@@ -45,7 +46,8 @@ def _consume_state(state: str | None) -> bool:
 
 @router.get("/status")
 def status(db: Session = Depends(get_db)):
-    configured = bool(settings.spotify_client_id and settings.spotify_client_secret)
+    configured = bool(runtime_settings.spotify_client_id()
+                      and runtime_settings.spotify_client_secret())
     user_connected = False
     if configured:
         client = SpotifyWebClient(db)

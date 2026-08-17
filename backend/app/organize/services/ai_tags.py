@@ -7,7 +7,7 @@ import re
 
 from pydantic import BaseModel
 
-from app.core.config import settings
+from app.core import runtime_settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class _Guesses(BaseModel):
 
 
 def is_configured() -> bool:
-    return bool(settings.ai_api_key)
+    return bool(runtime_settings.ai_api_key())
 
 
 def suggest(filenames: list[str]) -> list[dict]:
@@ -43,7 +43,7 @@ def suggest(filenames: list[str]) -> list[dict]:
         return []
     from anthropic import Anthropic  # import lazy
 
-    client = Anthropic(api_key=settings.ai_api_key)
+    client = Anthropic(api_key=runtime_settings.ai_api_key())
     out: list[dict] = []
     for i in range(0, len(filenames), _CHUNK):
         chunk = filenames[i:i + _CHUNK]
@@ -358,7 +358,7 @@ def review_genres(items: list[dict], *, max_web_searches: int = 3,
         return []
     from anthropic import Anthropic  # import lazy
 
-    client = Anthropic(api_key=settings.ai_api_key)
+    client = Anthropic(api_key=runtime_settings.ai_api_key())
     lines = []
     for j, it in enumerate(items):
         parts = [f"{it.get('artist') or '?'} - {it.get('title') or '?'}"]
