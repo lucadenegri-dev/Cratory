@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core import runtime_settings as rs
+from app.core.config import settings
 from app.core.http_errors import api_error
 from app.db import get_db
 from app.services import slskd_shares
@@ -43,9 +44,9 @@ def write_language(req: LanguageSetting, db: Session = Depends(get_db)):
 # Directory il cui override deve puntare a una cartella esistente (vuoto = feature
 # disattiva, come il default `.env`).
 _DIR_KEYS = ("library_root", "archive_root", "slskd_download_dir")
-# Tutti i campi editabili, nell'ordine mostrato dalla UI.
-_FIELD_KEYS = ("library_root", "archive_root", "slskd_download_dir", "slskd_url",
-               "slskd_config_path")
+# Tutti i campi in chiaro editabili: la sorgente è `runtime_settings`, non una
+# seconda lista da tenere allineata a mano.
+_FIELD_KEYS = rs.ENV_BACKED_KEYS
 
 
 class FieldState(BaseModel):
@@ -55,12 +56,23 @@ class FieldState(BaseModel):
     detail: str | None = None
 
 
+class SecretState(BaseModel):
+    """Stato di una credenziale. Il valore non esce mai: solo presenza,
+    provenienza e le ultime 4 cifre per riconoscerla."""
+    configured: bool
+    source: Literal["env", "db"]
+    hint: str | None = None
+
+
 class ConfigSettings(BaseModel):
     library_root: FieldState
     archive_root: FieldState
     slskd_download_dir: FieldState
     slskd_url: FieldState
     slskd_config_path: FieldState
+    ai_model: FieldState
+    secrets: dict[str, SecretState]
+    spotify_redirect_uri: str
     share_library: bool
     download_slots: int
     warning: str | None = None
@@ -73,6 +85,13 @@ class ConfigPatch(BaseModel):
     slskd_download_dir: str | None = None
     slskd_url: str | None = None
     slskd_config_path: str | None = None
+    ai_model: str | None = None
+    spotify_client_id: str | None = None
+    spotify_client_secret: str | None = None
+    ai_api_key: str | None = None
+    discogs_token: str | None = None
+    acoustid_api_key: str | None = None
+    slskd_api_key: str | None = None
 
 
 def _validate(key: str, value: str) -> tuple[bool, str | None]:
@@ -115,9 +134,19 @@ def _field_state(key: str) -> FieldState:
     return FieldState(value=value, source=rs.source(key), valid=valid, detail=detail)
 
 
+def _secret_state(key: str) -> SecretState:
+    value = rs.secret(key)
+    if not value:
+        return SecretState(configured=False, source=rs.source(key), hint=None)
+    hint = f"••••{value[-4:]}" if len(value) >= 4 else "••••"
+    return SecretState(configured=True, source=rs.source(key), hint=hint)
+
+
 def _snapshot(warning: str | None = None) -> ConfigSettings:
     return ConfigSettings(
         **{k: _field_state(k) for k in _FIELD_KEYS},
+        secrets={k: _secret_state(k) for k in rs.SECRET_KEYS},
+        spotify_redirect_uri=settings.spotify_redirect_uri,
         share_library=rs.share_library(),
         download_slots=rs.download_slots(),
         warning=warning,
@@ -131,10 +160,11 @@ def read_config():
 
 @router.patch("/config", response_model=ConfigSettings)
 def patch_config(req: ConfigPatch, db: Session = Depends(get_db)):
-    updates = req.model_dump(exclude_unset=True)
+    # `strip`: una chiave incollata porta spesso spazi o un newline finale, che
+    # renderebbero invalido l'header verso il provider con un errore opaco.
+    updates = {k: (v or "").strip() for k, v in req.model_dump(exclude_unset=True).items()}
     # Valida TUTTO prima di persistere qualsiasi cosa (niente stato parziale).
     for key, value in updates.items():
-        value = value or ""
         valid, detail = _validate(key, value)
         if not valid:
             raise api_error(422, "invalid_setting",
@@ -142,7 +172,7 @@ def patch_config(req: ConfigPatch, db: Session = Depends(get_db)):
 
     old_library = rs.library_root()
     for key, value in updates.items():
-        rs.apply(db, key, value or "")
+        rs.apply(db, key, value)
 
     # Se la share è attiva e la libreria è cambiata, ri-applicala (togli la vecchia,
     # metti la nuova). Best-effort: un problema col config non deve rompere il PATCH.
