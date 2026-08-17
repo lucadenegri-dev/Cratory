@@ -66,6 +66,7 @@
 | `frontend/lib/api/setup.ts` | Client HTTP del wizard + tipi |
 | `frontend/lib/setup-services.ts` | Mappa servizio → chiavi segrete richieste (dati, niente JSX) |
 | `frontend/components/setup/credential-field.tsx` | Un campo segreto: input mascherato, salva |
+| `frontend/components/setup/path-field.tsx` | Campo percorso/URL con dialog nativo. Condiviso fra passo libreria e passo slskd |
 | `frontend/components/setup/service-guide.tsx` | Guida numerata + link + valore copiabile |
 | `frontend/components/setup/service-card.tsx` | Guida + campi + Prova. **Usato sia da `/setup` sia da `/settings`** |
 | `frontend/components/setup/component-row.tsx` | Riga del probe: stato, versione, installa o comando |
@@ -2042,6 +2043,14 @@ export const TESTABLE: ServiceKey[] = ["spotify", "anthropic", "discogs", "acous
     howTo: "How to get it",
     openProvider: "Open the provider",
     copyValue: "Copy",
+    fieldLabels: {
+      spotify_client_id: "Client ID",
+      spotify_client_secret: "Client secret",
+      ai_api_key: "API key",
+      discogs_token: "Personal access token",
+      acoustid_api_key: "API key",
+      slskd_api_key: "API key (optional)",
+    },
     guides: {
       spotify: {
         title: "Spotify",
@@ -2182,6 +2191,14 @@ Aggiungere in `frontend/lib/i18n/it.ts` la stessa sezione con le stesse chiavi (
     howTo: "Come ottenerla",
     openProvider: "Apri il provider",
     copyValue: "Copia",
+    fieldLabels: {
+      spotify_client_id: "Client ID",
+      spotify_client_secret: "Client secret",
+      ai_api_key: "Chiave API",
+      discogs_token: "Personal access token",
+      acoustid_api_key: "Chiave API",
+      slskd_api_key: "Chiave API (facoltativa)",
+    },
     guides: {
       spotify: {
         title: "Spotify",
@@ -2572,7 +2589,7 @@ export function ServiceCard({ service, secrets, redirectUri, docsUrl, onSaved, c
           <CredentialField
             key={key}
             fieldKey={key}
-            label={key}
+            label={t.setup.fieldLabels[key]}
             state={secrets?.[key]}
             onSaved={onSaved}
           />
@@ -3058,12 +3075,15 @@ git commit -m "feat(setup): rotta /setup a schermo intero, gate del primo avvio"
 ## Task 11: Passi prerequisiti e libreria
 
 **Files:**
-- Create: `frontend/components/setup/steps/prerequisites.tsx`, `frontend/components/setup/steps/library.tsx`
+- Create: `frontend/components/setup/steps/prerequisites.tsx`, `frontend/components/setup/path-field.tsx`, `frontend/components/setup/steps/library.tsx`
 - Modify: `frontend/app/setup/page.tsx`
 
 **Interfaces:**
-- Consumes: `getProbe`, `ComponentRow`, `getConfigSettings`, `patchConfigSettings`, `pickerAvailability`, `pickPath`, e gli endpoint di indicizzazione `POST /api/library/index` + `GET /api/library/index/status` (già esposti dal client in `lib/api/tracks.ts` o `misc.ts`: usare la funzione esistente, non riscriverla).
-- Produces: `<PrerequisitesStep />`, `<LibraryStep />`.
+- Consumes: `getProbe`, `ComponentRow`, `getConfigSettings`, `patchConfigSettings`, `pickerAvailability`, `pickPath`, `startLibraryIndex`, `libraryIndexStatus` (tutte funzioni già esistenti del client — non riscriverle).
+- Produces: `<PrerequisitesStep />`, `<LibraryStep />`, e
+  `<PathField fieldKey={"library_root"|"archive_root"|"slskd_download_dir"|"slskd_url"} label={string} value={string} detail={string | null} canPick={boolean} kind={"folder"|"text"} onSaved={(c: ConfigSettings) => void} />`.
+
+**PathField è condiviso:** il Task 12 lo riusa per i campi di slskd. Va scritto una volta sola qui.
 
 - [ ] **Step 1: Implementare il passo prerequisiti**
 
@@ -3112,20 +3132,88 @@ export function PrerequisitesStep() {
 }
 ```
 
-- [ ] **Step 2: Implementare il passo libreria**
+- [ ] **Step 2: Estrarre `PathField`**
 
-Creare `frontend/components/setup/steps/library.tsx`. Prima aprire `frontend/components/settings/config-card.tsx` e riusarne il meccanismo di scelta percorso (`pickerAvailability` + `pickPath`) invece di reinventarlo; se la logica è già isolata in una funzione o in un componente, importarla.
+Il pattern "campo + bottone Scegli + salva" serve al passo libreria (due volte) e al passo slskd (due volte): va scritto una volta sola. Creare `frontend/components/setup/path-field.tsx`:
 
 ```tsx
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import {
-  errText, getConfigSettings, patchConfigSettings, pickPath, pickerAvailability,
-  type ConfigSettings,
+  errText, patchConfigSettings, pickPath, type ConfigSettings,
 } from "@/lib/api";
-import { Alert, Button, Input, Loading } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+
+/* Campo di configurazione in chiaro (percorso o URL), con il dialog nativo
+   dove è disponibile. Salva sul blur: un bottone Salva per campo, in una
+   procedura a passi, aggiunge un gesto senza aggiungere informazione.
+   Condiviso fra il passo libreria e il passo slskd. */
+export type PathFieldKey = "library_root" | "archive_root" | "slskd_download_dir" | "slskd_url";
+
+export function PathField({ fieldKey, label, value, detail, canPick, kind = "folder", onSaved }: {
+  fieldKey: PathFieldKey;
+  label: string;
+  value: string;
+  detail?: string | null;
+  canPick: boolean;
+  kind?: "folder" | "text";
+  onSaved: (config: ConfigSettings) => void;
+}) {
+  const t = useT();
+  const [error, setError] = useState<string | null>(null);
+
+  const salva = async (next: string) => {
+    if (next === value) return; // niente PATCH inutili a ogni blur
+    try {
+      onSaved(await patchConfigSettings({ [fieldKey]: next }));
+      setError(null);
+    } catch (e) {
+      setError(errText(e));
+    }
+  };
+
+  const scegli = async () => {
+    const { path } = await pickPath("folder", value || undefined);
+    if (path) await salva(path);
+  };
+
+  return (
+    <div>
+      <label className="mb-1 block text-xs uppercase tracking-wider text-muted">{label}</label>
+      <div className="flex gap-2">
+        <Input
+          defaultValue={value}
+          onBlur={(e) => salva(e.target.value.trim())}
+          className="flex-1"
+        />
+        {kind === "folder" && canPick && (
+          <Button size="sm" variant="outline" onClick={scegli}>{t.setup.choose}</Button>
+        )}
+      </div>
+      {detail && <p className="mt-1 text-xs text-faint">{detail}</p>}
+      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 3: Implementare il passo libreria**
+
+Creare `frontend/components/setup/steps/library.tsx`, montando due `PathField` e l'azione di indicizzazione.
+
+```tsx
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  errText, getConfigSettings, libraryIndexStatus, pickerAvailability, startLibraryIndex,
+  type ConfigSettings, type LibraryIndexJob,
+} from "@/lib/api";
+import { Alert, Button, Loading } from "@/components/ui";
+import { useT } from "@/lib/i18n";
+import { PathField } from "../path-field";
 
 export function LibraryStep() {
   const t = useT();
@@ -3142,45 +3230,28 @@ export function LibraryStep() {
     pickerAvailability().then((r) => setCanPick(r.available)).catch(() => setCanPick(false));
   }, [load]);
 
-  const salva = async (key: "library_root" | "archive_root", value: string) => {
-    try {
-      setConfig(await patchConfigSettings({ [key]: value }));
-      setError(null);
-    } catch (e) {
-      setError(errText(e));
-    }
-  };
-
-  const scegli = async (key: "library_root" | "archive_root") => {
-    const { path } = await pickPath("folder", config?.[key].value || undefined);
-    if (path) await salva(key, path);
-  };
-
   if (!config) return error ? <Alert tone="danger">{error}</Alert> : <Loading />;
-
-  const campo = (key: "library_root" | "archive_root", label: string) => (
-    <div>
-      <label className="mb-1 block text-xs uppercase tracking-wider text-muted">{label}</label>
-      <div className="flex gap-2">
-        <Input
-          defaultValue={config[key].value}
-          onBlur={(e) => salva(key, e.target.value)}
-          className="flex-1"
-        />
-        {canPick && (
-          <Button size="sm" variant="outline" onClick={() => scegli(key)}>{t.setup.choose}</Button>
-        )}
-      </div>
-      {config[key].detail && <p className="mt-1 text-xs text-faint">{config[key].detail}</p>}
-    </div>
-  );
 
   return (
     <div className="space-y-4">
       <p className="text-sm leading-relaxed text-muted">{t.setup.libraryBody}</p>
       {error && <Alert tone="danger">{error}</Alert>}
-      {campo("library_root", t.setup.libraryRootLabel)}
-      {campo("archive_root", t.setup.archiveRootLabel)}
+      <PathField
+        fieldKey="library_root"
+        label={t.setup.libraryRootLabel}
+        value={config.library_root.value}
+        detail={config.library_root.detail}
+        canPick={canPick}
+        onSaved={setConfig}
+      />
+      <PathField
+        fieldKey="archive_root"
+        label={t.setup.archiveRootLabel}
+        value={config.archive_root.value}
+        detail={config.archive_root.detail}
+        canPick={canPick}
+        onSaved={setConfig}
+      />
       <IndexAction disabled={!config.library_root.value} />
     </div>
   );
@@ -3232,18 +3303,7 @@ function IndexAction({ disabled }: { disabled: boolean }) {
 }
 ```
 
-Gli import in cima al file diventano:
-
-```tsx
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  errText, getConfigSettings, libraryIndexStatus, patchConfigSettings, pickPath,
-  pickerAvailability, startLibraryIndex,
-  type ConfigSettings, type LibraryIndexJob,
-} from "@/lib/api";
-```
-
-- [ ] **Step 3: Montare i due passi nella pagina**
+- [ ] **Step 4: Montare i due passi nella pagina**
 
 In `frontend/app/setup/page.tsx`, aggiungere gli import e le due righe:
 
@@ -3256,18 +3316,18 @@ import { LibraryStep } from "@/components/setup/steps/library";
         {step === "library" && <LibraryStep />}
 ```
 
-- [ ] **Step 4: Verificare nel browser**
+- [ ] **Step 5: Verificare nel browser**
 
 Avviare il preview (`preview_start`), navigare su `/setup`, controllare console e rete: il passo 1 elenca i cinque componenti col loro stato reale, il passo 2 mostra i percorsi correnti. Verificare che un "Ricontrolla" dopo un'installazione aggiorni lo stato.
 
 ```bash
-cd frontend && npx tsc --noEmit && npm run lint
+cd frontend && npm run test:unit && npx tsc --noEmit && npm run lint
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/components/setup/steps frontend/app/setup/page.tsx
+git add frontend/components/setup frontend/app/setup/page.tsx
 git commit -m "feat(setup): passi prerequisiti e libreria"
 ```
 
@@ -3360,13 +3420,14 @@ Creare `frontend/components/setup/steps/slskd.tsx`:
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  errText, getConfigSettings, patchConfigSettings, pickPath, pickerAvailability,
-  slskdStatus, type ConfigSettings, type SlskdStatus,
+  errText, getConfigSettings, pickerAvailability, slskdStatus,
+  type ConfigSettings, type SlskdStatus,
 } from "@/lib/api";
-import { Alert, Button, Input, Loading } from "@/components/ui";
+import { Alert, Button, Loading } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { ServiceGuide } from "../service-guide";
 import { CredentialField } from "../credential-field";
+import { PathField } from "../path-field";
 
 export function SlskdStep() {
   const t = useT();
@@ -3384,15 +3445,6 @@ export function SlskdStep() {
     pickerAvailability().then((r) => setCanPick(r.available)).catch(() => setCanPick(false));
   }, [load]);
 
-  const salva = async (key: "slskd_url" | "slskd_download_dir", value: string) => {
-    try {
-      setConfig(await patchConfigSettings({ [key]: value }));
-      setError(null);
-    } catch (e) {
-      setError(errText(e));
-    }
-  };
-
   const verifica = async () => {
     try {
       setStatus(await slskdStatus());
@@ -3408,31 +3460,28 @@ export function SlskdStep() {
       <ServiceGuide service="slskd" docsUrl="https://github.com/slskd/slskd" copyValue={null} />
       {error && <Alert tone="danger">{error}</Alert>}
 
-      <div>
-        <label className="mb-1 block text-xs uppercase tracking-wider text-muted">{t.setup.slskdUrlLabel}</label>
-        <Input defaultValue={config.slskd_url.value} onBlur={(e) => salva("slskd_url", e.target.value)} />
-      </div>
+      <PathField
+        fieldKey="slskd_url"
+        label={t.setup.slskdUrlLabel}
+        value={config.slskd_url.value}
+        detail={config.slskd_url.detail}
+        canPick={false}
+        kind="text"
+        onSaved={setConfig}
+      />
 
-      <div>
-        <label className="mb-1 block text-xs uppercase tracking-wider text-muted">{t.setup.slskdDownloadDirLabel}</label>
-        <div className="flex gap-2">
-          <Input
-            defaultValue={config.slskd_download_dir.value}
-            onBlur={(e) => salva("slskd_download_dir", e.target.value)}
-            className="flex-1"
-          />
-          {canPick && (
-            <Button size="sm" variant="outline" onClick={async () => {
-              const { path } = await pickPath("folder", config.slskd_download_dir.value || undefined);
-              if (path) await salva("slskd_download_dir", path);
-            }}>{t.setup.choose}</Button>
-          )}
-        </div>
-      </div>
+      <PathField
+        fieldKey="slskd_download_dir"
+        label={t.setup.slskdDownloadDirLabel}
+        value={config.slskd_download_dir.value}
+        detail={config.slskd_download_dir.detail}
+        canPick={canPick}
+        onSaved={setConfig}
+      />
 
       <CredentialField
         fieldKey="slskd_api_key"
-        label="SLSKD_API_KEY"
+        label={t.setup.fieldLabels.slskd_api_key}
         state={config.secrets.slskd_api_key}
         onSaved={load}
       />
