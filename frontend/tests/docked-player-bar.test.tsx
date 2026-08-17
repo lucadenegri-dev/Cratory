@@ -2,6 +2,9 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/api", () => ({
+  // Il dock carica BPM/tonalità/genere dalla scheda (GET /api/tracks/{id}):
+  // una promise mai risolta = dock senza riga metadati, il caso base dei test.
+  apiGet: vi.fn(() => new Promise(() => {})),
   discoveryPreview: vi.fn(),
   trackCoverSrc: () => null,
   trackAudioUrl: (id: number) => `/api/tracks/${id}/audio`,

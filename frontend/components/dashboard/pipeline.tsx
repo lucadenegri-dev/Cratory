@@ -32,7 +32,9 @@ function StageCell({ s }: { s: StageDef }) {
   );
 }
 
-export function PipelineStrip({ p }: { p: PipelineStatus }) {
+/** `bare`: senza la cornice della Card, per la Home — lì la struttura la fanno
+ *  i filetti della composizione e un bordo pieno la spezzerebbe in due lastre. */
+export function PipelineStrip({ p, bare = false }: { p: PipelineStatus; bare?: boolean }) {
   const t = useT();
 
   const stages: StageDef[] = [
@@ -61,18 +63,18 @@ export function PipelineStrip({ p }: { p: PipelineStatus }) {
     },
   ];
 
-  return (
-    <Card>
-      <div className="flex items-stretch overflow-x-auto">
-        {stages.map((s, i) => (
-          <div key={s.key} className="flex flex-1 items-center">
-            {i > 0 && <ChevronRight size={14} className="shrink-0 text-faint" aria-hidden />}
-            <Link href={s.href} className="flex-1 transition-colors hover:bg-elevated">
-              <StageCell s={s} />
-            </Link>
-          </div>
-        ))}
-      </div>
-    </Card>
+  const strip = (
+    <div className="flex items-stretch overflow-x-auto">
+      {stages.map((s, i) => (
+        <div key={s.key} className="flex flex-1 items-center">
+          {i > 0 && <ChevronRight size={14} className="shrink-0 text-faint" aria-hidden />}
+          <Link href={s.href} className="flex-1 transition-colors hover:bg-elevated">
+            <StageCell s={s} />
+          </Link>
+        </div>
+      ))}
+    </div>
   );
+
+  return bare ? strip : <Card>{strip}</Card>;
 }

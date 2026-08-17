@@ -9,13 +9,15 @@ import {
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
+import { primeOnFirstGesture } from "@/lib/audio-analyser";
 import { findTopPlaylist, pickRandom } from "@/lib/random-track";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
-import { Card, Alert, Loading } from "@/components/ui";
+import { Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
-import { Figure } from "@/components/dashboard/figure";
 import { AsciiDj } from "@/components/dashboard/ascii-dj";
 import { AsciiWordmark } from "@/components/dashboard/ascii-wordmark";
+import { AsciiAtmosphere } from "@/components/dashboard/ascii-atmosphere";
+import { SpectrumStrip } from "@/components/dashboard/spectrum-strip";
 
 /** La Home: il frontespizio (il nome in grande e la consolle che suona), poi
  *  la striscia del ciclo e le quattro misure in chiusura. Il ritratto
@@ -35,6 +37,11 @@ export default function Home() {
     apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch(() => setSets([]));
     // Serve solo a risolvere la playlist "Top" da cui pesca la consolle.
     listImportedPlaylists().then(setPlaylists).catch(() => setPlaylists([]));
+    // Sblocca il contesto Web Audio al primo gesto: dev'essere già in
+    // esecuzione quando parte il primo `play`, altrimenti l'analizzatore non si
+    // innesta e la cabina resta cieca proprio sulla traccia che l'ha avviata
+    // (il trasporto monta dopo il click, troppo tardi per innescarlo da lì).
+    primeOnFirstGesture();
   }, []);
 
   const empty = stats != null && stats.total_tracks === 0;
@@ -68,98 +75,101 @@ export default function Home() {
       .catch(() => {});
   };
 
+  const owned = stats?.with_local_file ?? 0;
+  const ownedPct = stats && stats.total_tracks > 0
+    ? Math.round((owned / stats.total_tracks) * 100) : null;
+
+  /* Il colophon in una riga sola: la scala della libreria in cifre tabellari,
+     dove prima c'erano quattro celle riquadrate. Le playlist non ci sono: le
+     conta già la prima fase della striscia qui sopra. */
+  const colophon = stats && (
+    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[10px] uppercase tracking-wider text-muted">
+      <span><span className="tnum text-fg-strong">{stats.total_tracks}</span> {t.dashboard.figureDiscovered}</span>
+      <span className="text-faint">·</span>
+      <span>
+        <span className="tnum text-fg-strong">{owned}</span> {t.dashboard.figureOwned}
+        {ownedPct !== null && <span className="tnum ml-1.5 text-faint">{ownedPct}%</span>}
+      </span>
+      <span className="text-faint">·</span>
+      <span><span className="tnum text-fg-strong">{sets ? sets.length : "—"}</span> {t.dashboard.figureSets}</span>
+      <Link href="/statistics" className="ml-auto transition-colors hover:text-fg-strong">
+        {t.dashboard.statsLink} →
+      </Link>
+    </div>
+  );
+
   return (
     <PageLayout>
-      {/* Il frontespizio sta in cima sempre: anche a libreria vuota e mentre
-          carica, la Home ha una testata. Sotto cambia solo il contenuto.
-          Stessa cornice delle lastre sotto ma un gradino avanti: fondo
-          `elevated` e bordo `border-strong` lo staccano dalla serie restando
-          in fila. Il sistema è piatto e non ha ombre, quindi il primo piano
-          si fa col contrasto, non con la profondità. */}
-      <Card className="mb-3 border-border-strong bg-elevated">
-        <div className="px-3 py-2">
-          <AsciiWordmark />
+      {/* Il frontespizio occupa la schermata: una sola composizione a piena
+          altezza invece di tre lastre incorniciate dello stesso peso: erano
+          quelle a impedire che la Home avesse un fuoco. La struttura la fanno
+          i filetti (§4 di DESIGN.md), non i bordi delle Card.
+          `container-type: size` solo da lg in su: sotto non c'è un'altezza
+          definita e il contenimento farebbe collassare il blocco a zero. Le
+          misure dell'arte in `cq*` discendono da qui — la cabina cresce fino a
+          riempire quello che le resta. */}
+      <div className="relative lg:h-[calc(100dvh-3rem-max(var(--player-bar-height,0px),106px))] lg:[container-type:size]">
+        {/* L'aria di tutta la pagina, dietro alla composizione. Sta qui e non
+            dentro il ramo dei dati così respira anche mentre carica e a
+            libreria vuota. Il contenuto è posizionato e viene dopo nel DOM,
+            quindi gli passa sopra senza bisogno di z-index. */}
+        <AsciiAtmosphere active={player.audible} />
+
+        <div className="relative flex h-full flex-col gap-3">
+          <div className="flex-none">
+            <AsciiWordmark sizeClass="text-[12px] sm:text-lg md:text-xl lg:text-[min(4.1cqh,4.5cqw)]" />
+          </div>
+
+          {error && <Alert tone="danger">{t.dashboard.backendDown(error)}</Alert>}
+
+          {!stats && !error && <div className="flex flex-1 items-center justify-center"><Loading /></div>}
+
+          {empty && (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+              <Music size={36} className="text-faint" />
+              <div>
+                <p className="font-medium text-fg-strong">{t.dashboard.emptyTitle}</p>
+                <p className="mt-1 text-sm text-muted">{t.dashboard.emptyBody}</p>
+              </div>
+              <Link href="/playlists" className="inline-flex items-center gap-1.5 bg-fg-strong px-4 py-2 text-xs font-medium uppercase tracking-wider text-bg transition-colors hover:bg-fg">
+                {t.dashboard.importPlaylist} <ArrowRight size={14} />
+              </Link>
+            </div>
+          )}
+
+          {stats && !empty && (
+            <>
+              {/* La cabina è il protagonista e si prende tutto lo spazio che
+                  avanza. Suona premendola. Si muove solo mentre dall'app esce
+                  davvero del suono (`audible`, non `status`: in pausa il dock
+                  resta "playing"): a musica ferma la pagina è ferma, l'aria
+                  della cabina e il pulviscolo di sfondo compresi. */}
+              <div className="flex min-h-0 flex-1 items-center justify-center overflow-x-auto">
+                <AsciiDj
+                  animate={player.audible}
+                  onActivate={playRandom}
+                  label={t.dashboard.djPlayRandom}
+                  sizeClass="text-[1.85vw] lg:text-[min(3.3cqh,2.1cqw)]"
+                />
+              </div>
+
+              {/* Lo spettro, staccato dalla cabina: una striscia a piena
+                  larghezza che chiude la zona dell'arte, sopra il piede. */}
+              {/* `pt-4` oltre al gap della colonna: la striscia deve leggersi
+                  come una misura autonoma, non come l'ultima riga della scena. */}
+              <div className="flex-none px-1 pt-4">
+                <SpectrumStrip active={player.audible} />
+              </div>
+
+              {/* Il piede: un filetto, le fasi del ciclo, il colophon in cifre. */}
+              <div className="flex-none border-t border-border pt-1">
+                {pipeline && <PipelineStrip p={pipeline} bare />}
+                {colophon && <div className="border-t border-border px-4 py-2.5">{colophon}</div>}
+              </div>
+            </>
+          )}
         </div>
-      </Card>
-
-      {error && <div className="mb-6"><Alert tone="danger">{t.dashboard.backendDown(error)}</Alert></div>}
-
-      {!stats && !error && <Loading />}
-
-      {empty && (
-        <Card>
-          <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-            <Music size={36} className="text-faint" />
-            <div>
-              <p className="font-medium text-fg-strong">{t.dashboard.emptyTitle}</p>
-              <p className="mt-1 text-sm text-muted">{t.dashboard.emptyBody}</p>
-            </div>
-            <Link href="/playlists" className="inline-flex items-center gap-1.5 bg-fg-strong px-4 py-2 text-xs font-medium uppercase tracking-wider text-bg transition-colors hover:bg-fg">
-              {t.dashboard.importPlaylist} <ArrowRight size={14} />
-            </Link>
-          </div>
-        </Card>
-      )}
-
-      {stats && !empty && (
-        <>
-          {/* La consolle chiude il frontespizio, sotto il nome: puro carattere,
-              in tutti i sensi. Premuta, suona. Si muove solo mentre dall'app
-              esce davvero del suono (`audible`, non `status`: in pausa il dock
-              resta "playing").
-              Incorniciata nello stesso involucro delle due sezioni sotto
-              (Card: bordo pieno e fondo surface): le tre lastre si leggono
-              come una serie invece che come un disegno sospeso nel vuoto. */}
-          <Card>
-            <div className="flex justify-center overflow-x-auto px-3 py-1">
-              <AsciiDj
-                animate={player.audible}
-                onActivate={playRandom}
-                label={t.dashboard.djPlayRandom}
-                hint={t.dashboard.djHint}
-              />
-            </div>
-          </Card>
-
-          {/* Link alle statistiche: la pagina non ha header PageLayout, quindi
-              il rimando sta qui, quieto e right-aligned in testa alle due
-              sezioni di dati a cui appartiene — non sopra il frontespizio. */}
-          <div className="mb-0.5 mt-1.5 flex justify-end">
-            <Link href="/statistics" className="text-[10px] uppercase tracking-wider text-muted transition-colors hover:text-fg">
-              {t.dashboard.statsLink} →
-            </Link>
-          </div>
-
-          {/* Striscia di orientamento: le fasi del ciclo con contatori vivi. */}
-          {pipeline && <PipelineStrip p={pipeline} />}
-
-          {/* Le quattro misure chiudono la pagina, come un colophon in cifre.
-              Stesso involucro della striscia sopra (Card: fondo surface e
-              bordo pieno); il margine negativo fa uscire i filetti di chiusura
-              delle celle di bordo, che `overflow-hidden` ritaglia — così le
-              divisioni interne restano da 1px a ogni breakpoint. */}
-          <div className="-mt-px overflow-hidden border border-border bg-surface">
-            <div className="-mb-px -mr-px grid grid-cols-2 sm:grid-cols-4">
-              <Figure label={t.dashboard.figureDiscovered} value={stats.total_tracks} />
-              <Figure
-                label={t.dashboard.figureOwned}
-                value={(
-                  <>
-                    {stats.with_local_file}
-                    {stats.total_tracks > 0 && (
-                      <span className="ml-1.5 text-[10px] font-normal text-muted">
-                        {Math.round((stats.with_local_file / stats.total_tracks) * 100)}%
-                      </span>
-                    )}
-                  </>
-                )}
-              />
-              <Figure label={t.dashboard.figurePlaylists} value={stats.playlists} />
-              <Figure label={t.dashboard.figureSets} value={sets ? sets.length : "—"} />
-            </div>
-          </div>
-        </>
-      )}
+      </div>
     </PageLayout>
   );
 }

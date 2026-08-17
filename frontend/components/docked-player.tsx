@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, Plus, X } from "lucide-react";
 
-import { discoverySaveForLater, trackAudioUrl } from "@/lib/api";
+import { apiGet, discoverySaveForLater, trackAudioUrl, type TrackDetail } from "@/lib/api";
+import { KeyBadge } from "@/components/key-badge";
 import { PlayerTransport } from "@/components/player-transport";
 import { RatingDiamond } from "@/components/rating-diamond";
 import { TrackCover } from "@/components/track-cover";
@@ -22,6 +23,10 @@ export function DockedPlayer() {
   const [localError, setLocalError] = useState(false);
   const [savingAdd, setSavingAdd] = useState(false);
   const [addedKey, setAddedKey] = useState<string | null>(null);
+  // I tre dati da DJ della traccia in ascolto (BPM, tonalità, genere), presi
+  // dalla scheda: LocalTrack porta solo l'identità, e caricarli qui evita di
+  // allargare ogni chiamata play() dell'app.
+  const [meta, setMeta] = useState<{ bpm: number | null; camelot: string | null; genre: string | null } | null>(null);
 
   const activeLocalId = active?.kind === "local-track" ? active.track.id : null;
   const activePreviewKey = active?.kind === "discovery-preview" ? active.item.key : null;
@@ -35,6 +40,7 @@ export function DockedPlayer() {
     setPrevKey(activeKey);
     setLocalError(false);
     setSavingAdd(false);
+    setMeta(null); // i dati della traccia precedente non devono trapelare sulla nuova
   }
 
   const visible = !!active && status !== "idle";
@@ -54,6 +60,15 @@ export function DockedPlayer() {
     },
     [],
   );
+
+  useEffect(() => {
+    if (activeLocalId == null) return;
+    let cancelled = false;
+    apiGet<TrackDetail>(`/api/tracks/${activeLocalId}`)
+      .then((tr) => { if (!cancelled) setMeta({ bpm: tr.bpm, camelot: tr.camelot_key, genre: tr.genre }); })
+      .catch(() => {}); // senza scheda il dock resta com'era: niente riga metadati
+    return () => { cancelled = true; };
+  }, [activeLocalId]);
 
   const prevNext = useMemo(
     () => (hasPrev || hasNext ? { hasPrev, hasNext, onPrev: prev, onNext: next } : null),
@@ -169,10 +184,12 @@ export function DockedPlayer() {
               <div className="truncate text-xs text-muted">{artist}</div>
             </div>
             {/* Il voto è un'azione da scrivania: sotto sm lo spazio va al
-                titolo, che altrimenti si riduce a due lettere. */}
+                titolo, che altrimenti si riduce a due lettere. Il selettore si
+                apre in fila a destra, dove la zona ha spazio libero: sopra c'è
+                il seek sul filetto del pannello. */}
             {active.kind === "local-track" && (
               <span className="hidden shrink-0 sm:inline-flex">
-                <RatingDiamond trackId={active.track.id} rating={active.track.rating ?? null} />
+                <RatingDiamond trackId={active.track.id} rating={active.track.rating ?? null} side="right" />
               </span>
             )}
           </div>
@@ -219,11 +236,39 @@ export function DockedPlayer() {
             )}
           </div>
 
-          {/* Zona destra: ADD per i lead discovery, chiudi. Da sm in su prende
-              la stessa larghezza flessibile della zona sinistra, così il
-              trasporto resta otticamente al centro della barra; sotto sm resta
-              alla sua misura e lo spazio va tutto al titolo. */}
+          {/* Zona destra: dati da DJ, ADD per i lead discovery, chiudi. Da sm in
+              su prende la stessa larghezza flessibile della zona sinistra, così
+              il trasporto resta otticamente al centro della barra; sotto sm
+              resta alla sua misura e lo spazio va tutto al titolo. */}
           <div className="flex shrink-0 items-center justify-end gap-2 sm:min-w-0 sm:flex-1">
+            {/* I dati della traccia in ascolto: tre celle label/valore divise da
+                filetti, la stessa grammatica delle Figure. `mx-auto`: i margini
+                automatici si spartiscono lo spazio libero della zona, quindi il
+                blocco si centra fra il trasporto e i comandi di chiusura invece
+                di appoggiarsi all'uno o agli altri. Da md in su: sotto, lo
+                spazio è del titolo. */}
+            {active.kind === "local-track" && meta && (meta.bpm != null || meta.camelot || meta.genre) && (
+              <span className="mx-auto hidden min-w-0 shrink divide-x divide-border md:flex">
+                {meta.bpm != null && (
+                  <span className="flex shrink-0 flex-col px-3 first:pl-0">
+                    <span className="text-[9px] uppercase tracking-wider text-faint">{t.player.metaBpm}</span>
+                    <span className="tnum text-xs text-fg">{meta.bpm % 1 === 0 ? meta.bpm : meta.bpm.toFixed(1)}</span>
+                  </span>
+                )}
+                {meta.camelot && (
+                  <span className="flex shrink-0 flex-col px-3 first:pl-0">
+                    <span className="text-[9px] uppercase tracking-wider text-faint">{t.player.metaKey}</span>
+                    <KeyBadge camelot={meta.camelot} className="text-xs" />
+                  </span>
+                )}
+                {meta.genre && (
+                  <span className="flex min-w-0 flex-col px-3 first:pl-0">
+                    <span className="text-[9px] uppercase tracking-wider text-faint">{t.player.metaGenre}</span>
+                    <span className="max-w-32 truncate text-xs text-fg" title={meta.genre}>{meta.genre}</span>
+                  </span>
+                )}
+              </span>
+            )}
             {addInput && (
               <button
                 type="button"

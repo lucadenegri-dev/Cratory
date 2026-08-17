@@ -98,6 +98,38 @@ body {
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-thumb { background: var(--color-border-strong); border: 2px solid var(--color-bg); }
 
+/* ---- Aria della Home: pulviscolo che sale per tutta la composizione -------
+   Una particella = un glifo. Tutto in CSS perché il campo non ridisegni nulla
+   a ogni fotogramma; l'unico legame col suono è `--air-glow`, scritta da JS su
+   un solo elemento (components/dashboard/ascii-atmosphere.tsx).
+   `100cqh` e non `100vh`: la corsa deve essere l'altezza della composizione,
+   che è il container dimensionato della Home. Sotto lg non c'è container e le
+   unità ricadono sul viewport, che lì è la stessa cosa. */
+.air {
+  position: absolute;
+  bottom: -1.5rem;
+  color: var(--c-muted);
+  opacity: 0;
+  animation-name: airRise;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+/* Il piano vicino: inchiostro pieno, un sesto delle particelle. */
+.air-near { color: var(--c-fg); }
+
+/* Senza musica il campo si ferma dov'è, non riparte da capo. */
+.air-still .air { animation-play-state: paused; }
+
+
+@keyframes airRise {
+  0%   { transform: translate(0, 0); opacity: 0; }
+  12%  { opacity: var(--air-glow, 0); }
+  50%  { transform: translate(var(--air-drift, 0px), calc(-50cqh - 1rem)); }
+  88%  { opacity: var(--air-glow, 0); }
+  100% { transform: translate(0, calc(-100cqh - 3rem)); opacity: 0; }
+}
+
 /* ---- DJ loaders: EQ inline (.eq*) + waveform (.eqm*) ---------------------- */
 
 /* EQ inline: 4 colonne segmentate con tacca di picco calda */
@@ -227,6 +259,16 @@ body {
 .seek:focus-visible { outline: 1px solid var(--c-fg); outline-offset: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Il pulviscolo resta, fermo: un campo sparso di glifi tenui invece di una
+     pagina spoglia. È il fermo immagine del campo animato — `--air-top` è la
+     quota che quella particella avrebbe a metà corsa, calcolata dallo stesso
+     ritardo che qui non servirebbe più a nulla. */
+  .air {
+    animation: none;
+    opacity: calc(var(--air-glow, 0) * 0.8);
+    bottom: auto;
+    top: var(--air-top, 50%);
+  }
   .eq-l1, .eq-l2, .eq-l3, .eq-l5 { animation: none !important; }
   .eq-fill { height: 62% !important; }
   .eqm-scan { animation: none; left: 38%; }

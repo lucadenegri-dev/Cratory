@@ -2,6 +2,9 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/api", () => ({
+  // Il dock carica BPM/tonalità/genere dalla scheda (GET /api/tracks/{id}):
+  // una promise mai risolta = dock senza riga metadati, il caso base dei test.
+  apiGet: vi.fn(() => new Promise(() => {})),
   discoveryPreview: vi.fn(),
   trackCoverSrc: () => null,
   trackAudioUrl: (id: number) => `/api/tracks/${id}/audio`,
@@ -9,7 +12,7 @@ vi.mock("@/lib/api", () => ({
   updateTrack: vi.fn(),
 }));
 
-import { discoveryPreview } from "@/lib/api";
+import { apiGet, discoveryPreview } from "@/lib/api";
 import { DockedPlayer } from "@/components/docked-player";
 import { PlayerProvider, usePlayer } from "@/lib/player";
 
@@ -65,6 +68,34 @@ describe("voto dal player docked", () => {
       screen.getByText("play-local").click();
     });
     expect(screen.getByLabelText("Voto")).toBeTruthy();
+  });
+
+  /* La riga BPM/tonalità/genere arriva dalla scheda: compare quando la GET
+     risolve, e ogni cella si rende solo se il dato c'è. */
+  it("con la scheda caricata il dock mostra BPM, tonalità e genere", async () => {
+    (apiGet as ReturnType<typeof vi.fn>).mockResolvedValue({
+      bpm: 126.5, camelot_key: "8A", genre: "Techno",
+    });
+    renderAll();
+    await act(async () => {
+      screen.getByText("play-local").click();
+    });
+    expect(screen.getByText("126.5")).toBeTruthy();
+    expect(screen.getByText("8A")).toBeTruthy();
+    expect(screen.getByText("Techno")).toBeTruthy();
+    expect(apiGet).toHaveBeenCalledWith("/api/tracks/5");
+  });
+
+  it("senza BPM né tonalità la riga mostra solo il genere, niente celle vuote", async () => {
+    (apiGet as ReturnType<typeof vi.fn>).mockResolvedValue({
+      bpm: null, camelot_key: null, genre: "Ambient",
+    });
+    renderAll();
+    await act(async () => {
+      screen.getByText("play-local").click();
+    });
+    expect(screen.getByText("Ambient")).toBeTruthy();
+    expect(screen.queryByText("BPM")).toBeNull();
   });
 
   it("con una preview discovery il rombo non c'e'", async () => {

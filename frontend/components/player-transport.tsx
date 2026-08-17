@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 
 import { useT } from "@/lib/i18n";
+import { attachAnalyser, primeOnFirstGesture } from "@/lib/audio-analyser";
 
 export type TransportPrevNext = {
   hasPrev: boolean;
@@ -38,6 +39,10 @@ function fmtTime(s: number): string {
  *  stream Bandcamp; l'iframe YouTube non passa di qui. */
 export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prevNext, mediaMeta }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  // Sblocca il contesto Web Audio al primo gesto utile: l'innesto sull'elemento
+  // avviene solo a contesto già in esecuzione, quindi senza questo la prima
+  // traccia della sessione non verrebbe mai analizzata. Idempotente.
+  useEffect(() => { primeOnFirstGesture(); }, []);
   const [paused, setPaused] = useState(true);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -152,9 +157,13 @@ export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prev
         data-testid={testId}
         src={src}
         autoPlay
-        onPlay={() => {
+        onPlay={(e) => {
           setPaused(false);
           onAudible(true);
+          // Innesto (una volta per elemento) nel grafo Web Audio che alimenta
+          // la cabina della Home. Non può azzittire nulla: tocca l'elemento
+          // solo a contesto già sbloccato, vedi lib/audio-analyser.ts.
+          attachAnalyser(e.currentTarget);
         }}
         onPause={() => {
           setPaused(true);

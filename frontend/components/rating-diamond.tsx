@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { updateTrack } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 
 // Scala "calore" del voto: 1 oliva, 2 ambra, 3 terracotta (accento Cratory).
@@ -30,9 +31,13 @@ type Props = {
   rating: number | null;
   onSaved?: (rating: number | null) => void;
   size?: number;
+  /** Dove si apre il selettore. `above` (default) per le righe di lista, dove
+   *  il rombo vive sul bordo destro e sopra c'è sempre spazio; `right` per il
+   *  dock, dove sopra c'è il seek e a destra la corsia è libera. */
+  side?: "above" | "right";
 };
 
-export function RatingDiamond({ trackId, rating, onSaved, size = 18 }: Props) {
+export function RatingDiamond({ trackId, rating, onSaved, size = 18, side = "above" }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState<number | null>(rating);
@@ -74,11 +79,15 @@ export function RatingDiamond({ trackId, rating, onSaved, size = 18 }: Props) {
 
   return (
     <span ref={rootRef} className="relative inline-flex shrink-0 items-center">
-      {/* Popup fuori dal flusso: l'espansione inline spostava gli elementi della
-          riga. Ancorato sopra e a destra (il rombo vive sul bordo destro delle
-          righe e in basso nel dock: sopra c'e' sempre spazio). */}
+      {/* Popup fuori dal flusso: l'espansione inline spostava gli elementi
+          della riga. `right`: in fila accanto al rombo, centrato sulla sua
+          altezza — i tre livelli si leggono come un seguito ordinato del
+          controllo, non come un balloon appeso. */}
       {open && (
-        <span className="absolute bottom-full right-0 z-20 mb-1 flex items-center gap-1 rounded border border-border bg-elevated px-1.5 py-1 shadow-lg">
+        <span className={cn(
+          "absolute z-20 flex items-center gap-1 rounded-none border border-border bg-elevated px-1.5 py-1 shadow-lg",
+          side === "right" ? "left-full top-1/2 ml-1.5 -translate-y-1/2" : "bottom-full right-0 mb-1",
+        )}>
           {[1, 2, 3].map((level) => (
             <button
               key={level}

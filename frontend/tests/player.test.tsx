@@ -2,6 +2,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/api", () => ({
+  // Il dock carica BPM/tonalità/genere dalla scheda (GET /api/tracks/{id}):
+  // una promise mai risolta = dock senza riga metadati, il caso base dei test.
+  apiGet: vi.fn(() => new Promise(() => {})),
   discoveryPreview: vi.fn(),
   // Il dock renderizza sempre una miniatura (TrackCover→trackCoverSrc) e, per le
   // tracce locali, un <audio src={trackAudioUrl}>; l'ADD chiama save-for-later.

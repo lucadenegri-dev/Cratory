@@ -1,3 +1,5 @@
+"use client";
+
 /* Il frontespizio della Home: CRATORY a lettere piene. Stesso vocabolario
    grafico delle casse della cabina (`#########` in ascii-dj), così le due
    scritte sembrano fatte dello stesso materiale.
@@ -6,6 +8,9 @@
    Solo `#` e spazio: i glifi pieni unicode (█ ▓) cadono sul font di fallback
    con larghezza diversa e disallineano le colonne — la stessa ragione per cui
    la cabina usa `°*·` al posto di `♪♫`. */
+
+import { resolveLines } from "@/lib/ascii-resolve";
+import { useAsciiIntro } from "@/lib/use-ascii-intro";
 
 const WORD = "CRATORY";
 
@@ -83,7 +88,9 @@ export const WORDMARK_LINES = wordmarkLines(WORD);
  *  una barra di scorrimento verticale dentro la cornice. Il rientro in `em`
  *  sull'arte dà comunque l'aria che serve: non si ritaglia nulla, si toglie
  *  solo la barra. */
-export function AsciiWordmark() {
+export function AsciiWordmark({ sizeClass }: { sizeClass?: string } = {}) {
+  const intro = useAsciiIntro();
+  const lines = resolveLines(WORDMARK_LINES, intro);
   return (
     <div className="flex justify-center overflow-x-auto overflow-y-hidden">
       <h1 className="sr-only">Cratory</h1>
@@ -97,9 +104,9 @@ export function AsciiWordmark() {
            `overflow-x-auto` sull'involucro costringe anche l'asse verticale ad
            `auto`, quei due pixel bastavano a far comparire una barra di
            scorrimento. In `em` perché l'eccedenza cresce col corpo. */
-        className="select-none py-[0.15em] text-[12px] text-fg-strong sm:text-lg md:text-xl lg:text-2xl 2xl:text-3xl"
+        className={`select-none py-[0.15em] text-fg-strong ${sizeClass ?? "text-[12px] sm:text-lg md:text-xl lg:text-2xl 2xl:text-3xl"}`}
       >
-        {WORDMARK_LINES.map((line, i) => (
+        {lines.map((line, i) => (
           <pre key={i} className="leading-[0.95]">{line}</pre>
         ))}
       </div>

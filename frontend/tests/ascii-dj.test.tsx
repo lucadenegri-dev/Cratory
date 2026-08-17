@@ -85,13 +85,15 @@ describe("AsciiDj (guscio)", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  /* L'etichetta esiste solo per gli assistivi: la scena non porta scritte (il
+     suggerimento sotto la cabina è stato tolto, sporcava il frontespizio). */
   it("con onActivate è un bottone etichettato che al click chiama il gestore", () => {
     const spy = vi.fn();
-    render(<AsciiDj onActivate={spy} label="Suona una traccia a caso" hint="premi" />);
+    const { container } = render(<AsciiDj onActivate={spy} label="Suona una traccia a caso" />);
     const btn = screen.getByRole("button", { name: "Suona una traccia a caso" });
     fireEvent.click(btn);
     expect(spy).toHaveBeenCalledOnce();
-    expect(screen.getByText("premi")).toBeTruthy();
+    expect(container.textContent).not.toContain("Suona una traccia a caso");
   });
 
   /* La consolle si muove solo quando in app sta suonando qualcosa: `animate`
@@ -121,14 +123,25 @@ describe("AsciiDj (guscio)", () => {
     }
   });
 
-  it("riprendendo, la scena riparte da dove si era fermata (non salta a capo)", () => {
+  /* Fermandosi la scena conserva la posa (i piatti non tornano a capo) ma la
+     cassa si rilassa: nessun woofer acceso mentre non esce suono. */
+  it("fermandosi conserva la posa dei piatti ma spegne il colpo di cassa", () => {
     vi.useFakeTimers();
     try {
       const { container, rerender } = render(<AsciiDj animate />);
-      act(() => { vi.advanceTimersByTime(1500); });
-      const running = container.textContent;
+      // Si cerca un tick in battere, così il denominatore c'è davvero: senza,
+      // il test sul rosso spento sarebbe verde anche partendo già spento.
+      act(() => { vi.advanceTimersByTime(500); });
+      if (container.querySelectorAll(".text-danger").length === 0) {
+        act(() => { vi.advanceTimersByTime(500); });
+      }
+      expect(container.querySelectorAll(".text-danger").length).toBeGreaterThan(0);
+      const platter = container.textContent!.match(/\(\s*([|/\\-])\s*\)/)?.[1];
+      expect(platter).toBeTruthy();
+
       rerender(<AsciiDj animate={false} />);
-      expect(container.textContent).toBe(running);
+      expect(container.querySelectorAll(".text-danger").length).toBe(0);
+      expect(container.textContent!.match(/\(\s*([|/\\-])\s*\)/)?.[1]).toBe(platter);
     } finally {
       vi.useRealTimers();
     }
