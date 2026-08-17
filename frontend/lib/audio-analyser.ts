@@ -11,10 +11,12 @@
  * contesto si crea/riprende su un gesto reale dell'utente
  * (`primeOnFirstGesture`). Ogni errore lascia l'elemento esattamente com'era.
  *
- * Cross-origin: le tracce possedute passano dal proxy /api di Next (stessa
- * origine, vedi next.config.ts), quindi si analizzano. Le preview di terzi
- * (iTunes, Bandcamp) sono cross-origin senza CORS: l'elemento suona lo stesso,
- * l'analizzatore legge zeri. Lo spettro resta piatto, che è la resa onesta. */
+ * Cross-origin: un MediaElementAudioSourceNode la cui risorsa è CORS-cross-origin
+ * emette SILENZIO — per specifica viene azzerata l'uscita, non solo l'analisi.
+ * Quindi le sorgenti di terzi (le preview iTunes/Bandcamp di Discovery) non si
+ * innestano affatto: suonano dall'elemento, senza spettro. Si analizzano solo le
+ * tracce possedute, che passano dal proxy /api di Next e sono di pari origine
+ * (vedi next.config.ts). */
 
 type Graph = {
   ctx: AudioContext;
@@ -72,12 +74,29 @@ export function primeOnFirstGesture(): void {
   }
 }
 
+/** Vero solo per le sorgenti di pari origine, le uniche innestabili senza
+ *  azzerare l'audio. Pura, così il test morda il caso che ha azzittito le
+ *  preview di Discovery. */
+export function isSameOriginSrc(src: string): boolean {
+  if (!src) return false;
+  try {
+    return new URL(src, window.location.href).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 /** Innesta l'elemento nel grafo, una sola volta per elemento. Non fa nulla se
  *  il contesto non è già in esecuzione: meglio nessuna analisi che un player
  *  muto. Il trasporto la richiama a ogni `play`, quindi il tentativo si ripete
  *  da sé al giro dopo. */
 export function attachAnalyser(el: HTMLMediaElement | null | undefined): void {
   if (!el || attached.has(el)) return;
+  // Sorgente di terzi: si esce PRIMA di toccare l'elemento. Innestarla
+  // significherebbe azzittirla (vedi la nota cross-origin in testa al file).
+  // Niente WeakSet: la sorgente dell'elemento può cambiare, e al prossimo
+  // `play` la condizione si rivaluta.
+  if (!isSameOriginSrc(el.currentSrc || el.src)) return;
   const g = ensureGraph();
   if (!g) return;
   if (g.ctx.state !== "running") {
@@ -124,8 +143,9 @@ export function bandEdgeHz(edge: 0 | 1): number {
 }
 
 /** Istantanea dei livelli, o null se non c'è nessun grafo (nessuna traccia
- *  ancora innestata, oppure Web Audio non disponibile). Con sorgente
- *  cross-origin i valori sono zeri: chi disegna lo tratta come silenzio. */
+ *  posseduta ancora innestata, oppure Web Audio non disponibile). Mentre suona
+ *  una sorgente di terzi il grafo resta fermo sull'ultima traccia analizzata e
+ *  i valori decadono a zero: chi disegna lo tratta come silenzio. */
 export function readLevels(barCount: number): AudioLevels | null {
   const g = graph;
   if (!g) return null;
