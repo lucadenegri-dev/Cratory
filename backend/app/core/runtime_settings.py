@@ -25,7 +25,12 @@ _PATH_KEYS = frozenset({"library_root", "archive_root", "slskd_download_dir",
 # Campi editabili con default in `.env` (settings.X). `share_library` è escluso:
 # è un flag solo-DB, senza controparte env.
 ENV_BACKED_KEYS = ("library_root", "archive_root", "slskd_download_dir",
-                   "slskd_url", "slskd_config_path")
+                   "slskd_url", "slskd_config_path", "ai_model")
+
+# Credenziali: stessa semantica (override DB > default .env), ma il valore non
+# esce mai dal backend — il router le espone solo mascherate.
+SECRET_KEYS = ("spotify_client_id", "spotify_client_secret", "ai_api_key",
+               "discogs_token", "acoustid_api_key", "slskd_api_key")
 
 _overrides: dict[str, str] = {}
 
@@ -65,6 +70,42 @@ def slskd_url() -> str:
 
 def slskd_config_path() -> str:
     return _resolved("slskd_config_path")
+
+
+def ai_model() -> str:
+    return _resolved("ai_model")
+
+
+def spotify_client_id() -> str:
+    return _resolved("spotify_client_id")
+
+
+def spotify_client_secret() -> str:
+    return _resolved("spotify_client_secret")
+
+
+def ai_api_key() -> str:
+    return _resolved("ai_api_key")
+
+
+def discogs_token() -> str:
+    return _resolved("discogs_token")
+
+
+def acoustid_api_key() -> str:
+    return _resolved("acoustid_api_key")
+
+
+def slskd_api_key() -> str:
+    return _resolved("slskd_api_key")
+
+
+def secret(key: str) -> str:
+    """Valore effettivo di una credenziale. `KeyError` fuori da `SECRET_KEYS`:
+    un typo non deve poter leggere in silenzio un campo qualsiasi di Settings."""
+    if key not in SECRET_KEYS:
+        raise KeyError(key)
+    return _resolved(key)
 
 
 def share_library() -> bool:
