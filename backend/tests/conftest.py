@@ -21,7 +21,6 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DB}"
 
 from app.db import Base  # noqa: E402
 import app.models  # noqa: E402,F401 — registra tutte le tabelle su Base.metadata prima di create_all
-import app.organize.models  # noqa: E402,F401 — registra tabelle Organize su Base.metadata
 from app.organize.services import scan_job  # noqa: E402
 from app.services import (  # noqa: E402
     audio_analysis_job, mix_identify_job, streaming_import_job,
@@ -93,9 +92,8 @@ def db():
     # Le foreign key sono accese dall'ascoltatore su `Engine` in cima al file,
     # non qui: cosi' valgono anche per gli engine che i singoli moduli di test
     # si costruiscono da soli.
-    from app.db import ensure_schema
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
-    ensure_schema(engine)
+    Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine, expire_on_commit=False)()
     try:
         yield session
