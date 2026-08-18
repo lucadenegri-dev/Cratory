@@ -5,9 +5,10 @@ sblocca, se è installabile in automatico e con quale comando. Il registry NON
 contiene prosa — solo chiavi: descrizioni e istruzioni vivono nei dizionari
 i18n del frontend.
 
-Confine Tauri: `resolve_binary` guarda prima `CRATORY_BIN_DIR`, poi il PATH.
-Quando i binari arriveranno impacchettati nel bundle basterà far partire il
-processo con quella variabile impostata — qui non cambia nulla.
+Confine Tauri: `resolve_binary` guarda prima `CRATORY_BIN_DIR`, poi (per i
+componenti `kind="venv"`) la cartella dell'interprete in esecuzione, poi il
+PATH. Quando i binari arriveranno impacchettati nel bundle basterà far
+partire il processo con quella variabile impostata — qui non cambia nulla.
 """
 from __future__ import annotations
 
@@ -99,9 +100,20 @@ def get(key: str) -> Component | None:
     return _BY_KEY.get(key)
 
 
-def resolve_binary(name: str, env_override: str | None = None) -> str | None:
+def resolve_binary(name: str, env_override: str | None = None, *, venv: bool = False) -> str | None:
     """Percorso del binario, o None. Ordine: env specifica del componente →
-    CRATORY_BIN_DIR (bundle) → PATH."""
+    CRATORY_BIN_DIR (bundle) → interprete del venv (solo se `venv=True`) → PATH.
+
+    `venv=True` va passato solo per i componenti `kind="venv"` (es. yt-dlp):
+    vivono nel virtualenv dell'app, non nel PATH del processo. Se il backend
+    parte con `<venv>/bin/python -m uvicorn …` senza `source .venv/bin/activate`,
+    `<venv>/bin` non finisce mai nel PATH e `shutil.which` non lo trova — pur
+    essendo il binario installato e funzionante. `sys.executable` è sempre
+    l'interprete che sta effettivamente girando, quindi il suo parent
+    (`<venv>/bin`, o `<venv>\\Scripts` su Windows) è la posizione giusta a
+    prescindere da come il processo è stato lanciato: niente più dipendenza
+    dall'attivazione della shell, condizione che vale anche per il futuro
+    bundle Tauri, dove nessuno attiva nulla."""
     if env_override:
         custom = os.environ.get(env_override)
         if custom and Path(custom).exists():
@@ -109,6 +121,10 @@ def resolve_binary(name: str, env_override: str | None = None) -> str | None:
     bundled = os.environ.get(BIN_DIR_ENV)
     if bundled:
         candidate = Path(bundled) / name
+        if candidate.exists():
+            return str(candidate)
+    if venv:
+        candidate = Path(sys.executable).parent / name
         if candidate.exists():
             return str(candidate)
     return shutil.which(name)
@@ -134,11 +150,16 @@ def _run_version(argv: list[str]) -> str | None:
 
 
 def _probe_binary(c: Component) -> dict:
-    path = resolve_binary(c.binary or c.key, c.env_override)
+    path = resolve_binary(c.binary or c.key, c.env_override, venv=c.kind == "venv")
     if not path:
         return {"present": False, "version": None, "source": None}
     bundled = os.environ.get(BIN_DIR_ENV)
-    source = "bundle" if bundled and path.startswith(bundled) else "path"
+    if bundled and path.startswith(bundled):
+        source = "bundle"
+    elif c.kind == "venv" and path.startswith(str(Path(sys.executable).parent)):
+        source = "venv"
+    else:
+        source = "path"
     return {"present": True, "version": _run_version([path, c.version_flag]),
             "source": source}
 

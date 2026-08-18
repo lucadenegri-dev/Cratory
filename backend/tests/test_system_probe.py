@@ -55,6 +55,68 @@ def test_env_override_specifico(tmp_path, monkeypatch):
     assert sp.resolve_binary("fpcalc", env_override="FPCALC") == str(fake)
 
 
+def test_binario_venv_trovato_nella_cartella_dell_interprete(tmp_path, monkeypatch):
+    """yt-dlp vive nel venv: se il backend parte senza `source .venv/bin/activate`
+    il PATH non contiene `<venv>/bin`, ma il binario va trovato lo stesso guardando
+    la cartella di sys.executable — altrimenti il wizard lo segnala come assente
+    pur essendo installato (bug osservato in produzione)."""
+    fake_venv_bin = tmp_path / "venv-bin"
+    fake_venv_bin.mkdir()
+    fake = fake_venv_bin / "yt-dlp"
+    fake.write_text("#!/bin/sh\n")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.delenv(sp.BIN_DIR_ENV, raising=False)
+    monkeypatch.setattr(sp.sys, "executable", str(fake_venv_bin / "python"))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    assert sp.resolve_binary("yt-dlp", venv=True) == str(fake)
+
+
+def test_binario_system_non_guarda_la_cartella_dell_interprete(tmp_path, monkeypatch):
+    """ffmpeg e fpcalc sono tool di sistema (kind="system"): anche se per caso
+    esistesse un file con lo stesso nome nella cartella dell'interprete, non va
+    considerato — solo PATH (o CRATORY_BIN_DIR) sono legittimi per loro."""
+    fake_venv_bin = tmp_path / "venv-bin"
+    fake_venv_bin.mkdir()
+    fake = fake_venv_bin / "ffmpeg"
+    fake.write_text("#!/bin/sh\n")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.delenv(sp.BIN_DIR_ENV, raising=False)
+    monkeypatch.setattr(sp.sys, "executable", str(fake_venv_bin / "python"))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    assert sp.resolve_binary("ffmpeg", venv=False) is None
+
+
+def test_env_override_vince_sulla_cartella_dell_interprete(tmp_path, monkeypatch):
+    """La precedenza esistente non va toccata: un override esplicito del
+    componente resta più forte anche della cartella dell'interprete."""
+    fake_venv_bin = tmp_path / "venv-bin"
+    fake_venv_bin.mkdir()
+    (fake_venv_bin / "yt-dlp").write_text("")
+    custom = tmp_path / "yt-dlp-custom"
+    custom.write_text("")
+    monkeypatch.delenv(sp.BIN_DIR_ENV, raising=False)
+    monkeypatch.setenv("YTDLP_BIN", str(custom))
+    monkeypatch.setattr(sp.sys, "executable", str(fake_venv_bin / "python"))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    assert sp.resolve_binary("yt-dlp", env_override="YTDLP_BIN", venv=True) == str(custom)
+
+
+def test_bin_dir_vince_sulla_cartella_dell_interprete(tmp_path, monkeypatch):
+    """La precedenza esistente non va toccata: CRATORY_BIN_DIR (bundle Tauri)
+    resta più forte della cartella dell'interprete."""
+    fake_venv_bin = tmp_path / "venv-bin"
+    fake_venv_bin.mkdir()
+    (fake_venv_bin / "yt-dlp").write_text("")
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    bundled = bundle_dir / "yt-dlp"
+    bundled.write_text("")
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(bundle_dir))
+    monkeypatch.setattr(sp.sys, "executable", str(fake_venv_bin / "python"))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    assert sp.resolve_binary("yt-dlp", venv=True) == str(bundled)
+
+
 def test_ricetta_per_piattaforma(monkeypatch):
     ffmpeg = sp.get("ffmpeg")
     monkeypatch.setattr(sp.sys, "platform", "darwin")
@@ -73,12 +135,17 @@ def test_ricetta_assente_ritorna_none(monkeypatch):
     assert sp.recipe_for(slskd) is None
 
 
-def test_probe_all_ha_una_voce_per_componente(monkeypatch):
+def test_probe_all_ha_una_voce_per_componente(monkeypatch, tmp_path):
     # `_run_version` va neutralizzato insieme a `which`: Essentia si rileva con
     # un import in subprocess, e su una macchina che ce l'ha davvero il test
     # passerebbe o fallirebbe a seconda dell'ambiente.
     monkeypatch.setattr(sp.shutil, "which", lambda name: None)
     monkeypatch.setattr(sp, "_run_version", lambda argv: None)
+    # yt-dlp (kind="venv") ora viene cercato anche nella cartella
+    # dell'interprete: su questa macchina di sviluppo il venv reale ce l'ha
+    # davvero, quindi va puntato altrove per mantenere il test indipendente
+    # dall'ambiente, come tutto il resto della funzione già fa per which/_run_version.
+    monkeypatch.setattr(sp.sys, "executable", str(tmp_path / "python"))
     result = sp.probe_all(force=True)
     assert [c["key"] for c in result] == [c.key for c in sp.REGISTRY]
     # slskd_url() è forzato empty dalla fixture, quindi non fa rete e ritorna
