@@ -27,9 +27,14 @@ function statusLabel(s: ServiceStatus, t: Dictionary): { text: string; strong: b
   return { text: t.settings.statusNotConfigured, strong: false };
 }
 
-export function ServicesList({ services, spotify }: {
+export function ServicesList({ services, spotify, onServicesChanged }: {
   services: ServiceStatus[];
   spotify: SpotifyStatus | null;
+  /* Ricarica lo stato dei servizi del genitore (badge di riga): senza,
+     dopo un salvataggio da riga espansa il pannello passa a "configurato"
+     ma il badge sopra resta indietro finché non si ricarica la pagina.
+     Opzionale per non rompere i chiamanti/test esistenti che non lo passano. */
+  onServicesChanged?: () => void;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -38,6 +43,10 @@ export function ServicesList({ services, spotify }: {
     getConfigSettings().then(setConfig).catch(() => setConfig(null));
   }, []);
   useEffect(loadConfig, [loadConfig]);
+  const handleSaved = useCallback(() => {
+    loadConfig();
+    onServicesChanged?.();
+  }, [loadConfig, onServicesChanged]);
   return (
     <div className="border border-border">
       {services.map((s, i) => (
@@ -91,7 +100,7 @@ export function ServicesList({ services, spotify }: {
                 secrets={config.secrets}
                 redirectUri={config.spotify_redirect_uri}
                 docsUrl={s.docs}
-                onSaved={loadConfig}
+                onSaved={handleSaved}
               />
             </div>
           )}

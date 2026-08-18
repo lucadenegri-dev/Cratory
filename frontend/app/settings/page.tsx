@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { apiGet, servicesStatus, setSetupCompleted, type ServiceStatus, type SpotifyStatus } from "@/lib/api";
+import { apiGet, errText, servicesStatus, setSetupCompleted, type ServiceStatus, type SpotifyStatus } from "@/lib/api";
 import { Alert, Button, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { ConfigCard } from "@/components/settings/config-card";
@@ -69,13 +69,19 @@ function SettingsInner() {
       <ConfigCard />
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">{t.settings.servicesHeading}</div>
-      {services ? <ServicesList services={services} spotify={spotify} /> : (
+      {services ? <ServicesList services={services} spotify={spotify} onServicesChanged={load} /> : (
         <div className="border border-border">{!error && <div className="px-5"><Loading /></div>}</div>
       )}
       <div className="mt-4">
         <Button size="sm" variant="outline" onClick={async () => {
-          await setSetupCompleted(false);
-          router.push("/setup");
+          // Se la riapertura fallisce non si naviga: l'errore va nell'Alert
+          // già presente in cima, altrimenti il pulsante sembra non fare nulla.
+          try {
+            await setSetupCompleted(false);
+            router.push("/setup");
+          } catch (e) {
+            setError(errText(e));
+          }
         }}>
           {t.setup.reopen}
         </Button>
