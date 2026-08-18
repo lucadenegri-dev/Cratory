@@ -101,6 +101,15 @@ def start(key: str) -> dict:
         try:
             for line in run_recipe(recipe):
                 _append(line)
+            # Invalida la cache del probe tramite il seam pubblico di
+            # system_probe: il prossimo GET /api/setup/probe deve vedere il
+            # componente appena installato, ma questo thread non deve a sua volta
+            # lanciare ffmpeg/fpcalc/essentia/slskd — sarebbe lavoro non
+            # necessario qui e renderebbe l'installer accoppiato ai sottoprocessi
+            # (e all'host) del probe.
+            system_probe.invalidate_cache()
+            with _lock:
+                _state.update({"status": "done", "detail": None})
         except (InstallFailed, OSError) as exc:
             log.warning("installazione di %s fallita: %s", key, exc)
             with _lock:
@@ -108,24 +117,15 @@ def start(key: str) -> dict:
             return
         except Exception as exc:  # noqa: BLE001 - ampio di proposito
             # Qualunque eccezione non prevista qui dentro (Popen, iterazione
-            # sullo stdout, run_recipe) andrebbe altrimenti a morire in questo
-            # thread senza che nessuno sposti lo stato da "running": start()
-            # tratterebbe ogni richiesta successiva come AlreadyRunning (409)
-            # finché non si riavvia il backend. Meglio marcare "error" e
-            # lasciare che l'utente riprovi.
+            # sullo stdout, run_recipe, invalidate_cache, state update) andrebbe
+            # altrimenti a morire in questo thread senza che nessuno sposti lo
+            # stato da "running": start() tratterebbe ogni richiesta successiva
+            # come AlreadyRunning (409) finché non si riavvia il backend. Meglio
+            # marcare "error" e lasciare che l'utente riprovi.
             log.exception("installazione di %s fallita in modo inatteso", key)
             with _lock:
                 _state.update({"status": "error", "detail": str(exc)})
             return
-        # Invalida la cache del probe tramite il seam pubblico di
-        # system_probe: il prossimo GET /api/setup/probe deve vedere il
-        # componente appena installato, ma questo thread non deve a sua volta
-        # lanciare ffmpeg/fpcalc/essentia/slskd — sarebbe lavoro non
-        # necessario qui e renderebbe l'installer accoppiato ai sottoprocessi
-        # (e all'host) del probe.
-        system_probe.invalidate_cache()
-        with _lock:
-            _state.update({"status": "done", "detail": None})
 
     spawn(run)
     return status()

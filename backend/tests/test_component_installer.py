@@ -163,3 +163,30 @@ def test_eccezione_inattesa_non_incastra_l_installer(monkeypatch):
                         lambda argv, **kw: _FakeProc(["Successfully installed"]))
     ci.start("yt-dlp")
     assert ci.status()["status"] == "done"
+
+
+def test_eccezione_nella_coda_della_run_non_incastra_l_installer(monkeypatch):
+    """Se la coda della run() (invalidate_cache o state update) solleva
+    un'eccezione, lo stato non deve rimanere bloccato su 'running':
+    dev'essere marchiato come 'error' in modo che start() possa ripartire."""
+    monkeypatch.setattr(ci.subprocess, "Popen",
+                        lambda argv, **kw: _FakeProc(["Successfully installed"]))
+    monkeypatch.setattr(ci, "spawn", lambda fn: fn())  # sincrono nei test
+
+    # Fai fallire invalidate_cache, mentre run_recipe riesce
+    def invalidate_esplode():
+        raise RuntimeError("invalidate_cache è esplosa")
+
+    monkeypatch.setattr(ci.system_probe, "invalidate_cache", invalidate_esplode)
+
+    ci.start("yt-dlp")
+    stato = ci.status()
+    assert stato["status"] == "error", "uno stato di errore nella coda deve marcare 'error'"
+    assert stato["detail"], "l'errore deve avere un messaggio"
+
+    # Una richiesta successiva deve poter ripartire, non sollevare AlreadyRunning.
+    monkeypatch.setattr(ci.system_probe, "invalidate_cache", lambda: None)
+    monkeypatch.setattr(ci.subprocess, "Popen",
+                        lambda argv, **kw: _FakeProc(["Successfully installed"]))
+    ci.start("yt-dlp")
+    assert ci.status()["status"] == "done"
