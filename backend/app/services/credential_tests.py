@@ -99,9 +99,14 @@ def check_discogs(client: httpx.Client) -> dict:
     )
     if res.status_code == 200:
         try:
-            return _ok(str(res.json().get("username", "")))
+            body = res.json()
         except ValueError:
             return _ok()
+        # Se il body non è un dict, il token è stato accettato ma
+        # il username non può essere letto
+        if isinstance(body, dict):
+            return _ok(str(body.get("username", "")))
+        return _ok()
     return _ko(_provider_message(res))
 
 
@@ -122,6 +127,10 @@ def check_acoustid(client: httpx.Client) -> dict:
     try:
         body = res.json()
     except ValueError:
+        return _ko(f"HTTP {res.status_code}")
+    # Se il body non è un dict, non riusciamo ad interpretarlo
+    # come OK o come errore specifico
+    if not isinstance(body, dict):
         return _ko(f"HTTP {res.status_code}")
     if body.get("status") == "ok":
         return _ok()

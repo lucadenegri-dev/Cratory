@@ -136,3 +136,118 @@ def test_errore_di_rete_non_propaga(db, monkeypatch):
         res = ct.check("anthropic", client=c)
     assert res["ok"] is False
     assert res["code"] == "network_error"
+
+
+# Fallback branches for Finding 2
+
+def test_provider_message_corpo_json_non_oggetto(db):
+    """_provider_message non fallisce se il JSON è valido ma non un oggetto."""
+    # Array JSON
+    res1 = httpx.Response(400, content=b"[]", headers={"content-type": "application/json"})
+    msg1 = ct._provider_message(res1)
+    assert msg1 == "HTTP 400"
+
+    # String JSON
+    res2 = httpx.Response(400, content=b'"error string"', headers={"content-type": "application/json"})
+    msg2 = ct._provider_message(res2)
+    assert msg2 == "HTTP 400"
+
+    # Null JSON
+    res3 = httpx.Response(400, content=b"null", headers={"content-type": "application/json"})
+    msg3 = ct._provider_message(res3)
+    assert msg3 == "HTTP 400"
+
+    # Number JSON
+    res4 = httpx.Response(400, content=b"123", headers={"content-type": "application/json"})
+    msg4 = ct._provider_message(res4)
+    assert msg4 == "HTTP 400"
+
+
+def test_provider_message_corpo_non_json(db):
+    """_provider_message fallback per corpo non-JSON."""
+    html_body = "<html><body>502 Bad Gateway</body></html>"
+    res = httpx.Response(502, content=html_body.encode())
+    msg = ct._provider_message(res)
+    # Dovrebbe troncare il testo grezzo o dire HTTP 502
+    assert "HTTP 502" in msg or "502" in msg
+
+
+def test_discogs_corpo_json_non_oggetto(db, monkeypatch):
+    """check_discogs non fallisce se la risposta 200 ha JSON non-dict."""
+    monkeypatch.setattr(settings, "discogs_token", "")
+    rs.apply(db, "discogs_token", "tok")
+
+    # Array JSON: il token è stato accettato ma non possiamo leggere il username
+    def handler(req):
+        return httpx.Response(200, json=[])
+
+    with _client(handler) as c:
+        res = ct.check("discogs", client=c)
+    assert res["ok"] is True
+    assert res["code"] == "ok"
+    assert isinstance(res, dict)
+
+    # String JSON
+    def handler2(req):
+        return httpx.Response(200, json="username_value")
+
+    with _client(handler2) as c:
+        res = ct.check("discogs", client=c)
+    assert res["ok"] is True
+    assert isinstance(res, dict)
+
+
+def test_discogs_corpo_non_json(db, monkeypatch):
+    """check_discogs fallback per corpo non-JSON con status 200."""
+    monkeypatch.setattr(settings, "discogs_token", "")
+    rs.apply(db, "discogs_token", "tok")
+
+    def handler(req):
+        return httpx.Response(200, content=b"<html>OK</html>")
+
+    with _client(handler) as c:
+        res = ct.check("discogs", client=c)
+    assert res["ok"] is True
+    assert isinstance(res, dict)
+
+
+def test_acoustid_corpo_json_non_oggetto(db, monkeypatch):
+    """check_acoustid non fallisce se il JSON non è un oggetto."""
+    monkeypatch.setattr(settings, "acoustid_api_key", "")
+    rs.apply(db, "acoustid_api_key", "aid")
+    monkeypatch.setattr(ct.system_probe, "resolve_binary", lambda *a, **k: "/usr/bin/fpcalc")
+
+    # Array JSON
+    def handler(req):
+        return httpx.Response(200, json=[])
+
+    with _client(handler) as c:
+        res = ct.check("acoustid", client=c)
+    assert res["ok"] is False
+    assert res["code"] == "invalid"
+    assert isinstance(res, dict)
+
+    # String JSON
+    def handler2(req):
+        return httpx.Response(200, json="error_message")
+
+    with _client(handler2) as c:
+        res = ct.check("acoustid", client=c)
+    assert res["ok"] is False
+    assert isinstance(res, dict)
+
+
+def test_acoustid_corpo_non_json(db, monkeypatch):
+    """check_acoustid fallback per corpo non-JSON."""
+    monkeypatch.setattr(settings, "acoustid_api_key", "")
+    rs.apply(db, "acoustid_api_key", "aid")
+    monkeypatch.setattr(ct.system_probe, "resolve_binary", lambda *a, **k: "/usr/bin/fpcalc")
+
+    def handler(req):
+        return httpx.Response(200, content=b"<html>Internal Server Error</html>")
+
+    with _client(handler) as c:
+        res = ct.check("acoustid", client=c)
+    assert res["ok"] is False
+    assert res["code"] == "invalid"
+    assert isinstance(res, dict)
