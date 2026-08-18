@@ -8,6 +8,8 @@ import { useT } from "@/lib/i18n";
 import { WelcomeStep } from "@/components/setup/steps/welcome";
 import { PrerequisitesStep } from "@/components/setup/steps/prerequisites";
 import { LibraryStep } from "@/components/setup/steps/library";
+import { ServicesStep } from "@/components/setup/steps/services";
+import { SlskdStep } from "@/components/setup/steps/slskd";
 import { SummaryStep } from "@/components/setup/steps/summary";
 
 /* Configurazione guidata: sei passi, nessuno bloccante. Lo stato di
@@ -60,6 +62,8 @@ export default function SetupPage() {
         {step === "welcome" && <WelcomeStep />}
         {step === "prerequisites" && <PrerequisitesStep />}
         {step === "library" && <LibraryStep />}
+        {step === "services" && <ServicesStep />}
+        {step === "slskd" && <SlskdStep />}
         {step === "summary" && <SummaryStep />}
       </div>
 

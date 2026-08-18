@@ -43,6 +43,7 @@ const ROUTES: { path: string; title: string | null }[] = [
   { path: "/organize/duplicates", title: "Duplicates" },
   { path: "/organize/plan", title: "Plan" },
   { path: "/organize/history", title: "History" },
+  { path: "/setup", title: null },
 ];
 
 // Rumore noto e innocuo che puo' comparire in dev mode: whitelist esplicita,
