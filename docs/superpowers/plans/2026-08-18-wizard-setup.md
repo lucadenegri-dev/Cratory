@@ -888,6 +888,13 @@ def test_ricetta_assente_ritorna_none(monkeypatch):
     assert sp.recipe_for(slskd) is None
 
 
+# NOTA (aggiunta in esecuzione, 2026-08-18): questo file ha bisogno anche di una
+# fixture autouse che forzi `settings.slskd_url = ""` e azzeri `sp._cache` prima e
+# dopo ogni test. Senza, `probe_all` raggiunge `_probe_slskd`, che con una
+# SLSKD_URL presente nell'ambiente fa una vera chiamata di rete: il test
+# dipenderebbe dalla macchina. Vedi backend/tests/test_system_probe.py.
+
+
 def test_probe_all_ha_una_voce_per_componente(monkeypatch):
     # `_run_version` va neutralizzato insieme a `which`: Essentia si rileva con
     # un import in subprocess, e su una macchina che ce l'ha davvero il test
