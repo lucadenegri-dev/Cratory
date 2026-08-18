@@ -825,7 +825,8 @@ content), while `/setup` renders full-screen without it, so the wizard has the w
 It receives `children` as a prop, so the pages inside stay server-rendered. `PageLayout`
 adds the page title and the optional 240px MARGINALIA
 column on top of that. Pages live under `app/` (dashboard, playlists, library, tracks, set-builder,
-sets, transitions, analysis, discovery, wishlist, labels, shazam, organize, settings, setup); the
+sets, transitions, analysis, discovery, wishlist, downloads, labels, statistics, shazam,
+organize, settings, setup); the
 typed API client is split by area under `lib/api/`, with `lib/organize/api.ts` for the
 Organize surface. `docs/DESIGN.md` holds the design system.
 

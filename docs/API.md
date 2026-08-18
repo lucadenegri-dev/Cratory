@@ -1271,7 +1271,7 @@ platform's install command for those. The response has the same shape as
 streams the subprocess' combined stdout/stderr, capped to the last 500 lines.
 `400 unknown_component` for a key outside the registry, `400 not_auto_installable`
 for a registry key that isn't auto-installable (or has no recipe for the current
-platform), `409 install_already_running` if a different install is already in
+platform), `409 install_already_running` if any install is already in
 flight — the installer runs one job at a time.
 
 `GET /api/setup/install/status` polls that same state. When a run finishes
@@ -1290,7 +1290,8 @@ account from a network problem. `code` is `"not_configured"` when the key is emp
 `"no_token"` for Discogs without a token (a valid state — the dig still works, just
 rate-limited), `"fpcalc_missing"` for AcoustID when the key is set but `fpcalc` isn't
 resolvable, `"network_error"` for a transport failure, `"invalid"` for a credential
-the provider rejected, or `"ok"`. `400 unknown_service` for anything outside the
+the provider rejected, `"key_accepted"` for AcoustID when the provider refused the
+probe fingerprint but not the key (the usual success there), or `"ok"`. `400 unknown_service` for anything outside the
 four.
 
 ## Organize
