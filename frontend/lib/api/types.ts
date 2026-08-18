@@ -1,3 +1,5 @@
+import type { SecretKey, SecretState } from "./setup";
+
 export interface Track {
   id: number;
   spotify_id: string | null;
@@ -531,6 +533,9 @@ export interface ConfigSettings {
   download_slots: number;
   /** Avviso soft (es. share non ri-applicata dopo un cambio di libreria). */
   warning: string | null;
+  ai_model: FieldState;
+  secrets: Record<SecretKey, SecretState>;
+  spotify_redirect_uri: string;
 }
 
 /** Corpo del PATCH: campo assente = invariato; stringa vuota = azzera l'override. */
@@ -540,6 +545,13 @@ export interface ConfigPatch {
   slskd_download_dir?: string;
   slskd_url?: string;
   slskd_config_path?: string;
+  ai_model?: string;
+  spotify_client_id?: string;
+  spotify_client_secret?: string;
+  ai_api_key?: string;
+  discogs_token?: string;
+  acoustid_api_key?: string;
+  slskd_api_key?: string;
 }
 
 export interface ShareLibraryResult {

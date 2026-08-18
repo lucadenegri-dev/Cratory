@@ -28,6 +28,12 @@ afterEach(() => {
 const field = (value: string): FieldState =>
   ({ value, source: "env", valid: true, detail: null });
 
+const secret = (): ConfigSettings["secrets"][keyof ConfigSettings["secrets"]] => ({
+  configured: false,
+  source: "env",
+  hint: null,
+});
+
 const CONFIG: ConfigSettings = {
   library_root: field("/Users/x/Music"),
   archive_root: field(""),
@@ -37,6 +43,16 @@ const CONFIG: ConfigSettings = {
   share_library: false,
   download_slots: 3,
   warning: null,
+  ai_model: field("claude-sonnet-4-5"),
+  secrets: {
+    spotify_client_id: secret(),
+    spotify_client_secret: secret(),
+    ai_api_key: secret(),
+    discogs_token: secret(),
+    acoustid_api_key: secret(),
+    slskd_api_key: secret(),
+  },
+  spotify_redirect_uri: "http://127.0.0.1:8000/api/spotify/callback",
 };
 
 async function mount(available: boolean) {

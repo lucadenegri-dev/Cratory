@@ -15,3 +15,4 @@ export * from "./api/misc";
 export * from "./api/slskd";
 export * from "./api/settings";
 export * from "./api/transitions";
+export * from "./api/setup";
