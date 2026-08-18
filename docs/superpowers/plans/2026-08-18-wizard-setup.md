@@ -1400,17 +1400,30 @@ def start(key: str) -> dict:
         _state.update({"key": key, "status": "running", "log": [], "detail": None})
 
     def run() -> None:
+        # NOTA (decisa in esecuzione, 2026-08-18): l'INTERO corpo sta dentro il
+        # try, e c'e' un secondo ramo `except Exception`. Un'eccezione che sfugge
+        # qui morirebbe nel thread senza spostare lo stato da "running", e
+        # `start()` risponderebbe 409 a ogni richiesta successiva fino al riavvio
+        # del backend. L'invalidazione della cache passa dal seam pubblico
+        # `system_probe.invalidate_cache()`, non da `probe_all(force=True)`:
+        # ri-sondare da questo thread lancerebbe i sottoprocessi del probe senza
+        # bisogno.
         try:
             for line in run_recipe(recipe):
                 _append(line)
+            system_probe.invalidate_cache()
+            with _lock:
+                _state.update({"status": "done", "detail": None})
         except (InstallFailed, OSError) as exc:
             log.warning("installazione di %s fallita: %s", key, exc)
             with _lock:
                 _state.update({"status": "error", "detail": str(exc)})
             return
-        system_probe.probe_all(force=True)  # lo stato mostrato deve essere quello nuovo
-        with _lock:
-            _state.update({"status": "done", "detail": None})
+        except Exception as exc:  # noqa: BLE001 - ampio di proposito
+            log.exception("installazione di %s fallita in modo inatteso", key)
+            with _lock:
+                _state.update({"status": "error", "detail": str(exc)})
+            return
 
     spawn(run)
     return status()
