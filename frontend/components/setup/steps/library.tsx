@@ -68,9 +68,14 @@ function IndexAction({ disabled }: { disabled: boolean }) {
       return;
     }
     timer.current = setInterval(async () => {
-      const st = await libraryIndexStatus();
-      setJob(st);
-      if (st.status !== "running" && timer.current) clearInterval(timer.current);
+      try {
+        const st = await libraryIndexStatus();
+        setJob(st);
+        if (st.status !== "running" && timer.current) clearInterval(timer.current);
+      } catch (e) {
+        setError(errText(e));
+        if (timer.current) clearInterval(timer.current);
+      }
     }, 1000);
   };
 
