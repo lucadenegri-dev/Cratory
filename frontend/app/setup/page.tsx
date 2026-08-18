@@ -6,6 +6,8 @@ import { setSetupCompleted, errText } from "@/lib/api";
 import { Alert, Button } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { WelcomeStep } from "@/components/setup/steps/welcome";
+import { PrerequisitesStep } from "@/components/setup/steps/prerequisites";
+import { LibraryStep } from "@/components/setup/steps/library";
 import { SummaryStep } from "@/components/setup/steps/summary";
 
 /* Configurazione guidata: sei passi, nessuno bloccante. Lo stato di
@@ -56,6 +58,8 @@ export default function SetupPage() {
 
       <div className="flex-1">
         {step === "welcome" && <WelcomeStep />}
+        {step === "prerequisites" && <PrerequisitesStep />}
+        {step === "library" && <LibraryStep />}
         {step === "summary" && <SummaryStep />}
       </div>
 
