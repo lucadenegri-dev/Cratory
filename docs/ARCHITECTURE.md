@@ -818,8 +818,11 @@ Next 16 breaking changes; read it before touching pages or routing.
 
 `app/layout.tsx` mounts, in order: the DM Mono font variable, an inline no-FOUC script that
 restores the theme and language from `localStorage`, `I18nProvider`, `PlayerProvider`,
-`SetupGate` (see "Setup and credentials" above), `EditorialShell` (the hairline shell: a
-sticky 180px INDEX nav beside the content) and the app-wide `DockedPlayer`. `PageLayout`
+`SetupGate` (see "Setup and credentials" above), `ShellSwitch` and the app-wide
+`DockedPlayer`. `ShellSwitch` is a thin client component that picks the frame by pathname:
+every route gets `EditorialShell` (the hairline shell: a sticky 180px INDEX nav beside the
+content), while `/setup` renders full-screen without it, so the wizard has the whole viewport.
+It receives `children` as a prop, so the pages inside stay server-rendered. `PageLayout`
 adds the page title and the optional 240px MARGINALIA
 column on top of that. Pages live under `app/` (dashboard, playlists, library, tracks, set-builder,
 sets, transitions, analysis, discovery, wishlist, labels, shazam, organize, settings, setup); the
