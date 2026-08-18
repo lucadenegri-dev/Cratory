@@ -1,9 +1,25 @@
 """Rilevamento dei componenti esterni: è la base del passo 1 del wizard."""
-import os
 import stat
 import sys
 
+import pytest
+
+from app.core import config
 from app.services import system_probe as sp
+
+
+@pytest.fixture(autouse=True)
+def _no_slskd_network_call(monkeypatch):
+    """Forza slskd_url() a ritornare stringa vuota, disattivando la feature.
+    Evita che test_probe_all_ha_una_voce_per_componente e
+    test_la_cache_evita_di_riesaminare_a_ogni_render facciano chiamate di rete
+    incontrollate a un demone slskd."""
+    monkeypatch.setattr(config.settings, "slskd_url", "")
+    # Pulisce la cache globale prima di ogni test per evitare eredità di risultati
+    # da run precedenti.
+    sp._cache = None
+    yield
+    sp._cache = None
 
 
 def test_binario_assente(monkeypatch):
@@ -65,7 +81,9 @@ def test_probe_all_ha_una_voce_per_componente(monkeypatch):
     monkeypatch.setattr(sp, "_run_version", lambda argv: None)
     result = sp.probe_all(force=True)
     assert [c["key"] for c in result] == [c.key for c in sp.REGISTRY]
-    assert all(c["present"] is False for c in result if c["kind"] != "daemon")
+    # slskd_url() è forzato empty dalla fixture, quindi non fa rete e ritorna
+    # "non present".
+    assert all(c["present"] is False for c in result)
 
 
 def test_la_cache_evita_di_riesaminare_a_ogni_render(monkeypatch):
