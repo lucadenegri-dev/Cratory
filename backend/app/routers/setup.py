@@ -7,12 +7,13 @@ testo user-facing nasce qui — solo chiavi, che il frontend traduce.
 """
 import sys
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.http_errors import api_error
 from app.db import get_db
-from app.services import system_probe
+from app.services import component_installer, system_probe
 from app.services.app_state import get_state, set_state
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
@@ -42,3 +43,23 @@ def probe(force: bool = False) -> dict:
     """Stato dei componenti esterni. `force=true` bypassa la cache: lo usa il
     bottone "Ricontrolla" dopo un'installazione."""
     return {"platform": sys.platform, "components": system_probe.probe_all(force=force)}
+
+
+@router.post("/install/{key}", status_code=202)
+def install(key: str, response: Response) -> dict:
+    try:
+        return component_installer.start(key)
+    except component_installer.UnknownComponent as exc:
+        raise api_error(400, "unknown_component", f"componente sconosciuto: {key}",
+                        component=key) from exc
+    except component_installer.NotAutoInstallable as exc:
+        raise api_error(400, "not_auto_installable",
+                        f"{key} va installato a mano", component=key) from exc
+    except component_installer.AlreadyRunning as exc:
+        raise api_error(409, "install_already_running",
+                        "un'installazione è già in corso") from exc
+
+
+@router.get("/install/status")
+def install_status() -> dict:
+    return component_installer.status()

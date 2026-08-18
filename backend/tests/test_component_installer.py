@@ -1,0 +1,97 @@
+"""L'installer esegue solo ricette del registry, mai una stringa di shell."""
+import pytest
+from fastapi.testclient import TestClient
+
+from app.db import get_db
+from app.main import app
+from app.services import component_installer as ci
+
+
+class _FakeProc:
+    def __init__(self, righe, returncode=0):
+        self.stdout = iter(righe)
+        self.returncode = returncode
+
+    def wait(self):
+        return self.returncode
+
+
+@pytest.fixture(autouse=True)
+def _reset_installer():
+    ci.reset()
+    yield
+    ci.reset()
+
+
+def test_chiave_sconosciuta(db):
+    app.dependency_overrides[get_db] = lambda: db
+    res = TestClient(app).post("/api/setup/install/rm-rf")
+    assert res.status_code == 400
+    app.dependency_overrides.clear()
+
+
+def test_componente_non_auto_installabile(db):
+    """ffmpeg si installa a mano: il wizard mostra il comando, non lo esegue."""
+    app.dependency_overrides[get_db] = lambda: db
+    res = TestClient(app).post("/api/setup/install/ffmpeg")
+    assert res.status_code == 400
+    app.dependency_overrides.clear()
+
+
+def test_esecuzione_mai_via_shell(monkeypatch):
+    visti = {}
+
+    def fake_popen(argv, **kwargs):
+        visti["argv"] = argv
+        visti["kwargs"] = kwargs
+        return _FakeProc(["riga 1", "riga 2"])
+
+    monkeypatch.setattr(ci.subprocess, "Popen", fake_popen)
+    righe = list(ci.run_recipe(["echo", "ciao"]))
+
+    assert righe == ["riga 1", "riga 2"]
+    assert isinstance(visti["argv"], list), "argv deve restare una lista"
+    assert visti["kwargs"].get("shell") in (None, False)
+
+
+def test_returncode_non_zero_solleva(monkeypatch):
+    monkeypatch.setattr(ci.subprocess, "Popen",
+                        lambda argv, **kw: _FakeProc(["boom"], returncode=1))
+    with pytest.raises(ci.InstallFailed):
+        list(ci.run_recipe(["pip", "install", "niente"]))
+
+
+def test_installazione_riuscita(monkeypatch):
+    monkeypatch.setattr(ci.subprocess, "Popen",
+                        lambda argv, **kw: _FakeProc(["Collecting yt-dlp", "Successfully installed"]))
+    monkeypatch.setattr(ci, "spawn", lambda fn: fn())  # sincrono nei test
+    ci.start("yt-dlp")
+    stato = ci.status()
+    assert stato["status"] == "done"
+    assert stato["key"] == "yt-dlp"
+    assert "Successfully installed" in stato["log"]
+
+
+def test_installazione_fallita_registra_l_errore(monkeypatch):
+    monkeypatch.setattr(ci.subprocess, "Popen",
+                        lambda argv, **kw: _FakeProc(["ERROR: no matching distribution"], returncode=1))
+    monkeypatch.setattr(ci, "spawn", lambda fn: fn())
+    ci.start("essentia")
+    stato = ci.status()
+    assert stato["status"] == "error"
+    assert stato["detail"]
+
+
+def test_una_installazione_alla_volta(monkeypatch):
+    monkeypatch.setattr(ci, "spawn", lambda fn: None)  # resta "running"
+    ci.start("yt-dlp")
+    with pytest.raises(ci.AlreadyRunning):
+        ci.start("essentia")
+
+
+def test_il_log_e_limitato(monkeypatch):
+    monkeypatch.setattr(ci.subprocess, "Popen",
+                        lambda argv, **kw: _FakeProc([f"riga {i}" for i in range(2000)]))
+    monkeypatch.setattr(ci, "spawn", lambda fn: fn())
+    ci.start("yt-dlp")
+    assert len(ci.status()["log"]) <= ci.MAX_LOG_LINES
