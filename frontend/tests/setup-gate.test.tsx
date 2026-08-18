@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { cleanup, render, waitFor } from "@testing-library/react";
 
 const replace = vi.fn();
 let pathname = "/";
@@ -16,6 +16,7 @@ const { SetupGate } = await import("@/components/setup/setup-gate");
 
 describe("SetupGate", () => {
   beforeEach(() => { replace.mockClear(); getSetupState.mockReset(); pathname = "/"; });
+  afterEach(cleanup);
 
   it("porta al wizard al primo avvio", async () => {
     getSetupState.mockResolvedValue({ completed: false });

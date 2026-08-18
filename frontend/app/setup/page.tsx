@@ -2,8 +2,8 @@
 
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { setSetupCompleted } from "@/lib/api";
-import { Button } from "@/components/ui";
+import { setSetupCompleted, errText } from "@/lib/api";
+import { Alert, Button } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { WelcomeStep } from "@/components/setup/steps/welcome";
 import { SummaryStep } from "@/components/setup/steps/summary";
@@ -17,13 +17,19 @@ export default function SetupPage() {
   const t = useT();
   const router = useRouter();
   const [index, setIndex] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const step = STEPS[index];
 
   const esci = useCallback(async () => {
+    setError(null);
     try {
       await setSetupCompleted(true);
-    } finally {
       router.replace("/");
+    } catch (e) {
+      /* Scrittura fallita: il flag resta false sul backend. Se si naviga
+         comunque via, il prossimo giro il gate riporta qui senza spiegazione
+         (trappola ritardata) — si resta sul wizard e si mostra l'errore. */
+      setError(errText(e));
     }
   }, [router]);
 
@@ -52,6 +58,8 @@ export default function SetupPage() {
         {step === "welcome" && <WelcomeStep />}
         {step === "summary" && <SummaryStep />}
       </div>
+
+      {error && <Alert tone="danger">⚠ {error}</Alert>}
 
       <footer className="mt-10 flex items-center justify-between gap-4 border-t border-border pt-5">
         <button type="button" onClick={esci} className="text-xs text-muted underline-offset-4 hover:underline">
