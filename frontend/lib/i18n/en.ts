@@ -118,6 +118,8 @@ export const en = {
     } as Record<string, { category: string; detail: string }>,
     reconnectButton: "Reconnect",
     connectButton: "Connect",
+    editKeys: "Edit keys",
+    collapseKeys: "Close",
     redirectUriPrefix: "Paste this redirect URI",
     redirectUriExactTerm: "exactly",
     redirectUriSuffix: "into the Spotify dashboard:",

@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, ExternalLink, Plug, Unplug } from "lucide-react";
 import {
-  setSoundcloudUsername, slskdConnect, slskdDisconnect, slskdStatus,
+  getConfigSettings, setSoundcloudUsername, slskdConnect, slskdDisconnect, slskdStatus,
   soundcloudStatus, SPOTIFY_LOGIN_URL,
-  type ServiceStatus, type SlskdStatus, type SoundCloudStatus, type SpotifyStatus,
+  type ConfigSettings, type ServiceStatus, type SlskdStatus, type SoundCloudStatus, type SpotifyStatus,
 } from "@/lib/api";
 import { runFingerprint, type FingerprintResult } from "@/lib/organize/api";
 import { Alert, Button, Input, Spinner } from "@/components/ui";
 import { useT, type Dictionary } from "@/lib/i18n";
+import { ServiceCard } from "@/components/setup/service-card";
+import { SERVICE_FIELDS, type ServiceKey } from "@/lib/setup-services";
 
 /* La lista unificata dei servizi esterni: una riga per servizio, semantica di
    stato unica, azioni inline dove servono (OAuth Spotify, login slskd,
@@ -30,6 +32,12 @@ export function ServicesList({ services, spotify }: {
   spotify: SpotifyStatus | null;
 }) {
   const t = useT();
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [config, setConfig] = useState<ConfigSettings | null>(null);
+  const loadConfig = useCallback(() => {
+    getConfigSettings().then(setConfig).catch(() => setConfig(null));
+  }, []);
+  useEffect(loadConfig, [loadConfig]);
   return (
     <div className="border border-border">
       {services.map((s, i) => (
@@ -64,12 +72,29 @@ export function ServicesList({ services, spotify }: {
                   <Button size="sm" variant="outline"><ExternalLink size={14} /> {s.connected ? t.settings.reconnectButton : t.settings.connectButton}</Button>
                 </a>
               )}
+              {SERVICE_FIELDS[s.key as ServiceKey] && (
+                <Button size="sm" variant="ghost"
+                        onClick={() => setExpanded(expanded === s.key ? null : s.key)}>
+                  {expanded === s.key ? t.settings.collapseKeys : t.settings.editKeys}
+                </Button>
+              )}
             </div>
           </div>
           {s.key === "spotify" && <SpotifyExtra s={s} spotify={spotify} t={t} />}
           {s.key === "slskd" && <SlskdExtra t={t} />}
           {s.key === "soundcloud" && <SoundCloudExtra t={t} />}
           {s.key === "acoustid" && s.configured && <AcoustidExtra t={t} />}
+          {expanded === s.key && config && (
+            <div className="mt-4 border-t border-border pt-4">
+              <ServiceCard
+                service={s.key as ServiceKey}
+                secrets={config.secrets}
+                redirectUri={config.spotify_redirect_uri}
+                docsUrl={s.docs}
+                onSaved={loadConfig}
+              />
+            </div>
+          )}
         </div>
       ))}
     </div>

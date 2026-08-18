@@ -117,6 +117,8 @@ export const it: Dictionary = {
     } as Record<string, { category: string; detail: string }>,
     reconnectButton: "Ricollega",
     connectButton: "Collega",
+    editKeys: "Modifica le chiavi",
+    collapseKeys: "Chiudi",
     redirectUriPrefix: "Redirect URI da incollare",
     redirectUriExactTerm: "esatto",
     redirectUriSuffix: "nel dashboard Spotify:",

@@ -1,9 +1,9 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { apiGet, servicesStatus, type ServiceStatus, type SpotifyStatus } from "@/lib/api";
-import { Alert, Loading } from "@/components/ui";
+import { useRouter, useSearchParams } from "next/navigation";
+import { apiGet, servicesStatus, setSetupCompleted, type ServiceStatus, type SpotifyStatus } from "@/lib/api";
+import { Alert, Button, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { ConfigCard } from "@/components/settings/config-card";
 import { OrganizeSection } from "@/components/settings/organize-section";
@@ -16,6 +16,7 @@ import { cn } from "@/lib/cn";
 
 function SettingsInner() {
   const { lang, setLang, t } = useI18n();
+  const router = useRouter();
   const params = useSearchParams();
   const oauth = params.get("spotify");
   const [services, setServices] = useState<ServiceStatus[] | null>(null);
@@ -71,6 +72,14 @@ function SettingsInner() {
       {services ? <ServicesList services={services} spotify={spotify} /> : (
         <div className="border border-border">{!error && <div className="px-5"><Loading /></div>}</div>
       )}
+      <div className="mt-4">
+        <Button size="sm" variant="outline" onClick={async () => {
+          await setSetupCompleted(false);
+          router.push("/setup");
+        }}>
+          {t.setup.reopen}
+        </Button>
+      </div>
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">{t.nav.groupOrganize}</div>
       <OrganizeSection />
