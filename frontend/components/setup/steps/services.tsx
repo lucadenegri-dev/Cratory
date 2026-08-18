@@ -20,7 +20,12 @@ export function ServicesStep() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getConfigSettings().then(setConfig).catch((e) => setError(errText(e)));
+    getConfigSettings()
+      .then((config) => {
+        setError(null);
+        setConfig(config);
+      })
+      .catch((e) => setError(errText(e)));
     servicesStatus().then((r) => setServices(r.services)).catch(() => setServices([]));
   }, []);
 
@@ -46,7 +51,7 @@ export function ServicesStep() {
             docsUrl={docs(service)}
             onSaved={load}
           >
-            {service === "spotify" && config.secrets.spotify_client_id.configured && (
+            {service === "spotify" && config.secrets.spotify_client_id.configured && config.secrets.spotify_client_secret.configured && (
               <a href={SPOTIFY_LOGIN_URL}>
                 <Button size="sm" variant="outline">
                   <ExternalLink size={14} /> {t.settings.connectButton}

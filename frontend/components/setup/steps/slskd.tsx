@@ -19,7 +19,12 @@ export function SlskdStep() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getConfigSettings().then(setConfig).catch((e) => setError(errText(e)));
+    getConfigSettings()
+      .then((config) => {
+        setError(null);
+        setConfig(config);
+      })
+      .catch((e) => setError(errText(e)));
   }, []);
 
   useEffect(() => {
@@ -28,6 +33,7 @@ export function SlskdStep() {
   }, [load]);
 
   const verifica = async () => {
+    setError(null);
     try {
       setStatus(await slskdStatus());
     } catch (e) {
