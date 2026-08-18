@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useT } from "@/lib/i18n";
@@ -17,13 +17,20 @@ export function ServiceGuide({ service, copyValue, docsUrl, copyAfterStep = 2 }:
 }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const guide = t.setup.guides[service];
+
+  /* Pulisci il timeout di copia se il componente si smonta prima che scada. */
+  useEffect(() => () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  }, []);
 
   const copy = async () => {
     if (!copyValue) return;
     await navigator.clipboard.writeText(copyValue);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    timeoutRef.current = setTimeout(() => setCopied(false), 1500);
   };
 
   return (

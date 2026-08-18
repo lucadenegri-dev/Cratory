@@ -14,8 +14,13 @@ export function ComponentRow({ c, onChanged }: { c: ProbeComponent; onChanged: (
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
+  /* Pulisci sia l'intervallo di polling che il timeout di copia se il componente si smonta. */
+  useEffect(() => () => {
+    if (timer.current) clearInterval(timer.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  }, []);
 
   const run = async () => {
     setError(null);
@@ -26,11 +31,16 @@ export function ComponentRow({ c, onChanged }: { c: ProbeComponent; onChanged: (
       return;
     }
     timer.current = setInterval(async () => {
-      const st = await getInstallStatus();
-      setInstall(st);
-      if (st.status !== "running") {
+      try {
+        const st = await getInstallStatus();
+        setInstall(st);
+        if (st.status !== "running") {
+          if (timer.current) clearInterval(timer.current);
+          onChanged();
+        }
+      } catch (e) {
+        setError(errText(e));
         if (timer.current) clearInterval(timer.current);
-        onChanged();
       }
     }, 1000);
   };
@@ -38,8 +48,9 @@ export function ComponentRow({ c, onChanged }: { c: ProbeComponent; onChanged: (
   const copy = async () => {
     if (!c.install_command) return;
     await navigator.clipboard.writeText(c.install_command.join(" "));
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    timeoutRef.current = setTimeout(() => setCopied(false), 1500);
   };
 
   const running = install?.status === "running" && install.key === c.key;
