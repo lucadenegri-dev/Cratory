@@ -5,11 +5,14 @@ Router HTTP-only: la logica sta in `services/system_probe.py`,
 `services/component_installer.py` e `services/credential_tests.py`. Nessun
 testo user-facing nasce qui — solo chiavi, che il frontend traduce.
 """
+import sys
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.services import system_probe
 from app.services.app_state import get_state, set_state
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
@@ -32,3 +35,10 @@ def write_state(req: SetupState, db: Session = Depends(get_db)) -> SetupState:
     non deve ripresentarsi da solo."""
     set_state(db, SETUP_COMPLETED_KEY, "1" if req.completed else "")
     return SetupState(completed=req.completed)
+
+
+@router.get("/probe")
+def probe(force: bool = False) -> dict:
+    """Stato dei componenti esterni. `force=true` bypassa la cache: lo usa il
+    bottone "Ricontrolla" dopo un'installazione."""
+    return {"platform": sys.platform, "components": system_probe.probe_all(force=force)}
