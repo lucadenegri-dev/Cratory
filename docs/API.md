@@ -1169,23 +1169,41 @@ are read through a cache in `core/runtime_settings`.
 `422` on anything else.
 
 `GET /api/settings/config` returns the editable configuration that **overrides
-`backend/.env` at runtime, with no backend restart**. The editable fields are
-`library_root`, `archive_root`, `slskd_download_dir`, `slskd_url` and
-`slskd_config_path`, each as `{value, source: "env"|"db", valid, detail}` — `source`
-tells you whether the effective value is a DB override or the `.env` default. Plus
-`share_library` (bool), `download_slots` (int, already clamped to 1–10 — see
-below) and `warning` (a soft note). Overrides live in `AppState`
-under `cfg.*`; read sites call `runtime_settings.<field>()`, so a change takes
-effect on the next scan, slskd client or file search.
+`backend/.env` at runtime, with no backend restart**. The plain-text editable fields
+are `library_root`, `archive_root`, `slskd_download_dir`, `slskd_url`,
+`slskd_config_path` and `ai_model`, each as `{value, source: "env"|"db", valid,
+detail}` — `source` tells you whether the effective value is a DB override or the
+`.env` default. Credentials are separate: `secrets` is a map of six keys
+(`spotify_client_id`, `spotify_client_secret`, `ai_api_key`, `discogs_token`,
+`acoustid_api_key`, `slskd_api_key`) to `{configured: bool, source: "env"|"db", hint:
+str | null}`. **A credential's value never appears in this or any other API
+response** — `hint` is `null` when unconfigured, otherwise the last 4 characters of
+the value prefixed with `••••` (bare `••••` if the value is shorter than 4 chars),
+just enough to recognize which key is set without exposing it. `spotify_redirect_uri`
+is read-only — it mirrors `backend/.env`'s `SPOTIFY_REDIRECT_URI` and isn't part of
+the PATCH, since it has to match whatever's registered on Spotify's own app
+dashboard. Plus `share_library` (bool), `download_slots` (int, already clamped to
+1–10 — see below) and `warning` (a soft note). Overrides live in `AppState` under
+`cfg.*`; read sites call `runtime_settings.<field>()` for plain fields or
+`runtime_settings.secret(key)` for credentials, so a change — whether it came from
+`/settings` or from the `/setup` wizard, both of which call this same endpoint —
+takes effect on the very next use: the next scan, slskd client, file search or
+provider call, no restart.
 
-`PATCH /api/settings/config` accepts any subset of those fields: a non-empty value
-sets an override, an empty string clears it back to `.env`. **Everything is
+`PATCH /api/settings/config` accepts any subset of the six plain fields above plus
+the six secrets (`spotify_client_id`, `spotify_client_secret`, `ai_api_key`,
+`discogs_token`, `acoustid_api_key`, `slskd_api_key`): a non-empty value sets an
+override, an empty string clears it back to `.env`. Every incoming value is
+`.strip()`ped first, since a pasted key often carries a trailing newline or space
+that would otherwise fail against the provider with an opaque error. **Everything is
 validated before anything is persisted** — no partial state. A directory must exist
 and be a directory; `slskd_url` must be `http(s)://`; `slskd_config_path` must be an
-existing writable file. Failures are `422 invalid_setting` with `params.field` and
-`params.detail`. If `share_library` is on and `library_root` changed, the share is
-re-applied best-effort and a soft failure comes back in `warning` rather than as an
-error.
+existing writable file; the secrets and `ai_model` have no format check (an empty
+value always just clears the override). Failures are `422 invalid_setting` with
+`params.field` and `params.detail`. If `share_library` is on and `library_root`
+changed, the share is re-applied best-effort and a soft failure comes back in
+`warning` rather than as an error. The response is the same `ConfigSettings` shape as
+the `GET`, secrets included — still masked.
 
 `PUT /api/settings/share-library` `{"enabled": bool}` toggles library sharing on
 Soulseek. slskd cannot change shares through its API at runtime, so Cratory edits
@@ -1204,6 +1222,76 @@ outside 1–10 — since the user just typed a specific number; the getter
 than raising, so a stray bad value already in the DB can never wedge the
 pool. Response `{download_slots}`. Takes effect immediately, no restart: the
 dispatcher re-reads it on every pass at filling its slots.
+
+## Setup wizard
+
+```text
+GET  /api/setup/state
+PUT  /api/setup/state
+GET  /api/setup/probe
+POST /api/setup/install/{key}
+GET  /api/setup/install/status
+POST /api/setup/test/{service}
+```
+
+`GET`/`PUT /api/setup/state` — `{"completed": bool}`, persisted in `AppState`
+(`setup.completed`). The frontend's `SetupGate` (mounted in the root layout) reads
+this on every navigation and redirects to `/setup` only on a *successful* response
+with `completed: false` — a backend that's down leaves the user where they are
+instead of sending them to a wizard that can't work. `PUT` is called with `true` both
+when the wizard finishes and when it's skipped (no distinction — neither should
+reappear on its own), and with `false` from `/settings`' "reopen wizard" button.
+
+`GET /api/setup/probe?force=false` → `{"platform": str, "components": [...]}`.
+`platform` is `sys.platform` (`"darwin"` / `"linux"` / `"win32"`). Each entry:
+
+```json
+{"key": "ffmpeg", "kind": "system", "severity": "required",
+ "unlocks": ["audio_hash", "shazam", "soundcloud_download"],
+ "auto_installable": false, "install_command": ["brew", "install", "ffmpeg"],
+ "present": true, "version": "6.0", "source": "path"}
+```
+
+`kind` is `"system"` (a binary expected on `PATH`), `"venv"` (importable, or
+pip-installable inside the backend's own virtualenv — `yt-dlp`, `essentia`) or
+`"daemon"` (`slskd`, probed by calling its own `/health` rather than by looking for a
+binary). `unlocks` is a list of feature keys, not prose — the frontend translates
+them. On a detected binary, `source` is `"bundle"` when it resolved under
+`CRATORY_BIN_DIR`, `"path"` from the system `PATH`, `"venv"` for an importable Python
+package, `"daemon"` when the slskd health check answered. The result is cached
+server-side for 10 seconds; `force=true` bypasses the cache (used by the wizard's
+"recheck" button after an install).
+
+`POST /api/setup/install/{key}` (`202`) starts installing one of the registry's
+`auto_installable` components (today: `yt-dlp`, `essentia`) as a background job;
+`ffmpeg`, `fpcalc` and `slskd` are never auto-installed — the wizard only shows the
+platform's install command for those. The response has the same shape as
+`GET /api/setup/install/status`: `{"key": str | null, "status":
+"idle"|"running"|"done"|"error", "log": [str, ...], "detail": str | null}` — `log`
+streams the subprocess' combined stdout/stderr, capped to the last 500 lines.
+`400 unknown_component` for a key outside the registry, `400 not_auto_installable`
+for a registry key that isn't auto-installable (or has no recipe for the current
+platform), `409 install_already_running` if a different install is already in
+flight — the installer runs one job at a time.
+
+`GET /api/setup/install/status` polls that same state. When a run finishes
+successfully, it also invalidates the probe cache, so the very next
+`GET /api/setup/probe` (even without `force=true`) sees the newly installed
+component.
+
+`POST /api/setup/test/{service}` — `service` is one of `spotify`, `anthropic`,
+`discogs`, `acoustid` (slskd has its own live check, `GET /api/slskd/status`, and
+isn't tested here). Makes one real, minimal call to the provider using whichever
+credential is currently in effect (`.env` or DB override) and returns `{"ok": bool,
+"code": str, "detail": str}`. **The credential itself never appears in the
+response** — only the outcome. `detail` on failure is the provider's own error
+message, not a paraphrase, so the user can tell a wrong secret from an out-of-credit
+account from a network problem. `code` is `"not_configured"` when the key is empty,
+`"no_token"` for Discogs without a token (a valid state — the dig still works, just
+rate-limited), `"fpcalc_missing"` for AcoustID when the key is set but `fpcalc` isn't
+resolvable, `"network_error"` for a transport failure, `"invalid"` for a credential
+the provider rejected, or `"ok"`. `400 unknown_service` for anything outside the
+four.
 
 ## Organize
 

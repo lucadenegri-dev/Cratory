@@ -44,6 +44,20 @@ described in `CLAUDE.md`.
 Settings are unified across sections: one external-services endpoint, one AI key
 (`ANTHROPIC_API_KEY`), a single `/settings` page.
 
+- **Setup** (2026-08-18): first launch opens a six-step guided wizard (`/setup`) —
+  welcome/language, prerequisites, library paths, external services, slskd,
+  summary — gated by `GET /api/setup/state` so a down backend never strands the
+  user there. A declarative registry (`services/system_probe.py`) detects ffmpeg,
+  fpcalc, yt-dlp, essentia and slskd; the two that live inside the backend's own
+  virtualenv (yt-dlp, essentia) can be auto-installed with streamed log output,
+  the rest just get their install command shown. Each provider credential
+  (Spotify, Anthropic, Discogs, AcoustID) can be tested for real before moving on.
+  Credentials became runtime-writable the same way paths/URLs already were
+  (`core/runtime_settings.py`'s `SECRET_KEYS`): a key saved from the wizard or from
+  `/settings` (same shared field components, so a key can be changed without
+  re-running the wizard) takes effect immediately, no restart, and its value never
+  appears in an API response.
+
 ## Where to look next
 
 - Full chronological development diary: `docs/archive/PROGRESS-diario-completo.md`.

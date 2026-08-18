@@ -96,8 +96,20 @@ local slskd on `:5030` if one is installed.
 
 ## Configuration
 
-Everything lives in `backend/.env`, copied from `backend/.env.example`. The app starts fine
-with that file untouched; each key switches a feature on.
+The first time you open the app, it takes you straight into a guided setup wizard at
+`/setup`: pick a language, see which external tools it found (and auto-install the two
+that can be, `yt-dlp` and `essentia` — the rest just get an install command), point it
+at your music folder, and paste in whichever API keys you want to use, testing each one
+against the real provider as you go. Nothing in it is mandatory — skip it, or any step,
+and reopen it later from Settings.
+
+`backend/.env`, copied from `backend/.env.example`, still supplies the defaults — the
+app starts fine with just that file untouched, and it's the only way to set a value
+before the very first launch. Anything set through the wizard or through Settings is
+stored in the database instead and **takes precedence over `.env`, with no backend
+restart needed**; clearing a field in the UI reverts it to whatever `.env` says.
+Credentials set this way are never echoed back by the API — a response only ever says
+whether one is configured and where it came from, never the value itself.
 
 | Key | Enables |
 |---|---|

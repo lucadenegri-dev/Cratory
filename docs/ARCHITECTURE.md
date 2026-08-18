@@ -68,7 +68,10 @@ backend/app/
 
   core/
     config.py            pydantic-settings Settings + logging setup
-    runtime_settings.py  Settings-UI overrides cached over the .env values
+    runtime_settings.py  Settings-UI overrides over the .env defaults — plain
+                         fields (ENV_BACKED_KEYS: paths, URLs, ai_model) and
+                         credentials (SECRET_KEYS) alike, cached in memory so
+                         every integration reads a live value with no restart
     http_errors.py       api_error(): structured {code, message, params} details
 
   routers/           mostly HTTP only — a few carry real logic (best-transition
@@ -79,7 +82,7 @@ backend/app/
     sets.py  transitions.py  labels.py  analysis.py  rekordbox.py
     discovery.py  dj_sets.py (/api/shazam)  downloads.py  files.py
     slskd.py  soundcloud.py  spotify.py  ai.py  pipeline.py  services.py
-    settings.py
+    settings.py  setup.py (/api/setup, the guided wizard)
 
   services/          deterministic logic and orchestration
     import        playlist_import  manual_import  local_import  streaming_import_job
@@ -93,6 +96,7 @@ backend/app/
     acquisition   acquisition  soulseek_select  download_queue  download_dispatcher
                   download_runner  download_review  slskd_shares
     mixes         mix_identify  mix_identify_job
+    setup         system_probe  component_installer  credential_tests
     misc          gap_analysis  labels  pipeline  rating  app_state
                   track_label  job_spawn  native_picker
 
@@ -751,6 +755,62 @@ Three surfaces, three strategies:
 Known limitation: `transition_reason` values are persisted at generation time in whatever
 language was active then — the future display language is not knowable in advance.
 
+## Setup and credentials
+
+First launch (`setup.completed` unset in `AppState`) sends the user to `/setup`, a
+six-step wizard — welcome/language, prerequisites, library paths, external services,
+slskd, summary — gated by `SetupGate` (mounted in `app/layout.tsx`, inside
+`I18nProvider`/`PlayerProvider`, before the page shell renders): it reads
+`GET /api/setup/state` on every navigation and redirects only on a *successful*
+`completed: false` response, so a backend that's down never strands the user on a
+wizard it can't drive. Finishing the wizard and skipping it both write `completed:
+true` through `PUT /api/setup/state`, with no distinction between the two; "reopen
+wizard" in `/settings` writes it back to `false` and sends the user to `/setup`
+again. `CredentialField`/`ServiceGuide`, wrapped together as `ServiceCard`, are the
+one implementation shared between the wizard's services and slskd steps and
+`/settings`' own expandable per-service row — a key can be changed from either place
+without re-running the rest of the wizard. `PathField` and `ComponentRow`
+(prerequisites) stay wizard-only: `/settings`' path editor (`ConfigCard`) is a
+separate, pre-existing implementation.
+
+**Credentials became runtime-writable.** `core/runtime_settings.py` now covers two
+groups: `ENV_BACKED_KEYS` (plain fields — paths, URLs, `ai_model`) and `SECRET_KEYS`
+(`spotify_client_id`, `spotify_client_secret`, `ai_api_key`, `discogs_token`,
+`acoustid_api_key`, `slskd_api_key`). Both resolve a DB override (`AppState`, key
+prefix `cfg.`) over the `.env` default, cached in memory — loaded once at startup,
+kept in sync on every `apply`/`clear` — because most read sites (the slskd client,
+indexing/download jobs, `file_search`) don't have a DB session at hand. Every
+integration that used to read a `Settings` constant (`settings.SPOTIFY_CLIENT_ID` and
+similar) directly now goes through `runtime_settings.secret(...)` or the matching
+plain-field accessor, so a key saved from the wizard or from `/settings` takes effect
+on the very next call — no restart. `GET`/`PATCH /api/settings/config` exposes
+secrets only masked (`configured`, `source`, `hint` — never the value); see
+`docs/API.md`.
+
+**Detecting and installing external components.** `services/system_probe.py` is a
+declarative registry, one `Component` per external dependency (`ffmpeg`, `fpcalc`,
+`yt-dlp`, `essentia`, `slskd`): how to detect it, what it unlocks, whether it's
+auto-installable and with which command per platform. The registry carries no prose
+— only feature keys the frontend translates. `services/component_installer.py`
+installs only the `auto_installable` entries (`yt-dlp`, `essentia` today) as a
+background job with streamed log output; `services/credential_tests.py` makes one
+real, minimal call per provider (`spotify`, `anthropic`, `discogs`, `acoustid`) and
+returns the provider's own error message, not a paraphrase. `routers/setup.py` is
+HTTP-only over the three.
+
+**Two seams exist purely for an eventual Tauri desktop build**, where Cratory's own
+binaries and processes stop being "whatever this dev machine's `PATH` happens to
+have" and become part of a shipped app bundle:
+
+- `system_probe.resolve_binary(name, env_override)` checks a component-specific env
+  var, then `CRATORY_BIN_DIR`, then falls back to `shutil.which` on `PATH`. A Tauri
+  build that ships `ffmpeg`/`fpcalc`/`yt-dlp` inside the bundle only has to set
+  `CRATORY_BIN_DIR` once at launch — nothing else in the probe changes.
+- `component_installer.run_recipe(argv)` is the *only* place that module spawns a
+  subprocess (`shell=False`, `argv` always a list, recipes only ever come from the
+  registry — no user input reaches a shell). A Tauri build replaces that one
+  function; none of its callers need to change.
+
 ## Frontend
 
 Next.js 16 with the App Router, React 19, Tailwind 4. `frontend/CLAUDE.md` documents the
@@ -758,10 +818,11 @@ Next 16 breaking changes; read it before touching pages or routing.
 
 `app/layout.tsx` mounts, in order: the DM Mono font variable, an inline no-FOUC script that
 restores the theme and language from `localStorage`, `I18nProvider`, `PlayerProvider`,
-`EditorialShell` (the hairline shell: a sticky 180px INDEX nav beside the content) and the
-app-wide `DockedPlayer`. `PageLayout` adds the page title and the optional 240px MARGINALIA
+`SetupGate` (see "Setup and credentials" above), `EditorialShell` (the hairline shell: a
+sticky 180px INDEX nav beside the content) and the app-wide `DockedPlayer`. `PageLayout`
+adds the page title and the optional 240px MARGINALIA
 column on top of that. Pages live under `app/` (dashboard, playlists, library, tracks, set-builder,
-sets, transitions, analysis, discovery, wishlist, labels, shazam, organize, settings); the
+sets, transitions, analysis, discovery, wishlist, labels, shazam, organize, settings, setup); the
 typed API client is split by area under `lib/api/`, with `lib/organize/api.ts` for the
 Organize surface. `docs/DESIGN.md` holds the design system.
 
