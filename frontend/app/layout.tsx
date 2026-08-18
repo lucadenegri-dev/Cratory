@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { DM_Mono } from "next/font/google";
 import "./globals.css";
-import { EditorialShell } from "@/components/editorial-shell";
+import { ShellSwitch } from "@/components/shell-switch";
+import { SetupGate } from "@/components/setup/setup-gate";
 import { I18nProvider } from "@/lib/i18n";
 import { DockedPlayer } from "@/components/docked-player";
 import { PlayerProvider } from "@/lib/player";
@@ -29,7 +30,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script dangerouslySetInnerHTML={{ __html: NO_FOUC }} />
         <I18nProvider>
           <PlayerProvider>
-            <EditorialShell>{children}</EditorialShell>
+            <SetupGate />
+            <ShellSwitch>{children}</ShellSwitch>
             <DockedPlayer />
           </PlayerProvider>
         </I18nProvider>

@@ -1,0 +1,73 @@
+"use client";
+
+import { useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
+import { setSetupCompleted } from "@/lib/api";
+import { Button } from "@/components/ui";
+import { useT } from "@/lib/i18n";
+import { WelcomeStep } from "@/components/setup/steps/welcome";
+import { SummaryStep } from "@/components/setup/steps/summary";
+
+/* Configurazione guidata: sei passi, nessuno bloccante. Lo stato di
+   completamento vive nel backend (AppState), non in localStorage: è una
+   proprietà dell'installazione, non del browser. */
+const STEPS = ["welcome", "prerequisites", "library", "services", "slskd", "summary"] as const;
+
+export default function SetupPage() {
+  const t = useT();
+  const router = useRouter();
+  const [index, setIndex] = useState(0);
+  const step = STEPS[index];
+
+  const esci = useCallback(async () => {
+    try {
+      await setSetupCompleted(true);
+    } finally {
+      router.replace("/");
+    }
+  }, [router]);
+
+  const titolo: Record<(typeof STEPS)[number], string> = {
+    welcome: t.setup.welcomeTitle,
+    prerequisites: t.setup.prereqTitle,
+    library: t.setup.libraryTitle,
+    services: t.setup.servicesTitle,
+    slskd: t.setup.slskdTitle,
+    summary: t.setup.summaryTitle,
+  };
+
+  return (
+    <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-6 py-10">
+      <header className="mb-8">
+        <div className="flex items-baseline justify-between gap-4">
+          <h1 className="text-lg font-semibold uppercase tracking-wide text-fg-strong">{t.setup.title}</h1>
+          <span className="tnum text-xs text-faint">{t.setup.stepOf(index + 1, STEPS.length)}</span>
+        </div>
+        <p className="mt-1 text-sm text-muted">{t.setup.subtitle}</p>
+      </header>
+
+      <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-fg-strong">{titolo[step]}</h2>
+
+      <div className="flex-1">
+        {step === "welcome" && <WelcomeStep />}
+        {step === "summary" && <SummaryStep />}
+      </div>
+
+      <footer className="mt-10 flex items-center justify-between gap-4 border-t border-border pt-5">
+        <button type="button" onClick={esci} className="text-xs text-muted underline-offset-4 hover:underline">
+          {t.setup.skipAll}
+        </button>
+        <div className="flex gap-2">
+          {index > 0 && (
+            <Button size="sm" variant="ghost" onClick={() => setIndex((i) => i - 1)}>{t.setup.back}</Button>
+          )}
+          {index < STEPS.length - 1 ? (
+            <Button size="sm" variant="outline" onClick={() => setIndex((i) => i + 1)}>{t.setup.next}</Button>
+          ) : (
+            <Button size="sm" onClick={esci}>{t.setup.finish}</Button>
+          )}
+        </div>
+      </footer>
+    </div>
+  );
+}
