@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.http_errors import api_error
 from app.db import get_db
-from app.services import component_installer, system_probe
+from app.services import component_installer, credential_tests, system_probe
 from app.services.app_state import get_state, set_state
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
@@ -63,3 +63,14 @@ def install(key: str, response: Response) -> dict:
 @router.get("/install/status")
 def install_status() -> dict:
     return component_installer.status()
+
+
+@router.post("/test/{service}")
+def test_credential(service: str) -> dict:
+    """Prova reale della credenziale. slskd non è qui: il suo stato vivo lo dà
+    già `GET /api/slskd/status`."""
+    try:
+        return credential_tests.check(service)
+    except KeyError as exc:
+        raise api_error(400, "unknown_service", f"servizio sconosciuto: {service}",
+                        service=service) from exc
