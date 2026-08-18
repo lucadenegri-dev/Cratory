@@ -193,3 +193,11 @@ def probe_all(force: bool = False) -> list[dict]:
     result = [_probe_one(c) for c in REGISTRY]
     _cache = (now, result)
     return result
+
+
+def invalidate_cache() -> None:
+    """Svuota la cache del probe: da chiamare dopo un evento che cambia lo
+    stato dei componenti (es. un'installazione riuscita), così la prossima
+    `probe_all()` ri-rileva invece di servire il risultato in cache."""
+    global _cache
+    _cache = None
