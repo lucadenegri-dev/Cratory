@@ -82,4 +82,21 @@ describe("ComponentRow", () => {
     await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(false), { timeout: 3000 });
     expect(onChanged).toHaveBeenCalled();
   });
+
+  it("una riga che si smonta a metà installazione rilascia il lucchetto del genitore", async () => {
+    startInstall.mockResolvedValue({ key: "essentia", status: "running", log: [], detail: null });
+    // Il polling resta "running" per sempre: quel che conta è che lo
+    // smontaggio, non un eventuale stato terminale, liberi il lucchetto.
+    getInstallStatus.mockResolvedValue({ key: "essentia", status: "running", log: [], detail: null });
+    const onBusyChange = vi.fn();
+    const { unmount } = render(<ComponentRow c={comp({})} onChanged={() => {}} onBusyChange={onBusyChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /installa|install/i }));
+
+    await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(true));
+    onBusyChange.mockClear();
+
+    unmount();
+
+    expect(onBusyChange).toHaveBeenCalledWith(false);
+  });
 });

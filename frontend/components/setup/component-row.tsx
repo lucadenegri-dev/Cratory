@@ -28,34 +28,65 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mounted = useRef(true);
+  // true quando è QUESTA riga ad aver segnalato busy al genitore: serve a
+  // rilasciare il lucchetto allo smontaggio senza toccare quello di un'altra riga.
+  const busy = useRef(false);
+  // Copia sempre aggiornata di onBusyChange, letta dalla cleanup dell'effetto
+  // di smontaggio (che gira una volta sola, deps []): senza questa "ultima
+  // versione" richiamerebbe la prop del render iniziale, non quella corrente.
+  const onBusyChangeRef = useRef(onBusyChange);
+  useEffect(() => {
+    onBusyChangeRef.current = onBusyChange;
+  });
 
-  /* Pulisci sia l'intervallo di polling che il timeout di copia se il componente si smonta. */
+  /* Pulisci sia l'intervallo di polling che il timeout di copia se il componente si smonta.
+     Se lo smontaggio arriva a metà installazione (il polling non ha ancora
+     raggiunto uno stato terminale), il lucchetto `busyKey` del genitore
+     resterebbe agganciato per sempre a una riga che non esiste più: nessun
+     altro bottone Installa si riabiliterebbe finché non si lascia e si
+     rientra nello step. Rilascialo qui, ma solo se è ancora questa riga a
+     detenerlo. */
   useEffect(() => () => {
+    mounted.current = false;
     if (timer.current) clearInterval(timer.current);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (busy.current) {
+      busy.current = false;
+      onBusyChangeRef.current?.(false);
+    }
   }, []);
 
   const run = async () => {
     setError(null);
+    let status: InstallStatus;
     try {
-      setInstall(await startInstall(c.key));
-      onBusyChange?.(true);
+      status = await startInstall(c.key);
     } catch (e) {
+      if (!mounted.current) return;
       setError(errText(e));
       return;
     }
+    // La riga potrebbe essersi smontata mentre l'installazione partiva:
+    // niente stato, niente lucchetto, niente polling che nessuno pulirebbe.
+    if (!mounted.current) return;
+    setInstall(status);
+    busy.current = true;
+    onBusyChange?.(true);
     timer.current = setInterval(async () => {
       try {
         const st = await getInstallStatus();
         setInstall(st);
         if (st.status !== "running") {
           if (timer.current) clearInterval(timer.current);
+          busy.current = false;
           onBusyChange?.(false);
           onChanged();
         }
       } catch (e) {
         setError(errText(e));
         if (timer.current) clearInterval(timer.current);
+        busy.current = false;
         onBusyChange?.(false);
       }
     }, 1000);
