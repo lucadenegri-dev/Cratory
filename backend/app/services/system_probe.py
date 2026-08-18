@@ -116,16 +116,16 @@ def resolve_binary(name: str, env_override: str | None = None, *, venv: bool = F
     bundle Tauri, dove nessuno attiva nulla."""
     if env_override:
         custom = os.environ.get(env_override)
-        if custom and Path(custom).exists():
+        if custom and Path(custom).is_file():
             return custom
     bundled = os.environ.get(BIN_DIR_ENV)
     if bundled:
         candidate = Path(bundled) / name
-        if candidate.exists():
+        if candidate.is_file():
             return str(candidate)
     if venv:
         candidate = Path(sys.executable).parent / name
-        if candidate.exists():
+        if candidate.is_file():
             return str(candidate)
     return shutil.which(name)
 
@@ -153,10 +153,17 @@ def _probe_binary(c: Component) -> dict:
     path = resolve_binary(c.binary or c.key, c.env_override, venv=c.kind == "venv")
     if not path:
         return {"present": False, "version": None, "source": None}
+    resolved = Path(path)
+    # Confronto per directory/percorso esatto, non prefisso di stringa: con
+    # CRATORY_BIN_DIR="/opt/bin" un prefisso di stringa etichetterebbe come
+    # bundle anche "/opt/binaries/ffmpeg", che non ci vive affatto.
+    override = os.environ.get(c.env_override) if c.env_override else None
     bundled = os.environ.get(BIN_DIR_ENV)
-    if bundled and path.startswith(bundled):
+    if override and resolved == Path(override):
+        source = "override"
+    elif bundled and resolved.parent == Path(bundled):
         source = "bundle"
-    elif c.kind == "venv" and path.startswith(str(Path(sys.executable).parent)):
+    elif c.kind == "venv" and resolved.parent == Path(sys.executable).parent:
         source = "venv"
     else:
         source = "path"

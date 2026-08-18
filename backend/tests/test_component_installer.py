@@ -33,8 +33,12 @@ def _reset_installer():
 @pytest.fixture(autouse=True)
 def _no_slskd_network_call(monkeypatch):
     """Come in test_system_probe.py: niente chiamate di rete a un demone
-    slskd quando questi test finiscono per invocare probe_all()."""
+    slskd quando questi test finiscono per invocare probe_all(), e nessuna
+    fuga di FPCALC/CRATORY_BIN_DIR dall'ambiente host (resolve_binary li
+    consulta prima del PATH)."""
     monkeypatch.setattr(config.settings, "slskd_url", "")
+    monkeypatch.delenv("FPCALC", raising=False)
+    monkeypatch.delenv(sp.BIN_DIR_ENV, raising=False)
 
 
 def test_chiave_sconosciuta(db):

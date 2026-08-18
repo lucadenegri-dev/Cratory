@@ -13,8 +13,16 @@ def _no_slskd_network_call(monkeypatch):
     """Forza slskd_url() a ritornare stringa vuota, disattivando la feature.
     Evita che test_probe_all_ha_una_voce_per_componente e
     test_la_cache_evita_di_riesaminare_a_ogni_render facciano chiamate di rete
-    incontrollate a un demone slskd."""
+    incontrollate a un demone slskd.
+
+    Ripulisce anche FPCALC e CRATORY_BIN_DIR: resolve_binary li consulta PRIMA
+    del PATH, quindi uno sviluppatore con uno dei due impostati nell'ambiente
+    (es. per lavorare sul bundle Tauri) farebbe fallire i test che assumono
+    "niente di preinstallato" — l'indipendenza dall'host non e' negoziabile.
+    """
     monkeypatch.setattr(config.settings, "slskd_url", "")
+    monkeypatch.delenv("FPCALC", raising=False)
+    monkeypatch.delenv(sp.BIN_DIR_ENV, raising=False)
     # Pulisce la cache globale prima di ogni test per evitare eredità di risultati
     # da run precedenti.
     sp._cache = None
@@ -115,6 +123,106 @@ def test_bin_dir_vince_sulla_cartella_dell_interprete(tmp_path, monkeypatch):
     monkeypatch.setattr(sp.sys, "executable", str(fake_venv_bin / "python"))
     monkeypatch.setattr(sp.shutil, "which", lambda name: None)
     assert sp.resolve_binary("yt-dlp", venv=True) == str(bundled)
+
+
+def test_bin_dir_richiede_un_file_non_una_directory(tmp_path, monkeypatch):
+    """resolve_binary deve richiedere un file, non un percorso qualsiasi:
+    altrimenti potrebbe disaccordarsi con fpcalc_available (os.path.isfile)
+    su una CRATORY_BIN_DIR/nome che risulta essere una cartella."""
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    (bundle_dir / "ffmpeg").mkdir()  # non un binario, solo una cartella omonima
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(bundle_dir))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    assert sp.resolve_binary("ffmpeg") is None
+
+
+def test_probe_binario_non_si_lascia_ingannare_da_prefisso_di_stringa(tmp_path, monkeypatch):
+    """CRATORY_BIN_DIR=".../bin" non deve etichettare come "bundle" un binario
+    trovato in ".../binaries": il vecchio confronto era un prefisso di stringa,
+    che "/bin" soddisfa anche per "/binaries/ffmpeg"."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()  # resta vuota: ffmpeg non ci vive, si ricade sul PATH
+    other_dir = tmp_path / "binaries"
+    other_dir.mkdir()
+    fake = other_dir / "ffmpeg"
+    fake.write_text("#!/bin/sh\n")
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(bin_dir))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: str(fake))
+    result = sp._probe_binary(sp.get("ffmpeg"))
+    assert result["source"] == "path"
+
+
+def test_probe_binario_bundle_riconosciuto_per_directory_esatta(tmp_path, monkeypatch):
+    """Caso normale: il binario vive davvero dentro CRATORY_BIN_DIR."""
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    fake = bundle_dir / "ffmpeg"
+    fake.write_text("#!/bin/sh\n")
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(bundle_dir))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    result = sp._probe_binary(sp.get("ffmpeg"))
+    assert result["source"] == "bundle"
+
+
+def test_probe_binario_override_riportato_come_override(tmp_path, monkeypatch):
+    """Un binario trovato tramite l'env override specifica del componente
+    (es. FPCALC) va riportato come tale, non genericamente come "path"."""
+    fake = tmp_path / "fpcalc-custom"
+    fake.write_text("")
+    monkeypatch.delenv(sp.BIN_DIR_ENV, raising=False)
+    monkeypatch.setenv("FPCALC", str(fake))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    result = sp._probe_binary(sp.get("fpcalc"))
+    assert result["source"] == "override"
+
+
+def test_fpcalc_available_delega_al_seam_bin_dir(tmp_path, monkeypatch):
+    """acoustid.fpcalc_available() deve vedere lo stesso binario del probe
+    quando arriva da CRATORY_BIN_DIR: prima delle due fonti erano due
+    implementazioni indipendenti che potevano disaccordarsi."""
+    from app.organize.integrations import acoustid
+
+    fake = tmp_path / "fpcalc"
+    fake.write_text("")
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    assert acoustid.fpcalc_available() is True
+
+
+def test_integrity_ffmpeg_available_delega_al_seam_bin_dir(tmp_path, monkeypatch):
+    """organize/integrations/integrity.ffmpeg_available() idem, per ffmpeg."""
+    from app.organize.integrations import integrity
+
+    fake = tmp_path / "ffmpeg"
+    fake.write_text("")
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    assert integrity.ffmpeg_available() is True
+
+
+def test_downloads_ffmpeg_available_delega_al_seam_bin_dir(tmp_path, monkeypatch):
+    """routers/downloads._ffmpeg_available() idem."""
+    from app.routers import downloads
+
+    fake = tmp_path / "ffmpeg"
+    fake.write_text("")
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    assert downloads._ffmpeg_available() is True
+
+
+def test_dj_sets_deps_available_delega_al_seam_bin_dir(tmp_path, monkeypatch):
+    """routers/dj_sets._deps_available() idem per la parte ffmpeg; yt-dlp e
+    shazamio sono neutralizzati per restare indipendenti dall'ambiente."""
+    from app.routers import dj_sets
+
+    fake = tmp_path / "ffmpeg"
+    fake.write_text("")
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    monkeypatch.setattr(dj_sets.importlib.util, "find_spec", lambda name: object())
+    assert dj_sets._deps_available() is True
 
 
 def test_ricetta_per_piattaforma(monkeypatch):

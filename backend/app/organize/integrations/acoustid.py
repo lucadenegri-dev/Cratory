@@ -12,14 +12,13 @@ Rate limit AcoustID: ~3 richieste/secondo (throttle a carico del chiamante).
 """
 
 import logging
-import os
-import shutil
 from typing import Any, Callable
 
 import httpx
 
 from app.core import runtime_settings
 from app.organize.integrations._http import post_with_retries
+from app.services import system_probe
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +42,11 @@ def acoustid_configured() -> bool:
 
 
 def fpcalc_available() -> bool:
-    """True se il binario fpcalc di Chromaprint e' raggiungibile (PATH o env FPCALC)."""
-    custom = os.environ.get("FPCALC")
-    if custom:
-        return os.path.isfile(custom)
-    return shutil.which("fpcalc") is not None
+    """True se il binario fpcalc di Chromaprint e' raggiungibile (env FPCALC,
+    CRATORY_BIN_DIR o PATH). Delega al seam unico di system_probe, cosi' il
+    wizard e questo controllo non possono piu' disaccordarsi sullo stesso
+    binario."""
+    return system_probe.resolve_binary("fpcalc", env_override="FPCALC") is not None
 
 
 def parse_lookup(payload: dict[str, Any]) -> list[dict[str, Any]]:

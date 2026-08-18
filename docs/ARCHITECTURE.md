@@ -803,9 +803,14 @@ binaries and processes stop being "whatever this dev machine's `PATH` happens to
 have" and become part of a shipped app bundle:
 
 - `system_probe.resolve_binary(name, env_override)` checks a component-specific env
-  var, then `CRATORY_BIN_DIR`, then falls back to `shutil.which` on `PATH`. A Tauri
+  var, then `CRATORY_BIN_DIR`, then (for `kind="venv"` components) the running
+  interpreter's own directory, then falls back to `shutil.which` on `PATH`. A Tauri
   build that ships `ffmpeg`/`fpcalc`/`yt-dlp` inside the bundle only has to set
-  `CRATORY_BIN_DIR` once at launch — nothing else in the probe changes.
+  `CRATORY_BIN_DIR` once at launch — nothing else in the probe changes. The seam
+  isn't probe-only: `acoustid.fpcalc_available`, `organize/integrations/integrity`'s
+  `ffmpeg_available`, and the ffmpeg checks in `routers/downloads.py` and
+  `routers/dj_sets.py` all delegate to it too, so a bundle build can't leave those
+  disagreeing with the wizard about the same binary.
 - `component_installer.run_recipe(argv)` is the *only* place that module spawns a
   subprocess (`shell=False`, `argv` always a list, recipes only ever come from the
   registry — no user input reaches a shell). A Tauri build replaces that one

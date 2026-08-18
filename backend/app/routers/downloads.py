@@ -17,6 +17,7 @@ from app.repositories import (
 from app.schemas import TrackOut
 from app.serializers import track_out
 from app.services import download_queue as dlqueue
+from app.services import system_probe
 from app.services.download_dispatcher import fill
 from app.services.soulseek_select import (
     AUTO_PICK_MIN_CONFIDENCE, QualityPreference, auto_pick_quality_ok, query_variants,
@@ -141,10 +142,9 @@ def _enqueue_out(esito) -> dict:
 
 
 def _ffmpeg_available() -> bool:
-    """ffmpeg presente? Serve al postprocessor MP3 di yt-dlp."""
-    import shutil
-
-    return shutil.which("ffmpeg") is not None
+    """ffmpeg presente? Serve al postprocessor MP3 di yt-dlp. Delega al seam
+    unico di system_probe (env override, CRATORY_BIN_DIR, PATH)."""
+    return system_probe.resolve_binary("ffmpeg") is not None
 
 
 @router.get("/pending", response_model=list[TrackOut])

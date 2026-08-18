@@ -7,7 +7,7 @@ testo user-facing nasce qui — solo chiavi, che il frontend traduce.
 """
 import sys
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -46,7 +46,7 @@ def probe(force: bool = False) -> dict:
 
 
 @router.post("/install/{key}", status_code=202)
-def install(key: str, response: Response) -> dict:
+def install(key: str) -> dict:
     try:
         return component_installer.start(key)
     except component_installer.UnknownComponent as exc:

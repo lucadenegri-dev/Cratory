@@ -25,7 +25,7 @@ from app.schemas import (
     MixIdentifyStatusOut,
     PlaylistImportReport,
 )
-from app.services import mix_identify_job
+from app.services import mix_identify_job, system_probe
 from app.services.manual_import import import_track_pairs
 
 logger = logging.getLogger(__name__)
@@ -81,11 +81,11 @@ def _dj_set_detail_out(db: Session, dj_set) -> dict:
 
 
 def _deps_available() -> bool:
-    """ffmpeg + yt-dlp + shazamio presenti? Senza non si puo' identificare."""
-    import shutil
-
+    """ffmpeg + yt-dlp + shazamio presenti? Senza non si puo' identificare.
+    ffmpeg delega al seam unico di system_probe (env override, CRATORY_BIN_DIR,
+    PATH)."""
     return bool(
-        shutil.which("ffmpeg")
+        system_probe.resolve_binary("ffmpeg")
         and importlib.util.find_spec("yt_dlp")
         and importlib.util.find_spec("shazamio")
     )

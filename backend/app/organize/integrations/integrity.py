@@ -3,9 +3,10 @@ di beets). Decodifica l'intero stream: cattura header rotti E corruzione a
 meta' file. Opzionale: senza ffmpeg nel PATH degrada pulito (non disponibile)."""
 
 import re
-import shutil
 import subprocess
 from dataclasses import dataclass
+
+from app.services import system_probe
 
 # Pattern che indicano corruzione REALE dei frame audio. Distinguono i veri
 # corrotti (frame FLAC/MP3 danneggiati) dagli intoppi benigni non-fatali —
@@ -23,7 +24,9 @@ class IntegrityResult:
 
 
 def ffmpeg_available() -> bool:
-    return shutil.which("ffmpeg") is not None
+    """Delega al seam unico di system_probe (env override, CRATORY_BIN_DIR,
+    PATH): stessa fonte di verita' del probe del wizard."""
+    return system_probe.resolve_binary("ffmpeg") is not None
 
 
 def parse_result(returncode: int, stderr: str) -> IntegrityResult:
