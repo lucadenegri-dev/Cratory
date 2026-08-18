@@ -30,6 +30,7 @@ from app.routers import (
     rekordbox,
     services,
     sets,
+    setup,
     slskd,
     soundcloud,
     spotify,
@@ -129,6 +130,7 @@ app.include_router(rekordbox.router)
 app.include_router(analysis.router)
 app.include_router(soundcloud.router)
 app.include_router(settings_router.router)
+app.include_router(setup.router)
 
 for _organize_router in (
     organize_scan, organize_analyze, organize_issues,
