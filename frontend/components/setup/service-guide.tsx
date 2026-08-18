@@ -37,11 +37,16 @@ export function ServiceGuide({ service, copyValue, docsUrl, copyAfterStep = 2 }:
     <div className="border border-border bg-bg p-4">
       <div className="mb-2 flex items-center justify-between gap-3">
         <span className="text-[10px] uppercase tracking-wider text-muted">{t.setup.howTo}</span>
-        <a href={docsUrl} target="_blank" rel="noreferrer">
-          <Button size="sm" variant="ghost">
-            <ExternalLink size={14} /> {t.setup.openProvider}
-          </Button>
-        </a>
+        {/* docsUrl vuoto (servizio senza link noto) punterebbe alla pagina
+            corrente: un click ricaricherebbe /setup e l'utente perderebbe
+            il passo in cui si trova. Niente link finché non c'è una meta. */}
+        {docsUrl && (
+          <a href={docsUrl} target="_blank" rel="noreferrer">
+            <Button size="sm" variant="ghost">
+              <ExternalLink size={14} /> {t.setup.openProvider}
+            </Button>
+          </a>
+        )}
       </div>
       <ol className="space-y-1.5">
         {guide.steps.map((step, i) => (

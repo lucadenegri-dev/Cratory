@@ -30,7 +30,7 @@ describe("CredentialField", () => {
   });
 
   it("mostra il campo vuoto quando la chiave non è configurata", () => {
-    render(
+    const { container } = render(
       <CredentialField
         fieldKey="ai_api_key"
         label="API key"
@@ -38,12 +38,16 @@ describe("CredentialField", () => {
         onSaved={() => {}}
       />,
     );
-    expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("");
+    // type="password" toglie il ruolo "textbox" (fix 5): niente accessible
+    // role per un campo credenziali, si interroga l'input per tipo.
+    const input = container.querySelector("input[type='password']") as HTMLInputElement;
+    expect(input).toBeTruthy();
+    expect(input.value).toBe("");
   });
 
   it("salva il valore digitato e avvisa il chiamante", async () => {
     const onSaved = vi.fn();
-    render(
+    const { container } = render(
       <CredentialField
         fieldKey="discogs_token"
         label="Token"
@@ -51,7 +55,8 @@ describe("CredentialField", () => {
         onSaved={onSaved}
       />,
     );
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "tok-123" } });
+    const input = container.querySelector("input[type='password']") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "tok-123" } });
     fireEvent.click(screen.getByRole("button", { name: /salva|save/i }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(patchConfigSettings).toHaveBeenCalledWith({ discogs_token: "tok-123" });

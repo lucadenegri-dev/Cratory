@@ -7,8 +7,21 @@ import { Button } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 /* Una riga del probe. I componenti auto-installabili hanno il bottone; gli
-   altri mostrano il comando da eseguire a mano, con copia. */
-export function ComponentRow({ c, onChanged }: { c: ProbeComponent; onChanged: () => void }) {
+   altri mostrano il comando da eseguire a mano, con copia — e lo stesso
+   comando manuale ricompare per un componente auto-installabile se
+   l'installazione appena tentata è fallita: è la via di fuga (es. Essentia
+   fuori dalla combinazione CPython/piattaforma per cui esiste la wheel). */
+export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
+  c: ProbeComponent;
+  onChanged: () => void;
+  /* Un altro componente sta installando: disabilita il bottone di QUESTA riga
+     (il backend accetta un solo install alla volta, 409 altrimenti). */
+  disabled?: boolean;
+  /* Notifica il genitore quando QUESTA riga inizia/finisce un'installazione,
+     cosi' PrerequisitesStep sa quale bottone disabilitare altrove senza un
+     secondo polling: riusa quello che questo componente fa già. */
+  onBusyChange?: (busy: boolean) => void;
+}) {
   const t = useT();
   const [install, setInstall] = useState<InstallStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +39,7 @@ export function ComponentRow({ c, onChanged }: { c: ProbeComponent; onChanged: (
     setError(null);
     try {
       setInstall(await startInstall(c.key));
+      onBusyChange?.(true);
     } catch (e) {
       setError(errText(e));
       return;
@@ -36,11 +50,13 @@ export function ComponentRow({ c, onChanged }: { c: ProbeComponent; onChanged: (
         setInstall(st);
         if (st.status !== "running") {
           if (timer.current) clearInterval(timer.current);
+          onBusyChange?.(false);
           onChanged();
         }
       } catch (e) {
         setError(errText(e));
         if (timer.current) clearInterval(timer.current);
+        onBusyChange?.(false);
       }
     }, 1000);
   };
@@ -54,6 +70,7 @@ export function ComponentRow({ c, onChanged }: { c: ProbeComponent; onChanged: (
   };
 
   const running = install?.status === "running" && install.key === c.key;
+  const failed = install?.status === "error" && install.key === c.key;
   const label = t.setup.components[c.key as keyof typeof t.setup.components] ?? c.key;
 
   return (
@@ -82,7 +99,7 @@ export function ComponentRow({ c, onChanged }: { c: ProbeComponent; onChanged: (
 
       {!c.present && c.auto_installable && (
         <div className="mt-3">
-          <Button size="sm" variant="outline" disabled={running} onClick={run}>
+          <Button size="sm" variant="outline" disabled={running || disabled} onClick={run}>
             {running ? t.setup.installing : t.setup.installButton}
           </Button>
           {install && install.key === c.key && install.log.length > 0 && (
@@ -90,14 +107,24 @@ export function ComponentRow({ c, onChanged }: { c: ProbeComponent; onChanged: (
               {install.log.join("\n")}
             </pre>
           )}
-          {install?.status === "error" && (
-            <p className="mt-1 text-xs text-danger">{t.setup.installFailed} — {install.detail}</p>
+          {failed && (
+            <div className="mt-1">
+              <p className="text-xs text-danger">{t.setup.installFailed}</p>
+              {/* Il dettaglio grezzo del backend (es. "python è uscito con
+                  codice 1") resta, ma come nota di debug secondaria: la
+                  riga che guida l'utente è quella tradotta sopra. */}
+              {install?.detail && <p className="mt-0.5 text-[11px] text-faint">{install.detail}</p>}
+            </div>
           )}
           {error && <p className="mt-1 text-xs text-danger">{error}</p>}
         </div>
       )}
 
-      {!c.present && !c.auto_installable && c.install_command && (
+      {/* Il comando manuale è la via di fuga: sempre presente per i
+          componenti non auto-installabili, e riappare per quelli
+          auto-installabili appena l'installazione fallisce (es. Essentia
+          fuori dalla combinazione CPython/piattaforma pinnata). */}
+      {!c.present && c.install_command && (!c.auto_installable || failed) && (
         <div className="mt-3">
           <p className="mb-1 text-xs text-muted">{t.setup.installManual}</p>
           <div className="flex items-center gap-2">

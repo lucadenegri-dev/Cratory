@@ -17,6 +17,12 @@ function esitoTesto(res: CredentialTestResult, t: Dictionary): string {
   if (res.code === "not_configured") return t.setup.testNotConfigured;
   if (res.code === "fpcalc_missing") return t.setup.testFpcalcMissing;
   if (res.code === "network_error") return `${t.setup.testNetworkError} — ${res.detail}`;
+  // Esito normale di AcoustID: la prova manda una fingerprint invalida di
+  // proposito, quindi il provider che protesta PROPRIO per la fingerprint
+  // dimostra che la chiave è stata accettata. Va isolato prima del ramo
+  // generico "ok", altrimenti il dettaglio del provider (un errore, in
+  // superficie) finisce appeso a "Funziona" e sembra un fallimento.
+  if (res.code === "key_accepted") return t.setup.testKeyAccepted;
   if (res.ok) return res.detail ? `${t.setup.testOk} — ${res.detail}` : t.setup.testOk;
   return `${t.setup.testKo} — ${res.detail}`;
 }

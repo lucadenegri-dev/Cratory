@@ -13,7 +13,11 @@ export function SummaryStep() {
   const [services, setServices] = useState<ServiceStatus[] | null>(null);
 
   useEffect(() => {
-    getProbe(true).then((r) => setComponents(r.components)).catch(() => setComponents([]));
+    // Niente force=true: rilanciare l'intero probe (5 sottoprocessi, import
+    // di Essentia incluso) ad ogni render dell'ultimo passo non serve — il
+    // backend tiene già una cache breve, e chi ha appena installato qualcosa
+    // al passo 1 ha già premuto "Ricontrolla" lì.
+    getProbe(false).then((r) => setComponents(r.components)).catch(() => setComponents([]));
     servicesStatus().then((r) => setServices(r.services)).catch(() => setServices([]));
   }, []);
 

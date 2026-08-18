@@ -59,6 +59,7 @@ export function CredentialField({ fieldKey, label, state, onSaved }: {
       <label className="mb-1 block text-xs uppercase tracking-wider text-muted">{label}</label>
       <div className="flex gap-2">
         <Input
+          type="password"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           autoComplete="off"

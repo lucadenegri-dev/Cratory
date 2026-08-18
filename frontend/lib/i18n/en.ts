@@ -244,9 +244,12 @@ export const en = {
     testNoToken: "Works without a token, at a lower rate limit",
     testFpcalcMissing: "Key saved, but fpcalc is missing — go back to step 1",
     testNetworkError: "Could not reach the provider",
+    testKeyAccepted: "Works — AcoustID accepted the key (this probe deliberately sends an invalid fingerprint to confirm that).",
     howTo: "How to get it",
     openProvider: "Open the provider",
     copyValue: "Copy",
+    aiModelLabel: "AI model",
+    aiModelHint: "Empty uses the default, claude-opus-4-8.",
     fieldLabels: {
       spotify_client_id: "Client ID",
       spotify_client_secret: "Client secret",
@@ -274,7 +277,7 @@ export const en = {
           "Go to API keys and create a new key.",
           "Copy it here — it is shown only once.",
         ],
-        note: "The account needs credit for the key to work. The AI only curates and explains: it never builds the tracklist and is never asked for BPM or key.",
+        note: "The account needs credit for the key to work. The AI only curates and explains: it never builds the tracklist and is never asked for BPM or key. The default model is claude-opus-4-8 — change it in the field below if you want a different one.",
       },
       discogs: {
         title: "Discogs",
@@ -1771,6 +1774,10 @@ export const en = {
     dj_set_already_imported: "Set already imported as playlist",
     picker_unavailable: "Native picker unavailable: it requires the backend on macOS.",
     picker_busy: "A picker dialog is already open on the backend machine.",
+    unknown_component: (p: Record<string, unknown>) => `Unknown component: ${p.component}`,
+    not_auto_installable: (p: Record<string, unknown>) => `${p.component} must be installed by hand.`,
+    install_already_running: "An installation is already running.",
+    unknown_service: (p: Record<string, unknown>) => `Unknown service: ${p.service}`,
     // --- Organize -----------------------------------------------------
     plan_draft_missing: "No draft plan.",
     issue_status_invalid: "Invalid status.",

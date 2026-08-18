@@ -11,6 +11,7 @@ import { runFingerprint, type FingerprintResult } from "@/lib/organize/api";
 import { Alert, Button, Input, Spinner } from "@/components/ui";
 import { useT, type Dictionary } from "@/lib/i18n";
 import { ServiceCard } from "@/components/setup/service-card";
+import { PathField } from "@/components/setup/path-field";
 import { SERVICE_FIELDS, type ServiceKey } from "@/lib/setup-services";
 
 /* La lista unificata dei servizi esterni: una riga per servizio, semantica di
@@ -101,7 +102,21 @@ export function ServicesList({ services, spotify, onServicesChanged }: {
                 redirectUri={config.spotify_redirect_uri}
                 docsUrl={s.docs}
                 onSaved={handleSaved}
-              />
+              >
+                {/* ai_model non è un segreto: stesso PathField dei percorsi,
+                    per non avere un editor diverso fra wizard e Impostazioni. */}
+                {s.key === "anthropic" && (
+                  <PathField
+                    fieldKey="ai_model"
+                    label={t.setup.aiModelLabel}
+                    value={config.ai_model.value}
+                    detail={config.ai_model.detail ?? t.setup.aiModelHint}
+                    canPick={false}
+                    kind="text"
+                    onSaved={setConfig}
+                  />
+                )}
+              </ServiceCard>
             </div>
           )}
         </div>

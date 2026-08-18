@@ -10,6 +10,12 @@ export function PrerequisitesStep() {
   const t = useT();
   const [components, setComponents] = useState<ProbeComponent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Chiave del componente che sta installando, se ce n'è uno: il backend
+  // esegue un job alla volta (409 altrimenti), quindi finché una riga è
+  // occupata tutti i bottoni Installa delle altre righe restano disabilitati.
+  // Niente polling qui: ogni ComponentRow riporta i propri cambi di stato
+  // tramite onBusyChange, riusando il polling che già fa per conto suo.
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const load = useCallback((force = false) => {
     getProbe(force)
@@ -27,7 +33,13 @@ export function PrerequisitesStep() {
         <>
           <div className="border border-border">
             {components.map((c) => (
-              <ComponentRow key={c.key} c={c} onChanged={() => load(true)} />
+              <ComponentRow
+                key={c.key}
+                c={c}
+                onChanged={() => load(true)}
+                disabled={busyKey !== null && busyKey !== c.key}
+                onBusyChange={(busy) => setBusyKey(busy ? c.key : null)}
+              />
             ))}
           </div>
           <Button size="sm" variant="ghost" onClick={() => load(true)}>{t.setup.recheck}</Button>

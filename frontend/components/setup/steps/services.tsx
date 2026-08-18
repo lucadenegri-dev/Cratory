@@ -10,6 +10,7 @@ import { Alert, Button, Loading } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import type { ServiceKey } from "@/lib/setup-services";
 import { ServiceCard } from "../service-card";
+import { PathField } from "../path-field";
 
 const ORDINE: ServiceKey[] = ["spotify", "anthropic", "discogs", "acoustid"];
 
@@ -57,6 +58,20 @@ export function ServicesStep() {
                   <ExternalLink size={14} /> {t.settings.connectButton}
                 </Button>
               </a>
+            )}
+            {/* ai_model non è un segreto (torna in chiaro come gli altri campi
+                di config): stesso PathField dei percorsi, non una terza
+                variante di campo solo per questo. */}
+            {service === "anthropic" && (
+              <PathField
+                fieldKey="ai_model"
+                label={t.setup.aiModelLabel}
+                value={config.ai_model.value}
+                detail={config.ai_model.detail ?? t.setup.aiModelHint}
+                canPick={false}
+                kind="text"
+                onSaved={setConfig}
+              />
             )}
           </ServiceCard>
         </section>

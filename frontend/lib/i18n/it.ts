@@ -239,9 +239,12 @@ export const it: Dictionary = {
     testNoToken: "Funziona senza token, con rate limit più basso",
     testFpcalcMissing: "Chiave salvata, ma manca fpcalc — torna al passo 1",
     testNetworkError: "Non è stato possibile raggiungere il provider",
+    testKeyAccepted: "Funziona — AcoustID ha accettato la chiave (questa prova invia di proposito un fingerprint non valido per verificarlo).",
     howTo: "Come ottenerla",
     openProvider: "Apri il provider",
     copyValue: "Copia",
+    aiModelLabel: "Modello AI",
+    aiModelHint: "Vuoto usa il default, claude-opus-4-8.",
     fieldLabels: {
       spotify_client_id: "Client ID",
       spotify_client_secret: "Client secret",
@@ -269,7 +272,7 @@ export const it: Dictionary = {
           "Vai in API keys e crea una chiave nuova.",
           "Copiala qui: viene mostrata una volta sola.",
         ],
-        note: "Perché la chiave funzioni l'account deve avere credito. L'AI cura e spiega: non costruisce mai la scaletta e non le si chiedono mai BPM o tonalità.",
+        note: "Perché la chiave funzioni l'account deve avere credito. L'AI cura e spiega: non costruisce mai la scaletta e non le si chiedono mai BPM o tonalità. Il modello di default è claude-opus-4-8 — cambialo nel campo qui sotto se ne vuoi un altro.",
       },
       discogs: {
         title: "Discogs",
@@ -1763,6 +1766,10 @@ export const it: Dictionary = {
     dj_set_already_imported: "Set già importato come playlist",
     picker_unavailable: "Dialog nativo non disponibile: richiede il backend su macOS.",
     picker_busy: "Un dialog di scelta è già aperto sulla macchina del backend.",
+    unknown_component: (p: Record<string, unknown>) => `Componente sconosciuto: ${p.component}`,
+    not_auto_installable: (p: Record<string, unknown>) => `${p.component} va installato a mano.`,
+    install_already_running: "Un'installazione è già in corso.",
+    unknown_service: (p: Record<string, unknown>) => `Servizio sconosciuto: ${p.service}`,
     // --- Organize -----------------------------------------------------
     plan_draft_missing: "Nessun piano draft.",
     issue_status_invalid: "Status non valido.",
