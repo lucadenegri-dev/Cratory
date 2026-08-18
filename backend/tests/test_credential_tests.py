@@ -251,3 +251,48 @@ def test_acoustid_corpo_non_json(db, monkeypatch):
     assert res["ok"] is False
     assert res["code"] == "invalid"
     assert isinstance(res, dict)
+
+
+# Fallback branches for Finding 2, round 2: "error" presente ma non un dict
+
+def test_acoustid_campo_error_stringa_non_dict(db, monkeypatch):
+    """check_acoustid non fallisce se 'error' è una stringa invece di un
+    oggetto (proxy/intermediario che riscrive il body del provider)."""
+    monkeypatch.setattr(settings, "acoustid_api_key", "")
+    rs.apply(db, "acoustid_api_key", "aid")
+    monkeypatch.setattr(ct.system_probe, "resolve_binary", lambda *a, **k: "/usr/bin/fpcalc")
+    payload = {"status": "error", "error": "Bad Gateway"}
+
+    with _client(lambda req: httpx.Response(200, json=payload)) as c:
+        res = ct.check("acoustid", client=c)
+    assert isinstance(res, dict)
+    assert res["ok"] is True
+    assert res["code"] == "key_accepted"
+    assert res["detail"] == "Bad Gateway"
+
+
+def test_acoustid_campo_error_lista_non_dict(db, monkeypatch):
+    """check_acoustid non fallisce se 'error' è una lista: nessun messaggio
+    testuale da estrarre, ma niente eccezione."""
+    monkeypatch.setattr(settings, "acoustid_api_key", "")
+    rs.apply(db, "acoustid_api_key", "aid")
+    monkeypatch.setattr(ct.system_probe, "resolve_binary", lambda *a, **k: "/usr/bin/fpcalc")
+    payload = {"status": "error", "error": ["boom"]}
+
+    with _client(lambda req: httpx.Response(200, json=payload)) as c:
+        res = ct.check("acoustid", client=c)
+    assert isinstance(res, dict)
+    assert res["ok"] is True
+    assert res["code"] == "key_accepted"
+    assert res["detail"] == ""
+
+
+def test_error_message_forme_varie():
+    """_error_message copre dict/stringa/altro senza mai sollevare."""
+    assert ct._error_message({"message": "boom"}) == "boom"
+    assert ct._error_message({"message": ""}) == ""
+    assert ct._error_message({}) == ""
+    assert ct._error_message("boom diretto") == "boom diretto"
+    assert ct._error_message(["boom"]) == ""
+    assert ct._error_message(None) == ""
+    assert ct._error_message(123) == ""

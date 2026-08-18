@@ -34,6 +34,19 @@ def _ko(detail: str, code: str = "invalid") -> dict:
     return {"ok": False, "code": code, "detail": detail}
 
 
+def _error_message(err: object) -> str:
+    """Messaggio testuale da un valore 'error', qualunque forma abbia:
+    dict con 'message', stringa diretta, o qualsiasi altra forma (lista,
+    numero, null) per cui non c'è un messaggio da estrarre -> stringa
+    vuota, mai un'eccezione."""
+    if isinstance(err, dict):
+        msg = err.get("message")
+        return str(msg) if msg else ""
+    if isinstance(err, str):
+        return err
+    return ""
+
+
 def _provider_message(res: httpx.Response) -> str:
     """Messaggio d'errore del provider, qualunque forma abbia il suo JSON."""
     try:
@@ -42,9 +55,11 @@ def _provider_message(res: httpx.Response) -> str:
         return res.text[:300] or f"HTTP {res.status_code}"
     if isinstance(body, dict):
         err = body.get("error")
-        if isinstance(err, dict) and err.get("message"):
-            return str(err["message"])
-        if isinstance(err, str):
+        if isinstance(err, dict):
+            msg = _error_message(err)
+            if msg:
+                return msg
+        elif isinstance(err, str):
             return str(body.get("error_description") or err)
         if body.get("message"):
             return str(body["message"])
@@ -134,7 +149,7 @@ def check_acoustid(client: httpx.Client) -> dict:
         return _ko(f"HTTP {res.status_code}")
     if body.get("status") == "ok":
         return _ok()
-    message = str((body.get("error") or {}).get("message", ""))
+    message = _error_message(body.get("error"))
     if "api key" in message.lower():
         return _ko(message)
     return _ok(message, code="key_accepted")
