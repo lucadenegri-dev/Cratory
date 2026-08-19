@@ -284,3 +284,58 @@ def test_essentia_ha_il_pin_e_il_flag_only_binary():
     recipe = sp.recipe_for(sp.get("essentia"))
     assert "--only-binary=:all:" in recipe
     assert "essentia==2.1b6.dev1389" in recipe
+
+
+# --- Rilevamento dei pacchetti Python -----------------------------------
+# yt-dlp ed Essentia nel codice sono `import`, non eseguibili: vanno rilevati
+# importandoli, e la presenza la decide il codice di uscita, non l'output.
+
+def _finto(key: str, module: str) -> sp.Component:
+    return sp.Component(key=key, kind="venv", severity="optional",
+                        unlocks=(), auto_installable=False, python_module=module)
+
+
+def test_modulo_python_assente_non_risulta_presente():
+    """Regressione del falso verde: `_run_version` ripiegava su stderr, quindi
+    l'ImportError veniva letto come versione ('Traceback (most recent call
+    last):') e il componente risultava installato. Un wizard che dice verde su
+    un componente mancante e' peggio di un wizard che non lo cerca."""
+    esito = sp._probe_python_module(_finto("finto", "modulo_che_non_esiste_davvero"))
+    assert esito["present"] is False
+    assert esito["version"] is None
+
+
+def test_modulo_python_presente_risulta_presente():
+    esito = sp._probe_python_module(_finto("finto", "json"))
+    assert esito["present"] is True
+    assert esito["source"] == "venv"
+
+
+def test_yt_dlp_rilevato_per_import_non_per_binario(monkeypatch):
+    """Nel codice yt-dlp e' solo `import yt_dlp`. Un eseguibile nel PATH senza
+    il modulo nel venv (il caso di chi fa `brew install yt-dlp`) farebbe dire
+    verde al wizard mentre ogni funzione che lo usa continua a fallire."""
+    monkeypatch.setattr(sp.shutil, "which", lambda name: "/opt/homebrew/bin/yt-dlp")
+    monkeypatch.setattr(sp, "_import_version", lambda module: None)
+    assert sp._probe_one(sp.get("yt-dlp"))["present"] is False
+
+
+def test_dispatch_non_dipende_dalla_chiave(monkeypatch):
+    """`_probe_one` riconosceva Essentia con un `if c.key == "essentia"`: un
+    pacchetto Python aggiunto al registry sarebbe stato cercato come binario."""
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    assert sp._probe_one(_finto("nuovo", "json"))["present"] is True
+
+
+def test_ogni_componente_ha_un_link_alla_documentazione():
+    """slskd non ha una ricetta: senza link, chi non ce l'ha legge 'non
+    trovato' e non ha nessun posto dove andare."""
+    for c in sp.REGISTRY:
+        assert c.docs.startswith("https://"), f"{c.key} senza documentazione"
+
+
+def test_il_probe_espone_il_link(monkeypatch):
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    monkeypatch.setattr(sp, "_import_version", lambda module: None)
+    for riga in sp.probe_all(force=True):
+        assert riga["docs"], f"{riga['key']} senza docs nel payload"

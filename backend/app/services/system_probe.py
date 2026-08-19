@@ -44,6 +44,12 @@ class Component:
     binary: str | None = None
     version_flag: str = "--version"
     env_override: str | None = None
+    # Componente che nel codice si usa come `import X`, non come eseguibile:
+    # va rilevato importandolo, perche' un binario omonimo nel PATH non dice
+    # niente sulla presenza del modulo nel venv.
+    python_module: str | None = None
+    # Dove leggere se la ricetta non fa al caso proprio (o non esiste).
+    docs: str = ""
 
 
 REGISTRY: tuple[Component, ...] = (
@@ -57,6 +63,7 @@ REGISTRY: tuple[Component, ...] = (
             "win32": ["winget", "install", "-e", "--id", "Gyan.FFmpeg"],
         },
         binary="ffmpeg", version_flag="-version",
+        docs="https://ffmpeg.org/download.html",
     ),
     Component(
         key="fpcalc", kind="system", severity="optional",
@@ -68,13 +75,15 @@ REGISTRY: tuple[Component, ...] = (
             "win32": ["winget", "install", "-e", "--id", "AcoustID.Chromaprint"],
         },
         binary="fpcalc", version_flag="-version", env_override="FPCALC",
+        docs="https://acoustid.org/chromaprint",
     ),
     Component(
         key="yt-dlp", kind="venv", severity="optional",
         unlocks=("soundcloud_import", "soundcloud_download", "shazam"),
         auto_installable=True,
         recipes={"*": [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"]},
-        binary="yt-dlp",
+        python_module="yt_dlp",
+        docs="https://github.com/yt-dlp/yt-dlp#installation",
     ),
     Component(
         key="essentia", kind="venv", severity="optional",
@@ -85,11 +94,17 @@ REGISTRY: tuple[Component, ...] = (
         # resterebbe appesa; così fallisce subito e la UI mostra la ricetta.
         recipes={"*": [sys.executable, "-m", "pip", "install",
                        "--only-binary=:all:", "essentia==2.1b6.dev1389"]},
+        python_module="essentia",
+        docs="https://essentia.upf.edu/installing.html",
     ),
     Component(
         key="slskd", kind="daemon", severity="optional",
         unlocks=("soulseek_download", "library_share"),
         auto_installable=False,
+        # Nessuna ricetta: e' un demone separato, si scarica dalle sue release
+        # e si configura a parte. Il link e' l'unica indicazione che possiamo
+        # dare, e va data.
+        docs="https://github.com/slskd/slskd/releases",
     ),
 )
 
@@ -145,6 +160,12 @@ def _run_version(argv: list[str]) -> str | None:
     except (OSError, subprocess.SubprocessError) as exc:
         log.debug("probe: %s non eseguibile (%s)", argv[0], exc)
         return None
+    if proc.returncode != 0:
+        # Senza questo, lo stderr di un fallimento (il "Traceback (most recent
+        # call last):" di un ImportError) veniva restituito come se fosse una
+        # versione, e il componente risultava presente.
+        log.debug("probe: %s uscito con %s", argv[0], proc.returncode)
+        return None
     output = (proc.stdout or proc.stderr or "").strip()
     return output.splitlines()[0][:120] if output else None
 
@@ -171,11 +192,27 @@ def _probe_binary(c: Component) -> dict:
             "source": source}
 
 
-def _probe_essentia() -> dict:
-    """Import in subprocess: Essentia è pesante e ha già il suo worker
-    separato — non va caricata nel processo che serve le richieste."""
-    version = _run_version([sys.executable, "-c",
-                            "import essentia; print(essentia.__version__)"])
+# Il nome del modulo arriva come argomento, non interpolato nel sorgente:
+# viene dal registry, ma il codice eseguito resta una costante.
+_VERSION_SNIPPET = (
+    "import importlib, sys\n"
+    "m = importlib.import_module(sys.argv[1])\n"
+    "v = getattr(m, '__version__', None)\n"
+    "if v is None:\n"
+    "    v = getattr(getattr(m, 'version', None), '__version__', None)\n"
+    "print(v or 'installato')\n"
+)
+
+
+def _import_version(module: str) -> str | None:
+    """Versione del modulo, o None se non importabile. L'import gira in un
+    subprocess: Essentia è pesante e ha già il suo worker separato, non va
+    caricata nel processo che serve le richieste."""
+    return _run_version([sys.executable, "-c", _VERSION_SNIPPET, module])
+
+
+def _probe_python_module(c: Component) -> dict:
+    version = _import_version(c.python_module or "")
     return {"present": version is not None, "version": version,
             "source": "venv" if version else None}
 
@@ -195,8 +232,8 @@ def _probe_slskd() -> dict:
 
 
 def _probe_one(c: Component) -> dict:
-    if c.key == "essentia":
-        detected = _probe_essentia()
+    if c.python_module:
+        detected = _probe_python_module(c)
     elif c.kind == "daemon":
         detected = _probe_slskd()
     else:
@@ -204,7 +241,7 @@ def _probe_one(c: Component) -> dict:
     return {
         "key": c.key, "kind": c.kind, "severity": c.severity,
         "unlocks": list(c.unlocks), "auto_installable": c.auto_installable,
-        "install_command": recipe_for(c), **detected,
+        "install_command": recipe_for(c), "docs": c.docs, **detected,
     }
 
 

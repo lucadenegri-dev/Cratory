@@ -25,6 +25,7 @@ function comp(over: Partial<ProbeComponent>): ProbeComponent {
     auto_installable: true,
     install_command: ["pip", "install", "essentia==2.1b6.dev1177"],
     unlocks: ["analysis_bpm_key"],
+    docs: "https://essentia.upf.edu/installing.html",
     ...over,
   };
 }
@@ -98,5 +99,43 @@ describe("ComponentRow", () => {
     unmount();
 
     expect(onBusyChange).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("ComponentRow: dove andare quando manca", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(cleanup);
+
+  it("mostra sempre il link alla documentazione del componente", () => {
+    render(<ComponentRow c={comp({ present: true })} onChanged={() => {}} />);
+    const link = screen.getByRole("link") as HTMLAnchorElement;
+    expect(link.href).toContain("essentia.upf.edu");
+  });
+
+  it("componente senza ricetta: dice che non c'è un comando invece di tacere", () => {
+    // slskd è un demone separato: senza questo, la riga diceva "non trovato"
+    // e nient'altro — nessun comando, nessuna spiegazione, nessun link utile.
+    render(<ComponentRow c={comp({
+      key: "slskd", kind: "daemon", auto_installable: false,
+      install_command: null, docs: "https://github.com/slskd/slskd/releases",
+    })} onChanged={() => {}} />);
+    expect(screen.getByText(/non c'è un comando|no single command/i)).toBeTruthy();
+  });
+
+  it("ricetta brew: avvisa che Homebrew non è preinstallato", () => {
+    render(<ComponentRow c={comp({
+      key: "ffmpeg", auto_installable: false,
+      install_command: ["brew", "install", "ffmpeg"],
+    })} onChanged={() => {}} />);
+    expect(screen.getByText(/non include|does not come with/i)).toBeTruthy();
+    const brew = screen.getAllByRole("link").find((a) => (a as HTMLAnchorElement).href.includes("brew.sh"));
+    expect(brew).toBeTruthy();
+  });
+
+  it("ricetta non-brew: nessun avviso su Homebrew", () => {
+    render(<ComponentRow c={comp({
+      auto_installable: false, install_command: ["pip", "install", "essentia"],
+    })} onChanged={() => {}} />);
+    expect(screen.queryByText(/non include|does not come with/i)).toBeNull();
   });
 });

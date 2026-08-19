@@ -103,6 +103,10 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
   const running = install?.status === "running" && install.key === c.key;
   const failed = install?.status === "error" && install.key === c.key;
   const label = t.setup.components[c.key as keyof typeof t.setup.components] ?? c.key;
+  // Le ricette di sistema sono scritte per un gestore di pacchetti preciso.
+  // Su macOS è Homebrew, che NON è preinstallato: senza dirlo, il comando è
+  // inutilizzabile proprio per chi parte da zero.
+  const needsBrew = c.install_command?.[0] === "brew";
 
   return (
     <div className="border-b border-border p-4 last:border-0">
@@ -119,6 +123,12 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
             {t.setup.unlocksLabel}{" "}
             {c.unlocks.map((u) => t.setup.unlocks[u as keyof typeof t.setup.unlocks] ?? u).join(", ")}
           </p>
+          {c.docs && (
+            <a href={c.docs} target="_blank" rel="noreferrer"
+               className="mt-1 inline-block text-xs text-fg underline-offset-4 hover:underline">
+              {t.setup.docsLink} ↗
+            </a>
+          )}
         </div>
         <div className="shrink-0 text-right">
           <div className={`text-[10px] uppercase tracking-wider ${c.present ? "text-fg-strong" : "text-muted"}`}>
@@ -167,7 +177,22 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
               {copied ? t.setup.copied : t.setup.copyCommand}
             </Button>
           </div>
+          {needsBrew && (
+            <p className="mt-1.5 text-[11px] text-faint">
+              {t.setup.installNeedsBrew}{" "}
+              <a href="https://brew.sh" target="_blank" rel="noreferrer"
+                 className="text-fg underline-offset-4 hover:underline">
+                {t.setup.installGetBrew} ↗
+              </a>
+            </p>
+          )}
         </div>
+      )}
+
+      {/* Nessuna ricetta (slskd): la riga diceva "non trovato" e taceva.
+          Dire che non esiste un comando è un'informazione, non un'assenza. */}
+      {!c.present && !c.install_command && (
+        <p className="mt-3 text-xs text-muted">{t.setup.installNoRecipe}</p>
       )}
     </div>
   );

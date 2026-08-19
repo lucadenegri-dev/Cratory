@@ -21,6 +21,8 @@ export type ProbeComponent = {
   auto_installable: boolean;
   install_command: string[] | null;
   unlocks: string[];
+  /** Dove leggere se la ricetta non fa al caso proprio (o non esiste). */
+  docs: string;
 };
 
 export type ProbeResponse = { platform: string; components: ProbeComponent[] };

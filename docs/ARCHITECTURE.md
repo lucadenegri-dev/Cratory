@@ -790,8 +790,18 @@ secrets only masked (`configured`, `source`, `hint` — never the value); see
 **Detecting and installing external components.** `services/system_probe.py` is a
 declarative registry, one `Component` per external dependency (`ffmpeg`, `fpcalc`,
 `yt-dlp`, `essentia`, `slskd`): how to detect it, what it unlocks, whether it's
-auto-installable and with which command per platform. The registry carries no prose
-— only feature keys the frontend translates. `services/component_installer.py`
+auto-installable and with which command per platform. Detection follows the way the
+app actually consumes the component, not its name: `python_module` entries (`yt-dlp`,
+`essentia`) are detected by importing them in a subprocess, because the code only ever
+does `import yt_dlp` / `import essentia` — an executable of the same name on `PATH`
+(what `brew install yt-dlp` leaves behind) says nothing about the module being in the
+venv. Binaries (`ffmpeg`, `fpcalc`) are resolved on disk; `slskd` is a daemon, probed
+over HTTP. Presence is decided by the subprocess exit code, never by its output: a
+non-zero exit returns no version, otherwise an `ImportError` traceback on stderr would
+read as a version string and report a missing component as installed. The registry
+carries no prose — only feature keys the frontend translates and a `docs` URL per
+component, which for `slskd` (no install recipe exists) is the only guidance the UI
+can offer. `services/component_installer.py`
 installs only the `auto_installable` entries (`yt-dlp`, `essentia` today) as a
 background job with streamed log output; `services/credential_tests.py` makes one
 real, minimal call per provider (`spotify`, `anthropic`, `discogs`, `acoustid`) and
