@@ -10,8 +10,29 @@ external services that features rely on. `backend/requirements.txt` and
 |---|---|---|
 | Python | **3.11** | Backend. Not a preference: the pinned Essentia build only publishes a CPython 3.11 wheel (see below). |
 | Node.js | 20.9+ | Frontend (Next 16's floor) |
-| ffmpeg | system install | Audio decoding: the `audio_hash` used for library identity, the segments the Shazam module fingerprints, and the yt-dlp MP3 extraction |
-| fpcalc (chromaprint) | system install, optional | AcoustID fingerprinting in Organize (`brew install chromaprint`) |
+| ffmpeg | system install, or downloaded by the app (Linux/Windows only) | Audio decoding: the `audio_hash` used for library identity, the segments the Shazam module fingerprints, and the yt-dlp MP3 extraction |
+| fpcalc (chromaprint) | system install, optional, or downloaded by the app | AcoustID fingerprinting in Organize (`brew install chromaprint`) |
+
+### Binaries the setup wizard can install
+
+`ffmpeg`, `fpcalc` and the `slskd` daemon no longer have to be installed by hand: the
+`/setup` wizard (`POST /api/setup/install/{key}`) can download, verify and install each
+one directly, from a version and SHA256 pinned in `backend/app/services/binary_manifest.py`
+— see `docs/ARCHITECTURE.md`'s "Detecting and installing external components" for why the
+hash is pinned in code rather than trusted at download time.
+
+| Binary | Pinned version | Source |
+|---|---|---|
+| fpcalc | 1.6.1 | Chromaprint's own GitHub releases (`acoustid/chromaprint`) — official builds for every platform, including a macOS universal binary |
+| ffmpeg | N-126217 | BtbN's `FFmpeg-Builds` releases — static Linux/Windows builds with published checksums; **no macOS build**, see below |
+| slskd | 0.26.0 | slskd's own GitHub releases (`slskd/slskd`) — a self-contained bundle (it carries its .NET runtime) for every platform |
+
+**macOS never gets an installable `ffmpeg`.** BtbN, the only upstream `ffmpeg` source
+that publishes static builds with checksums, ships no macOS asset, and no other source
+publishes a native `arm64` build with a checksum to pin against. Shipping the Intel build
+under Rosetta as the one binary Cratory *requires* was judged worse than an honest gap:
+on macOS `ffmpeg` always falls back to the manual `brew install ffmpeg` command the wizard
+shows. `fpcalc` and `slskd` have no such gap — both have real macOS builds pinned above.
 
 ## Backend (Python) — `backend/requirements.txt`
 
@@ -98,7 +119,7 @@ Not packages, but required for the corresponding feature to work:
 | MusicBrainz | Text-metadata proposals in Organize | Optional; no key, but requires an identifiable `MUSICBRAINZ_USER_AGENT` |
 | AcoustID | Acoustic fingerprint → MBID in Organize | Optional; `ACOUSTID_API_KEY` plus the `fpcalc` binary |
 | Anthropic API | Set curation and Organize's AI tag/genre helpers | Optional; `ANTHROPIC_API_KEY` |
-| slskd daemon | File acquisition over Soulseek, and the opt-in library share | Optional; runs separately, `SLSKD_URL`/`_API_KEY`/`_DOWNLOAD_DIR` |
+| slskd daemon | File acquisition over Soulseek, and the opt-in library share | Optional; runs separately, `SLSKD_URL`/`_API_KEY`/`_DOWNLOAD_DIR` — Cratory can also download it, write its config and start/stop it itself (see "Binaries the setup wizard can install" above and `docs/API.md`'s daemon lifecycle endpoints) |
 | Rekordbox | BPM and Camelot key via the `collection.xml` export | Required for BPM/key unless in-app analysis is used. No package and no API — a file upload |
 
 None of these providers supplies BPM, key, mood or energy. BPM and key come from Rekordbox

@@ -91,21 +91,28 @@ endpoints, `docs/API.md`.
   Organize). The app is bilingual (IT/EN): a persistent language setting, a typed
   frontend dictionary, backend errors as stable codes translated by the frontend, and
   deterministic phrases/AI output produced directly in the selected language.
-- **Guided setup.** First launch opens a six-step wizard at `/setup` (welcome,
-  prerequisites, library paths, external services, slskd, summary), gated by
+- **Guided setup** (2026-08-21). First launch opens a six-step wizard at `/setup`
+  (welcome, prerequisites, library paths, external services, slskd, summary), gated by
   `GET /api/setup/state` so a backend that's down never strands the user there.
-  `services/system_probe.py` detects `ffmpeg`, `fpcalc`, `yt-dlp`, `essentia` and
-  `slskd` through a declarative registry; `services/component_installer.py`
-  auto-installs the two that live inside the backend's own virtualenv (`yt-dlp`,
-  `essentia`) with streamed log output, while the system-level tools just get their
-  install command shown. `services/credential_tests.py` makes one real call per
-  provider (Spotify, Anthropic, Discogs, AcoustID) and surfaces the provider's own
-  error message. Credentials are now runtime-writable the same way paths and URLs
-  already were (`core/runtime_settings.py`'s `SECRET_KEYS`): a key saved from the
-  wizard or from `/settings` (which shares the same field components, so a key can
-  be changed without re-running the wizard) takes effect immediately, no restart —
-  and its value never appears in an API response, only whether it's configured and
-  where it came from.
+  `services/system_probe.py` detects three external binaries — `ffmpeg`, `fpcalc`,
+  `slskd` — through a declarative registry (`yt-dlp`/`essentia` are plain Python
+  dependencies pip already installs, not registry entries); `services/binary_manifest.py`
+  pins a version, download URL and SHA256 per component per platform, and
+  `services/binary_installer.py` downloads, verifies, extracts and — only once the
+  binary has actually run — installs it, with streamed log output. macOS has no pinned
+  `ffmpeg` build (no upstream publishes a checksummed native arm64 static binary), so it
+  always falls back to the manual command there. `services/slskd_daemon.py` goes a step
+  further for slskd alone: it writes `slskd.yml` (touching only the four keys it needs,
+  the rest of the user's file untouched) and starts/stops it as a detached process,
+  never touching a process it didn't start itself (ownership is proved by the exact
+  executable path recorded at launch, not by PID alone). `services/credential_tests.py`
+  makes one real call per provider (Spotify, Anthropic, Discogs, AcoustID) and surfaces
+  the provider's own error message. Credentials are runtime-writable the same way paths
+  and URLs already were (`core/runtime_settings.py`'s `SECRET_KEYS`): a key saved from
+  the wizard or from `/settings` (which shares the same field components, so a key can
+  be changed without re-running the wizard) takes effect immediately, no restart — and
+  its value never appears in an API response, only whether it's configured and where it
+  came from.
 
 ## Backlog
 

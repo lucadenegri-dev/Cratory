@@ -976,6 +976,58 @@ status. slskd stays in transition for a few seconds afterwards (Connecting →
 LoggingIn → LoggedIn), so poll `status` until `is_transitioning` is false.
 `409 slskd_not_configured`, `502 slskd_error`.
 
+### Daemon lifecycle
+
+```text
+GET  /api/slskd/daemon/status
+POST /api/slskd/daemon/start
+POST /api/slskd/daemon/stop
+PUT  /api/slskd/daemon/config
+```
+
+The section above assumes slskd is already running somewhere and Cratory just talks
+to it over HTTP; these four endpoints are the exception where Cratory downloads,
+configures and drives the daemon's own process (`services/slskd_daemon.py`, using
+`services/binary_installer.py` for the download — see `docs/ARCHITECTURE.md`'s "The
+boundary around slskd moved"). Not available on Windows: managing the process requires
+reading which executable owns a PID, and the tools for that don't exist there — every
+one of the four answers `501 slskd_unsupported_platform` on that platform rather than
+silently doing nothing.
+
+`GET /api/slskd/daemon/status` → `{"reachable": bool, "owned": bool | null, "pid": int
+| null}`. `reachable` is the same `/health` check as `GET /api/slskd/status`; `owned`
+is a tristate, not a boolean — `true`/`false` when Cratory can tell whose process is
+answering (a daemon it started itself vs. one the user runs independently), `null` on
+a platform where that can't be determined at all (Windows). `pid` is set only when
+`owned` is `true`.
+
+`POST /api/slskd/daemon/start` installs nothing itself — it requires `slskd` already
+present in the managed folder (`POST /api/setup/install/slskd` first) — writes the pid
+file with the exact executable path it launched, and waits for `/health` to answer
+before returning the refreshed status. `409 slskd_already_up` if something already
+answers at the configured URL (never starts a second one), `409 slskd_not_installed`
+if the binary isn't there, `502 slskd_start_failed` with the daemon's own recent log
+tail if it doesn't come up within the timeout, `501 slskd_unsupported_platform` on
+Windows.
+
+`POST /api/slskd/daemon/stop` stops the daemon only if `owned_pid()` proves it's the
+one this app started — the PID in the pid file is still, right now, running that exact
+executable path (PIDs get reused, so the PID alone is never enough evidence). `409
+slskd_not_ours` when there's no such proof (nothing running, or what's running isn't
+provably Cratory's), `501 slskd_unsupported_platform` on Windows.
+
+`PUT /api/slskd/daemon/config` — `{username, password, port?, download_dir?}` — writes
+`slskd.yml`. Only `username`/`password` are required; `port` and `download_dir` are
+`None`/omitted by default, and an omitted field means "leave whatever is already in
+the file alone," never "reset to a default" — that distinction is deliberate: the
+default port and download directory only apply the first time the file is created, so
+that a later call that omits a field can't silently overwrite a value the user (or an
+earlier call) actually chose. Every other key already in `slskd.yml` — shares, API
+key, comments — is preserved untouched, and a `.bak` copy is written before each
+rewrite. The password is written and never read back: the response,
+`{"configured": true, "username": str}`, echoes only the username. No slskd-specific
+error mapping beyond FastAPI's own `422` for a malformed body.
+
 ## Spotify
 
 ```text
@@ -1246,33 +1298,46 @@ reappear on its own), and with `false` from `/settings`' "reopen wizard" button.
 `platform` is `sys.platform` (`"darwin"` / `"linux"` / `"win32"`). Each entry:
 
 ```json
-{"key": "ffmpeg", "kind": "system", "severity": "required",
- "unlocks": ["audio_hash", "shazam", "soundcloud_download"],
- "auto_installable": false, "install_command": ["brew", "install", "ffmpeg"],
- "present": true, "version": "6.0", "source": "path"}
+{"key": "fpcalc", "kind": "system", "severity": "optional",
+ "unlocks": ["acoustid_fingerprint"],
+ "auto_installable": true, "installable": true,
+ "install_command": ["brew", "install", "chromaprint"],
+ "docs": "https://acoustid.org/chromaprint",
+ "present": true, "version": "1.6.1", "source": "bundle", "shadowing": null}
 ```
 
-`kind` is `"system"` (a binary expected on `PATH`), `"venv"` (importable, or
-pip-installable inside the backend's own virtualenv — `yt-dlp`, `essentia`) or
-`"daemon"` (`slskd`, probed by calling its own `/health` rather than by looking for a
-binary). `unlocks` is a list of feature keys, not prose — the frontend translates
-them. On a detected binary, `source` is `"bundle"` when it resolved under
-`CRATORY_BIN_DIR`, `"path"` from the system `PATH`, `"venv"` for an importable Python
-package, `"daemon"` when the slskd health check answered. The result is cached
+The registry has three entries — `ffmpeg`, `fpcalc`, `slskd` — `yt-dlp` and `essentia`
+are not among them: they are ordinary Python dependencies pip already installs, not
+external binaries this wizard needs to find. `kind` is `"system"` (`ffmpeg`, `fpcalc`
+— a binary resolved on disk) or `"daemon"` (`slskd`, probed by calling its own
+`/health` rather than by looking for a binary). `unlocks` is a list of feature keys,
+not prose — the frontend translates them. `installable` (and its older alias
+`auto_installable`, same value) is `true` when `binary_manifest` has a pinned download
+for this component on the current platform — for `ffmpeg` that's every platform
+*except* macOS, which has no entry on purpose (see `docs/ARCHITECTURE.md`); `slskd`
+has no manual `install_command` at all, only its releases page in `docs`. On a
+detected binary, `source` is `"bundle"` when it resolved under the managed folder
+(`CRATORY_BIN_DIR`, or its default when the env var isn't set), `"path"` from the
+system `PATH`, `"override"` from the component's own env var (`FPCALC`), `"daemon"`
+when the slskd health check answered. `shadowing` is only ever set alongside a
+`"bundle"` source: the system `PATH` copy the app isn't using, shown so the user
+understands why installing via `brew` didn't change anything. The result is cached
 server-side for 10 seconds; `force=true` bypasses the cache (used by the wizard's
 "recheck" button after an install).
 
-`POST /api/setup/install/{key}` (`202`) starts installing one of the registry's
-`auto_installable` components (today: `yt-dlp`, `essentia`) as a background job;
-`ffmpeg`, `fpcalc` and `slskd` are never auto-installed — the wizard only shows the
-platform's install command for those. The response has the same shape as
-`GET /api/setup/install/status`: `{"key": str | null, "status":
-"idle"|"running"|"done"|"error", "log": [str, ...], "detail": str | null}` — `log`
-streams the subprocess' combined stdout/stderr, capped to the last 500 lines.
-`400 unknown_component` for a key outside the registry, `400 not_auto_installable`
-for a registry key that isn't auto-installable (or has no recipe for the current
-platform), `409 install_already_running` if any install is already in
-flight — the installer runs one job at a time.
+`POST /api/setup/install/{key}` (`202`) starts downloading, verifying, extracting and
+running one of the three components in the background — `binary_installer.start()`.
+The response has the same shape as `GET /api/setup/install/status`: `{"key": str |
+null, "status": "idle"|"running"|"done"|"error", "log": [str, ...], "detail": str |
+null}` — `log` streams progress lines (download progress, hash verified, extracted,
+"the binary starts: …", installed path), capped to the last 500 lines. `400
+unknown_component` for a key outside the registry, `409 install_already_running` if
+any install is already in flight — the installer runs one job at a time. A key with
+no build for the current platform (macOS `ffmpeg`) is *not* rejected synchronously:
+`start()` only validates the key exists, so the request still returns `202` and the
+"no build for this platform" failure surfaces as `status: "error"` on the next
+`GET /api/setup/install/status` poll, same as a failed download or a binary that
+doesn't run.
 
 `GET /api/setup/install/status` polls that same state. When a run finishes
 successfully, it also invalidates the probe cache, so the very next

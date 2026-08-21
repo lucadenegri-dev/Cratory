@@ -96,7 +96,8 @@ backend/app/
     acquisition   acquisition  soulseek_select  download_queue  download_dispatcher
                   download_runner  download_review  slskd_shares
     mixes         mix_identify  mix_identify_job
-    setup         system_probe  component_installer  credential_tests
+    setup         system_probe  binary_manifest  binary_installer  slskd_daemon
+                  credential_tests
     misc          gap_analysis  labels  pipeline  rating  app_state
                   track_label  job_spawn  native_picker
 
@@ -788,43 +789,74 @@ secrets only masked (`configured`, `source`, `hint` — never the value); see
 `docs/API.md`.
 
 **Detecting and installing external components.** `services/system_probe.py` is a
-declarative registry, one `Component` per external dependency (`ffmpeg`, `fpcalc`,
-`yt-dlp`, `essentia`, `slskd`): how to detect it, what it unlocks, whether it's
-auto-installable and with which command per platform. Detection follows the way the
-app actually consumes the component, not its name: `python_module` entries (`yt-dlp`,
-`essentia`) are detected by importing them in a subprocess, because the code only ever
-does `import yt_dlp` / `import essentia` — an executable of the same name on `PATH`
-(what `brew install yt-dlp` leaves behind) says nothing about the module being in the
-venv. Binaries (`ffmpeg`, `fpcalc`) are resolved on disk; `slskd` is a daemon, probed
-over HTTP. Presence is decided by the subprocess exit code, never by its output: a
-non-zero exit returns no version, otherwise an `ImportError` traceback on stderr would
-read as a version string and report a missing component as installed. The registry
-carries no prose — only feature keys the frontend translates and a `docs` URL per
-component, which for `slskd` (no install recipe exists) is the only guidance the UI
-can offer. `services/component_installer.py`
-installs only the `auto_installable` entries (`yt-dlp`, `essentia` today) as a
-background job with streamed log output; `services/credential_tests.py` makes one
-real, minimal call per provider (`spotify`, `anthropic`, `discogs`, `acoustid`) and
-returns the provider's own error message, not a paraphrase. `routers/setup.py` is
-HTTP-only over the three.
+declarative registry of three external binaries — `ffmpeg`, `fpcalc`, `slskd` — how to
+detect each, what it unlocks, and (for `ffmpeg`/`fpcalc`) the manual install command per
+platform. `yt-dlp` and `essentia` used to be registry entries too; they left because they
+were never external binaries — they're ordinary Python packages pinned in
+`requirements.txt`, and `pip install -r requirements.txt` already puts them in the
+backend's own venv, so probing for them and offering to "auto-install" was solving a
+problem `pip` had already solved. Detection follows how the app actually consumes what's
+left: `ffmpeg`/`fpcalc` are resolved on disk (`resolve_binary`); `slskd` is a daemon,
+probed by calling its own `/health` rather than by looking for a binary — the same module
+also downloads, configures and starts it now, see below. Presence for the two binaries is
+decided by the subprocess exit code, never by its output: a non-zero exit returns no
+version, otherwise an `ImportError` traceback on stderr would read as a version string and
+report a missing component as installed. The registry carries no prose — only feature keys
+the frontend translates and a `docs` URL per component, which for `slskd` (no install
+recipe exists) is the only guidance the UI can offer; for `ffmpeg`/`fpcalc` the recipe
+(`brew install ffmpeg`, …) is display text only — the wizard shows it, Cratory never runs
+it itself.
 
-**Two seams exist purely for an eventual Tauri desktop build**, where Cratory's own
-binaries and processes stop being "whatever this dev machine's `PATH` happens to
-have" and become part of a shipped app bundle:
+`services/binary_manifest.py` holds the download side, deliberately separate from the
+registry above: this file changes at the cadence of version bumps, the registry describes
+behavior. Per component per platform tag (`darwin-arm64`, `linux-x86_64`, …) it pins a
+version, a download URL and a SHA256 — fixed in code, not fetched at install time. Both
+matter for a different reason: the pinned hash is what stops a tampered release upstream
+from being accepted (a digest read from GitHub's own API at install time would come from
+the same source a compromised release would also control, so it can't be the thing trusted
+at that moment), while a download that verified and extracted cleanly can still produce a
+binary that will not run — wrong architecture, a missing signature — which is why
+`services/binary_installer.py` treats **an install as valid only once the binary has
+actually executed**, not once the bytes match. This isn't a theoretical caution; it was
+observed for real during development. The sequence is download-while-hashing → verify
+against the pin → extract to a temp directory → run with the component's version flag →
+only then move into the managed folder, so an installation interrupted at any point never
+leaves a half-installed binary in place of a working one. **macOS deliberately has no
+`ffmpeg` entry**: BtbN, the only upstream that publishes static builds with checksums,
+ships no macOS asset, and no other source publishes a native `arm64` build with a checksum
+to pin — an Intel binary that depends on Rosetta, shipped as the one *required* component,
+was judged worse than an honest gap that falls back to the manual `brew install ffmpeg`
+command. `routers/setup.py` is HTTP-only over probe/install; `services/credential_tests.py`
+(unrelated to binaries) makes one real, minimal call per provider (`spotify`, `anthropic`,
+`discogs`, `acoustid`) and returns the provider's own error message, not a paraphrase.
 
-- `system_probe.resolve_binary(name, env_override)` checks a component-specific env
-  var, then `CRATORY_BIN_DIR`, then (for `kind="venv"` components) the running
-  interpreter's own directory, then falls back to `shutil.which` on `PATH`. A Tauri
-  build that ships `ffmpeg`/`fpcalc`/`yt-dlp` inside the bundle only has to set
-  `CRATORY_BIN_DIR` once at launch — nothing else in the probe changes. The seam
-  isn't probe-only: `acoustid.fpcalc_available`, `organize/integrations/integrity`'s
-  `ffmpeg_available`, and the ffmpeg checks in `routers/downloads.py` and
-  `routers/dj_sets.py` all delegate to it too, so a bundle build can't leave those
-  disagreeing with the wizard about the same binary.
-- `component_installer.run_recipe(argv)` is the *only* place that module spawns a
-  subprocess (`shell=False`, `argv` always a list, recipes only ever come from the
-  registry — no user input reaches a shell). A Tauri build replaces that one
-  function; none of its callers need to change.
+**The boundary around slskd moved.** Elsewhere in this document slskd is described as an
+external service Cratory only reaches over HTTP — that's still how Cratory talks to it once
+it's running, but no longer the whole story: `services/slskd_daemon.py` now downloads it
+(through `binary_installer` above), writes its configuration and starts it as a detached
+process, a deliberate exception to "Cratory doesn't run its own services." Two rules keep
+the exception contained. The user's own config file is never destroyed: `write_config`
+touches only the four keys Cratory needs — Soulseek username/password, web port, download
+directory — and leaves everything else in `slskd.yml` (shares, API key, comments) exactly
+as it was, writing a `.bak` before every rewrite. And only a daemon this app started is ever
+stopped: `stop()`'s sole authority is `owned_pid()`, which doesn't trust a bare PID (the OS
+reuses them) but checks that the live process under that PID is still, bit for bit, the same
+executable path `start()` recorded in the pid file when it launched it — a mismatch means
+the pid file is stale, and it gets removed rather than acted on.
+
+**One seam exists purely for an eventual Tauri desktop build**, where Cratory's own
+binaries and processes stop being "whatever this dev machine's `PATH` happens to have" and
+become part of a shipped app bundle: `system_probe.resolve_binary(name, env_override)`
+checks a component-specific env var, then `CRATORY_BIN_DIR`, then falls back to
+`shutil.which` on `PATH`. `CRATORY_BIN_DIR` isn't new — it was already consulted ahead of
+`PATH` app-wide — it simply gained a default (`managed_bin_dir()`, a `bin/` folder under the
+backend) so there's always somewhere for the installer to write even when nobody has set
+the env var. A Tauri build that ships `ffmpeg`/`fpcalc`/`slskd` inside the bundle only has
+to set `CRATORY_BIN_DIR` once at launch — nothing else in the probe, the installer or the
+daemon changes. The seam isn't probe-only: `acoustid.fpcalc_available`,
+`organize/integrations/integrity`'s `ffmpeg_available`, and the ffmpeg checks in
+`routers/downloads.py` and `routers/dj_sets.py` all delegate to it too, so a bundle build
+can't leave those disagreeing with the wizard about the same binary.
 
 ## Frontend
 
