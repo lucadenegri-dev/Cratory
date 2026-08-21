@@ -29,14 +29,17 @@ def test_download_riuscito(tmp_path):
 
 
 def test_hash_diverso_solleva_e_non_lascia_il_file(tmp_path):
-    """Un file con l'hash sbagliato non deve restare sul disco: se restasse,
-    un ritentativo o un altro percorso di codice potrebbe raccoglierlo."""
+    """Un file con l'hash sbagliato non deve restare sul disco — nemmeno come
+    `.parziale`: se restasse, un ritentativo o un altro percorso di codice
+    potrebbe raccoglierlo. Si controlla l'intera cartella, non solo `dest`,
+    perché `dest` non viene mai creato prima del rename finale: un controllo
+    limitato al suo nome sarebbe vero anche se il `.parziale` restasse."""
     dest = tmp_path / "scaricato"
     cattivo = "0" * 64
     with _client(lambda req: httpx.Response(200, content=CONTENUTO)) as c:
         with pytest.raises(bi.ChecksumMismatch):
             bi.download_verified(_download(cattivo), dest, client=c)
-    assert not dest.exists()
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_errore_http_solleva_download_failed(tmp_path):
@@ -80,3 +83,44 @@ def test_il_file_non_viene_tenuto_in_memoria(tmp_path, monkeypatch):
     with _client(handler) as c:
         bi.download_verified(_download(HASH_GIUSTO), tmp_path / "x", client=c)
     assert bi._CHUNK == 1024 and originale > 0
+
+
+class _StreamRottoAMeta(httpx.SyncByteStream):
+    """Un byte stream che consegna un po' di dati e poi esplode, per
+    simulare una connessione che cade a metà scaricamento (non prima di
+    ricevere la risposta, non nella richiesta stessa)."""
+
+    def __iter__(self):
+        yield b"a" * 2048
+        raise httpx.ReadError("connessione interrotta a metà scaricamento")
+
+    def close(self) -> None:
+        pass
+
+
+def test_errore_a_meta_scaricamento_non_lascia_traccia(tmp_path):
+    """Sia il caso di stato HTTP cattivo sia quello di errore di rete già
+    testati falliscono prima di scrivere un solo byte: il cleanup dentro gli
+    `except` sul file parziale scritto a metà, mai esercitato. Qui la
+    risposta arriva (200) e qualche KB viene scritto su disco prima che lo
+    stream sollevi un errore, cosa che deve comunque far scomparire ogni
+    traccia dalla cartella di destinazione."""
+    def handler(req):
+        return httpx.Response(200, stream=_StreamRottoAMeta())
+
+    with _client(handler) as c:
+        with pytest.raises(bi.DownloadFailed):
+            bi.download_verified(_download(HASH_GIUSTO), tmp_path / "x", client=c)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_client_iniettato_resta_utilizzabile_dopo_la_chiamata(tmp_path):
+    """Se il chiamante passa un client (`owned = False`), la funzione non deve
+    chiuderlo: un chiamante che condivide un client fra più download andrebbe
+    in errore silenzioso alla chiamata successiva."""
+    with _client(lambda req: httpx.Response(200, content=CONTENUTO)) as c:
+        bi.download_verified(_download(HASH_GIUSTO), tmp_path / "x", client=c)
+        # Se la funzione avesse chiuso il client iniettato, questa seconda
+        # richiesta sullo stesso client solleverebbe RuntimeError.
+        altra = c.get("https://esempio.invalid/y")
+    assert altra.status_code == 200
