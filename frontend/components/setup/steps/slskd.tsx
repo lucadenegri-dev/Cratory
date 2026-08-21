@@ -24,6 +24,7 @@ export function SlskdStep() {
   const [password, setPassword] = useState("");
   const [avvio, setAvvio] = useState(false);
   const [erroreDemone, setErroreDemone] = useState<string | null>(null);
+  const [fermaInCorso, setFermaInCorso] = useState(false);
 
   const load = useCallback(() => {
     getConfigSettings()
@@ -67,6 +68,21 @@ export function SlskdStep() {
       setErroreDemone(errText(e));
     } finally {
       setAvvio(false);
+    }
+  };
+
+  // Stessa forma del comando "Ferma" nella pagina Impostazioni (SlskdExtra):
+  // disabilita durante la chiamata e mostra l'errore invece di lasciarlo
+  // rigettare inosservato.
+  const ferma = async () => {
+    setFermaInCorso(true);
+    setErroreDemone(null);
+    try {
+      setDaemon(await daemonStop());
+    } catch (e) {
+      setErroreDemone(errText(e));
+    } finally {
+      setFermaInCorso(false);
     }
   };
 
@@ -132,8 +148,7 @@ export function SlskdStep() {
           <div className="flex items-center gap-3">
             <span className="text-xs text-fg-strong">{daemonLabel}</span>
             {daemon.owned === true && (
-              <Button size="sm" variant="outline"
-                      onClick={async () => setDaemon(await daemonStop())}>
+              <Button size="sm" variant="outline" disabled={fermaInCorso} onClick={ferma}>
                 {t.setup.daemonStop}
               </Button>
             )}
@@ -152,9 +167,9 @@ export function SlskdStep() {
                     onClick={scaricaEAvvia}>
               {avvio ? t.setup.daemonStarting : t.setup.daemonInstallAndStart}
             </Button>
-            {erroreDemone && <Alert tone="danger">{erroreDemone}</Alert>}
           </div>
         )}
+        {erroreDemone && <Alert tone="danger">{erroreDemone}</Alert>}
       </div>
     </div>
   );

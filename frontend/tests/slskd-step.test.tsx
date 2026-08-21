@@ -57,6 +57,26 @@ describe("SlskdStep", () => {
     await waitFor(() => expect(daemonStatus).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: /ferma|stop/i })).toBeNull();
     expect(screen.queryByText(/avviato fuori|elsewhere/i)).toBeNull();
+    // Un messaggio sbagliato qualunque farebbe passare le due asserzioni sopra:
+    // serve anche verificare che compaia proprio quello giusto.
+    expect(await screen.findByText(/non è possibile stabilire|can't tell/i)).toBeTruthy();
+  });
+
+  it("il bottone Ferma si disabilita durante la chiamata e mostra l'errore se il demone rifiuta lo stop", async () => {
+    // Prima di questo fix il click chiamava setDaemon(await daemonStop())
+    // senza try/catch né stato di occupato: un rigetto (race sulla
+    // proprietà, rete giù) spariva inosservato e il bottone restava
+    // cliccabile all'infinito.
+    daemonStatus.mockResolvedValue({ reachable: true, owned: true, pid: 42 });
+    let rifiuta!: (e: Error) => void;
+    daemonStop.mockReturnValue(new Promise((_, reject) => { rifiuta = reject; }));
+    render(<SlskdStep />);
+    const ferma = await screen.findByRole("button", { name: /ferma|stop/i }) as HTMLButtonElement;
+    fireEvent.click(ferma);
+    await waitFor(() => expect(ferma.disabled).toBe(true));
+    rifiuta(new Error("non è più nostro"));
+    await waitFor(() => expect(ferma.disabled).toBe(false));
+    expect(await screen.findByText(/non è più nostro/i)).toBeTruthy();
   });
 
   it("la password non resta nel campo dopo il salvataggio", async () => {
