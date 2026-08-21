@@ -96,13 +96,90 @@ def test_zip_con_traversal_rifiutato(tmp_path):
     assert not (tmp_path / "fuori").exists()
 
 
-def test_zip_con_percorso_assoluto_rifiutato(tmp_path):
+def test_zip_con_percorso_assoluto_fuori_destinazione_rifiutato(tmp_path):
+    """Caso storico, tenuto per copertura generale: qui `is_absolute()`
+    ferma per prima, ma il test da solo non lo dimostra, perché
+    `dest_dir / "/etc/cattivo"` scarta l'operando sinistro (così fa
+    pathlib con un secondo operando assoluto) e `_dentro` rifiuterebbe
+    comunque lo stesso nome se `is_absolute()` non ci fosse. I due test
+    seguenti isolano un controllo per volta."""
     a = tmp_path / "a.zip"
     _zip(a, {"/etc/cattivo": b"MALE"})
     dest = tmp_path / "out"
     dest.mkdir()
     with pytest.raises(bi.UnsafeArchive):
         bi.extract(a, _d("zip", "cattivo", "bundle"), dest)
+
+
+def test_zip_con_percorso_assoluto_dentro_la_destinazione_rifiutato(tmp_path):
+    """Percorso assoluto che punta proprio dentro dest_dir: qui `_dentro`
+    lo giudicherebbe innocuo (è "dentro" per davvero), quindi se questo
+    test passa è solo grazie al controllo `is_absolute()` in
+    `_valida_nomi`. Senza un caso così, rimuovere quel controllo non fa
+    fallire nessun test."""
+    dest = tmp_path / "out"
+    dest.mkdir()
+    nome = str(dest / "cattivo")
+    a = tmp_path / "a.zip"
+    _zip(a, {nome: b"MALE"})
+    with pytest.raises(bi.UnsafeArchive):
+        bi.extract(a, _d("zip", "cattivo", "bundle"), dest)
+
+
+def test_zip_con_symlink_preesistente_nella_destinazione_rifiutato(tmp_path):
+    """Il nome non è assoluto e non contiene "..": `is_absolute()` e il
+    controllo su ".." non c'entrano nulla qui. A intercettarlo è solo
+    `_dentro`, che segue un symlink già presente in dest_dir (residuo di
+    un'installazione precedente) e si accorge che porta fuori. Prova che
+    `_dentro` non è ridondante rispetto al controllo sui nomi."""
+    dest = tmp_path / "out"
+    dest.mkdir()
+    fuori = tmp_path / "fuori"
+    fuori.mkdir()
+    (dest / "condiviso").symlink_to(fuori)
+    a = tmp_path / "a.zip"
+    _zip(a, {"condiviso/cattivo": b"MALE"})
+    with pytest.raises(bi.UnsafeArchive):
+        bi.extract(a, _d("zip", "cattivo", "bundle"), dest)
+
+
+def test_tar_con_symlink_che_esce_dalla_destinazione_rifiutato(tmp_path):
+    """Il filtro `data` di tarfile blocca il link-escape con le proprie
+    classi (`tarfile.LinkOutsideDestinationError`, sottoclasse di
+    `tarfile.FilterError`), non con `InstallError`: il contratto di
+    extract() vuole `UnsafeArchive` per qualunque contenuto non sicuro, a
+    prescindere da chi lo rifiuta per primo."""
+    a = tmp_path / "a.tar.gz"
+    dest = tmp_path / "out"
+    dest.mkdir()
+    with tarfile.open(a, "w:gz") as t:
+        link = tarfile.TarInfo("link")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "../../../../../../tmp"
+        t.addfile(link)
+        dati = b"MALE"
+        info = tarfile.TarInfo("link/pwned")
+        info.size = len(dati)
+        t.addfile(info, io.BytesIO(dati))
+    with pytest.raises(bi.UnsafeArchive):
+        bi.extract(a, _d("tar.gz", "link", "bundle"), dest)
+
+
+def test_tar_single_membro_symlink_assoluto_rifiutato(tmp_path):
+    """Nel layout `single` il membro cercato per basename può essere esso
+    stesso un symlink assoluto: il filtro lo rifiuta con
+    `tarfile.AbsoluteLinkError` (anch'essa un `FilterError`), non con
+    `InstallError`."""
+    a = tmp_path / "a.tar.gz"
+    dest = tmp_path / "out"
+    dest.mkdir()
+    with tarfile.open(a, "w:gz") as t:
+        link = tarfile.TarInfo("fpcalc")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "/etc/passwd"
+        t.addfile(link)
+    with pytest.raises(bi.UnsafeArchive):
+        bi.extract(a, _d("tar.gz", "fpcalc", "single"), dest)
 
 
 def test_membro_mancante(tmp_path):

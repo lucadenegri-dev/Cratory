@@ -138,13 +138,22 @@ def extract(archive: Path, d: Download, dest_dir: Path) -> Path:
             nomi = t.getnames()
             _valida_nomi(nomi, dest_dir)
             interno = _trova_membro(nomi, d.member)
-            if d.layout == "bundle":
-                # `filter="data"` rifiuta link, device e percorsi assoluti;
-                # la validazione qui sopra copre comunque il caso zip, che
-                # un filtro equivalente non ce l'ha.
-                t.extractall(dest_dir, filter="data")
-            else:
-                t.extract(interno, dest_dir, filter="data")
+            try:
+                if d.layout == "bundle":
+                    # `filter="data"` rifiuta link, device e percorsi
+                    # assoluti; la validazione qui sopra copre comunque il
+                    # caso zip, che un filtro equivalente non ce l'ha.
+                    t.extractall(dest_dir, filter="data")
+                else:
+                    t.extract(interno, dest_dir, filter="data")
+            except tarfile.FilterError as exc:
+                # Il filtro rifiuta con le proprie classi, non sottoclassi
+                # di InstallError: le si traduce qui perché il contratto di
+                # extract() è "contenuto non sicuro -> UnsafeArchive", non
+                # "eccezione qualunque di tarfile". Un tarfile.TarError che
+                # non sia un rifiuto del filtro (archivio corrotto, lettura
+                # fallita) resta quello che è: non è la stessa cosa.
+                raise UnsafeArchive(str(exc)) from exc
 
     estratto = dest_dir / interno
     if d.layout == "single" and estratto.parent != dest_dir:
