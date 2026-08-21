@@ -17,7 +17,10 @@ export type ProbeComponent = {
   severity: "required" | "optional";
   present: boolean;
   version: string | null;
-  source: "bundle" | "path" | "venv" | "daemon" | null;
+  source: "bundle" | "path" | "override" | "daemon" | null;
+  /** Path to a system copy of the binary that this component's version is shadowing,
+   *  or null if there is no system copy or this component is not in use. */
+  shadowing: string | null;
   auto_installable: boolean;
   /** Esiste una build nel manifesto per questa piattaforma: se è false, il
    *  bottone Installa non ha senso e si mostra il comando manuale. */

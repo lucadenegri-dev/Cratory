@@ -22,6 +22,7 @@ function comp(over: Partial<ProbeComponent>): ProbeComponent {
     present: false,
     version: null,
     source: null,
+    shadowing: null,
     auto_installable: true,
     installable: true,
     install_command: ["pip", "install", "essentia==2.1b6.dev1177"],
