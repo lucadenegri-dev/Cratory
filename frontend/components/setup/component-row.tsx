@@ -145,7 +145,12 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange, onConfigure
 
       {!c.present && c.kind === "daemon" && (
         <div className="mt-3">
-          <Button size="sm" variant="outline" onClick={onConfigure}>
+          {/* Ignorava `disabled`: restava cliccabile anche a installazione
+              composita in corso, ed è l'unico bottone di questa riga sempre
+              presente (nessun `running` locale a bloccarlo). Cliccarlo
+              naviga via, smontando lo step mentre il giro sequenziale sta
+              ancora chiamando il backend (fix 2). */}
+          <Button size="sm" variant="outline" disabled={disabled} onClick={onConfigure}>
             {t.setup.installConfigure}
           </Button>
         </div>

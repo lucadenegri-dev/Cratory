@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PrerequisitesStep } from "@/components/setup/steps/prerequisites";
-import type { ProbeComponent } from "@/lib/api";
+import type { InstallStatus, ProbeComponent } from "@/lib/api";
 
 const getProbe = vi.fn();
 const startInstall = vi.fn();
@@ -22,26 +22,41 @@ function comp(over: Partial<ProbeComponent>): ProbeComponent {
   };
 }
 
+/** Promise risolvibile dall'esterno: serve a bloccare un poll a piacere, così
+ *  l'ordine delle chiamate si osserva senza dipendere dall'orologio reale. */
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => { resolve = r; });
+  return { promise, resolve };
+}
+
 describe("PrerequisitesStep", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    startInstall.mockResolvedValue({ key: "fpcalc", status: "running", log: [], detail: null });
+    startInstall.mockImplementation((key: string) =>
+      Promise.resolve({ key, status: "running", log: [], detail: null }),
+    );
     getInstallStatus.mockResolvedValue({ key: "fpcalc", status: "done", log: [], detail: null });
   });
   afterEach(cleanup);
 
-  it("installa in sequenza solo ciò che manca ed è installabile", async () => {
+  it("installa solo ciò che manca ed è installabile, mai un demone (fix 4)", async () => {
     getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
       comp({ key: "ffmpeg", present: false, installable: false }),
       comp({ key: "fpcalc", present: false, installable: true }),
-      comp({ key: "slskd", kind: "daemon", present: true, installable: true }),
+      // Manca ed è installable quanto fpcalc: se venisse installato, la sola
+      // spiegazione sarebbe che il filtro non esclude i demoni. Diverso dal
+      // "già presente" di prima: qui l'unico motivo di esclusione è `kind`.
+      comp({ key: "slskd", kind: "daemon", present: false, installable: true }),
     ]});
     render(<PrerequisitesStep onGoToSlskd={() => {}} />);
     const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
     fireEvent.click(bottone);
-    // ffmpeg non ha build su questa piattaforma, slskd c'è già: resta fpcalc.
+
+    await waitFor(() => expect(startInstall).toHaveBeenCalledWith("fpcalc"));
     await waitFor(() => expect(startInstall).toHaveBeenCalledTimes(1));
-    expect(startInstall).toHaveBeenCalledWith("fpcalc");
+    expect(startInstall).not.toHaveBeenCalledWith("ffmpeg");
+    expect(startInstall).not.toHaveBeenCalledWith("slskd");
   });
 
   it("il bottone è spento quando non c'è niente da installare", async () => {
@@ -51,5 +66,94 @@ describe("PrerequisitesStep", () => {
     render(<PrerequisitesStep onGoToSlskd={() => {}} />);
     const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
     expect((bottone as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("installa in sequenza: il secondo non parte finché il primo non è finito (fix 3)", async () => {
+    // Due componenti mancanti E installabili: con uno solo (come prima)
+    // l'ordine non è osservabile, e l'asserzione varrebbe identica anche per
+    // un'implementazione parallela. Il poll del primo resta appeso finché
+    // non lo sblocchiamo noi: se il secondo `startInstall` parte comunque,
+    // il giro non è sequenziale.
+    const primoPoll = deferred<InstallStatus>();
+    let pollCalls = 0;
+    getInstallStatus.mockImplementation(() => {
+      pollCalls += 1;
+      if (pollCalls === 1) return primoPoll.promise;
+      return Promise.resolve({ key: "essentia", status: "done", log: [], detail: null });
+    });
+    getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
+      comp({ key: "fpcalc", present: false, installable: true }),
+      comp({ key: "essentia", present: false, installable: true }),
+    ]});
+    render(<PrerequisitesStep onGoToSlskd={() => {}} />);
+    const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
+    fireEvent.click(bottone);
+
+    await waitFor(() => expect(startInstall).toHaveBeenCalledWith("fpcalc"));
+    await waitFor(() => expect(pollCalls).toBeGreaterThan(0));
+    // Il primo poll è ancora appeso: il secondo componente non deve essere partito.
+    expect(startInstall).not.toHaveBeenCalledWith("essentia");
+
+    primoPoll.resolve({ key: "fpcalc", status: "done", log: [], detail: null });
+    await waitFor(() => expect(startInstall).toHaveBeenCalledWith("essentia"));
+  });
+
+  it("un componente fallito non blocca l'installazione degli altri (fix 1)", async () => {
+    let pollCalls = 0;
+    getInstallStatus.mockImplementation(() => {
+      pollCalls += 1;
+      if (pollCalls === 1) {
+        return Promise.resolve({ key: "fpcalc", status: "error", log: [], detail: "python è uscito con codice 1" });
+      }
+      return Promise.resolve({ key: "essentia", status: "done", log: [], detail: null });
+    });
+    getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
+      comp({ key: "fpcalc", present: false, installable: true }),
+      comp({ key: "essentia", present: false, installable: true }),
+    ]});
+    render(<PrerequisitesStep onGoToSlskd={() => {}} />);
+    const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
+    fireEvent.click(bottone);
+
+    // Nonostante fpcalc fallisca, il giro prosegue con essentia.
+    await waitFor(() => expect(startInstall).toHaveBeenCalledWith("essentia"));
+    // E il fallimento non resta silenzioso: compare da qualche parte, col motivo.
+    await waitFor(() => expect(screen.getByText(/python è uscito con codice 1/)).toBeTruthy());
+  });
+
+  it("un avvio fallito (409, rete) viene mostrato invece di sparire nel nulla (fix 1)", async () => {
+    startInstall.mockRejectedValueOnce(new Error("409 Conflict"));
+    getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
+      comp({ key: "fpcalc", present: false, installable: true }),
+    ]});
+    render(<PrerequisitesStep onGoToSlskd={() => {}} />);
+    const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
+    fireEvent.click(bottone);
+
+    await waitFor(() => expect(screen.getByText(/409 Conflict/)).toBeTruthy());
+    // Non essendoci mai stato un job avviato, non deve nemmeno iniziare il polling.
+    expect(getInstallStatus).not.toHaveBeenCalled();
+  });
+
+  it("lo smontaggio dello step ferma il giro composito, non solo lo stato (fix 2)", async () => {
+    const primoPoll = deferred<InstallStatus>();
+    getInstallStatus.mockImplementation(() => primoPoll.promise);
+    getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
+      comp({ key: "fpcalc", present: false, installable: true }),
+      comp({ key: "essentia", present: false, installable: true }),
+    ]});
+    const { unmount } = render(<PrerequisitesStep onGoToSlskd={() => {}} />);
+    const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
+    fireEvent.click(bottone);
+    await waitFor(() => expect(startInstall).toHaveBeenCalledWith("fpcalc"));
+
+    // Simula la navigazione via a metà installazione (es. il bottone
+    // Configura della riga demone, prima cliccabile a prescindere).
+    unmount();
+    // Se il primo poll si sblocca DOPO lo smontaggio, un giro che non si è
+    // fermato proseguirebbe con essentia: non deve succedere.
+    primoPoll.resolve({ key: "fpcalc", status: "done", log: [], detail: null });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(startInstall).not.toHaveBeenCalledWith("essentia");
   });
 });

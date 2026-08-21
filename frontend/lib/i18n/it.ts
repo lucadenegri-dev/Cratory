@@ -313,6 +313,7 @@ export const it: Dictionary = {
     installAllMissing: "Installa quello che manca",
     installNoBuild: "Non abbiamo una build per questa piattaforma.",
     installConfigure: "Configura",
+    installAllFailedFor: (component: string) => `Non è stato possibile installare ${component}.`,
     daemonTitle: "Demone Soulseek",
     daemonRunning: "In esecuzione",
     daemonRunningElsewhere: "Già in esecuzione — avviato fuori da Cratory",

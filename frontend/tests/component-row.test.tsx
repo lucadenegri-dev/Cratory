@@ -167,4 +167,17 @@ describe("ComponentRow: installabilità", () => {
     fireEvent.click(screen.getByRole("button", { name: /configura|configure/i }));
     expect(onConfigure).toHaveBeenCalled();
   });
+
+  it("il bottone Configura del demone rispetta il disabled del genitore (fix 2)", () => {
+    // Prima ignorava `disabled`: restava cliccabile anche a installazione
+    // composita in corso, permettendo di navigare via (smontando lo step)
+    // mentre il giro sequenziale parlava ancora col backend.
+    const onConfigure = vi.fn();
+    render(<ComponentRow c={comp({
+      key: "slskd", kind: "daemon", installable: true, auto_installable: true,
+      install_command: null,
+    })} onChanged={() => {}} onConfigure={onConfigure} disabled />);
+    const btn = screen.getByRole("button", { name: /configura|configure/i }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
 });

@@ -318,6 +318,7 @@ export const en = {
     installAllMissing: "Install what's missing",
     installNoBuild: "We don't have a build for this platform.",
     installConfigure: "Configure",
+    installAllFailedFor: (component: string) => `Could not install ${component}.`,
     daemonTitle: "Soulseek daemon",
     daemonRunning: "Running",
     daemonRunningElsewhere: "Already running — started outside Cratory",
