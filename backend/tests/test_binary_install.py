@@ -270,3 +270,14 @@ def test_bundle_fallito_a_meta_copia_non_distrugge_quello_gia_installato(bin_dir
     assert (vecchia / "libfoo.so").read_text() == "dipendenza del vecchio binario"
     assert not (bin_dir / "slskd.new").exists()
     assert not (bin_dir / "slskd.old").exists()
+
+
+def test_binario_che_esce_zero_ma_non_stampa_nulla(bin_dir, monkeypatch):
+    """Un binario che esce 0 senza output è considerato funzionante: nulla da
+    leggere per la versione, il criterio di riuscita è che sia partito."""
+    dati = _archivio(b"#!/bin/sh\nexit 0\n")
+    _manifest(monkeypatch, hashlib.sha256(dati).hexdigest())
+    with httpx.Client(transport=httpx.MockTransport(
+            lambda req: httpx.Response(200, content=dati))) as c:
+        percorso = bi.install("fpcalc", client=c)
+    assert percorso.is_file()

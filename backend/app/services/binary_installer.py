@@ -225,7 +225,9 @@ def _prova_esecuzione(percorso: Path, version_flag: str) -> str:
     if proc.returncode != 0:
         raise DoesNotRun((proc.stderr or proc.stdout or "").strip()[:200]
                          or f"uscito con {proc.returncode}")
-    return (proc.stdout or proc.stderr or "").strip().splitlines()[0][:120]
+    output = (proc.stdout or proc.stderr or "").strip()
+    lines = output.splitlines()
+    return (lines[0] if lines else "")[:120]
 
 
 def installed_path(key: str) -> Path | None:
