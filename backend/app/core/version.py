@@ -33,3 +33,33 @@ def app_version() -> str:
     except OSError:
         return FALLBACK
     return letto or FALLBACK
+
+
+def parse_version(raw: str) -> tuple[int, int, int] | None:
+    """`v0.10.0` e `0.10.0` danno lo stesso risultato. `None` se non è una
+    versione su cui si possa ragionare: un tag lo scrive una persona a mano,
+    e non deve poter far esplodere il controllo aggiornamenti."""
+    testo = (raw or "").strip().lstrip("vV")
+    numeri = testo.split("+", 1)[0].split("-", 1)[0].split(".")
+    if len(numeri) != 3:
+        return None
+    try:
+        maggiore, minore, patch = (int(n) for n in numeri)
+    except ValueError:
+        return None
+    return maggiore, minore, patch
+
+
+def is_newer(candidate: str, current: str) -> bool:
+    """True se `candidate` è più recente di `current`.
+
+    Confronto fra numeri, non fra stringhe: "0.10.0" < "0.9.0" in ordine
+    testuale, e chi lo confrontasse così non mostrerebbe mai un aggiornamento
+    dopo la nona minor. Se una delle due non è leggibile la risposta è False:
+    meglio non annunciare un aggiornamento che annunciarne uno inventato.
+    """
+    a = parse_version(candidate)
+    b = parse_version(current)
+    if a is None or b is None:
+        return False
+    return a > b
