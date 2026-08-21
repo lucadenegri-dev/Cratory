@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, ExternalLink, Plug, Unplug } from "lucide-react";
 import {
+  daemonStart, daemonStatus, daemonStop, errText,
   getConfigSettings, setSoundcloudUsername, slskdConnect, slskdDisconnect, slskdStatus,
   soundcloudStatus, SPOTIFY_LOGIN_URL,
-  type ConfigSettings, type ServiceStatus, type SlskdStatus, type SoundCloudStatus, type SpotifyStatus,
+  type ConfigSettings, type ServiceStatus, type SlskdDaemonStatus, type SlskdStatus,
+  type SoundCloudStatus, type SpotifyStatus,
 } from "@/lib/api";
 import { runFingerprint, type FingerprintResult } from "@/lib/organize/api";
 import { Alert, Button, Input, Spinner } from "@/components/ui";
@@ -160,6 +162,41 @@ function SlskdExtra({ t }: { t: Dictionary }) {
   }, []);
   useEffect(load, [load]);
 
+  // Stato/comandi del demone stesso (accendi/spegni il processo), separati
+  // dallo stato di login soulseek sopra: qui non si riconfigura né si
+  // riscarica, a differenza del passo del wizard — a regime le credenziali
+  // ci sono già e il binario pure (se manca, il backend risponde 409
+  // slskd_not_installed e il messaggio tradotto rimanda al wizard).
+  const [daemon, setDaemon] = useState<SlskdDaemonStatus | null>(null);
+  const [inCorso, setInCorso] = useState(false);
+  const [erroreDemone, setErroreDemone] = useState<string | null>(null);
+
+  useEffect(() => { daemonStatus().then(setDaemon).catch(() => setDaemon(null)); }, []);
+
+  const comanda = async (azione: () => Promise<SlskdDaemonStatus>) => {
+    setInCorso(true);
+    setErroreDemone(null);
+    try {
+      setDaemon(await azione());
+    } catch (e) {
+      setErroreDemone(errText(e));
+    } finally {
+      setInCorso(false);
+    }
+  };
+
+  // Stesse tre possibilità del wizard: true = l'abbiamo avviato noi, false =
+  // acceso ma da qualcun altro, null = non rilevabile su questa piattaforma
+  // (niente tool di processo, es. Windows) — non va spacciato per "non
+  // nostro".
+  const daemonLabel = daemon?.reachable
+    ? (daemon.owned === true
+        ? t.setup.daemonRunning
+        : daemon.owned === false
+        ? t.setup.daemonRunningElsewhere
+        : t.setup.daemonRunningUnknownOwner)
+    : t.setup.daemonStopped;
+
   // Dopo connect/disconnect slskd resta "in transizione" per qualche secondo
   // (Connecting → LoggingIn → LoggedIn): polling breve e limitato finche' lo
   // stato si stabilizza, pulsanti disabilitati nel frattempo.
@@ -195,20 +232,40 @@ function SlskdExtra({ t }: { t: Dictionary }) {
   const connected = !!status?.is_connected && !!status?.is_logged_in;
 
   return (
-    <div className="mt-3 flex items-center justify-between gap-4 border border-border bg-bg p-3">
-      <span className={`text-sm ${st.strong ? "text-fg-strong" : "text-muted"}`}>{st.text}</span>
-      {canAct && (
-        connected ? (
-          <Button size="sm" variant="outline" onClick={() => act(slskdDisconnect)} disabled={busy}>
-            {busy ? <Spinner /> : <Unplug size={14} />} {t.settings.soulseekDisconnect}
-          </Button>
-        ) : (
-          <Button size="sm" onClick={() => act(slskdConnect)} disabled={busy}>
-            {busy ? <Spinner /> : <Plug size={14} />} {t.settings.soulseekConnect}
-          </Button>
-        )
-      )}
+    <div className="mt-3 border border-border bg-bg p-3">
+      <div className="flex items-center justify-between gap-4">
+        <span className={`text-sm ${st.strong ? "text-fg-strong" : "text-muted"}`}>{st.text}</span>
+        {canAct && (
+          connected ? (
+            <Button size="sm" variant="outline" onClick={() => act(slskdDisconnect)} disabled={busy}>
+              {busy ? <Spinner /> : <Unplug size={14} />} {t.settings.soulseekDisconnect}
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => act(slskdConnect)} disabled={busy}>
+              {busy ? <Spinner /> : <Plug size={14} />} {t.settings.soulseekConnect}
+            </Button>
+          )
+        )}
+      </div>
       {error && <Alert tone="danger">⚠ {error}</Alert>}
+      {daemon && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-muted">{daemonLabel}</span>
+          {daemon.reachable && daemon.owned === true && (
+            <Button size="sm" variant="outline" disabled={inCorso}
+                    onClick={() => comanda(daemonStop)}>
+              {t.setup.daemonStop}
+            </Button>
+          )}
+          {!daemon.reachable && (
+            <Button size="sm" variant="outline" disabled={inCorso}
+                    onClick={() => comanda(daemonStart)}>
+              {t.setup.daemonStart}
+            </Button>
+          )}
+          {erroreDemone && <span className="text-xs text-danger">{erroreDemone}</span>}
+        </div>
+      )}
     </div>
   );
 }

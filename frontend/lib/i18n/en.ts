@@ -322,6 +322,10 @@ export const en = {
     daemonTitle: "Soulseek daemon",
     daemonRunning: "Running",
     daemonRunningElsewhere: "Already running — started outside Cratory",
+    // owned=null: this platform's process tools can't tell us either way
+    // (e.g. Windows). Not "not ours" — we genuinely don't know, and saying
+    // the wrong thing is worse than saying nothing.
+    daemonRunningUnknownOwner: "Running (can't tell whether Cratory started it)",
     daemonStopped: "Not running",
     daemonInstallAndStart: "Download, configure and start",
     daemonStart: "Start",

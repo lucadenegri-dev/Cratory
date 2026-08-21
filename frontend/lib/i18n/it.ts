@@ -317,6 +317,10 @@ export const it: Dictionary = {
     daemonTitle: "Demone Soulseek",
     daemonRunning: "In esecuzione",
     daemonRunningElsewhere: "Già in esecuzione — avviato fuori da Cratory",
+    // owned=null: su questa piattaforma i tool di processo non ci sono (es.
+    // Windows) e non sappiamo dire di chi è. Non è "non nostro", è "non lo
+    // sappiamo": dire la cosa sbagliata è peggio che non dire niente.
+    daemonRunningUnknownOwner: "In esecuzione (non è possibile stabilire se avviato da Cratory)",
     daemonStopped: "Non in esecuzione",
     daemonInstallAndStart: "Scarica, configura e avvia",
     daemonStart: "Avvia",
