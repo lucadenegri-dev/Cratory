@@ -5,13 +5,18 @@ import type { ProbeComponent } from "@/lib/api";
 
 // Il mock deve esporre OGNI export usato dal componente: vitest solleva
 // "No 'X' export is defined on the mock" al primo accesso mancante
-// (stesso pattern di tests/credential-field.test.tsx).
+// (stesso pattern di tests/credential-field.test.tsx). daemonConfig/daemonStart
+// sono arrivati col demone gestito qui dentro (ex passo dedicato del wizard).
 const startInstall = vi.fn();
 const getInstallStatus = vi.fn();
+const daemonConfig = vi.fn();
+const daemonStart = vi.fn();
 vi.mock("@/lib/api", () => ({
   errText: (e: unknown) => String((e as Error)?.message ?? e),
   startInstall: (...a: unknown[]) => startInstall(...a),
   getInstallStatus: (...a: unknown[]) => getInstallStatus(...a),
+  daemonConfig: (...a: unknown[]) => daemonConfig(...a),
+  daemonStart: (...a: unknown[]) => daemonStart(...a),
 }));
 
 function comp(over: Partial<ProbeComponent>): ProbeComponent {
@@ -117,12 +122,12 @@ describe("ComponentRow: dove andare quando manca", () => {
     expect(link.href).toContain("essentia.upf.edu");
   });
 
-  it("componente senza ricetta: dice che non c'è un comando invece di tacere", () => {
-    // slskd è un demone separato: senza questo, la riga diceva "non trovato"
-    // e nient'altro — nessun comando, nessuna spiegazione, nessun link utile.
+  it("componente di sistema senza ricetta: dice che non c'è un comando invece di tacere", () => {
+    // slskd (kind "daemon") ha il suo blocco dedicato più sotto e non passa
+    // mai da qui: questo copre un componente di sistema che semplicemente non
+    // ha una ricetta per la piattaforma corrente.
     render(<ComponentRow c={comp({
-      key: "slskd", kind: "daemon", auto_installable: false,
-      install_command: null, docs: "https://github.com/slskd/slskd/releases",
+      key: "finto", auto_installable: false, installable: false, install_command: null,
     })} onChanged={() => {}} />);
     expect(screen.getByText(/non c'è un comando|no single command/i)).toBeTruthy();
   });
@@ -157,27 +162,112 @@ describe("ComponentRow: installabilità", () => {
     expect(screen.queryByRole("button", { name: /installa|install/i })).toBeNull();
     expect(screen.getByText(/brew install ffmpeg/)).toBeTruthy();
   });
+});
 
-  it("il demone rimanda al suo passo invece di installarsi alla cieca", () => {
-    const onConfigure = vi.fn();
-    render(<ComponentRow c={comp({
-      key: "slskd", kind: "daemon", installable: true, auto_installable: true,
-      install_command: null,
-    })} onChanged={() => {}} onConfigure={onConfigure} />);
-    fireEvent.click(screen.getByRole("button", { name: /configura|configure/i }));
-    expect(onConfigure).toHaveBeenCalled();
+// Il demone (slskd) non ha più un passo dedicato: la sua riga qui gestisce
+// per intero sia il caso "risponde già" (frase condivisa, niente form) sia
+// il caso "non risponde" (credenziali Soulseek + un'unica azione che scarica,
+// configura e avvia) — carry-over dal vecchio steps/slskd.tsx, incluso
+// l'ordine (configura prima di scaricare) e il controllo sull'errore di
+// installazione prima di avviare.
+function daemon(over: Partial<ProbeComponent> = {}): ProbeComponent {
+  return comp({
+    key: "slskd", kind: "daemon", installable: true, auto_installable: true,
+    install_command: null, docs: "https://github.com/slskd/slskd/releases",
+    ...over,
+  });
+}
+
+describe("ComponentRow: demone slskd", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(cleanup);
+
+  it("demone già raggiungibile: solo la frase condivisa, nessun modulo credenziali", () => {
+    render(<ComponentRow c={daemon({ present: true })} onChanged={() => {}} />);
+    expect(screen.getByText(/impostazioni|settings page/i)).toBeTruthy();
+    expect(screen.queryByLabelText(/username/i)).toBeNull();
+    expect(screen.queryByLabelText(/password/i)).toBeNull();
   });
 
-  it("il bottone Configura del demone rispetta il disabled del genitore (fix 2)", () => {
-    // Prima ignorava `disabled`: restava cliccabile anche a installazione
-    // composita in corso, permettendo di navigare via (smontando lo step)
-    // mentre il giro sequenziale parlava ancora col backend.
-    const onConfigure = vi.fn();
-    render(<ComponentRow c={comp({
-      key: "slskd", kind: "daemon", installable: true, auto_installable: true,
-      install_command: null,
-    })} onChanged={() => {}} onConfigure={onConfigure} disabled />);
-    const btn = screen.getByRole("button", { name: /configura|configure/i }) as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
+  it("demone non raggiungibile: chiede le credenziali e installa (fix)", async () => {
+    daemonConfig.mockResolvedValue({ configured: true, username: "io" });
+    startInstall.mockResolvedValue({ key: "slskd", status: "running", log: [], detail: null });
+    getInstallStatus.mockResolvedValue({ key: "slskd", status: "done", log: [], detail: null });
+    daemonStart.mockResolvedValue({ reachable: true, owned: true, pid: 7 });
+    const onChanged = vi.fn();
+    render(<ComponentRow c={daemon({ present: false })} onChanged={onChanged} />);
+
+    // Niente bottone finché mancano username e password.
+    const bottone = screen.getByRole("button", { name: /scarica, configura e avvia|download, configure/i }) as HTMLButtonElement;
+    expect(bottone.disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: "io" } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "segreta" } });
+    expect(bottone.disabled).toBe(false);
+    fireEvent.click(bottone);
+
+    await waitFor(() => expect(daemonConfig).toHaveBeenCalledWith({ username: "io", password: "segreta" }));
+    await waitFor(() => expect(startInstall).toHaveBeenCalledWith("slskd"));
+    await waitFor(() => expect(daemonStart).toHaveBeenCalled());
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it("la password non resta nel campo dopo il salvataggio", async () => {
+    daemonConfig.mockResolvedValue({ configured: true, username: "io" });
+    startInstall.mockResolvedValue({ key: "slskd", status: "running", log: [], detail: null });
+    getInstallStatus.mockResolvedValue({ key: "slskd", status: "done", log: [], detail: null });
+    daemonStart.mockResolvedValue({ reachable: true, owned: true, pid: 7 });
+    render(<ComponentRow c={daemon({ present: false })} onChanged={() => {}} />);
+
+    const pwd = screen.getByLabelText(/password/i) as HTMLInputElement;
+    fireEvent.change(pwd, { target: { value: "segreta" } });
+    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: "io" } });
+    fireEvent.click(screen.getByRole("button", { name: /scarica, configura e avvia|download, configure/i }));
+
+    await waitFor(() => expect(daemonConfig).toHaveBeenCalled());
+    await waitFor(() => expect(pwd.value).toBe(""));
+  });
+
+  it("installazione fallita non avvia il demone e mostra l'errore", async () => {
+    // Stesso fix del vecchio passo dedicato: un job che finisce in "error"
+    // non deve far scattare daemonStart() — né "slskd non è installato" né,
+    // peggio, l'avvio silenzioso di una copia vecchia già presente.
+    daemonConfig.mockResolvedValue({ configured: true, username: "io" });
+    startInstall.mockResolvedValue({ key: "slskd", status: "running", log: [], detail: null });
+    getInstallStatus.mockResolvedValue({ key: "slskd", status: "error", log: [], detail: "checksum errato" });
+    render(<ComponentRow c={daemon({ present: false })} onChanged={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: "io" } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "segreta" } });
+    fireEvent.click(screen.getByRole("button", { name: /scarica, configura e avvia|download, configure/i }));
+
+    await waitFor(() => expect(daemonConfig).toHaveBeenCalled());
+    expect(await screen.findByText(/checksum errato/i)).toBeTruthy();
+    expect(daemonStart).not.toHaveBeenCalled();
+  });
+
+  it("il bottone del demone rispetta il disabled del genitore", () => {
+    render(<ComponentRow c={daemon({ present: false })} onChanged={() => {}} disabled />);
+    const bottone = screen.getByRole("button", { name: /scarica, configura e avvia|download, configure/i }) as HTMLButtonElement;
+    expect(bottone.disabled).toBe(true);
+  });
+
+  it("avvisa il genitore quando l'installazione del demone inizia e finisce (stesso lucchetto delle altre righe)", async () => {
+    // startInstall condivide un solo job col backend (409 altrimenti): questa
+    // riga deve annunciare busy come tutte le altre, non solo quelle di
+    // ffmpeg/fpcalc.
+    daemonConfig.mockResolvedValue({ configured: true, username: "io" });
+    startInstall.mockResolvedValue({ key: "slskd", status: "running", log: [], detail: null });
+    getInstallStatus.mockResolvedValue({ key: "slskd", status: "done", log: [], detail: null });
+    daemonStart.mockResolvedValue({ reachable: true, owned: true, pid: 7 });
+    const onBusyChange = vi.fn();
+    render(<ComponentRow c={daemon({ present: false })} onChanged={() => {}} onBusyChange={onBusyChange} />);
+
+    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: "io" } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "segreta" } });
+    fireEvent.click(screen.getByRole("button", { name: /scarica, configura e avvia|download, configure/i }));
+
+    await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(false));
   });
 });

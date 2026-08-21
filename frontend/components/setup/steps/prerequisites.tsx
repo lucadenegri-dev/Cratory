@@ -12,7 +12,7 @@ import { ComponentRow } from "../component-row";
 // restava su "non trovato" e l'utente non aveva alcun indizio del perché.
 type InstallFailure = { key: string; message: string | null; errorCode?: string | null };
 
-export function PrerequisitesStep({ onGoToSlskd }: { onGoToSlskd: () => void }) {
+export function PrerequisitesStep() {
   const t = useT();
   const [components, setComponents] = useState<ProbeComponent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,8 +45,9 @@ export function PrerequisitesStep({ onGoToSlskd }: { onGoToSlskd: () => void }) 
   useEffect(() => load(), [load]);
 
   // Solo ciò che manca davvero E per cui esiste una build: ffmpeg su
-  // piattaforme senza binario resta manuale, il demone slskd rimanda al suo
-  // passo (onConfigure), mai un install alla cieca.
+  // piattaforme senza binario resta manuale, il demone slskd non parte mai
+  // da qui (la sua riga chiede prima le credenziali Soulseek — vedi
+  // ComponentRow), mai un install alla cieca.
   const mancanti = (components ?? []).filter(
     (c) => !c.present && c.installable && c.kind !== "daemon",
   );
@@ -137,7 +138,6 @@ export function PrerequisitesStep({ onGoToSlskd }: { onGoToSlskd: () => void }) 
                 onChanged={() => load(true)}
                 disabled={busyKey !== null && busyKey !== c.key}
                 onBusyChange={(busy) => setBusyKey(busy ? c.key : null)}
-                onConfigure={onGoToSlskd}
               />
             ))}
           </div>

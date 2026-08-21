@@ -49,7 +49,7 @@ describe("PrerequisitesStep", () => {
       // "già presente" di prima: qui l'unico motivo di esclusione è `kind`.
       comp({ key: "slskd", kind: "daemon", present: false, installable: true }),
     ]});
-    render(<PrerequisitesStep onGoToSlskd={() => {}} />);
+    render(<PrerequisitesStep />);
     const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
     fireEvent.click(bottone);
 
@@ -63,7 +63,7 @@ describe("PrerequisitesStep", () => {
     getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
       comp({ present: true }),
     ]});
-    render(<PrerequisitesStep onGoToSlskd={() => {}} />);
+    render(<PrerequisitesStep />);
     const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
     expect((bottone as HTMLButtonElement).disabled).toBe(true);
   });
@@ -85,7 +85,7 @@ describe("PrerequisitesStep", () => {
       comp({ key: "fpcalc", present: false, installable: true }),
       comp({ key: "essentia", present: false, installable: true }),
     ]});
-    render(<PrerequisitesStep onGoToSlskd={() => {}} />);
+    render(<PrerequisitesStep />);
     const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
     fireEvent.click(bottone);
 
@@ -111,7 +111,7 @@ describe("PrerequisitesStep", () => {
       comp({ key: "fpcalc", present: false, installable: true }),
       comp({ key: "essentia", present: false, installable: true }),
     ]});
-    render(<PrerequisitesStep onGoToSlskd={() => {}} />);
+    render(<PrerequisitesStep />);
     const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
     fireEvent.click(bottone);
 
@@ -126,7 +126,7 @@ describe("PrerequisitesStep", () => {
     getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
       comp({ key: "fpcalc", present: false, installable: true }),
     ]});
-    render(<PrerequisitesStep onGoToSlskd={() => {}} />);
+    render(<PrerequisitesStep />);
     const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
     fireEvent.click(bottone);
 
@@ -142,7 +142,7 @@ describe("PrerequisitesStep", () => {
       comp({ key: "fpcalc", present: false, installable: true }),
       comp({ key: "essentia", present: false, installable: true }),
     ]});
-    const { unmount } = render(<PrerequisitesStep onGoToSlskd={() => {}} />);
+    const { unmount } = render(<PrerequisitesStep />);
     const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
     fireEvent.click(bottone);
     await waitFor(() => expect(startInstall).toHaveBeenCalledWith("fpcalc"));

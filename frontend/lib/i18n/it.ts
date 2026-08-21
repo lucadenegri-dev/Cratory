@@ -310,17 +310,15 @@ export const it: Dictionary = {
         note: "slskd resta un programma separato, con un suo file di configurazione. Cratory può installarlo e avviarlo, ma in quel file scrive solo le poche chiavi necessarie: le tue impostazioni e i commenti restano intatti.",
       },
     },
-    slskdTitle: "Acquisizione da Soulseek",
-    slskdUrlLabel: "URL di slskd",
-    slskdDownloadDirLabel: "Cartella dei download",
-    slskdCheck: "Verifica il demone",
-    slskdReachable: "Demone raggiungibile",
-    slskdUnreachable: "Demone non raggiungibile",
     installAllMissing: "Installa quello che manca",
     installNoBuild: "Non abbiamo una build per questa piattaforma.",
-    installConfigure: "Configura",
     installAllFailedFor: (component: string) => `Non è stato possibile installare ${component}.`,
     daemonTitle: "Demone Soulseek",
+    // Già raggiungibile: niente da offrire, solo dire dove sta la sua
+    // configurazione. Generica apposta (nessun "passo 1", nessun "qui
+    // sotto"): la riga dei prerequisiti è l'unico posto che la mostra, ma
+    // deve restare vera letta da qualunque punto.
+    daemonManagedElsewhere: "Il suo URL, la cartella dei download e la chiave API sono nella pagina Impostazioni, sotto Servizi.",
     daemonRunning: "In esecuzione",
     daemonRunningElsewhere: "Già in esecuzione — avviato fuori da Cratory",
     // owned=null: su questa piattaforma i tool di processo non ci sono (es.

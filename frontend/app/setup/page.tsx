@@ -9,13 +9,15 @@ import { WelcomeStep } from "@/components/setup/steps/welcome";
 import { PrerequisitesStep } from "@/components/setup/steps/prerequisites";
 import { LibraryStep } from "@/components/setup/steps/library";
 import { ServicesStep } from "@/components/setup/steps/services";
-import { SlskdStep } from "@/components/setup/steps/slskd";
 import { SummaryStep } from "@/components/setup/steps/summary";
 
-/* Configurazione guidata: sei passi, nessuno bloccante. Lo stato di
+/* Configurazione guidata: cinque passi, nessuno bloccante. Lo stato di
    completamento vive nel backend (AppState), non in localStorage: è una
-   proprietà dell'installazione, non del browser. */
-const STEPS = ["welcome", "prerequisites", "library", "services", "slskd", "summary"] as const;
+   proprietà dell'installazione, non del browser. Slskd non ha più un passo
+   suo: la sua riga nei prerequisiti (ComponentRow) chiede le credenziali e
+   installa da sola quando il demone non risponde già — vedi
+   component-row.tsx. */
+const STEPS = ["welcome", "prerequisites", "library", "services", "summary"] as const;
 
 export default function SetupPage() {
   const t = useT();
@@ -42,7 +44,6 @@ export default function SetupPage() {
     prerequisites: t.setup.prereqTitle,
     library: t.setup.libraryTitle,
     services: t.setup.servicesTitle,
-    slskd: t.setup.slskdTitle,
     summary: t.setup.summaryTitle,
   };
 
@@ -60,12 +61,9 @@ export default function SetupPage() {
 
       <div className="flex-1">
         {step === "welcome" && <WelcomeStep />}
-        {step === "prerequisites" && (
-          <PrerequisitesStep onGoToSlskd={() => setIndex(STEPS.indexOf("slskd"))} />
-        )}
+        {step === "prerequisites" && <PrerequisitesStep />}
         {step === "library" && <LibraryStep />}
         {step === "services" && <ServicesStep />}
-        {step === "slskd" && <SlskdStep />}
         {step === "summary" && <SummaryStep />}
       </div>
 

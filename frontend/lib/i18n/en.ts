@@ -315,17 +315,14 @@ export const en = {
         note: "slskd remains a separate program with its own configuration file. Cratory can install and run it, but only writes the few keys it needs into that file — your own settings and comments there are left alone.",
       },
     },
-    slskdTitle: "Soulseek acquisition",
-    slskdUrlLabel: "slskd URL",
-    slskdDownloadDirLabel: "Download folder",
-    slskdCheck: "Check daemon",
-    slskdReachable: "Daemon reachable",
-    slskdUnreachable: "Daemon unreachable",
     installAllMissing: "Install what's missing",
     installNoBuild: "We don't have a build for this platform.",
-    installConfigure: "Configure",
     installAllFailedFor: (component: string) => `Could not install ${component}.`,
     daemonTitle: "Soulseek daemon",
+    // Already reachable: nothing to offer, just say where its settings live.
+    // Generic on purpose (no "step 1", no "below"): the prerequisites row is
+    // the only place that shows it, but it must read true from anywhere.
+    daemonManagedElsewhere: "Its URL, download folder and API key live on the Settings page, under Services.",
     daemonRunning: "Running",
     daemonRunningElsewhere: "Already running — started outside Cratory",
     // owned=null: this platform's process tools can't tell us either way
@@ -340,7 +337,7 @@ export const en = {
     daemonUsername: "Soulseek username",
     daemonPassword: "Soulseek password",
     daemonCredentialsNote: "These go into slskd's own configuration file. Cratory keeps no copy.",
-    // Step 5
+    // Step 4
     summaryTitle: "You're set",
     summaryBody: "Here is what is on and what is off. Everything off can be switched on later from Settings.",
     summaryOn: "On",
