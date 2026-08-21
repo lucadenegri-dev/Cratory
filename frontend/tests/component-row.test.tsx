@@ -23,6 +23,7 @@ function comp(over: Partial<ProbeComponent>): ProbeComponent {
     version: null,
     source: null,
     auto_installable: true,
+    installable: true,
     install_command: ["pip", "install", "essentia==2.1b6.dev1177"],
     unlocks: ["analysis_bpm_key"],
     docs: "https://essentia.upf.edu/installing.html",

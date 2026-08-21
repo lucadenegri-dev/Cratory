@@ -19,6 +19,9 @@ export type ProbeComponent = {
   version: string | null;
   source: "bundle" | "path" | "venv" | "daemon" | null;
   auto_installable: boolean;
+  /** Esiste una build nel manifesto per questa piattaforma: se è false, il
+   *  bottone Installa non ha senso e si mostra il comando manuale. */
+  installable: boolean;
   install_command: string[] | null;
   unlocks: string[];
   /** Dove leggere se la ricetta non fa al caso proprio (o non esiste). */
