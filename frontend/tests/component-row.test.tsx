@@ -60,7 +60,10 @@ describe("ComponentRow", () => {
   });
 
   it("componente non auto-installabile: comando manuale sempre presente", () => {
-    render(<ComponentRow c={comp({ auto_installable: false })} onChanged={() => {}} />);
+    // Nel backend auto_installable e installable sono ormai lo stesso valore
+    // (dipendono solo dall'esistere una build per la piattaforma): un
+    // componente "non auto-installabile" è anche "non installable".
+    render(<ComponentRow c={comp({ auto_installable: false, installable: false })} onChanged={() => {}} />);
     expect(screen.getByText(/pip install/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /installa|install/i })).toBeNull();
   });
@@ -139,5 +142,29 @@ describe("ComponentRow: dove andare quando manca", () => {
       auto_installable: false, install_command: ["pip", "install", "essentia"],
     })} onChanged={() => {}} />);
     expect(screen.queryByText(/non include|does not come with/i)).toBeNull();
+  });
+});
+
+describe("ComponentRow: installabilità", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(cleanup);
+
+  it("senza build per la piattaforma non offre il bottone", () => {
+    render(<ComponentRow c={comp({
+      key: "ffmpeg", installable: false, auto_installable: false,
+      install_command: ["brew", "install", "ffmpeg"],
+    })} onChanged={() => {}} />);
+    expect(screen.queryByRole("button", { name: /installa|install/i })).toBeNull();
+    expect(screen.getByText(/brew install ffmpeg/)).toBeTruthy();
+  });
+
+  it("il demone rimanda al suo passo invece di installarsi alla cieca", () => {
+    const onConfigure = vi.fn();
+    render(<ComponentRow c={comp({
+      key: "slskd", kind: "daemon", installable: true, auto_installable: true,
+      install_command: null,
+    })} onChanged={() => {}} onConfigure={onConfigure} />);
+    fireEvent.click(screen.getByRole("button", { name: /configura|configure/i }));
+    expect(onConfigure).toHaveBeenCalled();
   });
 });

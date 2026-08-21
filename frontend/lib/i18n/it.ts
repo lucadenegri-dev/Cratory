@@ -201,6 +201,7 @@ export const it: Dictionary = {
     detected: (version: string) => `Trovato: ${version}`,
     notFound: "Non trovato",
     fromBundle: "Incluso nell'app",
+    shadowingSystem: (path: string) => `È installata anche una copia di sistema in ${path}`,
     severityRequired: "Necessario",
     severityOptional: "Facoltativo",
     unlocksLabel: "Abilita:",

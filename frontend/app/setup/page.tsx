@@ -60,7 +60,9 @@ export default function SetupPage() {
 
       <div className="flex-1">
         {step === "welcome" && <WelcomeStep />}
-        {step === "prerequisites" && <PrerequisitesStep />}
+        {step === "prerequisites" && (
+          <PrerequisitesStep onGoToSlskd={() => setIndex(STEPS.indexOf("slskd"))} />
+        )}
         {step === "library" && <LibraryStep />}
         {step === "services" && <ServicesStep />}
         {step === "slskd" && <SlskdStep />}

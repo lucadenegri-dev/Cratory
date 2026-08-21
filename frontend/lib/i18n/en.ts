@@ -204,6 +204,7 @@ export const en = {
     detected: (version: string) => `Found: ${version}`,
     notFound: "Not found",
     fromBundle: "Bundled with the app",
+    shadowingSystem: (path: string) => `A system copy is also installed at ${path}`,
     severityRequired: "Required",
     severityOptional: "Optional",
     unlocksLabel: "Enables:",

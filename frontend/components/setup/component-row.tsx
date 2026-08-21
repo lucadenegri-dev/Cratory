@@ -11,7 +11,7 @@ import { useT } from "@/lib/i18n";
    comando manuale ricompare per un componente auto-installabile se
    l'installazione appena tentata è fallita: è la via di fuga (es. Essentia
    fuori dalla combinazione CPython/piattaforma per cui esiste la wheel). */
-export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
+export function ComponentRow({ c, onChanged, disabled, onBusyChange, onConfigure }: {
   c: ProbeComponent;
   onChanged: () => void;
   /* Un altro componente sta installando: disabilita il bottone di QUESTA riga
@@ -21,6 +21,10 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
      cosi' PrerequisitesStep sa quale bottone disabilitare altrove senza un
      secondo polling: riusa quello che questo componente fa già. */
   onBusyChange?: (busy: boolean) => void;
+  /* Un demone (slskd) non si installa alla cieca: serve prima configurarne
+     le credenziali. Al posto del bottone Installa, questa riga rimanda al
+     passo dedicato. */
+  onConfigure?: () => void;
 }) {
   const t = useT();
   const [install, setInstall] = useState<InstallStatus | null>(null);
@@ -135,10 +139,19 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
             {c.present ? (c.version ? t.setup.detected(c.version) : t.setup.installDone) : t.setup.notFound}
           </div>
           {c.source === "bundle" && <div className="text-[10px] text-faint">{t.setup.fromBundle}</div>}
+          {c.shadowing && <div className="text-[10px] text-faint">{t.setup.shadowingSystem(c.shadowing)}</div>}
         </div>
       </div>
 
-      {!c.present && c.auto_installable && (
+      {!c.present && c.kind === "daemon" && (
+        <div className="mt-3">
+          <Button size="sm" variant="outline" onClick={onConfigure}>
+            {t.setup.installConfigure}
+          </Button>
+        </div>
+      )}
+
+      {!c.present && c.installable && c.kind !== "daemon" && (
         <div className="mt-3">
           <Button size="sm" variant="outline" disabled={running || disabled} onClick={run}>
             {running ? t.setup.installing : t.setup.installButton}
@@ -167,6 +180,7 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
           fuori dalla combinazione CPython/piattaforma pinnata). */}
       {!c.present && c.install_command && (!c.auto_installable || failed) && (
         <div className="mt-3">
+          {!c.installable && <p className="mb-1 text-xs text-muted">{t.setup.installNoBuild}</p>}
           <p className="mb-1 text-xs text-muted">{t.setup.installManual}</p>
           <div className="flex items-center gap-2">
             <code className="flex-1 break-all bg-elevated px-2 py-1 text-xs text-fg">
