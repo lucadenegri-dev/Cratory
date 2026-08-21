@@ -47,6 +47,26 @@ def _manifest(monkeypatch, sha: str):
     return d
 
 
+def _fabbrica_popen(monkeypatch, righe: list[str], returncode: int) -> list[dict]:
+    """Sostituto di `subprocess.Popen` per i test della ricetta di sistema:
+    nessun processo vero parte, solo le righe di stdout e il codice di uscita
+    che il test vuole simulare. Ritorna la lista delle chiamate (argv +
+    kwargs) cosi' il test puo' verificare che l'argv sia esattamente quello
+    del registry, mai una stringa da shell."""
+    chiamate: list[dict] = []
+
+    class _PopenFinto:
+        def __init__(self, argv, **kw):
+            chiamate.append({"argv": argv, "kwargs": kw})
+            self.stdout = iter(righe)
+
+        def wait(self) -> int:
+            return returncode
+
+    monkeypatch.setattr(bi.subprocess, "Popen", _PopenFinto)
+    return chiamate
+
+
 def test_installazione_riuscita(bin_dir, monkeypatch):
     dati = _archivio()
     _manifest(monkeypatch, hashlib.sha256(dati).hexdigest())
@@ -98,12 +118,21 @@ def test_binario_che_non_parte_fa_fallire_l_installazione(bin_dir, monkeypatch):
 
 
 def test_piattaforma_senza_build_non_tocca_la_rete(bin_dir, monkeypatch):
+    """Nessun manifesto per questa piattaforma E nessuna ricetta col comando
+    presente (qui simulato azzerando `shutil.which`, indipendente dal fatto
+    che questa macchina abbia o no Homebrew davvero installato): resta
+    `NoBuildForPlatform`, niente da scaricare né da eseguire."""
     monkeypatch.setattr(bm, "MANIFEST", {"ffmpeg": {}})
     monkeypatch.setattr(bm, "platform_tag", lambda: "darwin-arm64")
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
 
     def esplodi(req):
         raise AssertionError("non doveva scaricare niente")
 
+    def esplodi_subprocess(*a, **kw):
+        raise AssertionError("non doveva eseguire nessuna ricetta")
+
+    monkeypatch.setattr(bi.subprocess, "Popen", esplodi_subprocess)
     with httpx.Client(transport=httpx.MockTransport(esplodi)) as c:
         with pytest.raises(bi.NoBuildForPlatform):
             bi.install("ffmpeg", client=c)
@@ -281,3 +310,163 @@ def test_binario_che_esce_zero_ma_non_stampa_nulla(bin_dir, monkeypatch):
             lambda req: httpx.Response(200, content=dati))) as c:
         percorso = bi.install("fpcalc", client=c)
     assert percorso.is_file()
+
+
+# --- La seconda via: la ricetta di sistema, quando non c'è un manifesto ----
+#
+# Nessuno di questi test lancia un gestore di pacchetti vero: `subprocess.Popen`
+# è sempre sostituito da `_fabbrica_popen`, e `shutil.which` è sempre
+# azzerato/riscritto esplicitamente — mai lasciato leggere l'ambiente reale
+# (su questa stessa macchina di sviluppo `brew` esiste davvero, e un test che
+# lo lasciasse trapelare eseguirebbe un install per davvero).
+
+def test_manifesto_vince_sulla_ricetta_anche_se_disponibile(bin_dir, monkeypatch):
+    """Un componente con un manifesto per questa piattaforma scarica sempre,
+    anche quando una ricetta di sistema sarebbe anche lei disponibile (qui
+    simulato: fpcalc ha una ricetta brew per macOS). Il download resta dentro
+    la cartella gestita, rimovibile cancellandola — la ricetta è solo il
+    ripiego per ciò che non possiamo fornire noi stessi."""
+    dati = _archivio()
+    _manifest(monkeypatch, hashlib.sha256(dati).hexdigest())
+    monkeypatch.setattr(bi, "_prova_esecuzione", lambda percorso, flag: "fpcalc 1.0")
+    monkeypatch.setattr(sp.sys, "platform", "darwin")
+    monkeypatch.setattr(sp.shutil, "which", lambda name: "/opt/homebrew/bin/" + name)
+
+    def esplodi_subprocess(*a, **kw):
+        raise AssertionError("non doveva shellare fuori: il manifesto vince")
+
+    monkeypatch.setattr(bi.subprocess, "Popen", esplodi_subprocess)
+    with httpx.Client(transport=httpx.MockTransport(
+            lambda req: httpx.Response(200, content=dati))) as c:
+        percorso = bi.install("fpcalc", client=c)
+    assert percorso == bin_dir / "fpcalc"
+
+
+def test_senza_manifesto_esegue_la_ricetta_disponibile(monkeypatch):
+    """ffmpeg su macOS non ha un manifesto: se `brew` è presente sul sistema
+    (qui simulato), l'installer esegue la ricetta invece di sollevare
+    `NoBuildForPlatform`."""
+    monkeypatch.setattr(bm, "platform_tag", lambda: "darwin-arm64")
+    monkeypatch.setattr(sp.sys, "platform", "darwin")
+    monkeypatch.setattr(sp.shutil, "which",
+                        lambda name: "/opt/homebrew/bin/brew" if name == "brew" else None)
+    chiamate = _fabbrica_popen(monkeypatch, ["==> Installing ffmpeg", "🍺  ffmpeg installato"], 0)
+    monkeypatch.setattr(sp, "resolve_binary", lambda name, override=None: "/opt/homebrew/bin/ffmpeg")
+    monkeypatch.setattr(bi, "_prova_esecuzione", lambda percorso, flag: "ffmpeg version 6.0")
+
+    righe_log: list[str] = []
+    percorso = bi.install("ffmpeg", on_log=righe_log.append)
+
+    assert percorso == Path("/opt/homebrew/bin/ffmpeg")
+    assert chiamate[0]["argv"] == ["brew", "install", "ffmpeg"]
+    assert "eseguo brew install ffmpeg" in righe_log
+    assert "==> Installing ffmpeg" in righe_log
+    assert any("parte" in r for r in righe_log)
+
+
+def test_ricetta_che_fallisce_fa_fallire_l_installazione(monkeypatch):
+    """Un `brew install` che esce con un codice diverso da zero non arriva
+    nemmeno a provare il binario: la ricetta stessa ha già detto che non è
+    andata."""
+    monkeypatch.setattr(bm, "platform_tag", lambda: "darwin-arm64")
+    monkeypatch.setattr(sp.sys, "platform", "darwin")
+    monkeypatch.setattr(sp.shutil, "which",
+                        lambda name: "/opt/homebrew/bin/brew" if name == "brew" else None)
+    _fabbrica_popen(monkeypatch, ["Error: ffmpeg: no bottle available"], 1)
+
+    def esplodi(*a, **kw):
+        raise AssertionError("non doveva arrivare a verificare l'esecuzione: la ricetta è già fallita")
+
+    monkeypatch.setattr(sp, "resolve_binary", esplodi)
+    monkeypatch.setattr(bi, "_prova_esecuzione", esplodi)
+
+    with pytest.raises(bi.RecipeFailed):
+        bi.install("ffmpeg")
+
+
+def test_ricetta_riuscita_ma_binario_introvabile_fallisce_lo_stesso(monkeypatch):
+    """L'exit code del gestore di pacchetti da solo non basta: se il binario
+    non risulta comunque sul PATH, l'installazione fallisce (`DoesNotRun`),
+    anche se `brew` è uscito con successo."""
+    monkeypatch.setattr(bm, "platform_tag", lambda: "darwin-arm64")
+    monkeypatch.setattr(sp.sys, "platform", "darwin")
+    monkeypatch.setattr(sp.shutil, "which",
+                        lambda name: "/opt/homebrew/bin/brew" if name == "brew" else None)
+    _fabbrica_popen(monkeypatch, ["ffmpeg installato"], 0)
+    monkeypatch.setattr(sp, "resolve_binary", lambda name, override=None: None)
+
+    def esplodi(*a, **kw):
+        raise AssertionError("non doveva provare a eseguire un binario introvabile")
+
+    monkeypatch.setattr(bi, "_prova_esecuzione", esplodi)
+
+    with pytest.raises(bi.DoesNotRun):
+        bi.install("ffmpeg")
+
+
+def test_ricetta_riuscita_ma_binario_non_parte_fallisce_lo_stesso(monkeypatch):
+    """Variante del test sopra: il binario risulta sul PATH ma non parte
+    (firma, architettura...). Stesso esito: l'exit code di `brew` da solo non
+    certifica niente."""
+    monkeypatch.setattr(bm, "platform_tag", lambda: "darwin-arm64")
+    monkeypatch.setattr(sp.sys, "platform", "darwin")
+    monkeypatch.setattr(sp.shutil, "which",
+                        lambda name: "/opt/homebrew/bin/brew" if name == "brew" else None)
+    _fabbrica_popen(monkeypatch, ["ffmpeg installato"], 0)
+    monkeypatch.setattr(sp, "resolve_binary", lambda name, override=None: "/opt/homebrew/bin/ffmpeg")
+
+    def non_parte(percorso, flag):
+        raise bi.DoesNotRun("Bad CPU type in executable")
+
+    monkeypatch.setattr(bi, "_prova_esecuzione", non_parte)
+
+    with pytest.raises(bi.DoesNotRun):
+        bi.install("ffmpeg")
+
+
+def test_la_cache_del_probe_e_invalidata_prima_di_verificare(monkeypatch):
+    """Il binario ora vive sul PATH di sistema, non nella cartella gestita:
+    la cache del probe (TTL 10s) può ancora ricordare "assente" da un giro
+    precedente. Deve essere invalidata PRIMA del controllo di risolvibilità,
+    altrimenti il controllo stesso non significa niente."""
+    monkeypatch.setattr(bm, "platform_tag", lambda: "darwin-arm64")
+    monkeypatch.setattr(sp.sys, "platform", "darwin")
+    monkeypatch.setattr(sp.shutil, "which",
+                        lambda name: "/opt/homebrew/bin/brew" if name == "brew" else None)
+    _fabbrica_popen(monkeypatch, [], 0)
+
+    ordine: list[str] = []
+    monkeypatch.setattr(sp, "invalidate_cache", lambda: ordine.append("invalidata"))
+
+    def resolve_finto(name, override=None):
+        ordine.append("verificata")
+        return "/opt/homebrew/bin/ffmpeg"
+
+    monkeypatch.setattr(sp, "resolve_binary", resolve_finto)
+    monkeypatch.setattr(bi, "_prova_esecuzione", lambda percorso, flag: "ok")
+
+    bi.install("ffmpeg")
+    assert ordine == ["invalidata", "verificata"]
+
+
+def test_run_recipe_trasmette_le_righe_in_streaming(monkeypatch):
+    _fabbrica_popen(monkeypatch, ["riga uno", "riga due  \n"], 0)
+    righe: list[str] = []
+    bi.run_recipe(["echo", "ciao"], on_log=righe.append)
+    assert righe == ["riga uno", "riga due"]
+
+
+def test_run_recipe_argv_come_lista_niente_shell(monkeypatch):
+    """Stessa disciplina del download: l'argv arriva dal registry come lista,
+    mai come stringa interpretata da una shell — e nessun input dell'utente
+    ci entra."""
+    chiamate = _fabbrica_popen(monkeypatch, [], 0)
+    bi.run_recipe(["brew", "install", "ffmpeg"])
+    assert chiamate[0]["argv"] == ["brew", "install", "ffmpeg"]
+    assert chiamate[0]["kwargs"].get("shell", False) is False
+
+
+def test_run_recipe_solleva_se_il_comando_fallisce(monkeypatch):
+    _fabbrica_popen(monkeypatch, ["Error: bottle unavailable"], 1)
+    with pytest.raises(bi.RecipeFailed):
+        bi.run_recipe(["brew", "install", "ffmpeg"])

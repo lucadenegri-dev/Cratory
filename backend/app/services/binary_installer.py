@@ -15,6 +15,21 @@ di guasto reali, e non tocca mai un'installazione già funzionante; lo scambio
 vero e proprio è solo rename sullo stesso filesystem, l'operazione con meno
 probabilità di fallire di tutta la procedura. Un'installazione precedente
 sopravvive quindi a qualunque guasto in quella successiva.
+
+Una seconda via esiste per i componenti senza una build nostra per questa
+piattaforma (oggi solo ffmpeg su macOS): eseguire la ricetta di sistema del
+registry (`system_probe.Component.recipes`, es. `brew install ffmpeg`),
+trasmettendo l'output nello stesso log in streaming, e provando l'esecuzione
+del binario con lo stesso criterio di riuscita di sempre — l'exit code del
+gestore di pacchetti da solo non basta, il binario deve risultare sul PATH e
+partire davvero. Stessa disciplina della prima via: l'argv arriva dal
+registry come lista, mai come stringa di shell, e nessun input dell'utente vi
+entra. La precedenza è netta e va in un verso solo: se esiste un manifesto lo
+si scarica — resta dentro la cartella gestita, rimovibile cancellandola; la
+ricetta è il ripiego, solo quando non possiamo fornire il binario noi stessi,
+e solo se il suo comando è davvero presente sul sistema (`brew` non è
+preinstallato su macOS: senza questo controllo si proverebbe a eseguire un
+comando inesistente invece di mostrare quello manuale).
 """
 from __future__ import annotations
 
@@ -208,12 +223,22 @@ class UnknownComponent(InstallError):
 
 
 class NoBuildForPlatform(InstallError):
-    """Non abbiamo una build per questa piattaforma. Non è un errore da
+    """Non abbiamo una build per questa piattaforma, e la ricetta di sistema
+    o non esiste o il suo comando non è installato. Non è un errore da
     nascondere: la UI mostra il comando manuale."""
 
 
 class DoesNotRun(InstallError):
-    """Installato ma non eseguibile: firma o architettura."""
+    """Installato ma non eseguibile: firma o architettura. Vale anche per la
+    via della ricetta: il gestore di pacchetti può uscire con successo e
+    lasciare comunque il binario assente dal PATH o incapace di partire."""
+
+
+class RecipeFailed(InstallError):
+    """La ricetta di sistema (es. `brew install ffmpeg`) è uscita con un
+    codice diverso da zero. Non è uno dei due allarmi di `_CODICI_ALLARME`
+    sotto (checksum/archivio): è un fallimento come un altro, la UI mostra il
+    messaggio generico più il dettaglio grezzo."""
 
 
 class AlreadyRunning(InstallError):
@@ -244,6 +269,54 @@ def _prova_esecuzione(percorso: Path, version_flag: str) -> str:
     output = (proc.stdout or proc.stderr or "").strip()
     lines = output.splitlines()
     return (lines[0] if lines else "")[:120]
+
+
+def run_recipe(argv: list[str], on_log: Callable[[str], None] | None = None) -> None:
+    """Esegue una ricetta di sistema (es. `brew install ffmpeg`) e trasmette
+    l'output nello stesso log in streaming del download. `shell=False`
+    (default di `Popen`) e `argv` come lista: nessuna stringa viene mai
+    interpretata da una shell, e le ricette arrivano solo dal registry —
+    nessun input dell'utente entra qui."""
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, bufsize=1)
+    assert proc.stdout is not None
+    for riga in proc.stdout:
+        if on_log:
+            on_log(riga.rstrip())
+    returncode = proc.wait()
+    if returncode != 0:
+        raise RecipeFailed(f"{argv[0]} è uscito con codice {returncode}")
+
+
+def _installa_da_ricetta(component: system_probe.Component, ricetta: list[str],
+                          on_log: Callable[[str], None] | None) -> Path:
+    """Fallback quando non abbiamo un manifesto per questo binario su questa
+    piattaforma (oggi solo ffmpeg su macOS): esegue la ricetta di sistema del
+    registry invece di scaricare. A differenza del download non tocca la
+    cartella gestita — modifica il sistema, con le sue dipendenze — ma il
+    criterio di riuscita resta lo stesso: l'exit code del gestore di pacchetti
+    da solo non basta, il binario deve risultare sul PATH e partire davvero.
+    """
+    def log_riga(msg: str) -> None:
+        if on_log:
+            on_log(msg)
+
+    log_riga(f"eseguo {' '.join(ricetta)}")
+    run_recipe(ricetta, on_log=log_riga)
+    log_riga(f"{ricetta[0]} terminato")
+
+    # Il binario ora vive sul PATH di sistema, non nella cartella gestita: la
+    # cache del probe (TTL 10s) può ancora ricordare "assente" da un giro
+    # precedente. Va invalidata PRIMA di controllare, altrimenti il controllo
+    # stesso rischierebbe di fidarsi dello stato vecchio.
+    system_probe.invalidate_cache()
+    percorso = system_probe.resolve_binary(component.binary or component.key,
+                                            component.env_override)
+    if not percorso:
+        raise DoesNotRun(f"{component.key} non risulta installato dopo il comando")
+    versione = _prova_esecuzione(Path(percorso), component.version_flag)
+    log_riga(f"il binario parte: {versione}")
+    return Path(percorso)
 
 
 def installed_path(key: str) -> Path | None:
@@ -324,16 +397,27 @@ def _installa_bundle(sorgente: Path, finale: Path) -> None:
 def install(key: str, client: httpx.Client | None = None,
             on_log: Callable[[str], None] | None = None) -> Path:
     """Scarica, verifica, estrae, prova e infine installa. Tutto avviene in
-    una directory temporanea: nella cartella gestita si sposta solo alla fine."""
-    if key not in binary_manifest.MANIFEST:
+    una directory temporanea: nella cartella gestita si sposta solo alla fine.
+
+    Se non abbiamo un manifesto per questo binario su questa piattaforma
+    (oggi solo ffmpeg su macOS), il ripiego è la ricetta di sistema del
+    registry — ma solo se il suo comando è davvero presente
+    (`system_probe.available_recipe`): altrimenti resta `NoBuildForPlatform`,
+    come prima, e la UI mostra il comando manuale."""
+    if key not in binary_manifest.MANIFEST and system_probe.get(key) is None:
         raise UnknownComponent(key)
     d = binary_manifest.entry_for(key)
-    if d is None:
-        raise NoBuildForPlatform(f"{key}: nessuna build per {binary_manifest.platform_tag()}")
 
     def log_riga(msg: str) -> None:
         if on_log:
             on_log(msg)
+
+    if d is None:
+        component = system_probe.get(key)
+        ricetta = component and system_probe.available_recipe(component)
+        if component is None or not ricetta:
+            raise NoBuildForPlatform(f"{key}: nessuna build per {binary_manifest.platform_tag()}")
+        return _installa_da_ricetta(component, ricetta, on_log)
 
     destinazione = system_probe.ensure_bin_dir()  # qui si scrive: va creata
     with tempfile.TemporaryDirectory(prefix="cratory-install-") as tmp:

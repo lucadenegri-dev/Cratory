@@ -1309,7 +1309,7 @@ reappear on its own), and with `false` from `/settings`' "reopen wizard" button.
 ```json
 {"key": "fpcalc", "kind": "system", "severity": "optional",
  "unlocks": ["acoustid_fingerprint"],
- "auto_installable": true, "installable": true,
+ "auto_installable": true, "installable": true, "install_method": "download",
  "install_command": ["brew", "install", "chromaprint"],
  "docs": "https://acoustid.org/chromaprint",
  "present": true, "version": "1.6.1", "source": "bundle", "shadowing": null}
@@ -1320,32 +1320,54 @@ are not among them: they are ordinary Python dependencies pip already installs, 
 external binaries this wizard needs to find. `kind` is `"system"` (`ffmpeg`, `fpcalc`
 — a binary resolved on disk) or `"daemon"` (`slskd`, probed by calling its own
 `/health` rather than by looking for a binary). `unlocks` is a list of feature keys,
-not prose — the frontend translates them. `installable` (and its older alias
-`auto_installable`, same value) is `true` when `binary_manifest` has a pinned download
-for this component on the current platform — for `ffmpeg` that's every platform
-*except* macOS, which has no entry on purpose (see `docs/ARCHITECTURE.md`); `slskd`
-has no manual `install_command` at all, only its releases page in `docs`. On a
-detected binary, `source` is `"bundle"` when it resolved under the managed folder
-(`CRATORY_BIN_DIR`, or its default when the env var isn't set), `"path"` from the
-system `PATH`, `"override"` from the component's own env var (`FPCALC`), `"daemon"`
+not prose — the frontend translates them.
+
+There are three distinct install routes, and `install_method` says which one applies:
+`"download"` when `binary_manifest` has a pinned build for this component on the
+current platform (the install stays inside the app's own managed folder, removable
+by deleting it); `"recipe"` when there's no such build but the registry's
+`Component.recipes` has a command for this platform *and* that command's own binary
+is actually on `PATH` (`system_probe.available_recipe`) — this is the fallback for
+`ffmpeg` on macOS, where no native Apple Silicon static build with published
+checksums exists, so the wizard runs `brew install ffmpeg` itself instead of only
+showing it; `"manual"` when neither applies, and only the command-to-copy remains.
+Precedence is one-directional: a manifest entry always wins over a recipe, even when
+both would be available. `installable` (and its older alias `auto_installable`, same
+value) is `true` for `"download"` and `"recipe"`, `false` for `"manual"` — it's what
+the frontend uses to decide whether to offer the Install button at all;
+`install_method` is what tells the two `true` cases apart, since one only touches the
+app's own folder and the other modifies the system. `install_command` is always the
+platform's recipe (or `null` if there is none, e.g. `slskd`, which has no manual
+command either — only its releases page in `docs`) regardless of `install_method`:
+it's shown as the copy-to-clipboard fallback even when the wizard can run it itself.
+On a detected binary, `source` is `"bundle"` when it resolved under the managed
+folder (`CRATORY_BIN_DIR`, or its default when the env var isn't set), `"path"` from
+the system `PATH`, `"override"` from the component's own env var (`FPCALC`), `"daemon"`
 when the slskd health check answered. `shadowing` is only ever set alongside a
 `"bundle"` source: the system `PATH` copy the app isn't using, shown so the user
 understands why installing via `brew` didn't change anything. The result is cached
 server-side for 10 seconds; `force=true` bypasses the cache (used by the wizard's
 "recheck" button after an install).
 
-`POST /api/setup/install/{key}` (`202`) starts downloading, verifying, extracting and
-running one of the three components in the background — `binary_installer.start()`.
-The response has the same shape as `GET /api/setup/install/status`: `{"key": str |
-null, "status": "idle"|"running"|"done"|"error", "log": [str, ...], "detail": str |
-null}` — `log` streams progress lines (download progress, hash verified, extracted,
-"the binary starts: …", installed path), capped to the last 500 lines. `400
-unknown_component` for a key outside the registry, `409 install_already_running` if
-any install is already in flight — the installer runs one job at a time. A key with
-no build for the current platform (macOS `ffmpeg`) is *not* rejected synchronously:
-`start()` only validates the key exists, so the request still returns `202` and the
-"no build for this platform" failure surfaces as `status: "error"` on the next
-`GET /api/setup/install/status` poll, same as a failed download or a binary that
+`POST /api/setup/install/{key}` (`202`) starts installing one of the three components
+in the background — `binary_installer.start()`. For `"download"`/`"manual"`
+components this downloads, verifies, extracts and runs the binary, same as before; for
+a `"recipe"` component (`install_method`) it instead runs the registry's recipe argv
+directly (`subprocess.Popen`, never a shell string, no user input reaches it) and
+streams its output into the same log, then re-resolves and runs the binary afterward
+— the package manager's exit code alone doesn't count as success, and the probe cache
+is invalidated first so that check isn't looking at stale state. The response has the
+same shape as `GET /api/setup/install/status`: `{"key": str | null, "status":
+"idle"|"running"|"done"|"error", "log": [str, ...], "detail": str | null, "error_code":
+str | null}` — `log` streams progress lines (download progress or recipe output, hash
+verified, extracted, "the binary starts: …", installed path), capped to the last 500
+lines. `400 unknown_component` for a key outside the registry, `409
+install_already_running` if any install is already in flight — the installer runs one
+job at a time. A key with neither a build nor an available recipe for the current
+platform is *not* rejected synchronously: `start()` only validates the key exists, so
+the request still returns `202` and the "no build for this platform" failure surfaces
+as `status: "error"` on the next `GET /api/setup/install/status` poll, same as a
+failed download, a failed recipe (`RecipeFailed`, exit code ≠ 0) or a binary that
 doesn't run.
 
 `GET /api/setup/install/status` polls that same state. When a run finishes

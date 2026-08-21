@@ -790,7 +790,7 @@ secrets only masked (`configured`, `source`, `hint` — never the value); see
 
 **Detecting and installing external components.** `services/system_probe.py` is a
 declarative registry of three external binaries — `ffmpeg`, `fpcalc`, `slskd` — how to
-detect each, what it unlocks, and (for `ffmpeg`/`fpcalc`) the manual install command per
+detect each, what it unlocks, and (for `ffmpeg`/`fpcalc`) the install recipe per
 platform. `yt-dlp` and `essentia` used to be registry entries too; they left because they
 were never external binaries — they're ordinary Python packages pinned in
 `requirements.txt`, and `pip install -r requirements.txt` already puts them in the
@@ -804,9 +804,27 @@ version, otherwise a failure message on stderr — wrong architecture, permissio
 a corrupt or partial download — would read as a version string and report a missing or
 broken component as installed. The registry carries no prose — only feature keys
 the frontend translates and a `docs` URL per component, which for `slskd` (no install
-recipe exists) is the only guidance the UI can offer; for `ffmpeg`/`fpcalc` the recipe
-(`brew install ffmpeg`, …) is display text only — the wizard shows it, Cratory never runs
-it itself.
+recipe exists) is the only guidance the UI can offer.
+
+There are two ways the wizard can install a component for real, and a manifest entry
+always wins: if `binary_manifest` has a pinned build for this platform, it downloads —
+the install stays inside the app's own managed folder, removable by deleting it. Where
+no such build exists, the fallback is to run the registry's recipe itself
+(`binary_installer.run_recipe`, a plain `subprocess.Popen` over the recipe's argv as a
+list — never a shell string, and no user input reaches it), but only when the recipe's
+own command is actually present on the system (`system_probe.available_recipe`, checked
+with `shutil.which`): `brew` doesn't ship with macOS, so a recipe alone is not the same
+promise as a build we can supply ourselves — it modifies the system, with its
+dependencies, not just Cratory's folder. `install_method` in the probe payload
+(`"download"` / `"recipe"` / `"manual"`) tells the frontend which of the two `true`
+cases of `installable` applies, so the row can say which promise it's making before the
+button is pressed. `install_command` itself is unconditional — the platform's recipe,
+shown as the manual fallback regardless of which route the button would take, or `null`
+where none exists (`slskd`). This is **why macOS has no `ffmpeg` entry in the
+manifest**: BtbN, the only upstream that publishes static builds with checksums, ships no
+macOS asset, and no other source publishes a native `arm64` build with a checksum to pin
+— an Intel binary that depends on Rosetta, shipped as the one *required* component, was
+judged worse than running `brew install ffmpeg` through the recipe route instead.
 
 `services/binary_manifest.py` holds the download side, deliberately separate from the
 registry above: this file changes at the cadence of version bumps, the registry describes
@@ -818,18 +836,19 @@ the same source a compromised release would also control, so it can't be the thi
 at that moment), while a download that verified and extracted cleanly can still produce a
 binary that will not run — wrong architecture, a missing signature — which is why
 `services/binary_installer.py` treats **an install as valid only once the binary has
-actually executed**, not once the bytes match. This isn't a theoretical caution; it was
-observed for real during development. The sequence is download-while-hashing → verify
-against the pin → extract to a temp directory → run with the component's version flag →
-only then move into the managed folder, so an installation interrupted at any point never
-leaves a half-installed binary in place of a working one. **macOS deliberately has no
-`ffmpeg` entry**: BtbN, the only upstream that publishes static builds with checksums,
-ships no macOS asset, and no other source publishes a native `arm64` build with a checksum
-to pin — an Intel binary that depends on Rosetta, shipped as the one *required* component,
-was judged worse than an honest gap that falls back to the manual `brew install ffmpeg`
-command. `routers/setup.py` is HTTP-only over probe/install; `services/credential_tests.py`
-(unrelated to binaries) makes one real, minimal call per provider (`spotify`, `anthropic`,
-`discogs`, `acoustid`) and returns the provider's own error message, not a paraphrase.
+actually executed**, not once the bytes match (or, on the recipe route, once the package
+manager's own exit code says success). The download sequence is download-while-hashing →
+verify against the pin → extract to a temp directory → run with the component's version
+flag → only then move into the managed folder, so an installation interrupted at any
+point never leaves a half-installed binary in place of a working one. The recipe route
+runs the same verification after the recipe finishes: it invalidates the probe's cache
+first (the binary now lives on the system `PATH`, not the managed folder the cache
+otherwise assumes) and only then re-resolves and runs the binary — a `brew install
+ffmpeg` that exits 0 while ffmpeg still isn't runnable fails the install exactly like a
+bad download would. `routers/setup.py` is HTTP-only over probe/install;
+`services/credential_tests.py` (unrelated to binaries) makes one real, minimal call per
+provider (`spotify`, `anthropic`, `discogs`, `acoustid`) and returns the provider's own
+error message, not a paraphrase.
 
 **The boundary around slskd moved.** Elsewhere in this document slskd is described as an
 external service Cratory only reaches over HTTP — that's still how Cratory talks to it once

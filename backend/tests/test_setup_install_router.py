@@ -6,6 +6,7 @@ from app.db import get_db
 from app.main import app
 from app.services import binary_installer as bi
 from app.services import slskd_daemon as sd
+from app.services import system_probe as sp
 
 
 @pytest.fixture(autouse=True)
@@ -26,7 +27,12 @@ def test_chiave_sconosciuta(db):
 
 
 def test_piattaforma_senza_build(db, monkeypatch):
+    """Nessun manifesto per questa piattaforma E nessuna ricetta col comando
+    presente (`shutil.which` azzerato, indipendente da Homebrew essendo o no
+    installato davvero su questa macchina): l'installazione finisce in
+    errore, niente da scaricare né da eseguire per davvero."""
     monkeypatch.setattr(bi.binary_manifest, "platform_tag", lambda: "darwin-arm64")
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
     monkeypatch.setattr(bi, "spawn", lambda fn: fn())
     res = _client(db).post("/api/setup/install/ffmpeg")
     assert res.status_code == 202
@@ -137,6 +143,23 @@ def test_un_fallimento_qualunque_non_ha_un_codice_di_errore(db, monkeypatch):
     monkeypatch.setattr(bi, "install", rompi)
     monkeypatch.setattr(bi, "spawn", lambda fn: fn())
     res = _client(db).post("/api/setup/install/fpcalc")
+    assert res.status_code == 202
+    body = _client(db).get("/api/setup/install/status").json()
+    assert body["status"] == "error"
+    assert body["error_code"] is None
+    app.dependency_overrides.clear()
+
+
+def test_la_ricetta_fallita_non_ha_un_codice_di_errore(db, monkeypatch):
+    """`RecipeFailed` (la ricetta di sistema è uscita con un codice diverso da
+    zero) non è uno dei due allarmi: stesso trattamento generico di
+    `DoesNotRun` sopra, non checksum_mismatch/unsafe_archive."""
+    def rompi(key, **kw):
+        raise bi.RecipeFailed("brew è uscito con codice 1")
+
+    monkeypatch.setattr(bi, "install", rompi)
+    monkeypatch.setattr(bi, "spawn", lambda fn: fn())
+    res = _client(db).post("/api/setup/install/ffmpeg")
     assert res.status_code == 202
     body = _client(db).get("/api/setup/install/status").json()
     assert body["status"] == "error"

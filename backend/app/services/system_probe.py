@@ -163,6 +163,21 @@ def recipe_for(component: Component) -> list[str] | None:
     return component.recipes.get(sys.platform) or component.recipes.get("*")
 
 
+def available_recipe(component: Component) -> list[str] | None:
+    """Come `recipe_for`, ma solo se il comando è davvero presente sul
+    sistema: `brew` non è preinstallato su macOS, e una ricetta che chiama un
+    gestore di pacchetti assente non è una via percorribile, solo del testo
+    da mostrare. `recipe_for` da solo resta il valore giusto per il comando
+    manuale (va mostrato anche quando non lo si può eseguire noi); questa è
+    la versione che sia il probe (per decidere `install_method`) sia
+    l'installer (per decidere se tentare davvero la ricetta) usano per
+    sapere se la via di sistema è percorribile."""
+    ricetta = recipe_for(component)
+    if ricetta and shutil.which(ricetta[0]):
+        return ricetta
+    return None
+
+
 def _run_version(argv: list[str]) -> str | None:
     try:
         proc = subprocess.run(argv, capture_output=True, text=True,
@@ -247,15 +262,30 @@ def _probe_one(c: Component) -> dict:
         detected = _probe_slskd()
     else:
         detected = _probe_binary(c)
-    installabile = binary_manifest.entry_for(c.key) is not None
+    manifesto = binary_manifest.entry_for(c.key) is not None
+    ricetta_percorribile = available_recipe(c) is not None
+    # Le due promesse non sono la stessa cosa, e la UI deve poterle
+    # distinguere: il download resta dentro la cartella gestita dell'app,
+    # rimovibile cancellandola; la ricetta modifica il sistema (dipendenze
+    # comprese) tramite il suo gestore di pacchetti. Precedenza netta: build
+    # nostra prima, ricetta solo come ripiego, comando manuale se nessuna
+    # delle due è percorribile.
+    if manifesto:
+        install_method = "download"
+    elif ricetta_percorribile:
+        install_method = "recipe"
+    else:
+        install_method = "manual"
+    installabile = manifesto or ricetta_percorribile
     return {
         "key": c.key, "kind": c.kind, "severity": c.severity,
         "unlocks": list(c.unlocks),
-        # `auto_installable` ora significa "l'app sa installarlo da sola", e
-        # per un binario esterno questo dipende solo dall'avere una build per
-        # questa piattaforma: niente build, niente bottone.
+        # `auto_installable` ora significa "l'app sa installarlo da sola",
+        # via download o via una ricetta di sistema il cui comando è
+        # presente: niente dell'una né dell'altra, niente bottone.
         "auto_installable": installabile,
         "installable": installabile,
+        "install_method": install_method,
         "install_command": recipe_for(c), "docs": c.docs, **detected,
     }
 

@@ -250,6 +250,67 @@ def test_su_linux_ffmpeg_e_installabile(monkeypatch):
     assert per_chiave["ffmpeg"]["installable"] is True
 
 
+# --- Le tre vie: download, ricetta di sistema, comando manuale -------------
+
+def test_con_manifesto_la_via_e_download(monkeypatch):
+    """fpcalc ha sempre un manifesto: la via è "download" indipendentemente
+    dal fatto che una ricetta di sistema sia anche disponibile."""
+    monkeypatch.setattr(sp.shutil, "which", lambda name: "/opt/homebrew/bin/" + name)
+    per_chiave = {r["key"]: r for r in sp.probe_all(force=True)}
+    assert per_chiave["fpcalc"]["install_method"] == "download"
+
+
+def test_senza_manifesto_ma_con_ricetta_disponibile_la_via_e_ricetta(monkeypatch):
+    """ffmpeg su macOS non ha un manifesto: se `brew` è presente sul sistema
+    (qui simulato), la via diventa "recipe", non più "manual" come prima di
+    questo cambiamento."""
+    monkeypatch.setattr(sp.binary_manifest, "platform_tag", lambda: "darwin-arm64")
+    monkeypatch.setattr(sp.sys, "platform", "darwin")
+    monkeypatch.setattr(sp.shutil, "which", lambda name: "/opt/homebrew/bin/brew" if name == "brew" else None)
+    per_chiave = {r["key"]: r for r in sp.probe_all(force=True)}
+    assert per_chiave["ffmpeg"]["install_method"] == "recipe"
+    assert per_chiave["ffmpeg"]["installable"] is True
+    assert per_chiave["ffmpeg"]["auto_installable"] is True
+
+
+def test_senza_manifesto_e_senza_ricetta_disponibile_la_via_e_manuale(monkeypatch):
+    """Né manifesto né `brew` sul sistema: resta il comando da copiare a
+    mano, niente bottone (Finding del design doc: `brew` non è
+    preinstallato)."""
+    monkeypatch.setattr(sp.binary_manifest, "platform_tag", lambda: "darwin-arm64")
+    monkeypatch.setattr(sp.sys, "platform", "darwin")
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    per_chiave = {r["key"]: r for r in sp.probe_all(force=True)}
+    assert per_chiave["ffmpeg"]["install_method"] == "manual"
+    assert per_chiave["ffmpeg"]["installable"] is False
+    assert per_chiave["ffmpeg"]["auto_installable"] is False
+    # Il comando resta comunque nel payload: è quello che la UI mostra da
+    # copiare a mano.
+    assert per_chiave["ffmpeg"]["install_command"] == ["brew", "install", "ffmpeg"]
+
+
+def test_available_recipe_richiede_il_comando_presente(monkeypatch):
+    ffmpeg = sp.get("ffmpeg")
+    monkeypatch.setattr(sp.sys, "platform", "darwin")
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    assert sp.available_recipe(ffmpeg) is None
+    monkeypatch.setattr(sp.shutil, "which", lambda name: "/opt/homebrew/bin/brew")
+    assert sp.available_recipe(ffmpeg) == ["brew", "install", "ffmpeg"]
+
+
+def test_available_recipe_none_se_non_ce_ricetta(monkeypatch):
+    """slskd non ha nessuna ricetta (è un demone a parte): `available_recipe`
+    non deve nemmeno provare a chiamare `shutil.which` con un comando
+    inesistente."""
+    slskd = sp.get("slskd")
+
+    def esplodi(name):
+        raise AssertionError("non doveva controllare nessun comando")
+
+    monkeypatch.setattr(sp.shutil, "which", esplodi)
+    assert sp.available_recipe(slskd) is None
+
+
 def test_dice_se_stiamo_scavalcando_una_copia_di_sistema(tmp_path, monkeypatch):
     """L'utente installa ffmpeg con brew dopo di noi: il nostro continua a
     vincere. Silenzio qui significa un utente che non capisce perché la sua

@@ -54,7 +54,10 @@ Settings are unified across sections: one external-services endpoint, one AI key
   downloads, verifies, extracts and installs each one — valid only once the binary
   has actually run, since a verified download can still fail to execute. macOS has
   no pinned `ffmpeg` build on purpose (no upstream ships a checksummed native arm64
-  static binary), so it keeps the manual command there. `services/slskd_daemon.py`
+  static binary): there the installer falls back to running the registry's recipe
+  itself (`brew install ffmpeg`, same streamed log, same run-it-to-verify discipline)
+  whenever `brew` is present, and only the manual command otherwise — the probe
+  payload's `install_method` tells the two routes apart. `services/slskd_daemon.py`
   additionally writes `slskd.yml` (only the four keys it needs, the rest of the
   user's file untouched) and starts/stops the daemon as a detached process, never
   touching one it didn't start itself. Each provider credential (Spotify, Anthropic,

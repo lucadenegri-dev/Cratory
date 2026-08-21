@@ -100,8 +100,11 @@ endpoints, `docs/API.md`.
   pins a version, download URL and SHA256 per component per platform, and
   `services/binary_installer.py` downloads, verifies, extracts and — only once the
   binary has actually run — installs it, with streamed log output. macOS has no pinned
-  `ffmpeg` build (no upstream publishes a checksummed native arm64 static binary), so it
-  always falls back to the manual command there. `services/slskd_daemon.py` goes a step
+  `ffmpeg` build (no upstream publishes a checksummed native arm64 static binary): there
+  the installer falls back to running the registry's recipe itself (`brew install
+  ffmpeg`, streamed into the same log, verified the same way) whenever `brew` is on the
+  system, and only the manual command otherwise — `install_method` in the probe payload
+  ("download"/"recipe"/"manual") tells the two apart. `services/slskd_daemon.py` goes a step
   further for slskd alone: it writes `slskd.yml` (touching only the four keys it needs,
   the rest of the user's file untouched) and starts/stops it as a detached process,
   never touching a process it didn't start itself (ownership is proved by the exact
