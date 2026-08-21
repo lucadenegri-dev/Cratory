@@ -10,15 +10,22 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import shutil
+import stat
+import subprocess
 import tarfile
+import tempfile
+import threading
 import zipfile
 from pathlib import Path
 from typing import Callable
 
 import httpx
 
+from app.services import binary_manifest, system_probe
 from app.services.binary_manifest import Download
+from app.services.job_spawn import spawn
 
 log = logging.getLogger(__name__)
 
@@ -165,3 +172,146 @@ def extract(archive: Path, d: Download, dest_dir: Path) -> Path:
             shutil.rmtree(radice, ignore_errors=True)
         estratto = finale
     return estratto
+
+
+MAX_LOG_LINES = 500
+_PROVA_TIMEOUT_S = 20.0
+
+
+class UnknownComponent(InstallError):
+    pass
+
+
+class NoBuildForPlatform(InstallError):
+    """Non abbiamo una build per questa piattaforma. Non è un errore da
+    nascondere: la UI mostra il comando manuale."""
+
+
+class DoesNotRun(InstallError):
+    """Installato ma non eseguibile: firma o architettura."""
+
+
+class AlreadyRunning(InstallError):
+    pass
+
+
+def _prova_esecuzione(percorso: Path) -> str:
+    """Esegue il binario appena installato. È il vero criterio di riuscita:
+    download, hash ed estrazione possono essere andati e il file può ancora
+    non partire."""
+    try:
+        proc = subprocess.run([str(percorso), "-version"], capture_output=True,
+                              text=True, timeout=_PROVA_TIMEOUT_S, check=False)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise DoesNotRun(str(exc)) from exc
+    if proc.returncode != 0:
+        raise DoesNotRun((proc.stderr or proc.stdout or "").strip()[:200]
+                         or f"uscito con {proc.returncode}")
+    return (proc.stdout or proc.stderr or "").strip().splitlines()[0][:120]
+
+
+def installed_path(key: str) -> Path | None:
+    """Dove sta l'eseguibile di questo componente nella cartella gestita, se
+    c'è. Conosce il layout: i bundle stanno in una sottocartella loro."""
+    d = binary_manifest.entry_for(key)
+    if d is None:
+        return None
+    base = system_probe.managed_bin_dir()
+    percorso = (base / key / d.member) if d.layout == "bundle" else (base / d.member)
+    return percorso if percorso.is_file() else None
+
+
+def install(key: str, client: httpx.Client | None = None,
+            on_log: Callable[[str], None] | None = None) -> Path:
+    """Scarica, verifica, estrae, prova e infine installa. Tutto avviene in
+    una directory temporanea: nella cartella gestita si sposta solo alla fine."""
+    if key not in binary_manifest.MANIFEST:
+        raise UnknownComponent(key)
+    d = binary_manifest.entry_for(key)
+    if d is None:
+        raise NoBuildForPlatform(f"{key}: nessuna build per {binary_manifest.platform_tag()}")
+
+    def log_riga(msg: str) -> None:
+        if on_log:
+            on_log(msg)
+
+    destinazione = system_probe.ensure_bin_dir()  # qui si scrive: va creata
+    with tempfile.TemporaryDirectory(prefix="cratory-install-") as tmp:
+        tmpdir = Path(tmp)
+        archivio = tmpdir / "archivio"
+        log_riga(f"scarico {d.url}")
+        download_verified(
+            d, archivio, client=client,
+            on_progress=lambda fatto, totale: log_riga(
+                f"scaricati {fatto // 1024} / {totale // 1024} KB"),
+        )
+        log_riga(f"hash verificato ({d.sha256[:12]}…)")
+
+        lavoro = tmpdir / "estratto"
+        lavoro.mkdir()
+        exe = extract(archivio, d, lavoro)
+        log_riga("estratto")
+
+        exe.chmod(exe.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        versione = _prova_esecuzione(exe)
+        log_riga(f"il binario parte: {versione}")
+
+        finale = (destinazione / key) if d.layout == "bundle" else (destinazione / d.member)
+        if d.layout == "bundle":
+            if finale.exists():
+                shutil.rmtree(finale)
+            shutil.move(str(exe.parent), str(finale))
+            finale = finale / d.member
+        else:
+            shutil.move(str(exe), str(finale))
+        log_riga(f"installato in {finale}")
+
+    system_probe.invalidate_cache()
+    return finale
+
+
+_lock = threading.Lock()
+_state: dict = {"key": None, "status": "idle", "log": [], "detail": None}
+
+
+def reset() -> None:
+    with _lock:
+        _state.update({"key": None, "status": "idle", "log": [], "detail": None})
+
+
+def status() -> dict:
+    with _lock:
+        return {**_state, "log": list(_state["log"])}
+
+
+def _append(line: str) -> None:
+    with _lock:
+        _state["log"].append(line)
+        if len(_state["log"]) > MAX_LOG_LINES:
+            del _state["log"][0:len(_state["log"]) - MAX_LOG_LINES]
+
+
+def start(key: str) -> dict:
+    """Avvia l'installazione in background. Un job alla volta."""
+    if key not in binary_manifest.MANIFEST:
+        raise UnknownComponent(key)
+    with _lock:
+        if _state["status"] == "running":
+            raise AlreadyRunning(_state["key"])
+        _state.update({"key": key, "status": "running", "log": [], "detail": None})
+
+    def run() -> None:
+        try:
+            install(key, on_log=_append)
+            with _lock:
+                _state.update({"status": "done", "detail": None})
+        except Exception as exc:  # noqa: BLE001 - ampio di proposito
+            # Qualunque eccezione non gestita qui morirebbe in questo thread
+            # lasciando lo stato su "running": ogni richiesta successiva
+            # riceverebbe 409 fino al riavvio del backend.
+            log.warning("installazione di %s fallita: %s", key, exc)
+            with _lock:
+                _state.update({"status": "error", "detail": str(exc)})
+
+    spawn(run)
+    return status()
