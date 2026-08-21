@@ -201,6 +201,12 @@ def test_ruotare_solo_le_credenziali_non_tocca_porta_e_cartella(db, monkeypatch,
         "  downloads: /mio/download/custom\n"
     )
     monkeypatch.setattr(sd, "default_config_path", lambda: cfg)
+    # Si fotografa il valore PRIMA, invece di darlo per vuoto: su una macchina
+    # con un `.env` reale `slskd_url()` è popolato, e un test che pretende ""
+    # fallisce per l'ambiente e non per il codice. L'invariante da provare è
+    # "non è cambiato", non "è vuoto".
+    url_prima = rs.slskd_url()
+    dir_prima = rs.slskd_download_dir()
 
     res = _client(db).put("/api/slskd/daemon/config", json={
         "username": "nuovo", "password": "nuova"})
@@ -213,7 +219,8 @@ def test_ruotare_solo_le_credenziali_non_tocca_porta_e_cartella(db, monkeypatch,
     # innesca — riscrivere le impostazioni di Cratory anche qui vorrebbe dire
     # sovrascrivere silenziosamente uno `slskd_url()`/`slskd_download_dir()`
     # che l'utente può aver scelto apposta diversi da quel che c'è nel file.
-    assert rs.slskd_url() == ""
+    assert rs.slskd_url() == url_prima
+    assert rs.slskd_download_dir() == dir_prima
     app.dependency_overrides.clear()
 
 
