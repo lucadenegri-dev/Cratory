@@ -34,6 +34,15 @@ class Download:
     # "bundle": si estrae tutto in bin/<key>/ perché l'eseguibile non è
     # autosufficiente (slskd porta con sé il runtime .NET).
     layout: Literal["single", "bundle"]
+    # Flag con cui si invoca il binario per il controllo "parte davvero":
+    # non è universale, ogni progetto sceglie il proprio (fpcalc e ffmpeg
+    # accettano `-version`, slskd solo `-v`/`--version`). Stesso campo che
+    # `system_probe.Component.version_flag` usa per il probe a runtime. Il
+    # default copre la maggioranza (fpcalc/ffmpeg): ogni voce del manifesto
+    # lo passa comunque esplicito, il default esiste solo per non costringere
+    # i test di extract/download — che non hanno niente a che fare con
+    # l'esecuzione del binario — a conoscere questo campo.
+    version_flag: str = "-version"
 
 
 _ARCH_ALIASES = {"amd64": "x86_64", "x64": "x86_64", "aarch64": "arm64"}
@@ -57,23 +66,23 @@ MANIFEST: dict[str, dict[str, Download]] = {
         "darwin-arm64": Download(
             "1.6.1", f"{_FPCALC}/chromaprint-fpcalc-1.6.1-macos-universal.tar.gz",
             "240aeb5a8c8205af458e3625cb7487b826b711a999e491ef00111f3cebd76f00",
-            "tar.gz", "fpcalc", "single"),
+            "tar.gz", "fpcalc", "single", "-version"),
         "darwin-x86_64": Download(
             "1.6.1", f"{_FPCALC}/chromaprint-fpcalc-1.6.1-macos-universal.tar.gz",
             "240aeb5a8c8205af458e3625cb7487b826b711a999e491ef00111f3cebd76f00",
-            "tar.gz", "fpcalc", "single"),
+            "tar.gz", "fpcalc", "single", "-version"),
         "linux-x86_64": Download(
             "1.6.1", f"{_FPCALC}/chromaprint-fpcalc-1.6.1-linux-x86_64.tar.gz",
             "fc16cd37a70168040bc9ceb45f1d4d1216f5a75bc4c9cf8564bea70ac6a45733",
-            "tar.gz", "fpcalc", "single"),
+            "tar.gz", "fpcalc", "single", "-version"),
         "linux-arm64": Download(
             "1.6.1", f"{_FPCALC}/chromaprint-fpcalc-1.6.1-linux-arm64.tar.gz",
             "7eaf5d655c4aa172ab28e3c870b8bb61dd2c327ac94de145676f88842cf6215a",
-            "tar.gz", "fpcalc", "single"),
+            "tar.gz", "fpcalc", "single", "-version"),
         "win32-x86_64": Download(
             "1.6.1", f"{_FPCALC}/chromaprint-fpcalc-1.6.1-windows-x86_64.zip",
             "735d6182b38e9f364b84ce6f4ccd682c75e2851de89735711d6b762d12b92a4e",
-            "zip", "fpcalc.exe", "single"),
+            "zip", "fpcalc.exe", "single", "-version"),
     },
     # ffmpeg: NESSUNA voce macOS, per decisione esplicita della spec — BtbN non
     # produce asset macOS e non esiste altrove una build arm64 nativa con
@@ -82,37 +91,40 @@ MANIFEST: dict[str, dict[str, Download]] = {
         "linux-x86_64": Download(
             "N-126217", f"{_FFMPEG}/ffmpeg-N-126217-ge1e325235e-linux64-gpl.tar.xz",
             "c3df9379d32a16f6923681411c97880ee8d45b0bae03a55a6fc8262f2f653ba6",
-            "tar.xz", "ffmpeg", "bundle"),
+            "tar.xz", "ffmpeg", "bundle", "-version"),
         "linux-arm64": Download(
             "N-126217", f"{_FFMPEG}/ffmpeg-N-126217-ge1e325235e-linuxarm64-gpl.tar.xz",
             "e184dbde7d57d8f1ffa616795d9c4f6f368b211bc9e6fd86b60fea511a21f430",
-            "tar.xz", "ffmpeg", "bundle"),
+            "tar.xz", "ffmpeg", "bundle", "-version"),
         "win32-x86_64": Download(
             "N-126217", f"{_FFMPEG}/ffmpeg-N-126217-ge1e325235e-win64-gpl.zip",
             "fe5a8f090b9fbc77d5e64c7d8b404b8837e05a09663ed9768ba19284cf929b20",
-            "zip", "ffmpeg.exe", "bundle"),
+            "zip", "ffmpeg.exe", "bundle", "-version"),
     },
+    # slskd accetta solo `-v`/`--version`: `-version` (un solo trattino, quello
+    # che va bene per fpcalc e ffmpeg) non è un'opzione riconosciuta e la
+    # prova di esecuzione fallirebbe sempre per l'unico componente bundle.
     "slskd": {
         "darwin-arm64": Download(
             "0.26.0", f"{_SLSKD}/slskd-0.26.0-osx-arm64.zip",
             "53bd82e26224908abb30780f3e3a3ee58788d17379354b3138c85c6fe02cd5a0",
-            "zip", "slskd", "bundle"),
+            "zip", "slskd", "bundle", "--version"),
         "darwin-x86_64": Download(
             "0.26.0", f"{_SLSKD}/slskd-0.26.0-osx-x64.zip",
             "3d624c53de73229caa090c395ee5eada9c7f54d59fd3a0e79a2597e8b467b448",
-            "zip", "slskd", "bundle"),
+            "zip", "slskd", "bundle", "--version"),
         "linux-x86_64": Download(
             "0.26.0", f"{_SLSKD}/slskd-0.26.0-linux-x64.zip",
             "9c19c04767ef036a47716404d097433e23fbdb41b339e0e8cbc2329c98b22583",
-            "zip", "slskd", "bundle"),
+            "zip", "slskd", "bundle", "--version"),
         "linux-arm64": Download(
             "0.26.0", f"{_SLSKD}/slskd-0.26.0-linux-arm64.zip",
             "57d4b9dbb0ad34aa6e6aaaf79b0bf3347dec5efcb48ad2b12f9ed4ece42787aa",
-            "zip", "slskd", "bundle"),
+            "zip", "slskd", "bundle", "--version"),
         "win32-x86_64": Download(
             "0.26.0", f"{_SLSKD}/slskd-0.26.0-win-x64.zip",
             "942299d8c97da6cc1f6cd82dcd4a3662b97b82fbd1742df4bec165b79357268a",
-            "zip", "slskd.exe", "bundle"),
+            "zip", "slskd.exe", "bundle", "--version"),
     },
 }
 

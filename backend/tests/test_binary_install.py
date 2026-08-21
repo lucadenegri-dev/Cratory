@@ -4,6 +4,7 @@ o architettura sbagliata."""
 import hashlib
 import io
 import tarfile
+import zipfile
 from pathlib import Path
 
 import httpx
@@ -40,7 +41,7 @@ def bin_dir(tmp_path, monkeypatch):
 
 def _manifest(monkeypatch, sha: str):
     d = Download("1.0", "https://esempio.invalid/a.tar.gz", sha,
-                 "tar.gz", "fpcalc", "single")
+                 "tar.gz", "fpcalc", "single", "-version")
     monkeypatch.setattr(bm, "MANIFEST", {"fpcalc": {"test": d}})
     monkeypatch.setattr(bm, "platform_tag", lambda: "test")
     return d
@@ -49,7 +50,7 @@ def _manifest(monkeypatch, sha: str):
 def test_installazione_riuscita(bin_dir, monkeypatch):
     dati = _archivio()
     _manifest(monkeypatch, hashlib.sha256(dati).hexdigest())
-    monkeypatch.setattr(bi, "_prova_esecuzione", lambda percorso: "fpcalc 1.0")
+    monkeypatch.setattr(bi, "_prova_esecuzione", lambda percorso, flag: "fpcalc 1.0")
     with httpx.Client(transport=httpx.MockTransport(
             lambda req: httpx.Response(200, content=dati))) as c:
         percorso = bi.install("fpcalc", client=c)
@@ -60,7 +61,7 @@ def test_installazione_riuscita(bin_dir, monkeypatch):
 def test_il_binario_installato_e_eseguibile(bin_dir, monkeypatch):
     dati = _archivio()
     _manifest(monkeypatch, hashlib.sha256(dati).hexdigest())
-    monkeypatch.setattr(bi, "_prova_esecuzione", lambda percorso: "ok")
+    monkeypatch.setattr(bi, "_prova_esecuzione", lambda percorso, flag: "ok")
     with httpx.Client(transport=httpx.MockTransport(
             lambda req: httpx.Response(200, content=dati))) as c:
         percorso = bi.install("fpcalc", client=c)
@@ -85,7 +86,7 @@ def test_binario_che_non_parte_fa_fallire_l_installazione(bin_dir, monkeypatch):
     dati = _archivio()
     _manifest(monkeypatch, hashlib.sha256(dati).hexdigest())
 
-    def non_parte(percorso):
+    def non_parte(percorso, flag):
         raise bi.DoesNotRun("Bad CPU type in executable")
 
     monkeypatch.setattr(bi, "_prova_esecuzione", non_parte)
@@ -137,9 +138,103 @@ def test_il_job_riporta_l_errore_invece_di_restare_appeso(bin_dir, monkeypatch):
 
 def test_installed_path_conosce_il_layout(bin_dir, monkeypatch):
     d = Download("1.0", "https://esempio.invalid/a.zip", "0" * 64,
-                 "zip", "slskd", "bundle")
+                 "zip", "slskd", "bundle", "--version")
     monkeypatch.setattr(bm, "MANIFEST", {"slskd": {"test": d}})
     monkeypatch.setattr(bm, "platform_tag", lambda: "test")
     (bin_dir / "slskd").mkdir()
     (bin_dir / "slskd" / "slskd").write_text("")
     assert bi.installed_path("slskd") == bin_dir / "slskd" / "slskd"
+
+
+def _script_che_pretende(flag_atteso: str) -> bytes:
+    """Un eseguibile finto che si comporta come i veri binari testati a mano:
+    esce 0 solo se invocato con il flag che si aspetta, altrimenti fallisce.
+    Non è un monkeypatch di `_prova_esecuzione`: è l'unico modo di accorgersi
+    se il flag passato dall'installer è quello sbagliato."""
+    return f"""#!/bin/sh
+if [ "$1" = "{flag_atteso}" ]; then
+    echo "finto binario, versione 1.0"
+    exit 0
+fi
+exit 1
+""".encode()
+
+
+def test_il_flag_di_versione_viene_dal_manifesto_non_hardcoded(bin_dir, monkeypatch):
+    """Non monkeypatcha `_prova_esecuzione`: con `-version` hardcoded in
+    quella funzione (il bug del finding), questo test fallirebbe per il
+    componente che pretende `--version`, esattamente come slskd nella vita
+    vera — e nel caso peggiore, se il flag sbagliato fosse interpretato come
+    "parti pure", il test resterebbe appeso fino al timeout."""
+    dati = _archivio(_script_che_pretende("--version"))
+    d = Download("1.0", "https://esempio.invalid/a.tar.gz",
+                 hashlib.sha256(dati).hexdigest(),
+                 "tar.gz", "fpcalc", "single", "--version")
+    monkeypatch.setattr(bm, "MANIFEST", {"fpcalc": {"test": d}})
+    monkeypatch.setattr(bm, "platform_tag", lambda: "test")
+    with httpx.Client(transport=httpx.MockTransport(
+            lambda req: httpx.Response(200, content=dati))) as c:
+        percorso = bi.install("fpcalc", client=c)
+    assert percorso.is_file()
+
+
+def test_flag_sbagliato_nel_manifesto_fa_fallire_l_installazione(bin_dir, monkeypatch):
+    """Simmetrico al test sopra: il finto binario accetta solo `--version` (il
+    caso di slskd), pinnare `-version` nel manifesto (il flag buono per fpcalc
+    e ffmpeg, sbagliato per slskd) deve far fallire la prova di esecuzione,
+    non passare silenziosamente."""
+    dati = _archivio(_script_che_pretende("--version"))
+    d = Download("1.0", "https://esempio.invalid/a.tar.gz",
+                 hashlib.sha256(dati).hexdigest(),
+                 "tar.gz", "fpcalc", "single", "-version")
+    monkeypatch.setattr(bm, "MANIFEST", {"fpcalc": {"test": d}})
+    monkeypatch.setattr(bm, "platform_tag", lambda: "test")
+    with httpx.Client(transport=httpx.MockTransport(
+            lambda req: httpx.Response(200, content=dati))) as c:
+        with pytest.raises(bi.DoesNotRun):
+            bi.install("fpcalc", client=c)
+
+
+def test_bundle_fallito_a_meta_copia_non_distrugge_quello_gia_installato(bin_dir, monkeypatch):
+    """Riproduce lo scenario del reviewer: un bundle già installato e
+    funzionante, un guasto durante la copia della nuova versione (lo stesso
+    che capita quando `shutil.move` tra filesystem diversi ricade su
+    copia-e-cancella e la copia si interrompe). L'invariante che conta è che
+    quello vecchio resti al suo posto — non una cartella vuota, non un
+    ibrido a metà tra vecchio e nuovo."""
+    vecchia = bin_dir / "slskd"
+    vecchia.mkdir()
+    (vecchia / "slskd").write_text("vecchio binario funzionante")
+    (vecchia / "libfoo.so").write_text("dipendenza del vecchio binario")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("slskd", b"#!/bin/sh\necho nuovo\nexit 0\n")
+    dati = buf.getvalue()
+    d = Download("2.0", "https://esempio.invalid/a.zip",
+                 hashlib.sha256(dati).hexdigest(),
+                 "zip", "slskd", "bundle", "--version")
+    monkeypatch.setattr(bm, "MANIFEST", {"slskd": {"test": d}})
+    monkeypatch.setattr(bm, "platform_tag", lambda: "test")
+    monkeypatch.setattr(bi, "_prova_esecuzione", lambda percorso, flag: "ok")
+
+    def esplode(*a, **kw):
+        raise OSError("disco pieno a metà copia")
+
+    # Si rompono entrambi i meccanismi con cui uno spostamento di una cartella
+    # può fallire: `copytree` è il passo costoso della versione corretta,
+    # `move` è quello che il reviewer ha rotto per riprodurre il bug nella
+    # versione precedente (che chiamava `shutil.move` direttamente sul
+    # sorgente, senza passare da una copia in stage).
+    monkeypatch.setattr(bi.shutil, "copytree", esplode)
+    monkeypatch.setattr(bi.shutil, "move", esplode)
+
+    with httpx.Client(transport=httpx.MockTransport(
+            lambda req: httpx.Response(200, content=dati))) as c:
+        with pytest.raises(OSError):
+            bi.install("slskd", client=c)
+
+    assert (vecchia / "slskd").read_text() == "vecchio binario funzionante"
+    assert (vecchia / "libfoo.so").read_text() == "dipendenza del vecchio binario"
+    assert not (bin_dir / "slskd.new").exists()
+    assert not (bin_dir / "slskd.old").exists()

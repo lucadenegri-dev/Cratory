@@ -55,6 +55,19 @@ def test_ogni_voce_e_pinnata_e_verificabile():
             assert "/latest/" not in d.url, (key, tag)
             assert d.version, (key, tag)
             assert d.member, (key, tag)
+            assert d.version_flag, (key, tag)
+
+
+def test_slskd_non_usa_il_flag_di_ffmpeg_e_fpcalc():
+    """slskd accetta solo `-v`/`--version`: pinnare `-version` (quello buono
+    per fpcalc e ffmpeg) farebbe fallire sempre la prova di esecuzione per
+    l'unico componente `bundle` del manifesto."""
+    for tag, d in bm.MANIFEST["slskd"].items():
+        assert d.version_flag == "--version", tag
+    for tag, d in bm.MANIFEST["fpcalc"].items():
+        assert d.version_flag == "-version", tag
+    for tag, d in bm.MANIFEST["ffmpeg"].items():
+        assert d.version_flag == "-version", tag
 
 
 def test_slskd_e_un_bundle_non_un_singolo_file():

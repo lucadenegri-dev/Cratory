@@ -5,12 +5,21 @@ file scorre, si confronta con quello pinnato nel manifesto, si estrae in una
 directory temporanea e solo alla fine — quando il binario ha dimostrato di
 partire — si sposta nella cartella gestita. Un'installazione interrotta non
 lascia mezzo binario in giro.
+
+Lo spostamento finale (`_installa_singolo`/`_installa_bundle`) rispetta lo
+stesso principio a un livello più fine: prima si copia nella cartella
+gestita, in una posizione affiancata a quella definitiva, poi si scambia con
+una rename. La parte che attraversa i filesystem — spesso da un mount
+temporaneo di sistema alla cartella del progetto — è quella con probabilità
+di guasto reali, e non tocca mai un'installazione già funzionante; lo scambio
+vero e proprio è solo rename sullo stesso filesystem, l'operazione con meno
+probabilità di fallire di tutta la procedura. Un'installazione precedente
+sopravvive quindi a qualunque guasto in quella successiva.
 """
 from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import shutil
 import stat
 import subprocess
@@ -195,12 +204,21 @@ class AlreadyRunning(InstallError):
     pass
 
 
-def _prova_esecuzione(percorso: Path) -> str:
+def _prova_esecuzione(percorso: Path, version_flag: str) -> str:
     """Esegue il binario appena installato. È il vero criterio di riuscita:
     download, hash ed estrazione possono essere andati e il file può ancora
-    non partire."""
+    non partire.
+
+    Il flag non è lo stesso per tutti: fpcalc e ffmpeg accettano `-version`,
+    slskd solo `-v`/`--version`. Un flag sconosciuto non fa fallire il
+    processo per un motivo comodo da distinguere: a seconda del binario esce
+    con errore (bene, lo intercettiamo) oppure — è il caso di slskd, che è un
+    demone — ignora l'argomento e parte per davvero, restando in vita fino al
+    timeout sotto. Da qui l'obbligo di passare il flag giusto per componente,
+    non uno hardcoded.
+    """
     try:
-        proc = subprocess.run([str(percorso), "-version"], capture_output=True,
+        proc = subprocess.run([str(percorso), version_flag], capture_output=True,
                               text=True, timeout=_PROVA_TIMEOUT_S, check=False)
     except (OSError, subprocess.SubprocessError) as exc:
         raise DoesNotRun(str(exc)) from exc
@@ -219,6 +237,70 @@ def installed_path(key: str) -> Path | None:
     base = system_probe.managed_bin_dir()
     percorso = (base / key / d.member) if d.layout == "bundle" else (base / d.member)
     return percorso if percorso.is_file() else None
+
+
+def _installa_singolo(sorgente: Path, finale: Path) -> None:
+    """Mette `sorgente` (un file dentro la directory temporanea di lavoro,
+    quasi certamente un mount diverso da `finale`) al posto di `finale`.
+
+    La copia che attraversa i filesystem è la parte che può interrompersi a
+    metà (disco pieno, processo ucciso): la si scrive in un file affiancato a
+    `finale`, mai su `finale` stesso, cosi' un guasto li' non tocca
+    l'eseguibile gia' installato. Solo a copia riuscita si scambia, con una
+    `replace` nella STESSA cartella — una rename, non una copia: o avviene
+    per intero o non avviene, non esiste uno stato intermedio da osservare.
+    """
+    staging = finale.with_name(finale.name + ".new")
+    staging.unlink(missing_ok=True)  # residuo di un tentativo precedente interrotto
+    try:
+        shutil.copy2(sorgente, staging)
+        staging.replace(finale)
+    finally:
+        staging.unlink(missing_ok=True)
+
+
+def _installa_bundle(sorgente: Path, finale: Path) -> None:
+    """Come `_installa_singolo`, ma per una cartella intera (slskd, che porta
+    con sé il runtime .NET): una rename non può sostituire una directory non
+    vuota, quindi lo scambio finale è in due mosse anziché una, ma resta
+    fatto solo di rename nella stessa cartella — mai una copia sopra
+    l'installazione precedente.
+
+    Ordine, ed è quello che conta:
+    1. si copia (costoso, può fallire a metà: attraversa da temp di sistema
+       a qui) in una cartella affiancata a `finale`, MAI dentro `finale`;
+    2. solo se la copia è arrivata intera, la vecchia `finale` (se c'è) si
+       sposta da parte e la nuova prende il suo posto — due rename, non due
+       copie: economiche, e sulla stessa cartella non hanno un mount da
+       attraversare, quindi non c'è la finestra "a metà" che ha cancellato
+       l'installazione precedente nel bug del reviewer.
+    Se il passo 1 fallisce, `finale` non è mai stata toccata. Se fallisce il
+    secondo rename (nella pratica, quasi mai: sono rename sullo stesso
+    filesystem), si tenta di rimettere la vecchia installazione al suo posto
+    invece di lasciare la cartella gestita vuota.
+    """
+    staging = finale.with_name(finale.name + ".new")
+    vecchio = finale.with_name(finale.name + ".old")
+    # Residui di una run precedente interrotta prima di arrivare alla pulizia
+    # finale: non devono restare in giro né confondere questa run.
+    shutil.rmtree(staging, ignore_errors=True)
+    shutil.rmtree(vecchio, ignore_errors=True)
+    try:
+        shutil.copytree(sorgente, staging)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    try:
+        if finale.exists():
+            finale.rename(vecchio)
+        staging.rename(finale)
+    except Exception:
+        if vecchio.exists() and not finale.exists():
+            vecchio.rename(finale)  # rollback: la vecchia installazione torna al suo posto
+        raise
+    finally:
+        shutil.rmtree(vecchio, ignore_errors=True)
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 def install(key: str, client: httpx.Client | None = None,
@@ -253,17 +335,15 @@ def install(key: str, client: httpx.Client | None = None,
         log_riga("estratto")
 
         exe.chmod(exe.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-        versione = _prova_esecuzione(exe)
+        versione = _prova_esecuzione(exe, d.version_flag)
         log_riga(f"il binario parte: {versione}")
 
         finale = (destinazione / key) if d.layout == "bundle" else (destinazione / d.member)
         if d.layout == "bundle":
-            if finale.exists():
-                shutil.rmtree(finale)
-            shutil.move(str(exe.parent), str(finale))
+            _installa_bundle(exe.parent, finale)
             finale = finale / d.member
         else:
-            shutil.move(str(exe), str(finale))
+            _installa_singolo(exe, finale)
         log_riga(f"installato in {finale}")
 
     system_probe.invalidate_cache()
