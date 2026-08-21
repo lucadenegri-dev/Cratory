@@ -190,6 +190,13 @@ export const it: Dictionary = {
     installing: "Installazione in corso…",
     installDone: "Installato",
     installFailed: "Installazione fallita",
+    // Queste due sono un allarme, non un intoppo (design doc §7): il file
+    // arrivato non è quello atteso, oppure l'archivio provava a scrivere
+    // fuori dalla cartella di installazione. Ritentare alla cieca non aiuta
+    // — il testo lo dice esplicitamente, al posto del generico installFailed
+    // qui sopra.
+    installFailedChecksum: "Il file scaricato non è quello atteso. Non è un intoppo di rete: potrebbe essere stato manomesso. Non limitarti a riprovare: verifica la fonte prima di installare.",
+    installFailedArchive: "L'archivio scaricato contiene percorsi che scriverebbero fuori dalla cartella di installazione. Non è un errore ordinario: non limitarti a riprovare, verifica la fonte prima di installare.",
     installManual: "Installalo tu, poi premi Ricontrolla:",
     installNoRecipe: "Per questo non c'è un comando: è un programma separato, con una sua installazione. La documentazione del progetto spiega come.",
     installNeedsBrew: "Il comando presuppone Homebrew, che macOS non include.",
@@ -1781,10 +1788,12 @@ export const it: Dictionary = {
     download_already_running: "Un download e' gia' in corso.",
     slskd_error: (p: Record<string, unknown>) => `Errore slskd: ${p.reason ?? ""}`,
     slskd_already_up: "Il demone slskd è già in esecuzione.",
+    slskd_already_owned: "Un demone slskd avviato da Cratory è già in esecuzione, ma non risponde all'URL configurato — verificalo prima di avviarne un altro.",
     slskd_not_installed: "slskd non è installato.",
     slskd_start_failed: (p: Record<string, unknown>) => `Avvio del demone slskd fallito: ${p.reason ?? ""}`,
     slskd_not_ours: "Il demone è in esecuzione ma non è stato avviato da Cratory.",
     slskd_unsupported_platform: "slskd non è supportato su questa piattaforma.",
+    slskd_running_cannot_install: "slskd è in esecuzione: fermalo prima di installarne una nuova versione.",
     download_review_error: (p: Record<string, unknown>) => `Errore revisione download: ${p.reason ?? ""}`,
     shazam_deps_missing: "Identificazione non disponibile: servono ffmpeg, yt-dlp e shazamio nel backend.",
     dj_set_already_imported: "Set già importato come playlist",

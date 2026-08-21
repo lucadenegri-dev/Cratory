@@ -38,6 +38,12 @@ export type InstallStatus = {
   status: "idle" | "running" | "done" | "error";
   log: string[];
   detail: string | null;
+  /** "checksum_mismatch" | "unsafe_archive" | null/assente: le due sole
+   *  eccezioni che meritano un messaggio d'allarme invece del generico
+   *  "installazione fallita" — vedi component-row.tsx. Opzionale (non
+   *  `| undefined` esplicito ma non richiesto) solo per non forzare ogni
+   *  fixture di test a portarlo: il backend lo manda sempre. */
+  error_code?: string | null;
 };
 
 export type CredentialTestResult = { ok: boolean; code: string; detail: string };

@@ -10,7 +10,7 @@ import { ComponentRow } from "../component-row";
 // motivo per mostrarlo (fix 1): prima il giro si limitava a smettere di
 // aspettare quando lo stato tornava "error", senza dire nulla — la riga
 // restava su "non trovato" e l'utente non aveva alcun indizio del perché.
-type InstallFailure = { key: string; message: string | null };
+type InstallFailure = { key: string; message: string | null; errorCode?: string | null };
 
 export function PrerequisitesStep({ onGoToSlskd }: { onGoToSlskd: () => void }) {
   const t = useT();
@@ -81,7 +81,7 @@ export function PrerequisitesStep({ onGoToSlskd }: { onGoToSlskd: () => void }) 
         if (!mounted.current) return;
         if (status.status === "error") {
           // Stessa scelta: un componente fallito non blocca i successivi.
-          fallite.push({ key: c.key, message: status.detail });
+          fallite.push({ key: c.key, message: status.detail, errorCode: status.error_code });
         }
       }
     } finally {
@@ -113,6 +113,14 @@ export function PrerequisitesStep({ onGoToSlskd }: { onGoToSlskd: () => void }) 
                 {failures.map((f) => (
                   <li key={f.key}>
                     <p>{t.setup.installAllFailedFor(componentLabel(f.key))}</p>
+                    {/* checksum_mismatch e unsafe_archive sono un allarme, non un
+                        intoppo (design doc §7): stessa distinzione di ComponentRow. */}
+                    {f.errorCode === "checksum_mismatch" && (
+                      <p className="mt-0.5 text-xs text-danger">{t.setup.installFailedChecksum}</p>
+                    )}
+                    {f.errorCode === "unsafe_archive" && (
+                      <p className="mt-0.5 text-xs text-danger">{t.setup.installFailedArchive}</p>
+                    )}
                     {/* Dettaglio grezzo del backend, come nota secondaria — stesso
                         pattern del fallimento a riga singola in ComponentRow. */}
                     {f.message && <p className="mt-0.5 text-[11px] text-faint">{f.message}</p>}

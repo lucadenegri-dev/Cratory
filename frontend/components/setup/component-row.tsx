@@ -168,7 +168,14 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange, onConfigure
           )}
           {failed && (
             <div className="mt-1">
-              <p className="text-xs text-danger">{t.setup.installFailed}</p>
+              {/* checksum_mismatch e unsafe_archive sono un allarme, non un
+                  intoppo (design doc §7): frase propria che scoraggia il
+                  "riprova e spera", non il generico installFailed. */}
+              <p className="text-xs text-danger">
+                {install?.error_code === "checksum_mismatch" ? t.setup.installFailedChecksum
+                  : install?.error_code === "unsafe_archive" ? t.setup.installFailedArchive
+                  : t.setup.installFailed}
+              </p>
               {/* Il dettaglio grezzo del backend (es. "python è uscito con
                   codice 1") resta, ma come nota di debug secondaria: la
                   riga che guida l'utente è quella tradotta sopra. */}

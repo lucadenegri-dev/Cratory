@@ -175,6 +175,28 @@ def test_avvio_senza_binario_installato(monkeypatch):
         sd.start()
 
 
+def test_demone_nostro_vivo_ma_url_sbagliato_non_ne_avvia_un_secondo(_pid_isolato, monkeypatch):
+    """Riproduce il finding B1: `slskd_url` punta altrove (typo, impostazione
+    stantia) mentre il demone che abbiamo avviato noi è vivo per davvero.
+    `is_reachable()` dice di no perché bussa all'URL sbagliato: senza il
+    controllo su `owned_pid()`, `start()` ne spawnerebbe un secondo, che
+    collide sulla porta del primo e muore — `StartFailed` cancellerebbe il
+    pid file di QUESTO tentativo, mentre il primo demone, ancora vivo, resta
+    senza un pid file che lo tracci: orfano, mai più fermabile da `stop()`."""
+    monkeypatch.setattr(sd.runtime_settings, "slskd_url", lambda: "http://url-sbagliato:9999")
+    _scrivi_pid(_pid_isolato, 4242, "/app/data/bin/slskd/slskd")
+    monkeypatch.setattr(sd, "_percorso_eseguibile", lambda pid: "/app/data/bin/slskd/slskd")
+
+    def esplodi(argv, **kw):
+        raise AssertionError("non doveva lanciare un secondo processo")
+
+    monkeypatch.setattr(sd.subprocess, "Popen", esplodi)
+    with _client(lambda req: httpx.Response(503)) as c:
+        with pytest.raises(sd.AlreadyOwned):
+            sd.start(client=c)
+    assert sd.pid_file().exists(), "il pid file del demone vivo non va toccato"
+
+
 class _FintoProcessoOrfano:
     """Simula lo spawn di `subprocess.Popen`: `/health` non risponderà mai,
     quindi `start()` dovrà arrendersi e tentare di fermare questo processo."""

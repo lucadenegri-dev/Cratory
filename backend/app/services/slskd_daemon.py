@@ -47,6 +47,17 @@ class AlreadyUp(DaemonError):
     """Qualcosa risponde già all'URL: non ne avviamo un secondo."""
 
 
+class AlreadyOwned(DaemonError):
+    """Un demone che abbiamo avviato noi risulta già vivo (pid file valido),
+    anche se non raggiungibile all'URL configurato — tipico di uno
+    `slskd_url` sbagliato o rimasto stantio. Senza questo controllo `start()`
+    vede solo `is_reachable()` dire "no" e ne spawna un secondo, che collide
+    sulla porta del primo e muore: `StartFailed` cancella allora il pid file
+    di QUESTO tentativo, ma il primo demone, ancora vivo, resta senza un pid
+    file che lo tracci — orfano e non più fermabile da `stop()`. Meglio
+    rifiutarsi subito che orfanizzare un demone che già funziona."""
+
+
 class NotOurs(DaemonError):
     """Non abbiamo un PID nostro valido: non fermiamo processi altrui."""
 
@@ -401,6 +412,18 @@ def start(client: httpx.Client | None = None) -> dict:
     _richiedi_piattaforma_supportata()
     if is_reachable(client):
         raise AlreadyUp("slskd risponde già all'URL configurato")
+    # Non basta "non raggiungibile": un demone nostro può essere vivo e sordo
+    # solo perché `slskd_url` punta altrove (typo, impostazione stantia).
+    # Senza questo controllo se ne spawnerebbe un secondo, che collide sulla
+    # porta del primo e muore — e il primo, ormai senza pid file, diventa
+    # un orfano che `stop()` non può più raggiungere. Vedi `AlreadyOwned`.
+    pid_posseduto = owned_pid()
+    if pid_posseduto is not None:
+        raise AlreadyOwned(
+            f"un demone slskd avviato da Cratory è già in esecuzione (pid "
+            f"{pid_posseduto}), ma non risponde all'URL configurato: "
+            f"verifica slskd_url prima di avviarne un altro"
+        )
     exe = binary_installer.installed_path("slskd")
     if exe is None:
         raise NotInstalled("slskd non è installato nella cartella dell'app")

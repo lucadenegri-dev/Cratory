@@ -71,7 +71,14 @@ export function SlskdStep() {
       // ad avviare — "slskd non è installato" se non c'era prima, oppure,
       // peggio, l'avvio silenzioso di una copia vecchia già presente.
       if (stato.status === "error") {
-        setErroreDemone(stato.detail);
+        // checksum_mismatch e unsafe_archive sono un allarme, non un intoppo
+        // (design doc §7): stessa distinzione di ComponentRow/PrerequisitesStep,
+        // qui per il download del binario slskd stesso.
+        setErroreDemone(
+          stato.error_code === "checksum_mismatch" ? t.setup.installFailedChecksum
+          : stato.error_code === "unsafe_archive" ? t.setup.installFailedArchive
+          : stato.detail,
+        );
         return;
       }
       setDaemon(await daemonStart());

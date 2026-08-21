@@ -193,6 +193,13 @@ export const en = {
     installing: "Installing…",
     installDone: "Installed",
     installFailed: "Installation failed",
+    // These two are alarms, not hiccups (design doc §7): the file that
+    // arrived is not the one that was pinned, or the archive tried to write
+    // outside the install folder. Retrying blindly does not help — the
+    // wording says so on purpose, instead of falling back to the generic
+    // installFailed line above.
+    installFailedChecksum: "The download does not match what was expected. This is not a network hiccup — it may have been tampered with. Do not just retry: check the source before installing.",
+    installFailedArchive: "The downloaded archive contains paths that would write outside the install folder. This is not an ordinary error — do not just retry: check the source before installing.",
     installManual: "Install it yourself, then press Recheck:",
     installNoRecipe: "There is no single command for this one: it is a separate program with its own setup. Its documentation explains how.",
     installNeedsBrew: "This command assumes Homebrew, which macOS does not come with.",
@@ -1789,10 +1796,12 @@ export const en = {
     download_already_running: "A download is already running.",
     slskd_error: (p: Record<string, unknown>) => `slskd error: ${p.reason ?? ""}`,
     slskd_already_up: "The slskd daemon is already running.",
+    slskd_already_owned: "A slskd daemon started by Cratory is already running, but it is not reachable at the configured URL — check it before starting another one.",
     slskd_not_installed: "slskd is not installed.",
     slskd_start_failed: (p: Record<string, unknown>) => `Failed to start the slskd daemon: ${p.reason ?? ""}`,
     slskd_not_ours: "The daemon is running but was not started by Cratory.",
     slskd_unsupported_platform: "slskd is not supported on this platform.",
+    slskd_running_cannot_install: "slskd is running: stop it before installing a new version.",
     download_review_error: (p: Record<string, unknown>) => `Download review error: ${p.reason ?? ""}`,
     shazam_deps_missing: "Identification unavailable: ffmpeg, yt-dlp and shazamio are required on the backend.",
     dj_set_already_imported: "Set already imported as playlist",

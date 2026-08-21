@@ -53,6 +53,17 @@ def test_start_quando_e_gia_acceso(db, monkeypatch):
     app.dependency_overrides.clear()
 
 
+def test_start_quando_un_nostro_demone_e_gia_vivo_ma_irraggiungibile(db, monkeypatch):
+    def gia_nostro(client=None):
+        raise sd.AlreadyOwned("un demone nostro è già in esecuzione")
+
+    monkeypatch.setattr(sd, "start", gia_nostro)
+    res = _client(db).post("/api/slskd/daemon/start")
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "slskd_already_owned"
+    app.dependency_overrides.clear()
+
+
 def test_start_senza_binario(db, monkeypatch):
     def non_installato(client=None):
         raise sd.NotInstalled("manca")

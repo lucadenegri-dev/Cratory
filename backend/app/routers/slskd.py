@@ -156,6 +156,8 @@ def daemon_start() -> DaemonStatus:
         return DaemonStatus(**slskd_daemon.start())
     except slskd_daemon.AlreadyUp as exc:
         raise api_error(409, "slskd_already_up", str(exc)) from exc
+    except slskd_daemon.AlreadyOwned as exc:
+        raise api_error(409, "slskd_already_owned", str(exc)) from exc
     except slskd_daemon.NotInstalled as exc:
         raise api_error(409, "slskd_not_installed", str(exc)) from exc
     except slskd_daemon.StartFailed as exc:

@@ -369,12 +369,12 @@ def install(key: str, client: httpx.Client | None = None,
 
 
 _lock = threading.Lock()
-_state: dict = {"key": None, "status": "idle", "log": [], "detail": None}
+_state: dict = {"key": None, "status": "idle", "log": [], "detail": None, "error_code": None}
 
 
 def reset() -> None:
     with _lock:
-        _state.update({"key": None, "status": "idle", "log": [], "detail": None})
+        _state.update({"key": None, "status": "idle", "log": [], "detail": None, "error_code": None})
 
 
 def status() -> dict:
@@ -389,6 +389,25 @@ def _append(line: str) -> None:
             del _state["log"][0:len(_state["log"]) - MAX_LOG_LINES]
 
 
+# Le uniche due eccezioni per cui il frontend deve mostrare un messaggio
+# d'allarme invece del generico "installazione fallita" (design doc §7): un
+# hash che non torna o un archivio che sconfina non sono un intoppo di rete
+# da ritentare, sono il segno che il file non è quello atteso. Le altre
+# eccezioni (download fallito, binario che non parte, piattaforma senza
+# build...) restano `error_code: None` e continuano a comportarsi come oggi.
+_CODICI_ALLARME: tuple[tuple[type[Exception], str], ...] = (
+    (ChecksumMismatch, "checksum_mismatch"),
+    (UnsafeArchive, "unsafe_archive"),
+)
+
+
+def _codice_errore(exc: Exception) -> str | None:
+    for classe, codice in _CODICI_ALLARME:
+        if isinstance(exc, classe):
+            return codice
+    return None
+
+
 def start(key: str) -> dict:
     """Avvia l'installazione in background. Un job alla volta."""
     if key not in binary_manifest.MANIFEST:
@@ -396,20 +415,21 @@ def start(key: str) -> dict:
     with _lock:
         if _state["status"] == "running":
             raise AlreadyRunning(_state["key"])
-        _state.update({"key": key, "status": "running", "log": [], "detail": None})
+        _state.update({"key": key, "status": "running", "log": [], "detail": None, "error_code": None})
 
     def run() -> None:
         try:
             install(key, on_log=_append)
             with _lock:
-                _state.update({"status": "done", "detail": None})
+                _state.update({"status": "done", "detail": None, "error_code": None})
         except Exception as exc:  # noqa: BLE001 - ampio di proposito
             # Qualunque eccezione non gestita qui morirebbe in questo thread
             # lasciando lo stato su "running": ogni richiesta successiva
             # riceverebbe 409 fino al riavvio del backend.
             log.warning("installazione di %s fallita: %s", key, exc)
             with _lock:
-                _state.update({"status": "error", "detail": str(exc)})
+                _state.update({"status": "error", "detail": str(exc),
+                               "error_code": _codice_errore(exc)})
 
     spawn(run)
     return status()
