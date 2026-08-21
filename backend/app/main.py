@@ -36,6 +36,7 @@ from app.routers import (
     spotify,
     tracks,
     transitions,
+    updates,
 )
 from app.routers import settings as settings_router
 from app.organize.routers import (
@@ -130,6 +131,7 @@ app.include_router(rekordbox.router)
 app.include_router(analysis.router)
 app.include_router(soundcloud.router)
 app.include_router(settings_router.router)
+app.include_router(updates.router)
 app.include_router(setup.router)
 
 for _organize_router in (
