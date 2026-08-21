@@ -29,6 +29,11 @@ log = logging.getLogger(__name__)
 BIN_DIR_ENV = "CRATORY_BIN_DIR"
 _CACHE_TTL_S = 10.0
 _PROBE_TIMEOUT_S = 5.0
+# Più breve di _PROBE_TIMEOUT_S: qui l'indirizzo può essere un default
+# indovinato (nessun SLSKD_URL impostato), non uno scelto dall'utente, e
+# probe_all() gira a ogni polling del wizard — un indirizzo irraggiungibile
+# non deve tenerlo in attesa.
+_SLSKD_PROBE_TIMEOUT_S = 1.0
 
 
 @dataclass(frozen=True)
@@ -213,16 +218,25 @@ def _probe_binary(c: Component) -> dict:
 
 def _probe_slskd() -> dict:
     """Il demone non è un binario da cercare nel PATH: o risponde al suo URL
-    o non c'è. L'URL vuoto significa 'feature disattiva', non 'errore'.
+    o non c'è.
+
+    URL vuoto (il default, prima che l'utente dica a Cratory dove sta slskd)
+    ricade sull'indirizzo di default del demone invece di dichiararlo subito
+    assente: altrimenti un'istanza già in esecuzione ma non ancora
+    configurata risulta "non presente", e il passo prerequisiti offre di
+    scaricarne una seconda copia per qualcosa che l'utente ha già acceso —
+    esattamente il caso da riconoscere, non da nascondere.
 
     Il demone non ha una copia di sistema da segnalare: è un servizio remoto.
     `shadowing` rimane None per uniformità con le altre probe."""
-    url = runtime_settings.slskd_url()
-    if not url:
-        return {"present": False, "version": None, "source": None, "shadowing": None}
+    # Import locale: system_probe -> binary_installer -> system_probe è già
+    # un ciclo (via binary_manifest); slskd_daemon passa anche lui da
+    # binary_installer, quindi un import in testa al modulo lo chiuderebbe.
+    from app.services import slskd_daemon
+    url = runtime_settings.slskd_url() or f"http://localhost:{slskd_daemon.DEFAULT_PORT}"
     import httpx
     try:
-        res = httpx.get(f"{url.rstrip('/')}/health", timeout=_PROBE_TIMEOUT_S)
+        res = httpx.get(f"{url.rstrip('/')}/health", timeout=_SLSKD_PROBE_TIMEOUT_S)
         return {"present": res.status_code < 500, "version": None, "source": "daemon", "shadowing": None}
     except httpx.HTTPError:
         return {"present": False, "version": None, "source": None, "shadowing": None}

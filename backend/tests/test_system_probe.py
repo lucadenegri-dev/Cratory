@@ -11,18 +11,31 @@ from app.services import system_probe as sp
 @pytest.fixture(autouse=True)
 def _no_slskd_network_call(monkeypatch):
     """Forza slskd_url() a ritornare stringa vuota, disattivando la feature.
-    Evita che test_probe_all_ha_una_voce_per_componente e
-    test_la_cache_evita_di_riesaminare_a_ogni_render facciano chiamate di rete
-    incontrollate a un demone slskd.
+
+    Da sola non basta più a evitare chiamate di rete: con la ricaduta
+    sull'indirizzo di default (fix "un demone già acceso non deve restare
+    invisibile"), URL vuoto porta comunque _probe_slskd a tentare
+    http://localhost:5030/health. Un demone slskd vero in ascolto lì
+    sull'host di sviluppo (caso reale: è così che gira anche il nostro)
+    renderebbe questi test dipendenti dalla macchina che li esegue — per
+    questo httpx.get è mockato qui, non solo l'URL. I test che vogliono
+    provare la ricaduta la sovrascrivono da soli, dopo questa fixture.
 
     Ripulisce anche FPCALC e CRATORY_BIN_DIR: resolve_binary li consulta PRIMA
     del PATH, quindi uno sviluppatore con uno dei due impostati nell'ambiente
     (es. per lavorare sul bundle Tauri) farebbe fallire i test che assumono
     "niente di preinstallato" — l'indipendenza dall'host non e' negoziabile.
     """
+    import httpx
+
     monkeypatch.setattr(config.settings, "slskd_url", "")
     monkeypatch.delenv("FPCALC", raising=False)
     monkeypatch.delenv(sp.BIN_DIR_ENV, raising=False)
+
+    def _nessun_demone(*_a, **_k):
+        raise httpx.ConnectError("nessun demone nei test")
+
+    monkeypatch.setattr(httpx, "get", _nessun_demone)
     # Pulisce la cache globale prima di ogni test per evitare eredità di risultati
     # da run precedenti.
     sp._cache = None
@@ -191,8 +204,8 @@ def test_probe_all_ha_una_voce_per_componente(monkeypatch):
     monkeypatch.setattr(sp, "_run_version", lambda argv: None)
     result = sp.probe_all(force=True)
     assert [c["key"] for c in result] == [c.key for c in sp.REGISTRY]
-    # slskd_url() è forzato empty dalla fixture, quindi non fa rete e ritorna
-    # "non present".
+    # slskd_url() è forzato empty dalla fixture e httpx.get è mockato per
+    # fallire sempre: niente demone trovato, "non present".
     assert all(c["present"] is False for c in result)
 
 
@@ -326,6 +339,59 @@ def test_un_binario_nella_cartella_gestita_viene_trovato(tmp_path, monkeypatch):
     (tmp_path / "ffmpeg").write_text("")
     monkeypatch.setattr(sp.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     assert sp.resolve_binary("ffmpeg") == str(tmp_path / "ffmpeg")
+
+
+# --- Ricaduta sull'indirizzo di default di slskd ---------------------------
+
+def test_url_vuoto_ricade_sul_default_e_trova_un_demone_acceso(monkeypatch):
+    """Un demone già in esecuzione, ma di cui Cratory non conosce ancora
+    l'URL (il caso normale al primo avvio), deve risultare presente: prima di
+    questo fix _probe_slskd tornava "non present" appena l'URL era vuoto,
+    senza nemmeno provare l'indirizzo di default — ed è esattamente il caso
+    che il passo prerequisiti deve riconoscere invece di offrire un secondo
+    download per qualcosa che l'utente ha già acceso."""
+    import httpx
+
+    from app.services import slskd_daemon
+
+    chiamate = []
+
+    class RispostaFinta:
+        status_code = 200
+
+    def get_finto(url, timeout=None):
+        chiamate.append((url, timeout))
+        return RispostaFinta()
+
+    monkeypatch.setattr(config.settings, "slskd_url", "")
+    monkeypatch.setattr(httpx, "get", get_finto)
+
+    esito = sp._probe_slskd()
+
+    assert esito["present"] is True
+    assert esito["source"] == "daemon"
+    assert chiamate[0][0] == f"http://localhost:{slskd_daemon.DEFAULT_PORT}/health"
+
+
+def test_url_vuoto_ricade_sul_default_con_timeout_breve(monkeypatch):
+    """L'indirizzo di default è indovinato, non configurato dall'utente: un
+    timeout lungo come quello dei sottoprocessi bloccherebbe ogni polling del
+    wizard se quell'indirizzo non risponde."""
+    import httpx
+
+    catturato = {}
+
+    def get_finto(url, timeout=None):
+        catturato["timeout"] = timeout
+        raise httpx.ConnectError("giù")
+
+    monkeypatch.setattr(config.settings, "slskd_url", "")
+    monkeypatch.setattr(httpx, "get", get_finto)
+
+    sp._probe_slskd()
+
+    assert catturato["timeout"] == sp._SLSKD_PROBE_TIMEOUT_S
+    assert sp._SLSKD_PROBE_TIMEOUT_S < sp._PROBE_TIMEOUT_S
 
 
 def test_ogni_riga_di_probe_all_ha_le_stesse_chiavi(monkeypatch):
