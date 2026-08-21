@@ -116,18 +116,34 @@ def get(key: str) -> Component | None:
 
 
 def managed_bin_dir() -> Path:
-    """La cartella dove l'app tiene i binari che ha scaricato lei.
+    """La cartella dove l'app tiene (o terrà) i binari che ha scaricato lei.
 
     È lo stesso posto che `resolve_binary` consulta per primo: la cartella
     gestita non è un meccanismo parallelo al seam `CRATORY_BIN_DIR`, ne è il
-    valore di default. Viene creata se non esiste — dopo un clone o un
-    `git clean -fdx` non c'è, e l'installer deve poterci scrivere subito.
+    valore di default. Solo lettura del percorso, niente filesystem: questa
+    funzione gira su praticamente ogni `resolve_binary`/probe, quindi anche
+    su un semplice `GET /api/services`, e un `mkdir` qui trasformerebbe un
+    controllo di disponibilità in un errore 500 su un mount read-only o senza
+    permessi di scrittura — oltre a creare cartelle nel repo reale a ogni run
+    dei test. Chi deve scriverci dentro chiama `ensure_bin_dir()`.
     """
     from app.core.config import BACKEND_DIR, settings
     raw = os.environ.get(BIN_DIR_ENV) or settings.bin_dir
     path = Path(raw)
     if not path.is_absolute():
         path = BACKEND_DIR / path
+    return path
+
+
+def ensure_bin_dir() -> Path:
+    """Come `managed_bin_dir()`, ma crea la cartella se non esiste.
+
+    Da chiamare solo da chi sta per scrivere binari nella cartella (l'installer,
+    in un task successivo) — dopo un clone o un `git clean -fdx` la cartella
+    non c'è, e serve poterci scrivere subito. Nessun chiamante in questo
+    commit: è previsto, l'installer arriva più avanti.
+    """
+    path = managed_bin_dir()
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -195,10 +211,14 @@ def _probe_binary(c: Component) -> dict:
     # CRATORY_BIN_DIR="/opt/bin" un prefisso di stringa etichetterebbe come
     # bundle anche "/opt/binaries/ffmpeg", che non ci vive affatto.
     override = os.environ.get(c.env_override) if c.env_override else None
-    bundled = os.environ.get(BIN_DIR_ENV)
+    # La cartella gestita, non la env grezza: CRATORY_BIN_DIR può benissimo
+    # essere assente (il caso normale) e resolve_binary aver comunque pescato
+    # dalla cartella di default (settings.bin_dir) — un binario scaricato lì
+    # dall'installer va etichettato "bundle" anche in quel caso, non "path"
+    # come se venisse dal sistema.
     if override and resolved == Path(override):
         source = "override"
-    elif bundled and resolved.parent == Path(bundled):
+    elif resolved.parent == managed_bin_dir():
         source = "bundle"
     elif c.kind == "venv" and resolved.parent == Path(sys.executable).parent:
         source = "venv"

@@ -358,12 +358,37 @@ def test_senza_env_usa_il_default_sotto_backend(monkeypatch):
     assert sp.managed_bin_dir() == BACKEND_DIR / "data" / "bin"
 
 
-def test_la_cartella_viene_creata(tmp_path, monkeypatch):
-    """L'installer ci scriverà dentro: deve esistere senza che nessuno la crei
-    a mano dopo un clone o un git clean."""
+def test_managed_bin_dir_non_crea_la_cartella(tmp_path, monkeypatch):
+    """La lookup resta pura: nessun mkdir, altrimenti un controllo di
+    disponibilità (fpcalc_available, GET /api/services, ...) creerebbe
+    cartelle come effetto collaterale, o esploderebbe su un mount read-only."""
     target = tmp_path / "mai-creata"
     monkeypatch.setenv(sp.BIN_DIR_ENV, str(target))
-    assert sp.managed_bin_dir().is_dir()
+    assert sp.managed_bin_dir() == target
+    assert not target.exists()
+
+
+def test_la_cartella_viene_creata(tmp_path, monkeypatch):
+    """L'installer ci scriverà dentro: `ensure_bin_dir()` deve farla esistere
+    senza che nessuno la crei a mano dopo un clone o un git clean."""
+    target = tmp_path / "mai-creata"
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(target))
+    assert sp.ensure_bin_dir().is_dir()
+
+
+def test_probe_binario_in_cartella_gestita_di_default_e_bundle(tmp_path, monkeypatch):
+    """Riproduce il Finding 1: CRATORY_BIN_DIR non impostata (il caso normale
+    una volta che l'installer scarica dentro la cartella di default), ma il
+    binario vive comunque in settings.bin_dir. Il probe deve riportarlo come
+    "bundle", non come "path": altrimenti il wizard direbbe all'utente che un
+    binario scaricato da noi viene dal sistema."""
+    monkeypatch.delenv(sp.BIN_DIR_ENV, raising=False)
+    monkeypatch.setattr(config.settings, "bin_dir", str(tmp_path))
+    fake = tmp_path / "ffmpeg"
+    fake.write_text("#!/bin/sh\n")
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    result = sp._probe_binary(sp.get("ffmpeg"))
+    assert result["source"] == "bundle"
 
 
 def test_un_binario_nella_cartella_gestita_viene_trovato(tmp_path, monkeypatch):
