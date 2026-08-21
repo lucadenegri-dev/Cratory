@@ -1445,6 +1445,65 @@ rg -n "component_installer" backend/ frontend/
 ```
 Atteso: nessun risultato.
 
+- [ ] **Step 5-bis: Togliere le chiavi i18n rimaste orfane**
+
+Con yt-dlp ed essentia fuori dal registry, nessun componente dichiara più
+`soundcloud_import` né `analysis_bpm_key` fra gli `unlocks`, e restano lì le
+loro descrizioni. Sono **quattro chiavi in due lingue**: testo che non
+raggiunge più nessuno schermo e che confonderà il prossimo che legge il
+dizionario.
+
+In `frontend/lib/i18n/en.ts` e `frontend/lib/i18n/it.ts`, dentro `setup`,
+rimuovere:
+
+- da `components`: le voci `"yt-dlp"` ed `essentia`;
+- da `unlocks`: le voci `soundcloud_import` e `analysis_bpm_key`.
+
+**Non** toccare le altre voci di `unlocks`: `audio_hash`, `shazam`,
+`soundcloud_download`, `acoustid_fingerprint`, `soulseek_download` e
+`library_share` sono tutte ancora dichiarate dai tre binari superstiti.
+
+Poi il test che tiene allineati dizionario e registry — creare
+`frontend/tests/setup-dictionary.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { it as dizionarioIt } from "@/lib/i18n/it";
+import { en } from "@/lib/i18n/en";
+
+/* Il dizionario e il registry del probe vivono ai due lati di un confine HTTP:
+   niente li tiene allineati da solo. Questo test becca il caso che si verifica
+   davvero — un componente tolto dal backend che lascia il suo testo qui — e
+   non l'inverso: una chiave mancante degrada già da sola, perché la UI ripiega
+   sul nome del componente (`?? c.key`). */
+const COMPONENTI_VIVI = ["ffmpeg", "fpcalc", "slskd"];
+const UNLOCKS_VIVI = [
+  "audio_hash", "shazam", "soundcloud_download",
+  "acoustid_fingerprint", "soulseek_download", "library_share",
+];
+
+describe("dizionario del wizard", () => {
+  for (const [nome, d] of [["it", dizionarioIt], ["en", en]] as const) {
+    it(`${nome}: nessuna descrizione di componenti che non esistono più`, () => {
+      expect(Object.keys(d.setup.components).sort()).toEqual([...COMPONENTI_VIVI].sort());
+    });
+
+    it(`${nome}: nessuna voce unlocks orfana`, () => {
+      expect(Object.keys(d.setup.unlocks).sort()).toEqual([...UNLOCKS_VIVI].sort());
+    });
+  }
+});
+```
+
+Eseguirlo e verificare che passi **solo dopo** aver rimosso le quattro chiavi:
+
+```bash
+cd frontend && npm run test:unit -- tests/setup-dictionary.test.ts
+```
+
+Provare che non sia vacuo: rimettere `essentia` in `components` di `it.ts`,
+rieseguire, verificare che il test cada, poi toglierla di nuovo.
+
 - [ ] **Step 6: Eseguire l'intera suite backend**
 
 ```bash
@@ -1455,7 +1514,7 @@ Atteso: tutto verde. I test che citavano `yt-dlp`/`essentia` nel registry vanno 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add -A backend
+git add -A backend frontend/lib/i18n frontend/tests/setup-dictionary.test.ts
 git commit -m "feat(setup): il registry passa ai tre binari esterni, via le ricette pip"
 ```
 
