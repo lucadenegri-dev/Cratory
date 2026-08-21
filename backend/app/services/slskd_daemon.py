@@ -53,6 +53,15 @@ class StartFailed(DaemonError):
     pass
 
 
+class UnsupportedPlatform(DaemonError):
+    """Windows non ha `ps` (per verificare di chi è un PID) né `SIGKILL`: senza
+    un modo per provare che un PID è ancora il processo che abbiamo avviato,
+    gestire il ciclo di vita significherebbe o non funzionare mai (il bug che
+    questa eccezione sostituisce: `owned_pid()` tornava sempre `None` e
+    cancellava il pid file ad ogni chiamata) o rischiare di firmare processi
+    altrui. Meglio rifiutarsi esplicitamente che fingere di funzionare."""
+
+
 def _yaml() -> YAML:
     yaml = YAML()  # round-trip: preserva commenti e formato
     yaml.preserve_quotes = True
@@ -62,9 +71,15 @@ def _yaml() -> YAML:
 def default_config_path() -> Path:
     """Il percorso configurato: `slskd_config_path()` ha un default non vuoto
     (`~/.config/slskd/slskd.yml`, espanso ad assoluto dal validator dei
-    settings), quindi non torna mai vuoto in pratica — niente alternativa
-    sotto `data/` da gestire qui."""
-    return Path(runtime_settings.slskd_config_path())
+    settings), ma un `.env` può azzerarlo esplicitamente (`SLSKD_CONFIG_PATH=`):
+    in quel caso il setting risolto è `""`, e `Path("")` risolverebbe alla
+    cwd del processo — un posto che dipende da dove è stato lanciato
+    uvicorn, non da dove sta l'app. Si degrada invece a un percorso fisso
+    sotto `data/`, come `pid_file()`/`log_file()`."""
+    valore = runtime_settings.slskd_config_path()
+    if not valore:
+        return BACKEND_DIR / "data" / "slskd.yml"
+    return Path(valore)
 
 
 def read_username(config_path: Path | str) -> str | None:
@@ -141,21 +156,61 @@ def is_reachable(client: httpx.Client | None = None) -> bool:
             client.close()
 
 
-def _riga_di_comando(pid: int) -> str:
-    """La riga di comando del processo, o stringa vuota. Serve a distinguere
-    'il nostro slskd' da 'un processo qualsiasi che ha ereditato quel PID':
-    il sistema operativo riusa i PID, quindi un PID da solo non è mai prova
-    di proprietà."""
+def _piattaforma_supportata() -> bool:
+    """`ps` e `SIGKILL` esistono solo su POSIX: su Windows non c'è modo, con
+    la sola libreria standard, di chiedere al sistema quale eseguibile sta
+    dietro a un PID."""
+    return os.name == "posix"
+
+
+def _richiedi_piattaforma_supportata() -> None:
+    if not _piattaforma_supportata():
+        raise UnsupportedPlatform(
+            "la gestione del demone slskd (avvio/arresto) non è disponibile "
+            "su questa piattaforma"
+        )
+
+
+def _percorso_eseguibile(pid: int) -> str:
+    """Il percorso dell'eseguibile del processo (`comm`, non l'intera riga di
+    comando), o stringa vuota se il PID non esiste più o `ps` fallisce.
+
+    Si usa `comm` e non `command` (che include gli argomenti) perché quello
+    che va confrontato con l'eseguibile installato è SOLO il binario
+    lanciato, non il resto della riga: `slskd --config /path/vim.yml` e
+    `vim /path/slskd.yml` condividono la sottostringa "slskd" da qualche
+    parte nella riga, ma solo il primo ha lanciato il nostro eseguibile.
+    Funziona perché `start()` lancia sempre l'eseguibile con il suo percorso
+    assoluto (mai per nome via PATH): `comm` su un processo avviato così
+    riporta quello stesso percorso assoluto, non solo il basename.
+    """
     try:
-        proc = subprocess.run(["ps", "-p", str(pid), "-o", "command="],
+        proc = subprocess.run(["ps", "-p", str(pid), "-o", "comm="],
                               capture_output=True, text=True, timeout=5, check=False)
     except (OSError, subprocess.SubprocessError):
         return ""
     return proc.stdout.strip()
 
 
-def _processo_e_slskd(pid: int) -> bool:
-    return "slskd" in _riga_di_comando(pid)
+def _processo_e_slskd(pid: int, atteso: Path) -> bool:
+    """Il processo `pid` è ancora, davvero, l'eseguibile slskd che abbiamo
+    installato e lanciato noi?
+
+    Un PID da solo non è mai prova: il sistema operativo li riusa, quindi un
+    PID vecchio può oggi appartenere a un processo qualsiasi dell'utente — il
+    caso concreto che questo controllo deve escludere è l'utente che apre
+    `vim ~/.config/slskd/slskd.yml` per modificare la config, la cui riga di
+    comando contiene "slskd" pur non essendo affatto il nostro demone.
+    Una sottostringa nella riga di comando non è evidenza: lo è invece sapere
+    quale eseguibile abbiamo lanciato (`atteso`, scritto nel pid file da
+    `start()`) e verificare che il processo vivo sotto quel PID sia ancora
+    esattamente quello — non "un programma il cui nome contiene slskd", ma
+    bit per bit lo stesso percorso su disco che abbiamo avviato.
+    """
+    percorso = _percorso_eseguibile(pid)
+    if not percorso:
+        return False
+    return Path(percorso).resolve() == atteso.resolve()
 
 
 def _processo_vivo(pid: int) -> bool:
@@ -169,28 +224,67 @@ def _processo_vivo(pid: int) -> bool:
 def owned_pid() -> int | None:
     """Il PID del demone che abbiamo avviato noi, se esiste ed è ancora lui.
 
-    Un PID vecchio può essere stato riassegnato dal sistema a tutt'altro
-    processo: prima di considerarlo nostro si controlla che la riga di
-    comando parli davvero di slskd. Se non torna, il file è stantio (o punta
-    a un estraneo) e va rimosso: non è più un titolo valido a fermare nulla.
+    Il pid file contiene due righe: il PID e il percorso assoluto
+    dell'eseguibile lanciato da `start()`. Un PID vecchio può essere stato
+    riassegnato dal sistema a tutt'altro processo: prima di considerarlo
+    nostro si controlla che il processo vivo sotto quel PID sia ancora
+    esattamente quell'eseguibile (`_processo_e_slskd`). Se non torna, il
+    file è stantio (o punta a un estraneo) e va rimosso: non è più un titolo
+    valido a fermare nulla.
     """
+    _richiedi_piattaforma_supportata()
     f = pid_file()
     if not f.is_file():
         return None
+    righe = f.read_text().splitlines()
+    if len(righe) < 2:
+        f.unlink(missing_ok=True)
+        return None
     try:
-        pid = int(f.read_text().strip())
+        pid = int(righe[0].strip())
     except ValueError:
         f.unlink(missing_ok=True)
         return None
-    if not _processo_e_slskd(pid):
+    atteso = Path(righe[1].strip())
+    if not _processo_e_slskd(pid, atteso):
         f.unlink(missing_ok=True)
         return None
     return pid
 
 
 def daemon_status(client: httpx.Client | None = None) -> dict:
-    pid = owned_pid()
-    return {"reachable": is_reachable(client), "owned": pid is not None, "pid": pid}
+    """`owned` è un tristate: `True`/`False` quando sappiamo rispondere,
+    `None` quando la piattaforma non lo consente (Windows) — mai `False` per
+    finta, che verrebbe letto come "nessun demone nostro" quando in realtà
+    non lo si può proprio sapere."""
+    try:
+        pid = owned_pid()
+        owned: bool | None = pid is not None
+    except UnsupportedPlatform:
+        pid = None
+        owned = None
+    return {"reachable": is_reachable(client), "owned": owned, "pid": pid}
+
+
+def _termina_orfano(proc: subprocess.Popen) -> None:
+    """Il processo spawnato non ha mai risposto in tempo: `start()` sta per
+    rinunciare e cancellare il pid file, ma quel che abbiamo lanciato noi
+    resta comunque una nostra responsabilità. Senza questo, resterebbe un
+    demone detached vivo e fuori dalla portata di `stop()` per sempre — un
+    orfano permanente, non un errore che si può ritentare pulito."""
+    if proc.poll() is not None:
+        return  # già morto da solo
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    proc.kill()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        log.warning("slskd (pid %s) non ha risposto neanche a SIGKILL", proc.pid)
 
 
 def start(client: httpx.Client | None = None) -> dict:
@@ -200,6 +294,7 @@ def start(client: httpx.Client | None = None) -> dict:
     Cratory, altrimenti chiudere la finestra interromperebbe una coda di
     download Soulseek in corso — peggio che non avere il demone affatto.
     """
+    _richiedi_piattaforma_supportata()
     if is_reachable(client):
         raise AlreadyUp("slskd risponde già all'URL configurato")
     exe = binary_installer.installed_path("slskd")
@@ -213,7 +308,10 @@ def start(client: httpx.Client | None = None) -> dict:
             stdout=out, stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-    pid_file().write_text(str(proc.pid))
+    # Due righe: PID ed eseguibile lanciato. `owned_pid()` non si fida del
+    # solo PID (riassegnabile dal sistema) e verifica che il processo vivo
+    # sotto quel PID sia ancora esattamente questo binario.
+    pid_file().write_text(f"{proc.pid}\n{exe}\n")
 
     # Non ci si fida dello spawn: il processo può partire e morire subito
     # dopo (porta occupata, credenziali sbagliate). Si aspetta che risponda
@@ -227,6 +325,7 @@ def start(client: httpx.Client | None = None) -> dict:
         time.sleep(_INTERVALLO_S)
 
     pid_file().unlink(missing_ok=True)
+    _termina_orfano(proc)
     coda = ""
     if log_file().is_file():
         coda = "\n".join(log_file().read_text(errors="replace").splitlines()[-15:])
@@ -241,11 +340,20 @@ def stop() -> dict:
     pid = owned_pid()
     if pid is None:
         raise NotOurs("nessun demone avviato da Cratory")
-    os.kill(pid, signal.SIGTERM)
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        # Già finito da solo fra la verifica di proprietà e il segnale: non è
+        # un errore, è esattamente lo stato che stop() voleva raggiungere.
+        pid_file().unlink(missing_ok=True)
+        return {"reachable": False, "owned": False, "pid": None}
     scadenza = time.monotonic() + 10
     while time.monotonic() < scadenza and _processo_vivo(pid):
         time.sleep(_INTERVALLO_S)
     if _processo_vivo(pid):
-        os.kill(pid, signal.SIGKILL)
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # morto nell'istante fra il controllo e il segnale
     pid_file().unlink(missing_ok=True)
     return {"reachable": False, "owned": False, "pid": None}
