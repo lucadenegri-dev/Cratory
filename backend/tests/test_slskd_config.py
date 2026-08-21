@@ -70,6 +70,45 @@ def test_config_assente_viene_creata(tmp_path):
     assert data["soulseek"]["username"] == "io"
 
 
+ESISTENTE_CON_PORTA_E_CARTELLA_CUSTOM = """\
+soulseek:
+  username: vecchio
+  password: vecchia
+web:
+  port: 6033
+directories:
+  downloads: /mio/download/custom
+"""
+
+
+def test_campi_omessi_lasciano_intatto_quel_che_gia_c_e(tmp_path):
+    """Il finding critico: una richiesta che tocca solo le credenziali non
+    deve toccare porta e cartella download gia' scelte dall'utente. `None`
+    (campo omesso) non e' un valore, e' l'assenza di uno: write_config deve
+    lasciare stare quel che trova nel file, non riscriverlo col default."""
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text(ESISTENTE_CON_PORTA_E_CARTELLA_CUSTOM)
+
+    sd.write_config(cfg, username="nuovo", password="nuova", port=None, download_dir=None)
+
+    data = _carica(cfg)
+    assert data["soulseek"]["username"] == "nuovo"
+    assert data["soulseek"]["password"] == "nuova"
+    assert data["web"]["port"] == 6033
+    assert data["directories"]["downloads"] == "/mio/download/custom"
+
+
+def test_campi_omessi_su_file_nuovo_prendono_i_default(tmp_path, monkeypatch):
+    """Al primo setup il file non esiste: qui, e SOLO qui, un campo omesso
+    deve prendere un valore di default (deve pur venire da qualche parte)."""
+    monkeypatch.setattr(sd.runtime_settings, "slskd_download_dir", lambda: "/default/dl")
+    cfg = tmp_path / "nuova" / "slskd.yml"
+    sd.write_config(cfg, username="io", password="segreta", port=None, download_dir=None)
+    data = _carica(cfg)
+    assert data["web"]["port"] == sd.DEFAULT_PORT
+    assert data["directories"]["downloads"] == "/default/dl"
+
+
 def test_il_file_non_e_leggibile_da_altri(tmp_path):
     """Contiene la password Soulseek in chiaro: è così che funziona slskd,
     ma i permessi devono almeno rifletterlo."""

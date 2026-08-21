@@ -98,14 +98,27 @@ def read_username(config_path: Path | str) -> str | None:
 
 
 def write_config(config_path: Path | str, *, username: str, password: str,
-                 port: int, download_dir: str) -> None:
+                 port: int | None = None, download_dir: str | None = None) -> None:
     """Scrive SOLO le quattro chiavi che ci servono. Il resto del file resta
-    intatto: è dell'utente, e può contenere share, api key e commenti suoi."""
+    intatto: è dell'utente, e può contenere share, api key e commenti suoi.
+
+    `port` e `download_dir` sono opzionali: `None` vuol dire "il chiamante
+    non l'ha specificato, lascia stare quel che c'è già nel file". I default
+    (`DEFAULT_PORT`, la cartella download dell'app) si applicano SOLO quando
+    il file non esiste ancora — un primo setup, dove il valore deve pur
+    venire da qualche parte. Non vanno risolti prima, nel chiamante: se il
+    router riempisse qui un default per un campo omesso, non ci sarebbe più
+    modo di distinguerlo da un valore scelto davvero dall'utente, e ogni
+    giro riscriverebbe silenziosamente porta e cartella — la corruzione che
+    il finding critico ha trovato. Non "semplificare" via questo `None`
+    risolvendo i default a monte: è la distinzione che serve.
+    """
     config_path = Path(config_path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     yaml = _yaml()
 
-    if config_path.is_file():
+    file_nuovo = not config_path.is_file()
+    if not file_nuovo:
         originale = config_path.read_text()
         data = yaml.load(originale) or {}
         modo = stat.S_IMODE(os.stat(config_path).st_mode)
@@ -117,10 +130,18 @@ def write_config(config_path: Path | str, *, username: str, password: str,
     data.setdefault("soulseek", {})
     data["soulseek"]["username"] = username
     data["soulseek"]["password"] = password
+
     data.setdefault("web", {})
-    data["web"]["port"] = port
+    if port is not None:
+        data["web"]["port"] = port
+    elif file_nuovo:
+        data["web"]["port"] = DEFAULT_PORT
+
     data.setdefault("directories", {})
-    data["directories"]["downloads"] = download_dir
+    if download_dir is not None:
+        data["directories"]["downloads"] = download_dir
+    elif file_nuovo:
+        data["directories"]["downloads"] = runtime_settings.slskd_download_dir()
 
     buf = io.StringIO()
     yaml.dump(data, buf)

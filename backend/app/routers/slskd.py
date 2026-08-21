@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from app.core import runtime_settings
 from app.core.http_errors import api_error
 from app.integrations.slskd import SlskdError, get_slskd_client
+from app.services import slskd_daemon
 
 router = APIRouter(prefix="/api/slskd", tags=["slskd"])
 
@@ -118,8 +119,6 @@ def slskd_disconnect() -> SlskdStatus:
 
 # Endpoint del demone: configurazione, avvio e arresto.
 
-from app.services import slskd_daemon
-
 
 class DaemonStatus(BaseModel):
     reachable: bool
@@ -130,8 +129,13 @@ class DaemonStatus(BaseModel):
 class DaemonConfig(BaseModel):
     username: str
     password: str
-    port: int = slskd_daemon.DEFAULT_PORT
-    download_dir: str = ""
+    # None = campo omesso dalla richiesta: write_config lascia intatto quel
+    # che c'e' gia' nel file (i default si applicano solo al primo setup,
+    # quando il file non esiste ancora). Niente default qui: risolverli in
+    # questo modello li renderebbe indistinguibili da un valore scelto
+    # davvero dal chiamante, e li farebbe riscrivere ad ogni giro.
+    port: int | None = None
+    download_dir: str | None = None
 
 
 class DaemonConfigResult(BaseModel):
@@ -175,6 +179,6 @@ def daemon_config(req: DaemonConfig) -> DaemonConfigResult:
     config = slskd_daemon.default_config_path()
     slskd_daemon.write_config(
         config, username=req.username, password=req.password,
-        port=req.port, download_dir=req.download_dir or runtime_settings.slskd_download_dir(),
+        port=req.port, download_dir=req.download_dir,
     )
     return DaemonConfigResult(configured=True, username=req.username)

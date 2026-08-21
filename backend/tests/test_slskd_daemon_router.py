@@ -69,6 +69,47 @@ def test_la_password_non_torna_indietro(db, monkeypatch, tmp_path):
     app.dependency_overrides.clear()
 
 
+def test_ruotare_solo_le_credenziali_non_tocca_porta_e_cartella(db, monkeypatch, tmp_path):
+    """Riproduce lo scenario del finding critico: config esistente con porta
+    e cartella download personalizzate, richiesta che porta solo username e
+    password. Entrambe devono sopravvivere intatte - non tornare al default
+    dell'app (porta 5030, cartella di Cratory)."""
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text(
+        "soulseek:\n"
+        "  username: vecchio\n"
+        "  password: vecchia\n"
+        "web:\n"
+        "  port: 6033\n"
+        "directories:\n"
+        "  downloads: /mio/download/custom\n"
+    )
+    monkeypatch.setattr(sd, "default_config_path", lambda: cfg)
+
+    res = _client(db).put("/api/slskd/daemon/config", json={
+        "username": "nuovo", "password": "nuova"})
+
+    assert res.status_code == 200
+    testo = cfg.read_text()
+    assert "port: 6033" in testo
+    assert "/mio/download/custom" in testo
+    app.dependency_overrides.clear()
+
+
+def test_stato_owned_null_quando_non_si_puo_sapere(db, monkeypatch):
+    """Tristate `owned`: None significa "non lo si puo' proprio sapere su
+    questa piattaforma" (Windows) - diverso sia da True (nostro) sia da
+    False (demone acceso ma non nostro). Va provato sul giro HTTP vero,
+    non solo sulla funzione di servizio: un domani che lo collassasse a
+    False nella serializzazione passerebbe inosservato altrimenti."""
+    monkeypatch.setattr(sd, "daemon_status",
+                        lambda client=None: {"reachable": True, "owned": None, "pid": None})
+    res = _client(db).get("/api/slskd/daemon/status")
+    assert res.status_code == 200
+    assert res.json()["owned"] is None
+    app.dependency_overrides.clear()
+
+
 def test_start_su_piattaforma_non_supportata(db, monkeypatch):
     def non_supportato(client=None):
         raise sd.UnsupportedPlatform("la gestione del demone slskd non è disponibile su questa piattaforma")
