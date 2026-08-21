@@ -74,19 +74,31 @@ def download_verified(
     parziale = dest.with_name(dest.name + ".parziale")
     digest = hashlib.sha256()
     scaricati = 0
+    # Cadenza di report: ogni 1 MB per file di dimensione ignota, oppure
+    # totale // 20 per i file noti (scalare da 2 MB a 122 MB senza riempire
+    # il log). Fixed byte interval riduce a quasi-nulla per i file minuscoli
+    # e esplode per i grandi; fixed step count (≈20 report per download) offre
+    # coerenza visibile e non riempie il buffer di 500 righe.
+    intervallo_byte = 1024 * 1024  # 1 MB di default
+    ultimo_report = 0
     try:
         with client.stream("GET", d.url, timeout=_TIMEOUT_S,
                            follow_redirects=True) as res:
             if res.status_code != 200:
                 raise DownloadFailed(f"HTTP {res.status_code} da {d.url}")
             totale = int(res.headers.get("content-length") or 0)
+            # Calcola intervallo basato sulla dimensione nota
+            if totale > 0:
+                intervallo_byte = max(intervallo_byte, totale // 20)
             with parziale.open("wb") as fh:
                 for blocco in res.iter_bytes(_CHUNK):
                     fh.write(blocco)
                     digest.update(blocco)
                     scaricati += len(blocco)
-                    if on_progress:
+                    # Report solo quando la soglia è superata
+                    if on_progress and (scaricati - ultimo_report) >= intervallo_byte:
                         on_progress(scaricati, totale or scaricati)
+                        ultimo_report = scaricati
     except httpx.HTTPError as exc:
         parziale.unlink(missing_ok=True)
         raise DownloadFailed(str(exc)) from exc
@@ -96,6 +108,10 @@ def download_verified(
     finally:
         if owned:
             client.close()
+
+    # Assicura che lo stato finale sia sempre riportato
+    if on_progress and ultimo_report != scaricati:
+        on_progress(scaricati, totale or scaricati)
 
     ottenuto = digest.hexdigest()
     if ottenuto != d.sha256:
