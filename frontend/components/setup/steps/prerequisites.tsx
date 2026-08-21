@@ -51,6 +51,11 @@ export function PrerequisitesStep() {
   const mancanti = (components ?? []).filter(
     (c) => !c.present && c.installable && c.kind !== "daemon",
   );
+  // Il bottone qui sotto ora può eseguire il gestore di pacchetti di sistema
+  // per uno o più componenti del giro: la sua nota deve dirlo, non solo
+  // quando non serve — altrimenti implica un contenimento che non è più
+  // sempre vero.
+  const includeViaRicetta = mancanti.some((c) => c.install_method === "recipe");
 
   const installaTutto = async () => {
     // In sequenza, non in parallelo: il backend esegue un job alla volta e
@@ -108,6 +113,9 @@ export function PrerequisitesStep() {
                   onClick={installaTutto}>
             {t.setup.installAllMissing}
           </Button>
+          {includeViaRicetta && (
+            <p className="mt-1.5 text-xs text-faint">{t.setup.installAllMissingSystemNote}</p>
+          )}
           {failures.length > 0 && (
             <Alert tone="danger">
               <ul className="space-y-1.5">

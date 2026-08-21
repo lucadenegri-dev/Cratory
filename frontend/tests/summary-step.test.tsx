@@ -17,7 +17,7 @@ function comp(over: Partial<ProbeComponent>): ProbeComponent {
   return {
     key: "ffmpeg", kind: "system", severity: "required", present: true,
     version: "6.0", source: "path", shadowing: null, auto_installable: true,
-    installable: true, install_command: null, unlocks: [], docs: "https://esempio.invalid",
+    installable: true, install_method: "download", install_command: null, unlocks: [], docs: "https://esempio.invalid",
     ...over,
   };
 }

@@ -204,6 +204,11 @@ export const en = {
     installNoRecipe: "There is no single command for this one: it is a separate program with its own setup. Its documentation explains how.",
     installNeedsBrew: "This command assumes Homebrew, which macOS does not come with.",
     installGetBrew: "Get Homebrew",
+    // Shown only when install_method is "recipe": unlike a download, which
+    // stays inside Cratory's own folder, this one runs the system's package
+    // manager and reaches outside it — the row has to say so, not imply the
+    // usual containment.
+    installSystemWide: "This installs system-wide, together with its dependencies, through your system's package manager — deleting Cratory's folder does not remove it.",
     docsLink: "Documentation",
     copyCommand: "Copy command",
     copied: "Copied",
@@ -316,6 +321,11 @@ export const en = {
       },
     },
     installAllMissing: "Install what's missing",
+    // One button does everything, and it now sometimes runs the system's
+    // package manager instead of only writing into Cratory's own folder:
+    // shown only when at least one missing component would go that way, so
+    // it doesn't imply everything else stays contained either.
+    installAllMissingSystemNote: "Some of these install system-wide, with their dependencies, through your system's package manager — not only into Cratory's own folder.",
     installNoBuild: "We don't have a build for this platform.",
     installAllFailedFor: (component: string) => `Could not install ${component}.`,
     daemonTitle: "Soulseek daemon",

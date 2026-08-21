@@ -201,6 +201,11 @@ export const it: Dictionary = {
     installNoRecipe: "Per questo non c'è un comando: è un programma separato, con una sua installazione. La documentazione del progetto spiega come.",
     installNeedsBrew: "Il comando presuppone Homebrew, che macOS non include.",
     installGetBrew: "Installa Homebrew",
+    // Mostrato solo quando install_method è "recipe": a differenza di un
+    // download, che resta dentro la cartella gestita di Cratory, questo
+    // esegue il gestore di pacchetti di sistema e va oltre — la riga deve
+    // dirlo, non lasciar intendere il solito contenimento.
+    installSystemWide: "Questo lo installa a livello di sistema, con le sue dipendenze, tramite il gestore di pacchetti del sistema — cancellare la cartella di Cratory non lo rimuove.",
     docsLink: "Documentazione",
     copyCommand: "Copia il comando",
     copied: "Copiato",
@@ -311,6 +316,11 @@ export const it: Dictionary = {
       },
     },
     installAllMissing: "Installa quello che manca",
+    // Un solo bottone fa tutto, e ora a volte esegue il gestore di pacchetti
+    // di sistema invece di scrivere solo nella cartella di Cratory: mostrato
+    // solo quando almeno un componente mancante passa da lì, cosi' non
+    // lascia intendere che resti tutto contenuto anche per gli altri.
+    installAllMissingSystemNote: "Alcuni di questi si installano a livello di sistema, con le loro dipendenze, tramite il gestore di pacchetti del sistema — non solo nella cartella di Cratory.",
     installNoBuild: "Non abbiamo una build per questa piattaforma.",
     installAllFailedFor: (component: string) => `Non è stato possibile installare ${component}.`,
     daemonTitle: "Demone Soulseek",

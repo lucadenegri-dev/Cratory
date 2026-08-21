@@ -244,6 +244,12 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
 
       {!c.present && c.installable && c.kind !== "daemon" && (
         <div className="mt-3">
+          {/* Via "recipe": il bottone qui sotto esegue il gestore di
+              pacchetti di sistema, non un download nella cartella gestita —
+              la differenza va detta, non lasciata intendere come contenuta. */}
+          {c.install_method === "recipe" && (
+            <p className="mb-2 text-xs text-faint">{t.setup.installSystemWide}</p>
+          )}
           <Button size="sm" variant="outline" disabled={running || disabled} onClick={run}>
             {running ? t.setup.installing : t.setup.installButton}
           </Button>

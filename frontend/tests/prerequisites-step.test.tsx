@@ -17,7 +17,7 @@ function comp(over: Partial<ProbeComponent>): ProbeComponent {
   return {
     key: "fpcalc", kind: "system", severity: "optional", present: false,
     version: null, source: null, shadowing: null, auto_installable: true, installable: true,
-    install_command: null, unlocks: [], docs: "https://esempio.invalid",
+    install_method: "download", install_command: null, unlocks: [], docs: "https://esempio.invalid",
     ...over,
   };
 }
@@ -66,6 +66,27 @@ describe("PrerequisitesStep", () => {
     render(<PrerequisitesStep />);
     const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });
     expect((bottone as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("un componente mancante via ricetta fa comparire la nota di modifica al sistema (fix installer-sistema)", async () => {
+    getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
+      comp({ key: "ffmpeg", present: false, installable: true, install_method: "recipe" }),
+    ]});
+    render(<PrerequisitesStep />);
+    await screen.findByRole("button", { name: /installa quello che manca|install what/i });
+    // Frase specifica del bottone cumulativo (non quella, simile, della riga
+    // sotto — entrambe compaiono insieme quando c'è un solo componente via
+    // ricetta, e un pattern troppo largo becca entrambe).
+    expect(screen.getByText(/alcuni di questi|some of these/i)).toBeTruthy();
+  });
+
+  it("senza nessun componente via ricetta, nessuna nota di modifica al sistema sul bottone cumulativo", async () => {
+    getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
+      comp({ key: "fpcalc", present: false, installable: true, install_method: "download" }),
+    ]});
+    render(<PrerequisitesStep />);
+    await screen.findByRole("button", { name: /installa quello che manca|install what/i });
+    expect(screen.queryByText(/alcuni di questi|some of these/i)).toBeNull();
   });
 
   it("installa in sequenza: il secondo non parte finché il primo non è finito (fix 3)", async () => {

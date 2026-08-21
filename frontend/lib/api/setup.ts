@@ -22,9 +22,17 @@ export type ProbeComponent = {
    *  or null if there is no system copy or this component is not in use. */
   shadowing: string | null;
   auto_installable: boolean;
-  /** Esiste una build nel manifesto per questa piattaforma: se è false, il
-   *  bottone Installa non ha senso e si mostra il comando manuale. */
+  /** L'app sa installarlo da sola (via download o via ricetta di sistema
+   *  disponibile): se è false, il bottone Installa non ha senso e si mostra
+   *  il comando manuale. */
   installable: boolean;
+  /** Quale delle tre vie userebbe l'installer: "download" (build propria,
+   *  resta dentro la cartella gestita, rimovibile cancellandola), "recipe"
+   *  (comando del gestore di pacchetti di sistema, es. brew — modifica il
+   *  sistema, con le sue dipendenze) o "manual" (nessuna delle due, solo il
+   *  comando da copiare). Non è la stessa promessa di `installable`: quello
+   *  dice SE un bottone ha senso, questo dice COSA farebbe. */
+  install_method: "download" | "recipe" | "manual";
   install_command: string[] | null;
   unlocks: string[];
   /** Dove leggere se la ricetta non fa al caso proprio (o non esiste). */

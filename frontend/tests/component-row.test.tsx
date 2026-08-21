@@ -30,6 +30,7 @@ function comp(over: Partial<ProbeComponent>): ProbeComponent {
     shadowing: null,
     auto_installable: true,
     installable: true,
+    install_method: "download",
     install_command: ["pip", "install", "essentia==2.1b6.dev1177"],
     unlocks: ["analysis_bpm_key"],
     docs: "https://essentia.upf.edu/installing.html",
@@ -127,15 +128,16 @@ describe("ComponentRow: dove andare quando manca", () => {
     // mai da qui: questo copre un componente di sistema che semplicemente non
     // ha una ricetta per la piattaforma corrente.
     render(<ComponentRow c={comp({
-      key: "finto", auto_installable: false, installable: false, install_command: null,
+      key: "finto", auto_installable: false, installable: false,
+      install_method: "manual", install_command: null,
     })} onChanged={() => {}} />);
     expect(screen.getByText(/non c'è un comando|no single command/i)).toBeTruthy();
   });
 
   it("ricetta brew: avvisa che Homebrew non è preinstallato", () => {
     render(<ComponentRow c={comp({
-      key: "ffmpeg", auto_installable: false,
-      install_command: ["brew", "install", "ffmpeg"],
+      key: "ffmpeg", auto_installable: false, installable: false,
+      install_method: "manual", install_command: ["brew", "install", "ffmpeg"],
     })} onChanged={() => {}} />);
     expect(screen.getByText(/non include|does not come with/i)).toBeTruthy();
     const brew = screen.getAllByRole("link").find((a) => (a as HTMLAnchorElement).href.includes("brew.sh"));
@@ -144,9 +146,34 @@ describe("ComponentRow: dove andare quando manca", () => {
 
   it("ricetta non-brew: nessun avviso su Homebrew", () => {
     render(<ComponentRow c={comp({
-      auto_installable: false, install_command: ["pip", "install", "essentia"],
+      auto_installable: false, installable: false,
+      install_method: "manual", install_command: ["pip", "install", "essentia"],
     })} onChanged={() => {}} />);
     expect(screen.queryByText(/non include|does not come with/i)).toBeNull();
+  });
+});
+
+describe("ComponentRow: via ricetta di sistema (fix installer-sistema)", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(cleanup);
+
+  it("install_method \"recipe\": la riga dice che modifica il sistema, non solo la cartella di Cratory", () => {
+    render(<ComponentRow c={comp({
+      key: "ffmpeg", auto_installable: true, installable: true,
+      install_method: "recipe", install_command: ["brew", "install", "ffmpeg"],
+    })} onChanged={() => {}} />);
+    // Il bottone Installa c'è comunque: è la stessa azione, cambia solo cosa
+    // c'è scritto sopra.
+    expect(screen.getByRole("button", { name: /installa|install/i })).toBeTruthy();
+    expect(screen.getByText(/sistema|system-wide/i)).toBeTruthy();
+  });
+
+  it("install_method \"download\": nessuna nota di modifica al sistema", () => {
+    render(<ComponentRow c={comp({
+      key: "essentia", auto_installable: true, installable: true,
+      install_method: "download",
+    })} onChanged={() => {}} />);
+    expect(screen.queryByText(/system-wide|a livello di sistema/i)).toBeNull();
   });
 });
 
@@ -157,7 +184,7 @@ describe("ComponentRow: installabilità", () => {
   it("senza build per la piattaforma non offre il bottone", () => {
     render(<ComponentRow c={comp({
       key: "ffmpeg", installable: false, auto_installable: false,
-      install_command: ["brew", "install", "ffmpeg"],
+      install_method: "manual", install_command: ["brew", "install", "ffmpeg"],
     })} onChanged={() => {}} />);
     expect(screen.queryByRole("button", { name: /installa|install/i })).toBeNull();
     expect(screen.getByText(/brew install ffmpeg/)).toBeTruthy();
