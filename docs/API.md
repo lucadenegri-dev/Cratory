@@ -1390,6 +1390,43 @@ the provider rejected, `"key_accepted"` for AcoustID when the provider refused t
 probe fingerprint but not the key (the usual success there), or `"ok"`. `400 unknown_service` for anything outside the
 four.
 
+## Version and updates
+
+`GET /api/version` → `{"version": "0.9.0"}`. The number comes from a single
+source: the `VERSION` file at the repository root, overridden by the
+`CRATORY_VERSION` environment variable. The override exists for a packaged
+build, where there is no repository root to read from.
+
+`GET /api/updates/check` asks GitHub for the latest release of the project and
+compares it with the running version.
+
+```json
+{"current": "0.9.0", "latest": "0.10.0", "update_available": true,
+ "url": "https://github.com/…/releases/tag/v0.10.0", "notes": "…"}
+```
+
+`notes` is the release body as written on GitHub — third-party text, not the
+app's own prose, and the only case where the backend passes prose through.
+
+The comparison is **numeric, not lexicographic**: as strings `"0.10.0" < "0.9.0"`,
+so a textual comparison would stop showing updates after the ninth minor.
+
+Two failure codes, both `502`, and neither ever degrades into
+`update_available: false`:
+
+| Code | When |
+|---|---|
+| `update_no_release` | GitHub answered `404` |
+| `update_check_failed` | network error, rate limit, unreadable response; carries `reason` |
+
+**The `404` is ambiguous by construction.** GitHub answers it both for a
+repository that cannot be reached (private, or missing) and for a public one
+with no releases yet — the response does not distinguish them. Reporting "no
+update available" in that case would tell the user they are up to date when
+nothing was verified, which is the failure this separation exists to prevent.
+So it becomes an error with its own code. Until the first release is published,
+the button honestly reports that it cannot tell.
+
 ## Organize
 
 The Organize section (`/organize` in the UI) is the library's file-level workshop

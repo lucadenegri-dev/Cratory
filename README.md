@@ -132,6 +132,29 @@ cd backend && python -m app.tools.clean_user_data library --include-backups   # 
 
 `library` clears playlists, tracks and sets but keeps your Spotify tokens; `all` drops those too.
 
+## Releases
+
+The version lives in one place: the `VERSION` file at the repository root.
+`frontend/package.json` carries the same number because npm requires one, and a
+test fails if the two drift apart.
+
+To publish a version:
+
+1. Bump `VERSION` and `frontend/package.json` together.
+2. Tag it `vX.Y.Z` — the tag carries the `v`, the file does not.
+3. Create a GitHub release for that tag, with notes. Those notes are what
+   Settings → Version shows when a newer version exists.
+
+Settings has a **Check for updates** button. It compares the running version
+with the latest published release and reports one of three things: you are up to
+date, version X is available, or it could not be determined — the last never
+disguised as the first.
+
+The check reads GitHub's public releases API, so **it only works once the
+repository is public**. While it is private, and until the first release exists,
+the button correctly reports that it cannot tell. Nothing is downloaded or
+installed: a packaged build will handle that, using the same releases.
+
 ## Tests
 
 ```bash

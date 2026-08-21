@@ -8,6 +8,12 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Version and updates** (2026-08-22): the app has a single version (`VERSION` at
+  the repository root, `CRATORY_VERSION` overriding it for a packaged build) shown
+  in Settings, with a button that compares it against the latest GitHub release.
+  Three outcomes kept apart — up to date, update available, could-not-check — and
+  the comparison is numeric, so `0.10.0` correctly beats `0.9.0`. Nothing is
+  downloaded yet: that arrives with the packaged build, off the same releases.
 - **Library**: ownership comes from indexing `LIBRARY_ROOT` on disk (`has_local_file`,
   re-linked by `audio_hash`); streaming playlists (Spotify, SoundCloud) are leads.
   Owned tracks show the physical file's effective tags (genre/album/label/year,

@@ -788,6 +788,18 @@ on the very next call — no restart. `GET`/`PATCH /api/settings/config` exposes
 secrets only masked (`configured`, `source`, `hint` — never the value); see
 `docs/API.md`.
 
+**The app's version, and checking for updates.** `VERSION` at the repository
+root is the single source; `core/version.py` reads it, with `CRATORY_VERSION`
+taking precedence — the same seam shape as `CRATORY_BIN_DIR`, and for the same
+reason: a packaged build has no repository root, so the packager passes the
+number in. A test fails if `frontend/package.json` drifts from it, because two
+numbers claiming to be the version are worse than one.
+`services/update_check.py` compares the running version with the latest GitHub
+release **numerically** (`"0.10.0" < "0.9.0"` as strings) and keeps three
+outcomes apart: up to date, update available, and could-not-check — the last
+never degrading into the first. See `docs/API.md` for why GitHub's `404` falls
+into the third.
+
 **Detecting and installing external components.** `services/system_probe.py` is a
 declarative registry of three external binaries — `ffmpeg`, `fpcalc`, `slskd` — how to
 detect each, what it unlocks, and (for `ffmpeg`/`fpcalc`) the install recipe per
