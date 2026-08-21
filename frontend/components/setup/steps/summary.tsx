@@ -23,9 +23,23 @@ export function SummaryStep() {
 
   if (!components || !services) return <Loading />;
 
+  // slskd compare in entrambe le fonti — una volta come componente del probe
+  // (chiave grezza "slskd", stato "present" = il demone risponde davvero),
+  // una volta come servizio (nome comprensibile "slskd (Soulseek)", stato
+  // "configured" = URL e cartella scritti). Stessa cosa vista da due
+  // angolazioni, non due voci: una riga sola, col nome leggibile del
+  // servizio e lo stato del probe. Si sceglie `present` e non `configured`
+  // perché è il segnale più vero di "funziona adesso" — dopo il fix che fa
+  // ricadere il probe sull'indirizzo di default, `present` è true anche per
+  // un demone già acceso ma non ancora configurato, mentre `configured`
+  // direbbe "spento" proprio nel caso che quel fix esiste per riconoscere.
+  const daemonKeys = new Set(components.filter((c) => c.kind === "daemon").map((c) => c.key));
   const righe = [
-    ...components.map((c) => ({ key: c.key, on: c.present })),
-    ...services.map((s) => ({ key: s.name, on: s.configured })),
+    ...components.map((c) => {
+      const servizio = services.find((s) => s.key === c.key);
+      return { key: servizio ? servizio.name : c.key, on: c.present };
+    }),
+    ...services.filter((s) => !daemonKeys.has(s.key)).map((s) => ({ key: s.name, on: s.configured })),
   ];
 
   return (
