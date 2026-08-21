@@ -102,12 +102,21 @@ def test_senza_env_usa_il_default_sotto_backend(monkeypatch):
     assert sp.managed_bin_dir() == BACKEND_DIR / "data" / "bin"
 
 
-def test_la_cartella_viene_creata(tmp_path, monkeypatch):
+def test_la_cartella_viene_creata_da_chi_ci_scrive(tmp_path, monkeypatch):
     """L'installer ci scriverà dentro: deve esistere senza che nessuno la crei
     a mano dopo un clone o un git clean."""
     target = tmp_path / "mai-creata"
     monkeypatch.setenv(sp.BIN_DIR_ENV, str(target))
-    assert sp.managed_bin_dir().is_dir()
+    assert sp.ensure_bin_dir().is_dir()
+
+
+def test_la_ricerca_non_crea_niente(tmp_path, monkeypatch):
+    """Cercare dove sta la cartella non deve toccare il disco: quella ricerca
+    sta sul percorso di ogni controllo di disponibilità."""
+    target = tmp_path / "mai-creata"
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(target))
+    sp.managed_bin_dir()
+    assert not target.exists()
 
 
 def test_un_binario_nella_cartella_gestita_viene_trovato(tmp_path, monkeypatch):
@@ -142,18 +151,30 @@ In `backend/app/services/system_probe.py`, sopra `resolve_binary`:
 
 ```python
 def managed_bin_dir() -> Path:
-    """La cartella dove l'app tiene i binari che ha scaricato lei.
+    """Dove l'app tiene i binari che ha scaricato lei. SOLA LETTURA.
 
     È lo stesso posto che `resolve_binary` consulta per primo: la cartella
     gestita non è un meccanismo parallelo al seam `CRATORY_BIN_DIR`, ne è il
-    valore di default. Viene creata se non esiste — dopo un clone o un
-    `git clean -fdx` non c'è, e l'installer deve poterci scrivere subito.
+    valore di default.
+
+    Non crea niente e non solleva: sta sul percorso di ogni controllo di
+    disponibilità (`fpcalc_available`, `ffmpeg_available`, `GET /api/services`),
+    e nessuno di quelli cattura errori di filesystem. Con un `mkdir` qui, su un
+    mount in sola lettura la domanda "c'è ffmpeg?" smetterebbe di rispondere
+    `False` e darebbe 500.
     """
     from app.core.config import BACKEND_DIR, settings
     raw = os.environ.get(BIN_DIR_ENV) or settings.bin_dir
     path = Path(raw)
     if not path.is_absolute():
         path = BACKEND_DIR / path
+    return path
+
+
+def ensure_bin_dir() -> Path:
+    """La stessa cartella, creandola. La chiama solo chi sta per scriverci
+    dentro (l'installer): dopo un clone o un `git clean -fdx` non esiste."""
+    path = managed_bin_dir()
     path.mkdir(parents=True, exist_ok=True)
     return path
 ```
@@ -1126,7 +1147,7 @@ def install(key: str, client: httpx.Client | None = None,
         if on_log:
             on_log(msg)
 
-    destinazione = system_probe.managed_bin_dir()
+    destinazione = system_probe.ensure_bin_dir()  # qui si scrive: va creata
     with tempfile.TemporaryDirectory(prefix="cratory-install-") as tmp:
         tmpdir = Path(tmp)
         archivio = tmpdir / "archivio"
