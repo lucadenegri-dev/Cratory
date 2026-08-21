@@ -115,6 +115,23 @@ def get(key: str) -> Component | None:
     return _BY_KEY.get(key)
 
 
+def managed_bin_dir() -> Path:
+    """La cartella dove l'app tiene i binari che ha scaricato lei.
+
+    È lo stesso posto che `resolve_binary` consulta per primo: la cartella
+    gestita non è un meccanismo parallelo al seam `CRATORY_BIN_DIR`, ne è il
+    valore di default. Viene creata se non esiste — dopo un clone o un
+    `git clean -fdx` non c'è, e l'installer deve poterci scrivere subito.
+    """
+    from app.core.config import BACKEND_DIR, settings
+    raw = os.environ.get(BIN_DIR_ENV) or settings.bin_dir
+    path = Path(raw)
+    if not path.is_absolute():
+        path = BACKEND_DIR / path
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def resolve_binary(name: str, env_override: str | None = None, *, venv: bool = False) -> str | None:
     """Percorso del binario, o None. Ordine: env specifica del componente →
     CRATORY_BIN_DIR (bundle) → interprete del venv (solo se `venv=True`) → PATH.
@@ -133,11 +150,10 @@ def resolve_binary(name: str, env_override: str | None = None, *, venv: bool = F
         custom = os.environ.get(env_override)
         if custom and Path(custom).is_file():
             return custom
-    bundled = os.environ.get(BIN_DIR_ENV)
-    if bundled:
-        candidate = Path(bundled) / name
-        if candidate.is_file():
-            return str(candidate)
+    bundled = os.environ.get(BIN_DIR_ENV) or str(managed_bin_dir())
+    candidate = Path(bundled) / name
+    if candidate.is_file():
+        return str(candidate)
     if venv:
         candidate = Path(sys.executable).parent / name
         if candidate.is_file():

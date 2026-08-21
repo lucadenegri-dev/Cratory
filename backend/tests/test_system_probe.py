@@ -339,3 +339,35 @@ def test_il_probe_espone_il_link(monkeypatch):
     monkeypatch.setattr(sp, "_import_version", lambda module: None)
     for riga in sp.probe_all(force=True):
         assert riga["docs"], f"{riga['key']} senza docs nel payload"
+
+
+# --- Cartella gestita dei binari -------------------------------------------
+
+def test_la_cartella_gestita_e_il_seam_esistente(tmp_path, monkeypatch):
+    """CRATORY_BIN_DIR non è un meccanismo separato dalla cartella gestita:
+    è la stessa cosa. Impostare la env deve spostare la cartella, così il
+    bundle Tauri continua a funzionare senza codice dedicato."""
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    assert sp.managed_bin_dir() == tmp_path
+
+
+def test_senza_env_usa_il_default_sotto_backend(monkeypatch):
+    from app.core.config import BACKEND_DIR, settings
+    monkeypatch.delenv(sp.BIN_DIR_ENV, raising=False)
+    monkeypatch.setattr(settings, "bin_dir", "./data/bin")
+    assert sp.managed_bin_dir() == BACKEND_DIR / "data" / "bin"
+
+
+def test_la_cartella_viene_creata(tmp_path, monkeypatch):
+    """L'installer ci scriverà dentro: deve esistere senza che nessuno la crei
+    a mano dopo un clone o un git clean."""
+    target = tmp_path / "mai-creata"
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(target))
+    assert sp.managed_bin_dir().is_dir()
+
+
+def test_un_binario_nella_cartella_gestita_viene_trovato(tmp_path, monkeypatch):
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    (tmp_path / "ffmpeg").write_text("")
+    monkeypatch.setattr(sp.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    assert sp.resolve_binary("ffmpeg") == str(tmp_path / "ffmpeg")

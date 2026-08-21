@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     # condividerle confonderebbe l'artwork reale con la proposta di un provider.
     cover_cache_dir: str = "./data/cover_cache"
     thumb_cache_dir: str = "./data/thumb_cache"
+    # Binari esterni scaricati dall'app (ffmpeg, fpcalc, slskd). Stessa forma
+    # delle cache qui sopra: relativo a backend/, sotto data/ (gitignorato).
+    # Non è una cartella "in più" rispetto a CRATORY_BIN_DIR: ne è il default,
+    # e in un bundle Tauri quella env la sovrascrive puntando al bundle.
+    bin_dir: str = "./data/bin"
 
     @field_validator("library_root", "archive_root", "slskd_download_dir",
                      "slskd_config_path")
@@ -99,7 +104,7 @@ class Settings(BaseSettings):
             db_path = BACKEND_DIR / db_path
         return f"sqlite:///{db_path.resolve().as_posix()}"
 
-    @field_validator("cover_cache_dir", "thumb_cache_dir")
+    @field_validator("cover_cache_dir", "thumb_cache_dir", "bin_dir")
     @classmethod
     def _cache_dir_assoluta(cls, value: str) -> str:
         """Path relativo risolto rispetto a backend/, mai alla cwd del processo:
