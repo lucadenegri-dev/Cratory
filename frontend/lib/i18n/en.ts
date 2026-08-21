@@ -243,7 +243,7 @@ export const en = {
     testKo: "Doesn't work",
     testNotConfigured: "Nothing to test yet",
     testNoToken: "Works without a token, at a lower rate limit",
-    testFpcalcMissing: "Key saved, but fpcalc is missing — go back to step 1",
+    testFpcalcMissing: "Key saved, but fpcalc is missing: the key alone cannot identify a file from its sound.",
     testNetworkError: "Could not reach the provider",
     testKeyAccepted: "Works — AcoustID accepted the key (this probe deliberately sends an invalid fingerprint to confirm that).",
     howTo: "How to get it",
@@ -294,7 +294,7 @@ export const en = {
         steps: [
           "Register an application on acoustid.org to get an API key.",
           "Paste the key here.",
-          "Make sure fpcalc is installed (step 1): the key alone is not enough.",
+          "Make sure fpcalc is installed: the key alone is not enough.",
         ],
         note: "Used by Organize to identify a file from the sound itself, which gives the most reliable metadata match.",
       },

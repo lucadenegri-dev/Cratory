@@ -238,7 +238,7 @@ export const it: Dictionary = {
     testKo: "Non funziona",
     testNotConfigured: "Non c'è ancora niente da provare",
     testNoToken: "Funziona senza token, con rate limit più basso",
-    testFpcalcMissing: "Chiave salvata, ma manca fpcalc — torna al passo 1",
+    testFpcalcMissing: "Chiave salvata, ma manca fpcalc: la chiave da sola non basta per riconoscere un file dal suono.",
     testNetworkError: "Non è stato possibile raggiungere il provider",
     testKeyAccepted: "Funziona — AcoustID ha accettato la chiave (questa prova invia di proposito un fingerprint non valido per verificarlo).",
     howTo: "Come ottenerla",
@@ -289,7 +289,7 @@ export const it: Dictionary = {
         steps: [
           "Registra un'applicazione su acoustid.org per ottenere una API key.",
           "Incolla qui la chiave.",
-          "Assicurati che fpcalc sia installato (passo 1): la chiave da sola non basta.",
+          "Assicurati che fpcalc sia installato: la chiave da sola non basta.",
         ],
         note: "Lo usa Organize per riconoscere un file dal suono, che è il modo più affidabile di agganciare i metadati giusti.",
       },

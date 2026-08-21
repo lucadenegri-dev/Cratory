@@ -22,5 +22,16 @@ describe("dizionario del wizard", () => {
     it(`${nome}: nessuna voce unlocks orfana`, () => {
       expect(Object.keys(d.setup.unlocks).sort()).toEqual([...UNLOCKS_VIVI].sort());
     });
+
+    // ComponentRow e ServiceGuide sono condivisi fra il wizard e /settings,
+    // dove non esiste (e non esisterà mai) un "passo 1": un testo che vi
+    // rimanda è vero solo nel wizard, falso ovunque il componente sia
+    // riusato. Le due stringhe di fpcalc erano state scritte assumendo il
+    // wizard (fix del finding A) — si controlla che non torni un riferimento
+    // posizionale (numero di passo, "qui sotto"), in nessuna delle due lingue.
+    it(`${nome}: il testo su fpcalc mancante non rimanda a un passo del wizard`, () => {
+      expect(d.setup.testFpcalcMissing).not.toMatch(/passo|step \d|qui sotto|here below/i);
+      expect(d.setup.guides.acoustid.steps[2]).not.toMatch(/passo|step \d|qui sotto|here below/i);
+    });
   }
 });
