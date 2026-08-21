@@ -989,10 +989,13 @@ The section above assumes slskd is already running somewhere and Cratory just ta
 to it over HTTP; these four endpoints are the exception where Cratory downloads,
 configures and drives the daemon's own process (`services/slskd_daemon.py`, using
 `services/binary_installer.py` for the download — see `docs/ARCHITECTURE.md`'s "The
-boundary around slskd moved"). Not available on Windows: managing the process requires
-reading which executable owns a PID, and the tools for that don't exist there — every
-one of the four answers `501 slskd_unsupported_platform` on that platform rather than
-silently doing nothing.
+boundary around slskd moved"). Not fully available on Windows, but only for the two
+that actually manage the process: `start` and `stop` need to know which executable owns
+a PID, and the tools for that don't exist there, so both answer `501
+slskd_unsupported_platform` rather than silently doing nothing. `status` and `config`
+don't check the platform at all — `status` has nothing platform-specific to report
+(`owned` just degrades to `null`, see below) and `config` only edits a YAML file, an
+operation Windows handles the same as everywhere else — so both keep working there.
 
 `GET /api/slskd/daemon/status` → `{"reachable": bool, "owned": bool | null, "pid": int
 | null}`. `reachable` is the same `/health` check as `GET /api/slskd/status`; `owned`
@@ -1024,8 +1027,14 @@ default port and download directory only apply the first time the file is create
 that a later call that omits a field can't silently overwrite a value the user (or an
 earlier call) actually chose. Every other key already in `slskd.yml` — shares, API
 key, comments — is preserved untouched, and a `.bak` copy is written before each
-rewrite. The password is written and never read back: the response,
-`{"configured": true, "username": str}`, echoes only the username. No slskd-specific
+rewrite, with the same restrictive permissions as the file it backs up (both contain the
+Soulseek password in clear text). The password is written and never read back: the
+response, `{"configured": true, "username": str}`, echoes only the username. When the
+file is created from scratch, the port and download directory actually chosen (default
+or explicit) are also written into Cratory's own settings (`slskd_url`,
+`slskd_download_dir`), so the two configurations start out aligned instead of
+diverging — without this, `slskd_url` stays empty and `POST /api/slskd/daemon/start`
+can never tell the freshly spawned process is actually reachable. No slskd-specific
 error mapping beyond FastAPI's own `422` for a malformed body.
 
 ## Spotify

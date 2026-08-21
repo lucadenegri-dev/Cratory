@@ -800,8 +800,9 @@ left: `ffmpeg`/`fpcalc` are resolved on disk (`resolve_binary`); `slskd` is a da
 probed by calling its own `/health` rather than by looking for a binary — the same module
 also downloads, configures and starts it now, see below. Presence for the two binaries is
 decided by the subprocess exit code, never by its output: a non-zero exit returns no
-version, otherwise an `ImportError` traceback on stderr would read as a version string and
-report a missing component as installed. The registry carries no prose — only feature keys
+version, otherwise a failure message on stderr — wrong architecture, permission denied,
+a corrupt or partial download — would read as a version string and report a missing or
+broken component as installed. The registry carries no prose — only feature keys
 the frontend translates and a `docs` URL per component, which for `slskd` (no install
 recipe exists) is the only guidance the UI can offer; for `ffmpeg`/`fpcalc` the recipe
 (`brew install ffmpeg`, …) is display text only — the wizard shows it, Cratory never runs
@@ -838,11 +839,18 @@ process, a deliberate exception to "Cratory doesn't run its own services." Two r
 the exception contained. The user's own config file is never destroyed: `write_config`
 touches only the four keys Cratory needs — Soulseek username/password, web port, download
 directory — and leaves everything else in `slskd.yml` (shares, API key, comments) exactly
-as it was, writing a `.bak` before every rewrite. And only a daemon this app started is ever
-stopped: `stop()`'s sole authority is `owned_pid()`, which doesn't trust a bare PID (the OS
-reuses them) but checks that the live process under that PID is still, bit for bit, the same
-executable path `start()` recorded in the pid file when it launched it — a mismatch means
-the pid file is stale, and it gets removed rather than acted on.
+as it was, writing a `.bak` before every rewrite, with the same restrictive permissions as
+the file it backs up (both hold the same clear-text password). And only a daemon this app
+started is ever stopped: `stop()`'s sole authority is `owned_pid()`, which doesn't trust a
+bare PID (the OS reuses them) but checks that the live process under that PID is still, bit
+for bit, the same executable path `start()` recorded in the pid file when it launched it —
+a mismatch means the pid file is stale, and it gets removed rather than acted on. When
+`write_config` creates `slskd.yml` from scratch, the port and download directory it picked
+(explicit or default) also get written into Cratory's own settings (`slskd_url`,
+`slskd_download_dir`) — `is_reachable()`, the criterion `start()` polls against after
+spawning the process, reads those settings, not the YAML file, so without this write-back a
+freshly configured daemon spawns, runs and answers `/health` correctly while Cratory still
+concludes the start failed and tears it back down.
 
 **One seam exists purely for an eventual Tauri desktop build**, where Cratory's own
 binaries and processes stop being "whatever this dev machine's `PATH` happens to have" and
@@ -851,9 +859,13 @@ checks a component-specific env var, then `CRATORY_BIN_DIR`, then falls back to
 `shutil.which` on `PATH`. `CRATORY_BIN_DIR` isn't new — it was already consulted ahead of
 `PATH` app-wide — it simply gained a default (`managed_bin_dir()`, a `bin/` folder under the
 backend) so there's always somewhere for the installer to write even when nobody has set
-the env var. A Tauri build that ships `ffmpeg`/`fpcalc`/`slskd` inside the bundle only has
-to set `CRATORY_BIN_DIR` once at launch — nothing else in the probe, the installer or the
-daemon changes. The seam isn't probe-only: `acoustid.fpcalc_available`,
+the env var. `resolve_binary` knows both layouts `binary_manifest.py` can produce: `single`
+puts the executable straight at `<bin_dir>/<name>` (fpcalc), `bundle` — the executable isn't
+self-contained, ffmpeg and slskd both ship this way — puts it one level down, at
+`<bin_dir>/<key>/<name>`, and `resolve_binary` tries both before falling back to `PATH`. A
+Tauri build that ships `ffmpeg`/`fpcalc`/`slskd` inside the bundle, laid out the same way,
+only has to set `CRATORY_BIN_DIR` once at launch — nothing else in the probe, the installer
+or the daemon changes. The seam isn't probe-only: `acoustid.fpcalc_available`,
 `organize/integrations/integrity`'s `ffmpeg_available`, and the ffmpeg checks in
 `routers/downloads.py` and `routers/dj_sets.py` all delegate to it too, so a bundle build
 can't leave those disagreeing with the wizard about the same binary.
