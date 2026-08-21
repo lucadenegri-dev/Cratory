@@ -326,3 +326,27 @@ def test_un_binario_nella_cartella_gestita_viene_trovato(tmp_path, monkeypatch):
     (tmp_path / "ffmpeg").write_text("")
     monkeypatch.setattr(sp.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     assert sp.resolve_binary("ffmpeg") == str(tmp_path / "ffmpeg")
+
+
+def test_ogni_riga_di_probe_all_ha_le_stesse_chiavi(monkeypatch):
+    """Tutte le righe di probe_all() devono avere lo stesso insieme di chiavi,
+    indipendentemente dal tipo di componente (binario, daemon, etc.) e dal suo
+    stato (presente o no). Questo previene divergenze come quella risolta
+    aggiungendo `shadowing` a _probe_slskd."""
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    monkeypatch.setattr(sp, "_run_version", lambda argv: None)
+    result = sp.probe_all(force=True)
+
+    # Tutte le righe hanno almeno una chiave
+    assert result, "probe_all() non ha ritornato nessun risultato"
+
+    # La prima riga fissa lo schema
+    schema = set(result[0].keys())
+
+    # Tutte le altre righe hanno esattamente lo stesso insieme di chiavi
+    for i, row in enumerate(result[1:], start=1):
+        righe_chiavi = set(row.keys())
+        assert righe_chiavi == schema, (
+            f"Riga {i} ({row['key']}) ha chiavi diverse: "
+            f"mancano {schema - righe_chiavi}, extra {righe_chiavi - schema}"
+        )

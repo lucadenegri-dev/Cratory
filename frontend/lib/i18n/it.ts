@@ -1767,7 +1767,6 @@ export const it: Dictionary = {
     picker_unavailable: "Dialog nativo non disponibile: richiede il backend su macOS.",
     picker_busy: "Un dialog di scelta è già aperto sulla macchina del backend.",
     unknown_component: (p: Record<string, unknown>) => `Componente sconosciuto: ${p.component}`,
-    not_auto_installable: (p: Record<string, unknown>) => `${p.component} va installato a mano.`,
     install_already_running: "Un'installazione è già in corso.",
     unknown_service: (p: Record<string, unknown>) => `Servizio sconosciuto: ${p.service}`,
     // --- Organize -----------------------------------------------------

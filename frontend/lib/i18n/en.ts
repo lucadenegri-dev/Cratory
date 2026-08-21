@@ -1775,7 +1775,6 @@ export const en = {
     picker_unavailable: "Native picker unavailable: it requires the backend on macOS.",
     picker_busy: "A picker dialog is already open on the backend machine.",
     unknown_component: (p: Record<string, unknown>) => `Unknown component: ${p.component}`,
-    not_auto_installable: (p: Record<string, unknown>) => `${p.component} must be installed by hand.`,
     install_already_running: "An installation is already running.",
     unknown_service: (p: Record<string, unknown>) => `Unknown service: ${p.service}`,
     // --- Organize -----------------------------------------------------

@@ -190,16 +190,19 @@ def _probe_binary(c: Component) -> dict:
 
 def _probe_slskd() -> dict:
     """Il demone non è un binario da cercare nel PATH: o risponde al suo URL
-    o non c'è. L'URL vuoto significa 'feature disattiva', non 'errore'."""
+    o non c'è. L'URL vuoto significa 'feature disattiva', non 'errore'.
+
+    Il demone non ha una copia di sistema da segnalare: è un servizio remoto.
+    `shadowing` rimane None per uniformità con le altre probe."""
     url = runtime_settings.slskd_url()
     if not url:
-        return {"present": False, "version": None, "source": None}
+        return {"present": False, "version": None, "source": None, "shadowing": None}
     import httpx
     try:
         res = httpx.get(f"{url.rstrip('/')}/health", timeout=_PROBE_TIMEOUT_S)
-        return {"present": res.status_code < 500, "version": None, "source": "daemon"}
+        return {"present": res.status_code < 500, "version": None, "source": "daemon", "shadowing": None}
     except httpx.HTTPError:
-        return {"present": False, "version": None, "source": None}
+        return {"present": False, "version": None, "source": None, "shadowing": None}
 
 
 def _probe_one(c: Component) -> dict:
