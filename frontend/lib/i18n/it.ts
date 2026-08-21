@@ -296,12 +296,11 @@ export const it: Dictionary = {
       slskd: {
         title: "slskd (Soulseek)",
         steps: [
-          "Installa e avvia slskd, poi accedi col tuo account Soulseek.",
-          "Indica qui sotto il suo URL (per esempio http://localhost:5030).",
-          "Imposta la cartella in cui slskd scrive i download completati.",
-          "Se slskd richiede una API key, incolla anche quella.",
+          "Hai già slskd in esecuzione? Basta puntarci Cratory: inserisci il suo URL, e una API key se quell'istanza la richiede.",
+          "Non hai slskd? Inserisci invece il tuo username e la password Soulseek: Cratory lo scarica, scrive la sua configurazione e lo avvia per te.",
+          "Avviato così, slskd riempie da solo i campi URL e cartella download: non serve inserirli prima.",
         ],
-        note: "slskd è un programma separato, con un suo file di configurazione. Cratory ci parla soltanto via HTTP.",
+        note: "slskd resta un programma separato, con un suo file di configurazione. Cratory può installarlo e avviarlo, ma in quel file scrive solo le poche chiavi necessarie: le tue impostazioni e i commenti restano intatti.",
       },
     },
     slskdTitle: "Acquisizione da Soulseek",

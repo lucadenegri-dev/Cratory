@@ -301,12 +301,11 @@ export const en = {
       slskd: {
         title: "slskd (Soulseek)",
         steps: [
-          "Install and start slskd, then log in with your Soulseek account.",
-          "Enter its URL below (for example http://localhost:5030).",
-          "Set the folder where slskd writes completed downloads.",
-          "If slskd requires an API key, paste it here too.",
+          "Already have slskd running? Just point Cratory at it: enter its URL, and an API key if that instance requires one.",
+          "No slskd yet? Enter your Soulseek username and password instead: Cratory downloads slskd, writes its configuration, and starts it for you.",
+          "When Cratory starts slskd this way, it fills in the URL and download folder fields itself — you don't need to set them first.",
         ],
-        note: "slskd is a separate program with its own configuration file. Cratory only talks to it over HTTP.",
+        note: "slskd remains a separate program with its own configuration file. Cratory can install and run it, but only writes the few keys it needs into that file — your own settings and comments there are left alone.",
       },
     },
     slskdTitle: "Soulseek acquisition",
