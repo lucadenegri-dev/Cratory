@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+import subprocess
 
 import pytest
 from sqlalchemy import create_engine, event
@@ -126,6 +127,93 @@ def seed_tracks(db):
         db.commit()
 
     return _seed
+
+
+@pytest.fixture(autouse=True)
+def _impedisci_esecuzione_package_manager(monkeypatch):
+    """I test non possono mai eseguire un gestore di pacchetti per davvero,
+    nemmeno per sbaglio. Chi lo tenta fallisce subito con un messaggio chiaro
+    di che cosa ha fatto e come aggiustarlo (aggiungere un mock), non silenziando
+    l'errore o peggio installando davvero. La lista di comandi bloccati arriva
+    dal registry: è la lista dei comandi che l'app sa eseguire in automatico.
+
+    Due entry point da coprire: subprocess.Popen (usato da
+    binary_installer.run_recipe per il flusso di sistema) e subprocess.run
+    (usato da binary_installer._prova_esecuzione e da system_probe._run_version
+    per il probe). Nessuna dipendenza nuova: tutto standard library.
+
+    NOTA: il wrapper di Popen è una classe che eredita da subprocess.Popen
+    in modo che le librerie terze (yt_dlp, etc) possono subclassare
+    subprocess.Popen normalmente — non è una semplice funzione perché
+    altrimenti il subclassing fallerebbe.
+    """
+    import subprocess as subprocess_orig
+
+    # Estrai i comandi bloccati dal registry di system_probe. Leggi la lista
+    # qui dentro il fixture perché il modulo non è stato importato in conftest
+    # e vogliamo caricare il registry esattamente al momento di essere
+    # eseguiti, non all'import. Inoltre, questo isola il costrutto dalla lista
+    # stessa (cambiarla lì non rompe il fixture, perché qui la leggiamo sempre
+    # al momento dell'esecuzione).
+    def _get_blocked_commands():
+        from app.services import system_probe
+        # Nomi dei comandi dai quali ricavare i primi argomenti
+        comandi_bloccati: set[str] = set()
+
+        for component in system_probe.REGISTRY:
+            ricette = component.recipes or {}
+            for ricetta in ricette.values():
+                if ricetta:  # lista non vuota
+                    # Il primo elemento è il comando (es. "brew", "apt", "sudo", "winget")
+                    comandi_bloccati.add(ricetta[0])
+
+        # Aggiungi anche alcune varianti che potrebbe provare someone:
+        # - apt e apt-get sono intercambiabili
+        # - yum e dnf sono intercambiabili
+        # - sudo di solito precede apt/yum ma conta lo stesso
+        comandi_bloccati.update([
+            "apt", "apt-get",
+            "yum", "dnf",
+            "pacman", "zypper", "apk",
+            "sudo",
+            "brew", "winget",
+        ])
+
+        return comandi_bloccati
+
+    blocked = _get_blocked_commands()
+
+    def _check_package_manager(argv):
+        """Solleva un errore se argv esegue un package manager."""
+        if not argv:
+            return
+        comando = argv[0]
+        # Estrai basename dal percorso completo (es. "/opt/homebrew/bin/brew" -> "brew")
+        basename = Path(comando).name if isinstance(comando, (str, Path)) else comando
+        if basename in blocked:
+            raise RuntimeError(
+                f"SICUREZZA: il test ha cercato di eseguire '{basename}' per davvero.\n"
+                f"Aggiungere un mock per subprocess.run() / subprocess.Popen() nel test.\n"
+                f"Argomenti: {argv}"
+            )
+
+    original_run = subprocess_orig.run
+    original_popen = subprocess_orig.Popen
+
+    def wrapped_run(args, **kwargs):
+        _check_package_manager(args if isinstance(args, (list, tuple)) else args.split())
+        return original_run(args, **kwargs)
+
+    # La classe wrapper per Popen che eredita da subprocess.Popen.
+    # Così le librerie terze che fanno `class MyPopen(subprocess.Popen)` continueranno
+    # a funzionare anche quando Popen è stato wrappato.
+    class WrappedPopen(original_popen):
+        def __init__(self, args=None, *popenargs, **kwargs):
+            _check_package_manager(args if isinstance(args, (list, tuple)) else (args.split() if args else []))
+            super().__init__(args, *popenargs, **kwargs)
+
+    monkeypatch.setattr(subprocess_orig, "run", wrapped_run)
+    monkeypatch.setattr(subprocess_orig, "Popen", WrappedPopen)
 
 
 @pytest.fixture(autouse=True)
