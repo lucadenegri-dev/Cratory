@@ -70,6 +70,57 @@ def test_riga_di_comando_con_slskd_a_caso_non_basta(_pid_isolato, monkeypatch):
     assert not sd.pid_file().exists()
 
 
+def test_percorso_eseguibile_su_linux_legge_proc_exe(monkeypatch):
+    """Su Linux `ps -o comm=` darebbe solo il basename troncato a 15
+    caratteri (viene da /proc/[pid]/comm, non dall'intero percorso): il
+    confronto esatto con l'eseguibile installato non incrocerebbe mai. Il
+    percorso vero si legge dal link simbolico /proc/[pid]/exe."""
+    monkeypatch.setattr(sd.sys, "platform", "linux")
+
+    def _finto_readlink(path):
+        assert path == "/proc/1234/exe"
+        return "/app/data/bin/slskd/slskd"
+
+    monkeypatch.setattr(sd.os, "readlink", _finto_readlink)
+    assert sd._percorso_eseguibile(1234) == "/app/data/bin/slskd/slskd"
+
+
+def test_percorso_eseguibile_su_linux_pid_inesistente_e_vuoto(monkeypatch):
+    """/proc/[pid]/exe non esiste per un PID morto: niente stack trace,
+    stringa vuota come sulle altre strade di fallimento."""
+    monkeypatch.setattr(sd.sys, "platform", "linux")
+
+    def _rompi(path):
+        raise OSError(2, "No such file or directory")
+
+    monkeypatch.setattr(sd.os, "readlink", _rompi)
+    assert sd._percorso_eseguibile(999999) == ""
+
+
+def test_percorso_eseguibile_su_macos_usa_ps_comm(monkeypatch):
+    """Su macOS `ps -o comm=` riporta già il percorso assoluto: è la strada
+    che il modulo usava prima del fix, e deve restare l'unica su questa
+    piattaforma (niente /proc su macOS)."""
+    monkeypatch.setattr(sd.sys, "platform", "darwin")
+
+    def _finto_run(argv, **kw):
+        assert argv == ["ps", "-p", "1234", "-o", "comm="]
+        return sd.subprocess.CompletedProcess(argv, 0, stdout="/app/data/bin/slskd/slskd\n", stderr="")
+
+    monkeypatch.setattr(sd.subprocess, "run", _finto_run)
+    assert sd._percorso_eseguibile(1234) == "/app/data/bin/slskd/slskd"
+
+
+def test_percorso_eseguibile_su_macos_ps_fallito_e_vuoto(monkeypatch):
+    monkeypatch.setattr(sd.sys, "platform", "darwin")
+
+    def _rompi(argv, **kw):
+        raise OSError("ps non trovato")
+
+    monkeypatch.setattr(sd.subprocess, "run", _rompi)
+    assert sd._percorso_eseguibile(1234) == ""
+
+
 def test_pid_valido_e_nostro(_pid_isolato, monkeypatch):
     _scrivi_pid(_pid_isolato, 1234, "/app/data/bin/slskd/slskd")
     monkeypatch.setattr(sd, "_percorso_eseguibile", lambda pid: "/app/data/bin/slskd/slskd")
@@ -184,6 +235,44 @@ def test_avvio_scaduto_ferma_il_processo_orfano(tmp_path, monkeypatch):
         with pytest.raises(sd.StartFailed):
             sd.start(client=c)
     assert finto.terminato, "il processo spawnato e mai confermato va terminato"
+
+
+class _FintoProcessoOrfanoCheSparisceDaSolo:
+    """Simula la stessa race già corretta in stop(): il processo spawnato
+    muore da solo fra il controllo (`poll()`, che qui riporta ancora vivo) e
+    l'invio del segnale — `terminate()` alza `ProcessLookupError`, come
+    farebbe `os.kill` in quella finestra."""
+
+    pid = 4321
+
+    def poll(self):
+        return None  # ancora vivo secondo l'ultimo controllo
+
+    def terminate(self):
+        raise ProcessLookupError(3, "No such process")
+
+    def kill(self):
+        raise AssertionError("non doveva tentare SIGKILL dopo un terminate() già a vuoto")
+
+    def wait(self, timeout=None):
+        raise AssertionError("non doveva aspettare un processo già sparito")
+
+
+def test_avvio_scaduto_processo_orfano_gia_sparito_non_solleva(tmp_path, monkeypatch):
+    """Riproduce il finding minore: senza guardia, `ProcessLookupError` da
+    `terminate()` si propagherebbe grezzo al posto di `StartFailed`, la
+    stessa classe di bug appena corretta in stop()."""
+    monkeypatch.setattr(sd.runtime_settings, "slskd_url", lambda: "http://x:5030")
+    monkeypatch.setattr(sd.binary_installer, "installed_path",
+                        lambda key: tmp_path / "slskd")
+    monkeypatch.setattr(sd, "_ATTESA_AVVIO_S", 0.05)
+    monkeypatch.setattr(sd, "_INTERVALLO_S", 0.01)
+
+    finto = _FintoProcessoOrfanoCheSparisceDaSolo()
+    monkeypatch.setattr(sd.subprocess, "Popen", lambda *a, **kw: finto)
+    with _client(lambda req: httpx.Response(503)) as c:
+        with pytest.raises(sd.StartFailed):
+            sd.start(client=c)
 
 
 def test_stato_riporta_raggiungibile_e_proprieta(_pid_isolato, monkeypatch):

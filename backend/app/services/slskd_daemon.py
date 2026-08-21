@@ -13,6 +13,7 @@ import os
 import signal
 import stat
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -172,17 +173,45 @@ def _richiedi_piattaforma_supportata() -> None:
 
 
 def _percorso_eseguibile(pid: int) -> str:
-    """Il percorso dell'eseguibile del processo (`comm`, non l'intera riga di
-    comando), o stringa vuota se il PID non esiste più o `ps` fallisce.
+    """Il percorso assoluto dell'eseguibile del processo, o stringa vuota se
+    il PID non esiste più o la lettura fallisce.
 
-    Si usa `comm` e non `command` (che include gli argomenti) perché quello
+    Seam unico per le due piattaforme POSIX supportate: il resto del modulo
+    chiama solo questa funzione e non deve sapere quale sistema operativo è
+    sotto. `ps -o comm=` NON significa la stessa cosa sulle due: su macOS
+    stampa il percorso assoluto dell'eseguibile (quello che serve al
+    confronto esatto in `_processo_e_slskd`), ma su Linux `comm` viene da
+    `/proc/[pid]/comm`, che contiene SOLO il basename dell'eseguibile,
+    troncato a 15 caratteri — mai un percorso. Con `ps` anche su Linux il
+    confronto esatto non incrocerebbe MAI per nessun processo: la prima
+    `owned_pid()` dopo uno `start()` riuscito cancellerebbe il pid file
+    appena scritto, e ogni `stop()` successivo solleverebbe `NotOurs` mentre
+    il demone che abbiamo lanciato resta vivo, non tracciato e non fermabile.
+    Linux espone invece il percorso vero del proprio eseguibile come link
+    simbolico in `/proc/[pid]/exe`: lo si legge con `os.readlink`, senza `ps`.
+    """
+    if sys.platform.startswith("linux"):
+        return _percorso_eseguibile_linux(pid)
+    return _percorso_eseguibile_macos(pid)
+
+
+def _percorso_eseguibile_linux(pid: int) -> str:
+    try:
+        return os.readlink(f"/proc/{pid}/exe")
+    except OSError:
+        return ""  # PID non esiste più, o /proc/[pid]/exe non leggibile
+
+
+def _percorso_eseguibile_macos(pid: int) -> str:
+    """Si usa `comm` e non `command` (che include gli argomenti) perché quello
     che va confrontato con l'eseguibile installato è SOLO il binario
     lanciato, non il resto della riga: `slskd --config /path/vim.yml` e
     `vim /path/slskd.yml` condividono la sottostringa "slskd" da qualche
     parte nella riga, ma solo il primo ha lanciato il nostro eseguibile.
     Funziona perché `start()` lancia sempre l'eseguibile con il suo percorso
     assoluto (mai per nome via PATH): `comm` su un processo avviato così
-    riporta quello stesso percorso assoluto, non solo il basename.
+    riporta quello stesso percorso assoluto, non solo il basename — a
+    differenza di Linux, dove `comm` è sempre e solo un basename tronco.
     """
     try:
         proc = subprocess.run(["ps", "-p", str(pid), "-o", "comm="],
@@ -274,13 +303,21 @@ def _termina_orfano(proc: subprocess.Popen) -> None:
     orfano permanente, non un errore che si può ritentare pulito."""
     if proc.poll() is not None:
         return  # già morto da solo
-    proc.terminate()
+    try:
+        proc.terminate()
+    except ProcessLookupError:
+        # Stessa race già gestita in stop(): morto da solo fra il poll() e
+        # l'invio del segnale. Non è un errore, è lo stato che si voleva.
+        return
     try:
         proc.wait(timeout=5)
         return
     except subprocess.TimeoutExpired:
         pass
-    proc.kill()
+    try:
+        proc.kill()
+    except ProcessLookupError:
+        return  # morto nell'istante fra il timeout e SIGKILL
     try:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
