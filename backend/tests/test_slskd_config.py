@@ -1,5 +1,6 @@
 """Il file di configurazione è dell'utente, non nostro: scriverci dentro non
 deve fargli perdere niente."""
+import os
 from pathlib import Path
 
 from ruamel.yaml import YAML
@@ -124,6 +125,60 @@ def test_il_backup_conserva_l_originale(tmp_path):
     cfg.write_text(ESISTENTE)
     sd.write_config(cfg, username="n", password="p", port=5030, download_dir="/tmp/dl")
     assert cfg.with_suffix(".yml.bak").read_text() == ESISTENTE
+
+
+def test_il_backup_non_e_leggibile_da_altri(tmp_path):
+    """Il finding M1: `.bak` contiene la stessa password in chiaro del file
+    vero, ma veniva scritto con `Path.write_text()`, che rispetta l'umask
+    invece dei permessi del file che sta duplicando — 0o644 con un umask
+    tipico, world-readable, dodici righe dopo che il file vero viene
+    ristretto apposta a 0o600. La password finiva leggibile lo stesso, solo
+    da un file diverso."""
+    import stat as st
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text(ESISTENTE)
+    os.chmod(cfg, 0o600)  # come lo lascerebbe una write_config precedente
+    sd.write_config(cfg, username="n", password="p", port=5030, download_dir="/tmp/dl")
+    assert st.S_IMODE(cfg.with_suffix(".yml.bak").stat().st_mode) == 0o600
+
+
+def test_cartella_download_vuota_su_file_nuovo_non_scrive_stringa_vuota(tmp_path, monkeypatch):
+    """Stesso momento di `test_campi_omessi_su_file_nuovo_prendono_i_default`,
+    ma senza un default già in `runtime_settings`: `slskd_download_dir()`
+    vuota (il caso reale di un primo setup su cui l'utente non ha ancora
+    scelto una cartella) non deve finire scritta cosi' com'e' in
+    `directories.downloads` — slskd partirebbe con una cartella di download
+    vuota, non assente."""
+    monkeypatch.setattr(sd.runtime_settings, "slskd_download_dir", lambda: "")
+    # Non deve toccare la vera backend/data/: isolata come pid_file/log_file
+    # nelle fixture degli altri test di questo modulo.
+    monkeypatch.setattr(sd, "_cartella_download_default", lambda: tmp_path / "download-default")
+    cfg = tmp_path / "nuova" / "slskd.yml"
+    esito = sd.write_config(cfg, username="io", password="segreta", port=None, download_dir=None)
+    data = _carica(cfg)
+    assert data["directories"]["downloads"], "non deve restare vuota"
+    assert Path(data["directories"]["downloads"]).is_dir(), "la cartella proposta deve esistere davvero"
+    assert esito.download_dir == data["directories"]["downloads"]
+
+
+def test_config_written_riporta_cosa_e_stato_scelto_su_file_nuovo(tmp_path, monkeypatch):
+    """`ConfigWritten` è quello che il router userà per allineare le
+    impostazioni di Cratory (finding B2): deve riportare `created=True` e i
+    valori EFFETTIVAMENTE scritti, non semplicemente eco degli argomenti
+    (che qui sono `None`)."""
+    monkeypatch.setattr(sd.runtime_settings, "slskd_download_dir", lambda: "/scelta/utente")
+    cfg = tmp_path / "nuova" / "slskd.yml"
+    esito = sd.write_config(cfg, username="io", password="segreta", port=None, download_dir=None)
+    assert esito.created is True
+    assert esito.port == sd.DEFAULT_PORT
+    assert esito.download_dir == "/scelta/utente"
+
+
+def test_config_written_su_file_esistente_non_e_creato(tmp_path):
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text(ESISTENTE)
+    esito = sd.write_config(cfg, username="n", password="p", port=5030, download_dir="/tmp/dl")
+    assert esito.created is False
 
 
 def test_rilettura_dell_username(tmp_path):

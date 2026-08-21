@@ -96,6 +96,25 @@ describe("SlskdStep", () => {
     await waitFor(() => expect(pwd.value).toBe(""));
   });
 
+  it("installazione fallita non avvia il demone e mostra l'errore (M2)", async () => {
+    // Stesso fix già fatto nel passo prerequisiti: prima di questo, il giro
+    // si limitava a smettere di aspettare quando lo stato tornava "error" e
+    // chiamava comunque daemonStart() — "slskd non è installato" (o, con una
+    // copia vecchia già presente, l'avvio silenzioso di quella).
+    daemonStatus.mockResolvedValue({ reachable: false, owned: false, pid: null });
+    daemonConfig.mockResolvedValue({ configured: true, username: "io" });
+    const { getInstallStatus } = await import("@/lib/api");
+    (getInstallStatus as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ status: "error", log: [], detail: "checksum errato" });
+    render(<SlskdStep />);
+    fireEvent.change(await screen.findByLabelText(/password/i), { target: { value: "segretissima" } });
+    fireEvent.change(await screen.findByLabelText(/username/i), { target: { value: "io" } });
+    fireEvent.click(screen.getByRole("button", { name: /scarica, configura e avvia|download, configure/i }));
+    await waitFor(() => expect(daemonConfig).toHaveBeenCalled());
+    expect(await screen.findByText(/checksum errato/i)).toBeTruthy();
+    expect(daemonStart).not.toHaveBeenCalled();
+  });
+
   it("omette porta e cartella download dalla configurazione: l'assente resta assente", async () => {
     // daemonConfig({username, password}) non deve riempire port/download_dir
     // "per aiutare": il backend legge l'assenza come "non toccare il valore

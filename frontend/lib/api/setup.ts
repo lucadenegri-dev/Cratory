@@ -13,7 +13,7 @@ export type SecretKey =
 
 export type ProbeComponent = {
   key: string;
-  kind: "system" | "venv" | "daemon";
+  kind: "system" | "daemon";
   severity: "required" | "optional";
   present: boolean;
   version: string | null;

@@ -1,7 +1,5 @@
 """Il manifesto è dati puri: la sua correttezza è che i pin ci siano tutti e
 che la selezione per piattaforma non peschi la build sbagliata."""
-import pytest
-
 from app.services import binary_manifest as bm
 
 
@@ -61,7 +59,7 @@ def test_ogni_voce_e_pinnata_e_verificabile():
 def test_slskd_non_usa_il_flag_di_ffmpeg_e_fpcalc():
     """slskd accetta solo `-v`/`--version`: pinnare `-version` (quello buono
     per fpcalc e ffmpeg) farebbe fallire sempre la prova di esecuzione per
-    l'unico componente `bundle` del manifesto."""
+    uno dei due componenti `bundle` del manifesto (l'altro è ffmpeg)."""
     for tag, d in bm.MANIFEST["slskd"].items():
         assert d.version_flag == "--version", tag
     for tag, d in bm.MANIFEST["fpcalc"].items():

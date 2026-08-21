@@ -1,10 +1,35 @@
 """Gli endpoint del demone traducono in HTTP le due regole del servizio."""
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from app.db import get_db
+from app.core import runtime_settings as rs
+from app.db import Base, get_db
 from app.main import app
 from app.services import slskd_daemon as sd
+
+
+@pytest.fixture()
+def db():
+    """`StaticPool` invece del `db` generico di conftest: una sola connessione
+    in-memory condivisa fra il thread del test e il threadpool di TestClient.
+    Serve da quando `daemon_config` scrive per davvero nel DB (write-back
+    delle impostazioni su config nuova) — senza `StaticPool`, il default
+    `SingletonThreadPool` di SQLite in-memory dà al thread di TestClient una
+    connessione (quindi un database) tutta sua, vuota: "no such table:
+    app_state" anche se lo schema è stato creato un attimo prima nel thread
+    del test. Stesso rimedio già in uso in `test_settings_config_router.py`."""
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
+                           poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 def _client(db):
@@ -69,6 +94,86 @@ def test_la_password_non_torna_indietro(db, monkeypatch, tmp_path):
     app.dependency_overrides.clear()
 
 
+def test_config_da_zero_allinea_le_impostazioni_di_cratory(db, monkeypatch, tmp_path):
+    """Il finding B2: `write_config` scrive solo `slskd.yml`. Su una config
+    nata da zero (nessun file preesistente) la porta e la cartella scelte —
+    qui i default, perché il chiamante non ne passa — devono finire scritte
+    ANCHE nelle impostazioni di Cratory (`slskd_url`/`slskd_download_dir`),
+    o `is_reachable()` resta cieco al demone appena configurato."""
+    monkeypatch.setattr(sd, "default_config_path", lambda: tmp_path / "nuova" / "slskd.yml")
+    # Isolato dalla vera backend/data/: senza cartella download già scelta,
+    # write_config ricadrebbe sulla cartella di default vera e la creerebbe
+    # per davvero fuori da tmp_path.
+    monkeypatch.setattr(sd, "_cartella_download_default", lambda: tmp_path / "download-default")
+    res = _client(db).put("/api/slskd/daemon/config", json={
+        "username": "io", "password": "segreta"})
+    assert res.status_code == 200
+    assert rs.slskd_url() == f"http://127.0.0.1:{sd.DEFAULT_PORT}"
+    assert rs.slskd_download_dir(), "la cartella scelta va scritta anche nelle impostazioni"
+    app.dependency_overrides.clear()
+
+
+class _FintoProcessoVivo:
+    """Popen finto per il giro end-to-end di `start()`: resta vivo per tutta
+    la finestra di polling, non serve altro — `start()` deve trovare il
+    demone raggiungibile ben prima del timeout."""
+    pid = 4242
+
+    def poll(self):
+        return None
+
+
+def test_avvio_su_configurazione_nuova_raggiunge_un_demone_raggiungibile(db, monkeypatch, tmp_path):
+    """L'invariante che mancava (B2): prima del write-back, `slskd_url()`
+    restava vuoto anche dopo `PUT /daemon/config` su una config nuova, e
+    `is_reachable()` — il criterio con cui `start()` giudica l'avvio
+    riuscito — ritornava sempre False per quel solo motivo: download,
+    installazione e spawn del processo tutti riusciti, e vent'secondi dopo
+    Cratory manda SIGTERM al proprio demone e dice all'utente che non è
+    partito. Riproduce il giro intero: configura da zero, poi avvia con un
+    client finto che risponde `/health` solo all'URL che il write-back
+    avrebbe dovuto scrivere — se `start()` lo raggiunge, il write-back ha
+    funzionato per davvero, non solo sulla carta di `runtime_settings`."""
+    cfg = tmp_path / "slskd.yml"
+    monkeypatch.setattr(sd, "default_config_path", lambda: cfg)
+    monkeypatch.setattr(sd, "pid_file", lambda: tmp_path / "slskd.pid")
+    monkeypatch.setattr(sd, "log_file", lambda: tmp_path / "slskd.log")
+    monkeypatch.setattr(sd.binary_installer, "installed_path",
+                        lambda key: tmp_path / "slskd")
+    monkeypatch.setattr(sd.subprocess, "Popen", lambda *a, **kw: _FintoProcessoVivo())
+    # owned_pid() a fine start() chiede di chi è l'eseguibile dietro al PID:
+    # senza questo chiamerebbe `ps` per davvero (o, peggio, `subprocess.run`
+    # userebbe lo stesso `Popen` finto appena sopra, rompendosi con un
+    # TypeError che non ha niente a che fare con l'invariante testata qui).
+    monkeypatch.setattr(sd, "_percorso_eseguibile", lambda pid: str(tmp_path / "slskd"))
+    # Isolato dalla vera backend/data/, stesso motivo del test sopra.
+    monkeypatch.setattr(sd, "_cartella_download_default", lambda: tmp_path / "download-default")
+
+    res = _client(db).put("/api/slskd/daemon/config", json={
+        "username": "io", "password": "segreta"})
+    assert res.status_code == 200
+    app.dependency_overrides.clear()
+
+    url_atteso = f"http://127.0.0.1:{sd.DEFAULT_PORT}/health"
+    chiamate = []
+
+    def _health(req):
+        chiamate.append(str(req.url))
+        # La prima chiamata è il controllo "c'è già qualcosa?" di start(),
+        # PRIMA dello spawn: deve fallire, altrimenti start() si fermerebbe
+        # su AlreadyUp senza mai testare il write-back. Da lì in poi il
+        # demone (mai avviato per davvero: `Popen` è finto) risponde.
+        if len(chiamate) == 1:
+            return httpx.Response(503)
+        return httpx.Response(200)
+
+    with httpx.Client(transport=httpx.MockTransport(_health)) as c:
+        stato = sd.start(client=c)
+
+    assert stato["reachable"] is True
+    assert chiamate[0] == url_atteso
+
+
 def test_ruotare_solo_le_credenziali_non_tocca_porta_e_cartella(db, monkeypatch, tmp_path):
     """Riproduce lo scenario del finding critico: config esistente con porta
     e cartella download personalizzate, richiesta che porta solo username e
@@ -93,6 +198,11 @@ def test_ruotare_solo_le_credenziali_non_tocca_porta_e_cartella(db, monkeypatch,
     testo = cfg.read_text()
     assert "port: 6033" in testo
     assert "/mio/download/custom" in testo
+    # Config già esistente: niente write-back. Solo `created=True` lo
+    # innesca — riscrivere le impostazioni di Cratory anche qui vorrebbe dire
+    # sovrascrivere silenziosamente uno `slskd_url()`/`slskd_download_dir()`
+    # che l'utente può aver scelto apposta diversi da quel che c'è nel file.
+    assert rs.slskd_url() == ""
     app.dependency_overrides.clear()
 
 

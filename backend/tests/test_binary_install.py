@@ -195,6 +195,38 @@ def test_flag_sbagliato_nel_manifesto_fa_fallire_l_installazione(bin_dir, monkey
             bi.install("fpcalc", client=c)
 
 
+def test_dopo_install_il_probe_vede_il_bundle_installato(bin_dir, monkeypatch):
+    """L'invariante che il finding B1 ha trovato mancante: `installed_path()`
+    conosce il layout bundle, ma prima di questo fix era l'unica funzione a
+    conoscerlo — il probe (`resolve_binary`) si fermava a `<bin_dir>/<name>` e
+    un ffmpeg installato (layout bundle, in `<bin_dir>/ffmpeg/ffmpeg`) restava
+    `present: False` per sempre: download, hash ed estrazione riusciti, il
+    bottone che non converge mai. Si prova sul componente vero (`ffmpeg`,
+    `required` nel registry), non su un doppio inventato, cosi' la stessa
+    Component che il wizard usa per davvero e' quella verificata qui."""
+    script = _script_che_pretende("-version")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("ffmpeg", script)
+    dati = buf.getvalue()
+    d = Download("1.0", "https://esempio.invalid/a.zip",
+                 hashlib.sha256(dati).hexdigest(),
+                 "zip", "ffmpeg", "bundle", "-version")
+    monkeypatch.setattr(bm, "MANIFEST", {"ffmpeg": {"test": d}})
+    monkeypatch.setattr(bm, "platform_tag", lambda: "test")
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+    sp._cache = None
+
+    with httpx.Client(transport=httpx.MockTransport(
+            lambda req: httpx.Response(200, content=dati))) as c:
+        percorso = bi.install("ffmpeg", client=c)
+    assert percorso.is_file()
+
+    esito = sp._probe_one(sp.get("ffmpeg"))
+    assert esito["present"] is True, "il probe deve vedere il bundle appena installato"
+    assert esito["source"] == "bundle", "deve venire riportato come dalla cartella gestita"
+
+
 def test_bundle_fallito_a_meta_copia_non_distrugge_quello_gia_installato(bin_dir, monkeypatch):
     """Riproduce lo scenario del reviewer: un bundle già installato e
     funzionante, un guasto durante la copia della nuova versione (lo stesso

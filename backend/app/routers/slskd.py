@@ -6,11 +6,13 @@ gia' in uso e comanda connect/disconnect sul demone. Vedi `integrations/slskd.py
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.core import runtime_settings
 from app.core.http_errors import api_error
+from app.db import get_db
 from app.integrations.slskd import SlskdError, get_slskd_client
 from app.services import slskd_daemon
 
@@ -173,12 +175,25 @@ def daemon_stop() -> DaemonStatus:
 
 
 @router.put("/daemon/config", response_model=DaemonConfigResult)
-def daemon_config(req: DaemonConfig) -> DaemonConfigResult:
+def daemon_config(req: DaemonConfig, db: Session = Depends(get_db)) -> DaemonConfigResult:
     """La password entra e non esce: non ne teniamo copia e non la
-    rispondiamo. L'username sì, si rilegge dal file."""
+    rispondiamo. L'username sì, si rilegge dal file.
+
+    Nessun controllo di piattaforma qui (a differenza di start/stop): questo
+    endpoint scrive solo un file YAML, un'operazione che su Windows funziona
+    esattamente come altrove — la piattaforma conta solo per gestire il
+    processo del demone.
+    """
     config = slskd_daemon.default_config_path()
-    slskd_daemon.write_config(
+    scritto = slskd_daemon.write_config(
         config, username=req.username, password=req.password,
         port=req.port, download_dir=req.download_dir,
     )
+    # Config nata da zero: porta e cartella scelte (magari solo di default)
+    # vanno scritte anche nelle impostazioni di Cratory, altrimenti
+    # `slskd_url()` resta vuoto e `is_reachable()`/`start()` non sapranno mai
+    # a quale URL bussare, anche a demone avviato con successo.
+    if scritto.created:
+        runtime_settings.apply(db, "slskd_url", f"http://127.0.0.1:{scritto.port}")
+        runtime_settings.apply(db, "slskd_download_dir", scritto.download_dir)
     return DaemonConfigResult(configured=True, username=req.username)

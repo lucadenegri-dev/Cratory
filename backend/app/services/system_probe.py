@@ -34,7 +34,7 @@ _PROBE_TIMEOUT_S = 5.0
 @dataclass(frozen=True)
 class Component:
     key: str
-    kind: Literal["system", "venv", "daemon"]
+    kind: Literal["system", "daemon"]
     severity: Literal["required", "optional"]
     # Chiavi di feature, non prosa: il frontend le traduce.
     unlocks: tuple[str, ...]
@@ -110,10 +110,10 @@ def managed_bin_dir() -> Path:
 def ensure_bin_dir() -> Path:
     """Come `managed_bin_dir()`, ma crea la cartella se non esiste.
 
-    Da chiamare solo da chi sta per scrivere binari nella cartella (l'installer,
-    in un task successivo) — dopo un clone o un `git clean -fdx` la cartella
-    non c'è, e serve poterci scrivere subito. Nessun chiamante in questo
-    commit: è previsto, l'installer arriva più avanti.
+    Da chiamare solo da chi sta per scrivere binari nella cartella — dopo un
+    clone o un `git clean -fdx` la cartella non c'è, e serve poterci scrivere
+    subito. Il chiamante è `binary_installer.install()`, prima di spostarci
+    dentro l'eseguibile appena scaricato.
     """
     path = managed_bin_dir()
     path.mkdir(parents=True, exist_ok=True)
@@ -122,7 +122,20 @@ def ensure_bin_dir() -> Path:
 
 def resolve_binary(name: str, env_override: str | None = None) -> str | None:
     """Percorso del binario, o None. Ordine: env specifica del componente →
-    CRATORY_BIN_DIR (bundle) → PATH."""
+    CRATORY_BIN_DIR (bundle) → PATH.
+
+    Il bundle ha due layout possibili (`binary_manifest.Download.layout`):
+    `single` mette l'eseguibile direttamente in `<bin_dir>/<name>`, `bundle`
+    (ffmpeg: l'eseguibile porta con sé le sue librerie) lo mette invece in
+    `<bin_dir>/<name>/<name>` — una sottocartella che prende il nome del
+    componente. Senza questo secondo tentativo un `ffmpeg` installato da
+    `binary_installer` non viene mai trovato: il probe continua a riportare
+    `present: False` anche a installazione riuscita, e con `ffmpeg` `required`
+    tutto quello che ne dipende resta rotto. Lo stesso fallback tiene onesto
+    il confine Tauri: un bundle che spedisce i binari già in questo layout
+    (sottocartella per nome) funziona impostando solo `CRATORY_BIN_DIR`,
+    senza bisogno di appiattire nulla.
+    """
     if env_override:
         custom = os.environ.get(env_override)
         if custom and Path(custom).is_file():
@@ -131,6 +144,9 @@ def resolve_binary(name: str, env_override: str | None = None) -> str | None:
     candidate = Path(bundled) / name
     if candidate.is_file():
         return str(candidate)
+    bundle_candidate = Path(bundled) / name / name
+    if bundle_candidate.is_file():
+        return str(bundle_candidate)
     return shutil.which(name)
 
 
@@ -174,9 +190,16 @@ def _probe_binary(c: Component) -> dict:
     # dalla cartella di default (settings.bin_dir) — un binario scaricato lì
     # dall'installer va etichettato "bundle" anche in quel caso, non "path"
     # come se venisse dal sistema.
+    managed = managed_bin_dir()
     if override and resolved == Path(override):
         source = "override"
-    elif resolved.parent == managed_bin_dir():
+    # `resolved.parent == managed`: layout `single` (`<bin_dir>/<name>`).
+    # `resolved.parent.parent == managed`: layout `bundle`, un livello sotto
+    # (`<bin_dir>/<key>/<name>`) — senza questo secondo confronto un ffmpeg
+    # appena installato risultava "path" invece di "bundle": non falso quanto
+    # a `present`, ma sbagliato quanto a provenienza, e con `shadowing` sotto
+    # che dipende proprio da `source == "bundle"` per attivarsi.
+    elif resolved.parent == managed or resolved.parent.parent == managed:
         source = "bundle"
     else:
         source = "path"

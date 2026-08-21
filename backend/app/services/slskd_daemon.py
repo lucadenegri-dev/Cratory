@@ -15,6 +15,7 @@ import stat
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
@@ -97,8 +98,27 @@ def read_username(config_path: Path | str) -> str | None:
     return (data.get("soulseek") or {}).get("username")
 
 
+def _cartella_download_default() -> Path:
+    """Cartella di download proposta quando l'utente non ne ha scelta una e
+    nemmeno le impostazioni di Cratory ne hanno già una (primo avvio, campo
+    lasciato vuoto): deve pur esistere qualcosa da scrivere in slskd.yml.
+    Stesso trattamento di `pid_file()`/`log_file()`/`default_config_path()`,
+    sotto la cartella dati dell'app."""
+    return BACKEND_DIR / "data" / "slskd-downloads"
+
+
+@dataclass(frozen=True)
+class ConfigWritten:
+    """Cosa è stato effettivamente scritto in slskd.yml, per chi deve
+    allineare le impostazioni di Cratory quando il file nasce da zero (vedi
+    `write_config`)."""
+    created: bool
+    port: int
+    download_dir: str
+
+
 def write_config(config_path: Path | str, *, username: str, password: str,
-                 port: int | None = None, download_dir: str | None = None) -> None:
+                 port: int | None = None, download_dir: str | None = None) -> ConfigWritten:
     """Scrive SOLO le quattro chiavi che ci servono. Il resto del file resta
     intatto: è dell'utente, e può contenere share, api key e commenti suoi.
 
@@ -112,6 +132,14 @@ def write_config(config_path: Path | str, *, username: str, password: str,
     giro riscriverebbe silenziosamente porta e cartella — la corruzione che
     il finding critico ha trovato. Non "semplificare" via questo `None`
     risolvendo i default a monte: è la distinzione che serve.
+
+    Ritorna cosa è stato scritto per davvero (`ConfigWritten`): il chiamante
+    (il router) ne ha bisogno per scrivere anche nelle impostazioni di
+    Cratory quando il file è nuovo. `slskd_url()` è vuoto di default, ed è il
+    criterio con cui `is_reachable()`/`start()` decidono se il demone ha
+    risposto: senza riportare qui la porta scelta, un `start()` su una
+    configurazione appena creata scarica, installa e avvia slskd per davvero
+    e lo giudica comunque fallito, perché non sa a quale URL bussare.
     """
     config_path = Path(config_path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -122,7 +150,7 @@ def write_config(config_path: Path | str, *, username: str, password: str,
         originale = config_path.read_text()
         data = yaml.load(originale) or {}
         modo = stat.S_IMODE(os.stat(config_path).st_mode)
-        config_path.with_suffix(config_path.suffix + ".bak").write_text(originale)
+        _scrivi_backup(config_path, originale, modo)
     else:
         data = {}
         modo = 0o600  # il file contiene la password Soulseek in chiaro
@@ -141,7 +169,11 @@ def write_config(config_path: Path | str, *, username: str, password: str,
     if download_dir is not None:
         data["directories"]["downloads"] = download_dir
     elif file_nuovo:
-        data["directories"]["downloads"] = runtime_settings.slskd_download_dir()
+        proposta = runtime_settings.slskd_download_dir()
+        if not proposta:
+            proposta = str(_cartella_download_default())
+            Path(proposta).mkdir(parents=True, exist_ok=True)
+        data["directories"]["downloads"] = proposta
 
     buf = io.StringIO()
     yaml.dump(data, buf)
@@ -149,6 +181,20 @@ def write_config(config_path: Path | str, *, username: str, password: str,
     tmp.write_text(buf.getvalue())
     os.chmod(tmp, modo)
     os.replace(tmp, config_path)
+
+    return ConfigWritten(created=file_nuovo, port=data["web"]["port"],
+                         download_dir=data["directories"]["downloads"])
+
+
+def _scrivi_backup(config_path: Path, contenuto: str, modo: int) -> None:
+    """Salva l'originale prima di sovrascriverlo. Stessa cautela del file
+    vero: contiene la stessa password in chiaro, quindi non può finire con
+    permessi più larghi solo perché `Path.write_text()` applica lo umask
+    invece di rispettare `modo` — il file principale dodici righe sotto lo
+    fa apposta (`os.chmod`), il backup deve fare lo stesso o la password
+    resta leggibile da chiunque altro sulla macchina."""
+    config_path.with_suffix(config_path.suffix + ".bak").write_text(contenuto)
+    os.chmod(config_path.with_suffix(config_path.suffix + ".bak"), modo)
 
 
 def pid_file() -> Path:

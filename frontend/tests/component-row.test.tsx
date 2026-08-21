@@ -17,7 +17,7 @@ vi.mock("@/lib/api", () => ({
 function comp(over: Partial<ProbeComponent>): ProbeComponent {
   return {
     key: "essentia",
-    kind: "venv",
+    kind: "system",
     severity: "optional",
     present: false,
     version: null,

@@ -103,7 +103,9 @@ MANIFEST: dict[str, dict[str, Download]] = {
     },
     # slskd accetta solo `-v`/`--version`: `-version` (un solo trattino, quello
     # che va bene per fpcalc e ffmpeg) non è un'opzione riconosciuta e la
-    # prova di esecuzione fallirebbe sempre per l'unico componente bundle.
+    # prova di esecuzione fallirebbe sempre. Layout `bundle` come ffmpeg (il
+    # runtime .NET che porta con sé, non un eseguibile autosufficiente), ma
+    # col flag sbagliato per gli altri due.
     "slskd": {
         "darwin-arm64": Download(
             "0.26.0", f"{_SLSKD}/slskd-0.26.0-osx-arm64.zip",

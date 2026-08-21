@@ -60,8 +60,19 @@ export function SlskdStep() {
       await daemonConfig({ username, password });
       setPassword(""); // non resta in memoria oltre l'invio
       await startInstall("slskd");
-      while ((await getInstallStatus()).status === "running") {
+      let stato = await getInstallStatus();
+      while (stato.status === "running") {
         await new Promise((r) => setTimeout(r, 1000));
+        stato = await getInstallStatus();
+      }
+      // Stesso fix già fatto nel passo prerequisiti (PrerequisitesStep):
+      // un job che finisce in errore (checksum sbagliato, rete caduta) non
+      // deve far scattare l'avvio. Senza questo controllo si prova comunque
+      // ad avviare — "slskd non è installato" se non c'era prima, oppure,
+      // peggio, l'avvio silenzioso di una copia vecchia già presente.
+      if (stato.status === "error") {
+        setErroreDemone(stato.detail);
+        return;
       }
       setDaemon(await daemonStart());
     } catch (e) {
