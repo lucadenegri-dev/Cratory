@@ -2,7 +2,7 @@
 componenti esterni, installazione di quelli sicuri, verifica delle credenziali.
 
 Router HTTP-only: la logica sta in `services/system_probe.py`,
-`services/component_installer.py` e `services/credential_tests.py`. Nessun
+`services/binary_installer.py` e `services/credential_tests.py`. Nessun
 testo user-facing nasce qui — solo chiavi, che il frontend traduce.
 """
 import sys
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.http_errors import api_error
 from app.db import get_db
-from app.services import component_installer, credential_tests, system_probe
+from app.services import binary_installer, credential_tests, system_probe
 from app.services.app_state import get_state, set_state
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
@@ -48,21 +48,18 @@ def probe(force: bool = False) -> dict:
 @router.post("/install/{key}", status_code=202)
 def install(key: str) -> dict:
     try:
-        return component_installer.start(key)
-    except component_installer.UnknownComponent as exc:
+        return binary_installer.start(key)
+    except binary_installer.UnknownComponent as exc:
         raise api_error(400, "unknown_component", f"componente sconosciuto: {key}",
                         component=key) from exc
-    except component_installer.NotAutoInstallable as exc:
-        raise api_error(400, "not_auto_installable",
-                        f"{key} va installato a mano", component=key) from exc
-    except component_installer.AlreadyRunning as exc:
+    except binary_installer.AlreadyRunning as exc:
         raise api_error(409, "install_already_running",
                         "un'installazione è già in corso") from exc
 
 
 @router.get("/install/status")
 def install_status() -> dict:
-    return component_installer.status()
+    return binary_installer.status()
 
 
 @router.post("/test/{service}")

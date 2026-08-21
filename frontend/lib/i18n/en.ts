@@ -210,17 +210,13 @@ export const en = {
     components: {
       ffmpeg: "Audio decoding. Without it Cratory cannot fingerprint your files, identify mixes or extract audio from SoundCloud.",
       fpcalc: "Chromaprint's fingerprint tool. Needed by AcoustID to identify a file from the sound itself.",
-      "yt-dlp": "Reads SoundCloud pages: playlist and likes import, and per-track download.",
-      essentia: "In-app BPM and key analysis, the alternative to importing them from Rekordbox.",
       slskd: "The Soulseek daemon that downloads files. It runs as a separate program.",
     },
     unlocks: {
       audio_hash: "file identity",
       shazam: "mix identification",
       soundcloud_download: "SoundCloud download",
-      soundcloud_import: "SoundCloud import",
       acoustid_fingerprint: "acoustic fingerprint",
-      analysis_bpm_key: "in-app BPM/key analysis",
       soulseek_download: "Soulseek download",
       library_share: "library sharing",
     },
