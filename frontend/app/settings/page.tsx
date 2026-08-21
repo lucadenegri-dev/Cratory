@@ -8,6 +8,7 @@ import { PageLayout } from "@/components/page-layout";
 import { ConfigCard } from "@/components/settings/config-card";
 import { OrganizeSection } from "@/components/settings/organize-section";
 import { ServicesList } from "@/components/settings/services-list";
+import { VersionCard } from "@/components/settings/version-card";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
@@ -89,6 +90,9 @@ function SettingsInner() {
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">{t.nav.groupOrganize}</div>
       <OrganizeSection />
+
+      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">{t.settings.versionHeading}</div>
+      <VersionCard />
     </PageLayout>
   );
 }

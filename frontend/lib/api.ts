@@ -16,3 +16,5 @@ export * from "./api/slskd";
 export * from "./api/settings";
 export * from "./api/transitions";
 export * from "./api/setup";
+
+export * from "./api/updates";
