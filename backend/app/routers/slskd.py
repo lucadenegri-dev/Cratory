@@ -114,3 +114,67 @@ def slskd_disconnect() -> SlskdStatus:
     finally:
         client.close()
     return _status()
+
+
+# Endpoint del demone: configurazione, avvio e arresto.
+
+from app.services import slskd_daemon
+
+
+class DaemonStatus(BaseModel):
+    reachable: bool
+    owned: bool | None
+    pid: int | None = None
+
+
+class DaemonConfig(BaseModel):
+    username: str
+    password: str
+    port: int = slskd_daemon.DEFAULT_PORT
+    download_dir: str = ""
+
+
+class DaemonConfigResult(BaseModel):
+    configured: bool
+    username: str
+
+
+@router.get("/daemon/status", response_model=DaemonStatus)
+def daemon_status() -> DaemonStatus:
+    return DaemonStatus(**slskd_daemon.daemon_status())
+
+
+@router.post("/daemon/start", response_model=DaemonStatus)
+def daemon_start() -> DaemonStatus:
+    try:
+        return DaemonStatus(**slskd_daemon.start())
+    except slskd_daemon.AlreadyUp as exc:
+        raise api_error(409, "slskd_already_up", str(exc)) from exc
+    except slskd_daemon.NotInstalled as exc:
+        raise api_error(409, "slskd_not_installed", str(exc)) from exc
+    except slskd_daemon.StartFailed as exc:
+        raise api_error(502, "slskd_start_failed", str(exc), reason=str(exc)) from exc
+    except slskd_daemon.UnsupportedPlatform as exc:
+        raise api_error(501, "slskd_unsupported_platform", str(exc)) from exc
+
+
+@router.post("/daemon/stop", response_model=DaemonStatus)
+def daemon_stop() -> DaemonStatus:
+    try:
+        return DaemonStatus(**slskd_daemon.stop())
+    except slskd_daemon.NotOurs as exc:
+        raise api_error(409, "slskd_not_ours", str(exc)) from exc
+    except slskd_daemon.UnsupportedPlatform as exc:
+        raise api_error(501, "slskd_unsupported_platform", str(exc)) from exc
+
+
+@router.put("/daemon/config", response_model=DaemonConfigResult)
+def daemon_config(req: DaemonConfig) -> DaemonConfigResult:
+    """La password entra e non esce: non ne teniamo copia e non la
+    rispondiamo. L'username sì, si rilegge dal file."""
+    config = slskd_daemon.default_config_path()
+    slskd_daemon.write_config(
+        config, username=req.username, password=req.password,
+        port=req.port, download_dir=req.download_dir or runtime_settings.slskd_download_dir(),
+    )
+    return DaemonConfigResult(configured=True, username=req.username)
