@@ -42,6 +42,13 @@ function LabelDetailInner() {
   const from = `/labels/detail?label=${encodeURIComponent(label)}`;
 
   useEffect(() => {
+    // Niente fetch con label vuota: apiGet scarta i query param vuoti (vedi
+    // lib/api/client.ts), quindi la richiesta degraderebbe silenziosamente a
+    // "/api/tracks" senza filtro, restituendo l'intera libreria invece di un
+    // errore. Il ramo "label mancante" si decide a render (vedi il guard piu'
+    // sotto), non qui: un setState sincrono nel corpo dell'effect e' vietato
+    // dal linter. Stesso principio di app/tracks/page.tsx.
+    if (!label) return;
     apiGet<{ total: number; items: Track[] }>("/api/tracks", { label, limit: 500, sort: "artist" })
       .then((r) => setAll(r.items))
       .catch((e) => setError(String(e.message ?? e)));
@@ -64,6 +71,22 @@ function LabelDetailInner() {
       .slice(0, 6)
       .map(([g, n]) => ({ label: g, value: n, href: `/library?genre=${encodeURIComponent(g)}` }));
   }, [tracks]);
+
+  // Label assente (rotta a query senza `?label=`, non piu' irraggiungibile ora
+  // che non e' un segmento di percorso): senza questo guard la fetch sopra
+  // degraderebbe silenziosamente a "/api/tracks" intera (apiGet scarta i
+  // query param vuoti) e questa pagina renderebbe l'intera libreria sotto
+  // un'intestazione vuota, come se fosse il contenuto di un'etichetta. Stesso
+  // principio di app/tracks/page.tsx e app/sets/detail/page.tsx, dopo tutti
+  // gli hook (l'ordine degli hook non puo' dipendere da un return anticipato).
+  // Nessuna chiave t.errors dedicata alla label (a differenza di
+  // traccia/set/playlist, una label non e' un record con un proprio id):
+  // riuso t.errors.playlist_not_found, la voce piu' vicina per forma — una
+  // collezione di tracce nominata, come questa pagina.
+  if (!label) {
+    const msg = t.errors.playlist_not_found;
+    return <PageLayout title={t.labels.detail.pageTitle}><Alert tone="danger">⚠ {typeof msg === "string" ? msg : msg({})}</Alert></PageLayout>;
+  }
 
   const marginalia = (
     <div className="space-y-4">
