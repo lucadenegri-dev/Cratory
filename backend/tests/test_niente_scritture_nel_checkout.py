@@ -74,29 +74,62 @@ def _fotografia(radice: Path) -> set[tuple[str, int, int]]:
     return voci
 
 
-_ESERCITA_LE_SCRITTURE = (
-    "from app.core.config import setup_logging;"
-    "from app.db import ensure_schema;"
-    "from app.organize.services import thumbs, cover_cache;"
-    "from app.services import system_probe, slskd_daemon;"
-    "setup_logging();"
-    "ensure_schema();"
-    "thumbs.thumb_path(1);"
-    "cover_cache.thumb_path(1);"
-    "system_probe.ensure_bin_dir();"
-    # I quattro ancoraggi propri del demone slskd (finding: restavano fissi
-    # sotto BACKEND_DIR). Toccati direttamente via le loro funzioni, non via
-    # write_config()/start(), per non dipendere da un binario slskd installato
-    # né da SLSKD_DOWNLOAD_DIR ereditata dall'ambiente dell'host.
-    "slskd_daemon.default_config_path().parent.mkdir(parents=True, exist_ok=True);"
-    "slskd_daemon.default_config_path().write_text('');"
-    "slskd_daemon._cartella_download_default().mkdir(parents=True, exist_ok=True);"
-    "slskd_daemon.pid_file().parent.mkdir(parents=True, exist_ok=True);"
-    "slskd_daemon.pid_file().write_text('esercitato');"
-    "slskd_daemon.log_file().parent.mkdir(parents=True, exist_ok=True);"
-    "slskd_daemon.log_file().touch();"
-    "print('fatto')"
-)
+_ESERCITA_LE_SCRITTURE = """\
+from app.core.config import setup_logging
+from app.db import ensure_schema
+from app.organize.services import thumbs, cover_cache
+from app.services import system_probe, slskd_daemon
+
+setup_logging()
+ensure_schema()
+thumbs.thumb_path(1)
+cover_cache.thumb_path(1)
+system_probe.ensure_bin_dir()
+
+# Guardia strutturale (finding A della review finale). default_config_path()
+# e' l'unico percorso, qui dentro, DERIVATO da un'impostazione utente
+# (slskd_config_path(), default non vuoto ~/.config/slskd/slskd.yml): oggi
+# resta dentro CRATORY_DATA_DIR solo perche' _ambiente_di_prova() sotto in
+# questo file azzera SLSKD_CONFIG_PATH nell'ambiente del sottoprocesso. Quel
+# guardrail e' ambientale: un pydantic-settings con env_ignore_empty=True, un
+# .env piazzato sotto la cartella dati, o un futuro override da DB lo
+# aggirerebbero tutti senza toccare questo script. E la prima asserzione dei
+# due test sotto fotografa solo BACKEND_DIR: una scrittura fuori di li' non la
+# farebbe fallire, resterebbe verde mentre danneggia un file vero
+# dell'utente -- e' successo per davvero, ha azzerato
+# ~/.config/slskd/slskd.yml. Questo controllo non e' cautela di principio: e'
+# cio' che impedisce a questo script di rifarlo. La guardia d'ambiente sopra
+# resta comunque: qui e' la cintura, li' la bretella.
+import os
+from pathlib import Path
+
+_DATA_DIR = Path(os.environ["CRATORY_DATA_DIR"]).resolve()
+
+
+def _dentro_data_dir(percorso):
+    percorso = Path(percorso).resolve()
+    if percorso != _DATA_DIR and _DATA_DIR not in percorso.parents:
+        raise SystemExit(
+            f"RIFIUTATO: {percorso} e' fuori da CRATORY_DATA_DIR "
+            f"({_DATA_DIR}); non scrivo li'."
+        )
+    return percorso
+
+
+# I quattro ancoraggi propri del demone slskd (finding: restavano fissi sotto
+# BACKEND_DIR). Toccati direttamente via le loro funzioni, non via
+# write_config()/start(), per non dipendere da un binario slskd installato ne'
+# da SLSKD_DOWNLOAD_DIR ereditata dall'ambiente dell'host.
+_dentro_data_dir(slskd_daemon.default_config_path())
+slskd_daemon.default_config_path().parent.mkdir(parents=True, exist_ok=True)
+slskd_daemon.default_config_path().write_text("")
+slskd_daemon._cartella_download_default().mkdir(parents=True, exist_ok=True)
+slskd_daemon.pid_file().parent.mkdir(parents=True, exist_ok=True)
+slskd_daemon.pid_file().write_text("esercitato")
+slskd_daemon.log_file().parent.mkdir(parents=True, exist_ok=True)
+slskd_daemon.log_file().touch()
+print("fatto")
+"""
 
 
 def _ambiente_di_prova(tmp_path: Path) -> dict[str, str]:
