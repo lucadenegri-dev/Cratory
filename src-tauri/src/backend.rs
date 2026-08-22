@@ -45,6 +45,14 @@ const READY_POLL_INTERVAL: Duration = Duration::from_millis(300);
 /// partito") senza alcun indizio sul perche'.
 const MAX_LOG_LINES: usize = 40;
 
+/// Quante di quelle righe finiscono nel dialogo d'errore. Poche di proposito:
+/// un alert di macOS non scorre e cresce in altezza, quindi un messaggio lungo
+/// spinge il bottone OK fuori dallo schermo. Il log dell'app le ha tutte.
+const RIGHE_NEL_DIALOGO: usize = 8;
+
+/// Taglio per singola riga, per la stessa ragione in orizzontale.
+const MAX_CARATTERI_PER_RIGA: usize = 160;
+
 /// Stato condiviso fra il thread che avvia il backend e l'handler
 /// `RunEvent::Exit` in `lib.rs` che lo termina. Un `Mutex` perche' i due lati
 /// vivono su thread diversi; il processo e' `None` finche' non e' stato
@@ -381,18 +389,38 @@ fn spawn_line_reader<R: Read + Send + 'static>(
 /// d'errore: fattorizzata perche' serve identica sia per il timeout sia per
 /// il caso "il processo e' morto da solo" (vedi `Esito` sopra).
 fn ultime_righe(output_log: &Mutex<VecDeque<String>>) -> String {
-    let righe = output_log
+    let tutte: Vec<String> = output_log
         .lock()
         .expect("output_log mutex avvelenato")
         .iter()
         .cloned()
-        .collect::<Vec<_>>()
-        .join("\n");
-    if righe.is_empty() {
-        "(nessun output)".to_string()
-    } else {
-        righe
+        .collect();
+    if tutte.is_empty() {
+        return "(nessun output)".to_string();
     }
+    // Nel dialogo entrano poche righe, non tutte le MAX_LOG_LINES del buffer.
+    // Un alert di macOS cresce in altezza col testo e non scorre: con quaranta
+    // righe di traceback il bottone OK finisce sotto il bordo dello schermo e
+    // il dialogo diventa impossibile da chiudere. Il buffer resta pieno perche'
+    // `fatal_error` scrive comunque il messaggio completo nel log.
+    let scartate = tutte.len().saturating_sub(RIGHE_NEL_DIALOGO);
+    let mut corpo: Vec<String> = tutte[scartate..]
+        .iter()
+        // Anche una riga sola puo' essere lunghissima e allargare il dialogo:
+        // si taglia, il log conserva l'originale.
+        .map(|r| {
+            if r.chars().count() > MAX_CARATTERI_PER_RIGA {
+                let tagliata: String = r.chars().take(MAX_CARATTERI_PER_RIGA).collect();
+                format!("{tagliata}...")
+            } else {
+                r.clone()
+            }
+        })
+        .collect();
+    if scartate > 0 {
+        corpo.insert(0, format!("(altre {scartate} righe nel log dell'app)"));
+    }
+    corpo.join("\n")
 }
 
 fn fatal_error(app: &AppHandle, title: &str, message: &str) {

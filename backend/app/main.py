@@ -60,6 +60,21 @@ from app.organize.routers import (
     settings as organize_settings,
 )
 
+# L'origin che il webview di Tauri presenta su macOS. Non e' configurabile:
+# se cambiasse, l'app desktop smetterebbe di funzionare e il posto in cui
+# accorgersene e' qui, non il .env di chi installa.
+WEBVIEW_ORIGIN = "tauri://localhost"
+
+def origini_ammesse(raw: str) -> list[str]:
+    """Le origini che il CORS accetta, dalla stringa separata da virgole.
+
+    Funzione e non espressione in linea perche' i test la chiamano invece di
+    riscriverla: una copia della logica nel test si disallinea al primo
+    cambiamento, ed e' gia' successo.
+    """
+    return sorted({o.strip() for o in raw.split(",") if o.strip()} | {WEBVIEW_ORIGIN})
+
+
 logger = logging.getLogger("app.request")
 
 
@@ -101,7 +116,12 @@ app = FastAPI(title="Cratory", version=app_version(), lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     # frontend_origin puo' elencare piu' origini separate da virgola (dev 3000, preview 3001).
-    allow_origins=[o.strip() for o in settings.frontend_origin.split(",") if o.strip()],
+    # L'origin del webview desktop si aggiunge SEMPRE, anche quando l'utente ha
+    # scritto la propria lista: non e' una preferenza, e' il modo in cui il
+    # bundle parla con se stesso. Chi mette FRONTEND_ORIGIN nel .env sta
+    # pensando ai browser, e senza questa unione si ritroverebbe l'app desktop
+    # muta — ogni chiamata bloccata dal CORS, nessun messaggio che lo spieghi.
+    allow_origins=origini_ammesse(settings.frontend_origin),
     allow_methods=["*"],
     allow_headers=["*"],
 )
