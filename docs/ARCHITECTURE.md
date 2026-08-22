@@ -896,10 +896,26 @@ self-contained, ffmpeg and slskd both ship this way — puts it one level down, 
 `<bin_dir>/<key>/<name>`, and `resolve_binary` tries both before falling back to `PATH`. A
 Tauri build that ships `ffmpeg`/`fpcalc`/`slskd` inside the bundle, laid out the same way,
 only has to set `CRATORY_BIN_DIR` once at launch — nothing else in the probe, the installer
-or the daemon changes. The seam isn't probe-only: `acoustid.fpcalc_available`,
-`organize/integrations/integrity`'s `ffmpeg_available`, and the ffmpeg checks in
-`routers/downloads.py` and `routers/dj_sets.py` all delegate to it too, so a bundle build
-can't leave those disagreeing with the wizard about the same binary.
+or the daemon changes. The seam isn't probe-only: the availability checks
+(`acoustid.fpcalc_available`, `organize/integrations/integrity`'s `ffmpeg_available`, and the
+ffmpeg checks in `routers/downloads.py` and `routers/dj_sets.py`) delegate to it, and so do
+the sites that actually invoke the binaries — `integrations/local_files.py`'s `audio_hash`
+and `decode_pcm_bytes`, `services/mix_identify.py`'s `probe_duration` and `extract_segment`,
+`organize/integrations/integrity.py`'s `_subprocess_runner`, and
+`organize/integrations/acoustid.py`'s fpcalc fingerprinter (which sets the `FPCALC`
+environment variable pyacoustid reads internally, since it takes no path argument, not a
+path passed straight through) — so a bundle build can't leave those disagreeing with the
+wizard about the same binary. That symmetry wasn't always there: the executors used to
+invoke bare names (`"ffmpeg"`, `"ffprobe"`), resolved only against `PATH` — a Finder-launched
+app inherits launchd's minimal `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin`), so the wizard could
+report every component present while every operation that used them broke. `ffprobe` itself
+is a separate binary from `ffmpeg` and has no entry in the component registry above; the
+bundle doesn't ship it — `costruisci_binari.py` relocates only the `ffmpeg` executable and
+its dylibs from Homebrew, not `ffprobe` — so `resolve_binary("ffprobe")` still falls through
+to `PATH` inside a packaged app and finds nothing. `mix_identify.probe_duration` (yt-dlp
+duration fallback) already degrades to `None` on any resolution or decode failure, so this
+stays a quiet feature gap rather than a crash; closing it for real means teaching
+`costruisci_binari.py` to relocate `ffprobe` too.
 
 A second seam of the same shape covers what the app *writes*. `core/paths.py`
 separates two meanings that used to share one name: `BACKEND_DIR` is where the
@@ -1030,7 +1046,7 @@ shown says so rather than asserting it as fact.
 
 **How the three seams fit together.** `CRATORY_DATA_DIR`, `CRATORY_BIN_DIR`
 and `CRATORY_VERSION` (see "Setup and credentials" above) were built for
-exactly this moment, and the backend did not change to receive them: the
+exactly this moment, and reading them required no backend change: the
 shell resolves each one from Tauri's own APIs — never by hand-concatenating
 `$HOME` — and sets them as environment variables on the child process at
 spawn time. `CRATORY_DATA_DIR` comes from `app.path().app_data_dir()`, which
@@ -1044,6 +1060,14 @@ development build (`cargo`/`tauri dev`) all three resolve to the empty string
 instead, which every consumer on the backend side already treats as "unset" —
 the same defaults development always had, so nothing about running `tauri
 dev` needed to change either.
+
+That narrow claim is about the three seams only, not the backend as a whole:
+it did change for this sub-project. `main.py`'s CORS middleware unions in the
+webview's fixed origin (`tauri://localhost`) alongside whatever
+`FRONTEND_ORIGIN` the user configured, and the ffmpeg/ffprobe/fpcalc call
+sites now resolve the binary through `system_probe.resolve_binary` instead of
+a bare name on `PATH` — see "One seam exists purely for an eventual Tauri
+desktop build" above for which sites and why.
 
 The window itself starts hidden (`"visible": false` in `tauri.conf.json`) and
 is shown only once `/api/setup/state` answers, then explicitly reloaded first:

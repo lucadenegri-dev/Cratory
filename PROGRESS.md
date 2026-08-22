@@ -20,11 +20,21 @@ described in `CLAUDE.md`.
   export, that runtime, ffmpeg relocated from Homebrew (no upstream ships a
   checksummed arm64 build), fpcalc/slskd read from the existing
   `binary_manifest`, ad-hoc signed. Port 8000 stays fixed, never scanned,
-  because Spotify's redirect URI is registered on it. The backend needed no
-  changes: it already honored the three seams
-  (`CRATORY_DATA_DIR`/`CRATORY_BIN_DIR`/`CRATORY_VERSION`) the first two
-  sub-projects had prepared. Verified against a real library: essentia
-  analyzing a real file, the relocated ffmpeg decoding a real FLAC, data
+  because Spotify's redirect URI is registered on it. The three environment
+  seams (`CRATORY_DATA_DIR`/`CRATORY_BIN_DIR`/`CRATORY_VERSION`) needed no
+  backend change — the first two sub-projects had already prepared them —
+  but the backend was not otherwise untouched: `main.py`'s CORS middleware
+  unions in the webview's fixed origin (`tauri://localhost`), and the five
+  call sites that actually invoke ffmpeg/ffprobe/fpcalc
+  (`integrations/local_files.py`, `services/mix_identify.py`,
+  `organize/integrations/integrity.py`, `organize/integrations/acoustid.py`)
+  now resolve the binary through `system_probe.resolve_binary` instead of a
+  bare name on `PATH` — they used to disagree with the availability probes,
+  which already used that seam, so the setup wizard could report every
+  component present while the operations that used them broke on a
+  Finder-launched app inheriting launchd's minimal `PATH`. Verified against
+  a real library: essentia analyzing a real file, the relocated ffmpeg
+  decoding a real FLAC, data
   under `~/Library/Application Support/com.cratory.app/` and nothing inside
   the bundle, no orphan process after the window closes. **Not yet
   distributable**: ad-hoc signing only, no Apple notarization, no `LICENSE`,
