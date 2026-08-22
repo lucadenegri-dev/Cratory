@@ -411,6 +411,7 @@ dependencies = [
 name = "cratory"
 version = "0.0.0"
 dependencies = [
+ "libc",
  "log",
  "reqwest",
  "serde",

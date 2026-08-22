@@ -28,3 +28,10 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 reqwest = { version = "0.13.3", default-features = false, features = ["blocking"] }
 tauri-plugin-dialog = "2.7.2"
+
+# Solo Unix: serve per mandare SIGTERM al backend prima del SIGKILL di
+# riserva (vedi src/backend.rs, termina_processo). Gia' presente in
+# Cargo.lock come dipendenza transitiva; qui diventa diretta, alla stessa
+# versione gia' risolta.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.189"
