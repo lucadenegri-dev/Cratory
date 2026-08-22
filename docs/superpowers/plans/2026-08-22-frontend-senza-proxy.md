@@ -518,7 +518,7 @@ perche' /playlists e' gia' la lista."
 
 **La differenza rispetto al Task 3.** Tutte e tre queste pagine hanno una pagina lista omonima (`app/sets/page.tsx`, `app/labels/page.tsx`, `app/shazam/page.tsx`), quindi vanno tutte sotto `detail/`. E nessuna delle tre ha un confine `<Suspense>`: `useSearchParams()` lo richiede, e senza il build statico fallisce. Vanno quindi ristrutturate nella forma che `tracks` e `playlists` hanno già.
 
-**La trappola di `labels`.** Oggi fa `const label = decodeURIComponent(raw)` perché il segmento di path arriva codificato. `useSearchParams().get("label")` restituisce il valore **già decodificato**: lasciare quella chiamata corrompe ogni etichetta che contenga `%`, e un'etichetta come `Ostgut Ton` con uno spazio smetterebbe di combaciare. La `decodeURIComponent` va tolta.
+**La trappola di `labels`.** Oggi fa `const label = decodeURIComponent(raw)` perché il segmento di path arriva codificato. `useSearchParams().get("label")` restituisce il valore **già decodificato**: lasciare quella chiamata corrompe ogni etichetta che contenga `%` — un `%` letterale non seguito da due cifre esadecimali solleva `URIError` e schianta la pagina, e una sequenza come `%26` diventa silenziosamente `&`. Un'etichetta con uno spazio, invece, ripasserebbe indenne: non è il caso pericoloso. La `decodeURIComponent` va tolta.
 
 - [ ] **Step 1: Scrivere i test che falliscono**
 
@@ -545,7 +545,8 @@ describe("sets, labels e shazam", () => {
 
   it("labels non ri-decodifica il valore", () => {
     // useSearchParams ha gia' decodificato una volta: una seconda passata
-    // corrompe le etichette con % e rompe quelle con gli spazi.
+    // corrompe le etichette con % (URIError) e con %26, che diventa
+    // silenziosamente &.
     expect(leggi("app/labels/detail/page.tsx")).not.toContain("decodeURIComponent");
   });
 });
@@ -645,7 +646,8 @@ export default function LabelDetail() {
 function LabelDetailInner() {
   const t = useT();
   // Niente decodeURIComponent: useSearchParams ha gia' decodificato una volta,
-  // e una seconda passata corrompe le etichette con % e rompe quelle con spazi.
+  // e una seconda passata corrompe le etichette con % (URIError, pagina
+  // schiantata) e con %26, che diventa silenziosamente &.
   const label = useSearchParams().get("label") ?? "";
 ```
 
@@ -679,7 +681,7 @@ Atteso: verde senza modifiche. Se fallisce, riportare cosa: significa che l'assu
 npm run test:unit && npm run lint && npm run build
 ```
 
-Poi con `npm run dev`, cliccando: da `/sets` aprire un set; da `/labels` aprire un'etichetta **che contenga uno spazio** (è il caso che la doppia decodifica romperebbe); da `/shazam` aprire un set identificato. In tutti e tre il link "indietro" deve tornare alla lista giusta. Riportare cosa si è visto.
+Poi con `npm run dev`, cliccando: da `/sets` aprire un set; da `/labels` aprire un'etichetta **che contenga un `%` letterale** (è il caso che la doppia decodifica romperebbe con `URIError`; un'etichetta con solo uno spazio non lo proverebbe, perché ripassa indenne da una doppia decodifica); da `/shazam` aprire un set identificato. In tutti e tre il link "indietro" deve tornare alla lista giusta. Riportare cosa si è visto.
 
 - [ ] **Step 8: Commit**
 
@@ -688,7 +690,7 @@ git add -A frontend
 git commit -m "refactor(rotte): sets, labels e shazam leggono la query, con il confine Suspense
 
 labels perde la decodeURIComponent: useSearchParams decodifica gia' una volta,
-e la seconda corrompe le etichette con % e spazi."
+e la seconda corrompe le etichette con % (URIError) e con %26, che diventa &."
 ```
 
 ---

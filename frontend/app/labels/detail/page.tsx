@@ -22,8 +22,10 @@ export default function LabelDetail() {
 function LabelDetailInner() {
   const t = useT();
   // Niente ri-decodifica manuale: useSearchParams ha gia' decodificato una
-  // volta, e una seconda passata corrompe le etichette con % e rompe quelle
-  // con spazi (vedi tests/rotte-query-string.test.ts).
+  // volta, e una seconda passata corrompe le etichette con % (un % non
+  // seguito da due cifre esadecimali solleva URIError e schianta la pagina)
+  // e con %26, che diventa silenziosamente & (vedi tests/rotte-query-string.test.ts
+  // e tests/labels-detail-decode.test.tsx).
   const label = useSearchParams().get("label") ?? "";
   const [all, setAll] = useState<Track[]>([]);
   const [error, setError] = useState<string | null>(null);

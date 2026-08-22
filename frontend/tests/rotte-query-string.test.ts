@@ -66,7 +66,11 @@ describe("sets, labels e shazam", () => {
 
   it("labels non ri-decodifica il valore", () => {
     // useSearchParams ha gia' decodificato una volta: una seconda passata
-    // corrompe le etichette con % e rompe quelle con gli spazi.
+    // corrompe le etichette con % (URIError, pagina schiantata) e con %26,
+    // che diventa silenziosamente &. Questo e' solo il pin della regressione
+    // esatta (il sorgente non deve ricontenere la chiamata); il comportamento
+    // a runtime e' provato in tests/labels-detail-decode.test.tsx, che
+    // renderizza davvero la pagina con un % letterale nella label.
     expect(leggi("app/labels/detail/page.tsx")).not.toContain("decodeURIComponent");
   });
 });
