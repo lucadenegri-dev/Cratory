@@ -141,7 +141,7 @@ export default function PlaylistsPage() {
           <PlaylistCover artworkUrl={p.artwork_url} platform={p.platform} kind={p.kind} className="h-11 w-11 shrink-0" iconSize={18} placeholderClassName="bg-elevated" />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <Link href={withFrom(`/playlists/${p.id}`, from)} className="truncate font-medium hover:text-fg-strong">{p.name}</Link>
+              <Link href={withFrom(`/playlists/detail?id=${p.id}`, from)} className="truncate font-medium hover:text-fg-strong">{p.name}</Link>
               <Badge tone="neutral">{p.platform}</Badge>
               {p.kind === "liked" && <Badge tone="neutral">liked</Badge>}
             </div>
@@ -153,7 +153,7 @@ export default function PlaylistsPage() {
           </div>
         </div>
         <div className="flex shrink-0 gap-1.5">
-          <ButtonLink href={withFrom(`/playlists/${p.id}`, from)} size="sm" variant="outline">
+          <ButtonLink href={withFrom(`/playlists/detail?id=${p.id}`, from)} size="sm" variant="outline">
             <Eye size={15} /> {t.playlists.openButton}
           </ButtonLink>
           <Button size="sm" variant="danger" onClick={() => setConfirmDelete(p)} disabled={busy !== null}>

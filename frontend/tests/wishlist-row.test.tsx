@@ -29,9 +29,9 @@ describe("WishlistRow", () => {
     // `from` arriva come prop (path + query dei filtri correnti della wishlist):
     // l'href deve portare l'origine esatta, codificata per intero (query compresa).
     expect(screen.getByText("Techno Peak").closest("a")?.getAttribute("href"))
-      .toBe("/playlists/7?from=%2Fwishlist%3Ftab%3Dnot_found%26q%3Daphex");
+      .toBe("/playlists/detail?id=7&from=%2Fwishlist%3Ftab%3Dnot_found%26q%3Daphex");
     expect(screen.getByText("Scoperte").closest("a")?.getAttribute("href"))
-      .toBe("/playlists/9?from=%2Fwishlist%3Ftab%3Dnot_found%26q%3Daphex");
+      .toBe("/playlists/detail?id=9&from=%2Fwishlist%3Ftab%3Dnot_found%26q%3Daphex");
     expect(screen.getByText("mai tentata")).toBeTruthy();
   });
 

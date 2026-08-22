@@ -165,7 +165,7 @@ export default function TransitionFinder() {
                   <li key={track.id} className="px-4 py-3 text-sm">
                     <div className="flex items-center gap-3">
                       <Badge tone="neutral" className="tnum w-9 justify-center">{score.score}</Badge>
-                      <Link href={withFrom(`/tracks/${track.id}`, from)} className="min-w-0 flex-1 truncate font-medium hover:text-fg-strong">{trackLabel(track)}</Link>
+                      <Link href={withFrom(`/tracks?id=${track.id}`, from)} className="min-w-0 flex-1 truncate font-medium hover:text-fg-strong">{trackLabel(track)}</Link>
                       {track.has_local_file && <Badge tone="success" className="shrink-0">{t.transitions.hasFileBadge}</Badge>}
                       {score.classification && (
                         <Badge tone="neutral" className="shrink-0">

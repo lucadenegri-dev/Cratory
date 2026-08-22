@@ -31,7 +31,7 @@ function TrackLibraryAction({ track, onSaved }: { track: DjSetTrack; onSaved: (t
   if (track.library_status && track.library_track_id != null) {
     const owned = track.library_status === "owned";
     return (
-      <Link href={withFrom(`/tracks/${track.library_track_id}`, from)} title={t.shazam.detail.viewInLibraryTitle} className="shrink-0">
+      <Link href={withFrom(`/tracks?id=${track.library_track_id}`, from)} title={t.shazam.detail.viewInLibraryTitle} className="shrink-0">
         <Badge tone={owned ? "success" : "info"}>
           {owned ? t.shazam.detail.ownedBadge : t.shazam.detail.inLibraryBadge}
         </Badge>
@@ -145,7 +145,7 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
           {importedPlaylistId ? (
             <p className="text-[11px] text-muted">
               {t.shazam.detail.importedAsPlaylist(imported?.created)} ·{" "}
-              <Link href={withFrom(`/playlists/${importedPlaylistId}`, from)} className="text-fg underline-offset-4 hover:underline">{t.shazam.detail.openLink}</Link>
+              <Link href={withFrom(`/playlists/detail?id=${importedPlaylistId}`, from)} className="text-fg underline-offset-4 hover:underline">{t.shazam.detail.openLink}</Link>
             </p>
           ) : (
             <Button size="sm" variant="outline" className="w-full" onClick={doImport} disabled={importing}>

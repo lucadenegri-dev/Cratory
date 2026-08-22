@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Pencil } from "lucide-react";
 import { type Track } from "@/lib/api";
+import { withFrom } from "@/lib/back-link";
 import { TrackCover } from "@/components/track-cover";
 import { TrackPlayButton } from "@/components/track-play-button";
 import { useT } from "@/lib/i18n";
@@ -13,24 +14,24 @@ import { useT } from "@/lib/i18n";
 export function LibraryTrackGrid({
   tracks,
   onEdit,
-  trackLinkQuery = "",
+  trackLinkFrom = "",
 }: {
   tracks: Track[];
   onEdit: (t: Track) => void;
-  /** Suffisso (es. "?from=...") da appendere ai link verso il dettaglio traccia,
+  /** Origine da passare a `withFrom` per il link verso il dettaglio traccia,
    *  cosi' il back-link li' puo' tornare alla libreria con gli stessi filtri. */
-  trackLinkQuery?: string;
+  trackLinkFrom?: string;
 }) {
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3">
       {tracks.map((tr) => (
-        <LibraryTrackCard key={tr.id} track={tr} context={tracks} onEdit={onEdit} trackLinkQuery={trackLinkQuery} />
+        <LibraryTrackCard key={tr.id} track={tr} context={tracks} onEdit={onEdit} trackLinkFrom={trackLinkFrom} />
       ))}
     </div>
   );
 }
 
-function LibraryTrackCard({ track, context, onEdit, trackLinkQuery }: { track: Track; context: Track[]; onEdit: (t: Track) => void; trackLinkQuery: string }) {
+function LibraryTrackCard({ track, context, onEdit, trackLinkFrom }: { track: Track; context: Track[]; onEdit: (t: Track) => void; trackLinkFrom: string }) {
   const t = useT();
   // Badge BPM·Key: solo i valori presenti, uniti con " · " (es. "128 · 7A").
   const meta = [track.bpm != null ? track.bpm.toFixed(0) : null, track.camelot_key ?? null]
@@ -39,7 +40,7 @@ function LibraryTrackCard({ track, context, onEdit, trackLinkQuery }: { track: T
   return (
     <div className="group relative flex flex-col gap-1.5 text-left">
       <Link
-        href={`/tracks/${track.id}${trackLinkQuery}`}
+        href={withFrom(`/tracks?id=${track.id}`, trackLinkFrom)}
         className="relative block aspect-square w-full overflow-hidden border border-border bg-elevated outline-none focus-visible:ring-1 focus-visible:ring-fg"
       >
         <TrackCover track={track} className="h-full w-full" iconSize={22} />

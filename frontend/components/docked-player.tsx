@@ -113,7 +113,7 @@ export function DockedPlayer() {
 
   // Traccia posseduta = ha una scheda: cover e titolo ci portano. Le preview
   // discovery non sono in libreria, quindi restano testo.
-  const trackHref = active.kind === "local-track" ? `/tracks/${active.track.id}` : null;
+  const trackHref = active.kind === "local-track" ? `/tracks?id=${active.track.id}` : null;
 
   return (
     // Telaio di posizionamento: `bottom` dinamico (se la barra job globale è

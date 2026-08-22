@@ -387,7 +387,7 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     {st.role && <Badge tone="neutral">{st.role}</Badge>}
-                    <Link href={withFrom(`/tracks/${st.track.id}`, from)} className="truncate font-medium hover:text-fg-strong">{trackLabel(st.track)}</Link>
+                    <Link href={withFrom(`/tracks?id=${st.track.id}`, from)} className="truncate font-medium hover:text-fg-strong">{trackLabel(st.track)}</Link>
                     <span className="tnum shrink-0 text-xs text-fg">{st.track.bpm?.toFixed(0) ?? "—"} BPM · {st.track.camelot_key ?? "?"} <span className="text-muted">· {fmtDuration(st.track.duration_seconds)}{st.track.genre ? ` · ${st.track.genre}` : ""}</span></span>
                     {st.transition_class && (
                       <Badge tone="neutral">

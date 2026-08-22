@@ -108,7 +108,7 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
               <tr key={tr.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
                 <td className={`${cell} tnum text-faint`}>{String(i + 1).padStart(2, "0")}</td>
                 <td className={cell}>
-                  <Link href={withFrom(`/tracks/${tr.id}`, from)} className="flex items-center gap-2.5">
+                  <Link href={withFrom(`/tracks?id=${tr.id}`, from)} className="flex items-center gap-2.5">
                     <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
                     <span className="max-w-[16rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
                   </Link>

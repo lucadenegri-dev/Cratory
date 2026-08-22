@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, List, LayoutGrid } from "lucide-react";
 import { apiGet, errText, fmtDate, fmtDateShort, fmtDuration, type Track } from "@/lib/api";
+import { withFrom } from "@/lib/back-link";
 import { Input, Select, Checkbox, Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
@@ -98,11 +99,13 @@ function LibraryInner() {
     if (offset > 0) params.set("offset", String(offset));
     return params.toString();
   }, [artist, title, genre, source, status, owned, bpmMin, bpmMax, key, incomplete, rating, sort, order, offset]);
-  // Suffisso `?from=` per i link verso il dettaglio traccia: porta con sé path +
+  // Origine per il link "indietro" dal dettaglio traccia: porta con sé path +
   // filtri/sort/paginazione, così il link indietro là torna esattamente qui.
   // NB: si usa `queryString` (lo stato vivo) e non searchParams, che è indietro
-  // di un debounce rispetto ai filtri appena toccati.
-  const trackLinkQuery = `?from=${encodeURIComponent(queryString ? `${pathname}?${queryString}` : pathname)}`;
+  // di un debounce rispetto ai filtri appena toccati. Non è più una query
+  // string pronta: la compone `withFrom`, che sceglie il separatore giusto
+  // ora che l'href verso /tracks ha già un `?id=`.
+  const trackLinkFrom = queryString ? `${pathname}?${queryString}` : pathname;
 
   // Stato -> URL: replace (non push, niente cronologia inquinata) con un debounce
   // leggero per non riscrivere l'URL a ogni tasto negli input di testo.
@@ -290,7 +293,7 @@ function LibraryInner() {
               <tr key={tr.id} className="border-b border-border/50 last:border-0 hover:bg-elevated/40">
                 <td className={`${cell} tnum text-faint`}>{String(offset + i + 1).padStart(2, "0")}</td>
                 <td className={cell}>
-                  <Link href={`/tracks/${tr.id}${trackLinkQuery}`} className="flex items-center gap-2.5">
+                  <Link href={withFrom(`/tracks?id=${tr.id}`, trackLinkFrom)} className="flex items-center gap-2.5">
                     <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
                     <span className="min-w-0">
                       <span className="block max-w-[18rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
@@ -321,7 +324,7 @@ function LibraryInner() {
         </table>
       </div>
       ) : (
-        <LibraryTrackGrid tracks={items} onEdit={setEditing} trackLinkQuery={trackLinkQuery} />
+        <LibraryTrackGrid tracks={items} onEdit={setEditing} trackLinkFrom={trackLinkFrom} />
       ))}
 
       {view === "list" && (

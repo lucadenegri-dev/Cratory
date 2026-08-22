@@ -112,7 +112,7 @@ export function FilesTable({
               <td className="px-3 py-1 text-center">
                 {r.track_id != null && (
                   <Link
-                    href={`/tracks/${r.track_id}`}
+                    href={`/tracks?id=${r.track_id}`}
                     onClick={(e) => e.stopPropagation()} // la riga apre l'editor tag
                     className="text-faint hover:text-fg"
                     title={t.organize.files.openTrack}

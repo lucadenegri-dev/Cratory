@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, use, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { useBackLink } from "@/lib/back-link";
 import { ArrowLeft, Check, Download, ExternalLink, Link2, ArrowRightLeft, Pencil } from "lucide-react";
 import { apiGet, downloadTrackSoundcloud, fmtDuration, transitions, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
@@ -45,7 +46,7 @@ function TransitionList({ title, items, emptyLabel }: { title: string; items: Tr
         {items.map(({ track, score }) => (
           <li key={track.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
             <Badge tone="neutral" className="tnum w-9 justify-center">{score.score}</Badge>
-            <Link href={`/tracks/${track.id}`} className="min-w-0 flex-1 truncate hover:text-fg-strong">{trackLabel(track)}</Link>
+            <Link href={`/tracks?id=${track.id}`} className="min-w-0 flex-1 truncate hover:text-fg-strong">{trackLabel(track)}</Link>
             <span className="tnum shrink-0 text-xs text-faint">{track.bpm?.toFixed(0)} · {track.camelot_key ?? "?"}</span>
           </li>
         ))}
@@ -55,9 +56,13 @@ function TransitionList({ title, items, emptyLabel }: { title: string; items: Tr
   );
 }
 
-function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
+function TrackPageInner() {
   const t = useT();
-  const { id } = use(params);
+  // useSearchParams restituisce il valore GIA' decodificato una volta: non
+  // ri-decodificarlo. Con la rotta a segmento l'id non poteva mancare; ora
+  // /tracks senza id e' raggiungibile, e "" percorre lo stesso ramo di un id
+  // inesistente invece di propagare undefined.
+  const id = useSearchParams().get("id") ?? "";
   // Al dettaglio traccia si arriva da mezza app (libreria, playlist, etichette,
   // set, transizioni, wishlist, Shazam): il link indietro torna dove eri, filtri
   // compresi. Senza `from` (link diretto, refresh) ripiega sulla libreria.
@@ -78,6 +83,13 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
   const [slskNotice, setSlskNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    // Niente fetch con id vuoto: `/api/tracks/` (slash finale) non da' 404, il
+    // backend la redirige 307 alla LISTA (`/api/tracks`), che fetch segue in
+    // silenzio restituendo 200 con una forma tutta diversa (niente
+    // `playlists`) — il render sotto andrebbe in eccezione. Il ramo "id
+    // mancante" si decide a render (vedi il primo `if` piu' sotto), non qui:
+    // un setState sincrono nel corpo dell'effect e' vietato dal linter.
+    if (!id) return;
     apiGet<TrackDetail>(`/api/tracks/${id}`).then(setTrack).catch((e) => setError(String(e.message ?? e)));
     transitions(id, { limit: 8 }).then(setCompatible).catch(() => {});
   }, [id]);
@@ -86,6 +98,19 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
     apiGet<TrackDetail>(`/api/tracks/${id}`).then(setTrack).catch(() => {});
   };
 
+  // Id assente (rotta a query senza `?id=`, non piu' irraggiungibile ora che
+  // non e' un segmento di percorso): stesso testo (`t.errors.track_not_found`,
+  // la stessa chiave che client.ts traduce da un 404 reale) di un id numerico
+  // inesistente, cosi' i due casi sono visivamente indistinguibili. Letto da
+  // `useT()` come tutto il resto della pagina — non da `translateApiError`
+  // diretto, che legge uno stato fuori da React e in dev disallinea la lingua
+  // fra il render server e la prima idratazione client. La chiave e' tipizzata
+  // `string | funzione` (altre voci di `errors` prendono parametri): qui e'
+  // sempre una stringa, il ramo funzione e' irraggiungibile.
+  if (!id) {
+    const msg = t.errors.track_not_found;
+    return <PageLayout title={t.tracks.pageTitle}><Alert tone="danger">⚠ {typeof msg === "string" ? msg : msg({})}</Alert></PageLayout>;
+  }
   if (error) return <PageLayout title={t.tracks.pageTitle}><Alert tone="danger">⚠ {error}</Alert></PageLayout>;
   if (!track) return <PageLayout title={t.tracks.pageTitle}><Loading /></PageLayout>;
 
@@ -293,6 +318,6 @@ function TrackPageInner({ params }: { params: Promise<{ id: string }> }) {
   );
 }
 
-export default function TrackPage(props: { params: Promise<{ id: string }> }) {
-  return <Suspense><TrackPageInner {...props} /></Suspense>;
+export default function TrackPage() {
+  return <Suspense><TrackPageInner /></Suspense>;
 }

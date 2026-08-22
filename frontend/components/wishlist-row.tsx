@@ -62,7 +62,7 @@ export function WishlistRow({
   const chips = track.playlists.slice(0, MAX_CHIPS);
   const extra = track.playlists.length - chips.length;
   const q = storeQuery(track.artist, track.title);
-  const href = withFrom(`/tracks/${track.id}`, from);
+  const href = withFrom(`/tracks?id=${track.id}`, from);
 
   const primary = (() => {
     if (archived) {
@@ -147,7 +147,7 @@ export function WishlistRow({
               {chips.map((p, i) => (
                 <span key={p.id} className="flex items-baseline gap-x-1.5">
                   {i > 0 && <span className="text-faint">·</span>}
-                  <Link href={withFrom(`/playlists/${p.id}`, from)}
+                  <Link href={withFrom(`/playlists/detail?id=${p.id}`, from)}
                     className="text-[10px] uppercase tracking-wider text-muted underline-offset-2 hover:text-fg-strong hover:underline">
                     {p.name}
                   </Link>

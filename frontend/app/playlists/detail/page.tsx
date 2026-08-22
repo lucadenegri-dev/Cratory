@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PlaylistExportFormat } from "@/lib/api";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, AlertTriangle, Info, Trash2, Sparkles, Pencil,
   RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart, Copy,
@@ -47,19 +47,23 @@ function camelotRank(key: string | null): number {
   return Number(m[1]) * 2 + (m[2].toUpperCase() === "B" ? 1 : 0);
 }
 
-function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
+function PlaylistDetailInner() {
   const t = useT();
   const STATUS_OPTIONS: [string, string][] = [
     ["ready_for_set", t.library.statusReadyOption],
     ["imported", t.library.statusImportedOption],
   ];
-  const { id } = use(params);
+  // Vedi app/tracks/page.tsx: valore gia' decodificato, "" invece di undefined.
+  const id = useSearchParams().get("id") ?? "";
   const pid = Number(id);
   const router = useRouter();
   // Alla playlist si arriva dalla lista, da Shazam e dalla wishlist: si torna
   // dove eri, non sempre all'elenco.
   const back = useBackLink({ href: "/playlists", labelKey: "playlists" });
-  const from = usePathname();
+  // Non piu' usePathname(): con l'id nella query (non nel path) `/playlists/detail`
+  // da solo non basta piu' a tornare qui. Si ricostruisce dall'id gia' letto sopra,
+  // stesso principio di trackLinkFrom in app/library/page.tsx.
+  const from = `/playlists/detail?id=${pid}`;
   const [downloading, setDownloading] = useState(false);
   const jobs = useJobs();
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
@@ -397,7 +401,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
     setActionError(null);
     try {
       const copy = await duplicatePlaylist(pid);
-      router.push(`/playlists/${copy.id}`);
+      router.push(`/playlists/detail?id=${copy.id}`);
     } catch (e) {
       setActionError(t.playlists.duplicateFailed(errText(e)));
       setDuplicating(false);
@@ -720,7 +724,7 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
                   </span>
                 </td>
                 <td className={cell}>
-                  <Link href={withFrom(`/tracks/${tr.id}`, from)} className="flex items-center gap-2.5">
+                  <Link href={withFrom(`/tracks?id=${tr.id}`, from)} className="flex items-center gap-2.5">
                     <TrackCover track={tr} className="h-8 w-8" iconSize={14} />
                     <span className="min-w-0">
                       <span className="block max-w-[18rem] truncate font-medium hover:text-fg-strong">{tr.title ?? <span className="italic text-faint">{t.library.untitledTrack}</span>}</span>
@@ -819,6 +823,6 @@ function PlaylistDetailInner({ params }: { params: Promise<{ id: string }> }) {
   );
 }
 
-export default function PlaylistDetail(props: { params: Promise<{ id: string }> }) {
-  return <Suspense><PlaylistDetailInner {...props} /></Suspense>;
+export default function PlaylistDetail() {
+  return <Suspense><PlaylistDetailInner /></Suspense>;
 }
