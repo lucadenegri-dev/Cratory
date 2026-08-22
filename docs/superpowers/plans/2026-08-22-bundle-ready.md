@@ -492,6 +492,25 @@ def test_dotenv_letto_dalla_cartella_dei_dati(tmp_path):
     assert esito.stdout.strip() == "WARNING"
 
 
+def test_load_dotenv_popola_l_ambiente_dalla_cartella_dei_dati(tmp_path):
+    """`load_dotenv` in main.py ed `env_file` in config.py sono due meccanismi
+    diversi con due effetti diversi: il primo riempie os.environ — da cui
+    organize/integrations/acoustid.py legge FPCALC direttamente — il secondo i
+    campi di Settings. Coprire il secondo non copre il primo, e questo test e'
+    l'unico che importa `app.main`."""
+    (tmp_path / ".env").write_text("FPCALC=/percorso/finto/fpcalc\n")
+    ambiente = {k: v for k, v in os.environ.items() if k != "FPCALC"}
+    ambiente["CRATORY_DATA_DIR"] = str(tmp_path)
+    esito = subprocess.run(
+        [sys.executable, "-c",
+         "import app.main, os; print('FPCALC=' + str(os.environ.get('FPCALC')))"],
+        cwd=str(paths.BACKEND_DIR), env=ambiente,
+        capture_output=True, text=True,
+    )
+    assert esito.returncode == 0, esito.stderr
+    assert "FPCALC=/percorso/finto/fpcalc" in esito.stdout
+
+
 def test_avvio_con_cartella_non_scrivibile_dice_perche(monkeypatch, tmp_path):
     """Il messaggio è tutto ciò che l'utente di un'app impacchettata vedrà."""
     bloccata = tmp_path / "sola-lettura"
@@ -514,7 +533,7 @@ def test_avvio_con_cartella_non_scrivibile_dice_perche(monkeypatch, tmp_path):
 cd backend && /Users/lucadenegri/Develop/DJProject01/backend/.venv/bin/python -m pytest tests/test_avvio_data_dir.py -q
 ```
 
-Atteso: 2 FAIL — il primo perché `.env` è ancora letto da `backend/`, il secondo perché nessuno controlla la scrivibilità e l'avvio procede senza sollevare.
+Atteso: **1 FAIL** — `test_avvio_con_cartella_non_scrivibile_dice_perche`, perche' nessuno controlla la scrivibilita' e l'avvio procede senza sollevare. `test_dotenv_letto_dalla_cartella_dei_dati` passa gia': copre `env_file`, che il Task 2 ha gia' riancorato. `test_load_dotenv_popola_l_ambiente_dalla_cartella_dei_dati` invece fallisce solo dopo lo Step 3, ed e' l'unico che copre davvero la riga di `main.py`: i due meccanismi sono distinti.
 
 - [ ] **Step 3: Leggere il `.env` dalla cartella dei dati**
 
