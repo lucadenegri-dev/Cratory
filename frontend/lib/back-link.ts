@@ -57,8 +57,11 @@ export function useBackLink(fallback: BackLinkFallback): BackLink {
   return resolveBackLink(searchParams.get("from"), fallback, t.nav);
 }
 
-/** Appende `?from=<origine>` a un link verso una pagina di dettaglio.
- *  `href` non deve avere già una query (i link verso i dettagli non ne hanno). */
+/** Appende `from=<origine>` a un link verso una pagina di dettaglio.
+ *  Il separatore dipende da `href`: dopo il passaggio delle rotte di dettaglio
+ *  alla query string (`/tracks?id=42`) un `?` fisso produrrebbe un secondo
+ *  punto interrogativo, e `id` varrebbe letteralmente "42?from=%2Flibrary". */
 export function withFrom(href: string, from: string): string {
-  return `${href}?from=${encodeURIComponent(from)}`;
+  const separatore = href.includes("?") ? "&" : "?";
+  return `${href}${separatore}from=${encodeURIComponent(from)}`;
 }

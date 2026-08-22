@@ -61,3 +61,21 @@ describe("withFrom", () => {
     );
   });
 });
+
+describe("withFrom con un href che ha già una query", () => {
+  it("usa & invece di ? quando la query c'è già", () => {
+    expect(withFrom("/tracks?id=42", "/library")).toBe("/tracks?id=42&from=%2Flibrary");
+  });
+
+  it("usa ancora ? quando la query non c'è", () => {
+    expect(withFrom("/library", "/")).toBe("/library?from=%2F");
+  });
+
+  it("non ri-codifica un href che contiene già un valore percent-encoded", () => {
+    // /labels?label=Ostgut%20Ton: il valore è già codificato dal chiamante e
+    // withFrom non deve toccarlo, solo appendere il proprio parametro.
+    expect(withFrom("/labels?label=Ostgut%20Ton", "/labels")).toBe(
+      "/labels?label=Ostgut%20Ton&from=%2Flabels",
+    );
+  });
+});
