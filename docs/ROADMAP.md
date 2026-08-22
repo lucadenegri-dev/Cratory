@@ -128,6 +128,17 @@ endpoints, `docs/API.md`.
   only in final review).
   First of the four sub-projects of the Tauri packaging work
   (`docs/superpowers/specs/2026-08-22-tauri-decomposizione-design.md`).
+- **Frontend without the Next proxy** (2026-08-22). The frontend exports
+  statically behind `CRATORY_STATIC_EXPORT=1`, which also drops `rewrites()` —
+  there is no Next server in a bundle to apply them. Both HTTP clients now
+  derive their base URL from one place (`lib/api/base.ts`), closing a
+  duplication the backlog already flagged: only one of the two had an override,
+  so half the app would have lost its calls. The five dynamic routes became
+  query strings (`/tracks?id=42`, `/playlists/detail?id=7`), because a dynamic
+  path segment cannot be statically exported — `generateStaticParams` over
+  arbitrary ids does not exist. Bookmarks to the old URLs break; on a
+  single-user personal app that was judged an acceptable price. Second of the
+  four sub-projects of the Tauri packaging work.
 
 ## Backlog
 
@@ -222,7 +233,7 @@ cleanup, and each was explicitly left alone this time.
   (`backend/app/routers/downloads.py`, `backend/app/routers/discovery.py`) where a
   `file_tags_for_track(db, x.id)` wrapper next to `backend/app/repositories.py:203`
   would do. Mechanical, cosmetic.
-- `frontend/app/playlists/[id]/page.tsx:588` renders
+- `frontend/app/playlists/detail/page.tsx:592` renders
   `new Date(ev.created_at).toLocaleString()` with no locale argument, so it follows
   the browser's system locale instead of the app's active language — same bug class
   already fixed in `frontend/lib/api/format.ts`

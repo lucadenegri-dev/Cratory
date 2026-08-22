@@ -8,6 +8,11 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Frontend without the Next proxy** (2026-08-22): `CRATORY_STATIC_EXPORT=1`
+  builds a static frontend with no `rewrites()`; one shared base URL feeds both
+  HTTP clients; the five detail routes read their id from the query string
+  instead of the path. Unset, `npm run dev` behaves exactly as before. Step two
+  of four toward a Tauri desktop build.
 - **Bundle-ready** (2026-08-22): the backend runs entirely from a read-only code
   directory. `CRATORY_DATA_DIR` — same seam shape as `CRATORY_BIN_DIR` and
   `CRATORY_VERSION` — redirects database, logs, caches, managed binaries,

@@ -935,6 +935,19 @@ organize, settings, setup); the
 typed API client is split by area under `lib/api/`, with `lib/organize/api.ts` for the
 Organize surface. `docs/DESIGN.md` holds the design system.
 
+**Two build modes, one frontend.** `CRATORY_STATIC_EXPORT=1` turns on
+`output: "export"` and omits `rewrites()`; without it nothing changes. The
+proxy is not merely unused in export mode — there is no Next server to run it —
+so it is omitted rather than left in place describing something that cannot
+happen. The five detail pages take their id from the query string
+(`/tracks?id=42`) rather than a path segment, because static export requires
+`generateStaticParams` and no such list exists for arbitrary ids. Values from
+`useSearchParams()` arrive already decoded once: decoding them again corrupts
+anything containing `%`, `&` or `#`, which is why `labels` lost its
+`decodeURIComponent` when it moved. `useSearchParams()` also requires a
+`<Suspense>` boundary, which is why every detail page is a thin wrapper around
+an inner component.
+
 ## Persistence and migrations
 
 SQLite, one file:
