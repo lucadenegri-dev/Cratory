@@ -23,8 +23,11 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=paths.DATA_DIR / ".env", extra="ignore")
 
     database_url: str = DEFAULT_DATABASE_URL
-    # Origini CORS ammesse (lista separata da virgola). 3000 = dev normale, 3001 = preview.
-    frontend_origin: str = "http://localhost:3000,http://localhost:3001"
+    # Origini CORS ammesse (lista separata da virgola). 3000 = dev normale,
+    # 3001 = preview, tauri://localhost = il webview del bundle desktop, dove
+    # la pagina non arriva da un server http e senza il quale non riesce una
+    # sola chiamata. Il valore per macOS va confermato sul webview reale.
+    frontend_origin: str = "http://localhost:3000,http://localhost:3001,tauri://localhost"
     log_level: str = "INFO"
     # Libreria canonica su disco (disk-first): radice indicizzata da /api/library/index.
     # Vuoto = indicizzazione disattiva. I file qui dentro SONO la libreria posseduta.
