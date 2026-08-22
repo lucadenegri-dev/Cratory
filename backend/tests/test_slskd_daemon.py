@@ -345,5 +345,5 @@ def test_config_path_esplicitamente_vuoto_non_risolve_alla_cwd(monkeypatch):
     controllo dell'app. Deve degradare a un percorso fisso sotto data/."""
     monkeypatch.setattr(sd.runtime_settings, "slskd_config_path", lambda: "")
     percorso = sd.default_config_path()
-    assert percorso == sd.BACKEND_DIR / "data" / "slskd.yml"
+    assert percorso == sd.paths.DATA_DIR / "data" / "slskd.yml"
     assert percorso != sd.Path("")

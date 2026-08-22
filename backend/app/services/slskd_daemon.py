@@ -21,8 +21,7 @@ from pathlib import Path
 import httpx
 from ruamel.yaml import YAML
 
-from app.core import runtime_settings
-from app.core.config import BACKEND_DIR
+from app.core import paths, runtime_settings
 from app.services import binary_installer
 
 log = logging.getLogger(__name__)
@@ -88,10 +87,17 @@ def default_config_path() -> Path:
     in quel caso il setting risolto è `""`, e `Path("")` risolverebbe alla
     cwd del processo — un posto che dipende da dove è stato lanciato
     uvicorn, non da dove sta l'app. Si degrada invece a un percorso fisso
-    sotto `data/`, come `pid_file()`/`log_file()`."""
+    sotto `data/`, come `pid_file()`/`log_file()` — questa è la cartella dati
+    di Cratory (`paths.DATA_DIR`), non quella dell'utente per slskd stesso, che
+    resta `slskd_config_path()` così com'è quando valorizzata: quel file è di
+    un altro programma, fuori dal seam `CRATORY_DATA_DIR`.
+
+    `paths.DATA_DIR` letto come attributo del modulo, non importato per nome:
+    un nome importato si legherebbe una volta sola all'import e non
+    risponderebbe più a `monkeypatch.setattr(paths, "DATA_DIR", ...)`."""
     valore = runtime_settings.slskd_config_path()
     if not valore:
-        return BACKEND_DIR / "data" / "slskd.yml"
+        return paths.DATA_DIR / "data" / "slskd.yml"
     return Path(valore)
 
 
@@ -115,7 +121,7 @@ def _cartella_download_default() -> Path:
     lasciato vuoto): deve pur esistere qualcosa da scrivere in slskd.yml.
     Stesso trattamento di `pid_file()`/`log_file()`/`default_config_path()`,
     sotto la cartella dati dell'app."""
-    return BACKEND_DIR / "data" / "slskd-downloads"
+    return paths.DATA_DIR / "data" / "slskd-downloads"
 
 
 @dataclass(frozen=True)
@@ -209,11 +215,11 @@ def _scrivi_backup(config_path: Path, contenuto: str, modo: int) -> None:
 
 
 def pid_file() -> Path:
-    return BACKEND_DIR / "data" / "slskd.pid"
+    return paths.DATA_DIR / "data" / "slskd.pid"
 
 
 def log_file() -> Path:
-    return BACKEND_DIR / "data" / "slskd.log"
+    return paths.DATA_DIR / "data" / "slskd.log"
 
 
 def is_reachable(client: httpx.Client | None = None) -> bool:
@@ -429,6 +435,11 @@ def start(client: httpx.Client | None = None) -> dict:
         raise NotInstalled("slskd non è installato nella cartella dell'app")
 
     config = default_config_path()
+    # La cartella dati di Cratory può non esistere ancora: se `slskd_config_path`
+    # punta a un file dell'utente (non al fallback sotto data/), niente altro
+    # l'ha creata prima d'ora. Senza questo mkdir, un clone fresco fallirebbe
+    # qui con un FileNotFoundError grezzo al primo avvio di slskd.
+    log_file().parent.mkdir(parents=True, exist_ok=True)
     with log_file().open("ab") as out:
         proc = subprocess.Popen(
             [str(exe), "--config", str(config)],
