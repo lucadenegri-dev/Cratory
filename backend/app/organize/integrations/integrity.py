@@ -46,8 +46,16 @@ def _subprocess_runner(path: str, timeout: int) -> tuple[int, str]:
     # -map 0:a:0 = decodifica SOLO lo stream audio (ignora le copertine
     # incorporate); niente -xerror = decodifica tutto il file, così un
     # intoppo transitorio non aborta il controllo.
+    #
+    # Risolve ffmpeg con lo stesso seam di `ffmpeg_available()` sopra: prima
+    # questa funzione invocava "ffmpeg" nudo (solo PATH), disaccordandosi dal
+    # controllo di disponibilità che invece consulta anche CRATORY_BIN_DIR —
+    # il job risultava "disponibile" e falliva comunque all'uso.
+    ffmpeg = system_probe.resolve_binary("ffmpeg")
+    if ffmpeg is None:
+        raise FileNotFoundError("ffmpeg non trovato (ne' env override, ne' CRATORY_BIN_DIR, ne' PATH).")
     proc = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", path, "-map", "0:a:0", "-f", "null", "-"],
+        [ffmpeg, "-v", "error", "-i", path, "-map", "0:a:0", "-f", "null", "-"],
         capture_output=True, text=True, timeout=timeout)
     return proc.returncode, proc.stderr
 

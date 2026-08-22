@@ -16,6 +16,8 @@ from pathlib import Path
 
 import mutagen
 
+from app.services import system_probe
+
 logger = logging.getLogger(__name__)
 
 AUDIO_EXTENSIONS = {
@@ -147,9 +149,16 @@ def decode_pcm_bytes(path: str | Path, *, offset: float = 0.0, seconds: float = 
 
     Stessa pipeline di `audio_hash` (che resta intatta perché è identità-critica);
     qui il seek `-ss` permette di campionare finestre a metà/fine traccia (PR4).
+
+    Risolve ffmpeg tramite il seam unico (`system_probe.resolve_binary`): un
+    nome nudo qui cercherebbe solo nel PATH, disaccordandosi silenziosamente
+    dal probe del wizard che invece consulta anche CRATORY_BIN_DIR.
     """
+    ffmpeg = system_probe.resolve_binary("ffmpeg")
+    if ffmpeg is None:
+        raise LocalFilesError("ffmpeg non trovato: necessario per l'analisi audio dei file locali.")
     cmd = [
-        "ffmpeg", "-v", "error", "-ss", f"{offset}", "-i", str(path),
+        ffmpeg, "-v", "error", "-ss", f"{offset}", "-i", str(path),
         "-t", f"{seconds}", "-ac", "1", "-ar", "22050", "-f", "s16le", "-",
     ]
     try:
@@ -165,9 +174,13 @@ def audio_hash(path: str | Path, *, seconds: int = HASH_SECONDS) -> str:
     """SHA-256 dei primi `seconds` di audio decodificato (mono 22050 Hz s16le).
 
     Solleva LocalFilesError se ffmpeg manca o non riesce a decodificare il file.
+    Stesso seam di `decode_pcm_bytes` per la risoluzione del binario.
     """
+    ffmpeg = system_probe.resolve_binary("ffmpeg")
+    if ffmpeg is None:
+        raise LocalFilesError("ffmpeg non trovato: necessario per l'hash audio dei file locali.")
     cmd = [
-        "ffmpeg", "-v", "error", "-i", str(path),
+        ffmpeg, "-v", "error", "-i", str(path),
         "-t", str(seconds), "-ac", "1", "-ar", "22050", "-f", "s16le", "-",
     ]
     try:

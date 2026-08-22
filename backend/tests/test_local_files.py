@@ -12,13 +12,16 @@ import wave
 
 import pytest
 
+from app.integrations import local_files
 from app.integrations.local_files import (
     AUDIO_EXTENSIONS,
     LocalFilesError,
     audio_hash,
+    decode_pcm_bytes,
     read_cover,
     read_tags,
 )
+from app.services import system_probe as sp
 
 
 def _ffmpeg_encode(path, *, title=None, artist=None, freq=440, secs=1.0):
@@ -206,3 +209,92 @@ def test_read_audio_quality_returns_format(tmp_path):
     assert q["format"] == "wav"
     # il bitrate puo' essere None o un intero, ma la chiave esiste
     assert "bitrate" in q
+
+
+# --- Seam Tauri: audio_hash/decode_pcm_bytes devono risolvere ffmpeg con ----
+# --- resolve_binary, non invocarlo nudo (solo PATH) -------------------------
+#
+# Un'app lanciata dal Finder eredita il PATH minimo di launchd, dove ffmpeg
+# non c'e' (vive in /opt/homebrew/bin o, nel bundle, in Resources/bin). Il
+# probe del wizard usa gia' resolve_binary (vede CRATORY_BIN_DIR): se queste
+# funzioni invocano "ffmpeg" nudo, il wizard dice "presente" e l'hash/decode
+# falliscono comunque.
+
+
+def _finto_ffmpeg(tmp_path):
+    fake = tmp_path / "ffmpeg"
+    fake.write_text("#!/bin/sh\n")
+    return fake
+
+
+def test_audio_hash_usa_il_seam_per_risolvere_ffmpeg(tmp_path, monkeypatch):
+    fake = _finto_ffmpeg(tmp_path)
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+
+    catturato = {}
+
+    class _Esito:
+        stdout = b"\x00\x00" * 100
+
+    def _run_finto(cmd, **kwargs):
+        catturato["cmd"] = cmd
+        return _Esito()
+
+    monkeypatch.setattr(local_files.subprocess, "run", _run_finto)
+
+    audio_hash(tmp_path / "song.wav")
+
+    assert catturato["cmd"][0] == str(fake)
+
+
+def test_audio_hash_solleva_se_ffmpeg_non_risolvibile(tmp_path, monkeypatch):
+    """Senza un ffmpeg risolvibile (ne' PATH ne' CRATORY_BIN_DIR), deve
+    fallire con LocalFilesError PRIMA di invocare subprocess — mai un nome
+    nudo che ricadrebbe silenziosamente sul solo PATH."""
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))  # vuota: nessun ffmpeg dentro
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+
+    def _esplodi(cmd, **kwargs):
+        raise AssertionError("non doveva invocare subprocess senza un binario risolto")
+
+    monkeypatch.setattr(local_files.subprocess, "run", _esplodi)
+
+    with pytest.raises(LocalFilesError):
+        audio_hash(tmp_path / "song.wav")
+
+
+def test_decode_pcm_bytes_usa_il_seam_per_risolvere_ffmpeg(tmp_path, monkeypatch):
+    """Stesso seam di audio_hash, per decode_pcm_bytes (usato da audio_energy
+    per l'analisi energia dei file locali)."""
+    fake = _finto_ffmpeg(tmp_path)
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+
+    catturato = {}
+
+    class _Esito:
+        stdout = b"\x00\x00" * 100
+
+    def _run_finto(cmd, **kwargs):
+        catturato["cmd"] = cmd
+        return _Esito()
+
+    monkeypatch.setattr(local_files.subprocess, "run", _run_finto)
+
+    decode_pcm_bytes(tmp_path / "song.wav")
+
+    assert catturato["cmd"][0] == str(fake)
+
+
+def test_decode_pcm_bytes_solleva_se_ffmpeg_non_risolvibile(tmp_path, monkeypatch):
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+
+    def _esplodi(cmd, **kwargs):
+        raise AssertionError("non doveva invocare subprocess senza un binario risolto")
+
+    monkeypatch.setattr(local_files.subprocess, "run", _esplodi)
+
+    with pytest.raises(LocalFilesError):
+        decode_pcm_bytes(tmp_path / "song.wav")

@@ -12,6 +12,7 @@ Rate limit AcoustID: ~3 richieste/secondo (throttle a carico del chiamante).
 """
 
 import logging
+import os
 from typing import Any, Callable
 
 import httpx
@@ -76,9 +77,20 @@ def parse_lookup(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _default_fingerprinter(path: str) -> tuple[int, bytes | str]:
     """Fingerprint via pyacoustid (che invoca fpcalc). Import lazy: il pacchetto
-    serve solo col fingerprinting attivo."""
+    serve solo col fingerprinting attivo.
+
+    pyacoustid non accetta un percorso come argomento: internamente legge
+    `os.environ.get("FPCALC", "fpcalc")` per trovare il binario. Il seam va
+    quindi rispettato impostando la env PRIMA della chiamata, non passando un
+    path — stessa risoluzione di `fpcalc_available()` sopra (env override,
+    CRATORY_BIN_DIR, PATH), cosi' le due non possono piu' disaccordarsi su
+    quale fpcalc usare."""
     import acoustid as pyacoustid  # noqa: PLC0415
 
+    resolved = system_probe.resolve_binary("fpcalc", env_override="FPCALC")
+    if resolved is None:
+        raise FileNotFoundError("fpcalc non trovato (ne' env FPCALC, ne' CRATORY_BIN_DIR, ne' PATH).")
+    os.environ["FPCALC"] = resolved
     return pyacoustid.fingerprint_file(path)
 
 

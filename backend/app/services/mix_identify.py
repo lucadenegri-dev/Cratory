@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from app.integrations.shazam import AudioRecognizer, RecognizerError
+from app.services import system_probe
 
 logger = logging.getLogger(__name__)
 
@@ -348,10 +349,21 @@ def probe_duration(audio_path: str) -> int | None:
 
     Fallback per i mix di cui yt-dlp non espone la durata (A18): senza, il
     campionamento vedrebbe durata 0 -> un solo segmento -> tracklist di 1 brano.
+
+    ffprobe e' risolto tramite lo stesso seam di ffmpeg (`system_probe.
+    resolve_binary`), ma NON e' un componente del registry e il bundle Tauri
+    (`costruisci_binari.py`) oggi rilocalizza solo l'eseguibile `ffmpeg`, non
+    `ffprobe`: nell'app impacchettata questa resolve tornera' quasi sempre
+    None (CRATORY_BIN_DIR non lo contiene, il PATH di un lancio da Finder e'
+    minimo) e questo fallback restera' inattivo — comportamento gia' previsto
+    ("None se non determinabile"), non un errore nuovo introdotto qui.
     """
+    ffprobe = system_probe.resolve_binary("ffprobe")
+    if ffprobe is None:
+        return None
     try:
         out = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+            [ffprobe, "-v", "error", "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1:nokey=1", audio_path],
             capture_output=True, text=True, check=True, timeout=30,
         ).stdout.strip()
@@ -373,9 +385,16 @@ def extract_segment(audio_path: str, offset: int, out_path: str,
                     length: int = SEGMENT_LENGTH, rate: float = 1.0) -> None:
     """Estrae un segmento WAV mono 16kHz a partire da `offset` (per il recognizer).
 
-    `rate` != 1.0 applica la compensazione pitch (vedi `_pitch_filter`)."""
+    `rate` != 1.0 applica la compensazione pitch (vedi `_pitch_filter`). ffmpeg
+    e' risolto tramite `system_probe.resolve_binary`: un nome nudo cercherebbe
+    solo nel PATH, disaccordandosi dal controllo `_deps_available()` che il
+    router consulta prima di avviare il job (stesso seam, altrimenti il
+    wizard direbbe "disponibile" e il job fallirebbe comunque)."""
+    ffmpeg = system_probe.resolve_binary("ffmpeg")
+    if ffmpeg is None:
+        raise RuntimeError("ffmpeg non trovato: necessario per estrarre i segmenti audio del mix.")
     subprocess.run(
-        ["ffmpeg", "-nostdin", "-y", "-loglevel", "error",
+        [ffmpeg, "-nostdin", "-y", "-loglevel", "error",
          "-ss", str(offset), "-t", str(length), "-i", audio_path,
          "-ac", "1", "-ar", "16000", *_pitch_filter(rate), "-vn", "-f", "wav", out_path],
         check=True,

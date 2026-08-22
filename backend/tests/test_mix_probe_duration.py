@@ -6,8 +6,10 @@ marcata "done". Il WAV di test e' generato con la stdlib (wave), niente rete.
 import wave
 from pathlib import Path
 
-from app.services import mix_identify
-from app.services.mix_identify import SetMeta, identify_set, plan_offsets, probe_duration
+import pytest
+
+from app.services import mix_identify, system_probe as sp
+from app.services.mix_identify import SetMeta, extract_segment, identify_set, plan_offsets, probe_duration
 
 
 def _make_wav(path: Path, seconds: int, rate: int = 8000) -> None:
@@ -51,3 +53,77 @@ def test_identify_set_falls_back_to_probe_when_no_duration(tmp_path, monkeypatch
     assert seen["duration"] == 600, \
         "senza durata yt-dlp deve campionare la durata da ffprobe, non 0"
     assert out_meta.duration_seconds == 600, "la durata ripiegata va salvata nel meta"
+
+
+# --- Seam Tauri: ffprobe/ffmpeg devono passare da resolve_binary ------------
+#
+# Un'app lanciata dal Finder eredita il PATH minimo di launchd (ffmpeg/ffprobe
+# non ci sono). Se probe_duration/extract_segment invocano i nomi nudi invece
+# di risolverli, il gate _deps_available() del router (che usa il seam) dice
+# "disponibile" e il job fallisce comunque all'uso.
+
+
+def test_probe_duration_usa_il_seam_per_risolvere_ffprobe(tmp_path, monkeypatch):
+    fake = tmp_path / "ffprobe"
+    fake.write_text("#!/bin/sh\n")
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+
+    catturato = {}
+
+    class _Esito:
+        stdout = "3.0"
+
+    def _run_finto(cmd, **kwargs):
+        catturato["cmd"] = cmd
+        return _Esito()
+
+    monkeypatch.setattr(mix_identify.subprocess, "run", _run_finto)
+
+    assert probe_duration("qualsiasi.wav") == 3
+    assert catturato["cmd"][0] == str(fake)
+
+
+def test_probe_duration_none_se_ffprobe_non_risolvibile(tmp_path, monkeypatch):
+    """Senza un ffprobe risolvibile deve tornare None (comportamento gia'
+    previsto per "non determinabile"), senza mai ricadere su un nome nudo."""
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))  # vuota
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+
+    def _esplodi(cmd, **kwargs):
+        raise AssertionError("non doveva invocare subprocess senza un binario risolto")
+
+    monkeypatch.setattr(mix_identify.subprocess, "run", _esplodi)
+
+    assert probe_duration("qualsiasi.wav") is None
+
+
+def test_extract_segment_usa_il_seam_per_risolvere_ffmpeg(tmp_path, monkeypatch):
+    fake = tmp_path / "ffmpeg"
+    fake.write_text("#!/bin/sh\n")
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+
+    catturato = {}
+
+    def _run_finto(cmd, **kwargs):
+        catturato["cmd"] = cmd
+
+    monkeypatch.setattr(mix_identify.subprocess, "run", _run_finto)
+
+    extract_segment("in.wav", 0, str(tmp_path / "out.wav"))
+
+    assert catturato["cmd"][0] == str(fake)
+
+
+def test_extract_segment_solleva_se_ffmpeg_non_risolvibile(tmp_path, monkeypatch):
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+
+    def _esplodi(cmd, **kwargs):
+        raise AssertionError("non doveva invocare subprocess senza un binario risolto")
+
+    monkeypatch.setattr(mix_identify.subprocess, "run", _esplodi)
+
+    with pytest.raises(RuntimeError):
+        extract_segment("in.wav", 0, str(tmp_path / "out.wav"))

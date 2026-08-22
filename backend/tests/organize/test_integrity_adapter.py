@@ -1,4 +1,8 @@
+import pytest
+
+from app.organize.integrations import integrity
 from app.organize.integrations.integrity import IntegrityResult, check_file, parse_result
+from app.services import system_probe as sp
 
 
 def test_parse_clean_decode_is_ok():
@@ -55,3 +59,50 @@ def test_check_file_timeout_is_corrupt():
     r = check_file("/whatever.flac", runner=fake_runner)
     assert r.ok is False
     assert r.detail == "timeout"
+
+
+# --- Seam Tauri: _subprocess_runner (l'esecutore reale, non iniettato) deve -
+# --- risolvere ffmpeg con resolve_binary, non invocarlo nudo ----------------
+#
+# ffmpeg_available() (sopra, testato in test_system_probe.py) usa gia' il
+# seam per dire se il controllo integrita' e' disponibile: se l'esecutore
+# vero invoca "ffmpeg" nudo invece del percorso risolto, il job si annuncia
+# disponibile (CRATORY_BIN_DIR) e fallisce comunque all'uso (PATH minimo di
+# un'app lanciata dal Finder).
+
+
+def test_subprocess_runner_usa_il_seam_per_risolvere_ffmpeg(tmp_path, monkeypatch):
+    fake = tmp_path / "ffmpeg"
+    fake.write_text("#!/bin/sh\n")
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+
+    catturato = {}
+
+    class _Esito:
+        returncode = 0
+        stderr = ""
+
+    def _run_finto(cmd, **kwargs):
+        catturato["cmd"] = cmd
+        return _Esito()
+
+    monkeypatch.setattr(integrity.subprocess, "run", _run_finto)
+
+    rc, stderr = integrity._subprocess_runner("/whatever.flac", 10)
+
+    assert catturato["cmd"][0] == str(fake)
+    assert (rc, stderr) == (0, "")
+
+
+def test_subprocess_runner_solleva_se_ffmpeg_non_risolvibile(tmp_path, monkeypatch):
+    monkeypatch.setenv(sp.BIN_DIR_ENV, str(tmp_path))  # vuota: nessun ffmpeg dentro
+    monkeypatch.setattr(sp.shutil, "which", lambda name: None)
+
+    def _esplodi(cmd, **kwargs):
+        raise AssertionError("non doveva invocare subprocess senza un binario risolto")
+
+    monkeypatch.setattr(integrity.subprocess, "run", _esplodi)
+
+    with pytest.raises(FileNotFoundError):
+        integrity._subprocess_runner("/whatever.flac", 10)
