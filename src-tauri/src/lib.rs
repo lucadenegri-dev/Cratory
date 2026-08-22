@@ -9,13 +9,15 @@ pub fn run() {
     // terminare un figlio che non e' mai partito.
     .manage(backend::BackendProcess::empty())
     .setup(|app| {
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
+      // Anche in release, di proposito. Un'app impacchettata che fallisce
+      // l'avvio senza scrivere una riga e' indiagnosticabile: l'utente vede
+      // un'icona che rimbalza e nient'altro, e chi la assiste non ha niente
+      // da leggere. Il plugin scrive in ~/Library/Logs/<identifier>/.
+      app.handle().plugin(
+        tauri_plugin_log::Builder::default()
+          .level(log::LevelFilter::Info)
+          .build(),
+      )?;
 
       // La finestra principale parte nascosta (vedi "visible": false in
       // tauri.conf.json) e viene mostrata solo da `avvia_e_attendi` dopo che

@@ -132,8 +132,39 @@ fn http_get(client: &reqwest::blocking::Client, url: &str, timeout: Duration) ->
 /// cwd, variabili d'ambiente sul processo figlio -- e' gia' tutto qui: il
 /// Task 5 cambia solo da dove arrivano questi due valori, non la forma del
 /// resto di questo modulo.
-fn python_command() -> &'static str {
-    "python3"
+/// In sviluppo non c'e' nessun runtime assemblato: si usa il python3 del
+/// PATH, o del venv attivato nella shell da cui parte `tauri dev`.
+#[cfg(debug_assertions)]
+fn python_command(_app: &AppHandle) -> PathBuf {
+    PathBuf::from("python3")
+}
+
+/// Nel bundle si usa l'interprete che il bundle si porta dietro, MAI il
+/// `python3` del PATH.
+///
+/// Un'app lanciata dal Finder non eredita l'ambiente di una shell: il suo
+/// PATH e' quello minimo di `launchd`, dove `python3` e' il Python di
+/// sistema (3.9 su questa macchina) che non ha ne' fastapi ne' uvicorn.
+/// Spedire 195 MB di runtime e poi invocarne un altro e' esattamente il
+/// difetto che questa funzione esiste per impedire, e si manifesta come un
+/// backend che non parte senza dire perche'.
+///
+/// `resource_dir` qui non puo' essere `None`: `spawn_backend` viene chiamata
+/// solo dopo che `backend_dir` (che la risolve dalla stessa fonte) ha dato
+/// `Some`. Se lo diventasse sarebbe un bug nostro, quindi si segnala invece
+/// di ripiegare in silenzio su un interprete sbagliato.
+#[cfg(not(debug_assertions))]
+fn python_command(app: &AppHandle) -> PathBuf {
+    match resource_dir(app) {
+        Some(r) => r.join("python/bin/python3"),
+        None => {
+            log::error!(
+                "resource_dir() non risolvibile al momento dello spawn: \
+                 ripiego sul python3 di sistema, che quasi certamente non ha uvicorn."
+            );
+            PathBuf::from("python3")
+        }
+    }
 }
 
 /// `None` finche' non c'e' una cartella backend valida da cui partire:
@@ -255,7 +286,7 @@ fn env_value(path: Option<PathBuf>) -> String {
 /// sempre l'interprete con `-m` evita il problema perche' non passa mai da
 /// uno script con uno shebang cucito addosso.
 fn spawn_backend(app: &AppHandle, backend_dir: &Path) -> std::io::Result<Child> {
-    Command::new(python_command())
+    Command::new(python_command(app))
         .args([
             "-m",
             "uvicorn",
@@ -452,10 +483,13 @@ pub fn avvia_e_attendi(app: AppHandle) {
             fatal_error(
                 &app,
                 "Backend non avviato",
+                // Il suggerimento non nomina il PATH: in un bundle
+                // l'interprete e' quello dentro Resources, e mandare l'utente
+                // a controllare il PATH lo manderebbe a cercare la cosa
+                // sbagliata. Il percorso stampato dice gia' quale dei due e'.
                 &format!(
-                    "Impossibile lanciare '{} -m uvicorn': {err}. \
-                     E' installato e disponibile nel PATH?",
-                    python_command()
+                    "Impossibile lanciare '{} -m uvicorn': {err}",
+                    python_command(&app).display()
                 ),
             );
             return;
@@ -519,6 +553,23 @@ pub fn avvia_e_attendi(app: AppHandle) {
 
     match app.get_webview_window("main") {
         Some(window) => {
+            // Ricarica PRIMA di mostrare, e non e' un ritocco cosmetico.
+            //
+            // La finestra e' dichiarata in tauri.conf.json, quindi il webview
+            // esiste e carica la pagina all'avvio del processo -- cioe' mentre
+            // il backend sta ancora salendo. Le chiamate che la pagina fa in
+            // quel momento trovano la porta chiusa e falliscono con "Load
+            // failed". Chi ripete (il polling dei job) si riprende da solo;
+            // chi chiede una volta sola in un useEffect (le statistiche della
+            // home, l'elenco dei set) resta con l'errore in pagina per sempre,
+            // e l'utente vede un'app appena aperta che dichiara il backend
+            // spento mentre il backend risponde.
+            //
+            // Nascondere la finestra non basta: nasconde il sintomo, non
+            // impedisce le chiamate. Ricaricare qui e' il punto in cui il
+            // backend ha appena risposto, quindi la pagina riparte contro un
+            // backend vivo.
+            let _ = window.eval("window.location.reload()");
             let _ = window.show();
             // Senza `set_focus`, se l'utente ha cambiato app durante
             // l'attesa (fino a READY_TIMEOUT secondi) la finestra compare
