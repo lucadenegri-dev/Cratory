@@ -52,6 +52,16 @@ describe("sectionOf", () => {
   it("ignora la query quando riconosce la sezione", () => {
     expect(sectionOf("/library?artist=A")).toBe("library");
   });
+
+  it("riconosce le rotte di dettaglio nella loro forma attuale (a query string)", () => {
+    // Il `from` che le pagine di dettaglio si costruiscono da sole dopo il
+    // passaggio alla query string: se `detail` non risolvesse alla sezione
+    // giusta, il link "indietro" mostrerebbe l'etichetta del fallback.
+    expect(sectionOf("/playlists/detail?id=7")).toBe("playlists");
+    expect(sectionOf("/sets/detail?id=12")).toBe("sets");
+    expect(sectionOf("/labels/detail?label=Ostgut%20Ton")).toBe("labels");
+    expect(sectionOf("/shazam/detail?id=3")).toBe("shazam");
+  });
 });
 
 describe("withFrom", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 
 /* Asserzioni sul sorgente, non sul rendering: queste pagine sono grosse,
    montano provider e chiamano il backend al mount, quindi un render in vitest
@@ -10,6 +10,23 @@ import { resolve } from "node:path";
    verifica manuale in fondo a questo task. Stesso pattern di
    tests/organize-api-base.test.ts. */
 const leggi = (p: string) => readFileSync(resolve(__dirname, "..", p), "utf8");
+
+/** Ogni sorgente del frontend (esclusi i test e gli artefatti di build). */
+function sorgenti(): string[] {
+  const radice = resolve(__dirname, "..");
+  const salta = new Set(["node_modules", ".next", "out", "tests", "e2e", "test-results"]);
+  const out: string[] = [];
+  const scendi = (dir: string) => {
+    for (const voce of readdirSync(dir, { withFileTypes: true })) {
+      if (voce.name.startsWith(".") || salta.has(voce.name)) continue;
+      const pieno = join(dir, voce.name);
+      if (voce.isDirectory()) scendi(pieno);
+      else if (/\.tsx?$/.test(voce.name)) out.push(relative(radice, pieno));
+    }
+  };
+  scendi(radice);
+  return out;
+}
 
 describe("le rotte di dettaglio leggono l'id dalla query", () => {
   it("tracks non e' piu' un segmento dinamico", () => {
@@ -31,17 +48,18 @@ describe("le rotte di dettaglio leggono l'id dalla query", () => {
     }
   });
 
-  it("nessun link punta piu' a un segmento dinamico", () => {
-    const sorgenti = ["app/library/page.tsx", "app/transitions/page.tsx",
-                      "components/wishlist-row.tsx", "components/library-track-grid.tsx",
-                      "components/organize/files-table.tsx", "app/playlists/page.tsx",
-                      // Non nella tabella del brief: il player docked condiviso linka
-                      // anche lui al dettaglio traccia (cover/titolo della "now playing").
-                      "components/docked-player.tsx"];
-    for (const p of sorgenti) {
-      // Il template `/tracks/${...}` e `/playlists/${...}`: le rotte statiche
-      // /playlists/import-* non hanno interpolazione e non combaciano.
-      expect(leggi(p), p).not.toMatch(/["`]\/(?:tracks|playlists)\/\$\{/);
+  it("nessun link punta piu' a un segmento dinamico, in nessun sorgente", () => {
+    // Setaccio su tutto il frontend, non su un elenco di file compilato a mano:
+    // un elenco resta indietro appena qualcuno aggiunge un sito di link (e' gia'
+    // successo — components/docked-player.tsx mancava dal brief). Copre tutte e
+    // cinque le rotte, non solo le due del primo giro.
+    //
+    // Il pattern vuole l'apice/backtick SUBITO prima del segmento, quindi i path
+    // dell'API (`/api/tracks/${id}`) non combaciano, e le rotte statiche
+    // (/playlists/import-*) non hanno interpolazione.
+    const vietato = /["`]\/(?:tracks|playlists|sets|labels|shazam)\/\$\{/;
+    for (const p of sorgenti()) {
+      expect(leggi(p), p).not.toMatch(vietato);
     }
   });
 });
