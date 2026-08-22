@@ -152,8 +152,41 @@ disguised as the first.
 
 The check reads GitHub's public releases API, so **it only works once the
 repository is public**. While it is private, and until the first release exists,
-the button correctly reports that it cannot tell. Nothing is downloaded or
-installed: a packaged build will handle that, using the same releases.
+the button correctly reports that it cannot tell.
+
+**Nothing is downloaded or installed automatically.** There is no auto-updater
+yet: the button tells you a newer version exists, and installing it is a manual
+download. Wiring Tauri's updater needs a signing keypair, a published manifest
+and at least one existing release, and configuring an automatic update path that
+cannot yet be exercised end to end would be worse than not having one.
+
+To attach the artifact to a release:
+
+4. Build the bundle with `python3 src-tauri/scripts/assembla.py`.
+5. Attach `src-tauri/target/release/bundle/dmg/Cratory_<version>_aarch64.dmg`
+   to the GitHub release for that tag.
+
+## Opening it on another Mac
+
+The `.dmg` is signed ad-hoc, not with an Apple Developer certificate, and it is
+not notarized — that requires a paid Apple account this project does not have.
+
+**So the first attempt to open it will fail, and macOS will say the app is
+"damaged".** It is not damaged, and the download is not corrupt: that is simply
+the message macOS uses for software it cannot verify with Apple. Downloading it
+again will not help.
+
+To open it:
+
+1. Open the `.dmg` and drag **Cratory** into Applications.
+2. Try to open it. The warning appears; dismiss it.
+3. Go to **System Settings → Privacy & Security**, scroll to the security
+   section, and press **Open Anyway** next to the message about Cratory.
+4. Confirm once more. macOS remembers the decision; later launches are normal.
+
+On recent macOS versions the old right-click → Open shortcut no longer works for
+un-notarized apps, which is why the System Settings route is the one described
+here.
 
 ## Desktop bundle
 
@@ -215,5 +248,8 @@ file and links it to a track already in your library.
 
 Acquisition is a thin client over your own slskd instance: it hosts, shares and redistributes
 nothing. What you search for, what you download, and whether you have the right to it, is
-entirely your responsibility. No license file is included; this is a personal tool, not a
-package to depend on.
+entirely your responsibility. Cratory is licensed under the **AGPL-3.0** (see `LICENSE`),
+and that follows from a technical decision rather than a preference: the desktop bundle
+ships Essentia, which is AGPL-3.0, so the combined work inherits it. If you hand the
+`.dmg` to someone, you owe them the corresponding source. It remains a personal tool, not
+a package to depend on.
