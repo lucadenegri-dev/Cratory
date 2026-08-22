@@ -50,7 +50,10 @@ describe("pagina di dettaglio label senza parametro `label`", () => {
     // messaggio), quindi si legge il textContent del ruolo alert invece di
     // cercare la stringa esatta con getByText.
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toBe("⚠ Playlist non trovata");
+    // Il testo, non solo la presenza dell'alert: su una pagina etichetta
+    // "Playlist non trovata" sarebbe il sostantivo sbagliato sotto gli occhi
+    // dell'utente, ed e' esattamente cio' che un riuso di chiave produce.
+    expect(alert.textContent).toBe("⚠ Etichetta non trovata");
 
     // La libreria intera non e' mai stata richiesta ne' mostrata.
     expect(mocks.apiGet).not.toHaveBeenCalled();

@@ -1771,6 +1771,7 @@ export const en = {
     },
   },
   errors: {
+    label_not_found: "Label not found",
     playlist_not_found: "Playlist not found",
     soundcloud_playlist_not_syncable:
       "SoundCloud playlists can't be synced: use the selective likes flow or re-import the URL.",

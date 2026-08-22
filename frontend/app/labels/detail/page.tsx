@@ -79,12 +79,11 @@ function LabelDetailInner() {
   // un'intestazione vuota, come se fosse il contenuto di un'etichetta. Stesso
   // principio di app/tracks/page.tsx e app/sets/detail/page.tsx, dopo tutti
   // gli hook (l'ordine degli hook non puo' dipendere da un return anticipato).
-  // Nessuna chiave t.errors dedicata alla label (a differenza di
-  // traccia/set/playlist, una label non e' un record con un proprio id):
-  // riuso t.errors.playlist_not_found, la voce piu' vicina per forma — una
-  // collezione di tracce nominata, come questa pagina.
+  // Senza il parametro `label` la query perderebbe il filtro (apiGet scarta i
+  // parametri vuoti) e la pagina mostrerebbe l'intera libreria sotto un titolo
+  // vuoto: dato plausibile e sbagliato, che e' peggio di un errore.
   if (!label) {
-    const msg = t.errors.playlist_not_found;
+    const msg = t.errors.label_not_found;
     return <PageLayout title={t.labels.detail.pageTitle}><Alert tone="danger">⚠ {typeof msg === "string" ? msg : msg({})}</Alert></PageLayout>;
   }
 

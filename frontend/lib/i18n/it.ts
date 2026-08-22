@@ -1764,6 +1764,7 @@ export const it: Dictionary = {
     },
   },
   errors: {
+    label_not_found: "Etichetta non trovata",
     playlist_not_found: "Playlist non trovata",
     soundcloud_playlist_not_syncable:
       "Playlist SoundCloud non sincronizzabile: usa il flusso selettivo dei like o reimporta l'URL.",
