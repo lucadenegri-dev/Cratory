@@ -5,15 +5,22 @@ from pathlib import Path
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-LOG_DIR = BACKEND_DIR / "logs"
+from app.core import paths
+
+# Ri-esportata: core/version.py e services/system_probe.py la importano da qui.
+BACKEND_DIR = paths.BACKEND_DIR
+# Tutto ciò che si scrive sta sotto DATA_DIR, che senza CRATORY_DATA_DIR è
+# BACKEND_DIR: in sviluppo non cambia niente, in un bundle diverge.
+LOG_DIR = paths.DATA_DIR / "logs"
 LOG_FILE = LOG_DIR / "djassistant.log"
-DEFAULT_DATABASE_PATH = BACKEND_DIR / "data" / "djassistant.db"
+DEFAULT_DATABASE_PATH = paths.DATA_DIR / "data" / "djassistant.db"
 DEFAULT_DATABASE_URL = f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore")
+    # Il .env segue i dati, non il codice: in un bundle `backend/` è di sola
+    # lettura e l'utente non può metterne uno lì dentro.
+    model_config = SettingsConfigDict(env_file=paths.DATA_DIR / ".env", extra="ignore")
 
     database_url: str = DEFAULT_DATABASE_URL
     # Origini CORS ammesse (lista separata da virgola). 3000 = dev normale, 3001 = preview.
@@ -95,25 +102,27 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def normalize_database_url(cls, value: str) -> str:
-        """SQLite locale sempre relativo a backend/, mai alla cwd del processo."""
+        """SQLite locale sempre relativo alla cartella dei dati, mai alla cwd."""
         if not value.startswith("sqlite:///") or value == "sqlite:///:memory:":
             return value
         raw_path = value.removeprefix("sqlite:///")
         db_path = Path(raw_path)
         if not db_path.is_absolute():
-            db_path = BACKEND_DIR / db_path
+            db_path = paths.DATA_DIR / db_path
         return f"sqlite:///{db_path.resolve().as_posix()}"
 
     @field_validator("cover_cache_dir", "thumb_cache_dir", "bin_dir")
     @classmethod
     def _cache_dir_assoluta(cls, value: str) -> str:
-        """Path relativo risolto rispetto a backend/, mai alla cwd del processo:
-        stesso difetto che database_url aveva prima del suo validator."""
+        """Path relativo risolto rispetto alla cartella dei dati, mai alla cwd
+        del processo: stesso difetto che database_url aveva prima del suo
+        validator. `paths.DATA_DIR` letto come attributo, non importato: un
+        nome importato si legherebbe una volta sola all'import."""
         if not value:
             return value
         path = Path(value)
         if not path.is_absolute():
-            path = BACKEND_DIR / path
+            path = paths.DATA_DIR / path
         return path.resolve().as_posix()
 
 
