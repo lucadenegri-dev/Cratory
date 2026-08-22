@@ -288,10 +288,16 @@ def assembla() -> None:
     print("--- tauri build ---")
     _esegui_streaming(["npm", "run", "tauri:build"], cwd=_RADICE_REPO / "frontend")
 
-    app = next(iter((_RADICE_REPO / "src-tauri" / "target").glob("**/Cratory.app")), None)
+    # Glob ristretto a `release/**`, non `**` su tutto `target/`: quest'ultimo
+    # e' ordine del filesystem, non "il bundle appena costruito" -- un
+    # Cratory.app di debug (target/debug/bundle/...) rimasto da una build
+    # precedente potrebbe finire riportato al posto di quello release appena
+    # prodotto da 'tauri build' qui sopra.
+    app = next(iter((_RADICE_REPO / "src-tauri" / "target").glob("release/**/Cratory.app")), None)
     if app is None:
         raise RuntimeError(
-            "'tauri build' e' uscito con successo ma nessun Cratory.app si trova sotto src-tauri/target/."
+            "'tauri build' e' uscito con successo ma nessun Cratory.app si trova sotto "
+            "src-tauri/target/release/."
         )
     print(f"Fatto: {app} ({_dimensione(app)}).")
 
