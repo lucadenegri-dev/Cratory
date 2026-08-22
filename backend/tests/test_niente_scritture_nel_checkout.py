@@ -21,6 +21,14 @@ Subprocess e non monkeypatch: `settings` e `DATA_DIR` sono singleton costruiti
 a import-time, quindi cambiare la variabile dentro il processo di pytest non
 rifà i calcoli. Il subprocess prova il percorso d'avvio vero, che è poi quello
 che eseguirà Tauri.
+
+Attenzione se gira `uvicorn --reload` sulla porta 8000 (il flusso di sviluppo
+documentato) mentre questo test è in esecuzione: la fotografia osserva
+*l'intero* checkout, compresi `logs/djassistant.log` e `data/djassistant.db`,
+che un server di sviluppo vero scrive per conto suo in parallelo. Un rosso che
+nomina un file che il subprocess di questo test non ha mai toccato non è una
+regressione: è quel server concorrente. Fermarlo e rilanciare, non inseguire
+il fantasma.
 """
 import os
 import subprocess
