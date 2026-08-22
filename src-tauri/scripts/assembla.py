@@ -13,6 +13,10 @@ perche' `tauri.conf.json` deve poter puntare a un percorso fisso in
 quindi lo staging non rischia di finire in un commit.
 
 In ordine:
+    0. Preflight (`_prerequisiti_ffmpeg`, importato da `costruisci_binari.py`):
+       Homebrew/ffmpeg installati, otool/install_name_tool/codesign sul PATH.
+       Fatto qui, per primo, cosi' una macchina senza i prerequisiti fallisce
+       in pochi secondi invece che dopo i ~5 minuti del passo 2.
     1. Build del frontend in export statico (`_costruisci_frontend`): vedi
        li' per il perche' `NEXT_PUBLIC_API_URL` va passata al comando di
        build e non all'ambiente del guscio.
@@ -52,6 +56,16 @@ from pathlib import Path
 _RADICE_REPO = Path(__file__).resolve().parents[2]
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 _STAGING = _RADICE_REPO / "src-tauri" / "target" / "staging"
+
+# Import diretto (non subprocess) del preflight di costruisci_binari.py: lo
+# stesso script gira comunque piu' avanti (passo 3, via subprocess, per
+# costruire davvero i binari), ma qui serve chiamare SOLO il controllo, prima
+# di spendere ~5 minuti nel runtime Python (passo 2). `_SCRIPTS_DIR` e' gia'
+# `sys.path[0]` quando questo file gira come script principale, ma lo si
+# inserisce comunque esplicitamente per non dipendere da quel dettaglio
+# implicito se in futuro questo modulo venisse importato da altrove.
+sys.path.insert(0, str(_SCRIPTS_DIR))
+from costruisci_binari import _prerequisiti_ffmpeg  # noqa: E402
 
 # Cosa NON copiare di backend/app nello staging: dati di sviluppo e
 # artefatti, non parte del bundle che l'utente riceve. tests/, data/ e
@@ -240,6 +254,15 @@ def _dimensione(cartella: Path) -> str:
 
 
 def assembla() -> None:
+    # Preflight PRIMA di tutto il resto: senza Homebrew/ffmpeg/Xcode Command
+    # Line Tools su questa macchina, costruisci_binari.py (passo 3) fallira'
+    # comunque -- ma solo dopo che il passo 2 (costruisci_runtime.py) ha gia'
+    # speso circa 5 minuti a scaricare e installare il runtime Python. Con
+    # questo controllo qui, in testa, una macchina senza i prerequisiti
+    # fallisce in pochi secondi invece che dopo il runtime.
+    print("--- preflight (Homebrew/ffmpeg/Xcode Command Line Tools) ---")
+    _prerequisiti_ffmpeg()
+
     _STAGING.mkdir(parents=True, exist_ok=True)
 
     _costruisci_frontend()
