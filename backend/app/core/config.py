@@ -132,7 +132,9 @@ _LOG_FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 
 
 def setup_logging() -> None:
-    """Logging su console + file rotante in backend/logs/. Idempotente."""
+    """Logging su console + file rotante in `LOG_DIR` (sotto `DATA_DIR`, non
+    più necessariamente `backend/logs/`: coincidono solo senza
+    `CRATORY_DATA_DIR`). Idempotente."""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     level = getattr(logging, settings.log_level.upper(), logging.INFO)
     formatter = logging.Formatter(_LOG_FORMAT)

@@ -106,6 +106,12 @@ def managed_bin_dir() -> Path:
 
     La radice dei percorsi relativi è la cartella dei dati, non quella del
     codice: in un bundle l'installer non potrebbe scrivere dentro `backend/`.
+
+    Import locale non per evitare un ciclo — a questo punto `app.core.config`
+    è già caricato comunque, perché questo stesso modulo importa
+    `app.core.runtime_settings` a livello di modulo, che a sua volta importa
+    `config` — ma perché resta innocuo e coerente con lo stile del resto del
+    file.
     """
     from app.core import paths
     from app.core.config import settings
