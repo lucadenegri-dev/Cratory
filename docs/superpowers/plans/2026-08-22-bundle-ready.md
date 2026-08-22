@@ -763,8 +763,11 @@ Creare `backend/tests/test_niente_scritture_nel_checkout.py`:
 """Con CRATORY_DATA_DIR impostata, sotto backend/ non compare niente di nuovo.
 
 Non è la somma dei test precedenti: quelli verificano cinque percorsi noti,
-questo verifica la proprietà. È l'unico che si accorge di un sesto punto di
-scrittura aggiunto in futuro senza riancorarlo.
+questo fotografa l'intero albero, quindi si accorge anche di una riscrittura
+silenziosa. Resta però una guardia di regressione sui percorsi che lo script
+d'esercizio mette in moto esplicitamente, non un rilevatore automatico di un
+sesto punto mai enumerato lì dentro: chi lo aggiunge deve estendere anche lo
+script, o il test resta verde senza vederlo.
 
 Subprocess e non monkeypatch: `settings` e `DATA_DIR` sono singleton costruiti
 a import-time, quindi cambiare la variabile dentro il processo di pytest non
@@ -919,8 +922,9 @@ kill %1 2>/dev/null; rm -rf "$HOME/Library/Application Support/Cratory-prova"
 git add backend/tests/test_niente_scritture_nel_checkout.py
 git commit -m "test(paths): l'invariante e' che il checkout resti intatto, non che i cinque percorsi combacino
 
-Un sesto punto di scrittura aggiunto senza riancorarlo fa fallire questo test;
-un confronto fra cinque percorsi noti passerebbe contento."
+Un sesto punto di scrittura resta invisibile a questo test finche' non lo si
+aggiunge anche allo script d'esercizio; un confronto fra cinque percorsi noti
+passerebbe comunque contento."
 ```
 
 ---
@@ -968,8 +972,12 @@ Nella sezione «Current state», dopo il punto «Guided setup», aggiungere:
   `DATA_DIR` (where the writes go), with `CRATORY_DATA_DIR` selecting the
   second and everything unchanged when it is unset. An invariant test starts
   the app in a subprocess with the variable set and asserts that nothing new
-  appears under `BACKEND_DIR` — the property, not a list of five known paths.
-  First of the four sub-projects of the Tauri packaging work
+  appears under `BACKEND_DIR` — a regression guard over the paths the exercise
+  script touches explicitly, not an automatic detector of one left out;
+  whoever adds a new write site has to extend the script too, or the test
+  stays green while missing it (as it did with four slskd anchors, caught
+  only in final review). First of the four sub-projects of the Tauri
+  packaging work
   (`docs/superpowers/specs/2026-08-22-tauri-decomposizione-design.md`).
 ```
 

@@ -121,7 +121,11 @@ endpoints, `docs/API.md`.
   `DATA_DIR` (where the writes go), with `CRATORY_DATA_DIR` selecting the
   second and everything unchanged when it is unset. An invariant test starts
   the app in a subprocess with the variable set and asserts that nothing new
-  appears under `BACKEND_DIR` — the property, not a list of five known paths.
+  appears under `BACKEND_DIR` — a regression guard over the paths the exercise
+  script touches explicitly, not an automatic detector of one left out;
+  whoever adds a new write site has to extend the script too, or the test
+  stays green while missing it (as it did with four slskd anchors, caught
+  only in final review).
   First of the four sub-projects of the Tauri packaging work
   (`docs/superpowers/specs/2026-08-22-tauri-decomposizione-design.md`).
 
