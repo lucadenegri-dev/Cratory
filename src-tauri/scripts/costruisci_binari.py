@@ -242,7 +242,7 @@ def _installa_da_manifesto(chiave: str, bin_dir: Path) -> Path:
 # --------------------------------------------------------------------------
 
 
-def _homebrew_ffmpeg() -> Path:
+def _homebrew_ffmpeg() -> tuple[Path, Path]:
     """Percorso di ffmpeg installato da Homebrew sulla macchina di build, o
     solleva con un messaggio chiaro se Homebrew o ffmpeg non ci sono: e' un
     requisito della macchina che costruisce il bundle, non dell'utente finale
@@ -267,13 +267,17 @@ def _homebrew_ffmpeg() -> Path:
         )
     prefix = Path(esito.stdout.strip())
     binario = prefix / "bin" / "ffmpeg"
-    if not binario.is_file():
-        raise RuntimeError(
-            f"'{binario}' non esiste nonostante Homebrew dichiari ffmpeg "
-            f"installato in '{prefix}' su questa macchina di build. "
-            "Eseguire 'brew reinstall ffmpeg' su questa stessa macchina."
-        )
-    return binario
+    sonda = prefix / "bin" / "ffprobe"
+    # Entrambi, non solo ffmpeg: sono due eseguibili della stessa formula, e
+    # senza ffprobe Shazam non ricava la durata del mix.
+    for atteso in (binario, sonda):
+        if not atteso.is_file():
+            raise RuntimeError(
+                f"'{atteso}' non esiste nonostante Homebrew dichiari ffmpeg "
+                f"installato in '{prefix}' su questa macchina di build. "
+                "Eseguire 'brew reinstall ffmpeg' su questa stessa macchina."
+            )
+    return binario, sonda
 
 
 def _deps(binario: Path) -> list[str]:
@@ -315,12 +319,12 @@ def _chiusura_transitiva(radice: Path) -> set[Path]:
     return dylib
 
 
-def _prerequisiti_ffmpeg() -> Path:
+def _prerequisiti_ffmpeg() -> tuple[Path, Path]:
     """Controlla tutto cio' che serve alla rilocazione PRIMA di scaricare
     qualsiasi cosa (fpcalc/slskd inclusi): Homebrew, ffmpeg installato,
     otool/install_name_tool/codesign sul PATH. Meglio fermarsi qui, subito,
     che dopo aver gia' speso tempo e banda sugli altri due componenti.
-    Ritorna il percorso dell'ffmpeg di Homebrew da rilocalizzare."""
+    Ritorna i percorsi di ffmpeg e ffprobe da rilocalizzare."""
     if sys.platform != "darwin":
         raise RuntimeError(
             "la rilocazione di ffmpeg da Homebrew e' implementata solo per "
@@ -331,25 +335,25 @@ def _prerequisiti_ffmpeg() -> Path:
     return _homebrew_ffmpeg()
 
 
-def _rilocalizza_ffmpeg(sorgente: Path, bin_dir: Path) -> Path:
-    """Copia l'ffmpeg di Homebrew (`sorgente`, gia' verificato da
+def _rilocalizza(nome: str, sorgente: Path, bin_dir: Path) -> Path:
+    """Copia un binario di Homebrew (`sorgente`, gia' verificato da
     `_prerequisiti_ffmpeg`) e la chiusura transitiva delle sue dylib dentro
-    `bin_dir/ffmpeg/`, riscrive ogni riferimento a essere relativo al binario
+    `bin_dir/<nome>/`, riscrive ogni riferimento a essere relativo al binario
     stesso e ri-firma. Il risultato gira da qualunque percorso, senza
     Homebrew e senza le variabili d'ambiente che Homebrew normalmente
     fornisce (verificato su questa macchina con `env -i` da una cartella
     diversa — Step 3 del brief)."""
-    print(f"[ffmpeg] rilocalizzo da {sorgente} ...")
+    print(f"[{nome}] rilocalizzo da {sorgente} ...")
 
-    cartella_finale = bin_dir / "ffmpeg"
+    cartella_finale = bin_dir / nome
     cartella_finale.mkdir(parents=True)
 
-    ffmpeg_finale = cartella_finale / "ffmpeg"
-    shutil.copy2(sorgente, ffmpeg_finale)
-    _rendi_eseguibile(ffmpeg_finale)
+    binario_finale = cartella_finale / nome
+    shutil.copy2(sorgente, binario_finale)
+    _rendi_eseguibile(binario_finale)
 
     dylib_originali = _chiusura_transitiva(sorgente)
-    print(f"[ffmpeg] chiusura transitiva: {len(dylib_originali)} dylib.")
+    print(f"[{nome}] chiusura transitiva: {len(dylib_originali)} dylib.")
 
     percorso_finale_per_originale: dict[Path, Path] = {}
     for originale in dylib_originali:
@@ -380,17 +384,17 @@ def _rilocalizza_ffmpeg(sorgente: Path, bin_dir: Path) -> Path:
             _esegui(["install_name_tool", "-change", dep,
                     f"@loader_path/{finale_dep.name}", str(binario)])
 
-    _riscrivi_riferimenti(ffmpeg_finale, sorgente)
+    _riscrivi_riferimenti(binario_finale, sorgente)
     for originale, finale in percorso_finale_per_originale.items():
         _esegui(["install_name_tool", "-id", f"@loader_path/{finale.name}", str(finale)])
         _riscrivi_riferimenti(finale, originale)
 
     # Ri-firma per ultima, su ogni file toccato: su Apple Silicon un binario
     # non firmato non parte affatto.
-    for file in [ffmpeg_finale, *percorso_finale_per_originale.values()]:
+    for file in [binario_finale, *percorso_finale_per_originale.values()]:
         _esegui(["codesign", "--force", "--sign", "-", str(file)])
 
-    return ffmpeg_finale
+    return binario_finale
 
 
 # --------------------------------------------------------------------------
@@ -416,7 +420,7 @@ def costruisci(destinazione: Path) -> None:
     # Prerequisiti di ffmpeg controllati per primi: se Homebrew o ffmpeg
     # mancano sulla macchina di build, meglio saperlo subito che dopo aver
     # gia' scaricato fpcalc e slskd per niente.
-    ffmpeg_sorgente = _prerequisiti_ffmpeg()
+    ffmpeg_sorgente, ffprobe_sorgente = _prerequisiti_ffmpeg()
 
     destinazione = destinazione.resolve()
     bin_dir = destinazione / "bin"
@@ -431,10 +435,18 @@ def costruisci(destinazione: Path) -> None:
     print("--- slskd ---")
     _installa_da_manifesto("slskd", bin_dir)
 
-    print("--- ffmpeg ---")
-    ffmpeg_finale = _rilocalizza_ffmpeg(ffmpeg_sorgente, bin_dir)
-    versione = _verifica_esecuzione(ffmpeg_finale, _FFMPEG_VERSION_FLAG, "ffmpeg")
-    print(f"[ffmpeg] installato in {ffmpeg_finale}, parte: {versione}")
+    # ffmpeg e ffprobe sono due eseguibili della stessa formula di Homebrew, e
+    # `resolve_binary` cerca ognuno nella propria sottocartella: ffprobe non
+    # puo' stare dentro bin/ffmpeg/. Ognuno si porta la propria chiusura di
+    # dylib — sono quasi le stesse, ma condividerle vorrebbe dire symlink
+    # dentro un bundle firmato, e la duplicazione costa meno del rischio.
+    # Senza ffprobe, Shazam non ricava la durata del mix e produce una
+    # tracklist di un segmento solo, senza dire perche'.
+    for nome_bin, sorgente in (("ffmpeg", ffmpeg_sorgente), ("ffprobe", ffprobe_sorgente)):
+        print(f"--- {nome_bin} ---")
+        finale = _rilocalizza(nome_bin, sorgente, bin_dir)
+        versione = _verifica_esecuzione(finale, _FFMPEG_VERSION_FLAG, nome_bin)
+        print(f"[{nome_bin}] installato in {finale}, parte: {versione}")
 
     dimensione = _dimensione(bin_dir)
     print(f"Fatto: binari in {bin_dir} ({dimensione}).")
