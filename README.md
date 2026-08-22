@@ -155,6 +155,35 @@ repository is public**. While it is private, and until the first release exists,
 the button correctly reports that it cannot tell. Nothing is downloaded or
 installed: a packaged build will handle that, using the same releases.
 
+## Desktop bundle
+
+Cratory can also be packaged as a native macOS app, `Cratory.app`, that opens
+with a double click and needs nothing else installed — no Python, no Node.js,
+no terminal. The backend, a Python runtime and its three external binaries
+(ffmpeg, fpcalc, slskd) all travel inside the bundle; see
+`docs/ARCHITECTURE.md` for how the pieces fit together and why.
+
+```bash
+python3 src-tauri/scripts/assembla.py
+```
+
+One command does the whole build: static frontend export, a relocatable
+CPython 3.11 with every backend dependency, the three binaries, and finally
+`tauri build`. Every run downloads and rebuilds each piece from scratch rather
+than patching one in place, so it is slow but repeatable.
+
+**Homebrew is required on the machine that builds the bundle — never on the
+machine that runs it.** No upstream publishes a checksummed native `arm64`
+macOS build of ffmpeg, so the build relocates the one from a local Homebrew
+install instead of downloading a prebuilt one. The finished app carries its
+own copy and needs nothing from Homebrew at runtime.
+
+The result is a working `.app`. It is ad-hoc signed, which is enough to run it
+on the machine that built it, but it is **not signed or notarized by Apple**
+— not yet something to give to anyone else. `tauri build` also emits a `.dmg`
+alongside it, a side effect of bundling for `"all"` targets, not a release
+artifact.
+
 ## Tests
 
 ```bash

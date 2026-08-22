@@ -948,6 +948,117 @@ anything containing `%`, `&` or `#`, which is why `labels` lost its
 `<Suspense>` boundary, which is why every detail page is a thin wrapper around
 an inner component.
 
+## The desktop shell (Tauri)
+
+`src-tauri/` is a Tauri v2 shell, crate `cratory`, that turns Cratory into a
+native macOS app, `Cratory.app`: it starts the backend as a child process,
+waits for it to answer, then shows a window pointed at the static frontend
+export. It lives beside `backend/` and `frontend/`, not inside either, because
+it drives both without belonging to either one; the Tauri CLI is an npm
+devDependency of `frontend/`, and its `tauri`/`tauri:dev`/`tauri:build`
+scripts `cd ..` first so the command runs from the repository root, where
+`src-tauri/tauri.conf.json` lives. That file's `version` field points at
+`frontend/package.json` instead of carrying its own number, riding on the
+existing invariant a backend test already enforces between that file and
+`VERSION` — one source of truth instead of a fourth number to keep in sync.
+
+**What the bundle contains.** `Contents/Resources/` holds four folders,
+assembled by `src-tauri/scripts/assembla.py` into `src-tauri/target/staging/`
+and declared in `tauri.conf.json`'s `bundle.resources`: `frontend/` (the
+static export), `backend/` (`backend/app` and `requirements.txt`, with
+`tests/`, `__pycache__`, `data/` and `logs/` excluded), `python/` (a
+relocatable CPython 3.11 with every backend dependency installed), and `bin/`
+(`fpcalc` at the top level, `ffmpeg/ffmpeg` and `slskd/slskd` one level down —
+the `single`/`bundle` layout `system_probe.resolve_binary` already knew how to
+read from `CRATORY_BIN_DIR`, prepared for this before this sub-project
+existed). Three scripts under `src-tauri/scripts/` build the pieces
+`assembla.py` doesn't build itself. `costruisci_runtime.py` downloads a pinned
+CPython release, installs `requirements.txt` into it, prunes what a running
+app never needs (`pip`, `setuptools`, `pytest`, the stdlib test suite,
+`idlelib`/`tkinter`, `__pycache__` — about 195 MB pruned from 299 MB
+installed), and — the verification that matters — *imports* essentia and the
+rest from the pruned tree rather than merely checking the files exist, since
+an extraction and install that complete without error can still leave an
+interpreter missing a native wheel. `costruisci_binari.py` reads `fpcalc` and
+`slskd`'s pinned version, URL and SHA256 from
+`backend/app/services/binary_manifest.entry_for` — never copying those values,
+so a manifest bump propagates here automatically — and re-implements the same
+download → verify hash → extract → run-with-its-version-flag sequence
+`services/binary_installer.py` already knows, rather than importing that
+module: `binary_installer` reaches its destination folder through
+`system_probe.managed_bin_dir()`, which pulls in `runtime_settings` and,
+through it, SQLAlchemy and the rest of the backend's stack — too much
+machinery to load just to download a file, and this script has to run with a
+bare `python3`, before any backend venv or bundled runtime exists. It
+relocates ffmpeg separately (below). `assembla.py` orchestrates both, exports
+the frontend statically first (`CRATORY_STATIC_EXPORT=1`, with
+`NEXT_PUBLIC_API_URL` baked in at this same step — Next.js inlines
+`NEXT_PUBLIC_*` values into the built JS rather than reading them from the
+shell's environment at runtime), ad-hoc signs every Mach-O file it finds under
+the assembled `python/` and `bin/` (most of the wheels `costruisci_runtime.py`
+installs — numpy, essentia — arrive from PyPI unsigned, and an unsigned
+Mach-O does not run at all on Apple Silicon), copies the backend source, and
+finally runs `tauri build`.
+
+**Why a relocatable CPython instead of a frozen binary.**
+`integrations/essentia_engine.py` runs analysis in a subprocess with
+`[sys.executable, "-m", "app.integrations.essentia_worker", path]`; in a
+frozen executable (PyInstaller and similar) `sys.executable` *is* the
+executable itself, which does not accept `-m` — shipping one would have meant
+rewriting working production code to satisfy a packager. A relocatable
+interpreter (`python-build-standalone`) needs no such compromise: `sys.prefix`
+follows the tree wherever it is copied, so the same `python3 -m uvicorn
+app.main:app` that runs in development also runs from inside the bundle. One
+consequence follows through the whole toolchain: the console scripts under a
+Python installation's `bin/` (`bin/uvicorn`, in a venv or in this runtime
+alike) carry the build machine's absolute interpreter path baked into their
+shebang line and are therefore not relocatable themselves — the shell and both
+build scripts always invoke `python3 -m <module>`, never a `bin/` script.
+
+**Why the port is fixed.** `spotify_redirect_uri` is registered with Spotify
+as `http://127.0.0.1:8000/api/spotify/callback` — a string fixed on Spotify's
+side, not something Cratory can renegotiate at runtime. `src/backend.rs`
+checks port 8000 before doing anything else and refuses to scan for a free one
+if it is taken: silently starting on another port would not fail loudly, it
+would break the OAuth redirect in a way far harder to diagnose than an
+explicit "port 8000 is busy" at launch. The check tries to tell "a Cratory is
+already running" apart from "something else has the port" by probing the same
+`/api/setup/state` route the readiness wait uses and checking that the
+response has the exact shape only Cratory's backend produces — imperfect (an
+unusually slow Cratory could look like "something else"), so the message
+shown says so rather than asserting it as fact.
+
+**How the three seams fit together.** `CRATORY_DATA_DIR`, `CRATORY_BIN_DIR`
+and `CRATORY_VERSION` (see "Setup and credentials" above) were built for
+exactly this moment, and the backend did not change to receive them: the
+shell resolves each one from Tauri's own APIs — never by hand-concatenating
+`$HOME` — and sets them as environment variables on the child process at
+spawn time. `CRATORY_DATA_DIR` comes from `app.path().app_data_dir()`, which
+on macOS resolves to `~/Library/Application Support/<identifier>` using
+`tauri.conf.json`'s `identifier` (`com.cratory.app`), not its `productName`
+(`Cratory`). `CRATORY_BIN_DIR` is `resource_dir()/bin`. `CRATORY_VERSION` is
+the version `tauri::generate_context!()` already compiled in from
+`tauri.conf.json` — no repository root to read `VERSION` from exists inside a
+shipped bundle, so this has to be baked in rather than read at runtime. In a
+development build (`cargo`/`tauri dev`) all three resolve to the empty string
+instead, which every consumer on the backend side already treats as "unset" —
+the same defaults development always had, so nothing about running `tauri
+dev` needed to change either.
+
+The window itself starts hidden (`"visible": false` in `tauri.conf.json`) and
+is shown only once `/api/setup/state` answers, then explicitly reloaded first:
+the webview begins loading the static export the instant the process starts,
+while the backend typically takes five or six seconds to come up, so a
+one-shot fetch made during that window (home stats, the sets list) fails and,
+unlike polled job state, never retries on its own — reloading once the
+backend is actually reachable is what keeps that from showing a permanently
+"backend is down" page. On exit the child is sent `SIGTERM`, given three
+seconds to run FastAPI's shutdown handlers, and only `SIGKILL`ed if still
+alive after that — not because there is state to lose on a hard kill, but
+because `download_dispatcher.stop_retry_loop()` runs during that shutdown, so
+the download queue's retry thread doesn't wake up mid-teardown and try to
+claim work that the app is about to disappear from under it.
+
 ## Persistence and migrations
 
 SQLite, one file:

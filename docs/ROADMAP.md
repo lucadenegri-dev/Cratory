@@ -139,6 +139,38 @@ endpoints, `docs/API.md`.
   arbitrary ids does not exist. Bookmarks to the old URLs break; on a
   single-user personal app that was judged an acceptable price. Second of the
   four sub-projects of the Tauri packaging work.
+- **Desktop shell** (2026-08-22). `src-tauri/` is a Tauri v2 shell (crate
+  `cratory`) that starts the backend as a child process, waits for
+  `/api/setup/state` to answer, and only then shows the window — reloading it
+  once at that point, since the webview begins loading while the backend is
+  typically still a few seconds from being up, and a one-shot fetch made in
+  that window never retries on its own. The backend runs from a relocatable
+  CPython 3.11 bundled inside the app (about 195 MB pruned) instead of a
+  frozen binary, because `essentia_engine.py` spawns
+  `[sys.executable, "-m", …]` and a frozen executable's `sys.executable` does
+  not accept `-m`. Three build scripts under `src-tauri/scripts/` assemble
+  the bundle: `costruisci_runtime.py` builds and prunes that runtime,
+  verifying it by importing essentia and the rest rather than just checking
+  the files extracted; `costruisci_binari.py` relocates ffmpeg from a local
+  Homebrew install (no upstream publishes a checksummed native arm64 macOS
+  build) and reads `fpcalc`/`slskd` from the existing `binary_manifest`
+  instead of duplicating its URLs and hashes; `assembla.py` orchestrates both
+  plus the frontend export and `tauri build`. Port 8000 stays fixed, never
+  scanned for a free one, because Spotify's redirect URI is registered on it.
+  The backend needed no changes: it already honored the three seams
+  (`CRATORY_DATA_DIR`, `CRATORY_BIN_DIR`, `CRATORY_VERSION`) the first two
+  sub-projects had prepared, which the shell now wires from Tauri's own
+  path APIs at launch. `python3 src-tauri/scripts/assembla.py` produces a
+  working, ad-hoc-signed `Cratory.app`, verified end to end against a real
+  library: essentia analyzing a real file, the relocated ffmpeg decoding a
+  real FLAC, data landing under `~/Library/Application
+  Support/com.cratory.app/` with nothing written inside the bundle, and no
+  orphan process left once the window closes. **Not yet distributable**:
+  signed ad-hoc, not by Apple, and the `.dmg` `tauri build` produces
+  alongside it — a side effect of bundling for `"all"` targets — is not a
+  release artifact. Notarization, a real `.dmg`, an updater and a `LICENSE`
+  file are the fourth and last sub-project. Third of the four sub-projects of
+  the Tauri packaging work.
 
 ## Backlog
 

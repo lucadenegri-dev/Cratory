@@ -8,6 +8,29 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Desktop shell** (2026-08-22): `src-tauri/` is a Tauri v2 shell that starts
+  the backend as a child process, waits for `/api/setup/state`, then shows
+  the window (hidden until then, reloaded once the backend answers so a
+  one-shot fetch made during startup doesn't strand the page showing a dead
+  backend). The backend runs from a relocatable CPython 3.11 bundled inside
+  the app (~195 MB pruned) rather than a frozen binary, because
+  `essentia_engine.py`'s subprocess spawn needs `sys.executable -m`, which a
+  frozen binary's `sys.executable` doesn't accept. `python3
+  src-tauri/scripts/assembla.py` builds `Cratory.app` end to end — frontend
+  export, that runtime, ffmpeg relocated from Homebrew (no upstream ships a
+  checksummed arm64 build), fpcalc/slskd read from the existing
+  `binary_manifest`, ad-hoc signed. Port 8000 stays fixed, never scanned,
+  because Spotify's redirect URI is registered on it. The backend needed no
+  changes: it already honored the three seams
+  (`CRATORY_DATA_DIR`/`CRATORY_BIN_DIR`/`CRATORY_VERSION`) the first two
+  sub-projects had prepared. Verified against a real library: essentia
+  analyzing a real file, the relocated ffmpeg decoding a real FLAC, data
+  under `~/Library/Application Support/com.cratory.app/` and nothing inside
+  the bundle, no orphan process after the window closes. **Not yet
+  distributable**: ad-hoc signing only, no Apple notarization, no `LICENSE`,
+  no updater, and the `.dmg` produced alongside it is a build side effect,
+  not a release artifact — that's the fourth and last sub-project. Step
+  three of four toward a Tauri desktop build.
 - **Frontend without the Next proxy** (2026-08-22): `CRATORY_STATIC_EXPORT=1`
   builds a static frontend with no `rewrites()`; one shared base URL feeds both
   HTTP clients; the five detail routes read their id from the query string
