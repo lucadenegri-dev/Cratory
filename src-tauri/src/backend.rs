@@ -138,29 +138,111 @@ fn python_command() -> &'static str {
 
 /// `None` finche' non c'e' una cartella backend valida da cui partire:
 /// in sviluppo c'e' sempre (la sorgente accanto a `src-tauri`), in una
-/// build di release non ancora, perche' risolvere la resource dir del
-/// bundle e' il lavoro del Task 5. `Option` invece di un valore inventato
-/// (es. una `PathBuf` vuota) cosi' il chiamante puo' distinguere "risorse
-/// del bundle non ancora collegate" da un errore di spawn qualunque, e
-/// mostrare il messaggio giusto invece di uno fuorviante tipo "python3 non
-/// installato?" per un problema che non ha niente a che fare con python3.
+/// build di release solo se `resource_dir()` si risolve (vedi sotto).
+/// `Option` invece di un valore inventato (es. una `PathBuf` vuota) cosi' il
+/// chiamante puo' distinguere "risorse del bundle mancanti/non risolvibili"
+/// da un errore di spawn qualunque, e mostrare il messaggio giusto invece di
+/// uno fuorviante tipo "python3 non installato?" per un problema che non ha
+/// niente a che fare con python3.
 ///
 /// `#[cfg(debug_assertions)]`, non un `if` a runtime: cosi' `env!` non
 /// viene nemmeno valutata in una build di release, e il percorso di
 /// sviluppo (che in un bundle non esiste) non resta comunque cucito
 /// dentro al binario distribuito.
 #[cfg(debug_assertions)]
-fn backend_dir() -> Option<PathBuf> {
+fn backend_dir(_app: &AppHandle) -> Option<PathBuf> {
     Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../backend"))
 }
 
-/// SEME per il Task 5: qui va risolta `app.path().resource_dir()` e
-/// restituito `<resource_dir>/backend`. Deliberatamente non implementato
-/// ora (vedi il commento su `backend_dir` sopra) -- `None` fa fallire
-/// l'avvio con un messaggio esplicito invece di inventare un percorso.
+/// Task 5: `<resource_dir>/backend`, dove `scripts/assembla.py` ha copiato
+/// `backend/app` e `backend/requirements.txt` (vedi `bundle.resources` in
+/// tauri.conf.json). Delega a `resource_dir` sotto per il percorso base;
+/// `None` si propaga da li' se il bundle non e' risolvibile.
 #[cfg(not(debug_assertions))]
-fn backend_dir() -> Option<PathBuf> {
+fn backend_dir(app: &AppHandle) -> Option<PathBuf> {
+    resource_dir(app).map(|r| r.join("backend"))
+}
+
+/// La cartella delle risorse del bundle (`Contents/Resources` dentro il
+/// `.app` su macOS -- vedi la doc di `PathResolver::resource_dir` di Tauri
+/// 2.11.5, letta da sorgente in
+/// `~/.cargo/registry/src/.../tauri-2.11.5/src/path/desktop.rs`). Solo in
+/// release: in sviluppo `resource_dir()` risolverebbe comunque a qualcosa
+/// (la cartella dell'eseguibile Cargo, `target/debug/`, per via del
+/// controllo "sto girando da un output di Cargo?" che la funzione fa da
+/// sola), ma mai a un posto che ha ricevuto le copie di `assembla.py` --
+/// per questo `backend_dir` in sviluppo (sopra) non la chiama nemmeno.
+///
+/// `Result` -> `Option` con un log: un `resource_dir()` che fallisce in
+/// release e' un bundle rotto (eseguibile fuori da una struttura `.app`
+/// valida), non un caso normale da passare sotto silenzio come il ramo
+/// "sviluppo" di `bin_dir`/`data_dir` sotto.
+#[cfg(not(debug_assertions))]
+fn resource_dir(app: &AppHandle) -> Option<PathBuf> {
+    match app.path().resource_dir() {
+        Ok(dir) => Some(dir),
+        Err(err) => {
+            log::error!("resource_dir() non risolvibile: {err}");
+            None
+        }
+    }
+}
+
+/// `CRATORY_BIN_DIR`: `<resource_dir>/bin`, dove `costruisci_binari.py` (via
+/// `assembla.py`) ha messo fpcalc/ffmpeg/slskd. Stringa vuota in sviluppo --
+/// vedi `env_value` sotto per come i due casi confluiscono nello stesso
+/// valore che il backend gia' sa interpretare come "assente" (vedi
+/// `resolve_binary` in `backend/app/services/system_probe.py`): qui
+/// l'assenza e' il comportamento normale di sempre, non un errore da
+/// segnalare come fa `backend_dir` con l'avvio mancato.
+#[cfg(debug_assertions)]
+fn bin_dir(_app: &AppHandle) -> Option<PathBuf> {
     None
+}
+
+#[cfg(not(debug_assertions))]
+fn bin_dir(app: &AppHandle) -> Option<PathBuf> {
+    resource_dir(app).map(|r| r.join("bin"))
+}
+
+/// `CRATORY_DATA_DIR`: dall'API di Tauri per le directory dell'app
+/// (`app.path().app_data_dir()`), MAI composta a mano concatenando `$HOME`
+/// -- e' esattamente per questo che quell'API esiste (se in futuro cambia
+/// qualcosa nel sandboxing o nella risoluzione della home, questa riga
+/// continua a valere senza modifiche). Su macOS risolve a
+/// `~/Library/Application Support/<identifier>`: l'`identifier` di
+/// tauri.conf.json ("com.cratory.app"), non il `productName` ("Cratory") --
+/// stessa convenzione, letta dalla stessa sorgente, di `app_config_dir` e
+/// `app_log_dir` nella libreria (`dir.join(&self.0.config().identifier)`).
+/// Stringa vuota in sviluppo, stessa ragione di `bin_dir` sopra:
+/// `backend/app/core/paths.py` tratta l'assenza come `= BACKEND_DIR`, il
+/// comportamento di sempre.
+#[cfg(debug_assertions)]
+fn data_dir(_app: &AppHandle) -> Option<PathBuf> {
+    None
+}
+
+#[cfg(not(debug_assertions))]
+fn data_dir(app: &AppHandle) -> Option<PathBuf> {
+    match app.path().app_data_dir() {
+        Ok(dir) => Some(dir),
+        Err(err) => {
+            log::error!("app_data_dir() non risolvibile: {err}");
+            None
+        }
+    }
+}
+
+/// `Some(path)` -> il percorso come stringa; `None` -> stringa vuota, che
+/// per il backend equivale a "variabile non impostata" (vedi
+/// `risolvi_data_dir` in `paths.py` e `resolve_binary` in `system_probe.py`:
+/// entrambi trattano un valore vuoto/di soli spazi come assente, non come un
+/// percorso letterale). Questo e' il punto di confluenza fra i due rami di
+/// `bin_dir`/`data_dir`: il chiamante (`spawn_backend`) non deve sapere se
+/// la stringa vuota viene dal ramo di sviluppo o da un fallimento di
+/// risoluzione in release.
+fn env_value(path: Option<PathBuf>) -> String {
+    path.map(|p| p.display().to_string()).unwrap_or_default()
 }
 
 /// Behaviour 2: avvia uvicorn come processo figlio.
@@ -185,14 +267,18 @@ fn spawn_backend(app: &AppHandle, backend_dir: &Path) -> std::io::Result<Child> 
         ])
         .current_dir(backend_dir)
         // Le tre env che il backend sa leggere (vedi backend/app/core/paths.py
-        // e backend/app/services/system_probe.py). Il meccanismo e' qui;
-        // CRATORY_DATA_DIR e CRATORY_BIN_DIR restano vuote finche' il Task 5
-        // non decide dove vive la cartella dati scrivibile del bundle (fuori
-        // dal .app firmato) e dove i binari esterni sono stati installati:
-        // vuote equivale al comportamento di oggi (default = cartella del
-        // backend), quindi lo sviluppo non cambia sotto i piedi.
-        .env("CRATORY_DATA_DIR", "")
-        .env("CRATORY_BIN_DIR", "")
+        // e backend/app/services/system_probe.py). CRATORY_DATA_DIR e
+        // CRATORY_BIN_DIR sono vuote in sviluppo (default = cartella del
+        // backend / PATH, il comportamento di sempre) e risolte dalle API di
+        // Tauri in release -- vedi `data_dir`/`bin_dir` sopra. CRATORY_VERSION
+        // arriva gia' incorporata a build time: `package_info().version` e'
+        // quello che `tauri::generate_context!()` legge da `version` in
+        // tauri.conf.json (che punta a frontend/package.json, tenuto
+        // allineato al file VERSION della radice da un test backend) --
+        // niente di tutto questo esiste piu' a runtime in un bundle, ma qui
+        // non serve: e' gia' stato risolto in fase di compilazione.
+        .env("CRATORY_DATA_DIR", env_value(data_dir(app)))
+        .env("CRATORY_BIN_DIR", env_value(bin_dir(app)))
         .env(
             "CRATORY_VERSION",
             app.package_info().version.to_string(),
@@ -338,22 +424,23 @@ pub fn avvia_e_attendi(app: AppHandle) {
         PortCheck::Libera => {}
     }
 
-    let backend_dir = match backend_dir() {
+    let backend_dir = match backend_dir(&app) {
         Some(dir) => dir,
         None => {
-            // SEME per il Task 5, non un errore di spawn qualunque: senza
-            // questo ramo separato, in una build di release senza resource
-            // dir collegata, l'unico messaggio che l'utente vedrebbe
-            // sarebbe quello di `spawn_backend` piu' sotto ("python3 non
-            // installato?"), fuorviante per un problema che non ha niente
-            // a che fare con python3.
+            // Non un errore di spawn qualunque: senza questo ramo separato,
+            // in una build di release con una resource dir non risolvibile,
+            // l'unico messaggio che l'utente vedrebbe sarebbe quello di
+            // `spawn_backend` piu' sotto ("python3 non installato?"),
+            // fuorviante per un problema che non ha niente a che fare con
+            // python3.
             fatal_error(
                 &app,
                 "Risorse del bundle mancanti",
                 "La cartella delle risorse del bundle (backend + runtime \
-                 Python) non e' ancora collegata in questa build: e' il \
-                 lavoro del Task 5. Questa build non puo' avviare il \
-                 backend.",
+                 Python) non e' risolvibile in questa build. Se questo e' \
+                 un bundle assemblato con scripts/assembla.py, verificare \
+                 che 'bundle.resources' in tauri.conf.json e lo staging \
+                 siano presenti; questa build non puo' avviare il backend.",
             );
             return;
         }

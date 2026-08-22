@@ -34,6 +34,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "target/staging/backend/": "backend",
+      "target/staging/python/": "python",
+      "target/staging/bin/": "bin",
+      "../frontend/out/": "frontend"
+    },
+    "macOS": {
+      "signingIdentity": "-"
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }
