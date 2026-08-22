@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings, setup_logging
+from app.core.version import app_version
 from app.db import ensure_schema
 from app.organize.services import scan_job
 from app.routers import (
@@ -86,7 +87,7 @@ async def lifespan(app: FastAPI):
     download_dispatcher.stop_retry_loop()
 
 
-app = FastAPI(title="Cratory", version="0.9.0", lifespan=lifespan)
+app = FastAPI(title="Cratory", version=app_version(), lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
