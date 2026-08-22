@@ -437,7 +437,7 @@ risolvono. Senza CRATORY_DATA_DIR resta esattamente il comportamento di prima."
 ### Task 3: L'avvio
 
 **Files:**
-- Modify: `backend/app/main.py:1-16`, `backend/app/main.py:61-62`
+- Modify: `backend/app/main.py:1-16`, `backend/app/main.py:62-63`
 - Test: `backend/tests/test_avvio_data_dir.py`
 
 **Interfaces:**
