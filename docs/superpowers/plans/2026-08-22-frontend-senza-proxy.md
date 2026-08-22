@@ -440,7 +440,9 @@ function PlaylistDetailInner() {
 
 - [ ] **Step 5: Aggiornare i siti che costruiscono i link**
 
-Otto siti verso `/tracks/`, quattro verso `/playlists/`. Percorso e riga esatti:
+Nove siti verso `/tracks/`, quattro verso `/playlists/`. L'elenco e' stato
+verificato eseguendolo: il sito in `components/docked-player.tsx` era sfuggito
+al grep iniziale perche' non usa `href=` ne' `push(`. Percorso e riga esatti:
 
 | File e riga | Da | A |
 |---|---|---|
@@ -453,6 +455,7 @@ Otto siti verso `/tracks/`, quattro verso `/playlists/`. Percorso e riga esatti:
 | `app/transitions/page.tsx:168` | `withFrom(`/tracks/${track.id}`, from)` | `withFrom(`/tracks?id=${track.id}`, from)` |
 | `components/wishlist-row.tsx:65` | `withFrom(`/tracks/${track.id}`, from)` | `withFrom(`/tracks?id=${track.id}`, from)` |
 | `components/organize/files-table.tsx:115` | `` `/tracks/${r.track_id}` `` | `` `/tracks?id=${r.track_id}` `` |
+| `components/docked-player.tsx` | `` `/tracks/${...}` `` | `` `/tracks?id=${...}` `` |
 | `components/library-track-grid.tsx:42` | `` `/tracks/${track.id}${trackLinkQuery}` `` | vedi sotto |
 | `app/playlists/page.tsx:144` e `:156` | `withFrom(`/playlists/${p.id}`, from)` | `withFrom(`/playlists/detail?id=${p.id}`, from)` |
 | `app/playlists/detail/page.tsx:400` | `router.push(`/playlists/${copy.id}`)` | `router.push(`/playlists/detail?id=${copy.id}`)` |
