@@ -17,6 +17,12 @@ import { test, expect, type Page, type ConsoleMessage } from "@playwright/test";
 const ROUTES: { path: string; title: string | null }[] = [
   { path: "/", title: null },
   { path: "/library", title: null },
+  // Rotta a query (E finale, fusione statica): "/tracks" senza `?id=` non e'
+  // piu' irraggiungibile come lo era da segmento di percorso. Il guard
+  // esplicito di app/tracks/page.tsx mostra l'alert "Traccia non trovata"
+  // sotto lo stesso <h1> del pageTitle normale (t.tracks.pageTitle): l'h1
+  // atteso resta "Traccia" in entrambi i casi, nessun fetch viene fatto.
+  { path: "/tracks", title: "Traccia" },
   { path: "/playlists", title: null },
   { path: "/labels", title: null },
   { path: "/wishlist", title: "Wishlist" },
