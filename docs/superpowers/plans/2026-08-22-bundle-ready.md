@@ -753,7 +753,7 @@ git commit -m "feat(probe): i binari gestiti stanno con i dati, non col codice"
 - Consumes: tutto quanto sopra. Nessun codice di produzione nuovo.
 - Produces: la guardia che tiene nel tempo.
 
-Questo test non elenca i cinque punti di scrittura: verifica la proprietà. Un sesto punto aggiunto fra un anno senza riancorarlo lo fa fallire, mentre un test che confronta cinque percorsi noti passerebbe contento.
+Questo test non confronta i cinque punti di scrittura per nome: fotografa l'intero albero prima e dopo, quindi si accorge anche di una riscrittura silenziosa. Ma resta una guardia sui percorsi che lo script d'esercizio (`_ESERCITA_LE_SCRITTURE`) mette in moto esplicitamente, non un rilevatore automatico di un punto non ancora enumerato lì dentro — un ancoraggio dimenticato in quello script resta invisibile e il test resta verde, com'è successo per davvero coi quattro percorsi propri del demone slskd nella revisione finale di questo lavoro. Chi aggiunge un nuovo punto di scrittura deve aggiungerlo anche allo script.
 
 - [ ] **Step 1: Scrivere il test**
 

@@ -148,10 +148,18 @@ poi ciò che Tauri eseguirà.
 La fotografia ignora `__pycache__` e i `.pyc` — altrimenti è il test stesso a
 sporcare l'albero che sta osservando, e diventa intermittente.
 
-Questo test non elenca i cinque punti: verifica la proprietà. Un sesto punto di
-scrittura aggiunto fra un anno senza riancorarlo lo fa fallire, mentre un test
-che confronta cinque percorsi noti passerebbe contento. È la differenza fra
-verificare l'invariante e verificare l'elenco.
+Questo test non confronta i cinque punti per nome: fotografa l'intero albero
+prima e dopo, quindi si accorge anche di una riscrittura silenziosa di un file
+già esistente, non solo di un nome nuovo comparso dal nulla. Ma resta una
+guardia di regressione sui percorsi che lo script d'esercizio mette in moto
+esplicitamente — non un rilevatore automatico di un punto di scrittura non
+ancora enumerato lì dentro. Un ancoraggio dimenticato nello script resta
+invisibile a questo test, che resta verde: è successo per davvero, nella
+revisione finale di questo stesso lavoro, con i quattro percorsi propri del
+demone slskd (config di fallback, cartella download di default, pid file, log
+file), rimasti ancorati a `BACKEND_DIR` senza che questo test se ne
+accorgesse, perché lo script d'esercizio non li toccava. Chi aggiunge un nuovo
+punto di scrittura deve aggiungerlo anche lì, o questo test non lo vedrà mai.
 
 ## Fuori ambito, dichiarato
 
