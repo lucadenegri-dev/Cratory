@@ -32,6 +32,25 @@ def test_dotenv_letto_dalla_cartella_dei_dati(tmp_path):
     assert esito.stdout.strip() == "WARNING"
 
 
+def test_load_dotenv_popola_l_ambiente_dalla_cartella_dei_dati(tmp_path):
+    """`load_dotenv` in main.py ed `env_file` in config.py sono due meccanismi
+    diversi con due effetti diversi: il primo riempie os.environ — da cui
+    organize/integrations/acoustid.py legge FPCALC direttamente — il secondo i
+    campi di Settings. Coprire il secondo non copre il primo, e questo test e'
+    l'unico che importa `app.main`."""
+    (tmp_path / ".env").write_text("FPCALC=/percorso/finto/fpcalc\n")
+    ambiente = {k: v for k, v in os.environ.items() if k != "FPCALC"}
+    ambiente["CRATORY_DATA_DIR"] = str(tmp_path)
+    esito = subprocess.run(
+        [sys.executable, "-c",
+         "import app.main, os; print('FPCALC=' + str(os.environ.get('FPCALC')))"],
+        cwd=str(paths.BACKEND_DIR), env=ambiente,
+        capture_output=True, text=True,
+    )
+    assert esito.returncode == 0, esito.stderr
+    assert "FPCALC=/percorso/finto/fpcalc" in esito.stdout
+
+
 def test_avvio_con_cartella_non_scrivibile_dice_perche(monkeypatch, tmp_path):
     """Il messaggio è tutto ciò che l'utente di un'app impacchettata vedrà."""
     bloccata = tmp_path / "sola-lettura"
