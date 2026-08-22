@@ -36,10 +36,12 @@ def test_percorso_relativo_solleva():
     assert "assoluto" in str(errore.value)
 
 
-def test_data_dir_di_default_e_backend_dir(monkeypatch):
-    """La costante di modulo, non solo la funzione."""
-    monkeypatch.delenv(paths.DATA_DIR_ENV, raising=False)
-    assert paths.risolvi_data_dir(None) == paths.BACKEND_DIR
+def test_data_dir_di_default_e_backend_dir():
+    """La costante di modulo, non solo la funzione: senza CRATORY_DATA_DIR
+    impostata al momento dell'import, `paths.DATA_DIR` deve coincidere con
+    `paths.BACKEND_DIR` — non solo `risolvi_data_dir(None)`, già coperto dal
+    test sopra."""
+    assert paths.DATA_DIR == paths.BACKEND_DIR
 
 
 def test_verifica_scrivibile_crea_la_cartella_mancante(tmp_path):
