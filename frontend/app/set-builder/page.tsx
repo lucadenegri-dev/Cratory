@@ -124,7 +124,7 @@ function SetBuilderInner() {
     const status = generation?.status ?? null;
     if (prevGenStatus.current === "running" && status === "done" && generation?.setlist_id != null) {
       // Il set nasce nel workbench: si apre lì per riordinare, sostituire tracce e vederne l'arco.
-      router.push(`/sets/${generation.setlist_id}`);
+      router.push(`/sets/detail?id=${generation.setlist_id}`);
     } else if (prevGenStatus.current === "running" && status === "error") {
       setError(generation?.error ?? t.setBuilder.generationFailed);
     }

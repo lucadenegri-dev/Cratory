@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { use, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { ArrowLeft, Radar, Music4, ExternalLink, Clock, ListPlus, Check } from "lucide-react";
 import {
   getDjSet, importDjSetAsPlaylist, discoverySaveForLater, fmtDuration, fmtDate,
@@ -20,13 +20,14 @@ import { withFrom } from "@/lib/back-link";
 // finche' lo status non e' piu' "identifying".
 const POLL_MS = 3000;
 
-function TrackLibraryAction({ track, onSaved }: { track: DjSetTrack; onSaved: (track: Track) => void }) {
+// `from` arriva dal genitore (link indietro del dettaglio traccia): non piu'
+// usePathname() qui dentro, perche' con l'id del set nella query (non nel
+// path) il componente non lo vedrebbe da solo.
+function TrackLibraryAction({ track, from, onSaved }: { track: DjSetTrack; from: string; onSaved: (track: Track) => void }) {
   const t = useT();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Origine per il link indietro del dettaglio traccia.
-  const from = usePathname();
 
   if (track.library_status && track.library_track_id != null) {
     const owned = track.library_status === "owned";
@@ -69,15 +70,22 @@ function TrackLibraryAction({ track, onSaved }: { track: DjSetTrack; onSaved: (t
   );
 }
 
-export default function DjSetDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function DjSetDetailPage() {
+  return <Suspense><DjSetDetailPageInner /></Suspense>;
+}
+
+function DjSetDetailPageInner() {
   const t = useT();
-  const { id } = use(params);
+  const id = useSearchParams().get("id") ?? "";
   const [set, setSet] = useState<DjSetDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<{ id: number; created: number } | null>(null);
-  // Origine per il link indietro del dettaglio playlist.
-  const from = usePathname();
+  // Origine per il link indietro del dettaglio playlist. Non piu' usePathname():
+  // con l'id nella query (non nel path) `/shazam/detail` da solo non basta
+  // piu' a tornare qui. Si ricostruisce dall'id gia' letto sopra, stesso
+  // principio di app/playlists/detail/page.tsx.
+  const from = `/shazam/detail?id=${id}`;
 
   useEffect(() => {
     getDjSet(Number(id)).then(setSet).catch((e) => setError(String(e.message ?? e)));
@@ -202,7 +210,7 @@ export default function DjSetDetailPage({ params }: { params: Promise<{ id: stri
                 </span>
                 {trk.isrc && <Badge tone="neutral" className="tnum shrink-0">{trk.isrc}</Badge>}
                 <ConfidenceBadge confidence={trk.confidence} />
-                <TrackLibraryAction track={trk} onSaved={(track) => patchTrackSaved(trk.position, track)} />
+                <TrackLibraryAction track={trk} from={from} onSaved={(track) => patchTrackSaved(trk.position, track)} />
               </li>
             ))}
           </ol>

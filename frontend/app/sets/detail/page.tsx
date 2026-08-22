@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
-import { use, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Sparkles, Download, Lightbulb, SlidersHorizontal,
   ArrowUp, ArrowDown, Trash2, Replace, Pencil, Check, ChevronDown, Plus, GripVertical,
@@ -64,9 +64,15 @@ const MODE_LABEL_KEY: Record<AlternativeMode, "safer" | "softer" | "harder" | "s
   surprising: "surprising",
 };
 
-export default function SetDetail({ params }: { params: Promise<{ id: string }> }) {
+export default function SetDetail() {
+  // useSearchParams obbliga a un confine Suspense, altrimenti il build statico
+  // fallisce: da qui la coppia wrapper + Inner, come in app/tracks/page.tsx.
+  return <Suspense><SetDetailInner /></Suspense>;
+}
+
+function SetDetailInner() {
   const t = useT();
-  const { id } = use(params);
+  const id = useSearchParams().get("id") ?? "";
   const router = useRouter();
 
   const [setlist, setSetlist] = useState<Setlist | null>(null);
@@ -92,9 +98,17 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
   const [addResults, setAddResults] = useState<Track[] | null>(null);
   const [addLoading, setAddLoading] = useState(false);
 
-  const from = usePathname();
+  // Non piu' usePathname(): con l'id nella query (non nel path) `/sets/detail`
+  // da solo non basta piu' a tornare qui. Si ricostruisce dall'id gia' letto
+  // sopra, stesso principio di app/playlists/detail/page.tsx.
+  const from = `/sets/detail?id=${id}`;
 
   useEffect(() => {
+    // Niente fetch con id vuoto: `/api/sets/` (slash finale) non da' 404, il
+    // backend la redirige alla lista, che fetch segue in silenzio restituendo
+    // una forma diversa (un array, non un Setlist) — il render andrebbe in
+    // eccezione. Vedi app/tracks/page.tsx per lo stesso guard.
+    if (!id) return;
     apiGet<Setlist>(`/api/sets/${id}`).then(setSetlist).catch((e) => setError(String(e.message ?? e)));
   }, [id]);
 
@@ -241,6 +255,19 @@ export default function SetDetail({ params }: { params: Promise<{ id: string }> 
     } catch (e) { setError(String((e as Error).message ?? e)); } finally { setPlaylistBusy(false); }
   }
 
+  // Id assente (rotta a query senza `?id=`, non piu' irraggiungibile ora che
+  // non e' un segmento di percorso): stesso testo di un id numerico inesistente,
+  // vedi app/tracks/page.tsx per lo stesso pattern. La chiave e' tipizzata
+  // `string | funzione`: qui e' sempre una stringa.
+  if (!id) {
+    const msg = t.errors.set_not_found;
+    return (
+      <PageLayout title={t.sets.pageTitle}>
+        <Link href="/sets" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.sets.backLink}</Link>
+        <Alert tone="danger">⚠ {typeof msg === "string" ? msg : msg({})}</Alert>
+      </PageLayout>
+    );
+  }
   if (error && !setlist) return (
     <PageLayout title={t.sets.pageTitle}>
       <Link href="/sets" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.sets.backLink}</Link>

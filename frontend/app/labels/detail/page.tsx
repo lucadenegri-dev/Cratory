@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { use, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Pencil, Shovel } from "lucide-react";
 import { apiGet, fmtDuration, type Track } from "@/lib/api";
 import { Alert, Input } from "@/components/ui";
@@ -15,10 +15,16 @@ import { MiniBars, type MiniBarRow } from "@/components/dashboard/mini-bars";
 import { useT } from "@/lib/i18n";
 import { withFrom } from "@/lib/back-link";
 
-export default function LabelDetail({ params }: { params: Promise<{ label: string }> }) {
+export default function LabelDetail() {
+  return <Suspense><LabelDetailInner /></Suspense>;
+}
+
+function LabelDetailInner() {
   const t = useT();
-  const { label: raw } = use(params);
-  const label = decodeURIComponent(raw);
+  // Niente ri-decodifica manuale: useSearchParams ha gia' decodificato una
+  // volta, e una seconda passata corrompe le etichette con % e rompe quelle
+  // con spazi (vedi tests/rotte-query-string.test.ts).
+  const label = useSearchParams().get("label") ?? "";
   const [all, setAll] = useState<Track[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Track | null>(null);
@@ -27,8 +33,11 @@ export default function LabelDetail({ params }: { params: Promise<{ label: strin
   const [qArtist, setQArtist] = useState("");
   const [qGenre, setQGenre] = useState("");
 
-  // Origine per il link indietro del dettaglio traccia (es. "/labels/Hessle%20Audio").
-  const from = usePathname();
+  // Origine per il link indietro del dettaglio traccia. Non piu' usePathname():
+  // con la label nella query (non nel path) `/labels/detail` da solo non
+  // basta piu' a tornare qui. Si ricostruisce dalla label gia' letta sopra,
+  // stesso principio di app/playlists/detail/page.tsx.
+  const from = `/labels/detail?label=${encodeURIComponent(label)}`;
 
   useEffect(() => {
     apiGet<{ total: number; items: Track[] }>("/api/tracks", { label, limit: 500, sort: "artist" })

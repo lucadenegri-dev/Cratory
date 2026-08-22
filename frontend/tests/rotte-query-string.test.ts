@@ -45,3 +45,28 @@ describe("le rotte di dettaglio leggono l'id dalla query", () => {
     }
   });
 });
+
+describe("sets, labels e shazam", () => {
+  it("nessuno e' piu' un segmento dinamico", () => {
+    for (const vecchia of ["app/sets/[id]", "app/labels/[label]", "app/shazam/[id]"]) {
+      expect(existsSync(resolve(__dirname, "..", vecchia)), vecchia).toBe(false);
+    }
+    for (const nuova of ["app/sets/detail/page.tsx", "app/labels/detail/page.tsx",
+                         "app/shazam/detail/page.tsx"]) {
+      expect(existsSync(resolve(__dirname, "..", nuova)), nuova).toBe(true);
+    }
+  });
+
+  it("hanno il confine Suspense che useSearchParams richiede", () => {
+    for (const p of ["app/sets/detail/page.tsx", "app/labels/detail/page.tsx",
+                     "app/shazam/detail/page.tsx"]) {
+      expect(leggi(p), p).toContain("<Suspense>");
+    }
+  });
+
+  it("labels non ri-decodifica il valore", () => {
+    // useSearchParams ha gia' decodificato una volta: una seconda passata
+    // corrompe le etichette con % e rompe quelle con gli spazi.
+    expect(leggi("app/labels/detail/page.tsx")).not.toContain("decodeURIComponent");
+  });
+});

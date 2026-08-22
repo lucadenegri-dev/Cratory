@@ -41,7 +41,7 @@ export default function SetsPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {sets?.map((s) => (
-          <Link key={s.id} href={`/sets/${s.id}`} className="group">
+          <Link key={s.id} href={`/sets/detail?id=${s.id}`} className="group">
             <Card className="h-full p-4 transition-colors hover:border-border-strong">
               <div className="mb-3 flex items-start justify-between gap-2">
                 <h3 className="truncate font-medium leading-snug group-hover:text-fg-strong">{s.name}</h3>

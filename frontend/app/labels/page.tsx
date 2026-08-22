@@ -84,7 +84,7 @@ export default function Labels() {
           {filtered.map((l) => {
             const years = l.year_min ? (l.year_max && l.year_max !== l.year_min ? `${l.year_min}–${l.year_max}` : `${l.year_min}`) : null;
             return (
-              <Link key={l.label} href={`/labels/${encodeURIComponent(l.label)}`}>
+              <Link key={l.label} href={`/labels/detail?label=${encodeURIComponent(l.label)}`}>
                 <Card className="h-full p-4 transition-colors hover:bg-elevated/40">
                   <div className="flex items-start justify-between gap-2">
                     <h2 className="min-w-0 truncate font-semibold text-fg-strong" title={l.label}>{l.label}</h2>

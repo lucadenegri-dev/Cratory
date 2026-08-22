@@ -42,7 +42,7 @@ describe("statistics view", () => {
   it("generi e label linkano alle rispettive pagine", () => {
     render(<StatisticsView stats={stats()} labels={[label("Ostgut Ton", 12)]} />);
     expect(screen.getByText("Techno").closest("a")?.getAttribute("href")).toBe("/library?genre=Techno");
-    expect(screen.getByText("Ostgut Ton").closest("a")?.getAttribute("href")).toBe("/labels/Ostgut%20Ton");
+    expect(screen.getByText("Ostgut Ton").closest("a")?.getAttribute("href")).toBe("/labels/detail?label=Ostgut%20Ton");
   });
 
   // La copertura non e' piu' tre barre di percentuale (erano tutte e tre
@@ -81,8 +81,8 @@ describe("statistics view", () => {
   it("le barre delle label condividono la scala fra le due colonne", () => {
     const rows = Array.from({ length: 10 }, (_, i) => label(`L${i}`, 100 - i * 10));
     const { container } = render(<StatisticsView stats={stats()} labels={rows} />);
-    const first = container.querySelector('a[href="/labels/L0"] span span') as HTMLElement;
-    const sixth = container.querySelector('a[href="/labels/L5"] span span') as HTMLElement;
+    const first = container.querySelector('a[href="/labels/detail?label=L0"] span span') as HTMLElement;
+    const sixth = container.querySelector('a[href="/labels/detail?label=L5"] span span') as HTMLElement;
     expect(first.style.width).toBe("100%");
     expect(sixth.style.width).toBe("50%");   // 50/100, non 50/50
   });

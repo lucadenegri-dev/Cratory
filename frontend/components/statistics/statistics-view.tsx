@@ -160,7 +160,7 @@ export function StatisticsView({ stats, labels }: { stats: LibraryStats; labels:
   const genreTail = genreEntries.length - genreRows.length;
 
   const labelRows: BarRow[] = labels.slice(0, 10).map((l) => ({
-    label: l.label, value: l.track_count, href: `/labels/${encodeURIComponent(l.label)}`,
+    label: l.label, value: l.track_count, href: `/labels/detail?label=${encodeURIComponent(l.label)}`,
   }));
   const labelScale = Math.max(1, ...labelRows.map((r) => r.value));
 

@@ -141,7 +141,7 @@ export default function ShazamPage() {
                     : <span className="grid h-12 w-12 shrink-0 place-items-center rounded-none bg-elevated text-faint"><Music4 size={18} /></span>}
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Link href={`/shazam/${s.id}`} className="truncate font-medium hover:text-fg-strong">{s.title ?? s.source_url}</Link>
+                      <Link href={`/shazam/detail?id=${s.id}`} className="truncate font-medium hover:text-fg-strong">{s.title ?? s.source_url}</Link>
                       <Badge tone={st.tone}>{st.label}</Badge>
                       <PartialBadge set={s} />
                       {s.platform && <Badge tone="neutral">{s.platform}</Badge>}
@@ -153,7 +153,7 @@ export default function ShazamPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-1.5">
-                  <ButtonLink href={`/shazam/${s.id}`} size="sm" variant="outline"><Eye size={15} /> {t.shazam.openButton}</ButtonLink>
+                  <ButtonLink href={`/shazam/detail?id=${s.id}`} size="sm" variant="outline"><Eye size={15} /> {t.shazam.openButton}</ButtonLink>
                   <Button size="sm" variant="danger" onClick={() => setConfirmDelete(s)}><Trash2 size={15} /></Button>
                 </div>
               </div>
