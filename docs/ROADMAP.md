@@ -178,9 +178,23 @@ endpoints, `docs/API.md`.
   orphan process left once the window closes. **Not yet distributable**:
   signed ad-hoc, not by Apple, and the `.dmg` `tauri build` produces
   alongside it — a side effect of bundling for `"all"` targets — is not a
-  release artifact. Notarization, a real `.dmg`, an updater and a `LICENSE`
-  file are the fourth and last sub-project. Third of the four sub-projects of
-  the Tauri packaging work.
+  release artifact. Third of the four sub-projects of the Tauri packaging work.
+- **Release** (2026-08-22). The bundle became something that can be handed to
+  someone: `LICENSE` carries the AGPL-3.0, which follows from shipping Essentia
+  rather than from preference, and the README says so and drops its old claim
+  that no license file exists. `bundle.targets` is now `["dmg"]` — the `.dmg`
+  is what is being built rather than a side effect of `"all"`. The README
+  explains, before anyone hits it, that the first launch on another Mac fails
+  with a message saying the app is "damaged": it is not, it is un-notarized,
+  and the way through is System Settings → Privacy & Security → Open Anyway,
+  since the old right-click shortcut no longer works. **Two things are
+  deliberately absent.** There is no Apple signature or notarization, which
+  needs a paid developer account. And there is **no auto-updater**: Tauri's
+  needs a signing keypair, a published manifest and an existing release, none
+  of which exist while the repository is private — configuring an automatic
+  update path that cannot be exercised end to end would be worse than leaving
+  it out. The Settings button still reports that a newer version exists;
+  installing it is a manual download. Last of the four sub-projects.
 
 ## Backlog
 

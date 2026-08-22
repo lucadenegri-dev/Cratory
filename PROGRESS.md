@@ -8,6 +8,13 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Release** (2026-08-22): the desktop bundle is shareable. `LICENSE` is the
+  AGPL-3.0 (a consequence of shipping Essentia, not a preference), the build
+  target is explicitly `dmg`, and the README explains up front that another Mac
+  will call the app "damaged" because it is un-notarized, with the exact steps
+  through System Settings. No Apple signature and **no auto-updater**: the
+  Settings button reports a newer version, installing it is manual. Last of
+  four sub-projects toward a Tauri desktop build.
 - **Desktop shell** (2026-08-22): `src-tauri/` is a Tauri v2 shell that starts
   the backend as a child process, waits for `/api/setup/state`, then shows
   the window (hidden until then, reloaded once the backend answers so a
