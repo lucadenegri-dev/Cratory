@@ -140,11 +140,21 @@ fn http_get(client: &reqwest::blocking::Client, url: &str, timeout: Duration) ->
 /// cwd, variabili d'ambiente sul processo figlio -- e' gia' tutto qui: il
 /// Task 5 cambia solo da dove arrivano questi due valori, non la forma del
 /// resto di questo modulo.
-/// In sviluppo non c'e' nessun runtime assemblato: si usa il python3 del
-/// PATH, o del venv attivato nella shell da cui parte `tauri dev`.
+/// In sviluppo non c'e' nessun runtime assemblato. Si preferisce il venv del
+/// progetto, e solo in sua assenza il `python3` del PATH.
+///
+/// L'ordine non e' una comodita': `tauri dev` non eredita il venv attivato in
+/// una shell, quindi senza questo controllo prende il python3 di sistema (il
+/// 3.9 su macOS), che non ha uvicorn — e l'avvio muore con un traceback di
+/// `click` che non dice niente a chi lo legge. E' successo davvero.
 #[cfg(debug_assertions)]
-fn python_command(_app: &AppHandle) -> PathBuf {
-    PathBuf::from("python3")
+fn python_command(_app: &AppHandle, backend_dir: &Path) -> PathBuf {
+    let del_venv = backend_dir.join(".venv/bin/python3");
+    if del_venv.is_file() {
+        del_venv
+    } else {
+        PathBuf::from("python3")
+    }
 }
 
 /// Nel bundle si usa l'interprete che il bundle si porta dietro, MAI il
@@ -162,7 +172,7 @@ fn python_command(_app: &AppHandle) -> PathBuf {
 /// `Some`. Se lo diventasse sarebbe un bug nostro, quindi si segnala invece
 /// di ripiegare in silenzio su un interprete sbagliato.
 #[cfg(not(debug_assertions))]
-fn python_command(app: &AppHandle) -> PathBuf {
+fn python_command(app: &AppHandle, _backend_dir: &Path) -> PathBuf {
     match resource_dir(app) {
         Some(r) => r.join("python/bin/python3"),
         None => {
@@ -294,7 +304,7 @@ fn env_value(path: Option<PathBuf>) -> String {
 /// sempre l'interprete con `-m` evita il problema perche' non passa mai da
 /// uno script con uno shebang cucito addosso.
 fn spawn_backend(app: &AppHandle, backend_dir: &Path) -> std::io::Result<Child> {
-    Command::new(python_command(app))
+    Command::new(python_command(app, backend_dir))
         .args([
             "-m",
             "uvicorn",
@@ -517,7 +527,7 @@ pub fn avvia_e_attendi(app: AppHandle) {
                 // sbagliata. Il percorso stampato dice gia' quale dei due e'.
                 &format!(
                     "Impossibile lanciare '{} -m uvicorn': {err}",
-                    python_command(&app).display()
+                    python_command(&app, &backend_dir).display()
                 ),
             );
             return;
