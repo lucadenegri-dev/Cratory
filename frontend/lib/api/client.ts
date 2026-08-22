@@ -1,10 +1,8 @@
+import { API_BASE } from "@/lib/api/base";
 import { translateApiError } from "@/lib/i18n/runtime";
 
-// Base API vuota = stesso host della pagina: le chiamate /api/* passano dal
-// rewrite di next.config.ts verso il backend, quindi l'app funziona anche
-// aperta da un altro dispositivo in LAN. NEXT_PUBLIC_API_URL resta come
-// override opzionale solo per setup particolari (backend su origin diverso).
-export const API = process.env.NEXT_PUBLIC_API_URL ?? "";
+// La base la decide lib/api/base.ts, per tutti e due i client HTTP.
+export const API = API_BASE;
 
 export const SPOTIFY_LOGIN_URL = `${API}/api/spotify/login`;
 

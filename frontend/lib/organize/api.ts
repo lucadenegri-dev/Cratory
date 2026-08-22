@@ -1,11 +1,13 @@
+import { API_BASE } from "@/lib/api/base";
 import { getCurrentLanguage, translateApiError } from "@/lib/i18n/runtime";
 
-/* Base relativa = stesso host della pagina: le chiamate /api/organize/* passano
-   dal rewrite di next.config.ts verso il backend (come lib/api/client.ts), così
-   l'app funziona anche aperta da un altro dispositivo in LAN e senza CORS.
-   Le rotte Organize vivono sotto /api/organize: i path passati a apiGet/apiSend
-   sono relativi a questa base (es. "/files" → /api/organize/files). */
-const API = "/api/organize";
+/* La base la decide lib/api/base.ts (come lib/api/client.ts): vuota, le
+   chiamate /api/organize/* passano dal rewrite di next.config.ts verso il
+   backend, quindi l'app funziona anche aperta da un altro dispositivo in LAN
+   e senza CORS; valorizzata, puntano dritte al backend (build statico, niente
+   rewrite). Le rotte Organize vivono sotto /api/organize: i path passati a
+   apiGet/apiSend sono relativi a questa base (es. "/files" → /api/organize/files). */
+const API = `${API_BASE}/api/organize`;
 
 // F3b: `scan_root` non è più un concetto gestito dall'utente. Esistono
 // esattamente due cartelle canoniche, derivate da Settings (LIBRARY_ROOT e
