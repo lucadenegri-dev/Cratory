@@ -1400,7 +1400,8 @@ build, where there is no repository root to read from.
 A third seam of the same shape, `CRATORY_DATA_DIR`, sits alongside
 `CRATORY_VERSION` and `CRATORY_BIN_DIR` above: it redirects everything the
 backend writes at runtime — the database, logs, the cover/thumb caches, the
-managed `bin/` folder, and `.env` itself — away from the code directory
+managed `bin/` folder, slskd's own config/downloads/pid/log files, and `.env`
+itself — away from the code directory
 (`backend/`) into a separate data directory, for a packaged build where the
 code directory is read-only. Unset, all of it lands under `backend/`, byte for
 byte the same as before this variable existed. Unlike the other two, it

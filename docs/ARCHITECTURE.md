@@ -904,7 +904,8 @@ can't leave those disagreeing with the wizard about the same binary.
 A second seam of the same shape covers what the app *writes*. `core/paths.py`
 separates two meanings that used to share one name: `BACKEND_DIR` is where the
 code lives, `DATA_DIR` is where the writes go — database, logs, cover and thumb
-caches, the managed `bin/` folder, and `.env`. `CRATORY_DATA_DIR` sets the
+caches, the managed `bin/` folder, slskd's own config/downloads/pid/log files,
+and `.env`. `CRATORY_DATA_DIR` sets the
 second; without it the two coincide and nothing changes, which is why
 development, self-hosting and the test suite never notice the seam exists.
 It matters because inside a signed `.app` the code directory is read-only, and
