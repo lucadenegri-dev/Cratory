@@ -103,12 +103,16 @@ def managed_bin_dir() -> Path:
     controllo di disponibilità in un errore 500 su un mount read-only o senza
     permessi di scrittura — oltre a creare cartelle nel repo reale a ogni run
     dei test. Chi deve scriverci dentro chiama `ensure_bin_dir()`.
+
+    La radice dei percorsi relativi è la cartella dei dati, non quella del
+    codice: in un bundle l'installer non potrebbe scrivere dentro `backend/`.
     """
-    from app.core.config import BACKEND_DIR, settings
+    from app.core import paths
+    from app.core.config import settings
     raw = os.environ.get(BIN_DIR_ENV) or settings.bin_dir
     path = Path(raw)
     if not path.is_absolute():
-        path = BACKEND_DIR / path
+        path = paths.DATA_DIR / path
     return path
 
 
