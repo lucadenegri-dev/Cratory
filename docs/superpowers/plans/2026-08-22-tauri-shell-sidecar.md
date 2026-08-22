@@ -229,7 +229,7 @@ Implementare quanto sopra in `src-tauri/scripts/costruisci_binari.py`, con la st
 ```bash
 cd /Users/lucadenegri/Develop/DJProject01/.claude/worktrees/wizardly-bassi-00b805
 python3 src-tauri/scripts/costruisci_binari.py /tmp/cratory-bin-prova
-find /tmp/cratory-bin-prova -maxdepth 2 -type f -perm +111 | sort
+find /tmp/cratory-bin-prova -maxdepth 3 -type f -perm +111 | sort
 ```
 
 Atteso: `bin/fpcalc`, `bin/ffmpeg/ffmpeg`, `bin/slskd/slskd`, più le dylib accanto a ffmpeg.
