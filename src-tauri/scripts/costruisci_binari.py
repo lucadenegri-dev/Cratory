@@ -446,11 +446,13 @@ def main() -> None:
         raise SystemExit(2)
     try:
         costruisci(Path(sys.argv[1]))
-    except RuntimeError as errore:
-        # I fallimenti previsti (hash sbagliato, comando esterno fallito,
-        # binario che non parte, Homebrew/ffmpeg assenti, ...) hanno gia' un
-        # messaggio che dice cosa e' andato storto: un traceback sopra non
-        # aggiunge informazione, la nasconde nel rumore.
+    except Exception as errore:  # noqa: BLE001
+        # I fallimenti previsti (RuntimeError: hash sbagliato, comando
+        # esterno fallito, binario che non parte, Homebrew/ffmpeg assenti,
+        # ...) hanno gia' un messaggio che dice cosa e' andato storto.
+        # Qualunque altra eccezione imprevista merita lo stesso trattamento
+        # leggibile invece di un traceback grezzo: chi lancia questo script
+        # da terminale/CI legge stderr, non uno stack trace Python.
         print(f"ERRORE: {errore}", file=sys.stderr)
         raise SystemExit(1)
 

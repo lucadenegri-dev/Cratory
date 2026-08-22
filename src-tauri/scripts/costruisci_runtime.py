@@ -29,6 +29,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -72,6 +73,28 @@ _CARTELLE_TOPLEVEL_DA_RIMUOVERE = ("share", "include")
 # comunque produrre un interprete che non importa essentia (wheel sbagliata,
 # libreria nativa mancante, ...).
 _MODULI_DA_VERIFICARE = ("essentia.standard", "fastapi", "uvicorn", "yt_dlp", "shazamio", "mutagen", "PIL", "acoustid")
+
+
+def _verifica_piattaforma() -> None:
+    """RUNTIME_URL sopra e' pinnato per aarch64-apple-darwin: nessun altro
+    URL e' registrato in questo script. Senza questo controllo, su
+    un'altra piattaforma (Intel, Linux, Windows, o anche un ramo arm64 di
+    un fork) lo script scaricherebbe comunque quell'archivio, ne
+    verificherebbe l'hash (che combacia: e' lo stesso file per chiunque lo
+    scarichi) e morirebbe solo dopo, dentro `pip install` o al primo
+    `python3` lanciato, con un OSError grezzo tipo "Exec format error" che
+    non dice affatto qual e' il problema reale. Stesso principio del
+    preflight di `costruisci_binari.py` (`_prerequisiti_ffmpeg`): fermarsi
+    subito, con un messaggio chiaro, prima di spendere tempo e banda."""
+    if sys.platform != "darwin" or platform.machine() != "arm64":
+        raise RuntimeError(
+            "questo script scarica un runtime Python pinnato per "
+            "aarch64-apple-darwin (Apple Silicon): nessun altro URL e' "
+            f"registrato qui (sys.platform={sys.platform!r}, "
+            f"platform.machine()={platform.machine()!r} su questa macchina). "
+            "Aggiornare RUNTIME_URL/RUNTIME_SHA256/_PY_VERSION_DIR per la "
+            "piattaforma di build voluta prima di continuare."
+        )
 
 
 def _scarica_e_verifica(cartella_tmp: Path) -> Path:
@@ -220,6 +243,8 @@ def _dimensione(cartella: Path) -> str:
 
 
 def costruisci(destinazione: Path) -> None:
+    _verifica_piattaforma()
+
     destinazione = destinazione.resolve()
     destinazione.mkdir(parents=True, exist_ok=True)
 
@@ -261,10 +286,13 @@ def main() -> None:
         raise SystemExit(2)
     try:
         costruisci(Path(sys.argv[1]))
-    except RuntimeError as errore:
-        # I fallimenti previsti (hash sbagliato, import mancante, ...) hanno
-        # gia' un messaggio che dice cosa e' andato storto: un traceback sopra
-        # non aggiunge informazione, la nasconde nel rumore.
+    except Exception as errore:  # noqa: BLE001
+        # I fallimenti previsti (RuntimeError: piattaforma sbagliata, hash
+        # sbagliato, import mancante, ...) hanno gia' un messaggio che dice
+        # cosa e' andato storto. Qualunque altra eccezione imprevista merita
+        # lo stesso trattamento leggibile invece di un traceback grezzo: chi
+        # lancia questo script da terminale/CI legge stderr, non uno stack
+        # trace Python.
         print(f"ERRORE: {errore}", file=sys.stderr)
         raise SystemExit(1)
 

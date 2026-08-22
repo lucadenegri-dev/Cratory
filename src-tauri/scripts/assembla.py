@@ -305,11 +305,13 @@ def assembla() -> None:
 def main() -> None:
     try:
         assembla()
-    except RuntimeError as errore:
-        # I fallimenti previsti (build del frontend fallita, comando esterno
-        # fallito, ...) hanno gia' un messaggio che dice cosa e' andato
-        # storto: un traceback sopra non aggiunge informazione, la nasconde
-        # nel rumore.
+    except Exception as errore:  # noqa: BLE001
+        # I fallimenti previsti (RuntimeError: build del frontend fallita,
+        # comando esterno fallito, ...) hanno gia' un messaggio che dice cosa
+        # e' andato storto. Qualunque altra eccezione imprevista merita lo
+        # stesso trattamento leggibile invece di un traceback grezzo: chi
+        # lancia questo script da terminale/CI legge stderr, non uno stack
+        # trace Python.
         print(f"ERRORE: {errore}", file=sys.stderr)
         raise SystemExit(1)
 
