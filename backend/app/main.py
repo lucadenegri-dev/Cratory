@@ -1,14 +1,19 @@
 import logging
 import time
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from dotenv import load_dotenv
+
+from app.core import paths
 # pydantic-settings carica .env dentro Settings (incluso ai_api_key, passato
 # esplicito ai client Anthropic), ma non tocca l'os.environ di processo. Serve
 # comunque per FPCALC, letto direttamente da os.environ in
 # organize/integrations/acoustid.py.
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+#
+# Il percorso arriva da app.core.paths e non da app.core.config: importare
+# config qui costruirebbe Settings() prima che il .env sia nell'ambiente, che è
+# proprio quello che questa riga deve evitare. paths non dipende da niente.
+load_dotenv(paths.DATA_DIR / ".env")
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -60,6 +65,10 @@ logger = logging.getLogger("app.request")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Prima di setup_logging(), che è il primo a scrivere (LOG_DIR.mkdir).
+    # Fallire qui con un messaggio leggibile è l'unica forma di diagnosi
+    # disponibile a un utente che ha un'icona e nessun terminale.
+    paths.verifica_scrivibile(paths.DATA_DIR)
     setup_logging()
     # F2: un solo Base/engine. ensure_schema crea anche le tabelle Organize
     # (import differito di app.organize.models dentro app.db.ensure_schema).
