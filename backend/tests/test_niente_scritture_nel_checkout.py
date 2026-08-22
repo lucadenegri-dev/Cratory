@@ -22,13 +22,34 @@ from app.core import paths
 _IGNORATI = {"__pycache__", ".venv"}
 
 
-def _fotografia(radice: Path) -> set[str]:
-    voci = set()
+def _fotografia(radice: Path) -> set[tuple[str, int, int]]:
+    """Percorso, dimensione e mtime — non il solo percorso.
+
+    Un confronto fra soli nomi e' cieco sul caso piu' probabile. I cinque
+    ancoraggi riusano nomi fissi (`djassistant.log`, `djassistant.db`), quindi
+    su qualunque macchina che abbia gia' avviato l'app in sviluppo quei file
+    esistono gia': una regressione che ci riscrive dentro non fa comparire
+    nessun nome nuovo, e un confronto fra insiemi di nomi resta verde mentre la
+    regressione e' viva. Con dimensione e mtime la riscrittura si vede.
+
+    Leggere un file non ne cambia l'mtime, quindi niente falsi positivi da
+    lettura. Le cartelle entrano col solo nome: il loro mtime cambia anche
+    quando ci compare dentro un `__pycache__` che abbiamo gia' escluso, e
+    quello si', sarebbe un falso positivo.
+    """
+    voci: set[tuple[str, int, int]] = set()
     for percorso in radice.rglob("*"):
-        parti = set(percorso.relative_to(radice).parts)
-        if parti & _IGNORATI or percorso.suffix == ".pyc":
+        rel = percorso.relative_to(radice)
+        if set(rel.parts) & _IGNORATI or percorso.suffix == ".pyc":
             continue
-        voci.add(str(percorso.relative_to(radice)))
+        if percorso.is_dir():
+            voci.add((str(rel), -1, -1))
+            continue
+        try:
+            stato = percorso.stat()
+        except OSError:
+            continue
+        voci.add((str(rel), stato.st_size, stato.st_mtime_ns))
     return voci
 
 
@@ -61,8 +82,11 @@ def test_niente_di_nuovo_sotto_backend(tmp_path):
     assert esito.returncode == 0, esito.stderr
     assert esito.stdout.strip().endswith("fatto")
 
-    comparsi = _fotografia(paths.BACKEND_DIR) - prima
-    assert comparsi == set(), f"scritti dentro il checkout: {sorted(comparsi)}"
+    scritti = _fotografia(paths.BACKEND_DIR) - prima
+    assert not scritti, (
+        "scritti o modificati dentro il checkout: "
+        f"{sorted({v[0] for v in scritti})}"
+    )
 
 
 def test_e_invece_tutto_e_atterrato_nella_cartella_dei_dati(tmp_path):
