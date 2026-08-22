@@ -142,8 +142,12 @@ To publish a version:
 
 1. Bump `VERSION` and `frontend/package.json` together.
 2. Tag it `vX.Y.Z` — the tag carries the `v`, the file does not.
-3. Create a GitHub release for that tag, with notes. Those notes are what
-   Settings → Version shows when a newer version exists.
+3. Build the bundle: `python3 src-tauri/scripts/assembla.py`. It needs Homebrew
+   with ffmpeg installed **on the build machine** — never on the machine of
+   whoever installs the app.
+4. Create a GitHub release for that tag, with notes, and attach
+   `src-tauri/target/release/bundle/dmg/Cratory_<version>_aarch64.dmg` to it.
+   Those notes are what Settings → Version shows when a newer version exists.
 
 Settings has a **Check for updates** button. It compares the running version
 with the latest published release and reports one of three things: you are up to
@@ -159,12 +163,6 @@ yet: the button tells you a newer version exists, and installing it is a manual
 download. Wiring Tauri's updater needs a signing keypair, a published manifest
 and at least one existing release, and configuring an automatic update path that
 cannot yet be exercised end to end would be worse than not having one.
-
-To attach the artifact to a release:
-
-4. Build the bundle with `python3 src-tauri/scripts/assembla.py`.
-5. Attach `src-tauri/target/release/bundle/dmg/Cratory_<version>_aarch64.dmg`
-   to the GitHub release for that tag.
 
 ## Opening it on another Mac
 
