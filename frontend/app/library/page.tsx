@@ -78,7 +78,7 @@ function LibraryInner() {
   // Querystring corrente derivata dallo stato dei filtri/sort/paginazione: unica
   // fonte sia per la sincronizzazione dell'URL (sotto) sia per il param `from` che
   // i link verso il dettaglio traccia portano con sé, cosi il back-link dal
-  // dettaglio puo' ricostruire la stessa vista filtrata (vedi tracks/[id]/page.tsx).
+  // dettaglio puo' ricostruire la stessa vista filtrata (vedi app/tracks/page.tsx).
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
     if (artist) params.set("artist", artist);

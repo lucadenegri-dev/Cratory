@@ -257,8 +257,10 @@ function SetDetailInner() {
 
   // Id assente (rotta a query senza `?id=`, non piu' irraggiungibile ora che
   // non e' un segmento di percorso): stesso testo di un id numerico inesistente,
-  // vedi app/tracks/page.tsx per lo stesso pattern. La chiave e' tipizzata
-  // `string | funzione`: qui e' sempre una stringa.
+  // vedi app/tracks/page.tsx per lo stesso pattern, compreso il perche' del
+  // restringimento: il blocco `errors` dei dizionari e' castato a
+  // `Record<string, string | ((p) => string)>`, quindi il tipo porta l'unione
+  // anche su una chiave il cui valore e' un letterale.
   if (!id) {
     const msg = t.errors.set_not_found;
     return (

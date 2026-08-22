@@ -133,9 +133,10 @@ async function apiGet<T>(
   path: string,
   params?: Record<string, string | number | boolean | undefined>,
 ): Promise<T> {
-  // Niente `new URL(...)`: con base relativa (API sotto /api/organize) lancerebbe.
-  // La query string viene costruita a mano, come in lib/api/client.ts, così l'URL
-  // resta relativo allo stesso host.
+  // Niente `new URL(...)`: quando API_BASE e' vuota (il caso di default) API vale
+  // "/api/organize", una base relativa su cui `new URL` lancerebbe. La query string
+  // si costruisce a mano, come in lib/api/client.ts, cosi' l'URL resta relativo con
+  // base vuota e assoluto quando la base e' valorizzata (build statico).
   let url = API + path;
   if (params) {
     const qs = new URLSearchParams();

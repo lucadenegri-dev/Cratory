@@ -56,8 +56,10 @@ export async function apiGet<T>(
   params?: Record<string, string | number | boolean | undefined | (string | number)[]>,
   opts?: { signal?: AbortSignal },
 ): Promise<T> {
-  // Niente `new URL(...)`: con base relativa (API vuota) lancerebbe. La query
-  // string viene costruita a mano, così l'URL resta relativo allo stesso host.
+  // Niente `new URL(...)`: quando API e' vuota (il caso di default) la base e'
+  // relativa e `new URL` lancerebbe. La query string si costruisce a mano, cosi'
+  // l'URL resta relativo con base vuota e assoluto quando la base e' valorizzata
+  // (build statico, vedi lib/api/base.ts).
   let url = API + path;
   if (params) {
     const qs = new URLSearchParams();

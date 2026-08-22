@@ -5,7 +5,7 @@
 // Annulla (ghost) + azione di conferma. tone="danger" per le azioni
 // distruttive (eliminazioni, sovrascritture irreversibili).
 // onConfirm NON chiude da solo: il chiamante azzera il proprio stato
-// (stessa convenzione del modal di eliminazione in /sets/[id]).
+// (stessa convenzione del modal di eliminazione in /sets/detail).
 
 import { Button, Modal } from "@/components/ui";
 import { useT } from "@/lib/i18n";

@@ -104,9 +104,11 @@ function TrackPageInner() {
   // inesistente, cosi' i due casi sono visivamente indistinguibili. Letto da
   // `useT()` come tutto il resto della pagina — non da `translateApiError`
   // diretto, che legge uno stato fuori da React e in dev disallinea la lingua
-  // fra il render server e la prima idratazione client. La chiave e' tipizzata
-  // `string | funzione` (altre voci di `errors` prendono parametri): qui e'
-  // sempre una stringa, il ramo funzione e' irraggiungibile.
+  // fra il render server e la prima idratazione client. Il blocco `errors` dei
+  // dizionari ha un `as Record<string, string | ((p) => string)>` in fondo
+  // (lib/i18n/en.ts), quindi ogni chiave e' tipizzata con l'unione anche dove il
+  // valore e' un letterale: da qui il restringimento, il cui ramo funzione qui
+  // non si percorre mai.
   if (!id) {
     const msg = t.errors.track_not_found;
     return <PageLayout title={t.tracks.pageTitle}><Alert tone="danger">⚠ {typeof msg === "string" ? msg : msg({})}</Alert></PageLayout>;
