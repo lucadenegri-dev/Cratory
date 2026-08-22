@@ -315,6 +315,20 @@ fn spawn_backend(app: &AppHandle, backend_dir: &Path) -> std::io::Result<Child> 
             BACKEND_HOST,
         ])
         .current_dir(backend_dir)
+        // Il processo figlio eredita per default TUTTO l'ambiente del
+        // genitore, non solo le tre env sotto: se la shell che lancia
+        // l'app.bundle (o l'utente stesso, in ~/.zshrc etc.) ha PYTHONHOME o
+        // PYTHONPATH esportate -- capita con altri progetti Python, altri
+        // venv attivati a mano, tool tipo pyenv -- l'interprete rilocabile
+        // del bundle le userebbe al posto della sua stdlib bundlata,
+        // rompendosi con un errore criptico (moduli non trovati, versione
+        // sbagliata) invece di partire pulito con solo cio' che ha portato
+        // con se'. Il seam CRATORY_BIN_DIR esiste apposta perche' il backend
+        // non debba dipendere dall'ambiente della shell che lo lancia: le
+        // stesse due variabili nel processo, ereditate senza controllo,
+        // sarebbero la stessa trappola da un'altra porta.
+        .env_remove("PYTHONHOME")
+        .env_remove("PYTHONPATH")
         // Le tre env che il backend sa leggere (vedi backend/app/core/paths.py
         // e backend/app/services/system_probe.py). CRATORY_DATA_DIR e
         // CRATORY_BIN_DIR sono vuote in sviluppo (default = cartella del
