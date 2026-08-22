@@ -155,6 +155,11 @@ export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prev
       <audio
         ref={audioRef}
         data-testid={testId}
+        // Nel bundle la pagina sta su tauri://localhost e l'audio su
+        // 127.0.0.1:8000: senza dichiarare l'origine incrociata,
+        // createMediaElementSource restituisce una sorgente tainted e
+        // l'analizzatore legge zeri — spettro fermo, nessun errore.
+        crossOrigin="anonymous"
         src={src}
         autoPlay
         onPlay={(e) => {
