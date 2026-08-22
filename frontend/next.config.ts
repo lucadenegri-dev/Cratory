@@ -4,6 +4,12 @@ import type { NextConfig } from "next";
 // browser non lo vede mai). Override con BACKEND_URL solo per setup particolari.
 const BACKEND = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
 
+// Build statico per il bundle desktop: niente server Next, quindi niente
+// rewrites — Next non li applicherebbe, e lasciarli qui direbbe il falso a chi
+// legge. Il client punta al backend con NEXT_PUBLIC_API_URL (lib/api/base.ts).
+// Senza questa variabile non cambia niente: dev, HMR, proxy e suite E2E come prima.
+const ESPORTA_STATICO = process.env.CRATORY_STATIC_EXPORT === "1";
+
 const nextConfig: NextConfig = {
   // Next 16 blocca due `next dev` concorrenti sulla stessa distDir (lockfile
   // in <distDir>/dev/lock). La suite E2E (playwright.config.ts) gira sulla
@@ -17,17 +23,19 @@ const nextConfig: NextConfig = {
   // useEffect dopo l'hydration — la pagina resta un guscio statico e nessuna
   // chiamata /api/* parte. Vale solo in sviluppo.
   allowedDevOrigins: ["127.0.0.1", "localhost"],
-  async rewrites() {
-    return [
-      {
-        // Proxy verso il backend: il browser chiama /api/* sullo stesso host
-        // della pagina (funziona anche da altri dispositivi in LAN) e Next
-        // inoltra al backend. Non ci sono route app/api/ da preservare.
-        source: "/api/:path*",
-        destination: `${BACKEND}/api/:path*`,
-      },
-    ];
-  },
+  ...(ESPORTA_STATICO ? { output: "export" as const } : {
+    async rewrites() {
+      return [
+        {
+          // Proxy verso il backend: il browser chiama /api/* sullo stesso host
+          // della pagina (funziona anche da altri dispositivi in LAN) e Next
+          // inoltra al backend. Non ci sono route app/api/ da preservare.
+          source: "/api/:path*",
+          destination: `${BACKEND}/api/:path*`,
+        },
+      ];
+    },
+  }),
 };
 
 export default nextConfig;
