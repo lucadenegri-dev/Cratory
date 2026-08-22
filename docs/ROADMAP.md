@@ -116,6 +116,14 @@ endpoints, `docs/API.md`.
   be changed without re-running the wizard) takes effect immediately, no restart — and
   its value never appears in an API response, only whether it's configured and where it
   came from.
+- **Bundle-ready** (2026-08-22). The backend no longer writes inside its own
+  checkout: `core/paths.py` splits `BACKEND_DIR` (where the code is) from
+  `DATA_DIR` (where the writes go), with `CRATORY_DATA_DIR` selecting the
+  second and everything unchanged when it is unset. An invariant test starts
+  the app in a subprocess with the variable set and asserts that nothing new
+  appears under `BACKEND_DIR` — the property, not a list of five known paths.
+  First of the four sub-projects of the Tauri packaging work
+  (`docs/superpowers/specs/2026-08-22-tauri-decomposizione-design.md`).
 
 ## Backlog
 

@@ -8,6 +8,10 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Bundle-ready** (2026-08-22): the backend runs entirely from a read-only code
+  directory. `CRATORY_DATA_DIR` — same seam shape as `CRATORY_BIN_DIR` and
+  `CRATORY_VERSION` — redirects database, logs, caches, managed binaries and
+  `.env`; unset, nothing changes. Step one of four toward a Tauri desktop build.
 - **Version and updates** (2026-08-22): the app has a single version (`VERSION` at
   the repository root, `CRATORY_VERSION` overriding it for a packaged build) shown
   in Settings, with a button that compares it against the latest GitHub release.

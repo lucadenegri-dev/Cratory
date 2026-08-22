@@ -901,6 +901,20 @@ or the daemon changes. The seam isn't probe-only: `acoustid.fpcalc_available`,
 `routers/downloads.py` and `routers/dj_sets.py` all delegate to it too, so a bundle build
 can't leave those disagreeing with the wizard about the same binary.
 
+A second seam of the same shape covers what the app *writes*. `core/paths.py`
+separates two meanings that used to share one name: `BACKEND_DIR` is where the
+code lives, `DATA_DIR` is where the writes go — database, logs, cover and thumb
+caches, the managed `bin/` folder, and `.env`. `CRATORY_DATA_DIR` sets the
+second; without it the two coincide and nothing changes, which is why
+development, self-hosting and the test suite never notice the seam exists.
+It matters because inside a signed `.app` the code directory is read-only, and
+writing there would invalidate the signature. A relative `CRATORY_DATA_DIR`
+raises at import rather than resolving against the process's working directory:
+data landing wherever the app happened to be launched from is the exact defect
+the config validators already declare they fixed. The startup writability check
+exists for a packaged user, who has an icon and no terminal in which to read a
+`PermissionError`.
+
 ## Frontend
 
 Next.js 16 with the App Router, React 19, Tailwind 4. `frontend/CLAUDE.md` documents the
