@@ -106,10 +106,24 @@ aggiornato", `Err` è "non è stato possibile controllare": **i tre esiti restan
 tre**, come già li tiene distinti `update_check.py`, e il terzo non degrada mai
 nel primo.
 
-`ErroreAggiornamento` non porta frasi: porta un **codice** (`rete`, `firma`,
-`permessi`, `sconosciuto`) e il dettaglio tecnico. La frase la scrivono i
-dizionari del frontend, nelle due lingue. È la stessa regola per cui i testi
-user-facing non nascono da chi solleva l'errore.
+`ErroreAggiornamento` non porta frasi: porta un **codice** e il dettaglio
+tecnico. La frase la scrivono i dizionari del frontend, nelle due lingue: è la
+stessa regola per cui i testi user-facing non nascono da chi solleva l'errore.
+
+I codici sono **la fase in cui si è fallito**, non la causa indovinata:
+`permessi`, `controllo`, `scaricamento`, `installazione`. Classificare per causa
+(«rete», «firma») vorrebbe dire leggere le varianti di
+`tauri_plugin_updater::Error`, che il plugin non promette di non cambiare, o
+peggio annusare il testo dell'errore; la fase invece la conosciamo con
+certezza, e per l'utente è la cosa che decide il da farsi. `firma` non sparisce:
+un pacchetto non autentico fa fallire `download`, che è dove la firma viene
+verificata, e cade in `scaricamento`.
+
+`permessi` è l'unico determinato **prima** e non dopo: il bundle si sostituisce
+scrivendo nella cartella che lo contiene, quindi si controlla con
+`libc::access(W_OK)` — `libc` è già una dipendenza unix del guscio — che quella
+cartella sia scrivibile, e si fallisce subito invece che dopo 172 MB di
+download inutile.
 
 Il progresso viaggia come evento `aggiornamento://progresso` con byte scaricati
 e totale. Il plugin lo chiamiamo da Rust, quindi in `capabilities/default.json`
