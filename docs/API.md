@@ -998,11 +998,20 @@ don't check the platform at all — `status` has nothing platform-specific to re
 operation Windows handles the same as everywhere else — so both keep working there.
 
 `GET /api/slskd/daemon/status` → `{"reachable": bool, "owned": bool | null, "pid": int
-| null}`. `reachable` is the same `/health` check as `GET /api/slskd/status`; `owned`
-is a tristate, not a boolean — `true`/`false` when Cratory can tell whose process is
-answering (a daemon it started itself vs. one the user runs independently), `null` on
-a platform where that can't be determined at all (Windows). `pid` is set only when
-`owned` is `true`.
+| null, "installed": bool, "configured": bool, "username": str | null}`. `reachable` is
+the same `/health` check as `GET /api/slskd/status`; `owned` is a tristate, not a
+boolean — `true`/`false` when Cratory can tell whose process is answering (a daemon it
+started itself vs. one the user runs independently), `null` on a platform where that
+can't be determined at all (Windows). `pid` is set only when `owned` is `true`.
+
+The last three say **how far along the setup is**, which is what lets one row offer a
+single sensible action instead of every action at once: `installed` is whether the
+binary sits in the app-managed folder, `configured` whether slskd's YAML file exists,
+and `username` the Soulseek account read from that file — so it can be shown without
+being asked for again. **The password is never returned**, by this or any other field.
+`start` and `stop` answer with the same model and the same three fields: they are
+computed per response, not defaulted, because `installed: false` right after a
+successful start would send the UI back to offering a download.
 
 `POST /api/slskd/daemon/start` installs nothing itself — it requires `slskd` already
 present in the managed folder (`POST /api/setup/install/slskd` first) — writes the pid
