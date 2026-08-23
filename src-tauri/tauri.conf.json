@@ -27,7 +27,7 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": ["dmg"],
+    "targets": ["app", "dmg"],
     "shortDescription": "Workbench per set DJ",
     "longDescription": "Importa playlist di streaming, costruisce set DJ sulle tracce che possiedi, scava per trovare musica nuova e tiene in ordine la libreria.",
     "icon": [

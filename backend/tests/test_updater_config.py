@@ -21,6 +21,20 @@ def test_il_bundle_produce_gli_artefatti_dell_updater():
     assert CONF["bundle"]["createUpdaterArtifacts"] is True
 
 
+def test_il_target_app_e_fra_quelli_costruiti():
+    """`createUpdaterArtifacts` da solo non basta, e questa è la lezione che è
+    costata una build da venti minuti.
+
+    L'artefatto che l'updater scarica su macOS è `Cratory.app.tar.gz`, e nasce
+    dal target `app`. Con `targets: ["dmg"]` il bundler produce il .dmg e
+    lascia `bundle/macos/` vuota: nessun tar.gz, nessun .sig, nessun errore —
+    la build finisce con successo e la release sarebbe pubblicabile senza
+    niente da aggiornare dentro. Il .dmg resta e resta necessario: è la prima
+    installazione, quella che l'updater non può fare."""
+    assert "app" in CONF["bundle"]["targets"]
+    assert "dmg" in CONF["bundle"]["targets"]
+
+
 def test_la_chiave_pubblica_c_e_ed_e_una_chiave():
     pubkey = CONF["plugins"]["updater"]["pubkey"]
     # Il .pub di minisign è una riga base64 di un centinaio di caratteri: un

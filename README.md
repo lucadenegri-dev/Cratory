@@ -249,10 +249,13 @@ install instead of downloading a prebuilt one. The finished app carries its
 own copy and needs nothing from Homebrew at runtime.
 
 The result is a working `.app`. It is ad-hoc signed, which is enough to run it
-on the machine that built it, but it is **not signed or notarized by Apple**
-— not yet something to give to anyone else. `tauri build` also emits a `.dmg`
-alongside it, a side effect of bundling for `"all"` targets, not a release
-artifact.
+on the machine that built it, but it is **not signed or notarized by Apple**.
+`bundle.targets` is `["app", "dmg"]`, and both are wanted: the `.dmg` is how
+someone installs Cratory the first time, and the `.app` is what
+`createUpdaterArtifacts` turns into the signed `Cratory.app.tar.gz` the updater
+downloads afterwards. Dropping `app` leaves `bundle/macos/` empty and the
+release with nothing to update from — a build that succeeds and produces half
+of what is needed.
 
 ## Tests
 
