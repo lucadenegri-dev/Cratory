@@ -34,6 +34,15 @@ tauri-plugin-dialog = "2.7.2"
 # (frontend/components/external-link-bridge.tsx) li consegna qui.
 tauri-plugin-opener = "2.5.4"
 
+# L'updater in-place. La sequenza che lo guida sta in src/aggiornamento.rs: il
+# backend Python gira DA DENTRO il bundle che si sostituisce, quindi va
+# terminato prima dell'installazione e non solo prima del riavvio.
+# La documentazione del plugin suggerisce di vincolarlo ai target non mobili;
+# qui sta fra le dipendenze normali perche' Cratory non costruisce per
+# Android/iOS -- se un giorno lo facesse, va spostato sotto un
+# [target."cfg(not(any(target_os = "android", target_os = "ios")))".dependencies].
+tauri-plugin-updater = "2"
+
 # Solo Unix: serve per mandare SIGTERM al backend prima del SIGKILL di
 # riserva (vedi src/backend.rs, termina_processo). Gia' presente in
 # Cargo.lock come dipendenza transitiva; qui diventa diretta, alla stessa

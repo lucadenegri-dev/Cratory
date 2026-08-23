@@ -1,0 +1,61 @@
+"""La configurazione dell'updater è codice: se qualcuno la spegne, va detto.
+
+Questi test non provano il funzionamento dell'updater — per quello serve un
+bundle vero — ma che la configurazione spedita non possa degradare in silenzio
+verso "non aggiorna nulla" o "accetta un manifesto da chiunque".
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+RADICE = Path(__file__).resolve().parent.parent.parent
+CONF = json.loads((RADICE / "src-tauri" / "tauri.conf.json").read_text())
+ENDPOINT = "https://github.com/lucadenegri-dev/Cratory/releases/latest/download/latest.json"
+
+
+def test_il_bundle_produce_gli_artefatti_dell_updater():
+    """Senza questo flag `tauri build` fa solo il .dmg, e la release non ha
+    niente che un'app già installata possa scaricare."""
+    assert CONF["bundle"]["createUpdaterArtifacts"] is True
+
+
+def test_la_chiave_pubblica_c_e_ed_e_una_chiave():
+    pubkey = CONF["plugins"]["updater"]["pubkey"]
+    # Il .pub di minisign è una riga base64 di un centinaio di caratteri: un
+    # placeholder o una stringa vuota non passano di qui.
+    assert len(pubkey) > 40
+    assert " " not in pubkey
+    # `pubkey` vuole il CONTENUTO del .pub, non il percorso del file: un
+    # percorso passerebbe il controllo sulla lunghezza e fallirebbe a runtime.
+    assert not pubkey.startswith(("~", "/", "."))
+
+
+def test_l_endpoint_e_quello_della_release_pubblica():
+    assert CONF["plugins"]["updater"]["endpoints"] == [ENDPOINT]
+
+
+def test_niente_http_in_chiaro_nella_configurazione_spedita():
+    """L'override per la verifica locale passa da `tauri build --config`. Se
+    quel flag finisse nel file committato, l'app spedita accetterebbe un
+    manifesto servito da chiunque su http."""
+    assert "dangerousInsecureTransportProtocol" not in CONF["plugins"]["updater"]
+
+
+def test_assembla_si_ferma_subito_senza_chiave_di_firma():
+    """Il controllo deve stare PRIMA di tutto il lavoro, non alla fine.
+
+    Il `timeout` è metà dell'asserzione: se il controllo finisse dopo il
+    preflight o dopo la build del frontend, questo test non fallirebbe con un
+    messaggio — si pianterebbe. Trenta secondi sono un'eternità per un
+    controllo su una variabile d'ambiente, e infinitamente meno dei ~20 minuti
+    di una build vera.
+    """
+    ambiente = {k: v for k, v in os.environ.items() if k != "TAURI_SIGNING_PRIVATE_KEY"}
+    esito = subprocess.run(
+        [sys.executable, str(RADICE / "src-tauri" / "scripts" / "assembla.py")],
+        capture_output=True, text=True, env=ambiente, timeout=30,
+    )
+    assert esito.returncode != 0
+    assert "TAURI_SIGNING_PRIVATE_KEY" in esito.stdout + esito.stderr

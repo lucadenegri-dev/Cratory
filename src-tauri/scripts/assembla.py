@@ -13,7 +13,9 @@ perche' `tauri.conf.json` deve poter puntare a un percorso fisso in
 quindi lo staging non rischia di finire in un commit.
 
 In ordine:
-    0. Preflight (`_prerequisiti_ffmpeg`, importato da `costruisci_binari.py`):
+    0. La chiave di firma dell'updater (`_chiave_di_firma`): senza,
+       `tauri build` fallirebbe alla fine di tutto (vedi li').
+    0-bis. Preflight (`_prerequisiti_ffmpeg`, importato da `costruisci_binari.py`):
        Homebrew/ffmpeg installati, otool/install_name_tool/codesign sul PATH.
        Fatto qui, per primo, cosi' una macchina senza i prerequisiti fallisce
        in pochi secondi invece che dopo i ~5 minuti del passo 2.
@@ -253,7 +255,33 @@ def _dimensione(cartella: Path) -> str:
         return f"{totale / (1024 * 1024):.1f}M (stima sui byte apparenti: 'du' non disponibile)"
 
 
+def _chiave_di_firma() -> None:
+    """La build deve fallire qui, non fra venti minuti al momento del bundling.
+
+    Con `createUpdaterArtifacts` attivo in `tauri.conf.json`, `tauri build`
+    firma `Cratory.app.tar.gz` con la chiave privata: senza, il passo finale
+    fallisce dopo aver ricostruito tutto. E un artefatto non firmato non
+    sarebbe comunque installabile da nessuna app gia' distribuita, perche' la
+    chiave pubblica e' murata dentro i bundle che girano gia'.
+
+    Il valore non viene mai stampato.
+    """
+    if not os.environ.get("TAURI_SIGNING_PRIVATE_KEY", "").strip():
+        raise SystemExit(
+            "TAURI_SIGNING_PRIVATE_KEY non e' nell'ambiente: senza chiave privata\n"
+            "l'artefatto dell'updater non puo' essere firmato, e la release sarebbe\n"
+            "installabile solo a mano. Prima di ricostruire:\n"
+            '  export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/cratory.key)"\n'
+            '  export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<la password della chiave>"'
+        )
+
+
 def assembla() -> None:
+    # Prima ancora del preflight: e' il controllo piu' economico di tutti e
+    # sorveglia il fallimento piu' costoso (venti minuti di build che finiscono
+    # su un errore di firma).
+    _chiave_di_firma()
+
     # Preflight PRIMA di tutto il resto: senza Homebrew/ffmpeg/Xcode Command
     # Line Tools su questa macchina, costruisci_binari.py (passo 3) fallira'
     # comunque -- ma solo dopo che il passo 2 (costruisci_runtime.py) ha gia'

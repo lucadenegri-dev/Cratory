@@ -26,6 +26,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["dmg"],
     "shortDescription": "Workbench per set DJ",
     "longDescription": "Importa playlist di streaming, costruisce set DJ sulle tracce che possiedi, scava per trovare musica nuova e tiene in ordine la libreria.",
@@ -47,6 +48,14 @@
     },
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFGQjAxQTRGMkFEQUMwRDkKUldUWndOb3FUeHF3SC9OanRNbFplNUtGZTdHY3ArTXVOQ0VuMjVpdE9lTExCRFZBVHRMdkFpdUIK",
+      "endpoints": [
+        "https://github.com/lucadenegri-dev/Cratory/releases/latest/download/latest.json"
+      ]
     }
   }
 }
