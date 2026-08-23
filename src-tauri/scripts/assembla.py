@@ -314,7 +314,17 @@ def assembla() -> None:
     print(f"Staging completo in {_STAGING} ({_dimensione(_STAGING)}).")
 
     print("--- tauri build ---")
-    _esegui_streaming(["npm", "run", "tauri:build"], cwd=_RADICE_REPO / "frontend")
+    # Varco per la verifica dell'updater: `tauri build --config <file>` fonde
+    # un frammento di configurazione sopra quello committato, cosi' si puo'
+    # puntare l'updater a un server locale senza toccare (e rischiare di
+    # committare) tauri.conf.json. Vuoto in ogni build normale. Il percorso
+    # deve essere assoluto: `tauri` gira dalla radice del repo, non da qui.
+    extra = os.environ.get("CRATORY_TAURI_EXTRA_CONFIG", "").strip()
+    comando = ["npm", "run", "tauri:build"]
+    if extra:
+        print(f"Configurazione aggiuntiva: {extra}")
+        comando += ["--", "--config", extra]
+    _esegui_streaming(comando, cwd=_RADICE_REPO / "frontend")
 
     # Glob ristretto a `release/**`, non `**` su tutto `target/`: quest'ultimo
     # e' ordine del filesystem, non "il bundle appena costruito" -- un
