@@ -154,9 +154,9 @@ with the latest published release and reports one of three things: you are up to
 date, version X is available, or it could not be determined — the last never
 disguised as the first.
 
-The check reads GitHub's public releases API, so **it only works once the
-repository is public**. While it is private, and until the first release exists,
-the button correctly reports that it cannot tell.
+The check reads GitHub's public releases API. The repository is public and
+releases exist, so the button gives a real answer; on a fork that is still
+private, or before the first release, it correctly reports that it cannot tell.
 
 **Nothing is downloaded or installed automatically.** There is no auto-updater
 yet: the button tells you a newer version exists, and installing it is a manual

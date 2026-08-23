@@ -193,10 +193,48 @@ endpoints, `docs/API.md`.
   deliberately absent.** There is no Apple signature or notarization, which
   needs a paid developer account. And there is **no auto-updater**: Tauri's
   needs a signing keypair, a published manifest and an existing release, none
-  of which exist while the repository is private — configuring an automatic
-  update path that cannot be exercised end to end would be worse than leaving
-  it out. The Settings button still reports that a newer version exists;
+  of which existed then — configuring an automatic update path that cannot be
+  exercised end to end would be worse than leaving it out. The repository is
+  public now and releases exist, so the Settings button really does report when
+  a newer version is out;
   installing it is a manual download. Last of the four sub-projects.
+- **What the bundle got wrong that development never showed** (2026-08-23,
+  released as 1.0.2). Two visible failures in the packaged app, one root: the
+  page is served from `tauri://localhost` while everything it touches is
+  somewhere else. Neither could appear in `npm run dev`, where the Next proxy
+  makes the backend same-origin and a browser handles `target="_blank"` itself.
+  **The Home spectrum was still flat**, despite 1.0.1 claiming to have fixed
+  it: that fix declared `crossOrigin="anonymous"` on the audio element, but
+  `attachAnalyser` returns before touching the element when the source is not
+  same-origin, so the declaration was never reached — the analyser read zeros
+  for every owned track, with no error to explain it, and the test shipped with
+  it was a grep over the source, green for the wrong reason. The predicate is
+  now "is this ours?" — the page **or** the backend, which admits the webview
+  origin in CORS and answers `Access-Control-Allow-Origin` on Range requests
+  too — and it lives once in `frontend/lib/api/base.ts` (`isOwnOrigin`),
+  compared as scheme+host+port rather than `URL.origin`, because `tauri:` is
+  not a special scheme and its origin is the opaque string `"null"`, which
+  would make every other opaque origin look like the page itself. `crossOrigin`
+  became conditional as a direct consequence, and that is not cosmetic: the
+  same element plays the dig's previews, `t4.bcbits.com` answers without
+  `Access-Control-Allow-Origin`, and asking for a permission nobody grants does
+  not degrade the analysis — it fails the load, silencing Bandcamp.
+  **Every external link did nothing at all** — Spotify, SoundCloud, Discogs,
+  the docs links in Settings, slskd's web UI. `target="_blank"` asks WKWebView
+  for a new webview; wry creates one only if a new-window handler is
+  registered, and Tauri never registers one, so the click fell into the void:
+  no tab, no navigation, no error. One capture-phase click listener on
+  `document`, mounted once by the root layout, now hands external http(s) URLs
+  to `tauri-plugin-opener` (scope limited to `http://*`/`https://*`) — one
+  place instead of the thirteen files that write `target="_blank"`, and inert
+  outside the desktop shell. Both were verified in the release artifact itself,
+  mounted from the `.dmg` and running the bundled Python runtime, not only in a
+  development build. **The install instructions were wrong too**, in the README
+  and in all three published releases: macOS does not say the app is "damaged"
+  — it says *"Cratory" Not Opened*, Apple could not verify it is free of
+  malware — and the Privacy & Security approval does not carry over to the next
+  version, because it is tied to a signature that ad-hoc signing changes with
+  every build.
 
 ## Backlog
 

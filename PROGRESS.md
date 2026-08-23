@@ -8,10 +8,33 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **What the bundle got wrong** (2026-08-23, released as 1.0.2): two visible
+  failures in the packaged app, one root — the page is served from
+  `tauri://localhost` while everything it touches is somewhere else, which
+  `npm run dev` can never show, since there the Next proxy makes the backend
+  same-origin and a browser opens `target="_blank"` by itself. The Home
+  spectrum was still flat despite 1.0.1 saying otherwise: that fix declared
+  `crossOrigin="anonymous"` but `attachAnalyser` bails out before touching the
+  element when the source is not same-origin, so it was never reached, and its
+  test was a grep over the source — green for the wrong reason. The predicate
+  is now "is this ours?" (the page **or** the backend), decided once in
+  `frontend/lib/api/base.ts`; `crossOrigin` became conditional as a
+  consequence, because the same element plays the dig's previews and
+  Bandcamp's host grants no CORS permission, so demanding one silences it.
+  Every external link did nothing at all: the webview drops `target="_blank"`
+  unless the app registers a new-window handler, and Tauri registers none — a
+  single capture-phase listener mounted by the root layout now hands external
+  http(s) URLs to `tauri-plugin-opener`. Verified in the release artifact
+  itself, mounted from the `.dmg`, not only in a development build. The
+  install instructions were wrong too, in the README and in all three
+  published releases: macOS says *"Cratory" Not Opened*, not "damaged", and
+  the Privacy & Security approval does not survive into the next version —
+  it is tied to a signature that ad-hoc signing changes with every build.
 - **Release** (2026-08-22): the desktop bundle is shareable. `LICENSE` is the
   AGPL-3.0 (a consequence of shipping Essentia, not a preference), the build
   target is explicitly `dmg`, and the README explains up front that another Mac
-  will call the app "damaged" because it is un-notarized, with the exact steps
+  will refuse the first launch (*"Cratory" Not Opened* — Apple could not verify
+  it is free of malware) because it is un-notarized, with the exact steps
   through System Settings. No Apple signature and **no auto-updater**: the
   Settings button reports a newer version, installing it is manual. Last of
   four sub-projects toward a Tauri desktop build.
