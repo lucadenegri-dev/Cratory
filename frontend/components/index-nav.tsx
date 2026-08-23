@@ -7,6 +7,7 @@ import { RefreshCw, Settings } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { downloadPending, startLibraryIndex } from "@/lib/api";
 import { useT, type Dictionary } from "@/lib/i18n";
+import { useAggiornamento } from "@/lib/updates";
 import { Clock } from "./clock";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -56,6 +57,7 @@ export function IndexNav() {
   const t = useT();
   const NAV_GROUPS = navGroups(t);
   const pathname = usePathname();
+  const { stato } = useAggiornamento();
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   // Conteggio "da sistemare" sulla voce Download (l'archivio separato non esiste più).
@@ -151,6 +153,16 @@ export function IndexNav() {
           )}
         >
           <Settings size={13} /> {t.nav.settings}
+          {/* Il segnale piu' piccolo che dice "c'e' qualcosa": un numero
+              accanto a "Impostazioni" si leggerebbe male, e il design system
+              e' monocromo -- niente colore d'accento, non esiste. */}
+          {stato.fase === "disponibile" && (
+            <span
+              aria-label={t.nav.updateAvailable}
+              title={t.nav.updateAvailable}
+              className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-fg-strong"
+            />
+          )}
         </Link>
         <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3 text-[10px]">
           <Clock />
