@@ -20,8 +20,11 @@ import argparse
 import datetime
 import json
 import re
+import socket
 import subprocess
 import sys
+import time
+import urllib.request
 from pathlib import Path
 
 RADICE = Path(__file__).resolve().parent.parent.parent
@@ -120,6 +123,54 @@ def _artefatti(versione: str) -> tuple[Path, Path, Path]:
     return tar, sig, dmg
 
 
+def _avvia_e_interroga(app: Path, attesa_s: int = 90) -> str | None:
+    """Lancia il bundle davvero e chiede al backend che versione e'.
+
+    Ritorna `None` se tutto va bene, altrimenti il motivo. Termina sempre cio'
+    che ha avviato, figlio compreso: il guscio uccide il backend quando esce,
+    ma se e' morto prima di lanciarlo non c'e' niente da uccidere.
+    """
+    binario = app / "Contents" / "MacOS" / "cratory"
+    if _porta_occupata():
+        return (
+            "la porta 8000 e' gia' occupata: chiudi Cratory (o il suo backend "
+            "rimasto in esecuzione) prima di pubblicare, altrimenti questa "
+            "prova risponderebbe per l'istanza sbagliata"
+        )
+
+    processo = subprocess.Popen(
+        [str(binario)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+    )
+    try:
+        scadenza = time.monotonic() + attesa_s
+        while time.monotonic() < scadenza:
+            if processo.poll() is not None:
+                return f"il guscio e' uscito da solo (codice {processo.returncode})"
+            try:
+                with urllib.request.urlopen(
+                    "http://127.0.0.1:8000/api/version", timeout=2
+                ) as risposta:
+                    return None if json.load(risposta).get("version") else "nessuna versione"
+            except Exception:
+                time.sleep(2)
+        return (
+            f"il backend non ha risposto entro {attesa_s}s. Il guscio puo' essere "
+            "vivo e la finestra invisibile: e' cosi' che si presenta un thread di "
+            "avvio morto (vedi il test di regressione in src-tauri/src/backend.rs)"
+        )
+    finally:
+        processo.terminate()
+        try:
+            processo.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            processo.kill()
+
+
+def _porta_occupata() -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", 8000)) == 0
+
+
 def _adesso() -> str:
     """RFC 3339, come lo vuole il manifesto."""
     return (
@@ -136,12 +187,28 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--base-url", default=None)
     parser.add_argument("--manifest-out", type=Path, default=None)
+    parser.add_argument(
+        "--salta-avvio",
+        dest="salta_avvio",
+        action="store_true",
+        help="non provare ad aprire il bundle (solo se non puoi eseguirlo qui)",
+    )
     args = parser.parse_args()
 
     versione = _versione()
     if not args.dry_run:
         _controlli(versione)
     tar, sig, dmg = _artefatti(versione)
+
+    if not args.dry_run and not args.salta_avvio:
+        # Un bundle che non si apre non si pubblica. Il 2026-08-24 e' stata
+        # pubblicata una 1.0.3 che partiva e restava invisibile per sempre: i
+        # test erano tutti verdi, perche' nessuno di loro apriva l'app.
+        print("--- prova di avvio del bundle ---")
+        guasto = _avvia_e_interroga(BUNDLE / "macos" / "Cratory.app")
+        if guasto:
+            raise SystemExit(f"il bundle non si avvia: {guasto}")
+        print("il bundle si avvia e il backend risponde.")
     note = args.note_file.read_text().strip()
 
     manifest = costruisci_manifest(
