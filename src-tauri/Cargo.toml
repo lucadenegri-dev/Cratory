@@ -41,7 +41,18 @@ tauri-plugin-opener = "2.5.4"
 # qui sta fra le dipendenze normali perche' Cratory non costruisce per
 # Android/iOS -- se un giorno lo facesse, va spostato sotto un
 # [target."cfg(not(any(target_os = "android", target_os = "ios")))".dependencies].
-tauri-plugin-updater = "2"
+# `default-features = false` + `native-tls` NON e' una preferenza estetica.
+# Il default del plugin e' `rustls-tls`, che attiva `reqwest/rustls-no-provider`:
+# rustls senza provider crittografico. Cargo unifica le feature fra tutti i
+# consumatori di reqwest, quindi quella scelta arrivava anche al client di
+# `backend.rs` -- che parla solo con http://127.0.0.1:8000 e non fa TLS -- e
+# `Client::new()` panicava, uccidendo il thread che avvia il backend: app viva
+# nella lista processi e finestra mai mostrata (vedi il test di regressione in
+# src/backend.rs). Con native-tls il TLS lo fa Security.framework di macOS,
+# che c'e' gia', e rustls esce dal grafo. `zip` va riattivata a mano perche'
+# stava nel default che abbiamo appena spento: senza, l'updater non sa
+# scompattare cio' che scarica.
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls", "zip"] }
 
 # Solo Unix: serve per mandare SIGTERM al backend prima del SIGKILL di
 # riserva (vedi src/backend.rs, termina_processo). Gia' presente in

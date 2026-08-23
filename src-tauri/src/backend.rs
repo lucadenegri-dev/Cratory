@@ -730,3 +730,32 @@ fn termina_processo(child: &mut Child) {
     let _ = child.kill();
     let _ = child.wait();
 }
+
+#[cfg(test)]
+mod test {
+    /// Regressione del 2026-08-24, e vale la pena spiegarla per intero perche'
+    /// il sintomo non somigliava per niente alla causa.
+    ///
+    /// `tauri-plugin-updater` dipende da reqwest con la feature
+    /// `rustls-no-provider`, e Cargo UNIFICA le feature fra tutti i
+    /// consumatori: da quel momento anche il nostro client -- che parla solo
+    /// con http://127.0.0.1:8000 e non ha mai visto un byte di TLS -- viene
+    /// costruito con rustls attivo e senza provider crittografico, e
+    /// `Client::new()` PANICA.
+    ///
+    /// Quel panic avviene nella prima riga di `avvia_e_attendi`, su un thread
+    /// di sistema: il thread muore, il backend non viene mai lanciato, e la
+    /// finestra -- che parte nascosta e viene mostrata solo quando il backend
+    /// risponde -- non compare mai. L'app risultava viva nella lista processi
+    /// e invisibile sullo schermo, senza una riga di log, perche' il panic
+    /// arrivava prima di qualunque logger.
+    ///
+    /// Il test costa un millisecondo e sorveglia una dipendenza che nessuno
+    /// di noi controlla: la prossima volta che qualcuno aggiunge un crate che
+    /// tocca reqwest, questo diventa rosso invece di spedire un'app che non
+    /// si apre.
+    #[test]
+    fn il_client_http_del_guscio_si_costruisce() {
+        let _ = reqwest::blocking::Client::new();
+    }
+}
