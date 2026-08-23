@@ -53,6 +53,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 _RADICE_REPO = Path(__file__).resolve().parents[2]
@@ -272,7 +273,51 @@ def _chiave_di_firma() -> None:
             "l'artefatto dell'updater non puo' essere firmato, e la release sarebbe\n"
             "installabile solo a mano. Prima di ricostruire:\n"
             '  export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/cratory.key)"\n'
-            '  export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<la password della chiave>"'
+            "  export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<la password della chiave>'"
+        )
+    _verifica_firma()
+
+
+def _firma_di_prova() -> str | None:
+    """Firma un file temporaneo con la chiave nell'ambiente.
+
+    `None` se la firma riesce; altrimenti il messaggio della CLI. La password
+    non viene mai passata sulla riga di comando -- finirebbe visibile nella
+    lista dei processi: `tauri signer sign` legge da solo
+    TAURI_SIGNING_PRIVATE_KEY e TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+    dall'ambiente, che questo processo gia' ha.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        bersaglio = Path(tmp) / "prova.txt"
+        bersaglio.write_text("prova di firma")
+        esito = subprocess.run(
+            ["npx", "tauri", "signer", "sign", str(bersaglio)],
+            cwd=_RADICE_REPO / "frontend",
+            capture_output=True,
+            text=True,
+        )
+        if esito.returncode == 0:
+            return None
+        return (esito.stderr or esito.stdout).strip()
+
+
+def _verifica_firma(esegui=_firma_di_prova) -> None:
+    """Che la variabile esista non dice che la chiave sia utilizzabile.
+
+    La password sbagliata si scopre altrimenti alla FINE di `tauri build`,
+    quando ha gia' ricostruito frontend, runtime Python, binari e app: venti
+    minuti per un errore che si vede in un secondo. Questa e' la stessa ragione
+    per cui il preflight di ffmpeg sta in testa, applicata a una precondizione
+    che allora non esisteva.
+    """
+    errore = esegui()
+    if errore:
+        raise SystemExit(
+            "La chiave di firma c'e' ma non e' utilizzabile:\n"
+            f"  {errore}\n"
+            "Se la password contiene caratteri speciali, esportala fra apici\n"
+            "SINGOLI: fra doppi apici la shell espande $ e backtick, e quello\n"
+            "che arriva qui non e' quello che hai digitato."
         )
 
 

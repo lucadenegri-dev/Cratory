@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 RADICE = Path(__file__).resolve().parent.parent.parent
 CONF = json.loads((RADICE / "src-tauri" / "tauri.conf.json").read_text())
 ENDPOINT = "https://github.com/lucadenegri-dev/Cratory/releases/latest/download/latest.json"
@@ -73,3 +75,34 @@ def test_assembla_si_ferma_subito_senza_chiave_di_firma():
     )
     assert esito.returncode != 0
     assert "TAURI_SIGNING_PRIVATE_KEY" in esito.stdout + esito.stderr
+
+
+def _assembla():
+    """Caricato per percorso: `src-tauri/scripts/` non è un pacchetto
+    importabile, e lo script aggiunge da sé la propria cartella a sys.path."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "assembla", RADICE / "src-tauri" / "scripts" / "assembla.py"
+    )
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+def test_una_chiave_inutilizzabile_ferma_la_build_con_un_messaggio_utile():
+    """Che la variabile esista non dice che la password sia giusta, e scoprirlo
+    alla fine di `tauri build` costa l'intera build. Qui si prova che un
+    fallimento della firma diventa un'uscita immediata, e che il messaggio dica
+    all'utente la cosa che gli serve invece del solo errore della CLI."""
+    assembla = _assembla()
+    with pytest.raises(SystemExit) as uscita:
+        assembla._verifica_firma(lambda: "Wrong password for that key")
+    messaggio = str(uscita.value)
+    assert "Wrong password" in messaggio
+    assert "SINGOLI" in messaggio
+
+
+def test_una_chiave_utilizzabile_non_ferma_niente():
+    assembla = _assembla()
+    assembla._verifica_firma(lambda: None)
