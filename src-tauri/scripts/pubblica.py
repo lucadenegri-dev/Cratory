@@ -20,6 +20,8 @@ import argparse
 import datetime
 import json
 import re
+import os
+import signal
 import socket
 import subprocess
 import sys
@@ -123,7 +125,7 @@ def _artefatti(versione: str) -> tuple[Path, Path, Path]:
     return tar, sig, dmg
 
 
-def _avvia_e_interroga(app: Path, attesa_s: int = 90) -> str | None:
+def _avvia_e_interroga(app: Path, attesa: str | None = None, attesa_s: int = 90) -> str | None:
     """Lancia il bundle davvero e chiede al backend che versione e'.
 
     Ritorna `None` se tutto va bene, altrimenti il motivo. Termina sempre cio'
@@ -138,8 +140,16 @@ def _avvia_e_interroga(app: Path, attesa_s: int = 90) -> str | None:
             "prova risponderebbe per l'istanza sbagliata"
         )
 
+    # Gruppo di processi separato: il guscio lancia uvicorn come figlio, e un
+    # SIGTERM al solo guscio lo lascerebbe vivo attaccato alla porta 8000 --
+    # l'orfano che il prossimo avvio scambia per "un altro programma la
+    # occupa". Al gruppo, invece, il segnale arriva a tutti e due.
     processo = subprocess.Popen(
-        [str(binario)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+        [str(binario)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
     )
     try:
         scadenza = time.monotonic() + attesa_s
@@ -150,7 +160,15 @@ def _avvia_e_interroga(app: Path, attesa_s: int = 90) -> str | None:
                 with urllib.request.urlopen(
                     "http://127.0.0.1:8000/api/version", timeout=2
                 ) as risposta:
-                    return None if json.load(risposta).get("version") else "nessuna versione"
+                    vista = json.load(risposta).get("version")
+                    if not vista:
+                        return "il backend risponde ma non dice che versione e'"
+                    if attesa and vista != attesa:
+                        return (
+                            f"il bundle dice di essere la {vista}, non la {attesa}: "
+                            "e' una build vecchia, o VERSION e' stata cambiata dopo"
+                        )
+                    return None
             except Exception:
                 time.sleep(2)
         return (
@@ -159,11 +177,31 @@ def _avvia_e_interroga(app: Path, attesa_s: int = 90) -> str | None:
             "avvio morto (vedi il test di regressione in src-tauri/src/backend.rs)"
         )
     finally:
-        processo.terminate()
+        _termina_gruppo(processo)
+
+
+def _termina_gruppo(processo: subprocess.Popen) -> None:
+    """SIGTERM al gruppo, SIGKILL di riserva, e non si esce finche' la porta
+    non e' davvero libera: questa funzione gira PRIMA di una pubblicazione, e
+    lasciare dietro un backend vivo romperebbe il prossimo avvio dell'app."""
+    try:
+        gruppo = os.getpgid(processo.pid)
+    except ProcessLookupError:
+        return
+    for segnale in (signal.SIGTERM, signal.SIGKILL):
         try:
-            processo.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            processo.kill()
+            os.killpg(gruppo, segnale)
+        except ProcessLookupError:
+            break
+        scadenza = time.monotonic() + 15
+        while time.monotonic() < scadenza:
+            if not _porta_occupata():
+                try:
+                    processo.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    pass
+                return
+            time.sleep(1)
 
 
 def _porta_occupata() -> bool:
@@ -205,7 +243,7 @@ def main() -> None:
         # pubblicata una 1.0.3 che partiva e restava invisibile per sempre: i
         # test erano tutti verdi, perche' nessuno di loro apriva l'app.
         print("--- prova di avvio del bundle ---")
-        guasto = _avvia_e_interroga(BUNDLE / "macos" / "Cratory.app")
+        guasto = _avvia_e_interroga(BUNDLE / "macos" / "Cratory.app", attesa=versione)
         if guasto:
             raise SystemExit(f"il bundle non si avvia: {guasto}")
         print("il bundle si avvia e il backend risponde.")
