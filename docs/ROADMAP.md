@@ -251,7 +251,13 @@ endpoints, `docs/API.md`.
   `libc::access(W_OK)` on the folder holding the bundle, so an app installed
   somewhere unwritable fails in a second instead of after 172 MB. Signing is
   minisign, unrelated to Apple: an unsigned or tampered package is refused.
-  Still absent, and still for the same reason: Apple signature and
+  `bundle.targets` went back to two entries, `["app", "dmg"]` — not a reversal
+  of the Release decision that made it `["dmg"]` but its correction: the
+  updater's artifact is built from the `app` target, and with `dmg` alone the
+  build succeeds while leaving `bundle/macos/` empty. That cost a twenty-minute
+  build to discover, and a guard test now asserts both targets, because
+  `createUpdaterArtifacts: true` on its own is a green light that proves
+  nothing. Still absent, and still for the same reason: Apple signature and
   notarization. **What is not yet proven** is the part that motivated the whole
   thing — whether a bundle replaced by the app itself escapes the *"Cratory"
   Not Opened* dialog, since it never passes through quarantine. Answering it
