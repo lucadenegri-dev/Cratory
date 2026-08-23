@@ -185,9 +185,11 @@ endpoints, `docs/API.md`.
   that no license file exists. `bundle.targets` is now `["dmg"]` — the `.dmg`
   is what is being built rather than a side effect of `"all"`. The README
   explains, before anyone hits it, that the first launch on another Mac fails
-  with a message saying the app is "damaged": it is not, it is un-notarized,
-  and the way through is System Settings → Privacy & Security → Open Anyway,
-  since the old right-click shortcut no longer works. **Two things are
+  with *"Cratory" Not Opened* — Apple could not verify it is free of malware:
+  not a broken download, just an un-notarized build, and the way through is
+  System Settings → Privacy & Security → Open Anyway, since the old right-click
+  shortcut no longer works. Every version needs that again, because the ad-hoc
+  signature the approval is tied to changes with each build. **Two things are
   deliberately absent.** There is no Apple signature or notarization, which
   needs a paid developer account. And there is **no auto-updater**: Tauri's
   needs a signing keypair, a published manifest and an existing release, none

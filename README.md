@@ -169,22 +169,29 @@ cannot yet be exercised end to end would be worse than not having one.
 The `.dmg` is signed ad-hoc, not with an Apple Developer certificate, and it is
 not notarized — that requires a paid Apple account this project does not have.
 
-**So the first attempt to open it will fail, and macOS will say the app is
-"damaged".** It is not damaged, and the download is not corrupt: that is simply
-the message macOS uses for software it cannot verify with Apple. Downloading it
-again will not help.
+**So the first attempt to open it will fail.** macOS says *"Cratory" Not
+Opened* — "Apple could not verify "Cratory" is free of malware that may harm
+your Mac or compromise your privacy." Nothing is wrong with the download, and
+downloading it again will not help: that is simply what macOS says about
+software it cannot check with Apple, because this build was never sent to Apple
+to be checked.
 
 To open it:
 
 1. Open the `.dmg` and drag **Cratory** into Applications.
-2. Try to open it. The warning appears; dismiss it.
+2. Try to open it. Dismiss the warning — without moving the app to the Trash.
 3. Go to **System Settings → Privacy & Security**, scroll to the security
    section, and press **Open Anyway** next to the message about Cratory.
-4. Confirm once more. macOS remembers the decision; later launches are normal.
+4. Confirm once more. Later launches of *that* build are normal.
 
 On recent macOS versions the old right-click → Open shortcut no longer works for
 un-notarized apps, which is why the System Settings route is the one described
 here.
+
+**Every new version needs the same four steps again.** The approval is tied to
+the app's signature, and an ad-hoc signature is different in every build — so
+macOS treats 1.0.2 as an app it has never been told to trust, even if you
+allowed 1.0.1 on the same Mac.
 
 ## Desktop bundle
 
