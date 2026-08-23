@@ -1,3 +1,4 @@
+mod aggiornamento;
 mod backend;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -12,6 +13,14 @@ pub fn run() {
     // browser di sistema. Lo scope in capabilities/default.json lo limita a
     // http/https: l'app non ha motivo di aprire altro.
     .plugin(tauri_plugin_opener::init())
+    // L'updater in-place. La sequenza sta in aggiornamento.rs: qui si registra
+    // soltanto il plugin che la esegue.
+    .plugin(tauri_plugin_updater::Builder::new().build())
+    .invoke_handler(tauri::generate_handler![
+      aggiornamento::controlla_aggiornamento,
+      aggiornamento::installa_aggiornamento,
+      aggiornamento::riavvia_app
+    ])
     // Lo stato del processo figlio del backend: vuoto finche' `backend::avvia_e_attendi`
     // non lo riempie, cosi' l'handler di uscita qui sotto non prova mai a
     // terminare un figlio che non e' mai partito.
