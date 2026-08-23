@@ -6,6 +6,7 @@ import { SetupGate } from "@/components/setup/setup-gate";
 import { I18nProvider } from "@/lib/i18n";
 import { DockedPlayer } from "@/components/docked-player";
 import { PlayerProvider } from "@/lib/player";
+import { ExternalLinkBridge } from "@/components/external-link-bridge";
 
 // Font di sistema: DM Mono (peso massimo 500; il grassetto 600 viene
 // sintetizzato dal browser). Il nome della variabile resta neutro.
@@ -28,6 +29,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="it" className={`h-full ${monoUi.variable}`} suppressHydrationWarning>
       <body className="h-full">
         <script dangerouslySetInnerHTML={{ __html: NO_FOUC }} />
+        {/* Nel guscio desktop i link esterni sono inerti: il webview non
+            apre nessuna scheda. Il ponte li consegna al browser di sistema,
+            una volta per tutta l'app. Nel browser non fa nulla. */}
+        <ExternalLinkBridge />
         <I18nProvider>
           <PlayerProvider>
             <SetupGate />

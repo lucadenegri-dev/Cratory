@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 
 import { useT } from "@/lib/i18n";
+import { isOwnUrl } from "@/lib/api/base";
 import { attachAnalyser, primeOnFirstGesture } from "@/lib/audio-analyser";
 
 export type TransportPrevNext = {
@@ -157,9 +158,16 @@ export function PlayerTransport({ src, testId, onAudible, onEnded, onError, prev
         data-testid={testId}
         // Nel bundle la pagina sta su tauri://localhost e l'audio su
         // 127.0.0.1:8000: senza dichiarare l'origine incrociata,
-        // createMediaElementSource restituisce una sorgente tainted e
+        // createMediaElementSource riceve una risorsa non CORS-approvata e
         // l'analizzatore legge zeri — spettro fermo, nessun errore.
-        crossOrigin="anonymous"
+        //
+        // Solo per le sorgenti nostre, però: la dichiarazione non è gratis.
+        // Questo stesso elemento suona le preview del dig, e t4.bcbits.com non
+        // risponde con Access-Control-Allow-Origin — chiedere il permesso a chi
+        // non lo concede fa fallire il caricamento, cioè zittisce la preview.
+        // Quelle nel grafo non entrano comunque (vedi isOwnOrigin), quindi non
+        // hanno niente da guadagnare in cambio.
+        crossOrigin={isOwnUrl(src) ? "anonymous" : undefined}
         src={src}
         autoPlay
         onPlay={(e) => {

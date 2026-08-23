@@ -1083,6 +1083,40 @@ because `download_dispatcher.stop_retry_loop()` runs during that shutdown, so
 the download queue's retry thread doesn't wake up mid-teardown and try to
 claim work that the app is about to disappear from under it.
 
+### Two things the webview does not do on its own
+
+Both follow from the same fact — inside the bundle the page is served from
+`tauri://localhost` while everything else it touches is somewhere else — and
+both were live bugs before they were handled.
+
+**External links are inert.** `target="_blank"` asks WKWebView for a new
+webview through `webView:createWebViewWithConfiguration:forNavigationAction:`;
+wry only creates one if a new-window handler is registered, and Tauri never
+registers one, so the delegate answers "nothing". No tab, no navigation, no
+error — every link to Spotify, SoundCloud, Discogs, the docs and slskd's web
+UI simply did nothing. The fix is one capture-phase click listener on
+`document`, mounted once by the root layout
+(`frontend/components/external-link-bridge.tsx`): in the desktop shell it
+claims any anchor whose resolved URL is http(s) and not the app's own, and
+hands it to `tauri-plugin-opener`, whose scope in
+`src-tauri/capabilities/default.json` is limited to `http://*` and `https://*`.
+In a browser the listener does nothing at all. It lives in one place on purpose
+— thirteen files write `target="_blank"`, and none of them has to know.
+
+**Audio is cross-origin.** The owned-track stream comes from
+`http://127.0.0.1:8000`, a different origin from the page, and a
+`MediaElementAudioSourceNode` fed by a cross-origin resource that is not
+CORS-approved outputs silence, not just a blind analyser. So the audio element
+asks for the CORS permission (`crossOrigin="anonymous"`) and the backend grants
+it (`WEBVIEW_ORIGIN` in the CORS union, above) — but only for sources that are
+ours. Third-party preview clips share the same element and must NOT ask:
+Bandcamp's stream host answers without `Access-Control-Allow-Origin`, and
+demanding a permission that is not granted fails the load outright. "Ours"
+therefore means the page's own origin *or* the backend's, a distinction
+`isOwnOrigin` in `frontend/lib/api/base.ts` owns for both the analyser and the
+link bridge; collapsing it back to plain same-origin is what kept the Home
+spectrum flat in the packaged app.
+
 ## Persistence and migrations
 
 SQLite, one file:

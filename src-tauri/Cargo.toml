@@ -28,6 +28,11 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 reqwest = { version = "0.13.3", default-features = false, features = ["blocking"] }
 tauri-plugin-dialog = "2.7.2"
+# Il webview non apre nulla da se': senza un gestore di nuove finestre
+# WKWebView lascia cadere `target="_blank"`, e nel bundle TUTTI i link
+# esterni erano inerti. Il ponte lato pagina
+# (frontend/components/external-link-bridge.tsx) li consegna qui.
+tauri-plugin-opener = "2.5.4"
 
 # Solo Unix: serve per mandare SIGTERM al backend prima del SIGKILL di
 # riserva (vedi src/backend.rs, termina_processo). Gia' presente in

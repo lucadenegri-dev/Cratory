@@ -93,6 +93,11 @@ silenced by name in `pytest.ini` because it is not our code to fix.
 - `next@16.2.9` — App Router framework. Next 16 has breaking changes relative to older versions — read `frontend/CLAUDE.md` before touching pages or routing.
 - `react@19.2.4`, `react-dom@19.2.4` — UI runtime.
 - `lucide-react@^1.18.0` — the icon set. Monochrome line icons, which is what the design system asks for.
+- `@tauri-apps/plugin-opener@^2.5.4` — hands a URL to the system browser. Only reached inside the
+  desktop shell, and only through a dynamic import, so a browser build never loads it: the webview
+  drops `target="_blank"` on the floor, which left every external link inert (see "Two things the
+  webview does not do on its own" in `docs/ARCHITECTURE.md`). Its Rust half is `tauri-plugin-opener`
+  in `src-tauri/Cargo.toml`.
 - `tailwind-merge@^3.6.0` — powers `lib/cn.ts`. It resolves conflicts between Tailwind utilities on the same property, so a `className` passed by a caller actually overrides a component's default instead of sitting next to it in the class list.
 
 **Build / styling**

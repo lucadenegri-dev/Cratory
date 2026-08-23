@@ -11,12 +11,22 @@
  * contesto si crea/riprende su un gesto reale dell'utente
  * (`primeOnFirstGesture`). Ogni errore lascia l'elemento esattamente com'era.
  *
- * Cross-origin: un MediaElementAudioSourceNode la cui risorsa è CORS-cross-origin
- * emette SILENZIO — per specifica viene azzerata l'uscita, non solo l'analisi.
- * Quindi le sorgenti di terzi (le preview iTunes/Bandcamp di Discovery) non si
- * innestano affatto: suonano dall'elemento, senza spettro. Si analizzano solo le
- * tracce possedute, che passano dal proxy /api di Next e sono di pari origine
- * (vedi next.config.ts). */
+ * Cross-origin: un MediaElementAudioSourceNode la cui risorsa è cross-origin e
+ * NON CORS-approvata emette SILENZIO — per specifica viene azzerata l'uscita,
+ * non solo l'analisi. Quindi le sorgenti di terzi (le preview iTunes/Bandcamp di
+ * Discovery) non si innestano affatto: suonano dall'elemento, senza spettro.
+ *
+ * Si analizza solo la roba nostra, che sono due casi e non uno: in sviluppo le
+ * tracce possedute passano dal proxy /api di Next e sono di pari origine (vedi
+ * next.config.ts); nel bundle desktop non c'è nessun proxy — la pagina sta su
+ * tauri://localhost e il backend su http://127.0.0.1:8000. Là la risorsa è
+ * cross-origin ma CORS-approvata (il backend ammette l'origin del webview, vedi
+ * WEBVIEW_ORIGIN in backend/app/main.py, e l'elemento la chiede con
+ * crossOrigin="anonymous"), quindi è innestabile esattamente come l'altra.
+ * Confondere i due casi con un unico "stessa origine" è ciò che teneva a terra
+ * lo spettro della Home nell'app impacchettata. */
+
+import { isOwnUrl } from "@/lib/api/base";
 
 type Graph = {
   ctx: AudioContext;
@@ -74,18 +84,6 @@ export function primeOnFirstGesture(): void {
   }
 }
 
-/** Vero solo per le sorgenti di pari origine, le uniche innestabili senza
- *  azzerare l'audio. Pura, così il test morda il caso che ha azzittito le
- *  preview di Discovery. */
-export function isSameOriginSrc(src: string): boolean {
-  if (!src) return false;
-  try {
-    return new URL(src, window.location.href).origin === window.location.origin;
-  } catch {
-    return false;
-  }
-}
-
 /** Innesta l'elemento nel grafo, una sola volta per elemento. Non fa nulla se
  *  il contesto non è già in esecuzione: meglio nessuna analisi che un player
  *  muto. Il trasporto la richiama a ogni `play`, quindi il tentativo si ripete
@@ -96,7 +94,7 @@ export function attachAnalyser(el: HTMLMediaElement | null | undefined): void {
   // significherebbe azzittirla (vedi la nota cross-origin in testa al file).
   // Niente WeakSet: la sorgente dell'elemento può cambiare, e al prossimo
   // `play` la condizione si rivaluta.
-  if (!isSameOriginSrc(el.currentSrc || el.src)) return;
+  if (!isOwnUrl(el.currentSrc || el.src)) return;
   const g = ensureGraph();
   if (!g) return;
   if (g.ctx.state !== "running") {

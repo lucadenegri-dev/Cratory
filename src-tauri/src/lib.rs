@@ -4,6 +4,14 @@ mod backend;
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
+    // Il webview non sa aprire una pagina esterna: WKWebView chiede al
+    // delegato una nuova vista per `target="_blank"`, Tauri non ne registra
+    // nessuno e il click cade nel vuoto — nessuna scheda, nessun errore.
+    // Il ponte lato pagina (frontend/components/external-link-bridge.tsx)
+    // intercetta quei click e li consegna a questo plugin, che li passa al
+    // browser di sistema. Lo scope in capabilities/default.json lo limita a
+    // http/https: l'app non ha motivo di aprire altro.
+    .plugin(tauri_plugin_opener::init())
     // Lo stato del processo figlio del backend: vuoto finche' `backend::avvia_e_attendi`
     // non lo riempie, cosi' l'handler di uscita qui sotto non prova mai a
     // terminare un figlio che non e' mai partito.
