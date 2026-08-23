@@ -295,6 +295,14 @@ def _firma_di_prova() -> str | None:
             cwd=_RADICE_REPO / "frontend",
             capture_output=True,
             text=True,
+            # stdin chiuso di proposito: senza password nell'ambiente la CLI la
+            # CHIEDE, e un preflight che si pianta ad aspettare un input che
+            # nessuno digitera' (in CI, o dentro un altro script) e' peggio del
+            # problema che risolve. Con stdin a /dev/null legge EOF e fallisce
+            # subito, che e' l'esito giusto: la password non c'e'.
+            stdin=subprocess.DEVNULL,
+            # Rete di sicurezza: scrypt impiega un secondo, non un minuto.
+            timeout=60,
         )
         if esito.returncode == 0:
             return None
