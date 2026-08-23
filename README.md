@@ -142,27 +142,56 @@ To publish a version:
 
 1. Bump `VERSION` and `frontend/package.json` together.
 2. Tag it `vX.Y.Z` — the tag carries the `v`, the file does not.
-3. Build the bundle: `python3 src-tauri/scripts/assembla.py`. It needs Homebrew
+3. Put the updater's signing key in the environment. Without it the build stops
+   immediately, before doing any work:
+
+   ```bash
+   export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/cratory.key)"
+   export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<the key's password>"
+   ```
+
+4. Build the bundle: `python3 src-tauri/scripts/assembla.py`. It needs Homebrew
    with ffmpeg installed **on the build machine** — never on the machine of
    whoever installs the app.
-4. Create a GitHub release for that tag, with notes, and attach
-   `src-tauri/target/release/bundle/dmg/Cratory_<version>_aarch64.dmg` to it.
-   Those notes are what Settings → Version shows when a newer version exists.
+5. Write the release notes to a file and publish:
+   `python3 src-tauri/scripts/pubblica.py --note-file NOTES.md`. It refuses to
+   run on a dirty working tree, on a mismatch between `VERSION` and
+   `package.json`, or if HEAD does not carry the tag — publishing is
+   irreversible, and those are the realistic ways to get it wrong. It then
+   builds `latest.json` and creates the release with four attachments: the
+   `.dmg` (first install), `Cratory.app.tar.gz` and its `.sig` (what the
+   updater downloads), and `latest.json` (what the updater reads). The notes
+   go into both the release body and the manifest, so Settings → Version shows
+   the same words whichever path it took.
 
-Settings has a **Check for updates** button. It compares the running version
-with the latest published release and reports one of three things: you are up to
-date, version X is available, or it could not be determined — the last never
-disguised as the first.
+**The signing key is the one thing that cannot be regenerated.** Its public
+half is walled into every bundle already distributed, so a different key
+produces signatures those bundles reject: lose `~/.tauri/cratory.key` and no
+already-installed copy of Cratory can ever update itself again. Keep a backup
+somewhere that outlives the build machine.
 
-The check reads GitHub's public releases API. The repository is public and
-releases exist, so the button gives a real answer; on a fork that is still
-private, or before the first release, it correctly reports that it cannot tell.
+**The app updates itself.** On startup it checks whether a newer version was
+published; if one was, a dot appears next to *Settings* in the index, and
+Settings → Version offers to download and install it. Nothing happens without an
+explicit confirmation, which spells out what it costs: roughly 172 MB, the app
+closes and starts again on its own, and anything running right now — an
+analysis, a download — is interrupted, because installing means terminating the
+backend first. Three outcomes and they stay three: up to date, version X is
+available, or it could not be determined — the last never disguised as the
+first. "Open the release" stays alongside the install button as the way out
+when the automatic path cannot work, and a failed install offers a restart:
+by then the backend is already gone, and only a restart puts the app back
+together.
 
-**Nothing is downloaded or installed automatically.** There is no auto-updater
-yet: the button tells you a newer version exists, and installing it is a manual
-download. Wiring Tauri's updater needs a signing keypair, a published manifest
-and at least one existing release, and configuring an automatic update path that
-cannot yet be exercised end to end would be worse than not having one.
+Downloads are verified before they are installed. Each `Cratory.app.tar.gz` is
+signed with a minisign key at build time and checked against the public half
+compiled into the running app — an unsigned or tampered package is refused, not
+installed. This is separate from Apple code signing, which this project still
+does not have.
+
+Outside the desktop shell — running from a checkout in a browser — the same
+Settings card only *reports*, because there is nothing to install: it asks the
+backend, which reads GitHub's public releases API.
 
 ## Opening it on another Mac
 
@@ -188,10 +217,13 @@ On recent macOS versions the old right-click → Open shortcut no longer works f
 un-notarized apps, which is why the System Settings route is the one described
 here.
 
-**Every new version needs the same four steps again.** The approval is tied to
-the app's signature, and an ad-hoc signature is different in every build — so
-macOS treats 1.0.2 as an app it has never been told to trust, even if you
-allowed 1.0.1 on the same Mac.
+**Every new version installed this way needs the same four steps again.** The
+approval is tied to the app's signature, and an ad-hoc signature is different in
+every build — so macOS treats 1.0.2 as an app it has never been told to trust,
+even if you allowed 1.0.1 on the same Mac. This is about installing by hand from
+a downloaded `.dmg`; whether an update the app installs *itself* also needs it
+is a separate question, and the answer will be written here once it has actually
+been observed rather than assumed.
 
 ## Desktop bundle
 

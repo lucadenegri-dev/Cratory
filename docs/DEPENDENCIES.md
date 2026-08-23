@@ -98,6 +98,9 @@ silenced by name in `pytest.ini` because it is not our code to fix.
   drops `target="_blank"` on the floor, which left every external link inert (see "Two things the
   webview does not do on its own" in `docs/ARCHITECTURE.md`). Its Rust half is `tauri-plugin-opener`
   in `src-tauri/Cargo.toml`.
+- `@tauri-apps/api@^2.11.1` — `invoke` and `listen`, used only by `lib/updates-bridge.ts` to reach the
+  shell's update commands and progress events. Dynamic imports, like the opener plugin: a browser
+  build never loads it.
 - `tailwind-merge@^3.6.0` — powers `lib/cn.ts`. It resolves conflicts between Tailwind utilities on the same property, so a `className` passed by a caller actually overrides a component's default instead of sitting next to it in the class list.
 
 **Build / styling**
@@ -109,6 +112,25 @@ silenced by name in `pytest.ini` because it is not our code to fix.
 - `vitest@^4.1.10` + `@vitejs/plugin-react@^6.0.3` + `jsdom@^29.1.1` — the unit suite (`npm run test:unit`, config in `vitest.config.ts`).
 - `@testing-library/react@^16.3.2` + `@testing-library/dom@^10.4.1` — component rendering and queries for those tests.
 - `@playwright/test@^1.61.1` — the end-to-end suite (`npm run test:e2e`, config in `playwright.config.ts`), which brings up its own backend against a throwaway database.
+
+## Desktop shell (Rust) — `src-tauri/Cargo.toml`
+
+- `tauri@2.11.3` + `tauri-build@2.6.3` — the shell itself.
+- `tauri-plugin-log@2` — writes to `~/Library/Logs/com.cratory.app/`, in release too on purpose: a
+  packaged app that fails to start without writing a line is undiagnosable.
+- `tauri-plugin-dialog@2.7.2` — the native error dialog when the backend cannot start.
+- `tauri-plugin-opener@2.5.4` — the Rust half of the external-link bridge.
+- `tauri-plugin-updater@2` — in-place updates. It needs three things that are not code: a **minisign
+  keypair** (`tauri signer generate`, private half kept outside the repository — losing it means no
+  already-installed app can ever update again, because the public half is walled into every bundle
+  already distributed), `TAURI_SIGNING_PRIVATE_KEY` in the build environment (`assembla.py` refuses
+  to start without it), and a published `latest.json`.
+- `reqwest@0.13.3`, `serde`/`serde_json`, `log` — the HTTP probe that waits for the backend, command
+  payloads, logging.
+- `libc@0.2.189` (unix only) — SIGTERM before the fallback SIGKILL when terminating the backend, and
+  `access(W_OK)` to tell whether the bundle's folder is writable before an update is downloaded.
+
+`gh` is needed only to publish a release (`src-tauri/scripts/pubblica.py`), never to build or run.
 
 ## External services
 

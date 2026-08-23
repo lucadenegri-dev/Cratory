@@ -8,6 +8,25 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **An updater that updates** (2026-08-23): the app downloads, verifies and
+  installs a new version itself, instead of only announcing one.
+  `tauri-plugin-updater` reads a `latest.json` published beside the release,
+  and the sequence lives in Rust (`src-tauri/src/aggiornamento.rs`) rather than
+  in the page, because of an ordering constraint the page must not be able to
+  get wrong: the Python backend runs from *inside* the bundle being replaced,
+  so it is terminated between the download and the install — which is why
+  `download` and `install` are called separately and the documented
+  `download_and_install` shortcut is not used. Error codes are the **phase**
+  (`permessi`, `controllo`, `scaricamento`, `installazione`), not a guessed
+  cause: the plugin's error variants are not a stable contract, the phase is.
+  `permessi` is decided before anything is downloaded, via
+  `libc::access(W_OK)` on the folder holding the bundle. A provider mounted
+  once checks at startup and lights a dot beside Settings; downloading and
+  installing sit behind a confirmation that says what it costs (~172 MB, the
+  app restarts, running jobs die). Publishing gained a second script,
+  `pubblica.py`, separate from `assembla.py` on purpose. **Not yet verified end
+  to end**: whether an in-place update also escapes the *"Cratory" Not Opened*
+  dialog is the open question, and it needs two real bundles to answer.
 - **What the bundle got wrong** (2026-08-23, released as 1.0.2): two visible
   failures in the packaged app, one root — the page is served from
   `tauri://localhost` while everything it touches is somewhere else, which

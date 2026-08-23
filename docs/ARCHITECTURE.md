@@ -1117,6 +1117,31 @@ therefore means the page's own origin *or* the backend's, a distinction
 link bridge; collapsing it back to plain same-origin is what kept the Home
 spectrum flat in the packaged app.
 
+**Updating in place.** `src-tauri/src/aggiornamento.rs` owns the update flow —
+not the page — because of an ordering constraint the page must not be able to
+get wrong: the Python backend runs *from inside* the bundle that is about to be
+replaced. The sequence is `download` → `backend::termina` → `install` →
+`restart`, and `download_and_install`, the documented shortcut, is deliberately
+unused precisely because it leaves no room between the download and the swap.
+Three commands reach the page: `controlla_aggiornamento` (`Ok(None)` is "up to
+date", `Err` is "could not check" — the same three outcomes
+`/api/updates/check` keeps apart), `installa_aggiornamento`, and `riavvia_app`,
+which exists because a failed install leaves the app a shell with no backend,
+and only a restart puts it back together. Errors carry a **phase**
+(`permessi`, `controllo`, `scaricamento`, `installazione`) rather than a guessed
+cause: the plugin's error variants are not a stable contract, the phase is, and
+the sentence itself lives in the frontend dictionaries. `permessi` is the one
+decided *before* anything happens — `libc::access(W_OK)` on the folder holding
+the bundle — so an app installed somewhere unwritable fails immediately instead
+of after 172 MB of download. On the page side a provider mounted once
+(`frontend/lib/updates.tsx`, inert outside the shell) checks at startup and
+feeds both the dot beside Settings in the index nav and the version card;
+downloading and installing always sit behind an explicit confirmation, because
+terminating the backend interrupts whatever was running. The updater artifacts
+(`Cratory.app.tar.gz` and its `.sig`) and the `latest.json` manifest are
+published by `src-tauri/scripts/pubblica.py` — a second script on purpose:
+building is repeatable and harmless, publishing is neither.
+
 ## Persistence and migrations
 
 SQLite, one file:

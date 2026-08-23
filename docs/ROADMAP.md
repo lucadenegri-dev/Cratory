@@ -236,6 +236,28 @@ endpoints, `docs/API.md`.
   version, because it is tied to a signature that ad-hoc signing changes with
   every build.
 
+- **The updater** (2026-08-23). The Settings button no longer only reports:
+  the app checks on startup, and downloads, verifies and installs a new version
+  on confirmation. `tauri-plugin-updater` reads `latest.json`, published as a
+  release asset by a new `src-tauri/scripts/pubblica.py` — deliberately a
+  second script, because building is repeatable and harmless while publishing
+  is neither. **The sequence lives in Rust**, in
+  `src-tauri/src/aggiornamento.rs`, and not in the page: the Python backend
+  runs from inside the bundle about to be replaced, so it must be terminated
+  between `download` and `install`, and `download_and_install` — the documented
+  shortcut — leaves no room for that. Error codes are the phase reached, not a
+  guessed cause, because the plugin's error variants are not a contract;
+  `permessi` is the exception and is decided *before* the download, with
+  `libc::access(W_OK)` on the folder holding the bundle, so an app installed
+  somewhere unwritable fails in a second instead of after 172 MB. Signing is
+  minisign, unrelated to Apple: an unsigned or tampered package is refused.
+  Still absent, and still for the same reason: Apple signature and
+  notarization. **What is not yet proven** is the part that motivated the whole
+  thing — whether a bundle replaced by the app itself escapes the *"Cratory"
+  Not Opened* dialog, since it never passes through quarantine. Answering it
+  needs two real bundles and a local manifest server; until then the README
+  says only what has been observed.
+
 ## Backlog
 
 Real open items from the code and docs review closed on 2026-08-13. Grouped by size —
