@@ -60,6 +60,21 @@ def costruisci_manifest(
     }
 
 
+# L'endpoint che deve essere compilato dentro l'app pubblicata. La
+# configurazione dell'updater finisce nel binario a build time: se questa
+# stringa non c'e', quel binario e' stato costruito con un override
+# (`CRATORY_TAURI_EXTRA_CONFIG`, che punta l'updater a un server locale) e
+# pubblicarlo darebbe a tutti un'app che cerca aggiornamenti su 127.0.0.1.
+ENDPOINT_PRODUZIONE = b"releases/latest/download/latest.json"
+
+
+def costruita_per_la_produzione(binario: bytes) -> bool:
+    """La variabile d'ambiente della prova resta esportata nella shell molto
+    piu' a lungo di quanto la si ricordi: questo controllo esiste perche' quel
+    dimenticarsene non sia pubblicabile."""
+    return ENDPOINT_PRODUZIONE in binario
+
+
 def _git(*argomenti: str) -> str:
     return subprocess.run(
         ["git", *argomenti], cwd=RADICE, capture_output=True, text=True, check=True
@@ -91,6 +106,17 @@ def _artefatti(versione: str) -> tuple[Path, Path, Path]:
     for p in (tar, sig, dmg):
         if not p.is_file():
             raise SystemExit(f"manca {p} -- ricostruire con assembla.py")
+
+    binario = BUNDLE / "macos" / "Cratory.app" / "Contents" / "MacOS" / "cratory"
+    if not binario.is_file():
+        raise SystemExit(f"manca {binario} -- serve il target `app`, non solo il dmg")
+    if not costruita_per_la_produzione(binario.read_bytes()):
+        raise SystemExit(
+            "questa e' una build di prova: l'endpoint dell'updater compilato dentro\n"
+            "l'app non e' quello pubblico. Succede quando CRATORY_TAURI_EXTRA_CONFIG\n"
+            "e' rimasta esportata nella shell. Rimuovila e ricostruisci:\n"
+            "  unset CRATORY_TAURI_EXTRA_CONFIG"
+        )
     return tar, sig, dmg
 
 

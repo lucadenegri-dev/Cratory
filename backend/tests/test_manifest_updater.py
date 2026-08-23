@@ -66,3 +66,18 @@ def test_base_url_serve_la_verifica_locale():
     funzione, stessa struttura, altro host."""
     url = manifesto(base_url="http://127.0.0.1:8787")["platforms"]["darwin-aarch64"]["url"]
     assert url == "http://127.0.0.1:8787/Cratory.app.tar.gz"
+
+
+def test_una_build_di_prova_non_e_pubblicabile():
+    """L'endpoint dell'updater finisce dentro il binario a build time. Se è
+    quello locale, l'app pubblicata cercherebbe aggiornamenti su 127.0.0.1 —
+    e la sola traccia sarebbe che nessuno si aggiorna mai."""
+    assert not pubblica.costruita_per_la_produzione(
+        b"...http://127.0.0.1:8787/latest.json..."
+    )
+
+
+def test_una_build_normale_lo_e():
+    assert pubblica.costruita_per_la_produzione(
+        b"...https://github.com/lucadenegri-dev/Cratory/releases/latest/download/latest.json..."
+    )
