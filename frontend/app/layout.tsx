@@ -7,6 +7,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { DockedPlayer } from "@/components/docked-player";
 import { PlayerProvider } from "@/lib/player";
 import { ExternalLinkBridge } from "@/components/external-link-bridge";
+import { AggiornamentoProvider } from "@/lib/updates";
 
 // Font di sistema: DM Mono (peso massimo 500; il grassetto 600 viene
 // sintetizzato dal browser). Il nome della variabile resta neutro.
@@ -34,11 +35,16 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             una volta per tutta l'app. Nel browser non fa nulla. */}
         <ExternalLinkBridge />
         <I18nProvider>
-          <PlayerProvider>
-            <SetupGate />
-            <ShellSwitch>{children}</ShellSwitch>
-            <DockedPlayer />
-          </PlayerProvider>
+          {/* Dentro I18nProvider perche' le frasi d'errore sono tradotte, e
+              fuori da ShellSwitch perche' anche l'indice laterale legge se
+              c'e' un aggiornamento. Nel browser non fa nulla. */}
+          <AggiornamentoProvider>
+            <PlayerProvider>
+              <SetupGate />
+              <ShellSwitch>{children}</ShellSwitch>
+              <DockedPlayer />
+            </PlayerProvider>
+          </AggiornamentoProvider>
         </I18nProvider>
       </body>
     </html>
