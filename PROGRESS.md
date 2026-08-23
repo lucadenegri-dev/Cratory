@@ -8,6 +8,16 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **The updater that stopped the app from starting** (2026-08-24, released as
+  1.0.4): 1.0.3 was published and pulled within the hour because it never
+  opened. `tauri-plugin-updater` brought reqwest with rustls and no crypto
+  provider, Cargo unified the features, and the shell's own HTTP client — which
+  only talks to `127.0.0.1:8000` — began panicking on construction, killing the
+  thread that starts the backend. Live process, invisible window, no log at all,
+  since the panic preceded the logger. Fixed with `native-tls`; guarded by a
+  Rust test that builds that client, and by `pubblica.py`, which now opens the
+  bundle and asks it its version before publishing. The real failure was the
+  verification: all suites green, none of them opening the app.
 - **An updater that updates** (2026-08-23): the app downloads, verifies and
   installs a new version itself, instead of only announcing one.
   `tauri-plugin-updater` reads a `latest.json` published beside the release,

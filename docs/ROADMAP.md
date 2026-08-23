@@ -264,6 +264,30 @@ endpoints, `docs/API.md`.
   needs two real bundles and a local manifest server; until then the README
   says only what has been observed.
 
+- **The updater that stopped the app from starting** (2026-08-24, released as
+  1.0.4). 1.0.3 was published and pulled within the hour: it never opened.
+  `tauri-plugin-updater` depends on reqwest with `rustls-no-provider`, and
+  Cargo unifies features across every consumer of a crate — so the shell's own
+  HTTP client, the one that only ever talks to `127.0.0.1:8000` and never sees
+  a byte of TLS, was suddenly built with rustls and no crypto provider.
+  `Client::new()` panicked on the first line of the thread that launches the
+  backend; the thread died, the backend never started, and the window — hidden
+  by design until the backend answers — never appeared. A live process, an
+  invisible app, and **not one line of log**, because the panic landed before
+  the logger was installed. The plugin now uses `native-tls`
+  (Security.framework, already on every Mac) and rustls is out of the graph.
+  **Two guards, one per mistake.** A Rust test builds that client on every
+  `cargo test` — red with the bug, green without, one millisecond — so the next
+  dependency that touches reqwest fails the suite instead of shipping an app
+  that will not open. And `pubblica.py` now **opens the bundle and asks the
+  backend which version it is** before publishing anything, refusing to release
+  what does not start; it was tried against the broken 1.0.3 still installed at
+  the time, which it rejected. The deeper failure was in the verification, not
+  in the code: every suite was green, and none of them opened the app. The
+  signal had been there sixteen hours earlier — in `tauri dev` the backend was
+  not coming up and the log was not being written — and it was filed away as
+  "recompilations".
+
 ## Backlog
 
 Real open items from the code and docs review closed on 2026-08-13. Grouped by size —
