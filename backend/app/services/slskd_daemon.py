@@ -32,6 +32,11 @@ DEFAULT_PORT = 5030
 _ATTESA_AVVIO_S = 20.0
 _INTERVALLO_S = 0.5
 _TIMEOUT_HTTP_S = 3.0
+# L'indirizzo di default e' indovinato, non configurato da nessuno: se non
+# risponde non merita la stessa pazienza di un URL che l'utente ha scritto.
+# Ogni apertura della riga che configura slskd passa di qui, e tre secondi di
+# attesa su un indirizzo a caso si vedono tutti.
+_TIMEOUT_INDOVINATO_S = 1.0
 
 
 class DaemonError(Exception):
@@ -226,13 +231,20 @@ def is_reachable(client: httpx.Client | None = None) -> bool:
     """Qualcosa risponde già all'URL configurato? Non ci interessa CHI: può
     essere il nostro demone, o quello che l'utente gestisce da sé — in
     entrambi i casi non se ne avvia un secondo."""
-    url = runtime_settings.slskd_url()
-    if not url:
-        return False
+    # URL vuoto (il default, prima che l'utente dica a Cratory dove sta slskd)
+    # ricade sull'indirizzo di default del demone invece di dichiararlo subito
+    # assente: altrimenti un'istanza gia' in esecuzione ma non ancora
+    # configurata risulta "non raggiungibile", e la riga che configura slskd
+    # offrirebbe di scaricare una seconda copia di qualcosa che l'utente ha
+    # gia' acceso. Questo comportamento viveva in `system_probe._probe_slskd`
+    # finche' slskd e' stato un componente; e' sceso qui con lui.
+    configurato = runtime_settings.slskd_url()
+    url = configurato or f"http://localhost:{DEFAULT_PORT}"
+    timeout = _TIMEOUT_HTTP_S if configurato else _TIMEOUT_INDOVINATO_S
     owned = client is None
     client = client or httpx.Client()
     try:
-        res = client.get(f"{url.rstrip('/')}/health", timeout=_TIMEOUT_HTTP_S)
+        res = client.get(f"{url.rstrip('/')}/health", timeout=timeout)
         return res.status_code < 500
     except httpx.HTTPError:
         return False

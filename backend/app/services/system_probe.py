@@ -33,13 +33,15 @@ _PROBE_TIMEOUT_S = 5.0
 # indovinato (nessun SLSKD_URL impostato), non uno scelto dall'utente, e
 # probe_all() gira a ogni polling del wizard — un indirizzo irraggiungibile
 # non deve tenerlo in attesa.
-_SLSKD_PROBE_TIMEOUT_S = 1.0
 
 
 @dataclass(frozen=True)
 class Component:
     key: str
-    kind: Literal["system", "daemon"]
+    # Un valore solo, per ora: il campo resta perche' la UI lo legge e perche'
+    # un secondo tipo di componente e' plausibile. slskd non lo era -- la sua
+    # presenza non e' un file ma una risposta HTTP -- ed e' uscito di qui.
+    kind: Literal["system"]
     severity: Literal["required", "optional"]
     # Chiavi di feature, non prosa: il frontend le traduce.
     unlocks: tuple[str, ...]
@@ -74,14 +76,6 @@ REGISTRY: tuple[Component, ...] = (
         },
         binary="fpcalc", version_flag="-version", env_override="FPCALC",
         docs="https://acoustid.org/chromaprint",
-    ),
-    Component(
-        key="slskd", kind="daemon", severity="optional",
-        unlocks=("soulseek_download", "library_share"),
-        # Nessuna ricetta: e' un demone separato, si scarica dalle sue release
-        # e si configura a parte. Il link e' l'unica indicazione che possiamo
-        # dare, e va data.
-        docs="https://github.com/slskd/slskd/releases",
     ),
 )
 
@@ -241,37 +235,8 @@ def _probe_binary(c: Component) -> dict:
             "source": source, "shadowing": di_sistema}
 
 
-def _probe_slskd() -> dict:
-    """Il demone non è un binario da cercare nel PATH: o risponde al suo URL
-    o non c'è.
-
-    URL vuoto (il default, prima che l'utente dica a Cratory dove sta slskd)
-    ricade sull'indirizzo di default del demone invece di dichiararlo subito
-    assente: altrimenti un'istanza già in esecuzione ma non ancora
-    configurata risulta "non presente", e il passo prerequisiti offre di
-    scaricarne una seconda copia per qualcosa che l'utente ha già acceso —
-    esattamente il caso da riconoscere, non da nascondere.
-
-    Il demone non ha una copia di sistema da segnalare: è un servizio remoto.
-    `shadowing` rimane None per uniformità con le altre probe."""
-    # Import locale: system_probe -> binary_installer -> system_probe è già
-    # un ciclo (via binary_manifest); slskd_daemon passa anche lui da
-    # binary_installer, quindi un import in testa al modulo lo chiuderebbe.
-    from app.services import slskd_daemon
-    url = runtime_settings.slskd_url() or f"http://localhost:{slskd_daemon.DEFAULT_PORT}"
-    import httpx
-    try:
-        res = httpx.get(f"{url.rstrip('/')}/health", timeout=_SLSKD_PROBE_TIMEOUT_S)
-        return {"present": res.status_code < 500, "version": None, "source": "daemon", "shadowing": None}
-    except httpx.HTTPError:
-        return {"present": False, "version": None, "source": None, "shadowing": None}
-
-
 def _probe_one(c: Component) -> dict:
-    if c.kind == "daemon":
-        detected = _probe_slskd()
-    else:
-        detected = _probe_binary(c)
+    detected = _probe_binary(c)
     manifesto = binary_manifest.entry_for(c.key) is not None
     ricetta_percorribile = available_recipe(c) is not None
     # Le due promesse non sono la stessa cosa, e la UI deve poterle

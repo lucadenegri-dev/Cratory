@@ -165,3 +165,14 @@ def test_la_ricetta_fallita_non_ha_un_codice_di_errore(db, monkeypatch):
     assert body["status"] == "error"
     assert body["error_code"] is None
     app.dependency_overrides.clear()
+
+
+def test_slskd_resta_installabile_anche_se_non_e_piu_un_componente():
+    """L'installer valida le chiavi contro il manifest dei binari, non contro
+    il registry del probe. È l'invariante che regge la riga del servizio:
+    senza, uscire dal registry vorrebbe dire perdere il download."""
+    from app.services import binary_manifest
+
+    assert binary_manifest.entry_for("slskd") is not None
+    assert "slskd" not in [c.key for c in sp.REGISTRY]
+

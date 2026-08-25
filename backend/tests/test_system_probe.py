@@ -193,10 +193,17 @@ def test_ricetta_jolly_vale_ovunque(monkeypatch):
     assert sp.recipe_for(finto) == [sys.executable, "-m", "pip", "install", "-U", "finto"]
 
 
+def _senza_ricette() -> sp.Component:
+    """Un componente che non ha ricette su nessuna piattaforma. Prima questo
+    ruolo lo faceva slskd, che pero' non e' piu' un componente: dipendere da
+    lui legava un test sulle ricette a una decisione di tutt'altra natura."""
+    return sp.Component(key="finto", kind="system", severity="optional",
+                        unlocks=(), recipes={}, binary="finto")
+
+
 def test_ricetta_assente_ritorna_none(monkeypatch):
-    slskd = sp.get("slskd")
     monkeypatch.setattr(sp.sys, "platform", "darwin")
-    assert sp.recipe_for(slskd) is None
+    assert sp.recipe_for(_senza_ricette()) is None
 
 
 def test_probe_all_ha_una_voce_per_componente(monkeypatch):
@@ -226,11 +233,17 @@ def test_la_cache_evita_di_riesaminare_a_ogni_render(monkeypatch):
     assert chiamate["n"] > prime
 
 
-def test_il_registry_contiene_solo_i_tre_binari_esterni():
+def test_il_registry_contiene_solo_binari_di_sistema():
     """yt-dlp ed essentia sono in requirements.txt: li installa pip, non il
     wizard. Tenerli qui significava mostrare due righe già a posto e dare
-    all'installer un lavoro che non è suo."""
-    assert [c.key for c in sp.REGISTRY] == ["ffmpeg", "fpcalc", "slskd"]
+    all'installer un lavoro che non è suo.
+
+    slskd non è qui per un motivo diverso: la sua presenza non è un file su
+    PATH ma una risposta HTTP, e configurarlo vuol dire credenziali, un file
+    YAML e un demone da avviare — cose da servizio, non da componente. Vive in
+    `routers/services.py`, e la sua riga sa fare tutto il percorso."""
+    assert [c.key for c in sp.REGISTRY] == ["ffmpeg", "fpcalc"]
+    assert {c.kind for c in sp.REGISTRY} == {"system"}
 
 
 def test_il_probe_dice_se_sappiamo_installarlo(monkeypatch):
@@ -299,10 +312,9 @@ def test_available_recipe_richiede_il_comando_presente(monkeypatch):
 
 
 def test_available_recipe_none_se_non_ce_ricetta(monkeypatch):
-    """slskd non ha nessuna ricetta (è un demone a parte): `available_recipe`
-    non deve nemmeno provare a chiamare `shutil.which` con un comando
-    inesistente."""
-    slskd = sp.get("slskd")
+    """Un componente senza ricette: `available_recipe` non deve nemmeno
+    provare a chiamare `shutil.which` con un comando inesistente."""
+    slskd = _senza_ricette()
 
     def esplodi(name):
         raise AssertionError("non doveva controllare nessun comando")
@@ -400,59 +412,6 @@ def test_un_binario_nella_cartella_gestita_viene_trovato(tmp_path, monkeypatch):
     (tmp_path / "ffmpeg").write_text("")
     monkeypatch.setattr(sp.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     assert sp.resolve_binary("ffmpeg") == str(tmp_path / "ffmpeg")
-
-
-# --- Ricaduta sull'indirizzo di default di slskd ---------------------------
-
-def test_url_vuoto_ricade_sul_default_e_trova_un_demone_acceso(monkeypatch):
-    """Un demone già in esecuzione, ma di cui Cratory non conosce ancora
-    l'URL (il caso normale al primo avvio), deve risultare presente: prima di
-    questo fix _probe_slskd tornava "non present" appena l'URL era vuoto,
-    senza nemmeno provare l'indirizzo di default — ed è esattamente il caso
-    che il passo prerequisiti deve riconoscere invece di offrire un secondo
-    download per qualcosa che l'utente ha già acceso."""
-    import httpx
-
-    from app.services import slskd_daemon
-
-    chiamate = []
-
-    class RispostaFinta:
-        status_code = 200
-
-    def get_finto(url, timeout=None):
-        chiamate.append((url, timeout))
-        return RispostaFinta()
-
-    monkeypatch.setattr(config.settings, "slskd_url", "")
-    monkeypatch.setattr(httpx, "get", get_finto)
-
-    esito = sp._probe_slskd()
-
-    assert esito["present"] is True
-    assert esito["source"] == "daemon"
-    assert chiamate[0][0] == f"http://localhost:{slskd_daemon.DEFAULT_PORT}/health"
-
-
-def test_url_vuoto_ricade_sul_default_con_timeout_breve(monkeypatch):
-    """L'indirizzo di default è indovinato, non configurato dall'utente: un
-    timeout lungo come quello dei sottoprocessi bloccherebbe ogni polling del
-    wizard se quell'indirizzo non risponde."""
-    import httpx
-
-    catturato = {}
-
-    def get_finto(url, timeout=None):
-        catturato["timeout"] = timeout
-        raise httpx.ConnectError("giù")
-
-    monkeypatch.setattr(config.settings, "slskd_url", "")
-    monkeypatch.setattr(httpx, "get", get_finto)
-
-    sp._probe_slskd()
-
-    assert catturato["timeout"] == sp._SLSKD_PROBE_TIMEOUT_S
-    assert sp._SLSKD_PROBE_TIMEOUT_S < sp._PROBE_TIMEOUT_S
 
 
 def test_ogni_riga_di_probe_all_ha_le_stesse_chiavi(monkeypatch):

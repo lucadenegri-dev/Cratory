@@ -169,6 +169,11 @@ def test_stop_su_processo_gia_morto_non_solleva(_pid_isolato, monkeypatch):
 
 
 def test_avvio_senza_binario_installato(monkeypatch):
+    # `is_reachable` va isolata, non basta azzerare l'URL: da quando l'URL
+    # vuoto ricade sull'indirizzo di default, questo test bussava alla 5030
+    # della macchina che lo esegue — e su una macchina dove slskd gira
+    # davvero falliva con AlreadyUp, per un demone che non c'entra niente.
+    monkeypatch.setattr(sd, "is_reachable", lambda client=None: False)
     monkeypatch.setattr(sd.runtime_settings, "slskd_url", lambda: "")
     monkeypatch.setattr(sd.binary_installer, "installed_path", lambda key: None)
     with pytest.raises(sd.NotInstalled):
@@ -314,6 +319,11 @@ def test_piattaforma_non_posix_rifiuta_owned_pid(monkeypatch):
 
 
 def test_piattaforma_non_posix_rifiuta_start(monkeypatch):
+    # `start()` interroga la raggiungibilità prima della piattaforma, e da
+    # quando l'URL vuoto ricade sull'indirizzo di default quella domanda
+    # arriva alla 5030 della macchina che esegue i test: dove slskd gira per
+    # davvero, qui tornava AlreadyUp invece di UnsupportedPlatform.
+    monkeypatch.setattr(sd, "is_reachable", lambda client=None: False)
     monkeypatch.setattr(sd.os, "name", "nt")
     with pytest.raises(sd.UnsupportedPlatform):
         sd.start()
@@ -331,6 +341,7 @@ def test_piattaforma_non_posix_stato_riporta_owned_sconosciuto(_pid_isolato, mon
     letto (non un'azione di gestione) riporta un `owned` esplicitamente
     sconosciuto (`None`), non `False` — che si leggerebbe come "nessun
     demone nostro" quando in realtà non lo si può proprio sapere."""
+    monkeypatch.setattr(sd, "is_reachable", lambda client=None: False)
     monkeypatch.setattr(sd.runtime_settings, "slskd_url", lambda: "")
     monkeypatch.setattr(sd.os, "name", "nt")
     stato = sd.daemon_status()
@@ -347,3 +358,57 @@ def test_config_path_esplicitamente_vuoto_non_risolve_alla_cwd(monkeypatch):
     percorso = sd.default_config_path()
     assert percorso == sd.paths.DATA_DIR / "data" / "slskd.yml"
     assert percorso != sd.Path("")
+
+
+# --- Ricaduta sull'indirizzo di default -----------------------------------
+# Questi due test stavano in test_system_probe.py e provavano `_probe_slskd`,
+# finche' slskd e' stato un componente. Il comportamento e' sceso in
+# `is_reachable` insieme a lui, e i test lo hanno seguito: quello che
+# proteggono non e' cambiato.
+
+class _ClienteFinto:
+    """Registra url e timeout di ogni GET. `esito` None = connessione giu'."""
+
+    def __init__(self, esito: int | None = 200):
+        self.esito = esito
+        self.chiamate: list[tuple[str, float]] = []
+
+    def get(self, url, timeout=None):
+        self.chiamate.append((url, timeout))
+        if self.esito is None:
+            raise httpx.ConnectError("giù")
+
+        class Risposta:
+            status_code = self.esito
+
+        return Risposta()
+
+
+def test_url_vuoto_ricade_sul_default_e_trova_un_demone_acceso(monkeypatch):
+    """Un demone già in esecuzione, ma di cui Cratory non conosce ancora
+    l'URL (il caso normale al primo avvio), deve risultare raggiungibile:
+    senza la ricaduta sull'indirizzo di default risulterebbe assente, e la
+    riga che configura slskd offrirebbe di scaricare una seconda copia di
+    qualcosa che l'utente ha già acceso."""
+    monkeypatch.setattr(sd.runtime_settings, "slskd_url", lambda: "")
+    client = _ClienteFinto()
+
+    assert sd.is_reachable(client) is True
+    assert client.chiamate[0][0] == f"http://localhost:{sd.DEFAULT_PORT}/health"
+
+
+def test_l_indirizzo_indovinato_ha_un_timeout_piu_corto(monkeypatch):
+    """L'indirizzo di default è indovinato, non configurato dall'utente: se
+    non risponde, un'attesa lunga si vede a ogni apertura della riga. Quello
+    scritto dall'utente merita invece la pazienza intera."""
+    monkeypatch.setattr(sd.runtime_settings, "slskd_url", lambda: "")
+    indovinato = _ClienteFinto(esito=None)
+    assert sd.is_reachable(indovinato) is False
+
+    monkeypatch.setattr(sd.runtime_settings, "slskd_url", lambda: "http://127.0.0.1:5030")
+    configurato = _ClienteFinto(esito=None)
+    assert sd.is_reachable(configurato) is False
+
+    assert indovinato.chiamate[0][1] < configurato.chiamate[0][1]
+    assert configurato.chiamate[0][1] == sd._TIMEOUT_HTTP_S
+
