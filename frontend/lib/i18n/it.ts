@@ -203,7 +203,7 @@ export const it: Dictionary = {
   },
   setup: {
     title: "Configurazione guidata",
-    subtitle: "Sei passi per mettere Cratory in funzione. Ogni passo si può saltare.",
+    subtitle: (n: number) => `${n} passi per mettere Cratory in funzione. Ogni passo si può saltare.`,
     stepOf: (n: number, total: number) => `Passo ${n} di ${total}`,
     next: "Avanti",
     back: "Indietro",

@@ -8,6 +8,14 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **L'aggiornamento in-place non chiede niente** (2026-08-26, verificato da
+  1.0.4 a 1.0.5): l'app ha scaricato, si è riavviata ed è tornata senza il
+  dialogo *"Cratory" Not Opened*. Era la domanda che ha motivato l'intero
+  lavoro sull'updater, e per due giorni i documenti si sono rifiutati di
+  rispondere: il dialogo segue l'attributo di quarantena che un browser attacca
+  a ciò che scarichi, e un bundle sostituito dall'app non passa da nessun
+  browser. Il giro in Privacy e sicurezza resta solo per la prima
+  installazione.
 - **slskd è un servizio, non un componente** (2026-08-24): è uscito dal probe
   del wizard, dove restano solo `ffmpeg` e `fpcalc`, e una riga sola copre
   l'intero percorso (scarica, configura, avvia, collega), montata sia dal

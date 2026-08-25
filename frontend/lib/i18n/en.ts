@@ -204,7 +204,11 @@ export const en = {
   },
   setup: {
     title: "Guided setup",
-    subtitle: "Six steps to get Cratory working. Every step can be skipped.",
+    // Il numero arriva da chi conta i passi, non da qui: erano sei, poi cinque
+    // quando slskd ha smesso di avere un passo suo, e nel bundle sono quattro
+    // perche' i binari viaggiano dentro l'app. Un numero scritto a mano in una
+    // frase e' destinato a raccontare la versione precedente del prodotto.
+    subtitle: (n: number) => `${n} steps to get Cratory working. Every step can be skipped.`,
     stepOf: (n: number, total: number) => `Step ${n} of ${total}`,
     next: "Next",
     back: "Back",

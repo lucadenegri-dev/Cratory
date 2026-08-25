@@ -228,10 +228,13 @@ here.
 **Every new version installed this way needs the same four steps again.** The
 approval is tied to the app's signature, and an ad-hoc signature is different in
 every build — so macOS treats 1.0.2 as an app it has never been told to trust,
-even if you allowed 1.0.1 on the same Mac. This is about installing by hand from
-a downloaded `.dmg`; whether an update the app installs *itself* also needs it
-is a separate question, and the answer will be written here once it has actually
-been observed rather than assumed.
+even if you allowed 1.0.1 on the same Mac.
+
+**Updates the app installs itself do not.** Observed going from 1.0.4 to 1.0.5:
+the app downloaded it, restarted, and came back with nothing asked. The dialog
+follows the quarantine flag a browser attaches to what you download — and a
+bundle the app replaces itself never passes through a browser. So the four
+steps above are the price of the *first* install only.
 
 ## Desktop bundle
 

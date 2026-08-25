@@ -258,11 +258,13 @@ endpoints, `docs/API.md`.
   build to discover, and a guard test now asserts both targets, because
   `createUpdaterArtifacts: true` on its own is a green light that proves
   nothing. Still absent, and still for the same reason: Apple signature and
-  notarization. **What is not yet proven** is the part that motivated the whole
-  thing — whether a bundle replaced by the app itself escapes the *"Cratory"
-  Not Opened* dialog, since it never passes through quarantine. Answering it
-  needs two real bundles and a local manifest server; until then the README
-  says only what has been observed.
+  notarization. **Now proven**, and it is the part that motivated the whole
+  thing: a bundle replaced by the app itself escapes the *"Cratory" Not Opened*
+  dialog. Going from 1.0.4 to 1.0.5 the app downloaded, restarted and came back
+  with nothing asked — the dialog follows the quarantine flag a browser
+  attaches to a download, and an in-place update never passes through one. The
+  four steps through System Settings are the price of the first install only,
+  and the README now says so.
 
 - **The updater that stopped the app from starting** (2026-08-24, released as
   1.0.4). 1.0.3 was published and pulled within the hour: it never opened.

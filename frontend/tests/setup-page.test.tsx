@@ -48,4 +48,27 @@ describe("SetupPage", () => {
     await waitFor(() => expect(screen.getByText(/backend non raggiungibile/)).toBeTruthy());
     expect(replace).not.toHaveBeenCalled();
   });
+
+  it("il sottotitolo conta i passi veri, non un numero scritto a mano", async () => {
+    /* Diceva "Sei passi" molto dopo che erano diventati cinque, e ancora
+       quando nel bundle erano quattro. Il numero ora viene da chi i passi li
+       compone: qui il probe dice `path`, quindi cinque. */
+    setSetupCompleted.mockResolvedValue({ completed: true });
+    render(<SetupPage />);
+    await waitFor(() => expect(screen.getByText(/5 passi|5 steps/)).toBeTruthy());
+    expect(screen.queryByText(/Sei passi|Six steps/)).toBeNull();
+  });
+
+  it("nel bundle il sottotitolo dice quattro", async () => {
+    getProbe.mockResolvedValueOnce({
+      platform: "darwin-arm64",
+      components: [
+        { key: "ffmpeg", present: true, source: "bundle" },
+        { key: "fpcalc", present: true, source: "bundle" },
+      ],
+    });
+    render(<SetupPage />);
+    await waitFor(() => expect(screen.getByText(/4 passi|4 steps/)).toBeTruthy());
+  });
 });
+

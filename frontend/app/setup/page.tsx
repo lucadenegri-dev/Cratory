@@ -76,7 +76,7 @@ export default function SetupPage() {
           <h1 className="text-lg font-semibold uppercase tracking-wide text-fg-strong">{t.setup.title}</h1>
           <span className="tnum text-xs text-faint">{t.setup.stepOf(index + 1, STEPS.length)}</span>
         </div>
-        <p className="mt-1 text-sm text-muted">{t.setup.subtitle}</p>
+        <p className="mt-1 text-sm text-muted">{t.setup.subtitle(STEPS.length)}</p>
       </header>
 
       <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-fg-strong">{titolo[step]}</h2>
