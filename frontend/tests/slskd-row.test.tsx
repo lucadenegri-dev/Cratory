@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const finto = vi.hoisted(() => ({
-  daemon: { reachable: false, owned: null as boolean | null, pid: null, installed: false, configured: false, username: null as string | null },
+  daemon: { reachable: false, owned: null as boolean | null, pid: null as number | null, installed: false, configured: false, username: null as string | null },
   slskd: { configured: false, reachable: false, is_connected: false, is_logged_in: false, is_connecting: false, is_transitioning: false, username: null as string | null },
   startInstall: vi.fn(),
   daemonConfig: vi.fn(),
@@ -30,7 +30,7 @@ import { SlskdRow } from "@/components/slskd-row";
 const acceso = { reachable: true, owned: true as boolean | null, pid: 42, installed: true, configured: true, username: "dj_test" };
 
 beforeEach(() => {
-  finto.daemon = { reachable: false, owned: null, pid: null, installed: false, configured: false, username: null };
+  finto.daemon = { reachable: false, owned: null, pid: null as number | null, installed: false, configured: false, username: null };
   finto.slskd = { configured: false, reachable: false, is_connected: false, is_logged_in: false, is_connecting: false, is_transitioning: false, username: null };
 });
 afterEach(cleanup);

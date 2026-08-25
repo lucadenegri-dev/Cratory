@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { setSetupCompleted, errText } from "@/lib/api";
+import { getProbe, setSetupCompleted, errText } from "@/lib/api";
+import { passiDelWizard, type Passo } from "@/lib/setup-steps";
 import { Alert, Button } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { WelcomeStep } from "@/components/setup/steps/welcome";
@@ -11,19 +12,40 @@ import { LibraryStep } from "@/components/setup/steps/library";
 import { ServicesStep } from "@/components/setup/steps/services";
 import { SummaryStep } from "@/components/setup/steps/summary";
 
-/* Configurazione guidata: cinque passi, nessuno bloccante. Lo stato di
-   completamento vive nel backend (AppState), non in localStorage: è una
-   proprietà dell'installazione, non del browser. Slskd non ha più un passo
-   suo: la sua riga nei prerequisiti (ComponentRow) chiede le credenziali e
-   installa da sola quando il demone non risponde già — vedi
-   component-row.tsx. */
-const STEPS = ["welcome", "prerequisites", "library", "services", "summary"] as const;
+/* Configurazione guidata: nessun passo è bloccante. Lo stato di completamento
+   vive nel backend (AppState), non in localStorage: è una proprietà
+   dell'installazione, non del browser.
+
+   I passi non sono sempre cinque: nell'app impacchettata ffmpeg e fpcalc
+   viaggiano dentro il bundle, quindi il passo dei prerequisiti non ha niente
+   da chiedere e non si monta (vedi lib/setup-steps.ts). slskd non è mai stato
+   un passo suo e ora non è nemmeno un prerequisito: è un servizio, e si
+   configura dal passo Servizi — vedi components/slskd-row.tsx. */
 
 export default function SetupPage() {
   const t = useT();
   const router = useRouter();
   const [index, setIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [componenti, setComponenti] = useState<{ present: boolean; source: string | null }[] | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    getProbe()
+      .then((r) => {
+        if (vivo) setComponenti(r.components);
+      })
+      .catch(() => {
+        // Il probe che non risponde non deve togliere un passo: `null` lo
+        // tiene, ed e' la scelta prudente.
+        if (vivo) setComponenti(null);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const STEPS = passiDelWizard(componenti);
   const step = STEPS[index];
 
   const esci = useCallback(async () => {
@@ -39,7 +61,7 @@ export default function SetupPage() {
     }
   }, [router]);
 
-  const titolo: Record<(typeof STEPS)[number], string> = {
+  const titolo: Record<Passo, string> = {
     welcome: t.setup.welcomeTitle,
     prerequisites: t.setup.prereqTitle,
     library: t.setup.libraryTitle,
