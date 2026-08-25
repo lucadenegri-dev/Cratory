@@ -60,7 +60,7 @@ beforeEach(() => {
     web_url: null,
   });
   soundcloudStatusFn.mockResolvedValue({ available: true, ytdlp_version: "2026.1", username: "luca" });
-  daemonStatusFn.mockResolvedValue({ reachable: false, owned: null, pid: null });
+  daemonStatusFn.mockResolvedValue({ reachable: false, owned: null, pid: null, installed: true, configured: true, username: null });
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -108,15 +108,15 @@ describe("ServicesList", () => {
     // Regressione reale già vista: scambiare qui l'etichetta con quella del
     // wizard ("Scarica, configura e avvia") promette un download e una
     // scrittura di configurazione che in questa pagina non avvengono.
-    daemonStatusFn.mockResolvedValue({ reachable: false, owned: null, pid: null });
+    daemonStatusFn.mockResolvedValue({ reachable: false, owned: null, pid: null, installed: true, configured: true, username: null });
     render(<ServicesList services={SEVEN} spotify={null} />);
     expect(await screen.findByRole("button", { name: "Avvia" })).toBeTruthy();
     expect(screen.queryByText(/scarica, configura e avvia|download, configure and start/i)).toBeNull();
   });
 
   it("demone raggiungibile e avviato da noi: c'è il bottone Ferma e chiama daemonStop", async () => {
-    daemonStatusFn.mockResolvedValue({ reachable: true, owned: true, pid: 42 });
-    daemonStop.mockResolvedValue({ reachable: false, owned: null, pid: null });
+    daemonStatusFn.mockResolvedValue({ reachable: true, owned: true, pid: 42, installed: true, configured: true, username: null });
+    daemonStop.mockResolvedValue({ reachable: false, owned: null, pid: null, installed: true, configured: true, username: null });
     render(<ServicesList services={SEVEN} spotify={null} />);
     expect(await screen.findByText("In esecuzione")).toBeTruthy();
     const stop = screen.getByRole("button", { name: /ferma|stop/i });
@@ -125,14 +125,14 @@ describe("ServicesList", () => {
   });
 
   it("demone raggiungibile ma acceso da altri: niente bottone Ferma, etichetta dedicata", async () => {
-    daemonStatusFn.mockResolvedValue({ reachable: true, owned: false, pid: null });
+    daemonStatusFn.mockResolvedValue({ reachable: true, owned: false, pid: null, installed: true, configured: true, username: null });
     render(<ServicesList services={SEVEN} spotify={null} />);
     expect(await screen.findByText(/avviato fuori da cratory|started outside cratory/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /ferma|stop/i })).toBeNull();
   });
 
   it("demone raggiungibile, proprietà non rilevabile: niente bottone Ferma, etichetta dedicata", async () => {
-    daemonStatusFn.mockResolvedValue({ reachable: true, owned: null, pid: null });
+    daemonStatusFn.mockResolvedValue({ reachable: true, owned: null, pid: null, installed: true, configured: true, username: null });
     render(<ServicesList services={SEVEN} spotify={null} />);
     expect(await screen.findByText(/non è possibile stabilire|can't tell/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /ferma|stop/i })).toBeNull();

@@ -16,7 +16,18 @@ export function slskdDisconnect() {
   return apiPost<SlskdStatus>("/api/slskd/disconnect");
 }
 
-export type SlskdDaemonStatus = { reachable: boolean; owned: boolean | null; pid: number | null };
+export type SlskdDaemonStatus = {
+  reachable: boolean;
+  owned: boolean | null;
+  pid: number | null;
+  /** Il binario è nella cartella gestita dall'app. */
+  installed: boolean;
+  /** Il file YAML di slskd esiste. */
+  configured: boolean;
+  /** L'account Soulseek letto dal file: si mostra senza richiederlo. La
+   *  password non torna mai indietro dal backend. */
+  username: string | null;
+};
 
 /** Stato del demone: raggiungibile via HTTP, e se l'abbiamo avviato noi. */
 export function daemonStatus() {
