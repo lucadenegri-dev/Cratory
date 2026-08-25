@@ -288,6 +288,30 @@ endpoints, `docs/API.md`.
   not coming up and the log was not being written — and it was filed away as
   "recompilations".
 
+- **slskd è un servizio, non un componente** (2026-08-24). Nel bundle i binari
+  esterni viaggiano dentro l'app, e il passo *Prerequisiti* del wizard mostrava
+  a chi aveva appena installato Cratory due righe verdi su cui non c'era niente
+  da fare. La premessa "sono integrati, quindi non serve configurarli" reggeva
+  però per due dei tre: **slskd non è un binario da avere ma un servizio da
+  configurare**, e la sua presenza non è un file su `PATH` ma una risposta
+  HTTP. È uscito da `system_probe.REGISTRY` — dove restano due binari di
+  sistema e un `kind` con un valore solo — e vive dove già stava, fra i
+  servizi. **La scoperta che ha cambiato il disegno**: le due interfacce che lo
+  gestivano non erano duplicati ma **due metà complementari**. Il wizard sapeva
+  scaricare il binario e scrivere lo YAML, Impostazioni sapeva collegare e
+  gestire il demone, e per questo la riga di Impostazioni *rimandava al
+  wizard* quando il binario mancava: non sapeva installarlo davvero.
+  Cancellarla come doppione avrebbe perso installazione e configurazione. Ora
+  una riga sola copre l'intero percorso — scarica, configura, avvia, collega —
+  montata sia dal wizard sia da Impostazioni. Il passo *Prerequisiti* resta per
+  ffmpeg e fpcalc e **non si monta quando entrambi vengono dal bundle**: quattro
+  passi invece di cinque, senza saltare un numero nel contatore. Due
+  comportamenti sono scesi insieme a slskd invece di essere persi: la ricaduta
+  sull'indirizzo di default quando l'URL non è configurato (ora in
+  `is_reachable`, con un timeout più corto perché quell'indirizzo è indovinato
+  e non scritto da nessuno) e le tre etichette di `owned`, incluso il perché il
+  bottone *Ferma* compare solo per un demone avviato da Cratory.
+
 ## Backlog
 
 Real open items from the code and docs review closed on 2026-08-13. Grouped by size —

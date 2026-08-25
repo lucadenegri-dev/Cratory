@@ -808,15 +808,28 @@ were never external binaries — they're ordinary Python packages pinned in
 `requirements.txt`, and `pip install -r requirements.txt` already puts them in the
 backend's own venv, so probing for them and offering to "auto-install" was solving a
 problem `pip` had already solved. Detection follows how the app actually consumes what's
-left: `ffmpeg`/`fpcalc` are resolved on disk (`resolve_binary`); `slskd` is a daemon,
-probed by calling its own `/health` rather than by looking for a binary — the same module
-also downloads, configures and starts it now, see below. Presence for the two binaries is
+left: `ffmpeg`/`fpcalc` are resolved on disk (`resolve_binary`).
+
+`slskd` used to be a third entry, probed by calling its own `/health` rather than by
+looking for a binary. It left for the same kind of reason `yt-dlp` did — it was never
+the same kind of thing. Its presence is not a file on `PATH` but an HTTP answer, and
+setting it up means Soulseek credentials, a YAML file written to disk and a daemon
+started: a service, not a component. It now lives only in `routers/services.py`, and one
+row (`frontend/components/slskd-row.tsx`) covers the whole path — download, configure,
+start, connect — mounted by both the wizard's services step and Settings. Before, that
+path was split in half: the wizard knew how to download the binary and write the config,
+Settings knew how to connect and run the daemon, and Settings' row *pointed users back
+to the wizard* when the binary was missing, because it genuinely could not install it.
+The `is_reachable` fallback to the daemon's default address came down with it, so a
+daemon already running under an address Cratory has not been told about is still
+recognised instead of being offered a second copy of itself.
+
+Presence for the two binaries is
 decided by the subprocess exit code, never by its output: a non-zero exit returns no
 version, otherwise a failure message on stderr — wrong architecture, permission denied,
 a corrupt or partial download — would read as a version string and report a missing or
 broken component as installed. The registry carries no prose — only feature keys
-the frontend translates and a `docs` URL per component, which for `slskd` (no install
-recipe exists) is the only guidance the UI can offer.
+the frontend translates and a `docs` URL per component.
 
 There are two ways the wizard can install a component for real, and a manifest entry
 always wins: if `binary_manifest` has a pinned build for this platform, it downloads —

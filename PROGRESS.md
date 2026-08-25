@@ -8,6 +8,14 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **slskd è un servizio, non un componente** (2026-08-24): è uscito dal probe
+  del wizard, dove restano solo `ffmpeg` e `fpcalc`, e una riga sola copre
+  l'intero percorso (scarica, configura, avvia, collega), montata sia dal
+  wizard sia da Impostazioni. Le due interfacce precedenti non erano duplicati
+  ma due metà — il wizard sapeva installare e configurare, Impostazioni
+  collegare e gestire — ed è il motivo per cui la seconda rimandava alla prima.
+  Nel bundle il passo dei prerequisiti non si monta affatto: ffmpeg e fpcalc
+  viaggiano dentro l'app e non c'è niente da chiedere.
 - **The updater that stopped the app from starting** (2026-08-24, released as
   1.0.4): 1.0.3 was published and pulled within the hour because it never
   opened. `tauri-plugin-updater` brought reqwest with rustls and no crypto
