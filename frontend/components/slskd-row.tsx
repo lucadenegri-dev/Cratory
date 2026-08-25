@@ -21,12 +21,20 @@ import { useT, type Dictionary } from "@/lib/i18n";
 
 type Fase = "caricamento" | "scarica" | "configura" | "avvia" | "collega" | "collegato";
 
+/* L'ordine delle domande e' il punto di questa funzione, e la prima e' "sta
+   gia' rispondendo?".
+ *
+ * Non "l'abbiamo installato noi?": chi ha slskd sul proprio Mac, installato
+ * per conto suo e in esecuzione, ha `installed: false` — il binario non e'
+ * nella cartella gestita dall'app — e chiedere quello per primo gli
+ * offrirebbe di scaricare una seconda copia di cio' che ha acceso lì davanti.
+ * Se il demone risponde, da dove sia venuto non interessa piu' a nessuno. */
 function fase(d: SlskdDaemonStatus | null, s: SlskdStatus | null): Fase {
   if (!d) return "caricamento";
+  if (d.reachable) return s?.is_connected && s?.is_logged_in ? "collegato" : "collega";
   if (!d.installed) return "scarica";
   if (!d.configured) return "configura";
-  if (!d.reachable) return "avvia";
-  return s?.is_connected && s?.is_logged_in ? "collegato" : "collega";
+  return "avvia";
 }
 
 /* Tre possibilita', non due: `owned` e' un tristate. `null` significa che su

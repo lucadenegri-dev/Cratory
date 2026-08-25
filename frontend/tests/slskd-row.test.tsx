@@ -100,6 +100,20 @@ describe("riga slskd", () => {
     await waitFor(() => expect(screen.queryByText("Ferma")).toBeNull());
   });
 
+  it("demone acceso ma installato dall'utente altrove: si collega, non lo riscarica", async () => {
+    /* Il caso vero di chi ha già slskd sul suo Mac, installato per conto suo:
+       `installed` è falso — il binario non è nella cartella gestita dall'app —
+       ma il demone risponde. Guardare `installed` per primo offrirebbe di
+       scaricare una seconda copia di qualcosa che è acceso lì davanti, ed è
+       esattamente il caso che questo lavoro esiste per riconoscere. */
+    finto.daemon = { reachable: true, owned: false, pid: null, installed: false, configured: true, username: "dj_test" };
+    finto.slskd = { ...finto.slskd, configured: true, reachable: true };
+    render(<SlskdRow />);
+    await waitFor(() => expect(screen.getByText(/Connetti|Collega/)).toBeTruthy());
+    expect(screen.queryByText("Scarica slskd")).toBeNull();
+    expect(screen.queryByText("Avvia")).toBeNull();
+  });
+
   it("non precompila mai la password", async () => {
     finto.daemon = { ...finto.daemon, installed: true };
     render(<SlskdRow />);
