@@ -49,19 +49,44 @@ export function SlskdRow() {
   const [inCorso, setInCorso] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
 
-  const ricarica = useCallback(async () => {
+  /* Legge senza toccare lo stato di React: chi chiama decide se e quando
+     applicare. Serve al primo caricamento, che non deve scrivere su un
+     componente gia' smontato, e tiene la lettura in un posto solo invece che
+     duplicata fra effetto e azioni. */
+  const leggi = useCallback(async () => {
+    let stato: SlskdDaemonStatus | null = null;
+    let guasto: string | null = null;
     try {
-      setDaemon(await daemonStatus());
+      stato = await daemonStatus();
     } catch (e) {
-      setErrore(errText(e));
+      guasto = errText(e);
     }
     // Lo stato del login non e' raggiungibile finche' il demone non risponde:
     // il suo fallimento qui non e' una notizia, e' la normalita' delle prime
     // fasi.
-    slskdStatus().then(setSlskd).catch(() => setSlskd(null));
+    const login = await slskdStatus().catch(() => null);
+    return { stato, login, guasto };
   }, []);
 
-  useEffect(() => { void ricarica(); }, [ricarica]);
+  const applica = useCallback((r: Awaited<ReturnType<typeof leggi>>) => {
+    setDaemon(r.stato);
+    setSlskd(r.login);
+    setErrore(r.guasto);
+  }, []);
+
+  const ricarica = useCallback(async () => {
+    applica(await leggi());
+  }, [leggi, applica]);
+
+  useEffect(() => {
+    let vivo = true;
+    void leggi().then((r) => {
+      if (vivo) applica(r);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [leggi, applica]);
 
   const azione = async (fn: () => Promise<unknown>) => {
     setInCorso(true);

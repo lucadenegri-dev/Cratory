@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const finto = vi.hoisted(() => ({
   daemon: { reachable: false, owned: null as boolean | null, pid: null, installed: false, configured: false, username: null as string | null },
@@ -62,12 +62,15 @@ describe("riga slskd", () => {
     expect(screen.queryByText("Salva configurazione")).toBeNull();
   });
 
-  it("demone attivo ma non collegato: offre il collegamento", async () => {
+  it("demone attivo ma non collegato: offre il collegamento, e il clic collega", async () => {
     finto.daemon = { ...acceso };
     finto.slskd = { ...finto.slskd, configured: true, reachable: true };
+    finto.slskdConnect = vi.fn().mockResolvedValue({});
     render(<SlskdRow />);
     await waitFor(() => expect(screen.getByText(/Connetti|Collega/)).toBeTruthy());
     expect(screen.queryByText("Avvia")).toBeNull();
+    fireEvent.click(screen.getByText(/Connetti|Collega/));
+    await waitFor(() => expect(finto.slskdConnect).toHaveBeenCalledTimes(1));
   });
 
   it("collegato: offre scollega e ferma", async () => {

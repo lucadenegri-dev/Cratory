@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import {
-  daemonConfig, daemonStart, errText, getInstallStatus, startInstall,
+  errText, getInstallStatus, startInstall,
   type InstallStatus, type ProbeComponent,
 } from "@/lib/api";
-import { Alert, Button, Field, Input } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 /* Una riga del probe. I componenti auto-installabili hanno il bottone; gli
@@ -51,17 +51,6 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
   useEffect(() => {
     onBusyChangeRef.current = onBusyChange;
   });
-
-  // Stato del form credenziali del demone (solo slskd): username/password
-  // Soulseek, non un secondo `install` locale — il giro composito qui sotto
-  // non passa dallo stesso stato "running/error" del bottone Installa
-  // ordinario (quello aggiorna log/percentuale a ogni poll; questo aspetta e
-  // basta), quindi tenerli separati evita che l'uno interferisca sui rami
-  // JSX dell'altro.
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [avvioDemone, setAvvioDemone] = useState(false);
-  const [erroreDemone, setErroreDemone] = useState<string | null>(null);
 
   /* Pulisci sia l'intervallo di polling che il timeout di copia se il componente si smonta.
      Se lo smontaggio arriva a metà installazione (il polling non ha ancora
@@ -120,50 +109,6 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
   // passo dedicato del wizard (ora sparito): configura PRIMA di scaricare
   // (le credenziali servono comunque), poi installa, poi avvia solo se
   // l'installazione non è finita in errore.
-  const installaDemone = async () => {
-    setErroreDemone(null);
-    setAvvioDemone(true);
-    busy.current = true;
-    onBusyChange?.(true);
-    try {
-      await daemonConfig({ username, password });
-      if (!mounted.current) return;
-      setPassword(""); // non resta in memoria oltre l'invio
-      await startInstall(c.key);
-      if (!mounted.current) return;
-      let stato = await getInstallStatus();
-      while (mounted.current && stato.status === "running") {
-        await new Promise((r) => setTimeout(r, 1000));
-        if (!mounted.current) return;
-        stato = await getInstallStatus();
-      }
-      if (!mounted.current) return;
-      // Un job che finisce in errore (checksum sbagliato, rete caduta) non
-      // deve far scattare l'avvio: senza questo controllo si proverebbe
-      // comunque ad avviare — "slskd non è installato" se non c'era prima,
-      // oppure, peggio, l'avvio silenzioso di una copia vecchia già presente.
-      if (stato.status === "error") {
-        // checksum_mismatch e unsafe_archive sono un allarme, non un intoppo
-        // (design doc §7): stessa distinzione delle altre righe, qui per il
-        // download del binario slskd stesso.
-        setErroreDemone(
-          stato.error_code === "checksum_mismatch" ? t.setup.installFailedChecksum
-          : stato.error_code === "unsafe_archive" ? t.setup.installFailedArchive
-          : stato.detail,
-        );
-        return;
-      }
-      await daemonStart();
-      if (!mounted.current) return;
-      onChanged();
-    } catch (e) {
-      if (mounted.current) setErroreDemone(errText(e));
-    } finally {
-      if (mounted.current) setAvvioDemone(false);
-      busy.current = false;
-      onBusyChange?.(false);
-    }
-  };
 
   const copy = async () => {
     if (!c.install_command) return;
@@ -212,37 +157,7 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
         </div>
       </div>
 
-      {/* Demone già raggiungibile: niente da offrire, solo dire dove sta la
-          sua configurazione — frase generica apposta (nessun "passo 1", nessun
-          "qui sotto"): è vera anche letta dalla pagina Impostazioni. */}
-      {c.present && c.kind === "daemon" && (
-        <p className="mt-3 text-xs text-muted">{t.setup.daemonManagedElsewhere}</p>
-      )}
-
-      {/* Demone non raggiungibile: servono le credenziali Soulseek prima di
-          poter installare, quindi niente bottone Installa nudo come per
-          ffmpeg/fpcalc — la riga chiede username e password e fa tutto lei. */}
-      {!c.present && c.kind === "daemon" && (
-        <div className="mt-3 space-y-2">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted">{t.setup.daemonTitle}</p>
-          <Field label={t.setup.daemonUsername}>
-            <Input value={username} onChange={(e) => setUsername(e.target.value)} disabled={disabled || avvioDemone} />
-          </Field>
-          <Field label={t.setup.daemonPassword}>
-            <Input type="password" value={password}
-                   onChange={(e) => setPassword(e.target.value)} disabled={disabled || avvioDemone} />
-          </Field>
-          <p className="text-xs text-faint">{t.setup.daemonCredentialsNote}</p>
-          <Button size="sm" variant="outline"
-                  disabled={disabled || avvioDemone || !username || !password}
-                  onClick={installaDemone}>
-            {avvioDemone ? t.setup.daemonStarting : t.setup.daemonInstallAndStart}
-          </Button>
-          {erroreDemone && <Alert tone="danger">{erroreDemone}</Alert>}
-        </div>
-      )}
-
-      {!c.present && c.installable && c.kind !== "daemon" && (
+      {!c.present && c.installable && (
         <div className="mt-3">
           {/* Via "recipe": il bottone qui sotto esegue il gestore di
               pacchetti di sistema, non un download nella cartella gestita —
@@ -283,7 +198,7 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
           auto-installabili appena l'installazione fallisce (es. Essentia
           fuori dalla combinazione CPython/piattaforma pinnata). Il demone ha
           il suo blocco dedicato sopra, mai questo. */}
-      {!c.present && c.kind !== "daemon" && c.install_command && (!c.auto_installable || failed) && (
+      {!c.present && c.install_command && (!c.auto_installable || failed) && (
         <div className="mt-3">
           {!c.installable && <p className="mb-1 text-xs text-muted">{t.setup.installNoBuild}</p>}
           <p className="mb-1 text-xs text-muted">{t.setup.installManual}</p>
@@ -311,7 +226,7 @@ export function ComponentRow({ c, onChanged, disabled, onBusyChange }: {
       {/* Nessuna ricetta e non è il demone (che ha il suo blocco dedicato
           sopra): dire che non esiste un comando è un'informazione, non
           un'assenza. */}
-      {!c.present && c.kind !== "daemon" && !c.install_command && (
+      {!c.present && !c.install_command && (
         <p className="mt-3 text-xs text-muted">{t.setup.installNoRecipe}</p>
       )}
     </div>

@@ -13,11 +13,11 @@ export type SecretKey =
 
 export type ProbeComponent = {
   key: string;
-  kind: "system" | "daemon";
+  kind: "system";
   severity: "required" | "optional";
   present: boolean;
   version: string | null;
-  source: "bundle" | "path" | "override" | "daemon" | null;
+  source: "bundle" | "path" | "override" | null;
   /** Path to a system copy of the binary that this component's version is shadowing,
    *  or null if there is no system copy or this component is not in use. */
   shadowing: string | null;

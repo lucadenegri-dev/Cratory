@@ -45,12 +45,10 @@ export function PrerequisitesStep() {
   useEffect(() => load(), [load]);
 
   // Solo ciò che manca davvero E per cui esiste una build: ffmpeg su
-  // piattaforme senza binario resta manuale, il demone slskd non parte mai
-  // da qui (la sua riga chiede prima le credenziali Soulseek — vedi
-  // ComponentRow), mai un install alla cieca.
-  const mancanti = (components ?? []).filter(
-    (c) => !c.present && c.installable && c.kind !== "daemon",
-  );
+  // piattaforme senza binario resta manuale, mai un install alla cieca.
+  // slskd non compare più qui: è un servizio, e si configura dal passo
+  // Servizi (vedi components/slskd-row.tsx).
+  const mancanti = (components ?? []).filter((c) => !c.present && c.installable);
   // Il bottone qui sotto ora può eseguire il gestore di pacchetti di sistema
   // per uno o più componenti del giro: la sua nota deve dirlo, non solo
   // quando non serve — altrimenti implica un contenimento che non è più

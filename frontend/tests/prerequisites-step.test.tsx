@@ -40,14 +40,14 @@ describe("PrerequisitesStep", () => {
   });
   afterEach(cleanup);
 
-  it("installa solo ciò che manca ed è installabile, mai un demone (fix 4)", async () => {
+  it("installa solo ciò che manca ed è installabile", async () => {
+    // Qui c'era anche una voce slskd con `kind: "daemon"`, per provare che il
+    // filtro escludesse i demoni. Non è più rappresentabile: slskd non è un
+    // componente (lo sorveglia backend/tests/test_system_probe.py), e il
+    // filtro non ha più un `kind` da guardare.
     getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
       comp({ key: "ffmpeg", present: false, installable: false }),
       comp({ key: "fpcalc", present: false, installable: true }),
-      // Manca ed è installable quanto fpcalc: se venisse installato, la sola
-      // spiegazione sarebbe che il filtro non esclude i demoni. Diverso dal
-      // "già presente" di prima: qui l'unico motivo di esclusione è `kind`.
-      comp({ key: "slskd", kind: "daemon", present: false, installable: true }),
     ]});
     render(<PrerequisitesStep />);
     const bottone = await screen.findByRole("button", { name: /installa quello che manca|install what/i });

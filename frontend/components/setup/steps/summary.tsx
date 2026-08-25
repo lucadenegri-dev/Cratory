@@ -33,13 +33,15 @@ export function SummaryStep() {
   // ricadere il probe sull'indirizzo di default, `present` è true anche per
   // un demone già acceso ma non ancora configurato, mentre `configured`
   // direbbe "spento" proprio nel caso che quel fix esiste per riconoscere.
-  const daemonKeys = new Set(components.filter((c) => c.kind === "daemon").map((c) => c.key));
+  /* Niente piu' de-duplica fra le due liste: serviva a slskd, che compariva
+     sia fra i componenti sia fra i servizi. Adesso e' solo un servizio, e un
+     componente non puo' piu' essere anche un servizio. */
   const righe = [
     ...components.map((c) => {
       const servizio = services.find((s) => s.key === c.key);
       return { key: servizio ? servizio.name : c.key, on: c.present };
     }),
-    ...services.filter((s) => !daemonKeys.has(s.key)).map((s) => ({ key: s.name, on: s.configured })),
+    ...services.map((s) => ({ key: s.name, on: s.configured })),
   ];
 
   return (

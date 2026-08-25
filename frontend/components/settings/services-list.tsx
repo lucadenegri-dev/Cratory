@@ -1,18 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, ExternalLink, Plug, Unplug } from "lucide-react";
+import { Check, Copy, ExternalLink } from "lucide-react";
 import {
-  daemonStart, daemonStatus, daemonStop, errText,
-  getConfigSettings, setSoundcloudUsername, slskdConnect, slskdDisconnect, slskdStatus,
-  soundcloudStatus, SPOTIFY_LOGIN_URL,
-  type ConfigSettings, type ServiceStatus, type SlskdDaemonStatus, type SlskdStatus,
-  type SoundCloudStatus, type SpotifyStatus,
+  getConfigSettings, setSoundcloudUsername, soundcloudStatus, SPOTIFY_LOGIN_URL,
+  type ConfigSettings, type ServiceStatus, type SoundCloudStatus, type SpotifyStatus,
 } from "@/lib/api";
 import { runFingerprint, type FingerprintResult } from "@/lib/organize/api";
 import { Alert, Button, Input, Spinner } from "@/components/ui";
 import { useT, type Dictionary } from "@/lib/i18n";
 import { ServiceCard } from "@/components/setup/service-card";
+import { SlskdRow } from "@/components/slskd-row";
 import { PathField } from "@/components/setup/path-field";
 import { SERVICE_FIELDS, type ServiceKey } from "@/lib/setup-services";
 
@@ -93,7 +91,7 @@ export function ServicesList({ services, spotify, onServicesChanged }: {
             </div>
           </div>
           {s.key === "spotify" && <SpotifyExtra s={s} spotify={spotify} t={t} />}
-          {s.key === "slskd" && <SlskdExtra t={t} />}
+          {s.key === "slskd" && <SlskdRow />}
           {s.key === "soundcloud" && <SoundCloudExtra t={t} />}
           {s.key === "acoustid" && s.configured && <AcoustidExtra t={t} />}
           {expanded === s.key && config && (
@@ -145,126 +143,6 @@ function SpotifyExtra({ s, spotify, t }: { s: ServiceStatus; spotify: SpotifySta
         <p className="mt-2 text-xs text-muted">
           {t.settings.reauthorizeHintPrefix} <code className="rounded-none bg-elevated px-1">403</code>, {t.settings.reauthorizeHintMiddle} <strong>{t.settings.reconnectButton}</strong> {t.settings.reauthorizeHintSuffix}
         </p>
-      )}
-    </div>
-  );
-}
-
-function SlskdExtra({ t }: { t: Dictionary }) {
-  const [status, setStatus] = useState<SlskdStatus | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    slskdStatus()
-      .then((s) => { setStatus(s); setError(null); })
-      .catch((e) => setError(String((e as Error).message ?? e)));
-  }, []);
-  useEffect(load, [load]);
-
-  // Stato/comandi del demone stesso (accendi/spegni il processo), separati
-  // dallo stato di login soulseek sopra: qui non si riconfigura né si
-  // riscarica, a differenza del passo del wizard — a regime le credenziali
-  // ci sono già e il binario pure (se manca, il backend risponde 409
-  // slskd_not_installed e il messaggio tradotto rimanda al wizard).
-  const [daemon, setDaemon] = useState<SlskdDaemonStatus | null>(null);
-  const [inCorso, setInCorso] = useState(false);
-  const [erroreDemone, setErroreDemone] = useState<string | null>(null);
-
-  useEffect(() => { daemonStatus().then(setDaemon).catch(() => setDaemon(null)); }, []);
-
-  const comanda = async (azione: () => Promise<SlskdDaemonStatus>) => {
-    setInCorso(true);
-    setErroreDemone(null);
-    try {
-      setDaemon(await azione());
-    } catch (e) {
-      setErroreDemone(errText(e));
-    } finally {
-      setInCorso(false);
-    }
-  };
-
-  // Stesse tre possibilità del wizard: true = l'abbiamo avviato noi, false =
-  // acceso ma da qualcun altro, null = non rilevabile su questa piattaforma
-  // (niente tool di processo, es. Windows) — non va spacciato per "non
-  // nostro".
-  const daemonLabel = daemon?.reachable
-    ? (daemon.owned === true
-        ? t.setup.daemonRunning
-        : daemon.owned === false
-        ? t.setup.daemonRunningElsewhere
-        : t.setup.daemonRunningUnknownOwner)
-    : t.setup.daemonStopped;
-
-  // Dopo connect/disconnect slskd resta "in transizione" per qualche secondo
-  // (Connecting → LoggingIn → LoggedIn): polling breve e limitato finche' lo
-  // stato si stabilizza, pulsanti disabilitati nel frattempo.
-  const act = async (fn: () => Promise<SlskdStatus>) => {
-    setBusy(true); setError(null);
-    try {
-      let s = await fn();
-      setStatus(s);
-      for (let i = 0; i < 10 && (s.is_transitioning || s.is_connecting); i++) {
-        await new Promise((r) => setTimeout(r, 1000));
-        s = await slskdStatus();
-        setStatus(s);
-      }
-    } catch (e) {
-      setError(String((e as Error).message ?? e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const st = ((): { text: string; strong: boolean } => {
-    if (!status) return { text: "—", strong: false };
-    if (!status.configured) return { text: t.settings.soulseekNotConfigured, strong: false };
-    if (!status.reachable) return { text: t.settings.soulseekUnreachable, strong: false };
-    if (status.is_connecting || status.is_transitioning) return { text: t.settings.soulseekConnecting, strong: false };
-    if (status.is_connected && status.is_logged_in) {
-      return { text: status.username ? t.settings.soulseekConnectedAs(status.username) : t.settings.soulseekConnected, strong: true };
-    }
-    return { text: t.settings.soulseekDisconnected, strong: false };
-  })();
-
-  const canAct = !!status?.configured && !!status?.reachable;
-  const connected = !!status?.is_connected && !!status?.is_logged_in;
-
-  return (
-    <div className="mt-3 border border-border bg-bg p-3">
-      <div className="flex items-center justify-between gap-4">
-        <span className={`text-sm ${st.strong ? "text-fg-strong" : "text-muted"}`}>{st.text}</span>
-        {canAct && (
-          connected ? (
-            <Button size="sm" variant="outline" onClick={() => act(slskdDisconnect)} disabled={busy}>
-              {busy ? <Spinner /> : <Unplug size={14} />} {t.settings.soulseekDisconnect}
-            </Button>
-          ) : (
-            <Button size="sm" onClick={() => act(slskdConnect)} disabled={busy}>
-              {busy ? <Spinner /> : <Plug size={14} />} {t.settings.soulseekConnect}
-            </Button>
-          )
-        )}
-      </div>
-      {error && <Alert tone="danger">⚠ {error}</Alert>}
-      {daemon && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="text-[10px] uppercase tracking-wider text-muted">{daemonLabel}</span>
-          {daemon.reachable && daemon.owned === true && (
-            <Button size="sm" variant="outline" disabled={inCorso}
-                    onClick={() => comanda(daemonStop)}>
-              {t.setup.daemonStop}
-            </Button>
-          )}
-          {!daemon.reachable && (
-            <Button size="sm" variant="outline" disabled={inCorso}
-                    onClick={() => comanda(daemonStart)}>
-              {t.setup.daemonStart}
-            </Button>
-          )}
-          {erroreDemone && <span className="text-xs text-danger">{erroreDemone}</span>}
-        </div>
       )}
     </div>
   );

@@ -76,17 +76,9 @@ describe("ServicesList", () => {
     expect(screen.queryByText(/non configurata|not configured/i)).toBeNull();
   });
 
-  it("slskd: il bottone Connetti chiama slskdConnect", async () => {
-    slskdConnect.mockResolvedValue({
-      configured: true, reachable: true, is_connected: true, is_logged_in: true,
-      is_connecting: false, is_transitioning: false, state: null, username: "u",
-      web_url: null,
-    });
-    render(<ServicesList services={SEVEN} spotify={null} />);
-    const btn = await screen.findByRole("button", { name: /connetti|connect/i });
-    fireEvent.click(btn);
-    await waitFor(() => expect(slskdConnect).toHaveBeenCalledTimes(1));
-  });
+  /* Il bottone Connetti di slskd non sta piu' qui: la lista monta
+     <SlskdRow />, che copre l'intero percorso. Il test del clic che chiama
+     slskdConnect e' in tests/slskd-row.test.tsx. */
 
   it("soundcloud: salva l'username col valore ripulito", async () => {
     setSoundcloudUsername.mockResolvedValue({ available: true, ytdlp_version: "2026.1", username: "nuovo-nome" });

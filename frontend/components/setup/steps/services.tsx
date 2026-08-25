@@ -10,9 +10,13 @@ import { Alert, Button, Loading } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import type { ServiceKey } from "@/lib/setup-services";
 import { ServiceCard } from "../service-card";
+import { SlskdRow } from "@/components/slskd-row";
 import { PathField } from "../path-field";
 
-const ORDINE: ServiceKey[] = ["spotify", "anthropic", "discogs", "acoustid"];
+/* slskd sta qui e non piu' fra i prerequisiti: non e' un binario da avere ma
+   un servizio da configurare, e la sua riga sa fare tutto il percorso —
+   scaricare il demone, scrivergli la configurazione, avviarlo, collegarsi. */
+const ORDINE: ServiceKey[] = ["spotify", "anthropic", "discogs", "acoustid", "slskd"];
 
 export function ServicesStep() {
   const t = useT();
@@ -45,6 +49,7 @@ export function ServicesStep() {
           <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-strong">
             {t.setup.guides[service].title}
           </h3>
+          {service === "slskd" && <SlskdRow />}
           <ServiceCard
             service={service}
             secrets={config.secrets}

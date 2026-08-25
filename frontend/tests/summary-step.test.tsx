@@ -35,42 +35,15 @@ describe("SummaryStep", () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(cleanup);
 
-  it("slskd compare una sola volta, non due", async () => {
-    // Prima del fix: una riga "slskd" (dal probe, kind daemon) e una riga
-    // "slskd (Soulseek)" (dai servizi) — stessa cosa, due nomi, due stati
-    // potenzialmente diversi.
-    getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
-      comp({ key: "slskd", kind: "daemon", present: true }),
-    ]});
-    servicesStatus.mockResolvedValue({ services: [
-      svc({ key: "slskd", name: "slskd (Soulseek)", configured: false }),
-    ]});
-    render(<SummaryStep />);
+  /* Qui stavano due test su slskd: "compare una sola volta, non due" e "la
+     riga fusa usa lo stato del probe, non quello del servizio". Descrivevano
+     un mondo in cui slskd era insieme componente e servizio, e la de-duplica
+     serviva a non mostrarlo due volte. Non e' piu' rappresentabile: slskd e'
+     uscito dal probe (vedi backend/tests/test_system_probe.py, che sorveglia
+     l'elenco dei componenti), quindi un componente non puo' piu' coincidere
+     con un servizio. */
 
-    await waitFor(() => expect(screen.getByText("slskd (Soulseek)")).toBeTruthy());
-    expect(screen.queryByText("slskd")).toBeNull();
-    expect(screen.getAllByText(/slskd/i)).toHaveLength(1);
-  });
-
-  it("la riga fusa usa lo stato del probe (present), non quello del servizio (configured)", async () => {
-    // Il caso che il fix 3 del probe esiste per riconoscere: demone già
-    // acceso ma non ancora configurato. `present` è vero, `configured` è
-    // falso — la riga deve dire "acceso": è quello che sta succedendo
-    // davvero, non "configured" che direbbe lo sbagliato "spento".
-    getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
-      comp({ key: "slskd", kind: "daemon", present: true }),
-    ]});
-    servicesStatus.mockResolvedValue({ services: [
-      svc({ key: "slskd", name: "slskd (Soulseek)", configured: false }),
-    ]});
-    render(<SummaryStep />);
-
-    const riga = await screen.findByText("slskd (Soulseek)");
-    const stato = riga.parentElement?.textContent ?? "";
-    expect(stato).toMatch(/acceso|on/i);
-  });
-
-  it("componenti e servizi non-demone restano righe distinte", async () => {
+  it("componenti e servizi restano righe distinte", async () => {
     getProbe.mockResolvedValue({ platform: "darwin-arm64", components: [
       comp({ key: "ffmpeg", present: true }),
     ]});
