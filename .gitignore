@@ -40,3 +40,7 @@ Thumbs.db
 
 # brainstorming visual companion
 .superpowers/
+
+# Attrezzo personale: allinea il DB di sviluppo a quello dell'app installata
+allinea-db.sh
+backend/data/backup-allinea/

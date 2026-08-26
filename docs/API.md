@@ -620,9 +620,23 @@ GET  /api/discovery/genres
 POST /api/discovery/dig
 GET  /api/discovery/release
 GET  /api/discovery/preview
+GET  /api/discovery/preview/youtube/{video_id}   → HTML, not JSON: see below
 POST /api/discovery/add
 POST /api/discovery/save-for-later
 ```
+
+`GET /api/discovery/preview/youtube/{video_id}` is the only endpoint in the app
+that answers **HTML instead of JSON**, and it is not a page of the interface: it
+is a bare document whose only content is YouTube's iframe. It exists for the
+`Referer` header. Since 2025 YouTube answers *"Error 153 — video player
+configuration error"* to embeds that arrive without a usable one, and in the
+desktop shell the page is served from `tauri://localhost`, a scheme that
+produces none. Served from here, the request to YouTube leaves from
+`http://127.0.0.1:8000` instead. The id must match `[A-Za-z0-9_-]{11}` or the
+call is refused with `400 invalid_youtube_id` — it is interpolated into HTML,
+so an unchecked one would let the caller choose the page's contents. Nothing is
+downloaded or stored: the preview stays ephemeral.
+
 
 The dig ("Scava") does crate digging by genre or label and returns releases and
 tracks not yet owned. Two sources sit behind a shared `DigSource` protocol —

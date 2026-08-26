@@ -1155,6 +1155,21 @@ terminating the backend interrupts whatever was running. The updater artifacts
 published by `src-tauri/scripts/pubblica.py` — a second script on purpose:
 building is repeatable and harmless, publishing is neither.
 
+**One endpoint answers HTML, and only for the referrer.** Everything the app
+renders lives in the frontend; `GET /api/discovery/preview/youtube/{video_id}`
+is the exception, and it exists for a reason that has nothing to do with the
+interface. Since 2025 YouTube answers *"Error 153 — video player configuration
+error"* to embeds that arrive without a usable `Referer`, and in the desktop
+shell the page is served from `tauri://localhost` — a scheme that produces no
+valid referrer, no matter which attributes the iframe carries
+(`referrerpolicy` was tried first and does not help). The endpoint returns a
+bare document whose only content is the YouTube iframe, so the request to
+YouTube leaves from `http://127.0.0.1:8000`, which does have a referrer. The
+video id is validated against `[A-Za-z0-9_-]{11}` before it is interpolated:
+it lands inside HTML, so an unchecked one would let the caller choose what the
+page says. Nothing is downloaded or kept — the preview stays as ephemeral as
+it was.
+
 ## Persistence and migrations
 
 SQLite, one file:

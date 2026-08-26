@@ -11,6 +11,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -260,6 +261,50 @@ def get_release_detail(source: str = "discogs", id: str = ""):
     if not id.isdigit():
         raise api_error(400, "discovery_bad_id", "Id Discogs non valido.")
     return _discogs_release(int(id))
+
+
+# Gli id di YouTube sono undici caratteri di un alfabeto ristretto. Il
+# controllo non e' cosmetico: l'id finisce dentro l'HTML della pagina qui
+# sotto, e senza vincolo sarebbe il chiamante a decidere cosa ci scriviamo.
+_ID_YOUTUBE = re.compile(r"[A-Za-z0-9_-]{11}")
+
+# Nessuna prosa, nessuno stile, nessuno script: solo il player, a tutta
+# pagina, dentro un documento che esiste per il suo indirizzo e non per il suo
+# contenuto.
+_PAGINA_YOUTUBE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>preview</title>
+<style>html,body{{margin:0;height:100%;background:#000}}iframe{{border:0;width:100%;height:100%}}</style>
+</head><body>
+<iframe src="https://www.youtube-nocookie.com/embed/{video_id}?autoplay=1"
+        allow="autoplay; encrypted-media" allowfullscreen></iframe>
+</body></html>"""
+
+
+@router.get("/preview/youtube/{video_id}", response_class=HTMLResponse)
+def preview_youtube(video_id: str) -> HTMLResponse:
+    """Una pagina che contiene soltanto il player YouTube.
+
+    Serve per il referrer, e per nient'altro. Dal 2025 YouTube risponde
+    "Errore 153 - configurazione del video player" agli embed che arrivano
+    senza un `Referer` utilizzabile, e nel guscio desktop la pagina sta su
+    `tauri://localhost`: uno schema che un referrer valido non lo produce, per
+    quanti attributi gli si mettano addosso. Servendo l'iframe da qui, la
+    richiesta a YouTube parte da `http://127.0.0.1:8000` — un indirizzo che un
+    referrer ce l'ha.
+
+    E' l'unico endpoint dell'app che risponde HTML invece di JSON: non e' una
+    pagina dell'interfaccia (quella e' tutta nel frontend), e' un contenitore
+    tecnico il cui unico contenuto e' un iframe di terzi. Niente qui viene
+    scaricato o conservato: la preview resta effimera com'era.
+    """
+    if not _ID_YOUTUBE.fullmatch(video_id):
+        raise api_error(
+            400, "invalid_youtube_id",
+            "id YouTube non valido: undici caratteri fra lettere, cifre, `-` e `_`",
+            video_id=video_id,
+        )
+    return HTMLResponse(_PAGINA_YOUTUBE.format(video_id=video_id))
 
 
 @router.get("/preview", response_model=DiscoveryPreviewOut)

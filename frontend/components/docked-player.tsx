@@ -9,6 +9,7 @@ import { KeyBadge } from "@/components/key-badge";
 import { PlayerTransport } from "@/components/player-transport";
 import { RatingDiamond } from "@/components/rating-diamond";
 import { TrackCover } from "@/components/track-cover";
+import { API_BASE } from "@/lib/api/base";
 import { useT } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
 
@@ -143,10 +144,19 @@ export function DockedPlayer() {
         {active.kind === "discovery-preview" && status === "playing" && data?.kind === "youtube" && data.youtube_video_id && (
           <div className="absolute bottom-full right-3 mb-2 w-64 max-w-[calc(100vw-2rem)] border border-border-strong bg-elevated shadow-[var(--c-shadow-float)]">
             <div className="aspect-video w-full overflow-hidden">
+              {/* Non si punta a YouTube: si punta a una pagina del backend che
+                  contiene l'iframe di YouTube. Sembra un giro inutile e non lo
+                  e' — dal 2025 YouTube risponde "Errore 153 - configurazione
+                  del video player" agli embed che arrivano senza un `Referer`
+                  utilizzabile, e nel guscio desktop questa pagina sta su
+                  `tauri://localhost`, uno schema che un referrer valido non lo
+                  produce, per quanti attributi gli si mettano addosso. Dal
+                  backend la richiesta parte invece da http://127.0.0.1:8000,
+                  che un referrer ce l'ha. */}
               <iframe
                 data-testid="preview-iframe"
                 className="h-full w-full"
-                src={`https://www.youtube-nocookie.com/embed/${data.youtube_video_id}?autoplay=1`}
+                src={`${API_BASE}/api/discovery/preview/youtube/${data.youtube_video_id}`}
                 title={active.item.title}
                 allow="autoplay; encrypted-media"
                 allowFullScreen

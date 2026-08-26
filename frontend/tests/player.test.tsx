@@ -86,9 +86,13 @@ describe("preview player", () => {
       screen.getByText("play-a").click();
     });
     await waitFor(() => expect(screen.getByTestId("preview-iframe")).toBeTruthy());
-    expect(screen.getByTestId("preview-iframe").getAttribute("src")).toContain(
-      "youtube-nocookie.com/embed/abcdefghijk",
-    );
+    const src = screen.getByTestId("preview-iframe").getAttribute("src") ?? "";
+    // Passa dal backend, che serve una pagina contenente l'iframe di YouTube.
+    expect(src).toContain("/api/discovery/preview/youtube/abcdefghijk");
+    // E NON punta a YouTube direttamente: e' la causa dell'"Errore 153 -
+    // configurazione del video player" nel guscio desktop, dove la pagina sta
+    // su tauri://localhost e non produce un `Referer` che YouTube accetti.
+    expect(src).not.toContain("youtube-nocookie.com");
   });
 
   it("a newer play supersedes a slower older in-flight resolution", async () => {
