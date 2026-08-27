@@ -35,7 +35,24 @@ class SlskdUnreachable(Exception):
     rivendicati finche' il daemon non torna. Vive qui e non nel client
     (`integrations/slskd.py`) perche' non descrive un errore di quel client —
     lo classifica: dice cosa ne fa la coda.
+
+    `reason` e' il codice che il dispatcher scrive sull'interruttore e che il
+    frontend traduce: non tutti gli ostacoli d'infrastruttura sono lo stesso
+    ostacolo, e dire "slskd non risponde" quando il daemon risponde benissimo
+    ma sta solo strozzando le richieste manda l'utente a debuggare la cosa
+    sbagliata.
     """
+
+    def __init__(self, message: str, reason: str = "unreachable"):
+        super().__init__(message)
+        self.reason = reason
+
+
+def _breaker_reason(exc: BaseException) -> str:
+    """Il codice da mostrare per questo ostacolo. Il 429 — il tetto di
+    concorrenza del daemon, che il client ha gia' atteso e ritentato invano —
+    e' l'unico che non voglia dire "il daemon non risponde"."""
+    return "throttled" if getattr(exc, "status_code", None) == 429 else "unreachable"
 
 
 def _candidate_from_payload(payload: dict | None) -> SlskdFile | None:
@@ -165,7 +182,7 @@ def run_item(item_id: int) -> tuple[str, str | None] | None:
                 queue.requeue(db, item_id)
                 logger.warning("Item di coda %s rinviato, slskd irraggiungibile: %s",
                                item_id, exc)
-                raise SlskdUnreachable(str(exc)) from exc
+                raise SlskdUnreachable(str(exc), _breaker_reason(exc)) from exc
             logger.exception("Item di coda %s fallito", item_id)
             outcome, reason, path = "failed", str(exc) or "error", None
         # Annullato mentre lavorava: l'item resta `cancelled` e la traccia NON

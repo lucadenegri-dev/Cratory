@@ -8,6 +8,7 @@ Confermare gli endpoint contro lo Swagger del proprio slskd (<SLSKD_URL>/swagger
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,37 @@ from app.integrations._http import ClosableHttpClient, get_with_retries, raise_f
 logger = logging.getLogger(__name__)
 
 BASE = "/api/v0"
+
+# slskd serializza nel proprio processo le due POST che avviano un lavoro, e
+# non mette in attesa chi arriva secondo: risponde 429 all'istante ("Only one
+# concurrent operation is permitted"), perche' prova a prendere il semaforo
+# senza attendere (`Wait(0)`).
+#
+#   SearchesController   SemaphoreSlim(1, 1)  ->  POST /searches
+#   TransfersController  SemaphoreSlim(2, 2)  ->  POST /transfers/downloads/{u}
+#
+# Cratory ne fa piu' di una alla volta di mestiere: il pool della coda lavora
+# `download_slots` item in parallelo (tre di default) e ogni worker comincia
+# proprio con una ricerca — quindi partendo insieme, come fanno quando si
+# accoda una playlist, due su tre prendevano un 429 prima ancora di provare a
+# scaricare. I cancelli qui sotto rispecchiano i tetti del daemon, cosi' la
+# richiesta di troppo aspetta il suo turno invece di essere rifiutata.
+#
+# Sono di modulo e non del client perche' il tetto e' del daemon, non della
+# connessione: i client si creano e si buttano per ogni item (`run_item`), e
+# un cancello per istanza non conterebbe nulla. Un solo processo uvicorn,
+# quindi un lock in memoria basta — la stessa assunzione della coda
+# (`download_queue._claim_lock`).
+_SEARCH_GATE = threading.Semaphore(1)
+_ENQUEUE_GATE = threading.Semaphore(2)
+
+# Il cancello copre le richieste di Cratory, non quelle di chiunque altro:
+# la web UI di slskd, aperta sull'altro monitor, occupa lo stesso semaforo.
+# Per quel residuo si ritenta, con attesa crescente e un tetto: un 429 che
+# sopravvive a tutti i tentativi non e' piu' un incidente di traffico ed e'
+# trattato come infrastruttura (vedi `slskd_unreachable`).
+THROTTLE_RETRIES = 4      # tentativi totali, non aggiuntivi
+THROTTLE_BACKOFF = 0.25   # secondi, raddoppia a ogni rifiuto: 0.25, 0.5, 1.0
 
 
 class SlskdError(Exception):
@@ -79,6 +111,30 @@ class SlskdClient(ClosableHttpClient):
             raise SlskdError(f"slskd POST {path} fallita: {exc}") from exc
         raise_for_status(r, SlskdError, name="slskd")
         return r.json() if r.content else {}
+
+    def _post_throttled(self, path: str, gate: threading.Semaphore, json=None):
+        """`_post` per gli endpoint che slskd serializza (vedi i cancelli in
+        cima al modulo): si aspetta il proprio turno, e un 429 di un altro
+        client si ritenta invece di risalire al chiamante.
+
+        L'attesa fra un tentativo e l'altro sta FUORI dal cancello: dormirci
+        dentro bloccherebbe anche chi e' in fila per un turno che il daemon
+        avrebbe gia' libero.
+        """
+        attesa = THROTTLE_BACKOFF
+        for tentativo in range(THROTTLE_RETRIES):
+            with gate:
+                try:
+                    return self._post(path, json=json)
+                except SlskdError as exc:
+                    ultimo = tentativo == THROTTLE_RETRIES - 1
+                    if getattr(exc, "status_code", None) != 429 or ultimo:
+                        raise
+                    logger.warning("slskd ha strozzato POST %s (tentativo %d/%d), "
+                                   "riprovo fra %.2fs", path, tentativo + 1,
+                                   THROTTLE_RETRIES, attesa)
+            time.sleep(attesa)
+            attesa *= 2
 
     def _put(self, path: str, json=None):
         try:
@@ -150,7 +206,7 @@ class SlskdClient(ClosableHttpClient):
         text = f"{artist} {title}".strip()
         if not text:
             return []
-        created = self._post("/searches", json={
+        created = self._post_throttled("/searches", _SEARCH_GATE, json={
             "searchText": text,
             "searchTimeout": search_timeout_ms,
             "responseLimit": response_limit,
@@ -185,8 +241,8 @@ class SlskdClient(ClosableHttpClient):
         return files
 
     def enqueue_download(self, file: "SlskdFile") -> None:
-        self._post(f"/transfers/downloads/{file.username}",
-                   json=[{"filename": file.filename, "size": file.size or 0}])
+        self._post_throttled(f"/transfers/downloads/{file.username}", _ENQUEUE_GATE,
+                             json=[{"filename": file.filename, "size": file.size or 0}])
 
     def transfer_state(self, username: str, filename: str) -> dict | None:
         """Stato del transfer per (username, filename).
@@ -290,10 +346,17 @@ def slskd_unreachable(exc: BaseException) -> bool:
       (chiave API sbagliata o ruotata) e ogni 5xx sono un daemon vivo che
       risponde male — infrastruttura quanto una connessione rifiutata, e con
       lo stesso danno se non trattati come tale (un riaggancio che ripesca un
-      daemon rotto brucerebbe l'intera coda). Il 409 e' il caso ambiguo: da
-      solo direbbe "questa richiesta non va bene", ma quello che slskd manda su
-      `POST /searches` a daemon scollegato ("must be connected (currently:
-      Disconnected)") e' infrastruttura pura — con 300 item in coda, trattarlo
+      daemon rotto brucerebbe l'intera coda). Il 429 e' il tetto di
+      concorrenza del daemon, e arriva qui solo dopo che `_post_throttled`
+      ha atteso il proprio turno e ritentato invano (vedi i cancelli in cima
+      al modulo): non e' piu' un incidente di traffico ma un daemon che non
+      e' in grado — quanto un 503, e non colpa della traccia. Non puo'
+      incantarsi, perche' il semaforo di slskd si libera in un `finally`, e
+      finche' non lo fa e' il raffreddamento dell'interruttore a diradare i
+      tentativi. Il 409 e' il caso ambiguo: da solo direbbe "questa richiesta
+      non va bene", ma quello che slskd manda su `POST /searches` a daemon
+      scollegato ("must be connected (currently: Disconnected)") e'
+      infrastruttura pura — con 300 item in coda, trattarlo
       come colpa della traccia li marcherebbe tutti `failed` e scriverebbe
       l'esito su 300 tracce. Si guarda quindi il testo (vedi `_NON_COLLEGATO`);
       gli altri 409 restano un fallimento della singola richiesta.
@@ -314,7 +377,7 @@ def slskd_unreachable(exc: BaseException) -> bool:
     if status == 409:
         testo = str(exc).lower()
         return any(frammento in testo for frammento in _NON_COLLEGATO)
-    return status is not None and (status in (401, 403) or status >= 500)
+    return status is not None and (status in (401, 403, 429) or status >= 500)
 
 
 def get_slskd_client() -> SlskdClient:

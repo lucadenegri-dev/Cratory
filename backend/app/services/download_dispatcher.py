@@ -170,7 +170,7 @@ def _work(item_id: int) -> None:
         # ricevuto esito: qui si apre l'interruttore, cosi' il pool smette di
         # rivendicare gli altri item che dipendono da slskd invece di bruciarli
         # tutti uno dopo l'altro contro un daemon spento.
-        _trip_slskd_breaker()
+        _trip_slskd_breaker(exc.reason)
         logger.info("Item %s rimesso in coda: %s", item_id, exc)
     except Exception:  # noqa: BLE001 — il runner non dovrebbe sollevare, ma uno
         logger.exception("Worker della coda esploso su item %s", item_id)

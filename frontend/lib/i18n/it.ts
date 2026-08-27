@@ -659,6 +659,7 @@ export const it: Dictionary = {
     pausedReason: (code: string | null): string => {
       switch (code) {
         case "unreachable": return "slskd non risponde, o non è collegato alla rete Soulseek.";
+        case "throttled": return "slskd accetta una richiesta alla volta ed è già occupato.";
         case "repeated_failures": return "Troppi download falliti di fila per lo stesso motivo.";
         default: return "Il daemon dei download non è raggiungibile.";
       }

@@ -668,6 +668,7 @@ export const en = {
     pausedReason: (code: string | null): string => {
       switch (code) {
         case "unreachable": return "slskd is not answering, or is not connected to the Soulseek network.";
+        case "throttled": return "slskd only accepts one request at a time, and is already busy.";
         case "repeated_failures": return "Too many downloads failed in a row for the same reason.";
         default: return "The download daemon is unreachable.";
       }
