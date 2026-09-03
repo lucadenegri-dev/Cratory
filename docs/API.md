@@ -1075,11 +1075,24 @@ and playlists. It is never a source of BPM or key.
 `GET /api/spotify/status` → `configured`, `user_connected`, and `redirect_uri`,
 which is shown in the UI because it must match the Spotify dashboard entry exactly.
 
-`GET /api/spotify/login` redirects into the OAuth authorize flow.
+`GET /api/spotify/login` redirects into the OAuth authorize flow. Its optional
+`return_to` says where the user should land afterwards; it is accepted only when
+its origin is one this installation recognises — the same allowlist the CORS
+middleware uses (`core/origins.py`, `tauri://localhost` always included) — and is
+remembered alongside the CSRF state, never read back from the callback's query
+string. Anything else is ignored and the historical default applies.
+
 `GET /api/spotify/callback` is the redirect target: it validates the one-shot CSRF
-state (10-minute TTL), exchanges the code, and always redirects back to the
-frontend's `/settings` with `?spotify=connected` or `?spotify=error&detail=…`. It
-never returns JSON, and never an error status.
+state (10-minute TTL), exchanges the code, and sends the user back to that
+`return_to` (default: the frontend's `/settings`) with `?spotify=connected` or
+`?spotify=error&detail=…`. It never returns JSON, and never an error status. When
+the destination is `http(s)` that is a redirect, as it always was; when it is the
+desktop webview's own scheme it is instead a small HTML page that navigates there
+— a `Location:` to a custom scheme is uncertain ground for WKWebView, and the page
+degrades to a readable message plus a link if the jump does not happen. Without
+`return_to` the callback always landed on `http://localhost:3000/settings`, which
+in the packaged app is nobody: the token exchange succeeded and the webview was
+left on a failed navigation.
 
 `POST /api/spotify/create-playlist` (`{setlist_id, name?}`) creates a Spotify
 playlist from a saved set; tracks without a `spotify_id` are skipped. Response

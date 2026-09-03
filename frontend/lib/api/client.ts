@@ -1,10 +1,25 @@
-import { API_BASE } from "@/lib/api/base";
+import { API_BASE, urlDiRitorno } from "@/lib/api/base";
 import { translateApiError } from "@/lib/i18n/runtime";
 
 // La base la decide lib/api/base.ts, per tutti e due i client HTTP.
 export const API = API_BASE;
 
-export const SPOTIFY_LOGIN_URL = `${API}/api/spotify/login`;
+/** L'avvio dell'OAuth Spotify, che dice al backend dove riportare l'utente:
+ *  la pagina da cui si e' partiti. Senza `return_to` il callback ricade sulla
+ *  prima origine di FRONTEND_ORIGIN (http://localhost:3000), che nel bundle
+ *  desktop non esiste — la pagina sta su tauri://localhost, e il ritorno
+ *  finiva su una navigazione fallita: dal lato dell'utente, il bottone
+ *  "Accetta" di Spotify che non va avanti.
+ *
+ *  Funzione e non costante: l'href dipende da dove si trova la pagina adesso,
+ *  e in prerender non c'e' nessuna pagina (allora si omette il parametro e
+ *  vale il comportamento storico). */
+export function spotifyLoginUrl(): string {
+  const login = `${API}/api/spotify/login`;
+  if (typeof window === "undefined") return login;
+  const ritorno = urlDiRitorno(window.location.href);
+  return ritorno ? `${login}?return_to=${encodeURIComponent(ritorno)}` : login;
+}
 
 /** Errore di una chiamata API: messaggio già tradotto (via translateApiError)
  *  più status HTTP e code opzionale, per i call site che vogliono distinguerli. */

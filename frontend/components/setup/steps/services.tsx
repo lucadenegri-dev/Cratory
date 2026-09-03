@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import {
-  errText, getConfigSettings, servicesStatus, SPOTIFY_LOGIN_URL,
+  errText, getConfigSettings, servicesStatus, spotifyLoginUrl,
   type ConfigSettings, type ServiceStatus,
 } from "@/lib/api";
 import { Alert, Button, Loading } from "@/components/ui";
@@ -58,7 +58,7 @@ export function ServicesStep() {
             onSaved={load}
           >
             {service === "spotify" && config.secrets.spotify_client_id.configured && config.secrets.spotify_client_secret.configured && (
-              <a href={SPOTIFY_LOGIN_URL}>
+              <a href={spotifyLoginUrl()}>
                 <Button size="sm" variant="outline">
                   <ExternalLink size={14} /> {t.settings.connectButton}
                 </Button>

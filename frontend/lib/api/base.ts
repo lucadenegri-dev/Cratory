@@ -52,3 +52,26 @@ export function isOwnUrl(url: string): boolean {
   if (typeof window === "undefined") return false;
   return isOwnOrigin(url, window.location.href, API_BASE);
 }
+
+/** L'URL a cui il backend deve riportare l'utente dopo un flusso che passa da
+ *  fuori (l'OAuth di Spotify): origine della pagina piu' il percorso corrente,
+ *  senza query ne' fragment — quella query la riscrive il callback.
+ *
+ *  Non `location.origin`: `tauri:` non e' uno schema speciale e la sua origin
+ *  per specifica e' opaca, cioe' la stringa "null". Nel bundle desktop il
+ *  backend riceverebbe "null/setup", la scarterebbe come destinazione non
+ *  valida e ricadrebbe su http://localhost:3000, che li' non esiste — cioe'
+ *  esattamente il difetto che questo parametro serve a togliere. Stessa
+ *  ragione, stessa forma di `chiaveOrigine` qui sopra.
+ *
+ *  Pura nel suo argomento: il test la esercita sui due mondi senza fingere
+ *  `window`. Stringa vuota se `href` non e' un URL — meglio nessuna
+ *  destinazione che una inventata. */
+export function urlDiRitorno(href: string): string {
+  try {
+    const u = new URL(href);
+    return `${u.protocol}//${u.host}${u.pathname}`;
+  } catch {
+    return "";
+  }
+}

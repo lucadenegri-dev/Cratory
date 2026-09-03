@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getProbe, setSetupCompleted, errText } from "@/lib/api";
 import { passiDelWizard, type Passo } from "@/lib/setup-steps";
 import { Alert, Button } from "@/components/ui";
@@ -22,10 +22,20 @@ import { SummaryStep } from "@/components/setup/steps/summary";
    un passo suo e ora non è nemmeno un prerequisito: è un servizio, e si
    configura dal passo Servizi — vedi components/slskd-row.tsx. */
 
-export default function SetupPage() {
+function SetupInner() {
   const t = useT();
   const router = useRouter();
-  const [index, setIndex] = useState(0);
+  /* L'OAuth Spotify esce dall'app e torna qui, non su /settings: durante il
+     wizard `completed` è false, e il SetupGate rimanderebbe subito indietro —
+     wizard da capo, esito mai mostrato. Il backend riporta alla pagina che
+     glielo ha chiesto (`return_to`, vedi lib/api/client.ts). */
+  const params = useSearchParams();
+  const oauth = params.get("spotify");
+  /* Il passo si tiene per nome, non per numero: la lista dei passi cambia
+     forma quando il probe risponde (nel bundle i prerequisiti spariscono, vedi
+     lib/setup-steps.ts) e un indice numerico punterebbe a un altro passo senza
+     che nessuno se ne accorga. */
+  const [passo, setPasso] = useState<Passo>(oauth ? "services" : "welcome");
   const [error, setError] = useState<string | null>(null);
   const [componenti, setComponenti] = useState<{ present: boolean; source: string | null }[] | null>(null);
 
@@ -46,6 +56,9 @@ export default function SetupPage() {
   }, []);
 
   const STEPS = passiDelWizard(componenti);
+  // Un passo che la lista non contiene più (il probe l'ha appena tolto) non
+  // deve diventare un indice negativo: si ricomincia dal primo.
+  const index = Math.max(0, STEPS.indexOf(passo));
   const step = STEPS[index];
 
   const esci = useCallback(async () => {
@@ -79,6 +92,9 @@ export default function SetupPage() {
         <p className="mt-1 text-sm text-muted">{t.setup.subtitle(STEPS.length)}</p>
       </header>
 
+      {oauth === "connected" && <div className="mb-4"><Alert tone="info">{t.settings.spotifyConnected}</Alert></div>}
+      {oauth === "error" && <div className="mb-4"><Alert tone="danger">{t.settings.spotifyLoginFailed(params.get("detail") ?? "")}</Alert></div>}
+
       <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-fg-strong">{titolo[step]}</h2>
 
       <div className="flex-1">
@@ -97,10 +113,10 @@ export default function SetupPage() {
         </button>
         <div className="flex gap-2">
           {index > 0 && (
-            <Button size="sm" variant="ghost" onClick={() => setIndex((i) => i - 1)}>{t.setup.back}</Button>
+            <Button size="sm" variant="ghost" onClick={() => setPasso(STEPS[index - 1])}>{t.setup.back}</Button>
           )}
           {index < STEPS.length - 1 ? (
-            <Button size="sm" variant="outline" onClick={() => setIndex((i) => i + 1)}>{t.setup.next}</Button>
+            <Button size="sm" variant="outline" onClick={() => setPasso(STEPS[index + 1])}>{t.setup.next}</Button>
           ) : (
             <Button size="sm" onClick={esci}>{t.setup.finish}</Button>
           )}
@@ -108,4 +124,10 @@ export default function SetupPage() {
       </footer>
     </div>
   );
+}
+
+/* `useSearchParams` in un build statico vuole un confine di Suspense sopra:
+   stesso involucro di app/settings/page.tsx, per la stessa ragione. */
+export default function SetupPage() {
+  return <Suspense><SetupInner /></Suspense>;
 }

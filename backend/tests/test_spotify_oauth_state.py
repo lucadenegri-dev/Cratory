@@ -144,7 +144,10 @@ def test_callback_state_scaduto_rifiutato(client, monkeypatch):
     quindi congelarlo bloccherebbe la richiesta invece di limitarsi a farla fallire.
     Si retrodata direttamente il timestamp memorizzato per quello state."""
     spotify_router._remember_state("stato-vecchio")
-    spotify_router._pending_states["stato-vecchio"] -= (spotify_router._STATE_TTL_SECONDS + 1)
+    pendente = spotify_router._pending_states["stato-vecchio"]
+    spotify_router._pending_states["stato-vecchio"] = pendente._replace(
+        issued=pendente.issued - spotify_router._STATE_TTL_SECONDS - 1
+    )
     called = {"n": 0}
     monkeypatch.setattr(spotify_router.SpotifyWebClient, "exchange_code",
                         lambda self, code: called.update(n=called["n"] + 1))

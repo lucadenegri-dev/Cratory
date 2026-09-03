@@ -10,7 +10,7 @@ import {
   importPlaylist,
   listSpotifyPlaylists,
   listImportedPlaylists,
-  SPOTIFY_LOGIN_URL,
+  spotifyLoginUrl,
   type SpotifyPlaylistRef,
   type SpotifyStatus,
 } from "@/lib/api";
@@ -105,7 +105,7 @@ export default function ImportSpotifyPage() {
               ? isf.notConfigured
               : isf.connectHint}
             {spotify?.configured && (
-              <a href={SPOTIFY_LOGIN_URL} className="ml-2 font-medium underline">{isf.connectButton}</a>
+              <a href={spotifyLoginUrl()} className="ml-2 font-medium underline">{isf.connectButton}</a>
             )}
           </Alert>
         </div>

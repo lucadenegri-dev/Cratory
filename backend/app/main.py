@@ -19,6 +19,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings, setup_logging
+# Ri-esportate: il CORS qui sotto le usa, e le usa anche routers/spotify.py per
+# validare la destinazione di ritorno dell'OAuth (vedi core/origins.py).
+from app.core.origins import WEBVIEW_ORIGIN, origini_ammesse  # noqa: F401
 from app.core.version import app_version
 from app.db import ensure_schema
 from app.organize.services import scan_job
@@ -59,21 +62,6 @@ from app.organize.routers import (
     scan as organize_scan,
     settings as organize_settings,
 )
-
-# L'origin che il webview di Tauri presenta su macOS. Non e' configurabile:
-# se cambiasse, l'app desktop smetterebbe di funzionare e il posto in cui
-# accorgersene e' qui, non il .env di chi installa.
-WEBVIEW_ORIGIN = "tauri://localhost"
-
-def origini_ammesse(raw: str) -> list[str]:
-    """Le origini che il CORS accetta, dalla stringa separata da virgole.
-
-    Funzione e non espressione in linea perche' i test la chiamano invece di
-    riscriverla: una copia della logica nel test si disallinea al primo
-    cambiamento, ed e' gia' successo.
-    """
-    return sorted({o.strip() for o in raw.split(",") if o.strip()} | {WEBVIEW_ORIGIN})
-
 
 logger = logging.getLogger("app.request")
 
