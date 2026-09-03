@@ -3,13 +3,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 
 const finto = vi.hoisted(() => ({
   daemon: { reachable: false, owned: null as boolean | null, pid: null as number | null, installed: false, configured: false, username: null as string | null },
-  slskd: { configured: false, reachable: false, is_connected: false, is_logged_in: false, is_connecting: false, is_transitioning: false, username: null as string | null },
+  slskd: { configured: false, reachable: false, is_connected: false, is_logged_in: false, is_connecting: false, is_transitioning: false, username: null as string | null, unauthorized: false },
   startInstall: vi.fn(),
   daemonConfig: vi.fn(),
   daemonStart: vi.fn(),
   daemonStop: vi.fn(),
   slskdConnect: vi.fn(),
   slskdDisconnect: vi.fn(),
+  repairApiKey: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -23,6 +24,7 @@ vi.mock("@/lib/api", () => ({
   daemonStop: () => finto.daemonStop(),
   slskdConnect: () => finto.slskdConnect(),
   slskdDisconnect: () => finto.slskdDisconnect(),
+  repairApiKey: () => finto.repairApiKey(),
 }));
 
 import { SlskdRow } from "@/components/slskd-row";
@@ -31,7 +33,7 @@ const acceso = { reachable: true, owned: true as boolean | null, pid: 42, instal
 
 beforeEach(() => {
   finto.daemon = { reachable: false, owned: null, pid: null as number | null, installed: false, configured: false, username: null };
-  finto.slskd = { configured: false, reachable: false, is_connected: false, is_logged_in: false, is_connecting: false, is_transitioning: false, username: null };
+  finto.slskd = { configured: false, reachable: false, is_connected: false, is_logged_in: false, is_connecting: false, is_transitioning: false, username: null, unauthorized: false };
 });
 afterEach(cleanup);
 
@@ -112,6 +114,33 @@ describe("riga slskd", () => {
     await waitFor(() => expect(screen.getByText(/Connetti|Collega/)).toBeTruthy());
     expect(screen.queryByText("Scarica slskd")).toBeNull();
     expect(screen.queryByText("Avvia")).toBeNull();
+  });
+
+  /* Il 401: il demone risponde a `/health` (anonimo) ma rifiuta ogni
+     `/api/v0/*`. E' lo stato in cui si trova chi ha configurato slskd prima
+     che Cratory scrivesse una chiave API — e "Connetti", l'unica azione che
+     la riga sapeva offrire a demone acceso, non fa che ripetergli il 401. */
+  it("demone acceso che rifiuta la chiave: offre la riparazione, non il collegamento", async () => {
+    finto.daemon = { ...acceso };
+    finto.slskd = { ...finto.slskd, configured: true, unauthorized: true };
+    render(<SlskdRow />);
+    await waitFor(() => expect(screen.getByText("Ripara e riavvia")).toBeTruthy());
+    expect(screen.queryByText(/Connetti|Collega/)).toBeNull();
+    expect(screen.queryByText("Avvia")).toBeNull();
+  });
+
+  it("riparazione su un demone non nostro: dice che il riavvio tocca all'utente", async () => {
+    /* Meta' lavoro fatto e meta' no: la chiave e' scritta, ma slskd la legge
+       solo all'avvio e quello non possiamo darglielo noi. Se la riga tacesse,
+       l'utente resterebbe col 401 convinto di aver finito. */
+    finto.daemon = { ...acceso, owned: false, pid: null };
+    finto.slskd = { ...finto.slskd, configured: true, unauthorized: true };
+    finto.repairApiKey.mockResolvedValue({ configured: true, restarted: false, needs_restart: true });
+    render(<SlskdRow />);
+    await waitFor(() => expect(screen.getByText("Ripara e riavvia")).toBeTruthy());
+    fireEvent.click(screen.getByText("Ripara e riavvia"));
+    await waitFor(() => expect(finto.repairApiKey).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Riavvia slskd/)).toBeTruthy();
   });
 
   it("non precompila mai la password", async () => {

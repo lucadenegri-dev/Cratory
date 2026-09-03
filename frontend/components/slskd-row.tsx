@@ -13,13 +13,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Plug, Unplug } from "lucide-react";
 import {
   daemonConfig, daemonStart, daemonStatus, daemonStop, errText, getInstallStatus,
-  slskdConnect, slskdDisconnect, slskdStatus, startInstall,
+  repairApiKey, slskdConnect, slskdDisconnect, slskdStatus, startInstall,
   type SlskdDaemonStatus, type SlskdStatus,
 } from "@/lib/api";
 import { Alert, Button, Input, Spinner } from "@/components/ui";
 import { useT, type Dictionary } from "@/lib/i18n";
 
-type Fase = "caricamento" | "scarica" | "configura" | "avvia" | "collega" | "collegato";
+type Fase = "caricamento" | "scarica" | "configura" | "avvia" | "ripara" | "collega"
+  | "collegato";
 
 /* L'ordine delle domande e' il punto di questa funzione, e la prima e' "sta
    gia' rispondendo?".
@@ -31,6 +32,12 @@ type Fase = "caricamento" | "scarica" | "configura" | "avvia" | "collega" | "col
  * Se il demone risponde, da dove sia venuto non interessa piu' a nessuno. */
 function fase(d: SlskdDaemonStatus | null, s: SlskdStatus | null): Fase {
   if (!d) return "caricamento";
+  /* Prima di "collega", e per la stessa ragione per cui "sta gia' rispondendo?"
+     viene prima di tutto: `/health` e' l'unico endpoint anonimo di slskd,
+     quindi un demone che rifiuta la nostra chiave API risulta acceso lo
+     stesso. Offrirgli "Connetti" vuol dire offrirgli il 401 che ha gia'
+     preso — la strada che lo porta fuori e' riscrivere la chiave. */
+  if (d.reachable && s?.unauthorized) return "ripara";
   if (d.reachable) return s?.is_connected && s?.is_logged_in ? "collegato" : "collega";
   if (!d.installed) return "scarica";
   if (!d.configured) return "configura";
@@ -56,6 +63,11 @@ export function SlskdRow() {
   const [password, setPassword] = useState("");
   const [inCorso, setInCorso] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
+  /* Riparazione riuscita a meta': la chiave e' scritta, ma il demone non e'
+     nostro (o la piattaforma non ce lo lascia gestire) e slskd le api_keys le
+     legge solo all'avvio. Tacere qui lascerebbe l'utente col 401, convinto di
+     aver finito. */
+  const [daRiavviare, setDaRiavviare] = useState(false);
 
   /* Legge senza toccare lo stato di React: chi chiama decide se e quando
      applicare. Serve al primo caricamento, che non deve scrivere su un
@@ -126,6 +138,12 @@ export function SlskdRow() {
       setPassword(""); // non resta in memoria oltre l'invio
     });
 
+  const ripara = () =>
+    azione(async () => {
+      const esito = await repairApiKey();
+      setDaRiavviare(esito.needs_restart);
+    });
+
   const f = fase(daemon, slskd);
   // Solo un si' pieno autorizza a fermarlo: un demone acceso da qualcun altro
   // non e' nostro da spegnere, e uno di proprieta' ignota nemmeno.
@@ -166,6 +184,16 @@ export function SlskdRow() {
           <Button size="sm" disabled={inCorso} onClick={() => azione(daemonStart)}>
             {t.setup.daemonStart}
           </Button>
+        </div>
+      )}
+
+      {f === "ripara" && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted">{t.settings.slskdStepRepair}</p>
+          <Button size="sm" disabled={inCorso} onClick={ripara}>
+            {inCorso ? t.settings.slskdRepairing : t.settings.slskdRepair}
+          </Button>
+          {daRiavviare && <Alert tone="warning">{t.settings.slskdRepairNeedsRestart}</Alert>}
         </div>
       )}
 

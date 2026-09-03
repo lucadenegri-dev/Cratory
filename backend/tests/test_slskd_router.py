@@ -25,6 +25,8 @@ class _FakeClient:
         self.disconnect_called = False
 
     def server_state(self):
+        if isinstance(self._raise_state, Exception):
+            raise self._raise_state
         if self._raise_state:
             raise SlskdError("daemon irraggiungibile")
         return self._state
@@ -110,3 +112,38 @@ def test_connect_not_configured_returns_409(monkeypatch):
     monkeypatch.setattr(settings, "slskd_url", "")
     r = TestClient(app).post("/api/slskd/connect")
     assert r.status_code == 409
+
+
+def _errore(status: int) -> SlskdError:
+    """Un errore come lo costruisce `raise_for_status`: il codice HTTP ci
+    arriva attaccato all'eccezione, non nel tipo."""
+    exc = SlskdError(f"slskd {status}: ")
+    exc.status_code = status
+    return exc
+
+
+def test_status_401_dice_che_la_chiave_e_rifiutata(monkeypatch):
+    """Un 401 non e' "il demone e' giu'": e' acceso, e sta rifiutando noi.
+    Senza distinguerli la UI vede un demone raggiungibile (`/health` risponde
+    a chiunque) e uno stato che dice "irraggiungibile", e l'unica cosa che
+    puo' offrire e' "Connetti" — che ridara' 401 all'infinito."""
+    _use_client(monkeypatch, _FakeClient(raise_state=_errore(401)))
+    body = TestClient(app).get("/api/slskd/status").json()
+    assert body["unauthorized"] is True
+    assert body["reachable"] is False
+
+
+def test_status_403_e_lo_stesso_problema(monkeypatch):
+    """Chiave valida ma con ruolo o CIDR insufficienti: rifiutati uguale, e la
+    riparazione (riscrivere la nostra voce) e' la stessa."""
+    _use_client(monkeypatch, _FakeClient(raise_state=_errore(403)))
+    assert TestClient(app).get("/api/slskd/status").json()["unauthorized"] is True
+
+
+def test_status_demone_giu_non_e_un_problema_di_chiave(monkeypatch):
+    """Il contro-caso, o `unauthorized` potrebbe essere sempre vero e passare
+    lo stesso: connessione rifiutata, nessuno status code."""
+    _use_client(monkeypatch, _FakeClient(raise_state=True))
+    body = TestClient(app).get("/api/slskd/status").json()
+    assert body["reachable"] is False
+    assert body["unauthorized"] is False

@@ -976,7 +976,14 @@ uses.
 `GET /api/slskd/status` returns `configured` (`SLSKD_URL` is set, so we know where
 the daemon is), `reachable` (it answered), `is_connected`, `is_logged_in`,
 `is_connecting`, `is_transitioning`, `state` (raw slskd string), `username` (the
-Soulseek account configured in slskd; the password stays masked) and `web_url`.
+Soulseek account configured in slskd; the password stays masked), `unauthorized` and
+`web_url`. `unauthorized` is the one failure that isn't "the daemon is down": it
+answered and rejected Cratory's API key (401/403). `reachable` stays `false` — a daemon
+that refuses us is unusable, the same reading `slskd_unreachable` takes in the download
+queue — but the distinction matters to the UI, because `/health` is slskd's only
+anonymous endpoint, so the daemon looks up either way and the only action worth
+offering is repairing the key, not connecting again (see `POST
+/api/slskd/daemon/api-key`).
 `web_url` is populated as soon as `configured`, **even when the daemon is
 unreachable** — the wishlist links to it precisely when a Cratory download fails.
 The connection flags are only meaningful when `reachable`.
@@ -997,10 +1004,11 @@ GET  /api/slskd/daemon/status
 POST /api/slskd/daemon/start
 POST /api/slskd/daemon/stop
 PUT  /api/slskd/daemon/config
+POST /api/slskd/daemon/api-key
 ```
 
 The section above assumes slskd is already running somewhere and Cratory just talks
-to it over HTTP; these four endpoints are the exception where Cratory downloads,
+to it over HTTP; these five endpoints are the exception where Cratory downloads,
 configures and drives the daemon's own process (`services/slskd_daemon.py`, using
 `services/binary_installer.py` for the download — see `docs/ARCHITECTURE.md`'s "The
 boundary around slskd moved"). Not fully available on Windows, but only for the two
@@ -1048,10 +1056,23 @@ provably Cratory's), `501 slskd_unsupported_platform` on Windows.
 the file alone," never "reset to a default" — that distinction is deliberate: the
 default port and download directory only apply the first time the file is created, so
 that a later call that omits a field can't silently overwrite a value the user (or an
-earlier call) actually chose. Every other key already in `slskd.yml` — shares, API
-key, comments — is preserved untouched, and a `.bak` copy is written before each
-rewrite, with the same restrictive permissions as the file it backs up (both contain the
-Soulseek password in clear text). The password is written and never read back: the
+earlier call) actually chose. Every other key already in `slskd.yml` — shares, other
+people's API keys, comments — is preserved untouched, and a `.bak` copy is written
+before each rewrite, with the same restrictive permissions as the file it backs up
+(both contain the Soulseek password in clear text).
+
+One key Cratory does write besides those four: its own entry under
+`web.authentication.api_keys.cratory` (loopback CIDR, `Administrator` role, needed by
+`PUT /server` and `PUT /shares`), generated once and **reused, never rewritten**, if
+it's already there. Without it slskd answers `401` to every `/api/v0/*` call while
+`/health` — the only anonymous endpoint, and the one the daemon-status check uses —
+keeps answering `200`: the guided path installed, configured and started the daemon
+successfully and then failed at the first click on Connect. The generated key is also
+mirrored into Cratory's own `slskd_api_key` setting on **every** call, not only when
+the file is created (unlike `slskd_url`/`slskd_download_dir` below): what's written
+there is always exactly what's in the file, so realigning it can't overwrite a
+deliberate choice, while skipping it would leave Cratory signing its requests with the
+wrong key. The password is written and never read back: the
 response, `{"configured": true, "username": str}`, echoes only the username. When the
 file is created from scratch, the port and download directory actually chosen (default
 or explicit) are also written into Cratory's own settings (`slskd_url`,
@@ -1059,6 +1080,20 @@ or explicit) are also written into Cratory's own settings (`slskd_url`,
 diverging — without this, `slskd_url` stays empty and `POST /api/slskd/daemon/start`
 can never tell the freshly spawned process is actually reachable. No slskd-specific
 error mapping beyond FastAPI's own `422` for a malformed body.
+
+`POST /api/slskd/daemon/api-key` → `{"configured": true, "restarted": bool,
+"needs_restart": bool}` repairs authentication for a setup that predates the key
+provisioning above: it adds the `cratory` entry to `slskd.yml` if missing, mirrors it
+into `slskd_api_key`, and restarts the daemon so slskd actually loads it (API keys are
+read once, at startup). It takes no body — unlike `PUT /daemon/config` it needs no
+credentials, which is the point: the Soulseek password goes in and never comes back
+out, so there is nothing to ask the user for. The restart happens only for a daemon
+Cratory started itself (same `owned_pid()` proof as `stop`); otherwise the key is still
+written and `needs_restart: true` says the restart is the user's to do — on Windows too,
+where the platform can't prove ownership but editing a YAML file works fine, so this
+endpoint returns `200` there rather than `501`. `409 slskd_not_configured` when
+`slskd.yml` doesn't exist at all (there is nothing to repair: configure the account
+first), `502 slskd_start_failed` if the daemon doesn't come back up.
 
 ## Spotify
 

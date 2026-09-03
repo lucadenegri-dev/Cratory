@@ -508,6 +508,10 @@ export interface SlskdStatus {
   is_transitioning: boolean;
   state: string | null;
   username: string | null;
+  /** Il demone ha risposto ma ha rifiutato la chiave API di Cratory (401/403).
+   *  Diverso da `reachable: false`: e' acceso, e la strada per uscirne non e'
+   *  "avvialo" ma "riscrivi la chiave e riavvialo". */
+  unauthorized: boolean;
   /** URL della web UI di slskd (= SLSKD_URL), valorizzato appena configurato
    *  anche se il demone e' irraggiungibile; null se non configurato. */
   web_url: string | null;

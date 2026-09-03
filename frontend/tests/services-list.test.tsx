@@ -57,7 +57,7 @@ beforeEach(() => {
   slskdStatusFn.mockResolvedValue({
     configured: true, reachable: true, is_connected: false, is_logged_in: false,
     is_connecting: false, is_transitioning: false, state: null, username: null,
-    web_url: null,
+    unauthorized: false, web_url: null,
   });
   soundcloudStatusFn.mockResolvedValue({ available: true, ytdlp_version: "2026.1", username: "luca" });
   daemonStatusFn.mockResolvedValue({ reachable: false, owned: null, pid: null, installed: true, configured: true, username: null });

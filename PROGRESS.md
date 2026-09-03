@@ -8,6 +8,19 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Il 401 di slskd su installazione fresca** (2026-09-03): il percorso guidato
+  scriveva nello `slskd.yml` account, porta e cartella, e nessuna chiave API. Il
+  demone partiva per davvero — `/health` è il suo unico endpoint anonimo, ed era
+  l'unico che Cratory guardasse per dirlo raggiungibile — cosí il primo errore
+  arrivava tre passi dopo, al click su Connetti: un 401 su `PUT /api/v0/server`.
+  In sviluppo non si vedeva perché la chiave era stata scritta a mano mesi prima,
+  ed è la ragione per cui il buco è sopravvissuto a tutte le prove. Adesso
+  `write_config` genera (o riusa, senza mai riscriverla) la voce
+  `web.authentication.api_keys.cratory` e la specchia in `slskd_api_key` ad ogni
+  salvataggio. Per chi è già bloccato — demone acceso, fase "configura" non piú
+  offerta — `GET /api/slskd/status` distingue "ci rifiuta" da "è spento"
+  (`unauthorized`), e `POST /api/slskd/daemon/api-key` scrive la chiave e riavvia
+  il demone senza richiedere la password Soulseek, che entra e non esce.
 - **L'aggiornamento in-place non chiede niente** (2026-08-26, verificato da
   1.0.4 a 1.0.5): l'app ha scaricato, si è riavviata ed è tornata senza il
   dialogo *"Cratory" Not Opened*. Era la domanda che ha motivato l'intero

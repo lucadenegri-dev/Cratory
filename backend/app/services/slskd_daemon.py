@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import secrets
 import signal
 import stat
 import subprocess
@@ -28,6 +29,20 @@ log = logging.getLogger(__name__)
 
 DEFAULT_PORT = 5030
 
+# La voce di Cratory dentro `web.authentication.api_keys`. Nome fisso: e' cosi'
+# che la si ritrova al salvataggio successivo invece di accumularne una nuova
+# ogni volta. Le chiavi degli altri, sotto altri nomi, restano dove sono.
+API_KEY_NAME = "cratory"
+# A spenderla e' il backend, sulla stessa macchina del demone: al resto della
+# rete non serve. slskd accetta un elenco di CIDR (v4 e v6 del solo loopback).
+_API_KEY_CIDR = "127.0.0.1/32,::1/128"
+# Administrator e non ReadWrite: Cratory chiama anche PUT /server (connetti) e
+# PUT /shares (rescan dopo aver scritto le share), riservati all'amministratore.
+_API_KEY_ROLE = "Administrator"
+# 24 byte -> 48 caratteri esadecimali. slskd rifiuta all'avvio le chiavi sotto
+# i 16 caratteri, e una chiave breve qui non farebbe risparmiare niente a nessuno.
+_API_KEY_BYTES = 24
+
 # Quanto aspettare che /health risponda dopo lo spawn, e ogni quanto ricontrollare.
 _ATTESA_AVVIO_S = 20.0
 _INTERVALLO_S = 0.5
@@ -45,6 +60,11 @@ class DaemonError(Exception):
 
 class NotInstalled(DaemonError):
     pass
+
+
+class ConfigMissing(DaemonError):
+    """Il file di configurazione di slskd non esiste: non c'e' niente da
+    riparare, va prima configurato l'account (vedi `ensure_api_key`)."""
 
 
 class AlreadyUp(DaemonError):
@@ -83,6 +103,59 @@ def _yaml() -> YAML:
     yaml = YAML()  # round-trip: preserva commenti e formato
     yaml.preserve_quotes = True
     return yaml
+
+
+def _sezione(padre: dict, nome: str) -> dict:
+    """Il sotto-dizionario `nome`, creandolo se manca.
+
+    Non `setdefault`: una chiave presente ma vuota (`authentication:` senza
+    figli) vale `None` in YAML, non un dizionario, e `setdefault` la
+    restituirebbe tale e quale — l'indicizzazione subito dopo esploderebbe su
+    un file perfettamente legittimo."""
+    valore = padre.get(nome)
+    if not isinstance(valore, dict):
+        valore = {}
+        padre[nome] = valore
+    return valore
+
+
+def _assicura_chiave_api(data: dict) -> str:
+    """La chiave con cui Cratory parla all'API di slskd: quella gia' nel file
+    se c'e', altrimenti una nuova. Ritorna sempre quella effettiva.
+
+    Senza chiave, ogni `/api/v0/*` torna 401. `/health` e' l'unico endpoint
+    anonimo del demone, ed e' anche l'unico che Cratory guardava per dirlo
+    "raggiungibile": l'avvio sembrava riuscito e il primo errore arrivava al
+    click su "Connetti". Era il buco del percorso guidato, che scriveva
+    account, porta e cartella e nient'altro.
+
+    Una chiave gia' presente non si tocca MAI — nemmeno per allungarla o per
+    cambiarle ruolo. E' dell'utente, puo' averla incollata altrove, e
+    rigenerarla ad ogni salvataggio sarebbe un 401 nuovo ad ogni giro."""
+    auth = _sezione(_sezione(data, "web"), "authentication")
+    chiavi = _sezione(auth, "api_keys")
+    voce = chiavi.get(API_KEY_NAME)
+    esistente = voce.get("key") if isinstance(voce, dict) else None
+    if esistente:
+        return str(esistente)
+    chiave = secrets.token_hex(_API_KEY_BYTES)
+    chiavi[API_KEY_NAME] = {"key": chiave, "cidr": _API_KEY_CIDR, "role": _API_KEY_ROLE}
+    return chiave
+
+
+def _salva(config_path: Path, data: dict, yaml: YAML, modo: int) -> None:
+    """Scrive lo YAML dove va, con i permessi che deve avere.
+
+    Si passa da un temporaneo perche' un'interruzione a meta' dump lascerebbe
+    l'utente senza configurazione, e `os.chmod` prima del rename perche'
+    `Path.write_text()` applica l'umask: il file contiene la password
+    Soulseek in chiaro."""
+    buf = io.StringIO()
+    yaml.dump(data, buf)
+    tmp = config_path.with_suffix(config_path.suffix + ".tmp")
+    tmp.write_text(buf.getvalue())
+    os.chmod(tmp, modo)
+    os.replace(tmp, config_path)
 
 
 def default_config_path() -> Path:
@@ -137,6 +210,10 @@ class ConfigWritten:
     created: bool
     port: int
     download_dir: str
+    # La chiave con cui parlare al demone: trovata nel file o appena generata
+    # (`_assicura_chiave_api`). Il chiamante la specchia in `slskd_api_key` —
+    # le due copie non possono divergere, o si torna al 401.
+    api_key: str
 
 
 def write_config(config_path: Path | str, *, username: str, password: str,
@@ -197,15 +274,43 @@ def write_config(config_path: Path | str, *, username: str, password: str,
             Path(proposta).mkdir(parents=True, exist_ok=True)
         data["directories"]["downloads"] = proposta
 
-    buf = io.StringIO()
-    yaml.dump(data, buf)
-    tmp = config_path.with_suffix(config_path.suffix + ".tmp")
-    tmp.write_text(buf.getvalue())
-    os.chmod(tmp, modo)
-    os.replace(tmp, config_path)
+    api_key = _assicura_chiave_api(data)
+
+    _salva(config_path, data, yaml, modo)
 
     return ConfigWritten(created=file_nuovo, port=data["web"]["port"],
-                         download_dir=data["directories"]["downloads"])
+                         download_dir=data["directories"]["downloads"],
+                         api_key=api_key)
+
+
+def ensure_api_key(config_path: Path | str) -> str:
+    """Garantisce che slskd.yml contenga la chiave API di Cratory, e la
+    ritorna — senza chiedere nient'altro.
+
+    E' la riparazione di chi ha configurato slskd PRIMA che Cratory scrivesse
+    la chiave: quelle installazioni hanno un demone acceso e funzionante, ma
+    muto con noi (401 su ogni `/api/v0/*`), e da `write_config` non ci si
+    passa piu' — vuole la password Soulseek, che e' entrata e non esce (non
+    la si rilegge dal file, e richiederla solo per aggiungere una chiave
+    sarebbe una domanda senza motivo).
+
+    Il file deve esistere: crearne uno con la sola chiave API darebbe un
+    demone che parte e non si collega a niente. `ConfigMissing` dice al
+    chiamante di rimandare alla configurazione vera.
+
+    slskd legge le `api_keys` all'avvio: scriverla qui non basta, il demone va
+    riavviato perche' abbia effetto. Se ne occupa il router."""
+    config_path = Path(config_path)
+    if not config_path.is_file():
+        raise ConfigMissing(f"{config_path} non esiste: slskd non e' ancora configurato")
+    yaml = _yaml()
+    originale = config_path.read_text()
+    data = yaml.load(originale) or {}
+    modo = stat.S_IMODE(os.stat(config_path).st_mode)
+    _scrivi_backup(config_path, originale, modo)
+    chiave = _assicura_chiave_api(data)
+    _salva(config_path, data, yaml, modo)
+    return chiave
 
 
 def _scrivi_backup(config_path: Path, contenuto: str, modo: int) -> None:

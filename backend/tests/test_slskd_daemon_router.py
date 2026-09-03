@@ -1,6 +1,7 @@
 """Gli endpoint del demone traducono in HTTP le due regole del servizio."""
 import httpx
 import pytest
+from ruamel.yaml import YAML
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -253,4 +254,134 @@ def test_stop_su_piattaforma_non_supportata(db, monkeypatch):
 
     monkeypatch.setattr(sd, "stop", non_supportato)
     assert _client(db).post("/api/slskd/daemon/stop").status_code == 501
+    app.dependency_overrides.clear()
+
+
+def _chiave_nel_file(cfg):
+    return YAML().load(cfg.read_text())["web"]["authentication"]["api_keys"][sd.API_KEY_NAME]["key"]
+
+
+def test_la_chiave_api_finisce_anche_nelle_impostazioni(db, monkeypatch, tmp_path):
+    """Le due copie della chiave — quella dentro slskd.yml e quella con cui
+    Cratory firma le richieste — non possono divergere: se il file ne ha una
+    e le impostazioni no, il demone risponde 401 a tutto. È esattamente il
+    bug su installazione fresca, dove di chiavi non ce n'era nessuna delle
+    due e l'errore si vedeva solo al click su "Connetti"."""
+    cfg = tmp_path / "nuova" / "slskd.yml"
+    monkeypatch.setattr(sd, "default_config_path", lambda: cfg)
+    monkeypatch.setattr(sd, "_cartella_download_default", lambda: tmp_path / "download-default")
+    res = _client(db).put("/api/slskd/daemon/config", json={
+        "username": "io", "password": "segreta"})
+    assert res.status_code == 200
+    chiave = _chiave_nel_file(cfg)
+    assert rs.slskd_api_key() == chiave
+    assert chiave not in res.text, "la chiave è una credenziale: non torna al frontend"
+    app.dependency_overrides.clear()
+
+
+def test_la_chiave_api_si_allinea_anche_su_config_esistente(db, monkeypatch, tmp_path):
+    """`created` governa il write-back di porta e cartella (che l'utente può
+    aver scelto apposta diversi dal file), ma NON quello della chiave: quella
+    scritta nelle impostazioni è sempre e solo quella che sta nel file, quindi
+    riallinearla non sovrascrive nessuna scelta — mentre non farlo lascia il
+    401 in piedi su ogni configurazione preesistente."""
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text("soulseek:\n  username: vecchio\n  password: vecchia\n"
+                   "web:\n  port: 6033\n  authentication:\n    api_keys:\n"
+                   "      cratory:\n        key: chiave-scritta-a-mano-lunga\n"
+                   "directories:\n  downloads: /mio/download/custom\n")
+    monkeypatch.setattr(sd, "default_config_path", lambda: cfg)
+    res = _client(db).put("/api/slskd/daemon/config", json={
+        "username": "nuovo", "password": "nuova"})
+    assert res.status_code == 200
+    assert rs.slskd_api_key() == "chiave-scritta-a-mano-lunga"
+    app.dependency_overrides.clear()
+
+
+class _Riavvio:
+    """Registra stop e start senza toccare processi veri."""
+
+    def __init__(self):
+        self.eventi = []
+
+    def stop(self):
+        self.eventi.append("stop")
+        return {"reachable": False, "owned": False, "pid": None}
+
+    def start(self, client=None):
+        self.eventi.append("start")
+        return {"reachable": True, "owned": True, "pid": 4243}
+
+
+def test_riparazione_scrive_la_chiave_e_riavvia_il_demone_nostro(db, monkeypatch, tmp_path):
+    """Il recupero di chi si è configurato slskd prima di questa versione: ha
+    un demone acceso che ci risponde 401, e la riga non gli offre più la
+    configurazione (quella fase si vede solo a demone spento). Una sola
+    azione deve bastare — chiave e riavvio insieme, perché slskd legge le
+    `api_keys` una volta sola, all'avvio."""
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text("soulseek:\n  username: vecchio\n  password: vecchia\nweb:\n  port: 5030\n")
+    monkeypatch.setattr(sd, "default_config_path", lambda: cfg)
+    monkeypatch.setattr(sd, "owned_pid", lambda: 4242)
+    riavvio = _Riavvio()
+    monkeypatch.setattr(sd, "stop", riavvio.stop)
+    monkeypatch.setattr(sd, "start", riavvio.start)
+
+    res = _client(db).post("/api/slskd/daemon/api-key")
+
+    assert res.status_code == 200
+    assert res.json() == {"configured": True, "restarted": True, "needs_restart": False}
+    assert riavvio.eventi == ["stop", "start"], "senza riavvio la chiave nuova non viene letta"
+    assert rs.slskd_api_key() == _chiave_nel_file(cfg)
+    app.dependency_overrides.clear()
+
+
+def test_riparazione_non_ferma_un_demone_non_nostro(db, monkeypatch, tmp_path):
+    """La regola del modulo vale anche qui: non si ferma un processo che non
+    abbiamo avviato noi. La chiave si scrive lo stesso, ma il riavvio lo deve
+    fare l'utente — e la risposta deve dirlo, o resterebbe col 401 senza
+    sapere che gli manca un passo."""
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text("soulseek:\n  username: vecchio\n  password: vecchia\nweb:\n  port: 5030\n")
+    monkeypatch.setattr(sd, "default_config_path", lambda: cfg)
+    monkeypatch.setattr(sd, "owned_pid", lambda: None)
+    riavvio = _Riavvio()
+    monkeypatch.setattr(sd, "stop", riavvio.stop)
+    monkeypatch.setattr(sd, "start", riavvio.start)
+
+    res = _client(db).post("/api/slskd/daemon/api-key")
+
+    assert res.status_code == 200
+    assert res.json() == {"configured": True, "restarted": False, "needs_restart": True}
+    assert riavvio.eventi == [], "non è nostro: non lo si tocca"
+    assert rs.slskd_api_key() == _chiave_nel_file(cfg)
+    app.dependency_overrides.clear()
+
+
+def test_riparazione_su_piattaforma_senza_gestione_del_processo(db, monkeypatch, tmp_path):
+    """Su Windows non si può sapere di chi è un PID (vedi `UnsupportedPlatform`):
+    la chiave si scrive comunque — è solo un file YAML — e il riavvio resta
+    all'utente. Un 501 qui negherebbe anche la parte che funziona."""
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text("soulseek:\n  username: vecchio\n  password: vecchia\nweb:\n  port: 5030\n")
+    monkeypatch.setattr(sd, "default_config_path", lambda: cfg)
+
+    def non_supportato():
+        raise sd.UnsupportedPlatform("niente ps né SIGKILL")
+
+    monkeypatch.setattr(sd, "owned_pid", non_supportato)
+    res = _client(db).post("/api/slskd/daemon/api-key")
+    assert res.status_code == 200
+    assert res.json()["needs_restart"] is True
+    assert rs.slskd_api_key() == _chiave_nel_file(cfg)
+    app.dependency_overrides.clear()
+
+
+def test_riparazione_senza_configurazione(db, monkeypatch, tmp_path):
+    """Niente file, niente da riparare: va prima configurato l'account, e il
+    codice d'errore deve dirlo (la riga rimanda alla fase giusta)."""
+    monkeypatch.setattr(sd, "default_config_path", lambda: tmp_path / "manca.yml")
+    res = _client(db).post("/api/slskd/daemon/api-key")
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "slskd_not_configured"
     app.dependency_overrides.clear()

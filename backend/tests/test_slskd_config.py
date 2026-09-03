@@ -3,6 +3,7 @@ deve fargli perdere niente."""
 import os
 from pathlib import Path
 
+import pytest
 from ruamel.yaml import YAML
 
 from app.services import slskd_daemon as sd
@@ -189,3 +190,108 @@ def test_rilettura_dell_username(tmp_path):
 
 def test_rilettura_su_file_assente(tmp_path):
     assert sd.read_username(tmp_path / "manca.yml") is None
+
+
+# La chiave API: senza, slskd risponde 401 a ogni chiamata di Cratory.
+
+SENZA_CHIAVE = """\
+soulseek:
+  username: vecchio
+  password: vecchia
+web:
+  port: 5030
+"""
+
+
+def test_la_chiave_api_viene_creata_quando_manca(tmp_path):
+    """Il bug del 401 su installazione fresca: `write_config` scriveva
+    credenziali Soulseek, porta e cartella download, ma nessuna chiave API —
+    e slskd rifiuta ogni `/api/v0/*` senza. L'utente arrivava fino a
+    "Connetti" e prendeva un 401 da un demone che aveva appena avviato con
+    successo, perché `/health` (l'unica cosa che Cratory guardava per dirlo
+    "raggiungibile") è anonimo e il resto no."""
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text(SENZA_CHIAVE)
+    esito = sd.write_config(cfg, username="io", password="segreta",
+                            port=5030, download_dir="/tmp/dl")
+    voce = _carica(cfg)["web"]["authentication"]["api_keys"][sd.API_KEY_NAME]
+    assert voce["key"] == esito.api_key
+    assert len(voce["key"]) >= 16, "slskd rifiuta le chiavi più corte di 16 caratteri"
+    assert voce["role"] == "Administrator", "PUT /server e PUT /shares vogliono l'admin"
+
+
+def test_la_chiave_api_esistente_viene_riusata(tmp_path):
+    """Rigenerarla ad ogni salvataggio romperebbe chi una chiave ce l'ha già
+    (scritta a mano, magari anche incollata nelle impostazioni): si riusa e
+    si riporta al chiamante, che deve poterla specchiare in `slskd_api_key`."""
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text(ESISTENTE)
+    esito = sd.write_config(cfg, username="n", password="p",
+                            port=5030, download_dir="/tmp/dl")
+    assert esito.api_key == "abc123"
+    assert _carica(cfg)["web"]["authentication"]["api_keys"]["cratory"]["key"] == "abc123"
+
+
+def test_ogni_installazione_ha_la_sua_chiave(tmp_path):
+    """Una chiave costante sarebbe una password pubblicata su GitHub: chiunque
+    altro sulla macchina potrebbe comandare il demone dell'utente."""
+    a = sd.write_config(tmp_path / "a" / "slskd.yml", username="io", password="p",
+                        port=5030, download_dir="/tmp/dl")
+    b = sd.write_config(tmp_path / "b" / "slskd.yml", username="io", password="p",
+                        port=5030, download_dir="/tmp/dl")
+    assert a.api_key != b.api_key
+
+
+def test_authentication_presente_ma_vuota(tmp_path):
+    """`authentication:` senza figli è `None` in YAML, non un dizionario: un
+    `setdefault` ci si romperebbe sopra con un AttributeError, su un file
+    perfettamente legittimo."""
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text("soulseek:\n  username: vecchio\nweb:\n  port: 5030\n  authentication:\n")
+    esito = sd.write_config(cfg, username="io", password="p",
+                            port=5030, download_dir="/tmp/dl")
+    voce = _carica(cfg)["web"]["authentication"]["api_keys"][sd.API_KEY_NAME]
+    assert voce["key"] == esito.api_key
+
+
+def test_ensure_api_key_non_chiede_le_credenziali(tmp_path):
+    """La riparazione di chi ha configurato slskd PRIMA che Cratory scrivesse
+    la chiave: la password Soulseek è entrata e non esce più (non la si
+    rilegge né la si richiede), quindi la chiave dev'essere aggiungibile
+    senza toccare nient'altro del file."""
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text(SENZA_CHIAVE)
+    chiave = sd.ensure_api_key(cfg)
+    data = _carica(cfg)
+    assert data["soulseek"]["username"] == "vecchio"
+    assert data["soulseek"]["password"] == "vecchia"
+    assert data["web"]["port"] == 5030
+    assert data["web"]["authentication"]["api_keys"][sd.API_KEY_NAME]["key"] == chiave
+
+
+def test_ensure_api_key_e_idempotente(tmp_path):
+    """Ripararlo due volte non deve invalidare la chiave che la prima
+    riparazione ha appena messo nelle impostazioni."""
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text(SENZA_CHIAVE)
+    assert sd.ensure_api_key(cfg) == sd.ensure_api_key(cfg)
+
+
+def test_ensure_api_key_conserva_permessi_e_backup(tmp_path):
+    """Riscrive lo stesso file che contiene la password in chiaro: stessa
+    cautela di `write_config`, non una scorciatoia."""
+    import stat as st
+    cfg = tmp_path / "slskd.yml"
+    cfg.write_text(SENZA_CHIAVE)
+    os.chmod(cfg, 0o600)
+    sd.ensure_api_key(cfg)
+    assert st.S_IMODE(cfg.stat().st_mode) == 0o600
+    assert cfg.with_suffix(".yml.bak").read_text() == SENZA_CHIAVE
+
+
+def test_ensure_api_key_senza_file(tmp_path):
+    """Non c'è niente da riparare: senza credenziali Soulseek un file di sola
+    chiave API farebbe partire un demone che non si collega a nulla. Chi
+    chiama deve poter distinguere questo caso e rimandare alla configurazione."""
+    with pytest.raises(sd.ConfigMissing):
+        sd.ensure_api_key(tmp_path / "manca.yml")

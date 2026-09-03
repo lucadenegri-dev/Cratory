@@ -44,6 +44,22 @@ export function daemonStop() {
   return apiPost<SlskdDaemonStatus>("/api/slskd/daemon/stop");
 }
 
+export type ApiKeyRepair = {
+  /** La chiave c'e', nel file di slskd e nelle impostazioni di Cratory. */
+  configured: boolean;
+  /** L'abbiamo riavviato noi (solo se il demone e' nostro). */
+  restarted: boolean;
+  /** ...altrimenti tocca all'utente: slskd legge le api_keys solo all'avvio. */
+  needs_restart: boolean;
+};
+
+/** Ripara l'autenticazione: scrive la chiave API in slskd.yml, la specchia
+ *  nelle impostazioni e riavvia il demone se e' nostro. 409 se slskd non e'
+ *  ancora configurato. */
+export function repairApiKey() {
+  return apiPost<ApiKeyRepair>("/api/slskd/daemon/api-key");
+}
+
 /** Scrive le credenziali Soulseek nel slskd.yml. La password non torna indietro. */
 export function daemonConfig(body: {
   username: string; password: string; port?: number; download_dir?: string;
