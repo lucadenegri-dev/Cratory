@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import {
-  getConfigSettings, setSoundcloudUsername, soundcloudStatus, SPOTIFY_LOGIN_URL,
+  getConfigSettings, setSoundcloudUsername, soundcloudStatus, spotifyLoginUrl,
   type ConfigSettings, type ServiceStatus, type SoundCloudStatus, type SpotifyStatus,
 } from "@/lib/api";
 import { runFingerprint, type FingerprintResult } from "@/lib/organize/api";
@@ -78,7 +78,7 @@ export function ServicesList({ services, spotify, onServicesChanged }: {
                 return <span className={`text-[10px] uppercase tracking-wider ${st.strong ? "text-fg-strong" : "text-muted"}`}>{st.text}</span>;
               })()}
               {s.key === "spotify" && (
-                <a href={SPOTIFY_LOGIN_URL}>
+                <a href={spotifyLoginUrl()}>
                   <Button size="sm" variant="outline"><ExternalLink size={14} /> {s.connected ? t.settings.reconnectButton : t.settings.connectButton}</Button>
                 </a>
               )}
@@ -152,6 +152,11 @@ function SoundCloudExtra({ t }: { t: Dictionary }) {
   const [status, setStatus] = useState<SoundCloudStatus | null>(null);
   const [username, setUsername] = useState("");
   const [saving, setSaving] = useState(false);
+  /* Senza questa conferma il salvataggio riuscito era invisibile: il campo
+     contiene gia' quello che l'utente ha scritto e il badge della riga viene
+     da yt-dlp, non dall'username — premere Salva sembrava non fare nulla.
+     Stessa forma di config-card, che la conferma la dava gia'. */
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -161,8 +166,11 @@ function SoundCloudExtra({ t }: { t: Dictionary }) {
   }, []);
 
   const save = async () => {
-    setError(null); setSaving(true);
-    try { setStatus(await setSoundcloudUsername(username.trim())); }
+    setError(null); setSaving(true); setSaved(false);
+    try {
+      setStatus(await setSoundcloudUsername(username.trim()));
+      setSaved(true); setTimeout(() => setSaved(false), 1500);
+    }
     catch (e) { setError(String((e as { message?: string })?.message ?? e)); }
     finally { setSaving(false); }
   };
@@ -171,15 +179,18 @@ function SoundCloudExtra({ t }: { t: Dictionary }) {
     <div className="mt-3 grid gap-2 border border-border bg-bg p-3">
       {status && !status.available && <Alert tone="warning">{t.settings.soundcloudYtdlpUnavailable}</Alert>}
       {error && <Alert tone="danger">⚠ {error}</Alert>}
-      <div className="flex items-center gap-2">
+      {/* Un form, non tre elementi affiancati: scritto un username, il gesto
+          naturale e' premere Invio, e fuori da un form non salvava niente. */}
+      <form className="flex items-center gap-2"
+        onSubmit={(e) => { e.preventDefault(); if (username.trim() !== "") void save(); }}>
         <span className="shrink-0 text-xs text-muted">{t.settings.usernameLabel}</span>
         <Input className="flex-1" value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder={t.settings.usernamePlaceholder} disabled={saving} />
-        <Button size="sm" onClick={save} disabled={saving || username.trim() === ""}>
-          {saving ? <Spinner /> : t.common.save}
+        <Button type="submit" size="sm" disabled={saving || username.trim() === ""}>
+          {saving ? <Spinner /> : saved ? t.settings.savedLabel : t.common.save}
         </Button>
-      </div>
+      </form>
       {status?.ytdlp_version && <p className="text-xs text-faint">yt-dlp {status.ytdlp_version}</p>}
     </div>
   );

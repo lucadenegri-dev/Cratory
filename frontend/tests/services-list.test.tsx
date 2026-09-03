@@ -89,6 +89,47 @@ describe("ServicesList", () => {
     await waitFor(() => expect(setSoundcloudUsername).toHaveBeenCalledWith("nuovo-nome"));
   });
 
+  /* Segnalazione reale: "inserisco l'username SoundCloud, premo Salva e non
+     succede niente". Il salvataggio riusciva — l'username finiva davvero in
+     AppState — ma nella riga non cambiava un pixel: il campo conteneva gia'
+     quello che l'utente aveva scritto, e il badge di stato della riga viene
+     da yt-dlp, non dall'username. Un successo indistinguibile da un bottone
+     morto. Il resto delle Impostazioni la conferma la dava gia'
+     (config-card mostra `savedLabel`): qui mancava e basta. */
+  it("soundcloud: il salvataggio riuscito si vede", async () => {
+    setSoundcloudUsername.mockResolvedValue({ available: true, ytdlp_version: "2026.1", username: "nuovo-nome" });
+    render(<ServicesList services={SEVEN} spotify={null} />);
+    const input = await screen.findByDisplayValue("luca");
+    fireEvent.change(input, { target: { value: "nuovo-nome" } });
+    expect(screen.queryByText(/salvato|saved/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /salva|save/i }));
+    await waitFor(() => expect(screen.getByText(/salvato|saved/i)).toBeTruthy());
+  });
+
+  it("soundcloud: il salvataggio fallito non si traveste da riuscito", async () => {
+    setSoundcloudUsername.mockRejectedValue(new Error("backend non raggiungibile"));
+    render(<ServicesList services={SEVEN} spotify={null} />);
+    const input = await screen.findByDisplayValue("luca");
+    fireEvent.change(input, { target: { value: "nuovo-nome" } });
+    fireEvent.click(screen.getByRole("button", { name: /salva|save/i }));
+    await waitFor(() => expect(screen.getByText(/backend non raggiungibile/)).toBeTruthy());
+    expect(screen.queryByText(/salvato|saved/i)).toBeNull();
+  });
+
+  it("soundcloud: Invio nel campo salva, non ricarica la pagina", async () => {
+    /* Il campo era fuori da un form: chi scrive un username e preme Invio,
+       che e' il gesto naturale, non salvava nulla — l'altra meta' del
+       "non succede niente". */
+    setSoundcloudUsername.mockResolvedValue({ available: true, ytdlp_version: "2026.1", username: "da-invio" });
+    render(<ServicesList services={SEVEN} spotify={null} />);
+    const input = await screen.findByDisplayValue("luca");
+    fireEvent.change(input, { target: { value: "da-invio" } });
+    const form = input.closest("form");
+    expect(form).toBeTruthy();
+    fireEvent.submit(form!);
+    await waitFor(() => expect(setSoundcloudUsername).toHaveBeenCalledWith("da-invio"));
+  });
+
   it("acoustid configurato: 'Identifica ora' chiama runFingerprint", async () => {
     runFingerprint.mockResolvedValue({ configured: true, identified: 1, below_threshold: 0, not_found: 0, errors: 0, total: 1 });
     render(<ServicesList services={SEVEN} spotify={null} />);
