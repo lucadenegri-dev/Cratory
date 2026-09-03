@@ -23,9 +23,12 @@ def test_diverges_key_stringa_canonica():
 
 
 def test_apply_analysis_scrive_canonici_e_source():
+    # `respect_source=False` = la scelta esplicita su una riga precisa, l'unica
+    # via per cui l'analisi scavalca rekordbox/manual (vedi
+    # test_analysis_sources.py per la guardia sulle modalita' in blocco).
     t = _t(bpm=128.0, bpm_source="rekordbox", camelot_key="8A", key_source="manual",
            analysis_bpm=130.0, analysis_camelot="9A", genre="techno")
-    assert apply_analysis(t) is True
+    assert apply_analysis(t, respect_source=False) is True
     assert t.bpm == 130.0 and t.bpm_source == "cratory"
     assert t.camelot_key == "9A" and t.key_source == "cratory"
     assert t.status == "ready_for_set" and t.energy is not None

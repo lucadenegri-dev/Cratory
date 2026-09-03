@@ -44,6 +44,7 @@ export function RekordboxImportCard({ onImported }: { onImported: () => void }) 
     [t.analysis.reportBpmSet, report.bpm_set],
     [t.analysis.reportKeySet, report.key_set],
     [t.analysis.reportEnergySet, report.energy_set],
+    [t.analysis.reportSourceRealigned, report.source_realigned],
   ] : [];
 
   return (

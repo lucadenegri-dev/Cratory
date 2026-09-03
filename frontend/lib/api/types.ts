@@ -766,6 +766,8 @@ export interface RekordboxImportReport {
   bpm_set: number;
   key_set: number;
   energy_set: number;
+  /** Tracce con valore gia' corretto ma provenienza allineata a Rekordbox. */
+  source_realigned: number;
 }
 
 // --- Coda di acquisizione (/api/downloads/queue) ---------------------------

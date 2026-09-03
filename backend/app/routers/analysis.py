@@ -75,10 +75,18 @@ def divergences(db: Session = Depends(get_db)):
 
 @router.post("/apply", response_model=AnalysisApplyOut)
 def apply(payload: AnalysisApplyIn, db: Session = Depends(get_db)):
-    """Applica i valori analizzati. track_ids/mode='divergent' = scelta esplicita
-    dell'utente dalle divergenze APERTE (le scartate restano fuori); mode='all'
-    riscrive TUTTE le analizzate, scartate comprese (qualunque fonte, anche
-    manual) e richiede force=true come conferma."""
+    """Applica i valori analizzati. track_ids = scelta esplicita su righe
+    precise; mode='divergent' = tutte le divergenze APERTE (le scartate restano
+    fuori); mode='all' = tutte le analizzate, scartate comprese, e richiede
+    force=true come conferma.
+
+    Solo `track_ids` scavalca la gerarchia delle fonti: la riga della lista
+    divergenze mostra da dove viene il valore, quindi chi la sceglie sa cosa
+    sta sostituendo. Le due modalita' in blocco no — riempiono i vuoti e
+    riscrivono i valori gia' 'cratory', ma non declassano Rekordbox ne' una
+    correzione manuale (regola 2). Senza questa distinzione un click
+    rimpiazzava un import Rekordbox appena fatto con le stime dell'analisi.
+    Quelle tracce restano nella lista divergenze, applicabili una per una."""
     if payload.mode == "all" and not payload.force:
         raise api_error(422, "analysis_force_required",
                         "mode='all' rewrites every analyzed track: pass force=true.")
@@ -92,7 +100,9 @@ def apply(payload: AnalysisApplyIn, db: Session = Depends(get_db)):
         targets = [t for t in owned if open_divergence(t)]
     else:  # mode == "all"
         targets = [t for t in owned if t.analyzed_at is not None]
-    applied = sum(1 for t in targets if apply_analysis(t))
+    per_traccia = bool(payload.track_ids)
+    applied = sum(1 for t in targets
+                  if apply_analysis(t, respect_source=not per_traccia))
     db.commit()
     return AnalysisApplyOut(applied=applied, skipped=len(targets) - applied)
 

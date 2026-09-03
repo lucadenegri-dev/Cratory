@@ -489,6 +489,7 @@ export const en = {
     reportBpmSet: "BPM set",
     reportKeySet: "Key set",
     reportEnergySet: "Energy recalculated",
+    reportSourceRealigned: "Provenance realigned",
 
     // In-app analysis (alternative)
     analysisHeading: "In-app analysis",
@@ -532,7 +533,7 @@ export const en = {
     applySelectedConfirm: (n: number) =>
       `${n} selected ${n === 1 ? "row has a manual correction" : "rows have manual corrections"} that will be overwritten. Continue?`,
     forceApplyAll: "Force apply all",
-    forceConfirm: "Overwrite BPM/key of ALL analyzed tracks (including manual and Rekordbox values)? This cannot be undone.",
+    forceConfirm: "Apply the analysis to ALL analyzed tracks, including ones whose divergences were dismissed? Values coming from Rekordbox or from a manual correction stay as they are: those change one track at a time. This cannot be undone.",
     appliedSummary: (applied: number, skipped: number) => `${applied} applied · ${skipped} unchanged`,
 
     // Marginalia: the numbers, out of the main flow

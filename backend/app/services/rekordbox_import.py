@@ -106,7 +106,11 @@ def apply_collection(db: Session, xml_bytes: bytes, overwrite: bool = False) -> 
     vuoti e sovrascrive i valori 'cratory' (analisi in-app); protegge le
     correzioni manuali; con overwrite=True la ri-analisi Rekordbox vince sui
     valori esistenti, ma un dato assente nell'XML non azzera mai quello in
-    libreria."""
+    libreria.
+
+    Dove l'XML conferma un valore gia' presente non cambia il numero ma cambia
+    la provenienza (`source_realigned` nel report): il valore smette di
+    risultare una stima dell'analisi, che e' quello che era."""
     rows = parse_collection(xml_bytes)
     owned = list(db.scalars(select(Track).where(Track.has_local_file.is_(True))).all())
     by_path = {_norm_path(t.local_path): t for t in owned if t.local_path}
@@ -114,7 +118,7 @@ def apply_collection(db: Session, xml_bytes: bytes, overwrite: bool = False) -> 
     by_at = {(_low(t.artist), _low(t.title)): t for t in owned if t.artist and t.title}
     owned_basenames = {os.path.basename(_norm_path(t.local_path)) for t in owned if t.local_path}
 
-    matched = bpm_set = key_set = energy_set = no_match = 0
+    matched = bpm_set = key_set = energy_set = no_match = realigned = 0
     seen: set[int] = set()
     for r in rows:
         t = _match(r, by_path, by_hash, by_at, owned_basenames)
@@ -129,20 +133,41 @@ def apply_collection(db: Session, xml_bytes: bytes, overwrite: bool = False) -> 
         # riempie i vuoti e riprende i valori 'cratory' (l'analisi in-app e'
         # fallback); non tocca le correzioni manuali. overwrite=True vince su
         # tutto (intento esplicito). Ogni scrittura marca la fonte.
+        # Un valore che l'XML CONFERMA non e' un non-evento: cambia da dove
+        # quel valore viene. Condizionare tutto alla differenza lasciava
+        # centinaia di BPM/key identici a Rekordbox etichettati `cratory` —
+        # i contatori per fonte non si muovevano dopo un import ("non cambia
+        # niente") e quei valori restavano dichiarati come stime, quindi
+        # sacrificabili da chiunque rispetti la gerarchia. Si riallinea solo
+        # l'etichetta: `manual` non e' scavalcabile e resta dov'e', perche'
+        # la scrittura passa comunque dalla stessa guardia.
+        riallineata = False
         bpm_writable = overwrite or t.bpm is None or t.bpm_source == "cratory"
-        if r.bpm is not None and bpm_writable and t.bpm != r.bpm:
-            t.bpm = r.bpm
-            t.bpm_source = "rekordbox"
-            bpm_set += 1
+        if r.bpm is not None and bpm_writable:
+            if t.bpm != r.bpm:
+                t.bpm = r.bpm
+                t.bpm_source = "rekordbox"
+                bpm_set += 1
+            elif t.bpm_source != "rekordbox":
+                t.bpm_source = "rekordbox"
+                riallineata = True
         key_writable = overwrite or not t.camelot_key or t.key_source == "cratory"
-        if r.camelot and key_writable and t.camelot_key != r.camelot:
-            t.camelot_key = r.camelot
-            t.key_source = "rekordbox"
-            key_set += 1
+        if r.camelot and key_writable:
+            if t.camelot_key != r.camelot:
+                t.camelot_key = r.camelot
+                t.key_source = "rekordbox"
+                key_set += 1
+            elif t.key_source != "rekordbox":
+                t.key_source = "rekordbox"
+                riallineata = True
+        realigned += riallineata
         if apply_estimated_energy(t):
             energy_set += 1
         refresh_status(t)
     db.commit()
     return {"in_file": len(rows), "matched": matched,
             "unmatched": no_match, "bpm_set": bpm_set,
-            "key_set": key_set, "energy_set": energy_set}
+            "key_set": key_set, "energy_set": energy_set,
+            # Tracce il cui valore era gia' giusto ma non risultava venire da
+            # Rekordbox: nessun numero e' cambiato, la provenienza si'.
+            "source_realigned": realigned}

@@ -480,6 +480,7 @@ export const it: Dictionary = {
     reportBpmSet: "BPM impostati",
     reportKeySet: "Tonalità impostate",
     reportEnergySet: "Energia ricalcolata",
+    reportSourceRealigned: "Provenienza allineata",
 
     // Analisi in-app (alternativa)
     analysisHeading: "Analisi in-app",
@@ -523,7 +524,7 @@ export const it: Dictionary = {
     applySelectedConfirm: (n: number) =>
       `${n} ${n === 1 ? "riga selezionata ha una correzione manuale" : "righe selezionate hanno correzioni manuali"} che verranno sovrascritte. Continuare?`,
     forceApplyAll: "Forza su tutte",
-    forceConfirm: "Sovrascrivere BPM/key di TUTTE le tracce analizzate (compresi valori manuali e Rekordbox)? L'operazione non è annullabile.",
+    forceConfirm: "Applicare l'analisi a TUTTE le tracce analizzate, comprese quelle con divergenze scartate? I valori che vengono da Rekordbox o da una correzione manuale restano come sono: quelli si cambiano una traccia alla volta. L'operazione non è annullabile.",
     appliedSummary: (applied: number, skipped: number) => `${applied} applicate · ${skipped} invariate`,
 
     // Marginalia: i numeri, fuori dal flusso principale

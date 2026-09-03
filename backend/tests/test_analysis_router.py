@@ -150,7 +150,12 @@ def test_force_all_riscrive_anche_le_scartate(client):
     c, S = client
     _seed_divergent(S)
     with S() as s:  # mode='all' filtra su analyzed_at
-        s.get(Track, 1).analyzed_at = datetime.now(timezone.utc)
+        t = s.get(Track, 1)
+        t.analyzed_at = datetime.now(timezone.utc)
+        # Fonte `cratory`: qui si prova che mode='all' NON salta le scartate,
+        # non che scavalchi la gerarchia — quello non lo fa piu' nessuna
+        # modalita' in blocco (test_apply_in_blocco_non_declassa_rekordbox).
+        t.bpm_source = t.key_source = "cratory"
         s.commit()
     c.post("/api/analysis/dismiss", json={"track_ids": [1]})
     r = c.post("/api/analysis/apply", json={"mode": "all", "force": True})
@@ -178,3 +183,23 @@ def test_dismiss_vuoto_422(client):
     r = c.post("/api/analysis/dismiss", json={"track_ids": []})
     assert r.status_code == 422
     assert r.json()["detail"]["code"] == "analysis_dismiss_empty"
+
+
+def test_apply_in_blocco_non_declassa_rekordbox(client):
+    """L'altra meta' di `test_apply_track_ids`, dallo stesso seed: la scelta
+    su righe precise scavalca la fonte, il blocco no.
+
+    E' il caso reale che ha innescato la correzione: un import Rekordbox
+    seguito da un apply in blocco si annullava da solo, e la traccia tornava
+    ai valori dell'analisi. Le divergenze restano aperte, cosi' quelle tracce
+    si possono ancora applicare una per una.
+    """
+    c, S = client
+    _seed_divergent(S)                       # bpm/key da rekordbox, analisi diversa
+    r = c.post("/api/analysis/apply", json={"mode": "divergent"})
+    assert r.status_code == 200 and r.json() == {"applied": 0, "skipped": 1}
+    with S() as s:
+        t = s.get(Track, 1)
+        assert (t.bpm, t.camelot_key) == (128.0, "8A")
+        assert (t.bpm_source, t.key_source) == ("rekordbox", "rekordbox")
+    assert len(c.get("/api/analysis/divergences").json()) == 1

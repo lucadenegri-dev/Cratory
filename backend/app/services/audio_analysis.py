@@ -72,7 +72,18 @@ def open_divergence(track) -> bool:
     return diverges(track) and not is_dismissed(track)
 
 
-def _apply(track, bpm_ok: bool, key_ok: bool) -> bool:
+def _apply(track, bpm_ok: bool, key_ok: bool, respect_source: bool = True) -> bool:
+    # Gerarchia manual > rekordbox > cratory (regola 2): l'analisi in-app e'
+    # l'alternativa, non l'autorita'. Con `respect_source` scrive solo dove non
+    # declassa nessuno — campo vuoto (nessuna fonte da perdere) o valore che
+    # gia' viene dall'analisi. Senza la guardia un solo apply in blocco
+    # rimpiazza centinaia di valori importati da Rekordbox con le stime
+    # dell'analizzatore, che sulla key sbaglia il modo con regolarita'.
+    if respect_source:
+        bpm_ok = bpm_ok and (track.bpm is None
+                             or track.bpm_source in (None, "", "cratory"))
+        key_ok = key_ok and (not track.camelot_key
+                             or track.key_source in (None, "", "cratory"))
     changed = False
     # Scrive il BPM solo se differisce alla STESSA precisione (1 decimale) usata
     # da diverges(): cosi' un force-apply-all su un valore identico a 1 decimale
@@ -94,13 +105,22 @@ def _apply(track, bpm_ok: bool, key_ok: bool) -> bool:
     return changed
 
 
-def apply_analysis(track) -> bool:
-    """Copia i valori analysis_* nei canonici dove esistono. True se ha scritto."""
-    return _apply(track, bpm_ok=True, key_ok=True)
+def apply_analysis(track, *, respect_source: bool = True) -> bool:
+    """Copia i valori analysis_* nei canonici dove esistono. True se ha scritto.
+
+    `respect_source=False` e' la via d'uscita per la scelta esplicita su una
+    traccia precisa (la riga della lista divergenze mostra la propria fonte,
+    quindi la scelta e' informata): li' l'analisi puo' scavalcare anche
+    Rekordbox o una correzione a mano. Le modalita' in blocco tengono il
+    default, altrimenti un click annulla un import intero."""
+    return _apply(track, bpm_ok=True, key_ok=True, respect_source=respect_source)
 
 
 def auto_apply_missing(track) -> bool:
-    """Fallback automatico post-job: riempie SOLO i campi vuoti."""
+    """Fallback automatico post-job: riempie SOLO i campi vuoti.
+
+    Non passa da `respect_source`: un campo vuoto non ha una fonte da
+    declassare, quindi le due guardie coincidono."""
     return _apply(track, bpm_ok=track.bpm is None, key_ok=not track.camelot_key)
 
 
