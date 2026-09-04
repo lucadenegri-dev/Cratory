@@ -147,3 +147,57 @@ describe("AsciiDj (guscio)", () => {
     }
   });
 });
+
+/* L'easter egg (spec 2026-09-04): stessa cabina, altra figura. Le tre righe
+   della DJ sono sostituzioni lunghe quanto il pezzo che rimpiazzano, quindi le
+   dimensioni non cambiano e tutto il resto della scena resta identico. `boy`
+   è il denominatore: senza, il test sui glifi sarebbe verde anche se `girl`
+   fosse ignorata e i glifi stessero già nel template. */
+describe("figura girl (easter egg)", () => {
+  afterEach(cleanup);
+
+  it("ha le stesse dimensioni di boy su molti tick", () => {
+    for (let t = 0; t < 200; t++) {
+      const f = djFrame(t, { figure: "girl" });
+      expect(f.length).toBe(DJ_ROWS);
+      for (const line of f) expect(line.length).toBe(DJ_COLS);
+    }
+  });
+
+  it("porta ricci, capelli ai lati e scollo; boy no", () => {
+    const girl = djFrame(DJ_REST_TICK, { figure: "girl" }).join("\n");
+    const boy = djFrame(DJ_REST_TICK, { figure: "boy" }).join("\n");
+    for (const piece of ["()()", "/(oo)\\", "//\\  ///"]) {
+      expect(girl).toContain(piece);
+      expect(boy).not.toContain(piece);
+    }
+    expect(boy).toContain("_(oo)_");
+    expect(girl).not.toContain("_(oo)_");
+  });
+
+  it("fuori dalla figura la scena è la stessa: casse, consolle e piatti", () => {
+    const girl = djFrame(DJ_REST_TICK, { figure: "girl" });
+    const boy = djFrame(DJ_REST_TICK, { figure: "boy" });
+    // Le righe 0 e da 4 in poi della scena (aria esclusa) non toccano la figura.
+    expect(girl[DJ_AIR_ROWS]).toBe(boy[DJ_AIR_ROWS]);
+    for (let r = DJ_AIR_ROWS + 4; r < DJ_ROWS; r++) expect(girl[r]).toBe(boy[r]);
+  });
+
+  it("senza opzione la figura è boy", () => {
+    expect(djFrame(5)).toEqual(djFrame(5, { figure: "boy" }));
+  });
+
+  it("sbatte le ciglia anche fra i capelli", () => {
+    // blink = sceneTick % 7 === 6.
+    expect(djFrame(0, { sceneTick: 6, figure: "girl" }).join("\n")).toContain("/(--)\\");
+    expect(djFrame(0, { sceneTick: 5, figure: "girl" }).join("\n")).toContain("/(oo)\\");
+  });
+
+  it("AsciiDj con figure=girl rende la DJ", () => {
+    const { container } = render(<AsciiDj figure="girl" animate={false} />);
+    expect(container.textContent).toContain("/(oo)\\");
+    cleanup();
+    const boy = render(<AsciiDj animate={false} />).container;
+    expect(boy.textContent).toContain("_(oo)_");
+  });
+});

@@ -21,6 +21,17 @@ described in `CLAUDE.md`.
   l'ordinamento sul conteggio delle sole righe filtrate (aperte): ogni accetta
   toglieva una riga e due gruppi vicini si scavalcavano. Il rango ora si calcola
   sul totale di tutte le issue, che un cambio di stato non muove.
+- **DJ GOODGIRL, un easter egg sul frontespizio** (2026-09-04): con l'username
+  SoundCloud `xgiorgix` la Home cambia persona — la scritta che si risolve dal
+  rumore dice DJ GOODGIRL, la DJ dietro la consolle è una ragazza riccia
+  (`()()`, `/(oo)\`, scollo a V) e un terzo del pulviscolo che sale con la
+  musica è fatto di cuori nel rosso della cassa. Tutto frontend, tutto a
+  prop con default: `AsciiWordmark` prende `word`/`title` (alfabeto esteso a
+  D J G I L e spazio), `AsciiDj` prende `figure`, `AsciiAtmosphere` prende
+  `hearts`; la decisione sta in `lib/persona.ts`. La scritta aspetta la
+  risposta di `/api/soundcloud/status` prima di montarsi, così l'ingresso si
+  risolve direttamente nella parola giusta. Spec in
+  `docs/superpowers/specs/2026-09-04-dj-goodgirl-easter-egg-design.md`.
 - **Il 401 di slskd su installazione fresca** (2026-09-03): il percorso guidato
   scriveva nello `slskd.yml` account, porta e cartella, e nessuna chiave API. Il
   demone partiva per davvero — `/health` è il suo unico endpoint anonimo, ed era

@@ -9,6 +9,7 @@
    con larghezza diversa e disallineano le colonne — la stessa ragione per cui
    la cabina usa `°*·` al posto di `♪♫`. */
 
+import { useMemo } from "react";
 import { resolveLines } from "@/lib/ascii-resolve";
 import { useAsciiIntro } from "@/lib/use-ascii-intro";
 
@@ -16,9 +17,12 @@ const WORD = "CRATORY";
 
 export const WORDMARK_ROWS = 5;
 
-/* Glifi 5x5, solo le lettere che servono a CRATORY: un alfabeto completo
-   sarebbe codice mai chiamato. Esportati perché il test ne sorvegli la
-   geometria, che è ciò che tiene in riga le colonne. */
+/* Glifi 5x5, solo le lettere che servono: CRATORY e, per l'easter egg (spec
+   2026-09-04), DJ GOODGIRL. Un alfabeto completo sarebbe codice mai chiamato.
+   Lo spazio è un glifo come gli altri: cinque colonne vuote, così la parola
+   composta ha larghezza uniforme senza casi speciali nel compositore.
+   Esportati perché il test ne sorvegli la geometria, che è ciò che tiene in
+   riga le colonne. */
 export const GLYPHS: Record<string, readonly string[]> = {
   C: ["#####",
       "#    ",
@@ -50,6 +54,36 @@ export const GLYPHS: Record<string, readonly string[]> = {
       "  #  ",
       "  #  ",
       "  #  "],
+  D: ["#### ",
+      "#   #",
+      "#   #",
+      "#   #",
+      "#### "],
+  J: ["#####",
+      "    #",
+      "    #",
+      "#   #",
+      " ### "],
+  G: [" ####",
+      "#    ",
+      "# ###",
+      "#   #",
+      " ####"],
+  I: ["#####",
+      "  #  ",
+      "  #  ",
+      "  #  ",
+      "#####"],
+  L: ["#    ",
+      "#    ",
+      "#    ",
+      "#    ",
+      "#####"],
+  " ": ["     ",
+        "     ",
+        "     ",
+        "     ",
+        "     "],
 };
 
 /** Compone una parola dai glifi, una colonna di spazio fra le lettere:
@@ -87,13 +121,22 @@ export const WORDMARK_LINES = wordmarkLines(WORD);
  *  sub-pixel dell'inchiostro (l'interlinea sta sotto l'unità) per far comparire
  *  una barra di scorrimento verticale dentro la cornice. Il rientro in `em`
  *  sull'arte dà comunque l'aria che serve: non si ritaglia nulla, si toglie
- *  solo la barra. */
-export function AsciiWordmark({ sizeClass }: { sizeClass?: string } = {}) {
+ *  solo la barra.
+ *  `word` e `title` esistono per l'easter egg DJ GOODGIRL (spec 2026-09-04):
+ *  la Home li passa insieme, i default lasciano CRATORY. */
+export function AsciiWordmark({ word = WORD, title = "Cratory", sizeClass }: {
+  /** La parola composta dai glifi. L'easter egg passa "DJ GOODGIRL". */
+  word?: string;
+  /** Il testo dell'h1 nascosto: deve dire ciò che l'arte mostra. */
+  title?: string;
+  sizeClass?: string;
+} = {}) {
   const intro = useAsciiIntro();
-  const lines = resolveLines(WORDMARK_LINES, intro);
+  const base = useMemo(() => (word === WORD ? WORDMARK_LINES : wordmarkLines(word)), [word]);
+  const lines = resolveLines(base, intro);
   return (
     <div className="flex justify-center overflow-x-auto overflow-y-hidden">
-      <h1 className="sr-only">Cratory</h1>
+      <h1 className="sr-only">{title}</h1>
       <div
         aria-hidden="true"
         /* 12px sul telefono, non 13: 41 colonne per l'advance di DM Mono fanno

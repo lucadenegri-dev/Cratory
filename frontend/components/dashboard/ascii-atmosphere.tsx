@@ -20,6 +20,14 @@ import { readLevels } from "@/lib/audio-analyser";
 /* Solo pulviscolo: `*` e `°` erano due glifi troppo grafici per un fondo. */
 const GLYPHS = ["·", ".", "'", ","] as const;
 
+/* L'easter egg (spec 2026-09-04): con la persona goodgirl un terzo del
+   pulviscolo è fatto di cuori. Il cuore non sta in DM Mono e cade sul font di
+   fallback — qui è accettabile, a differenza della cabina e della scritta:
+   ogni particella è un elemento posizionato per conto suo, non una cella di
+   una griglia, quindi la larghezza del glifo non sposta nulla. */
+export const HEART = "♥";
+export const HEART_GLYPHS = ["·", ".", HEART, "'", ",", HEART] as const;
+
 /** A musica ferma il campo non si vede affatto: non basta fermarlo, deve
  *  proprio sparire. */
 export const AIR_IDLE_GLOW = 0;
@@ -59,7 +67,9 @@ function hash01(i: number, salt: number): number {
 }
 
 /** Il campo, derivato dall'indice: puro e deterministico, mai Math.random. */
-export function airParticles(count: number, seed = 0): AirParticle[] {
+export function airParticles(
+  count: number, seed = 0, glyphs: readonly string[] = GLYPHS,
+): AirParticle[] {
   return Array.from({ length: count }, (_, i) => {
     const duration = 16 + hash01(i, seed + 2) * 22;
     const elapsed = hash01(i, seed + 3);          // frazione di corsa già fatta
@@ -71,19 +81,28 @@ export function airParticles(count: number, seed = 0): AirParticle[] {
       drift: (hash01(i, seed + 5) - 0.5) * 52,
       top: 100 - elapsed * 100,                   // sale dal basso: 100% → 0%
       near: hash01(i, seed + 7) < 0.18,
-      glyph: GLYPHS[Math.floor(hash01(i, seed + 6) * GLYPHS.length) % GLYPHS.length],
+      glyph: glyphs[Math.floor(hash01(i, seed + 6) * glyphs.length) % glyphs.length],
     };
   });
 }
 
 const COUNT = 120;
 const PARTICLES = airParticles(COUNT);
+/* Stesso seme: i cuori prendono il posto di alcune particelle, il campo non
+   si ridistribuisce. */
+const HEART_PARTICLES = airParticles(COUNT, 0, HEART_GLYPHS);
 
 /** Lo strato, dietro alla composizione. `active` = dall'app esce suono: allora
  *  la luminosità segue i medi della traccia, altrimenti resta al valore di
- *  riposo. Decorativo e inerte al puntatore. */
-export function AsciiAtmosphere({ active }: { active: boolean }) {
+ *  riposo. Con `hearts` un terzo delle particelle è un cuore in danger.
+ *  Decorativo e inerte al puntatore. */
+export function AsciiAtmosphere({ active, hearts = false }: {
+  active: boolean;
+  /** Cuori fra il pulviscolo: l'easter egg DJ GOODGIRL. */
+  hearts?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
+  const particles = hearts ? HEART_PARTICLES : PARTICLES;
 
   const glow = useRef(AIR_IDLE_GLOW);
 
@@ -118,8 +137,9 @@ export function AsciiAtmosphere({ active }: { active: boolean }) {
        suono, in pagina non si muove nulla. */
     <div ref={ref} aria-hidden="true"
       className={`pointer-events-none absolute inset-0 select-none overflow-hidden${active ? "" : " air-still"}`}>
-      {PARTICLES.map((p, i) => (
-        <span key={i} className={p.near ? "air air-near" : "air"}
+      {particles.map((p, i) => (
+        <span key={i}
+          className={`${p.near ? "air air-near" : "air"}${p.glyph === HEART ? " air-heart" : ""}`}
           style={{
             left: `${p.left.toFixed(2)}%`,
             fontSize: `${p.size.toFixed(2)}rem`,
