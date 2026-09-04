@@ -117,6 +117,9 @@ body {
 }
 /* Il piano vicino: inchiostro pieno, un sesto delle particelle. */
 .air-near { color: var(--c-fg); }
+/* I cuori dell'easter egg DJ GOODGIRL: lo stesso rosso del colpo di cassa.
+   Dopo `.air-near` di proposito, così vince anche sul piano vicino. */
+.air-heart { color: var(--c-danger); }
 
 /* Senza musica il campo si ferma dov'è, non riparte da capo. */
 .air-still .air { animation-play-state: paused; }
