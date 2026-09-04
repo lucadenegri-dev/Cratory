@@ -28,6 +28,22 @@ const SCENE = [
   " #########/          |#########|#########|########|/             #########/",
 ];
 
+export type DjFigure = "boy" | "girl";
+
+/* La DJ dell'easter egg (spec 2026-09-04): stessa cabina, tre righe della
+   figura ritoccate — ricci in testa, capelli ai lati del viso, scollo a V fra
+   le braccia. Ogni pezzo è lungo quanto quello che rimpiazza e si aggancia
+   con indexOf sul template di base, come le parti animate: l'allineamento non
+   può rompersi. La consolle sotto resta quella di sempre. */
+const GIRL_SCENE = ((): string[] => {
+  const s = SCENE.slice();
+  const face = s[2].indexOf("(oo)");
+  s[1] = splice(s[1], face, "()()");                       // sopra, al posto di "///"
+  s[2] = splice(s[2], face - 1, "/(oo)\\");               // "_(oo)_" → "/(oo)\"
+  s[3] = splice(s[3], s[3].indexOf("//    //"), "//\\  ///");
+  return s;
+})();
+
 export const DJ_AIR_ROWS = 3;
 export const DJ_COLS = Math.max(...SCENE.map((l) => l.length));
 export const DJ_ROWS = DJ_AIR_ROWS + SCENE.length;
@@ -53,20 +69,27 @@ const SPIN = ["|", "/", "-", "\\"] as const;
 const NOTES = ["·"] as const;
 const WAVES = ["^^^", "~^~", "^~^"] as const;
 
-/* Le posizioni delle parti animate, trovate una volta sola sul template.
+/* Le posizioni delle parti animate, trovate una volta sola per template.
    I capelli non ci sono: restano quelli del template, fermi. */
-const AT = {
-  tweetL: SCENE[1].indexOf("(=====)"),
-  tweetR: SCENE[1].lastIndexOf("(=====)"),
-  face: SCENE[2].indexOf("(oo)"),
-  woofL: SCENE[5].indexOf("( O )"),
-  woofR: SCENE[5].lastIndexOf("( O )"),
-  platL: SCENE[6].indexOf("( o )"),
-  platR: SCENE[6].lastIndexOf("( o )"),
-  wave1: SCENE[6].indexOf("^^^"),
-  slash1: SCENE[6].indexOf("///"),
-  wave2: SCENE[7].indexOf("^^^"),
-  slash2: SCENE[7].indexOf("///"),
+function locate(scene: readonly string[]) {
+  return {
+    tweetL: scene[1].indexOf("(=====)"),
+    tweetR: scene[1].lastIndexOf("(=====)"),
+    face: scene[2].indexOf("(oo)"),
+    woofL: scene[5].indexOf("( O )"),
+    woofR: scene[5].lastIndexOf("( O )"),
+    platL: scene[6].indexOf("( o )"),
+    platR: scene[6].lastIndexOf("( o )"),
+    wave1: scene[6].indexOf("^^^"),
+    slash1: scene[6].indexOf("///"),
+    wave2: scene[7].indexOf("^^^"),
+    slash2: scene[7].indexOf("///"),
+  };
+}
+
+const FIGURES: Record<DjFigure, { scene: readonly string[]; at: ReturnType<typeof locate> }> = {
+  boy: { scene: SCENE, at: locate(SCENE) },
+  girl: { scene: GIRL_SCENE, at: locate(GIRL_SCENE) },
 };
 
 /* LCG minimale: pseudo-casualità deterministica dal seme, mai Math.random.
@@ -98,8 +121,12 @@ function splice(line: string, col: number, s: string): string {
  *  separati perché la Home fa respirare l'aria anche a musica ferma, con la
  *  consolle immobile. `thump` sovrascrive il colpo di cassa: quando c'è
  *  l'analisi dell'audio la cassa batte sui bassi veri della traccia, non su un
- *  contatore. */
-export function djFrame(tick: number, opts?: { sceneTick?: number; thump?: boolean }): string[] {
+ *  contatore. `figure` sceglie chi sta dietro la consolle (default `boy`;
+ *  `girl` è l'easter egg DJ GOODGIRL). */
+export function djFrame(
+  tick: number,
+  opts?: { sceneTick?: number; thump?: boolean; figure?: DjFigure },
+): string[] {
   /* Aria: note spawnate ogni 2 tick che salgono di una riga a tick, derivando
      di ±1 colonna per passo, e svaniscono uscendo dall'alto. */
   const air: string[] = [];
@@ -120,7 +147,8 @@ export function djFrame(tick: number, opts?: { sceneTick?: number; thump?: boole
   const thump = opts?.thump ?? sceneTick % 2 === 0;   // il colpo di cassa
   const blink = sceneTick % 7 === 6;
   const wink = sceneTick % 23 === 11;
-  const scene = SCENE.slice();
+  const { scene: base, at: AT } = FIGURES[opts?.figure ?? "boy"];
+  const scene = base.slice();
 
   scene[1] = splice(scene[1], AT.tweetL, thump ? "(-=-=-)" : "(=====)");
   scene[1] = splice(scene[1], AT.tweetR, thump ? "(-=-=-)" : "(=====)");
@@ -212,10 +240,12 @@ function WooferRow({ line }: { line: string }) {
  *  dashboard lo lega al suono che esce davvero dal player, così la consolle si
  *  muove solo mentre c'è musica. A rubinetto chiuso la scena resta dov'era —
  *  come un fermo immagine, non un ritorno a capo. */
-export function AsciiDj({ onActivate, label, animate = true, sizeClass }: {
+export function AsciiDj({ onActivate, label, animate = true, sizeClass, figure = "boy" }: {
   onActivate?: () => void;
   label?: string;
   animate?: boolean;
+  /** Chi sta dietro la consolle: `girl` è l'easter egg DJ GOODGIRL. */
+  figure?: DjFigure;
   /** Corpo del carattere dell'arte. Il default è la scala per breakpoint; la
    *  Home passa una misura in unità di container per riempire la schermata. */
   sizeClass?: string;
@@ -247,6 +277,7 @@ export function AsciiDj({ onActivate, label, animate = true, sizeClass }: {
      dispari. Con l'analisi viva il colpo lo detta l'audio; senza, il contatore. */
   const lines = resolveLines(
     djFrame(reduced ? DJ_REST_TICK : air, {
+      figure,
       sceneTick: reduced ? DJ_REST_TICK : tick,
       ...(!running ? { thump: false } : audioThump === null ? {} : { thump: audioThump }),
     }),
