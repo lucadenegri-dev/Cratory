@@ -4,20 +4,43 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Music, ArrowRight } from "lucide-react";
 import {
-  apiGet, getPipeline, listImportedPlaylists,
+  apiGet, getPipeline, listImportedPlaylists, soundcloudStatus,
   type LibraryStats, type SetlistSummary, type PipelineStatus, type Track, type Playlist,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
 import { primeOnFirstGesture } from "@/lib/audio-analyser";
 import { findTopPlaylist, pickRandom } from "@/lib/random-track";
+import { personaFor, type Persona } from "@/lib/persona";
 import { PipelineStrip } from "@/components/dashboard/pipeline";
 import { Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
-import { AsciiDj } from "@/components/dashboard/ascii-dj";
+import { AsciiDj, type DjFigure } from "@/components/dashboard/ascii-dj";
 import { AsciiWordmark } from "@/components/dashboard/ascii-wordmark";
 import { AsciiAtmosphere } from "@/components/dashboard/ascii-atmosphere";
 import { SpectrumStrip } from "@/components/dashboard/spectrum-strip";
+
+/* Il frontespizio per persona (spec 2026-09-04). `cratory` è la Home di
+   sempre; `goodgirl` è l'easter egg per l'username SoundCloud xgiorgix: la
+   scritta DJ GOODGIRL, la DJ riccia dietro la consolle, cuori nel pulviscolo.
+   DJ GOODGIRL fa 65 colonne contro le 41 di CRATORY, quindi il corpo scende
+   di un passo per stare nella stessa larghezza: 7px sul telefono (65 colonne
+   sull'advance di DM Mono ≈ 273px, dentro i 309 disponibili) e 2.8cqw da lg
+   (4.5 × 41 / 65). */
+const FRONTISPIECE: Record<Persona, {
+  word: string; title: string; sizeClass: string; figure: DjFigure; hearts: boolean;
+}> = {
+  cratory: {
+    word: "CRATORY", title: "Cratory",
+    sizeClass: "text-[12px] sm:text-lg md:text-xl lg:text-[min(4.1cqh,4.5cqw)]",
+    figure: "boy", hearts: false,
+  },
+  goodgirl: {
+    word: "DJ GOODGIRL", title: "DJ Goodgirl",
+    sizeClass: "text-[7px] sm:text-sm md:text-lg lg:text-[min(4.1cqh,2.8cqw)]",
+    figure: "girl", hearts: true,
+  },
+};
 
 /** La Home: il frontespizio (il nome in grande e la consolle che suona), poi
  *  la striscia del ciclo e le quattro misure in chiusura. Il ritratto
@@ -30,6 +53,10 @@ export default function Home() {
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /* `null` = persona non ancora nota: la scritta aspetta, così l'ingresso dal
+     rumore si risolve direttamente nella parola giusta invece di mostrare
+     CRATORY e poi cambiarlo. In locale la risposta arriva in pochi ms. */
+  const [persona, setPersona] = useState<Persona | null>(null);
 
   useEffect(() => {
     apiGet<LibraryStats>("/api/stats").then((s) => { setStats(s); setError(null); }).catch((e) => setError(String(e.message ?? e)));
@@ -37,6 +64,8 @@ export default function Home() {
     apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch(() => setSets([]));
     // Serve solo a risolvere la playlist "Top" da cui pesca la consolle.
     listImportedPlaylists().then(setPlaylists).catch(() => setPlaylists([]));
+    // L'easter egg: la persona del frontespizio dipende dall'username SoundCloud.
+    soundcloudStatus().then((s) => setPersona(personaFor(s.username))).catch(() => setPersona("cratory"));
     // Sblocca il contesto Web Audio al primo gesto: dev'essere già in
     // esecuzione quando parte il primo `play`, altrimenti l'analizzatore non si
     // innesta e la cabina resta cieca proprio sulla traccia che l'ha avviata
@@ -45,6 +74,7 @@ export default function Home() {
   }, []);
 
   const empty = stats != null && stats.total_tracks === 0;
+  const front = persona ? FRONTISPIECE[persona] : null;
 
   /* Il click sulla consolle: una traccia a caso dalla playlist "Top", fra
      quelle possedute (solo quelle hanno un file da suonare). Se la playlist
@@ -113,11 +143,11 @@ export default function Home() {
             dentro il ramo dei dati così respira anche mentre carica e a
             libreria vuota. Il contenuto è posizionato e viene dopo nel DOM,
             quindi gli passa sopra senza bisogno di z-index. */}
-        <AsciiAtmosphere active={player.audible} />
+        <AsciiAtmosphere active={player.audible} hearts={front?.hearts ?? false} />
 
         <div className="relative flex h-full flex-col gap-3">
           <div className="flex-none">
-            <AsciiWordmark sizeClass="text-[12px] sm:text-lg md:text-xl lg:text-[min(4.1cqh,4.5cqw)]" />
+            {front && <AsciiWordmark word={front.word} title={front.title} sizeClass={front.sizeClass} />}
           </div>
 
           {error && <Alert tone="danger">{t.dashboard.backendDown(error)}</Alert>}
@@ -146,6 +176,7 @@ export default function Home() {
                   della cabina e il pulviscolo di sfondo compresi. */}
               <div className="flex min-h-0 flex-1 items-center justify-center overflow-x-auto">
                 <AsciiDj
+                  figure={front?.figure ?? "boy"}
                   animate={player.audible}
                   onActivate={playRandom}
                   label={t.dashboard.djPlayRandom}
