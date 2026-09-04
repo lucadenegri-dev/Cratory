@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  listIssues, setIssueStatus, fixIssue, bulkIssues, aiSuggestTags, genreReviewPreview,
-  providerSuggest, acceptStrongOverrides, detectRatings,
+  listIssues, setIssueStatus, fixIssue, bulkIssues, bulkFixIssues, aiSuggestTags,
+  genreReviewPreview, providerSuggest, detectRatings,
   type Issue, type Location,
 } from "@/lib/organize/api";
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
-import { IssuesTable, issueIsFixable, issueIsStrong, type GroupBy } from "@/components/organize/issues-table";
+import { IssuesTable } from "@/components/organize/issues-table";
+import { groupOrder, issueIsStrong, planAccept, type Drafts, type GroupBy } from "@/lib/organize/issue-actions";
 import { Alert, Button, Checkbox, EmptyState, Input, Loading, Modal, Select, Spinner } from "@/components/ui";
 import { PathPickerButton, usePickerAvailability } from "@/components/path-picker-button";
 import { cn } from "@/lib/cn";
@@ -66,6 +67,13 @@ export default function IssuesPage() {
   const [onlyNew, setOnlyNew] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupBy>("type");
   const [forceOpen, setForceOpen] = useState(false);
+  // Valori digitati a mano nelle righe, per id issue. Vivono qui e non nella
+  // riga così "accetta visibili" / "accetta gruppo" li vedono e li accettano
+  // in blocco, invece di costringere a un ✓ per riga.
+  const [drafts, setDrafts] = useState<Drafts>({});
+  const onDraft = useCallback((id: number, value: string) =>
+    setDrafts((cur) => ({ ...cur, [id]: value })), []);
+  const [dismissConfirm, setDismissConfirm] = useState(false);
 
   const load = useCallback(() => {
     listIssues()
@@ -85,16 +93,26 @@ export default function IssuesPage() {
   const onAccept = (id: number) => act(() => setIssueStatus(id, "accepted"));
   const onDismiss = (id: number) => act(() => setIssueStatus(id, "dismissed"));
   const onReopen = (id: number) => act(() => setIssueStatus(id, "open"));
-  const acceptAllFixable = () => act(() => bulkIssues({ status: "accepted" }));
-  const dismissAllInfo = () => act(() => bulkIssues({ severity: "info", status: "dismissed" }));
-  const onAcceptCovers = () => act(async () => {
-    const r = await bulkIssues({ type: "missing_cover", status: "accepted" });
-    setAiNote(t.organize.issues.acceptCoversNote(r.updated));
+
+  // Comandi massivi: sempre per id espliciti, su una lista che l'utente ha
+  // davanti (il visibile con i filtri correnti, o un gruppo). Mai per
+  // tipo/gravità globali: quelli toccavano anche righe fuori dallo schermo.
+  const acceptMany = (list: Issue[]) => act(async () => {
+    const plan = planAccept(list, drafts);
+    const [byStatus, byFix] = await Promise.all([
+      plan.statusIds.length ? bulkIssues({ ids: plan.statusIds, status: "accepted" }) : { updated: 0 },
+      plan.fixes.length ? bulkFixIssues(plan.fixes) : { updated: 0, skipped: 0 },
+    ]);
+    // le bozze accettate non servono più; quelle saltate restano da rivedere
+    const done = new Set([...plan.statusIds, ...plan.fixes.map((f) => f.id)]);
+    setDrafts((cur) => Object.fromEntries(Object.entries(cur).filter(([id]) => !done.has(Number(id)))));
+    setAiNote(t.organize.issues.bulkAcceptNote(byStatus.updated + byFix.updated, plan.skipped + byFix.skipped));
   });
-  const onAcceptGroup = (key: string) => act(() =>
-    bulkIssues(groupBy === "severity"
-      ? { severity: key, status: "accepted" }
-      : { type: key, status: "accepted" }));
+  const dismissMany = (list: Issue[]) => act(async () => {
+    const ids = list.filter((i) => i.status === "open").map((i) => i.id);
+    const r = ids.length ? await bulkIssues({ ids, status: "dismissed" }) : { updated: 0 };
+    setAiNote(t.organize.issues.bulkDismissNote(r.updated));
+  });
 
   const onAiSuggest = async () => {
     setActionError(null);
@@ -244,12 +262,6 @@ export default function IssuesPage() {
       .catch((e) => setActionError(e instanceof Error ? e.message : t.organize.common.error));
   };
 
-  const onAcceptHigh = () =>
-    act(async () => {
-      const r = await acceptStrongOverrides();
-      setAiNote(t.organize.issues.acceptHighNote(r.updated));
-    });
-
   // Il rescan gira nel job globale (barra in basso): quando passa running→done
   // ricarico le issue e mostro il riepilogo; su errore lo segnalo.
   const prevRescan = useRef(rescan.status);
@@ -333,23 +345,20 @@ export default function IssuesPage() {
   const bySev: Record<string, number> = { error: 0, warning: 0, info: 0 };
   const byType: Record<string, number> = {};
   let accepted = 0;
-  let openCovers = 0;
-  // quante issue APERTE alimentano ciascuna azione di massa: se 0, il bottone
-  // relativo non ha nulla da fare e resta nascosto (barra più pulita).
-  let openStrong = 0;
-  let openFixable = 0;
-  let openInfo = 0;
   for (const i of issues) {
     bySev[i.severity] = (bySev[i.severity] ?? 0) + 1;
     byType[i.type] = (byType[i.type] ?? 0) + 1;
     if (i.status === "accepted") accepted++;
-    if (i.status === "open") {
-      if (i.type === "missing_cover") openCovers++;
-      if (i.severity === "info") openInfo++;
-      if (issueIsFixable(i)) openFixable++;
-      if (issueIsStrong(i)) openStrong++;
-    }
   }
+
+  // Cosa alimenta i comandi massivi: le issue APERTE fra quelle visibili. Se
+  // un conteggio è 0 il bottone relativo non ha nulla da fare e resta nascosto.
+  const visibleOpen = filtered.filter((i) => i.status === "open");
+  const visiblePlan = planAccept(visibleOpen, drafts);
+  const visibleStrong = visibleOpen.filter(issueIsStrong);
+  const visiblePaid = visibleOpen.filter((i) => i.type === "provider_override" || i.type === "genre_review").length;
+  // Rango dei gruppi su TUTTE le issue: stabile mentre si accetta/ignora.
+  const rank = useMemo(() => groupOrder(issues, groupBy), [issues, groupBy]);
 
   // Sorgenti di proposte, divise per modalità: "enrich" riempie i buchi,
   // "maintenance" fa pulizia/verifica/riscrittura.
@@ -576,17 +585,20 @@ export default function IssuesPage() {
         {/* barra sopra la lista: azioni di massa a sinistra, raggruppamento a destra */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
-            {openStrong > 0 && (
-              <Button variant="outline" size="sm" onClick={onAcceptHigh}>{t.organize.issues.acceptHighBtn}</Button>
+            {visibleStrong.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => acceptMany(visibleStrong)}>
+                {t.organize.issues.acceptHighBtn(visibleStrong.length)}
+              </Button>
             )}
-            {openFixable > 0 && (
-              <Button variant="outline" size="sm" onClick={acceptAllFixable}>{t.organize.issues.acceptFixableBtn}</Button>
+            {visiblePlan.total > 0 && (
+              <Button variant="outline" size="sm" onClick={() => acceptMany(visibleOpen)}>
+                {t.organize.issues.acceptVisibleBtn(visiblePlan.total)}
+              </Button>
             )}
-            {openInfo > 0 && (
-              <Button variant="outline" size="sm" onClick={dismissAllInfo}>{t.organize.issues.dismissInfoBtn}</Button>
-            )}
-            {openCovers > 0 && (
-              <Button variant="outline" size="sm" onClick={onAcceptCovers}>{t.organize.issues.acceptCoversBtn}</Button>
+            {visibleOpen.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setDismissConfirm(true)}>
+                {t.organize.issues.dismissVisibleBtn(visibleOpen.length)}
+              </Button>
             )}
           </div>
           <div className="flex items-center gap-3">
@@ -625,11 +637,28 @@ export default function IssuesPage() {
           </EmptyState>
         ) : (
           <IssuesTable
-            issues={filtered} groupBy={groupBy}
+            issues={filtered} groupBy={groupBy} rank={rank}
+            drafts={drafts} onDraft={onDraft}
             onFix={onFix} onAccept={onAccept} onDismiss={onDismiss} onReopen={onReopen}
-            onAcceptGroup={onAcceptGroup}
+            onAcceptGroup={acceptMany} onDismissGroup={dismissMany}
           />
         )}
+
+        {/* "Ignora visibili" può toccare tutta la lista in un click: conferma
+            con il conteggio, e quante sono proposte pagate (provider/AI). */}
+        <Modal
+          open={dismissConfirm}
+          onClose={() => setDismissConfirm(false)}
+          title={t.organize.issues.dismissConfirmTitle}
+          footer={<>
+            <Button variant="ghost" size="sm" onClick={() => setDismissConfirm(false)}>{t.organize.common.cancel}</Button>
+            <Button variant="primary" size="sm" onClick={() => { setDismissConfirm(false); dismissMany(visibleOpen); }}>
+              {t.organize.issues.dismissVisibleBtn(visibleOpen.length)}
+            </Button>
+          </>}
+        >
+          <p className="text-sm text-muted">{t.organize.issues.dismissConfirmBody(visibleOpen.length, visiblePaid)}</p>
+        </Modal>
       </div>
     </PageLayout>
   );

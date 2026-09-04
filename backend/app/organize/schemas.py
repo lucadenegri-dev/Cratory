@@ -96,9 +96,22 @@ class IssueStatusBody(BaseModel):
 
 
 class IssueBulkBody(BaseModel):
+    """Bersaglio del bulk: per `ids` espliciti (ciò che la lista mostra, filtri
+    inclusi) e/o per `type`/`severity`. Una lista `ids` vuota tocca zero issue,
+    non "tutte": è distinta da `None`."""
+    ids: list[int] | None = None
     type: str | None = None
     severity: str | None = None
     status: str
+
+
+class IssueFixItem(BaseModel):
+    id: int
+    value: str
+
+
+class IssueBulkFixBody(BaseModel):
+    items: list[IssueFixItem]
 
 
 class IssueFixBody(BaseModel):

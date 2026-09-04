@@ -1583,7 +1583,6 @@ export const it: Dictionary = {
         `${suggested} suggerimenti pronti${unresolved > 0 ? `, ${unresolved} non ricavabili dal nome file` : ""} — rivedi e accetta col ✓.`,
       providerNote: (suggested, covers, fingerprinted, unresolved, acoustid) =>
         `${suggested} suggerimenti da provider${covers > 0 ? `, ${covers} copertine trovate` : ""}${fingerprinted > 0 ? ` (${fingerprinted} via fingerprint)` : ""}${unresolved > 0 ? `, ${unresolved} non trovati` : ""}${acoustid ? "" : " — fingerprint off, solo match testuale"} — rivedi e accetta col ✓.`,
-      acceptHighNote: (updated) => `${updated} proposte ad alta confidenza accettate → andranno nel PLAN.`,
       rescanNote: (strong, medium, weak, scanned, acoustid, covers) =>
         `Rescan: ${strong} alta, ${medium} media, ${weak} bassa${covers > 0 ? `, ${covers} copertine` : ""} su ${scanned} tracce${acoustid ? "" : " (fingerprint off: nessuna alta via ID)"}.`,
       rescanDone: "Rescan completato.",
@@ -1622,11 +1621,17 @@ export const it: Dictionary = {
       reconsiderAccepted: "Riconsidera anche le proposte già accettate",
       reconsiderDismissed: "Riconsidera anche le proposte ignorate",
       reconsiderHint: "Di default tocca solo le proposte ancora aperte. Le riconsiderate tornano da rivedere (aperte), ma solo se il provider ha un valore diverso.",
-      acceptHighBtn: "✓ Accetta tutti alta confidenza",
-      acceptFixableBtn: "✓ Accetta tutti i fixabili",
-      dismissInfoBtn: "✕ Ignora tutti gli info",
-      acceptCoversBtn: "✓ Accetta tutte le copertine",
-      acceptCoversNote: (n) => `${n} copertine accettate → andranno nel PLAN.`,
+      // Comandi massivi: agiscono su ciò che la lista mostra (filtri correnti),
+      // valori digitati a mano inclusi. Con i filtri azzerati = tutta la lista.
+      acceptHighBtn: (n) => `✓ Accetta alta confidenza (${n})`,
+      acceptVisibleBtn: (n) => `✓ Accetta visibili (${n})`,
+      dismissVisibleBtn: (n) => `✕ Ignora visibili (${n})`,
+      bulkAcceptNote: (updated, skipped) =>
+        `${updated} proposte accettate → andranno nel PLAN${skipped > 0 ? `, ${skipped} saltate (nessun valore da applicare)` : ""}.`,
+      bulkDismissNote: (n) => `${n} issue ignorate: il tag resta invariato. Filtra per "ignorate" per riaprirle.`,
+      dismissConfirmTitle: "Ignora le issue visibili",
+      dismissConfirmBody: (n, paid) =>
+        `Verranno ignorate ${n} issue aperte, quelle mostrate con i filtri correnti.${paid > 0 ? ` Tra queste ${paid} sono proposte da provider o AI, pagate in ricerche.` : ""} Il tag resta invariato e si possono riaprire in ogni momento.`,
 
       // Pannello Enrich — tre sorgenti che riempiono le proposte vuote
       enrichTitle: "Arricchisci le proposte",
@@ -1658,6 +1663,7 @@ export const it: Dictionary = {
       groupByNone: "lista piatta",
       groupMeta: (open, total) => (open > 0 ? `${open} aperte · ${total}` : `${total}`),
       groupAccept: "✓ accetta gruppo",
+      groupDismiss: "✕ ignora gruppo",
       typeLabel: (ty) => ISSUE_TYPE_LABELS_IT[ty] ?? humanizeType(ty),
       emptyTitle: "Nessuna issue",
       emptyClean: "La libreria è pulita (o non ancora scansionata).",

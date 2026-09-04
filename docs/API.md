@@ -1626,6 +1626,7 @@ GET  /api/organize/issues
 POST /api/organize/issues/{issue_id}/status
 POST /api/organize/issues/{issue_id}/fix
 POST /api/organize/issues/bulk
+POST /api/organize/issues/bulk-fix
 GET  /api/organize/issues/cover-thumb/{file_id}
 POST /api/organize/issues/detect-ratings
 POST /api/organize/issues/ai-suggest
@@ -1658,11 +1659,23 @@ value non-empty (`400 issue_value_empty`). Any `source`/`confidence` markers on 
 existing suggestion are preserved, so accepting a provider proposal by hand does not
 lose its confidence badge.
 
-`POST .../bulk` sets a status across issues matched by `type` and/or `severity`.
-Two types are deliberately excluded unless targeted **by type**: `provider_override`
-and `genre_review`. Both were paid for in network calls or AI tokens, and "dismiss
-all the info-level ones" should not wipe them in a single click. Response
-`{updated}`.
+`POST .../bulk` sets a status across issues matched by explicit `ids` and/or by
+`type` / `severity`. The Issues page always sends `ids` — the open issues the list
+is showing with the current filters, or one group of them — so a bulk command
+never touches a row the user did not have in front of them; an empty `ids` list
+touches nothing (it is distinct from omitting it). Two types are deliberately
+excluded when the target is a **severity alone**: `provider_override` and
+`genre_review`. Both were paid for in network calls or AI tokens, and "dismiss all
+the info-level ones" should not wipe them in a single click; targeting them by
+type or by id is the user's explicit choice. Accepting still skips issues with no
+suggestion. Response `{updated}`.
+
+`POST .../bulk-fix` is the bulk form of `/fix`: `{items: [{id, value}]}`, one
+hand-typed value per issue, each written and accepted with the same rules as the
+single call (editable field, non-empty value, `source`/`confidence` markers
+preserved). What cannot be accepted — unknown id, non-editable field, empty value —
+is skipped and counted instead of failing the whole request. Response
+`{updated, skipped}`.
 
 `GET .../cover-thumb/{file_id}` serves the provider-proposed cover held in cache,
 `404 thumb_missing` when there is none.

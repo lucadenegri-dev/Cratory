@@ -222,6 +222,8 @@ export interface IssueFilters {
 }
 
 export interface IssueBulk {
+  /** Id espliciti (ciò che la lista mostra): una lista vuota tocca zero issue. */
+  ids?: number[];
   type?: string;
   severity?: string;
   status: "open" | "accepted" | "dismissed";
@@ -238,6 +240,11 @@ export function fixIssue(id: number, value: string) {
 }
 export function bulkIssues(body: IssueBulk) {
   return apiSend<{ updated: number }>("POST", "/issues/bulk", body);
+}
+/** Versione in blocco di fixIssue: i valori digitati a mano, uno per riga.
+ *  Ciò che non si può accettare viene saltato e contato, non fa fallire il resto. */
+export function bulkFixIssues(items: { id: number; value: string }[]) {
+  return apiSend<{ updated: number; skipped: number }>("POST", "/issues/bulk-fix", { items });
 }
 
 export interface AiSuggestResult {

@@ -13,8 +13,9 @@ from app.organize.core.http_errors import api_error
 from app.db import get_db
 from app.organize.integrations import acoustid, cover_art
 from app.organize.models import AudioFile, Issue, utcnow
-from app.organize.schemas import (IntegrityCheckBody, IssueBulkBody, IssueFixBody, IssueRead,
-                         IssueStatusBody, ProviderRescanBody, ProviderSuggestBody)
+from app.organize.schemas import (IntegrityCheckBody, IssueBulkBody, IssueBulkFixBody,
+                                  IssueFixBody, IssueRead, IssueStatusBody,
+                                  ProviderRescanBody, ProviderSuggestBody)
 from app.organize.services import ai_tags, apply_job, cover_cache, covers as cover_svc, integrity_job, provider_rescan_job, ratings, scan_job, text_providers
 from app.organize.services.planner import EDITABLE_TAG_FIELDS
 
@@ -81,20 +82,29 @@ def set_status(issue_id: int, body: IssueStatusBody, db: Session = Depends(get_d
 def bulk(body: IssueBulkBody, db: Session = Depends(get_db)):
     if body.status not in _VALID:
         raise api_error(400, "issue_status_invalid", "Invalid status")
+    if body.ids is not None and not body.ids:
+        return {"updated": 0}  # lista vuota esplicita: niente da toccare
     stmt = select(Issue)
+    if body.ids is not None:
+        stmt = stmt.where(Issue.id.in_(body.ids))
     if body.type:
         stmt = stmt.where(Issue.type == body.type)
     if body.severity:
         stmt = stmt.where(Issue.severity == body.severity)
+    # Il frontend manda gli id di ciò che la lista mostra: l'utente ha quelle
+    # righe davanti, quindi il riparo qui sotto non si applica.
+    explicit = body.ids is not None
     updated = 0
     for issue in db.scalars(stmt).all():
         # Le override e le proposte AI genre_review si toccano in blocco solo se
-        # targetizzate per tipo, mai per sola severità (così "ignora tutti gli
-        # info" non cancella in un colpo le proposte, pagate in ricerche web).
-        if issue.type == "provider_override" and body.type != "provider_override":
-            continue
-        if issue.type == "genre_review" and body.type != "genre_review":
-            continue
+        # targetizzate per tipo o per id, mai per sola severità (così "ignora
+        # tutti gli info" non cancella in un colpo le proposte, pagate in
+        # ricerche web).
+        if not explicit:
+            if issue.type == "provider_override" and body.type != "provider_override":
+                continue
+            if issue.type == "genre_review" and body.type != "genre_review":
+                continue
         if body.status == "accepted" and issue.suggested_fix_json is None:
             continue
         issue.status = body.status
@@ -104,16 +114,15 @@ def bulk(body: IssueBulkBody, db: Session = Depends(get_db)):
     return {"updated": updated}
 
 
-@router.post("/{issue_id}/fix", response_model=IssueRead)
-def fix_issue(issue_id: int, body: IssueFixBody, db: Session = Depends(get_db)):
-    issue = db.get(Issue, issue_id)
-    if issue is None:
-        raise api_error(404, "issue_not_found", "Issue not found")
+def _apply_fix(issue: Issue, value: str) -> str | None:
+    """Accetta un valore digitato a mano per il campo dell'issue: scrive il
+    suggerimento e marca accepted. Ritorna il codice errore se non si può
+    (campo non editabile, valore vuoto), None se ha agito. Non committa."""
     if issue.field not in _RETAGGABLE:
-        raise api_error(400, "issue_field_not_editable", "Field can't be edited by hand")
-    value = body.value.strip()
+        return "issue_field_not_editable"
+    value = value.strip()
     if not value:
-        raise api_error(400, "issue_value_empty", "Empty value")
+        return "issue_value_empty"
     fix = {"field": issue.field, "action": "retag", "to": value}
     # Preserva i marcatori (source/confidence) del suggerimento esistente: così
     # accettando per-riga un provider_override non si perde il badge di confidenza.
@@ -124,6 +133,35 @@ def fix_issue(issue_id: int, body: IssueFixBody, db: Session = Depends(get_db)):
     issue.suggested_fix_json = fix
     issue.status = "accepted"
     issue.updated_at = utcnow()
+    return None
+
+
+@router.post("/bulk-fix", response_model=dict)
+def bulk_fix(body: IssueBulkFixBody, db: Session = Depends(get_db)):
+    """Versione in blocco di /fix: una coppia (id, valore) per riga. Ciò che non
+    si può accettare (id sconosciuto, campo non editabile, valore vuoto) viene
+    saltato e contato, non fa fallire il resto."""
+    updated = skipped = 0
+    for item in body.items:
+        issue = db.get(Issue, item.id)
+        if issue is None or _apply_fix(issue, item.value) is not None:
+            skipped += 1
+            continue
+        updated += 1
+    db.commit()
+    return {"updated": updated, "skipped": skipped}
+
+
+@router.post("/{issue_id}/fix", response_model=IssueRead)
+def fix_issue(issue_id: int, body: IssueFixBody, db: Session = Depends(get_db)):
+    issue = db.get(Issue, issue_id)
+    if issue is None:
+        raise api_error(404, "issue_not_found", "Issue not found")
+    err = _apply_fix(issue, body.value)
+    if err == "issue_field_not_editable":
+        raise api_error(400, err, "Field can't be edited by hand")
+    if err == "issue_value_empty":
+        raise api_error(400, err, "Empty value")
     db.commit()
     file = db.get(AudioFile, issue.file_id)
     return _to_read(issue, file)

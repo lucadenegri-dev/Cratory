@@ -1593,7 +1593,6 @@ export const en = {
         `${suggested} suggestions ready${unresolved > 0 ? `, ${unresolved} not derivable from the filename` : ""} — review and accept with ✓.`,
       providerNote: (suggested: number, covers: number, fingerprinted: number, unresolved: number, acoustid: boolean) =>
         `${suggested} suggestions from providers${covers > 0 ? `, ${covers} covers found` : ""}${fingerprinted > 0 ? ` (${fingerprinted} via fingerprint)` : ""}${unresolved > 0 ? `, ${unresolved} not found` : ""}${acoustid ? "" : " — fingerprint off, text match only"} — review and accept with ✓.`,
-      acceptHighNote: (updated: number) => `${updated} high-confidence proposals accepted → they'll go into the PLAN.`,
       rescanNote: (strong: number, medium: number, weak: number, scanned: number, acoustid: boolean, covers: number) =>
         `Rescan: ${strong} strong, ${medium} medium, ${weak} weak${covers > 0 ? `, ${covers} covers` : ""} over ${scanned} tracks${acoustid ? "" : " (fingerprint off: no strong via ID)"}.`,
       rescanDone: "Rescan complete.",
@@ -1632,11 +1631,17 @@ export const en = {
       reconsiderAccepted: "Reconsider already-accepted proposals too",
       reconsiderDismissed: "Reconsider dismissed proposals too",
       reconsiderHint: "By default it only touches proposals still open. Reconsidered ones come back to review (open), but only if the provider has a different value.",
-      acceptHighBtn: "✓ Accept all high-confidence",
-      acceptFixableBtn: "✓ Accept all fixable",
-      dismissInfoBtn: "✕ Dismiss all info",
-      acceptCoversBtn: "✓ Accept all covers",
-      acceptCoversNote: (n: number) => `${n} covers accepted → they'll go into the PLAN.`,
+      // Bulk commands act on what the list shows (current filters), hand-typed
+      // values included. With no filters = the whole list.
+      acceptHighBtn: (n: number) => `✓ Accept high-confidence (${n})`,
+      acceptVisibleBtn: (n: number) => `✓ Accept visible (${n})`,
+      dismissVisibleBtn: (n: number) => `✕ Dismiss visible (${n})`,
+      bulkAcceptNote: (updated: number, skipped: number) =>
+        `${updated} proposals accepted → they'll go into the PLAN${skipped > 0 ? `, ${skipped} skipped (no value to apply)` : ""}.`,
+      bulkDismissNote: (n: number) => `${n} issues dismissed: tags stay unchanged. Filter by "dismissed" to reopen them.`,
+      dismissConfirmTitle: "Dismiss the visible issues",
+      dismissConfirmBody: (n: number, paid: number) =>
+        `${n} open issues will be dismissed — the ones shown with the current filters.${paid > 0 ? ` ${paid} of them are provider or AI proposals, paid for in lookups.` : ""} Tags stay unchanged and they can be reopened at any time.`,
 
       // Enrich panel — three sources that fill empty proposals
       enrichTitle: "Enrich proposals",
@@ -1669,6 +1674,7 @@ export const en = {
       groupMeta: (open: number, total: number) =>
         open > 0 ? `${open} open · ${total}` : `${total}`,
       groupAccept: "✓ accept group",
+      groupDismiss: "✕ dismiss group",
       typeLabel: (ty: string) => ISSUE_TYPE_LABELS_EN[ty] ?? humanizeType(ty),
       emptyTitle: "No issues",
       emptyClean: "The library is clean (or not scanned yet).",

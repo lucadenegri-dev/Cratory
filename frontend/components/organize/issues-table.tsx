@@ -6,32 +6,12 @@ import { CoverThumb } from "@/components/organize/cover-thumb";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 
-export type GroupBy = "type" | "severity" | "none";
+import {
+  issueIsFixable, issueIsStrong, RETAGGABLE, suggestedValue,
+  type Drafts, type GroupBy,
+} from "@/lib/organize/issue-actions";
 
-// Stessi campi retaggabili del backend (planner._EFFECTIVE_FIELDS).
-const RETAGGABLE = new Set([
-  "artist", "title", "album", "album_artist", "genre", "year", "label", "track_no", "comment",
-]);
-
-// Un'issue è "fixable" se ha un'azione applicabile: quarantena, svuotamento,
-// o un campo retaggabile. Stessa logica usata nella riga (vedi IssueRow).
-export function issueIsFixable(i: Issue): boolean {
-  const action = i.suggested_fix_json?.action;
-  if (action === "clear" || action === "quarantine") return true;
-  return i.field != null && RETAGGABLE.has(i.field);
-}
-
-// Override "forte" (match sicuro da provider): la ConfBadge mappa high→strong.
-// Riservato alle proposte di origine provider: le proposte AI (genre_review)
-// sono per definizione "da rivedere", mai accettabili in blocco come un match
-// sicuro — anche quando portano confidence "high" nel vocabolario dell'AI.
-export function issueIsStrong(i: Issue): boolean {
-  if (i.suggested_fix_json?.source !== "provider") return false;
-  const c = i.suggested_fix_json?.confidence;
-  return c === "high" || c === "strong";
-}
-
-const SEV_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
+export { issueIsFixable, issueIsStrong, type GroupBy };
 
 function SevMark({ sev }: { sev: string }) {
   if (sev === "error") return <span className="text-danger">▲</span>;
@@ -88,10 +68,14 @@ function Cover({ fileId, dismissed }: { fileId: number; dismissed: boolean }) {
   );
 }
 
-function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReopen }: {
+function IssueRow({ issue, showSev, showType, draft, onDraft, onFix, onAccept, onDismiss, onReopen }: {
   issue: Issue;
   showSev: boolean;
   showType: boolean;
+  /** Valore digitato a mano (se c'è): la bozza vive nella pagina, non qui,
+   *  così i comandi massivi la vedono. */
+  draft: string | undefined;
+  onDraft: (id: number, value: string) => void;
   onFix: (id: number, value: string) => Promise<void>;
   onAccept: (id: number) => Promise<void>;
   onDismiss: (id: number) => Promise<void>;
@@ -105,11 +89,12 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
   const isClear = issue.suggested_fix_json?.action === "clear";
   // File corrotto: la "fix" è mandarlo in quarantena, non ritaggarlo.
   const isQuarantine = issue.suggested_fix_json?.action === "quarantine";
-  const suggested = typeof issue.suggested_fix_json?.to === "string"
-    ? (issue.suggested_fix_json.to as string) : "";
+  const suggested = suggestedValue(issue);
   const conf = issue.suggested_fix_json?.confidence;
   const confSource = issue.suggested_fix_json?.source;
-  const [value, setValue] = useState(suggested);
+  // Derivato, non stato locale: senza bozza mostra il suggerimento, anche
+  // quando l'AI/provider lo imposta dopo il mount (niente rimontaggio).
+  const value = draft ?? suggested;
   const [busy, setBusy] = useState(false);
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -155,7 +140,7 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
               <input
                 className="w-40 border border-border bg-bg px-2 py-1 text-[11px] text-fg-strong placeholder:text-faint focus:border-border-strong focus:outline-none"
                 value={value}
-                onChange={(e) => setValue(e.target.value)}
+                onChange={(e) => onDraft(issue.id, e.target.value)}
                 placeholder={t.organize.issues.writeField(issue.field ?? "")}
               />
             </div>
@@ -205,23 +190,24 @@ function IssueRow({ issue, showSev, showType, onFix, onAccept, onDismiss, onReop
   );
 }
 
-// key stabile per riga: include il suggerimento così, quando l'AI lo imposta
-// dopo il mount, la riga si rimonta e l'input mostra il valore.
-function rowKey(i: Issue): string {
-  const sug = typeof i.suggested_fix_json?.to === "string" ? i.suggested_fix_json.to : "";
-  return `${i.id}:${sug}`;
-}
-
 export function IssuesTable({
-  issues, groupBy, onFix, onAccept, onDismiss, onReopen, onAcceptGroup,
+  issues, groupBy, rank, drafts, onDraft, onFix, onAccept, onDismiss, onReopen,
+  onAcceptGroup, onDismissGroup,
 }: {
   issues: Issue[];
   groupBy: GroupBy;
+  /** Rango di un gruppo (vedi groupOrder): calcolato dalla pagina su TUTTE le
+   *  issue, così accettare una riga non fa scavalcare i gruppi. */
+  rank: (key: string) => number;
+  drafts: Drafts;
+  onDraft: (id: number, value: string) => void;
   onFix: (id: number, value: string) => Promise<void>;
   onAccept: (id: number) => Promise<void>;
   onDismiss: (id: number) => Promise<void>;
   onReopen: (id: number) => Promise<void>;
-  onAcceptGroup: (key: string) => Promise<void>;
+  /** Ricevono le issue del gruppo (aperte e non): la pagina decide cosa farne. */
+  onAcceptGroup: (list: Issue[]) => Promise<void>;
+  onDismissGroup: (list: Issue[]) => Promise<void>;
 }) {
   const t = useT();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -246,7 +232,8 @@ export function IssuesTable({
   );
 
   const rowFor = (i: Issue) => (
-    <IssueRow key={rowKey(i)} issue={i} showSev={showSev} showType={showType}
+    <IssueRow key={i.id} issue={i} showSev={showSev} showType={showType}
+      draft={drafts[i.id]} onDraft={onDraft}
       onFix={onFix} onAccept={onAccept} onDismiss={onDismiss} onReopen={onReopen} />
   );
 
@@ -267,11 +254,10 @@ export function IssuesTable({
     const key = groupBy === "type" ? i.type : i.severity;
     (groups.get(key) ?? groups.set(key, []).get(key)!).push(i);
   }
-  const entries = [...groups.entries()].sort((a, b) =>
-    groupBy === "severity"
-      ? (SEV_ORDER[a[0]] ?? 9) - (SEV_ORDER[b[0]] ?? 9)
-      : b[1].length - a[1].length,
-  );
+  // Ordine dal rango stabile della pagina, NON dal conteggio delle righe qui
+  // presenti: con il filtro "aperte" ogni accetta/ignora toglie una riga e un
+  // ordine sul conteggio farebbe scavalcare i gruppi sotto il mouse.
+  const entries = [...groups.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
 
   const labelFor = (key: string) =>
     groupBy === "type" ? t.organize.issues.typeLabel(key) : key;
@@ -283,9 +269,9 @@ export function IssuesTable({
       return next;
     });
 
-  const acceptGroup = async (key: string) => {
+  const runGroup = async (key: string, fn: () => Promise<void>) => {
     setGroupBusy(key);
-    try { await onAcceptGroup(key); } finally { setGroupBusy(null); }
+    try { await fn(); } finally { setGroupBusy(null); }
   };
 
   return (
@@ -314,12 +300,20 @@ export function IssuesTable({
                       <span className="tnum text-[10px] text-muted">{t.organize.issues.groupMeta(open, list.length)}</span>
                     </button>
                     {open > 0 && (
-                      <button
-                        type="button"
-                        disabled={groupBusy === key}
-                        onClick={() => acceptGroup(key)}
-                        className="ml-auto border border-border px-2 py-0.5 text-[10px] text-ok hover:bg-elevated disabled:opacity-40"
-                      >{t.organize.issues.groupAccept}</button>
+                      <span className="ml-auto flex gap-1">
+                        <button
+                          type="button"
+                          disabled={groupBusy === key}
+                          onClick={() => runGroup(key, () => onAcceptGroup(list))}
+                          className="border border-border px-2 py-0.5 text-[10px] text-ok hover:bg-elevated disabled:opacity-40"
+                        >{t.organize.issues.groupAccept}</button>
+                        <button
+                          type="button"
+                          disabled={groupBusy === key}
+                          onClick={() => runGroup(key, () => onDismissGroup(list))}
+                          className="border border-border px-2 py-0.5 text-[10px] text-muted hover:bg-elevated disabled:opacity-40"
+                        >{t.organize.issues.groupDismiss}</button>
+                      </span>
                     )}
                   </div>
                 </td>

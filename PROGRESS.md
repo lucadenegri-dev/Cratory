@@ -8,6 +8,19 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **I comandi massivi di Issues agiscono su ciò che vedi** (2026-09-04): la barra
+  aveva quattro bottoni per tipo o gravità globali, nessuno che ignorasse la
+  lista intera, e "accetta i fixabili" saltava in silenzio ogni valore digitato a
+  mano — la bozza viveva nello stato della singola riga, e il backend accettava
+  solo issue con un suggerimento già salvato. Ora le bozze salgono alla pagina, i
+  tre comandi (alta confidenza, accetta visibili, ignora visibili) lavorano per
+  id espliciti sulle issue aperte mostrate dai filtri correnti — con i filtri
+  azzerati è l'intera lista — e un `POST /bulk-fix` accetta in blocco i valori
+  a mano, anche da "accetta gruppo"; "ignora visibili" chiede conferma col
+  conteggio delle proposte pagate. Il salto dei gruppi al click su ✓ era
+  l'ordinamento sul conteggio delle sole righe filtrate (aperte): ogni accetta
+  toglieva una riga e due gruppi vicini si scavalcavano. Il rango ora si calcola
+  sul totale di tutte le issue, che un cambio di stato non muove.
 - **Il 401 di slskd su installazione fresca** (2026-09-03): il percorso guidato
   scriveva nello `slskd.yml` account, porta e cartella, e nessuna chiave API. Il
   demone partiva per davvero — `/health` è il suo unico endpoint anonimo, ed era
