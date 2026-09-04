@@ -95,9 +95,38 @@ di ciglia `(--)` e ammiccamento `(o-)` funzionano come oggi, dentro `/…\`.
 `AsciiDj` prende la stessa prop `figure` e la passa a `djFrame`; la Home
 gliela passa in base alla persona.
 
+## I cuori nell'aria
+
+Richiesta arrivata dopo i mockup: "dei cuoricini nell'ambiente quando parte a
+suonare". L'ambiente è `AsciiAtmosphere`
+(`frontend/components/dashboard/ascii-atmosphere.tsx`), il pulviscolo che
+sale dietro tutta la composizione: a musica ferma è invisibile
+(`AIR_IDLE_GLOW = 0`) e si accende quando dall'app esce suono. Basta quindi
+cambiare di cosa è fatto il pulviscolo, non quando si vede.
+
+- `AsciiAtmosphere` prende `hearts?: boolean` (default `false`). La Home lo
+  passa `true` solo con la persona goodgirl.
+- `airParticles(count, seed, glyphs)` prende la tavolozza come terzo
+  parametro (default quella di oggi). La tavolozza dei cuori è
+  `["·", ".", "♥", "'", ",", "♥"]`: un terzo delle particelle è un cuore, il
+  resto è il pulviscolo di sempre. Il campo dei cuori è una costante calcolata
+  una volta, come quello di oggi.
+- Il cuore `♥` non sta in DM Mono e cade sul font di fallback. Qui è
+  accettabile, a differenza della cabina e della scritta: ogni particella è un
+  elemento posizionato per conto suo, non una cella di una griglia monospace,
+  quindi la larghezza del glifo non sposta nulla.
+- I cuori portano la classe `air-heart`, in `app/globals.css` subito dopo
+  `.air-near`: `color: var(--c-danger)`, lo stesso rosso del colpo di cassa.
+  Restano soggetti a `--air-glow` e a `air-still` come le altre particelle.
+
 ## Test
 
 Tutti in `frontend/tests`, con vitest.
+
+- `ascii-atmosphere.test.tsx` (nuovo): la tavolozza di default non produce
+  cuori; quella dei cuori ne produce fra 20 e 60 su 120 particelle (un terzo,
+  con tolleranza); `<AsciiAtmosphere active hearts />` rende span con `♥` e
+  classe `air-heart`, `<AsciiAtmosphere active />` nessuno.
 
 - `persona.test.ts`: `xgiorgix`, `XGIORGIX` → `goodgirl`; `null`, `""`,
   `giorgia`, `xgiorgix2` → `cratory`.
@@ -111,10 +140,13 @@ Tutti in `frontend/tests`, con vitest.
   `boy` non li contiene (denominatore); il blink `(--)` compare in `girl` sul
   tick giusto; `djFrame(t)` senza opzioni è identico a `figure: "boy"`.
 - `home-persona.test.tsx`: la Home con `@/lib/api` mockato. Con
-  `soundcloudStatus` che risponde `xgiorgix` l'h1 dice "DJ Goodgirl" e l'arte
-  contiene `/(oo)\`; con un altro username o con la fetch che fallisce l'h1
-  dice "Cratory". Prima della risposta nessun h1 (niente lampeggio).
+  `soundcloudStatus` che risponde `xgiorgix` l'h1 dice "DJ Goodgirl", l'arte
+  contiene `/(oo)\` e l'atmosfera ha cuori; con un altro username o con la
+  fetch che fallisce l'h1 dice "Cratory" e non ci sono cuori. Prima della
+  risposta nessun h1 (niente lampeggio).
 
 ## Fuori scope
 
-Impostazioni, backend, i18n, Tauri, l'aria e lo spettro della Home.
+Impostazioni, backend, i18n, Tauri, lo spettro della Home e le tre righe
+d'aria sopra la cabina (che sono una griglia monospace: lì un cuore
+disallineerebbe le colonne).
