@@ -24,9 +24,9 @@ import { SpectrumStrip } from "@/components/dashboard/spectrum-strip";
    sempre; `goodgirl` è l'easter egg per l'username SoundCloud xgiorgix: la
    scritta DJ GOODGIRL, la DJ riccia dietro la consolle, cuori nel pulviscolo.
    DJ GOODGIRL fa 65 colonne contro le 41 di CRATORY, quindi il corpo scende
-   di un passo per stare nella stessa larghezza: 7px sul telefono (65 colonne
-   sull'advance di DM Mono ≈ 273px, dentro i 309 disponibili) e 2.8cqw da lg
-   (4.5 × 41 / 65). */
+   di un passo per stare nella stessa larghezza: 8px sul telefono (65 colonne
+   sull'advance di DM Mono ≈ 312px, dentro i 335 misurati in preview a 375px;
+   a 9px eccedeva) e 2.8cqw da lg (4.5 × 41 / 65). */
 const FRONTISPIECE: Record<Persona, {
   word: string; title: string; sizeClass: string; figure: DjFigure; hearts: boolean;
 }> = {
@@ -37,7 +37,7 @@ const FRONTISPIECE: Record<Persona, {
   },
   goodgirl: {
     word: "DJ GOODGIRL", title: "DJ Goodgirl",
-    sizeClass: "text-[7px] sm:text-sm md:text-lg lg:text-[min(4.1cqh,2.8cqw)]",
+    sizeClass: "text-[8px] sm:text-sm md:text-lg lg:text-[min(4.1cqh,2.8cqw)]",
     figure: "girl", hearts: true,
   },
 };
