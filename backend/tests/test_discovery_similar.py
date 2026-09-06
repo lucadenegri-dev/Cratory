@@ -333,9 +333,23 @@ def test_the_style_edge_costs_no_request_when_switched_off():
 
 def test_each_edge_maps_with_the_shape_its_endpoint_returns():
     src, _ = _resolver()
-    from_discography = src.to_lead("same_artist", DISCOGRAPHY_ITEM)
-    assert from_discography.artist == "Jasmín"
-    assert from_discography.source_id == "637178087:4024735967"
+    # I due archi di discografia devono passare dal mapper della discografia: la
+    # forma discover non ha `artist_name` e uscirebbe `None`.
+    for edge in ("same_artist", "same_label"):
+        from_discography = src.to_lead(edge, DISCOGRAPHY_ITEM)
+        assert from_discography is not None, edge
+        assert from_discography.artist == "Jasmín"
+        assert from_discography.source_id == "637178087:4024735967"
     from_discover = src.to_lead("same_period_style", DISCOVER_ITEM_2026)
     assert from_discover.artist == "Altro Artista"
     assert from_discover.stream_url == "https://t4.bcbits.com/stream/x"
+
+
+def test_a_similar_lead_carries_no_seed_let_alone_the_name_of_an_edge():
+    # `seed` dice cosa ha cercato chi scava: nei simili non si è cercato niente, e
+    # metterci il nome dell'arco lo farebbe uscire dall'API come se fosse un seme.
+    src, _ = _resolver()
+    for edge, raw in (("same_artist", DISCOGRAPHY_ITEM),
+                      ("same_label", DISCOGRAPHY_ITEM),
+                      ("same_period_style", DISCOVER_ITEM_2026)):
+        assert src.to_lead(edge, raw).seed is None, edge

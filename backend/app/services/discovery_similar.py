@@ -12,7 +12,6 @@ niente, si cambia solo da dove arrivano i candidati.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from sqlalchemy.orm import Session
@@ -136,7 +135,6 @@ def similar(
             reached[key].append(edge)
 
     weights = _weights("genre", has_styles=False)
-    current_year = datetime.now(timezone.utc).year
     leads: list[DiscoveryLead] = []
     for key, lead in by_key.items():
         lead.score = _score(lead, profile, weights, [])

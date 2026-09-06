@@ -185,7 +185,7 @@ class BandcampSource:
             return self._lead_from_discography(raw, seed)
         return self._lead_from_discover(raw, seed)
 
-    def _lead_from_discography(self, raw: dict, seed: Seed) -> DiscoveryLead | None:
+    def _lead_from_discography(self, raw: dict, seed: Seed | None) -> DiscoveryLead | None:
         title = (raw.get("title") or "").strip()
         artist_raw = (raw.get("artist_name") or "").strip()
         if not title or not artist_raw or artist_raw.lower() in _VARIOUS:
@@ -199,7 +199,7 @@ class BandcampSource:
             year=_bc_year(raw.get("release_date")),
             label=(raw.get("band_name") or "").strip() or None,
             styles=[],
-            source="bandcamp", seed=seed.value,
+            source="bandcamp", seed=(seed.value if seed else None),
             source_id=(f"{band_id}:{item_id}" if band_id and item_id else None),
             # La discografia non porta l'URL della pagina: lo risolve il pannello,
             # che apre `tralbum_details` e riceve `bandcamp_url`.
@@ -209,7 +209,7 @@ class BandcampSource:
             format_badge=None,
         )
 
-    def _lead_from_discover(self, raw: dict, seed: Seed) -> DiscoveryLead | None:
+    def _lead_from_discover(self, raw: dict, seed: Seed | None) -> DiscoveryLead | None:
         title = (raw.get("title") or "").strip()
         band = (raw.get("band_name") or "").strip()
         album_artist = (raw.get("album_artist") or "").strip()
@@ -236,7 +236,7 @@ class BandcampSource:
             year=_bc_year(raw.get("release_date")),
             label=label,
             styles=[],
-            source="bandcamp", seed=seed.value,
+            source="bandcamp", seed=(seed.value if seed else None),
             source_id=(f"{band_id}:{item_id}" if band_id and item_id else None),
             source_url=(raw.get("item_url") or "").split("?")[0] or None,
             thumb_url=_art_url((raw.get("primary_image") or {}).get("image_id")),
@@ -393,11 +393,8 @@ class BandcampSimilar:
 
         if not origin.tag or origin.year is None:
             return []
-        try:
-            batch, _cursor, _total = self.client.discover(
-                tag=origin.tag, cursor="*", size=STYLE_EDGE_ITEMS)
-        except BandcampError:
-            raise
+        batch, _cursor, _total = self.client.discover(
+            tag=origin.tag, cursor="*", size=STYLE_EDGE_ITEMS)
         lo, hi = origin.year - PERIOD_YEARS, origin.year + PERIOD_YEARS
         out = []
         for item in batch or []:
@@ -411,8 +408,16 @@ class BandcampSimilar:
     def to_lead(self, edge: str, raw: dict):
         """Due archi, due forme: discografia (artista, etichetta) vs discover (stile).
 
-        I mapper sono quelli di `BandcampSource`: il seme che gli si passa serve solo
-        a marcare il lead, e qui è il nome dell'arco.
+        Si chiamano i mapper di `BandcampSource` DIRETTAMENTE e non il suo `to_lead`:
+        quello smista su `seed.type`, e fabbricare un seme finto per pilotarlo
+        legherebbe i simili a una regola del dig che non li riguarda — cambiarla là
+        farebbe sparire in silenzio i lead delle discografie.
+
+        Il seme passato è `None` perché qui un seme non c'è: `DiscoveryLead.seed` dice
+        "cosa ha cercato chi scava", e nei simili non si è cercato né un genere né
+        un'etichetta. Da quale arco arriva il lead lo dicono i `Reason`, che è il
+        campo fatto per raccontarlo.
         """
-        seed = Seed(type="label" if edge != "same_period_style" else "genre", value=edge)
-        return self._source.to_lead(raw, seed)
+        if edge == "same_period_style":
+            return self._source._lead_from_discover(raw, None)
+        return self._source._lead_from_discography(raw, None)
