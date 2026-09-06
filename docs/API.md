@@ -674,6 +674,14 @@ The response reports, source-neutral, in items:
   visible. `resolution` is `style|genre|label` (Discogs), `tag|discography`
   (Bandcamp) or `null` for a dead seed.
 
+`reach` has a hard ceiling per source: Discogs stops at 10,000 items (100 pages
+of 100 — page 101 is a 404), Bandcamp at 3,000 (the cost of its cursor walk).
+On Discogs a `genre` seed is probed as a `style` first (fine-grained, e.g.
+"Deep House") and falls back to `genre` (coarse — about fifteen shelves such as
+"Electronic", millions of releases) when the style pile is empty; that is when
+`resolution` reads `"genre"` and the UI warns that only the top of a huge pile
+is visible.
+
 `GET /api/discovery/genres` returns the seed vocabulary: `library` (genres already
 in the library) and `styles` (a hand-curated Discogs style list). Both sources share
 it; Bandcamp normalizes each entry into a tag (lowercase, runs of non-alphanumeric
