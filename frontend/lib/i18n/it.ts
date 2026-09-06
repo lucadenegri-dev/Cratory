@@ -1071,12 +1071,6 @@ export const it: Dictionary = {
     leadCountOf: (shown: number, total: number) => `${shown} di ${total}`,
     showLabel: "Mostra",
     showAll: "tutti",
-    broadSeed: (total: string, reachable: string, src: string) =>
-      `Seme molto ampio: ${total} dischi su ${src}, ne vedi solo i ${reachable} più in cima. Un sottogenere più preciso scava meglio.`,
-    // Variante per il seme etichetta: "un sottogenere più preciso" non ha senso su
-    // una label (non è un genere), quindi qui si tiene solo l'informazione sulla pila.
-    broadSeedLabel: (total: string, reachable: string, src: string) =>
-      `Seme molto ampio: ${total} dischi su ${src}, ne vedi solo i ${reachable} più in cima.`,
     formatLabel: "Formato",
     formatAll: "Tutti",
     sortLabel: "Ordine",
@@ -1123,8 +1117,6 @@ export const it: Dictionary = {
     nothingToDigTitle: "Niente da scavare",
     nothingToDigShortPile: (value: string) =>
       `Nessun brano nuovo per “${value}”: la pila è corta e possiedi già tutto quello che c'è.`,
-    nothingToDigBody: (value: string, seedType: string) =>
-      `Nessun brano nuovo per “${value}”. Prova un altro ${seedType} o vai più a fondo nella pila.`,
     // Seme inesistente: distinto da "niente di nuovo". Li' la pila c'e' e i dischi sono
     // stati filtrati (li possiedi gia'), quindi "vai piu' a fondo" e' un consiglio che
     // puo' funzionare. Qui la pila non esiste: non e' un problema della tua libreria e
@@ -1132,8 +1124,6 @@ export const it: Dictionary = {
     deadSeedTitle: (src: string) => `Seme sconosciuto a ${src}`,
     deadSeedBody: (value: string, src: string) =>
       `${src} non ha nessun disco catalogato come “${value}”: quel nome non esiste nel suo vocabolario. Non c'entra la tua libreria, e cambiare profondità non aiuta. Scegli una voce dai suggerimenti del campo.`,
-    seedTypeValue: "valore",
-    seedTypeStyle: "stile",
     noFormatMatch: "Nessun disco con questo formato.",
     noDetails: "Nessun dettaglio disponibile per questo disco.",
     loadingTracklist: "Carico la tracklist…",

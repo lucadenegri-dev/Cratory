@@ -1089,12 +1089,6 @@ export const en = {
     leadCountOf: (shown: number, total: number) => `${shown} of ${total}`,
     showLabel: "Show",
     showAll: "all",
-    broadSeed: (total: string, reachable: string, src: string) =>
-      `Very broad seed: ${total} records on ${src}, you only see the top ${reachable}. A more specific subgenre digs better.`,
-    // Label variant: "a more specific subgenre" makes no sense for a label seed (it's
-    // not a genre), so this one keeps only the pile-size information.
-    broadSeedLabel: (total: string, reachable: string, src: string) =>
-      `Very broad seed: ${total} records on ${src}, you only see the top ${reachable}.`,
     formatLabel: "Format",
     formatAll: "All",
     sortLabel: "Order",
@@ -1141,16 +1135,12 @@ export const en = {
     nothingToDigTitle: "Nothing to dig",
     nothingToDigShortPile: (value: string) =>
       `No new tracks for “${value}”: the pile is short and you already own everything in it.`,
-    nothingToDigBody: (value: string, seedType: string) =>
-      `No new tracks for “${value}”. Try another ${seedType} or dig deeper into the pile.`,
     // Dead seed: distinct from "nothing new". There the pile exists and the records were
     // filtered out (you already own them), so "dig deeper" is advice that can work. Here
     // the pile doesn't exist: it's not your library's fault and no depth helps.
     deadSeedTitle: (src: string) => `Seed unknown to ${src}`,
     deadSeedBody: (value: string, src: string) =>
       `${src} has no records catalogued as “${value}”: that name isn't in its vocabulary. It's not your library, and changing depth won't help. Pick an entry from the field's suggestions.`,
-    seedTypeValue: "value",
-    seedTypeStyle: "style",
     noFormatMatch: "No record with this format.",
     noDetails: "No details available for this record.",
     loadingTracklist: "Loading tracklist…",

@@ -10,20 +10,25 @@ import {
   discoverySimilar,
   errText,
   getDiscoveryGenres,
+  getDiscoverySettings,
   getLabels,
+  searchTracks,
   type DiscoveryDigResponse,
   type DiscoveryGenres,
   type DiscoverySimilarResponse,
+  type GenreCount,
   type LabelStats,
+  type Track,
   type TrackDetail,
 } from "@/lib/api";
 import { Alert, Chip, EmptyState, Loading, SegmentedControl } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { applyLens, DiscoveryLeadGrid, FORMAT_VALUES, type SortMode } from "@/components/discovery-lead-grid";
-import { DiscoveryDigBar } from "@/components/discovery-dig-bar";
+import { DiscoveryDigBar, type DigMode } from "@/components/discovery-dig-bar";
 import { DiscoverySimilarHeader } from "@/components/discovery-similar-header";
-import { similarHref, WINDOW_ITEMS, type DigSourceKey, type SeedType } from "@/lib/discovery-dig";
+import { similarHref, WINDOW_ITEMS, type DigSourceKey } from "@/lib/discovery-dig";
+import { digHref, parseSeeds, sameSeeds, type DigSeed } from "@/lib/discovery-seeds";
 import { isInternalPath, withFrom } from "@/lib/back-link";
 import { pickSurprise } from "@/lib/discovery-surprise";
 import { useI18n } from "@/lib/i18n";
@@ -39,19 +44,19 @@ function DiscoveryInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const initialSeed = (searchParams.get("seed") === "label" ? "label" : "genre") as SeedType;
-  const initialValue = searchParams.get("value") ?? "";
   const initialDepthRaw = Number(searchParams.get("depth") ?? "0");
   const initialDepth = Number.isFinite(initialDepthRaw) ? Math.min(1, Math.max(0, initialDepthRaw)) : 0;
   const initialSource: DigSourceKey =
     searchParams.get("source") === "bandcamp" ? "bandcamp" : "discogs";
   const [genres, setGenres] = useState<DiscoveryGenres | null>(null);
   const [labels, setLabels] = useState<LabelStats[] | null>(null);
+  const [genreCounts, setGenreCounts] = useState<GenreCount[]>([]);
+  // `null` = preferenza non ancora letta: lo scavo aspetta, perché un URL con
+  // source=discogs a Discogs spento deve degradare a Bandcamp PRIMA di partire.
+  const [discogsEnabled, setDiscogsEnabled] = useState<boolean | null>(null);
 
-  // scava (dig Discogs) — il soggetto (genere o etichetta) è un unico campo:
-  // il seed_type è derivato da quale gruppo dell'autocomplete è stato scelto.
-  const [seedType, setSeedType] = useState<SeedType>(initialSeed);
-  const [subject, setSubject] = useState(initialValue);
+  // I semi in barra: stato locale, la verità dello scavo è nell'URL (`seeds=`).
+  const [seeds, setSeeds] = useState<DigSeed[]>(() => parseSeeds(searchParams.get("seeds")));
   const [depth, setDepth] = useState(initialDepth);
   const [source, setSource] = useState<DigSourceKey>(initialSource);
   const [dig, setDig] = useState<DiscoveryDigResponse | null>(null);
@@ -62,7 +67,7 @@ function DiscoveryInner() {
   const similarIdRaw = Number(searchParams.get("similar") ?? "");
   const similarId = Number.isFinite(similarIdRaw) ? similarIdRaw : 0;
   const isSimilar = similarId > 0;
-  const stylePeriod = searchParams.get("style_period") === "1";
+  const urlStylePeriod = searchParams.get("style_period") === "1";
   // L'origine da cui si è arrivati alla traccia, di passaggio qui: serve al link
   // indietro per restituire la traccia con la sua memoria (i filtri della
   // libreria, la playlist) invece che nuda. Validata perché finisce dentro un
@@ -82,6 +87,14 @@ function DiscoveryInner() {
   // suo interruttore) sparirebbe da sotto il cursore proprio mentre `busy`
   // dovrebbe limitarsi a disabilitarla.
   const simTrackRef = useRef<number | null>(null);
+
+  // Il modo è stato locale: commutarlo cambia solo quale campo si vede. L'URL
+  // si muove quando parte una ricerca. All'apertura si deduce da cosa c'è.
+  const [mode, setMode] = useState<DigMode>(isSimilar ? "track" : "seeds");
+  // L'interruttore vive nell'URL quando c'è una traccia (come prima), in locale
+  // prima di sceglierla: così si accende PRIMA di cercare e viaggia col push.
+  const [localStylePeriod, setLocalStylePeriod] = useState(urlStylePeriod);
+  const stylePeriod = isSimilar ? urlStylePeriod : localStylePeriod;
 
   // lenti sui risultati già ottenuti: fuori dall'URL, non rilanciano il dig
   const [format, setFormat] = useState<string | null>(null);
@@ -103,24 +116,24 @@ function DiscoveryInner() {
   const canSurprise = surprisePool.genres.length + surprisePool.labels.length > 0;
 
   useEffect(() => {
-    getDiscoveryGenres()
-      .then(setGenres)
-      .catch(() => setGenres({ library: [], styles: [] }));
-    getLabels()
-      .then(setLabels)
-      .catch(() => setLabels([]));
+    getDiscoveryGenres().then(setGenres).catch(() => setGenres({ library: [], styles: [] }));
+    getLabels().then(setLabels).catch(() => setLabels([]));
+    apiGet<GenreCount[]>("/api/library/genres").then(setGenreCounts).catch(() => setGenreCounts([]));
+    getDiscoverySettings()
+      .then((s) => setDiscogsEnabled(s.discogs_enabled))
+      .catch(() => setDiscogsEnabled(true));
   }, []);
 
   const executeDig = useCallback(
-    async (seed: SeedType, value: string, d: number, src: DigSourceKey) => {
+    async (list: DigSeed[], d: number, src: DigSourceKey) => {
       setBusy(true);
       setError(null);
       setDig(null);
       const sourceName = src === "bandcamp" ? t.discovery.sourceBandcamp : t.discovery.sourceDiscogs;
       jobs.startClientJob("dig", t.jobs.dig);
-      jobs.updateClientJob("dig", { detail: `${sourceName} · ${value}` });
+      jobs.updateClientJob("dig", { detail: `${sourceName} · ${list.map((s) => s.value).join(", ")}` });
       try {
-        setDig(await discoveryDig(seed, value, { depth: d, source: src }));
+        setDig(await discoveryDig(list, { depth: d, source: src }));
       } catch (e) {
         setError(errText(e));
       } finally {
@@ -136,16 +149,25 @@ function DiscoveryInner() {
     // I due rami leggono la STESSA query string: senza questa guardia, entrare in
     // modalità simili farebbe partire anche un dig col valore vuoto.
     if (isSimilar) return;
-    const seed: SeedType = searchParams.get("seed") === "label" ? "label" : "genre";
-    const value = searchParams.get("value") ?? "";
-    if (!value) return; // pagina aperta senza un dig: mostra l'empty state, non eseguire
+    if (discogsEnabled === null) return;   // la preferenza decide la sorgente: si aspetta
+    const list = parseSeeds(searchParams.get("seeds"));
+    if (list.length === 0) return;         // pagina aperta senza uno scavo: empty state
     const depthRaw = Number(searchParams.get("depth") ?? "0");
     const d = Number.isFinite(depthRaw) ? Math.min(1, Math.max(0, depthRaw)) : 0;
-    const src: DigSourceKey = searchParams.get("source") === "bandcamp" ? "bandcamp" : "discogs";
+    const wanted: DigSourceKey = searchParams.get("source") === "bandcamp" ? "bandcamp" : "discogs";
+    // Discogs spento: un link con source=discogs degrada, non fallisce.
+    const src: DigSourceKey = !discogsEnabled && wanted === "discogs" ? "bandcamp" : wanted;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- il dig è l'external system: l'effect risincronizza i risultati sull'URL (query string), non su state locale
-    executeDig(seed, value, d, src);
+    executeDig(list, d, src);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paramsKey]);
+  }, [paramsKey, discogsEnabled]);
+
+  // A Discogs spento la barra offre solo Bandcamp: la sorgente locale si
+  // allinea, così il prossimo Scava non scrive un source che la barra non mostra.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- allinea `source` alla preferenza Discogs, che arriva async dal backend (external system): non un loop di stato, la guardia sui valori la rende idempotente
+    if (discogsEnabled === false && source === "discogs") setSource("bandcamp");
+  }, [discogsEnabled, source]);
 
   // Gemello del precedente per la modalità simili: stessa dipendenza (l'URL),
   // guardia opposta. La traccia di partenza serve all'intestazione (artista e
@@ -159,6 +181,10 @@ function DiscoveryInner() {
     setBusy(true);
     setError(null);
     if (trackChanged) {
+      // Entrare in una NUOVA traccia simile mostra sempre la barra in modo
+      // traccia, anche se si arrivava da uno scavo lasciato in modo semi:
+      // "entrare in ?similar=" è un evento, non solo lo stato al primo mount.
+      setMode("track");
       setSim(null);
       setSimTrack(null);
     }
@@ -184,50 +210,36 @@ function DiscoveryInner() {
   // scavo: `similarHref` è la stessa funzione che scrive il bottone nel dettaglio
   // traccia, così un solo posto costruisce questo indirizzo.
   const setStylePeriod = (on: boolean) => {
-    // `from` deve sopravvivere al giro dell'interruttore, altrimenti la catena
-    // indietro si spezza al primo clic invece che al primo passo indietro.
-    router.push(similarHref(similarId, on, from), { scroll: false });
+    setLocalStylePeriod(on);
+    if (isSimilar) router.push(similarHref(similarId, on, from), { scroll: false });
   };
 
   const runDig = () => {
-    const value = subject.trim();
-    if (!value) return;
+    if (seeds.length === 0) return;
     surpriseRef.current = false;
     surpriseRerolledRef.current = false;
-    const params = new URLSearchParams();
-    params.set("seed", seedType);
-    params.set("value", value);
-    params.set("depth", String(depth));
-    params.set("source", source);
-    // Params identici a quelli già nell'URL: la ricerca è deterministica, il
-    // risultato sarebbe lo stesso. Non pushare, così non si accumula una voce
-    // di cronologia duplicata (back richiederebbe due click).
-    if (params.toString() === searchParams.toString()) return;
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    const href = digHref(pathname, seeds, depth, source);
+    // Stesso URL: ricerca deterministica, stesso risultato. Niente voce doppia
+    // nella cronologia.
+    if (href === `${pathname}?${searchParams.toString()}`) return;
+    router.push(href, { scroll: false });
   };
 
-  const navigateDig = (seed: SeedType, value: string, d: number) => {
-    // Sincronizza la barra col seme pescato: "Sorprendimi" (e il reroll) aggiornano
-    // l'URL ma il componente non rimonta, quindi lo state va allineato a mano perché
-    // Combobox e profondità mostrino cosa è uscito. La sorgente NON cambia: "Sorprendimi"
-    // pesca un seme, non una sorgente, quindi resta quella già selezionata (closure `source`).
-    setSeedType(seed);
-    setSubject(value);
+  const navigateDig = (seed: DigSeed, d: number) => {
+    // Sorprendimi (e il reroll) mettono UN seme in barra e aggiornano l'URL: il
+    // componente non rimonta, quindi lo state va allineato a mano. La sorgente
+    // resta quella scelta: si pesca un seme, non una sorgente.
+    setSeeds([seed]);
     setDepth(d);
-    const params = new URLSearchParams();
-    params.set("seed", seed);
-    params.set("value", value);
-    params.set("depth", String(d));
-    params.set("source", source);
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    router.push(digHref(pathname, [seed], d, source), { scroll: false });
   };
 
   const runSurprise = () => {
-    const pick = pickSurprise(surprisePool, subject.trim() || null);
+    const pick = pickSurprise(surprisePool, seeds.map((s) => s.value));
     if (!pick) return;
-    surpriseRef.current = true;        // questo dig nasce da Sorprendimi
-    surpriseRerolledRef.current = false; // nuovo click: reroll di nuovo disponibile
-    navigateDig(pick.seedType, pick.value, pick.depth);
+    surpriseRef.current = true;
+    surpriseRerolledRef.current = false;
+    navigateDig({ type: pick.seedType, value: pick.value }, pick.depth);
   };
 
   // Colpo a vuoto di "Sorprendimi": un solo reroll automatico, poi l'empty state
@@ -239,25 +251,19 @@ function DiscoveryInner() {
     if (dig.leads.length > 0) return;
     if (surpriseRerolledRef.current) return; // reroll già speso: mostra empty state
     surpriseRerolledRef.current = true;
-    const pick = pickSurprise(surprisePool, dig.value);
+    const pick = pickSurprise(surprisePool, dig.seeds.map((s) => s.value));
     if (!pick) return;
     surpriseRef.current = true; // anche il reroll nasce da Sorprendimi
-    // navigateDig risincronizza la barra (subject/seedType/depth) col nuovo seme
+    // navigateDig risincronizza la barra (semi/profondità) col nuovo seme
     // pescato dal reroll, non un loop di stato
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    navigateDig(pick.seedType, pick.value, pick.depth);
+    navigateDig({ type: pick.seedType, value: pick.value }, pick.depth);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dig]);
 
-  const digReady = !!subject.trim();
-  // Invalida a ogni cambio di seme (soggetto o tipo): senza questo controllo `pile`
-  // resta legato all'ULTIMA risposta, non al soggetto corrente digitato — il controllo
-  // di profondita' restava disabilitato (pila corta di prima) finche' non si rilanciava
-  // il dig, contro la spec ("disabled fino al prossimo cambio di seme").
-  const pile =
-    dig && dig.seed_type === seedType && dig.value === subject.trim()
-      ? { total: dig.pile_total, reach: dig.pile_reach }
-      : null;
+  // Le pile valgono per i semi CORRENTI in barra: cambiato un seme, la
+  // profondità torna attiva finché non si riscava.
+  const piles = dig && sameSeeds(dig.seeds, seeds) ? dig.piles : null;
 
   // `hasResult` guarda solo la modalità corrente: un `sim` rimasto in memoria da
   // prima non deve far comparire la riga delle lenti (né spegnere lo spinner)
@@ -272,38 +278,31 @@ function DiscoveryInner() {
     [isSimilar, sim, dig, format, sort, show],
   );
 
-  // Zero lead nello scavo ha due cause diverse, e dirle uguali mente. Se la pila
-  // non esiste (`pile_total === 0`) il seme è sconosciuto alla sorgente: la
+  // Zero lead nello scavo ha due cause diverse, e dirle uguali mente. Se una pila
+  // non esiste (`total === 0`) quel seme è sconosciuto alla sorgente: la
   // libreria non c'entra e "vai più a fondo" è un consiglio che non può
-  // funzionare, perché non c'è fondo. Se invece la pila c'è, i dischi sono stati
-  // filtrati (li possiedi già) e scavare più a fondo è la mossa giusta.
+  // funzionare, perché non c'è fondo. Se invece le pile ci sono, i dischi sono
+  // stati filtrati (li possiedi già) e scavare più a fondo è la mossa giusta.
   const digEmpty = (d: DiscoveryDigResponse) => {
-    // Nome leggibile della sorgente di QUESTO dig, non di quella selezionata ora
-    // nella barra: le stringhe non devono mentire su un risultato precedente.
     const srcName = d.source === "bandcamp" ? t.discovery.sourceBandcamp : t.discovery.sourceDiscogs;
-    if (d.pile_total === 0) {
+    const names = d.seeds.map((s) => `“${s.value}”`).join(", ");
+    const live = d.piles.filter((p) => p.total > 0);
+    if (live.length === 0) {
       return (
         <EmptyState icon={<Disc3 size={28} />} title={t.discovery.deadSeedTitle(srcName)}>
-          {t.discovery.deadSeedBody(d.value, srcName)}
+          {t.discovery.deadSeedBody(names, srcName)}
         </EmptyState>
       );
     }
     if (d.leads.length === 0) {
-      // Su una pila CORTA (la finestra è l'intera pila) "vai più a fondo" è un
-      // consiglio inerte — la profondità è disabilitata proprio per quella pila.
-      const shortPile = d.pile_reach <= WINDOW_ITEMS;
+      const budget = Math.floor(WINDOW_ITEMS / Math.max(1, d.seeds.length));
+      const shortPile = live.every((p) => p.reach <= budget);
       return (
         <EmptyState icon={<Disc3 size={28} />} title={t.discovery.nothingToDigTitle}>
-          {shortPile
-            ? t.discovery.nothingToDigShortPile(d.value)
-            : t.discovery.nothingToDigBody(
-                d.value,
-                d.seed_type === "label" ? t.discovery.seedTypeValue : t.discovery.seedTypeStyle,
-              )}
+          {shortPile ? t.discovery.nothingToDigShortPile(names) : t.discovery.nothingToDigSeeds(names)}
         </EmptyState>
       );
     }
-    // Lead ce ne sono: se la lista è vuota è la lente di formato ad averli tolti.
     return <p className="py-8 text-center text-sm text-muted">{t.discovery.noFormatMatch}</p>;
   };
 
@@ -352,38 +351,34 @@ function DiscoveryInner() {
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
-      {isSimilar && sim && simTrack && (
-        <DiscoverySimilarHeader
-          data={sim}
-          track={simTrack}
-          stylePeriod={stylePeriod}
-          onStylePeriodChange={setStylePeriod}
-          busy={busy}
-        />
-      )}
+      <DiscoveryDigBar
+        mode={mode}
+        onModeChange={setMode}
+        seeds={seeds}
+        onSeedsChange={setSeeds}
+        depth={depth}
+        onDepthChange={setDepth}
+        source={source}
+        onSourceChange={setSource}
+        discogsEnabled={discogsEnabled !== false}
+        stylePeriod={stylePeriod}
+        onStylePeriodChange={setStylePeriod}
+        options={{
+          genres: genres ?? { library: [], styles: [] },
+          labels: labels?.map((l) => l.label) ?? [],
+          genreCounts,
+        }}
+        piles={piles}
+        busy={busy}
+        onSubmit={runDig}
+        onSurprise={runSurprise}
+        canSurprise={canSurprise}
+        onPickTrack={(track: Track) => router.push(similarHref(track.id, localStylePeriod, null), { scroll: false })}
+        searchTracks={searchTracks}
+      />
 
-      {!isSimilar && (
-        <DiscoveryDigBar
-          subject={subject}
-          onSubjectChange={(value, seed) => {
-            setSubject(value);
-            setSeedType(seed);
-          }}
-          depth={depth}
-          onDepthChange={setDepth}
-          source={source}
-          onSourceChange={setSource}
-          options={{
-            genres: genres ?? { library: [], styles: [] },
-            labels: labels?.map((l) => l.label) ?? [],
-          }}
-          pile={pile}
-          busy={busy}
-          ready={digReady}
-          onSubmit={runDig}
-          onSurprise={runSurprise}
-          canSurprise={canSurprise}
-        />
+      {isSimilar && sim && simTrack && (
+        <DiscoverySimilarHeader data={sim} track={simTrack} />
       )}
 
       {hasResult && (
@@ -430,13 +425,14 @@ function DiscoveryInner() {
               viene azzerato entrando nei simili, e uno scavo largo lasciato
               indietro (scavo → back su `?similar=…`) descriverebbe qui una pila
               che questa vista non ha. */}
-          {!isSimilar && dig && dig.pile_total > dig.pile_reach && (
+          {!isSimilar && dig && dig.piles.some((p) => p.total > p.reach) && (
             <span className="tnum text-muted">
-              {/* Sul seme etichetta il consiglio "un sottogenere più preciso" non ha
-                  senso (una label non è un genere): variante senza quella frase. */}
-              {(dig.seed_type === "label" ? t.discovery.broadSeedLabel : t.discovery.broadSeed)(
-                dig.pile_total.toLocaleString(lang),
-                dig.pile_reach.toLocaleString(lang),
+              {t.discovery.broadSeeds(
+                dig.piles
+                  .filter((p) => p.total > p.reach)
+                  .map((p) => t.discovery.broadSeedDetail(
+                    p.value, p.total.toLocaleString(lang), p.reach.toLocaleString(lang)))
+                  .join("; "),
                 dig.source === "bandcamp" ? t.discovery.sourceBandcamp : t.discovery.sourceDiscogs,
               )}
             </span>
@@ -454,7 +450,7 @@ function DiscoveryInner() {
           niente da digitare, e lo stato vuoto lo dà `similarEmpty`. */}
       {!isSimilar && !busy && !dig && (
         <EmptyState icon={<Disc3 size={28} />} title={t.discovery.readyTitle}>
-          {digReady
+          {seeds.length > 0
             ? t.discovery.readyBodyReady
             : t.discovery.readyBodyNotReady}
         </EmptyState>

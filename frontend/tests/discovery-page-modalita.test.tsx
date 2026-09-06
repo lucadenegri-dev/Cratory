@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 
 import { it as dict } from "@/lib/i18n/it";
 import { similarHref } from "@/lib/discovery-dig";
+import { digHref } from "@/lib/discovery-seeds";
 import type { DiscoveryDigResponse, DiscoverySimilarResponse } from "@/lib/api/types";
 
 /* Le due modalità della pagina Discovery (scavo e simili) leggono la STESSA
@@ -23,6 +24,7 @@ vi.mock("next/navigation", () => ({
 const discoveryDig = vi.fn();
 const discoverySimilar = vi.fn();
 const apiGet = vi.fn();
+const searchTracks = vi.fn();
 // Il resto di `@/lib/api` passa dall'originale: la pagina (e i componenti che
 // monta) ne usa molto più di queste tre, e un mock a elenco chiuso cadrebbe al
 // primo export non previsto.
@@ -33,13 +35,15 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   apiGet: (...a: unknown[]) => apiGet(...a),
   getDiscoveryGenres: () => Promise.resolve({ library: [], styles: [] }),
   getLabels: () => Promise.resolve([]),
+  getDiscoverySettings: () => Promise.resolve({ discogs_enabled: true }),
+  searchTracks: (...a: unknown[]) => searchTracks(...a),
 }));
 
 const { default: DiscoveryPage } = await import("@/app/discovery/page");
 
 const DIG: DiscoveryDigResponse = {
-  seed_type: "label", value: "Warp Records", source: "discogs", leads: [],
-  pile_total: 5000, pile_reach: 500, seed_resolution: "label",
+  seeds: [{ type: "label", value: "Warp Records" }], source: "discogs", leads: [],
+  piles: [{ seed_type: "label", value: "Warp Records", total: 5000, reach: 500, resolution: "label" }],
 };
 
 const SIM: DiscoverySimilarResponse = {
@@ -58,10 +62,18 @@ const SIM: DiscoverySimilarResponse = {
 
 const TRACK = { id: 5, artist: "Jasmín", title: "Bite The Hand" } as never;
 
+// Default: la pagina interroga `/api/library/genres` a ogni montaggio (i conteggi
+// della tavolozza), a prescindere dal modo. Senza una risposta di default qui, i
+// test che non toccano `apiGet` prima del primo render romperebbero su
+// `apiGet(...).then` restituendo `undefined`. I singoli test lo sovrascrivono
+// quando serve una traccia diversa da TRACK.
+apiGet.mockImplementation((path: string) => Promise.resolve(path === "/api/library/genres" ? [] : TRACK));
+
 // Il testo atteso viene dal dizionario, non ricopiato a mano: un cambio di
 // stringa non deve far passare il test per il motivo sbagliato.
-const AVVISO_PILA = dict.discovery.broadSeedLabel(
-  (5000).toLocaleString("it"), (500).toLocaleString("it"), dict.discovery.sourceDiscogs);
+const AVVISO_PILA = dict.discovery.broadSeeds(
+  dict.discovery.broadSeedDetail("Warp Records", (5000).toLocaleString("it"), (500).toLocaleString("it")),
+  dict.discovery.sourceDiscogs);
 const INTERRUTTORE = /Stile e periodo/;
 
 afterEach(cleanup);
@@ -69,13 +81,13 @@ afterEach(cleanup);
 describe("pagina Discovery, confine fra scavo e simili", () => {
   it("l'avviso sulla pila non sopravvive al passaggio ai simili", async () => {
     discoveryDig.mockResolvedValue(DIG);
-    query = new URLSearchParams("seed=label&value=Warp Records&depth=0&source=discogs");
+    query = new URLSearchParams("seeds=label:Warp%20Records&depth=0&source=discogs");
     const view = render(<DiscoveryPage />);
     await waitFor(() => expect(screen.getByText(AVVISO_PILA)).toBeTruthy());
 
     // Stesso componente montato, altra query string: `dig` resta in memoria.
     discoverySimilar.mockResolvedValue(SIM);
-    apiGet.mockResolvedValue(TRACK);
+    apiGet.mockImplementation((path: string) => Promise.resolve(path === "/api/library/genres" ? [] : TRACK));
     query = new URLSearchParams("similar=5");
     view.rerender(<DiscoveryPage />);
 
@@ -89,7 +101,7 @@ describe("pagina Discovery, confine fra scavo e simili", () => {
     discoverySimilar
       .mockResolvedValueOnce(SIM)
       .mockImplementationOnce(() => new Promise((res) => { sblocca = res; }));
-    apiGet.mockResolvedValue(TRACK);
+    apiGet.mockImplementation((path: string) => Promise.resolve(path === "/api/library/genres" ? [] : TRACK));
     query = new URLSearchParams("similar=5");
     const view = render(<DiscoveryPage />);
     await waitFor(() => expect(screen.getByLabelText(INTERRUTTORE)).toBeTruthy());
@@ -111,7 +123,7 @@ describe("pagina Discovery, confine fra scavo e simili", () => {
     // Lo stato dei simili vive nella query string: senza il push, un ricarico o un
     // back tornerebbe a leggere l'interruttore spento mentre la vista lo mostra acceso.
     discoverySimilar.mockResolvedValue(SIM);
-    apiGet.mockResolvedValue(TRACK);
+    apiGet.mockImplementation((path: string) => Promise.resolve(path === "/api/library/genres" ? [] : TRACK));
     query = new URLSearchParams("similar=5");
     push.mockClear();
     render(<DiscoveryPage />);
@@ -126,7 +138,7 @@ describe("pagina Discovery, confine fra scavo e simili", () => {
     discoverySimilar
       .mockResolvedValueOnce(SIM)
       .mockImplementationOnce(() => new Promise(() => {}));
-    apiGet.mockResolvedValue(TRACK);
+    apiGet.mockImplementation((path: string) => Promise.resolve(path === "/api/library/genres" ? [] : TRACK));
     query = new URLSearchParams("similar=5");
     const view = render(<DiscoveryPage />);
     await waitFor(() => expect(screen.getByLabelText(INTERRUTTORE)).toBeTruthy());
@@ -135,7 +147,8 @@ describe("pagina Discovery, confine fra scavo e simili", () => {
     view.rerender(<DiscoveryPage />);
 
     // Soggetto diverso: tenere l'intestazione di prima sarebbe mentire.
-    expect(screen.queryByLabelText(INTERRUTTORE)).toBeNull();
+    // L'interruttore ora vive nella barra, sempre montata: è l'intestazione a sparire.
+    expect(screen.queryByText(dict.discovery.similarFrom)).toBeNull();
     // `Loading` annida due role="status" (anche l'equalizzatore ne ha uno):
     // basta che l'etichetta dello spinner ci sia.
     expect(screen.getAllByRole("status").some(
@@ -155,7 +168,7 @@ describe("pagina Discovery, il link indietro dei simili", () => {
 
   async function rendiConOrigine(from: string | null) {
     discoverySimilar.mockResolvedValue(SIM);
-    apiGet.mockResolvedValue(TRACK);
+    apiGet.mockImplementation((path: string) => Promise.resolve(path === "/api/library/genres" ? [] : TRACK));
     const p = new URLSearchParams("similar=5");
     if (from !== null) p.set("from", from);
     query = p;
@@ -189,7 +202,7 @@ describe("pagina Discovery, il link indietro dei simili", () => {
     // l'intestazione dei risultati: così si può tornare indietro senza aspettare
     // la fine di una ricerca che dura una decina di secondi.
     discoverySimilar.mockImplementation(() => new Promise(() => {}));
-    apiGet.mockResolvedValue(TRACK);
+    apiGet.mockImplementation((path: string) => Promise.resolve(path === "/api/library/genres" ? [] : TRACK));
     query = new URLSearchParams(`similar=5&from=${encodeURIComponent(ORIGINE)}`);
     render(<DiscoveryPage />);
 
@@ -197,8 +210,9 @@ describe("pagina Discovery, il link indietro dei simili", () => {
       expect(screen.getByText(dict.discovery.similarBackToTrack)).toBeTruthy());
     expect(linkIndietro().getAttribute("href")).toBe(
       `/tracks?id=5&from=${encodeURIComponent(ORIGINE)}`);
-    // Nessun risultato ancora: la freccia non può venire dall'intestazione.
-    expect(screen.queryByLabelText(INTERRUTTORE)).toBeNull();
+    // Nessun risultato ancora: la freccia non può venire dall'intestazione, che
+    // infatti non è montata (l'interruttore ora vive nella barra, sempre montata).
+    expect(screen.queryByText(dict.discovery.similarFrom)).toBeNull();
   });
 
   it("l'interruttore non perde l'origine per strada", async () => {
@@ -208,5 +222,84 @@ describe("pagina Discovery, il link indietro dei simili", () => {
     push.mockClear();
     fireEvent.click(screen.getByLabelText(INTERRUTTORE));
     expect(push).toHaveBeenCalledWith(similarHref(5, true, ORIGINE), { scroll: false });
+  });
+});
+
+describe("pagina Discovery, la barra a due modi", () => {
+  it("scegliere una traccia porta ai simili con l'interruttore locale", async () => {
+    searchTracks.mockResolvedValue([TRACK]);
+    query = new URLSearchParams();
+    push.mockClear();
+    render(<DiscoveryPage />);
+    fireEvent.click(screen.getByText(dict.discovery.modeTrack));
+    fireEvent.click(screen.getByLabelText(INTERRUTTORE));      // acceso, ma solo in locale
+    expect(push).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByPlaceholderText(dict.discovery.trackSearchPlaceholder), { target: { value: "jas" } });
+    await waitFor(() => expect(screen.getByText(/Bite The Hand/)).toBeTruthy());
+    fireEvent.mouseDown(screen.getByText(/Bite The Hand/));
+    expect(push).toHaveBeenCalledWith(similarHref(5, true, null), { scroll: false });
+  });
+
+  it("in ?similar= la barra è in modo traccia e commutare a semi non tocca l'URL", async () => {
+    discoverySimilar.mockResolvedValue(SIM);
+    query = new URLSearchParams("similar=5");
+    push.mockClear();
+    render(<DiscoveryPage />);
+    await waitFor(() => expect(screen.getByText(dict.discovery.similarFrom)).toBeTruthy());
+    expect(screen.getByPlaceholderText(dict.discovery.trackSearchPlaceholder)).toBeTruthy();
+    fireEvent.click(screen.getByText(dict.discovery.modeSeeds));
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByText(dict.discovery.similarFrom)).toBeTruthy();   // i risultati restano
+  });
+
+  it("Scava scrive i semi nell'URL", async () => {
+    query = new URLSearchParams();
+    push.mockClear();
+    render(<DiscoveryPage />);
+    const campo = screen.getAllByRole("combobox")[0];
+    fireEvent.change(campo, { target: { value: "Deep House" } });
+    fireEvent.keyDown(campo, { key: "Enter" });
+    fireEvent.change(campo, { target: { value: "Electro" } });
+    fireEvent.keyDown(campo, { key: "Enter" });
+    fireEvent.click(screen.getByText(dict.discovery.dig));
+    expect(push).toHaveBeenCalledWith(
+      digHref("/discovery", [{ type: "genre", value: "Deep House" }, { type: "genre", value: "Electro" }], 0, "discogs"),
+      { scroll: false });
+  });
+
+  it("il vecchio ?seed=&value= non fa partire nulla", () => {
+    // I test precedenti hanno già invocato discoveryDig: la storicità delle
+    // chiamate non è quello che questo test vuole controllare.
+    discoveryDig.mockClear();
+    query = new URLSearchParams("seed=genre&value=House");
+    render(<DiscoveryPage />);
+    expect(discoveryDig).not.toHaveBeenCalled();
+  });
+});
+
+describe("pagina Discovery, Discogs spento", () => {
+  it("un URL con source=discogs scava su Bandcamp e non mostra il selettore", async () => {
+    vi.doMock("@/lib/api", async (importOriginal) => ({
+      ...(await importOriginal<Record<string, unknown>>()),
+      discoveryDig: (...a: unknown[]) => discoveryDig(...a),
+      discoverySimilar: (...a: unknown[]) => discoverySimilar(...a),
+      apiGet: (...a: unknown[]) => apiGet(...a),
+      getDiscoveryGenres: () => Promise.resolve({ library: [], styles: [] }),
+      getLabels: () => Promise.resolve([]),
+      getDiscoverySettings: () => Promise.resolve({ discogs_enabled: false }),
+      searchTracks: (...a: unknown[]) => searchTracks(...a),
+    }));
+    vi.resetModules();
+    const { default: Page } = await import("@/app/discovery/page");
+    discoveryDig.mockClear();
+    discoveryDig.mockResolvedValue({ ...DIG, source: "bandcamp" });
+    query = new URLSearchParams("seeds=label:Warp%20Records&depth=0&source=discogs");
+    render(<Page />);
+    await waitFor(() => expect(discoveryDig).toHaveBeenCalled());
+    expect(discoveryDig).toHaveBeenCalledWith(
+      [{ type: "label", value: "Warp Records" }], { depth: 0, source: "bandcamp" });
+    expect(screen.queryByText(dict.discovery.sourceDiscogs)).toBeNull();
+    vi.doUnmock("@/lib/api");
+    vi.resetModules();
   });
 });
