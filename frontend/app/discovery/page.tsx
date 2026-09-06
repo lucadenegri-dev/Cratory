@@ -63,6 +63,14 @@ function DiscoveryInner() {
   const stylePeriod = searchParams.get("style_period") === "1";
   const [sim, setSim] = useState<DiscoverySimilarResponse | null>(null);
   const [simTrack, setSimTrack] = useState<TrackDetail | null>(null);
+  // Traccia dell'ultimo giro dei simili. Distingue le due ragioni per cui
+  // l'effect riparte: un id diverso è un altro soggetto (il risultato di prima
+  // non lo descrive più: si azzera e parte lo spinner), mentre l'interruttore
+  // stile/periodo sulla STESSA traccia è solo un'altra domanda sullo stesso
+  // soggetto. Lì il risultato resta montato, altrimenti l'intestazione (e il
+  // suo interruttore) sparirebbe da sotto il cursore proprio mentre `busy`
+  // dovrebbe limitarsi a disabilitarla.
+  const simTrackRef = useRef<number | null>(null);
 
   // lenti sui risultati già ottenuti: fuori dall'URL, non rilanciano il dig
   const [format, setFormat] = useState<string | null>(null);
@@ -134,10 +142,15 @@ function DiscoveryInner() {
   // il ramo è comunque inservibile, e l'errore va mostrato una volta sola.
   useEffect(() => {
     if (!isSimilar) return;
+    const trackChanged = simTrackRef.current !== similarId;
+    simTrackRef.current = similarId;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- i simili sono l'external system: l'effect risincronizza il risultato sull'URL (query string), non su state locale
     setBusy(true);
     setError(null);
-    setSim(null);
+    if (trackChanged) {
+      setSim(null);
+      setSimTrack(null);
+    }
     jobs.startClientJob("dig", t.discovery.similarJob);
     Promise.all([
       discoverySimilar(similarId, { stylePeriod }),
@@ -389,8 +402,11 @@ function DiscoveryInner() {
             />
           </div>
           {/* La pila è roba dello scavo: i simili non ne hanno una, quindi questo
-              avviso resta legato a `dig`. */}
-          {dig && dig.pile_total > dig.pile_reach && (
+              avviso resta legato a `dig`. Serve ANCHE `!isSimilar`: `dig` non
+              viene azzerato entrando nei simili, e uno scavo largo lasciato
+              indietro (scavo → back su `?similar=…`) descriverebbe qui una pila
+              che questa vista non ha. */}
+          {!isSimilar && dig && dig.pile_total > dig.pile_reach && (
             <span className="tnum text-muted">
               {/* Sul seme etichetta il consiglio "un sottogenere più preciso" non ha
                   senso (una label non è un genere): variante senza quella frase. */}
