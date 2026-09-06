@@ -52,3 +52,15 @@ def get_language(db: Session) -> str:
     """Lingua dell'app ("it" | "en"): valori sconosciuti degradano al default."""
     value = get_state(db, LANGUAGE_KEY)
     return value if value in ("it", "en") else DEFAULT_LANGUAGE
+
+
+DISCOGS_ENABLED_KEY = "discovery.discogs_enabled"
+
+
+def get_discogs_enabled(db: Session) -> bool:
+    """Discogs come sorgente nella barra del Dig. È una preferenza di
+    interfaccia: il backend resta permissivo e `/api/discovery/dig` accetta
+    `source=discogs` comunque, così un link salvato torna a funzionare appena
+    si riaccende. Default acceso; solo "0" spegne, una riga con un valore
+    inatteso non spegne niente in silenzio."""
+    return get_state(db, DISCOGS_ENABLED_KEY) != "0"

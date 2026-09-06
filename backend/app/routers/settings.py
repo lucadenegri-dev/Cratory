@@ -1,7 +1,8 @@
 """Impostazioni utente persistite in AppState (mono-utente, niente tabella dedicata).
 
-Due gruppi:
+Gruppi:
 - `/language`: preferenza lingua UI.
+- `/discovery`: Discogs come sorgente nella barra del Dig (preferenza di interfaccia).
 - `/config` + `/share-library`: override runtime dei path/URL di `.env`
   (`runtime_settings`) e flag "Condividi libreria" (edita `slskd.yml`).
 """
@@ -19,7 +20,7 @@ from app.core.config import settings
 from app.core.http_errors import api_error
 from app.db import get_db
 from app.services import slskd_shares
-from app.services.app_state import LANGUAGE_KEY, get_language, set_state
+from app.services.app_state import DISCOGS_ENABLED_KEY, LANGUAGE_KEY, get_discogs_enabled, get_language, set_state
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -36,6 +37,21 @@ def read_language(db: Session = Depends(get_db)):
 @router.put("/language", response_model=LanguageSetting)
 def write_language(req: LanguageSetting, db: Session = Depends(get_db)):
     set_state(db, LANGUAGE_KEY, req.language)
+    return req
+
+
+class DiscoverySettings(BaseModel):
+    discogs_enabled: bool
+
+
+@router.get("/discovery", response_model=DiscoverySettings)
+def read_discovery(db: Session = Depends(get_db)):
+    return DiscoverySettings(discogs_enabled=get_discogs_enabled(db))
+
+
+@router.put("/discovery", response_model=DiscoverySettings)
+def write_discovery(req: DiscoverySettings, db: Session = Depends(get_db)):
+    set_state(db, DISCOGS_ENABLED_KEY, "1" if req.discogs_enabled else "0")
     return req
 
 
