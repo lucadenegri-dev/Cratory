@@ -27,6 +27,7 @@ vi.mock("@/lib/api", () => ({
   libraryIndexStatus: (...args: unknown[]) => libraryIndexStatus(...(args as [])),
   shazamIdentifyStatus: (...args: unknown[]) => shazamIdentifyStatus(...(args as [])),
   streamingImportStatus: (...args: unknown[]) => streamingImportStatus(...(args as [])),
+  startAnalysis: vi.fn(),
 }));
 
 const idleDownload: DownloadStatus = {

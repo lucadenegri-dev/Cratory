@@ -4,7 +4,7 @@ import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   analysisStatus, downloadStatus, generateStatus, libraryIndexStatus, shazamIdentifyStatus,
-  streamingImportStatus,
+  startAnalysis, streamingImportStatus,
   type AnalysisJobStatus, type DownloadStatus, type GenStatus, type LibraryIndexJob, type ShazamIdentifyState,
   type StreamingImportJobStatus,
 } from "@/lib/api";
@@ -320,6 +320,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
+  /* Innesco del terzo anello. Vive in un ref e non in uno stato: cambia fuori
+     dal ciclo di render e non deve provocarne uno. */
+  const analysisAfterScan = useRef(false);
+
   /* Riavvio automatico della scansione a fine Apply. È un COMPORTAMENTO, non
      un'API: nessun tipo lo protegge, e viveva nel provider di Organize che qui
      è stato assorbito. Esiste perché un apply sposta e ritagga file sul disco,
@@ -330,9 +334,34 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     const was = prevApplyStatus.current;
     prevApplyStatus.current = apply.status;
     if (was === "running" && apply.status === "done" && (apply.result?.applied_ops ?? 0) > 0) {
-      startScan().catch(() => { /* backend offline o scan già in corso (409) */ });
+      startScan()
+        .then(() => { analysisAfterScan.current = true; })
+        .catch(() => { /* backend offline o scan già in corso (409) */ });
     }
   }, [apply.status, apply.result, startScan]);
+
+  /* Terzo anello: a fine scansione parte l'analisi BPM/key sulle tracce che ne
+     sono prive. Perché dopo la scansione e non a fine Apply: l'apply sposta e
+     rinomina i file senza riscrivere `AudioFile.path` né `Track.local_path`, ed
+     è la scansione a riallinearli. Lanciarla prima passerebbe a Essentia
+     percorsi che non esistono più, e il job segna `analyzed_at` anche quando la
+     decodifica fallisce: il buco resterebbe, mascherato da traccia analizzata.
+     L'innesco si consuma al primo esito della scansione qualunque esso sia, così
+     una scansione manuale successiva non se lo ritrova addosso. */
+  const scanStatus = libraryIndex?.status;
+  const prevScanStatus = useRef<LibraryIndexJob["status"] | undefined>(scanStatus);
+  useEffect(() => {
+    const was = prevScanStatus.current;
+    prevScanStatus.current = scanStatus;
+    if (was !== "running" || (scanStatus !== "done" && scanStatus !== "error")) return;
+    const armed = analysisAfterScan.current;
+    analysisAfterScan.current = false;
+    if (armed && scanStatus === "done") {
+      startAnalysis("missing")
+        .then(() => { refresh(); })
+        .catch(() => { /* Essentia assente (503), analisi già in corso (409), rete */ });
+    }
+  }, [scanStatus, refresh]);
 
   useEffect(() => {
     alive.current = true;

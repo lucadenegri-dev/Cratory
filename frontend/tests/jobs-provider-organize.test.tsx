@@ -26,6 +26,10 @@ const providerRescanStatus = vi.fn<() => Promise<ProviderRescanJobState>>();
 const integrityStatus = vi.fn<() => Promise<IntegrityJobState>>();
 const genreReviewStatus = vi.fn<() => Promise<GenreReviewJobState>>();
 const startScan = vi.fn(async () => idleApply);
+const startAnalysis = vi.fn(async () => ({
+  status: "running" as const, processed: 0, total: 0, analyzed: 0, failed: 0,
+  applied: 0, current_label: null, error: null,
+}));
 
 vi.mock("@/lib/api", () => ({
   analysisStatus: (...a: unknown[]) => analysisStatus(...(a as [])),
@@ -34,6 +38,7 @@ vi.mock("@/lib/api", () => ({
   libraryIndexStatus: (...a: unknown[]) => libraryIndexStatus(...(a as [])),
   shazamIdentifyStatus: (...a: unknown[]) => shazamIdentifyStatus(...(a as [])),
   streamingImportStatus: (...a: unknown[]) => streamingImportStatus(...(a as [])),
+  startAnalysis: (...a: unknown[]) => startAnalysis(...(a as [])),
 }));
 
 vi.mock("@/lib/organize/api", () => ({
@@ -97,6 +102,27 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/** Percorre la catena apply -> scan: apply in corso, poi concluso con `ops`
+ *  operazioni applicate. Lascia il job di scansione fermo su idle. */
+async function applyConcluso(ops: number) {
+  applyStatus.mockResolvedValue({ ...idleApply, status: "running", processed: 1, total: 3 });
+  render(<JobsProvider><div /></JobsProvider>);
+  await tick();
+  applyStatus.mockResolvedValue({
+    ...idleApply, status: "done", processed: 3, total: 3,
+    result: { applied_ops: ops } as ApplyJobState["result"],
+  });
+  await tick(2000);
+}
+
+/** Porta il job di scansione da running all'esito indicato, un poll per stato. */
+async function scansione(esito: "done" | "error") {
+  libraryIndexStatus.mockResolvedValue({ ...idleLibraryIndex, status: "running", processed: 1, total: 2 });
+  await tick(2000);
+  libraryIndexStatus.mockResolvedValue({ ...idleLibraryIndex, status: esito });
+  await tick(2000);
+}
+
 describe("job Organize nel provider unico", () => {
   it("un apply in corso produce la sua riga", async () => {
     applyStatus.mockResolvedValue({ ...idleApply, status: "running", processed: 2, total: 8 });
@@ -147,5 +173,68 @@ describe("job Organize nel provider unico", () => {
     await tick(2000);
 
     expect(startScan).not.toHaveBeenCalled();
+  });
+
+  it("a fine scansione innescata dall'apply parte l'analisi BPM/key", async () => {
+    /* Terzo anello: apply -> scan -> analisi. Sta DOPO la scansione perche'
+       l'apply sposta i file senza riscrivere i percorsi in DB. */
+    await applyConcluso(3);
+    expect(startScan).toHaveBeenCalledTimes(1);
+    expect(startAnalysis).not.toHaveBeenCalled();
+
+    await scansione("done");
+
+    expect(startAnalysis).toHaveBeenCalledTimes(1);
+    expect(startAnalysis).toHaveBeenCalledWith("missing");
+  });
+
+  it("ma una scansione manuale NON fa partire l'analisi", async () => {
+    /* Il caso che distingue questo anello da un innesco incondizionato su
+       ogni fine scansione: senza, l'analisi ripartirebbe a ogni scan. */
+    render(<JobsProvider><div /></JobsProvider>);
+    await tick();
+
+    await scansione("done");
+
+    expect(startAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("se la scansione viene rifiutata l'analisi non parte", async () => {
+    /* Scan gia' in corso (409) o backend offline: l'innesco non si arma, e la
+       scansione che sta girando non e' quella che riallinea i file appena
+       spostati. */
+    startScan.mockRejectedValueOnce(new Error("409 scan_running"));
+    await applyConcluso(3);
+    expect(startScan).toHaveBeenCalledTimes(1);
+
+    await scansione("done");
+
+    expect(startAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("una scansione finita in errore consuma comunque l'innesco", async () => {
+    /* Niente analisi su un indice non riallineato; e l'innesco non deve
+       sopravvivere per aggrapparsi alla prima scansione manuale successiva. */
+    await applyConcluso(3);
+
+    await scansione("error");
+    expect(startAnalysis).not.toHaveBeenCalled();
+
+    await scansione("done");
+    expect(startAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("un avvio dell'analisi rifiutato non rompe la barra dei job", async () => {
+    /* Essentia non installato (503): l'apply e' concluso e riuscito, l'errore
+       dell'anello opzionale non deve arrivare all'utente ne' alla barra. */
+    startAnalysis.mockRejectedValueOnce(new Error("503 analysis_engine_unavailable"));
+    await applyConcluso(3);
+    await scansione("done");
+
+    expect(startAnalysis).toHaveBeenCalledTimes(1);
+
+    applyStatus.mockResolvedValue({ ...idleApply, status: "running", processed: 2, total: 8 });
+    await tick(2000);
+    expect(screen.getByText("25%")).toBeTruthy();
   });
 });
