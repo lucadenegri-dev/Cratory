@@ -3,7 +3,6 @@
 import { ExternalLink } from "lucide-react";
 
 import { TrackCover } from "@/components/track-cover";
-import { Checkbox } from "@/components/ui";
 import { useT, type Dictionary } from "@/lib/i18n";
 import type { DiscoverySimilarResponse, SimilarEdge, Track } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
@@ -37,14 +36,13 @@ function EdgeChip({ label, edge, t }: { label: string; edge?: SimilarEdge; t: Di
   );
 }
 
+// L'interruttore stile/periodo sta nella barra (modo Traccia): qui solo
+// l'origine e gli archi.
 export function DiscoverySimilarHeader({
-  data, track, stylePeriod, onStylePeriodChange, busy,
+  data, track,
 }: {
   data: DiscoverySimilarResponse;
   track: Track;
-  stylePeriod: boolean;
-  onStylePeriodChange: (v: boolean) => void;
-  busy: boolean;
 }) {
   const t = useT();
   const origin = data.origin;
@@ -85,12 +83,6 @@ export function DiscoverySimilarHeader({
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          <Checkbox
-            label={t.discovery.similarStylePeriod}
-            checked={stylePeriod}
-            onChange={onStylePeriodChange}
-            disabled={busy}
-          />
           <div className="flex flex-wrap gap-1.5">
             <EdgeChip label={t.discovery.similarEdgeArtist} edge={data.edges.same_artist} t={t} />
             <EdgeChip label={t.discovery.similarEdgeLabel} edge={data.edges.same_label} t={t} />
