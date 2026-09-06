@@ -65,24 +65,26 @@
 
 ### Task 1: Lavoro zero — HEAD torna a compilare
 
+> **Già fatto** da `14510b76` (altra sessione): `tsc` pulito. Nessuna azione.
+
 **Files:**
 - Modify: `frontend/app/discovery/page.tsx:355-362`
 
-- [ ] **Step 1: Verifica che il build sia rotto**
+- [x] **Step 1: Verifica che il build sia rotto**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: `app/discovery/page.tsx(359,11): error TS2322 ... Property 'backHref' does not exist`
 
-- [ ] **Step 2: Togli la prop dal punto di chiamata**
+- [x] **Step 2: Togli la prop dal punto di chiamata**
 
 In `frontend/app/discovery/page.tsx`, dentro `{isSimilar && sim && simTrack && (<DiscoverySimilarHeader …>)}` elimina la riga `backHref={similarBackHref}`. `similarBackHref` resta: lo usa il `Link` in cima alla pagina.
 
-- [ ] **Step 3: Verifica**
+- [x] **Step 3: Verifica**
 
 Run: `cd frontend && npx tsc --noEmit && npx vitest run tests/discovery-page-modalita.test.tsx`
 Expected: nessun errore tsc; 9 test verdi.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git status --porcelain
