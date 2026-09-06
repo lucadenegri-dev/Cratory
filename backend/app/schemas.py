@@ -551,27 +551,39 @@ class DiscoveryLeadOut(BaseModel):
     format_badge: str | None = None
 
 
-class DiscoveryDigRequest(BaseModel):
-    seed_type: Literal["genre", "label"]
+class DiscoverySeedIn(BaseModel):
+    type: Literal["genre", "label"]
     value: str = Field(min_length=1)
+
+
+class DiscoveryDigRequest(BaseModel):
+    # Piu' semi = UNIONE delle loro pile, col budget di 300 item diviso fra loro.
+    # Misti (genere + etichetta) sono legittimi. Cap a 4: oltre, la quota per
+    # seme scende sotto la soglia in cui la finestra dice qualcosa.
+    seeds: list[DiscoverySeedIn] = Field(min_length=1, max_length=4)
     # DOVE pescare nella pila della sorgente: 0 = la cima, 1 = il fondo di cio' che
     # la sorgente raggiunge. Non e' un mix di ordinamento: sceglie il bacino.
     depth: float = Field(default=0.0, ge=0.0, le=1.0)
     source: Literal["discogs", "bandcamp"] = "discogs"
 
 
-class DiscoveryDigResponse(BaseModel):
+class DiscoveryPileOut(BaseModel):
+    """La pila di un seme. `total == 0` = seme che la sorgente non conosce;
+    `reach <= 300 // len(seeds)` = la finestra e' l'intera pila e `depth` non
+    ha effetto; `reach < total` = si vede solo una porzione."""
     seed_type: str
     value: str
+    total: int = 0
+    reach: int = 0
+    # "style"|"genre"|"label"|"tag"|"discography"|null
+    resolution: str | None = None
+
+
+class DiscoveryDigResponse(BaseModel):
+    seeds: list[DiscoverySeedIn]
     source: str = "discogs"
     leads: list[DiscoveryLeadOut] = []
-    # Quanto e' alta la pila (0 = seme che la sorgente non conosce).
-    pile_total: int = 0
-    # Quanti item la sorgente raggiunge. <= 300 => la finestra e' l'intera pila e
-    # `depth` non ha effetto. < pile_total => la UI avverte che si vede una porzione.
-    pile_reach: int = 0
-    # "style"|"genre"|"label"|"tag"|"discography"|null
-    seed_resolution: str | None = None
+    piles: list[DiscoveryPileOut] = []
 
 
 class DiscoveryGenresOut(BaseModel):

@@ -44,7 +44,7 @@ def test_add_unresolved_track_dedup_by_name(db):
 from app.integrations.discogs import DiscogsClient, DiscogsError
 from app.models import Track
 from app.routers.discovery import dig_endpoint
-from app.schemas import DiscoveryDigRequest
+from app.schemas import DiscoveryDigRequest, DiscoverySeedIn
 
 
 def _fake_release(title, *, label="Lbl", style="Acid House", have=3, want=120):
@@ -72,7 +72,7 @@ def test_dig_endpoint_returns_reasons(db, monkeypatch):
         lambda self, **kw: [_fake_release("Cult - Grail")],
     )
     _stub_pile(monkeypatch)
-    resp = dig_endpoint(DiscoveryDigRequest(seed_type="genre", value="Acid House"), db)
+    resp = dig_endpoint(DiscoveryDigRequest(seeds=[DiscoverySeedIn(type="genre", value="Acid House")]), db)
     assert resp.leads, "atteso almeno un lead"
     codes = {r.code for r in resp.leads[0].reasons}
     assert "rare_wanted" in codes and "deep_cut" in codes
@@ -105,7 +105,7 @@ def test_dig_endpoint_exposes_source_id_and_format_badge(db, monkeypatch):
         lambda self, **kw: [release],
     )
     _stub_pile(monkeypatch)
-    resp = dig_endpoint(DiscoveryDigRequest(seed_type="genre", value="Acid House"), db)
+    resp = dig_endpoint(DiscoveryDigRequest(seeds=[DiscoverySeedIn(type="genre", value="Acid House")]), db)
     lead = resp.leads[0]
     assert lead.source_id == "42"
     assert lead.format_badge == "EP"
@@ -131,7 +131,7 @@ def test_dig_endpoint_ignores_legacy_taste_field_profile_is_library(db, monkeypa
     _stub_pile(monkeypatch)
     resp = dig_endpoint(
         DiscoveryDigRequest.model_validate(
-            {"seed_type": "genre", "value": "Acid House", "taste_playlist_id": 999}
+            {"seeds": [{"type": "genre", "value": "Acid House"}], "taste_playlist_id": 999}
         ),
         db,
     )
@@ -159,7 +159,7 @@ def test_dig_endpoint_502_on_discogs_error(db, monkeypatch):
     # il test passerebbe senza mai arrivare alla search, cioe' per il motivo sbagliato.
     _stub_pile(monkeypatch)
     with pytest.raises(HTTPException) as exc_info:
-        dig_endpoint(DiscoveryDigRequest(seed_type="genre", value="Acid House"), db)
+        dig_endpoint(DiscoveryDigRequest(seeds=[DiscoverySeedIn(type="genre", value="Acid House")]), db)
     assert exc_info.value.status_code == 502
     assert exc_info.value.detail["code"] == "discovery_provider_error"
 

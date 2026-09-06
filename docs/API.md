@@ -309,7 +309,9 @@ file edits them through `PATCH /api/tracks/{track_id}` as usual.
 
 `GET /api/tracks` filters on:
 
-- **substring, case-insensitive**: `artist`, `title`, `album`, `genre`.
+- **substring, case-insensitive**: `artist`, `title`, `album`, `genre`. `q` — one
+  free-text field matching `artist` **or** `title` (`ilike`), for the Dig's track
+  search; `artist`/`title` stay separate AND filters.
 - **exact**: `label` (the drill-down from the labels page), `source`
   (`spotify|soundcloud|manual|local_files`), `status` (`imported|ready_for_set`),
   `rating` (`1`-`3`; unrated tracks never match this filter).
@@ -639,10 +641,16 @@ so an unchecked one would let the caller choose the page's contents. Nothing is
 downloaded or stored: the preview stays ephemeral.
 
 
-The dig ("Scava") does crate digging by genre or label and returns releases and
-tracks not yet owned. Two sources sit behind a shared `DigSource` protocol —
-**Discogs** (`source="discogs"`, the default) and **Bandcamp**
-(`source="bandcamp"`) — chosen per request.
+The dig ("Scava") does crate digging by genre and/or label and returns releases and
+tracks not yet owned. The request carries **one to four seeds**
+(`seeds: [{type: "genre"|"label", value}]`, mixed types allowed); the engine digs
+each seed's pile and returns the **union**, deduplicated across seeds. Two sources
+sit behind a shared `DigSource` protocol — **Discogs** (`source="discogs"`, the
+default) and **Bandcamp** (`source="bandcamp"`) — chosen per request.
+
+The window budget is **300 items per dig, divided between the seeds** (`300 // n`),
+never multiplied: three genres cost three round trips and 300 items, not nine and
+900. Five seeds or an empty list is `422`.
 
 ### How depth works
 
@@ -659,23 +667,12 @@ has no demand signal at all and sorts by its `top` slice instead.
 
 The response reports, source-neutral, in items:
 
-- `pile_total` — the pile's real height for that seed; `0` means the source does not
-  know the seed at all (a dead seed, with `seed_resolution: null`).
-- `pile_reach` — how many of those items this source can actually reach. Discogs:
-  10,000, a hard wall (page 101 is a 404). Bandcamp: 3,000, a cost choice rather
-  than a provider limit.
-
-`pile_reach <= 300` means the window already covers everything reachable and `depth`
-has no effect — the UI disables the control instead of showing an inert slider.
-`pile_total > pile_reach` means only part of the pile is visible. A Bandcamp label
-seed always has `pile_reach == pile_total`: the whole discography is fetched once by
-the probe and the window just slices it.
-
-`seed_resolution` is `style` | `genre` | `label` | `tag` | `discography` | `null`.
-`tag` and `discography` are the Bandcamp forms. `genre` means a Discogs seed fell
-back from a fine-grained style to a top-level genre — one of ~15 huge shelves like
-`Electronic` — where only the most-wanted releases are reachable through pagination;
-the UI says so rather than letting a shelf pass for a fine dig.
+- `piles[]`, one per seed in request order: `{seed_type, value, total, reach,
+  resolution}`. `total == 0` is a seed the source does not know (reported by name,
+  never folded into a sum); `reach <= 300 // len(seeds)` means the window is the
+  whole pile and `depth` has no effect; `reach < total` means only a slice is
+  visible. `resolution` is `style|genre|label` (Discogs), `tag|discography`
+  (Bandcamp) or `null` for a dead seed.
 
 `GET /api/discovery/genres` returns the seed vocabulary: `library` (genres already
 in the library) and `styles` (a hand-curated Discogs style list). Both sources share
@@ -780,6 +777,11 @@ Leads are `DiscoveryLeadOut` exactly as the dig returns them, so preview, trackl
 add and download work unchanged. Ranking is the dig's own: taste profile over the
 whole library, per-artist cap, no demand signal (Bandcamp has none). Expect 4-6
 Bandcamp requests per call; nothing is cached.
+
+The dig's per-artist cap (two leads per artist) applies to the label and style edges
+only: the `same_artist` edge is one artist by construction, and capping it collapsed
+a whole discography to two cards. `edges[*].count` describes the leads **returned**,
+not the candidates before the cap.
 
 ## Downloads
 
@@ -1305,6 +1307,8 @@ GET   /api/services/status
 GET   /api/ai/status
 GET   /api/settings/language
 PUT   /api/settings/language
+GET   /api/settings/discovery
+PUT   /api/settings/discovery
 GET   /api/settings/config
 PATCH /api/settings/config
 PUT   /api/settings/share-library
@@ -1334,6 +1338,10 @@ are read through a cache in `core/runtime_settings`.
 
 `GET`/`PUT /api/settings/language` — `{"language": "it"|"en"}`, default `"it"`,
 `422` on anything else.
+
+`GET`/`PUT /api/settings/discovery` → `{discogs_enabled: bool}`: whether the Dig bar
+offers Discogs as a source. UI preference only (default `true`); the backend keeps
+accepting `source=discogs`, and nothing in Organize is touched.
 
 `GET /api/settings/config` returns the editable configuration that **overrides
 `backend/.env` at runtime, with no backend restart**. The plain-text editable fields

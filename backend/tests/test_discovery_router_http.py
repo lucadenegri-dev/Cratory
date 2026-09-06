@@ -84,11 +84,10 @@ def test_dig_200_via_http(client, monkeypatch):
     # della search e non ci sarebbero lead da verificare.
     monkeypatch.setattr(DiscogsClient, "count_releases", lambda self, **kw: 100)
 
-    r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "Acid House"})
+    r = c.post("/api/discovery/dig", json={"seeds": [{"type": "genre", "value": "Acid House"}]})
     assert r.status_code == 200
     body = r.json()
-    assert body["seed_type"] == "genre"
-    assert body["value"] == "Acid House"
+    assert body["seeds"] == [{"type": "genre", "value": "Acid House"}]
     assert len(body["leads"]) == 1
     assert body["leads"][0]["artist"] == "Cult"
     assert body["leads"][0]["title"] == "Grail"
@@ -96,8 +95,15 @@ def test_dig_200_via_http(client, monkeypatch):
 
 def test_dig_422_seed_type_non_valido(client):
     c, _ = client
-    r = c.post("/api/discovery/dig", json={"seed_type": "not_a_seed_type", "value": "x"})
+    r = c.post("/api/discovery/dig", json={"seeds": [{"type": "not_a_seed_type", "value": "x"}]})
     assert r.status_code == 422  # Literal["genre", "label"] non rispettato
+
+
+def test_dig_422_senza_semi_e_oltre_quattro(client):
+    c, _ = client
+    assert c.post("/api/discovery/dig", json={"seeds": []}).status_code == 422
+    five = [{"type": "genre", "value": str(i)} for i in range(5)]
+    assert c.post("/api/discovery/dig", json={"seeds": five}).status_code == 422
 
 
 def test_dig_endpoint_accepts_depth_and_returns_pile_reach(client, monkeypatch):
@@ -113,9 +119,9 @@ def test_dig_endpoint_accepts_depth_and_returns_pile_reach(client, monkeypatch):
     monkeypatch.setattr(DiscogsClient, "search_releases", _fake_search)
     monkeypatch.setattr(DiscogsClient, "count_releases", lambda self, **kw: 43345)
 
-    r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "Acid House", "depth": 1.0})
+    r = c.post("/api/discovery/dig", json={"seeds": [{"type": "genre", "value": "Acid House"}], "depth": 1.0})
     assert r.status_code == 200
-    assert r.json()["pile_reach"] == 10_000  # tetto duro Discogs: 100 pagine da 100
+    assert r.json()["piles"][0]["reach"] == 10_000  # tetto duro Discogs: 100 pagine da 100
     assert captured["pages"] == [98, 99, 100]
 
 
@@ -132,14 +138,14 @@ def test_dig_endpoint_depth_defaults_to_the_canon(client, monkeypatch):
     monkeypatch.setattr(DiscogsClient, "search_releases", _fake_search)
     monkeypatch.setattr(DiscogsClient, "count_releases", lambda self, **kw: 43345)
 
-    r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "Acid House"})
+    r = c.post("/api/discovery/dig", json={"seeds": [{"type": "genre", "value": "Acid House"}]})
     assert r.status_code == 200
     assert captured["pages"] == [1, 2, 3]  # default depth=0.0: i classici
 
 
 def test_dig_endpoint_rejects_out_of_range_depth(client):
     c, _ = client
-    r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "x", "depth": 1.5})
+    r = c.post("/api/discovery/dig", json={"seeds": [{"type": "genre", "value": "x"}], "depth": 1.5})
     assert r.status_code == 422
 
 
@@ -187,7 +193,7 @@ def test_dig_endpoint_ignores_legacy_limit_field(client, monkeypatch):
     monkeypatch.setattr(DiscogsClient, "count_releases", lambda self, **kw: 43345)
 
     r = c.post("/api/discovery/dig",
-               json={"seed_type": "genre", "value": "Acid House", "limit": 5})
+               json={"seeds": [{"type": "genre", "value": "Acid House"}], "limit": 5})
     assert r.status_code == 200
     # Asserzione ESATTA, non `> 5`: coglie sia il troncamento a 5 (campo legacy
     # rispettato) sia la reintroduzione di QUALUNQUE tetto a valle (es. 80).
@@ -203,32 +209,33 @@ def test_dig_endpoint_exposes_seed_resolution_and_pile_total(client, monkeypatch
         DiscogsClient, "count_releases",
         lambda self, **kw: 0 if "style" in kw else 4_960_093,
     )
-    r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "Electronic"})
+    r = c.post("/api/discovery/dig", json={"seeds": [{"type": "genre", "value": "Electronic"}]})
     assert r.status_code == 200
-    assert r.json()["seed_resolution"] == "genre"
-    assert r.json()["pile_total"] == 4_960_093
+    assert r.json()["piles"][0]["resolution"] == "genre"
+    assert r.json()["piles"][0]["total"] == 4_960_093
 
 
 def test_dig_response_speaks_items_not_pages(client, monkeypatch):
     from app.routers import discovery as router_mod
-    from app.services.dig_sources import DiscoveryLead
-    from app.services.discovery_dig import DigResult
+    from app.services.dig_sources import DiscoveryLead, Seed
+    from app.services.discovery_dig import DigResult, PileInfo
 
     def _fake_dig(db, **kw):
+        seed = Seed("genre", "Acid House")
         return DigResult(
-            seed_type="genre", value="Acid House",
+            seeds=[seed],
             leads=[DiscoveryLead(artist="A", title="B", source="discogs",
                                  source_id="7", source_url="https://discogs/7")],
-            pile_total=43345, pile_reach=10_000, seed_resolution="style",
+            piles=[PileInfo(seed=seed, total=43345, reach=10_000, resolution="style")],
         )
 
     monkeypatch.setattr(router_mod, "dig", _fake_dig)
     c, _ = client
-    r = c.post("/api/discovery/dig", json={"seed_type": "genre", "value": "Acid House"})
+    r = c.post("/api/discovery/dig", json={"seeds": [{"type": "genre", "value": "Acid House"}]})
     assert r.status_code == 200
     body = r.json()
-    assert body["pile_total"] == 43345
-    assert body["pile_reach"] == 10_000
+    assert body["piles"] == [{"seed_type": "genre", "value": "Acid House",
+                              "total": 43345, "reach": 10_000, "resolution": "style"}]
     assert "pile_pages" not in body
     assert body["source"] == "discogs"
     lead = body["leads"][0]
@@ -240,7 +247,7 @@ def test_dig_response_speaks_items_not_pages(client, monkeypatch):
 def test_dig_rejects_an_unknown_source(client):
     c, _ = client
     r = c.post("/api/discovery/dig",
-               json={"seed_type": "genre", "value": "x", "source": "soundcloud"})
+               json={"seeds": [{"type": "genre", "value": "x"}], "source": "soundcloud"})
     assert r.status_code == 422
 
 
@@ -254,17 +261,40 @@ def test_dig_with_source_bandcamp_uses_the_bandcamp_source(client, monkeypatch):
 
     def _fake_dig(db, **kw):
         seen["source"] = kw["source"].name
-        from app.services.discovery_dig import DigResult
-        return DigResult(seed_type="genre", value="Techno", leads=[],
-                         pile_total=434149, pile_reach=3000, seed_resolution="tag")
+        from app.services.dig_sources import Seed
+        from app.services.discovery_dig import DigResult, PileInfo
+        return DigResult(seeds=[Seed("genre", "Techno")], leads=[],
+                         piles=[PileInfo(seed=Seed("genre", "Techno"), total=434149,
+                                         reach=3000, resolution="tag")])
 
     monkeypatch.setattr(router_mod, "dig", _fake_dig)
     c, _ = client
     r = c.post("/api/discovery/dig",
-               json={"seed_type": "genre", "value": "Techno", "source": "bandcamp"})
+               json={"seeds": [{"type": "genre", "value": "Techno"}], "source": "bandcamp"})
     assert r.status_code == 200
     assert seen["source"] == "bandcamp"
-    assert r.json()["pile_reach"] == 3000
+    assert r.json()["piles"][0]["reach"] == 3000
+
+
+def test_dig_passes_every_seed_to_the_engine(client, monkeypatch):
+    from app.routers import discovery as router_mod
+    from app.services.dig_sources import Seed
+    from app.services.discovery_dig import DigResult
+
+    seen = {}
+
+    def _fake_dig(db, **kw):
+        seen["seeds"] = kw["seeds"]
+        return DigResult(seeds=kw["seeds"], leads=[], piles=[])
+
+    monkeypatch.setattr(router_mod, "dig", _fake_dig)
+    c, _ = client
+    r = c.post("/api/discovery/dig", json={"seeds": [
+        {"type": "genre", "value": "Deep House"}, {"type": "label", "value": "Hessle Audio"}]})
+    assert r.status_code == 200
+    assert seen["seeds"] == [Seed("genre", "Deep House"), Seed("label", "Hessle Audio")]
+    assert r.json()["seeds"] == [{"type": "genre", "value": "Deep House"},
+                                 {"type": "label", "value": "Hessle Audio"}]
 
 
 def test_a_bandcamp_provider_error_is_a_502_not_a_500(client, monkeypatch):
@@ -277,7 +307,7 @@ def test_a_bandcamp_provider_error_is_a_502_not_a_500(client, monkeypatch):
     monkeypatch.setattr(router_mod, "dig", _boom)
     c, _ = client
     r = c.post("/api/discovery/dig",
-               json={"seed_type": "genre", "value": "Techno", "source": "bandcamp"})
+               json={"seeds": [{"type": "genre", "value": "Techno"}], "source": "bandcamp"})
     assert r.status_code == 502
 
 

@@ -1,9 +1,10 @@
 """Discovery mode: crate digging ("Scava").
 
-Endpoint dig: genera lead per genere/etichetta, ne apre la tracklist, offre una
-preview audio effimera e importa/salva-per-dopo i lead scelti. La sorgente e'
-Discogs o Bandcamp (`req.source`, `app/services/dig_sources/`); iTunes/YouTube
-servono solo alla preview del fallback Discogs.
+Endpoint dig: genera lead dall'unione di uno o piu' semi genere/etichetta, ne apre
+la tracklist, offre una preview audio effimera e importa/salva-per-dopo i lead
+scelti. La sorgente e' Discogs o Bandcamp (`req.source`,
+`app/services/dig_sources/`); iTunes/YouTube servono solo alla preview del
+fallback Discogs.
 """
 
 import re
@@ -30,6 +31,7 @@ from app.schemas import (
     DiscoveryDigResponse,
     DiscoveryGenresOut,
     DiscoveryLeadOut,
+    DiscoveryPileOut,
     DiscoveryPreviewOut,
     DiscoveryReleaseOut,
     DiscoverySaveForLaterRequest,
@@ -42,6 +44,7 @@ from app.schemas import (
 )
 from app.serializers import track_out
 from app.services.dig_sources.bandcamp import BandcampSimilar, BandcampSource, _art_url, _bc_year_from_epoch
+from app.services.dig_sources import Seed
 from app.services.dig_sources.discogs import DiscogsSource
 from app.services.discovery_dig import DiscoveryLead, dig
 from app.services.discovery_similar import similar
@@ -152,12 +155,12 @@ def discovery_genres(db: Session = Depends(get_db)):
 
 @router.post("/dig", response_model=DiscoveryDigResponse)
 def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
-    """Lista-dig a volume per genere/stile o etichetta (lead non risolti)."""
+    """Lista-dig a volume dall'unione dei semi (generi/etichette): lead non risolti."""
     client = BandcampClient() if req.source == "bandcamp" else DiscogsClient()
     source = BandcampSource(client) if req.source == "bandcamp" else DiscogsSource(client)
+    seeds = [Seed(type=s.type, value=s.value) for s in req.seeds]
     try:
-        result = dig(db, seed_type=req.seed_type, value=req.value,
-                     source=source, depth=req.depth)
+        result = dig(db, seeds=seeds, source=source, depth=req.depth)
     except (DiscogsError, BandcampError) as exc:
         # Rate limit / token mancante / endpoint cambiato: 502 esplicito, mai uno
         # "zero risultati" muto — l'utente deve poter distinguere "non c'e' niente"
@@ -167,10 +170,11 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
     finally:
         client.close()
     return DiscoveryDigResponse(
-        seed_type=result.seed_type, value=result.value, source=req.source,
+        seeds=req.seeds, source=req.source,
         leads=[_lead_out(lead) for lead in result.leads],
-        pile_total=result.pile_total, pile_reach=result.pile_reach,
-        seed_resolution=result.seed_resolution,
+        piles=[DiscoveryPileOut(seed_type=p.seed.type, value=p.seed.value,
+                                total=p.total, reach=p.reach, resolution=p.resolution)
+               for p in result.piles],
     )
 
 
