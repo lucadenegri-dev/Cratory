@@ -142,3 +142,54 @@ describe("pagina Discovery, confine fra scavo e simili", () => {
       (n) => n.textContent?.includes(dict.discovery.similarInProgress))).toBe(true);
   });
 });
+
+/* La catena indietro: libreria -> traccia -> simili -> traccia -> libreria.
+   Il valore che la tiene insieme è `from`, e il punto in cui si spezzava era
+   proprio questo: i simili non lo trasportavano, così la traccia ritrovata
+   non ricordava più i filtri da cui eri partito. */
+describe("pagina Discovery, il link indietro dei simili", () => {
+  const ORIGINE = "/library?genre=Techno&sort=bpm&order=desc";
+
+  const linkIndietro = () =>
+    (screen.getByText(dict.discovery.similarBackToTrack).closest("a") as HTMLAnchorElement);
+
+  async function rendiConOrigine(from: string | null) {
+    discoverySimilar.mockResolvedValue(SIM);
+    apiGet.mockResolvedValue(TRACK);
+    const p = new URLSearchParams("similar=5");
+    if (from !== null) p.set("from", from);
+    query = p;
+    render(<DiscoveryPage />);
+    await waitFor(() => expect(screen.getByLabelText(INTERRUTTORE)).toBeTruthy());
+  }
+
+  it("restituisce la traccia con la sua origine, non nuda", async () => {
+    await rendiConOrigine(ORIGINE);
+    expect(linkIndietro().getAttribute("href")).toBe(
+      `/tracks?id=5&from=${encodeURIComponent(ORIGINE)}`);
+  });
+
+  it("senza origine torna comunque alla traccia", async () => {
+    await rendiConOrigine(null);
+    expect(linkIndietro().getAttribute("href")).toBe("/tracks?id=5");
+  });
+
+  it("scarta un'origine che porterebbe fuori dall'app", async () => {
+    // `from` finisce dentro un href: assoluto o protocol-relative, diventerebbe
+    // un'uscita dall'app confezionata da chi ha scritto l'URL.
+    await rendiConOrigine("https://evil.example/x");
+    expect(linkIndietro().getAttribute("href")).toBe("/tracks?id=5");
+    cleanup();
+    await rendiConOrigine("//evil.example/x");
+    expect(linkIndietro().getAttribute("href")).toBe("/tracks?id=5");
+  });
+
+  it("l'interruttore non perde l'origine per strada", async () => {
+    // Il giro dell'interruttore riscrive l'URL: se `from` non ci sopravvive, la
+    // catena si spezza al primo clic invece che al primo passo indietro.
+    await rendiConOrigine(ORIGINE);
+    push.mockClear();
+    fireEvent.click(screen.getByLabelText(INTERRUTTORE));
+    expect(push).toHaveBeenCalledWith(similarHref(5, true, ORIGINE), { scroll: false });
+  });
+});

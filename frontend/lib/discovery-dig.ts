@@ -18,10 +18,21 @@ export const DEPTHS = [
  *  soglia la finestra è l'intera pila e la profondità non ha niente da scegliere. */
 export const WINDOW_ITEMS = 300;
 
-/** L'URL della modalità simili. Unica fonte per bottone, interruttore e rilancio. */
-export function similarHref(trackId: number, stylePeriod: boolean): string {
+/** L'URL della modalità simili. Unica fonte per bottone, interruttore e rilancio.
+ *
+ *  `from` è l'origine da cui si è arrivati alla traccia (la libreria coi suoi
+ *  filtri, una playlist...): viaggia fin qui perché il link "torna alla traccia"
+ *  possa restituirla alla traccia INTATTA, con la sua stessa memoria. Senza,
+ *  la catena si spezza al primo passo indietro e si riatterra sulla libreria
+ *  nuda. Chi lo LEGGE deve validarlo: qui si trasporta e basta. */
+export function similarHref(
+  trackId: number,
+  stylePeriod: boolean,
+  from?: string | null,
+): string {
   const params = new URLSearchParams();
   params.set("similar", String(trackId));
   params.set("style_period", stylePeriod ? "1" : "0");
+  if (from) params.set("from", from);
   return `/discovery?${params.toString()}`;
 }

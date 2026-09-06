@@ -64,7 +64,11 @@ function TrackPageInner() {
   // ri-decodificarlo. Con la rotta a segmento l'id non poteva mancare; ora
   // /tracks senza id e' raggiungibile, e "" percorre lo stesso ramo di un id
   // inesistente invece di propagare undefined.
-  const id = useSearchParams().get("id") ?? "";
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id") ?? "";
+  // L'origine viaggia anche verso i simili: di là il link indietro la usa per
+  // restituire QUESTA pagina com'era, non nuda. Senza, la catena si spezza qui.
+  const from = searchParams.get("from");
   // Al dettaglio traccia si arriva da mezza app (libreria, playlist, etichette,
   // set, transizioni, wishlist, Shazam): il link indietro torna dove eri, filtri
   // compresi. Senza `from` (link diretto, refresh) ripiega sulla libreria.
@@ -169,7 +173,7 @@ function TrackPageInner() {
         />
         <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> {t.tracks.editValues}</Button>
         {track.has_local_file && (
-          <ButtonLink href={similarHref(track.id, false)} size="sm" variant="outline">
+          <ButtonLink href={similarHref(track.id, false, from)} size="sm" variant="outline">
             <Sparkles size={14} /> {t.tracks.similar}
           </ButtonLink>
         )}

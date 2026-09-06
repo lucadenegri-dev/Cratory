@@ -23,6 +23,7 @@ import { applyLens, DiscoveryLeadGrid, FORMAT_VALUES, type SortMode } from "@/co
 import { DiscoveryDigBar } from "@/components/discovery-dig-bar";
 import { DiscoverySimilarHeader } from "@/components/discovery-similar-header";
 import { similarHref, WINDOW_ITEMS, type DigSourceKey, type SeedType } from "@/lib/discovery-dig";
+import { isInternalPath, withFrom } from "@/lib/back-link";
 import { pickSurprise } from "@/lib/discovery-surprise";
 import { useI18n } from "@/lib/i18n";
 
@@ -61,6 +62,15 @@ function DiscoveryInner() {
   const similarId = Number.isFinite(similarIdRaw) ? similarIdRaw : 0;
   const isSimilar = similarId > 0;
   const stylePeriod = searchParams.get("style_period") === "1";
+  // L'origine da cui si è arrivati alla traccia, di passaggio qui: serve al link
+  // indietro per restituire la traccia con la sua memoria (i filtri della
+  // libreria, la playlist) invece che nuda. Validata perché finisce dentro un
+  // href, e chi scrive l'URL non è per forza l'app.
+  const fromRaw = searchParams.get("from");
+  const from = fromRaw && isInternalPath(fromRaw) ? fromRaw : null;
+  const similarBackHref = from
+    ? withFrom(`/tracks?id=${similarId}`, from)
+    : `/tracks?id=${similarId}`;
   const [sim, setSim] = useState<DiscoverySimilarResponse | null>(null);
   const [simTrack, setSimTrack] = useState<TrackDetail | null>(null);
   // Traccia dell'ultimo giro dei simili. Distingue le due ragioni per cui
@@ -173,7 +183,9 @@ function DiscoveryInner() {
   // scavo: `similarHref` è la stessa funzione che scrive il bottone nel dettaglio
   // traccia, così un solo posto costruisce questo indirizzo.
   const setStylePeriod = (on: boolean) => {
-    router.push(similarHref(similarId, on), { scroll: false });
+    // `from` deve sopravvivere al giro dell'interruttore, altrimenti la catena
+    // indietro si spezza al primo clic invece che al primo passo indietro.
+    router.push(similarHref(similarId, on, from), { scroll: false });
   };
 
   const runDig = () => {
@@ -332,6 +344,7 @@ function DiscoveryInner() {
         <DiscoverySimilarHeader
           data={sim}
           track={simTrack}
+          backHref={similarBackHref}
           stylePeriod={stylePeriod}
           onStylePeriodChange={setStylePeriod}
           busy={busy}

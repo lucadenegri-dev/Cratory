@@ -21,8 +21,10 @@ export type BackLink = { href: string; label: string };
 export type BackLinkFallback = { href: string; labelKey: SectionKey };
 
 /** Un path interno e innocuo: niente URL assoluti, niente `//host` o `/\host`
- *  (che i browser trattano come protocol-relative, cioè come uscita dall'app). */
-function isInternalPath(path: string): boolean {
+ *  (che i browser trattano come protocol-relative, cioè come uscita dall'app).
+ *  Esportata perché è la stessa regola ovunque un `from` che arriva dall'URL
+ *  diventi un href — qui e nella modalità simili di Discovery. */
+export function isInternalPath(path: string): boolean {
   return path.startsWith("/") && path[1] !== "/" && path[1] !== "\\";
 }
 
