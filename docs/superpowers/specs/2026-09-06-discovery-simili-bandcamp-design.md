@@ -127,7 +127,8 @@ class Origin:
   `track.label` esiste: `find_band(track.label)` e poi la sua discografia
   (due richieste); se non esiste, assente per `no_label`.
 - **`same_period_style`**, solo con `style_period=True`: `discover(tag)` sul
-  primo cursore, una o due batch (fino a 120 item), filtrato sul client a
+  primo cursore, **una sola batch da 120 item** (`STYLE_EDGE_ITEMS`, non i 500 del
+  dig: qui è un rinforzo e la finestra temporale scarta già molto), filtrata sul client a
   `|year - origin.year| <= PERIOD_YEARS` con `PERIOD_YEARS = 3`. Assente per
   `no_tag` se `tag` è nullo, per `no_year` se manca l'anno, per `off` se
   l'interruttore è spento. Nessuna richiesta quando è assente.
@@ -163,7 +164,7 @@ class EdgeReport:
 ### Costo
 
 Da 4 a 6 richieste Bandcamp per chiamata (ricerca band, discografia, dettaglio
-release, discografia etichetta, una o due batch di discover). Nessuna cache,
+release, discografia etichetta, una batch di discover). Nessuna cache,
 nessuna colonna nuova su `Track`.
 
 ## Endpoint
