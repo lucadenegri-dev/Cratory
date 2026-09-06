@@ -24,6 +24,7 @@ vi.mock("next/navigation", () => ({
 const mocks = vi.hoisted(() => ({
   apiGet: vi.fn(),
   slskdStatus: vi.fn(),
+  downloadQueue: vi.fn(),
   updateTrack: vi.fn(),
   enqueueDownloads: vi.fn(),
 }));
@@ -32,6 +33,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   apiGet: mocks.apiGet,
   slskdStatus: mocks.slskdStatus,
+  downloadQueue: mocks.downloadQueue,
   updateTrack: mocks.updateTrack,
   enqueueDownloads: mocks.enqueueDownloads,
 }));
@@ -59,6 +61,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   jobsMock.useJobs.mockReturnValue({ download: download(), refresh: vi.fn() });
   mocks.slskdStatus.mockResolvedValue({ web_url: null });
+  mocks.downloadQueue.mockResolvedValue({ slots: 1, active: 0, pause: { paused: false }, items: [] });
 });
 
 async function selectAllRows() {

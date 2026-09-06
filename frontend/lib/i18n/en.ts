@@ -9,6 +9,15 @@ export function humanizeType(ty: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : ty;
 }
 
+// m:ss da secondi (anche in stringa, dai motivi del backend). Copia locale di
+// fmtDuration: lib/api/format importa il runtime i18n, che importa questi
+// dizionari — un import da qui chiuderebbe il cerchio a module-init.
+export function mmss(seconds: number | string): string {
+  const n = Math.round(Number(seconds));
+  if (!Number.isFinite(n)) return String(seconds);
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+}
+
 // Etichette leggibili per i tipi di issue noti (EN). I non mappati passano
 // per humanizeType, così la UI regge tipi nuovi senza rompersi.
 const ISSUE_TYPE_LABELS_EN: Record<string, string> = {
@@ -632,7 +641,16 @@ export const en = {
       }
     },
     linkAllButton: "Link all",
-    retryAllButton: "Retry all",
+    // Reason of a needs_review: the backend sends fixed Italian phrases (and
+    // jargon). Rewritten for the user here; an unknown phrase passes through
+    // rather than vanishing.
+    reviewReason: (raw: string | null): string | null => {
+      if (!raw) return null;
+      if (raw === "confidenza sotto soglia per l'auto-pick") return "no result confident enough: pick one yourself";
+      const m = /^durata non corrisponde \(attesa (\d+(?:\.\d+)?)s, file (\d+(?:\.\d+)?)s\)$/.exec(raw);
+      if (m) return `duration mismatch: expected ${mmss(m[1])}, file ${mmss(m[2])}`;
+      return raw;
+    },
     review: {
       expectedDuration: (d: string) => `expected duration ${d}`,
       fileAlreadyDownloaded: "File already downloaded",
@@ -696,14 +714,20 @@ export const en = {
   wishlist: {
     pageTitle: "Wishlist",
     statusTitle: "Status",
+    filtersTitle: "Filters",
     filterAria: "Filter by download status",
     tabAll: "All",
     tabNever: "Never tried",
+    tabQueued: "Queued",
     tabReview: "In review",
     tabNotFound: "Not found",
     tabFailed: "Failed",
     searchPlaceholder: "Filter by artist or title…",
     playlistAllOption: "All playlists",
+    sortAria: "Sort the list",
+    sortArtist: "Artist (A–Z)",
+    sortAddedDesc: "Added (newest)",
+    sortAddedAsc: "Added (oldest)",
     showArchivedLabel: "Show archived",
     badgeNever: "never tried",
     badgeReview: "in review",
@@ -729,8 +753,10 @@ export const en = {
     archivedEmptyTitle: "No archived tracks",
     archivedEmptyBody: "Tracks you archive from the wishlist will show up here.",
     soulseekOpen: "Open slskd",
-    soulseekHint: "Fallback: if slskd is unreachable or you want its own UI, open it here.",
-    bulkHeading: "Bulk actions",
+    // Status that comes from the queue, not from the last outcome (see wishlist-row.tsx).
+    queuedStatus: "queued",
+    selectAllAria: "Select all visible tracks",
+    selectAllLabel: "Select all",
     enqueueSelected: (n: number) => n === 1 ? "Queue 1 track" : `Queue ${n} tracks`,
     selectedCount: (n: number) => `${n} selected`,
     clearSelection: "Clear selection",

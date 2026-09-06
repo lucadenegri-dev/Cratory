@@ -25,3 +25,33 @@ describe("statusTab", () => {
     expect(statusTab("review")).toBe("review");
   });
 });
+
+// Stato "in coda": non viene da `last_download_outcome` (che racconta l'ultimo
+// esito, non il presente) ma dallo snapshot della coda. queued e running sono
+// entrambi "in coda" per la wishlist; done/cancelled no.
+import { queuedTrackIds } from "@/lib/wishlist-status";
+
+describe("queuedTrackIds", () => {
+  it("raccoglie solo gli item in attesa o in corso", () => {
+    const ids = queuedTrackIds([
+      { track_id: 1, state: "queued" },
+      { track_id: 2, state: "running" },
+      { track_id: 3, state: "done" },
+      { track_id: 4, state: "cancelled" },
+    ]);
+    expect([...ids].sort()).toEqual([1, 2]);
+  });
+});
+
+// La coda vince sull'ultimo esito: una "non trovata" riaccodata conta (e si
+// filtra) come "in coda", cosi' la tab e la riga dicono la stessa cosa.
+import { rowTab } from "@/lib/wishlist-status";
+
+describe("rowTab", () => {
+  it("in coda prevale sull'esito precedente", () => {
+    expect(rowTab({ last_download_outcome: "not_found" }, true)).toBe("queued");
+    expect(rowTab({ last_download_outcome: "not_found" }, false)).toBe("not_found");
+    expect(rowTab({ last_download_outcome: "downloaded" }, false)).toBe("review");
+    expect(rowTab({ last_download_outcome: null }, false)).toBe("never");
+  });
+});

@@ -19,6 +19,7 @@ vi.mock("next/navigation", () => ({
 const mocks = vi.hoisted(() => ({
   apiGet: vi.fn(),
   slskdStatus: vi.fn(),
+  downloadQueue: vi.fn(),
   downloadTrackAuto: vi.fn(),
   enqueueDownloads: vi.fn(),
 }));
@@ -27,6 +28,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   apiGet: mocks.apiGet,
   slskdStatus: mocks.slskdStatus,
+  downloadQueue: mocks.downloadQueue,
   downloadTrackAuto: mocks.downloadTrackAuto,
   enqueueDownloads: mocks.enqueueDownloads,
 }));
@@ -51,6 +53,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.apiGet.mockResolvedValue({ total: 1, items: [track()] });
   mocks.slskdStatus.mockResolvedValue({ web_url: null });
+  mocks.downloadQueue.mockResolvedValue({ slots: 1, active: 0, pause: { paused: false }, items: [] });
   jobsMock.useJobs.mockReturnValue({ download: download(), refresh: vi.fn() });
 });
 

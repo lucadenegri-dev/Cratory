@@ -107,3 +107,27 @@ describe("WishlistRow", () => {
     expect(onToggleSelect).toHaveBeenCalled();
   });
 });
+
+// Critique 2026-09-06: «in coda» e motivo del review tradotto.
+describe("WishlistRow: coda e motivo", () => {
+  it("queued: stato «in coda», azione primaria e checkbox spente", () => {
+    render(<WishlistRow track={{ ...base, last_download_outcome: "not_found" } as Track}
+      downloadsAvailable from={from} queued selected={false} onToggleSelect={vi.fn()} {...noop} />);
+    expect(screen.getByText("in coda")).toBeTruthy();
+    expect(screen.queryByText("non trovata")).toBeNull();
+    expect((screen.getByText("Riprova").closest("button") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Seleziona questa traccia") as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it("il motivo del review arriva dal backend in italiano gergale: la riga lo traduce", () => {
+    const { rerender } = render(<WishlistRow
+      track={{ ...base, last_download_outcome: "needs_review", last_download_reason: "confidenza sotto soglia per l'auto-pick" } as Track}
+      downloadsAvailable from={from} {...noop} />);
+    expect(screen.queryByText(/auto-pick/)).toBeNull();
+    expect(screen.getByText(/nessun risultato abbastanza sicuro/)).toBeTruthy();
+    rerender(<WishlistRow
+      track={{ ...base, last_download_outcome: "needs_review", last_download_reason: "durata non corrisponde (attesa 294s, file 180s)" } as Track}
+      downloadsAvailable from={from} {...noop} />);
+    expect(screen.getByText(/durata diversa: attesa 4:54, file 3:00/)).toBeTruthy();
+  });
+});

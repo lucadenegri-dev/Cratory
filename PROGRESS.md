@@ -8,6 +8,31 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Wishlist: la riga dice se è in coda, e la lista si sfoltisce** (2026-09-06):
+  una traccia accodata restava «non trovata / Riprova», identica a prima del
+  click, perché lo stato veniva solo da `last_download_outcome` (l'ultimo esito,
+  non il presente). Ora `load()` legge anche lo snapshot di
+  `/api/downloads/queue` — riletto subito dopo ogni accodamento, senza un poller
+  in più — e la riga in attesa o in corso mostra «in coda» con azione e checkbox
+  spente. Tre semplificazioni dalla critique della pagina: le tab di stato a
+  conteggio zero non compaiono (resta la tab attiva, per poterla lasciare);
+  «Riprova tutte» esce dalla marginalia, sostituito da «seleziona tutte» in
+  testa lista che rispetta i filtri e dice quante ne accoda; il motivo dei
+  `needs_review` («confidenza sotto soglia per l'auto-pick», frase fissa del
+  backend in italiano gergale) è riscritto nei dizionari come i codici dei
+  fallimenti, con la durata in m:ss. Via anche l'intestazione «Azioni di
+  gruppo» e la nota di due righe su slskd: «Apri slskd» è un link ghost.
+  «In coda» è anche una tab: la coda prevale sull'ultimo esito in un solo
+  punto (`rowTab`), usato sia dal conteggio delle tab sia dal filtro della
+  lista, così una traccia riaccodata esce dalla tab del suo vecchio esito
+  invece di comparire in due posti. La colonna destra si intitola «Filtri»
+  (prima «Stato», che nominava solo il primo blocco) e l'elenco degli stati ha
+  la sua etichetta: era in cima alla colonna e si leggeva come una legenda di
+  conteggi, non come il filtro che è. Accanto alla provenienza compare la data
+  di primo import (`added_at`, assente su circa metà delle tracce: lì si omette
+  invece di stampare un trattino) e un select ordina per quella data, lato
+  client come i filtri, con le tracce senza data in fondo in entrambi i versi.
+
 - **L'analisi BPM/key riparte da sola a fine Apply** (2026-09-06): applicare un
   piano Organize lascia tracce possedute senza BPM né key, e finora toccava
   ricordarsi di aprire `/analysis` e premere Avvia. Ora la catena ha tre anelli:

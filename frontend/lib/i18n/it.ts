@@ -5,7 +5,7 @@ import type { Dictionary } from "./en";
 
 
 // --- Organize (ex Sortory) ---------------------------------------------
-import { humanizeType } from "./en";
+import { humanizeType, mmss } from "./en";
 // Etichette leggibili per i tipi di issue noti (IT). I non mappati passano
 // per humanizeType, così la UI regge tipi nuovi senza rompersi.
 const ISSUE_TYPE_LABELS_IT: Record<string, string> = {
@@ -623,7 +623,16 @@ export const it: Dictionary = {
       }
     },
     linkAllButton: "Collega tutte",
-    retryAllButton: "Riprova tutte",
+    // Motivo di un needs_review: il backend manda frasi italiane fisse (e
+    // gergali). Qui si riscrivono per l'utente; una frase sconosciuta passa
+    // com'e', piuttosto che sparire.
+    reviewReason: (raw: string | null): string | null => {
+      if (!raw) return null;
+      if (raw === "confidenza sotto soglia per l'auto-pick") return "nessun risultato abbastanza sicuro: scegli tu";
+      const m = /^durata non corrisponde \(attesa (\d+(?:\.\d+)?)s, file (\d+(?:\.\d+)?)s\)$/.exec(raw);
+      if (m) return `durata diversa: attesa ${mmss(m[1])}, file ${mmss(m[2])}`;
+      return raw;
+    },
     review: {
       expectedDuration: (d: string) => `durata attesa ${d}`,
       fileAlreadyDownloaded: "File già scaricato",
@@ -687,14 +696,20 @@ export const it: Dictionary = {
   wishlist: {
     pageTitle: "Wishlist",
     statusTitle: "Stato",
+    filtersTitle: "Filtri",
     filterAria: "Filtra per stato download",
     tabAll: "Tutte",
     tabNever: "Mai tentate",
+    tabQueued: "In coda",
     tabReview: "In review",
     tabNotFound: "Non trovate",
     tabFailed: "Fallite",
     searchPlaceholder: "Filtra per artista o titolo…",
     playlistAllOption: "Tutte le playlist",
+    sortAria: "Ordina la lista",
+    sortArtist: "Artista (A–Z)",
+    sortAddedDesc: "Aggiunta (recenti)",
+    sortAddedAsc: "Aggiunta (meno recenti)",
     showArchivedLabel: "Mostra archiviate",
     badgeNever: "mai tentata",
     badgeReview: "in review",
@@ -720,8 +735,10 @@ export const it: Dictionary = {
     archivedEmptyTitle: "Nessuna traccia archiviata",
     archivedEmptyBody: "Le tracce che archivi dalla wishlist compariranno qui.",
     soulseekOpen: "Apri slskd",
-    soulseekHint: "Riserva: se slskd non risponde o vuoi la sua interfaccia, aprila da qui.",
-    bulkHeading: "Azioni di gruppo",
+    // Stato che non viene dall'ultimo esito ma dalla coda (vedi wishlist-row.tsx).
+    queuedStatus: "in coda",
+    selectAllAria: "Seleziona tutte le tracce visibili",
+    selectAllLabel: "Seleziona tutte",
     enqueueSelected: (n: number) => n === 1 ? "Accoda 1 traccia" : `Accoda ${n} tracce`,
     selectedCount: (n: number) => n === 1 ? "1 selezionata" : `${n} selezionate`,
     clearSelection: "Deseleziona",

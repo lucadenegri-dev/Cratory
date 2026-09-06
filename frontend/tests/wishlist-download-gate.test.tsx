@@ -21,12 +21,14 @@ vi.mock("next/navigation", () => ({
 const mocks = vi.hoisted(() => ({
   apiGet: vi.fn(),
   slskdStatus: vi.fn(),
+  downloadQueue: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   apiGet: mocks.apiGet,
   slskdStatus: mocks.slskdStatus,
+  downloadQueue: mocks.downloadQueue,
 }));
 
 const track = (over: Partial<Track> = {}): Track => ({
@@ -49,6 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.apiGet.mockResolvedValue({ total: 1, items: [track()] });
   mocks.slskdStatus.mockResolvedValue({ web_url: null });
+  mocks.downloadQueue.mockResolvedValue({ slots: 1, active: 0, pause: { paused: false }, items: [] });
 });
 
 describe("gate dei bottoni di download nella wishlist", () => {

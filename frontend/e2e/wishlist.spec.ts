@@ -4,12 +4,14 @@ import { test, expect } from "@playwright/test";
 // verifichiamo montaggio e tab di stato. /downloads non redirige piu' a
 // /wishlist: dalla coda persistente (B) e' la pagina della coda dei download,
 // vedi e2e/downloads-queue.spec.ts.
+// Le tab a conteggio zero non compaiono (critique 2026-09-06): con DB vuoto
+// resta solo «Tutte».
 
 test("monta con empty state e tab di stato", async ({ page }) => {
   await page.goto("/wishlist");
   await expect(page.getByRole("heading", { name: "Wishlist" })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Tutte/ })).toBeVisible();
-  await expect(page.getByRole("tab", { name: /Mai tentate/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Mai tentate/ })).toHaveCount(0);
 });
 
 // Percorso felice della ricerca Soulseek integrata (Task 6). La e2e avvia il
