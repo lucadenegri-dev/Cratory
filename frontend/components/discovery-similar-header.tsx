@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 
+import { TrackCover } from "@/components/track-cover";
 import { Checkbox } from "@/components/ui";
 import { useT, type Dictionary } from "@/lib/i18n";
 import type { DiscoverySimilarResponse, SimilarEdge, Track } from "@/lib/api/types";
@@ -52,32 +53,40 @@ export function DiscoverySimilarHeader({
   return (
     <div className="mb-6 border border-border p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-muted">
-            {t.discovery.similarFrom}
-          </div>
-          <div className="mt-1 truncate text-sm text-fg">
-            {track.artist} — {track.title}
-          </div>
-          {origin && origin.resolution === "release" ? (
-            <div className="mt-1 text-xs text-faint" title={t.discovery.similarResolvedRelease}>
-              <span className="truncate">{origin.title}</span>
-              {origin.label && <span> · {origin.label}</span>}
-              {origin.year != null && <span> · {origin.year}</span>}
-              {origin.source_url && (
-                <a href={origin.source_url} target="_blank" rel="noreferrer"
-                   className="ml-2 inline-flex items-center gap-1 text-fg hover:underline">
-                  <ExternalLink size={12} /> Bandcamp
-                </a>
-              )}
+        <div className="flex min-w-0 items-start gap-3">
+          {/* `TrackCover` e non un `<img>` a mano: la traccia di partenza è per
+              forza posseduta, e senza `album_art_url` la copertina sta dentro al
+              file. È anche l'unico componente che ripiega sul segnaposto se
+              l'endpoint disco risponde 404. Decorativa: artista e titolo sono
+              scritti qui accanto. */}
+          <TrackCover track={track} className="h-10 w-10" iconSize={16} />
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-muted">
+              {t.discovery.similarFrom}
             </div>
-          ) : origin ? (
-            <div className="mt-1 text-xs text-faint">{t.discovery.similarArtistOnly}</div>
-          ) : null}
-          <Link href={`/tracks?id=${track.id}`}
-                className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg">
-            <ArrowLeft size={13} /> {t.discovery.similarBackToTrack}
-          </Link>
+            <div className="mt-1 truncate text-sm text-fg">
+              {track.artist} — {track.title}
+            </div>
+            {origin && origin.resolution === "release" ? (
+              <div className="mt-1 text-xs text-faint" title={t.discovery.similarResolvedRelease}>
+                <span className="truncate">{origin.title}</span>
+                {origin.label && <span> · {origin.label}</span>}
+                {origin.year != null && <span> · {origin.year}</span>}
+                {origin.source_url && (
+                  <a href={origin.source_url} target="_blank" rel="noreferrer"
+                     className="ml-2 inline-flex items-center gap-1 text-fg hover:underline">
+                    <ExternalLink size={12} /> Bandcamp
+                  </a>
+                )}
+              </div>
+            ) : origin ? (
+              <div className="mt-1 text-xs text-faint">{t.discovery.similarArtistOnly}</div>
+            ) : null}
+            <Link href={`/tracks?id=${track.id}`}
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg">
+              <ArrowLeft size={13} /> {t.discovery.similarBackToTrack}
+            </Link>
+          </div>
         </div>
 
         <div className="flex flex-col items-end gap-2">

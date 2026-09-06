@@ -69,6 +69,36 @@ describe("DiscoverySimilarHeader", () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
+  it("mostra la copertina della traccia di partenza", () => {
+    const track = { ...(TRACK as object), album_art_url: "https://x/art.jpg" } as never;
+    const { container } = render(
+      <DiscoverySimilarHeader data={data()} track={track} stylePeriod={false}
+                              onStylePeriodChange={() => {}} busy={false} />);
+    const img = container.querySelector("img");
+    expect(img?.getAttribute("src")).toBe("https://x/art.jpg");
+    // Decorativa: artista e titolo sono già scritti accanto.
+    expect(img?.getAttribute("alt")).toBe("");
+  });
+
+  it("senza copertina in rete la cerca nel file posseduto", () => {
+    // La traccia di partenza è sempre posseduta: se `album_art_url` manca, la
+    // copertina sta dentro al file e la serve l'endpoint disco.
+    const track = { ...(TRACK as object), has_local_file: true } as never;
+    const { container } = render(
+      <DiscoverySimilarHeader data={data()} track={track} stylePeriod={false}
+                              onStylePeriodChange={() => {}} busy={false} />);
+    expect(container.querySelector("img")?.getAttribute("src")).toContain(
+      "/api/tracks/1/cover");
+  });
+
+  it("senza copertina da nessuna parte mette il segnaposto, non un'immagine vuota", () => {
+    const { container } = render(
+      <DiscoverySimilarHeader data={data()} track={TRACK} stylePeriod={false}
+                              onStylePeriodChange={() => {}} busy={false} />);
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("svg.lucide-music-4")).not.toBeNull();
+  });
+
   it("la release riconosciuta porta il title che dice cos'è", () => {
     render(<DiscoverySimilarHeader data={data()} track={TRACK} stylePeriod={false}
                                    onStylePeriodChange={() => {}} busy={false} />);

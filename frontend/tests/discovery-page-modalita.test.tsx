@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { it as dict } from "@/lib/i18n/it";
+import { similarHref } from "@/lib/discovery-dig";
 import type { DiscoveryDigResponse, DiscoverySimilarResponse } from "@/lib/api/types";
 
 /* Le due modalità della pagina Discovery (scavo e simili) leggono la STESSA
@@ -104,6 +105,21 @@ describe("pagina Discovery, confine fra scavo e simili", () => {
     sblocca(SIM);
     await waitFor(() =>
       expect((screen.getByLabelText(INTERRUTTORE) as HTMLInputElement).disabled).toBe(false));
+  });
+
+  it("l'interruttore scrive style_period nell'URL, non solo nello stato locale", async () => {
+    // Lo stato dei simili vive nella query string: senza il push, un ricarico o un
+    // back tornerebbe a leggere l'interruttore spento mentre la vista lo mostra acceso.
+    discoverySimilar.mockResolvedValue(SIM);
+    apiGet.mockResolvedValue(TRACK);
+    query = new URLSearchParams("similar=5");
+    push.mockClear();
+    render(<DiscoveryPage />);
+    await waitFor(() => expect(screen.getByLabelText(INTERRUTTORE)).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText(INTERRUTTORE));
+
+    expect(push).toHaveBeenCalledWith(similarHref(5, true), { scroll: false });
   });
 
   it("un'altra traccia invece azzera il risultato e mostra lo spinner", async () => {
