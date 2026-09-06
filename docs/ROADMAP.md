@@ -38,7 +38,8 @@ endpoints, `docs/API.md`.
   (technically safe, a creative risk, or a good reset); `services/gap_analysis.py`
   reads a playlist for structural holes — no openers, no peak, missing BPM bridges,
   flat energy, harmonic dead ends.
-- **Discovery ("Dig").** Seeds on a genre or a label and digs into Discogs or
+- **Discovery ("Dig").** Seeds on one to four genres and/or labels (the union of
+  their piles, with the 300-item window split between them) and digs into Discogs or
   Bandcamp behind a shared `DigSource` protocol, chosen per request; the source's
   pile is sorted by demand and `depth` picks a window to fetch from it, with taste
   ranking (familiarity + label + style) inside that window. A lead can be previewed
@@ -51,6 +52,10 @@ endpoints, `docs/API.md`.
   discography, the label's, and — behind a switch — the same style within ±3 years.
   Resolution degrades explicitly (`release` → `artist_only` → no origin at all) and
   each edge reports its lead count or why it was not walked.
+  The "Similar" search is reachable from the Dig bar too (mode "Track", a free-text
+  search over the library); the dig's per-artist cap exempts the artist edge, which
+  is one artist by construction. Discogs can be hidden as a dig source from Settings
+  (UI preference, default on; Organize's own Discogs client is untouched).
 - **Acquisition & Wishlist.** Every non-owned track carries its download outcome,
   playlist provenance and buy links (Bandcamp, Beatport, Discogs); archiving is
   reversible. The wishlist supports multi-select, for batch actions alongside the

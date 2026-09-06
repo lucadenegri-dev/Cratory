@@ -8,6 +8,14 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Dig ridisegnato (2026-09-06).** La barra scava per più semi insieme (unione,
+  fino a quattro, budget di 300 item diviso fra loro), con i semi come chip e una
+  tavolozza dei generi in libreria; i simili si raggiungono anche da lì, con una
+  ricerca traccia. Discogs si spegne dalle impostazioni. I simili non collassano
+  più a due lead: il cap per artista del dig si applicava all'arco artista, che è
+  un artista solo per costruzione — misurato, due su dieci — e i conteggi degli
+  archi ora descrivono i lead resi.
+
 - **Discovery "Simili" (2026-09-06).** Dal dettaglio di una traccia posseduta si
   arriva ai suoi parenti su Bandcamp: stessa discografia, stessa etichetta, e con un
   interruttore lo stesso stile nel periodo. Riusa dedup, gusto e griglia del dig; gli
