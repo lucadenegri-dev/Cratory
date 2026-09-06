@@ -34,13 +34,17 @@ from app.schemas import (
     DiscoveryReleaseOut,
     DiscoverySaveForLaterRequest,
     DiscoverySaveForLaterResponse,
+    DiscoverySimilarResponse,
     DiscoveryTrackOut,
+    EdgeReportOut,
+    OriginOut,
     ReasonOut,
 )
 from app.serializers import track_out
-from app.services.dig_sources.bandcamp import BandcampSource, _art_url, _bc_year_from_epoch
+from app.services.dig_sources.bandcamp import BandcampSimilar, BandcampSource, _art_url, _bc_year_from_epoch
 from app.services.dig_sources.discogs import DiscogsSource
 from app.services.discovery_dig import DiscoveryLead, dig
+from app.services.discovery_similar import similar
 from app.services.playlist_import import get_or_create_discovery_playlist, import_single_track
 from app.services.preview import extract_youtube_videos, resolve_preview
 
@@ -167,6 +171,47 @@ def dig_endpoint(req: DiscoveryDigRequest, db: Session = Depends(get_db)):
         leads=[_lead_out(lead) for lead in result.leads],
         pile_total=result.pile_total, pile_reach=result.pile_reach,
         seed_resolution=result.seed_resolution,
+    )
+
+
+@router.get("/similar", response_model=DiscoverySimilarResponse)
+def similar_endpoint(
+    track_id: int,
+    source: str = "bandcamp",
+    style_period: bool = False,
+    db: Session = Depends(get_db),
+):
+    """I lead Bandcamp imparentati con una traccia posseduta."""
+    if source != "bandcamp":
+        raise api_error(400, "discovery_bad_source",
+                        f"Sorgente non supportata dai simili: {source}")
+    track = db.get(Track, track_id)
+    if track is None:
+        raise api_error(404, "track_not_found", f"Traccia {track_id} inesistente")
+
+    client = BandcampClient()
+    try:
+        result = similar(db, track, source=BandcampSimilar(client),
+                         style_period=style_period)
+    except BandcampError as exc:
+        # Come nel dig: "non c'è niente" e "il provider non ha risposto" devono
+        # restare distinguibili dal chiamante.
+        raise api_error(502, "discovery_provider_error", f"Discovery provider error: {exc}",
+                        reason=str(exc)) from exc
+    finally:
+        client.close()
+
+    origin = result.origin
+    return DiscoverySimilarResponse(
+        track_id=track_id, source=source,
+        origin=OriginOut(
+            artist=origin.artist, title=origin.title, label=origin.label,
+            year=origin.year, tag=origin.tag, source_url=origin.source_url,
+            resolution=origin.resolution,
+        ) if origin else None,
+        edges={k: EdgeReportOut(count=v.count, absent_reason=v.absent_reason)
+               for k, v in result.edges.items()},
+        leads=[_lead_out(lead) for lead in result.leads],
     )
 
 
