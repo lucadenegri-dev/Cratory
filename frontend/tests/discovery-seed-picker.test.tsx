@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { DiscoverySeedPicker } from "@/components/discovery-seed-picker";
@@ -90,5 +91,20 @@ describe("DiscoverySeedPicker", () => {
     setup([DEEP], { disabled: true });
     expect(input().disabled).toBe(true);
     expect((screen.getByLabelText("Togli Deep House") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("la tavolozza si chiude da sola quando entra il primo seme", () => {
+    // Harness con stato: nella pagina vera i semi tornano nella STESSA istanza,
+    // e il collasso deve avvenire lì, non solo al montaggio con un seme già dato.
+    function Harness() {
+      const [seeds, setSeeds] = useState<DigSeed[]>([]);
+      return <DiscoverySeedPicker seeds={seeds} onChange={setSeeds} options={OPTIONS} />;
+    }
+    render(<Harness />);
+    expect(screen.getByText("In libreria")).toBeTruthy();
+    fireEvent.change(input(), { target: { value: "Inventato" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(screen.queryByText("In libreria")).toBeNull();
+    expect(screen.getByText("mostra")).toBeTruthy();
   });
 });
