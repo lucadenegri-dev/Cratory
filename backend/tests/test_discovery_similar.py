@@ -79,9 +79,7 @@ def test_leads_carry_one_reason_per_edge_that_reached_them(db):
 
 
 def test_edge_counts_report_leads_produced_after_dedup(db):
-    # Artisti DIVERSI di proposito: con tre lead dello stesso artista il tetto
-    # `_MAX_PER_ARTIST` (2) ne taglierebbe uno e il test misurerebbe il tetto
-    # invece del conteggio degli archi. Il tetto ha il suo test, più sotto.
+    # Artisti diversi: qui si misura il conteggio per arco, non il cap (che ha i suoi test sotto).
     source = _FakeSource(origin=_origin(), edges=[
         ("same_artist", _lead(artist="Artista A", title="A")),
         ("same_label", _lead(artist="Artista B", title="B")),
@@ -118,15 +116,43 @@ def test_a_missing_label_in_artist_only_is_absent_for_its_own_reason(db):
     assert result.edges["same_label"].absent_reason == "no_label"
 
 
-def test_one_artist_cannot_monopolise_the_grid(db):
-    # La discografia dell'artista di partenza mangerebbe la griglia senza il tetto
-    # che il dig applica già (_MAX_PER_ARTIST).
-    edges = [("same_artist", _lead(title=f"Disco {i}")) for i in range(5)]
+def test_the_artist_edge_is_not_capped(db):
+    # La sonda della diagnosi, come test permanente. `_MAX_PER_ARTIST` del dig
+    # tagliava a 2 un arco che è per costruzione un artista solo: "i simili
+    # danno due risultati" veniva da qui, non dall'interruttore stile/periodo.
+    edges = [("same_artist", _lead(artist="Jasmín", title=f"Disco {i}")) for i in range(10)]
+    source = _FakeSource(origin=_origin(), edges=edges)
+    result = similar(db, _track(), source=source, style_period=False, library=[])
+    assert len(result.leads) == 10
+    assert result.edges["same_artist"].count == 10
+
+
+def test_the_label_edge_is_still_capped(db):
+    # Sull'etichetta il monopolio è un rischio vero: un artista prolifico del
+    # catalogo non deve mangiarsi la griglia. Il cap resta lì.
+    edges = [("same_label", _lead(artist="Prolific", title=f"Disco {i}")) for i in range(5)]
     source = _FakeSource(origin=_origin(), edges=edges)
     result = similar(db, _track(), source=source, style_period=False, library=[])
     assert len(result.leads) == 2
-    # L'arco però ha davvero prodotto 5 lead: il tetto taglia la vista, non il conto.
-    assert result.edges["same_artist"].count == 5
+
+
+def test_edge_counts_describe_the_leads_shown_not_the_candidates(db):
+    # Il chip "ETICHETTA 5" con due card a schermo mentiva: contava prima del cap.
+    edges = [("same_label", _lead(artist="Prolific", title=f"Disco {i}")) for i in range(5)]
+    source = _FakeSource(origin=_origin(), edges=edges)
+    result = similar(db, _track(), source=source, style_period=False, library=[])
+    assert result.edges["same_label"].count == len(result.leads) == 2
+
+
+def test_a_lead_reached_by_artist_and_label_is_exempt(db):
+    # La parentela più forte vince: raggiunto anche dall'artista, non si taglia.
+    edges = [("same_artist", _lead(artist="Jasmín", title=f"Disco {i}")) for i in range(3)]
+    edges += [("same_label", _lead(artist="Jasmín", title=f"Disco {i}")) for i in range(3)]
+    source = _FakeSource(origin=_origin(), edges=edges)
+    result = similar(db, _track(), source=source, style_period=False, library=[])
+    assert len(result.leads) == 3
+    assert result.edges["same_artist"].count == 3
+    assert result.edges["same_label"].count == 3
 
 
 def test_owned_leads_are_dropped(db):

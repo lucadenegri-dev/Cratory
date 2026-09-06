@@ -19,12 +19,13 @@ from sqlalchemy.orm import Session
 from app.services.dig_sources import DiscoveryLead, Reason
 from app.services.discovery_dig import (
     TasteProfile,
+    _cap_per_artist,
     _dedup_key,
     _is_owned,
     _library_tracks,
     _owned_index,
     _score,
-    _select,
+    _sort_by_score,
     _weights,
 )
 
@@ -116,7 +117,6 @@ def similar(
     # reason per ogni arco che l'ha raggiunto. La chiave è quella del dig, così
     # "(Original Mix)" e le ristampe collassano come là.
     by_key: dict[tuple[str, str], DiscoveryLead] = {}
-    edge_hits: dict[str, int] = {e: 0 for e in EDGES}
     reached: dict[tuple[str, str], list[str]] = {}
 
     for edge, raw in raw_edges:
@@ -128,10 +128,8 @@ def similar(
             continue
         if key not in by_key:
             by_key[key] = lead
-            edge_hits[edge] += 1
             reached[key] = [edge]
         elif edge not in reached[key]:
-            edge_hits[edge] += 1
             reached[key].append(edge)
 
     weights = _weights("genre", has_styles=False)
@@ -141,7 +139,21 @@ def similar(
         lead.reasons = [_edge_reason(edge, origin) for edge in reached[key]]
         leads.append(lead)
 
-    selected = _select(leads)
+    # Il cap anti-monopolio resta sugli archi etichetta e stile. L'arco artista
+    # ne e' esente: e' un artista solo per costruzione, e il cap lo riduceva a
+    # due card qualunque fosse la discografia. Raggiunto anche dall'artista, un
+    # lead e' esente: la parentela piu' forte vince.
+    selected = _cap_per_artist(
+        _sort_by_score(leads),
+        exempt=lambda lead: any(r.code == "same_artist" for r in lead.reasons),
+    )
+
+    # I conteggi descrivono i lead RESI, non i candidati: "ETICHETTA 5" con due
+    # card a schermo era una bugia.
+    edge_hits: dict[str, int] = {e: 0 for e in EDGES}
+    for lead in selected:
+        for r in lead.reasons:
+            edge_hits[r.code] += 1
 
     edges = {e: EdgeReport(count=edge_hits[e]) for e in EDGES}
     for edge, reason in _absent_edges(origin, style_period).items():

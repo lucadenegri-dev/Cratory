@@ -20,6 +20,7 @@ Deterministico e testabile: la sorgente e' iniettata (`DigSource` Protocol).
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -356,30 +357,44 @@ def _reasons(lead: DiscoveryLead, profile: TasteProfile, seed_type: str,
     return out
 
 
-def _select(leads: list[DiscoveryLead]) -> list[DiscoveryLead]:
-    """Ordina per score e applica il cap per artista (no monopolio). NON tronca:
-    la finestra di WINDOW_ITEMS item e' gia' il limite naturale (~300 release grezze),
-    e il vecchio tetto di 80 nascondeva 160 lead a ogni dig senza che nulla lo dicesse
-    (misurato su style=Acid House: 244 candidati validi su 300). Quanti mostrarne
-    e' una lente della UI, non un parametro del motore.
+def _sort_by_score(leads: list[DiscoveryLead]) -> list[DiscoveryLead]:
+    """Il sort DEVE restare stabile — `sorted` lo garantisce, ed e' su questa
+    garanzia che poggia il fallback a gusto piatto: quando il riferimento e' vuoto
+    (o nessun segnale aggancia) i lead pareggiano tutti, e l'ordine che sopravvive
+    e' quello in cui sono entrati, cioe' l'ordine con cui la sorgente ha risposto
+    dentro la finestra (per Discogs, quello per domanda). Sostituire `sorted` con
+    un ordinamento instabile lo romperebbe in silenzio."""
+    return sorted(leads, key=lambda x: x.score, reverse=True)
 
-    Il sort DEVE restare stabile — `sorted` lo garantisce, ed e' su questa garanzia che
-    poggia il fallback a gusto piatto: quando il riferimento e' vuoto (o nessun segnale
-    aggancia) i lead pareggiano tutti, e l'ordine che sopravvive e' quello in cui sono
-    entrati, cioe' l'ordine con cui la sorgente ha risposto dentro la finestra (per
-    Discogs, quello per domanda). E' l'unico ordine sensato che resta quando il gusto
-    non discrimina, ed e' voluto: sostituire `sorted` con un ordinamento instabile lo
-    romperebbe in silenzio (nessun errore, solo lead in ordine arbitrario).
-    """
+
+def _cap_per_artist(
+    leads: list[DiscoveryLead],
+    *,
+    exempt: Callable[[DiscoveryLead], bool] | None = None,
+) -> list[DiscoveryLead]:
+    """Il cap anti-monopolio (`_MAX_PER_ARTIST`), sull'ordine gia' dato. NON tronca:
+    la finestra e' gia' il limite naturale; quanti mostrarne e' una lente della UI.
+
+    `exempt` esclude dal cap i lead per cui il "monopolio" e' il risultato chiesto:
+    nei simili l'arco artista e' per costruzione un artista solo, e senza esenzione
+    l'intera discografia collassava a due card."""
     out: list[DiscoveryLead] = []
     per_artist: dict[str, int] = {}
-    for lead in sorted(leads, key=lambda x: x.score, reverse=True):
+    for lead in leads:
+        if exempt is not None and exempt(lead):
+            out.append(lead)
+            continue
         a = lead.artist_keys[0]
         if per_artist.get(a, 0) >= _MAX_PER_ARTIST:
             continue
         per_artist[a] = per_artist.get(a, 0) + 1
         out.append(lead)
     return out
+
+
+def _select(leads: list[DiscoveryLead]) -> list[DiscoveryLead]:
+    """Ordina per score e applica il cap per artista: la sequenza del dig."""
+    return _cap_per_artist(_sort_by_score(leads))
 
 
 @dataclass
