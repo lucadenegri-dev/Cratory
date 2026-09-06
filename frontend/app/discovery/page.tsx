@@ -356,7 +356,6 @@ function DiscoveryInner() {
         <DiscoverySimilarHeader
           data={sim}
           track={simTrack}
-          backHref={similarBackHref}
           stylePeriod={stylePeriod}
           onStylePeriodChange={setStylePeriod}
           busy={busy}
