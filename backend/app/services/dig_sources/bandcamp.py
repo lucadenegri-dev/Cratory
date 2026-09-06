@@ -329,10 +329,8 @@ class BandcampSimilar:
         """La release della discografia che corrisponde alla traccia.
 
         La discografia elenca RELEASE, non brani: si prova prima l'album (match
-        diretto, anche per prefisso — un tag locale abbreviato è più corto del
-        titolo intero della release, es. "Bite The Hand" per "Bite The Hand That
-        Feeds You") e poi il titolo (funziona quando il brano è uscito come single o
-        EP omonimo). Aprire ogni release per cercarci dentro il brano costerebbe una
+        diretto) e poi il titolo (funziona quando il brano è uscito come single o EP
+        omonimo). Aprire ogni release per cercarci dentro il brano costerebbe una
         richiesta a release: fuori scope.
         """
         from app.services.discovery_dig import _dedup_title
@@ -342,8 +340,7 @@ class BandcampSimilar:
                   if (v or "").strip()]
         for want in wanted:
             for item in discography:
-                item_title = _norm(_dedup_title(item.get("title") or ""))
-                if item_title == want or item_title.startswith(want + " "):
+                if _norm(_dedup_title(item.get("title") or "")) == want:
                     return item
         return None
 

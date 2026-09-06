@@ -195,7 +195,9 @@ def _resolver(**kw) -> tuple[BandcampSimilar, _FakeClient]:
 
 def test_resolve_matches_the_release_by_album_and_reads_its_details():
     src, client = _resolver()
-    origin = src.resolve(_track())
+    # Titolo completo: la discografia elenca release, e il match è esatto per
+    # scelta di design (niente prefisso, per non risolvere sulla release sbagliata).
+    origin = src.resolve(_track(album="Bite The Hand That Feeds You"))
     assert origin.resolution == "release"
     assert origin.band_id == 637178087
     assert origin.tralbum_id == 4024735967
@@ -208,7 +210,7 @@ def test_resolve_matches_the_release_by_album_and_reads_its_details():
 
 def test_resolve_skips_generic_and_location_tags_when_choosing_the_style_tag():
     src, _ = _resolver()
-    assert src.resolve(_track()).tag == "bass"
+    assert src.resolve(_track(album="Bite The Hand That Feeds You")).tag == "bass"
 
 
 def test_resolve_matches_by_title_when_the_album_tag_is_missing():
