@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import { TrackCover } from "@/components/track-cover";
 import { Checkbox } from "@/components/ui";
@@ -39,14 +38,10 @@ function EdgeChip({ label, edge, t }: { label: string; edge?: SimilarEdge; t: Di
 }
 
 export function DiscoverySimilarHeader({
-  data, track, backHref, stylePeriod, onStylePeriodChange, busy,
+  data, track, stylePeriod, onStylePeriodChange, busy,
 }: {
   data: DiscoverySimilarResponse;
   track: Track;
-  // Dove torna il link indietro. Lo compone la pagina, che è l'unica a leggere
-  // l'URL: qui si rende e basta, così la traccia ritrovata conserva l'origine
-  // (i filtri della libreria, la playlist) da cui si era partiti.
-  backHref: string;
   stylePeriod: boolean;
   onStylePeriodChange: (v: boolean) => void;
   busy: boolean;
@@ -86,10 +81,6 @@ export function DiscoverySimilarHeader({
             ) : origin ? (
               <div className="mt-1 text-xs text-faint">{t.discovery.similarArtistOnly}</div>
             ) : null}
-            <Link href={backHref}
-                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg">
-              <ArrowLeft size={13} /> {t.discovery.similarBackToTrack}
-            </Link>
           </div>
         </div>
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Disc3 } from "lucide-react";
+import { ArrowLeft, Disc3 } from "lucide-react";
 import {
   apiGet,
   discoveryDig,
@@ -334,6 +335,17 @@ function DiscoveryInner() {
 
   return (
     <PageLayout title="Dig">
+      {/* In cima e a sinistra come in ogni pagina di dettaglio, e fuori
+          dall'intestazione dei risultati di proposito: una ricerca di simili
+          dura una decina di secondi, e per tornare indietro non si deve
+          aspettare che finisca. */}
+      {isSimilar && (
+        <Link href={similarBackHref}
+              className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
+          <ArrowLeft size={15} /> {t.discovery.similarBackToTrack}
+        </Link>
+      )}
+
       <p className="mb-4 text-sm text-muted">
         {isSimilar ? t.discovery.similarIntro : t.discovery.intro}
       </p>

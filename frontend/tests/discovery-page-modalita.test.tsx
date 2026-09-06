@@ -184,6 +184,23 @@ describe("pagina Discovery, il link indietro dei simili", () => {
     expect(linkIndietro().getAttribute("href")).toBe("/tracks?id=5");
   });
 
+  it("la freccia c'è già mentre i simili stanno arrivando", async () => {
+    // Sta in cima alla pagina, come nelle altre pagine di dettaglio, non dentro
+    // l'intestazione dei risultati: così si può tornare indietro senza aspettare
+    // la fine di una ricerca che dura una decina di secondi.
+    discoverySimilar.mockImplementation(() => new Promise(() => {}));
+    apiGet.mockResolvedValue(TRACK);
+    query = new URLSearchParams(`similar=5&from=${encodeURIComponent(ORIGINE)}`);
+    render(<DiscoveryPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText(dict.discovery.similarBackToTrack)).toBeTruthy());
+    expect(linkIndietro().getAttribute("href")).toBe(
+      `/tracks?id=5&from=${encodeURIComponent(ORIGINE)}`);
+    // Nessun risultato ancora: la freccia non può venire dall'intestazione.
+    expect(screen.queryByLabelText(INTERRUTTORE)).toBeNull();
+  });
+
   it("l'interruttore non perde l'origine per strada", async () => {
     // Il giro dell'interruttore riscrive l'URL: se `from` non ci sopravvive, la
     // catena si spezza al primo clic invece che al primo passo indietro.
