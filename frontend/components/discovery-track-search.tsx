@@ -32,6 +32,7 @@ export function DiscoveryTrackSearch({ search, onPick, disabled }: {
   useEffect(() => {
     const term = q.trim();
     const mine = ++turn.current;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- l'effect risincronizza la lista sulla query (input dell'utente), non su state derivato: campo svuotato = lista via, senza aspettare il debounce
     if (!term) { setResults(null); return; }
     const id = window.setTimeout(() => {
       search(term)
