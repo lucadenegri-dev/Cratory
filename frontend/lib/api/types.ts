@@ -174,6 +174,33 @@ export interface DiscoveryDigResponse {
   seed_resolution: "style" | "genre" | "label" | "tag" | "discography" | null;
 }
 
+export interface SimilarOrigin {
+  artist: string;
+  title: string | null;
+  label: string | null;
+  year: number | null;
+  tag: string | null;
+  source_url: string | null;
+  /** "release" = release riconosciuta; "artist_only" = solo artista, resto dai tag. */
+  resolution: "release" | "artist_only";
+}
+
+export interface SimilarEdge {
+  /** Lead prodotti. `null` quando l'arco non è stato percorso. */
+  count: number | null;
+  absent_reason:
+    | "no_band" | "self_released" | "no_label" | "no_tag" | "no_year" | "off" | null;
+}
+
+export interface DiscoverySimilarResponse {
+  track_id: number;
+  source: string;
+  /** `null` quando Bandcamp non conosce l'artista: nessun punto di partenza. */
+  origin: SimilarOrigin | null;
+  edges: Record<string, SimilarEdge>;
+  leads: DiscoveryLead[];
+}
+
 export interface DiscoveryGenres {
   library: string[];
   styles: string[];

@@ -7,6 +7,7 @@ import type {
   DiscoveryImportInput,
   DiscoveryPreview,
   DiscoveryRelease,
+  DiscoverySimilarResponse,
 } from "./types";
 
 export type { DigSourceKey };
@@ -54,4 +55,14 @@ export function discoveryImportTrack(input: DiscoveryImportInput) {
 
 export function discoverySaveForLater(input: DiscoveryImportInput) {
   return apiPost<DiscoveryAddResponse>("/api/discovery/save-for-later", input);
+}
+
+export function discoverySimilar(
+  trackId: number,
+  opts?: { stylePeriod?: boolean },
+) {
+  return apiGet<DiscoverySimilarResponse>("/api/discovery/similar", {
+    track_id: trackId,
+    style_period: opts?.stylePeriod ? "true" : "false",
+  });
 }

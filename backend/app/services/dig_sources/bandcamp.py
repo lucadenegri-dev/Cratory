@@ -185,7 +185,7 @@ class BandcampSource:
             return self._lead_from_discography(raw, seed)
         return self._lead_from_discover(raw, seed)
 
-    def _lead_from_discography(self, raw: dict, seed: Seed) -> DiscoveryLead | None:
+    def _lead_from_discography(self, raw: dict, seed: Seed | None) -> DiscoveryLead | None:
         title = (raw.get("title") or "").strip()
         artist_raw = (raw.get("artist_name") or "").strip()
         if not title or not artist_raw or artist_raw.lower() in _VARIOUS:
@@ -199,7 +199,7 @@ class BandcampSource:
             year=_bc_year(raw.get("release_date")),
             label=(raw.get("band_name") or "").strip() or None,
             styles=[],
-            source="bandcamp", seed=seed.value,
+            source="bandcamp", seed=(seed.value if seed else None),
             source_id=(f"{band_id}:{item_id}" if band_id and item_id else None),
             # La discografia non porta l'URL della pagina: lo risolve il pannello,
             # che apre `tralbum_details` e riceve `bandcamp_url`.
@@ -209,7 +209,7 @@ class BandcampSource:
             format_badge=None,
         )
 
-    def _lead_from_discover(self, raw: dict, seed: Seed) -> DiscoveryLead | None:
+    def _lead_from_discover(self, raw: dict, seed: Seed | None) -> DiscoveryLead | None:
         title = (raw.get("title") or "").strip()
         band = (raw.get("band_name") or "").strip()
         album_artist = (raw.get("album_artist") or "").strip()
@@ -236,10 +236,188 @@ class BandcampSource:
             year=_bc_year(raw.get("release_date")),
             label=label,
             styles=[],
-            source="bandcamp", seed=seed.value,
+            source="bandcamp", seed=(seed.value if seed else None),
             source_id=(f"{band_id}:{item_id}" if band_id and item_id else None),
             source_url=(raw.get("item_url") or "").split("?")[0] or None,
             thumb_url=_art_url((raw.get("primary_image") or {}).get("image_id")),
             stream_url=stream,
             format_badge=_badge(track_count),
         )
+
+
+# Quanti item chiedere al discover per l'arco stile. `DISCOVER_PAGE_SIZE` (500) è la
+# misura del dig, che deve riempire una finestra; qui l'arco è un rinforzo e la
+# finestra temporale scarta già molto, quindi una batch corta basta e costa meno.
+STYLE_EDGE_ITEMS = 120
+
+# Tag troppo larghi per definire uno stile: non discriminano niente e il discover
+# che ne uscirebbe è indistinguibile da un dig generico.
+GENERIC_TAGS = {"electronic", "music", "dance"}
+
+# `item_type` della discografia -> `tralbum_type` di tralbum_details. L'API rifiuta
+# esplicitamente "album" ("Expected tralbum_type as 'a' or 't'"): la mappa non è
+# cosmesi, senza di lei la risoluzione fallisce sempre.
+_TRALBUM_TYPES = {"album": "a", "track": "t", "a": "a", "t": "t"}
+
+
+class BandcampSimilar:
+    """I parenti di un disco su Bandcamp: risoluzione e archi.
+
+    L'unico punto che conosce la forma dei payload Bandcamp per i simili. Condivide
+    con `BandcampSource` i mapper da record grezzo a lead: la discografia e il
+    discover hanno due forme diverse, ed è già `BandcampSource` a saperlo.
+    """
+
+    name = "bandcamp"
+
+    def __init__(self, client):
+        self.client = client
+        self._source = BandcampSource(client)
+
+    # --- resolve -------------------------------------------------------------
+
+    def resolve(self, track) -> Any:
+        from app.services.discovery_similar import Origin
+
+        artist_raw = (getattr(track, "artist", None) or "").strip()
+        if not artist_raw:
+            return None
+        artist, _keys = _clean_artist(artist_raw)
+        if not artist:
+            return None
+        band = self.client.find_band(artist)
+        if not band or not band.get("id"):
+            return None
+        band_id = int(band["id"])
+        discography = self.client.band_discography(band_id)
+
+        item = self._match_release(discography, track)
+        if item is None:
+            # Release non riconosciuta: si tiene l'artista e si prendono dai tag del
+            # file quel che la release avrebbe dato. Dichiarato, non nascosto.
+            return Origin(
+                artist=artist, band_id=band_id, title=None, tralbum_id=None,
+                tralbum_type=None,
+                label=(getattr(track, "label", None) or "").strip() or None,
+                label_id=None,
+                tag=(_tag_norm(getattr(track, "genre", None) or "") or None),
+                year=getattr(track, "year", None),
+                source_url=None, resolution="artist_only", discography=discography,
+            )
+
+        tralbum_type = _TRALBUM_TYPES.get(str(item.get("item_type") or "a"), "a")
+        detail = self.client.tralbum(
+            band_id=int(item.get("band_id") or band_id),
+            tralbum_id=int(item["item_id"]),
+            tralbum_type=tralbum_type,
+        )
+        label_id = detail.get("label_id")
+        return Origin(
+            artist=artist, band_id=band_id,
+            title=(item.get("title") or "").strip() or None,
+            tralbum_id=int(item["item_id"]), tralbum_type=tralbum_type,
+            label=(detail.get("label") or "").strip() or None,
+            label_id=int(label_id) if label_id else None,
+            tag=self._style_tag(detail, track),
+            year=_bc_year_from_epoch(detail.get("release_date"))
+                 or getattr(track, "year", None),
+            source_url=(detail.get("bandcamp_url") or "").split("?")[0] or None,
+            resolution="release", discography=discography,
+        )
+
+    def _match_release(self, discography: list[dict], track) -> dict | None:
+        """La release della discografia che corrisponde alla traccia.
+
+        La discografia elenca RELEASE, non brani: si prova prima l'album (match
+        diretto) e poi il titolo (funziona quando il brano è uscito come single o EP
+        omonimo). Aprire ogni release per cercarci dentro il brano costerebbe una
+        richiesta a release: fuori scope.
+        """
+        from app.services.discovery_dig import _dedup_title
+
+        wanted = [_norm(_dedup_title(v)) for v in
+                  ((getattr(track, "album", None) or ""), (getattr(track, "title", None) or ""))
+                  if (v or "").strip()]
+        for want in wanted:
+            for item in discography:
+                if _norm(_dedup_title(item.get("title") or "")) == want:
+                    return item
+        return None
+
+    def _style_tag(self, detail: dict, track) -> str | None:
+        """Il primo tag utile della release: né di luogo né generico."""
+        for tag in detail.get("tags") or []:
+            if tag.get("isloc"):
+                continue
+            norm = (tag.get("norm_name") or "").strip().lower()
+            if norm and norm not in GENERIC_TAGS:
+                return norm
+        return _tag_norm(getattr(track, "genre", None) or "") or None
+
+    # --- expand --------------------------------------------------------------
+
+    def expand(self, origin, *, style_period: bool) -> list[tuple[str, dict]]:
+        out: list[tuple[str, dict]] = []
+        out.extend(("same_artist", item) for item in self._artist_edge(origin))
+        out.extend(("same_label", item) for item in self._label_edge(origin))
+        if style_period:
+            out.extend(("same_period_style", item) for item in self._style_edge(origin))
+        return out
+
+    def _artist_edge(self, origin) -> list[dict]:
+        """Le altre release dell'artista. Zero richieste: la discografia è già in mano."""
+        return [item for item in origin.discography
+                if str(item.get("item_id")) != str(origin.tralbum_id)]
+
+    def _label_edge(self, origin) -> list[dict]:
+        """La discografia dell'etichetta.
+
+        Autoprodotto (`label_id` assente o uguale alla band) non è un errore: è un
+        arco che non esiste, e non deve costare una richiesta.
+        """
+        if origin.label_id and origin.label_id != origin.band_id:
+            return self.client.band_discography(origin.label_id)
+        if origin.resolution == "artist_only" and origin.label:
+            band = self.client.find_band(origin.label)
+            if band and band.get("id"):
+                return self.client.band_discography(int(band["id"]))
+        return []
+
+    def _style_edge(self, origin) -> list[dict]:
+        """Il discover del tag, ristretto alla finestra temporale dell'origine.
+
+        Una sola batch: l'arco è un rinforzo, non un dig, e la finestra scarta già
+        molto. Il filtro sull'anno è sul client perché il discover non lo offre.
+        """
+        from app.services.discovery_similar import PERIOD_YEARS
+
+        if not origin.tag or origin.year is None:
+            return []
+        batch, _cursor, _total = self.client.discover(
+            tag=origin.tag, cursor="*", size=STYLE_EDGE_ITEMS)
+        lo, hi = origin.year - PERIOD_YEARS, origin.year + PERIOD_YEARS
+        out = []
+        for item in batch or []:
+            year = _bc_year(item.get("release_date"))
+            if year is not None and lo <= year <= hi:
+                out.append(item)
+        return out
+
+    # --- mapping -------------------------------------------------------------
+
+    def to_lead(self, edge: str, raw: dict):
+        """Due archi, due forme: discografia (artista, etichetta) vs discover (stile).
+
+        Si chiamano i mapper di `BandcampSource` DIRETTAMENTE e non il suo `to_lead`:
+        quello smista su `seed.type`, e fabbricare un seme finto per pilotarlo
+        legherebbe i simili a una regola del dig che non li riguarda — cambiarla là
+        farebbe sparire in silenzio i lead delle discografie.
+
+        Il seme passato è `None` perché qui un seme non c'è: `DiscoveryLead.seed` dice
+        "cosa ha cercato chi scava", e nei simili non si è cercato né un genere né
+        un'etichetta. Da quale arco arriva il lead lo dicono i `Reason`, che è il
+        campo fatto per raccontarlo.
+        """
+        if edge == "same_period_style":
+            return self._source._lead_from_discover(raw, None)
+        return self._source._lead_from_discography(raw, None)

@@ -348,3 +348,47 @@ def test_release_detail_rejects_a_malformed_id(client, bad):
     c, _ = client
     r = c.get("/api/discovery/release", params={"source": "bandcamp", "id": bad})
     assert r.status_code == 400
+
+
+def _one_track(S) -> int:
+    """Una traccia posseduta nel DB del TestClient. Ritorna il suo id."""
+    db = S()
+    tr = Track(artist="Jasmín", title="Bite The Hand", source_type="local",
+               has_local_file=True)
+    db.add(tr)
+    db.commit()
+    track_id = tr.id
+    db.close()
+    return track_id
+
+
+def test_similar_of_an_unknown_track_is_404(client):
+    c, _S = client
+    r = c.get("/api/discovery/similar", params={"track_id": 999999})
+    assert r.status_code == 404
+    assert r.json()["detail"]["code"] == "track_not_found"
+
+
+def test_similar_refuses_a_source_that_is_not_bandcamp(client):
+    c, S = client
+    track_id = _one_track(S)
+    r = c.get("/api/discovery/similar",
+              params={"track_id": track_id, "source": "discogs"})
+    assert r.status_code == 400
+    assert r.json()["detail"]["code"] == "discovery_bad_source"
+
+
+def test_similar_turns_a_provider_failure_into_502(client, monkeypatch):
+    from app.integrations.bandcamp import BandcampError
+    import app.routers.discovery as mod
+
+    c, S = client
+    track_id = _one_track(S)
+
+    def boom(*a, **kw):
+        raise BandcampError("Bandcamp giù")
+
+    monkeypatch.setattr(mod, "similar", boom)
+    r = c.get("/api/discovery/similar", params={"track_id": track_id})
+    assert r.status_code == 502
+    assert r.json()["detail"]["code"] == "discovery_provider_error"

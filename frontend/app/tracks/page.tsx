@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useBackLink } from "@/lib/back-link";
-import { ArrowLeft, Check, Download, ExternalLink, Link2, ArrowRightLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Check, Download, ExternalLink, Link2, ArrowRightLeft, Pencil, Sparkles } from "lucide-react";
 import { apiGet, downloadTrackSoundcloud, fmtDuration, transitions, trackLabel, type TrackDetail, type TransitionCandidate } from "@/lib/api";
 import { Card, CardHeader, Badge, Alert, Button, Loading, Spinner } from "@/components/ui";
+import { ButtonLink } from "@/components/button-link";
+import { similarHref } from "@/lib/discovery-dig";
 import { PageLayout } from "@/components/page-layout";
 import { TrackEditModal } from "@/components/track-edit-modal";
 import { TrackCover } from "@/components/track-cover";
@@ -62,7 +64,11 @@ function TrackPageInner() {
   // ri-decodificarlo. Con la rotta a segmento l'id non poteva mancare; ora
   // /tracks senza id e' raggiungibile, e "" percorre lo stesso ramo di un id
   // inesistente invece di propagare undefined.
-  const id = useSearchParams().get("id") ?? "";
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id") ?? "";
+  // L'origine viaggia anche verso i simili: di là il link indietro la usa per
+  // restituire QUESTA pagina com'era, non nuda. Senza, la catena si spezza qui.
+  const from = searchParams.get("from");
   // Al dettaglio traccia si arriva da mezza app (libreria, playlist, etichette,
   // set, transizioni, wishlist, Shazam): il link indietro torna dove eri, filtri
   // compresi. Senza `from` (link diretto, refresh) ripiega sulla libreria.
@@ -166,6 +172,11 @@ function TrackPageInner() {
           onSaved={(r) => setTrack((cur) => (cur ? { ...cur, rating: r } : cur))}
         />
         <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> {t.tracks.editValues}</Button>
+        {track.has_local_file && (
+          <ButtonLink href={similarHref(track.id, false, from)} size="sm" variant="outline">
+            <Sparkles size={14} /> {t.tracks.similar}
+          </ButtonLink>
+        )}
         <AddToPlaylistMenu trackIds={[track.id]} inPlaylistIds={track.playlists.map((p) => p.id)} onChanged={refresh} />
       </div>
       <div className="space-y-2 border-t border-border pt-4 text-xs">

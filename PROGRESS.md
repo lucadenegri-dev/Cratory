@@ -8,6 +8,11 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Discovery "Simili" (2026-09-06).** Dal dettaglio di una traccia posseduta si
+  arriva ai suoi parenti su Bandcamp: stessa discografia, stessa etichetta, e con un
+  interruttore lo stesso stile nel periodo. Riusa dedup, gusto e griglia del dig; gli
+  archi non percorsi dicono perché invece di mostrare uno zero.
+
 - **Wishlist: la riga dice se è in coda, e la lista si sfoltisce** (2026-09-06):
   una traccia accodata restava «non trovata / Riprova», identica a prima del
   click, perché lo stato veniva solo da `last_download_outcome` (l'ultimo esito,

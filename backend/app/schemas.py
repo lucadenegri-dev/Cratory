@@ -579,6 +579,37 @@ class DiscoveryGenresOut(BaseModel):
     styles: list[str] = []    # stili curati (sottoinsieme Discogs) per il drill-down
 
 
+class OriginOut(BaseModel):
+    """La release riconosciuta come punto di partenza dei simili."""
+
+    artist: str
+    title: str | None = None
+    label: str | None = None
+    year: int | None = None
+    tag: str | None = None
+    source_url: str | None = None
+    # "release" = release riconosciuta; "artist_only" = solo l'artista, il resto
+    # viene dai tag del file.
+    resolution: str
+
+
+class EdgeReportOut(BaseModel):
+    """Quanti lead ha prodotto un arco, o perché non è stato percorso."""
+
+    count: int | None = None
+    # no_band | self_released | no_label | no_tag | no_year | off
+    absent_reason: str | None = None
+
+
+class DiscoverySimilarResponse(BaseModel):
+    track_id: int
+    source: str = "bandcamp"
+    # null quando la sorgente non conosce l'artista: non c'è nessun punto di partenza.
+    origin: OriginOut | None = None
+    edges: dict[str, EdgeReportOut] = {}
+    leads: list[DiscoveryLeadOut] = []
+
+
 class DiscoveryTrackOut(BaseModel):
     position: str
     title: str
