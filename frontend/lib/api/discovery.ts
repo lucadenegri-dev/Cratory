@@ -1,5 +1,6 @@
 import { apiGet, apiPost } from "./client";
 import type { DigSourceKey } from "../discovery-dig";
+import type { DigSeed } from "../discovery-seeds";
 import type {
   DiscoveryAddResponse,
   DiscoveryDigResponse,
@@ -19,13 +20,11 @@ export function getDiscoveryGenres() {
 }
 
 export function discoveryDig(
-  seedType: "genre" | "label",
-  value: string,
+  seeds: DigSeed[],
   opts?: { depth?: number; source?: DigSourceKey },
 ) {
   return apiPost<DiscoveryDigResponse>("/api/discovery/dig", {
-    seed_type: seedType,
-    value,
+    seeds,
     depth: opts?.depth,
     source: opts?.source,
   });

@@ -162,16 +162,26 @@ export interface DiscoveryLead {
   format_badge: string | null;
 }
 
-export interface DiscoveryDigResponse {
-  seed_type: string;
+export interface DiscoverySeed {
+  type: "genre" | "label";
   value: string;
+}
+
+/** La pila di UN seme. `total === 0` => seme che la sorgente non conosce;
+ *  `reach <= WINDOW_ITEMS / seeds.length` => `depth` non ha effetto. */
+export interface DiscoveryPile {
+  seed_type: "genre" | "label";
+  value: string;
+  total: number;
+  reach: number;
+  resolution: "style" | "genre" | "label" | "tag" | "discography" | null;
+}
+
+export interface DiscoveryDigResponse {
+  seeds: DiscoverySeed[];
   source: string;
   leads: DiscoveryLead[];
-  /** Quanto è alta la pila. 0 => seme che la sorgente non conosce. */
-  pile_total: number;
-  /** Quanti item la sorgente raggiunge. <= WINDOW_ITEMS => `depth` non ha effetto. */
-  pile_reach: number;
-  seed_resolution: "style" | "genre" | "label" | "tag" | "discography" | null;
+  piles: DiscoveryPile[];
 }
 
 export interface SimilarOrigin {
@@ -204,6 +214,17 @@ export interface DiscoverySimilarResponse {
 export interface DiscoveryGenres {
   library: string[];
   styles: string[];
+}
+
+export interface DiscoverySettings {
+  /** Discogs come sorgente nella barra del Dig. Solo interfaccia: il backend
+   *  accetta `source=discogs` comunque. */
+  discogs_enabled: boolean;
+}
+
+export interface GenreCount {
+  genre: string;
+  count: number;
 }
 
 export interface TrackDetail extends Track {

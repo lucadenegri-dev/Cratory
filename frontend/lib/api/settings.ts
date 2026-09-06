@@ -1,5 +1,5 @@
 import { apiGet, apiPatch, apiPost, apiPut } from "./client";
-import type { ConfigPatch, ConfigSettings, ShareLibraryResult } from "./types";
+import type { ConfigPatch, ConfigSettings, DiscoverySettings, ShareLibraryResult } from "./types";
 
 /** Config editabile (path/URL) con override runtime sui default di backend/.env. */
 export function getConfigSettings() {
@@ -31,4 +31,13 @@ export function pickPath(kind: "folder" | "file", start?: string, prompt?: strin
   return apiPost<{ path: string | null }>("/api/files/pick", {
     kind, start: start || null, prompt: prompt || null,
   });
+}
+
+/** Preferenze di Discovery: quali sorgenti offrire nella barra del Dig. */
+export function getDiscoverySettings() {
+  return apiGet<DiscoverySettings>("/api/settings/discovery");
+}
+
+export function setDiscoverySettings(s: DiscoverySettings) {
+  return apiPut<DiscoverySettings>("/api/settings/discovery", s);
 }

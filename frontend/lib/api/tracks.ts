@@ -1,5 +1,5 @@
 import { API, apiGet, apiPatch, apiPost } from "./client";
-import type { LibraryIndexJob, TrackDetail, TrackUpdate } from "./types";
+import type { LibraryIndexJob, Track, TrackDetail, TrackUpdate } from "./types";
 
 /** Modifica manuale di una traccia: i valori inseriti hanno la precedenza sull'enrichment. */
 export function updateTrack(id: number, patch: TrackUpdate) {
@@ -28,4 +28,10 @@ export function trackCoverSrc(
 /** URL di streaming del file locale di una traccia posseduta (audizione rapida). */
 export function trackAudioUrl(id: number): string {
   return `${API}/api/tracks/${id}/audio`;
+}
+
+/** Ricerca libera su artista o titolo, per la barra del Dig (modo Traccia). */
+export function searchTracks(q: string, limit = 8) {
+  return apiGet<{ total: number; items: Track[] }>("/api/tracks", { q, limit })
+    .then((r) => r.items);
 }

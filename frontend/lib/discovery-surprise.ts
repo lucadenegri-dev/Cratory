@@ -7,13 +7,13 @@ const DEPTH_VALUES = DEPTHS.map((d) => d.value);
 
 /**
  * Pesca un seme casuale dal gusto (libreria): generi di libreria + etichette,
- * pick uniforme, esclusi gli style curati. `current` (il seme in barra) viene
- * escluso per non ripetere il colpo appena fatto; se resta l'unico seme, lo
- * ripesca comunque. `rng` iniettabile per i test.
+ * pick uniforme, esclusi gli style curati. `exclude` (i semi già in barra)
+ * viene escluso per non ripetere un colpo appena fatto; se non resta nulla,
+ * ripesca comunque da tutto il pool. `rng` iniettabile per i test.
  */
 export function pickSurprise(
   pool: { genres: string[]; labels: string[] },
-  current: string | null,
+  exclude: string[],
   rng: () => number = Math.random,
 ): SurprisePick | null {
   const entries: { seedType: SeedType; value: string }[] = [
@@ -22,8 +22,8 @@ export function pickSurprise(
   ];
   if (entries.length === 0) return null;
 
-  const cur = current?.trim().toLowerCase() ?? null;
-  const filtered = cur ? entries.filter((e) => e.value.trim().toLowerCase() !== cur) : entries;
+  const cur = new Set(exclude.map((v) => v.trim().toLowerCase()).filter(Boolean));
+  const filtered = cur.size ? entries.filter((e) => !cur.has(e.value.trim().toLowerCase())) : entries;
   const chooseFrom = filtered.length > 0 ? filtered : entries;
 
   const idx = Math.min(Math.floor(rng() * chooseFrom.length), chooseFrom.length - 1);
