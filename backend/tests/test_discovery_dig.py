@@ -66,6 +66,12 @@ def _src(search, *, total=300):
     return DiscogsSource(_Client())
 
 
+def _dig(seed_type, value, **kw):
+    """Un solo seme, nella forma nuova: la maggior parte dei test misura il
+    motore su un seme, e il contratto a lista non deve farli riscrivere."""
+    return dig(None, seeds=[Seed(seed_type, value)], **kw)
+
+
 def test_lead_parsing_and_various_skipped():
     lead = _lead_from_release(_release("Aphex Twin - Xtal", year=1992, rid=1), "Acid House")
     assert lead.artist == "Aphex Twin" and lead.title == "Xtal"
@@ -193,12 +199,12 @@ def test_dig_dedup_vs_library_and_pressings():
             _release("New Artist - New Track", rid=3),                     # altra pressatura: dedup
         ]
 
-    res = dig(None, seed_type="genre", value="Acid House", source=_src(search, total=300),
+    res = _dig("genre", "Acid House", source=_src(search, total=300),
               library=_lib(("Owned Artist", "Owned Track")))
     pairs = [(l.artist, l.title) for l in res.leads]
     assert ("Owned Artist", "Owned Track") not in pairs       # gia' posseduto
     assert pairs.count(("New Artist", "New Track")) == 1       # pressature collassate
-    assert res.seed_type == "genre" and res.value == "Acid House"
+    assert res.seeds == [Seed("genre", "Acid House")]
 
 
 def test_dig_label_seed_uses_label_filter():
@@ -208,7 +214,7 @@ def test_dig_label_seed_uses_label_filter():
         seen.update(kw)
         return [_release("A - B", rid=9)]
 
-    dig(None, seed_type="label", value="Warp", source=_src(search, total=300), library=[])
+    _dig("label", "Warp", source=_src(search, total=300), library=[])
     assert seen.get("label") == "Warp"
 
 
@@ -227,7 +233,7 @@ def test_dig_familiarity_orders_within_the_window():
             _release("Known - Other", rid=2, have=20),
         ]
 
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300),
+    res = _dig("genre", "x", source=_src(search, total=300),
               library=_lib(("Known", "Something Else")))
     assert res.leads[0].artist == "Known"
 
@@ -241,7 +247,7 @@ def test_dig_does_not_truncate():
     def search(**kw):
         return [_release(f"A{i} - T{i}", rid=i) for i in range(150)]
 
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300), library=[])
+    res = _dig("genre", "x", source=_src(search, total=300), library=[])
     assert len(res.leads) == 150
 
 
@@ -256,7 +262,7 @@ def test_dig_filters_offtarget_formats():
             _release("Real Artist - Real Track", rid=3, fmt=["Vinyl", '12"']),
         ]
 
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300), library=[])
+    res = _dig("genre", "x", source=_src(search, total=300), library=[])
     pairs = [(l.artist, l.title) for l in res.leads]
     assert pairs == [("Real Artist", "Real Track")]  # comp e DJ mix scartati
 
@@ -270,7 +276,7 @@ def test_dig_filters_dead_self_released_but_keeps_wanted():
                      label="Not On Label (Cult Hero Self-released)"),
         ]
 
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300), library=[])
+    res = _dig("genre", "x", source=_src(search, total=300), library=[])
     pairs = [(l.artist, l.title) for l in res.leads]
     assert ("Nobody", "Bedroom Demo") not in pairs        # self-released morto: scartato
     assert ("Cult Hero", "Sought Gem") in pairs           # self-released ma RICHIESTO: tenuto
@@ -284,7 +290,7 @@ def test_dig_dedup_variant_titles():
             _release("A - Track [Radio Edit]", rid=3),
         ]
 
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300), library=[])
+    res = _dig("genre", "x", source=_src(search, total=300), library=[])
     assert len(res.leads) == 1  # varianti collassate
 
 
@@ -292,7 +298,7 @@ def test_dig_caps_per_artist():
     def search(**kw):
         return [_release(f"Prolific - Track {i}", rid=i) for i in range(6)]
 
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300), library=[])
+    res = _dig("genre", "x", source=_src(search, total=300), library=[])
     assert len(res.leads) == 2  # max 2 per artista
 
 
@@ -402,7 +408,7 @@ def test_dig_label_boost_changes_order():
 
     # Riferimento di gusto: possiedo qualcosa su Warp. Il gusto ordina sempre, `depth`
     # sceglie solo la finestra da cui pescare, non l'ordine dentro la finestra.
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300),
+    res = _dig("genre", "x", source=_src(search, total=300),
               library=_lib(("Whoever", "Whatever", {"label": "Warp"})))
     assert res.leads[0].label == "Warp"
 
@@ -414,7 +420,7 @@ def test_dig_style_affinity_changes_order():
             _release("On Style - Track", rid=2, style="Acid House", have=20),
         ]
 
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300),
+    res = _dig("genre", "x", source=_src(search, total=300),
               library=_lib(("Whoever", "Whatever", {"genre": "Acid House"})))
     # `DiscoveryLead.style` (singolare) e' diventato `.styles` (Task 3): il test era
     # rimasto mascherato dal crash di `_reasons`, non aggiornato al rename.
@@ -429,7 +435,7 @@ def test_dig_graduated_familiarity_prefers_more_collected():
         ]
 
     # 'Thrice' lo possiedo 3 volte (familiarita' piena), 'Once' una volta sola.
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300),
+    res = _dig("genre", "x", source=_src(search, total=300),
               library=_lib(
                   ("Once", "a"),
                   ("Thrice", "a"), ("Thrice", "b"), ("Thrice", "c"),
@@ -448,7 +454,7 @@ def test_dig_profile_always_comes_from_library():
         return [_release("Sconosciuto - X", rid=1), _release("Tyree* - Y", rid=2)]
 
     lib = _lib(("Tyree", "T1"), ("Tyree", "T2"), ("Tyree", "T3"))
-    res = dig(None, seed_type="genre", value="Acid House", source=_src(search, total=300),
+    res = _dig("genre", "Acid House", source=_src(search, total=300),
               library=lib, depth=0.0)
     assert res.leads[0].artist == "Tyree"      # la familiarita' della LIBRERIA ordina
 
@@ -466,7 +472,7 @@ def test_dig_emits_rare_wanted_and_deep_cut():
     def search(**kw):
         return [_release("Cult - Grail", rid=1, have=3, want=120)]
 
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300), library=[])
+    res = _dig("genre", "x", source=_src(search, total=300), library=[])
     lead = res.leads[0]
     assert "rare_wanted" in _codes(lead)
     assert "deep_cut" in _codes(lead)
@@ -478,7 +484,7 @@ def test_dig_no_rare_wanted_when_not_demanded():
     def search(**kw):
         return [_release("Common - Tune", rid=1, have=4000, want=2)]
 
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300), library=[])
+    res = _dig("genre", "x", source=_src(search, total=300), library=[])
     codes = _codes(res.leads[0])
     assert "rare_wanted" not in codes
     assert "deep_cut" not in codes        # have=4000 > soglia
@@ -488,7 +494,7 @@ def test_dig_emits_taste_reason_codes():
     def search(**kw):
         return [_release("Followed - Track", rid=1, label="Warp", style="Acid House", have=20)]
 
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300),
+    res = _dig("genre", "x", source=_src(search, total=300),
               library=_lib(("Followed", "Older", {"label": "Warp", "genre": "Acid House"})))
     lead = res.leads[0]
     codes = _codes(lead)
@@ -503,7 +509,7 @@ def test_dig_emits_recent_reason():
     def search(**kw):
         return [_release("New - Drop", rid=1, year=cur, have=20)]
 
-    res = dig(None, seed_type="genre", value="x", source=_src(search, total=300), library=[])
+    res = _dig("genre", "x", source=_src(search, total=300), library=[])
     assert "recent" in _codes(res.leads[0])
 
 
@@ -805,7 +811,7 @@ def test_dig_picks_the_window_from_depth():
         seen.update(kw)
         return [_release("A - T", rid=1)]
 
-    dig(None, seed_type="genre", value="Acid House", source=_src(search, total=43345),
+    _dig("genre", "Acid House", source=_src(search, total=43345),
         library=[], depth=1.0)
     assert seen["pages"] == [98, 99, 100]
     assert seen["sort"] == "want" and seen["sort_order"] == "desc"
@@ -817,9 +823,9 @@ def test_dig_reports_pile_reach():
     # la risposta porta `pile_total`/`pile_reach` diretti, non piu' pagine derivate.
     # 150 release, la sorgente le raggiunge tutte (150 < WINDOW_ITEMS), niente
     # profondita' da scegliere.
-    res = dig(None, seed_type="label", value="Piccola", source=_src(lambda **kw: [], total=150),
+    res = _dig("label", "Piccola", source=_src(lambda **kw: [], total=150),
               library=[], depth=0.5)
-    assert res.pile_reach == 150
+    assert res.piles[0].reach == 150
 
 
 def test_dig_genre_falls_back_to_genre_when_style_is_empty():
@@ -842,7 +848,7 @@ def test_dig_genre_falls_back_to_genre_when_style_is_empty():
         def search_releases(self, **kw):
             return search(**kw)
 
-    dig(None, seed_type="genre", value="Electronic", source=DiscogsSource(_Client()),
+    _dig("genre", "Electronic", source=DiscogsSource(_Client()),
         library=[], depth=0.0)
     assert "style" in probes[0] and "genre" in probes[1]
     assert seen.get("genre") == "Electronic" and "style" not in seen
@@ -851,7 +857,7 @@ def test_dig_genre_falls_back_to_genre_when_style_is_empty():
 def test_dig_empty_pile_makes_no_search_call():
     called = []
 
-    dig(None, seed_type="label", value="Inesistente",
+    _dig("label", "Inesistente",
         source=_src(lambda **kw: called.append(kw) or [], total=0),
         library=[], depth=0.0)
     assert called == []      # pila vuota: niente da scaricare, niente richieste sprecate
@@ -863,7 +869,7 @@ def test_flat_taste_preserves_pile_order():
     def search(**kw):
         return [_release("A1 - T1", rid=1), _release("A2 - T2", rid=2), _release("A3 - T3", rid=3)]
 
-    res = dig(None, seed_type="genre", value="Acid House",
+    res = _dig("genre", "Acid House",
               source=_src(search, total=300),
               library=[], depth=0.0)
     assert [lead.source_id for lead in res.leads] == ["1", "2", "3"]
@@ -877,7 +883,7 @@ def test_dig_excludes_owned_and_ranks_by_taste():
             _release("Tyree* - New Track", rid=3),       # artista che collezioni: primo
         ]
 
-    res = dig(None, seed_type="genre", value="Acid House", source=_src(search, total=300),
+    res = _dig("genre", "Acid House", source=_src(search, total=300),
               library=_lib(("Tyree", "Owned Track"), ("Tyree", "Other"), ("Tyree", "More")),
               depth=0.0)
     assert [lead.source_id for lead in res.leads] == ["3", "1"]
@@ -911,11 +917,11 @@ def test_score_ignores_demand_which_the_window_already_encodes():
 
 
 def test_dig_reports_style_resolution():
-    res = dig(None, seed_type="genre", value="Acid House",
+    res = _dig("genre", "Acid House",
               source=_src(lambda **kw: [], total=43345),
               library=[], depth=0.0)
-    assert res.seed_resolution == "style"
-    assert res.pile_total == 43345
+    assert res.piles[0].resolution == "style"
+    assert res.piles[0].total == 43345
 
 
 def test_dig_reports_genre_fallback_resolution():
@@ -932,26 +938,26 @@ def test_dig_reports_genre_fallback_resolution():
         def search_releases(self, **kw):
             return []
 
-    res = dig(None, seed_type="genre", value="Electronic",
+    res = _dig("genre", "Electronic",
               source=DiscogsSource(_Client()),
               library=[], depth=0.0)
-    assert res.seed_resolution == "genre"
-    assert res.pile_total == 4_960_093    # il conteggio del filtro che ha VINTO
+    assert res.piles[0].resolution == "genre"
+    assert res.piles[0].total == 4_960_093    # il conteggio del filtro che ha VINTO
 
 
 def test_dig_reports_label_resolution():
-    res = dig(None, seed_type="label", value="Trax Records",
+    res = _dig("label", "Trax Records",
               source=_src(lambda **kw: [], total=10096),
               library=[], depth=0.0)
-    assert res.seed_resolution == "label"
+    assert res.piles[0].resolution == "label"
 
 
 def test_dead_seed_has_no_resolution():
-    res = dig(None, seed_type="genre", value="Inesistente",
+    res = _dig("genre", "Inesistente",
               source=_src(lambda **kw: [], total=0),
               library=[], depth=0.0)
-    assert res.seed_resolution is None
-    assert res.pile_reach == 0
+    assert res.piles[0].resolution is None
+    assert res.piles[0].reach == 0
 
 
 # --- opzione 3: lo stile del seme esce dal segnale (resta solo l'affinita' EXTRA) ---
@@ -971,7 +977,7 @@ def test_style_signal_measures_only_beyond_the_seed():
         ]
 
     lib = _lib(("A", "T1", {"genre": "Acid House"}), ("B", "T2", {"genre": "Tech House"}))
-    res = dig(None, seed_type="genre", value="Acid House", source=_src(search, total=300),
+    res = _dig("genre", "Acid House", source=_src(search, total=300),
               library=lib)
     assert res.leads[0].artist == "Extra Style"
 
@@ -986,7 +992,7 @@ def test_style_match_badge_needs_an_extra_style():
         ]
 
     lib = _lib(("A", "T1", {"genre": "Acid House"}), ("B", "T2", {"genre": "Tech House"}))
-    res = dig(None, seed_type="genre", value="Acid House", source=_src(search, total=300),
+    res = _dig("genre", "Acid House", source=_src(search, total=300),
               library=lib)
     by_artist = {l.artist: {r.code for r in l.reasons} for l in res.leads}
     assert "style_match" not in by_artist["Only Seed"]
@@ -1000,6 +1006,102 @@ def test_label_dig_style_signal_is_untouched():
         return [_release("A - B", rid=1, label="Warp", style="Acid House")]
 
     lib = _lib(("X", "T", {"genre": "Acid House"}))
-    res = dig(None, seed_type="label", value="Warp", source=_src(search, total=300),
+    res = _dig("label", "Warp", source=_src(search, total=300),
               library=lib)
     assert "style_match" in {r.code for r in res.leads[0].reasons}
+
+
+# --- semi multipli: unione delle pile, budget diviso -------------------------
+
+
+def test_dig_unites_the_piles_and_dedups_across_them():
+    calls = []
+
+    def search(**kw):
+        calls.append(kw.get("style"))
+        if kw.get("style") == "Deep House":
+            return [_release("A - Shared", rid=1), _release("B - Only Deep", rid=2)]
+        return [_release("A - Shared", rid=3), _release("C - Only Electro", rid=4)]
+
+    res = dig(None, seeds=[Seed("genre", "Deep House"), Seed("genre", "Electro")],
+              source=_src(search, total=300), library=[])
+    pairs = sorted((l.artist, l.title) for l in res.leads)
+    # Un disco raggiunto da due generi compare una volta sola.
+    assert pairs == [("A", "Shared"), ("B", "Only Deep"), ("C", "Only Electro")]
+    assert calls == ["Deep House", "Electro"]     # una sfogliata per seme, nell'ordine dato
+
+
+def test_dig_splits_the_budget_between_the_seeds():
+    seen: list[dict] = []
+
+    def search(**kw):
+        seen.append(dict(kw))
+        return []
+
+    dig(None, seeds=[Seed("genre", "A"), Seed("genre", "B")],
+        source=_src(search, total=43345), library=[], depth=0.0)
+    # 300 // 2 = 150 item a seme: due pagine Discogs da 100, non tre.
+    assert [s["pages"] for s in seen] == [[1, 2], [1, 2]]
+
+
+def test_dig_reports_one_pile_per_seed_including_the_dead_one():
+    def count(**kw):
+        # Morto su ENTRAMBE le sonde: style= e il ripiego su genre=.
+        return 0 if "Inesistente" in kw.values() else 5000
+
+    class _Client:
+        def count_releases(self, **kw):
+            return count(**kw)
+
+        def search_releases(self, **kw):
+            return []
+
+    res = dig(None, seeds=[Seed("genre", "Acid House"), Seed("genre", "Inesistente")],
+              source=DiscogsSource(_Client()), library=[])
+    assert [p.seed.value for p in res.piles] == ["Acid House", "Inesistente"]
+    assert res.piles[0].total == 5000 and res.piles[0].resolution == "style"
+    # Il seme morto e' riportato per nome, non nascosto dentro un totale.
+    assert res.piles[1].total == 0 and res.piles[1].reach == 0
+    assert res.piles[1].resolution is None
+
+
+def test_dig_mixed_seeds_keep_the_label_weight():
+    # Con un genere e un'etichetta insieme il segnale etichetta discrimina di
+    # nuovo (non e' piu' costante per costruzione): resta nel punteggio.
+    def search(**kw):
+        return [_release("X - On Warp", rid=1, label="Warp"),
+                _release("Y - Elsewhere", rid=2, label="Other")]
+
+    res = dig(None, seeds=[Seed("genre", "IDM"), Seed("label", "Warp")],
+              source=_src(search, total=300),
+              library=_lib(("Someone", "Track", {"label": "Warp"})))
+    assert res.leads[0].title == "On Warp"
+    assert "label_followed" in {r.code for r in res.leads[0].reasons}
+
+
+def test_dig_all_label_seeds_drop_the_label_weight():
+    from app.services.discovery_dig import _dominant_type
+    assert _dominant_type([Seed("label", "Warp"), Seed("label", "Ninja")]) == "label"
+    assert _dominant_type([Seed("label", "Warp"), Seed("genre", "IDM")]) == "genre"
+    assert _dominant_type([Seed("genre", "IDM")]) == "genre"
+
+
+def test_dig_style_floor_excludes_every_seed():
+    # Con due semi, lo style del SECONDO non deve valere come affinita' extra.
+    from app.services.discovery_dig import _styles_beyond_seed
+    assert _styles_beyond_seed(["Deep House", "Electro", "Techno"],
+                               {"deep house", "electro"}) == ["Techno"]
+
+
+def test_dig_refuses_no_seeds_and_too_many():
+    with pytest.raises(ValueError):
+        dig(None, seeds=[], source=_src(lambda **kw: [], total=300), library=[])
+    with pytest.raises(ValueError):
+        dig(None, seeds=[Seed("genre", str(i)) for i in range(5)],
+            source=_src(lambda **kw: [], total=300), library=[])
+
+
+def test_window_honours_a_smaller_budget():
+    assert _window(0.0, _discogs_pile(43345), 150) == (0, 150)
+    assert _window(1.0, _discogs_pile(43345), 150) == (9850, 150)
+    assert _window(0.5, _discogs_pile(120), 150) == (0, 120)   # pila piu' corta del budget

@@ -1,4 +1,5 @@
-"""Discovery v2 — "crate digging": lista-dig a volume da una `DigSource`.
+"""Discovery v2 — "crate digging": lista-dig a volume dall'UNIONE delle pile di uno o
+piu' semi (`Seed`), con un budget di WINDOW_ITEMS diviso fra loro.
 
 Il dig produce TANTI lead leggeri NON risolti dai semi Genere/Etichetta (l'identita'
 Spotify si risolve solo al salvataggio). Il motore ragiona in ITEM, non in pagine: chiede
@@ -40,6 +41,17 @@ from app.models import Track
 
 logger = logging.getLogger(__name__)
 
+# Quanti semi puo' avere uno scavo. Oltre, il budget per seme scende sotto la
+# soglia in cui la finestra smette di dire qualcosa (300 // 5 = 60 item).
+MAX_SEEDS = 4
+
+
+def _budget(n_seeds: int) -> int:
+    """Quanti item spettano a ogni seme. Il budget di uno scavo resta
+    WINDOW_ITEMS in tutto, DIVISO fra i semi, mai moltiplicato: il costo di
+    uno scavo non deve crescere col numero di generi scelti."""
+    return WINDOW_ITEMS // max(1, n_seeds)
+
 
 def _norm(value: str | None) -> str:
     return (value or "").strip().lower()
@@ -59,19 +71,20 @@ def _reach(pile: Pile) -> int:
     return max(0, min(pile.height, pile.reach))
 
 
-def _window(depth: float, pile: Pile) -> tuple[int, int]:
+def _window(depth: float, pile: Pile, budget: int = WINDOW_ITEMS) -> tuple[int, int]:
     """La finestra (offset, count) da pescare nella pila.
 
     depth 0 = la cima (il canone del seme), depth 1 = il fondo di cio' che la sorgente
     RAGGIUNGE — che non e' il fondo della pila quando `reach < height`. Su una pila piu'
-    corta della finestra `depth` non ha effetto: non c'e' profondita' da scegliere, e il
-    chiamante lo segnala alla UI via `pile_reach`.
+    corta del budget `depth` non ha effetto: non c'e' profondita' da scegliere, e il
+    chiamante lo segnala alla UI via `reach`. `budget` e' la quota di questo seme
+    (`_budget`): con un seme solo e' l'intera finestra.
     """
     reach = _reach(pile)
     if reach <= 0:
         return 0, 0
-    start = round(max(0.0, min(1.0, depth)) * max(0, reach - WINDOW_ITEMS))
-    return start, min(WINDOW_ITEMS, reach - start)
+    start = round(max(0.0, min(1.0, depth)) * max(0, reach - budget))
+    return start, min(budget, reach - start)
 
 
 _MAX_PER_ARTIST = 2  # un artista non deve monopolizzare la lista
@@ -307,18 +320,23 @@ def _weights(seed_type: str, *, has_styles: bool = True) -> Weights:
     return Weights(artist=artist / total, label=label / total, style=style / total)
 
 
-def _styles_beyond_seed(styles: list[str], seed_norm: str) -> list[str]:
-    """Gli style della release OLTRE il seme del dig.
+def _styles_beyond_seed(styles: list[str], seed_norms: set[str]) -> list[str]:
+    """Gli style della release OLTRE i semi del dig.
 
     Su un dig per genere ogni release contiene lo style del seme per costruzione
     (e' il filtro `style=value` della ricerca): la sua somiglianza con la libreria
-    e' un PAVIMENTO comune a tutti i lead — se possiedi il genere alla lettera vale
-    1.0, e `style_affinity` diventa una costante che non ordina e accende il badge
-    su ogni card. Escludere il seme misura solo l'affinita' EXTRA, che e'
-    l'informazione vera (una release taggata anche 'Tech House' che collezioni).
-    Sui dig per etichetta e' un no-op: nessuno style si chiama come l'etichetta.
+    e' un PAVIMENTO comune a tutti i lead. Con piu' semi il pavimento e' l'unione:
+    lo style del secondo seme non e' affinita' extra piu' di quanto lo sia il primo.
+    Sui semi etichetta e' un no-op: nessuno style si chiama come l'etichetta.
     """
-    return [s for s in styles if _norm(s) != seed_norm]
+    return [s for s in styles if _norm(s) not in seed_norms]
+
+
+def _dominant_type(seeds: list[Seed]) -> str:
+    """Il tipo che governa pesi e badge. 'label' SOLO se ogni seme e' un'etichetta:
+    con semi misti il segnale etichetta discrimina di nuovo (non e' piu' costante
+    per costruzione) e va tenuto."""
+    return "label" if seeds and all(s.type == "label" for s in seeds) else "genre"
 
 
 def _score(lead: DiscoveryLead, profile: TasteProfile, weights: Weights,
@@ -398,83 +416,82 @@ def _select(leads: list[DiscoveryLead]) -> list[DiscoveryLead]:
 
 
 @dataclass
-class DigResult:
-    seed_type: str
-    value: str
-    leads: list[DiscoveryLead] = field(default_factory=list)
-    # Quanto e' alta la pila del seme (0 = seme che la sorgente non conosce).
-    pile_total: int = 0
-    # Quanti item la sorgente raggiunge davvero. Se <= WINDOW_ITEMS la finestra e'
-    # l'intera pila e `depth` non ha effetto: la UI deve poterlo dire invece di
-    # offrire un controllo inerte. Se < pile_total, la UI avverte che si vede
-    # solo una porzione.
-    pile_reach: int = 0
+class PileInfo:
+    """La pila di UN seme, come la UI deve poterla raccontare: un seme morto
+    (`total == 0`) si dice per nome, non si nasconde in un totale."""
+    seed: Seed
+    total: int = 0
+    reach: int = 0
     # Com'e' stato risolto il seme: "style"|"genre"|"label"|"tag"|"discography"|None.
-    seed_resolution: str | None = None
+    resolution: str | None = None
+
+
+@dataclass
+class DigResult:
+    seeds: list[Seed]
+    leads: list[DiscoveryLead] = field(default_factory=list)
+    piles: list[PileInfo] = field(default_factory=list)
 
 
 def dig(
     db: Session,
     *,
-    seed_type: str,
-    value: str,
+    seeds: list[Seed],
     source: DigSource,
     library: list | None = None,
     depth: float = 0.0,
 ) -> DigResult:
-    """Lead non posseduti dal seme dato (genere|etichetta), ordinati per gusto.
+    """Lead non posseduti dall'UNIONE dei semi dati, ordinati per gusto.
 
-    Due assi separati: `depth` sceglie DOVE pescare nella pila della sorgente (0 = la
-    cima, 1 = il fondo di cio' che raggiunge); il gusto ordina SEMPRE dentro la
-    finestra.
-
-    Il profilo di gusto e la dedup del posseduto usano la STESSA `library`, per
-    scelta: il riferimento per-playlist e' stato rimosso perche' su una playlist magra
-    il gusto si azzerava in silenzio e la lista ricadeva sull'ordine della pila senza
-    che nulla lo dicesse.
+    Ogni seme scava la propria pila (probe -> finestra -> fetch) con la sua quota
+    del budget; dedup, punteggio e selezione sono una passata sola sull'unione.
+    `depth` vale per tutte le pile. Il profilo di gusto e la dedup del posseduto
+    usano la STESSA `library`.
     """
+    if not seeds:
+        raise ValueError("dig: serve almeno un seme")
+    if len(seeds) > MAX_SEEDS:
+        raise ValueError(f"dig: al massimo {MAX_SEEDS} semi, ricevuti {len(seeds)}")
     if library is None:
         library = _library_tracks(db)
     owned_tracks, owned_albums = _owned_index(library)
     profile = TasteProfile.from_tracks(library)
+    budget = _budget(len(seeds))
 
-    seed = Seed(type=seed_type, value=value)
-    pile = source.probe(seed)
-    offset, count = _window(depth, pile)
-    reach = _reach(pile)
-    if count <= 0:
-        return DigResult(seed_type=seed_type, value=value, pile_total=pile.height,
-                         pile_reach=reach, seed_resolution=pile.resolution)
-
-    items = source.fetch(seed, pile, offset, count)
-
+    piles: list[PileInfo] = []
     leads: list[DiscoveryLead] = []
     seen: set[tuple[str, str]] = set()
-    for item in items or []:
-        lead = source.to_lead(item, seed)
-        if lead is None:
+    for seed in seeds:
+        pile = source.probe(seed)
+        reach = _reach(pile)
+        piles.append(PileInfo(seed=seed, total=pile.height, reach=reach,
+                              resolution=pile.resolution))
+        offset, count = _window(depth, pile, budget)
+        if count <= 0:
             continue
-        k = _dedup_key(lead.artist_keys[0], lead.title)  # collassa varianti e pressature
-        if k in seen or _is_owned(lead, owned_tracks, owned_albums):
-            continue
-        seen.add(k)
-        leads.append(lead)
+        for item in source.fetch(seed, pile, offset, count) or []:
+            lead = source.to_lead(item, seed)
+            if lead is None:
+                continue
+            k = _dedup_key(lead.artist_keys[0], lead.title)  # collassa varianti, pressature e semi
+            if k in seen or _is_owned(lead, owned_tracks, owned_albums):
+                continue
+            seen.add(k)
+            leads.append(lead)
 
-    # Quali segnali esistono lo dicono i DATI, non il nome della sorgente: se un
-    # giorno Bandcamp restituisse gli stili nella lista, il peso torna da solo.
+    # Quali segnali esistono lo dicono i DATI, non il nome della sorgente.
     has_styles = any(lead.styles for lead in leads)
-    weights = _weights(seed_type, has_styles=has_styles)
+    kind = _dominant_type(seeds)
+    weights = _weights(kind, has_styles=has_styles)
     current_year = datetime.now(timezone.utc).year
-    seed_norm = _norm(value)
+    seed_norms = {_norm(s.value) for s in seeds}
     for lead in leads:
-        extra_styles = _styles_beyond_seed(lead.styles, seed_norm)
+        extra_styles = _styles_beyond_seed(lead.styles, seed_norms)
         lead.score = _score(lead, profile, weights, extra_styles)
-        lead.reasons = _reasons(lead, profile, seed_type, current_year, extra_styles)
+        lead.reasons = _reasons(lead, profile, kind, current_year, extra_styles)
     selected = _select(leads)
 
-    logger.info("Discovery dig %s %s=%r: %s lead (depth=%.2f, offset %s, pila %s/%s)",
-                source.name, seed_type, value, len(selected), depth, offset,
-                reach, pile.height)
-    return DigResult(seed_type=seed_type, value=value, leads=selected,
-                     pile_total=pile.height, pile_reach=reach,
-                     seed_resolution=pile.resolution)
+    logger.info("Discovery dig %s %s: %s lead (depth=%.2f, budget %s/seme, pile %s)",
+                source.name, [f"{s.type}={s.value!r}" for s in seeds], len(selected),
+                depth, budget, [(p.reach, p.total) for p in piles])
+    return DigResult(seeds=list(seeds), leads=selected, piles=piles)
