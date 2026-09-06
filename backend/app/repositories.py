@@ -3,7 +3,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
@@ -96,6 +96,7 @@ def _apply_track_filters(  # noqa: PLR0913
     *,
     artist: str | None = None,
     title: str | None = None,
+    q: str | None = None,
     album: str | None = None,
     genre: str | None = None,
     label: str | None = None,
@@ -118,6 +119,16 @@ def _apply_track_filters(  # noqa: PLR0913
         stmt = stmt.where(Track.artist.ilike(f"%{artist}%"))
     if title:
         stmt = stmt.where(Track.title.ilike(f"%{title}%"))
+    if q:
+        # Un campo solo per la ricerca traccia del Dig: artista O titolo. Non
+        # sostituisce `artist`/`title`, che restano filtri separati e in AND.
+        # Se `artist=` è specificato, q raffina il campo artista; altrimenti
+        # cerca in artista O titolo.
+        like = f"%{q}%"
+        if artist:
+            stmt = stmt.where(Track.artist.ilike(like))
+        else:
+            stmt = stmt.where(or_(Track.artist.ilike(like), Track.title.ilike(like)))
     if album:
         stmt = stmt.where(_EFFECTIVE_TAGS["album"].ilike(f"%{album}%"))
     if genre:

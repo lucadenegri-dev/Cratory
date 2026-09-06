@@ -40,6 +40,7 @@ def get_tracks(  # noqa: PLR0913
     db: Session = Depends(get_db),
     artist: str | None = None,
     title: str | None = None,
+    q: str | None = None,
     album: str | None = None,
     genre: str | None = None,
     label: str | None = None,
@@ -71,7 +72,7 @@ def get_tracks(  # noqa: PLR0913
     total, rows = list_tracks(
         db,
         limit=limit, offset=offset, sort=sort, order=order,
-        artist=artist, title=title, album=album, genre=genre, label=label, source=source, status=status,
+        artist=artist, title=title, q=q, album=album, genre=genre, label=label, source=source, status=status,
         bpm_min=bpm_min, bpm_max=bpm_max, key=key, rating=rating,
         duration_min=duration_min, duration_max=duration_max,
         has_spotify=has_spotify, has_soundcloud=has_soundcloud,
