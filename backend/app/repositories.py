@@ -122,13 +122,8 @@ def _apply_track_filters(  # noqa: PLR0913
     if q:
         # Un campo solo per la ricerca traccia del Dig: artista O titolo. Non
         # sostituisce `artist`/`title`, che restano filtri separati e in AND.
-        # Se `artist=` è specificato, q raffina il campo artista; altrimenti
-        # cerca in artista O titolo.
         like = f"%{q}%"
-        if artist:
-            stmt = stmt.where(Track.artist.ilike(like))
-        else:
-            stmt = stmt.where(or_(Track.artist.ilike(like), Track.title.ilike(like)))
+        stmt = stmt.where(or_(Track.artist.ilike(like), Track.title.ilike(like)))
     if album:
         stmt = stmt.where(_EFFECTIVE_TAGS["album"].ilike(f"%{album}%"))
     if genre:

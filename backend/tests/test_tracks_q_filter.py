@@ -50,17 +50,20 @@ def test_q_cerca_su_artista_o_titolo(client_db):
     assert _titles(r) == ["Bite The Hand", "Jasmine Tea"]
 
 
-def test_q_non_interferisce_con_artist_esplicito(client_db):
+def test_q_resta_in_and_con_artist_esplicito(client_db):
     client, db = client_db
     _tr(db, "Jasmín", "Bite The Hand")
     _tr(db, "Pearson Sound", "Jasmine Tea")
+    _tr(db, "Pearson Sound", "Other")
     db.commit()
 
-    # `artist=` resta un filtro a sé: la riga con "jasm" solo nel titolo non passa.
+    # `q` non sostituisce `artist=`: i due filtri si sommano. Resta solo la riga
+    # di Pearson il cui titolo (o artista) contiene "jasm".
     r = client.get("/api/tracks", params={"q": "jasm", "artist": "Pearson"})
-    assert _titles(r) == []
-    r = client.get("/api/tracks", params={"artist": "Pearson"})
     assert _titles(r) == ["Jasmine Tea"]
+    # E `artist=` da solo non passa da `q`.
+    r = client.get("/api/tracks", params={"artist": "Pearson"})
+    assert _titles(r) == ["Jasmine Tea", "Other"]
 
 
 def test_q_vuoto_non_filtra(client_db):
