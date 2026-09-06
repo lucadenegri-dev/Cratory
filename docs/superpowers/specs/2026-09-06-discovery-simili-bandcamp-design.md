@@ -137,18 +137,20 @@ class Origin:
 
 - Deduplica con `_dedup_key` e `_is_owned` contro la libreria intera
   (`_owned_index`), esclusa la release d'origine.
-- `TasteProfile.from_tracks(library)`, `_score` con i pesi di `_weights("similar")`:
-  trattato come il seme `genre` (nessun peso azzerato; `has_styles` è `False`
-  su Bandcamp e azzera da solo il peso stile).
+- `TasteProfile.from_tracks(library)`, `_score` con i pesi di
+  `_weights("genre", has_styles=False)`. Non `"label"`: il peso etichetta va tenuto,
+  perché è costante solo sui lead dell'arco etichetta, mentre quelli degli altri due
+  archi portano etichette proprie e lì discrimina davvero.
 - `_select` con il tetto per artista `_MAX_PER_ARTIST`: qui serve a impedire che
   la discografia dell'artista di partenza mangi la griglia.
 - Reason: un `Reason(code=edge, data={...})` per ogni arco che ha raggiunto il
   lead (`same_label` porta `{"label": ...}`, `same_period_style` porta
   `{"tag": ..., "year_from": ..., "year_to": ...}`). Un lead raggiunto da due
-  archi porta due reason. `recent` resta come nel dig. `rare_wanted`,
-  `deep_cut`, `label_followed`, `artist_collected`, `style_match` non si
-  calcolano: i primi due non hanno dati su Bandcamp, gli altri direbbero
-  l'ovvio.
+  archi porta due reason. I reason del dig NON si calcolano qui: `rare_wanted` e
+  `deep_cut` non hanno dati su Bandcamp; `label_followed`, `artist_collected` e
+  `style_match` direbbero l'ovvio (è la parentela stessa); `recent` è ridondante
+  perché la card mostra già l'anno. In modalità simili un reason dice da quale
+  arco arriva il lead, e nient'altro.
 
 ### Bilancio degli archi
 
