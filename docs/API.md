@@ -618,6 +618,7 @@ analysis_dismiss_empty` on an empty list. Response `{dismissed}`.
 ```text
 GET  /api/discovery/genres
 POST /api/discovery/dig
+GET  /api/discovery/similar
 GET  /api/discovery/release
 GET  /api/discovery/preview
 GET  /api/discovery/preview/youtube/{video_id}   → HTML, not JSON: see below
@@ -745,6 +746,40 @@ That cache is local to this endpoint and does not serve
 does not write to Spotify. `POST /api/discovery/save-for-later` does the same import
 and files the track in the system "Discovery" playlist. Neither downloads anything —
 for that, see the downloads endpoints.
+
+### Similar
+
+`GET /api/discovery/similar?track_id=&source=&style_period=` returns the Bandcamp
+leads related to a track you own — the digger's move "this one I like, give me its
+relatives" — filtered against the whole library like the dig.
+
+`source` accepts only `bandcamp` (`400 discovery_bad_source` otherwise): Discogs is a
+map, not the shop this user buys from, and Bandcamp leads carry a real per-track
+stream instead of an iTunes clip. An unknown `track_id` is `404 track_not_found`; a
+provider failure is `502 discovery_provider_error`, never a silent empty list.
+
+Resolution runs in three steps and degrades **explicitly**: band search on the cleaned
+artist, then a match of the track's album (or title) against that band's discography,
+then the release detail for label, tags and year. `origin.resolution` is `release`
+when the release was matched and `artist_only` when it was not — in which case label,
+style tag and year come from the file's own tags. `origin` is `null` when Bandcamp
+does not know the artist at all: there is no starting point, and no fallback is
+attempted.
+
+Three edges produce the leads, and each one that reached a lead leaves a `Reason` on
+it: `same_artist` (the rest of that discography, no extra request), `same_label` (the
+label's discography, absent when the release is self-released), and
+`same_period_style` (a `discover` on the release's first non-generic, non-location
+tag, kept to `±3` years around the origin) which runs only with `style_period=true`.
+`edges` reports each one as either a `count` — how many leads it produced after
+dedup, `0` included — or an `absent_reason` (`no_band`, `self_released`, `no_label`,
+`no_tag`, `no_year`, `off`). The two are never both set: "I looked and found nothing"
+and "I could not look" are different facts, and the UI says which.
+
+Leads are `DiscoveryLeadOut` exactly as the dig returns them, so preview, tracklist,
+add and download work unchanged. Ranking is the dig's own: taste profile over the
+whole library, per-artist cap, no demand signal (Bandcamp has none). Expect 4-6
+Bandcamp requests per call; nothing is cached.
 
 ## Downloads
 

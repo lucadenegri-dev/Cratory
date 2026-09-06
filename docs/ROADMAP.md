@@ -46,6 +46,11 @@ endpoints, `docs/API.md`.
   Discogs associates with the release, or Bandcamp's own per-track stream when the
   lead came from there — and nothing is ever downloaded or kept. Spotify is only an
   identity resolver; `/recommendations` is never used.
+  From a track you own, **"Similar"** (`/discovery?similar=<track_id>`) digs the
+  graph around it on Bandcamp instead of a genre seed: the rest of the artist's
+  discography, the label's, and — behind a switch — the same style within ±3 years.
+  Resolution degrades explicitly (`release` → `artist_only` → no origin at all) and
+  each edge reports its lead count or why it was not walked.
 - **Acquisition & Wishlist.** Every non-owned track carries its download outcome,
   playlist provenance and buy links (Bandcamp, Beatport, Discogs); archiving is
   reversible. The wishlist supports multi-select, for batch actions alongside the
