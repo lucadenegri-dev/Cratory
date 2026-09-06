@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Disc3, Play } from "lucide-react";
-import { type DiscoveryDigResponse, type DiscoveryLead, type Reason } from "@/lib/api";
-import { EmptyState } from "@/components/ui";
+import { type DiscoveryLead, type Reason } from "@/lib/api";
 import { DiscoveryTracklistPanel } from "@/components/discovery-tracklist-panel";
-import { WINDOW_ITEMS } from "@/lib/discovery-dig";
 import { useT, type Dictionary } from "@/lib/i18n";
 import { usePlayer } from "@/lib/player";
 
@@ -23,6 +21,13 @@ function reasonLabel(r: Reason, t: Dictionary): string {
       return t.discovery.reasonStyleMatch;
     case "recent":
       return t.discovery.reasonRecent(r.data.year);
+    case "same_artist":
+      return t.discovery.reasonSameArtist;
+    case "same_label":
+      return t.discovery.reasonSameLabel(String(r.data.label ?? ""));
+    case "same_period_style":
+      return t.discovery.reasonSamePeriodStyle(
+        String(r.data.tag ?? ""), r.data.year_from ?? "", r.data.year_to ?? "");
     default:
       return r.code;
   }
@@ -44,51 +49,22 @@ export function applyLens(
   return { visible: opts.show === "all" ? sorted : sorted.slice(0, opts.show), total: base.length };
 }
 
-export function DiscoveryLeadGrid({ dig, leads }: {
-  dig: DiscoveryDigResponse;
+export function DiscoveryLeadGrid({ leads, empty }: {
   // La lista GIA' passata dalla lente (formato+ordinamento+taglio, in page.tsx):
   // la griglia rende cio' che riceve, non filtra — cosi' il conteggio "N di M"
   // nella riga della risposta e le card mostrate escono dallo stesso calcolo.
   leads: DiscoveryLead[];
+  // Lo stato vuoto e' del chiamante: scavo e simili hanno cause diverse da
+  // spiegare (pila inesistente, pila gia' posseduta, artista sconosciuto a
+  // Bandcamp...) e la griglia non puo' saperle. Qui si rende solo cio' che arriva.
+  empty: ReactNode;
 }) {
-  const t = useT();
   const [openLead, setOpenLead] = useState<DiscoveryLead | null>(null);
-  // Nome leggibile della sorgente di QUESTO dig (non quella selezionata ora nella
-  // barra): le stringhe che nominano la sorgente non devono mentire su un risultato
-  // che viene da un dig precedente.
-  const srcName = dig.source === "bandcamp" ? t.discovery.sourceBandcamp : t.discovery.sourceDiscogs;
-
-  // Zero lead ha due cause diverse, e dirle uguali mente. Se la pila non esiste
-  // (`pile_total === 0`) il seme e' sconosciuto alla sorgente: la libreria non c'entra
-  // e "vai piu' a fondo" e' un consiglio che non puo' funzionare, perche' non c'e' fondo.
-  // Se invece la pila c'e', i dischi sono stati filtrati (li possiedi gia') e scavare
-  // piu' a fondo e' esattamente la mossa giusta.
-  if (dig.pile_total === 0) {
-    return (
-      <EmptyState icon={<Disc3 size={28} />} title={t.discovery.deadSeedTitle(srcName)}>
-        {t.discovery.deadSeedBody(dig.value, srcName)}
-      </EmptyState>
-    );
-  }
-
-  if (dig.leads.length === 0) {
-    // Su una pila CORTA (la finestra e' l'intera pila) "vai piu' a fondo" e' un
-    // consiglio inerte — la profondita' e' disabilitata proprio per quella pila.
-    // Se possiedi gia' tutto quello che c'e', va detto cosi'.
-    const shortPile = dig.pile_reach <= WINDOW_ITEMS;
-    return (
-      <EmptyState icon={<Disc3 size={28} />} title={t.discovery.nothingToDigTitle}>
-        {shortPile
-          ? t.discovery.nothingToDigShortPile(dig.value)
-          : t.discovery.nothingToDigBody(dig.value, dig.seed_type === "label" ? t.discovery.seedTypeValue : t.discovery.seedTypeStyle)}
-      </EmptyState>
-    );
-  }
 
   return (
     <div>
       {leads.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">{t.discovery.noFormatMatch}</p>
+        empty
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3">
           {leads.map((l, i) => (

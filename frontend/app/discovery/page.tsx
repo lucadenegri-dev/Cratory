@@ -4,20 +4,25 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Disc3 } from "lucide-react";
 import {
+  apiGet,
   discoveryDig,
+  discoverySimilar,
   errText,
   getDiscoveryGenres,
   getLabels,
   type DiscoveryDigResponse,
   type DiscoveryGenres,
+  type DiscoverySimilarResponse,
   type LabelStats,
+  type TrackDetail,
 } from "@/lib/api";
 import { Alert, Chip, EmptyState, Loading, SegmentedControl } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { useJobs } from "@/components/jobs-provider";
 import { applyLens, DiscoveryLeadGrid, FORMAT_VALUES, type SortMode } from "@/components/discovery-lead-grid";
 import { DiscoveryDigBar } from "@/components/discovery-dig-bar";
-import { type DigSourceKey, type SeedType } from "@/lib/discovery-dig";
+import { DiscoverySimilarHeader } from "@/components/discovery-similar-header";
+import { similarHref, WINDOW_ITEMS, type DigSourceKey, type SeedType } from "@/lib/discovery-dig";
 import { pickSurprise } from "@/lib/discovery-surprise";
 import { useI18n } from "@/lib/i18n";
 
@@ -48,6 +53,16 @@ function DiscoveryInner() {
   const [depth, setDepth] = useState(initialDepth);
   const [source, setSource] = useState<DigSourceKey>(initialSource);
   const [dig, setDig] = useState<DiscoveryDigResponse | null>(null);
+
+  // Modalità simili: stessa pagina, altro ramo. La verità sta nell'URL
+  // (`?similar=<id>&style_period=<0|1>`) come per lo scavo, così il bottone nel
+  // dettaglio traccia e l'interruttore qui dentro passano dallo stesso posto.
+  const similarIdRaw = Number(searchParams.get("similar") ?? "");
+  const similarId = Number.isFinite(similarIdRaw) ? similarIdRaw : 0;
+  const isSimilar = similarId > 0;
+  const stylePeriod = searchParams.get("style_period") === "1";
+  const [sim, setSim] = useState<DiscoverySimilarResponse | null>(null);
+  const [simTrack, setSimTrack] = useState<TrackDetail | null>(null);
 
   // lenti sui risultati già ottenuti: fuori dall'URL, non rilanciano il dig
   const [format, setFormat] = useState<string | null>(null);
@@ -99,6 +114,9 @@ function DiscoveryInner() {
 
   const paramsKey = searchParams.toString();
   useEffect(() => {
+    // I due rami leggono la STESSA query string: senza questa guardia, entrare in
+    // modalità simili farebbe partire anche un dig col valore vuoto.
+    if (isSimilar) return;
     const seed: SeedType = searchParams.get("seed") === "label" ? "label" : "genre";
     const value = searchParams.get("value") ?? "";
     if (!value) return; // pagina aperta senza un dig: mostra l'empty state, non eseguire
@@ -109,6 +127,41 @@ function DiscoveryInner() {
     executeDig(seed, value, d, src);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramsKey]);
+
+  // Gemello del precedente per la modalità simili: stessa dipendenza (l'URL),
+  // guardia opposta. La traccia di partenza serve all'intestazione (artista e
+  // titolo) e va chiesta insieme ai simili, non prima: se una delle due fallisce
+  // il ramo è comunque inservibile, e l'errore va mostrato una volta sola.
+  useEffect(() => {
+    if (!isSimilar) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- i simili sono l'external system: l'effect risincronizza il risultato sull'URL (query string), non su state locale
+    setBusy(true);
+    setError(null);
+    setSim(null);
+    jobs.startClientJob("dig", t.discovery.similarJob);
+    Promise.all([
+      discoverySimilar(similarId, { stylePeriod }),
+      apiGet<TrackDetail>(`/api/tracks/${similarId}`),
+    ])
+      .then(([data, track]) => {
+        setSim(data);
+        setSimTrack(track);
+        jobs.updateClientJob("dig", { detail: `${track.artist} — ${track.title}` });
+      })
+      .catch((e) => setError(errText(e)))
+      .finally(() => {
+        setBusy(false);
+        jobs.endClientJob("dig");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsKey]);
+
+  // L'interruttore stile/periodo riscrive l'URL come fanno i parametri dello
+  // scavo: `similarHref` è la stessa funzione che scrive il bottone nel dettaglio
+  // traccia, così un solo posto costruisce questo indirizzo.
+  const setStylePeriod = (on: boolean) => {
+    router.push(similarHref(similarId, on), { scroll: false });
+  };
 
   const runDig = () => {
     const value = subject.trim();
@@ -180,42 +233,123 @@ function DiscoveryInner() {
       ? { total: dig.pile_total, reach: dig.pile_reach }
       : null;
 
+  // `hasResult` guarda solo la modalità corrente: un `sim` rimasto in memoria da
+  // prima non deve far comparire la riga delle lenti (né spegnere lo spinner)
+  // mentre è in corso uno scavo, e viceversa.
+  const hasResult = isSimilar ? sim !== null : dig !== null;
+
   // Lista e conteggio escono dalla STESSA lente: "40 di 240" e le 40 card mostrate
   // non possono divergere. Il taglio (`show`) viene dopo il filtro di formato.
+  // La lente vale per entrambe le modalità: cambia solo da dove arrivano i lead.
   const { visible, total } = useMemo(
-    () => applyLens(dig?.leads ?? [], { format, sort, show }),
-    [dig, format, sort, show],
+    () => applyLens(isSimilar ? sim?.leads ?? [] : dig?.leads ?? [], { format, sort, show }),
+    [isSimilar, sim, dig, format, sort, show],
   );
+
+  // Zero lead nello scavo ha due cause diverse, e dirle uguali mente. Se la pila
+  // non esiste (`pile_total === 0`) il seme è sconosciuto alla sorgente: la
+  // libreria non c'entra e "vai più a fondo" è un consiglio che non può
+  // funzionare, perché non c'è fondo. Se invece la pila c'è, i dischi sono stati
+  // filtrati (li possiedi già) e scavare più a fondo è la mossa giusta.
+  const digEmpty = (d: DiscoveryDigResponse) => {
+    // Nome leggibile della sorgente di QUESTO dig, non di quella selezionata ora
+    // nella barra: le stringhe non devono mentire su un risultato precedente.
+    const srcName = d.source === "bandcamp" ? t.discovery.sourceBandcamp : t.discovery.sourceDiscogs;
+    if (d.pile_total === 0) {
+      return (
+        <EmptyState icon={<Disc3 size={28} />} title={t.discovery.deadSeedTitle(srcName)}>
+          {t.discovery.deadSeedBody(d.value, srcName)}
+        </EmptyState>
+      );
+    }
+    if (d.leads.length === 0) {
+      // Su una pila CORTA (la finestra è l'intera pila) "vai più a fondo" è un
+      // consiglio inerte — la profondità è disabilitata proprio per quella pila.
+      const shortPile = d.pile_reach <= WINDOW_ITEMS;
+      return (
+        <EmptyState icon={<Disc3 size={28} />} title={t.discovery.nothingToDigTitle}>
+          {shortPile
+            ? t.discovery.nothingToDigShortPile(d.value)
+            : t.discovery.nothingToDigBody(
+                d.value,
+                d.seed_type === "label" ? t.discovery.seedTypeValue : t.discovery.seedTypeStyle,
+              )}
+        </EmptyState>
+      );
+    }
+    // Lead ce ne sono: se la lista è vuota è la lente di formato ad averli tolti.
+    return <p className="py-8 text-center text-sm text-muted">{t.discovery.noFormatMatch}</p>;
+  };
+
+  // I simili hanno le loro cause, diverse da quelle dello scavo: nessun punto di
+  // partenza (Bandcamp non conosce l'artista) contro parentela trovata ma tutta
+  // già posseduta. Il guasto della sorgente non passa di qui: è un errore, e
+  // sale nell'alert in cima alla pagina.
+  const similarEmpty = (d: DiscoverySimilarResponse) => {
+    if (!d.origin) {
+      return (
+        <EmptyState
+          icon={<Disc3 size={28} />}
+          title={t.discovery.similarNoBandTitle(simTrack?.artist ?? "")}
+        >
+          {t.discovery.similarNoBandBody}
+        </EmptyState>
+      );
+    }
+    if (d.leads.length === 0) {
+      return (
+        <EmptyState icon={<Disc3 size={28} />} title={t.discovery.similarAllOwnedTitle}>
+          {t.discovery.similarAllOwnedBody(d.origin.artist)}
+          {!stylePeriod && ` ${t.discovery.similarAllOwnedHint}`}
+        </EmptyState>
+      );
+    }
+    return <p className="py-8 text-center text-sm text-muted">{t.discovery.noFormatMatch}</p>;
+  };
 
   return (
     <PageLayout title="Dig">
-      <p className="mb-4 text-sm text-muted">{t.discovery.intro}</p>
+      <p className="mb-4 text-sm text-muted">
+        {isSimilar ? t.discovery.similarIntro : t.discovery.intro}
+      </p>
 
       {error && <div className="mb-4"><Alert tone="danger">⚠ {error}</Alert></div>}
 
-      <DiscoveryDigBar
-        subject={subject}
-        onSubjectChange={(value, seed) => {
-          setSubject(value);
-          setSeedType(seed);
-        }}
-        depth={depth}
-        onDepthChange={setDepth}
-        source={source}
-        onSourceChange={setSource}
-        options={{
-          genres: genres ?? { library: [], styles: [] },
-          labels: labels?.map((l) => l.label) ?? [],
-        }}
-        pile={pile}
-        busy={busy}
-        ready={digReady}
-        onSubmit={runDig}
-        onSurprise={runSurprise}
-        canSurprise={canSurprise}
-      />
+      {isSimilar && sim && simTrack && (
+        <DiscoverySimilarHeader
+          data={sim}
+          track={simTrack}
+          stylePeriod={stylePeriod}
+          onStylePeriodChange={setStylePeriod}
+          busy={busy}
+        />
+      )}
 
-      {dig && (
+      {!isSimilar && (
+        <DiscoveryDigBar
+          subject={subject}
+          onSubjectChange={(value, seed) => {
+            setSubject(value);
+            setSeedType(seed);
+          }}
+          depth={depth}
+          onDepthChange={setDepth}
+          source={source}
+          onSourceChange={setSource}
+          options={{
+            genres: genres ?? { library: [], styles: [] },
+            labels: labels?.map((l) => l.label) ?? [],
+          }}
+          pile={pile}
+          busy={busy}
+          ready={digReady}
+          onSubmit={runDig}
+          onSurprise={runSurprise}
+          canSurprise={canSurprise}
+        />
+      )}
+
+      {hasResult && (
         <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border pb-3 text-xs">
           <span className="tnum text-muted">
             {visible.length < total
@@ -254,7 +388,9 @@ function DiscoveryInner() {
               ]}
             />
           </div>
-          {dig.pile_total > dig.pile_reach && (
+          {/* La pila è roba dello scavo: i simili non ne hanno una, quindi questo
+              avviso resta legato a `dig`. */}
+          {dig && dig.pile_total > dig.pile_reach && (
             <span className="tnum text-muted">
               {/* Sul seme etichetta il consiglio "un sottogenere più preciso" non ha
                   senso (una label non è un genere): variante senza quella frase. */}
@@ -268,13 +404,15 @@ function DiscoveryInner() {
         </div>
       )}
 
-      {busy && !dig && (
-        <Loading label={t.discovery.digInProgress} />
+      {busy && !hasResult && (
+        <Loading label={isSimilar ? t.discovery.similarInProgress : t.discovery.digInProgress} />
       )}
-      {dig && (
-        <DiscoveryLeadGrid dig={dig} leads={visible} />
-      )}
-      {!busy && !dig && (
+      {isSimilar
+        ? sim && <DiscoveryLeadGrid leads={visible} empty={similarEmpty(sim)} />
+        : dig && <DiscoveryLeadGrid leads={visible} empty={digEmpty(dig)} />}
+      {/* L'invito a scavare vale solo per la barra: in modalità simili non c'è
+          niente da digitare, e lo stato vuoto lo dà `similarEmpty`. */}
+      {!isSimilar && !busy && !dig && (
         <EmptyState icon={<Disc3 size={28} />} title={t.discovery.readyTitle}>
           {digReady
             ? t.discovery.readyBodyReady
