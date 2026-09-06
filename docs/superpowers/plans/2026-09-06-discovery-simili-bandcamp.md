@@ -151,10 +151,13 @@ def test_leads_carry_one_reason_per_edge_that_reached_them(db):
 
 
 def test_edge_counts_report_leads_produced_after_dedup(db):
+    # Artisti DIVERSI di proposito: con tre lead dello stesso artista il tetto
+    # `_MAX_PER_ARTIST` (2) ne taglierebbe uno e il test misurerebbe il tetto
+    # invece del conteggio degli archi. Il tetto ha il suo test, più sotto.
     source = _FakeSource(origin=_origin(), edges=[
-        ("same_artist", _lead(title="A")),
-        ("same_label", _lead(title="B")),
-        ("same_label", _lead(title="C")),
+        ("same_artist", _lead(artist="Artista A", title="A")),
+        ("same_label", _lead(artist="Artista B", title="B")),
+        ("same_label", _lead(artist="Artista C", title="C")),
     ])
     result = similar(db, _track(), source=source, style_period=False, library=[])
     assert result.edges["same_artist"].count == 1
@@ -450,7 +453,7 @@ git commit -m "feat(discovery): il motore dei simili, archi e ranking"
 
 **Interfaces:**
 - Consumes: `Origin` da Task 1; dal client `find_band(name)`, `band_discography(band_id)`, `tralbum(band_id=, tralbum_id=, tralbum_type=)`; gli helper già nel file `_clean_artist`, `_norm`, `_tag_norm`, `_bc_year_from_epoch`.
-- Produces: `BandcampSimilar(client)` con `resolve(track) -> Origin | None`; costanti `GENERIC_TAGS`.
+- Produces: `BandcampSimilar(client)` con `resolve(track) -> Origin | None`; costanti `GENERIC_TAGS` e `STYLE_EDGE_ITEMS = 120` (quest'ultima usata dalla Task 3).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -703,7 +706,7 @@ git commit -m "feat(discovery): BandcampSimilar riconosce la release d'origine"
 
 **Interfaces:**
 - Consumes: `Origin` da Task 1; `BandcampSimilar.resolve` da Task 2; dal client `discover(tag=, cursor=, size=)`.
-- Produces: `BandcampSimilar.expand(origin, *, style_period) -> list[tuple[str, dict]]`, `BandcampSimilar.to_lead(edge, raw) -> DiscoveryLead | None`, costante `STYLE_EDGE_ITEMS = 120`.
+- Produces: `BandcampSimilar.expand(origin, *, style_period) -> list[tuple[str, dict]]`, `BandcampSimilar.to_lead(edge, raw) -> DiscoveryLead | None`. Usa `STYLE_EDGE_ITEMS`, già introdotta dalla Task 2.
 
 - [ ] **Step 1: Write the failing test**
 
