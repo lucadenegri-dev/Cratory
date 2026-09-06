@@ -233,3 +233,109 @@ def test_unresolved_release_falls_back_to_the_file_tags():
 def test_a_band_bandcamp_does_not_know_resolves_to_nothing():
     src = BandcampSimilar(_FakeClient(band=None))
     assert src.resolve(_track()) is None
+
+
+DISCOVER_ITEM_2026 = {
+    "item_id": 900001, "item_type": "a", "title": "Vicino nel tempo",
+    "item_url": "https://x.bandcamp.com/album/vicino", "band_id": 42,
+    "album_artist": "Altro Artista", "band_name": "Una Label",
+    "primary_image": {"image_id": 5}, "track_count": 4,
+    "featured_track": {"stream_url": "https://t4.bcbits.com/stream/x"},
+    "release_date": "2026-01-01 00:00:00 UTC",
+}
+DISCOVER_ITEM_2010 = {**DISCOVER_ITEM_2026, "item_id": 900002, "title": "Lontano",
+                      "release_date": "2010-01-01 00:00:00 UTC"}
+
+LABEL_ITEM = {**DISCOGRAPHY_ITEM, "item_id": 777, "title": "Un disco dell'etichetta",
+              "artist_name": "Pearson Sound", "band_name": "Hessle Audio"}
+
+
+class _FakeClientWithDiscover(_FakeClient):
+    def __init__(self, discover_batch=None, **kw):
+        super().__init__(**kw)
+        self.discover_batch = discover_batch or []
+
+    def discover(self, *, tag, cursor="*", size=500):
+        self.calls.append(("discover", tag, cursor, size))
+        return list(self.discover_batch), None, len(self.discover_batch)
+
+
+def test_the_artist_edge_reuses_the_discography_and_excludes_the_origin_release():
+    other = {**DISCOGRAPHY_ITEM, "item_id": 555, "title": "Un altro disco"}
+    client = _FakeClientWithDiscover(
+        band={"id": 637178087, "name": "Jasmín"},
+        discographies={637178087: [DISCOGRAPHY_ITEM, other], 2788766970: []},
+        tralbum=TRALBUM,
+    )
+    src = BandcampSimilar(client)
+    origin = src.resolve(_track(album="Bite The Hand That Feeds You"))
+    before = len(client.calls)
+    edges = src.expand(origin, style_period=False)
+    titles = [raw["title"] for edge, raw in edges if edge == "same_artist"]
+    assert titles == ["Un altro disco"]
+    # L'arco artista non ricompra la discografia: solo la chiamata dell'etichetta.
+    assert [c[0] for c in client.calls[before:]] == ["band_discography"]
+
+
+def test_the_label_edge_walks_the_label_discography():
+    client = _FakeClientWithDiscover(
+        band={"id": 637178087, "name": "Jasmín"},
+        discographies={637178087: [DISCOGRAPHY_ITEM], 2788766970: [LABEL_ITEM]},
+        tralbum=TRALBUM,
+    )
+    src = BandcampSimilar(client)
+    edges = src.expand(src.resolve(_track(album="Bite The Hand That Feeds You")),
+                       style_period=False)
+    assert [raw["title"] for edge, raw in edges if edge == "same_label"] == \
+        ["Un disco dell'etichetta"]
+
+
+def test_a_self_released_origin_has_no_label_edge_and_costs_no_request():
+    client = _FakeClientWithDiscover(
+        band={"id": 637178087, "name": "Jasmín"},
+        discographies={637178087: [DISCOGRAPHY_ITEM]},
+        tralbum={**TRALBUM, "label_id": 637178087, "label": "Jasmín"},
+    )
+    src = BandcampSimilar(client)
+    origin = src.resolve(_track(album="Bite The Hand That Feeds You"))
+    before = len(client.calls)
+    edges = src.expand(origin, style_period=False)
+    assert [e for e, _ in edges if e == "same_label"] == []
+    assert client.calls[before:] == []
+
+
+def test_the_style_edge_keeps_only_releases_inside_the_period_window():
+    client = _FakeClientWithDiscover(
+        discover_batch=[DISCOVER_ITEM_2026, DISCOVER_ITEM_2010],
+        band={"id": 637178087, "name": "Jasmín"},
+        discographies={637178087: [DISCOGRAPHY_ITEM], 2788766970: []},
+        tralbum=TRALBUM,
+    )
+    src = BandcampSimilar(client)
+    edges = src.expand(src.resolve(_track()), style_period=True)
+    # origin.year = 2025, PERIOD_YEARS = 3 -> 2026 dentro, 2010 fuori.
+    assert [raw["title"] for edge, raw in edges if edge == "same_period_style"] == \
+        ["Vicino nel tempo"]
+    assert any(c[0] == "discover" and c[1] == "bass" for c in client.calls)
+
+
+def test_the_style_edge_costs_no_request_when_switched_off():
+    client = _FakeClientWithDiscover(
+        discover_batch=[DISCOVER_ITEM_2026],
+        band={"id": 637178087, "name": "Jasmín"},
+        discographies={637178087: [DISCOGRAPHY_ITEM], 2788766970: []},
+        tralbum=TRALBUM,
+    )
+    src = BandcampSimilar(client)
+    src.expand(src.resolve(_track()), style_period=False)
+    assert not any(c[0] == "discover" for c in client.calls)
+
+
+def test_each_edge_maps_with_the_shape_its_endpoint_returns():
+    src, _ = _resolver()
+    from_discography = src.to_lead("same_artist", DISCOGRAPHY_ITEM)
+    assert from_discography.artist == "Jasmín"
+    assert from_discography.source_id == "637178087:4024735967"
+    from_discover = src.to_lead("same_period_style", DISCOVER_ITEM_2026)
+    assert from_discover.artist == "Altro Artista"
+    assert from_discover.stream_url == "https://t4.bcbits.com/stream/x"

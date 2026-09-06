@@ -353,3 +353,66 @@ class BandcampSimilar:
             if norm and norm not in GENERIC_TAGS:
                 return norm
         return _tag_norm(getattr(track, "genre", None) or "") or None
+
+    # --- expand --------------------------------------------------------------
+
+    def expand(self, origin, *, style_period: bool) -> list[tuple[str, dict]]:
+        out: list[tuple[str, dict]] = []
+        out.extend(("same_artist", item) for item in self._artist_edge(origin))
+        out.extend(("same_label", item) for item in self._label_edge(origin))
+        if style_period:
+            out.extend(("same_period_style", item) for item in self._style_edge(origin))
+        return out
+
+    def _artist_edge(self, origin) -> list[dict]:
+        """Le altre release dell'artista. Zero richieste: la discografia è già in mano."""
+        return [item for item in origin.discography
+                if str(item.get("item_id")) != str(origin.tralbum_id)]
+
+    def _label_edge(self, origin) -> list[dict]:
+        """La discografia dell'etichetta.
+
+        Autoprodotto (`label_id` assente o uguale alla band) non è un errore: è un
+        arco che non esiste, e non deve costare una richiesta.
+        """
+        if origin.label_id and origin.label_id != origin.band_id:
+            return self.client.band_discography(origin.label_id)
+        if origin.resolution == "artist_only" and origin.label:
+            band = self.client.find_band(origin.label)
+            if band and band.get("id"):
+                return self.client.band_discography(int(band["id"]))
+        return []
+
+    def _style_edge(self, origin) -> list[dict]:
+        """Il discover del tag, ristretto alla finestra temporale dell'origine.
+
+        Una sola batch: l'arco è un rinforzo, non un dig, e la finestra scarta già
+        molto. Il filtro sull'anno è sul client perché il discover non lo offre.
+        """
+        from app.services.discovery_similar import PERIOD_YEARS
+
+        if not origin.tag or origin.year is None:
+            return []
+        try:
+            batch, _cursor, _total = self.client.discover(
+                tag=origin.tag, cursor="*", size=STYLE_EDGE_ITEMS)
+        except BandcampError:
+            raise
+        lo, hi = origin.year - PERIOD_YEARS, origin.year + PERIOD_YEARS
+        out = []
+        for item in batch or []:
+            year = _bc_year(item.get("release_date"))
+            if year is not None and lo <= year <= hi:
+                out.append(item)
+        return out
+
+    # --- mapping -------------------------------------------------------------
+
+    def to_lead(self, edge: str, raw: dict):
+        """Due archi, due forme: discografia (artista, etichetta) vs discover (stile).
+
+        I mapper sono quelli di `BandcampSource`: il seme che gli si passa serve solo
+        a marcare il lead, e qui è il nome dell'arco.
+        """
+        seed = Seed(type="label" if edge != "same_period_style" else "genre", value=edge)
+        return self._source.to_lead(raw, seed)
