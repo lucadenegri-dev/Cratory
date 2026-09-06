@@ -14,6 +14,7 @@ import { TrackEditModal } from "@/components/track-edit-modal";
 import { MiniBars, type MiniBarRow } from "@/components/dashboard/mini-bars";
 import { useT } from "@/lib/i18n";
 import { withFrom } from "@/lib/back-link";
+import { digHref } from "@/lib/discovery-seeds";
 
 export default function LabelDetail() {
   return <Suspense><LabelDetailInner /></Suspense>;
@@ -113,7 +114,7 @@ function LabelDetailInner() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <Link href="/labels" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {t.labels.detail.backLink}</Link>
         <Link
-          href={`/discovery?seed=label&value=${encodeURIComponent(label)}`}
+          href={digHref("/discovery", [{ type: "label", value: label }], 0, "discogs")}
           className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 text-sm text-muted transition-colors hover:border-fg/40 hover:text-fg"
         >
           <Shovel size={14} /> {t.labels.detail.digThisLabel}

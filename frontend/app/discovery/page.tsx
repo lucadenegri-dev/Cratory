@@ -155,8 +155,11 @@ function DiscoveryInner() {
     const depthRaw = Number(searchParams.get("depth") ?? "0");
     const d = Number.isFinite(depthRaw) ? Math.min(1, Math.max(0, depthRaw)) : 0;
     const wanted: DigSourceKey = searchParams.get("source") === "bandcamp" ? "bandcamp" : "discogs";
-    // Discogs spento: un link con source=discogs degrada, non fallisce.
-    const src: DigSourceKey = !discogsEnabled && wanted === "discogs" ? "bandcamp" : wanted;
+    // Discogs spento: un link con source=discogs degrada, non fallisce. Il
+    // confronto è `=== false`, non `!discogsEnabled`: quest'ultimo sarebbe
+    // vero anche a `null`, rendendo il ramo di degrado indipendente dalla
+    // guardia sopra (e quindi dalla preferenza) invece che dipendente da essa.
+    const src: DigSourceKey = discogsEnabled === false && wanted === "discogs" ? "bandcamp" : wanted;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- il dig è l'external system: l'effect risincronizza i risultati sull'URL (query string), non su state locale
     executeDig(list, d, src);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -373,7 +376,7 @@ function DiscoveryInner() {
         onSubmit={runDig}
         onSurprise={runSurprise}
         canSurprise={canSurprise}
-        onPickTrack={(track: Track) => router.push(similarHref(track.id, localStylePeriod, null), { scroll: false })}
+        onPickTrack={(track: Track) => router.push(similarHref(track.id, stylePeriod, null), { scroll: false })}
         searchTracks={searchTracks}
       />
 

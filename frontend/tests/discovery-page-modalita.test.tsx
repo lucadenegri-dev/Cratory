@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { it as dict } from "@/lib/i18n/it";
 import { similarHref } from "@/lib/discovery-dig";
@@ -267,13 +267,26 @@ describe("pagina Discovery, la barra a due modi", () => {
       { scroll: false });
   });
 
-  it("il vecchio ?seed=&value= non fa partire nulla", () => {
+  it("il vecchio ?seed=&value= non fa partire nulla", async () => {
     // I test precedenti hanno già invocato discoveryDig: la storicità delle
     // chiamate non è quello che questo test vuole controllare.
     discoveryDig.mockClear();
     query = new URLSearchParams("seed=genre&value=House");
-    render(<DiscoveryPage />);
+    const view = render(<DiscoveryPage />);
+    // L'effect dello scavo aspetta che `discogsEnabled` sia noto, e quella
+    // preferenza arriva da un .then(): un'asserzione sincrona qui sarebbe vera
+    // anche a pagina rotta, perché nessun dig può partire prima che l'effect
+    // rigiri dopo la promise. Il flush porta la pagina allo stato a riposo.
+    await act(async () => {});
     expect(discoveryDig).not.toHaveBeenCalled();
+
+    // Prova che il flush sopra basta davvero a far partire un dig: stessa
+    // pagina montata, stavolta con un ?seeds= valido. Se l'asserzione sopra
+    // fosse vera a prescindere (test vacuo), questa lo smaschererebbe.
+    query = new URLSearchParams("seeds=genre:House&depth=0&source=discogs");
+    view.rerender(<DiscoveryPage />);
+    await act(async () => {});
+    expect(discoveryDig).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -298,8 +311,26 @@ describe("pagina Discovery, Discogs spento", () => {
     await waitFor(() => expect(discoveryDig).toHaveBeenCalled());
     expect(discoveryDig).toHaveBeenCalledWith(
       [{ type: "label", value: "Warp Records" }], { depth: 0, source: "bandcamp" });
+    // Un solo giro: se l'effect partisse anche a `discogsEnabled === null`
+    // (prima che la preferenza arrivi), questa chiamata sarebbe la SECONDA,
+    // non la prima — e sarebbe bandcamp comunque, mascherando il bug.
+    expect(discoveryDig).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(dict.discovery.sourceDiscogs)).toBeNull();
     vi.doUnmock("@/lib/api");
     vi.resetModules();
+  });
+
+  it("un URL con source=discogs scava su Discogs quando Discogs è acceso", async () => {
+    // Gemello del test sopra, sul ramo opposto: dimostra che l'attesa della
+    // preferenza non degrada MAI a Bandcamp quando Discogs è acceso, e che lo
+    // scavo parte una volta sola (non una a `null` e una alla preferenza vera).
+    discoveryDig.mockClear();
+    discoveryDig.mockResolvedValue(DIG);
+    query = new URLSearchParams("seeds=label:Warp%20Records&depth=0&source=discogs");
+    render(<DiscoveryPage />);
+    await waitFor(() => expect(discoveryDig).toHaveBeenCalled());
+    expect(discoveryDig).toHaveBeenCalledTimes(1);
+    expect(discoveryDig).toHaveBeenCalledWith(
+      [{ type: "label", value: "Warp Records" }], { depth: 0, source: "discogs" });
   });
 });

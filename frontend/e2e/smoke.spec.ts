@@ -130,11 +130,10 @@ for (const { path, title } of ROUTES) {
 // (verificata via GET /api/labels), non inventata — "Trax Records" del brief
 // originale non esiste nella libreria corrente.
 //
-// Storicamente il <select> del gusto condivideva il ruolo ARIA "combobox" col campo
-// soggetto e serviva .first() per disambiguare; il selettore del gusto e' stato
-// rimosso (la manopola azzerava l'ordinamento in silenzio sulle playlist magre), ma
-// .first() resta innocuo e tiene il selettore stabile se un altro combobox comparisse.
+// Il vecchio ?seed=&value= non esiste piu': i semi vivono in ?seeds=type:value,
+// e il seme precompilato si osserva come chip nella barra (col suo bottone di
+// rimozione), non piu' come valore di un <select>.
 test("deep link per etichetta precompila il soggetto", async ({ page }) => {
-  await page.goto("/discovery?seed=label&value=Warp%20Records");
-  await expect(page.getByRole("combobox").first()).toHaveValue("Warp Records");
+  await page.goto("/discovery?seeds=label:Warp%20Records&depth=0&source=discogs");
+  await expect(page.getByRole("button", { name: "Togli Warp Records" })).toBeVisible();
 });
