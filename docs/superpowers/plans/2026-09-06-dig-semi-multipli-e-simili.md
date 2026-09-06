@@ -603,7 +603,8 @@ def test_dig_splits_the_budget_between_the_seeds():
 
 def test_dig_reports_one_pile_per_seed_including_the_dead_one():
     def count(**kw):
-        return 0 if kw.get("style") == "Inesistente" else 5000
+        # Morto su ENTRAMBE le sonde: style= e il ripiego su genre=.
+        return 0 if "Inesistente" in kw.values() else 5000
 
     class _Client:
         def count_releases(self, **kw):
@@ -1550,6 +1551,7 @@ describe("DiscoverySeedPicker", () => {
     expect(onChange).toHaveBeenLastCalledWith([{ type: "genre", value: "Techno" }]);
     cleanup();
     const onChange2 = setup([{ type: "genre", value: "Techno" }]);
+    fireEvent.click(screen.getByText("mostra"));   // con un seme la tavolozza parte chiusa
     fireEvent.click(screen.getByRole("button", { name: /^Techno/ }));
     expect(onChange2).toHaveBeenLastCalledWith([]);
   });
@@ -2411,7 +2413,9 @@ e `AVVISO_PILA` diventa `dict.discovery.broadSeeds(dict.discovery.broadSeedDetai
 
 3. Ogni `new URLSearchParams("seed=label&value=Warp Records&depth=0&source=discogs")` → `new URLSearchParams("seeds=label:Warp%20Records&depth=0&source=discogs")`.
 
-4. Aggiungi in coda un terzo `describe`:
+4. Nel test `"un'altra traccia invece azzera il risultato e mostra lo spinner"` l'asserzione `expect(screen.queryByLabelText(INTERRUTTORE)).toBeNull()` diventa `expect(screen.queryByText(dict.discovery.similarFrom)).toBeNull()`: l'interruttore ora vive nella barra, sempre montata; è l'intestazione a sparire. In cima al file aggiungi `import { digHref } from "@/lib/discovery-seeds";` accanto all'import di `similarHref` (serve al describe nuovo).
+
+5. Aggiungi in coda un terzo `describe`:
 
 ```tsx
 describe("pagina Discovery, la barra a due modi", () => {
@@ -2452,7 +2456,8 @@ describe("pagina Discovery, la barra a due modi", () => {
     fireEvent.keyDown(campo, { key: "Enter" });
     fireEvent.click(screen.getByText(dict.discovery.dig));
     expect(push).toHaveBeenCalledWith(
-      "/discovery?seeds=genre%3ADeep+House%2Cgenre%3AElectro&depth=0&source=discogs", { scroll: false });
+      digHref("/discovery", [{ type: "genre", value: "Deep House" }, { type: "genre", value: "Electro" }], 0, "discogs"),
+      { scroll: false });
   });
 
   it("il vecchio ?seed=&value= non fa partire nulla", () => {
