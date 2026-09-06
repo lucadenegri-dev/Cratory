@@ -137,3 +137,97 @@ def test_owned_leads_are_dropped(db):
                      library=[owned])
     assert result.leads == []
     assert result.edges["same_artist"].count == 0
+
+
+from app.services.dig_sources.bandcamp import BandcampSimilar
+
+
+# Payload catturati dall'API reale il 2026-09-06, ridotti ai campi usati.
+DISCOGRAPHY_ITEM = {
+    "item_id": 4024735967, "item_type": "album", "band_id": 637178087,
+    "title": "Bite The Hand That Feeds You", "artist_name": "Jasmín",
+    "band_name": "Jasmín", "art_id": 111, "release_date": "26 Jun 2026 00:00:00 GMT",
+}
+
+TRALBUM = {
+    "label": "Hessle Audio", "label_id": 2788766970,
+    "tags": [
+        {"name": "Electronic", "norm_name": "electronic", "isloc": False},
+        {"name": "Bristol", "norm_name": "bristol", "isloc": True},
+        {"name": "bass", "norm_name": "bass", "isloc": False},
+    ],
+    "release_date": 1761091200,
+    "bandcamp_url": "https://jasminhoek.bandcamp.com/album/bite-the-hand-that-feeds-you",
+}
+
+
+class _FakeClient:
+    """Client Bandcamp finto: risposte prefissate, chiamate registrate."""
+
+    def __init__(self, band=None, discographies=None, tralbum=None):
+        self.band = band
+        self.discographies = discographies or {}
+        self._tralbum = tralbum or {}
+        self.calls: list[tuple] = []
+
+    def find_band(self, name):
+        self.calls.append(("find_band", name))
+        return self.band
+
+    def band_discography(self, band_id):
+        self.calls.append(("band_discography", band_id))
+        return list(self.discographies.get(band_id, []))
+
+    def tralbum(self, *, band_id, tralbum_id, tralbum_type="a"):
+        self.calls.append(("tralbum", band_id, tralbum_id, tralbum_type))
+        return dict(self._tralbum)
+
+
+def _resolver(**kw) -> tuple[BandcampSimilar, _FakeClient]:
+    client = _FakeClient(
+        band={"id": 637178087, "name": "Jasmín"},
+        discographies={637178087: [DISCOGRAPHY_ITEM]},
+        tralbum=TRALBUM,
+        **kw,
+    )
+    return BandcampSimilar(client), client
+
+
+def test_resolve_matches_the_release_by_album_and_reads_its_details():
+    src, client = _resolver()
+    origin = src.resolve(_track())
+    assert origin.resolution == "release"
+    assert origin.band_id == 637178087
+    assert origin.tralbum_id == 4024735967
+    assert origin.tralbum_type == "a"   # "album" -> "a", non "album"
+    assert origin.label == "Hessle Audio"
+    assert origin.label_id == 2788766970
+    assert origin.year == 2025          # da release_date epoch
+    assert origin.source_url == TRALBUM["bandcamp_url"]
+
+
+def test_resolve_skips_generic_and_location_tags_when_choosing_the_style_tag():
+    src, _ = _resolver()
+    assert src.resolve(_track()).tag == "bass"
+
+
+def test_resolve_matches_by_title_when_the_album_tag_is_missing():
+    src, _ = _resolver()
+    origin = src.resolve(_track(album=None, title="Bite The Hand That Feeds You"))
+    assert origin.resolution == "release"
+
+
+def test_unresolved_release_falls_back_to_the_file_tags():
+    src, client = _resolver()
+    origin = src.resolve(_track(album="Un disco che non esiste", title="Nemmeno questo"))
+    assert origin.resolution == "artist_only"
+    assert origin.label == "Hessle Audio"   # dal tag del file
+    assert origin.tag == "bass"             # da track.genre "Bass", normalizzato
+    assert origin.year == 2025              # da track.year
+    # Nessun dettaglio release chiesto: non c'è release da dettagliare.
+    assert not any(c[0] == "tralbum" for c in client.calls)
+
+
+def test_a_band_bandcamp_does_not_know_resolves_to_nothing():
+    src = BandcampSimilar(_FakeClient(band=None))
+    assert src.resolve(_track()) is None

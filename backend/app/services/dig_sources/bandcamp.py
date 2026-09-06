@@ -243,3 +243,116 @@ class BandcampSource:
             stream_url=stream,
             format_badge=_badge(track_count),
         )
+
+
+# Quanti item chiedere al discover per l'arco stile. `DISCOVER_PAGE_SIZE` (500) è la
+# misura del dig, che deve riempire una finestra; qui l'arco è un rinforzo e la
+# finestra temporale scarta già molto, quindi una batch corta basta e costa meno.
+STYLE_EDGE_ITEMS = 120
+
+# Tag troppo larghi per definire uno stile: non discriminano niente e il discover
+# che ne uscirebbe è indistinguibile da un dig generico.
+GENERIC_TAGS = {"electronic", "music", "dance"}
+
+# `item_type` della discografia -> `tralbum_type` di tralbum_details. L'API rifiuta
+# esplicitamente "album" ("Expected tralbum_type as 'a' or 't'"): la mappa non è
+# cosmesi, senza di lei la risoluzione fallisce sempre.
+_TRALBUM_TYPES = {"album": "a", "track": "t", "a": "a", "t": "t"}
+
+
+class BandcampSimilar:
+    """I parenti di un disco su Bandcamp: risoluzione e archi.
+
+    L'unico punto che conosce la forma dei payload Bandcamp per i simili. Condivide
+    con `BandcampSource` i mapper da record grezzo a lead: la discografia e il
+    discover hanno due forme diverse, ed è già `BandcampSource` a saperlo.
+    """
+
+    name = "bandcamp"
+
+    def __init__(self, client):
+        self.client = client
+        self._source = BandcampSource(client)
+
+    # --- resolve -------------------------------------------------------------
+
+    def resolve(self, track) -> Any:
+        from app.services.discovery_similar import Origin
+
+        artist_raw = (getattr(track, "artist", None) or "").strip()
+        if not artist_raw:
+            return None
+        artist, _keys = _clean_artist(artist_raw)
+        if not artist:
+            return None
+        band = self.client.find_band(artist)
+        if not band or not band.get("id"):
+            return None
+        band_id = int(band["id"])
+        discography = self.client.band_discography(band_id)
+
+        item = self._match_release(discography, track)
+        if item is None:
+            # Release non riconosciuta: si tiene l'artista e si prendono dai tag del
+            # file quel che la release avrebbe dato. Dichiarato, non nascosto.
+            return Origin(
+                artist=artist, band_id=band_id, title=None, tralbum_id=None,
+                tralbum_type=None,
+                label=(getattr(track, "label", None) or "").strip() or None,
+                label_id=None,
+                tag=(_tag_norm(getattr(track, "genre", None) or "") or None),
+                year=getattr(track, "year", None),
+                source_url=None, resolution="artist_only", discography=discography,
+            )
+
+        tralbum_type = _TRALBUM_TYPES.get(str(item.get("item_type") or "a"), "a")
+        detail = self.client.tralbum(
+            band_id=int(item.get("band_id") or band_id),
+            tralbum_id=int(item["item_id"]),
+            tralbum_type=tralbum_type,
+        )
+        label_id = detail.get("label_id")
+        return Origin(
+            artist=artist, band_id=band_id,
+            title=(item.get("title") or "").strip() or None,
+            tralbum_id=int(item["item_id"]), tralbum_type=tralbum_type,
+            label=(detail.get("label") or "").strip() or None,
+            label_id=int(label_id) if label_id else None,
+            tag=self._style_tag(detail, track),
+            year=_bc_year_from_epoch(detail.get("release_date"))
+                 or getattr(track, "year", None),
+            source_url=(detail.get("bandcamp_url") or "").split("?")[0] or None,
+            resolution="release", discography=discography,
+        )
+
+    def _match_release(self, discography: list[dict], track) -> dict | None:
+        """La release della discografia che corrisponde alla traccia.
+
+        La discografia elenca RELEASE, non brani: si prova prima l'album (match
+        diretto, anche per prefisso — un tag locale abbreviato è più corto del
+        titolo intero della release, es. "Bite The Hand" per "Bite The Hand That
+        Feeds You") e poi il titolo (funziona quando il brano è uscito come single o
+        EP omonimo). Aprire ogni release per cercarci dentro il brano costerebbe una
+        richiesta a release: fuori scope.
+        """
+        from app.services.discovery_dig import _dedup_title
+
+        wanted = [_norm(_dedup_title(v)) for v in
+                  ((getattr(track, "album", None) or ""), (getattr(track, "title", None) or ""))
+                  if (v or "").strip()]
+        for want in wanted:
+            for item in discography:
+                item_title = _norm(_dedup_title(item.get("title") or ""))
+                if item_title == want or item_title.startswith(want + " "):
+                    return item
+        return None
+
+    def _style_tag(self, detail: dict, track) -> str | None:
+        """Il primo tag utile della release: né di luogo né generico."""
+        for tag in detail.get("tags") or []:
+            if tag.get("isloc"):
+                continue
+            norm = (tag.get("norm_name") or "").strip().lower()
+            if norm and norm not in GENERIC_TAGS:
+                return norm
+        return _tag_norm(getattr(track, "genre", None) or "") or None
