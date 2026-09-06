@@ -61,8 +61,20 @@ function LibraryInner() {
   const [incomplete, setIncomplete] = useState(searchParams.get("incomplete") === "1");
   const [owned, setOwned] = useState(searchParams.get("owned") ?? ""); // "" = tutte | "true" = possedute | "false" = wishlist
   const [rating, setRating] = useState(searchParams.get("rating") ?? "");
-  const [sort, setSort] = useState(searchParams.get("sort") ?? "");
-  const [order, setOrder] = useState<Order>(searchParams.get("order") === "desc" ? "desc" : "asc");
+  // La libreria si apre sulle ultime arrivate. Il default del backend è
+  // alfabetico per artista, che su una libreria che cresce è l'ordine meno
+  // utile: entrando si vuole vedere cos'è entrato di recente. Un `sort`
+  // esplicito nell'URL vince sempre — è così che tornando dal dettaglio di una
+  // traccia si ritrova la vista che si era lasciata.
+  const sortIniziale = searchParams.get("sort") ?? "added_at";
+  const [sort, setSort] = useState(sortIniziale);
+  const [order, setOrder] = useState<Order>(
+    searchParams.get("order")
+      ? (searchParams.get("order") === "desc" ? "desc" : "asc")
+      // Senza `order` esplicito il verso lo detta la colonna: sulle date il
+      // senso è "prima le più recenti", sul resto resta l'ascendente di prima.
+      : (sortIniziale === "added_at" ? "desc" : "asc"),
+  );
   const [editing, setEditing] = useState<Track | null>(null);
   const [view, setView] = useState<"list" | "grid">("list");
   // Griglia: nessuna paginazione, si caricano tutte le tracce (limit=0 = "tutte" lato API).
