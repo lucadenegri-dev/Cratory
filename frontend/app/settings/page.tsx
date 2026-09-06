@@ -6,14 +6,14 @@ import { apiGet, errText, servicesStatus, setSetupCompleted, type ServiceStatus,
 import { Alert, Button, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { ConfigCard } from "@/components/settings/config-card";
+import { DiscoverySection } from "@/components/settings/discovery-section";
 import { OrganizeSection } from "@/components/settings/organize-section";
 import { ServicesList } from "@/components/settings/services-list";
 import { VersionCard } from "@/components/settings/version-card";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
-/* Impostazioni: 4 gruppi (fusione F1-F6, un prodotto solo).
-   Generale · Percorsi e libreria · Servizi esterni · Organize. */
+/* Impostazioni: 5 gruppi: Generale · Discovery · Percorsi e libreria · Servizi esterni · Organize. */
 
 function SettingsInner() {
   const { lang, setLang, t } = useI18n();
@@ -65,6 +65,9 @@ function SettingsInner() {
           </button>
         </div>
       </div>
+
+      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">{t.settings.discoveryHeading}</div>
+      <DiscoverySection />
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">{t.settings.pathsHeading}</div>
       <ConfigCard />
