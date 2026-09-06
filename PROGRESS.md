@@ -8,6 +8,21 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **L'analisi BPM/key riparte da sola a fine Apply** (2026-09-06): applicare un
+  piano Organize lascia tracce possedute senza BPM né key, e finora toccava
+  ricordarsi di aprire `/analysis` e premere Avvia. Ora la catena ha tre anelli:
+  `apply (con operazioni applicate) → scan → analisi con scope "missing"`.
+  L'analisi sta **dopo** la scansione, non a fine apply, perché `apply_plan`
+  sposta e rinomina i file senza riscrivere `AudioFile.path` né
+  `Track.local_path`: è la scansione a riallinearli, e analizzare prima
+  passerebbe a Essentia percorsi morti valorizzando comunque `analyzed_at`, cioè
+  mascherando il buco invece di riempirlo. L'innesco vive in un ref del
+  `JobsProvider`, si arma solo se la scansione post-apply è stata accettata e si
+  consuma al primo esito della scansione, così una scansione manuale non lo
+  eredita mai. I valori entrano nei canonici solo via `auto_apply_missing`, che
+  riempie i campi vuoti con provenienza `cratory`: la gerarchia
+  `manual > rekordbox > cratory` resta intatta.
+
 - **I comandi massivi di Issues agiscono su ciò che vedi** (2026-09-04): la barra
   aveva quattro bottoni per tipo o gravità globali, nessuno che ignorasse la
   lista intera, e "accetta i fixabili" saltava in silenzio ogni valore digitato a
