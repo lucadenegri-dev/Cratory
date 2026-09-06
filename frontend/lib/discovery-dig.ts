@@ -17,3 +17,11 @@ export const DEPTHS = [
 /** Quanti item scarica un dig: rispecchia WINDOW_ITEMS del backend. Sotto questa
  *  soglia la finestra è l'intera pila e la profondità non ha niente da scegliere. */
 export const WINDOW_ITEMS = 300;
+
+/** L'URL della modalità simili. Unica fonte per bottone, interruttore e rilancio. */
+export function similarHref(trackId: number, stylePeriod: boolean): string {
+  const params = new URLSearchParams();
+  params.set("similar", String(trackId));
+  params.set("style_period", stylePeriod ? "1" : "0");
+  return `/discovery?${params.toString()}`;
+}
