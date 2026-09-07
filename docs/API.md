@@ -650,7 +650,9 @@ default) and **Bandcamp** (`source="bandcamp"`) — chosen per request.
 
 The window budget is **300 items per dig, divided between the seeds** (`300 // n`),
 never multiplied: three genres cost three round trips and 300 items, not nine and
-900. Five seeds or an empty list is `422`.
+900. Five seeds or an empty list is `422`. On Bandcamp each seed's cursor walk
+still starts from the top, so at `depth=1.0` the request count grows with the
+number of seeds even though the item budget does not.
 
 ### How depth works
 
@@ -683,11 +685,13 @@ On Discogs a `genre` seed is probed as a `style` first (fine-grained, e.g.
 is visible.
 
 `GET /api/discovery/genres` returns the seed vocabulary: `library` (genres already
-in the library) and `styles` (a hand-curated Discogs style list). Both sources share
-it; Bandcamp normalizes each entry into a tag (lowercase, runs of non-alphanumeric
-characters collapsed to one hyphen) with one hand-kept alias
-(`Drum n Bass` → `drum-and-bass`, because the naive normalization lands on a real
-but wrong tag).
+in the library), `styles` (a hand-curated Discogs style list) and `library_counts`
+(`{genre, count}` per `library` entry, same order — counted on the same `Track.genre`
+column as `library`, with no BPM filter, so the Dig palette's chip counts can never
+diverge from the chips themselves). Both sources share the vocabulary; Bandcamp
+normalizes each entry into a tag (lowercase, runs of non-alphanumeric characters
+collapsed to one hyphen) with one hand-kept alias (`Drum n Bass` → `drum-and-bass`,
+because the naive normalization lands on a real but wrong tag).
 
 ### Leads
 

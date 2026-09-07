@@ -73,3 +73,17 @@ def test_q_vuoto_non_filtra(client_db):
     db.commit()
     r = client.get("/api/tracks", params={"q": ""})
     assert _titles(r) == ["x", "y"]
+
+
+def test_q_con_percento_letterale_non_e_wildcard(client_db):
+    """`q` va scappato come gli altri filtri (ci_contains): un `%` nel valore
+    cercato deve valere come carattere letterale, non come wildcard LIKE.
+    Prima del fix `like = f"%{q}%"` con q="%" produceva il pattern "%%%",
+    che collassa a un jolly e matcha qualunque titolo."""
+    client, db = client_db
+    _tr(db, "Artist", "100% Pure")
+    _tr(db, "Artist", "Full Stop")
+    db.commit()
+
+    r = client.get("/api/tracks", params={"q": "%"})
+    assert _titles(r) == ["100% Pure"]

@@ -50,13 +50,21 @@ def test_genres_200_include_libreria_e_stili_curati(client):
     body = r.json()
     assert body["library"] == ["Acid House", "Ambient"]  # ordinato, senza duplicati
     assert "House" in body["styles"]  # stile curato sempre presente
+    # Stessa colonna dei chip, senza il filtro BPM di /api/library/genres: i due
+    # generi contano le tracce viste sopra, nello stesso ordine di `library`.
+    assert body["library_counts"] == [
+        {"genre": "Acid House", "count": 2},
+        {"genre": "Ambient", "count": 1},
+    ]
 
 
 def test_genres_200_libreria_vuota(client):
     c, _ = client
     r = c.get("/api/discovery/genres")
     assert r.status_code == 200
-    assert r.json()["library"] == []
+    body = r.json()
+    assert body["library"] == []
+    assert body["library_counts"] == []
 
 
 # --- /dig -----------------------------------------------------------------------

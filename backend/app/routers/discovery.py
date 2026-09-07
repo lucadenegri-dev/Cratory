@@ -13,7 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.http_errors import api_error
@@ -39,6 +39,7 @@ from app.schemas import (
     DiscoverySimilarResponse,
     DiscoveryTrackOut,
     EdgeReportOut,
+    GenreCountOut,
     OriginOut,
     ReasonOut,
 )
@@ -65,7 +66,7 @@ from app.services.preview import extract_youtube_videos, resolve_preview
 # La lista e' scritta a mano e Discogs non espone un endpoint per enumerare gli style,
 # quindi non e' derivabile dai dati: marcira' ancora. La difesa non e' un test (girerebbe
 # in rete, andrebbe escluso dalla suite e non lo eseguirebbe nessuno) ma la UI: un seme
-# senza pila lo dice (`pile_total == 0`), invece di far credere che il problema sia la
+# senza pila lo dice (`piles[].total == 0`), invece di far credere che il problema sia la
 # libreria dell'utente.
 _CURATED_STYLES = [
     "House", "Deep House", "Tech House", "Acid House", "Techno", "Minimal Techno",
@@ -145,12 +146,24 @@ def _lead_out(lead: DiscoveryLead) -> DiscoveryLeadOut:
 
 @router.get("/genres", response_model=DiscoveryGenresOut)
 def discovery_genres(db: Session = Depends(get_db)):
-    """Generi gia' in libreria + stili curati, per il seme 'Generi' del dig."""
+    """Generi gia' in libreria + stili curati, per il seme 'Generi' del dig.
+
+    Un'unica query raggruppata alimenta sia `library` che `library_counts`: stessa
+    colonna (`Track.genre`), stesso filtro, cosi' i due non possono divergere come
+    accadeva confrontando questo endpoint con /api/library/genres (tag effettivo,
+    solo tracce con BPM)."""
     rows = db.execute(
-        select(Track.genre).where(Track.genre.is_not(None), Track.genre != "").distinct()
+        select(Track.genre, func.count())
+        .where(Track.genre.is_not(None), Track.genre != "")
+        .group_by(Track.genre)
     ).all()
-    library = sorted({g for (g,) in rows if g})
-    return DiscoveryGenresOut(library=library, styles=_CURATED_STYLES)
+    counts = {genre: count for genre, count in rows if genre}
+    library = sorted(counts)
+    return DiscoveryGenresOut(
+        library=library,
+        styles=_CURATED_STYLES,
+        library_counts=[GenreCountOut(genre=g, count=counts[g]) for g in library],
+    )
 
 
 @router.post("/dig", response_model=DiscoveryDigResponse)

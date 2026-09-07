@@ -16,7 +16,6 @@ import {
   type DiscoveryDigResponse,
   type DiscoveryGenres,
   type DiscoverySimilarResponse,
-  type GenreCount,
   type LabelStats,
   type Track,
   type TrackDetail,
@@ -50,7 +49,6 @@ function DiscoveryInner() {
     searchParams.get("source") === "bandcamp" ? "bandcamp" : "discogs";
   const [genres, setGenres] = useState<DiscoveryGenres | null>(null);
   const [labels, setLabels] = useState<LabelStats[] | null>(null);
-  const [genreCounts, setGenreCounts] = useState<GenreCount[]>([]);
   // `null` = preferenza non ancora letta: lo scavo aspetta, perché un URL con
   // source=discogs a Discogs spento deve degradare a Bandcamp PRIMA di partire.
   const [discogsEnabled, setDiscogsEnabled] = useState<boolean | null>(null);
@@ -116,9 +114,8 @@ function DiscoveryInner() {
   const canSurprise = surprisePool.genres.length + surprisePool.labels.length > 0;
 
   useEffect(() => {
-    getDiscoveryGenres().then(setGenres).catch(() => setGenres({ library: [], styles: [] }));
+    getDiscoveryGenres().then(setGenres).catch(() => setGenres({ library: [], styles: [], library_counts: [] }));
     getLabels().then(setLabels).catch(() => setLabels([]));
-    apiGet<GenreCount[]>("/api/library/genres").then(setGenreCounts).catch(() => setGenreCounts([]));
     getDiscoverySettings()
       .then((s) => setDiscogsEnabled(s.discogs_enabled))
       .catch(() => setDiscogsEnabled(true));
@@ -300,9 +297,12 @@ function DiscoveryInner() {
     if (d.leads.length === 0) {
       const budget = Math.floor(WINDOW_ITEMS / Math.max(1, d.seeds.length));
       const shortPile = live.every((p) => p.reach <= budget);
+      // Solo i semi VIVI qui: quelli morti li nomina già l'avviso della barra,
+      // ripeterli in questo messaggio mentirebbe su quali hanno una pila.
+      const liveNames = live.map((p) => `“${p.value}”`).join(", ");
       return (
         <EmptyState icon={<Disc3 size={28} />} title={t.discovery.nothingToDigTitle}>
-          {shortPile ? t.discovery.nothingToDigShortPile(names) : t.discovery.nothingToDigSeeds(names)}
+          {shortPile ? t.discovery.nothingToDigShortPile(liveNames) : t.discovery.nothingToDigSeeds(liveNames)}
         </EmptyState>
       );
     }
@@ -369,7 +369,7 @@ function DiscoveryInner() {
         options={{
           genres: genres ?? { library: [], styles: [] },
           labels: labels?.map((l) => l.label) ?? [],
-          genreCounts,
+          genreCounts: genres?.library_counts ?? [],
         }}
         piles={piles}
         busy={busy}

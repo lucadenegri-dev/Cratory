@@ -586,9 +586,18 @@ class DiscoveryDigResponse(BaseModel):
     piles: list[DiscoveryPileOut] = []
 
 
+class GenreCountOut(BaseModel):
+    genre: str
+    count: int
+
+
 class DiscoveryGenresOut(BaseModel):
     library: list[str] = []   # generi gia' presenti in libreria
     styles: list[str] = []    # stili curati (sottoinsieme Discogs) per il drill-down
+    # Contato su Track.genre come `library`, senza il filtro BPM di
+    # /api/library/genres: stesso vocabolario dei chip della tavolozza, cosi'
+    # i due non possono divergere.
+    library_counts: list[GenreCountOut] = []
 
 
 class OriginOut(BaseModel):
@@ -786,11 +795,6 @@ class LibraryStatsOut(BaseModel):
     genre_distribution: dict[str, int] = {}
     bpm_histogram: list[BpmBin] = []
     energy_distribution: list[EnergyBucket] = []
-
-
-class GenreCountOut(BaseModel):
-    genre: str
-    count: int
 
 
 class GenerateAsyncStartOut(BaseModel):

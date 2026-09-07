@@ -69,7 +69,7 @@ export function DiscoveryDigBar({
   const depthInert = emptyPile || shortPile;
 
   const hint = emptyPile
-    ? t.discovery.emptyPile(srcName)
+    ? t.discovery.emptyPile(srcName, piles?.length ?? 0)
     : shortPile
       ? t.discovery.shortPile
       : dead.length > 0

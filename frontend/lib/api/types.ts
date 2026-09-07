@@ -214,6 +214,9 @@ export interface DiscoverySimilarResponse {
 export interface DiscoveryGenres {
   library: string[];
   styles: string[];
+  // Stessa colonna di `library`, senza il filtro BPM di /api/library/genres:
+  // stesso vocabolario dei chip della tavolozza, ordine identico a `library`.
+  library_counts: GenreCount[];
 }
 
 export interface DiscoverySettings {

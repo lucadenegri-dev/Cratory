@@ -1070,7 +1070,6 @@ export const en = {
     dig: "Dig",
     surprise: "Surprise me",
     surpriseEmpty: "No genre or label in your library to pick from.",
-    subjectPlaceholder: "Genre or label… e.g. Acid House, Trax Records",
     groupGenre: "genre",
     groupLabel: "label",
     depthLabel: "Depth",
@@ -1084,7 +1083,8 @@ export const en = {
     sourceDiscogs: "Discogs",
     sourceBandcamp: "Bandcamp",
     shortPile: "short pile: this is all of it",
-    emptyPile: (src: string) => `no pile: ${src} doesn't know this seed`,
+    emptyPile: (src: string, n: number) =>
+      `no pile: ${src} does not know ${n > 1 ? "these seeds" : "this seed"}`,
     leadCount: (n: number) => `${n} leads`,
     leadCountOf: (shown: number, total: number) => `${shown} of ${total}`,
     showLabel: "Show",
@@ -1133,14 +1133,14 @@ export const en = {
     reasonStyleMatch: "style you listen to",
     reasonRecent: (year?: string | number) => `recent${year ? ` · ${year}` : ""}`,
     nothingToDigTitle: "Nothing to dig",
-    nothingToDigShortPile: (value: string) =>
-      `No new tracks for “${value}”: the pile is short and you already own everything in it.`,
+    nothingToDigShortPile: (names: string) =>
+      `No new tracks for ${names}: the pile is short and you already own everything in it.`,
     // Dead seed: distinct from "nothing new". There the pile exists and the records were
     // filtered out (you already own them), so "dig deeper" is advice that can work. Here
     // the pile doesn't exist: it's not your library's fault and no depth helps.
     deadSeedTitle: (src: string) => `Seed unknown to ${src}`,
-    deadSeedBody: (value: string, src: string) =>
-      `${src} has no records catalogued as “${value}”: that name isn't in its vocabulary. It's not your library, and changing depth won't help. Pick an entry from the field's suggestions.`,
+    deadSeedBody: (names: string, src: string) =>
+      `${src} has no records catalogued as ${names}: that name isn't in its vocabulary. It's not your library, and changing depth won't help. Pick an entry from the field's suggestions.`,
     noFormatMatch: "No record with this format.",
     noDetails: "No details available for this record.",
     loadingTracklist: "Loading tracklist…",

@@ -1052,7 +1052,6 @@ export const it: Dictionary = {
     dig: "Scava",
     surprise: "Sorprendimi",
     surpriseEmpty: "Nessun genere o etichetta in libreria da cui pescare.",
-    subjectPlaceholder: "Genere o etichetta… es. Acid House, Trax Records",
     groupGenre: "genere",
     groupLabel: "etichetta",
     depthLabel: "Profondità",
@@ -1066,7 +1065,8 @@ export const it: Dictionary = {
     sourceDiscogs: "Discogs",
     sourceBandcamp: "Bandcamp",
     shortPile: "pila corta: tutta qui",
-    emptyPile: (src: string) => `nessuna pila: ${src} non conosce questo seme`,
+    emptyPile: (src: string, n: number) =>
+      `nessuna pila: ${src} non conosce ${n > 1 ? "questi semi" : "questo seme"}`,
     leadCount: (n: number) => `${n} lead`,
     leadCountOf: (shown: number, total: number) => `${shown} di ${total}`,
     showLabel: "Mostra",
@@ -1115,15 +1115,15 @@ export const it: Dictionary = {
     reasonStyleMatch: "stile che ascolti",
     reasonRecent: (year?: string | number) => `recente${year ? ` · ${year}` : ""}`,
     nothingToDigTitle: "Niente da scavare",
-    nothingToDigShortPile: (value: string) =>
-      `Nessun brano nuovo per “${value}”: la pila è corta e possiedi già tutto quello che c'è.`,
+    nothingToDigShortPile: (names: string) =>
+      `Nessun brano nuovo per ${names}: la pila è corta e possiedi già tutto quello che c'è.`,
     // Seme inesistente: distinto da "niente di nuovo". Li' la pila c'e' e i dischi sono
     // stati filtrati (li possiedi gia'), quindi "vai piu' a fondo" e' un consiglio che
     // puo' funzionare. Qui la pila non esiste: non e' un problema della tua libreria e
     // nessuna profondita' aiuta.
     deadSeedTitle: (src: string) => `Seme sconosciuto a ${src}`,
-    deadSeedBody: (value: string, src: string) =>
-      `${src} non ha nessun disco catalogato come “${value}”: quel nome non esiste nel suo vocabolario. Non c'entra la tua libreria, e cambiare profondità non aiuta. Scegli una voce dai suggerimenti del campo.`,
+    deadSeedBody: (names: string, src: string) =>
+      `${src} non ha nessun disco catalogato come ${names}: quel nome non esiste nel suo vocabolario. Non c'entra la tua libreria, e cambiare profondità non aiuta. Scegli una voce dai suggerimenti del campo.`,
     noFormatMatch: "Nessun disco con questo formato.",
     noDetails: "Nessun dettaglio disponibile per questo disco.",
     loadingTracklist: "Carico la tracklist…",
