@@ -44,3 +44,7 @@ Thumbs.db
 # Attrezzo personale: allinea il DB di sviluppo a quello dell'app installata
 allinea-db.sh
 backend/data/backup-allinea/
+
+# credenziali di rilascio (password della chiave updater): mai nel repo
+release.env
+RELEASE.env
