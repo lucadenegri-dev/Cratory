@@ -82,8 +82,10 @@ endpoints, `docs/API.md`.
 - **Playlists.** Import and sync from Spotify and SoundCloud (playlists, secret
   links, selective likes), plus manual playlists and a bulk "Sync all" background job
   (a failing playlist is reported and skipped, never fatal to the rest). Rename with
-  a locked name, drag-and-drop reordering, multi-select bulk actions, "duplicate as
-  manual" fork, a per-playlist sync history, and export in four formats.
+  a locked name, drag-and-drop reordering, multi-select bulk actions (add to another
+  playlist, remove, queue the missing ones for download), "duplicate as manual" fork,
+  a per-playlist sync history, a user-uploaded cover on manual/Shazam playlists, and
+  export in four formats.
 - **Mix identification (Shazam).** Identifies the tracklist of an external mix from
   a URL (yt-dlp → ffmpeg segments → Shazam), building a separate corpus
   (`DjSet`/`DjSetTrack`) kept apart from the library; the downloaded audio is

@@ -9,9 +9,10 @@ import {
   RefreshCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download, Heart, Copy,
 } from "lucide-react";
 import {
-  getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDate, fmtDateShort, fmtDuration,
+  getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDate, fmtDateShort, fmtDuration, fmtDurationLong,
   startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack, renamePlaylist,
-  setPlaylistOrder, removeTracksFromPlaylist, duplicatePlaylist, playlistSyncLog,
+  setPlaylistOrder, removeTracksFromPlaylist, duplicatePlaylist, playlistSyncLog, enqueueDownloads,
+  uploadPlaylistArtwork, deletePlaylistArtwork,
   type Playlist, type Track, type GapAnalysis, type PlaylistSyncEvent,
 } from "@/lib/api";
 import { useBackLink, withFrom } from "@/lib/back-link";
@@ -82,9 +83,11 @@ function PlaylistDetailInner() {
   const [removingTrackId, setRemovingTrackId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  // Selezione multipla per le azioni bulk (togli / aggiungi a playlist).
+  const [coverBusy, setCoverBusy] = useState(false);
+  // Selezione multipla per le azioni bulk (togli / aggiungi a playlist / scarica).
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkRemoving, setBulkRemoving] = useState(false);
+  const [bulkEnqueuing, setBulkEnqueuing] = useState(false);
   const [confirmBulkRemove, setConfirmBulkRemove] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
@@ -102,8 +105,10 @@ function PlaylistDetailInner() {
   const [owned, setOwned] = useState(""); // "" = tutte | "true" = possedute | "false" = wishlist
   const [rating, setRating] = useState(""); // "" | "1" | "2" | "3"
   const [incomplete, setIncomplete] = useState(false);
-  const [sort, setSort] = useState("");
-  const [order, setOrder] = useState<Order>("asc");
+  // Si apre con «#» decrescente: le ultime aggiunte in cima, come in libreria.
+  // Un clic sull'intestazione «#» riporta all'ordine naturale (crescente).
+  const [sort, setSort] = useState("rank");
+  const [order, setOrder] = useState<Order>("desc");
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(0);
 
@@ -332,7 +337,9 @@ function PlaylistDetailInner() {
     }
   };
 
-  const dragEnabled = canReorder && sort === "" && visible.length === tracks.length;
+  // «#» crescente E' l'ordine della playlist: la vista coincide, si puo' trascinare.
+  const naturalOrder = sort === "" || (sort === "rank" && order === "asc");
+  const dragEnabled = canReorder && naturalOrder && visible.length === tracks.length;
 
   const applyDrop = async (targetId: number) => {
     if (dragId === null || dragId === targetId) return;
@@ -376,6 +383,61 @@ function PlaylistDetailInner() {
   const allVisibleSelected = visible.length > 0 && visible.every((tr) => selected.has(tr.id));
   const toggleSelectAll = (on: boolean) => {
     setSelected(on ? new Set(visible.map((tr) => tr.id)) : new Set());
+  };
+
+  // Da accodare: solo le selezionate senza file locale. La route batch della
+  // coda (/api/downloads/queue) non filtra le possedute — lo fa solo
+  // /api/downloads/playlist/{id} — quindi il filtro vive qui, come in wishlist.
+  const selectedMissing = tracks.filter((tr) => selected.has(tr.id) && !tr.has_local_file && !tr.archived);
+  // Stesso gate della wishlist: slskd non configurato -> pulsante spento, non un 409.
+  const downloadsAvailable = jobs.download?.available ?? true;
+
+  const doBulkDownload = async () => {
+    const ids = selectedMissing.map((tr) => tr.id);
+    setBulkEnqueuing(true);
+    setActionError(null);
+    setNotice(null);
+    try {
+      const res = await enqueueDownloads(ids);
+      setNotice(t.playlists.bulkEnqueued(res.enqueued, res.skipped));
+      setSelected(new Set());
+      jobs.refresh(); // il progresso vive nella barra job in basso
+    } catch (e) {
+      setActionError(t.playlists.downloadNotStarted(errText(e)));
+    } finally {
+      setBulkEnqueuing(false);
+    }
+  };
+
+  // Cover caricata dall'utente: solo sulle playlist di Cratory (manual/shazam),
+  // le sincronizzate tengono quella della piattaforma (il backend risponde 409).
+  const coverEditable = playlist?.kind === "manual" || playlist?.kind === "shazam";
+
+  const onCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // riscegliere lo stesso file deve rifare l'upload
+    if (!file) return;
+    setCoverBusy(true);
+    setActionError(null);
+    try {
+      setPlaylist(await uploadPlaylistArtwork(pid, file));
+    } catch (err) {
+      setActionError(t.playlists.coverFailed(errText(err)));
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+
+  const onCoverRemove = async () => {
+    setCoverBusy(true);
+    setActionError(null);
+    try {
+      setPlaylist(await deletePlaylistArtwork(pid));
+    } catch (err) {
+      setActionError(t.playlists.coverFailed(errText(err)));
+    } finally {
+      setCoverBusy(false);
+    }
   };
 
   const doBulkRemove = async () => {
@@ -433,7 +495,7 @@ function PlaylistDetailInner() {
     <div className="space-y-3">
       <ButtonLink href={`/set-builder?playlist=${pid}`} size="sm" block><Sparkles size={15} /> {t.playlists.buildSetButton}</ButtonLink>
       {missing > 0 && (
-        <Button size="sm" variant="outline" className="w-full" onClick={doDownloadMissing} disabled={downloading}>
+        <Button size="sm" variant="outline" className="w-full" onClick={doDownloadMissing} disabled={downloading || !downloadsAvailable}>
           {downloading ? <Spinner /> : <Download size={15} />} {t.playlists.downloadMissingButton(missing)}
         </Button>
       )}
@@ -481,7 +543,23 @@ function PlaylistDetailInner() {
       <Link href={back.href} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft size={15} /> {back.label}</Link>
 
       <div className="mb-6 flex flex-wrap items-start gap-4">
-        <PlaylistCover artworkUrl={playlist.artwork_url} platform={playlist.platform} kind={playlist.kind} className="h-24 w-24" iconSize={30} placeholderClassName="bg-surface-2" />
+        <div className="group relative h-24 w-24 shrink-0">
+          <PlaylistCover artworkUrl={playlist.artwork_url} platform={playlist.platform} kind={playlist.kind} className="h-24 w-24" iconSize={30} placeholderClassName="bg-surface-2" />
+          {coverEditable && (
+            // Comandi sopra la cover: compaiono al passaggio del mouse o al focus.
+            <div className={`absolute inset-x-0 bottom-0 flex flex-col items-stretch bg-bg/85 text-[11px] uppercase tracking-wide transition-opacity focus-within:opacity-100 group-hover:opacity-100 ${coverBusy ? "opacity-100" : "opacity-0"}`}>
+              <label className="cursor-pointer px-2 py-1 text-center text-fg hover:text-fg-strong">
+                {coverBusy ? <Spinner /> : t.playlists.coverChange}
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={coverBusy} onChange={onCoverFile} />
+              </label>
+              {playlist.artwork_url && (
+                <button type="button" onClick={onCoverRemove} disabled={coverBusy} className="px-2 py-1 text-center text-muted hover:text-danger disabled:opacity-40">
+                  {t.playlists.coverRemove}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             {renaming ? (
@@ -514,7 +592,7 @@ function PlaylistDetailInner() {
             <Badge tone="neutral">{playlist.platform}</Badge>
             {playlist.kind === "liked" && <Badge tone="neutral">liked</Badge>}
           </div>
-          <p className="mt-1 text-sm text-muted">{t.playlists.trackCount(playlist.track_count)} · {t.playlists.readyForSetLabel(ready)} · {t.playlists.ownedOfLabel(ownedCount, tracks.length)} · {fmtDuration(totalDur)}{playlist.owner ? ` · ${playlist.owner}` : ""}</p>
+          <p className="mt-1 text-sm text-muted">{t.playlists.trackCount(playlist.track_count)} · {t.playlists.readyForSetLabel(ready)} · {t.playlists.ownedOfLabel(ownedCount, tracks.length)} · {fmtDurationLong(totalDur)}{playlist.owner ? ` · ${playlist.owner}` : ""}</p>
         </div>
       </div>
 
@@ -607,6 +685,10 @@ function PlaylistDetailInner() {
         <div className="mb-2 flex flex-wrap items-center gap-2 border border-border bg-elevated px-3 py-2 text-sm">
           <span className="text-muted">{t.playlists.selectedCount(selected.size)}</span>
           <AddToPlaylistMenu trackIds={[...selected]} excludePlaylistId={pid} onChanged={() => reload()} />
+          <Button size="sm" variant="outline" onClick={doBulkDownload}
+            disabled={bulkEnqueuing || !downloadsAvailable || selectedMissing.length === 0}>
+            {bulkEnqueuing ? <Spinner /> : <Download size={14} />} {t.playlists.bulkDownloadButton(selectedMissing.length)}
+          </Button>
           <Button size="sm" variant="danger" onClick={() => setConfirmBulkRemove(true)} disabled={bulkRemoving}>
             {bulkRemoving ? <Spinner /> : <Trash2 size={14} />} {t.playlists.bulkRemoveButton}
           </Button>

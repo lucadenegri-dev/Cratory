@@ -10,8 +10,8 @@ import csv
 import io
 import logging
 
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import PlainTextResponse
+from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -60,7 +60,7 @@ from app.schemas import (
     TrackOut,
 )
 from app.serializers import track_out
-from app.services import streaming_import_job
+from app.services import playlist_artwork, streaming_import_job
 from app.services.export_render import fmt_duration, render_m3u8
 from app.services.gap_analysis import analyze_gaps
 from app.services.manual_import import import_manual_playlist
@@ -353,7 +353,62 @@ def remove_playlist(playlist_id: int, db: Session = Depends(get_db)):
     removed = delete_playlist(db, playlist_id)
     if removed is None:
         raise api_error(404, "playlist_not_found", "Playlist not found")
+    playlist_artwork.delete_artwork(playlist_id)  # la cover caricata non sopravvive alla playlist
     return PlaylistDeleteResult(deleted_tracks=removed)
+
+
+# --- Cover caricata dall'utente (playlist di Cratory) --------------------------
+
+_ARTWORK_KINDS = {"manual", "shazam"}
+
+
+def _artwork_editable(db: Session, playlist_id: int) -> Playlist:
+    playlist = get_playlist(db, playlist_id)
+    if playlist is None:
+        raise api_error(404, "playlist_not_found", "Playlist not found")
+    if playlist.kind not in _ARTWORK_KINDS:
+        raise api_error(409, "playlist_artwork_not_editable",
+                        "Synced playlists keep the platform's artwork.")
+    return playlist
+
+
+@router.post("/{playlist_id}/artwork", response_model=PlaylistOut)
+def upload_playlist_artwork(playlist_id: int, file: UploadFile = File(...),
+                            db: Session = Depends(get_db)):
+    """Carica (o sostituisce) la cover di una playlist manual/shazam. PNG, JPEG o
+    WebP, riconosciuti dal contenuto; max 5 MB. Vedi `services/playlist_artwork`."""
+    playlist = _artwork_editable(db, playlist_id)
+    content = file.file.read(playlist_artwork.MAX_BYTES + 1)
+    try:
+        playlist.artwork_url = playlist_artwork.save_artwork(playlist_id, content)
+    except playlist_artwork.ArtworkError as exc:
+        status = 413 if exc.code == "image_too_large" else 415
+        raise api_error(status, exc.code, str(exc))
+    db.commit()
+    db.refresh(playlist)
+    return PlaylistOut.model_validate(playlist)
+
+
+@router.get("/{playlist_id}/artwork")
+def get_playlist_artwork(playlist_id: int, db: Session = Depends(get_db)):
+    """Serve il file cover caricato. 404 se la playlist o la cover non esistono."""
+    if get_playlist(db, playlist_id) is None:
+        raise api_error(404, "playlist_not_found", "Playlist not found")
+    path = playlist_artwork.artwork_path(playlist_id)
+    if path is None:
+        raise api_error(404, "playlist_artwork_missing", "Playlist has no uploaded artwork")
+    return FileResponse(path, media_type=playlist_artwork.media_type_of(path))
+
+
+@router.delete("/{playlist_id}/artwork", response_model=PlaylistOut)
+def delete_playlist_artwork(playlist_id: int, db: Session = Depends(get_db)):
+    """Toglie la cover caricata. Idempotente: senza cover risponde comunque 200."""
+    playlist = _artwork_editable(db, playlist_id)
+    playlist_artwork.delete_artwork(playlist_id)
+    playlist.artwork_url = None
+    db.commit()
+    db.refresh(playlist)
+    return PlaylistOut.model_validate(playlist)
 
 
 @router.delete("/{playlist_id}/tracks/{track_id}", response_model=PlaylistDeleteResult)

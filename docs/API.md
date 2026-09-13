@@ -111,6 +111,9 @@ GET    /api/playlists/{playlist_id}/tracks
 GET    /api/playlists/{playlist_id}/sync-log
 GET    /api/playlists/{playlist_id}/gaps
 POST   /api/playlists/{playlist_id}/export
+POST   /api/playlists/{playlist_id}/artwork
+GET    /api/playlists/{playlist_id}/artwork
+DELETE /api/playlists/{playlist_id}/artwork
 ```
 
 ```text
@@ -221,6 +224,28 @@ you need `playlist_added_at`.
 `PATCH /api/playlists/{playlist_id}` renames the playlist and sets
 `name_locked=true` (exposed in the response): from then on a sync re-reads
 everything from the platform **except** the name.
+
+### User-uploaded artwork
+
+Cratory's own playlists (`kind` `manual` or `shazam`) have no platform cover, so
+the user can give them one. `POST /api/playlists/{playlist_id}/artwork` takes a
+multipart `file` — PNG, JPEG or WebP, recognised by content (magic bytes), never
+by the declared content type or the file name — up to 5 MB, stores it as
+`DATA_DIR/data/covers/playlist-{id}.{ext}` (one file per playlist, a new upload
+replaces the old one) and sets `artwork_url` to
+`/api/playlists/{id}/artwork?v=<ms timestamp>`; the `v` changes on every upload so
+the browser never shows a stale cover from cache. Response: the `PlaylistOut`.
+Errors: `404 playlist_not_found`, `409 playlist_artwork_not_editable` on a synced
+playlist (its cover belongs to the platform), `415 unsupported_image_type`,
+`413 image_too_large`.
+
+`GET /api/playlists/{playlist_id}/artwork` serves the file (`FileResponse`, the
+media type from the stored extension); `404 playlist_artwork_missing` when there
+is none. `DELETE` removes the file and clears `artwork_url`, idempotently (200
+even with no cover), with the same 409 on synced playlists. Deleting the playlist
+also deletes its uploaded cover. The frontend prefixes these relative URLs with
+`NEXT_PUBLIC_API_URL` in `PlaylistCover`, so they resolve in the desktop bundle
+too, where the page and the backend are different origins.
 
 ### Removal and orphan leads
 

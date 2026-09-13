@@ -115,3 +115,22 @@ describe("trackLabel", () => {
     expect(trackLabel(withoutValues)).toBe("Unknown artist — Untitled");
   });
 });
+
+describe("fmtDurationLong", () => {
+  it("sopra l'ora: ore e minuti", async () => {
+    const { fmtDurationLong } = await import("@/lib/api/format");
+    expect(fmtDurationLong(3 * 3600 + 21 * 60 + 40)).toBe("3h 21min");
+    expect(fmtDurationLong(3600)).toBe("1h 00min");
+  });
+
+  it("sotto l'ora: solo minuti", async () => {
+    const { fmtDurationLong } = await import("@/lib/api/format");
+    expect(fmtDurationLong(42 * 60 + 5)).toBe("42 min");
+  });
+
+  it("zero o assente: il trattino, come fmtDuration", async () => {
+    const { fmtDurationLong } = await import("@/lib/api/format");
+    expect(fmtDurationLong(0)).toBe("—");
+    expect(fmtDurationLong(null)).toBe("—");
+  });
+});

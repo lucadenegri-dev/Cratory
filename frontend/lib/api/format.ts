@@ -29,6 +29,14 @@ export function fmtDuration(seconds: number | null | undefined): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** Durata lunga (totali di playlist): "3h 21min" sopra l'ora, "42 min" sotto. */
+export function fmtDurationLong(seconds: number | null | undefined): string {
+  if (!seconds) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return h > 0 ? `${h}h ${String(m).padStart(2, "0")}min` : `${m} min`;
+}
+
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);

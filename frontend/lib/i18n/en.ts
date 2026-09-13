@@ -897,6 +897,9 @@ export const en = {
     duplicateFailed: (msg: string) => `Duplicate failed: ${msg}`,
     renameTitle: "Rename playlist",
     renameFailed: (msg: string) => `Rename failed: ${msg}`,
+    coverChange: "Change image",
+    coverRemove: "Remove image",
+    coverFailed: (msg: string) => `Image not saved: ${msg}`,
     exportButton: "Export",
     exportM3u8Option: "M3U8 (Rekordbox)",
     exportCsvOption: "CSV",
@@ -915,6 +918,9 @@ export const en = {
     dragDisabledHint: "To reorder by dragging, clear filters and sorting.",
     selectedCount: (n: number) => n === 1 ? "1 selected" : `${n} selected`,
     bulkRemoveButton: "Remove from playlist",
+    bulkDownloadButton: (n: number) => `Download (${n})`,
+    bulkEnqueued: (added: number, skipped: number) => skipped
+      ? `${added} queued, ${skipped} already in the queue` : `${added} queued`,
     bulkRemoveConfirm: (n: number) =>
       `Remove ${n} tracks from this playlist? Leads with no file on disk, not in other playlists nor in a set, will be deleted.`,
     bulkRemoved: (n: number, deleted: number) =>

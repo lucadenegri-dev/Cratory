@@ -1,4 +1,4 @@
-import { API, apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
+import { API, apiDelete, apiGet, apiPatch, apiPost, apiPut, apiUpload } from "./client";
 import type {
   GapAnalysis,
   LikedTrackPreview,
@@ -54,6 +54,17 @@ export function getPlaylist(id: number, opts?: { signal?: AbortSignal }) {
 /** Rinomina la playlist. Il nome scelto e' definitivo: il sync non lo sovrascrive. */
 export function renamePlaylist(id: number, name: string) {
   return apiPatch<Playlist>(`/api/playlists/${id}`, { name });
+}
+
+/** Cover caricata dall'utente (solo playlist manual/shazam): PNG, JPEG o WebP, max 5 MB. */
+export function uploadPlaylistArtwork(id: number, file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  return apiUpload<Playlist>(`/api/playlists/${id}/artwork`, fd);
+}
+
+export function deletePlaylistArtwork(id: number) {
+  return apiDelete<Playlist>(`/api/playlists/${id}/artwork`);
 }
 
 export function deletePlaylist(id: number) {

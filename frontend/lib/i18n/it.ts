@@ -879,6 +879,9 @@ export const it: Dictionary = {
     duplicateFailed: (msg: string) => `Duplicazione fallita: ${msg}`,
     renameTitle: "Rinomina playlist",
     renameFailed: (msg: string) => `Rinomina fallita: ${msg}`,
+    coverChange: "Cambia immagine",
+    coverRemove: "Rimuovi immagine",
+    coverFailed: (msg: string) => `Immagine non caricata: ${msg}`,
     exportButton: "Esporta",
     exportM3u8Option: "M3U8 (Rekordbox)",
     exportCsvOption: "CSV",
@@ -897,6 +900,10 @@ export const it: Dictionary = {
     dragDisabledHint: "Per riordinare col trascinamento togli filtri e ordinamenti.",
     selectedCount: (n: number) => n === 1 ? "1 selezionata" : `${n} selezionate`,
     bulkRemoveButton: "Togli dalla playlist",
+    // Conta solo le selezionate senza file locale: le possedute non si accodano.
+    bulkDownloadButton: (n: number) => `Scarica (${n})`,
+    bulkEnqueued: (added: number, skipped: number) => skipped
+      ? `${added} accodate, ${skipped} erano già in coda` : `${added} accodate`,
     bulkRemoveConfirm: (n: number) =>
       `Togliere ${n} tracce da questa playlist? I lead senza file su disco, non in altre playlist né in un set, verranno cancellati.`,
     bulkRemoved: (n: number, deleted: number) =>

@@ -1,4 +1,5 @@
 import { Music4 } from "lucide-react";
+import { API_BASE } from "@/lib/api/base";
 
 // Cover di default per le playlist di sistema (che non hanno artwork_url):
 // asset editoriali statici in /public — liked per piattaforma, più Discovery.
@@ -32,7 +33,12 @@ export function PlaylistCover({
     : kind === "discovery" ? DISCOVERY_COVER
     : kind === "rating_top" ? RATING_TOP_COVER
     : null;
-  const src = artworkUrl ?? fallback;
+  // La cover caricata dall'utente e' servita dal backend con un URL relativo
+  // (`/api/playlists/{id}/artwork`): nel bundle desktop la pagina e il backend
+  // sono origini diverse, quindi va premesso API_BASE. Gli URL di piattaforma
+  // sono assoluti e restano com'erano.
+  const raw = artworkUrl ?? fallback;
+  const src = raw && raw.startsWith("/api/") ? API_BASE + raw : raw;
   if (src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element

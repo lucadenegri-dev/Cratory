@@ -147,7 +147,7 @@ export default function PlaylistsPage() {
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-faint">
               <span>{t.playlists.trackCount(p.track_count)}</span>
-              <span>· {p.owner ?? "—"}</span>
+              {p.owner && <span>· {p.owner}</span>}
               <span className="inline-flex items-center gap-1">· <Calendar size={11} /> {t.playlists.importedOn(fmtDate(p.imported_at))}</span>
             </div>
           </div>
