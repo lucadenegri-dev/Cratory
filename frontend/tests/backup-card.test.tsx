@@ -119,6 +119,35 @@ describe("scheda Dati", () => {
     await waitFor(() => expect(guscio.riavviaOra).toHaveBeenCalled());
   });
 
+  it("Annulla ed Escape sono inerti mentre la conferma è in corso", async () => {
+    api.pickPath.mockResolvedValue({ path: "/x/b.zip" });
+    api.prepareRestore.mockResolvedValue({
+      creato_il: "2026-09-01T10:00:00+00:00", app_version: "1.0.7", tracce: 3412, playlist: 58,
+      membri: [], ha_credenziali: true,
+    });
+    // `confirmRestore` resta in sospeso finché non chiamiamo `release`: nella
+    // finestra in cui è in volo, Annulla/Escape/backdrop non devono poter
+    // annullare uno scambio che sul backend potrebbe già essere committato.
+    let release: (v: { riavvio_necessario: boolean }) => void = () => {};
+    api.confirmRestore.mockReturnValue(new Promise<{ riavvio_necessario: boolean }>((resolve) => { release = resolve; }));
+
+    render(<BackupCard />);
+    fireEvent.click(await screen.findByText("Ripristina da backup…"));
+    fireEvent.click(await screen.findByText("Ripristina e riavvia"));
+
+    // Annulla è disabilitato mentre la conferma è in volo.
+    await waitFor(() => expect(screen.getByText("Annulla")).toHaveProperty("disabled", true));
+    fireEvent.click(screen.getByText("Annulla"));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(api.cancelRestore).not.toHaveBeenCalled();
+    // Il modal resta aperto, col riepilogo ancora in vista.
+    expect(screen.getByText(/3412 tracce, 58 playlist/)).toBeTruthy();
+
+    release({ riavvio_necessario: true });
+    expect(await screen.findByText(/Riavvia il backend per completarlo/)).toBeTruthy();
+    expect(api.cancelRestore).not.toHaveBeenCalled();
+  });
+
   it("un job in corso diventa una frase che lo nomina", async () => {
     // Il client traduce il codice prima di sollevare: qui arriva già la frase.
     api.pickPath.mockResolvedValue({ path: "/x/b.zip" });

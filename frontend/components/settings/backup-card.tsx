@@ -142,12 +142,12 @@ export function BackupCard() {
 
       <Modal
         open={riepilogo !== null}
-        onClose={annulla}
+        onClose={busy ? () => undefined : annulla}
         title={t.settings.restoreTitle}
         footer={
           riavvioManuale ? null : (
             <>
-              <Button variant="ghost" size="sm" onClick={annulla}>{t.common.cancel}</Button>
+              <Button variant="ghost" size="sm" disabled={busy} onClick={annulla}>{t.common.cancel}</Button>
               <Button variant="danger" size="sm" disabled={busy} onClick={() => void conferma()}>
                 {t.settings.restoreConfirm}
               </Button>
