@@ -128,6 +128,24 @@ slskd_daemon.pid_file().parent.mkdir(parents=True, exist_ok=True)
 slskd_daemon.pid_file().write_text("esercitato")
 slskd_daemon.log_file().parent.mkdir(parents=True, exist_ok=True)
 slskd_daemon.log_file().touch()
+
+# Backup e ripristino (spec 2026-09-13): tre punti di scrittura nuovi sotto
+# DATA_DIR — il parziale dello zip accanto alla destinazione, lo staging e il
+# marker. Lo zip stesso si scrive dove dice l'utente: qui in una cartella
+# dentro DATA_DIR per non sporcare nient'altro.
+from app.services import backup
+_dest_backup = _dentro_data_dir(_DATA_DIR / "prova-backup" / "b.zip")
+_esito = backup.crea(_dest_backup)
+class _SessioneFinta:
+    def query(self, *_a, **_k):
+        return self
+    def filter(self, *_a, **_k):
+        return self
+    def first(self):
+        return None
+backup.prepara(Path(_esito.percorso), _SessioneFinta())
+backup.conferma(_SessioneFinta())
+backup.annulla()
 print("fatto")
 """
 
@@ -185,3 +203,6 @@ def test_e_invece_tutto_e_atterrato_nella_cartella_dei_dati(tmp_path):
     assert (tmp_path / "data" / "slskd-downloads").is_dir()
     assert (tmp_path / "data" / "slskd.pid").is_file()
     assert (tmp_path / "data" / "slskd.log").is_file()
+    assert (tmp_path / "prova-backup" / "b.zip").is_file()
+    assert not (tmp_path / "data" / "restore-staging").exists()
+    assert not (tmp_path / "data" / "restore-pending.json").exists()

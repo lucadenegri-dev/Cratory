@@ -5,6 +5,12 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 from app.core import paths
+# Il ripristino confermato si applica QUI, prima di load_dotenv e prima che
+# qualunque import costruisca Settings o apra il DB: uno .env ripristinato deve
+# valere già in questo avvio, e i file si scambiano solo a DB chiuso.
+# services/backup non importa config a livello di modulo proprio per questo.
+from app.services import backup as _backup
+_ESITO_RIPRISTINO = _backup.applica_se_in_attesa()
 # pydantic-settings carica .env dentro Settings (incluso ai_api_key, passato
 # esplicito ai client Anthropic), ma non tocca l'os.environ di processo. Serve
 # comunque per FPCALC, letto direttamente da os.environ in
@@ -28,6 +34,7 @@ from app.organize.services import scan_job
 from app.routers import (
     ai,
     analysis,
+    backup,
     discovery,
     dj_sets,
     download_queue,
@@ -82,6 +89,15 @@ async def lifespan(app: FastAPI):
     from app.db import SessionLocal
     with SessionLocal() as db:
         runtime_settings.load(db)
+    # L'esito del ripristino applicato all'avvio (prima di load_dotenv, a DB
+    # chiuso) si annota adesso che il DB è aperto: la pagina Impostazioni lo
+    # legge da /api/backup/restore/last.
+    if _ESITO_RIPRISTINO is not None:
+        from dataclasses import asdict
+        import json as _json
+        from app.services.app_state import set_state
+        with SessionLocal() as db:
+            set_state(db, "last_restore", _json.dumps(asdict(_ESITO_RIPRISTINO)))
     # Disk-first: il disco È la libreria — riallineala all'avvio, ma non a ogni
     # reload di uvicorn: start_job_if_due salta se un run è finito da poco. Il job
     # è un thread daemon; con la scansione incrementale il costo è minimo.
@@ -151,6 +167,7 @@ app.include_router(soundcloud.router)
 app.include_router(settings_router.router)
 app.include_router(updates.router)
 app.include_router(setup.router)
+app.include_router(backup.router)
 
 for _organize_router in (
     organize_scan, organize_analyze, organize_issues,
