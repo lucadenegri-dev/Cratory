@@ -120,6 +120,16 @@ def test_crea_salta_le_voci_assenti(dati, tmp_path):
     assert membri == {"manifest.json", "data/djassistant.db", "data/slskd.yml"}
 
 
+def test_uno_snapshot_rimasto_da_un_crash_non_blocca_il_backup(dati, tmp_path):
+    """`VACUUM INTO` vuole che il file di destinazione non esista: un
+    `.db-snapshot` sopravvissuto a un crash farebbe fallire ogni backup
+    successivo con «output file already exists»."""
+    (tmp_path / "b.zip.db-snapshot").write_bytes(b"avanzo di un crash")
+    esito = backup.crea(tmp_path / "b.zip")
+    assert _membri(Path(esito.percorso)) >= {"manifest.json", "data/djassistant.db"}
+    assert not (tmp_path / "b.zip.db-snapshot").exists()
+
+
 def test_lo_snapshot_e_coerente_con_una_connessione_aperta(dati, tmp_path):
     db = backup._db_path()
     viva = sqlite3.connect(db, isolation_level=None)
@@ -445,6 +455,24 @@ def test_applica_scambia_i_file_e_conserva_pre_restore(dati, tmp_path, sessione)
     assert not (dati / "data" / "restore-pending.json").exists()
     assert not (dati / "data" / "restore-staging").exists()
     assert not (backup._db_path().parent / "djassistant.db-wal").exists()
+
+
+def test_applica_logga_dove_finiscono_i_dati_prima_di_muoverli(dati, tmp_path, sessione, caplog):
+    """Se lo scambio si interrompe a metà, questa riga è l'unica traccia di dove
+    sono i dati di prima: va scritta PRIMA del primo `move`."""
+    archivio = Path(backup.crea(tmp_path / "b.zip").percorso)
+    backup.prepara(archivio, sessione)
+    backup.conferma(sessione)
+    sessione.close()
+    sessione.get_bind().dispose()
+    with caplog.at_level("WARNING", logger="app.services.backup"):
+        backup.applica_se_in_attesa()
+    righe = [r.getMessage() for r in caplog.records]
+    assert any(str(dati / "data" / "pre-restore") in r for r in righe)
+    # Prima dell'altro warning, quello di fine scambio.
+    assert righe.index(next(r for r in righe if "pre-restore" in r)) < righe.index(
+        next(r for r in righe if "ripristino applicato" in r)
+    )
 
 
 def test_applica_con_staging_mancante_toglie_il_marker_e_non_tocca_i_dati(dati):

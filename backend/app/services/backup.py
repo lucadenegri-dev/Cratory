@@ -223,6 +223,11 @@ def crea(destinazione: Path) -> EsitoBackup:
         snapshot = destinazione.with_name(destinazione.name + ".db-snapshot")
         creato_il = _adesso()
         membri: list[dict] = []
+        # `VACUUM INTO` pretende che il file di destinazione NON esista: uno
+        # snapshot rimasto lì da un crash (il `finally` sotto non è girato)
+        # farebbe fallire ogni backup successivo con "output file already
+        # exists", e nessuno saprebbe perché.
+        snapshot.unlink(missing_ok=True)
         try:
             _snapshot_db(_db_path(), snapshot)
             with zipfile.ZipFile(parziale, "w", compression=zipfile.ZIP_DEFLATED) as z:
@@ -461,14 +466,25 @@ def applica_se_in_attesa() -> EsitoRipristino | None:
 
     pre = _pre_restore()
     shutil.rmtree(pre, ignore_errors=True)
-    pre.mkdir(parents=True)
+    # `exist_ok`: se la rmtree qui sopra non ha potuto togliere tutto (un file
+    # bloccato, permessi), un `mkdir` esigente farebbe fallire lo scambio
+    # all'avvio, che è il momento peggiore per fallire.
+    pre.mkdir(parents=True, exist_ok=True)
+    # PRIMA di muovere un solo byte: se qualcosa va storto a metà scambio,
+    # questa riga di log è l'unica cosa che dice all'utente dove sono finiti i
+    # suoi dati.
+    log.warning("ripristino: i dati attuali vanno in %s", pre)
+
+    # Il database esce e rientra subito, prima di tutto il resto: la finestra
+    # in cui su disco non c'è nessun DB dura due move, non l'intero scambio.
     for suffisso in ("", "-wal", "-shm"):
         _sposta(db_dest.with_name(db_dest.name + suffisso), pre / (db_dest.name + suffisso))
+    _sposta(staging / MEMBRO_DB, db_dest)
+
     _sposta(_covers_dir(), pre / "covers")
     _sposta(_env_path(), pre / ".env")
     _sposta(_slskd_yml(), pre / "slskd.yml")
 
-    _sposta(staging / MEMBRO_DB, db_dest)
     covers_dst = _covers_dir()
     covers_dst.mkdir(parents=True, exist_ok=True)
     covers_src = staging / PREFISSO_COVERS.rstrip("/")

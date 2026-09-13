@@ -961,8 +961,12 @@ config loaded. The swap runs at the next start, in `main.py` **before `load_dote
 a restored `.env` must be in force in that very start, and at that point nothing has
 opened the database yet (SQLAlchemy's engine is built at import but connects lazily).
 That is also why `services/backup.py` imports `app.core.config` and `app.core.version`
-only inside functions. Current files go to `data/pre-restore/` (latest set only); a
+only inside functions. Current files go to `data/pre-restore/` (latest set only, and the path is logged
+before the first move so a crash mid-swap still says where the old data went); a
 missing or incomplete staging removes the marker and leaves the data untouched. The
+swap targets the database path fixed at confirm time, so a restored `.env` that points
+`DATABASE_URL` somewhere else is *not* honoured by the swap itself — not a shell
+scenario, since the shell sets `CRATORY_DATA_DIR` and never `DATABASE_URL`. The
 outcome lands in `app_state.last_restore` once the lifespan has the DB open. In the
 desktop shell the page calls `riavvia_app`, which terminates the Python child before
 `app.restart()`: `restart()` never delivers `RunEvent::Exit`, so the handler in `lib.rs`
