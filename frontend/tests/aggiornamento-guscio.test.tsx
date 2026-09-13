@@ -14,6 +14,12 @@ const finto = vi.hoisted(() => ({
 vi.mock("@/lib/updates", () => ({
   useAggiornamento: () => ({ ...finto, nelGuscio: true }),
 }));
+// La conferma ora chiede la stima del backup: qui non serve, resta la coppia
+// di uscite di sempre e l'asserzione su "viene interrotto" continua a valere.
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getBackupEstimate: () => Promise.reject(new Error("non in questo test")),
+}));
 
 import { AggiornamentoGuscio } from "@/components/settings/aggiornamento-guscio";
 

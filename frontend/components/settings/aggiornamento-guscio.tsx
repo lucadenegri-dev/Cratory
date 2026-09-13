@@ -8,7 +8,7 @@
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui";
-import { ConfirmModal } from "@/components/confirm-modal";
+import { ConfermaAggiornamento } from "@/components/settings/conferma-aggiornamento";
 import { useT, type Dictionary } from "@/lib/i18n";
 import { useAggiornamento } from "@/lib/updates";
 
@@ -120,13 +120,10 @@ export function AggiornamentoGuscio({ versione }: { versione: string }) {
         </Button>
       </div>
       {corpo()}
-      <ConfirmModal
+      <ConfermaAggiornamento
         open={conferma}
-        title={t.settings.versionConfirmTitle}
-        message={t.settings.versionConfirmBody}
-        confirmLabel={t.settings.versionInstall}
         onClose={() => setConferma(false)}
-        onConfirm={() => {
+        onInstall={() => {
           setConferma(false);
           void installaOra();
         }}
