@@ -379,6 +379,11 @@ def prepara(archivio: Path, db) -> Riepilogo:
         raise JobInCorso(job)
     riepilogo = ispeziona(archivio)
     staging = _staging()
+    # Una nuova preparazione revoca la conferma precedente: il marker punta a
+    # uno staging che da qui in poi contiene un altro backup. Dopo `ispeziona`
+    # di proposito: un archivio rifiutato non tocca lo staging, e quindi non ha
+    # motivo di invalidare una conferma che resta coerente con quello che c'è.
+    _marker().unlink(missing_ok=True)
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(parents=True)
     with zipfile.ZipFile(archivio) as z:

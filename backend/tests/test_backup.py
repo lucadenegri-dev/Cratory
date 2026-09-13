@@ -265,10 +265,62 @@ def test_prepara_popola_lo_staging_senza_marker(dati, tmp_path, sessione):
 
 
 def test_prepara_ignora_membri_non_ammessi(dati, tmp_path, sessione):
+    """I due nomi ostili non finiscono nello staging, e nemmeno DOVE finirebbero
+    se `_membro_ammesso` li lasciasse passare: `../fuori.txt` risolve a
+    `dati/data/fuori.txt` e `data/covers/../../x` a `staging/x`. Si asserisce
+    l'insieme esatto dei file sotto staging, così un membro in più — ovunque
+    atterri — rompe il test."""
     archivio = _zip_con(tmp_path, extra=[("../fuori.txt", b"no"), ("data/covers/../../x", b"no")])
     backup.prepara(archivio, sessione)
-    assert not (tmp_path / "fuori.txt").exists()
-    assert not (dati / "x").exists()
+    staging = dati / "data" / "restore-staging"
+    trovati = {str(f.relative_to(staging)) for f in staging.rglob("*") if f.is_file()}
+    assert trovati == {
+        "riepilogo.json",
+        "manifest.json",
+        "data/djassistant.db",
+        "data/covers/playlist-1.jpg",
+        ".env",
+        "data/slskd.yml",
+    }
+    # Dove sarebbero atterrati davvero, se fossero stati ammessi.
+    assert not (dati / "data" / "fuori.txt").exists()
+    assert not (staging / "x").exists()
+
+
+def test_una_nuova_preparazione_revoca_la_conferma_precedente(dati, tmp_path, sessione):
+    """Senza questo, il marker di A resterebbe a puntare a uno staging che nel
+    frattempo contiene B: al prossimo avvio si applicherebbe B sotto un
+    riepilogo che descrive A, e B non l'ha confermato nessuno."""
+    primo = Path(backup.crea(tmp_path / "a.zip").percorso)
+    backup.prepara(primo, sessione)
+    backup.conferma(sessione)
+    assert (dati / "data" / "restore-pending.json").exists()
+
+    with sqlite3.connect(backup._db_path()) as c:
+        c.execute(
+            "INSERT INTO playlists(name, platform, track_count, kind, imported_at, created_at, updated_at) "
+            "VALUES ('b', 'manual', 0, 'playlist', '2024-01-01 00:00:00', '2024-01-01 00:00:00', '2024-01-01 00:00:00')"
+        )
+    secondo = Path(backup.crea(tmp_path / "b.zip").percorso)
+    r = backup.prepara(secondo, sessione)
+
+    assert not (dati / "data" / "restore-pending.json").exists()
+    assert r.playlist == 1
+    assert backup.riepilogo_in_attesa().creato_il == r.creato_il
+    assert backup.riepilogo_in_attesa().playlist == 1
+
+
+def test_un_archivio_rifiutato_non_revoca_la_conferma(dati, tmp_path, sessione):
+    """L'altra faccia: se `ispeziona` boccia l'archivio, lo staging non viene
+    toccato e la conferma di prima resta valida per quello che c'è dentro."""
+    backup.prepara(Path(backup.crea(tmp_path / "a.zip").percorso), sessione)
+    backup.conferma(sessione)
+    rotto = tmp_path / "rotto.zip"
+    rotto.write_bytes(b"non sono uno zip")
+    with pytest.raises(backup.BackupNonValido):
+        backup.prepara(rotto, sessione)
+    assert (dati / "data" / "restore-pending.json").exists()
+    assert (dati / "data" / "restore-staging" / "data" / "djassistant.db").is_file()
 
 
 def test_prepara_file_inesistente(dati, sessione, tmp_path):
