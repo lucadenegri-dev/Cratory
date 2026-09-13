@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { apiGet, errText, servicesStatus, setSetupCompleted, type ServiceStatus, type SpotifyStatus } from "@/lib/api";
 import { Alert, Button, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
+import { BackupCard } from "@/components/settings/backup-card";
 import { ConfigCard } from "@/components/settings/config-card";
 import { DiscoverySection } from "@/components/settings/discovery-section";
 import { OrganizeSection } from "@/components/settings/organize-section";
@@ -13,7 +14,7 @@ import { VersionCard } from "@/components/settings/version-card";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
-/* Impostazioni: 5 gruppi: Generale · Discovery · Percorsi e libreria · Servizi esterni · Organize. */
+/* Impostazioni: 6 gruppi: Generale · Discovery · Percorsi e libreria · Servizi esterni · Organize · Dati (più la Versione). */
 
 function SettingsInner() {
   const { lang, setLang, t } = useI18n();
@@ -93,6 +94,9 @@ function SettingsInner() {
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">{t.nav.groupOrganize}</div>
       <OrganizeSection />
+
+      <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">{t.settings.dataHeading}</div>
+      <BackupCard />
 
       <div className="mb-2 mt-8 text-[10px] uppercase tracking-wider text-muted">{t.settings.versionHeading}</div>
       <VersionCard />
