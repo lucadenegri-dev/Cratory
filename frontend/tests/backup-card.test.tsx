@@ -148,6 +148,43 @@ describe("scheda Dati", () => {
     expect(api.cancelRestore).not.toHaveBeenCalled();
   });
 
+  it("chiudere il messaggio «riavvia il backend» non annulla il ripristino confermato", async () => {
+    // Dopo `confirmRestore` il marker è scritto: Escape sul messaggio finale
+    // deve solo chiudere il messaggio, non mandare la DELETE che cancella
+    // marker e staging.
+    api.pickPath.mockResolvedValue({ path: "/x/b.zip" });
+    api.prepareRestore.mockResolvedValue({ creato_il: null, app_version: null, tracce: 0, playlist: 0, membri: [], ha_credenziali: false });
+    api.confirmRestore.mockResolvedValue({ riavvio_necessario: true });
+    api.cancelRestore.mockResolvedValue(undefined);
+
+    render(<BackupCard />);
+    fireEvent.click(await screen.findByText("Ripristina da backup…"));
+    fireEvent.click(await screen.findByText("Ripristina e riavvia"));
+    expect(await screen.findByText(/Riavvia il backend per completarlo/)).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByText(/Riavvia il backend per completarlo/)).toBeNull());
+    expect(api.cancelRestore).not.toHaveBeenCalled();
+  });
+
+  it("se il riavvio nel guscio fallisce, resta il messaggio di riavvio manuale", async () => {
+    // `confirmRestore` è già andato a buon fine: il ripristino è scritto sul
+    // backend e un riavvio fallito non lo annulla — va solo fatto a mano.
+    guscio.nelGuscio = true;
+    api.pickPath.mockResolvedValue({ path: "/x/b.zip" });
+    api.prepareRestore.mockResolvedValue({ creato_il: null, app_version: null, tracce: 0, playlist: 0, membri: [], ha_credenziali: false });
+    api.confirmRestore.mockResolvedValue({ riavvio_necessario: true });
+    api.cancelRestore.mockResolvedValue(undefined);
+    guscio.riavviaOra.mockRejectedValue(new Error("il guscio non risponde"));
+
+    render(<BackupCard />);
+    fireEvent.click(await screen.findByText("Ripristina da backup…"));
+    fireEvent.click(await screen.findByText("Ripristina e riavvia"));
+
+    expect(await screen.findByText(/Riavvia il backend per completarlo/)).toBeTruthy();
+    expect(api.cancelRestore).not.toHaveBeenCalled();
+  });
+
   it("un job in corso diventa una frase che lo nomina", async () => {
     // Il client traduce il codice prima di sollevare: qui arriva già la frase.
     api.pickPath.mockResolvedValue({ path: "/x/b.zip" });

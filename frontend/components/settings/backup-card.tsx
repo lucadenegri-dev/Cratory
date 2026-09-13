@@ -72,6 +72,7 @@ export function BackupCard() {
   const ripristinaDa = async () => {
     setErrore(null);
     setEsito(null);
+    setRiavvioManuale(false);
     setBusy(true);
     try {
       const r = await pickPath("file", undefined, t.settings.restorePickPrompt);
@@ -90,18 +91,40 @@ export function BackupCard() {
     void cancelRestore().catch(() => undefined);
   };
 
+  // Chiudere il messaggio «riavvia il backend» NON è annullare: a quel punto
+  // la conferma è già scritta sul backend, e una DELETE cancellerebbe marker e
+  // staging — cioè disferebbe in silenzio un ripristino che l'utente ha
+  // chiesto. Si chiude e basta.
+  const chiudi = () => {
+    if (riavvioManuale) {
+      setRiepilogo(null);
+      setRiavvioManuale(false);
+      return;
+    }
+    annulla();
+  };
+
   const conferma = async () => {
     setBusy(true);
+    let confermato = false;
     try {
       await confirmRestore();
+      confermato = true;
       if (nelGuscio) {
         await riavviaOra();
       } else {
         setRiavvioManuale(true);
       }
     } catch (e) {
-      setRiepilogo(null);
-      setErrore(errText(e));
+      // Dopo una conferma andata a buon fine il ripristino è già registrato:
+      // un riavvio fallito non lo annulla, manca solo il riavvio. Chiudere con
+      // un errore direbbe il contrario.
+      if (confermato) {
+        setRiavvioManuale(true);
+      } else {
+        setRiepilogo(null);
+        setErrore(errText(e));
+      }
     } finally {
       setBusy(false);
     }
@@ -142,7 +165,7 @@ export function BackupCard() {
 
       <Modal
         open={riepilogo !== null}
-        onClose={busy ? () => undefined : annulla}
+        onClose={busy ? () => undefined : chiudi}
         title={t.settings.restoreTitle}
         footer={
           riavvioManuale ? null : (
