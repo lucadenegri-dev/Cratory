@@ -130,3 +130,23 @@ def test_build_script_contiene_timeout_esplicito_a_300s():
         script = np.build_script(kind, None, None)
         assert "with timeout of 300 seconds" in script
         assert "end timeout" in script
+
+
+def test_build_script_save_usa_choose_file_name_col_nome_di_default():
+    script = np.build_script("save", None, "Salva il backup", default_name="cratory-backup.zip")
+    assert "choose file name" in script
+    assert 'default name "cratory-backup.zip"' in script
+    assert 'with prompt "Salva il backup"' in script
+    assert "choose file" not in script.replace("choose file name", "")
+
+
+def test_build_script_save_escapa_le_virgolette_nel_nome():
+    script = np.build_script("save", None, None, default_name='a"b.zip')
+    assert 'default name "a\\"b.zip"' in script
+
+
+def test_pick_save_non_tronca_il_percorso(monkeypatch):
+    _force_available(monkeypatch)
+    got = np.pick_path("save", default_name="x.zip",
+                       runner=lambda *a, **k: _proc(stdout="/Users/x/Desktop/x.zip\n"))
+    assert got == "/Users/x/Desktop/x.zip"

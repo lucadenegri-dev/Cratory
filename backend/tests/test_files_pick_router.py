@@ -17,8 +17,8 @@ def test_availability_riflette_il_servizio(monkeypatch):
 def test_pick_ritorna_il_percorso(monkeypatch):
     seen: dict = {}
 
-    def fake_pick(kind, start=None, prompt=None):
-        seen.update(kind=kind, start=start, prompt=prompt)
+    def fake_pick(kind, start=None, prompt=None, default_name=None):
+        seen.update(kind=kind, start=start, prompt=prompt, default_name=default_name)
         return "/Users/x/Music"
 
     monkeypatch.setattr(native_picker, "pick_path", fake_pick)
@@ -26,7 +26,7 @@ def test_pick_ritorna_il_percorso(monkeypatch):
                     json={"kind": "folder", "start": "/Users/x", "prompt": "Libreria"})
     assert r.status_code == 200
     assert r.json() == {"path": "/Users/x/Music"}
-    assert seen == {"kind": "folder", "start": "/Users/x", "prompt": "Libreria"}
+    assert seen == {"kind": "folder", "start": "/Users/x", "prompt": "Libreria", "default_name": None}
 
 
 def test_pick_annullato_ritorna_path_null(monkeypatch):
@@ -58,3 +58,18 @@ def test_pick_occupato_409(monkeypatch):
 
 def test_kind_non_valido_422():
     assert client.post("/api/files/pick", json={"kind": "symlink"}).status_code == 422
+
+
+def test_pick_save_passa_il_nome_di_default(monkeypatch):
+    seen: dict = {}
+
+    def fake_pick(kind, start=None, prompt=None, default_name=None):
+        seen.update(kind=kind, default_name=default_name)
+        return "/Users/x/Desktop/cratory-backup.zip"
+
+    monkeypatch.setattr(native_picker, "pick_path", fake_pick)
+    r = client.post("/api/files/pick",
+                    json={"kind": "save", "default_name": "cratory-backup.zip"})
+    assert r.status_code == 200
+    assert r.json() == {"path": "/Users/x/Desktop/cratory-backup.zip"}
+    assert seen == {"kind": "save", "default_name": "cratory-backup.zip"}

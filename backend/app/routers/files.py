@@ -31,9 +31,11 @@ class PickAvailabilityOut(BaseModel):
 
 
 class PickIn(BaseModel):
-    kind: Literal["folder", "file"]
+    kind: Literal["folder", "file", "save"]
     start: str | None = None
     prompt: str | None = None
+    # Solo per kind="save": il nome proposto nel dialogo.
+    default_name: str | None = None
 
 
 class PickOut(BaseModel):
@@ -50,7 +52,7 @@ def pick_availability():
 def pick(body: PickIn):
     """Apre il dialog nativo sulla macchina del backend; path null = annullato."""
     try:
-        return PickOut(path=native_picker.pick_path(body.kind, body.start, body.prompt))
+        return PickOut(path=native_picker.pick_path(body.kind, body.start, body.prompt, body.default_name))
     except native_picker.PickerUnavailableError:
         raise api_error(409, "picker_unavailable",
                         "Native picker requires macOS with osascript")

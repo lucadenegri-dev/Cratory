@@ -39,18 +39,28 @@ def _escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def build_script(kind: str, start: str | None, prompt: str | None) -> str:
-    """AppleScript `choose folder`/`choose file` dentro System Events attivato:
-    porta il dialog in primo piano anche se il backend gira in background.
-    `start` diventa `default location` solo se è una directory esistente.
+def build_script(kind: str, start: str | None, prompt: str | None,
+                 default_name: str | None = None) -> str:
+    """AppleScript `choose folder`/`choose file`/`choose file name` dentro System
+    Events attivato: porta il dialog in primo piano anche se il backend gira in
+    background. `start` diventa `default location` solo se è una directory
+    esistente. `choose file name` (kind="save") restituisce un percorso anche
+    se il file non esiste e chiede da solo conferma di sovrascrittura.
 
     Il `choose` gira dentro un blocco `with timeout of` esplicito: l'Apple
     Event verso System Events ha di default un reply timeout di 120s, troppo
     poco se l'utente lascia il dialog aperto più a lungo. Lo estendiamo a
     `TIMEOUT_SECONDS` per allinearlo al timeout del subprocess."""
-    choose = "choose folder" if kind == "folder" else "choose file"
+    if kind == "folder":
+        choose = "choose folder"
+    elif kind == "save":
+        choose = "choose file name"
+    else:
+        choose = "choose file"
     if prompt:
         choose += f' with prompt "{_escape(prompt)}"'
+    if kind == "save" and default_name:
+        choose += f' default name "{_escape(default_name)}"'
     if start:
         start_dir = Path(start).expanduser()
         if start_dir.is_dir():
@@ -66,7 +76,7 @@ def build_script(kind: str, start: str | None, prompt: str | None) -> str:
 
 
 def pick_path(kind: str, start: str | None = None, prompt: str | None = None,
-              *, runner=subprocess.run) -> str | None:
+              default_name: str | None = None, *, runner=subprocess.run) -> str | None:
     """Percorso scelto nel dialog, o `None` se l'utente annulla o il dialog scade.
 
     `runner` ha la firma di `subprocess.run` ed è iniettabile nei test:
@@ -78,7 +88,7 @@ def pick_path(kind: str, start: str | None = None, prompt: str | None = None,
     try:
         try:
             proc = runner(
-                ["osascript", "-e", build_script(kind, start, prompt)],
+                ["osascript", "-e", build_script(kind, start, prompt, default_name)],
                 capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT_SECONDS,
             )
         except subprocess.TimeoutExpired:
