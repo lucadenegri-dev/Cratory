@@ -8,6 +8,12 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Backup e ripristino (2026-09-13).** I dati che il disco non ricostruisce — voti,
+  wishlist, set, playlist, cover, credenziali — stanno in un solo zip, salvato con
+  nome da Impostazioni o su richiesta prima di un aggiornamento. Il ripristino non
+  tocca mai il DB vivo: valida, mostra il riepilogo, e al riavvio scambia i file
+  prima che chiunque li apra, conservando i precedenti in `pre-restore/`.
+
 - **Dig ridisegnato (2026-09-06).** La barra scava per più semi insieme (unione,
   fino a quattro, budget di 300 item diviso fra loro), con i semi come chip e una
   tavolozza dei generi in libreria; i simili si raggiungono anche da lì, con una

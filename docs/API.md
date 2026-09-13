@@ -1332,10 +1332,57 @@ and an empty list for a query under 2 characters. Each hit is
 `GET /api/files/pick/availability` → `{available}`: the native path picker exists
 only on macOS with `osascript` in the PATH.
 
-`POST /api/files/pick` `{kind: "folder"|"file", start?, prompt?}` opens the Finder
-dialog **on the backend machine** and returns `{path}`, or `path: null` if the user
-cancels or the dialog times out (300s). `409 picker_unavailable` off macOS,
-`409 picker_busy` if a dialog is already open.
+`POST /api/files/pick` `{kind: "folder"|"file"|"save", start?, prompt?, default_name?}` opens the
+Finder dialog **on the backend machine** and returns `{path}`, or `path: null` if the user
+cancels or the dialog times out (300s). `save` is a "save as" dialog (`choose file name`):
+it returns a path even when the file does not exist yet, proposing `default_name`.
+`409 picker_unavailable` off macOS, `409 picker_busy` if a dialog is already open.
+
+## Backup and restore
+
+```text
+GET    /api/backup/estimate
+POST   /api/backup
+POST   /api/backup/restore/prepare
+POST   /api/backup/restore/confirm
+DELETE /api/backup/restore
+GET    /api/backup/restore/last
+```
+
+One zip holds the user data the disk cannot rebuild: the database (a `VACUUM INTO`
+snapshot, consistent while the app runs), the uploaded playlist covers
+(`data/covers/`), `.env` and `slskd.yml` — **credentials included**, so a restore puts
+the app back exactly as it was. Caches, logs, pid files and the slskd download folder
+stay out. Member names are fixed: `manifest.json` (`formato: 1`, `app_version`,
+`creato_il`, `membri`), `data/djassistant.db`, `data/covers/<file>`, `.env`,
+`data/slskd.yml`.
+
+`GET /api/backup/estimate` → `{byte, voci: [{nome, byte, presente}], last_backup_at,
+nome_di_default, picker_disponibile}`. The database size is used pages × page size,
+not DB + WAL on disk.
+
+`POST /api/backup` `{path: string | null}` writes the zip at `path` (`.zip` appended if
+missing; a `.parziale` file is written next to it and renamed at the end) and returns
+`{percorso, byte, creato_il}`; `path: null` saves to `~/Downloads/<nome_di_default>`.
+`409 backup_in_corso` while another one is being written.
+
+Restore is a two-step, cold swap. `POST /api/backup/restore/prepare` `{path}` validates
+the archive, extracts it to `DATA_DIR/data/restore-staging/` and returns the summary
+`{creato_il, app_version, tracce, playlist, membri, ha_credenziali}` — nothing is
+applied yet. Errors: `404 file_non_trovato`; `400` with `archivio_non_valido`,
+`manifest_assente`, `db_assente`, `db_corrotto` or `versione_piu_recente` (a backup
+made by a newer app; older ones are fine, `ensure_schema` migrates forward; the check
+is skipped when the running version is the `0.0.0-dev` fallback); `409 job_in_corso`
+with `params.job` = `analysis | import | shazam | downloads` when the restart would
+interrupt something. `POST /api/backup/restore/confirm` writes
+`DATA_DIR/data/restore-pending.json` and answers `{riavvio_necessario: true}`
+(`409 niente_da_ripristinare` without a prepared staging, `409 job_in_corso` re-checked).
+`DELETE /api/backup/restore` discards staging and marker (204). On the next backend
+start — in `main.py`, before `load_dotenv` and before anything opens the database —
+the current files are moved to `DATA_DIR/data/pre-restore/` (only the latest set is
+kept) and the staged ones take their place; the outcome is stored in
+`app_state.last_restore` and served by `GET /api/backup/restore/last` (`{stato, applicato_il,
+motivo?, backup_creato_il?, backup_app_version?, tracce?, playlist?}` or `null`).
 
 ## Services, settings and AI
 

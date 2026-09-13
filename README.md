@@ -201,6 +201,15 @@ Outside the desktop shell — running from a checkout in a browser — the same
 Settings card only *reports*, because there is nothing to install: it asks the
 backend, which reads GitHub's public releases API.
 
+### Backup
+
+Settings → Data writes a single zip with everything the disk cannot rebuild: the
+database, uploaded covers, `.env` and `slskd.yml`. **The file contains your
+credentials** (API keys, Spotify tokens, the Soulseek password): keep it as you keep
+`.env`. The updater offers a backup before installing a new version. Restore from the
+same card: pick the zip, read the summary, confirm — the app restarts and swaps the
+files before opening them; the previous data is kept in `data/pre-restore/`.
+
 ## Opening it on another Mac
 
 The `.dmg` is signed ad-hoc, not with an Apple Developer certificate, and it is

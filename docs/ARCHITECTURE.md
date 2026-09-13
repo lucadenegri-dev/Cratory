@@ -81,7 +81,7 @@ backend/app/
     tracks.py (/api: tracks, library/index, stats, genres)  playlists.py
     sets.py  transitions.py  labels.py  analysis.py  rekordbox.py
     discovery.py  dj_sets.py (/api/shazam)  downloads.py  files.py
-    slskd.py  soundcloud.py  spotify.py  ai.py  pipeline.py  services.py
+    slskd.py  soundcloud.py  spotify.py  ai.py  backup.py  pipeline.py  services.py
     settings.py  setup.py (/api/setup, the guided wizard)
 
   services/          deterministic logic and orchestration
@@ -944,6 +944,32 @@ data landing wherever the app happened to be launched from is the exact defect
 the config validators already declare they fixed. The startup writability check
 exists for a packaged user, who has an icon and no terminal in which to read a
 `PermissionError`.
+
+### Backup and restore
+
+`services/backup.py` is deterministic and HTTP-free. Backup: `VACUUM INTO` a temporary
+file (a transactional snapshot that needs no job to stop), zip it with the uploaded
+covers, `.env` and `slskd.yml` under fixed member names, write to `<name>.zip.parziale`
+and rename at the end. The list of what goes in lives in `contenuto()` and mirrors the
+list `applica_se_in_attesa()` swaps: they are the two only lists and must match.
+
+Restore never touches the live database. `prepara()` validates (zip integrity,
+manifest `formato: 1`, `PRAGMA integrity_check` on the extracted DB, version not newer
+than the running app) and extracts into `data/restore-staging/`; `conferma()` writes
+`data/restore-pending.json` — including the database path resolved *now*, with the
+config loaded. The swap runs at the next start, in `main.py` **before `load_dotenv`**:
+a restored `.env` must be in force in that very start, and at that point nothing has
+opened the database yet (SQLAlchemy's engine is built at import but connects lazily).
+That is also why `services/backup.py` imports `app.core.config` and `app.core.version`
+only inside functions. Current files go to `data/pre-restore/` (latest set only); a
+missing or incomplete staging removes the marker and leaves the data untouched. The
+outcome lands in `app_state.last_restore` once the lifespan has the DB open. In the
+desktop shell the page calls the existing `riavvia_app`; in the dev browser the
+restore completes when the backend is restarted by hand — the alternative, a hot swap
+with `engine.dispose()` and `SessionLocal.configure(bind=…)`, was rejected for the
+concurrent-session and in-memory-state hazards it would add for the dev environment
+alone. The updater asks for a backup before installing; that backup runs while the
+backend is still alive, so `aggiornamento.rs` is unchanged.
 
 ## Frontend
 

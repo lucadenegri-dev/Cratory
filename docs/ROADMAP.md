@@ -326,6 +326,18 @@ endpoints, `docs/API.md`.
   e non scritto da nessuno) e le tre etichette di `owned`, incluso il perché il
   bottone *Ferma* compare solo per un demone avviato da Cratory.
 
+- **Backup e ripristino** (2026-09-13). Una scheda «Dati» in Impostazioni scrive uno
+  zip — DB da `VACUUM INTO`, cover caricate, `.env`, `slskd.yml`, credenziali comprese
+  per scelta — con «salva con nome» (il picker nativo ha imparato `choose file name`),
+  o in `~/Downloads` senza picker. L'updater chiede prima di installare se fare un
+  backup, dicendo quanto peserebbe; un backup annullato o fallito non fa partire
+  l'aggiornamento. Il ripristino è in due tempi e a freddo: `prepare` valida ed
+  estrae in staging e mostra il riepilogo (data, versione, tracce, playlist),
+  `confirm` scrive un marker, e `main.py` applica lo scambio al riavvio **prima di
+  `load_dotenv`**, mettendo i dati attuali in `pre-restore/`. Nel guscio il riavvio
+  parte dalla pagina; nel browser si riavvia il backend a mano. Spec in
+  `docs/superpowers/specs/2026-09-13-backup-ripristino-design.md`.
+
 ## Backlog
 
 Real open items from the code and docs review closed on 2026-08-13. Grouped by size —
