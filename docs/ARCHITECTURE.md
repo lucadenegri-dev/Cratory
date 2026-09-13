@@ -964,12 +964,16 @@ That is also why `services/backup.py` imports `app.core.config` and `app.core.ve
 only inside functions. Current files go to `data/pre-restore/` (latest set only); a
 missing or incomplete staging removes the marker and leaves the data untouched. The
 outcome lands in `app_state.last_restore` once the lifespan has the DB open. In the
-desktop shell the page calls the existing `riavvia_app`; in the dev browser the
+desktop shell the page calls `riavvia_app`, which terminates the Python child before
+`app.restart()`: `restart()` never delivers `RunEvent::Exit`, so the handler in `lib.rs`
+that usually kills uvicorn does not run, and an orphan holding port 8000 with the
+database open would make the relaunched shell die on the "Cratory is already open"
+dialog without ever re-importing `main.py`. In the dev browser the
 restore completes when the backend is restarted by hand — the alternative, a hot swap
 with `engine.dispose()` and `SessionLocal.configure(bind=…)`, was rejected for the
 concurrent-session and in-memory-state hazards it would add for the dev environment
 alone. The updater asks for a backup before installing; that backup runs while the
-backend is still alive, so `aggiornamento.rs` is unchanged.
+backend is still alive, so nothing changes in `installa_aggiornamento`.
 
 ## Frontend
 

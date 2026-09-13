@@ -335,7 +335,9 @@ endpoints, `docs/API.md`.
   estrae in staging e mostra il riepilogo (data, versione, tracce, playlist),
   `confirm` scrive un marker, e `main.py` applica lo scambio al riavvio **prima di
   `load_dotenv`**, mettendo i dati attuali in `pre-restore/`. Nel guscio il riavvio
-  parte dalla pagina; nel browser si riavvia il backend a mano. Spec in
+  parte dalla pagina — `riavvia_app` ha dovuto imparare a terminare il backend prima
+  di `app.restart()`, che non passa per `RunEvent::Exit`; nel browser si riavvia il
+  backend a mano. Spec in
   `docs/superpowers/specs/2026-09-13-backup-ripristino-design.md`.
 
 ## Backlog

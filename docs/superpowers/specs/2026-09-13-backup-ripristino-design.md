@@ -40,6 +40,16 @@ deterministico e testabile senza server. Il prezzo è che nel browser di
 sviluppo, dove non c'è un guscio che riavvia, il ripristino si completa
 riavviando il backend a mano; nel guscio lo fa `riavvia_app`, che esiste già.
 
+> **Correzione (review finale, 2026-09-13).** «`riavvia_app`, che esiste già»
+> era vero solo a metà: la funzione esisteva ma nasceva per la via d'uscita
+> dell'updater, dove il backend è già stato terminato. Chiamata a backend vivo
+> non basta — `app.restart()` non passa per `RunEvent::Exit`, quindi
+> `backend::termina` non gira e il vecchio uvicorn resta sulla porta 8000 col DB
+> aperto; il guscio rilanciato la trova occupata e muore sul dialogo «Cratory è
+> già aperto», senza mai re-importare `main.py`. `riavvia_app` ora chiama
+> `backend::termina(&app)` prima di `app.restart()` (idempotente: `termina` fa
+> `take()` dell'unico figlio tracciato). Vedi anche §5.
+
 ## 1. Il servizio (`backend/app/services/backup.py`)
 
 Modulo deterministico, senza AI, senza HTTP. Legge `paths.DATA_DIR` e
@@ -259,6 +269,10 @@ In `aggiornamento-guscio.tsx` la `ConfirmModal` diventa una `Modal` propria,
 
 Niente cambia in `aggiornamento.rs`: il backup finisce prima che
 `installa_aggiornamento` sia invocato, a backend vivo.
+
+> **Correzione (review finale, 2026-09-13).** Vale per il *backup* pre-update,
+> non per il ripristino: `riavvia_app` — nello stesso file — è dovuta cambiare.
+> Vedi il riquadro in «Perché lo scambio avviene a freddo».
 
 ## 6. Test
 

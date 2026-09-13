@@ -119,9 +119,25 @@ pub async fn installa_aggiornamento(app: AppHandle) -> Result<(), ErroreAggiorna
 
 /// La via d'uscita quando l'installazione fallisce: a quel punto il backend e'
 /// gia' stato terminato e l'app e' un guscio vuoto, e solo un riavvio la
-/// rimette in piedi.
+/// rimette in piedi. La stessa `riavvia_app` la chiama pero' anche la scheda
+/// «Dati» dopo aver confermato un ripristino, e li' il backend e' VIVO.
+///
+/// Per questo il figlio va terminato esplicitamente qui, esattamente come fa
+/// gia' `installa_aggiornamento` prima di `install`: `app.restart()` non passa
+/// per `RunEvent::Exit`, quindi l'handler in `lib.rs` che chiama
+/// `backend::termina` non gira mai. Senza questa riga il vecchio uvicorn
+/// resterebbe attaccato alla porta 8000 col DB aperto, il guscio rilanciato la
+/// troverebbe occupata da Cratory e morirebbe sul dialogo «Cratory e' gia'
+/// aperto»: `main.py` non verrebbe mai re-importato e lo scambio a freddo del
+/// ripristino non avverrebbe. E' questa chiamata a far applicare al prossimo
+/// avvio un ripristino confermato.
+///
+/// Chiamarla due volte non fa danno: `backend::termina` fa `take()` dell'unico
+/// `Child` tracciato, quindi sulla via d'uscita dell'updater -- dove il backend
+/// e' gia' stato terminato -- non trova piu' nessun figlio e non fa nulla.
 #[tauri::command]
 pub fn riavvia_app(app: AppHandle) {
+    backend::termina(&app);
     app.restart();
 }
 
