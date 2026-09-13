@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.core import paths
 from app.core.config import settings
@@ -236,3 +237,167 @@ def test_in_sviluppo_la_versione_non_si_controlla(dati, tmp_path, monkeypatch):
     monkeypatch.setattr(version, "app_version", lambda: version.FALLBACK)
     archivio = _zip_con(tmp_path, manifest={"formato": 1, "app_version": "9.9.9", "creato_il": "x", "membri": []})
     assert backup.ispeziona(archivio).app_version == "9.9.9"
+
+
+# --- ripristino: i due tempi ----------------------------------------------------
+
+@pytest.fixture()
+def sessione(dati):
+    engine = create_engine(f"sqlite:///{backup._db_path()}", connect_args={"check_same_thread": False})
+    s = sessionmaker(bind=engine, expire_on_commit=False)()
+    try:
+        yield s
+    finally:
+        s.close()
+        engine.dispose()
+
+
+def test_prepara_popola_lo_staging_senza_marker(dati, tmp_path, sessione):
+    archivio = Path(backup.crea(tmp_path / "b.zip").percorso)
+    r = backup.prepara(archivio, sessione)
+    staging = dati / "data" / "restore-staging"
+    assert (staging / "data" / "djassistant.db").is_file()
+    assert (staging / "data" / "covers" / "playlist-1.jpg").is_file()
+    assert (staging / ".env").is_file() and (staging / "data" / "slskd.yml").is_file()
+    assert json.loads((staging / "riepilogo.json").read_text())["playlist"] == r.playlist
+    assert not (dati / "data" / "restore-pending.json").exists()
+    assert backup.riepilogo_in_attesa().creato_il == r.creato_il
+
+
+def test_prepara_ignora_membri_non_ammessi(dati, tmp_path, sessione):
+    archivio = _zip_con(tmp_path, extra=[("../fuori.txt", b"no"), ("data/covers/../../x", b"no")])
+    backup.prepara(archivio, sessione)
+    assert not (tmp_path / "fuori.txt").exists()
+    assert not (dati / "x").exists()
+
+
+def test_prepara_file_inesistente(dati, sessione, tmp_path):
+    with pytest.raises(FileNotFoundError):
+        backup.prepara(tmp_path / "manca.zip", sessione)
+
+
+def test_conferma_scrive_il_marker_con_db_path_e_riepilogo(dati, tmp_path, sessione):
+    archivio = Path(backup.crea(tmp_path / "b.zip").percorso)
+    backup.prepara(archivio, sessione)
+    backup.conferma(sessione)
+    marker = json.loads((dati / "data" / "restore-pending.json").read_text())
+    assert marker["db_path"] == str(backup._db_path())
+    assert marker["staging"] == str(dati / "data" / "restore-staging")
+    assert marker["riepilogo"]["tracce"] == 0
+
+
+def test_conferma_senza_staging_solleva(dati, sessione):
+    with pytest.raises(backup.NienteDaRipristinare):
+        backup.conferma(sessione)
+
+
+def test_annulla_pulisce_tutto_ed_e_idempotente(dati, tmp_path, sessione):
+    backup.prepara(Path(backup.crea(tmp_path / "b.zip").percorso), sessione)
+    backup.conferma(sessione)
+    backup.annulla()
+    backup.annulla()
+    assert not (dati / "data" / "restore-staging").exists()
+    assert not (dati / "data" / "restore-pending.json").exists()
+    assert backup.riepilogo_in_attesa() is None
+
+
+@pytest.mark.parametrize("modulo, attr, atteso", [
+    ("app.services.audio_analysis_job", "is_running", "analysis"),
+    ("app.services.streaming_import_job", "is_running", "import"),
+    ("app.services.mix_identify_job", "is_running", "shazam"),
+])
+def test_prepara_rifiuta_con_un_job_in_corso(dati, tmp_path, sessione, monkeypatch, modulo, attr, atteso):
+    import importlib
+    monkeypatch.setattr(importlib.import_module(modulo), attr, lambda: True)
+    archivio = Path(backup.crea(tmp_path / "b.zip").percorso)
+    with pytest.raises(backup.JobInCorso) as e:
+        backup.prepara(archivio, sessione)
+    assert e.value.job == atteso
+    assert not (dati / "data" / "restore-staging").exists()
+
+
+def test_prepara_rifiuta_con_un_download_in_corso(dati, tmp_path, sessione):
+    from app.models import DownloadQueueItem, Track
+    t = Track(platform="spotify", platform_track_id="x", source_type="spotify", title="t", artist="a")
+    sessione.add(t)
+    sessione.flush()
+    sessione.add(DownloadQueueItem(track_id=t.id, kind="soulseek_auto", state="running"))
+    sessione.commit()
+    with pytest.raises(backup.JobInCorso) as e:
+        backup.prepara(Path(backup.crea(tmp_path / "b.zip").percorso), sessione)
+    assert e.value.job == "downloads"
+
+
+def test_un_download_in_coda_ma_non_in_corso_non_blocca(dati, tmp_path, sessione):
+    from app.models import DownloadQueueItem, Track
+    t = Track(platform="spotify", platform_track_id="x", source_type="spotify", title="t", artist="a")
+    sessione.add(t)
+    sessione.flush()
+    sessione.add(DownloadQueueItem(track_id=t.id, kind="soulseek_auto", state="queued"))
+    sessione.commit()
+    backup.prepara(Path(backup.crea(tmp_path / "b.zip").percorso), sessione)
+
+
+def _sha(p: Path) -> str:
+    import hashlib
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def test_applica_senza_marker_non_tocca_niente(dati):
+    prima = _sha(backup._db_path())
+    assert backup.applica_se_in_attesa() is None
+    assert _sha(backup._db_path()) == prima
+
+
+def test_applica_scambia_i_file_e_conserva_pre_restore(dati, tmp_path, sessione):
+    # Il backup contiene 'nel_backup'; il DB attuale, dopo, conterrà 'dopo'.
+    with sqlite3.connect(backup._db_path()) as c:
+        c.execute(
+            "INSERT INTO app_state(key, value, updated_at) VALUES ('nel_backup', '1', '2024-01-01 00:00:00')"
+        )
+    archivio = Path(backup.crea(tmp_path / "b.zip").percorso)
+    with sqlite3.connect(backup._db_path()) as c:
+        c.execute("DELETE FROM app_state WHERE key='nel_backup'")
+        c.execute(
+            "INSERT INTO app_state(key, value, updated_at) VALUES ('dopo', '1', '2024-01-01 00:00:00')"
+        )
+    (dati / ".env").write_text("CAMBIATO=1\n")
+    backup.prepara(archivio, sessione)
+    backup.conferma(sessione)
+    sessione.close()
+    sessione.get_bind().dispose()
+
+    esito = backup.applica_se_in_attesa()
+
+    assert esito.stato == "ok" and esito.tracce == 0
+    with sqlite3.connect(backup._db_path()) as c:
+        chiavi = {r[0] for r in c.execute("SELECT key FROM app_state")}
+    assert "nel_backup" in chiavi and "dopo" not in chiavi
+    assert (dati / ".env").read_text() == "SPOTIFY_CLIENT_ID=abc\n"
+    pre = dati / "data" / "pre-restore"
+    assert (pre / "djassistant.db").is_file()
+    assert (pre / ".env").read_text() == "CAMBIATO=1\n"
+    assert (pre / "covers" / "playlist-1.jpg").is_file()
+    assert not (dati / "data" / "restore-pending.json").exists()
+    assert not (dati / "data" / "restore-staging").exists()
+    assert not (backup._db_path().parent / "djassistant.db-wal").exists()
+
+
+def test_applica_con_staging_mancante_toglie_il_marker_e_non_tocca_i_dati(dati):
+    prima = _sha(backup._db_path())
+    (dati / "data" / "restore-pending.json").write_text(json.dumps({
+        "staging": str(dati / "data" / "restore-staging"),
+        "db_path": str(backup._db_path()),
+        "riepilogo": {},
+    }))
+    esito = backup.applica_se_in_attesa()
+    assert esito.stato == "fallito" and esito.motivo == "staging_incompleto"
+    assert _sha(backup._db_path()) == prima
+    assert not (dati / "data" / "restore-pending.json").exists()
+
+
+def test_applica_con_marker_illeggibile_lo_toglie(dati):
+    (dati / "data" / "restore-pending.json").write_text("{non json")
+    esito = backup.applica_se_in_attesa()
+    assert esito.stato == "fallito"
+    assert not (dati / "data" / "restore-pending.json").exists()

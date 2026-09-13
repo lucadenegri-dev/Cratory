@@ -87,6 +87,17 @@ class Riepilogo:
     ha_credenziali: bool
 
 
+@dataclass
+class EsitoRipristino:
+    stato: str  # "ok" | "fallito"
+    applicato_il: str
+    motivo: str | None = None
+    backup_creato_il: str | None = None
+    backup_app_version: str | None = None
+    tracce: int | None = None
+    playlist: int | None = None
+
+
 # --- percorsi -----------------------------------------------------------------
 
 def _db_path() -> Path:
@@ -326,4 +337,139 @@ def ispeziona(archivio: Path) -> Riepilogo:
         playlist=playlist,
         membri=membri,
         ha_credenziali=MEMBRO_ENV in membri or MEMBRO_SLSKD in membri,
+    )
+
+
+# --- ripristino: i due tempi --------------------------------------------------
+
+def job_in_corso(db) -> str | None:
+    """Il riavvio interromperebbe questi: l'utente deve saperlo prima di
+    scegliere. Import dentro la funzione: portano a `config`."""
+    from app.models import DownloadQueueItem
+    from app.services import audio_analysis_job, mix_identify_job, streaming_import_job
+
+    if audio_analysis_job.is_running():
+        return "analysis"
+    if streaming_import_job.is_running():
+        return "import"
+    if mix_identify_job.is_running():
+        return "shazam"
+    if db.query(DownloadQueueItem).filter(DownloadQueueItem.state == "running").first():
+        return "downloads"
+    return None
+
+
+def _riepilogo_path() -> Path:
+    return _staging() / "riepilogo.json"
+
+
+def riepilogo_in_attesa() -> Riepilogo | None:
+    try:
+        return Riepilogo(**json.loads(_riepilogo_path().read_text()))
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def prepara(archivio: Path, db) -> Riepilogo:
+    archivio = Path(archivio)
+    if not archivio.is_file():
+        raise FileNotFoundError(str(archivio))
+    job = job_in_corso(db)
+    if job:
+        raise JobInCorso(job)
+    riepilogo = ispeziona(archivio)
+    staging = _staging()
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    with zipfile.ZipFile(archivio) as z:
+        for nome in riepilogo.membri:
+            destinazione = staging / nome
+            destinazione.parent.mkdir(parents=True, exist_ok=True)
+            with z.open(nome) as src, destinazione.open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+    _riepilogo_path().write_text(json.dumps(asdict(riepilogo)))
+    return riepilogo
+
+
+def conferma(db) -> None:
+    job = job_in_corso(db)
+    if job:
+        raise JobInCorso(job)
+    riepilogo = riepilogo_in_attesa()
+    if riepilogo is None or not (_staging() / MEMBRO_DB).is_file():
+        raise NienteDaRipristinare
+    _marker().write_text(json.dumps({
+        "staging": str(_staging()),
+        # Il percorso del DB si fissa ADESSO, a config caricata: chi applica
+        # gira prima di load_dotenv e non deve dedurlo.
+        "db_path": str(_db_path()),
+        "confermato_il": _adesso(),
+        "riepilogo": asdict(riepilogo),
+    }))
+
+
+def annulla() -> None:
+    _marker().unlink(missing_ok=True)
+    shutil.rmtree(_staging(), ignore_errors=True)
+
+
+# --- ripristino: lo scambio, a freddo -------------------------------------------
+
+def _sposta(sorgente: Path, destinazione: Path) -> None:
+    if sorgente.exists():
+        destinazione.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(sorgente), str(destinazione))
+
+
+def applica_se_in_attesa() -> EsitoRipristino | None:
+    """Da chiamare all'avvio PRIMA che chiunque apra il DB. Senza marker non
+    tocca niente. Con staging mancante o incompleto toglie il marker e lascia i
+    dati com'erano: meglio ripartire con i vecchi che con metà dei nuovi."""
+    marker = _marker()
+    if not marker.exists():
+        return None
+    try:
+        dati = json.loads(marker.read_text())
+        if not isinstance(dati, dict):
+            dati = {}
+    except (OSError, ValueError):
+        dati = {}
+    marker.unlink(missing_ok=True)
+
+    staging = Path(dati.get("staging") or _staging())
+    db_dest = Path(dati.get("db_path") or "")
+    riepilogo = dati.get("riepilogo") or {}
+    if not db_dest.is_absolute() or not (staging / MEMBRO_DB).is_file():
+        log.warning("ripristino: staging incompleto in %s, marker rimosso, dati intatti", staging)
+        shutil.rmtree(staging, ignore_errors=True)
+        return EsitoRipristino(stato="fallito", applicato_il=_adesso(), motivo="staging_incompleto")
+
+    pre = _pre_restore()
+    shutil.rmtree(pre, ignore_errors=True)
+    pre.mkdir(parents=True)
+    for suffisso in ("", "-wal", "-shm"):
+        _sposta(db_dest.with_name(db_dest.name + suffisso), pre / (db_dest.name + suffisso))
+    _sposta(_covers_dir(), pre / "covers")
+    _sposta(_env_path(), pre / ".env")
+    _sposta(_slskd_yml(), pre / "slskd.yml")
+
+    _sposta(staging / MEMBRO_DB, db_dest)
+    covers_dst = _covers_dir()
+    covers_dst.mkdir(parents=True, exist_ok=True)
+    covers_src = staging / PREFISSO_COVERS.rstrip("/")
+    if covers_src.is_dir():
+        for f in covers_src.iterdir():
+            _sposta(f, covers_dst / f.name)
+    _sposta(staging / MEMBRO_ENV, _env_path())
+    _sposta(staging / MEMBRO_SLSKD, _slskd_yml())
+    shutil.rmtree(staging, ignore_errors=True)
+
+    log.warning("ripristino applicato dal backup del %s (v%s)", riepilogo.get("creato_il"), riepilogo.get("app_version"))
+    return EsitoRipristino(
+        stato="ok",
+        applicato_il=_adesso(),
+        backup_creato_il=riepilogo.get("creato_il"),
+        backup_app_version=riepilogo.get("app_version"),
+        tracce=riepilogo.get("tracce"),
+        playlist=riepilogo.get("playlist"),
     )
