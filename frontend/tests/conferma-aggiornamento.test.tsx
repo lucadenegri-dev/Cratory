@@ -43,11 +43,35 @@ describe("la conferma dell'aggiornamento", () => {
   });
 
   it("senza stima restano le due uscite di prima", async () => {
-    api.getBackupEstimate.mockRejectedValue(new Error("giù"));
+    // Promessa controllata a mano: `stima` resta `null` all'avvio anche nel
+    // percorso felice, quindi un `findByText` normale la troverebbe già vera
+    // al primo render, prima ancora che il `.catch()` giri. Si aspetta la
+    // chiamata, si rifiuta a mano, e si lascia girare il `.catch()` con un
+    // giro di microtask/macrotask prima di guardare il DOM.
+    let rifiuta!: (e: unknown) => void;
+    api.getBackupEstimate.mockReturnValue(new Promise((_, rj) => { rifiuta = rj; }));
     monta();
-    expect(await screen.findByText("Scarica e installa (≈172 MB)")).toBeTruthy();
+    await waitFor(() => expect(api.getBackupEstimate).toHaveBeenCalledTimes(1));
+    rifiuta(new Error("giù"));
+    await new Promise((r) => setTimeout(r, 0)); // lascia girare il .catch e il commit di React
+    expect(screen.getByText("Scarica e installa (≈172 MB)")).toBeTruthy();
+    expect(screen.getByText("Annulla")).toBeTruthy();
     expect(screen.queryByText("Backup e aggiorna")).toBeNull();
     expect(screen.queryByText(/Occuperebbe/)).toBeNull();
+  });
+
+  it("controprova: con la stessa attesa, una stima risolta fa comparire le tre uscite", async () => {
+    // Stesso schema della prova sopra, ma risolvendo invece di rifiutare:
+    // dimostra che il giro di attesa basta a far comparire lo stato aggiornato,
+    // quindi la sua assenza nella prova sopra non è un caso di temporizzazione.
+    let risolvi!: (v: unknown) => void;
+    api.getBackupEstimate.mockReturnValue(new Promise((rs) => { risolvi = rs; }));
+    monta();
+    await waitFor(() => expect(api.getBackupEstimate).toHaveBeenCalledTimes(1));
+    risolvi(stima());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByText("Backup e aggiorna")).toBeTruthy();
+    expect(screen.getByText(/Occuperebbe circa 23 MB/)).toBeTruthy();
   });
 
   it("aggiorna senza backup installa e basta", async () => {
