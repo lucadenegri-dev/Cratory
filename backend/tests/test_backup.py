@@ -142,3 +142,97 @@ def test_due_backup_insieme_il_secondo_e_rifiutato(dati, tmp_path):
             backup.crea(tmp_path / "b.zip")
     finally:
         backup._lock.release()
+
+
+# --- ispezione ------------------------------------------------------------------
+
+def _zip_con(tmp_path, nome="x.zip", *, manifest=..., db: bytes | Path | None = ..., extra=()):
+    """Costruisce uno zip di prova a partire da un backup vero e lo altera."""
+    vero = Path(backup.crea(tmp_path / "vero.zip").percorso)
+    out = tmp_path / nome
+    with zipfile.ZipFile(vero) as src, zipfile.ZipFile(out, "w") as dst:
+        for m in src.namelist():
+            if m == "manifest.json":
+                if manifest is None:
+                    continue
+                dst.writestr(m, src.read(m) if manifest is ... else json.dumps(manifest))
+            elif m == "data/djassistant.db":
+                if db is None:
+                    continue
+                dst.writestr(m, src.read(m) if db is ... else (db if isinstance(db, bytes) else db.read_bytes()))
+            else:
+                dst.writestr(m, src.read(m))
+        for nome_extra, contenuto in extra:
+            dst.writestr(nome_extra, contenuto)
+    return out
+
+
+def test_ispeziona_un_backup_vero(dati, tmp_path):
+    with sqlite3.connect(backup._db_path()) as c:
+        c.execute(
+            "INSERT INTO playlists(name, platform, track_count, kind, imported_at, created_at, updated_at) "
+            "VALUES ('p', 'manual', 0, 'playlist', '2024-01-01 00:00:00', '2024-01-01 00:00:00', '2024-01-01 00:00:00')"
+        )
+    esito = backup.crea(tmp_path / "b.zip")
+    r = backup.ispeziona(Path(esito.percorso))
+    assert r.creato_il == esito.creato_il
+    assert r.playlist == 1 and r.tracce == 0
+    assert r.ha_credenziali is True
+    assert "data/djassistant.db" in r.membri
+
+
+def test_ispeziona_senza_credenziali(dati, tmp_path):
+    (dati / ".env").unlink()
+    (dati / "data" / "slskd.yml").unlink()
+    r = backup.ispeziona(Path(backup.crea(tmp_path / "b.zip").percorso))
+    assert r.ha_credenziali is False
+
+
+@pytest.mark.parametrize("caso, codice", [
+    ("non_zip", "archivio_non_valido"),
+    ("senza_manifest", "manifest_assente"),
+    ("formato_2", "manifest_assente"),
+    ("senza_db", "db_assente"),
+    ("db_troncato", "db_corrotto"),
+])
+def test_ispeziona_rifiuta_con_il_codice_giusto(dati, tmp_path, caso, codice):
+    if caso == "non_zip":
+        archivio = tmp_path / "x.zip"
+        archivio.write_bytes(b"non sono uno zip")
+    elif caso == "senza_manifest":
+        archivio = _zip_con(tmp_path, manifest=None)
+    elif caso == "formato_2":
+        archivio = _zip_con(tmp_path, manifest={"formato": 2, "app_version": "1.0.0"})
+    elif caso == "senza_db":
+        archivio = _zip_con(tmp_path, db=None)
+    else:
+        archivio = _zip_con(tmp_path, db=b"SQLite format 3\x00" + b"\x00" * 100)
+    with pytest.raises(backup.BackupNonValido) as e:
+        backup.ispeziona(archivio)
+    assert e.value.codice == codice
+
+
+def test_ispeziona_rifiuta_una_versione_piu_recente(dati, tmp_path, monkeypatch):
+    from app.core import version
+    monkeypatch.setattr(version, "app_version", lambda: "1.0.8")
+    archivio = _zip_con(tmp_path, manifest={"formato": 1, "app_version": "1.1.0", "creato_il": "x", "membri": []})
+    with pytest.raises(backup.BackupNonValido) as e:
+        backup.ispeziona(archivio)
+    assert e.value.codice == "versione_piu_recente"
+
+
+def test_ispeziona_accetta_una_versione_piu_vecchia_o_uguale(dati, tmp_path, monkeypatch):
+    from app.core import version
+    monkeypatch.setattr(version, "app_version", lambda: "1.0.8")
+    for v in ("1.0.8", "0.9.0"):
+        archivio = _zip_con(tmp_path, nome=f"{v}.zip", manifest={"formato": 1, "app_version": v, "creato_il": "x", "membri": []})
+        assert backup.ispeziona(archivio).app_version == v
+
+
+def test_in_sviluppo_la_versione_non_si_controlla(dati, tmp_path, monkeypatch):
+    """`0.0.0-dev` batterebbe qualunque backup fatto da un'app vera: in un
+    checkout senza VERSION il controllo si salta."""
+    from app.core import version
+    monkeypatch.setattr(version, "app_version", lambda: version.FALLBACK)
+    archivio = _zip_con(tmp_path, manifest={"formato": 1, "app_version": "9.9.9", "creato_il": "x", "membri": []})
+    assert backup.ispeziona(archivio).app_version == "9.9.9"

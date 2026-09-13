@@ -77,6 +77,16 @@ class EsitoBackup:
     creato_il: str
 
 
+@dataclass
+class Riepilogo:
+    creato_il: str | None
+    app_version: str | None
+    tracce: int
+    playlist: int
+    membri: list[str]
+    ha_credenziali: bool
+
+
 # --- percorsi -----------------------------------------------------------------
 
 def _db_path() -> Path:
@@ -222,3 +232,98 @@ def crea(destinazione: Path) -> EsitoBackup:
         return EsitoBackup(str(destinazione), destinazione.stat().st_size, creato_il)
     finally:
         _lock.release()
+
+
+# --- ispezione ------------------------------------------------------------------
+
+def _membro_ammesso(nome: str) -> bool:
+    """Solo nomi noti, e per le cover solo un nome di file piatto: uno zip
+    scritto da altri non deve poter estrarre fuori dallo staging."""
+    if nome in (MEMBRO_MANIFEST, MEMBRO_DB, MEMBRO_ENV, MEMBRO_SLSKD):
+        return True
+    if nome.startswith(PREFISSO_COVERS):
+        resto = nome[len(PREFISSO_COVERS):]
+        return bool(resto) and "/" not in resto and resto not in (".", "..")
+    return False
+
+
+def _piu_recente_dell_app(versione_backup: str | None) -> bool:
+    from app.core import version  # dentro: vedi docstring del modulo
+    in_esecuzione = version.app_version()
+    if in_esecuzione == version.FALLBACK:
+        return False  # checkout di sviluppo: nessun numero con cui confrontare
+    mia = version.parse_version(in_esecuzione)
+    sua = version.parse_version(versione_backup or "")
+    if mia is None or sua is None:
+        return False
+    return sua > mia
+
+
+def _conta(con: sqlite3.Connection, tabella: str) -> int:
+    try:
+        return int(con.execute(f"SELECT count(*) FROM {tabella}").fetchone()[0])
+    except sqlite3.DatabaseError:
+        return 0
+
+
+def _verifica_db(percorso: Path) -> tuple[int, int]:
+    """(tracce, playlist); `BackupNonValido("db_corrotto")` se non è un DB sano.
+    Il file è una copia temporanea che nessun altro tocca: connessione normale."""
+    try:
+        con = sqlite3.connect(str(percorso))
+    except sqlite3.DatabaseError as exc:
+        raise BackupNonValido("db_corrotto", str(exc)) from exc
+    try:
+        try:
+            esito = con.execute("PRAGMA integrity_check").fetchone()
+        except sqlite3.DatabaseError as exc:
+            raise BackupNonValido("db_corrotto", str(exc)) from exc
+        if not esito or esito[0] != "ok":
+            raise BackupNonValido("db_corrotto", str(esito))
+        return _conta(con, "tracks"), _conta(con, "playlists")
+    finally:
+        con.close()
+
+
+def _leggi_manifest(z: zipfile.ZipFile) -> dict:
+    if MEMBRO_MANIFEST not in z.namelist():
+        raise BackupNonValido("manifest_assente")
+    try:
+        manifest = json.loads(z.read(MEMBRO_MANIFEST))
+    except ValueError as exc:
+        raise BackupNonValido("manifest_assente", str(exc)) from exc
+    if not isinstance(manifest, dict) or manifest.get("formato") != FORMATO:
+        raise BackupNonValido("manifest_assente", f"formato {manifest.get('formato') if isinstance(manifest, dict) else '?'}")
+    return manifest
+
+
+def ispeziona(archivio: Path) -> Riepilogo:
+    """Legge lo zip senza applicare nulla. Estrae il DB in una cartella
+    temporanea per il controllo d'integrità e i contatori."""
+    import tempfile
+
+    archivio = Path(archivio)
+    if not zipfile.is_zipfile(archivio):
+        raise BackupNonValido("archivio_non_valido")
+    with zipfile.ZipFile(archivio) as z:
+        if z.testzip() is not None:
+            raise BackupNonValido("archivio_non_valido", "membro corrotto")
+        manifest = _leggi_manifest(z)
+        membri = [m for m in z.namelist() if _membro_ammesso(m)]
+        if MEMBRO_DB not in membri:
+            raise BackupNonValido("db_assente")
+        if _piu_recente_dell_app(manifest.get("app_version")):
+            raise BackupNonValido("versione_piu_recente", str(manifest.get("app_version")))
+        with tempfile.TemporaryDirectory(prefix="cratory-ispezione-") as tmp:
+            estratto = Path(tmp) / "db.sqlite"
+            with z.open(MEMBRO_DB) as src, estratto.open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+            tracce, playlist = _verifica_db(estratto)
+    return Riepilogo(
+        creato_il=manifest.get("creato_il"),
+        app_version=manifest.get("app_version"),
+        tracce=tracce,
+        playlist=playlist,
+        membri=membri,
+        ha_credenziali=MEMBRO_ENV in membri or MEMBRO_SLSKD in membri,
+    )

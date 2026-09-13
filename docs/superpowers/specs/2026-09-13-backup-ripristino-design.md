@@ -115,7 +115,7 @@ Rifiuta con `BackupNonValido(codice)`, codici stabili tradotti dal frontend:
 | `manifest_assente` | manca `manifest.json`, o non è JSON, o `formato` ≠ 1 |
 | `db_assente` | manca `data/djassistant.db` |
 | `db_corrotto` | `integrity_check` ≠ `ok`, o il file non è un DB sqlite |
-| `versione_piu_recente` | `app_version` del manifest > versione in esecuzione, confrontate come tuple di interi (le parti non numeriche valgono 0); versioni uguali o più vecchie passano perché `ensure_schema` migra solo in avanti |
+| `versione_piu_recente` | `app_version` del manifest > versione in esecuzione, confrontate come tuple di interi (le parti non numeriche valgono 0); versioni uguali o più vecchie passano perché `ensure_schema` migra solo in avanti. Se l'app in esecuzione riporta la versione di ripiego `0.0.0-dev` (checkout senza `VERSION`), il controllo si salta: altrimenti in sviluppo ogni backup fatto da un'app vera verrebbe rifiutato. |
 
 ## 2. Il ripristino in due tempi
 
