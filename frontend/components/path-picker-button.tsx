@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { errText, pickerAvailability, pickPath } from "@/lib/api";
 import { Button, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
@@ -20,10 +21,14 @@ export function usePickerAvailability(): boolean {
    Il genitore decide se montarlo (usePickerAvailability) e cosa farne: qui
    niente salvataggio, solo la scelta. type="button": il pulsante vive anche
    dentro form (modale link file) e non deve scatenarne il submit. */
-export function PathPickerButton({ kind, start, prompt, onPick, onError }: {
-  kind: "folder" | "file";
+export function PathPickerButton({ kind, start, prompt, defaultName, label, variant = "primary", onPick, onError }: {
+  kind: "folder" | "file" | "save";
   start?: string;
   prompt?: string;
+  defaultName?: string;
+  /** Testo del pulsante; default «Sfoglia…». */
+  label?: ReactNode;
+  variant?: "primary" | "outline";
   onPick: (path: string) => void;
   onError: (message: string) => void;
 }) {
@@ -33,7 +38,7 @@ export function PathPickerButton({ kind, start, prompt, onPick, onError }: {
   const open = async () => {
     setBusy(true);
     try {
-      const r = await pickPath(kind, start, prompt);
+      const r = await pickPath(kind, start, prompt, defaultName);
       if (r.path) onPick(r.path);
     } catch (e) {
       onError(errText(e));
@@ -43,8 +48,8 @@ export function PathPickerButton({ kind, start, prompt, onPick, onError }: {
   };
 
   return (
-    <Button type="button" size="sm" onClick={open} disabled={busy}>
-      {busy ? <Spinner /> : t.settings.browseButton}
+    <Button type="button" size="sm" variant={variant} onClick={open} disabled={busy}>
+      {busy ? <Spinner /> : (label ?? t.settings.browseButton)}
     </Button>
   );
 }

@@ -22,8 +22,19 @@ describe("PathPickerButton", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button"));
     });
-    expect(pickPath).toHaveBeenCalledWith("folder", "/Users/x", undefined);
+    expect(pickPath).toHaveBeenCalledWith("folder", "/Users/x", undefined, undefined);
     expect(onPick).toHaveBeenCalledWith("/Users/x/Music");
+  });
+
+  it("kind save passa il nome di default e usa l'etichetta data", async () => {
+    pickPath.mockResolvedValue({ path: "/Users/x/Desktop/b.zip" });
+    const onPick = vi.fn();
+    render(<PathPickerButton kind="save" defaultName="b.zip" label="Backup ora…" onPick={onPick} onError={() => {}} />);
+    await act(async () => {
+      fireEvent.click(screen.getByText("Backup ora…"));
+    });
+    expect(pickPath).toHaveBeenCalledWith("save", undefined, undefined, "b.zip");
+    expect(onPick).toHaveBeenCalledWith("/Users/x/Desktop/b.zip");
   });
 
   it("annullo (path null) non chiama onPick", async () => {

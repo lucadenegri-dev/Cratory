@@ -26,10 +26,11 @@ export function pickerAvailability() {
   return apiGet<{ available: boolean }>("/api/files/pick/availability");
 }
 
-/** Apre il dialog nativo sulla macchina del backend; path null = annullato. */
-export function pickPath(kind: "folder" | "file", start?: string, prompt?: string) {
+/** Apre il dialog nativo sulla macchina del backend; path null = annullato.
+ *  `save` = «salva con nome»: restituisce un percorso anche se il file non esiste. */
+export function pickPath(kind: "folder" | "file" | "save", start?: string, prompt?: string, defaultName?: string) {
   return apiPost<{ path: string | null }>("/api/files/pick", {
-    kind, start: start || null, prompt: prompt || null,
+    kind, start: start || null, prompt: prompt || null, default_name: defaultName || null,
   });
 }
 
