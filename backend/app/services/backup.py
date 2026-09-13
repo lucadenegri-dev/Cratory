@@ -68,6 +68,10 @@ class Voce:
     percorso: str
     byte: int
     presente: bool
+    # Quanti file: per le cover è il numero di immagini, ed è quello che la
+    # scheda «Dati» dice all'utente («database, 4 cover, credenziali»). Per le
+    # voci che sono un file solo vale 1 se c'è, 0 se manca.
+    file: int
 
 
 @dataclass
@@ -163,15 +167,21 @@ def _byte_file(f: Path) -> int:
     return f.stat().st_size if f.is_file() else 0
 
 
+def _conta_file(cartella: Path) -> int:
+    if not cartella.is_dir():
+        return 0
+    return sum(1 for f in cartella.rglob("*") if f.is_file())
+
+
 def contenuto() -> list[Voce]:
     """Le quattro voci del backup. Se se ne aggiunge una, va aggiunta anche a
     `applica_se_in_attesa`: sono le due sole liste e devono coincidere."""
     db, covers, env, slskd = _db_path(), _covers_dir(), _env_path(), _slskd_yml()
     return [
-        Voce("database", str(db), _byte_db(db), db.is_file()),
-        Voce("covers", str(covers), _byte_cartella(covers), covers.is_dir()),
-        Voce("env", str(env), _byte_file(env), env.is_file()),
-        Voce("slskd", str(slskd), _byte_file(slskd), slskd.is_file()),
+        Voce("database", str(db), _byte_db(db), db.is_file(), int(db.is_file())),
+        Voce("covers", str(covers), _byte_cartella(covers), covers.is_dir(), _conta_file(covers)),
+        Voce("env", str(env), _byte_file(env), env.is_file(), int(env.is_file())),
+        Voce("slskd", str(slskd), _byte_file(slskd), slskd.is_file(), int(slskd.is_file())),
     ]
 
 

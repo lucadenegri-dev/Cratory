@@ -21,6 +21,8 @@ class VoceOut(BaseModel):
     nome: str
     byte: int
     presente: bool
+    # Numero di file della voce: le cover sono tante, le altre voci una sola.
+    file: int
 
 
 class EstimateOut(BaseModel):
@@ -64,7 +66,7 @@ def estimate(db: Session = Depends(get_db)):
     voci = backup.contenuto()
     return EstimateOut(
         byte=sum(v.byte for v in voci),
-        voci=[VoceOut(nome=v.nome, byte=v.byte, presente=v.presente) for v in voci],
+        voci=[VoceOut(nome=v.nome, byte=v.byte, presente=v.presente, file=v.file) for v in voci],
         last_backup_at=get_state(db, "last_backup_at"),
         nome_di_default=backup.nome_di_default(),
         picker_disponibile=native_picker.picker_available(),

@@ -26,7 +26,7 @@ function partiDellaStima(t: Dictionary, s: BackupEstimate): string {
   const v = (nome: string) => s.voci.find((x) => x.nome === nome);
   if (v("database")?.presente) parti.push(t.settings.backupPartDatabase);
   const covers = v("covers");
-  if (covers?.presente && covers.byte > 0) parti.push(t.settings.backupPartCovers(1));
+  if (covers?.presente && covers.file > 0) parti.push(t.settings.backupPartCovers(covers.file));
   if (v("env")?.presente || v("slskd")?.presente) parti.push(t.settings.backupPartCredentials);
   return parti.join(", ");
 }

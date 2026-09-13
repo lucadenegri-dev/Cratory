@@ -37,15 +37,23 @@ def db():
 def test_estimate(monkeypatch, db):
     app.dependency_overrides[get_db] = lambda: db
     try:
-        monkeypatch.setattr(backup, "contenuto", lambda: [backup.Voce("database", "/x", 10, True), backup.Voce("env", "/e", 0, False)])
+        monkeypatch.setattr(backup, "contenuto", lambda: [
+            backup.Voce("database", "/x", 10, True, 1),
+            backup.Voce("covers", "/c", 40, True, 4),
+            backup.Voce("env", "/e", 0, False, 0),
+        ])
         monkeypatch.setattr(backup, "nome_di_default", lambda: "cratory-backup-x.zip")
         from app.services import native_picker
         monkeypatch.setattr(native_picker, "picker_available", lambda: False)
         r = client.get("/api/backup/estimate")
         assert r.status_code == 200
         assert r.json() == {
-            "byte": 10,
-            "voci": [{"nome": "database", "byte": 10, "presente": True}, {"nome": "env", "byte": 0, "presente": False}],
+            "byte": 50,
+            "voci": [
+                {"nome": "database", "byte": 10, "presente": True, "file": 1},
+                {"nome": "covers", "byte": 40, "presente": True, "file": 4},
+                {"nome": "env", "byte": 0, "presente": False, "file": 0},
+            ],
             "last_backup_at": None,
             "nome_di_default": "cratory-backup-x.zip",
             "picker_disponibile": False,

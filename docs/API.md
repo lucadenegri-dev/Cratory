@@ -1357,9 +1357,11 @@ stay out. Member names are fixed: `manifest.json` (`formato: 1`, `app_version`,
 `creato_il`, `membri`), `data/djassistant.db`, `data/covers/<file>`, `.env`,
 `data/slskd.yml`.
 
-`GET /api/backup/estimate` → `{byte, voci: [{nome, byte, presente}], last_backup_at,
+`GET /api/backup/estimate` → `{byte, voci: [{nome, byte, presente, file}], last_backup_at,
 nome_di_default, picker_disponibile}`. The database size is used pages × page size,
-not DB + WAL on disk.
+not DB + WAL on disk. `file` is how many files the entry holds — the number of images
+for `covers`, 1 or 0 for the single-file entries — and it is what the card says out
+loud («database, 4 cover, credenziali»).
 
 `POST /api/backup` `{path: string | null}` writes the zip at `path` (`.zip` appended if
 missing; a `.parziale` file is written next to it and renamed at the end) and returns

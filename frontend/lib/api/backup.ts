@@ -1,6 +1,8 @@
 import { apiDelete, apiGet, apiPost } from "./client";
 
-export type BackupVoce = { nome: string; byte: number; presente: boolean };
+/** `file` è il numero di file della voce: le cover sono tante, le altre una
+    sola (0 quando mancano). */
+export type BackupVoce = { nome: string; byte: number; presente: boolean; file: number };
 export type BackupEstimate = {
   byte: number;
   voci: BackupVoce[];

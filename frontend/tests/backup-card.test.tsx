@@ -26,10 +26,10 @@ import { ApiError } from "@/lib/api";
 const stima = (extra = {}) => ({
   byte: 23_400_000,
   voci: [
-    { nome: "database", byte: 20_000_000, presente: true },
-    { nome: "covers", byte: 3_400_000, presente: true },
-    { nome: "env", byte: 100, presente: true },
-    { nome: "slskd", byte: 50, presente: true },
+    { nome: "database", byte: 20_000_000, presente: true, file: 1 },
+    { nome: "covers", byte: 3_400_000, presente: true, file: 4 },
+    { nome: "env", byte: 100, presente: true, file: 1 },
+    { nome: "slskd", byte: 50, presente: true, file: 1 },
   ],
   last_backup_at: null as string | null,
   nome_di_default: "cratory-backup-20260913-1840.zip",
@@ -52,7 +52,20 @@ describe("scheda Dati", () => {
   it("dice che non c'è ancora un backup e quanto peserebbe", async () => {
     render(<BackupCard />);
     expect(await screen.findByText("Nessun backup finora")).toBeTruthy();
-    expect(screen.getByText(/circa 23 MB · database, 1 cover, credenziali/)).toBeTruthy();
+    expect(screen.getByText(/circa 23 MB · database, 4 cover, credenziali/)).toBeTruthy();
+  });
+
+  it("con una sola cover la stima dice «1 cover»", async () => {
+    api.getBackupEstimate.mockResolvedValue(stima({
+      voci: [
+        { nome: "database", byte: 20_000_000, presente: true, file: 1 },
+        { nome: "covers", byte: 12_000, presente: true, file: 1 },
+        { nome: "env", byte: 100, presente: true, file: 1 },
+        { nome: "slskd", byte: 50, presente: true, file: 1 },
+      ],
+    }));
+    render(<BackupCard />);
+    expect(await screen.findByText(/database, 1 cover, credenziali/)).toBeTruthy();
   });
 
   it("mostra la data dell'ultimo backup", async () => {

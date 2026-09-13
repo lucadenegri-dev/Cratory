@@ -51,12 +51,24 @@ def test_contenuto_elenca_le_quattro_voci_e_le_dimensioni(dati):
     assert all(v.presente for v in voci.values())
     assert voci["covers"].byte == len(b"\xff\xd8cover")
     assert voci["database"].byte > 0
+    assert voci["covers"].file == 1
+    assert voci["database"].file == 1 and voci["env"].file == 1 and voci["slskd"].file == 1
+
+
+def test_contenuto_conta_le_cover(dati):
+    """Il conteggio è quello che la scheda «Dati» mostra all'utente: «database,
+    N cover, credenziali». Con due cover deve dire due."""
+    (dati / "data" / "covers" / "playlist-2.jpg").write_bytes(b"\xff\xd8due")
+    voci = {v.nome: v for v in backup.contenuto()}
+    assert voci["covers"].file == 2
 
 
 def test_contenuto_segna_assente_cio_che_manca(dati):
     (dati / ".env").unlink()
+    shutil.rmtree(dati / "data" / "covers")
     voci = {v.nome: v for v in backup.contenuto()}
-    assert voci["env"].presente is False and voci["env"].byte == 0
+    assert voci["env"].presente is False and voci["env"].byte == 0 and voci["env"].file == 0
+    assert voci["covers"].presente is False and voci["covers"].file == 0
 
 
 def test_stima_non_dipende_dal_wal(dati):
