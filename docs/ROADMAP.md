@@ -465,6 +465,35 @@ cleanup, and each was explicitly left alone this time.
   recall fix** comes last on purpose: the cascade produces `not_found` for tracks that
   do exist on Soulseek, but which variants actually fail is a question C's data
   answers — fixing it blind would just be a different guess.
+- **The four sites agreed on 2026-09-13**, in this order. They came out of a
+  review of what the app still lacks: Cratory knows the library but not what its
+  owner does with it. Backup and restore (done, above) was the fifth and went
+  first because the others add data the disk cannot rebuild.
+  1. **Usage memory.** `Track` carries a `rating` and nothing else about the
+     owner's practice: no `last_played`, no "used in N sets", no personal tags or
+     notes (`mood_tags` exist only as AI output on setlist rows), and the player
+     records nothing. The Set Builder cannot avoid the track played five sets in
+     a row nor favour the untested ones; the Dig's taste ranking works without
+     the strongest signal it could have; Statistics describe the catalogue, not
+     the practice. Deterministic and within the rules: a `played_at` written by
+     the player, a `set_count` derived from setlists, in-app tags and notes that
+     never touch the file (Organize stays the only writer of file tags). Shazam
+     phase 2 (below) hangs off the same signal.
+  2. **Persistent jobs.** The download queue survives a restart; Essentia
+     analysis, streaming import and Shazam identification do not — an analysis
+     over a large library interrupted by an in-place update starts from zero.
+     The model to converge on is the queue itself (`download_queue.py`,
+     `download_dispatcher.py`, `download_runner.py`), not the abstract base
+     class the "four job state machines" item above imagines.
+  3. **Set Builder: lock and regenerate.** After generation one can move,
+     replace with alternatives and add, but not "keep these three and regenerate
+     the rest" nor "regenerate from position N" — the natural gesture when a set
+     is right at 80%. The two-phase generator (skeleton + beam per segment) is
+     already shaped to take fixed anchors.
+  4. **Gap → Dig.** Gap analysis says "missing 128→132 bridge" and "harmonic dead
+     end"; the Dig digs by taste, by explicit design. A "dig for this gap" link
+     that pre-fills genre/label seeds from the playlist closes the loop without
+     making the Dig filter by compatibility.
 - **Shazam phase 2.** Use the `DjSetTrack` corpus for co-occurrence suggestions
   (which tracks tend to get mixed together) — not started.
 - **PostgreSQL.** Low priority: SQLite is enough for personal, single-user use; only
