@@ -765,12 +765,13 @@ slskd, summary — gated by `SetupGate` (mounted in `app/layout.tsx`, inside
 `GET /api/setup/state` on every navigation and redirects only on a *successful*
 `completed: false` response, so a backend that's down never strands the user on a
 wizard it can't drive. Finishing the wizard and skipping it both write `completed:
-true` through `PUT /api/setup/state`, with no distinction between the two; "reopen
-wizard" in `/settings` writes it back to `false` and sends the user to `/setup`
-again. `CredentialField`/`ServiceGuide`, wrapped together as `ServiceCard`, are the
+true` through `PUT /api/setup/state`, with no distinction between the two; "Open
+setup guide" in `/settings` (General section) writes it back to `false` and sends
+the user to `/setup` again. `CredentialField`/`ServiceGuide`, wrapped together as `ServiceCard`, are the
 one implementation shared between the wizard's services and slskd steps and
-`/settings`' own expandable per-service row — a key can be changed from either place
-without re-running the rest of the wizard. `PathField` and `ComponentRow`
+`/settings`' own per-service row (Connections section, opened with "Manage" or
+"Configure", the guide folded under "How to connect this service") — a key can be
+changed from either place without re-running the rest of the wizard. `PathField` and `ComponentRow`
 (prerequisites) stay wizard-only: `/settings`' path editor (`ConfigCard`) is a
 separate, pre-existing implementation.
 

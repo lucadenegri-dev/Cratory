@@ -288,7 +288,7 @@ function SetBuilderInner() {
                 </span>
               </div>
               {!aiReady && (
-                <p className="mt-2 text-xs text-muted">{t.setBuilder.aiConfigPrefix} <code className="rounded-none bg-elevated px-1">AI_API_KEY</code> {t.setBuilder.aiConfigMiddle} <Link href="/settings" className="text-fg underline-offset-4 hover:underline">{t.nav.settings}</Link>{t.setBuilder.aiConfigSuffix}</p>
+                <p className="mt-2 text-xs text-muted">{t.setBuilder.aiConfigPrefix} <code className="rounded-none bg-elevated px-1">AI_API_KEY</code> {t.setBuilder.aiConfigMiddle} <Link href="/settings?section=connections" className="text-fg underline-offset-4 hover:underline">{t.nav.settings}</Link>{t.setBuilder.aiConfigSuffix}</p>
               )}
             </Section>
 

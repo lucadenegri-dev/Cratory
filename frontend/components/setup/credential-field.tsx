@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { patchConfigSettings, errText, type SecretKey, type SecretState } from "@/lib/api";
 import { Button, Input } from "@/components/ui";
 import { useT } from "@/lib/i18n";
@@ -16,6 +16,7 @@ export function CredentialField({ fieldKey, label, state, onSaved }: {
   onSaved: () => void;
 }) {
   const t = useT();
+  const inputId = useId();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
@@ -56,9 +57,11 @@ export function CredentialField({ fieldKey, label, state, onSaved }: {
 
   return (
     <div className="py-1.5">
-      <label className="mb-1 block text-xs uppercase tracking-wider text-muted">{label}</label>
+      <label htmlFor={inputId} className="mb-1 block text-xs uppercase tracking-wider text-muted">{label}</label>
       <div className="flex gap-2">
         <Input
+          id={inputId}
+          disabled={saving}
           type="password"
           value={value}
           onChange={(e) => setValue(e.target.value)}

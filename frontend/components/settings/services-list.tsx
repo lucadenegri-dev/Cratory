@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import {
   getConfigSettings, setSoundcloudUsername, soundcloudStatus, spotifyLoginUrl,
-  type ConfigSettings, type ServiceStatus, type SoundCloudStatus, type SpotifyStatus,
+  errText, type ConfigSettings, type ServiceStatus, type SlskdStatus, type SoundCloudStatus,
 } from "@/lib/api";
 import { runFingerprint, type FingerprintResult } from "@/lib/organize/api";
-import { Alert, Button, Input, Spinner } from "@/components/ui";
+import { Alert, BTN_SIZE, BTN_VARIANT, Button, Input, Loading, Spinner } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { useT, type Dictionary } from "@/lib/i18n";
 import { ServiceCard } from "@/components/setup/service-card";
 import { SlskdRow } from "@/components/slskd-row";
@@ -23,14 +24,12 @@ import { SERVICE_FIELDS, type ServiceKey } from "@/lib/setup-services";
 function statusLabel(s: ServiceStatus, t: Dictionary): { text: string; strong: boolean } {
   if (s.connected === true) return { text: t.settings.statusConnected, strong: true };
   if (s.connected === false) return { text: t.settings.statusToConnect, strong: false };
-  if (s.configured && s.optional_ok === false) return { text: t.settings.statusOptionalToken, strong: true };
   if (s.configured) return { text: t.settings.statusActive, strong: true };
   return { text: t.settings.statusNotConfigured, strong: false };
 }
 
-export function ServicesList({ services, spotify, onServicesChanged }: {
+export function ServicesList({ services, onServicesChanged }: {
   services: ServiceStatus[];
-  spotify: SpotifyStatus | null;
   /* Ricarica lo stato dei servizi del genitore (badge di riga): senza,
      dopo un salvataggio da riga espansa il pannello passa a "configurato"
      ma il badge sopra resta indietro finché non si ricarica la pagina.
@@ -40,110 +39,71 @@ export function ServicesList({ services, spotify, onServicesChanged }: {
   const t = useT();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [config, setConfig] = useState<ConfigSettings | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [soulseek, setSoulseek] = useState<SlskdStatus | null>(null);
   const loadConfig = useCallback(() => {
-    getConfigSettings().then(setConfig).catch(() => setConfig(null));
+    getConfigSettings().then((value) => { setConfig(value); setConfigError(null); }).catch((e) => setConfigError(errText(e)));
   }, []);
   useEffect(loadConfig, [loadConfig]);
   const handleSaved = useCallback(() => {
     loadConfig();
     onServicesChanged?.();
   }, [loadConfig, onServicesChanged]);
+  const names: Record<string, string> = { slskd: "Soulseek", anthropic: "Anthropic", acoustid: "AcoustID" };
+  const order = ["spotify", "soundcloud", "slskd", "discogs", "musicbrainz", "acoustid", "anthropic"];
   return (
-    <div className="border border-border">
-      {services.map((s, i) => (
-        <div key={s.key} className="border-b border-border p-5 last:border-0">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex min-w-0 gap-3">
-              <span className="tnum mt-0.5 text-xs text-faint">{String(i + 1).padStart(2, "0")}</span>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className="text-sm font-semibold uppercase tracking-wide text-fg-strong">{s.name}</span>
-                  <span className="text-[10px] uppercase tracking-wider text-faint">{t.settings.servicesMeta[s.key]?.category ?? s.category}</span>
-                </div>
+    <div className="border-t border-border">
+      {[...services].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key)).map((s) => {
+        const name = names[s.key] ?? s.name;
+        const editable = !!SERVICE_FIELDS[s.key as ServiceKey] || s.key === "soundcloud";
+        const open = expanded === s.key;
+        // Il login Soulseek arriva dalla riga slskd (onStatusChange): vale solo
+        // se slskd è configurato, altrimenti «Disconnesso» fingerebbe un
+        // demone spento dove manca proprio l'URL.
+        const loggedIn = !!soulseek && soulseek.is_connected && soulseek.is_logged_in;
+        const st = s.key === "slskd" && soulseek?.configured
+          ? { text: loggedIn ? t.settings.statusConnected : t.settings.soulseekDisconnected, strong: loggedIn }
+          : statusLabel(s, t);
+        return (
+          <section key={s.key} aria-label={name} className="border-b border-border py-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0 flex-1 basis-64">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-fg-strong">{name}</h2>
                 <p className="mt-1 text-sm text-muted">{t.settings.servicesMeta[s.key]?.detail ?? s.detail}</p>
-                <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-faint">
-                  {s.env.map((e) => <code key={e} className="rounded-none bg-elevated px-1">{e}</code>)}
-                  {s.optional_env.map((e) => (
-                    <code key={e} className="rounded-none bg-elevated px-1 opacity-70">
-                      {e} <span className="text-[9px] uppercase">{t.settings.optionalBadge}</span>
-                    </code>
-                  ))}
-                  <a href={s.docs} target="_blank" rel="noreferrer" className="text-fg underline-offset-4 hover:underline">docs ↗</a>
-                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`text-xs ${st.strong ? "text-fg-strong" : "text-muted"}`}>{st.text}</span>
+                {editable && <Button size="sm" variant="outline" aria-expanded={open} aria-controls={`service-${s.key}`}
+                  aria-label={`${open ? t.settings.collapseKeys : s.configured ? t.settings.manageButton : t.settings.configureButton} ${name}`}
+                  onClick={() => setExpanded(open ? null : s.key)}>
+                  {open ? t.settings.collapseKeys : s.configured ? t.settings.manageButton : t.settings.configureButton}
+                </Button>}
               </div>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-2">
-              {s.key !== "slskd" && (() => {
-                const st = statusLabel(s, t);
-                return <span className={`text-[10px] uppercase tracking-wider ${st.strong ? "text-fg-strong" : "text-muted"}`}>{st.text}</span>;
-              })()}
-              {s.key === "spotify" && (
-                <a href={spotifyLoginUrl()}>
-                  <Button size="sm" variant="outline"><ExternalLink size={14} /> {s.connected ? t.settings.reconnectButton : t.settings.connectButton}</Button>
-                </a>
-              )}
-              {SERVICE_FIELDS[s.key as ServiceKey] && (
-                <Button size="sm" variant="ghost"
-                        onClick={() => setExpanded(expanded === s.key ? null : s.key)}>
-                  {expanded === s.key ? t.settings.collapseKeys : t.settings.editKeys}
-                </Button>
-              )}
-            </div>
-          </div>
-          {s.key === "spotify" && <SpotifyExtra s={s} spotify={spotify} t={t} />}
-          {s.key === "slskd" && <SlskdRow />}
-          {s.key === "soundcloud" && <SoundCloudExtra t={t} />}
-          {s.key === "acoustid" && s.configured && <AcoustidExtra t={t} />}
-          {expanded === s.key && config && (
-            <div className="mt-4 border-t border-border pt-4">
-              <ServiceCard
-                service={s.key as ServiceKey}
-                secrets={config.secrets}
-                redirectUri={config.spotify_redirect_uri}
-                docsUrl={s.docs}
-                onSaved={handleSaved}
-              >
-                {/* ai_model non è un segreto: stesso PathField dei percorsi,
-                    per non avere un editor diverso fra wizard e Impostazioni. */}
-                {s.key === "anthropic" && (
-                  <PathField
-                    fieldKey="ai_model"
-                    label={t.setup.aiModelLabel}
-                    value={config.ai_model.value}
-                    detail={config.ai_model.detail ?? t.setup.aiModelHint}
-                    canPick={false}
-                    kind="text"
-                    onSaved={setConfig}
-                  />
-                )}
-              </ServiceCard>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SpotifyExtra({ s, spotify, t }: { s: ServiceStatus; spotify: SpotifyStatus | null; t: Dictionary }) {
-  const [copied, setCopied] = useState(false);
-  if (!spotify?.configured) return null;
-  const copyRedirect = async () => {
-    await navigator.clipboard.writeText(spotify.redirect_uri);
-    setCopied(true); setTimeout(() => setCopied(false), 1500);
-  };
-  return (
-    <div className="mt-3 border border-border bg-bg p-3">
-      <p className="mb-1.5 text-xs text-muted">{t.settings.redirectUriPrefix} <strong>{t.settings.redirectUriExactTerm}</strong> {t.settings.redirectUriSuffix}</p>
-      <div className="flex items-center gap-2">
-        <code className="flex-1 break-all bg-elevated px-2 py-1 text-xs text-fg">{spotify.redirect_uri}</code>
-        <Button size="sm" variant="outline" onClick={copyRedirect}>{copied ? <><Check size={14} /> {t.settings.copiedLabel}</> : <><Copy size={14} /> {t.settings.copyButton}</>}</Button>
-      </div>
-      {s.connected && (
-        <p className="mt-2 text-xs text-muted">
-          {t.settings.reauthorizeHintPrefix} <code className="rounded-none bg-elevated px-1">403</code>, {t.settings.reauthorizeHintMiddle} <strong>{t.settings.reconnectButton}</strong> {t.settings.reauthorizeHintSuffix}
-        </p>
-      )}
+            {editable && <div id={`service-${s.key}`} hidden={!open} className="mt-5 space-y-5 border-t border-border pt-5">
+              {/* <a> nudo, non next/link: l'href è l'endpoint OAuth del backend,
+                  che Link prefetcherebbe (avvio login senza click) e al click
+                  tenterebbe da router client. Stesse classi del Button. */}
+              {s.key === "spotify" && s.configured && <a href={spotifyLoginUrl()}
+                className={cn("inline-flex items-center justify-center gap-2 font-medium uppercase tracking-wider transition-colors", BTN_VARIANT.outline, BTN_SIZE.sm)}>
+                <ExternalLink size={14} /> {s.connected ? t.settings.reconnectButton : t.settings.connectButton}
+              </a>}
+              {s.key === "slskd" && <SlskdRow onStatusChange={setSoulseek} />}
+              {s.key === "soundcloud" && <SoundCloudExtra t={t} />}
+              {SERVICE_FIELDS[s.key as ServiceKey] && <>
+                {configError && <Alert tone="danger">{configError}<Button size="sm" variant="outline" onClick={loadConfig}>{t.settings.retryButton}</Button></Alert>}
+                {!config && !configError && <Loading />}
+                {config && <ServiceCard service={s.key as ServiceKey} secrets={config.secrets}
+                  redirectUri={config.spotify_redirect_uri} docsUrl={s.docs} onSaved={handleSaved} collapsibleGuide>
+                  {s.key === "anthropic" && <PathField fieldKey="ai_model" label={t.setup.aiModelLabel}
+                    value={config.ai_model.value} detail={t.settings.modelHint} canPick={false} kind="text" onSaved={setConfig} />}
+                </ServiceCard>}
+              </>}
+              {s.key === "acoustid" && s.configured && <AcoustidExtra t={t} />}
+            </div>}
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -181,17 +141,16 @@ function SoundCloudExtra({ t }: { t: Dictionary }) {
       {error && <Alert tone="danger">⚠ {error}</Alert>}
       {/* Un form, non tre elementi affiancati: scritto un username, il gesto
           naturale e' premere Invio, e fuori da un form non salvava niente. */}
-      <form className="flex items-center gap-2"
-        onSubmit={(e) => { e.preventDefault(); if (username.trim() !== "") void save(); }}>
-        <span className="shrink-0 text-xs text-muted">{t.settings.usernameLabel}</span>
-        <Input className="flex-1" value={username}
-          onChange={(e) => setUsername(e.target.value)}
+      <form className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => { e.preventDefault(); if (!saving && username.trim() !== "") void save(); }}>
+        <label htmlFor="settings-soundcloud-username" className="shrink-0 text-xs text-muted">{t.settings.usernameLabel}</label>
+        <Input id="settings-soundcloud-username" className="min-w-0 flex-1" value={username}
+          onChange={(e) => { setUsername(e.target.value); setSaved(false); }}
           placeholder={t.settings.usernamePlaceholder} disabled={saving} />
         <Button type="submit" size="sm" disabled={saving || username.trim() === ""}>
           {saving ? <Spinner /> : saved ? t.settings.savedLabel : t.common.save}
         </Button>
       </form>
-      {status?.ytdlp_version && <p className="text-xs text-faint">yt-dlp {status.ytdlp_version}</p>}
     </div>
   );
 }

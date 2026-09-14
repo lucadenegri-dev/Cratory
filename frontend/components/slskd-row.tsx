@@ -55,7 +55,7 @@ function etichettaDemone(d: SlskdDaemonStatus, t: Dictionary): string {
   return t.setup.daemonRunningUnknownOwner;
 }
 
-export function SlskdRow() {
+export function SlskdRow({ onStatusChange }: { onStatusChange?: (status: SlskdStatus | null) => void }) {
   const t = useT();
   const [daemon, setDaemon] = useState<SlskdDaemonStatus | null>(null);
   const [slskd, setSlskd] = useState<SlskdStatus | null>(null);
@@ -91,8 +91,9 @@ export function SlskdRow() {
   const applica = useCallback((r: Awaited<ReturnType<typeof leggi>>) => {
     setDaemon(r.stato);
     setSlskd(r.login);
+    onStatusChange?.(r.login);
     setErrore(r.guasto);
-  }, []);
+  }, [onStatusChange]);
 
   const ricarica = useCallback(async () => {
     applica(await leggi());

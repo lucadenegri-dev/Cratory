@@ -8,6 +8,16 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Impostazioni in cinque sezioni (2026-09-15).** Generali · Libreria · Download ·
+  Collegamenti · Backup, scelte da `?section=` con i pannelli montati e nascosti,
+  così una bozza non salvata sopravvive al cambio sezione e ogni form di cartelle
+  scrive solo i propri campi. Le chiavi dei servizi si aprono con «Gestisci» e la
+  guida al collegamento è ripiegata; i testi sono stati riscritti per l'utente
+  (niente nomi di variabili d'ambiente). Dalla review: la riga Soulseek senza URL
+  dice «Da configurare», le note del backend sui campi validi e il badge «override
+  .env» restano visibili, i link interni puntano alla sezione giusta, il bottone
+  Collega Spotify è un `<a>` nudo e non un `next/link` (niente prefetch dell'OAuth).
+
 - **Backup e ripristino (2026-09-13).** I dati che il disco non ricostruisce — voti,
   wishlist, set, playlist, cover, credenziali — stanno in un solo zip, salvato con
   nome da Impostazioni o su richiesta prima di un aggiornamento. Il ripristino non

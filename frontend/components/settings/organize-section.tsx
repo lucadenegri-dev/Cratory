@@ -40,6 +40,8 @@ export function OrganizeSection() {
   const [error, setError] = useState<string | null>(null);
   const [naming, setNaming] = useState("");
   const [folder, setFolder] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const load = useCallback(() => {
     getSettings()
@@ -53,9 +55,10 @@ export function OrganizeSection() {
   useEffect(() => { load(); }, [load]);
 
   const saveTemplates = async () => {
-    setError(null);
-    try { setSettings(await updateSettings({ naming_template: naming, folder_template: folder })); }
+    setError(null); setSaving(true); setSaved(false);
+    try { setSettings(await updateSettings({ naming_template: naming, folder_template: folder })); setSaved(true); }
     catch (e) { setError(e instanceof Error ? e.message : t.organize.common.error); }
+    finally { setSaving(false); }
   };
 
   return (
@@ -69,40 +72,39 @@ export function OrganizeSection() {
           <section className="flex flex-col gap-4">
             <div>
               <h2 className="text-sm font-medium text-fg-strong">{t.organize.settings.organization}</h2>
-              <p className="mt-1 text-xs text-faint">
-                {t.organize.settings.orgIntroA}
-                <b className="text-muted">{t.organize.settings.orgSubfolders}</b>{t.organize.settings.orgIntroC}
-                <b className="text-muted">{t.organize.settings.orgName}</b>{t.organize.settings.orgIntroD}
-              </p>
+              <p className="mt-1 text-xs text-muted">{t.settings.organizationHint}</p>
             </div>
 
             <label className="block">
               <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">{t.organize.settings.tplNameLabel}</span>
               <input className="w-full border border-border bg-surface px-3 py-2 text-sm text-fg-strong focus:border-border-strong focus:outline-none"
-                value={naming} onChange={(e) => setNaming(e.target.value)} />
-              <span className="mt-1.5 block text-xs text-faint">{t.organize.settings.fieldsLabel} <span className="font-mono">{"{artist} {title} {album} {genre} {year} {label} {track_no}"}</span></span>
+                value={naming} disabled={saving} onChange={(e) => { setNaming(e.target.value); setSaved(false); }} />
+              <span className="mt-1.5 block text-xs text-muted">{t.organize.settings.fieldsLabel} <span className="font-mono">{"{artist} {title} {album} {genre} {year} {label} {track_no}"}</span></span>
             </label>
 
             <label className="block">
               <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">{t.organize.settings.tplFolderLabel}</span>
               <input className="w-full border border-border bg-surface px-3 py-2 text-sm text-fg-strong focus:border-border-strong focus:outline-none"
-                value={folder} onChange={(e) => setFolder(e.target.value)} />
-              <span className="mt-1.5 block text-xs text-faint">{folder.trim() ? <>{t.organize.settings.subfoldersLabel} <span className="text-ok">{preview(folder)}/</span></> : t.organize.settings.noSubfolders}</span>
+                value={folder} disabled={saving} onChange={(e) => { setFolder(e.target.value); setSaved(false); }} />
+              <span className="mt-1.5 block text-xs text-muted">{folder.trim() ? <>{t.organize.settings.subfoldersLabel} <span className="text-fg">{preview(folder)}/</span></> : t.organize.settings.noSubfolders}</span>
             </label>
 
             <div className="border border-border bg-surface p-3">
               <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted">{t.organize.settings.pathPreview}</div>
-              <div className="overflow-x-auto whitespace-nowrap font-mono text-[11px] leading-relaxed">
-                <div className="text-faint">{SAMPLE_SOURCE}</div>
+              <div className="break-words font-mono text-[11px] leading-relaxed">
+                <div className="text-muted">{SAMPLE_SOURCE}</div>
                 <div className="text-muted">↓</div>
-                <div className="text-ok">{renderDest(folder, naming, t.organize.files.library)}</div>
+                <div className="text-fg">{renderDest(folder, naming, t.organize.files.library)}</div>
               </div>
-              <p className="mt-1.5 text-[10px] text-faint">{t.organize.settings.previewHint}</p>
+              <p className="mt-1.5 text-xs text-muted">{t.organize.settings.previewHint}</p>
             </div>
 
-            <Button variant="outline" size="sm" className="self-start" onClick={saveTemplates}>{t.organize.settings.saveTemplates}</Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="outline" size="sm" disabled={saving || (naming === settings.naming_template && folder === settings.folder_template)} onClick={saveTemplates}>{t.organize.settings.saveTemplates}</Button>
+              {saved && <span role="status" className="text-xs text-muted">{t.settings.savedLabel}</span>}
+            </div>
 
-            <p className="text-xs text-faint">{t.organize.settings.foldersNote}</p>
+            <p className="text-xs text-muted">{t.organize.settings.foldersNote}</p>
           </section>
         </>
       )}

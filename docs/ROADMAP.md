@@ -99,8 +99,11 @@ endpoints, `docs/API.md`.
 - **Settings & internationalization.** One external-services status endpoint
   (`GET /api/services/status`), one AI key (`ANTHROPIC_API_KEY`, `AI_API_KEY` read as
   a fallback) shared by Set curation and Organize's AI helpers, and a single
-  `/settings` page in four groups (Language · Paths & library · External services ·
-  Organize). The app is bilingual (IT/EN): a persistent language setting, a typed
+  `/settings` page with five sections (General · Library · Downloads · Connections ·
+  Backup). Library includes naming rules; General includes language, Discovery, updates
+  and guided setup. Connections exposes credentials and setup guides on demand.
+  Section links preserve unsaved drafts, and each folder form saves only its own
+  fields. The app is bilingual (IT/EN): a persistent language setting, a typed
   frontend dictionary, backend errors as stable codes translated by the frontend, and
   deterministic phrases/AI output produced directly in the selected language.
 - **Guided setup** (2026-08-21). First launch opens a six-step wizard at `/setup`

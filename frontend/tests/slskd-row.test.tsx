@@ -69,9 +69,9 @@ describe("riga slskd", () => {
     finto.slskd = { ...finto.slskd, configured: true, reachable: true };
     finto.slskdConnect = vi.fn().mockResolvedValue({});
     render(<SlskdRow />);
-    await waitFor(() => expect(screen.getByText(/Connetti|Collega/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: /Connetti|Collega/ })).toBeTruthy());
     expect(screen.queryByText("Avvia")).toBeNull();
-    fireEvent.click(screen.getByText(/Connetti|Collega/));
+    fireEvent.click(screen.getByRole("button", { name: /Connetti|Collega/ }));
     await waitFor(() => expect(finto.slskdConnect).toHaveBeenCalledTimes(1));
   });
 
@@ -111,7 +111,7 @@ describe("riga slskd", () => {
     finto.daemon = { reachable: true, owned: false, pid: null, installed: false, configured: true, username: "dj_test" };
     finto.slskd = { ...finto.slskd, configured: true, reachable: true };
     render(<SlskdRow />);
-    await waitFor(() => expect(screen.getByText(/Connetti|Collega/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: /Connetti|Collega/ })).toBeTruthy());
     expect(screen.queryByText("Scarica slskd")).toBeNull();
     expect(screen.queryByText("Avvia")).toBeNull();
   });

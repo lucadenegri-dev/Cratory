@@ -1501,7 +1501,7 @@ this on every navigation and redirects to `/setup` only on a *successful* respon
 with `completed: false` — a backend that's down leaves the user where they are
 instead of sending them to a wizard that can't work. `PUT` is called with `true` both
 when the wizard finishes and when it's skipped (no distinction — neither should
-reappear on its own), and with `false` from `/settings`' "reopen wizard" button.
+reappear on its own), and with `false` from `/settings`' "Open setup guide" button.
 
 `GET /api/setup/probe?force=false` → `{"platform": str, "components": [...]}`.
 `platform` is `sys.platform` (`"darwin"` / `"linux"` / `"win32"`). Each entry:

@@ -27,13 +27,14 @@ function esitoTesto(res: CredentialTestResult, t: Dictionary): string {
   return `${t.setup.testKo} — ${res.detail}`;
 }
 
-export function ServiceCard({ service, secrets, redirectUri, docsUrl, onSaved, children }: {
+export function ServiceCard({ service, secrets, redirectUri, docsUrl, onSaved, children, collapsibleGuide = false }: {
   service: ServiceKey;
   secrets: Record<SecretKey, SecretState> | undefined;
   redirectUri?: string | null;
   docsUrl: string;
   onSaved: () => void;
   children?: ReactNode;
+  collapsibleGuide?: boolean;
 }) {
   const t = useT();
   const [result, setResult] = useState<CredentialTestResult | null>(null);
@@ -50,13 +51,13 @@ export function ServiceCard({ service, secrets, redirectUri, docsUrl, onSaved, c
     }
   };
 
+  const guide = <ServiceGuide service={service} docsUrl={docsUrl} copyValue={service === "spotify" ? redirectUri : null} />;
   return (
     <div className="space-y-3">
-      <ServiceGuide
-        service={service}
-        docsUrl={docsUrl}
-        copyValue={service === "spotify" ? redirectUri : null}
-      />
+      {collapsibleGuide ? <details>
+        <summary className="cursor-pointer text-xs text-muted">{t.settings.connectionGuide}</summary>
+        <div className="mt-3">{guide}</div>
+      </details> : guide}
       <div>
         {SERVICE_FIELDS[service].map((key) => (
           <CredentialField

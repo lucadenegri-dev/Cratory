@@ -5,7 +5,7 @@ import {
   errText, getConfigSettings, patchConfigSettings, setDownloadSlots, setLibraryShare, startLibraryIndex,
   type ConfigPatch, type ConfigSettings,
 } from "@/lib/api";
-import { Alert, Badge, Button, CardHeader, Checkbox, Field, Input, Loading, Spinner } from "@/components/ui";
+import { Alert, Badge, Button, Checkbox, Field, Input, Loading, Spinner } from "@/components/ui";
 import { PathPickerButton, usePickerAvailability } from "@/components/path-picker-button";
 import { useJobs } from "@/components/jobs-provider";
 import { useT } from "@/lib/i18n";
@@ -24,12 +24,12 @@ const PICK_KIND: Partial<Record<ConfigFieldKey, "folder" | "file">> = {
   slskd_config_path: "file",
 };
 
-export function ConfigCard() {
+export function ConfigCard({ section = "library" }: { section?: "library" | "downloads" }) {
   const t = useT();
   const [config, setConfig] = useState<ConfigSettings | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [savedFields, setSavedFields] = useState<readonly ConfigFieldKey[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
@@ -38,6 +38,7 @@ export function ConfigCard() {
 
   const hydrate = useCallback((c: ConfigSettings) => {
     setConfig(c);
+    setError(null);
     setDraft(Object.fromEntries(CONFIG_FIELDS.map((k) => [k, c[k].value])));
     setWarning(c.warning);
   }, []);
@@ -56,16 +57,20 @@ export function ConfigCard() {
     slskd_config_path: t.settings.fieldSlskdConfig,
   };
 
-  const dirty = config ? CONFIG_FIELDS.some((k) => draft[k] !== config[k].value) : false;
-
-  const save = async () => {
+  const save = async (fields: readonly ConfigFieldKey[]) => {
     if (!config) return;
     const patch: ConfigPatch = {};
-    for (const k of CONFIG_FIELDS) if (draft[k] !== config[k].value) patch[k] = draft[k];
-    setSaving(true); setError(null); setSaved(false);
+    for (const k of fields) if (draft[k] !== config[k].value) patch[k] = draft[k];
+    setSaving(true); setError(null); setSavedFields([]);
     try {
-      hydrate(await patchConfigSettings(patch));
-      setSaved(true); setTimeout(() => setSaved(false), 1500);
+      const updated = await patchConfigSettings(patch);
+      setConfig(updated);
+      setWarning(updated.warning);
+      // Salvare in una sezione non deve buttare la bozza dell'altra.
+      setDraft((current) => Object.fromEntries(CONFIG_FIELDS.map((k) => [
+        k, k in patch || current[k] === config[k].value ? updated[k].value : current[k],
+      ])));
+      setSavedFields(fields);
     } catch (e) { setError(errText(e)); }
     finally { setSaving(false); }
   };
@@ -84,62 +89,77 @@ export function ConfigCard() {
   if (!config) {
     return (
       <div className="border border-border p-5">
-        {error ? <Alert tone="danger">⚠ {error}</Alert> : <Loading />}
+        {error ? <><Alert tone="danger">{error}</Alert><Button size="sm" variant="outline" className="mt-3" onClick={reloadConfig}>{t.settings.retryButton}</Button></> : <Loading />}
       </div>
     );
   }
 
+  const libraryFields = ["library_root", "archive_root"] as const;
+  const downloadFields = ["slskd_download_dir", "slskd_url", "slskd_config_path"] as const;
+  const dirty = (fields: readonly ConfigFieldKey[]) => fields.some((k) => draft[k] !== config[k].value);
+  const field = (k: ConfigFieldKey) => {
+    const f = config[k];
+    const unchanged = draft[k] === f.value;
+    const pickKind = PICK_KIND[k];
+    return (
+      <Field key={k} label={<span className="flex flex-wrap items-center gap-2">
+        {FIELD_LABEL[k]}
+        {f.source === "db" && <Badge tone="info">{t.settings.overrideBadge}</Badge>}
+        {unchanged && !f.valid && <Badge tone="danger">{f.detail}</Badge>}
+      </span>} hint={!unchanged ? t.settings.unsavedHint
+        // Una nota su un valore valido («cartella non scrivibile», «Disattivato
+        // (vuoto)») è dell'utente quanto un errore: resta l'hint del campo.
+        : f.valid && f.detail ? f.detail
+        : k === "slskd_download_dir" ? t.settings.downloadFolderHint : undefined}>
+        <fieldset disabled={saving} className="flex min-w-0 flex-wrap items-center gap-2">
+          <Input className="min-w-0 flex-1" value={draft[k] ?? ""} disabled={saving}
+            onChange={(e) => { setSavedFields([]); setDraft((d) => ({ ...d, [k]: e.target.value })); }} />
+          {pickerOk && pickKind && <PathPickerButton kind={pickKind} start={draft[k]} prompt={FIELD_LABEL[k]}
+            onPick={(p) => { setSavedFields([]); setDraft((d) => ({ ...d, [k]: p })); }} onError={setError} />}
+        </fieldset>
+      </Field>
+    );
+  };
+  const saveButton = (fields: readonly ConfigFieldKey[]) => (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button type="submit" size="sm" disabled={saving || !dirty(fields)}>
+        {saving && <Spinner />} {t.settings.saveButton}
+      </Button>
+      {savedFields.length > 0 && fields.every((k) => savedFields.includes(k)) && !dirty(fields) && <span role="status" className="text-xs text-muted">{t.settings.savedLabel}</span>}
+    </div>
+  );
+
   return (
-    <div className="border border-border">
-      <CardHeader title={t.settings.configHeading} subtitle={t.settings.configSubtitle} />
-      <div className="space-y-4 p-5">
-        {error && <Alert tone="danger">⚠ {error}</Alert>}
-        {warning && <Alert tone="warning">{warning}</Alert>}
-        {CONFIG_FIELDS.map((k) => {
-          const f = config[k];
-          const unchanged = draft[k] === f.value;
-          const pickKind = PICK_KIND[k]; // variabile locale: TS non restringe PICK_KIND[k] tra due accessi
-          return (
-            <Field key={k}
-              label={
-                <span className="flex flex-wrap items-center gap-2">
-                  {FIELD_LABEL[k]}
-                  {f.source === "db" && <Badge tone="info">{t.settings.overrideBadge}</Badge>}
-                  {unchanged && !f.valid && <Badge tone="danger">{f.detail}</Badge>}
-                </span>
-              }
-              hint={!unchanged ? t.settings.unsavedHint : f.valid ? (f.detail ?? undefined) : undefined}>
-              <div className="flex items-center gap-2">
-                <Input className="flex-1" value={draft[k] ?? ""}
-                  onChange={(e) => setDraft((d) => ({ ...d, [k]: e.target.value }))} />
-                {pickerOk && pickKind && (
-                  <PathPickerButton kind={pickKind} start={draft[k]} prompt={FIELD_LABEL[k]}
-                    onPick={(p) => setDraft((d) => ({ ...d, [k]: p }))}
-                    onError={setError} />
-                )}
-              </div>
-            </Field>
-          );
-        })}
-        <Button size="sm" onClick={save} disabled={saving || !dirty}>
-          {saving ? <Spinner /> : null} {saved ? t.settings.savedLabel : t.settings.saveButton}
-        </Button>
-
-        <div className="border-t border-border pt-4">
-          <Checkbox label={t.settings.shareLibraryLabel} checked={config.share_library}
-            disabled={shareBusy} onChange={toggleShare} />
-          <p className="mt-1.5 text-xs text-muted">{t.settings.shareLibraryHint}</p>
-          {shareMsg && <p className="mt-1.5 text-xs text-fg">{shareMsg}</p>}
-        </div>
-
+    <div>
+      {error && <div className="mb-4"><Alert tone="danger">{error}</Alert></div>}
+      {warning && <div className="mb-4"><Alert tone="warning">{warning}</Alert></div>}
+      <section hidden={section !== "library"} aria-label={t.settings.sections.library} className="space-y-6">
+        <p className="text-sm text-muted">{t.settings.libraryHint}</p>
+        <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); if (dirty(libraryFields) && !saving) void save(libraryFields); }}>
+          {libraryFields.map(field)}
+          {saveButton(libraryFields)}
+        </form>
+        <div className="border-t border-border pt-5"><LibraryIndexSection /></div>
+      </section>
+      <section hidden={section !== "downloads"} aria-label={t.settings.sections.downloads} className="space-y-6">
+        <p className="text-sm text-muted">{t.settings.downloadsHint}</p>
+        <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); if (dirty(downloadFields) && !saving) void save(downloadFields); }}>
+          {field("slskd_download_dir")}
+          <details className="border-t border-border pt-4">
+            <summary className="cursor-pointer text-sm text-muted">{t.settings.advancedSoulseek}</summary>
+            <div className="mt-5 space-y-5">{field("slskd_url")}{field("slskd_config_path")}</div>
+          </details>
+          {saveButton(downloadFields)}
+        </form>
         <div className="border-t border-border">
-          <DownloadSlotsSection value={config.download_slots} reload={reloadConfig} />
+          <DownloadSlotsSection value={config.download_slots} onSaved={(download_slots) => setConfig((c) => c ? { ...c, download_slots } : c)} />
         </div>
-
-        <div className="border-t border-border pt-4">
-          <LibraryIndexSection />
+        <div className="border-t border-border pt-5">
+          <Checkbox label={t.settings.shareLibraryLabel} checked={config.share_library} disabled={shareBusy} onChange={toggleShare} />
+          <p className="mt-1.5 text-xs text-muted">{t.settings.shareLibraryHint}</p>
+          {shareMsg && <p role="status" className="mt-1.5 text-xs text-fg">{shareMsg}</p>}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
@@ -151,7 +171,7 @@ export function ConfigCard() {
  *  invece di restare bloccato su quello invalido. Si riallinea anche se
  *  `value` cambia da fuori (reload di altri campi), tranne mentre l'utente
  *  ci sta digitando dentro. */
-function DownloadSlotsSection({ value, reload }: { value: number; reload: () => void }) {
+function DownloadSlotsSection({ value, onSaved }: { value: number; onSaved: (value: number) => void }) {
   const t = useT();
   const [slots, setSlots] = useState(value);
   const [error, setError] = useState<string | null>(null);
@@ -175,19 +195,19 @@ function DownloadSlotsSection({ value, reload }: { value: number; reload: () => 
       return;
     }
     try {
-      await setDownloadSlots(slots);
+      const result = await setDownloadSlots(slots);
       setError(null);
-      reload();
+      onSaved(result.download_slots);
     } catch (e) { setError(errText(e)); }
   };
 
   return (
     <div>
       {error && <div className="px-5 pt-3"><Alert tone="danger">⚠ {error}</Alert></div>}
-      <label className="flex items-center gap-3 px-5 py-3 text-sm">
+      <label className="flex items-center gap-3 py-4 text-sm">
         <span className="flex-1">
           {t.settings.downloadSlotsLabel}
-          <span className="mt-0.5 block text-xs text-faint">{t.settings.downloadSlotsHint}</span>
+          <span className="mt-0.5 block text-xs text-muted">{t.settings.downloadSlotsHint}</span>
         </span>
         <Input type="number" min={1} max={10} className="h-8 w-20"
           value={slots}

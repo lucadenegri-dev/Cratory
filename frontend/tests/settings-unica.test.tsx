@@ -31,11 +31,6 @@ describe("Impostazioni unica", () => {
     expect(existsSync(resolve(__dirname, "../app/organize/settings/page.tsx"))).toBe(false);
   });
 
-  it("la sezione Organize è montata nella pagina unica, sotto la sua intestazione", () => {
-    const page = readFileSync(resolve(__dirname, "../app/settings/page.tsx"), "utf8");
-    expect(page).toContain("<OrganizeSection />");
-    expect(page).toMatch(/groupOrganize[\s\S]{0,120}<OrganizeSection \/>/);
-  });
 
   it("la pagina usa la lista servizi unificata, senza card sciolte", () => {
     const page = readFileSync(resolve(__dirname, "../app/settings/page.tsx"), "utf8");

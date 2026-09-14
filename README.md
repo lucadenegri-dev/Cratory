@@ -186,7 +186,7 @@ closes and starts again on its own, and anything running right now — an
 analysis, a download — is interrupted, because installing means terminating the
 backend first. Three outcomes and they stay three: up to date, version X is
 available, or it could not be determined — the last never disguised as the
-first. "Open the release" stays alongside the install button as the way out
+first. "See what's new" stays alongside the install button as the way out
 when the automatic path cannot work, and a failed install offers a restart:
 by then the backend is already gone, and only a restart puts the app back
 together.
@@ -203,7 +203,7 @@ backend, which reads GitHub's public releases API.
 
 ### Backup
 
-Settings → Data writes a single zip with everything the disk cannot rebuild: the
+Settings → Backup writes a single zip with everything the disk cannot rebuild: the
 database, uploaded covers, `.env` and `slskd.yml`. **The file contains your
 credentials** (API keys, Spotify tokens, the Soulseek password): keep it as you keep
 `.env`. The updater offers a backup before installing a new version. Restore from the

@@ -78,7 +78,7 @@ describe("scheda Dati", () => {
     api.getBackupEstimate.mockResolvedValue(stima({ picker_disponibile: false }));
     api.createBackup.mockResolvedValue({ percorso: "/Users/x/Downloads/b.zip", byte: 23_400_000, creato_il: "x" });
     render(<BackupCard />);
-    fireEvent.click(await screen.findByText("Backup ora…"));
+    fireEvent.click(await screen.findByText("Crea backup…"));
     await waitFor(() => expect(api.createBackup).toHaveBeenCalledWith(null));
     expect(await screen.findByText(/Backup scritto in \/Users\/x\/Downloads\/b.zip \(23 MB\)/)).toBeTruthy();
     expect(api.pickPath).not.toHaveBeenCalled();
@@ -90,7 +90,7 @@ describe("scheda Dati", () => {
     api.pickPath.mockResolvedValue({ path: "/Users/x/Desktop/b.zip" });
     api.createBackup.mockResolvedValue({ percorso: "/Users/x/Desktop/b.zip", byte: 1_000_000, creato_il: "x" });
     render(<BackupCard />);
-    fireEvent.click(await screen.findByText("Backup ora…"));
+    fireEvent.click(await screen.findByText("Crea backup…"));
     await waitFor(() => expect(api.pickPath).toHaveBeenCalledWith("save", undefined, "Salva il backup di Cratory", "cratory-backup-20260913-1840.zip"));
     await waitFor(() => expect(api.createBackup).toHaveBeenCalledWith("/Users/x/Desktop/b.zip"));
   });

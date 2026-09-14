@@ -55,18 +55,18 @@ const CONFIG: ConfigSettings = {
   spotify_redirect_uri: "http://127.0.0.1:8000/api/spotify/callback",
 };
 
-async function mount(available: boolean) {
+async function mount(available: boolean, section: "library" | "downloads" = "library") {
   getConfigSettings.mockResolvedValue(CONFIG);
   pickerAvailability.mockResolvedValue({ available });
-  await act(async () => {
-    render(<ConfigCard />);
-  });
+  const view = render(<ConfigCard section={section} />);
+  await act(async () => {});
+  return view;
 }
 
 describe("ConfigCard + picker", () => {
-  it("con picker disponibile mostra Sfoglia sui 4 campi percorso", async () => {
+  it("in Libreria mostra Sfoglia solo sulle due cartelle", async () => {
     await mount(true);
-    expect(screen.getAllByRole("button", { name: "Sfoglia…" })).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: "Sfoglia…" })).toHaveLength(2);
   });
 
   it("senza picker nessun pulsante Sfoglia (resta l'input testuale)", async () => {
@@ -108,7 +108,7 @@ const spinValue = (el: HTMLElement) => (el as HTMLInputElement).value;
 
 describe("ConfigCard + download slots", () => {
   it("valore svuotato: nessuna scrittura e il campo torna al valore in vigore", async () => {
-    await mount(true);
+    await mount(true, "downloads");
     const input = screen.getByRole("spinbutton");
     expect(spinValue(input)).toBe("3");
 
@@ -123,7 +123,7 @@ describe("ConfigCard + download slots", () => {
   });
 
   it("valore fuori scala (>10): nessuna scrittura e il campo torna al valore in vigore", async () => {
-    await mount(true);
+    await mount(true, "downloads");
     const input = screen.getByRole("spinbutton");
 
     fireEvent.change(input, { target: { value: "15" } });
@@ -137,7 +137,7 @@ describe("ConfigCard + download slots", () => {
   });
 
   it("valore valido: scrive il numero digitato", async () => {
-    await mount(true);
+    await mount(true, "downloads");
     setDownloadSlots.mockResolvedValue({ download_slots: 7 });
     const input = screen.getByRole("spinbutton");
 
@@ -151,11 +151,11 @@ describe("ConfigCard + download slots", () => {
   });
 
   it("il campo si riallinea quando il valore arriva da fuori (reload dopo il salvataggio di un altro campo)", async () => {
-    await mount(true);
+    await mount(true, "downloads");
     expect(spinValue(screen.getByRole("spinbutton"))).toBe("3");
 
-    patchConfigSettings.mockResolvedValue({ ...CONFIG, library_root: field("/Users/x/Music2"), download_slots: 8 });
-    fireEvent.change(screen.getByDisplayValue("/Users/x/Music"), { target: { value: "/Users/x/Music2" } });
+    patchConfigSettings.mockResolvedValue({ ...CONFIG, slskd_download_dir: field("/Users/x/Downloads2"), download_slots: 8 });
+    fireEvent.change(screen.getByDisplayValue("/Users/x/Downloads"), { target: { value: "/Users/x/Downloads2" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Salva" }));
     });
@@ -164,14 +164,14 @@ describe("ConfigCard + download slots", () => {
   });
 
   it("il riallineamento dall'esterno non cancella quello che l'utente sta digitando", async () => {
-    await mount(true);
+    await mount(true, "downloads");
     const input = screen.getByRole("spinbutton");
 
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "5" } });
 
-    patchConfigSettings.mockResolvedValue({ ...CONFIG, library_root: field("/Users/x/Music2"), download_slots: 8 });
-    fireEvent.change(screen.getByDisplayValue("/Users/x/Music"), { target: { value: "/Users/x/Music2" } });
+    patchConfigSettings.mockResolvedValue({ ...CONFIG, slskd_download_dir: field("/Users/x/Downloads2"), download_slots: 8 });
+    fireEvent.change(screen.getByDisplayValue("/Users/x/Downloads"), { target: { value: "/Users/x/Downloads2" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Salva" }));
     });
@@ -184,5 +184,63 @@ describe("ConfigCard + download slots", () => {
       fireEvent.blur(input);
     });
     expect(setDownloadSlots).toHaveBeenCalledWith(5);
+  });
+});
+
+
+describe("ConfigCard: note e provenienza dei campi", () => {
+  it("una nota del backend su un campo valido resta visibile come hint", async () => {
+    getConfigSettings.mockResolvedValue({ ...CONFIG, slskd_download_dir: { ...field("/Users/x/Downloads"), detail: "Nota: cartella non scrivibile" } });
+    pickerAvailability.mockResolvedValue({ available: false });
+    render(<ConfigCard section="downloads" />);
+    await act(async () => {});
+    expect(screen.getByText("Nota: cartella non scrivibile")).toBeTruthy();
+  });
+
+  it("un valore che sovrascrive backend/.env porta il badge «override .env»", async () => {
+    getConfigSettings.mockResolvedValue({ ...CONFIG, library_root: { ...field("/Users/x/Music"), source: "db" } });
+    pickerAvailability.mockResolvedValue({ available: false });
+    render(<ConfigCard section="library" />);
+    await act(async () => {});
+    expect(screen.getByText("override .env")).toBeTruthy();
+  });
+});
+
+describe("ConfigCard: bozze per sezione", () => {
+  it("salvare Download conserva la bozza di Libreria e scrive solo i campi di Download", async () => {
+    const view = await mount(false);
+    fireEvent.change(screen.getByDisplayValue("/Users/x/Music"), { target: { value: "/Music/Draft" } });
+    // Prima il positivo, così il null di sotto prova davvero che la sezione è nascosta.
+    expect(screen.getByRole("textbox", { name: /Cartella della musica/ })).toBeTruthy();
+    view.rerender(<ConfigCard section="downloads" />);
+    expect(screen.queryByRole("textbox", { name: /Cartella della musica/ })).toBeNull();
+    fireEvent.change(screen.getByDisplayValue("/Users/x/Downloads"), { target: { value: "/Downloads/New" } });
+    patchConfigSettings.mockResolvedValue({ ...CONFIG, slskd_download_dir: field("/Downloads/New") });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Salva" })); });
+    expect(patchConfigSettings).toHaveBeenCalledWith({ slskd_download_dir: "/Downloads/New" });
+    view.rerender(<ConfigCard section="library" />);
+    expect(screen.getByDisplayValue("/Music/Draft")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Salva" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("il salvataggio automatico degli slot non ricarica né cancella le cartelle in modifica", async () => {
+    await mount(false, "downloads");
+    fireEvent.change(screen.getByDisplayValue("/Users/x/Downloads"), { target: { value: "/Downloads/Draft" } });
+    setDownloadSlots.mockResolvedValue({ download_slots: 5 });
+    const slots = screen.getByRole("spinbutton");
+    fireEvent.change(slots, { target: { value: "5" } });
+    await act(async () => { fireEvent.blur(slots); });
+    expect(getConfigSettings).toHaveBeenCalledTimes(1);
+    expect(screen.getByDisplayValue("/Downloads/Draft")).toBeTruthy();
+  });
+
+  it("un salvataggio fallito conserva la bozza e mostra l'errore", async () => {
+    await mount(false);
+    patchConfigSettings.mockRejectedValue(new Error("Save failed"));
+    fireEvent.change(screen.getByDisplayValue("/Users/x/Music"), { target: { value: "/Music/Draft" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Salva" })); });
+    expect(screen.getByRole("alert").textContent).toContain("Save failed");
+    expect(screen.getByDisplayValue("/Music/Draft")).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

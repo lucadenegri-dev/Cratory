@@ -94,7 +94,7 @@ export default function ImportSoundcloudPage() {
                 <Heart size={15} /> {t.playlists.openButton}
               </Button>
             ) : (
-              <Button size="sm" variant="outline" onClick={() => router.push("/settings")}>
+              <Button size="sm" variant="outline" onClick={() => router.push("/settings?section=connections")}>
                 <Settings size={15} /> {t.nav.settings}
               </Button>
             )}

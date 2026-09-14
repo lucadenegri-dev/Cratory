@@ -205,7 +205,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       // inspecting → deduping, ed è la sola riga della barra che lo racconta.
       track(v.status, {
         key: "library-index", label: t.jobs.libraryIndex, detail: v.phase ?? undefined,
-        processed: v.processed, total: v.total, href: "/settings",
+        processed: v.processed, total: v.total, href: "/settings?section=library",
       }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
     }
     if (an.status === "fulfilled") {

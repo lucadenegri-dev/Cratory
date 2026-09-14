@@ -18,27 +18,27 @@ describe("DiscoverySection", () => {
     getDiscoverySettings.mockResolvedValue({ discogs_enabled: false });
     render(<DiscoverySection />);
     await waitFor(() =>
-      expect((screen.getByLabelText(/Offri Discogs/) as HTMLInputElement).checked).toBe(false));
+      expect((screen.getByLabelText(/Mostra Discogs/) as HTMLInputElement).checked).toBe(false));
   });
 
   it("il click salva e riflette la risposta", async () => {
     getDiscoverySettings.mockResolvedValue({ discogs_enabled: true });
     setDiscoverySettings.mockResolvedValue({ discogs_enabled: false });
     render(<DiscoverySection />);
-    await waitFor(() => expect(screen.getByLabelText(/Offri Discogs/)).toBeTruthy());
-    fireEvent.click(screen.getByLabelText(/Offri Discogs/));
+    await waitFor(() => expect(screen.getByLabelText(/Mostra Discogs/)).toBeTruthy());
+    fireEvent.click(screen.getByLabelText(/Mostra Discogs/));
     expect(setDiscoverySettings).toHaveBeenCalledWith({ discogs_enabled: false });
     await waitFor(() =>
-      expect((screen.getByLabelText(/Offri Discogs/) as HTMLInputElement).checked).toBe(false));
+      expect((screen.getByLabelText(/Mostra Discogs/) as HTMLInputElement).checked).toBe(false));
   });
 
   it("un salvataggio fallito lo dice e non cambia lo stato", async () => {
     getDiscoverySettings.mockResolvedValue({ discogs_enabled: true });
     setDiscoverySettings.mockRejectedValue(new Error("boom"));
     render(<DiscoverySection />);
-    await waitFor(() => expect(screen.getByLabelText(/Offri Discogs/)).toBeTruthy());
-    fireEvent.click(screen.getByLabelText(/Offri Discogs/));
+    await waitFor(() => expect(screen.getByLabelText(/Mostra Discogs/)).toBeTruthy());
+    fireEvent.click(screen.getByLabelText(/Mostra Discogs/));
     await waitFor(() => expect(screen.getByText(/boom/)).toBeTruthy());
-    expect((screen.getByLabelText(/Offri Discogs/) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText(/Mostra Discogs/) as HTMLInputElement).checked).toBe(true);
   });
 });
