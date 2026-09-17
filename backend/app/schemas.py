@@ -193,6 +193,7 @@ class SetlistOut(BaseModel):
 class SetlistSummaryOut(BaseModel):
     id: int
     name: str
+    kind: str = "generated"  # generated | manual: la lista instrada alla pagina giusta
     strategy: str | None = None
     target_duration_minutes: int | None = None
     track_count: int = 0

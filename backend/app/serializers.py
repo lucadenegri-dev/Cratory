@@ -139,13 +139,15 @@ def alternative_out(alt, file_tags: FileTags | None = None) -> AlternativeOut:
 
 
 def setlist_summary_out(setlist: Setlist) -> SetlistSummaryOut:
+    with_track = [st for st in setlist.tracks if st.track is not None]  # i varchi non contano
     return SetlistSummaryOut(
         id=setlist.id,
         name=setlist.name,
+        kind=setlist.kind or "generated",
         strategy=setlist.strategy,
         target_duration_minutes=setlist.target_duration_minutes,
-        track_count=len(setlist.tracks),
-        total_duration_seconds=sum(st.track.duration_seconds or 0 for st in setlist.tracks),
+        track_count=len(with_track),
+        total_duration_seconds=sum(st.track.duration_seconds or 0 for st in with_track),
         generated_by=setlist.generated_by or "algorithmic",
         created_at=setlist.created_at,
     )

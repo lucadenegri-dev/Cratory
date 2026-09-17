@@ -457,19 +457,20 @@ def library_stats(db: Session) -> dict:
 _SETLIST_TRACKS = (
     selectinload(Setlist.tracks)
     .selectinload(SetlistTrack.track)
-    .selectinload(Track.playlists)
+    .selectinload(Track.playlists),
+    selectinload(Setlist.blocks),
 )
 
 
 def get_setlist(db: Session, setlist_id: int) -> Setlist | None:
     return db.scalar(
-        select(Setlist).options(_SETLIST_TRACKS).where(Setlist.id == setlist_id)
+        select(Setlist).options(*_SETLIST_TRACKS).where(Setlist.id == setlist_id)
     )
 
 
 def list_setlists(db: Session) -> list[Setlist]:
     return list(db.scalars(
-        select(Setlist).options(_SETLIST_TRACKS).order_by(Setlist.created_at.desc())
+        select(Setlist).options(*_SETLIST_TRACKS).order_by(Setlist.created_at.desc())
     ).all())
 
 
@@ -619,7 +620,9 @@ def orphan_lead_ids(db: Session, candidate_ids: Iterable[int] | None = None) -> 
     stmt = select(Track.id).where(
         Track.has_local_file.is_not(True),
         Track.id.not_in(select(playlist_tracks.c.track_id)),
-        Track.id.not_in(select(SetlistTrack.track_id)),
+        # Le righe varco del set manuale hanno track_id NULL: senza questa
+        # guardia il NOT IN non troverebbe mai nulla (NULL nel sottoinsieme).
+        Track.id.not_in(select(SetlistTrack.track_id).where(SetlistTrack.track_id.is_not(None))),
     )
     if candidate_ids is not None:
         ids = list(candidate_ids)
@@ -875,6 +878,10 @@ def delete_playlist(db: Session, playlist_id: int) -> int | None:
     db.execute(playlist_tracks.delete().where(playlist_tracks.c.playlist_id == playlist_id))
     # Un set Shazam importato in questa playlist torna re-importabile.
     db.execute(update(DjSet).where(DjSet.imported_playlist_id == playlist_id).values(imported_playlist_id=None))
+    # Il set manuale nato da questa playlist resta, senza origine (spec: il
+    # materiale si riduce a cio' che e' nel set + la ricerca in libreria).
+    db.execute(update(Setlist).where(Setlist.source_playlist_id == playlist_id)
+               .values(source_playlist_id=None))
     # Lo storico sync muore con la playlist (FK senza cascade su SQLite).
     db.execute(delete(PlaylistSyncEvent).where(PlaylistSyncEvent.playlist_id == playlist_id))
     db.delete(playlist)
