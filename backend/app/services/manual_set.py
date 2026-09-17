@@ -117,6 +117,8 @@ def insert_rows(db: Session, setlist_id: int, *, expected_revision: int,
     at = len(rows)
     if after_row_id is not None:
         anchor = _row_of(setlist, after_row_id)
+        if anchor not in rows:
+            raise ManualSetError(f"Row {after_row_id} is not in the main block")
         at = rows.index(anchor) + 1
     present = {r.track_id for r in rows if r.track_id is not None}
     new_rows: list[SetlistTrack] = []

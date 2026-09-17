@@ -152,6 +152,17 @@ def generate_status():
     return dict(_gen_state)
 
 
+def _require_generated(setlist) -> None:
+    """Le rotte dell'editor classico assumono la forma di un set generato
+    (righe sempre con `track`, indicizzabili per `position`): un set manuale
+    puo' avere righe varco (`track` None) e blocchi (`block_id` fuori dalla
+    numerazione lineare), quindi va rifiutato qui con lo stesso errore di
+    dominio di `GET /{id}` invece di far arrivare un AttributeError o
+    scombinare in silenzio il percorso costruito a mano."""
+    if setlist.kind == "manual":
+        raise api_error(409, "set_is_manual", "This set is manual: use /manual")
+
+
 def _manual_error(exc: ManualSetError) -> HTTPException:
     if isinstance(exc, RevisionConflict):
         return api_error(409, "set_revision_conflict",
@@ -186,8 +197,7 @@ def get_one(setlist_id: int, db: Session = Depends(get_db)):
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
         raise api_error(404, "set_not_found", "Set not found")
-    if setlist.kind == "manual":
-        raise api_error(409, "set_is_manual", "This set is manual: use /manual")
+    _require_generated(setlist)
     return setlist_out(setlist, get_language(db), db=db)
 
 
@@ -265,6 +275,7 @@ def export(
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
         raise api_error(404, "set_not_found", "Set not found")
+    _require_generated(setlist)
     lang = get_language(db)
 
     if format == "csv":
@@ -361,6 +372,10 @@ def delete(setlist_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/{setlist_id}/tracks/{position}", response_model=SetlistOut)
 def delete_track(setlist_id: int, position: int, db: Session = Depends(get_db)):
+    setlist = get_setlist(db, setlist_id)
+    if setlist is None:
+        raise api_error(404, "set_not_found", "Set not found")
+    _require_generated(setlist)
     try:
         return setlist_out(remove_track(db, setlist_id, position), get_language(db), db=db)
     except SetEditError as exc:
@@ -369,6 +384,10 @@ def delete_track(setlist_id: int, position: int, db: Session = Depends(get_db)):
 
 @router.post("/{setlist_id}/tracks", response_model=SetlistOut)
 def add(setlist_id: int, req: AddTrackRequest, db: Session = Depends(get_db)):
+    setlist = get_setlist(db, setlist_id)
+    if setlist is None:
+        raise api_error(404, "set_not_found", "Set not found")
+    _require_generated(setlist)
     try:
         return setlist_out(add_track(db, setlist_id, req.track_id, req.position), get_language(db), db=db)
     except SetEditError as exc:
@@ -377,6 +396,10 @@ def add(setlist_id: int, req: AddTrackRequest, db: Session = Depends(get_db)):
 
 @router.post("/{setlist_id}/tracks/{position}/move", response_model=SetlistOut)
 def move(setlist_id: int, position: int, req: MoveTrackRequest, db: Session = Depends(get_db)):
+    setlist = get_setlist(db, setlist_id)
+    if setlist is None:
+        raise api_error(404, "set_not_found", "Set not found")
+    _require_generated(setlist)
     try:
         if req.to is not None:
             setlist = move_track_to(db, setlist_id, position, req.to)
@@ -389,6 +412,10 @@ def move(setlist_id: int, position: int, req: MoveTrackRequest, db: Session = De
 
 @router.post("/{setlist_id}/tracks/{position}/replace", response_model=SetlistOut)
 def replace(setlist_id: int, position: int, req: ReplaceTrackRequest, db: Session = Depends(get_db)):
+    setlist = get_setlist(db, setlist_id)
+    if setlist is None:
+        raise api_error(404, "set_not_found", "Set not found")
+    _require_generated(setlist)
     try:
         return setlist_out(replace_track(db, setlist_id, position, req.track_id), get_language(db), db=db)
     except SetEditError as exc:
@@ -400,6 +427,7 @@ def alternatives(setlist_id: int, req: AlternativesRequest, db: Session = Depend
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
         raise api_error(404, "set_not_found", "Set not found")
+    _require_generated(setlist)
     try:
         alts = find_alternatives(db, setlist, req.position, req.mode, req.limit)
     except AlternativesError as exc:

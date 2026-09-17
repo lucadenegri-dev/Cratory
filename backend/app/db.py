@@ -148,6 +148,13 @@ def _migrate_setlist_tracks_nullable_track(conn) -> None:
     ddl = str(CreateTable(SetlistTrack.__table__).compile(dialect=conn.dialect))
     ddl = ddl.replace("CREATE TABLE setlist_tracks", f'CREATE TABLE "{tmp}"', 1)
     conn.execute(text(ddl))
+    # SQLite non applica le FK in scrittura da sempre: una riga con `track_id`
+    # penzolante (la sua traccia e' stata cancellata altrove) puo' essere
+    # sopravvissuta indefinitamente. La COPY qui sotto gira con le FK accese,
+    # quindi quella riga da sola abortirebbe l'INSERT e l'intera transazione
+    # di ensure_schema (l'app non parte piu'). Va scartata prima della copia.
+    conn.execute(text("DELETE FROM setlist_tracks WHERE track_id IS NOT NULL "
+                      "AND track_id NOT IN (SELECT id FROM tracks)"))
     live = {r[1] for r in info}
     cols = ", ".join(f'"{c}"' for c in SetlistTrack.__table__.columns.keys() if c in live)
     conn.execute(text(f'INSERT INTO "{tmp}" ({cols}) SELECT {cols} FROM setlist_tracks'))

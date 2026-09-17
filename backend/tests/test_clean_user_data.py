@@ -11,11 +11,11 @@ Il modulo lavora sull'engine globale di `app.db`, non sulla fixture `db`: i test
 gliene sostituiscono uno tutto loro su file (VACUUM non gira in memoria).
 """
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
 from app.db import Base
-from app.models import DownloadQueueItem, Playlist, Track, playlist_tracks
+from app.models import DownloadQueueItem, Playlist, Setlist, SetlistBlock, Track, playlist_tracks
 from app.organize.models import AudioFile, ScanRoot
 from app.tools import clean_user_data
 
@@ -27,9 +27,19 @@ def db_su_file(tmp_path, monkeypatch):
     `clean` chiama `ensure_schema()` (che userebbe l'engine di modulo) e legge
     `settings.database_url` per il path: si sostituiscono entrambi, cosi' il test
     non tocca ne' il DB reale ne' quello condiviso dalla suite.
+
+    Le foreign key sono accese, come in produzione (`app.db._make_engine`):
+    altrimenti una tabella figlia mancante dall'ordine di `DATA_TABLES` non
+    farebbe fallire nulla qui, mascherando esattamente il difetto che questi
+    test devono intercettare.
     """
     path = tmp_path / "clean.db"
     engine = create_engine(f"sqlite:///{path}")
+
+    @event.listens_for(engine, "connect")
+    def _fk_on(dbapi_conn, _record):
+        dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
     Base.metadata.create_all(engine)
     monkeypatch.setattr(clean_user_data, "engine", engine)
     monkeypatch.setattr(clean_user_data, "ensure_schema", lambda: None)
@@ -75,6 +85,25 @@ def test_pulizia_libreria_svuota_anche_i_figli_di_tracks(db_su_file):
         text("SELECT COUNT(*) FROM audio_file")).scalar_one() == 1
     assert db_su_file.execute(
         text("SELECT track_id FROM audio_file")).scalar_one() is None
+
+
+def test_pulizia_libreria_svuota_i_set_manuali_coi_blocchi(db_su_file):
+    """Un set manuale ha righe in `setlist_blocks`, tabella figlia di `setlists`
+    a sua volta referenziata da `setlist_tracks`: se manca da `DATA_TABLES` la
+    `DELETE FROM setlists` va in IntegrityError con le foreign key accese."""
+    s = Setlist(name="M", kind="manual")
+    db_su_file.add(s)
+    db_su_file.flush()
+    b = SetlistBlock(setlist_id=s.id, position=1)
+    db_su_file.add(b)
+    db_su_file.commit()
+
+    report = clean_user_data.clean("library", preserve_tokens=True,
+                                   include_backups=False, dry_run=False)
+
+    assert report["after"]["setlists"] == 0
+    assert db_su_file.execute(
+        text("SELECT COUNT(*) FROM setlist_blocks")).scalar_one() == 0
 
 
 def test_dry_run_non_cancella_nulla(db_su_file):

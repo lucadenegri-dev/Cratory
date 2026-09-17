@@ -752,7 +752,9 @@ def unreferenced_track_ids(db: Session, candidate_ids: Iterable[int] | None = No
     decidere se una traccia sganciata va rimossa o tenuta come lead."""
     stmt = select(Track.id).where(
         Track.id.not_in(select(playlist_tracks.c.track_id)),
-        Track.id.not_in(select(SetlistTrack.track_id)),
+        # Le righe varco del set manuale hanno track_id NULL: senza questa
+        # guardia il NOT IN non troverebbe mai nulla (NULL nel sottoinsieme).
+        Track.id.not_in(select(SetlistTrack.track_id).where(SetlistTrack.track_id.is_not(None))),
     )
     if candidate_ids is not None:
         ids = list(candidate_ids)

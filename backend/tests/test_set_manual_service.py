@@ -2,7 +2,7 @@
 rimozione, appunto, revisione. DB in memoria, nessuna rete."""
 import pytest
 
-from app.models import Playlist, Track
+from app.models import Playlist, SetlistTrack, Track
 from app.repositories import add_track_to_playlist, get_setlist
 from app.services.manual_set import (
     ManualSetNotFound,
@@ -115,6 +115,25 @@ def test_inserisci_traccia_inesistente(db):
     s = create_manual_set(db, name="M", playlist_id=None)
     with pytest.raises(ManualSetError):
         insert_rows(db, s.id, expected_revision=0, track_ids=[999], gap=False, after_row_id=None)
+
+
+def test_inserisci_dopo_una_riga_fuori_dal_blocco_principale(db):
+    """`after_row_id` che nomina una riga fuori dal blocco main (es. una riserva,
+    block_id NULL: non ancora raggiungibile in tappa 1 ma gia' nel modello) deve
+    dare un errore di dominio, non un ValueError non gestito da rows.index()."""
+    t = _tracks(db, 2)
+    s = create_manual_set(db, name="M", playlist_id=None)
+    # Aggiunta via relationship (non solo la colonna FK): cosi' la riga entra
+    # subito in `s.tracks` in memoria, come farebbe il caricamento eager reale
+    # di un set con piu' blocchi (tappa 2/3) — senza questo la riga resterebbe
+    # invisibile alla collezione gia' caricata e il test proverebbe solo
+    # RowNotFound invece del vero bug (rows.index() fuori dal blocco main).
+    reserve = SetlistTrack(block_id=None, position=1, slot_kind="track", track_id=t[0].id)
+    s.tracks.append(reserve)
+    db.commit()
+    with pytest.raises(ManualSetError):
+        insert_rows(db, s.id, expected_revision=0, track_ids=[t[1].id], gap=False,
+                   after_row_id=reserve.id)
 
 
 def test_sposta_a_posizione(db):

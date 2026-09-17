@@ -21,7 +21,7 @@ from app.db import engine, ensure_schema
 # figli che mancavano erano `playlist_tracks` (difetto di sempre: lo strumento
 # falliva su qualsiasi libreria con una playlist dentro) e `download_queue_items`
 # (lo storico della coda, che sopravvive al download).
-DATA_TABLES = ("setlist_tracks", "setlists", "download_queue_items",
+DATA_TABLES = ("setlist_tracks", "setlist_blocks", "setlists", "download_queue_items",
                "playlist_tracks", "tracks", "playlists")
 TOKEN_TABLES = ("spotify_tokens",)
 # Il quarto figlio di `tracks` e' `audio_file`, ma quella e' una tabella di

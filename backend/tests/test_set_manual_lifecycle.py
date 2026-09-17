@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import _migrate_drop_legacy, ensure_schema
 from app.models import Playlist, Setlist, SetlistBlock, SetlistTrack, Track
-from app.repositories import delete_playlist, get_setlist, orphan_lead_ids
+from app.repositories import delete_playlist, get_setlist, orphan_lead_ids, unreferenced_track_ids
 from app.serializers import setlist_summary_out
 
 
@@ -40,6 +40,17 @@ def test_lead_nel_set_manuale_non_e_orfano(db):
     db.commit()
     _manual_with_gap(db, track=lead)
     assert orphan_lead_ids(db, [lead.id]) == []
+
+
+def test_traccia_sganciata_trovata_anche_se_esiste_una_riga_varco(db):
+    orphan = Track(source_type="spotify", title="Sganciata", has_local_file=False)
+    db.add(orphan)
+    db.commit()
+    _manual_with_gap(db)
+    # Stesso bug di orphan_lead_ids: NOT IN con un NULL nel sottoinsieme non
+    # trova mai nulla, senza la guardia sul NULL nessuna traccia sarebbe piu'
+    # "sganciata" appena esiste una riga varco in un set qualsiasi.
+    assert unreferenced_track_ids(db, [orphan.id]) == [orphan.id]
 
 
 def test_riepilogo_conta_solo_le_tracce_e_porta_il_kind(db):

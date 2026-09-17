@@ -208,6 +208,11 @@ def create_playlist(req: CreatePlaylistRequest, db: Session = Depends(get_db)):
     setlist = get_setlist(db, req.setlist_id)
     if setlist is None:
         raise api_error(404, "set_not_found", "Set not found")
+    if setlist.kind == "manual":
+        # Le righe varco del set manuale hanno track None: st.track.spotify_id
+        # sarebbe un AttributeError, non un 500 pulito. Stesso codice/messaggio
+        # di GET /api/sets/{id}.
+        raise api_error(409, "set_is_manual", "This set is manual: use /manual")
     track_ids = [st.track.spotify_id for st in setlist.tracks if st.track.spotify_id]
     if not track_ids:
         raise api_error(422, "set_no_spotify_tracks", "The set has no Spotify tracks")

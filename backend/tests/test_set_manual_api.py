@@ -140,6 +140,47 @@ def test_endpoint_manuali_rifiutano_un_set_generato(client_db):
     assert r.status_code == 409 and r.json()["detail"]["code"] == "set_not_manual"
 
 
+def test_endpoint_classici_rifiutano_un_set_manuale_con_varco(client_db):
+    """Le rotte dell'editor classico assumono `st.track` sempre presente e
+    indicizzano per `position`: su un set manuale con una riga varco andrebbero
+    in AttributeError (500) o, per add/move/replace che scrivono via
+    `set_editor` (ignora `block_id`), scombinerebbero in silenzio il percorso.
+    Devono rifiutare con lo stesso 409 set_is_manual di GET /{id}."""
+    client, db = client_db
+    _, t = _seed(db)
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    r = client.post(f"/api/sets/{sid}/rows", json={"expected_revision": 0, "track_ids": [t[0].id]})
+    r = client.post(f"/api/sets/{sid}/rows", json={"expected_revision": 1, "gap": True, "after_row_id": None})
+    assert r.status_code == 200, r.text
+
+    def _assert_manual(resp):
+        assert resp.status_code == 409, resp.text
+        assert resp.json()["detail"]["code"] == "set_is_manual"
+
+    _assert_manual(client.post(f"/api/sets/{sid}/export"))
+    _assert_manual(client.delete(f"/api/sets/{sid}/tracks/1"))
+    _assert_manual(client.post(f"/api/sets/{sid}/tracks", json={"track_id": t[1].id}))
+    _assert_manual(client.post(f"/api/sets/{sid}/tracks/1/move", json={"direction": "down"}))
+    _assert_manual(client.post(f"/api/sets/{sid}/tracks/1/replace", json={"track_id": t[1].id}))
+    _assert_manual(client.post(f"/api/sets/{sid}/alternatives", json={"position": 1}))
+    _assert_manual(client.post("/api/spotify/create-playlist", json={"setlist_id": sid}))
+
+
+def test_rinomina_e_cancellazione_restano_aperte_su_un_set_manuale(client_db):
+    """Rename e delete del set intero non assumono la forma generata (non
+    toccano posizioni/`st.track`): un set manuale deve poterle usare — la
+    cancellazione in particolare e' l'unico modo che l'utente ha per buttare
+    via un set manuale creato per errore (nessun editor classico da aprire)."""
+    client, db = client_db
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    r = client.patch(f"/api/sets/{sid}", json={"name": "Rinominato"})
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "Rinominato"
+    r = client.delete(f"/api/sets/{sid}")
+    assert r.status_code == 204, r.text
+    assert client.get(f"/api/sets/{sid}/manual").json()["detail"]["code"] == "set_not_found"
+
+
 def test_created_at_concorde_tra_lista_e_dettaglio(client_db):
     """La stessa riga manual deve avere lo stesso `created_at` (stessa stringa,
     stesso formato) sia nella lista (`setlist_summary_out`) sia nel dettaglio
