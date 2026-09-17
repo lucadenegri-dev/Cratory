@@ -488,11 +488,21 @@ cleanup, and each was explicitly left alone this time.
      The model to converge on is the queue itself (`download_queue.py`,
      `download_dispatcher.py`, `download_runner.py`), not the abstract base
      class the "four job state machines" item above imagines.
-  3. **Set Builder: lock and regenerate.** After generation one can move,
-     replace with alternatives and add, but not "keep these three and regenerate
-     the rest" nor "regenerate from position N" — the natural gesture when a set
-     is right at 80%. The two-phase generator (skeleton + beam per segment) is
-     already shaped to take fixed anchors.
+  3. **Set Builder: DJ-led preparation workspace** (direction revised
+     2026-09-16; designed, not implemented). Build from a playlist through
+     audition, manually composed sequences, gaps, saved alternatives, reserves,
+     preparation notes and undo/redo, on the existing `Setlist` model (a `kind`
+     column, not a second set model). No AI in the flow. The generator becomes
+     a tool inside the set ("fill this gap", the deterministic beam over a fixed
+     number of slots between two chosen tracks) and the old generation form and
+     AI curation go away with it. This replaces "lock and regenerate" as the
+     next Set Builder priority. See the
+     [specification](superpowers/specs/2026-09-15-set-builder-workbench.md).
+     Deferred behind it, as its own design cycle once real transitions exist
+     to try: a two-deck audition (beat grids from the Rekordbox XML `TEMPO`
+     node and from Essentia's beat positions, Web Audio tempo-matched
+     playback, no waveform/cue/loop) — an explicit, bounded exception to the
+     "prepares, does not play" rule, decided 2026-09-17.
   4. **Gap → Dig.** Gap analysis says "missing 128→132 bridge" and "harmonic dead
      end"; the Dig digs by taste, by explicit design. A "dig for this gap" link
      that pre-fills genre/label seeds from the playlist closes the loop without
