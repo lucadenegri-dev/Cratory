@@ -446,12 +446,58 @@ export interface Setlist {
 export interface SetlistSummary {
   id: number;
   name: string;
+  kind: string;
   strategy: string | null;
   target_duration_minutes: number | null;
   track_count: number;
   total_duration_seconds: number;
   generated_by: string;
   created_at: string;
+}
+
+/* --- Set manuale (banco di preparazione, tappa 1) --- */
+export interface ManualRow {
+  id: number;
+  block_id: number | null;
+  position: number;
+  slot_kind: "track" | "gap";
+  track: Track | null; // null sui varchi
+  note: string | null;
+}
+
+export interface ManualBlock {
+  id: number;
+  name: string | null;
+  placement: "main" | "bench";
+  position: number;
+  rows: ManualRow[];
+}
+
+export interface ManualSet {
+  id: number;
+  name: string;
+  kind: string;
+  revision: number;
+  source_playlist_id: number | null;
+  source_playlist_name: string | null;
+  notes: string | null;
+  blocks: ManualBlock[];
+  track_count: number;
+  total_file_seconds: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MaterialItem {
+  track: Track;
+  in_set: boolean;
+  from_playlist: boolean;
+}
+
+export interface Material {
+  playlist_id: number | null;
+  playlist_name: string | null;
+  items: MaterialItem[];
 }
 
 export type AlternativeMode = "safer" | "softer" | "harder" | "same_artist" | "surprising";

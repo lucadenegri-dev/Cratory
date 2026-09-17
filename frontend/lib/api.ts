@@ -6,6 +6,7 @@ export * from "./api/format";
 export * from "./api/tracks";
 export * from "./api/playlists";
 export * from "./api/sets";
+export * from "./api/manual-sets";
 export * from "./api/discovery";
 export * from "./api/downloads";
 export * from "./api/download-queue";
