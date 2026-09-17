@@ -176,3 +176,48 @@ def test_created_at_concorde_tra_lista_e_dettaglio(client_db):
     from_list = next(s for s in client.get("/api/sets").json() if s["id"] == setlist.id)
     from_detail = client.get(f"/api/sets/{setlist.id}/manual").json()
     assert from_list["created_at"] == from_detail["created_at"]
+
+
+def test_materiale_playlist_aggiornata_piu_set_piu_ricerca(client_db):
+    client, db = client_db
+    pl, t = _seed(db)  # t[2] senza file
+    extra = Track(source_type="spotify", title="Fuori playlist", artist="Z", has_local_file=True)
+    db.add(extra)
+    db.commit()
+    sid = client.post("/api/sets/manual", json={"playlist_id": pl.id}).json()["id"]
+    client.post(f"/api/sets/{sid}/rows", json={"expected_revision": 0, "track_ids": [t[0].id, extra.id]})
+
+    doc = client.get(f"/api/sets/{sid}/material").json()
+    assert doc["playlist_name"] == "Deep"
+    by_id = {it["track"]["id"]: it for it in doc["items"]}
+    assert [it["track"]["id"] for it in doc["items"]][:3] == [t[0].id, t[1].id, t[2].id]
+    assert by_id[t[0].id]["in_set"] is True and by_id[t[0].id]["from_playlist"] is True
+    assert by_id[extra.id]["in_set"] is True and by_id[extra.id]["from_playlist"] is False
+
+    # la playlist cambia: il materiale la segue, il set no
+    from app.repositories import remove_track_from_playlist
+    remove_track_from_playlist(db, pl.id, t[0].id)
+    db.commit()
+    doc = client.get(f"/api/sets/{sid}/material").json()
+    assert {it["track"]["id"] for it in doc["items"]} == {t[1].id, t[2].id, t[0].id, extra.id}
+    assert {it["track"]["id"] for it in doc["items"] if it["from_playlist"]} == {t[1].id, t[2].id}
+    assert client.get(f"/api/sets/{sid}/manual").json()["track_count"] == 2
+
+    only_owned = client.get(f"/api/sets/{sid}/material", params={"owned": "true"}).json()["items"]
+    assert t[2].id not in {it["track"]["id"] for it in only_owned}
+    unused = client.get(f"/api/sets/{sid}/material", params={"unused": "true"}).json()["items"]
+    assert {it["track"]["id"] for it in unused} == {t[1].id, t[2].id}
+
+    lib = Track(source_type="spotify", title="Rain", artist="Kerri Chandler", has_local_file=True)
+    db.add(lib)
+    db.commit()
+    found = client.get(f"/api/sets/{sid}/material", params={"q": "kerri"}).json()["items"]
+    assert [it["track"]["id"] for it in found] == [lib.id]
+    assert found[0]["from_playlist"] is False and found[0]["in_set"] is False
+
+
+def test_materiale_senza_playlist(client_db):
+    client, db = client_db
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    doc = client.get(f"/api/sets/{sid}/material").json()
+    assert doc["playlist_id"] is None and doc["items"] == []

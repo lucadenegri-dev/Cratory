@@ -298,6 +298,18 @@ class RowPatchRequest(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class MaterialItemOut(BaseModel):
+    track: TrackOut
+    in_set: bool
+    from_playlist: bool
+
+
+class MaterialOut(BaseModel):
+    playlist_id: int | None = None
+    playlist_name: str | None = None
+    items: list[MaterialItemOut] = []
+
+
 # --- Alternative per traccia (F9) --------------------------------------------
 
 

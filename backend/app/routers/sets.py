@@ -11,7 +11,13 @@ from sqlalchemy.orm import Session
 from app.core.http_errors import api_error
 from app.db import SessionLocal, get_db
 from app.integrations.llm import LLMError, LLMNotConfigured, get_llm_client, llm_configured
-from app.repositories import effective_genres_for_tracks, file_tags_for_tracks, get_setlist, list_setlists
+from app.repositories import (
+    effective_genres_for_tracks,
+    file_tags_for_tracks,
+    get_playlist,
+    get_setlist,
+    list_setlists,
+)
 from app.schemas import (
     AddTrackRequest,
     AlternativesRequest,
@@ -20,6 +26,8 @@ from app.schemas import (
     GenerateStatusOut,
     ManualSetCreate,
     ManualSetOut,
+    MaterialItemOut,
+    MaterialOut,
     MoveTrackRequest,
     ReplaceTrackRequest,
     RowMoveRequest,
@@ -30,10 +38,11 @@ from app.schemas import (
     SetlistSummaryOut,
     SetRenameRequest,
 )
-from app.serializers import alternative_out, manual_set_out, setlist_out, setlist_summary_out
+from app.serializers import alternative_out, manual_set_out, setlist_out, setlist_summary_out, track_out
 from app.services.ai_curation import run_curated_generation
 from app.services.alternatives import AlternativesError, find_alternatives
 from app.services.app_state import get_language
+from app.services.manual_material import material_for
 from app.services.manual_set import (
     ManualSetError,
     ManualSetNotFound,
@@ -188,6 +197,25 @@ def get_manual(setlist_id: int, db: Session = Depends(get_db)):
         return manual_set_out(load_manual_set(db, setlist_id), db)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
+
+
+@router.get("/{setlist_id}/material", response_model=MaterialOut)
+def get_material(setlist_id: int, q: str | None = Query(default=None, max_length=200),
+                 owned: bool = False, unused: bool = False, db: Session = Depends(get_db)):
+    """Playlist di origine aggiornata + tracce nel set + (con q) ricerca in libreria."""
+    try:
+        setlist = load_manual_set(db, setlist_id)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+    items = material_for(db, setlist, q=q, owned=owned, unused=unused)
+    ft_map = file_tags_for_tracks(db, [t.id for t, _, _ in items])
+    playlist = get_playlist(db, setlist.source_playlist_id) if setlist.source_playlist_id else None
+    return MaterialOut(
+        playlist_id=setlist.source_playlist_id,
+        playlist_name=playlist.name if playlist is not None else None,
+        items=[MaterialItemOut(track=track_out(t, ft_map.get(t.id)), in_set=in_set, from_playlist=fp)
+               for t, in_set, fp in items],
+    )
 
 
 @router.post("/{setlist_id}/rows", response_model=ManualSetOut)
