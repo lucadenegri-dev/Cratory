@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import {
-  ApiError, errText, fmtDuration, getManualSet, getMaterial, insertRows, moveRow, patchRow, removeRow,
+  ApiError, apiDelete, errText, fmtDuration, getManualSet, getMaterial, insertRows, moveRow, patchRow, removeRow,
   type ManualRow, type ManualSet, type Material, type MaterialItem,
 } from "@/lib/api";
-import { Alert, Badge, Button, Card, CardHeader, Loading } from "@/components/ui";
+import { Alert, Badge, Button, Card, CardHeader, Loading, Modal } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { MaterialPanel } from "@/components/set-builder/material-panel";
 import { PathPanel } from "@/components/set-builder/path-panel";
@@ -22,6 +22,7 @@ export default function ManualSetPage() {
 
 function ManualSetInner() {
   const t = useT();
+  const router = useRouter();
   const id = Number(useSearchParams().get("id") ?? "");
   const [set, setSet] = useState<ManualSet | null>(null);
   const [material, setMaterial] = useState<Material | null>(null);
@@ -32,6 +33,7 @@ function ManualSetInner() {
   const [query, setQuery] = useState("");
   const [owned, setOwned] = useState(false);
   const [unused, setUnused] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstRun = useRef(true);
 
@@ -86,6 +88,12 @@ function ManualSetInner() {
     setSaveState(next ? "saved" : "error");
   };
 
+  const doDelete = async () => {
+    setConfirmDelete(false);
+    try { await apiDelete(`/api/sets/${id}`); router.push("/sets"); }
+    catch (e) { setError(errText(e)); }
+  };
+
   const rows = set?.blocks.filter((b) => b.placement === "main").flatMap((b) => b.rows) ?? [];
   const selected = rows.find((r) => r.id === selectedRowId) ?? null;
 
@@ -94,7 +102,12 @@ function ManualSetInner() {
   const meta = set ? t.sets.manual.tracksMeta(set.track_count, fmtDuration(set.total_file_seconds)) : undefined;
 
   return (
-    <PageLayout title={set?.name ?? t.sets.manual.pageTitle} meta={meta}>
+    <PageLayout title={set?.name ?? t.sets.manual.pageTitle} meta={meta}
+      action={set && (
+        <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
+          <Trash2 size={15} /> {t.sets.deleteSetButton}
+        </Button>
+      )}>
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted">
         <Link href="/sets" className="inline-flex items-center gap-1 hover:text-fg"><ArrowLeft size={14} /> {t.sets.backLink}</Link>
         <Badge>{t.sets.manual.manualBadge}</Badge>
@@ -125,6 +138,15 @@ function ManualSetInner() {
             <DetailPanel row={selected} saveState={saveState} onSaveNote={(r, n) => void onSaveNote(r, n)} />
           </Card>
         </div>
+      )}
+
+      {/* Conferma eliminazione: unico modo per buttare via un set manuale
+          creato per errore, non avendo un editor classico da aprire. */}
+      {set && (
+        <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title={t.sets.deleteModalTitle}
+          footer={<><Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>{t.common.cancel}</Button><Button variant="danger" size="sm" onClick={() => void doDelete()}><Trash2 size={15} /> {t.common.delete}</Button></>}>
+          <p className="text-sm text-muted">{t.sets.deleteConfirmBody(set.name)}</p>
+        </Modal>
       )}
     </PageLayout>
   );

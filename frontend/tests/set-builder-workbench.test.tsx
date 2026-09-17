@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   moveRow: vi.fn(),
   patchRow: vi.fn(),
   removeRow: vi.fn(),
+  apiDelete: vi.fn(),
 }));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -52,6 +53,7 @@ const material = (inSet: number[] = []) => ({
 beforeEach(() => {
   api.getManualSet.mockResolvedValue(set());
   api.getMaterial.mockResolvedValue(material());
+  api.apiDelete.mockResolvedValue(undefined);
 });
 afterEach(() => {
   cleanup();
@@ -104,5 +106,40 @@ describe("set manuale: il gesto base", () => {
     expect(await screen.findByText("Il set è cambiato altrove")).toBeTruthy();
     fireEvent.click(screen.getByText("Ricarica"));
     await waitFor(() => expect(api.getManualSet).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("set manuale: eliminazione", () => {
+  it("chiede conferma prima di eliminare", async () => {
+    mount();
+    await screen.findByText(/Traccia 1/);
+    expect(screen.queryByText("Eliminare il set?")).toBeNull();
+    fireEvent.click(screen.getByText("Elimina set"));
+    expect(await screen.findByText("Eliminare il set?")).toBeTruthy();
+    expect(screen.getByText("«Sabato» verrà eliminato definitivamente.")).toBeTruthy();
+    expect(api.apiDelete).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("confermando chiama l'endpoint di cancellazione e torna a /sets", async () => {
+    mount();
+    await screen.findByText(/Traccia 1/);
+    fireEvent.click(screen.getByText("Elimina set"));
+    await screen.findByText("Eliminare il set?");
+    // Due bottoni "Elimina...": quello nel footer del modal e' "Elimina" (common.delete).
+    fireEvent.click(screen.getByRole("button", { name: "Elimina" }));
+    await waitFor(() => expect(api.apiDelete).toHaveBeenCalledWith("/api/sets/7"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/sets"));
+  });
+
+  it("annullando non chiama l'endpoint ne' naviga", async () => {
+    mount();
+    await screen.findByText(/Traccia 1/);
+    fireEvent.click(screen.getByText("Elimina set"));
+    await screen.findByText("Eliminare il set?");
+    fireEvent.click(screen.getByText("Annulla"));
+    await waitFor(() => expect(screen.queryByText("Eliminare il set?")).toBeNull());
+    expect(api.apiDelete).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
   });
 });
