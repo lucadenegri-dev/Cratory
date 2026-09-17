@@ -28,6 +28,9 @@ const ROUTES: { path: string; title: string | null }[] = [
   { path: "/wishlist", title: "Wishlist" },
   { path: "/downloads", title: "Download" },
   { path: "/sets", title: null },
+  // Rotta a query del set manuale: senza `?id=` mostra l'alert "Set non trovato"
+  // sotto l'h1 del pageTitle, nessun fetch.
+  { path: "/sets/manual", title: "Set" },
   { path: "/transitions", title: null },
   { path: "/analysis", title: null },
   // La rotta resta "/discovery" ma l'intestazione (e la voce di nav,

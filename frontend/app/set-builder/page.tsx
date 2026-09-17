@@ -8,7 +8,7 @@ import {
   TrendingUp, SlidersHorizontal, ArrowRight, Sunrise, Flame, Sunset, ChevronDown,
 } from "lucide-react";
 import {
-  apiGet, apiPost, errText,
+  apiGet, apiPost, createManualSet, errText,
   type AiStatus, type GenStatus, type Playlist,
 } from "@/lib/api";
 import { Card, Button, Input, Textarea, Select, Field, Checkbox, EqMeter, Alert, EmptyState } from "@/components/ui";
@@ -201,6 +201,20 @@ function SetBuilderInner() {
           <HelpCircle size={15} />
           {t.setBuilder.guideLinkLabel}
         </Link>
+      }
+      marginaliaTitle={t.sets.actionsTitle}
+      marginalia={
+        <Button
+          variant="outline" size="sm" className="w-full"
+          onClick={async () => {
+            try {
+              const s = await createManualSet({ playlist_id: playlistId ? Number(playlistId) : null });
+              router.push(`/sets/manual?id=${s.id}`);
+            } catch (e) { setError(errText(e)); }
+          }}
+        >
+          {t.sets.manual.prepareButton}
+        </Button>
       }
     >
       <p className="mb-6 text-sm text-muted">

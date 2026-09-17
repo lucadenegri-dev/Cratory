@@ -460,6 +460,23 @@ missing BPM bridges, flat energy, harmonic dead ends). `/api/transitions` classi
 of tracks on its own. `services/labels.py` aggregates the library per record label, reading
 the label from the effective tag.
 
+### Manual set (tappa 1)
+
+A DJ can build a set by hand instead of generating one: `Setlist.kind` is `generated`
+(everything above) or `manual`. A manual set has no strategy, no target duration and
+never runs `assign_roles` or transition recomputation — `services/manual_set.py` is
+its own small deterministic service, independent of the generator, that applies one
+mutation per call inside a transaction and bumps `Setlist.revision`; every mutating
+call must echo back the `revision` it last saw, or get `409 set_revision_conflict`. A
+`SetlistBlock` groups the set's `SetlistTrack` rows, identified by id rather than
+position; a row is either a track or a gap (`slot_kind`), and either can carry a
+free-text note. `services/manual_material.py` is the material behind the workbench:
+the source playlist read fresh, the tracks already in the set, and a library search.
+The frontend's `/sets/manual?id=…` (three panels: material, path, detail) and the
+list at `/sets` route by `kind` — see
+`docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the staged plan
+(this is tappa 1 only: no alternatives, no bench/undo, no export).
+
 ## Discovery
 
 Discovery works by **taste**, not by technical compatibility — that stays with the Set

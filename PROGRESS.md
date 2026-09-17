@@ -8,6 +8,20 @@ described in `CLAUDE.md`.
 
 ## Current state by area
 
+- **Set manuale, tappa 1 (2026-09-18).** Un DJ prepara un set a mano da una playlist:
+  "Prepara un set" da `/set-builder` e da `/playlists/detail?id=…` crea un
+  `Setlist` `kind="manual"` e apre `/sets/manual?id=…` (tre pannelli — materiale,
+  percorso, dettaglio — sopra il player esistente). Il materiale è la playlist di
+  origine letta aggiornata più le tracce già nel set più, con una ricerca, la
+  libreria. Si inseriscono tracce o un varco, si sposta una riga, si toglie, si
+  scrive un appunto libero per riga; ogni mutazione porta `expected_revision` e un
+  409 `set_revision_conflict` vuol dire ricaricare. La lista `/sets` instrada per
+  `kind` (badge "a mano") e il dettaglio classico rifiuta un set manuale con 409
+  `set_is_manual`. Cosa non c'è ancora, di proposito: alternative/riserve/confronto,
+  sequenze multiple/banco/undo, note di coppia/stato "provato"/`play_bpm`/pitch,
+  durata pianificata, export dedicato, "riempi il varco" — tappe 2-6 del piano in
+  `docs/superpowers/plans/2026-09-17-set-manuale-tappa-1.md`.
+
 - **Impostazioni in cinque sezioni (2026-09-15).** Generali · Libreria · Download ·
   Collegamenti · Backup, scelte da `?section=` con i pannelli montati e nascosti,
   così una bozza non salvata sopravvive al cambio sezione e ogni form di cartelle

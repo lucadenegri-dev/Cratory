@@ -12,7 +12,7 @@ import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDate, fmtDateShort, fmtDuration, fmtDurationLong,
   startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack, renamePlaylist,
   setPlaylistOrder, removeTracksFromPlaylist, duplicatePlaylist, playlistSyncLog, enqueueDownloads,
-  uploadPlaylistArtwork, deletePlaylistArtwork,
+  uploadPlaylistArtwork, deletePlaylistArtwork, createManualSet,
   type Playlist, type Track, type GapAnalysis, type PlaylistSyncEvent,
 } from "@/lib/api";
 import { useBackLink, withFrom } from "@/lib/back-link";
@@ -494,6 +494,17 @@ function PlaylistDetailInner() {
   const marginalia = (
     <div className="space-y-3">
       <ButtonLink href={`/set-builder?playlist=${pid}`} size="sm" block><Sparkles size={15} /> {t.playlists.buildSetButton}</ButtonLink>
+      <Button
+        size="sm" variant="outline" className="w-full"
+        onClick={async () => {
+          try {
+            const s = await createManualSet({ playlist_id: pid });
+            router.push(`/sets/manual?id=${s.id}`);
+          } catch (e) { setActionError(errText(e)); }
+        }}
+      >
+        {t.sets.manual.prepareButton}
+      </Button>
       {missing > 0 && (
         <Button size="sm" variant="outline" className="w-full" onClick={doDownloadMissing} disabled={downloading || !downloadsAvailable}>
           {downloading ? <Spinner /> : <Download size={15} />} {t.playlists.downloadMissingButton(missing)}

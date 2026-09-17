@@ -517,7 +517,64 @@ neighbours.
 `markdown` | `m3u8`. CSV includes `local_path` (empty for tracks without a file).
 `m3u8` is importable in Rekordbox and lists absolute local paths; tracks without a
 local file are excluded and their count noted in a leading comment. To export to
-Spotify instead, use `POST /api/spotify/create-playlist`.
+Spotify instead, use `POST /api/spotify/create-playlist`. This export stays scoped to
+generated sets: the manual set below has no dedicated export in this stage.
+
+### Set manuale (banco di preparazione, tappa 1)
+
+```text
+POST   /api/sets/manual
+GET    /api/sets/{setlist_id}/manual
+GET    /api/sets/{setlist_id}/material
+POST   /api/sets/{setlist_id}/rows
+POST   /api/sets/{setlist_id}/rows/{row_id}/move
+PATCH  /api/sets/{setlist_id}/rows/{row_id}
+DELETE /api/sets/{setlist_id}/rows/{row_id}
+```
+
+A DJ builds a set by hand from a playlist instead of generating one:
+`SetlistSummaryOut.kind` is `generated` (the engine above) or `manual`, and
+`GET /api/sets/{setlist_id}` — the classic detail endpoint — now answers
+`409 set_is_manual` for a manual set instead of serving it.
+
+`POST /api/sets/manual` creates an empty manual set — body `{name?, playlist_id?}`,
+both optional — and returns it with `201`. Its own shape comes from
+`GET /api/sets/{setlist_id}/manual` (`ManualSetOut`): `revision`,
+`source_playlist_id`/`source_playlist_name` (`null` if the playlist was since
+deleted), `notes`, and `blocks` (`ManualBlockOut`, each with `rows`). A row
+(`ManualRowOut`) has `slot_kind` `track` | `gap`; `track` is `null` on a gap, and any
+row can carry a free-text `note`.
+
+`GET /api/sets/{setlist_id}/material?q=&owned=&unused=` returns the source playlist
+read fresh (not a snapshot taken at creation), the tracks already in the set, and —
+with `q` — a library search; each `MaterialItemOut` flags `in_set` and
+`from_playlist`.
+
+Every mutation carries `expected_revision` — body field on the three POST/PATCH
+below, query parameter on the DELETE — and returns the whole updated `ManualSetOut`
+with the new `revision`. A mismatch answers `409 set_revision_conflict` with the
+current value in `current`: the rule is reload and retry, never merge blindly, and
+rows are always addressed **by id**, never by position, so a stale position never
+lands on the wrong row.
+
+- `POST .../rows` inserts either tracks (`track_ids`, kept in the given order) or a
+  single gap (`gap: true`), after `after_row_id` (`null` appends at the end);
+  exactly one of tracks-or-gap per call.
+- `POST .../rows/{row_id}/move` takes a 1-based `position` inside the row's block.
+- `PATCH .../rows/{row_id}` sets or clears `note` (max 2000 characters).
+- `DELETE .../rows/{row_id}` removes one row.
+
+New error codes: `404 set_not_found`, `409 set_not_manual` (a generated set hit a
+manual-only endpoint), `404 set_row_not_found`, `404 playlist_not_found` (creating
+from a playlist id that no longer exists), `422 manual_set_error` with a `reason` for
+anything else domain-specific, plus the `409 set_is_manual` above on the classic
+detail endpoint.
+
+Manual sets never go through `assign_roles`, transition recomputation or the
+deterministic generator above. This stage has no alternatives, no reserves, no
+multiple sequences/bench, no undo, no pair notes or "tried" state, no `play_bpm` or
+pitch percentage, no planned duration and no dedicated export — see
+`docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the full staged plan.
 
 ## Transitions
 
