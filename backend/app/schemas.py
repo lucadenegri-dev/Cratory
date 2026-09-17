@@ -233,6 +233,71 @@ class AddTrackRequest(BaseModel):
     position: int | None = Field(default=None, ge=1)
 
 
+# --- Set manuale (banco di preparazione, tappa 1) ------------------------------
+
+
+class ManualSetCreate(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+    playlist_id: int | None = None
+
+
+class ManualRowOut(BaseModel):
+    id: int
+    block_id: int | None = None
+    position: int
+    slot_kind: Literal["track", "gap"]
+    track: TrackOut | None = None  # None sui varchi
+    note: str | None = None
+
+
+class ManualBlockOut(BaseModel):
+    id: int
+    name: str | None = None
+    placement: Literal["main", "bench"]
+    position: int
+    rows: list[ManualRowOut] = []
+
+
+class ManualSetOut(BaseModel):
+    id: int
+    name: str
+    kind: str
+    revision: int
+    source_playlist_id: int | None = None
+    source_playlist_name: str | None = None  # None se la playlist e' stata cancellata
+    notes: str | None = None
+    blocks: list[ManualBlockOut] = []
+    track_count: int = 0
+    total_file_seconds: int = 0  # somma delle durate dei file, i varchi non contano
+    created_at: datetime
+    updated_at: datetime
+
+
+class RowsInsertRequest(BaseModel):
+    """Tracce (nell'ordine dato) oppure un varco; esattamente uno dei due."""
+
+    expected_revision: int = Field(ge=0)
+    track_ids: list[int] = []
+    gap: bool = False
+    after_row_id: int | None = None  # None = in coda
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> "RowsInsertRequest":
+        if self.gap == bool(self.track_ids):
+            raise ValueError("Give either track_ids or gap")
+        return self
+
+
+class RowMoveRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    position: int = Field(ge=1)  # 1-based dentro il blocco
+
+
+class RowPatchRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    note: str | None = Field(default=None, max_length=2000)
+
+
 # --- Alternative per traccia (F9) --------------------------------------------
 
 

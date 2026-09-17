@@ -18,17 +18,35 @@ from app.schemas import (
     AlternativesResponse,
     GenerateAsyncStartOut,
     GenerateStatusOut,
+    ManualSetCreate,
+    ManualSetOut,
     MoveTrackRequest,
     ReplaceTrackRequest,
+    RowMoveRequest,
+    RowPatchRequest,
+    RowsInsertRequest,
     SetGenerationRequest,
     SetlistOut,
     SetlistSummaryOut,
     SetRenameRequest,
 )
-from app.serializers import alternative_out, setlist_out, setlist_summary_out
+from app.serializers import alternative_out, manual_set_out, setlist_out, setlist_summary_out
 from app.services.ai_curation import run_curated_generation
 from app.services.alternatives import AlternativesError, find_alternatives
 from app.services.app_state import get_language
+from app.services.manual_set import (
+    ManualSetError,
+    ManualSetNotFound,
+    ManualSetNotManual,
+    RevisionConflict,
+    RowNotFound,
+    create_manual_set,
+    insert_rows,
+    load_manual_set,
+    move_row,
+    remove_row,
+    update_row_note,
+)
 from app.services.set_editor import (
     SetEditError,
     add_track,
@@ -125,6 +143,30 @@ def generate_status():
     return dict(_gen_state)
 
 
+def _manual_error(exc: ManualSetError) -> HTTPException:
+    if isinstance(exc, RevisionConflict):
+        return api_error(409, "set_revision_conflict",
+                         f"The set changed (revision {exc.current}): reload and retry.", current=exc.current)
+    if isinstance(exc, ManualSetNotFound):
+        return api_error(404, "set_not_found", "Set not found")
+    if isinstance(exc, ManualSetNotManual):
+        return api_error(409, "set_not_manual", "This set was generated: open it in the classic editor")
+    if isinstance(exc, RowNotFound):
+        return api_error(404, "set_row_not_found", "Row not found")
+    if "Playlist not found" in str(exc):
+        return api_error(404, "playlist_not_found", "Playlist not found")
+    return api_error(422, "manual_set_error", f"Manual set error: {exc}", reason=str(exc))
+
+
+@router.post("/manual", response_model=ManualSetOut, status_code=201)
+def create_manual(req: ManualSetCreate, db: Session = Depends(get_db)):
+    """Set preparato a mano, vuoto, con la playlist di origine letta aggiornata."""
+    try:
+        return manual_set_out(create_manual_set(db, name=req.name, playlist_id=req.playlist_id), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
 @router.get("", response_model=list[SetlistSummaryOut])
 def get_all(db: Session = Depends(get_db)):
     return [setlist_summary_out(s) for s in list_setlists(db)]
@@ -135,7 +177,54 @@ def get_one(setlist_id: int, db: Session = Depends(get_db)):
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
         raise api_error(404, "set_not_found", "Set not found")
+    if setlist.kind == "manual":
+        raise api_error(409, "set_is_manual", "This set is manual: use /manual")
     return setlist_out(setlist, get_language(db), db=db)
+
+
+@router.get("/{setlist_id}/manual", response_model=ManualSetOut)
+def get_manual(setlist_id: int, db: Session = Depends(get_db)):
+    try:
+        return manual_set_out(load_manual_set(db, setlist_id), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.post("/{setlist_id}/rows", response_model=ManualSetOut)
+def rows_insert(setlist_id: int, req: RowsInsertRequest, db: Session = Depends(get_db)):
+    try:
+        return manual_set_out(insert_rows(
+            db, setlist_id, expected_revision=req.expected_revision,
+            track_ids=req.track_ids, gap=req.gap, after_row_id=req.after_row_id), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.post("/{setlist_id}/rows/{row_id}/move", response_model=ManualSetOut)
+def rows_move(setlist_id: int, row_id: int, req: RowMoveRequest, db: Session = Depends(get_db)):
+    try:
+        return manual_set_out(move_row(
+            db, setlist_id, row_id, expected_revision=req.expected_revision, position=req.position), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.patch("/{setlist_id}/rows/{row_id}", response_model=ManualSetOut)
+def rows_patch(setlist_id: int, row_id: int, req: RowPatchRequest, db: Session = Depends(get_db)):
+    try:
+        return manual_set_out(update_row_note(
+            db, setlist_id, row_id, expected_revision=req.expected_revision, note=req.note), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.delete("/{setlist_id}/rows/{row_id}", response_model=ManualSetOut)
+def rows_delete(setlist_id: int, row_id: int, expected_revision: int = Query(ge=0),
+                db: Session = Depends(get_db)):
+    try:
+        return manual_set_out(remove_row(db, setlist_id, row_id, expected_revision=expected_revision), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
 
 
 @router.post("/{setlist_id}/export", response_class=PlainTextResponse)

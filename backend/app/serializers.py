@@ -1,11 +1,16 @@
 """Conversione modelli ORM -> schemi Pydantic con campi derivati."""
 
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from app.models import Setlist, Track
-from app.repositories import FileTags, file_tags_for_tracks
+from app.repositories import FileTags, file_tags_for_tracks, get_playlist
 from app.schemas import (
     AlternativeOut,
+    ManualBlockOut,
+    ManualRowOut,
+    ManualSetOut,
     SetlistOut,
     SetlistSummaryOut,
     SetlistTrackOut,
@@ -150,4 +155,42 @@ def setlist_summary_out(setlist: Setlist) -> SetlistSummaryOut:
         total_duration_seconds=sum(st.track.duration_seconds or 0 for st in with_track),
         generated_by=setlist.generated_by or "algorithmic",
         created_at=setlist.created_at,
+    )
+
+
+def _naive(dt: datetime) -> datetime:
+    """Normalizza a naive UTC: `Setlist.created_at`/`updated_at` sono aware appena
+    creati in memoria (default Python `utcnow()`), ma tornano naive non appena
+    l'oggetto viene ricaricato da SQLite (colonna `DateTime` senza timezone). Senza
+    questa normalizzazione lo stesso set serializza diversamente a seconda che la
+    riga sia stata appena scritta o riletta, rompendo l'idempotenza del documento."""
+    return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
+def manual_set_out(setlist: Setlist, db: Session) -> ManualSetOut:
+    """Documento del set manuale: blocchi in ordine, righe in ordine, tag
+    effettivi dei file come nel resto dell'app (una sola query)."""
+    track_ids = [st.track_id for st in setlist.tracks if st.track_id is not None]
+    ft_map = file_tags_for_tracks(db, track_ids)
+    blocks = []
+    for block in sorted(setlist.blocks, key=lambda b: b.position):
+        rows = sorted((st for st in setlist.tracks if st.block_id == block.id), key=lambda st: st.position)
+        blocks.append(ManualBlockOut(
+            id=block.id, name=block.name, placement=block.placement, position=block.position,
+            rows=[ManualRowOut(
+                id=st.id, block_id=st.block_id, position=st.position, slot_kind=st.slot_kind,
+                track=track_out(st.track, ft_map.get(st.track_id)) if st.track is not None else None,
+                note=st.note,
+            ) for st in rows],
+        ))
+    with_track = [st for st in setlist.tracks if st.track is not None]
+    playlist = get_playlist(db, setlist.source_playlist_id) if setlist.source_playlist_id else None
+    return ManualSetOut(
+        id=setlist.id, name=setlist.name, kind=setlist.kind, revision=setlist.revision,
+        source_playlist_id=setlist.source_playlist_id,
+        source_playlist_name=playlist.name if playlist is not None else None,
+        notes=setlist.notes, blocks=blocks,
+        track_count=len(with_track),
+        total_file_seconds=sum(st.track.duration_seconds or 0 for st in with_track),
+        created_at=_naive(setlist.created_at), updated_at=_naive(setlist.updated_at),
     )
