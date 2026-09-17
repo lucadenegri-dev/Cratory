@@ -213,8 +213,41 @@ class Setlist(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
+    # Banco di preparazione (spec 2026-09-15): generated = nato dal generatore,
+    # manual = preparato a mano. I set manual non passano mai da assign_roles.
+    kind: Mapped[str] = mapped_column(String, default="generated", server_default="generated", index=True)
+    # Playlist di origine, letta AGGIORNATA come materiale (nessuna copia della
+    # membership). Azzerata da repositories.delete_playlist: sui DB migrati la
+    # colonna nasce senza REFERENCES (vedi db._migrate_add_model_columns).
+    source_playlist_id: Mapped[int | None] = mapped_column(ForeignKey("playlists.id"), index=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+    # Cambia a ogni modifica strutturale: il client la rimanda come
+    # expected_revision e il server risponde 409 se non coincide.
+    revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
     tracks: Mapped[list["SetlistTrack"]] = relationship(
         back_populates="setlist", cascade="all, delete-orphan", order_by="SetlistTrack.position"
+    )
+    blocks: Mapped[list["SetlistBlock"]] = relationship(
+        back_populates="setlist", cascade="all, delete-orphan", order_by="SetlistBlock.position"
+    )
+
+
+class SetlistBlock(Base):
+    """Sequenza di un set manuale. placement: main (nel percorso) | bench (banco).
+    Le righe (SetlistTrack) puntano al blocco; block_id NULL = riserva."""
+
+    __tablename__ = "setlist_blocks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    setlist_id: Mapped[int] = mapped_column(ForeignKey("setlists.id"), index=True)
+    name: Mapped[str | None] = mapped_column(String)
+    placement: Mapped[str] = mapped_column(String, default="main", server_default="main")
+    position: Mapped[int] = mapped_column(Integer, default=1)
+
+    setlist: Mapped[Setlist] = relationship(back_populates="blocks")
+    rows: Mapped[list["SetlistTrack"]] = relationship(
+        back_populates="block", order_by="SetlistTrack.position"
     )
 
 
@@ -223,8 +256,16 @@ class SetlistTrack(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     setlist_id: Mapped[int] = mapped_column(ForeignKey("setlists.id"), index=True)
-    track_id: Mapped[int] = mapped_column(ForeignKey("tracks.id"), index=True)
+    # Nullable dal banco di preparazione: un varco (slot_kind='gap') e' una riga
+    # senza traccia. Sui DB esistenti la NOT NULL cade con un rebuild una tantum
+    # (db._migrate_setlist_tracks_nullable_track).
+    track_id: Mapped[int | None] = mapped_column(ForeignKey("tracks.id"), index=True)
+    # Posizione dentro il blocco (o dentro la riserva). Sui set generated,
+    # senza blocchi, e' l'ordine del set come sempre.
     position: Mapped[int] = mapped_column(Integer)
+    slot_kind: Mapped[str] = mapped_column(String, default="track", server_default="track")
+    block_id: Mapped[int | None] = mapped_column(ForeignKey("setlist_blocks.id"), index=True)
+    note: Mapped[str | None] = mapped_column(Text)
     # Ruolo della traccia nell'arco del set: intro|warmup|groove|transition|peak|release|closing
     role: Mapped[str | None] = mapped_column(String)
     transition_score: Mapped[float | None] = mapped_column(Float)
@@ -237,7 +278,8 @@ class SetlistTrack(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     setlist: Mapped[Setlist] = relationship(back_populates="tracks")
-    track: Mapped[Track] = relationship()
+    block: Mapped["SetlistBlock | None"] = relationship(back_populates="rows")
+    track: Mapped[Track | None] = relationship()
 
 
 class DjSet(Base):

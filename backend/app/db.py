@@ -47,6 +47,7 @@ def ensure_schema(eng=None) -> None:
     Base.metadata.create_all(eng)
     with eng.begin() as conn:
         _migrate_add_model_columns(conn, eng.dialect)
+        _migrate_setlist_tracks_nullable_track(conn)
         for table in Base.metadata.tables.values():
             existing_cols = {c["name"] for c in inspect(conn).get_columns(table.name)}
             for idx in table.indexes:
@@ -118,6 +119,40 @@ def _column_add_ddl(col, dialect) -> str:
         if not col.nullable:
             parts.append("NOT NULL")  # SQLite lo accetta in ADD COLUMN solo col DEFAULT
     return " ".join(parts)
+
+
+def _migrate_setlist_tracks_nullable_track(conn) -> None:
+    """Banco di preparazione: `setlist_tracks.track_id` deve accettare NULL (varco).
+
+    SQLite non cambia la nullabilita' con ALTER: rebuild una tantum
+    crea-copia-drop-rename. Oggi nessuna tabella referenzia `setlist_tracks`
+    (le alternative arrivano in una tappa successiva e verranno create da
+    create_all DOPO questa funzione), quindi il RENAME non riscrive REFERENCES
+    altrui. Va eseguita dopo `_migrate_add_model_columns` (che ha gia' aggiunto
+    le colonne nuove alla tabella vecchia) e PRIMA della ricreazione degli
+    indici in `ensure_schema`: gli indici cadono col DROP e il loop del modello
+    li rifa' sulla tabella ricostruita. Idempotente: no-op se gia' nullable.
+    """
+    from sqlalchemy.schema import CreateTable
+
+    from app.models import SetlistTrack  # import differito: models importa db.Base
+
+    info = conn.execute(text('PRAGMA table_info("setlist_tracks")')).fetchall()
+    if not info:
+        return
+    notnull = {r[1]: bool(r[3]) for r in info}
+    if not notnull.get("track_id", False):
+        return
+    tmp = "setlist_tracks__rebuild"
+    conn.execute(text(f'DROP TABLE IF EXISTS "{tmp}"'))  # run precedente interrotta
+    ddl = str(CreateTable(SetlistTrack.__table__).compile(dialect=conn.dialect))
+    ddl = ddl.replace("CREATE TABLE setlist_tracks", f'CREATE TABLE "{tmp}"', 1)
+    conn.execute(text(ddl))
+    live = {r[1] for r in info}
+    cols = ", ".join(f'"{c}"' for c in SetlistTrack.__table__.columns.keys() if c in live)
+    conn.execute(text(f'INSERT INTO "{tmp}" ({cols}) SELECT {cols} FROM setlist_tracks'))
+    conn.execute(text("DROP TABLE setlist_tracks"))
+    conn.execute(text(f'ALTER TABLE "{tmp}" RENAME TO setlist_tracks'))
 
 
 # Tabelle dell'era Rekordbox/MVP1 rimosse dopo il pivot a playlist->set.
@@ -225,7 +260,12 @@ def _migrate_drop_legacy(conn) -> None:
     ))
     conn.execute(text(f"DELETE FROM tracks WHERE source_type IN ({legacy_src})"))
     conn.execute(text("DELETE FROM setlist_tracks WHERE track_id NOT IN (SELECT id FROM tracks)"))
-    conn.execute(text("DELETE FROM setlists WHERE id NOT IN (SELECT setlist_id FROM setlist_tracks)"))
+    # Un set manuale puo' essere vuoto per scelta (spec banco di preparazione):
+    # la potatura dei set senza righe riguarda solo quelli del generatore.
+    conn.execute(text(
+        "DELETE FROM setlists WHERE kind = 'generated' "
+        "AND id NOT IN (SELECT setlist_id FROM setlist_tracks)"
+    ))
 
 
 # Colonne enrichment/fingerprint rimosse con lo slim-down (slice 1B). `energy` resta.
