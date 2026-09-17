@@ -138,3 +138,41 @@ def test_endpoint_manuali_rifiutano_un_set_generato(client_db):
     generated = generate_set(db, SetGenerationRequest(target_duration_minutes=30, start_bpm=128))
     r = client.get(f"/api/sets/{generated.id}/manual")
     assert r.status_code == 409 and r.json()["detail"]["code"] == "set_not_manual"
+
+
+def test_created_at_concorde_tra_lista_e_dettaglio(client_db):
+    """La stessa riga manual deve avere lo stesso `created_at` (stessa stringa,
+    stesso formato) sia nella lista (`setlist_summary_out`) sia nel dettaglio
+    manuale (`manual_set_out`): altrimenti un client JS che fa `new Date(...)`
+    interpreta le due risposte come due istanti diversi (offset assente =
+    locale, offset presente = UTC).
+
+    Il round-trip via HTTP qui sotto non basta da solo a incastrare una
+    regressione: appena la richiesta che crea la riga ritorna, l'oggetto ORM
+    smette di avere riferimenti forti e sparisce dalla identity map (nessuna
+    `expire_on_commit`, ma nessuno lo tiene in vita); qualunque lettura
+    successiva - lista o dettaglio, con o senza normalizzazione nel
+    serializer - rilegge percio' un valore gia' naive da SQLite, e i due
+    riletti combaciano comunque per accidente. Per pizzicare davvero un
+    serializer che ha smesso di normalizzare, bisogna interrogare entrambi
+    mentre l'oggetto e' ancora caldo (aware) in memoria: lo si ottiene solo
+    creandolo qui nel test (riferimento tenuto in vita dalla variabile locale)
+    invece che tramite l'endpoint, il cui frame torna e libera l'oggetto prima
+    che il test possa ispezionarlo."""
+    client, db = client_db
+
+    from app.services.manual_set import create_manual_set
+    from app.serializers import manual_set_out, setlist_summary_out
+
+    setlist = create_manual_set(db, name="M", playlist_id=None)
+    assert setlist.created_at.tzinfo is not None  # ancora caldo: sanity check del setup
+
+    summary_created_at = setlist_summary_out(setlist).created_at.isoformat()
+    detail_created_at = manual_set_out(setlist, db).created_at.isoformat()
+    assert summary_created_at == detail_created_at
+
+    # E anche il round-trip end-to-end reale (dopo che l'oggetto e' stato
+    # rigenerato/riletto, entrambi gli endpoint devono restare d'accordo).
+    from_list = next(s for s in client.get("/api/sets").json() if s["id"] == setlist.id)
+    from_detail = client.get(f"/api/sets/{setlist.id}/manual").json()
+    assert from_list["created_at"] == from_detail["created_at"]

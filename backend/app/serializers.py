@@ -73,6 +73,15 @@ def track_detail_out(track: Track, file_tags: FileTags | None = None) -> TrackDe
                           file_artist=ft.artist, file_title=ft.title)
 
 
+def _naive(dt: datetime) -> datetime:
+    """Normalizza a naive UTC. Causa: `models.utcnow()` (default di
+    created_at/updated_at) restituisce aware, ma le colonne `DateTime` sono
+    naive - un giro DB le riporta senza tzinfo. Qui normalizziamo al confine
+    del serializer; i serializer fuori dalla famiglia set (Track, Playlist,
+    Organize, ...) hanno ancora lo stesso difetto a monte."""
+    return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
 def setlist_out(setlist: Setlist, lang: str = "it", db: Session | None = None) -> SetlistOut:
     # F10: classifichiamo ogni transizione dal brano precedente (deterministico,
     # ricalcolato in lettura dai dati delle due tracce: nessuna colonna in DB).
@@ -128,7 +137,7 @@ def setlist_out(setlist: Setlist, lang: str = "it", db: Session | None = None) -
         curation=setlist.curation or {},
         mixing_overview=mixing_overview([st.track for st in setlist.tracks], lang),
         total_duration_seconds=total,
-        created_at=setlist.created_at,
+        created_at=_naive(setlist.created_at),
         tracks=items,
     )
 
@@ -154,17 +163,8 @@ def setlist_summary_out(setlist: Setlist) -> SetlistSummaryOut:
         track_count=len(with_track),
         total_duration_seconds=sum(st.track.duration_seconds or 0 for st in with_track),
         generated_by=setlist.generated_by or "algorithmic",
-        created_at=setlist.created_at,
+        created_at=_naive(setlist.created_at),
     )
-
-
-def _naive(dt: datetime) -> datetime:
-    """Normalizza a naive UTC: `Setlist.created_at`/`updated_at` sono aware appena
-    creati in memoria (default Python `utcnow()`), ma tornano naive non appena
-    l'oggetto viene ricaricato da SQLite (colonna `DateTime` senza timezone). Senza
-    questa normalizzazione lo stesso set serializza diversamente a seconda che la
-    riga sia stata appena scritta o riletta, rompendo l'idempotenza del documento."""
-    return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
 
 
 def manual_set_out(setlist: Setlist, db: Session) -> ManualSetOut:
