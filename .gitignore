@@ -48,3 +48,6 @@ backend/data/backup-allinea/
 # credenziali di rilascio (password della chiave updater): mai nel repo
 release.env
 RELEASE.env
+
+# materiale di lavoro della generazione immagini (loghi, prove): non è sorgente
+output/

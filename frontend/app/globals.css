@@ -84,6 +84,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* La maschera usa l'alpha del simbolo approvato: currentColor segue subito
+   l'inchiostro del tema scuro/carta, senza duplicare o filtrare l'asset. */
+.cratory-mark {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask: url("/brand/cratory-mark.png") center / 145% no-repeat;
+  mask: url("/brand/cratory-mark.png") center / 145% no-repeat;
+}
+
 /* numeri tabellari per BPM, key, durate */
 .tnum {
   font-variant-numeric: tabular-nums;

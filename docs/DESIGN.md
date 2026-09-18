@@ -29,7 +29,7 @@ themes:
 typography:
   ui-font: "var(--font-mono-ui), ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace"
   brand:
-    fontWeight: 600
+    fontWeight: 500
     textTransform: "uppercase"
     letterSpacing: "0.16em"
   title-page:
@@ -166,6 +166,13 @@ list of tracks to add, and their files acquired into the library.
 ### Brand personality
 
 Sober, typographic, archival.
+
+The compact brand pairs the acid C monogram with `CRATORY` in DM Mono 500,
+uppercase, tracked at 0.16em. In the sidebar the mark is 24px, separated from
+the 14px wordmark by 10px. Its alpha mask takes the current text color, so it
+uses light ink in dark mode and dark ink on paper. The desktop/browser icon
+uses the same symbol in light ink on the dark background. The ASCII wordmark
+on the Home remains the larger editorial treatment.
 
 Cratory reads like a printed catalogue of a record collection: monospace everywhere, a
 hairline grid, square geometry, almost no color. Crate digging remains a creative act —
@@ -365,7 +372,7 @@ Personality comes from uppercase tracking on labels and the tabular-figure treat
 metrics, not from a second family.
 
 ### Hierarchy
-- **Brand** (600, uppercase, `0.16em` tracking): the `CRATORY` wordmark.
+- **Brand** (500, uppercase, `0.16em` tracking): the `CRATORY` wordmark beside the C monogram.
 - **Page title** (600, uppercase, `0.12em` tracking, `text-sm`): the page title only, rendered by `PageLayout`.
 - **Section/card/modal header** (600, uppercase, `tracking-wider`, base size `1rem`): `CardHeader` and the `Modal` title.
 - **Nav group header** (600, uppercase, `0.14em` tracking, `9px`, `fg-strong`): the four station groups in INDEX.
