@@ -22,9 +22,11 @@ export function PathPanel({
 }: Props) {
   const t = useT();
   const rows = set.blocks.filter((b) => b.placement === "main").flatMap((b) => b.rows);
-  if (rows.length === 0) return <p className="text-sm text-muted">{t.sets.manual.pathEmpty}</p>;
+  if (rows.length === 0) {
+    return <p data-testid="path-panel" className="text-sm text-muted">{t.sets.manual.pathEmpty}</p>;
+  }
   return (
-    <ol className="divide-y divide-border">
+    <ol data-testid="path-panel" className="divide-y divide-border">
       {rows.map((row, i) => (
         <li key={row.id} className={cn("flex items-center gap-2 py-1.5", selectedRowId === row.id && "bg-surface-2")}>
           <span className="tnum w-6 text-right text-xs text-muted">{row.position}</span>

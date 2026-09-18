@@ -22,6 +22,21 @@ described in `CLAUDE.md`.
   durata pianificata, export dedicato, "riempi il varco" — tappe 2-6 del piano in
   `docs/superpowers/plans/2026-09-17-set-manuale-tappa-1.md`.
 
+- **Set manuale, tappa 2 (2026-09-19).** Su una riga il DJ tiene delle candidate e
+  ne sceglie una: lo scambio porta l'attiva fra le alternative, così cambiare idea
+  non perde nulla, e su un varco la scelta lo trasforma in traccia mantenendone id e
+  appunto. Un confronto affiancato da due a quattro mostra BPM, tonalità e durata con
+  "sconosciuto" dove il dato manca, e ascolta solo le tracce in confronto. La riserva
+  — le tracce da parte per la serata — è fatta di righe senza blocco, non entra nel
+  conteggio né nella durata del set, e ha un filtro "da parte" nel materiale; una
+  traccia può stare in riserva e nel percorso insieme, il vincolo di unicità vale
+  dentro il percorso. `SetlistAlternative` è l'unica tabella nuova; il ciclo di vita
+  la conosce (lead orfani, tracce non referenziate, fusione di doppioni con
+  deduplica, pulizia dati). Cosa non c'è ancora: sequenze nominate e banco, annulla e
+  ripeti, note di coppia e stato "provato", `play_bpm`, durata pianificata, export
+  dedicato, "riempi il varco" — tappe 3-6, piano in
+  `docs/superpowers/plans/2026-09-19-set-manuale-tappa-2.md`.
+
 - **Impostazioni in cinque sezioni (2026-09-15).** Generali · Libreria · Download ·
   Collegamenti · Backup, scelte da `?section=` con i pannelli montati e nascosti,
   così una bozza non salvata sopravvive al cambio sezione e ogni form di cartelle

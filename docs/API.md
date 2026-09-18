@@ -520,7 +520,7 @@ local file are excluded and their count noted in a leading comment. To export to
 Spotify instead, use `POST /api/spotify/create-playlist`. This export stays scoped to
 generated sets: the manual set below has no dedicated export in this stage.
 
-### Set manuale (banco di preparazione, tappa 1)
+### Set manuale (banco di preparazione, tappe 1-2)
 
 ```text
 POST   /api/sets/manual
@@ -530,6 +530,9 @@ POST   /api/sets/{setlist_id}/rows
 POST   /api/sets/{setlist_id}/rows/{row_id}/move
 PATCH  /api/sets/{setlist_id}/rows/{row_id}
 DELETE /api/sets/{setlist_id}/rows/{row_id}
+POST   /api/sets/{setlist_id}/rows/{row_id}/alternatives
+POST   /api/sets/{setlist_id}/rows/{row_id}/alternatives/{alt_id}/choose
+DELETE /api/sets/{setlist_id}/rows/{row_id}/alternatives/{alt_id}
 ```
 
 A DJ builds a set by hand from a playlist instead of generating one:
@@ -543,12 +546,17 @@ both optional — and returns it with `201`. Its own shape comes from
 `source_playlist_id`/`source_playlist_name` (`null` if the playlist was since
 deleted), `notes`, and `blocks` (`ManualBlockOut`, each with `rows`). A row
 (`ManualRowOut`) has `slot_kind` `track` | `gap`; `track` is `null` on a gap, and any
-row can carry a free-text `note`.
+row can carry a free-text `note`, and `alternatives` — the candidates the DJ keeps
+beside it (`ManualAlternativeOut`: `id`, `position`, `track`, `note`). Alongside
+`blocks`, `reserve` holds the rows with no block: tracks set aside for the night,
+which are **not** part of the path and are excluded from `track_count` and
+`total_file_seconds`.
 
-`GET /api/sets/{setlist_id}/material?q=&owned=&unused=` returns the source playlist
-read fresh (not a snapshot taken at creation), the tracks already in the set, and —
-with `q` — a library search; each `MaterialItemOut` flags `in_set` and
-`from_playlist`.
+`GET /api/sets/{setlist_id}/material?q=&owned=&unused=&reserved=` returns the source
+playlist read fresh (not a snapshot taken at creation), the tracks already in the set,
+and — with `q` — a library search; each `MaterialItemOut` flags `in_set` (on a row of
+the **path**), `from_playlist` and `in_reserve`. `reserved=true` keeps only what is
+set aside.
 
 Every mutation carries `expected_revision` — body field on the three POST/PATCH
 below, query parameter on the DELETE — and returns the whole updated `ManualSetOut`
@@ -559,21 +567,41 @@ lands on the wrong row.
 
 - `POST .../rows` inserts either tracks (`track_ids`, kept in the given order) or a
   single gap (`gap: true`), after `after_row_id` (`null` appends at the end);
-  exactly one of tracks-or-gap per call.
-- `POST .../rows/{row_id}/move` takes a 1-based `position` inside the row's block.
+  exactly one of tracks-or-gap per call. `reserve: true` appends to the reserve
+  instead of the path — a gap there is refused, it belongs to the path. The "one
+  track at most once" rule holds **inside the path**: the same track may sit in the
+  reserve and in the path at once.
+- `POST .../rows/{row_id}/move` takes a 1-based `position` inside the row's
+  destination. `to_reserve` changes that destination: `true` moves the row to the
+  reserve, `false` brings it back into the path (refused if that track is already
+  there), `null` leaves it where it is. Both lists renumber contiguously.
+- `POST .../rows/{row_id}/alternatives` keeps 1 to 20 `track_ids` as candidates on
+  that row. The active track cannot be a candidate of itself, and the same candidate
+  is not added twice to one row.
+- `POST .../rows/{row_id}/alternatives/{alt_id}/choose` is a swap: the candidate
+  becomes the active track and the outgoing one takes its place among the
+  candidates. On a gap there is nothing to keep, so the slot simply becomes a
+  `track` row, holding on to its id and its note.
+- `DELETE .../rows/{row_id}/alternatives/{alt_id}` drops one candidate
+  (`expected_revision` as a query parameter, like the row delete).
 - `PATCH .../rows/{row_id}` sets or clears `note` (max 2000 characters).
 - `DELETE .../rows/{row_id}` removes one row.
 
 New error codes: `404 set_not_found`, `409 set_not_manual` (a generated set hit a
-manual-only endpoint), `404 set_row_not_found`, `404 playlist_not_found` (creating
+manual-only endpoint), `404 set_row_not_found`, `404 set_alternative_not_found`
+(the candidate does not sit on that row), `404 playlist_not_found` (creating
 from a playlist id that no longer exists), `422 manual_set_error` with a `reason` for
 anything else domain-specific, plus the `409 set_is_manual` above on the classic
 detail endpoint.
 
+These candidates are the DJ's own, saved on the row. They are unrelated to
+`POST /api/sets/{setlist_id}/alternatives`, the generator's *computed* suggestions,
+which stays reserved for generated sets.
+
 Manual sets never go through `assign_roles`, transition recomputation or the
-deterministic generator above. This stage has no alternatives, no reserves, no
-multiple sequences/bench, no undo, no pair notes or "tried" state, no `play_bpm` or
-pitch percentage, no planned duration and no dedicated export — see
+deterministic generator above. These stages have no multiple sequences or bench, no
+undo, no pair notes or "tried" state, no `play_bpm` or pitch percentage, no planned
+duration and no dedicated export — see
 `docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the full staged plan.
 
 ## Transitions

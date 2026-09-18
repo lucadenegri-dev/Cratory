@@ -460,7 +460,7 @@ missing BPM bridges, flat energy, harmonic dead ends). `/api/transitions` classi
 of tracks on its own. `services/labels.py` aggregates the library per record label, reading
 the label from the effective tag.
 
-### Manual set (tappa 1)
+### Manual set (tappe 1-2)
 
 A DJ can build a set by hand instead of generating one: `Setlist.kind` is `generated`
 (everything above) or `manual`. A manual set has no strategy, no target duration and
@@ -472,10 +472,22 @@ call must echo back the `revision` it last saw, or get `409 set_revision_conflic
 position; a row is either a track or a gap (`slot_kind`), and either can carry a
 free-text note. `services/manual_material.py` is the material behind the workbench:
 the source playlist read fresh, the tracks already in the set, and a library search.
+
+The active track on a row is `SetlistTrack.track_id`; the candidates the DJ keeps
+beside it live in `setlist_alternatives`, and choosing one is a swap — the outgoing
+track takes the candidate's place in that list, so nothing is lost by changing mind.
+The swap assigns the `track` relationship together with the foreign key: the
+serializer reads the relationship, and the key alone would leave the response showing
+the outgoing track. On a gap there is nothing to keep, so the slot becomes a `track`
+row keeping its id and note. The reserve — tracks set aside for the night — needs no
+table of its own: it is the rows with `block_id NULL`, and it stays out of the set's
+track count and duration. Both lists renumber contiguously, and the "one track at
+most once" rule binds the path only.
+
 The frontend's `/sets/manual?id=…` (three panels: material, path, detail) and the
 list at `/sets` route by `kind` — see
 `docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the staged plan
-(this is tappa 1 only: no alternatives, no bench/undo, no export).
+(tappe 1-2: no bench or named sequences, no undo, no pair notes, no export).
 
 ## Discovery
 
