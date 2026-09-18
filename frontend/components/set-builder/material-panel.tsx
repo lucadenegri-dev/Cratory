@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Bookmark, Layers, Plus } from "lucide-react";
 import { type Material, type MaterialItem } from "@/lib/api";
 import { Badge, Chip, Input, Loading } from "@/components/ui";
 import { TrackPlayButton } from "@/components/track-play-button";
@@ -15,19 +15,30 @@ type Props = {
   onOwned: (v: boolean) => void;
   onUnused: (v: boolean) => void;
   onAdd: (item: MaterialItem) => void;
+  onReserve: (item: MaterialItem) => void;
+  onAddAlternative: (item: MaterialItem) => void;
+  reserved: boolean;
+  onReserved: (v: boolean) => void;
+  /** Vero solo con una riga selezionata: senza, «tieni come alternativa» non
+   *  avrebbe un punto a cui attaccare la candidata. */
+  canAddAlternative: boolean;
 };
 
 /** Pannello Materiale: playlist aggiornata + ricerca; il tasto + manda la
  *  traccia in coda al percorso. Le tracce gia' nel set restano visibili. */
-export function MaterialPanel({ material, query, owned, unused, onQuery, onOwned, onUnused, onAdd }: Props) {
+export function MaterialPanel({
+  material, query, owned, unused, onQuery, onOwned, onUnused, onAdd,
+  onReserve, onAddAlternative, reserved, onReserved, canAddAlternative,
+}: Props) {
   const t = useT();
   const playable = material?.items.filter((it) => it.track.has_local_file).map((it) => it.track) ?? [];
   return (
-    <div className="flex h-full flex-col gap-3">
+    <div className="flex h-full flex-col gap-3" data-testid="material-panel">
       <Input value={query} onChange={(e) => onQuery(e.target.value)} placeholder={t.sets.manual.searchPlaceholder} />
       <div className="flex flex-wrap gap-2">
         <Chip on={owned} onClick={() => onOwned(!owned)}>{t.sets.manual.filterOwned}</Chip>
         <Chip on={unused} onClick={() => onUnused(!unused)}>{t.sets.manual.filterUnused}</Chip>
+        <Chip on={reserved} onClick={() => onReserved(!reserved)}>{t.sets.manual.filterReserved}</Chip>
       </div>
       {material === null && <Loading />}
       {material && material.items.length === 0 && (
@@ -50,6 +61,18 @@ export function MaterialPanel({ material, query, owned, unused, onQuery, onOwned
               <button type="button" title={t.sets.manual.addTitle} onClick={() => onAdd(it)}
                 className="grid h-7 w-7 place-items-center border border-border text-muted hover:text-fg">
                 <Plus size={14} />
+              </button>
+            )}
+            {!it.in_reserve && (
+              <button type="button" title={t.sets.manual.reserveAddTitle} onClick={() => onReserve(it)}
+                className="grid h-7 w-7 place-items-center border border-border text-muted hover:text-fg">
+                <Bookmark size={14} />
+              </button>
+            )}
+            {canAddAlternative && (
+              <button type="button" title={t.sets.manual.addAlternativeTitle} onClick={() => onAddAlternative(it)}
+                className="grid h-7 w-7 place-items-center border border-border text-muted hover:text-fg">
+                <Layers size={14} />
               </button>
             )}
           </li>

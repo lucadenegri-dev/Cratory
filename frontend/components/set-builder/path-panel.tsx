@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, MoveHorizontal, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Bookmark, MoveHorizontal, Trash2 } from "lucide-react";
 import { type ManualRow, type ManualSet } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
@@ -12,11 +12,14 @@ type Props = {
   onMove: (row: ManualRow, position: number) => void;
   onRemove: (row: ManualRow) => void;
   onGapAfter: (row: ManualRow) => void;
+  onToReserve: (row: ManualRow) => void;
 };
 
 /** Le righe del percorso (tappa 1: un solo blocco main). Ogni riga e' un
  *  bottone che la seleziona; le azioni sono per id, mai per posizione. */
-export function PathPanel({ set, selectedRowId, onSelect, onMove, onRemove, onGapAfter }: Props) {
+export function PathPanel({
+  set, selectedRowId, onSelect, onMove, onRemove, onGapAfter, onToReserve,
+}: Props) {
   const t = useT();
   const rows = set.blocks.filter((b) => b.placement === "main").flatMap((b) => b.rows);
   if (rows.length === 0) return <p className="text-sm text-muted">{t.sets.manual.pathEmpty}</p>;
@@ -40,6 +43,9 @@ export function PathPanel({ set, selectedRowId, onSelect, onMove, onRemove, onGa
           <button type="button" title={t.sets.manual.moveUpTitle} disabled={i === 0} onClick={() => onMove(row, row.position - 1)} className="text-muted disabled:opacity-30"><ArrowUp size={14} /></button>
           <button type="button" title={t.sets.manual.moveDownTitle} disabled={i === rows.length - 1} onClick={() => onMove(row, row.position + 1)} className="text-muted disabled:opacity-30"><ArrowDown size={14} /></button>
           <button type="button" title={t.sets.manual.addGapTitle} onClick={() => onGapAfter(row)} className="text-muted"><MoveHorizontal size={14} /></button>
+          {row.slot_kind === "track" && (
+            <button type="button" title={t.sets.manual.toReserveTitle} onClick={() => onToReserve(row)} className="text-muted hover:text-fg"><Bookmark size={14} /></button>
+          )}
           <button type="button" title={t.sets.manual.removeTitle} onClick={() => onRemove(row)} className="text-muted hover:text-danger"><Trash2 size={14} /></button>
         </li>
       ))}

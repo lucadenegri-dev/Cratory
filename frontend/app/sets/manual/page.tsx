@@ -5,14 +5,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import {
-  ApiError, apiDelete, errText, fmtDuration, getManualSet, getMaterial, insertRows, moveRow, patchRow, removeRow,
-  type ManualRow, type ManualSet, type Material, type MaterialItem,
+  ApiError, addAlternatives, apiDelete, chooseAlternative, errText, fmtDuration, getManualSet,
+  getMaterial, insertRows, moveRow, patchRow, removeAlternative, removeRow,
+  type ManualAlternative, type ManualRow, type ManualSet, type Material, type MaterialItem,
 } from "@/lib/api";
 import { Alert, Badge, Button, Card, CardHeader, Loading, Modal } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { MaterialPanel } from "@/components/set-builder/material-panel";
 import { PathPanel } from "@/components/set-builder/path-panel";
 import { DetailPanel, type SaveState } from "@/components/set-builder/detail-panel";
+import { ComparePanel } from "@/components/set-builder/compare-panel";
+import { ReservePanel } from "@/components/set-builder/reserve-panel";
 import { useT } from "@/lib/i18n";
 
 export default function ManualSetPage() {
@@ -33,14 +36,16 @@ function ManualSetInner() {
   const [query, setQuery] = useState("");
   const [owned, setOwned] = useState(false);
   const [unused, setUnused] = useState(false);
+  const [reserved, setReserved] = useState(false);
+  const [compareRowId, setCompareRowId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstRun = useRef(true);
 
-  const loadMaterial = useCallback(async (q = query, o = owned, u = unused) => {
+  const loadMaterial = useCallback(async (q = query, o = owned, u = unused, r = reserved) => {
     if (!id) return;
-    try { setMaterial(await getMaterial(id, { q, owned: o, unused: u })); } catch (e) { setError(errText(e)); }
-  }, [id, query, owned, unused]);
+    try { setMaterial(await getMaterial(id, { q, owned: o, unused: u, reserved: r })); } catch (e) { setError(errText(e)); }
+  }, [id, query, owned, unused, reserved]);
 
   const reloadAll = useCallback(async () => {
     if (!id) return;
@@ -55,9 +60,9 @@ function ManualSetInner() {
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; } // al montaggio carica gia' reloadAll
     if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => { void loadMaterial(query, owned, unused); }, 250);
+    debounce.current = setTimeout(() => { void loadMaterial(query, owned, unused, reserved); }, 250);
     return () => { if (debounce.current) clearTimeout(debounce.current); };
-  }, [query, owned, unused]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [query, owned, unused, reserved]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Applica una mutazione: la risposta e' la verita' (revision inclusa); su 409 chiede di ricaricare. */
   const mutate = useCallback(async (run: (rev: number) => Promise<ManualSet>) => {
@@ -82,6 +87,12 @@ function ManualSetInner() {
     if (selectedRowId === row.id) setSelectedRowId(null);
     return mutate((rev) => removeRow(id, row.id, rev));
   };
+  const onReserve = (item: MaterialItem) => mutate((rev) => insertRows(id, { expected_revision: rev, track_ids: [item.track.id], reserve: true }));
+  const onAddAlternative = (item: MaterialItem) => selected && mutate((rev) => addAlternatives(id, selected.id, { expected_revision: rev, track_ids: [item.track.id] }));
+  const onUseAlternative = (row: ManualRow, alt: ManualAlternative) => mutate((rev) => chooseAlternative(id, row.id, alt.id, { expected_revision: rev }));
+  const onRemoveAlternative = (row: ManualRow, alt: ManualAlternative) => mutate((rev) => removeAlternative(id, row.id, alt.id, rev));
+  const onToReserve = (row: ManualRow) => mutate((rev) => moveRow(id, row.id, { expected_revision: rev, position: 1, to_reserve: true }));
+  const onToPath = (row: ManualRow) => mutate((rev) => moveRow(id, row.id, { expected_revision: rev, position: 1, to_reserve: false }));
   const onSaveNote = async (row: ManualRow, note: string) => {
     setSaveState("saving");
     const next = await mutate((rev) => patchRow(id, row.id, { expected_revision: rev, note: note.trim() || null }));
@@ -96,6 +107,8 @@ function ManualSetInner() {
 
   const rows = set?.blocks.filter((b) => b.placement === "main").flatMap((b) => b.rows) ?? [];
   const selected = rows.find((r) => r.id === selectedRowId) ?? null;
+  // Il confronto si chiude da se' quando la riga sparisce dal percorso.
+  const compareRow = rows.find((r) => r.id === compareRowId) ?? null;
 
   if (!id) return <PageLayout title={t.sets.manual.pageTitle}><Alert tone="danger">{t.sets.manual.notFound}</Alert></PageLayout>;
 
@@ -128,14 +141,26 @@ function ManualSetInner() {
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)]">
           <Card className="p-4"><CardHeader title={t.sets.manual.materialTitle} />
             <MaterialPanel material={material} query={query} owned={owned} unused={unused}
-              onQuery={setQuery} onOwned={setOwned} onUnused={setUnused} onAdd={(it) => void onAdd(it)} />
+              reserved={reserved} onReserved={setReserved}
+              onQuery={setQuery} onOwned={setOwned} onUnused={setUnused} onAdd={(it) => void onAdd(it)}
+              onReserve={(it) => void onReserve(it)} onAddAlternative={(it) => void onAddAlternative(it)}
+              canAddAlternative={selected !== null} />
           </Card>
           <Card className="p-4"><CardHeader title={t.sets.manual.pathTitle} />
             <PathPanel set={set} selectedRowId={selectedRowId} onSelect={(rid) => { setSelectedRowId(rid); setSaveState("idle"); }}
-              onMove={(r, p) => void onMove(r, p)} onRemove={(r) => void onRemove(r)} onGapAfter={(r) => void onGapAfter(r)} />
+              onMove={(r, p) => void onMove(r, p)} onRemove={(r) => void onRemove(r)} onGapAfter={(r) => void onGapAfter(r)}
+              onToReserve={(r) => void onToReserve(r)} />
+            <ReservePanel rows={set.reserve} onToPath={(r) => void onToPath(r)} onRemove={(r) => void onRemove(r)} />
           </Card>
           <Card className="p-4"><CardHeader title={t.sets.manual.detailTitle} />
-            <DetailPanel row={selected} saveState={saveState} onSaveNote={(r, n) => void onSaveNote(r, n)} />
+            <DetailPanel row={selected} saveState={saveState} onSaveNote={(r, n) => void onSaveNote(r, n)}
+              onUseAlternative={(r, a) => void onUseAlternative(r, a)}
+              onRemoveAlternative={(r, a) => void onRemoveAlternative(r, a)}
+              onCompare={(r) => setCompareRowId(r.id)} />
+            {compareRow && (
+              <ComparePanel row={compareRow} onClose={() => setCompareRowId(null)}
+                onUse={(a) => void onUseAlternative(compareRow, a)} />
+            )}
           </Card>
         </div>
       )}

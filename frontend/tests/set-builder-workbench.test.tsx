@@ -42,12 +42,13 @@ const set = (revision = 0, rows: Array<{ id: number; track: ReturnType<typeof tr
   notes: null, track_count: rows.filter((r) => r.track).length, total_file_seconds: 300 * rows.filter((r) => r.track).length,
   created_at: "2026-09-17T10:00:00", updated_at: "2026-09-17T10:00:00",
   blocks: rows.length ? [{ id: 1, name: null, placement: "main" as const, position: 1,
-    rows: rows.map((r, i) => ({ id: r.id, block_id: 1, position: i + 1, slot_kind: r.track ? "track" as const : "gap" as const, track: r.track, note: null })) }] : [],
+    rows: rows.map((r, i) => ({ id: r.id, block_id: 1, position: i + 1, slot_kind: r.track ? "track" as const : "gap" as const, track: r.track, note: null, alternatives: [] })) }] : [],
+  reserve: [],
 });
 
 const material = (inSet: number[] = []) => ({
   playlist_id: 3, playlist_name: "Deep",
-  items: [1, 2].map((id) => ({ track: track(id), in_set: inSet.includes(id), from_playlist: true })),
+  items: [1, 2].map((id) => ({ track: track(id), in_set: inSet.includes(id), from_playlist: true, in_reserve: false })),
 });
 
 beforeEach(() => {
