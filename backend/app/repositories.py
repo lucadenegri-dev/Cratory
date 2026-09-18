@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
     DjSet, DjSetTrack, DownloadQueueItem, Playlist, PlaylistSyncEvent, Setlist,
-    SetlistTrack, Track, playlist_tracks, utcnow,
+    SetlistAlternative, SetlistTrack, Track, playlist_tracks, utcnow,
 )
 from app.organize.models import AudioFile
 
@@ -623,6 +623,10 @@ def orphan_lead_ids(db: Session, candidate_ids: Iterable[int] | None = None) -> 
         # Le righe varco del set manuale hanno track_id NULL: senza questa
         # guardia il NOT IN non troverebbe mai nulla (NULL nel sottoinsieme).
         Track.id.not_in(select(SetlistTrack.track_id).where(SetlistTrack.track_id.is_not(None))),
+        # Una candidata tenuta su una riga e' una decisione del DJ, non un
+        # residuo: conta come riferimento esattamente come una membership.
+        # Qui nessuna guardia sul NULL: `SetlistAlternative.track_id` e' NOT NULL.
+        Track.id.not_in(select(SetlistAlternative.track_id)),
     )
     if candidate_ids is not None:
         ids = list(candidate_ids)
@@ -729,6 +733,21 @@ def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
     db.execute(
         update(SetlistTrack).where(SetlistTrack.track_id == drop.id).values(track_id=keep.id)
     )
+    # Alternative: sposta quelle di drop su keep, ma prima toglie quelle che
+    # renderebbero keep candidata due volte sulla stessa riga.
+    righe_con_keep = select(SetlistAlternative.setlist_track_id).where(
+        SetlistAlternative.track_id == keep.id
+    )
+    db.execute(
+        delete(SetlistAlternative).where(
+            SetlistAlternative.track_id == drop.id,
+            SetlistAlternative.setlist_track_id.in_(righe_con_keep),
+        )
+    )
+    db.execute(
+        update(SetlistAlternative).where(SetlistAlternative.track_id == drop.id)
+        .values(track_id=keep.id)
+    )
     _merge_download_queue_items(db, keep, drop)
     # Backfill dei soli campi vuoti di keep.
     for f in _MERGE_BACKFILL_FIELDS:
@@ -755,6 +774,10 @@ def unreferenced_track_ids(db: Session, candidate_ids: Iterable[int] | None = No
         # Le righe varco del set manuale hanno track_id NULL: senza questa
         # guardia il NOT IN non troverebbe mai nulla (NULL nel sottoinsieme).
         Track.id.not_in(select(SetlistTrack.track_id).where(SetlistTrack.track_id.is_not(None))),
+        # Una candidata tenuta su una riga e' una decisione del DJ, non un
+        # residuo: conta come riferimento esattamente come una membership.
+        # Qui nessuna guardia sul NULL: `SetlistAlternative.track_id` e' NOT NULL.
+        Track.id.not_in(select(SetlistAlternative.track_id)),
     )
     if candidate_ids is not None:
         ids = list(candidate_ids)

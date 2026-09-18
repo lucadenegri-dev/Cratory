@@ -280,6 +280,27 @@ class SetlistTrack(Base):
     setlist: Mapped[Setlist] = relationship(back_populates="tracks")
     block: Mapped["SetlistBlock | None"] = relationship(back_populates="rows")
     track: Mapped[Track | None] = relationship()
+    alternatives: Mapped[list["SetlistAlternative"]] = relationship(
+        back_populates="row", cascade="all, delete-orphan",
+        order_by="SetlistAlternative.position",
+    )
+
+
+class SetlistAlternative(Base):
+    """Candidata su una riga del set manuale. L'attiva NON sta qui: e'
+    `SetlistTrack.track_id`. Scegliere una candidata e' uno scambio, e la
+    traccia che lascia il posto torna in questa lista (spec 2026-09-15)."""
+
+    __tablename__ = "setlist_alternatives"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    setlist_track_id: Mapped[int] = mapped_column(ForeignKey("setlist_tracks.id"), index=True)
+    track_id: Mapped[int] = mapped_column(ForeignKey("tracks.id"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=1)
+    note: Mapped[str | None] = mapped_column(Text)
+
+    row: Mapped["SetlistTrack"] = relationship(back_populates="alternatives")
+    track: Mapped[Track] = relationship()
 
 
 class DjSet(Base):

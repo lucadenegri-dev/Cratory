@@ -5,8 +5,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import _migrate_drop_legacy, ensure_schema
-from app.models import Playlist, Setlist, SetlistBlock, SetlistTrack, Track
-from app.repositories import delete_playlist, get_setlist, orphan_lead_ids, unreferenced_track_ids
+from app.models import Playlist, Setlist, SetlistAlternative, SetlistBlock, SetlistTrack, Track
+from app.repositories import (
+    delete_playlist, get_setlist, merge_tracks, orphan_lead_ids, unreferenced_track_ids,
+)
 from app.serializers import setlist_summary_out
 
 
@@ -90,3 +92,66 @@ def test_pulizia_legacy_non_cancella_i_set_manuali_vuoti():
     with S() as s:
         names = set(s.scalars(select(Setlist.name)).all())
     assert names == {"vuoto manuale"}
+
+
+# --- Tappa 2: le alternative nel ciclo di vita ---------------------------------
+
+
+def _manual_with_alternative(db, active, candidate):
+    """Set manuale con una riga attiva su `active` e `candidate` fra le sue alternative."""
+    s = Setlist(name="M", kind="manual")
+    db.add(s)
+    db.flush()
+    b = SetlistBlock(setlist_id=s.id, position=1)
+    db.add(b)
+    db.flush()
+    row = SetlistTrack(setlist_id=s.id, block_id=b.id, position=1, track_id=active.id)
+    db.add(row)
+    db.flush()
+    db.add(SetlistAlternative(setlist_track_id=row.id, track_id=candidate.id, position=1))
+    db.commit()
+    return s, row
+
+
+def test_traccia_fra_le_alternative_non_e_orfana(db):
+    attiva = Track(source_type="spotify", title="Attiva", has_local_file=True)
+    candidata = Track(source_type="spotify", title="Candidata", has_local_file=False)
+    db.add_all([attiva, candidata])
+    db.commit()
+    _manual_with_alternative(db, attiva, candidata)
+    assert orphan_lead_ids(db, [candidata.id]) == []
+
+
+def test_traccia_fra_le_alternative_e_referenziata(db):
+    attiva = Track(source_type="spotify", title="Attiva", has_local_file=True)
+    candidata = Track(source_type="spotify", title="Candidata", has_local_file=True)
+    db.add_all([attiva, candidata])
+    db.commit()
+    _manual_with_alternative(db, attiva, candidata)
+    assert candidata.id not in unreferenced_track_ids(db, [candidata.id])
+
+
+def test_merge_sposta_le_alternative_sulla_traccia_che_resta(db):
+    attiva = Track(source_type="spotify", title="Attiva", has_local_file=True)
+    keep = Track(source_type="spotify", title="Keep", has_local_file=True)
+    drop = Track(source_type="spotify", title="Drop", has_local_file=True)
+    db.add_all([attiva, keep, drop])
+    db.commit()
+    s, row = _manual_with_alternative(db, attiva, drop)
+    merge_tracks(db, keep, drop)
+    db.refresh(row)
+    assert [a.track_id for a in row.alternatives] == [keep.id]
+
+
+def test_merge_non_duplica_una_alternativa_gia_presente(db):
+    attiva = Track(source_type="spotify", title="Attiva", has_local_file=True)
+    keep = Track(source_type="spotify", title="Keep", has_local_file=True)
+    drop = Track(source_type="spotify", title="Drop", has_local_file=True)
+    db.add_all([attiva, keep, drop])
+    db.commit()
+    s, row = _manual_with_alternative(db, attiva, keep)
+    db.add(SetlistAlternative(setlist_track_id=row.id, track_id=drop.id, position=2))
+    db.commit()
+    merge_tracks(db, keep, drop)
+    db.refresh(row)
+    assert [a.track_id for a in row.alternatives] == [keep.id]  # una sola, non due

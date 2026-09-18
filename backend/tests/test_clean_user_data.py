@@ -15,7 +15,10 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
 from app.db import Base
-from app.models import DownloadQueueItem, Playlist, Setlist, SetlistBlock, Track, playlist_tracks
+from app.models import (
+    DownloadQueueItem, Playlist, Setlist, SetlistAlternative, SetlistBlock, SetlistTrack,
+    Track, playlist_tracks,
+)
 from app.organize.models import AudioFile, ScanRoot
 from app.tools import clean_user_data
 
@@ -117,3 +120,30 @@ def test_dry_run_non_cancella_nulla(db_su_file):
     assert db_su_file.execute(text("SELECT COUNT(*) FROM tracks")).scalar_one() == 1
     assert db_su_file.execute(
         text("SELECT COUNT(*) FROM download_queue_items")).scalar_one() == 1
+
+
+def test_pulizia_libreria_svuota_anche_le_alternative(db_su_file):
+    """`setlist_alternatives` e' figlia di `setlist_tracks`: se manca da
+    `DATA_TABLES` la DELETE sulla madre va in IntegrityError con le foreign
+    key accese."""
+    t = Track(source_type="spotify", title="T", has_local_file=True)
+    db_su_file.add(t)
+    db_su_file.flush()
+    s = Setlist(name="M", kind="manual")
+    db_su_file.add(s)
+    db_su_file.flush()
+    b = SetlistBlock(setlist_id=s.id, position=1)
+    db_su_file.add(b)
+    db_su_file.flush()
+    row = SetlistTrack(setlist_id=s.id, block_id=b.id, position=1, track_id=t.id)
+    db_su_file.add(row)
+    db_su_file.flush()
+    db_su_file.add(SetlistAlternative(setlist_track_id=row.id, track_id=t.id, position=1))
+    db_su_file.commit()
+
+    report = clean_user_data.clean("library", preserve_tokens=True,
+                                   include_backups=False, dry_run=False)
+
+    assert report["after"]["setlists"] == 0
+    assert db_su_file.execute(
+        text("SELECT COUNT(*) FROM setlist_alternatives")).scalar_one() == 0
