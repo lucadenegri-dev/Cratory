@@ -456,13 +456,21 @@ export interface SetlistSummary {
 }
 
 /* --- Set manuale (banco di preparazione, tappa 1) --- */
+export interface ManualAlternative {
+  id: number;
+  position: number;
+  track: Track;
+  note: string | null;
+}
+
 export interface ManualRow {
   id: number;
-  block_id: number | null;
+  block_id: number | null; // null = riga di riserva
   position: number;
   slot_kind: "track" | "gap";
   track: Track | null; // null sui varchi
   note: string | null;
+  alternatives: ManualAlternative[];
 }
 
 export interface ManualBlock {
@@ -482,6 +490,7 @@ export interface ManualSet {
   source_playlist_name: string | null;
   notes: string | null;
   blocks: ManualBlock[];
+  reserve: ManualRow[]; // righe senza blocco: le tracce tenute in tasca
   track_count: number;
   total_file_seconds: number;
   created_at: string;
@@ -490,8 +499,9 @@ export interface ManualSet {
 
 export interface MaterialItem {
   track: Track;
-  in_set: boolean;
+  in_set: boolean; // già su una riga del percorso
   from_playlist: boolean;
+  in_reserve: boolean;
 }
 
 export interface Material {

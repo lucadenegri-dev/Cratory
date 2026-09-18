@@ -11,23 +11,31 @@ export function getManualSet(id: number) {
   return apiGet<ManualSet>(`/api/sets/${id}/manual`);
 }
 
-export function getMaterial(id: number, opts: { q?: string; owned?: boolean; unused?: boolean } = {}) {
+export function getMaterial(
+  id: number,
+  opts: { q?: string; owned?: boolean; unused?: boolean; reserved?: boolean } = {},
+) {
   const p = new URLSearchParams();
   if (opts.q) p.set("q", opts.q);
   if (opts.owned) p.set("owned", "true");
   if (opts.unused) p.set("unused", "true");
+  if (opts.reserved) p.set("reserved", "true");
   const qs = p.toString();
   return apiGet<Material>(`/api/sets/${id}/material${qs ? `?${qs}` : ""}`);
 }
 
 export function insertRows(
   id: number,
-  body: { expected_revision: number; track_ids?: number[]; gap?: boolean; after_row_id?: number | null },
+  body: { expected_revision: number; track_ids?: number[]; gap?: boolean; after_row_id?: number | null; reserve?: boolean },
 ) {
   return apiPost<ManualSet>(`/api/sets/${id}/rows`, body);
 }
 
-export function moveRow(id: number, rowId: number, body: { expected_revision: number; position: number }) {
+export function moveRow(
+  id: number,
+  rowId: number,
+  body: { expected_revision: number; position: number; to_reserve?: boolean | null },
+) {
   return apiPost<ManualSet>(`/api/sets/${id}/rows/${rowId}/move`, body);
 }
 
@@ -37,4 +45,19 @@ export function patchRow(id: number, rowId: number, body: { expected_revision: n
 
 export function removeRow(id: number, rowId: number, expectedRevision: number) {
   return apiDelete<ManualSet>(`/api/sets/${id}/rows/${rowId}?expected_revision=${expectedRevision}`);
+}
+
+/** Candidate tenute dal DJ su una riga: non sono le alternative calcolate dal
+ *  vecchio generatore, che vivono su un altro endpoint e su altri set. */
+export function addAlternatives(id: number, rowId: number, body: { expected_revision: number; track_ids: number[] }) {
+  return apiPost<ManualSet>(`/api/sets/${id}/rows/${rowId}/alternatives`, body);
+}
+
+export function removeAlternative(id: number, rowId: number, altId: number, expectedRevision: number) {
+  return apiDelete<ManualSet>(`/api/sets/${id}/rows/${rowId}/alternatives/${altId}?expected_revision=${expectedRevision}`);
+}
+
+/** Scambio: la candidata diventa attiva e la traccia uscente resta fra le candidate. */
+export function chooseAlternative(id: number, rowId: number, altId: number, body: { expected_revision: number }) {
+  return apiPost<ManualSet>(`/api/sets/${id}/rows/${rowId}/alternatives/${altId}/choose`, body);
 }
