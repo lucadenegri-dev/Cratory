@@ -858,13 +858,13 @@ export const it: Dictionary = {
     intro: "Le playlist importate sono liste di lead: candidati da scaricare. La libreria — ciò che possiedi — è il disco.",
     importSpotifyButton: "Importa da Spotify",
     importSoundcloudButton: "Importa da SoundCloud",
-    importManualButton: "Inserisci manualmente",
+    importManualButton: "Nuova playlist",
     statsPlaylists: "Playlist",
     statsTracksTotal: "Tracce totali",
     specialsHeading: "Speciali",
     importedHeading: "Importate",
     emptyTitle: "Nessuna playlist importata",
-    emptyBody: "Usa “Importa da Spotify”, “Importa da SoundCloud” o “Inserisci manualmente” per iniziare a costruire un set.",
+    emptyBody: "Usa “Importa da Spotify”, “Importa da SoundCloud” o “Nuova playlist” per iniziare a costruire un set.",
     deleteConfirm: (name: string) =>
       `Rimuovere la playlist "${name}"? I lead senza file su disco, non presenti in altre playlist né in un set, verranno cancellati dalla libreria. L'operazione non si può annullare.`,
     deletedWithOrphans: (name: string, n: number) =>

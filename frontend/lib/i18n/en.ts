@@ -876,13 +876,13 @@ export const en = {
     intro: "Imported playlists are lead lists: candidates to download. Your library — what you own — is the disk.",
     importSpotifyButton: "Import from Spotify",
     importSoundcloudButton: "Import from SoundCloud",
-    importManualButton: "Enter manually",
+    importManualButton: "New playlist",
     statsPlaylists: "Playlists",
     statsTracksTotal: "Total tracks",
     specialsHeading: "Specials",
     importedHeading: "Imported",
     emptyTitle: "No playlists imported",
-    emptyBody: "Use “Import from Spotify”, “Import from SoundCloud”, or “Enter manually” to start building a set.",
+    emptyBody: "Use “Import from Spotify”, “Import from SoundCloud”, or “New playlist” to start building a set.",
     deleteConfirm: (name: string) =>
       `Remove the playlist "${name}"? Leads with no file on disk, not present in other playlists or a set, will be deleted from the library. This can't be undone.`,
     deletedWithOrphans: (name: string, n: number) =>
