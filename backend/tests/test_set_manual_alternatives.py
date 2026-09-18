@@ -66,6 +66,10 @@ def test_scegliere_scambia_e_conserva_la_precedente(db):
     s = choose_alternative(db, s.id, row.id, alt.id, expected_revision=2)
     riga = path_rows(s)[0]
     assert riga.track_id == t[1].id                            # la candidata e' attiva
+    # Anche l'oggetto collegato, non solo la chiave: e' `row.track` che il
+    # serializer legge per costruire la risposta, e assegnare la sola foreign
+    # key lo lascerebbe puntare alla traccia uscente.
+    assert riga.track is not None and riga.track.id == t[1].id
     assert t[0].id in [a.track_id for a in riga.alternatives]  # la precedente e' conservata
     assert t[2].id in [a.track_id for a in riga.alternatives]  # l'altra resta
     assert len(riga.alternatives) == 2

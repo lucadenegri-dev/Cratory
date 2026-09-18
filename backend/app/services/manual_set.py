@@ -289,7 +289,11 @@ def choose_alternative(db: Session, setlist_id: int, row_id: int, alt_id: int, *
     row = _row_of(setlist, row_id)
     alt = _alt_of(row, alt_id)
     uscente = row.track_id
+    # La relationship va assegnata insieme alla foreign key: `row.track` e'
+    # gia' caricata, e al flush SQLAlchemy la fa vincere sul solo `track_id`
+    # riscrivendolo com'era. Stesso accorgimento di set_editor.add_track.
     row.track_id = alt.track_id
+    row.track = alt.track
     row.slot_kind = "track"
     row.alternatives.remove(alt)
     if uscente is not None:

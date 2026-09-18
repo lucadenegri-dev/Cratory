@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.models import Setlist, Track
 from app.repositories import FileTags, file_tags_for_tracks, get_playlist
 from app.schemas import (
+    ManualAlternativeOut,
     AlternativeOut,
     ManualBlockOut,
     ManualRowOut,
@@ -168,28 +169,41 @@ def setlist_summary_out(setlist: Setlist) -> SetlistSummaryOut:
 
 
 def manual_set_out(setlist: Setlist, db: Session) -> ManualSetOut:
-    """Documento del set manuale: blocchi in ordine, righe in ordine, tag
-    effettivi dei file come nel resto dell'app (una sola query)."""
+    """Documento del set manuale: blocchi in ordine, righe in ordine, riserva,
+    candidate per riga, tag effettivi dei file come nel resto dell'app."""
     track_ids = [st.track_id for st in setlist.tracks if st.track_id is not None]
+    track_ids += [a.track_id for st in setlist.tracks for a in st.alternatives]
     ft_map = file_tags_for_tracks(db, track_ids)
+
+    def row_out(st) -> ManualRowOut:
+        return ManualRowOut(
+            id=st.id, block_id=st.block_id, position=st.position, slot_kind=st.slot_kind,
+            track=track_out(st.track, ft_map.get(st.track_id)) if st.track is not None else None,
+            note=st.note,
+            alternatives=[ManualAlternativeOut(
+                id=a.id, position=a.position, note=a.note,
+                track=track_out(a.track, ft_map.get(a.track_id)),
+            ) for a in sorted(st.alternatives, key=lambda a: a.position)],
+        )
+
     blocks = []
     for block in sorted(setlist.blocks, key=lambda b: b.position):
         rows = sorted((st for st in setlist.tracks if st.block_id == block.id), key=lambda st: st.position)
         blocks.append(ManualBlockOut(
             id=block.id, name=block.name, placement=block.placement, position=block.position,
-            rows=[ManualRowOut(
-                id=st.id, block_id=st.block_id, position=st.position, slot_kind=st.slot_kind,
-                track=track_out(st.track, ft_map.get(st.track_id)) if st.track is not None else None,
-                note=st.note,
-            ) for st in rows],
+            rows=[row_out(st) for st in rows],
         ))
-    with_track = [st for st in setlist.tracks if st.track is not None]
+    # Conteggio e durata restano quelli del PERCORSO: la riserva non e' il set.
+    with_track = [st for st in setlist.tracks
+                  if st.track is not None and st.block_id is not None]
     playlist = get_playlist(db, setlist.source_playlist_id) if setlist.source_playlist_id else None
     return ManualSetOut(
         id=setlist.id, name=setlist.name, kind=setlist.kind, revision=setlist.revision,
         source_playlist_id=setlist.source_playlist_id,
         source_playlist_name=playlist.name if playlist is not None else None,
         notes=setlist.notes, blocks=blocks,
+        reserve=[row_out(st) for st in sorted(
+            (st for st in setlist.tracks if st.block_id is None), key=lambda st: st.position)],
         track_count=len(with_track),
         total_file_seconds=sum(st.track.duration_seconds or 0 for st in with_track),
         created_at=_naive(setlist.created_at), updated_at=_naive(setlist.updated_at),

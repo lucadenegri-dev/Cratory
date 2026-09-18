@@ -19,6 +19,8 @@ from app.repositories import (
     list_setlists,
 )
 from app.schemas import (
+    AlternativeChooseRequest,
+    AlternativesAddRequest,
     AddTrackRequest,
     AlternativesRequest,
     AlternativesResponse,
@@ -44,6 +46,10 @@ from app.services.alternatives import AlternativesError, find_alternatives
 from app.services.app_state import get_language
 from app.services.manual_material import material_for
 from app.services.manual_set import (
+    AlternativeNotFound,
+    add_alternatives,
+    choose_alternative,
+    remove_alternative,
     ManualSetError,
     ManualSetNotFound,
     ManualSetNotManual,
@@ -173,6 +179,8 @@ def _manual_error(exc: ManualSetError) -> HTTPException:
         return api_error(409, "set_not_manual", "This set was generated: open it in the classic editor")
     if isinstance(exc, RowNotFound):
         return api_error(404, "set_row_not_found", "Row not found")
+    if isinstance(exc, AlternativeNotFound):
+        return api_error(404, "set_alternative_not_found", "Alternative not found")
     if "Playlist not found" in str(exc):
         return api_error(404, "playlist_not_found", "Playlist not found")
     return api_error(422, "manual_set_error", f"Manual set error: {exc}", reason=str(exc))
@@ -211,20 +219,22 @@ def get_manual(setlist_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{setlist_id}/material", response_model=MaterialOut)
 def get_material(setlist_id: int, q: str | None = Query(default=None, max_length=200),
-                 owned: bool = False, unused: bool = False, db: Session = Depends(get_db)):
+                 owned: bool = False, unused: bool = False, reserved: bool = False,
+                 db: Session = Depends(get_db)):
     """Playlist di origine aggiornata + tracce nel set + (con q) ricerca in libreria."""
     try:
         setlist = load_manual_set(db, setlist_id)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
-    items = material_for(db, setlist, q=q, owned=owned, unused=unused)
-    ft_map = file_tags_for_tracks(db, [t.id for t, _, _ in items])
+    items = material_for(db, setlist, q=q, owned=owned, unused=unused, reserved=reserved)
+    ft_map = file_tags_for_tracks(db, [t.id for t, _, _, _ in items])
     playlist = get_playlist(db, setlist.source_playlist_id) if setlist.source_playlist_id else None
     return MaterialOut(
         playlist_id=setlist.source_playlist_id,
         playlist_name=playlist.name if playlist is not None else None,
-        items=[MaterialItemOut(track=track_out(t, ft_map.get(t.id)), in_set=in_set, from_playlist=fp)
-               for t, in_set, fp in items],
+        items=[MaterialItemOut(track=track_out(t, ft_map.get(t.id)), in_set=in_set,
+                               from_playlist=fp, in_reserve=in_res)
+               for t, in_set, fp, in_res in items],
     )
 
 
@@ -233,7 +243,8 @@ def rows_insert(setlist_id: int, req: RowsInsertRequest, db: Session = Depends(g
     try:
         return manual_set_out(insert_rows(
             db, setlist_id, expected_revision=req.expected_revision,
-            track_ids=req.track_ids, gap=req.gap, after_row_id=req.after_row_id), db)
+            track_ids=req.track_ids, gap=req.gap, after_row_id=req.after_row_id,
+            reserve=req.reserve), db)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
 
@@ -242,7 +253,8 @@ def rows_insert(setlist_id: int, req: RowsInsertRequest, db: Session = Depends(g
 def rows_move(setlist_id: int, row_id: int, req: RowMoveRequest, db: Session = Depends(get_db)):
     try:
         return manual_set_out(move_row(
-            db, setlist_id, row_id, expected_revision=req.expected_revision, position=req.position), db)
+            db, setlist_id, row_id, expected_revision=req.expected_revision,
+            position=req.position, to_reserve=req.to_reserve), db)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
 
@@ -261,6 +273,40 @@ def rows_delete(setlist_id: int, row_id: int, expected_revision: int = Query(ge=
                 db: Session = Depends(get_db)):
     try:
         return manual_set_out(remove_row(db, setlist_id, row_id, expected_revision=expected_revision), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.post("/{setlist_id}/rows/{row_id}/alternatives", response_model=ManualSetOut)
+def alternatives_add(setlist_id: int, row_id: int, req: AlternativesAddRequest,
+                     db: Session = Depends(get_db)):
+    """Candidate su una riga: quelle che il DJ tiene li' accanto, non quelle
+    calcolate dal generatore (vedi POST /{id}/alternatives, per i set generati)."""
+    try:
+        return manual_set_out(add_alternatives(
+            db, setlist_id, row_id, expected_revision=req.expected_revision,
+            track_ids=req.track_ids), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.delete("/{setlist_id}/rows/{row_id}/alternatives/{alt_id}", response_model=ManualSetOut)
+def alternatives_remove(setlist_id: int, row_id: int, alt_id: int,
+                        expected_revision: int = Query(ge=0), db: Session = Depends(get_db)):
+    try:
+        return manual_set_out(remove_alternative(
+            db, setlist_id, row_id, alt_id, expected_revision=expected_revision), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.post("/{setlist_id}/rows/{row_id}/alternatives/{alt_id}/choose",
+             response_model=ManualSetOut)
+def alternatives_choose(setlist_id: int, row_id: int, alt_id: int,
+                        req: AlternativeChooseRequest, db: Session = Depends(get_db)):
+    try:
+        return manual_set_out(choose_alternative(
+            db, setlist_id, row_id, alt_id, expected_revision=req.expected_revision), db)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
 

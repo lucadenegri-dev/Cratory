@@ -241,13 +241,21 @@ class ManualSetCreate(BaseModel):
     playlist_id: int | None = None
 
 
+class ManualAlternativeOut(BaseModel):
+    id: int
+    position: int
+    track: TrackOut
+    note: str | None = None
+
+
 class ManualRowOut(BaseModel):
     id: int
-    block_id: int | None = None
+    block_id: int | None = None  # None = riga di riserva
     position: int
     slot_kind: Literal["track", "gap"]
     track: TrackOut | None = None  # None sui varchi
     note: str | None = None
+    alternatives: list[ManualAlternativeOut] = []
 
 
 class ManualBlockOut(BaseModel):
@@ -267,6 +275,7 @@ class ManualSetOut(BaseModel):
     source_playlist_name: str | None = None  # None se la playlist e' stata cancellata
     notes: str | None = None
     blocks: list[ManualBlockOut] = []
+    reserve: list[ManualRowOut] = []  # righe senza blocco: le tracce tenute in tasca
     track_count: int = 0
     total_file_seconds: int = 0  # somma delle durate dei file, i varchi non contano
     created_at: datetime
@@ -280,17 +289,30 @@ class RowsInsertRequest(BaseModel):
     track_ids: list[int] = []
     gap: bool = False
     after_row_id: int | None = None  # None = in coda
+    reserve: bool = False  # in coda alla riserva invece che nel percorso
 
     @model_validator(mode="after")
     def _exactly_one(self) -> "RowsInsertRequest":
         if self.gap == bool(self.track_ids):
             raise ValueError("Give either track_ids or gap")
+        if self.gap and self.reserve:
+            raise ValueError("A gap belongs to the path, not to the reserve")
         return self
 
 
 class RowMoveRequest(BaseModel):
     expected_revision: int = Field(ge=0)
     position: int = Field(ge=1)  # 1-based dentro il blocco
+    to_reserve: bool | None = None  # None = resta dov'e'
+
+
+class AlternativesAddRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    track_ids: list[int] = Field(min_length=1, max_length=20)
+
+
+class AlternativeChooseRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
 
 
 class RowPatchRequest(BaseModel):
@@ -300,8 +322,9 @@ class RowPatchRequest(BaseModel):
 
 class MaterialItemOut(BaseModel):
     track: TrackOut
-    in_set: bool
+    in_set: bool       # gia' su una riga del PERCORSO
     from_playlist: bool
+    in_reserve: bool
 
 
 class MaterialOut(BaseModel):

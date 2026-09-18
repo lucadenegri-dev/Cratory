@@ -262,3 +262,76 @@ def test_materiale_senza_playlist(client_db):
     sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
     doc = client.get(f"/api/sets/{sid}/material").json()
     assert doc["playlist_id"] is None and doc["items"] == []
+
+
+# --- Tappa 2: alternative, riserva, materiale ---------------------------------
+
+
+def test_alternative_via_http(client_db):
+    client, db = client_db
+    _, t = _seed(db, n=4)
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    doc = client.post(f"/api/sets/{sid}/rows",
+                      json={"expected_revision": 0, "track_ids": [t[0].id]}).json()
+    row = _rows(doc)[0]
+
+    r = client.post(f"/api/sets/{sid}/rows/{row['id']}/alternatives",
+                    json={"expected_revision": 1, "track_ids": [t[1].id, t[2].id]})
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    alts = _rows(doc)[0]["alternatives"]
+    assert [a["track"]["id"] for a in alts] == [t[1].id, t[2].id]
+    assert doc["revision"] == 2
+
+    r = client.post(f"/api/sets/{sid}/rows/{row['id']}/alternatives/{alts[0]['id']}/choose",
+                    json={"expected_revision": 2})
+    riga = _rows(r.json())[0]
+    assert riga["track"]["id"] == t[1].id
+    assert t[0].id in [a["track"]["id"] for a in riga["alternatives"]]
+
+    alt_id = riga["alternatives"][0]["id"]
+    r = client.delete(f"/api/sets/{sid}/rows/{row['id']}/alternatives/{alt_id}",
+                      params={"expected_revision": 3})
+    assert r.status_code == 200
+    assert alt_id not in [a["id"] for a in _rows(r.json())[0]["alternatives"]]
+
+    r = client.delete(f"/api/sets/{sid}/rows/{row['id']}/alternatives/999999",
+                      params={"expected_revision": 4})
+    assert r.status_code == 404 and r.json()["detail"]["code"] == "set_alternative_not_found"
+
+
+def test_riserva_via_http(client_db):
+    client, db = client_db
+    _, t = _seed(db, n=3)
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    r = client.post(f"/api/sets/{sid}/rows",
+                    json={"expected_revision": 0, "track_ids": [t[0].id], "reserve": True})
+    doc = r.json()
+    assert _rows(doc) == []
+    assert [x["track"]["id"] for x in doc["reserve"]] == [t[0].id]
+    assert doc["track_count"] == 0  # la riserva non e' il set
+
+    riga = doc["reserve"][0]
+    r = client.post(f"/api/sets/{sid}/rows/{riga['id']}/move",
+                    json={"expected_revision": 1, "position": 1, "to_reserve": False})
+    doc = r.json()
+    assert [x["track"]["id"] for x in _rows(doc)] == [t[0].id]
+    assert doc["reserve"] == [] and doc["track_count"] == 1
+
+
+def test_materiale_distingue_percorso_e_riserva(client_db):
+    client, db = client_db
+    pl, t = _seed(db, n=3)
+    sid = client.post("/api/sets/manual", json={"playlist_id": pl.id}).json()["id"]
+    client.post(f"/api/sets/{sid}/rows", json={"expected_revision": 0, "track_ids": [t[0].id]})
+    client.post(f"/api/sets/{sid}/rows",
+                json={"expected_revision": 1, "track_ids": [t[1].id], "reserve": True})
+
+    items = client.get(f"/api/sets/{sid}/material").json()["items"]
+    by_id = {it["track"]["id"]: it for it in items}
+    assert by_id[t[0].id]["in_set"] is True and by_id[t[0].id]["in_reserve"] is False
+    assert by_id[t[1].id]["in_set"] is False and by_id[t[1].id]["in_reserve"] is True
+
+    solo_riserva = client.get(f"/api/sets/{sid}/material",
+                              params={"reserved": "true"}).json()["items"]
+    assert [it["track"]["id"] for it in solo_riserva] == [t[1].id]

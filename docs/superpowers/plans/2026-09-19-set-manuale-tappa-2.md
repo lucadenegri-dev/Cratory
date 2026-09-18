@@ -390,6 +390,10 @@ def test_scegliere_scambia_e_conserva_la_precedente(db):
     s = choose_alternative(db, s.id, row.id, alt.id, expected_revision=2)
     riga = path_rows(s)[0]
     assert riga.track_id == t[1].id                       # la candidata è attiva
+    # Anche l'oggetto collegato: è `row.track` che il serializer legge, e la
+    # sola chiave lo lascerebbe sulla traccia uscente (test verde per il
+    # motivo sbagliato, verificato il 2026-09-19).
+    assert riga.track is not None and riga.track.id == t[1].id
     assert t[0].id in [a.track_id for a in riga.alternatives]  # la precedente è conservata
     assert t[2].id in [a.track_id for a in riga.alternatives]  # l'altra resta
     assert len(riga.alternatives) == 2
@@ -746,7 +750,12 @@ def choose_alternative(db: Session, setlist_id: int, row_id: int, alt_id: int, *
     row = _row_of(setlist, row_id)
     alt = _alt_of(row, alt_id)
     uscente = row.track_id
+    # La relationship va assegnata insieme alla foreign key: `row.track` è già
+    # caricata, e il serializer legge quella — con la sola chiave la risposta
+    # mostrerebbe ancora la traccia uscente. Stesso accorgimento di
+    # set_editor.add_track.
     row.track_id = alt.track_id
+    row.track = alt.track
     row.slot_kind = "track"
     row.alternatives.remove(alt)
     if uscente is not None:

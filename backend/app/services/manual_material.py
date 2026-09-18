@@ -13,18 +13,23 @@ SEARCH_LIMIT = 50
 
 
 def material_for(db: Session, setlist: Setlist, *, q: str | None, owned: bool, unused: bool,
-                 ) -> list[tuple[Track, bool, bool]]:
-    """Ritorna (track, in_set, from_playlist) in ordine: playlist, poi tracce del
-    set fuori playlist, poi risultati di ricerca. Senza `q` niente ricerca."""
-    in_set = {st.track_id for st in setlist.tracks if st.track_id is not None}
-    items: list[tuple[Track, bool, bool]] = []
+                 reserved: bool = False,
+                 ) -> list[tuple[Track, bool, bool, bool]]:
+    """Ritorna (track, in_set, from_playlist, in_reserve) in ordine: playlist,
+    poi tracce del set fuori playlist, poi risultati di ricerca. Senza `q`
+    niente ricerca. `in_set` e' il PERCORSO: una riga di riserva non ci entra."""
+    in_set = {st.track_id for st in setlist.tracks
+              if st.track_id is not None and st.block_id is not None}
+    in_reserve = {st.track_id for st in setlist.tracks
+                  if st.track_id is not None and st.block_id is None}
+    items: list[tuple[Track, bool, bool, bool]] = []
     seen: set[int] = set()
 
     def push(track: Track, from_playlist: bool) -> None:
         if track.id in seen:
             return
         seen.add(track.id)
-        items.append((track, track.id in in_set, from_playlist))
+        items.append((track, track.id in in_set, from_playlist, track.id in in_reserve))
 
     if setlist.source_playlist_id is not None:
         for track in tracks_for_playlist(db, setlist.source_playlist_id):
@@ -42,6 +47,8 @@ def material_for(db: Session, setlist: Setlist, *, q: str | None, owned: bool, u
         items = [it for it in items if it[0].has_local_file]
     if unused:
         items = [it for it in items if not it[1]]
+    if reserved:
+        items = [it for it in items if it[3]]
     return items
 
 
