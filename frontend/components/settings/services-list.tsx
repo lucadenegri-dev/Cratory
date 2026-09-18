@@ -80,6 +80,11 @@ export function ServicesList({ services, onServicesChanged }: {
                 </Button>}
               </div>
             </div>
+            {/* Esecuzione e connessione stanno fuori dal pannello richiudibile:
+                avviare il demone e collegarsi alla rete e' l'uso quotidiano
+                della riga, mentre «Gestisci» apre la chiave API, che si tocca
+                una volta sola. Chiuderle li' dentro le aveva fatte sparire. */}
+            {s.key === "slskd" && <SlskdRow onStatusChange={setSoulseek} />}
             {editable && <div id={`service-${s.key}`} hidden={!open} className="mt-5 space-y-5 border-t border-border pt-5">
               {/* <a> nudo, non next/link: l'href è l'endpoint OAuth del backend,
                   che Link prefetcherebbe (avvio login senza click) e al click
@@ -88,7 +93,6 @@ export function ServicesList({ services, onServicesChanged }: {
                 className={cn("inline-flex items-center justify-center gap-2 font-medium uppercase tracking-wider transition-colors", BTN_VARIANT.outline, BTN_SIZE.sm)}>
                 <ExternalLink size={14} /> {s.connected ? t.settings.reconnectButton : t.settings.connectButton}
               </a>}
-              {s.key === "slskd" && <SlskdRow onStatusChange={setSoulseek} />}
               {s.key === "soundcloud" && <SoundCloudExtra t={t} />}
               {SERVICE_FIELDS[s.key as ServiceKey] && <>
                 {configError && <Alert tone="danger">{configError}<Button size="sm" variant="outline" onClick={loadConfig}>{t.settings.retryButton}</Button></Alert>}

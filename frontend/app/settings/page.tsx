@@ -62,7 +62,6 @@ function SettingsInner() {
             </div>
           </div>
           <DiscoverySection />
-          <VersionCard />
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5">
             <div><h2 className={LABEL}>{t.settings.setupHeading}</h2><p className="mt-1 text-xs text-muted">{t.settings.setupHint}</p></div>
             <Button size="sm" variant="outline" disabled={setupBusy} onClick={async () => {
@@ -72,15 +71,16 @@ function SettingsInner() {
             }}>{t.settings.setupButton}</Button>
           </div>
           {setupError && <Alert tone="danger">{setupError}</Alert>}
+          {/* Ultima della sezione: la versione non e' una cosa da fare, e'
+              la firma in calce alla pagina. */}
+          <VersionCard />
         </section>
 
         <div hidden={section !== "library" && section !== "downloads"}>
           <ConfigCard section={section === "downloads" ? "downloads" : "library"} />
-          <div hidden={section !== "library"} className="mt-6">
-            <details className="border-t border-border pt-4">
-              <summary className={cn("cursor-pointer", LABEL)}>{t.settings.namingHeading}</summary>
-              <div className="pt-5"><OrganizeSection /></div>
-            </details>
+          <div hidden={section !== "library"} className="mt-6 border-t border-border pt-5">
+            <h2 className={LABEL}>{t.settings.namingHeading}</h2>
+            <div className="pt-5"><OrganizeSection /></div>
           </div>
         </div>
 

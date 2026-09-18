@@ -152,6 +152,18 @@ describe("ServicesList", () => {
     await waitFor(() => expect(setSoundcloudUsername).toHaveBeenCalledWith("da-invio"));
   });
 
+  it("slskd: «Gestisci» apre la chiave API, non e' la porta di esecuzione e connessione", async () => {
+    daemonStatusFn.mockResolvedValue({ reachable: true, owned: true, pid: 42, installed: true, configured: true, username: null });
+    render(<ServicesList services={SEVEN} />);
+    const row = within(screen.getByRole("region", { name: "Soulseek" }));
+    const connetti = await row.findByRole("button", { name: /connetti|connect/i });
+    // Il pannello richiudibile e' chiuso (aria-expanded=false) e i comandi
+    // del demone si vedono lo stesso.
+    expect(row.getByRole("button", { name: "Gestisci Soulseek" }).getAttribute("aria-expanded")).toBe("false");
+    expect(connetti).toBeTruthy();
+    expect(row.getByRole("button", { name: /ferma|stop/i })).toBeTruthy();
+  });
+
   it("acoustid configurato: 'Identifica ora' chiama runFingerprint", async () => {
     runFingerprint.mockResolvedValue({ configured: true, identified: 1, below_threshold: 0, not_found: 0, errors: 0, total: 1 });
     render(<ServicesList services={SEVEN} />);
@@ -160,13 +172,16 @@ describe("ServicesList", () => {
     await waitFor(() => expect(runFingerprint).toHaveBeenCalledTimes(1));
   });
 
+  /* Nessun clic su «Gestisci» prima delle prossime asserzioni, ed e' il
+     punto: esecuzione e connessione erano finite dentro il pannello
+     richiudibile delle chiavi, e dalla riga Soulseek sembravano sparite.
+     Se qualcuno le rimette li' dentro, questi test tornano rossi. */
   it("demone non raggiungibile: il bottone porta l'etichetta breve di Impostazioni, non quella del wizard", async () => {
     // Regressione reale già vista: scambiare qui l'etichetta con quella del
     // wizard ("Scarica, configura e avvia") promette un download e una
     // scrittura di configurazione che in questa pagina non avvengono.
     daemonStatusFn.mockResolvedValue({ reachable: false, owned: null, pid: null, installed: true, configured: true, username: null });
     render(<ServicesList services={SEVEN} />);
-    fireEvent.click(screen.getByRole("button", { name: "Gestisci Soulseek" }));
     expect(await screen.findByRole("button", { name: "Avvia" })).toBeTruthy();
     expect(screen.queryByText(/scarica, configura e avvia|download, configure and start/i)).toBeNull();
   });
@@ -175,7 +190,6 @@ describe("ServicesList", () => {
     daemonStatusFn.mockResolvedValue({ reachable: true, owned: true, pid: 42, installed: true, configured: true, username: null });
     daemonStop.mockResolvedValue({ reachable: false, owned: null, pid: null, installed: true, configured: true, username: null });
     render(<ServicesList services={SEVEN} />);
-    fireEvent.click(screen.getByRole("button", { name: "Gestisci Soulseek" }));
     expect(await screen.findByText("In esecuzione")).toBeTruthy();
     const stop = screen.getByRole("button", { name: /ferma|stop/i });
     fireEvent.click(stop);
@@ -185,16 +199,20 @@ describe("ServicesList", () => {
   it("demone raggiungibile ma acceso da altri: niente bottone Ferma, etichetta dedicata", async () => {
     daemonStatusFn.mockResolvedValue({ reachable: true, owned: false, pid: null, installed: true, configured: true, username: null });
     render(<ServicesList services={SEVEN} />);
-    fireEvent.click(screen.getByRole("button", { name: "Gestisci Soulseek" }));
-    expect(await screen.findByText(/avviato fuori da cratory|started outside cratory/i)).toBeTruthy();
+    // La query per ruolo, non per testo: un nodo dentro un contenitore
+    // `hidden` non ha ruolo accessibile, quindi questa riga cade se i
+    // comandi tornano dentro il pannello richiudibile — il testo da solo
+    // li troverebbe anche nascosti.
+    expect(await screen.findByRole("button", { name: /connetti|connect/i })).toBeTruthy();
+    expect(screen.getByText(/avviato fuori da cratory|started outside cratory/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /ferma|stop/i })).toBeNull();
   });
 
   it("demone raggiungibile, proprietà non rilevabile: niente bottone Ferma, etichetta dedicata", async () => {
     daemonStatusFn.mockResolvedValue({ reachable: true, owned: null, pid: null, installed: true, configured: true, username: null });
     render(<ServicesList services={SEVEN} />);
-    fireEvent.click(screen.getByRole("button", { name: "Gestisci Soulseek" }));
-    expect(await screen.findByText(/non è possibile stabilire|can't tell/i)).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /connetti|connect/i })).toBeTruthy();
+    expect(screen.getByText(/non è possibile stabilire|can't tell/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /ferma|stop/i })).toBeNull();
   });
 });
