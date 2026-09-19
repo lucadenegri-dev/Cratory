@@ -1,9 +1,9 @@
 """Schemi Pydantic per request/response API."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 
 class TrackPlaylistRef(BaseModel):
@@ -175,7 +175,9 @@ class SetlistSummaryOut(BaseModel):
 
 
 class SetRenameRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
+    # Lo strip viene PRIMA di min_length: un nome di soli spazi e' 422, non
+    # un set senza nome in archivio.
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 
 
 # --- Set manuale (banco di preparazione, tappa 1) ------------------------------

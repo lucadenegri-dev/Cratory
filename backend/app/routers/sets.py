@@ -33,11 +33,10 @@ from app.schemas import (
     RowMoveRequest,
     RowPatchRequest,
     RowsInsertRequest,
-    SetlistOut,
     SetlistSummaryOut,
     SetRenameRequest,
 )
-from app.serializers import manual_set_out, setlist_out, setlist_summary_out, track_out
+from app.serializers import manual_set_out, setlist_summary_out, track_out
 from app.services.app_state import get_language
 from app.services.manual_export import render_manual
 from app.services.manual_fill import FillError
@@ -402,7 +401,7 @@ def export(
         writer.writerow(["position", "role", "title", "artist", "bpm", "key", "duration_seconds",
                          "source", "spotify_id", "url", "transition_score", "risk_level",
                          "transition_class", "local_path"])
-        # I4: stesso genere effettivo di setlist_out per la classificazione del reset.
+        # I4: genere effettivo (tag file) per la classificazione del reset.
         genre_map = effective_genres_for_tracks(db, [st.track_id for st in setlist.tracks])
         prev = None
         for st in setlist.tracks:
@@ -472,10 +471,14 @@ def _edit_error(exc: SetEditError) -> HTTPException:
     return api_error(status, "set_edit_error", f"Set edit error: {exc}", reason=str(exc))
 
 
-@router.patch("/{setlist_id}", response_model=SetlistOut)
+@router.patch("/{setlist_id}", response_model=SetlistSummaryOut)
 def rename(setlist_id: int, req: SetRenameRequest, db: Session = Depends(get_db)):
+    """Rinomina, per QUALUNQUE tipo di set. La risposta e' il riepilogo, lo
+    stesso di `GET /api/sets`: il documento completo del set generato non esiste
+    piu' (andato col generatore) e su un set a mano si romperebbe comunque,
+    perche' i varchi sono righe senza traccia."""
     try:
-        return setlist_out(rename_set(db, setlist_id, req.name), get_language(db), db=db)
+        return setlist_summary_out(rename_set(db, setlist_id, req.name))
     except SetEditError as exc:
         raise _edit_error(exc) from exc
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const api = vi.hoisted(() => ({
   getManualSet: vi.fn(),
@@ -32,12 +32,12 @@ const track = (id: number) => ({
   added_at: null, spotify_url: null, album_art_url: null, has_local_file: true, rating: null,
 });
 
-const riga = (id: number, position: number, planned: number | null = null) => ({
+const riga = (id: number, position: number) => ({
   id, block_id: 1, position, slot_kind: "track" as const, track: track(id),
-  note: null, play_bpm: null, planned_seconds: planned, alternatives: [],
+  note: null, play_bpm: null, planned_seconds: null, alternatives: [],
 });
 
-const set = (opts: { revision?: number; duration?: object; planned?: number | null } = {}) => ({
+const set = (opts: { revision?: number; duration?: object } = {}) => ({
   id: 7, name: "Sabato", kind: "manual", revision: opts.revision ?? 1,
   sources: [{ playlist_id: 3, name: "Deep" }], notes: null,
   track_count: 2, total_file_seconds: 600,
@@ -45,7 +45,7 @@ const set = (opts: { revision?: number; duration?: object; planned?: number | nu
   created_at: "2026-09-19T10:00:00", updated_at: "2026-09-19T10:00:00",
   blocks: [{
     id: 1, name: null, placement: "main" as const, position: 1,
-    rows: [riga(10, 1, opts.planned ?? null), riga(11, 2)],
+    rows: [riga(10, 1), riga(11, 2)],
   }],
   reserve: [],
   transitions: [],
@@ -69,11 +69,6 @@ afterEach(() => {
   push.mockReset();
 });
 
-const seleziona = async (id: number) => {
-  const li = (await screen.findByTestId("path-panel")).querySelector(`li[data-row="${id}"]`);
-  fireEvent.click(within(li as HTMLElement).getByRole("button", { name: /Traccia/ }));
-};
-
 describe("durata", () => {
   it("la mostra in testa", async () => {
     mount();
@@ -90,42 +85,6 @@ describe("durata", () => {
     expect(await screen.findByText(/stima incompleta/)).toBeTruthy();
     expect(screen.getByText(/1 traccia senza durata/)).toBeTruthy();
     expect(screen.getByText(/2 varchi aperti/)).toBeTruthy();
-  });
-});
-
-describe("«quanto la tengo»", () => {
-  it("manda solo planned_seconds", async () => {
-    api.patchRow.mockResolvedValue(set({ revision: 2, planned: 120 }));
-    mount();
-    await seleziona(10);
-    const campo = within(screen.getByTestId("detail-panel")).getByLabelText("Quanto la tengo");
-    fireEvent.change(campo, { target: { value: "120" } });
-    fireEvent.blur(campo);
-    await waitFor(() => expect(api.patchRow).toHaveBeenCalledWith(7, 10, {
-      expected_revision: 1, planned_seconds: 120,
-    }));
-  });
-
-  it("svuotare il campo azzera la durata pianificata", async () => {
-    api.getManualSet.mockResolvedValue(set({ planned: 120 }));
-    api.patchRow.mockResolvedValue(set({ revision: 2 }));
-    mount();
-    await seleziona(10);
-    const campo = within(screen.getByTestId("detail-panel")).getByLabelText("Quanto la tengo");
-    fireEvent.change(campo, { target: { value: "" } });
-    fireEvent.blur(campo);
-    await waitFor(() => expect(api.patchRow).toHaveBeenCalledWith(7, 10, {
-      expected_revision: 1, planned_seconds: null,
-    }));
-  });
-
-  it("un valore invariato non chiama niente", async () => {
-    api.getManualSet.mockResolvedValue(set({ planned: 120 }));
-    mount();
-    await seleziona(10);
-    const campo = within(screen.getByTestId("detail-panel")).getByLabelText("Quanto la tengo");
-    fireEvent.blur(campo);
-    expect(api.patchRow).not.toHaveBeenCalled();
   });
 });
 

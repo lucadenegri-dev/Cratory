@@ -36,9 +36,8 @@ export function SourcesPanel({ sources, onAdd, onRemove }: Props) {
 
   return (
     <div data-testid="sources-panel" className="mb-3 border-b border-border pb-3">
-      <div className="mb-1 text-xs uppercase tracking-wider text-muted">
-        {t.sets.manual.sourcesTitle}
-      </div>
+      {/* Senza titolino: il filetto in basso basta a staccare le origini dalla
+          ricerca, e le pastiglie dicono da sé cosa sono. */}
       {sources.length === 0 && <p className="text-sm text-muted">{t.sets.manual.sourcesEmpty}</p>}
       <div className="flex flex-wrap gap-1.5">
         {sources.map((s) => (

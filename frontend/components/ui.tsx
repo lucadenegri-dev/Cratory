@@ -4,7 +4,7 @@ import { ChevronDown, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
-import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, Ref, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 /* ---------------------------------------------------------------- Card */
 
@@ -63,7 +63,11 @@ export function Button({
 const FIELD =
   "w-full border border-border bg-bg px-3 text-sm text-fg placeholder:text-faint focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-fg";
 
-export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+/* `ref` e' dichiarato a parte perche' `InputHTMLAttributes` non lo prevede:
+   in React 19 e' una prop come le altre e finisce sull'input con lo spread.
+   Serve a chi deve dare il fuoco al campo DOPO l'apertura di un Modal, che
+   al montaggio se lo prende per se' (vedi Modal qui sotto). */
+export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement> & { ref?: Ref<HTMLInputElement> }) {
   return <input className={cn(FIELD, "h-10", className)} {...props} />;
 }
 

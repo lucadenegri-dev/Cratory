@@ -531,3 +531,36 @@ def test_il_materiale_di_una_bozza_via_http(client_db):
     assert len(doc["items"]) == 3
     assert all(item["in_set"] is False for item in doc["items"])
     assert [s["playlist_id"] for s in doc["sources"]] == [pl.id]
+
+
+def test_rinomina_un_set_a_mano_che_ha_un_varco(client_db):
+    """Regressione: la rinomina rispondeva col documento del set GENERATO, che
+    su un varco (riga senza traccia) andava in 500 — e intanto il nome era gia'
+    stato scritto, quindi il client vedeva un errore su un'operazione riuscita."""
+    client, db = client_db
+    _, t = _seed(db)
+    sid = client.post("/api/sets/manual", json={"name": "Sabato"}).json()["id"]
+    r = client.post(f"/api/sets/{sid}/rows", json={"expected_revision": 0, "track_ids": [t[0].id]})
+    assert r.status_code == 200, r.text
+    riga = _rows(r.json())[0]
+    r = client.post(f"/api/sets/{sid}/rows",
+                    json={"expected_revision": 1, "gap": True, "after_row_id": riga["id"]})
+    assert r.status_code == 200, r.text
+    assert [x["slot_kind"] for x in _rows(r.json())] == ["track", "gap"]
+
+    r = client.patch(f"/api/sets/{sid}", json={"name": "  Domenica  "})
+    assert r.status_code == 200, r.text
+    # Il riepilogo, come GET /api/sets: il varco non conta fra le tracce.
+    assert r.json()["name"] == "Domenica"
+    assert r.json()["kind"] == "manual" and r.json()["track_count"] == 1
+    assert client.get("/api/sets").json()[0]["name"] == "Domenica"
+
+
+def test_rinomina_rifiuta_un_nome_di_soli_spazi(client_db):
+    """Prima passava: `min_length` guardava la stringa grezza, poi il servizio
+    la ripuliva, e in archivio restava un set senza nome."""
+    client, _ = client_db
+    sid = client.post("/api/sets/manual", json={"name": "Sabato"}).json()["id"]
+    assert client.patch(f"/api/sets/{sid}", json={"name": ""}).status_code == 422
+    assert client.patch(f"/api/sets/{sid}", json={"name": "   "}).status_code == 422
+    assert client.get("/api/sets").json()[0]["name"] == "Sabato"

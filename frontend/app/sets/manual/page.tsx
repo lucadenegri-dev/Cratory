@@ -3,17 +3,17 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Redo2, Trash2, Undo2 } from "lucide-react";
+import { ArrowLeft, Pencil, Redo2, Trash2, Undo2 } from "lucide-react";
 import {
   ApiError, addAlternatives, apiDelete, chooseAlternative, errText, fmtDuration, fmtDurationLong,
   getManualSet,
   addSource, createManualSet, draftMaterial, fillGap, getMaterial, groupRows, insertRows,
   moveBlock, moveRow, patchRow, redoSet, removeAlternative, removeRow, removeSource,
-  renameBlock, setPairNote, splitBlock, undoSet,
+  renameBlock, renameSet, setPairNote, splitBlock, undoSet,
   type ManualAlternative, type ManualBlock, type ManualRow, type ManualSet, type ManualTransition,
   type Material, type MaterialItem, type Source,
 } from "@/lib/api";
-import { Alert, Badge, Button, Card, CardHeader, Loading, Modal } from "@/components/ui";
+import { Alert, Badge, Button, Card, CardHeader, Input, Loading, Modal } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { MaterialPanel } from "@/components/set-builder/material-panel";
 import { PathPanel } from "@/components/set-builder/path-panel";
@@ -60,6 +60,9 @@ function ManualSetInner() {
   const [checkedRowIds, setCheckedRowIds] = useState<number[]>([]);
   const [fillingRowId, setFillingRowId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstRun = useRef(true);
 
@@ -161,8 +164,6 @@ function ManualSetInner() {
     await mutate((rev, sid) => removeSource(sid, playlistId, rev));
   };
 
-  const onSavePlannedSeconds = (row: ManualRow, seconds: number | null) =>
-    mutate((rev, sid) => patchRow(sid, row.id, { expected_revision: rev, planned_seconds: seconds }));
   const onFillGap = async (row: ManualRow, count: number) => {
     const next = await mutate((rev, sid) => fillGap(sid, row.id, { expected_revision: rev, count }));
     if (next) setFillingRowId(null);   // un rifiuto lascia il pannello aperto
@@ -248,6 +249,29 @@ function ManualSetInner() {
     return () => window.removeEventListener("keydown", onKey);
   }, [passoStorico]);
 
+  /** Il nome sta fuori dal protocollo delle revisioni (vedi `renameSet`):
+   *  non passa da `mutate`, non manda `expected_revision` e non invalida le
+   *  modifiche in corso sulle righe. Il nome salvato e' quello che torna dal
+   *  server, non quello digitato: il backend lo taglia ai bordi. */
+  const doRename = async () => {
+    const nome = nameDraft.trim();
+    if (!set || nome === "") return;
+    try {
+      const out = await renameSet(set.id, nome);
+      setSet((prev) => (prev ? { ...prev, name: out.name } : prev));
+      setRenaming(false);
+      setError(null);
+    } catch (e) { setError(errText(e)); }
+  };
+
+  /* Il fuoco al campo del nome. Non basta `autoFocus`: il Modal si prende il
+     fuoco sul proprio pannello all'apertura, e il suo effetto gira dopo quello
+     dell'input. Questo invece e' un effetto della PAGINA, cioe' del genitore:
+     gira dopo quello del figlio, quindi ha l'ultima parola. */
+  useEffect(() => {
+    if (renaming) nameInputRef.current?.focus();
+  }, [renaming]);
+
   const doDelete = async () => {
     setConfirmDelete(false);
     try { await apiDelete(`/api/sets/${id}`); router.push("/sets"); }
@@ -276,13 +300,18 @@ function ManualSetInner() {
   return (
     <PageLayout title={set?.name ?? t.sets.manual.pageTitle} meta={meta}
       action={set && (
-        <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
-          <Trash2 size={15} /> {t.sets.deleteSetButton}
-        </Button>
+        <span className="flex items-center gap-2">
+          <Button variant="outline" size="sm"
+            onClick={() => { setNameDraft(set.name); setRenaming(true); }}>
+            <Pencil size={15} /> {t.sets.renameTitle}
+          </Button>
+          <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
+            <Trash2 size={15} /> {t.sets.deleteSetButton}
+          </Button>
+        </span>
       )}>
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted">
         <Link href="/sets" className="inline-flex items-center gap-1 hover:text-fg"><ArrowLeft size={14} /> {t.sets.backLink}</Link>
-        <Badge>{t.sets.manual.manualBadge}</Badge>
         {!set && <><Badge>{t.sets.manual.draftBadge}</Badge> <span>{t.sets.manual.draftHint}</span></>}
       </div>
       {error && <div className="mb-3"><Alert tone="danger">⚠ {error}</Alert></div>}
@@ -354,7 +383,6 @@ function ManualSetInner() {
             <DetailPanel row={selected} transitions={vista.transitions} saveState={saveState}
               onSaveNote={(r, n) => void onSaveNote(r, n)}
               onSavePlayBpm={(r, b) => void onSavePlayBpm(r, b)}
-              onSavePlannedSeconds={(r, s) => void onSavePlannedSeconds(r, s)}
               onSavePairNote={(x, n) => void onSavePairNote(x, n)}
               onUseAlternative={(r, a) => void onUseAlternative(r, a)}
               onRemoveAlternative={(r, a) => void onRemoveAlternative(r, a)}
@@ -365,6 +393,18 @@ function ManualSetInner() {
             )}
           </Card>
         </div>
+      )}
+
+      {/* Rinomina: il titolo dell'header e' un `title` semplice del
+          PageLayout, quindi il nome si cambia da qui invece che in linea. */}
+      {set && (
+        <Modal open={renaming} onClose={() => setRenaming(false)} title={t.sets.renameModalTitle}
+          footer={<><Button variant="ghost" size="sm" onClick={() => setRenaming(false)}>{t.common.cancel}</Button><Button size="sm" disabled={nameDraft.trim() === ""} onClick={() => void doRename()}>{t.common.save}</Button></>}>
+          <Input ref={nameInputRef} value={nameDraft} placeholder={t.sets.setNamePlaceholder}
+            aria-label={t.sets.setNamePlaceholder}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void doRename(); }} />
+        </Modal>
       )}
 
       {/* Conferma eliminazione: unico modo per buttare via un set manuale

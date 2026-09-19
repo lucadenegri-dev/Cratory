@@ -86,7 +86,9 @@ function SetsInner() {
             <Card className="h-full p-4 transition-colors hover:border-border-strong">
               <div className="mb-3 flex items-start justify-between gap-2">
                 <h3 className="truncate font-medium leading-snug group-hover:text-fg-strong">{s.name}</h3>
-                <Badge>{s.kind === "manual" ? t.sets.manual.manualBadge : t.sets.legacyBadge}</Badge>
+                {/* Solo sui vecchi set generati: «a mano» e' l'unico modo di
+                    prepararne uno, quindi dirlo su ognuno non distingue niente. */}
+                {s.kind !== "manual" && <Badge>{t.sets.legacyBadge}</Badge>}
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                 <span className="inline-flex items-center gap-1"><ListMusic size={13} /> {t.sets.trackCountLabel(s.track_count)}</span>

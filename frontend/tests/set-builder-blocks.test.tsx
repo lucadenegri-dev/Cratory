@@ -214,9 +214,21 @@ describe("annulla e ripeti", () => {
   it("cmd+z dentro l'appunto lo lascia al campo", async () => {
     // Il campo dell'appunto ha il suo annulla nativo: rubarglielo farebbe
     // sparire il set invece della parola appena scritta.
+    // L'appunto di riga vive solo sui varchi (2026-09-19), quindi il percorso
+    // qui ne ha uno: serve una textarea vera, non un campo numerico.
+    api.getManualSet.mockResolvedValue({
+      ...set(),
+      blocks: [{
+        id: 1, name: "Apertura", placement: "main" as const, position: 1,
+        rows: [{
+          id: 10, block_id: 1, position: 1, slot_kind: "gap" as const,
+          track: null, note: null, alternatives: [],
+        }],
+      }],
+    });
     mount();
     const percorso = within(await screen.findByTestId("path-panel"));
-    fireEvent.click(percorso.getByRole("button", { name: /Traccia 10/ }));
+    fireEvent.click(percorso.getByRole("button", { name: /Varco/ }));
     const appunto = await screen.findByPlaceholderText(/Entra sul break/);
     fireEvent.focus(appunto);
     fireEvent.keyDown(appunto, { key: "z", metaKey: true, bubbles: true });

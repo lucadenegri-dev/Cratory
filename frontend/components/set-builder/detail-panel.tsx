@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
-import { type ManualAlternative, type ManualRow, type ManualTransition } from "@/lib/api";
+import { fmtDuration, type ManualAlternative, type ManualRow, type ManualTransition } from "@/lib/api";
 import { Badge, Button, Input, Textarea } from "@/components/ui";
 import { TransitionPanel } from "@/components/set-builder/transition-panel";
 import { TrackPlayButton } from "@/components/track-play-button";
@@ -16,7 +16,6 @@ type Props = {
   saveState: SaveState;
   onSaveNote: (row: ManualRow, note: string) => void;
   onSavePlayBpm: (row: ManualRow, playBpm: number | null) => void;
-  onSavePlannedSeconds: (row: ManualRow, seconds: number | null) => void;
   onSavePairNote: (transition: ManualTransition, note: string) => void;
   onUseAlternative: (row: ManualRow, alt: ManualAlternative) => void;
   onRemoveAlternative: (row: ManualRow, alt: ManualAlternative) => void;
@@ -26,13 +25,12 @@ type Props = {
 /** Dettaglio della riga selezionata: dati tecnici con "sconosciuto" dove
  *  manca un valore, appunto salvato al blur solo se cambiato. */
 export function DetailPanel({
-  row, transitions, saveState, onSaveNote, onSavePlayBpm, onSavePlannedSeconds, onSavePairNote,
+  row, transitions, saveState, onSaveNote, onSavePlayBpm, onSavePairNote,
   onUseAlternative, onRemoveAlternative, onCompare,
 }: Props) {
   const t = useT();
   const [draft, setDraft] = useState(row?.note ?? "");
   const [tempo, setTempo] = useState(row?.play_bpm?.toString() ?? "");
-  const [quanto, setQuanto] = useState(row?.planned_seconds?.toString() ?? "");
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- riallineo il draft alla riga selezionata (stesso pattern di components/setup/path-field.tsx)
     setDraft(row?.note ?? "");
@@ -41,10 +39,6 @@ export function DetailPanel({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- stessa ragione: il campo segue la riga selezionata
     setTempo(row?.play_bpm?.toString() ?? "");
   }, [row?.id, row?.play_bpm]);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- stessa ragione: il campo segue la riga selezionata
-    setQuanto(row?.planned_seconds?.toString() ?? "");
-  }, [row?.id, row?.planned_seconds]);
   if (!row) return <p className="text-sm text-muted">{t.sets.manual.detailEmpty}</p>;
   const tr = row.track;
   // I passaggi che riguardano QUESTA riga: quello che ci arriva e quello che ne
@@ -59,6 +53,19 @@ export function DetailPanel({
         <dl className="grid grid-cols-2 gap-2 text-sm">
           <div><dt className="text-xs text-muted">BPM</dt><dd className="tnum">{tr.bpm ?? t.sets.manual.unknownValue}</dd></div>
           <div><dt className="text-xs text-muted">Camelot</dt><dd>{tr.camelot_key ?? t.sets.manual.unknownValue}</dd></div>
+          {/* Genere e durata: la durata e' quella del file, non una scelta di
+              questo set — `min-w-0` e il troncamento perche' un genere lungo
+              qui allargherebbe la colonna e sfonderebbe la griglia. */}
+          <div className="min-w-0">
+            <dt className="text-xs text-muted">{t.sets.manual.genreLabel}</dt>
+            <dd className="truncate" title={tr.genre ?? undefined}>{tr.genre ?? t.sets.manual.unknownValue}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted">{t.sets.manual.lengthLabel}</dt>
+            <dd className="tnum">
+              {tr.duration_seconds === null ? t.sets.manual.unknownValue : fmtDuration(tr.duration_seconds)}
+            </dd>
+          </div>
         </dl>
       )}
       {tr && (
@@ -77,26 +84,20 @@ export function DetailPanel({
           <p className="mt-0.5 text-xs text-faint">{t.sets.manual.playBpmHint}</p>
         </div>
       )}
-      {tr && (
-        <div>
-          <label htmlFor="planned-seconds" className="block text-xs text-muted">{t.sets.manual.plannedSecondsLabel}</label>
-          <Input id="planned-seconds" type="number" inputMode="numeric" min={1} max={3600}
-            className="tnum mt-1 w-28" value={quanto} placeholder={tr.duration_seconds?.toString() ?? ""}
-            onChange={(e) => setQuanto(e.target.value)}
-            onBlur={() => {
-              const valore = quanto.trim() === "" ? null : Number(quanto);
-              if (valore !== null && Number.isNaN(valore)) return;
-              if (valore !== (row.planned_seconds ?? null)) onSavePlannedSeconds(row, valore);
-            }} />
-          <p className="mt-0.5 text-xs text-faint">{t.sets.manual.plannedSecondsHint}</p>
-        </div>
+      {/* L'appunto di riga sopravvive solo sui varchi. Su una traccia lo dicono
+          meglio le note dei due passaggi, che sono legate alle tracce; un varco
+          invece non produce passaggi, quindi senza questo campo resterebbe
+          l'unica riga del set su cui non si puo' scrivere niente — ed e'
+          proprio quel che l'export stampa accanto al varco. */}
+      {!tr && (
+        <>
+          <label className="block text-xs text-muted">{t.sets.manual.noteLabel}</label>
+          <Textarea value={draft} placeholder={t.sets.manual.notePlaceholder} rows={4}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => { if (draft.trim() !== (row.note ?? "")) onSaveNote(row, draft); }} />
+          <div className="text-xs text-muted" aria-live="polite">{stateLabel}</div>
+        </>
       )}
-
-      <label className="block text-xs text-muted">{t.sets.manual.noteLabel}</label>
-      <Textarea value={draft} placeholder={t.sets.manual.notePlaceholder} rows={4}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => { if (draft.trim() !== (row.note ?? "")) onSaveNote(row, draft); }} />
-      <div className="text-xs text-muted" aria-live="polite">{stateLabel}</div>
 
       {entrante && (
         <TransitionPanel transition={entrante} variant="in" onSaveNote={onSavePairNote} />

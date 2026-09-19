@@ -53,6 +53,10 @@ export function MaterialPanel({
               <div className="flex flex-wrap gap-x-2 text-xs text-muted">
                 <span className="tnum">{it.track.bpm ?? t.sets.manual.unknownValue}</span>
                 <span>{it.track.camelot_key ?? t.sets.manual.unknownValue}</span>
+                {/* Il genere e' l'unico dato di lunghezza libera in questa riga, e
+                    la colonna e' la piu' stretta delle tre: senza un tetto
+                    manderebbe le pastiglie a capo da solo. */}
+                {it.track.genre && <span className="max-w-28 truncate">{it.track.genre}</span>}
                 {!it.track.has_local_file && <Badge tone="warning">{t.sets.manual.noFileBadge}</Badge>}
                 {it.in_set && <Badge>{t.sets.manual.inSetBadge}</Badge>}
               </div>

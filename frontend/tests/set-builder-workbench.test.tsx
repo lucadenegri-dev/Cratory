@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   patchRow: vi.fn(),
   removeRow: vi.fn(),
   apiDelete: vi.fn(),
+  renameSet: vi.fn(),
 }));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -86,16 +87,42 @@ describe("set manuale: il gesto base", () => {
     expect(screen.getAllByText("nel set").length).toBeGreaterThan(0);
   });
 
-  it("salva l'appunto al blur e mostra 'sconosciuto' sui dati mancanti", async () => {
+  it("mostra 'sconosciuto' sui dati mancanti, e la durata quando c'e'", async () => {
     api.getManualSet.mockResolvedValue(set(1, [{ id: 10, track: track(2) }]));
-    api.patchRow.mockResolvedValue(set(2, [{ id: 10, track: track(2) }]));
     mount();
     // La riga del percorso e' un <button>; nel materiale la stessa traccia non lo e'.
     const inPath = (await screen.findAllByText(/Traccia 2/)).find((el) => el.closest("button"));
     fireEvent.click(inPath!);
     const detail = within(screen.getByTestId("detail-panel"));
-    expect((await detail.findAllByText("sconosciuto")).length).toBe(2);
-    const area = screen.getByPlaceholderText(/Entra sul break/);
+    // Tre celle su quattro sono vuote nel fixture (bpm, camelot, genere): il
+    // denominatore conta, perche' con un numero piu' alto il test passerebbe
+    // anche se una cella smettesse di comparire del tutto.
+    expect((await detail.findAllByText("sconosciuto")).length).toBe(3);
+    // La quarta ha un valore, e non dice "sconosciuto" ma il tempo formattato.
+    expect(detail.getByText("Genere")).toBeTruthy();
+    expect(detail.getByText("Durata")).toBeTruthy();
+    expect(detail.getByText("5:00")).toBeTruthy();
+  });
+
+  it("su una traccia non c'e' l'appunto di riga: lo dicono i passaggi", async () => {
+    // Dal 2026-09-19 «Il tuo appunto» resta solo sui varchi (vedi il test dopo).
+    api.getManualSet.mockResolvedValue(set(1, [{ id: 10, track: track(2) }]));
+    mount();
+    const inPath = (await screen.findAllByText(/Traccia 2/)).find((el) => el.closest("button"));
+    fireEvent.click(inPath!);
+    await screen.findByTestId("detail-panel");
+    expect(screen.queryByPlaceholderText(/Entra sul break/)).toBeNull();
+  });
+
+  it("salva l'appunto del varco al blur", async () => {
+    // Un varco non produce passaggi: questo campo e' l'unico posto in cui
+    // scriverci sopra, ed e' cio' che l'export stampa accanto al varco.
+    api.getManualSet.mockResolvedValue(set(1, [{ id: 10, track: null }]));
+    api.patchRow.mockResolvedValue(set(2, [{ id: 10, track: null }]));
+    mount();
+    const percorso = within(await screen.findByTestId("path-panel"));
+    fireEvent.click(percorso.getByRole("button", { name: /Varco/ }));
+    const area = await screen.findByPlaceholderText(/Entra sul break/);
     fireEvent.change(area, { target: { value: "apre bene" } });
     fireEvent.blur(area);
     await waitFor(() => expect(api.patchRow).toHaveBeenCalledWith(7, 10, { expected_revision: 1, note: "apre bene" }));
@@ -111,6 +138,47 @@ describe("set manuale: il gesto base", () => {
     expect(await screen.findByText("Il set è cambiato altrove")).toBeTruthy();
     fireEvent.click(screen.getByText("Ricarica"));
     await waitFor(() => expect(api.getManualSet).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("set manuale: rinomina", () => {
+  it("manda il nome ripulito dagli spazi", async () => {
+    api.renameSet.mockResolvedValue({ id: 7, name: "Domenica" });
+    mount();
+    await screen.findByText("Sabato");
+    fireEvent.click(screen.getByRole("button", { name: /Rinomina/ }));
+    const campo = await screen.findByLabelText("Nome del set");
+    fireEvent.change(campo, { target: { value: "  Domenica  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Salva" }));
+    await waitFor(() => expect(api.renameSet).toHaveBeenCalledWith(7, "Domenica"));
+  });
+
+  it("l'intestazione mostra il nome salvato dal server, non quello digitato", async () => {
+    // Il nome salvato lo decide il backend (lo taglia ai bordi, lo tronca a
+    // 200). Qui la risposta differisce apposta da cio' che si e' scritto: e'
+    // l'unico modo di distinguere «mostro la risposta» da «mostro la mia
+    // ipotesi» — con lo stesso testo i due casi sarebbero indistinguibili.
+    api.renameSet.mockResolvedValue({ id: 7, name: "Domenica sera" });
+    mount();
+    await screen.findByText("Sabato");
+    fireEvent.click(screen.getByRole("button", { name: /Rinomina/ }));
+    const campo = await screen.findByLabelText("Nome del set");
+    fireEvent.change(campo, { target: { value: "Domenica" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salva" }));
+    expect(await screen.findByText("Domenica sera")).toBeTruthy();
+    expect(screen.queryByText("Sabato")).toBeNull();
+  });
+
+  it("un nome vuoto non parte", async () => {
+    mount();
+    await screen.findByText("Sabato");
+    fireEvent.click(screen.getByRole("button", { name: /Rinomina/ }));
+    const campo = await screen.findByLabelText("Nome del set");
+    fireEvent.change(campo, { target: { value: "   " } });
+    fireEvent.keyDown(campo, { key: "Enter" });
+    expect(api.renameSet).not.toHaveBeenCalled();
+    // E il modal resta aperto: chiuderlo fingerebbe che sia andata bene.
+    expect(screen.getByLabelText("Nome del set")).toBeTruthy();
   });
 });
 
