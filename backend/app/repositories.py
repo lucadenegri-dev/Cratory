@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
     DjSet, DjSetTrack, DownloadQueueItem, Playlist, PlaylistSyncEvent, Setlist,
-    SetlistAlternative, SetlistTrack, Track, playlist_tracks, utcnow,
+    SetlistAlternative, SetlistPairNote, SetlistTrack, Track, playlist_tracks, utcnow,
 )
 from app.organize.models import AudioFile
 
@@ -627,6 +627,12 @@ def orphan_lead_ids(db: Session, candidate_ids: Iterable[int] | None = None) -> 
         # residuo: conta come riferimento esattamente come una membership.
         # Qui nessuna guardia sul NULL: `SetlistAlternative.track_id` e' NOT NULL.
         Track.id.not_in(select(SetlistAlternative.track_id)),
+        # Un appunto su un passaggio e' un giudizio del DJ su DUE tracce, e
+        # sopravvive per progetto all'uscita di una delle due dal percorso:
+        # senza queste due clausole la pulizia cancellerebbe la traccia e
+        # lascerebbe l'appunto appeso al nulla.
+        Track.id.not_in(select(SetlistPairNote.from_track_id)),
+        Track.id.not_in(select(SetlistPairNote.to_track_id)),
     )
     if candidate_ids is not None:
         ids = list(candidate_ids)
@@ -748,6 +754,23 @@ def merge_tracks(db: Session, keep: Track, drop: Track) -> Track:
         update(SetlistAlternative).where(SetlistAlternative.track_id == drop.id)
         .values(track_id=keep.id)
     )
+    # Appunti di coppia: prima cadono quelli che duplicherebbero una coppia gia'
+    # esistente su keep (la terna e' unica), poi gli altri si ripuntano.
+    esistenti = {tuple(r) for r in db.execute(select(
+        SetlistPairNote.setlist_id, SetlistPairNote.from_track_id,
+        SetlistPairNote.to_track_id)).all()}
+    for nota in db.scalars(select(SetlistPairNote).where(
+            (SetlistPairNote.from_track_id == drop.id)
+            | (SetlistPairNote.to_track_id == drop.id))).all():
+        nuova = (nota.setlist_id,
+                 keep.id if nota.from_track_id == drop.id else nota.from_track_id,
+                 keep.id if nota.to_track_id == drop.id else nota.to_track_id)
+        if nuova in esistenti:
+            db.delete(nota)
+            continue
+        esistenti.add(nuova)
+        nota.from_track_id, nota.to_track_id = nuova[1], nuova[2]
+    db.flush()
     _merge_download_queue_items(db, keep, drop)
     # Backfill dei soli campi vuoti di keep.
     for f in _MERGE_BACKFILL_FIELDS:
@@ -778,6 +801,12 @@ def unreferenced_track_ids(db: Session, candidate_ids: Iterable[int] | None = No
         # residuo: conta come riferimento esattamente come una membership.
         # Qui nessuna guardia sul NULL: `SetlistAlternative.track_id` e' NOT NULL.
         Track.id.not_in(select(SetlistAlternative.track_id)),
+        # Un appunto su un passaggio e' un giudizio del DJ su DUE tracce, e
+        # sopravvive per progetto all'uscita di una delle due dal percorso:
+        # senza queste due clausole la pulizia cancellerebbe la traccia e
+        # lascerebbe l'appunto appeso al nulla.
+        Track.id.not_in(select(SetlistPairNote.from_track_id)),
+        Track.id.not_in(select(SetlistPairNote.to_track_id)),
     )
     if candidate_ids is not None:
         ids = list(candidate_ids)

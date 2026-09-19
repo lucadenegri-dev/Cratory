@@ -5,7 +5,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import _migrate_drop_legacy, ensure_schema
-from app.models import Playlist, Setlist, SetlistAlternative, SetlistBlock, SetlistTrack, Track
+from app.models import (
+    Playlist, Setlist, SetlistAlternative, SetlistBlock, SetlistPairNote, SetlistTrack, Track,
+)
 from app.repositories import (
     delete_playlist, get_setlist, merge_tracks, orphan_lead_ids, unreferenced_track_ids,
 )
@@ -155,3 +157,64 @@ def test_merge_non_duplica_una_alternativa_gia_presente(db):
     merge_tracks(db, keep, drop)
     db.refresh(row)
     assert [a.track_id for a in row.alternatives] == [keep.id]  # una sola, non due
+
+
+def test_un_lead_giudicato_in_un_passaggio_non_e_orfano(db):
+    """Un appunto su A->B sopravvive all'uscita di B dal percorso: se la pulizia
+    cancellasse B, l'appunto resterebbe appeso al nulla."""
+    a = Track(source_type="spotify", title="A", has_local_file=True)
+    b = Track(source_type="spotify", title="B")  # lead, niente file
+    db.add_all([a, b])
+    db.flush()
+    s = Setlist(name="M", kind="manual")
+    db.add(s)
+    db.flush()
+    db.add(SetlistPairNote(setlist_id=s.id, from_track_id=a.id, to_track_id=b.id, note="x"))
+    db.commit()
+
+    assert b.id not in orphan_lead_ids(db)
+    assert b.id not in unreferenced_track_ids(db)
+
+
+def test_fondere_due_tracce_sposta_gli_appunti_di_coppia(db):
+    a = Track(source_type="spotify", title="A", has_local_file=True)
+    b = Track(source_type="spotify", title="B", has_local_file=True)
+    doppione = Track(source_type="spotify", title="B bis", has_local_file=True)
+    db.add_all([a, b, doppione])
+    db.flush()
+    s = Setlist(name="M", kind="manual")
+    db.add(s)
+    db.flush()
+    db.add(SetlistPairNote(setlist_id=s.id, from_track_id=a.id, to_track_id=doppione.id,
+                           note="dal doppione"))
+    db.commit()
+
+    merge_tracks(db, keep=b, drop=doppione)
+    db.commit()
+
+    righe = db.scalars(select(SetlistPairNote)).all()
+    assert [(p.from_track_id, p.to_track_id) for p in righe] == [(a.id, b.id)]
+
+
+def test_fondere_non_crea_due_appunti_sulla_stessa_coppia(db):
+    """Se esistono gia' A->keep e A->drop, dopo la fusione ne resta uno solo:
+    la terna (set, from, to) e' unica, e un UPDATE cieco violerebbe l'indice."""
+    a = Track(source_type="spotify", title="A", has_local_file=True)
+    b = Track(source_type="spotify", title="B", has_local_file=True)
+    doppione = Track(source_type="spotify", title="B bis", has_local_file=True)
+    db.add_all([a, b, doppione])
+    db.flush()
+    s = Setlist(name="M", kind="manual")
+    db.add(s)
+    db.flush()
+    db.add_all([
+        SetlistPairNote(setlist_id=s.id, from_track_id=a.id, to_track_id=b.id, note="tengo"),
+        SetlistPairNote(setlist_id=s.id, from_track_id=a.id, to_track_id=doppione.id, note="cade"),
+    ])
+    db.commit()
+
+    merge_tracks(db, keep=b, drop=doppione)
+    db.commit()
+
+    righe = db.scalars(select(SetlistPairNote)).all()
+    assert [p.note for p in righe] == ["tengo"]

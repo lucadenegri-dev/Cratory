@@ -16,8 +16,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import Base
 from app.models import (
-    DownloadQueueItem, Playlist, Setlist, SetlistAlternative, SetlistBlock, SetlistRevision,
-    SetlistTrack, Track, playlist_tracks,
+    DownloadQueueItem, Playlist, Setlist, SetlistAlternative, SetlistBlock, SetlistPairNote,
+    SetlistRevision, SetlistTrack, Track, playlist_tracks,
 )
 from app.organize.models import AudioFile, ScanRoot
 from app.tools import clean_user_data
@@ -164,3 +164,25 @@ def test_pulizia_libreria_svuota_anche_la_cronologia(db_su_file):
     assert report["after"]["setlists"] == 0
     assert db_su_file.execute(
         text("SELECT COUNT(*) FROM setlist_revisions")).scalar_one() == 0
+
+
+def test_pulizia_libreria_svuota_anche_gli_appunti_di_coppia(db_su_file):
+    """`setlist_pair_notes` e' figlia di `setlists` E di `tracks`: senza di lei
+    in DATA_TABLES la DELETE sulle madri va in IntegrityError con le foreign
+    key accese."""
+    t = Track(source_type="spotify", title="T", has_local_file=True)
+    db_su_file.add(t)
+    db_su_file.flush()
+    s = Setlist(name="M", kind="manual")
+    db_su_file.add(s)
+    db_su_file.flush()
+    db_su_file.add(SetlistPairNote(setlist_id=s.id, from_track_id=t.id,
+                                   to_track_id=t.id, note="x"))
+    db_su_file.commit()
+
+    report = clean_user_data.clean("library", preserve_tokens=True,
+                                   include_backups=False, dry_run=False)
+
+    assert report["after"]["setlists"] == 0
+    assert db_su_file.execute(
+        text("SELECT COUNT(*) FROM setlist_pair_notes")).scalar_one() == 0

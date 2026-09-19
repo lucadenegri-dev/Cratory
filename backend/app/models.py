@@ -7,7 +7,10 @@ deterministico (services/energy). Nessun motore di enrichment interno.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Table, Text
+from sqlalchemy import (
+    JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Table, Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -241,6 +244,9 @@ class Setlist(Base):
         back_populates="setlist", cascade="all, delete-orphan",
         order_by="SetlistRevision.seq",
     )
+    pair_notes: Mapped[list["SetlistPairNote"]] = relationship(
+        back_populates="setlist", cascade="all, delete-orphan",
+    )
 
 
 class SetlistBlock(Base):
@@ -276,6 +282,10 @@ class SetlistTrack(Base):
     slot_kind: Mapped[str] = mapped_column(String, default="track", server_default="track")
     block_id: Mapped[int | None] = mapped_column(ForeignKey("setlist_blocks.id"), index=True)
     note: Mapped[str | None] = mapped_column(Text)
+    # "La suono a": il tempo a cui il DJ suona QUESTA traccia in QUESTO set.
+    # Non tocca `Track.bpm`, che resta il dato della traccia; serve a valutare
+    # i vicini sul tempo vero di cabina (spec 2026-09-15, sezione 3).
+    play_bpm: Mapped[float | None] = mapped_column(Float)
     # Ruolo della traccia nell'arco del set: intro|warmup|groove|transition|peak|release|closing
     role: Mapped[str | None] = mapped_column(String)
     transition_score: Mapped[float | None] = mapped_column(Float)
@@ -334,6 +344,30 @@ class SetlistRevision(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     setlist: Mapped[Setlist] = relationship(back_populates="revisions")
+
+
+class SetlistPairNote(Base):
+    """Appunto su un passaggio: dalla traccia `from` alla traccia `to`.
+
+    La chiave sono le TRACCE, non le righe: il giudizio non si trasferisce e non
+    si perde. Se dopo A finisce C, la coppia A->C semplicemente non ha riga qui;
+    se si rimette B, l'appunto su A->B torna a galla da solo. La tappa 4 non ha
+    stato ("provato" e' stato tolto, 2026-09-19): resta il solo testo.
+    """
+
+    __tablename__ = "setlist_pair_notes"
+    __table_args__ = (
+        UniqueConstraint("setlist_id", "from_track_id", "to_track_id",
+                         name="uq_pair_note_per_coppia"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    setlist_id: Mapped[int] = mapped_column(ForeignKey("setlists.id"), index=True)
+    from_track_id: Mapped[int] = mapped_column(ForeignKey("tracks.id"), index=True)
+    to_track_id: Mapped[int] = mapped_column(ForeignKey("tracks.id"), index=True)
+    note: Mapped[str | None] = mapped_column(Text)
+
+    setlist: Mapped[Setlist] = relationship(back_populates="pair_notes")
 
 
 class DjSet(Base):
