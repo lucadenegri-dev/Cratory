@@ -9,8 +9,6 @@ restano le sole parti che il beam usa ancora — e che oggi servono a
 import statistics
 from dataclasses import dataclass
 
-from app.models import Track
-from app.schemas import SetGenerationRequest
 from app.services.scoring import genre_families_of, genre_of
 
 
@@ -66,7 +64,7 @@ def _trajectory_fit(bpm: float | None, desired: float) -> float:
     return max(0.0, 100.0 - abs(bpm - desired) * 8.0)
 
 
-def _desired_energy(req: SetGenerationRequest, progress: float,
+def _desired_energy(req, progress: float,
                     profile: StrategyProfile | None = None) -> float | None:
     """Energia target lungo il set (0-100), interpolata start->end.
 

@@ -124,34 +124,6 @@ class TransitionCandidateOut(BaseModel):
     score: TransitionScoreOut
 
 
-class SetGenerationRequest(BaseModel):
-    name: str | None = None
-    # se valorizzato, il set parte SOLO dalle tracce di questa playlist importata
-    playlist_id: int | None = None
-    target_duration_minutes: int = Field(default=60, ge=10, le=300)
-    start_bpm: float | None = None
-    end_bpm: float | None = None
-    # progressione di energia (0-100) lungo il set
-    start_energy: int | None = Field(default=None, ge=0, le=100)
-    end_energy: int | None = Field(default=None, ge=0, le=100)
-    seed_artists: list[str] = []
-    # filtro genere: match esatto sui tag di libreria; vuoto = tutti i generi
-    genres: list[str] = []
-    preferred_keys: list[str] = []
-    strategy: str = "smooth"  # smooth|progressive|contrast|experimental|peak_time|warm_up|closing
-    max_tracks_per_artist: int = Field(default=2, ge=1, le=10)
-    sources: list[str] = []  # vuoto = tutte; valori: spotify|soundcloud|local
-    prefer_harmonic: bool = True
-    prefer_progressive_bpm: bool = True
-    allow_sharp_changes: bool = False
-    avoid_short_tracks: bool = True
-    # Disk-first: di default il set nasce SOLO da tracce possedute (file su disco),
-    # cosi' e' garantito suonabile. False = includi anche i lead (senza file).
-    owned_only: bool = True
-    prompt: str | None = None  # prompt libero: interpretato dalla curatela AI
-    use_ai: bool | None = None  # None = auto (AI se configurata e c'e' un prompt)
-
-
 class SetlistTrackOut(BaseModel):
     position: int
     role: str | None = None
@@ -204,30 +176,6 @@ class SetlistSummaryOut(BaseModel):
 
 class SetRenameRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-
-
-class MoveTrackRequest(BaseModel):
-    """Sposta una traccia: passo singolo (`direction`, per le frecce/tastiera) oppure
-    posizione arbitraria (`to`, 1-based, per il drag-and-drop). Esattamente uno dei due.
-    """
-
-    direction: Literal["up", "down"] | None = None
-    to: int | None = Field(default=None, ge=1)
-
-    @model_validator(mode="after")
-    def _exactly_one(self) -> "MoveTrackRequest":
-        if (self.direction is None) == (self.to is None):
-            raise ValueError("Specificare esattamente uno tra 'direction' e 'to'")
-        return self
-
-
-class ReplaceTrackRequest(BaseModel):
-    track_id: int
-
-
-class AddTrackRequest(BaseModel):
-    track_id: int
-    position: int | None = Field(default=None, ge=1)
 
 
 # --- Set manuale (banco di preparazione, tappa 1) ------------------------------
@@ -407,26 +355,6 @@ class MaterialOut(BaseModel):
 
 
 # --- Alternative per traccia (F9) --------------------------------------------
-
-
-class AlternativesRequest(BaseModel):
-    position: int = Field(ge=1)
-    mode: Literal["safer", "softer", "harder", "same_artist", "surprising"] = "safer"
-    limit: int = Field(default=5, ge=1, le=10)
-
-
-class AlternativeOut(BaseModel):
-    track: TrackOut
-    score_prev: int | None = None  # transizione dal brano precedente
-    score_next: int | None = None  # transizione verso il brano successivo
-    reason: str = ""
-    risk_level: str = "medium"
-
-
-class AlternativesResponse(BaseModel):
-    position: int
-    mode: str
-    alternatives: list[AlternativeOut] = []
 
 
 # --- Playlist import (nuovo flusso) ------------------------------------------
@@ -969,27 +897,6 @@ class LibraryStatsOut(BaseModel):
     genre_distribution: dict[str, int] = {}
     bpm_histogram: list[BpmBin] = []
     energy_distribution: list[EnergyBucket] = []
-
-
-class GenerateAsyncStartOut(BaseModel):
-    """Risposta immediata di POST /api/sets/generate-async: il job e' partito
-    in background, seguire /generate-status per l'esito."""
-
-    status: str
-    phase: str | None = None
-    using_ai: bool
-
-
-class GenerateStatusOut(BaseModel):
-    """Stato del job di generazione asincrona (GET /api/sets/generate-status)."""
-
-    status: str
-    phase: str | None = None
-    using_ai: bool = False
-    setlist_id: int | None = None
-    error: str | None = None
-    started_at: str | None = None
-    finished_at: str | None = None
 
 
 class PipelineOut(BaseModel):

@@ -3,7 +3,6 @@ classificazione onesta, spiegazione utile, warning aggregati, dedup, export accu
 """
 
 from app.models import Track
-from app.schemas import SetGenerationRequest
 
 
 def mk(bpm=None, key=None, duration=300, energy=None, genre=None, artist=None, title=None):

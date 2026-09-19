@@ -10,9 +10,8 @@ Due comportamenti:
 
 from app.models import Playlist, Track
 from app.repositories import add_track_to_playlist
-from app.schemas import SetGenerationRequest
 from app.services.scoring import RESET_GENRE_SIMILARITY, genre_families_of, genre_similarity_score
-from app.services.set_generator import _DEFAULT_PROFILE, _candidate_score
+from app.services.set_generator import _DEFAULT_PROFILE, BeamParams, _candidate_score
 
 
 def make_track(**kw) -> Track:
@@ -72,7 +71,7 @@ def test_unmapped_genres_fall_back_to_token_overlap():
 def test_genre_has_dedicated_weight_in_ranking():
     # A parita' di BPM/key/energia il genere deve spostare il ranking in modo
     # netto: termine con peso proprio, non diluito nella media con l'energia.
-    req = SetGenerationRequest()
+    req = BeamParams()
     prev = make_track(bpm=130, camelot_key="7A", energy=60, genre="Techno")
     same = make_track(bpm=130, camelot_key="7A", energy=65, genre="Acid Techno")
     other = make_track(bpm=130, camelot_key="7A", energy=65, genre="House")
@@ -84,7 +83,7 @@ def test_genre_has_dedicated_weight_in_ranking():
 def test_missing_genre_stays_neutral_in_ranking():
     # Una traccia senza genere non deve essere ne' premiata ne' punita rispetto
     # a una coerente: il termine usa il valore neutro (50), non sparisce.
-    req = SetGenerationRequest()
+    req = BeamParams()
     prev = make_track(bpm=130, camelot_key="7A", genre="Techno")
     unknown = make_track(bpm=130, camelot_key="7A", genre=None)
     clash = make_track(bpm=130, camelot_key="7A", genre="House")

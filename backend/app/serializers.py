@@ -8,7 +8,6 @@ from app.models import Setlist, Track
 from app.repositories import FileTags, file_tags_for_tracks, get_playlist
 from app.schemas import (
     ManualAlternativeOut,
-    AlternativeOut,
     ManualBlockOut,
     ManualRowOut,
     ManualSetOut,
@@ -143,16 +142,6 @@ def setlist_out(setlist: Setlist, lang: str = "it", db: Session | None = None) -
         total_duration_seconds=total,
         created_at=_naive(setlist.created_at),
         tracks=items,
-    )
-
-
-def alternative_out(alt, file_tags: FileTags | None = None) -> AlternativeOut:
-    return AlternativeOut(
-        track=track_out(alt.track, file_tags),
-        score_prev=alt.score_prev,
-        score_next=alt.score_next,
-        reason=alt.reason,
-        risk_level=alt.risk_level,
     )
 
 

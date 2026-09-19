@@ -8,8 +8,9 @@ import pytest
 
 from app.models import Playlist, Track
 from app.repositories import add_track_to_playlist
-from app.schemas import SetGenerationRequest
-from app.services.set_generator import _DEFAULT_PROFILE, _beam_search_span, _candidate_score
+from app.services.set_generator import (
+    _DEFAULT_PROFILE, BeamParams, _beam_search_span, _candidate_score,
+)
 from app.services.set_skeleton import strategy_profile
 
 
@@ -20,7 +21,7 @@ def make_track(**kw) -> Track:
 
 
 def _score(prev, cand, **kw) -> float:
-    total, _ = _candidate_score(prev, cand, 126.0, SetGenerationRequest(), {},
+    total, _ = _candidate_score(prev, cand, 126.0, BeamParams(), {},
                                 _DEFAULT_PROFILE, 0.5, **kw)
     return total
 
@@ -85,7 +86,7 @@ def test_span_returns_only_fillers_within_budget():
     pool = _span_pool()
     opener = pool[0]
     fillers = _beam_search_span(
-        opener, pool, SetGenerationRequest(), strategy_profile("smooth"),
+        opener, pool, BeamParams(), strategy_profile("smooth"),
         125.0, 125.0, 3600,
         elapsed_secs=300, fill_until_secs=1200)  # spazio per ~3 filler da 300s
     assert 0 < len(fillers) <= 3
@@ -99,7 +100,7 @@ def test_span_excludes_used_and_respects_artist_counts():
     pool = _span_pool()
     opener = pool[0]
     fillers = _beam_search_span(
-        opener, pool, SetGenerationRequest(max_tracks_per_artist=1),
+        opener, pool, BeamParams(max_tracks_per_artist=1),
         strategy_profile("smooth"), 125.0, 125.0, 3600,
         elapsed_secs=300, fill_until_secs=1500,
         used={pool[1].id, opener.id}, artist_counts={"art3": 1})
@@ -111,7 +112,7 @@ def test_span_excludes_used_and_respects_artist_counts():
 def test_span_empty_when_budget_already_filled():
     pool = _span_pool()
     fillers = _beam_search_span(
-        pool[0], pool, SetGenerationRequest(), strategy_profile("smooth"),
+        pool[0], pool, BeamParams(), strategy_profile("smooth"),
         125.0, 125.0, 3600, elapsed_secs=1200, fill_until_secs=1200)
     assert fillers == []
 
@@ -154,8 +155,6 @@ def test_mood_scores_shift_candidate_ranking():
 def test_lo_span_si_puo_fermare_a_conteggio(db):
     """«Riempi il varco» vuole N tracce, non N secondi: il criterio a conteggio
     affianca quello a secondi senza sostituirlo."""
-    from app.schemas import SetGenerationRequest
-    from app.services.set_generator import _beam_search_span
     from app.services.set_skeleton import strategy_profile
 
     tracce = []
@@ -166,7 +165,7 @@ def test_lo_span_si_puo_fermare_a_conteggio(db):
         tracce.append(t)
     db.commit()
 
-    req = SetGenerationRequest(target_duration_minutes=60)
+    req = BeamParams()
     fillers = _beam_search_span(
         tracce[0], tracce[1:], req, strategy_profile("smooth"),
         start_bpm=124.0, end_bpm=130.0, target_seconds=3600,

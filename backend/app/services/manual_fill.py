@@ -10,10 +10,9 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.models import Setlist, SetlistTrack, Track
-from app.schemas import SetGenerationRequest
 from app.services.manual_material import material_for
 from app.services.manual_set import ManualSetError, path_rows, resolved_path
-from app.services.set_generator import _beam_search_span
+from app.services.set_generator import BeamParams, _beam_search_span
 from app.services.set_skeleton import strategy_profile
 
 
@@ -53,7 +52,7 @@ def propose_fill(db: Session, setlist: Setlist, gap: SetlistTrack, *, count: int
 
     fillers = []
     if quanti > 0 and pool:
-        req = SetGenerationRequest(target_duration_minutes=60)
+        req = BeamParams()
         fillers = _beam_search_span(
             opener, pool, req, strategy_profile("smooth"),
             start_bpm=start or 124.0, end_bpm=end or start or 124.0,

@@ -56,8 +56,8 @@ def test_mixing_tip_mentions_halftime():
 # --- C) Profili di strategia -------------------------------------------------
 
 def _req(**kw):
-    from app.schemas import SetGenerationRequest
-    return SetGenerationRequest(**kw)
+    from app.services.set_generator import BeamParams
+    return BeamParams(**kw)
 
 
 def test_strategy_profiles_differ():

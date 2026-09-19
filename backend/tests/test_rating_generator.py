@@ -1,7 +1,7 @@
 """Bonus voto nel generator: tie-break, mai sopra la compatibilita' BPM/key."""
 
 from app.models import Track
-from app.schemas import SetGenerationRequest
+from app.services.set_generator import BeamParams
 from app.services.set_generator import _DEFAULT_PROFILE, _candidate_score, _pick_first
 
 
@@ -12,7 +12,7 @@ def make_track(**kw) -> Track:
 
 
 def _score(prev, cand) -> float:
-    total, _ = _candidate_score(prev, cand, 126.0, SetGenerationRequest(), {},
+    total, _ = _candidate_score(prev, cand, 126.0, BeamParams(), {},
                                 _DEFAULT_PROFILE, 0.5)
     return total
 
@@ -42,7 +42,7 @@ def test_pick_first_bpm_esatto_batte_votata_fuori_bpm():
     # Il voto non deve mai ribaltare l'aderenza al BPM di partenza, nemmeno per
     # la prima traccia: qui la votata e' a qualche BPM di distanza, l'altra e'
     # esattamente sul BPM richiesto e non votata.
-    req = SetGenerationRequest()
+    req = BeamParams()
     esatta = make_track(id=1, bpm=126.0)
     votata_fuori_bpm = make_track(id=2, bpm=130.0, rating=3)
     scelta = _pick_first([esatta, votata_fuori_bpm], req, start_bpm=126.0)
@@ -51,7 +51,7 @@ def test_pick_first_bpm_esatto_batte_votata_fuori_bpm():
 
 def test_pick_first_a_parita_di_bpm_vince_la_votata():
     # Stesso BPM (stesso first_score): qui il voto e' un legittimo tie-break puro.
-    req = SetGenerationRequest()
+    req = BeamParams()
     non_votata = make_track(id=1, bpm=126.0)
     votata = make_track(id=2, bpm=126.0, rating=3)
     scelta = _pick_first([non_votata, votata], req, start_bpm=126.0)

@@ -9,12 +9,12 @@ da scoring.
 
 import logging
 import statistics
+from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
 from app.models import Setlist, SetlistTrack, Track
 from app.repositories import effective_genres_for_tracks
-from app.schemas import SetGenerationRequest
 from app.services.camelot import camelot_compatibility
 from app.services.scoring import (
     RESET_ENERGY_DROP,
@@ -38,6 +38,27 @@ from app.services.set_skeleton import (  # noqa: F401 - re-export per compat tes
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class BeamParams:
+    """I parametri del beam search.
+
+    Era `SetGenerationRequest`, il corpo della vecchia richiesta di generazione;
+    da quando il generatore e' solo uno strumento dentro il set (2026-09-19) non
+    e' piu' il corpo di niente, e stare fra gli schemi HTTP avrebbe detto una
+    bugia a chi legge. I default sono quelli che arrivavano dal form.
+    """
+
+    max_tracks_per_artist: int = 2
+    prefer_harmonic: bool = True
+    prefer_progressive_bpm: bool = True
+    allow_sharp_changes: bool = False
+    preferred_keys: list[str] = field(default_factory=list)
+    seed_artists: list[str] = field(default_factory=list)
+    genres: list[str] = field(default_factory=list)
+    start_energy: int | None = None
+    end_energy: int | None = None
 
 # Peso dello score di transizione vs aderenza alla traiettoria BPM.
 _TRANSITION_WEIGHT = 0.55
@@ -88,7 +109,7 @@ class SetGenerationError(Exception):
     pass
 
 
-def _feature_fit(prev: Track, cand: Track, req: SetGenerationRequest,
+def _feature_fit(prev: Track, cand: Track, req: BeamParams,
                  desired_energy: float | None) -> float | None:
     """Smoothness dell'energia (0-100), solo se il dato e' presente.
 
@@ -103,7 +124,7 @@ def _feature_fit(prev: Track, cand: Track, req: SetGenerationRequest,
     return None
 
 
-def _pick_first(candidates: list[Track], req: SetGenerationRequest, start_bpm: float) -> Track:
+def _pick_first(candidates: list[Track], req: BeamParams, start_bpm: float) -> Track:
     seeds = [s.lower() for s in req.seed_artists]
 
     def first_score(t: Track) -> float:
@@ -119,7 +140,7 @@ def _pick_first(candidates: list[Track], req: SetGenerationRequest, start_bpm: f
 
 
 def _candidate_score(
-    prev: Track, cand: Track, desired_bpm: float, req: SetGenerationRequest,
+    prev: Track, cand: Track, desired_bpm: float, req: BeamParams,
     artist_counts: dict[str, int], profile: StrategyProfile, progress: float,
     desired_energy: float | None = None, *,
     converge_to: Track | None = None, converge_ramp: float = 0.0,
@@ -207,7 +228,7 @@ BEAM_EXPANSIONS = 8
 
 
 def _beam_search_span(
-    opener: Track, candidates: list[Track], req: SetGenerationRequest,
+    opener: Track, candidates: list[Track], req: BeamParams,
     profile: StrategyProfile, start_bpm: float, end_bpm: float,
     target_seconds: int, *, elapsed_secs: int, fill_until_secs: int,
     converge_to: Track | None = None,

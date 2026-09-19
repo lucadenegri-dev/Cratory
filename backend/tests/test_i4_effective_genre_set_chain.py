@@ -13,7 +13,6 @@ from sqlalchemy import event
 
 from app.models import Track
 from app.organize.models import AudioFile, ScanRoot
-from app.schemas import SetGenerationRequest
 
 
 @pytest.fixture()
@@ -63,7 +62,9 @@ def test_requested_genre_bonus_absent_without_genre_map(db, make_owned):
                  "duration_seconds": 300},
         file_kw={"genre": "Progressive House"},
     )
-    req = SetGenerationRequest(genres=["Progressive House"])
+    from app.services.set_generator import BeamParams
+
+    req = BeamParams(genres=["Progressive House"])
     s_no_map, _ = _candidate_score(prev, matching, 128.0, req, {}, _DEFAULT_PROFILE, 0.5,
                                    genre_counts={})  # genre_map di default None
     s_with_map, _ = _candidate_score(prev, matching, 128.0, req, {}, _DEFAULT_PROFILE, 0.5,
