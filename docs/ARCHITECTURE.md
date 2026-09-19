@@ -460,7 +460,7 @@ missing BPM bridges, flat energy, harmonic dead ends). `/api/transitions` classi
 of tracks on its own. `services/labels.py` aggregates the library per record label, reading
 the label from the effective tag.
 
-### Manual set (tappe 1-4)
+### Manual set (tappe 1-5)
 
 A DJ can build a set by hand instead of generating one: `Setlist.kind` is `generated`
 (everything above) or `manual`. A manual set has no strategy, no target duration and
@@ -520,13 +520,36 @@ changes. The spec also gave it a `state` (`unreviewed`/`to_try`/`tried`); it was
 dropped on the user's decision (2026-09-19), because without `tried` the "to try"
 flag never closes and becomes a list that only ever fills up.
 
+`resolved_path` is the one projection that export, duration and compatibility all
+read: `main` blocks in order, only rows carrying a track. It stays deliberately
+separate from `path_rows`, which keeps the gaps because whoever draws the path must
+see them — merging the two would force every caller to remember to filter, and
+sooner or later one of them forgets. `set_duration` sums `planned_seconds` where
+the DJ set it and the file's length otherwise, and reports `incomplete` with the
+reason rather than quietly presenting a partial total as a real one.
+
+`services/manual_export.py` holds one renderer per format, and the app's preview is
+the endpoint's own response rather than a second client-side rendering — which is
+what makes "the preview matches the exported file" true by construction instead of
+by discipline.
+
+`services/manual_fill.py` is the generator as a tool inside the set. It is not a
+second engine: it calls the same `_beam_search_span`, which learned a stop-by-count
+criterion alongside its stop-by-seconds one, with the track before the gap as opener
+and the one after it as the convergence target. `mood_scores` is always `None` —
+that parameter is the only door AI curation could come through, and a test monkeypatches
+the whole curation module to prove nothing knocks on it. The proposals become ordinary
+rows in a single revision, so one undo reopens the gap.
+
 The frontend's `/sets/manual?id=…` (three panels: material, path, detail, with the
 bench and the reserve under the path, and the incoming/outgoing passage inside the
 detail) and the list at `/sets` route by `kind`. A row's
 up/down arrows move it inside its own sequence, so they stop at its edges: crossing a
 boundary means moving the sequence itself. See
-`docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the staged plan
-(tappe 1-4: no planned duration, no dedicated export, no "fill this gap").
+`docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the staged plan.
+What remains of it is the demolition half of tappa 6 — removing the old generation
+form and AI curation — deliberately split into its own change, because "fill this
+gap" is what justifies keeping the beam search and had to exist first.
 
 ## Discovery
 

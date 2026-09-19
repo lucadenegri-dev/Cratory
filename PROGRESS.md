@@ -76,6 +76,28 @@ described in `CLAUDE.md`.
   export dedicati, «riempi il varco» — tappe 5-6, piano in
   `docs/superpowers/plans/2026-09-19-set-manuale-tappa-4.md`.
 
+- **Set manuale, tappa 5 e «riempi il varco» (2026-09-19).** Il set dice quanto
+  dura: la somma del **percorso risolto** (sequenze principali in ordine, sole
+  righe con traccia), con «Quanto la tengo» per riga che vince sulla durata del
+  file. Quando il totale è parziale lo dichiara e dice perché — quante tracce senza
+  durata, quanti varchi aperti — invece di spacciare una somma incompleta per un
+  dato. L'**export** non è più riservato ai set generati: testo, CSV, Markdown e
+  M3U8 leggono il percorso risolto, più due formati nuovi, la **scheda di
+  preparazione** (sequenze, appunti, alternative, varchi, pitch di ogni passaggio)
+  e le **riserve**. Una traccia senza file esce dall'M3U8, che punta ai file, ma
+  resta nella scheda segnata «non disponibile»: è una decisione presa, e
+  nasconderla sarebbe una bugia. L'anteprima è la risposta stessa dell'endpoint,
+  non una seconda resa lato client, quindi non può divergere dal file scaricato.
+  **«Riempi il varco»**: il generatore propone N tracce fra le due ai lati del
+  varco — lo stesso beam search del set builder, che ora sa fermarsi a conteggio e
+  non solo a tempo, con il pool preso dal materiale meno ciò che è già nel
+  percorso. Le proposte entrano come righe normali e tutto il riempimento è **una
+  sola revisione**: un annulla riapre il varco com'era. Nessuna AI, e c'è un test
+  che monkeypatcha l'intera curatela per dimostrare che nessuno la chiama. Cosa
+  non c'è ancora: la rimozione del vecchio form di generazione e della curatela
+  AI, separata apposta in un cantiere suo. Piano in
+  `docs/superpowers/plans/2026-09-19-set-manuale-tappa-5-6a.md`.
+
 - **Impostazioni in cinque sezioni (2026-09-15).** Generali · Libreria · Download ·
   Collegamenti · Backup, scelte da `?section=` con i pannelli montati e nascosti,
   così una bozza non salvata sopravvive al cambio sezione e ogni form di cartelle

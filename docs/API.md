@@ -517,10 +517,17 @@ neighbours.
 `markdown` | `m3u8`. CSV includes `local_path` (empty for tracks without a file).
 `m3u8` is importable in Rekordbox and lists absolute local paths; tracks without a
 local file are excluded and their count noted in a leading comment. To export to
-Spotify instead, use `POST /api/spotify/create-playlist`. This export stays scoped to
-generated sets: the manual set below has no dedicated export in this stage.
+Spotify instead, use `POST /api/spotify/create-playlist`. Since tappa 5 this endpoint also serves hand-prepared sets, which read the
+**resolved path** and add two formats of their own: `prep`, the preparation sheet
+(sequences with their names, per-row notes, alternatives, open gaps and the pitch
+of each passage), and `reserve`, the tracks set aside. A track with no file on disk
+is excluded from `m3u8` — it cannot be in a Rekordbox playlist — but **stays** in
+the preparation sheet, marked unavailable: it is a decision the DJ took, and hiding
+it would be a lie. The two new formats answer `422 set_format_not_available` on a
+generated set. The preview in the app is this very response, not a second rendering,
+so it cannot drift from the downloaded file.
 
-### Set manuale (banco di preparazione, tappe 1-4)
+### Set manuale (banco di preparazione, tappe 1-5)
 
 ```text
 POST   /api/sets/manual
@@ -540,6 +547,7 @@ POST   /api/sets/{setlist_id}/blocks/{block_id}/split
 POST   /api/sets/{setlist_id}/undo
 POST   /api/sets/{setlist_id}/redo
 PUT    /api/sets/{setlist_id}/pair-notes
+POST   /api/sets/{setlist_id}/rows/{row_id}/fill-gap
 ```
 
 A DJ builds a set by hand from a playlist instead of generating one:
@@ -577,6 +585,15 @@ percentage is already computed on that grid (140 → 70 is `0.0`, not `-50`).
 and `bpm_percent` are `null` and the client shows "unknown" — never the neutral
 rating `score_transition` would return, which reads as a judgement and is not one.
 
+The **resolved path** is the projection everything downstream reads: `main` blocks
+in order, only rows that carry a track. Bench, reserve and alternatives are not in
+it, and an open gap breaks the adjacency around it. `duration` reports that path:
+`seconds` is the sum of what is known — `planned_seconds` per row when set,
+otherwise the file's own length — and `incomplete` says the total is partial, with
+`unknown_rows` and `open_gaps` saying why. A row also carries `planned_seconds`:
+how long the DJ keeps *that* track in *that* set, which never touches
+`Track.duration_seconds`.
+
 `GET /api/sets/{setlist_id}/material?q=&owned=&unused=&reserved=` returns the source
 playlist read fresh (not a snapshot taken at creation), the tracks already in the set,
 and — with `q` — a library search; each `MaterialItemOut` flags `in_set` (on a row of
@@ -611,8 +628,19 @@ lands on the wrong row.
   (`expected_revision` as a query parameter, like the row delete).
 - `PATCH .../rows/{row_id}` is a **partial** patch: a field absent from the body is
   left alone, and an explicit `null` clears it. `note` is free text (max 2000
-  characters); `play_bpm` is the booth tempo for that row (20–300). Sending only
+  characters); `play_bpm` is the booth tempo for that row (20–300);
+  `planned_seconds` is its net contribution to the duration (1–3600). Sending only
   the note therefore never wipes the tempo, and vice versa.
+- `POST .../rows/{row_id}/fill-gap` hands an open gap to the generator, which
+  proposes `count` tracks (1–10) for it. It is the same deterministic beam search
+  the set builder uses, stopped by count instead of by seconds, with the track
+  before the gap as opener and the one after it as the target to converge on; a
+  gap at either end simply has one free side. The pool is the set's material minus
+  everything already in the path. **No AI**: the curation hook (`mood_scores`) is
+  always `None`. The proposals land as ordinary rows — movable, editable,
+  deletable — and the whole fill is **one** revision, so a single undo reopens the
+  gap exactly as it was. `422 set_fill_failed` when there is nothing to propose,
+  and the gap stays open.
 - `PUT .../pair-notes` writes the note on the passage between two **tracks** —
   `from_track_id` → `to_track_id`, not two row ids. That is what makes the
   judgement survive the path: replace B with C and the pair A→C simply has no
@@ -657,9 +685,10 @@ These candidates are the DJ's own, saved on the row. They are unrelated to
 `POST /api/sets/{setlist_id}/alternatives`, the generator's *computed* suggestions,
 which stays reserved for generated sets.
 
-Manual sets never go through `assign_roles`, transition recomputation or the
-deterministic generator above. These stages have no planned duration and no
-dedicated export — see
+Manual sets never go through `assign_roles` or transition recomputation, and
+"fill this gap" does not change that: it proposes tracks, it does not assign roles
+or store scores. What is still missing is the removal of the old generation form
+and of AI curation — see
 `docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the full staged plan.
 
 ## Transitions

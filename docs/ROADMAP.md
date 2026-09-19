@@ -489,7 +489,7 @@ cleanup, and each was explicitly left alone this time.
      `download_dispatcher.py`, `download_runner.py`), not the abstract base
      class the "four job state machines" item above imagines.
   3. **Set Builder: DJ-led preparation workspace** (direction revised
-     2026-09-16; **tappe 1-4 shipped**, 2026-09-18/19). Build from a playlist
+     2026-09-16; **tappe 1-5 shipped**, 2026-09-18/19). Build from a playlist
      through audition, manually composed sequences, gaps, saved alternatives,
      reserves, preparation notes and undo/redo, on the existing `Setlist` model
      (a `kind` column, not a second set model). No AI in the flow. Done so far:
@@ -498,11 +498,16 @@ cleanup, and each was explicitly left alone this time.
      sequences, the bench and undo/redo (tappa 3); per-passage notes, technical
      compatibility with the pitch as a signed percentage, and the "I play it at"
      tempo per row (tappa 4 — the spec's "to try"/"tried" state was dropped on
-     the user's decision, 2026-09-19: without "tried" the flag never closes).
-     Still open: planned duration and dedicated exports (tappa 5); and "fill
-     this gap" — the generator becoming a tool inside the set, the deterministic
-     beam over a fixed number of slots between two chosen tracks — with which the
-     old generation form and AI curation go away (tappa 6). See the
+     the user's decision, 2026-09-19: without "tried" the flag never closes);
+     planned duration and the exports, preparation sheet included (tappa 5); and
+     "fill this gap", the generator as a tool inside the set — the same beam
+     search, stopped by count instead of by seconds. **Still open: the demolition
+     half of tappa 6** — removing the old generation form and AI curation
+     (`ai_curation.py`, the job's AI branch, `curation`, `mood_tags`,
+     `ai_reason`, and `/set-builder` becoming the list of sets). It was split off
+     deliberately on 2026-09-19: it is the only irreversible step of the spec, and
+     "fill this gap" is what justifies keeping the beam search, so it had to exist
+     first. See the
      [specification](superpowers/specs/2026-09-15-set-builder-workbench.md).
      Deferred behind it, as its own design cycle once real transitions exist
      to try: a two-deck audition (beat grids from the Rekordbox XML `TEMPO`

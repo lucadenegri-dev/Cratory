@@ -147,3 +147,42 @@ test("l'appunto di un passaggio non si trasferisce e non si perde", async ({ pag
   await expect(page.getByTestId("transition-panel-out")
     .getByPlaceholder("Come ci entro, cosa taglio…")).toHaveValue("entra sul break");
 });
+
+test("il varco si fa riempire dal generatore, e la scheda di preparazione lo racconta", async ({ page, request }) => {
+  const { playlistId, trackIds } = await seminaTracce(request, 6);
+  const creato = await request.post("/api/sets/manual", { data: { playlist_id: playlistId } });
+  expect(creato.ok()).toBeTruthy();
+  const set = await creato.json();
+  await request.post(`/api/sets/${set.id}/rows`, {
+    data: { expected_revision: 0, track_ids: [trackIds[0], trackIds[1]] },
+  });
+
+  await page.goto(`/sets/manual?id=${set.id}`);
+  const percorso = page.getByTestId("path-panel");
+  await expect(percorso.getByText("Traccia 0")).toBeVisible();
+
+  // Lascia un varco fra le due tracce.
+  await percorso.locator("li").filter({ hasText: "Traccia 0" })
+    .getByTitle("Lascia un varco dopo questa riga").click();
+  await expect(percorso.locator("li")).toHaveCount(3);
+
+  // Falla riempire con due tracce: il percorso ne ha quattro, nessun varco.
+  await percorso.getByTitle("Riempi il varco").click();
+  const pannello = page.getByTestId("fill-gap");
+  await pannello.getByLabel("Quante tracce").fill("2");
+  await pannello.getByText("Riempi").click();
+  await expect(percorso.locator("li")).toHaveCount(4);
+  await expect(percorso.getByText("Varco")).toHaveCount(0);
+
+  // Un annulla solo riapre il varco: il riempimento è una revisione sola.
+  await page.getByRole("button", { name: "Annulla" }).click();
+  await expect(percorso.locator("li")).toHaveCount(3);
+  await expect(percorso.getByText("Varco")).toHaveCount(1);
+
+  // La scheda di preparazione: l'anteprima è la risposta del server.
+  await page.getByRole("button", { name: "Esporta" }).click();
+  await page.getByText("Scheda di preparazione").click();
+  const anteprima = page.getByTestId("export-preview");
+  await expect(anteprima).toContainText("Traccia 0");
+  await expect(anteprima).toContainText("varco");
+});
