@@ -439,6 +439,20 @@ def effective_bpm_diff(a: float, b: float) -> tuple[float, bool]:
     return (folded, True) if folded < direct else (direct, False)
 
 
+def pitch_percent(from_bpm: float, to_bpm: float) -> tuple[float, bool]:
+    """Quanto pitch serve per portare `to_bpm` sulla griglia di `from_bpm`.
+
+    Firmata (negativa = rallentare) e in percentuale, non in BPM secchi: e' il
+    numero che si legge sul fader, e a 90 o a 170 la stessa differenza assoluta
+    non e' affatto lo stesso gesto. Il secondo valore dice se l'allineamento
+    migliore e' a mezzo/doppio tempo, nel qual caso la percentuale e' gia'
+    calcolata su quella griglia (140 -> 70 e' 0 %, non -50 %).
+    """
+    candidati = ((to_bpm, False), (to_bpm * 2, True), (to_bpm / 2, True))
+    allineato, piegato = min(candidati, key=lambda c: abs(c[0] - from_bpm))
+    return round((allineato - from_bpm) / from_bpm * 100, 1), piegato
+
+
 # A4: fasce BPM PERCENTUALI. Le vecchie soglie assolute ±2/±5/±8 BPM erano di
 # fatto tarate sul "club sweet spot" ~128 BPM (2/128 ~= 1.56%, 5/128 ~= 3.9%,
 # 8/128 ~= 6.25%) ma, essendo assolute, scalavano male con il tempo: 5 BPM a

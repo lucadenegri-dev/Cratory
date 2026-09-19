@@ -51,3 +51,57 @@ def test_la_riga_porta_il_tempo_a_cui_la_suono(db):
     assert riga.play_bpm == 126.5
     # Il tempo della traccia non si tocca: `play_bpm` vale in questo set e basta.
     assert a.bpm == 124.0
+
+
+# --- Task 2: compatibilita' di un passaggio ------------------------------------
+
+from app.services.manual_pairs import bpm_of, pair_compat  # noqa: E402
+
+
+def _riga(track=None, play_bpm=None, slot_kind="track"):
+    return SetlistTrack(position=1, track=track, play_bpm=play_bpm, slot_kind=slot_kind)
+
+
+def test_la_compatibilita_dice_pitch_e_tonalita(db):
+    a, b = _due_tracce(db)          # 124 8A -> 126 9A
+    c = pair_compat(_riga(a), _riga(b))
+    assert (c.bpm_from, c.bpm_to) == (124.0, 126.0)
+    assert c.bpm_percent == 1.6
+    assert c.halftime is False
+    assert c.key_relation == "adjacent"
+    assert c.missing == []
+    assert isinstance(c.score, int)
+
+
+def test_un_dato_mancante_si_dichiara_invece_di_valere_neutro(db):
+    """La spec lo chiede per nome: con BPM o tonalita' mancanti si mostra
+    «sconosciuto», non il punteggio neutro che `score_transition` darebbe."""
+    a, _ = _due_tracce(db)
+    senza = Track(source_type="spotify", title="X", duration_seconds=300, has_local_file=True)
+    db.add(senza)
+    db.commit()
+    c = pair_compat(_riga(a), _riga(senza))
+    assert c.score is None
+    assert sorted(c.missing) == ["bpm", "key"]
+    assert c.bpm_percent is None
+    assert c.key_relation == "unknown"
+
+
+def test_la_suono_a_batte_il_bpm_della_traccia(db):
+    a, b = _due_tracce(db)          # 124 -> 126
+    assert bpm_of(_riga(a)) == 124.0
+    assert bpm_of(_riga(a, play_bpm=126.0)) == 126.0
+    # Portate allo stesso tempo, il pitch che serve e' zero.
+    c = pair_compat(_riga(a, play_bpm=126.0), _riga(b))
+    assert c.bpm_from == 126.0
+    assert c.bpm_percent == 0.0
+
+
+def test_un_varco_non_ha_compatibilita(db):
+    """Regola della spec: finche' il varco e' aperto, le tracce ai suoi lati non
+    sono vicine. Chi calcola non deve nemmeno essere chiamato: qui si verifica
+    che una riga senza traccia non produca numeri inventati."""
+    a, _ = _due_tracce(db)
+    c = pair_compat(_riga(a), _riga(None, slot_kind="gap"))
+    assert c.score is None
+    assert sorted(c.missing) == ["bpm", "key"]

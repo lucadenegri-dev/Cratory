@@ -1,4 +1,5 @@
 """Test dello scoring tecnico transizioni e della compatibilita' Camelot."""
+import pytest
 
 from app.models import Track
 from app.services.camelot import camelot_compatibility, parse_camelot
@@ -7,6 +8,7 @@ from app.services.scoring import (
     energy_progression_score,
     genre_similarity_score,
     mixing_tip,
+    pitch_percent,
     score_transition,
 )
 
@@ -165,3 +167,21 @@ def test_mixing_overview_summarizes_plan():
 def test_mixing_overview_empty_for_single_track():
     from app.services.scoring import mixing_overview
     assert mixing_overview([make_track(bpm=120, key="8A")]) == []
+
+
+def test_il_pitch_e_una_percentuale_firmata():
+    # L'esempio della spec: "124 -> 123, -0,8 %".
+    assert pitch_percent(124.0, 123.0) == (-0.8, False)
+    assert pitch_percent(124.0, 126.0) == (1.6, False)
+    assert pitch_percent(128.0, 128.0) == (0.0, False)
+
+
+def test_il_pitch_si_misura_sulla_griglia_allineata():
+    """A mezzo/doppio tempo il pitch che serve non e' la differenza secca: da 140
+    a 70 non si pitcha del -50 %, si suona 70 a griglia doppia e il pitch e' 0."""
+    percento, piegato = pitch_percent(140.0, 70.0)
+    assert piegato is True
+    assert percento == 0.0
+    percento, piegato = pitch_percent(140.0, 69.0)
+    assert piegato is True
+    assert percento == pytest.approx(-1.4, abs=0.05)
