@@ -127,7 +127,20 @@ test("l'appunto di un passaggio non si trasferisce e non si perde", async ({ pag
   const appunto = page.getByTestId("transition-panel-in")
     .getByPlaceholder("Come ci entro, cosa taglio…");
   await appunto.fill("entra sul break");
+  // Il blur fa PARTIRE il salvataggio, non lo compie: la PUT e' asincrona.
+  // Gli altri ricaricamenti di questo file sono preceduti da un'attesa
+  // sull'interfaccia (una pastiglia che compare, una sezione che sparisce) che
+  // di fatto aspetta la risposta; qui no, perche' la casella mostra gia' il
+  // testo digitato e non c'e' niente di nuovo da aspettare a schermo. Senza
+  // questa attesa la GET del ricaricamento puo' arrivare al server PRIMA che
+  // la PUT abbia scritto, e la pagina riparte dal documento di prima, con
+  // l'appunto vuoto e la revisione vecchia — da li' in poi la prima mutazione
+  // prende 409 e la riga non se ne va. Coi worker in parallelo il backend
+  // rallenta e la corsa la vinceva il ricaricamento.
+  const salvato = page.waitForResponse((r) =>
+    r.request().method() === "PUT" && r.url().includes("/pair-notes") && r.ok());
   await appunto.blur();
+  await salvato;
 
   // Salvato davvero: sopravvive al ricaricamento.
   await page.reload();
