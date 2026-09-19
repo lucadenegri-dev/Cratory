@@ -124,41 +124,6 @@ class TransitionCandidateOut(BaseModel):
     score: TransitionScoreOut
 
 
-class SetlistTrackOut(BaseModel):
-    position: int
-    role: str | None = None
-    track: TrackOut
-    transition_score: float | None = None
-    transition_reason: str | None = None
-    transition_note: str | None = None
-    risk_level: str | None = None
-    # F10: classificazione semantica della transizione dal brano precedente
-    transition_class: str | None = None
-    transition_class_reason: str | None = None
-    # Consiglio tecnico deterministico su come mixare dal brano precedente (no AI, no id)
-    mix_tip: str | None = None
-
-
-class SetlistOut(BaseModel):
-    id: int
-    name: str
-    target_duration_minutes: int | None = None
-    start_bpm: float | None = None
-    end_bpm: float | None = None
-    strategy: str | None = None
-    prompt: str | None = None
-    global_explanation: str | None = None
-    generated_by: str = "algorithmic"
-    # Disk-first: il set e' nato "solo brani posseduti" (l'editor lo fa rispettare)
-    owned_only: bool = False
-    validation: dict = {}
-    # Piano di mixaggio deterministico del set (come legare i brani, dove i salti).
-    mixing_overview: list[str] = []
-    total_duration_seconds: int = 0
-    created_at: datetime
-    tracks: list[SetlistTrackOut] = []
-
-
 class SetlistSummaryOut(BaseModel):
     id: int
     name: str

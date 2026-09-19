@@ -399,50 +399,6 @@ export interface TransitionCandidate {
   score: TransitionScore;
 }
 
-export interface SetlistTrack {
-  position: number;
-  role: string | null;
-  track: Track;
-  transition_score: number | null;
-  transition_reason: string | null;
-  transition_note: string | null;
-  ai_reason: string | null;
-  risk_level: string | null;
-  transition_class: TransitionClass | null;
-  transition_class_reason: string | null;
-  mix_tip: string | null;
-  mood_tags: string[];
-}
-
-export interface SetlistValidation {
-  warnings?: string[];
-  auto_fixes?: string[];
-  critical_points?: string[];
-  alternative_directions?: string[];
-  missing_library_suggestions?: string[];
-  stats?: Record<string, number>;
-}
-
-export interface Setlist {
-  id: number;
-  name: string;
-  strategy: string | null;
-  target_duration_minutes: number | null;
-  global_explanation: string | null;
-  generated_by: string;
-  owned_only: boolean;
-  validation: SetlistValidation;
-  mixing_overview: string[];
-  total_duration_seconds: number;
-  created_at: string;
-  tracks: SetlistTrack[];
-  curation: {
-    intent_summary?: string;
-    compiled?: Record<string, unknown>;
-    warnings?: string[];
-  };
-}
-
 export interface SetlistSummary {
   id: number;
   name: string;

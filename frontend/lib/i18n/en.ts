@@ -1490,15 +1490,6 @@ export const en = {
     altScorePrev: "prev",
     altScoreNext: (n: number) => ` · next ${n}`,
     useAlternativeButton: "Use",
-    arc: {
-      title: "Set arc",
-      insufficientData: "insufficient BPM/energy data to draw the arc",
-      energyLegend: "Energy",
-      bpmRangeLabel: (min: number, max: number) => `BPM from ${min} to ${max}`,
-      energyRangeLabel: (from: number, to: number) => `energy from ${from} to ${to}`,
-      trackCountLabel: (n: number) => (n === 1 ? "1 track" : `${n} tracks`),
-      ariaLabel: (label: string) => `Set arc: ${label}`,
-    },
     manual: {
       prepareButton: "Prepare a set",
       pageTitle: "Set",

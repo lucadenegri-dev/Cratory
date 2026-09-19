@@ -14,9 +14,7 @@ from app.schemas import (
     ManualTransitionOut,
     SetDurationOut,
     SourceOut,
-    SetlistOut,
     SetlistSummaryOut,
-    SetlistTrackOut,
     TrackDetailOut,
     TrackOut,
     TrackPlaylistRef,
@@ -25,7 +23,6 @@ from app.services.manual_pairs import pair_compat
 from app.services.manual_set import (
     can_redo, can_undo, pair_note_map, path_rows, set_duration,
 )
-from app.services.scoring import classify_transition, mixing_overview, mixing_tip
 
 
 def _spotify_url(track: Track) -> str | None:
@@ -87,63 +84,6 @@ def _naive(dt: datetime) -> datetime:
     del serializer; i serializer fuori dalla famiglia set (Track, Playlist,
     Organize, ...) hanno ancora lo stesso difetto a monte."""
     return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
-
-
-def setlist_out(setlist: Setlist, lang: str = "it", db: Session | None = None) -> SetlistOut:
-    # F10: classifichiamo ogni transizione dal brano precedente (deterministico,
-    # ricalcolato in lettura dai dati delle due tracce: nessuna colonna in DB).
-    # M6: genere/album/label/anno effettivi (tag file) anche nel dettaglio set,
-    # non solo in Library — una sola query in piu' per l'intero set (`db` e'
-    # opzionale: i chiamanti che non lo passano restano col fallback streaming,
-    # com'era prima).
-    ft_map = file_tags_for_tracks(db, [st.track_id for st in setlist.tracks]) if db is not None else {}
-    # I4: la classificazione del reset (classify_transition) deve leggere lo
-    # STESSO genere effettivo mostrato in `track` qui sotto, non lo streaming
-    # grezzo: altrimenti un set con quel brano "Progressive House" solo sul file
-    # può etichettare come reset una transizione che non lo è (o viceversa).
-    # D4: derivata da `ft_map` (già una query in blocco, riga sopra) invece di
-    # un secondo giro di query — stessa espressione di `_EFFECTIVE_TAGS["genre"]`
-    # (tag file se presente, altrimenti lo streaming), calcolata qui in Python.
-    genre_map = ({st.track_id: ft_map.get(st.track_id, FileTags()).genre or st.track.genre
-                 for st in setlist.tracks} if db is not None else None)
-    items = []
-    prev = None
-    for st in setlist.tracks:
-        # score=transition_score persistito: evita di ricomputare score_transition
-        # per ogni riga del set (None su set storici -> fallback interno).
-        cls = (classify_transition(prev, st.track, lang, score=st.transition_score, genre_map=genre_map)
-               if prev is not None else None)
-        items.append(SetlistTrackOut(
-            position=st.position,
-            role=st.role,
-            track=track_out(st.track, ft_map.get(st.track_id)),
-            transition_score=st.transition_score,
-            transition_reason=st.transition_reason,
-            transition_note=st.transition_note,
-            risk_level=st.risk_level,
-            transition_class=cls.label if cls else None,
-            transition_class_reason=cls.reason if cls else None,
-            mix_tip=mixing_tip(prev, st.track, lang) if prev is not None else None,
-        ))
-        prev = st.track
-    total = sum(st.track.duration_seconds or 0 for st in setlist.tracks)
-    return SetlistOut(
-        id=setlist.id,
-        name=setlist.name,
-        target_duration_minutes=setlist.target_duration_minutes,
-        start_bpm=setlist.start_bpm,
-        end_bpm=setlist.end_bpm,
-        strategy=setlist.strategy,
-        prompt=setlist.prompt,
-        global_explanation=setlist.global_explanation,
-        generated_by=setlist.generated_by or "algorithmic",
-        owned_only=bool(setlist.owned_only),
-        validation=setlist.validation or {},
-        mixing_overview=mixing_overview([st.track for st in setlist.tracks], lang),
-        total_duration_seconds=total,
-        created_at=_naive(setlist.created_at),
-        tracks=items,
-    )
 
 
 def setlist_summary_out(setlist: Setlist) -> SetlistSummaryOut:

@@ -189,7 +189,7 @@ def classify_transition(from_track: Track, to_track: Track, lang: str = "it",
     ricomputare score_transition sulla stessa coppia; None = calcolo interno.
     Il numero non dipende da `lang`, quindi il riuso e' sempre equivalente.
     `genre_map` opzionale (I4): id-traccia -> genere effettivo, risolta a monte dal
-    chiamante che ha una sessione (es. `serializers.setlist_out`); None (default)
+    chiamante che ha una sessione (es. l'export in `routers/sets.py`); None (default)
     mantiene il comportamento di sempre, lettura di `.genre` streaming — nessun
     chiamante esistente (/api/transitions, alternatives, ...) si rompe.
     """
@@ -267,40 +267,6 @@ _TIPS = {
     "energy_up": {"it": "porta su l'energia", "en": "bring the energy up"},
     "energy_down": {"it": "scarica l'energia (reset)", "en": "drop the energy (reset)"},
     "opening_track": {"it": "apertura", "en": "opener"},
-    "at_track_one": {"it": "al brano {nums}", "en": "at track {nums}"},
-    "at_track_many": {"it": "ai brani {nums}", "en": "at tracks {nums}"},
-    "overview_harmony": {
-        "it": "Armonia: {harmonic}/{known} cambi in chiave (mix armonico Camelot).",
-        "en": "Harmony: {harmonic}/{known} changes in key (Camelot harmonic mix).",
-    },
-    "overview_harmony_weak": {
-        "it": " {weak} fuori chiave: tienili brevi o maschera con l'EQ.",
-        "en": " {weak} out of key: keep them short or mask with EQ.",
-    },
-    "overview_bpm_arc": {"it": "BPM da {lo:.0f} a {hi:.0f}", "en": "BPM from {lo:.0f} to {hi:.0f}"},
-    "overview_bpm_jump_one": {"it": "salto marcato", "en": "sharp jump"},
-    "overview_bpm_jump_many": {"it": "salti marcati", "en": "sharp jumps"},
-    "overview_bpm_jump_line": {
-        "it": "{arc}: {noun} {at} — meglio un cut su un break o una traccia ponte; altrove beatmatch e blend lungo.",
-        "en": "{arc}: {noun} {at} — better a cut on a break or a bridge track; elsewhere beatmatch and long blend.",
-    },
-    "overview_bpm_smooth_line": {
-        "it": "{arc}: differenze contenute, lega in beatmatch con blend graduale sull'intro.",
-        "en": "{arc}: contained differences, link in beatmatch with a gradual blend on the intro.",
-    },
-    "overview_energy_trend_up": {"it": "in salita", "en": "climbing"},
-    "overview_energy_trend_down": {"it": "in discesa", "en": "dropping"},
-    "overview_energy_trend_stable": {"it": "stabile", "en": "stable"},
-    "overview_energy_line": {
-        "it": "Energia {trend} ({e0} → {e1}).",
-        "en": "Energy {trend} ({e0} → {e1}).",
-    },
-    "overview_reset_one": {"it": "Stacco di reset", "en": "Reset break"},
-    "overview_reset_many": {"it": "Stacchi di reset", "en": "Reset breaks"},
-    "overview_reset_line": {
-        "it": " {noun} {at}: sfrutta il calo per cambiare zona.",
-        "en": " {noun} {at}: use the drop to change zone.",
-    },
 }
 
 
@@ -362,70 +328,6 @@ def mixing_tip(from_track: Track, to_track: Track, lang: str = "it") -> str:
             parts.append(_tip("energy_down", lang))
 
     return " · ".join(parts)
-
-
-def mixing_overview(tracks: list[Track], lang: str = "it") -> list[str]:
-    """Piano di mixaggio del set, DETERMINISTICO: una sintesi tecnica di come legare
-    i brani (armonia, salti di BPM, arco di energia). Complementa i `mixing_tip` per
-    traccia con la visione d'insieme. I numeri di brano sono le posizioni 1-based.
-    `lang` ("it" | "en") sceglie la lingua del testo.
-    """
-    pairs = list(zip(tracks, tracks[1:]))
-    if not pairs:
-        return []
-    bullets: list[str] = []
-
-    def at_tracks(positions: list[int]) -> str:
-        nums = ", ".join(str(p) for p in positions)
-        key = "at_track_one" if len(positions) == 1 else "at_track_many"
-        return _tip(key, lang, nums=nums)
-
-    # Armonia (Camelot)
-    harmonic = weak = known = 0
-    for a, b in pairs:
-        level, _ = camelot_compatibility(a.camelot_key, b.camelot_key)
-        if level in ("same", "compatible"):
-            harmonic += 1
-            known += 1
-        elif level == "weak":
-            weak += 1
-            known += 1
-    if known:
-        s = _tip("overview_harmony", lang, harmonic=harmonic, known=known)
-        if weak:
-            s += _tip("overview_harmony_weak", lang, weak=weak)
-        bullets.append(s)
-
-    # BPM: arco e salti che richiedono un cut/ponte
-    bpms = [t.bpm for t in tracks if t.bpm]
-    jumps = [i + 2 for i, (a, b) in enumerate(pairs) if a.bpm and b.bpm and abs(b.bpm - a.bpm) > 8]
-    if bpms:
-        arc = _tip("overview_bpm_arc", lang, lo=min(bpms), hi=max(bpms))
-        if jumps:
-            noun = _tip("overview_bpm_jump_one", lang) if len(jumps) == 1 else _tip("overview_bpm_jump_many", lang)
-            bullets.append(_tip("overview_bpm_jump_line", lang, arc=arc, noun=noun, at=at_tracks(jumps)))
-        else:
-            bullets.append(_tip("overview_bpm_smooth_line", lang, arc=arc))
-
-    # Energia: andamento e reset
-    energies = [t.energy for t in tracks if t.energy is not None]
-    resets = [i + 2 for i, (a, b) in enumerate(pairs)
-              if a.energy is not None and b.energy is not None and b.energy - a.energy <= -15]
-    if len(energies) >= 2:
-        delta = energies[-1] - energies[0]
-        if delta >= 8:
-            trend = _tip("overview_energy_trend_up", lang)
-        elif delta <= -8:
-            trend = _tip("overview_energy_trend_down", lang)
-        else:
-            trend = _tip("overview_energy_trend_stable", lang)
-        s = _tip("overview_energy_line", lang, trend=trend, e0=energies[0], e1=energies[-1])
-        if resets:
-            noun = _tip("overview_reset_one", lang) if len(resets) == 1 else _tip("overview_reset_many", lang)
-            s += _tip("overview_reset_line", lang, noun=noun, at=at_tracks(resets))
-        bullets.append(s)
-
-    return bullets
 
 
 def effective_bpm_diff(a: float, b: float) -> tuple[float, bool]:

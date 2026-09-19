@@ -1,4 +1,4 @@
-"""Scoring bilingue (Task 13): `reason`/`mixing_tip`/`mixing_overview` parametrici
+"""Scoring bilingue (Task 13): `reason`/`mixing_tip` parametrici
 su `lang`, `TransitionClassification` senza `label_it` (la label enum la traduce
 il frontend da `label`, il codice).
 """
@@ -6,7 +6,6 @@ il frontend da `label`, il codice).
 from app.models import Track
 from app.services.scoring import (
     classify_transition,
-    mixing_overview,
     mixing_tip,
     score_transition,
 )
@@ -94,16 +93,3 @@ def test_score_transition_score_stable_across_langs():
     a = make_track(bpm=128, key="8A", duration=300)
     b = make_track(bpm=133, key="10A", duration=45)
     assert score_transition(a, b).score == score_transition(a, b, lang="en").score
-
-
-def test_mixing_overview_en():
-    tracks = [
-        make_track(bpm=120, key="8A", energy=40),
-        make_track(bpm=121, key="9A", energy=50),
-        make_track(bpm=138, key="2B", energy=80),
-    ]
-    out_it = mixing_overview(tracks)
-    out_en = mixing_overview(tracks, lang="en")
-    assert out_it != out_en
-    assert any("salto marcato al brano 3" in b for b in out_it)
-    assert any("sharp jump at track 3" in b for b in out_en)

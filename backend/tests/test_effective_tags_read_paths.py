@@ -164,7 +164,7 @@ def _count_queries(engine, fn):
     return count
 
 
-# --- D5: setlist_out ed export CSV devono passare il genere effettivo -----
+# --- D5: l'export CSV deve passare il genere effettivo -------------------
 # --- a classify_transition (innesti di I4 rimasti scoperti da test) --------
 
 
@@ -193,24 +193,6 @@ def _set_con_reset_solo_via_tag_file(db, root):
     db.add(SetlistTrack(setlist_id=setlist.id, track_id=cand.id, position=2))
     db.commit()
     return setlist
-
-
-def test_setlist_out_passa_il_genere_effettivo_a_classify_transition(client_db):
-    """DEVE fallire se setlist_out tornasse a costruire `genre_map` solo se
-    `db` produce risultati (o smettesse di passarla): la classificazione
-    resterebbe `creative_risk` (lo streaming e' identico su entrambe le
-    tracce) invece di `good_reset` (il tag file della seconda e' "Ambient")."""
-    _client, db, _engine = client_db
-    root = _root(db)
-    setlist = _set_con_reset_solo_via_tag_file(db, root)
-
-    # Chiamata diretta: l'endpoint `GET /api/sets/{id}` e' sparito col
-    # generatore (2026-09-19), ma `setlist_out` resta — lo usa la rinomina — e
-    # il comportamento sotto esame e' suo, non della rotta.
-    from app.serializers import setlist_out
-
-    doc = setlist_out(setlist, "it", db=db)
-    assert doc.tracks[1].transition_class == "good_reset"
 
 
 def test_export_csv_passa_il_genere_effettivo_a_classify_transition(client_db):

@@ -1474,15 +1474,6 @@ export const it: Dictionary = {
     altScorePrev: "prev",
     altScoreNext: (n: number) => ` · next ${n}`,
     useAlternativeButton: "Usa",
-    arc: {
-      title: "Arco del set",
-      insufficientData: "dati BPM/energia insufficienti per tracciare l'arco",
-      energyLegend: "Energia",
-      bpmRangeLabel: (min: number, max: number) => `BPM da ${min} a ${max}`,
-      energyRangeLabel: (from: number, to: number) => `energia da ${from} a ${to}`,
-      trackCountLabel: (n: number) => (n === 1 ? "1 traccia" : `${n} tracce`),
-      ariaLabel: (label: string) => `Arco del set: ${label}`,
-    },
     manual: {
       prepareButton: "Prepara un set",
       pageTitle: "Set",
