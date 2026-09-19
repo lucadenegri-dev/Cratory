@@ -26,6 +26,11 @@ export function SourcesPanel({ sources, onAdd, onRemove }: Props) {
       .catch((e) => setErrore(errText(e)));
   }, []);
 
+  // Su una bozza le origini arrivano senza nome (nessun set che lo porti): lo
+  // si legge dall'elenco appena caricato, invece di mostrare un numero.
+  const nome = (s: Source) =>
+    s.name ?? playlists.find((p) => p.id === s.playlist_id)?.name ?? `#${s.playlist_id}`;
+
   const scelte = new Set(sources.map((s) => s.playlist_id));
   const disponibili = playlists.filter((p) => !scelte.has(p.id));
 
@@ -38,7 +43,7 @@ export function SourcesPanel({ sources, onAdd, onRemove }: Props) {
       <div className="flex flex-wrap gap-1.5">
         {sources.map((s) => (
           <span key={s.playlist_id} className="inline-flex items-center gap-1">
-            <Badge>{s.name ?? `#${s.playlist_id}`}</Badge>
+            <Badge>{nome(s)}</Badge>
             <button type="button" title={t.sets.manual.removeSourceTitle}
               onClick={() => onRemove(s.playlist_id)} className="text-muted hover:text-danger">
               <X size={13} />

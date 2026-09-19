@@ -514,6 +514,21 @@ through a small facade object, because assigning `Track.bpm` on the loaded row
 would write the booth tempo into the library at the next flush, which is the one
 thing `play_bpm` exists to avoid.
 
+`SetlistSource` is the join between a set and the playlists it digs from — more
+than one since 2026-09-19, ordered by `position`. The membership is **never
+copied**: each playlist is read fresh at every open, exactly as the single source
+always was, so removing one removes its tracks from the material and not from the
+path. Undo does not cover the sources, deliberately: the snapshot is the structure
+of the path, and where the material comes from is not part of it.
+
+A set is **not created when the workbench opens**. The page works on a draft —
+sources in local state, material from `GET /api/sets/material` — and the set is
+born at the first gesture that needs a row, in a single function that every
+mutation goes through. Opening and closing the workbench therefore leaves nothing
+behind, while a set emptied later stays: the legacy cleanup in `db.py` remains
+limited to `kind = generated`, and deleting a set someone deliberately emptied
+would be losing data, not tidying up.
+
 `SetlistPairNote` keys a note to a **pair of tracks**, not a pair of rows, and that
 is the whole point: the judgement neither transfers nor disappears when the path
 changes. The spec also gave it a `state` (`unreviewed`/`to_try`/`tried`); it was

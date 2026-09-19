@@ -482,6 +482,9 @@ POST   /api/sets/{setlist_id}/undo
 POST   /api/sets/{setlist_id}/redo
 PUT    /api/sets/{setlist_id}/pair-notes
 POST   /api/sets/{setlist_id}/rows/{row_id}/fill-gap
+POST   /api/sets/{setlist_id}/sources
+DELETE /api/sets/{setlist_id}/sources/{playlist_id}
+GET    /api/sets/material
 ```
 
 A DJ builds a set by hand from a playlist instead of generating one:
@@ -489,10 +492,14 @@ A DJ builds a set by hand from a playlist instead of generating one:
 `GET /api/sets/{setlist_id}` — the classic detail endpoint — now answers
 `409 set_is_manual` for a manual set instead of serving it.
 
-`POST /api/sets/manual` creates an empty manual set — body `{name?, playlist_id?}`,
-both optional — and returns it with `201`. Its own shape comes from
-`GET /api/sets/{setlist_id}/manual` (`ManualSetOut`): `revision`,
-`source_playlist_id`/`source_playlist_name` (`null` if the playlist was since
+`POST /api/sets/manual` creates an empty set — body `{name?, playlist_ids?}`,
+both optional — and returns it with `201`. **The client does not call this when
+the workbench opens**: since 2026-09-19 the page works on a draft and the set is
+created at the first gesture that needs a row, so opening and closing the
+workbench leaves nothing behind. A set you empty *later* is a decision of yours
+and stays. Its own shape comes from `GET /api/sets/{setlist_id}/manual`
+(`ManualSetOut`): `revision`, `sources` (the playlists it digs from, in order,
+each `{playlist_id, name}` with `name` `null` if the playlist was since
 deleted), `notes`, and `blocks` (`ManualBlockOut`, each with `rows`). A row
 (`ManualRowOut`) has `slot_kind` `track` | `gap`; `track` is `null` on a gap, and any
 row can carry a free-text `note`, and `alternatives` — the candidates the DJ keeps
@@ -528,11 +535,21 @@ otherwise the file's own length — and `incomplete` says the total is partial, 
 how long the DJ keeps *that* track in *that* set, which never touches
 `Track.duration_seconds`.
 
+`POST .../sources` (body `{expected_revision, playlist_id}`) adds a playlist to
+the sources, in last place; `DELETE .../sources/{playlist_id}?expected_revision=N`
+removes one. Removing a source removes its tracks from the **material**, never
+from the path: a track you already chose is a decision taken. Note that undo does
+**not** put a removed source back — the history snapshot covers the structure of
+the path, and the sources are where the material comes from, not the set.
+
 `GET /api/sets/{setlist_id}/material?q=&owned=&unused=&reserved=` returns the source
-playlist read fresh (not a snapshot taken at creation), the tracks already in the set,
+playlists read fresh (not a snapshot taken at creation), in their order and with no
+track repeated when it sits in two of them, plus the tracks already in the set,
 and — with `q` — a library search; each `MaterialItemOut` flags `in_set` (on a row of
 the **path**), `from_playlist` and `in_reserve`. `reserved=true` keeps only what is
-set aside.
+set aside. `GET /api/sets/material?playlist_ids=1&playlist_ids=2&q=&owned=` is the
+same payload for a **draft**, which has no set yet: `in_set` and `in_reserve` are
+always false. Both answer `MaterialOut`, whose `sources` mirror `ManualSetOut`'s.
 
 Every mutation carries `expected_revision` — body field on the three POST/PATCH
 below, query parameter on the DELETE — and returns the whole updated `ManualSetOut`

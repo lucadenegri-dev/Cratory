@@ -108,10 +108,13 @@ function ManualSetInner() {
   }, [set, draftSources, router]);
 
   /** Applica una mutazione: la risposta e' la verita' (revision inclusa); su 409 chiede di ricaricare. */
-  const mutate = useCallback(async (run: (rev: number) => Promise<ManualSet>) => {
+  const mutate = useCallback(async (run: (rev: number, sid: number) => Promise<ManualSet>) => {
     try {
+      // L'id arriva da qui e non dalla chiusura del render: su una bozza `id`
+      // vale ancora 0 nell'istante in cui il set nasce (lo stato React non si e'
+      // ancora aggiornato), e la mutazione finirebbe su /api/sets/0.
       const corrente = await assicuraSet();
-      const next = await run(corrente.revision);
+      const next = await run(corrente.revision, corrente.id);
       setSet(next);
       setError(null);
       void loadMaterial();
@@ -123,22 +126,22 @@ function ManualSetInner() {
     }
   }, [assicuraSet, loadMaterial]);
 
-  const onAdd = (item: MaterialItem) => mutate((rev) => insertRows(id, { expected_revision: rev, track_ids: [item.track.id], after_row_id: null }));
-  const onGapAfter = (row: ManualRow) => mutate((rev) => insertRows(id, { expected_revision: rev, gap: true, after_row_id: row.id }));
-  const onMove = (row: ManualRow, position: number) => mutate((rev) => moveRow(id, row.id, { expected_revision: rev, position }));
+  const onAdd = (item: MaterialItem) => mutate((rev, sid) => insertRows(sid, { expected_revision: rev, track_ids: [item.track.id], after_row_id: null }));
+  const onGapAfter = (row: ManualRow) => mutate((rev, sid) => insertRows(sid, { expected_revision: rev, gap: true, after_row_id: row.id }));
+  const onMove = (row: ManualRow, position: number) => mutate((rev, sid) => moveRow(sid, row.id, { expected_revision: rev, position }));
   const onRemove = (row: ManualRow) => {
     if (selectedRowId === row.id) setSelectedRowId(null);
-    return mutate((rev) => removeRow(id, row.id, rev));
+    return mutate((rev, sid) => removeRow(sid, row.id, rev));
   };
-  const onReserve = (item: MaterialItem) => mutate((rev) => insertRows(id, { expected_revision: rev, track_ids: [item.track.id], reserve: true }));
-  const onAddAlternative = (item: MaterialItem) => selected && mutate((rev) => addAlternatives(id, selected.id, { expected_revision: rev, track_ids: [item.track.id] }));
-  const onUseAlternative = (row: ManualRow, alt: ManualAlternative) => mutate((rev) => chooseAlternative(id, row.id, alt.id, { expected_revision: rev }));
-  const onRemoveAlternative = (row: ManualRow, alt: ManualAlternative) => mutate((rev) => removeAlternative(id, row.id, alt.id, rev));
-  const onToReserve = (row: ManualRow) => mutate((rev) => moveRow(id, row.id, { expected_revision: rev, position: 1, to_reserve: true }));
-  const onToPath = (row: ManualRow) => mutate((rev) => moveRow(id, row.id, { expected_revision: rev, position: 1, to_reserve: false }));
+  const onReserve = (item: MaterialItem) => mutate((rev, sid) => insertRows(sid, { expected_revision: rev, track_ids: [item.track.id], reserve: true }));
+  const onAddAlternative = (item: MaterialItem) => selected && mutate((rev, sid) => addAlternatives(sid, selected.id, { expected_revision: rev, track_ids: [item.track.id] }));
+  const onUseAlternative = (row: ManualRow, alt: ManualAlternative) => mutate((rev, sid) => chooseAlternative(sid, row.id, alt.id, { expected_revision: rev }));
+  const onRemoveAlternative = (row: ManualRow, alt: ManualAlternative) => mutate((rev, sid) => removeAlternative(sid, row.id, alt.id, rev));
+  const onToReserve = (row: ManualRow) => mutate((rev, sid) => moveRow(sid, row.id, { expected_revision: rev, position: 1, to_reserve: true }));
+  const onToPath = (row: ManualRow) => mutate((rev, sid) => moveRow(sid, row.id, { expected_revision: rev, position: 1, to_reserve: false }));
   const onSavePlayBpm = (row: ManualRow, playBpm: number | null) =>
     // Solo la proprietà toccata: mandare anche `note` la riscriverebbe ogni volta.
-    mutate((rev) => patchRow(id, row.id, { expected_revision: rev, play_bpm: playBpm }));
+    mutate((rev, sid) => patchRow(sid, row.id, { expected_revision: rev, play_bpm: playBpm }));
   /** Su una bozza le origini vivono nello stato locale: il set non c'e' ancora
    *  e crearlo per aggiungere una playlist sarebbe esattamente cio' che si sta
    *  evitando. Su un set vero passano dall'endpoint. */
@@ -148,30 +151,30 @@ function ManualSetInner() {
         ? prev : [...prev, { playlist_id: playlistId, name: null }]);
       return;
     }
-    await mutate((rev) => addSource(id, { expected_revision: rev, playlist_id: playlistId }));
+    await mutate((rev, sid) => addSource(sid, { expected_revision: rev, playlist_id: playlistId }));
   };
   const onRemoveSource = async (playlistId: number) => {
     if (!set) {
       setDraftSources((prev) => prev.filter((x) => x.playlist_id !== playlistId));
       return;
     }
-    await mutate((rev) => removeSource(id, playlistId, rev));
+    await mutate((rev, sid) => removeSource(sid, playlistId, rev));
   };
 
   const onSavePlannedSeconds = (row: ManualRow, seconds: number | null) =>
-    mutate((rev) => patchRow(id, row.id, { expected_revision: rev, planned_seconds: seconds }));
+    mutate((rev, sid) => patchRow(sid, row.id, { expected_revision: rev, planned_seconds: seconds }));
   const onFillGap = async (row: ManualRow, count: number) => {
-    const next = await mutate((rev) => fillGap(id, row.id, { expected_revision: rev, count }));
+    const next = await mutate((rev, sid) => fillGap(sid, row.id, { expected_revision: rev, count }));
     if (next) setFillingRowId(null);   // un rifiuto lascia il pannello aperto
   };
   const onSavePairNote = (transition: ManualTransition, note: string) =>
-    mutate((rev) => setPairNote(id, {
+    mutate((rev, sid) => setPairNote(sid, {
       expected_revision: rev, from_track_id: transition.from_track_id,
       to_track_id: transition.to_track_id, note: note.trim() || null,
     }));
   const onSaveNote = async (row: ManualRow, note: string) => {
     setSaveState("saving");
-    const next = await mutate((rev) => patchRow(id, row.id, { expected_revision: rev, note: note.trim() || null }));
+    const next = await mutate((rev, sid) => patchRow(sid, row.id, { expected_revision: rev, note: note.trim() || null }));
     setSaveState(next ? "saved" : "error");
   };
 
@@ -197,21 +200,21 @@ function ManualSetInner() {
 
   const onGroup = async () => {
     if (!groupable) return;
-    await mutate((rev) => groupRows(id, { expected_revision: rev, row_ids: groupable, name: null }));
+    await mutate((rev, sid) => groupRows(sid, { expected_revision: rev, row_ids: groupable, name: null }));
     setCheckedRowIds([]);
   };
   const onCheck = (rowId: number) => setCheckedRowIds((prev) =>
     prev.includes(rowId) ? prev.filter((x) => x !== rowId) : [...prev, rowId]);
   const onRenameBlock = (block: ManualBlock, name: string) =>
-    mutate((rev) => renameBlock(id, block.id, { expected_revision: rev, name: name.trim() || null }));
+    mutate((rev, sid) => renameBlock(sid, block.id, { expected_revision: rev, name: name.trim() || null }));
   const onMoveBlock = (block: ManualBlock, position: number) =>
-    mutate((rev) => moveBlock(id, block.id, { expected_revision: rev, position }));
+    mutate((rev, sid) => moveBlock(sid, block.id, { expected_revision: rev, position }));
   const onToBench = (block: ManualBlock) =>
-    mutate((rev) => moveBlock(id, block.id, { expected_revision: rev, position: benchBlocks.length + 1, to_bench: true }));
+    mutate((rev, sid) => moveBlock(sid, block.id, { expected_revision: rev, position: benchBlocks.length + 1, to_bench: true }));
   const onBenchToPath = (block: ManualBlock) =>
-    mutate((rev) => moveBlock(id, block.id, { expected_revision: rev, position: mainBlocks.length + 1, to_bench: false }));
+    mutate((rev, sid) => moveBlock(sid, block.id, { expected_revision: rev, position: mainBlocks.length + 1, to_bench: false }));
   const onSplitBlock = (block: ManualBlock) =>
-    mutate((rev) => splitBlock(id, block.id, { expected_revision: rev }));
+    mutate((rev, sid) => splitBlock(sid, block.id, { expected_revision: rev }));
 
   /** Annulla/ripeti. Un 409 «niente da annullare» non è un errore da mostrare:
    *  il pulsante era già spento, e lo stato vero arriva ricaricando. */

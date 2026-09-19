@@ -119,6 +119,27 @@ described in `CLAUDE.md`.
   avvio; i set non si toccano. Piano in
   `docs/superpowers/plans/2026-09-19-rimozione-generatore-e-curatela.md`.
 
+- **Origini multiple e set che nasce quando serve (2026-09-19).** Un set può
+  pescare da più playlist insieme: l'elenco sta nel pannello del materiale e si
+  cambia mentre si lavora. Le playlist si leggono aggiornate come sempre, nel
+  loro ordine e senza ripetere una traccia che sta in due; togliere un'origine
+  toglie le sue tracce dal materiale ma **non dal percorso**, perché una traccia
+  già scelta è una decisione presa. L'annulla non rimette un'origine tolta: lo
+  snapshot copre la struttura del percorso, non la provenienza del materiale.
+
+  **«Prepara un set» non salva più niente.** Il banco apre una bozza; il set
+  nasce alla prima traccia (o varco, o riserva) che ci metti, e in quel momento
+  l'URL prende il suo id. Se chiudi prima, non resta niente. **Un set che svuoti
+  dopo resta dov'è**: sono due cose diverse, e cancellartelo sarebbe perdere
+  dati, non fare pulizia — la pulizia automatica resta limitata ai vecchi set
+  generati. Questo rovescia la riga «un set a mano può essere vuoto» della spec,
+  per decisione dell'utente.
+
+  Chi aggiorna non perde niente: `_migrate_setlist_sources` travasa la vecchia
+  `source_playlist_id` nella tabella nuova al primo avvio, e la colonna resta
+  finché il travaso non avrà girato ovunque. Piano in
+  `docs/superpowers/plans/2026-09-19-origini-multiple-e-bozza.md`.
+
 - **Impostazioni in cinque sezioni (2026-09-15).** Generali · Libreria · Download ·
   Collegamenti · Backup, scelte da `?section=` con i pannelli montati e nascosti,
   così una bozza non salvata sopravvive al cambio sezione e ogni form di cartelle

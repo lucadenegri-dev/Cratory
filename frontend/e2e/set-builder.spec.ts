@@ -6,10 +6,18 @@ import { test, expect } from "@playwright/test";
 // in libreria: le tracce le creiamo via API prima di aprire la pagina.
 
 /** Crea `n` tracce possedute e ritorna i loro id, nell'ordine. */
-async function seminaTracce(request: import("@playwright/test").APIRequestContext, n: number) {
-  const righe = Array.from({ length: n }, (_, i) => `Artista ${i} - Traccia ${i}`).join("\n");
+async function seminaTracce(request: import("@playwright/test").APIRequestContext, n: number,
+                            prefisso = "") {
+  // Senza `prefisso` due chiamate creano le STESSE tracce: import-manual
+  // deduplica per artista+titolo. Va bene quasi sempre; serve distinguerle solo
+  // quando il test vuole due playlist con contenuti diversi.
+  const righe = Array.from({ length: n }, (_, i) =>
+    `Artista ${prefisso}${i} - Traccia ${prefisso}${i}`).join("\n");
   const res = await request.post("/api/playlists/import-manual", {
-    data: { name: `E2E ${Date.now()}`, text: righe },
+    // Nome unico anche fra worker paralleli: due \`Date.now()\` nello stesso
+    // millisecondo darebbero due playlist omonime, e i test che contano i set
+    // per nome si conterebbero addosso.
+    data: { name: `E2E ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, text: righe },
   });
   expect(res.ok()).toBeTruthy();
   // L'import manuale risponde con un report (`playlist_id`), non con la playlist.
@@ -185,4 +193,54 @@ test("il varco si fa riempire dal generatore, e la scheda di preparazione lo rac
   const anteprima = page.getByTestId("export-preview");
   await expect(anteprima).toContainText("Traccia 0");
   await expect(anteprima).toContainText("varco");
+});
+
+test("una bozza abbandonata non lascia un set vuoto in archivio", async ({ page, request }) => {
+  const { playlistId } = await seminaTracce(request, 2, "boz");
+  // Il nome della playlist e' unico per test (E2E <timestamp>) e un set creato
+  // da lei lo eredita: contare TUTTI i set sarebbe inaffidabile, perche' i
+  // worker di Playwright girano in parallelo e ne creano altri.
+  const nome = (await (await request.get(`/api/playlists/${playlistId}`)).json()).name as string;
+  const quantiMiei = async () => {
+    const tutti = (await (await request.get("/api/sets")).json()) as { name: string }[];
+    return tutti.filter((x) => x.name === nome).length;
+  };
+  expect(await quantiMiei()).toBe(0);
+
+  // Apri il banco su una bozza e scegli una playlist: non deve salvare niente.
+  await page.goto(`/sets/manual?playlist=${playlistId}`);
+  await expect(page.getByTestId("material-panel").getByText("Traccia boz0")).toBeVisible();
+  await page.goto("/sets");
+  await expect(page.getByText("Prepara un set")).toBeVisible();
+  expect(await quantiMiei()).toBe(0);
+
+  // Rifallo, ma stavolta metti dentro una traccia: ora il set esiste.
+  await page.goto(`/sets/manual?playlist=${playlistId}`);
+  await page.getByTestId("material-panel").locator("li").filter({ hasText: "Traccia boz0" })
+    .getByTitle("Aggiungi al percorso").click();
+  await expect(page.getByTestId("path-panel").getByText("Traccia boz0")).toBeVisible();
+  await expect(page).toHaveURL(/\/sets\/manual\?id=\d+/);
+  expect(await quantiMiei()).toBe(1);
+});
+
+test("un set pesca da due playlist insieme", async ({ page, request }) => {
+  const a = await seminaTracce(request, 2, "A");
+  const b = await seminaTracce(request, 2, "B");
+  const creato = await request.post("/api/sets/manual", {
+    data: { playlist_ids: [a.playlistId] },
+  });
+  const set = await creato.json();
+
+  await page.goto(`/sets/manual?id=${set.id}`);
+  const origini = page.getByTestId("sources-panel");
+  await expect(origini.getByLabel("Aggiungi una playlist")).toBeVisible();
+
+  // Il materiale ha solo le tracce della prima playlist.
+  const materiale = page.getByTestId("material-panel");
+  const primaTraccia = await materiale.locator("li").count();
+
+  // Aggiungi la seconda: il materiale cresce.
+  await origini.getByLabel("Aggiungi una playlist").selectOption(String(b.playlistId));
+  await expect(materiale.locator("li")).not.toHaveCount(primaTraccia);
+  await expect(materiale.getByText("Traccia B0")).toBeVisible();
 });
