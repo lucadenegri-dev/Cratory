@@ -316,6 +316,7 @@ def _beam_search_span(
     mood_scores: dict[int, int] | None = None,
     genre_counts: dict[str, int] | None = None,
     genre_map: dict[int, str | None] | None = None,
+    max_count: int | None = None,
 ) -> list[tuple[Track, TransitionScore]]:
     """Riempe uno span di set col beam search; ritorna i soli filler (opener escluso).
 
@@ -326,6 +327,10 @@ def _beam_search_span(
 
     used viene arricchito con opener.id qui dentro; artist_counts NO: l'artista dell'opener
     deve essere gia' contato dal chiamante (altrimenti il cap per artista sfora di uno).
+
+    max_count: se dato, lo span si chiude appena ha scelto quel numero di tracce,
+    a prescindere dai secondi. Serve a "riempi il varco", che ragiona in slot e
+    non in durata; None lascia il comportamento a secondi di sempre.
     """
     span_start = elapsed_secs
     span_len = max(1, fill_until_secs - span_start)
@@ -333,11 +338,18 @@ def _beam_search_span(
     base_arts = dict(artist_counts or {})
     base_genres = dict(genre_counts or {})
 
+    def _span_finito(secs: int, quanti: int) -> bool:
+        """Il criterio di chiusura dello span: a conteggio se `max_count` c'e',
+        altrimenti a secondi come sempre."""
+        if max_count is not None:
+            return quanti >= max_count
+        return secs >= fill_until_secs
+
     def new_beam() -> dict:
         return {"chosen": [], "prev": opener, "used": set(base_used),
                 "arts": dict(base_arts), "genres": dict(base_genres),
                 "secs": elapsed_secs, "cum": 0.0,
-                "done": elapsed_secs >= fill_until_secs}
+                "done": _span_finito(elapsed_secs, 0)}
 
     def expand(b: dict) -> list[dict]:
         progress = min(1.0, b["secs"] / target_seconds)
@@ -377,7 +389,7 @@ def _beam_search_span(
                 "chosen": b["chosen"] + [(t, ts)], "prev": t,
                 "used": b["used"] | {t.id}, "arts": arts, "genres": genres,
                 "secs": secs, "cum": b["cum"] + sc,
-                "done": secs >= fill_until_secs,
+                "done": _span_finito(secs, len(b["chosen"]) + 1),
             })
         return children
 
@@ -395,7 +407,7 @@ def _beam_search_span(
     while not greedy["done"]:
         greedy = expand(greedy)[0]
 
-    complete = [b for b in beams if b["secs"] >= fill_until_secs] or beams
+    complete = [b for b in beams if _span_finito(b["secs"], len(b["chosen"]))] or beams
     complete.append(greedy)
     best = max(complete, key=lambda b: (b["cum"] / max(1, len(b["chosen"])),
                                         [t.id for t, _ in b["chosen"]]))

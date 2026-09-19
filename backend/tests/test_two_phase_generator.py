@@ -205,3 +205,32 @@ def test_mood_scores_shift_candidate_ranking():
     # id assente dal giudizio -> neutro 50
     assert _score(prev, cand, mood_scores={99: 100}) == pytest.approx(base + 50 * 0.30)
     assert _score(prev, cand, mood_scores=None) == base
+
+
+def test_lo_span_si_puo_fermare_a_conteggio(db):
+    """«Riempi il varco» vuole N tracce, non N secondi: il criterio a conteggio
+    affianca quello a secondi senza sostituirlo."""
+    from app.schemas import SetGenerationRequest
+    from app.services.set_generator import _beam_search_span
+    from app.services.set_skeleton import strategy_profile
+
+    tracce = []
+    for i in range(10):
+        t = Track(source_type="spotify", title=f"T{i}", artist=f"A{i}", bpm=124.0 + i,
+                  camelot_key="8A", duration_seconds=300, has_local_file=True)
+        db.add(t)
+        tracce.append(t)
+    db.commit()
+
+    req = SetGenerationRequest(target_duration_minutes=60)
+    fillers = _beam_search_span(
+        tracce[0], tracce[1:], req, strategy_profile("smooth"),
+        start_bpm=124.0, end_bpm=130.0, target_seconds=3600,
+        elapsed_secs=300, fill_until_secs=3600, max_count=3)
+    assert len(fillers) == 3
+    # I secondi non c'entrano: con lo stesso span e nessun conteggio ne sceglie molte di piu'.
+    senza = _beam_search_span(
+        tracce[0], tracce[1:], req, strategy_profile("smooth"),
+        start_bpm=124.0, end_bpm=130.0, target_seconds=3600,
+        elapsed_secs=300, fill_until_secs=3600)
+    assert len(senza) > 3
