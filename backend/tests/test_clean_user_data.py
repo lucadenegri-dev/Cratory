@@ -16,8 +16,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import Base
 from app.models import (
-    DownloadQueueItem, Playlist, Setlist, SetlistAlternative, SetlistBlock, SetlistTrack,
-    Track, playlist_tracks,
+    DownloadQueueItem, Playlist, Setlist, SetlistAlternative, SetlistBlock, SetlistRevision,
+    SetlistTrack, Track, playlist_tracks,
 )
 from app.organize.models import AudioFile, ScanRoot
 from app.tools import clean_user_data
@@ -147,3 +147,20 @@ def test_pulizia_libreria_svuota_anche_le_alternative(db_su_file):
     assert report["after"]["setlists"] == 0
     assert db_su_file.execute(
         text("SELECT COUNT(*) FROM setlist_alternatives")).scalar_one() == 0
+
+
+def test_pulizia_libreria_svuota_anche_la_cronologia(db_su_file):
+    """`setlist_revisions` e' figlia di `setlists`: senza di lei in DATA_TABLES
+    la DELETE sulla madre va in IntegrityError con le foreign key accese."""
+    s = Setlist(name="M", kind="manual")
+    db_su_file.add(s)
+    db_su_file.flush()
+    db_su_file.add(SetlistRevision(setlist_id=s.id, seq=0, kind="create", snapshot={}))
+    db_su_file.commit()
+
+    report = clean_user_data.clean("library", preserve_tokens=True,
+                                   include_backups=False, dry_run=False)
+
+    assert report["after"]["setlists"] == 0
+    assert db_su_file.execute(
+        text("SELECT COUNT(*) FROM setlist_revisions")).scalar_one() == 0

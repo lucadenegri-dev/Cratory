@@ -224,12 +224,22 @@ class Setlist(Base):
     # Cambia a ogni modifica strutturale: il client la rimanda come
     # expected_revision e il server risponde 409 se non coincide.
     revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Cursore della cronologia: a quale snapshot corrisponde lo stato attuale.
+    # NON e' `revision`, che cresce e basta e serve solo alla concorrenza: se
+    # il cursore tornasse indietro con l'annulla, una modifica successiva
+    # riporterebbe `revision` a un valore gia' visto da un client, che si
+    # crederebbe aggiornato su uno stato che non esiste piu'.
+    undo_seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     tracks: Mapped[list["SetlistTrack"]] = relationship(
         back_populates="setlist", cascade="all, delete-orphan", order_by="SetlistTrack.position"
     )
     blocks: Mapped[list["SetlistBlock"]] = relationship(
         back_populates="setlist", cascade="all, delete-orphan", order_by="SetlistBlock.position"
+    )
+    revisions: Mapped[list["SetlistRevision"]] = relationship(
+        back_populates="setlist", cascade="all, delete-orphan",
+        order_by="SetlistRevision.seq",
     )
 
 
@@ -301,6 +311,29 @@ class SetlistAlternative(Base):
 
     row: Mapped["SetlistTrack"] = relationship(back_populates="alternatives")
     track: Mapped[Track] = relationship()
+
+
+class SetlistRevision(Base):
+    """Uno stato della struttura di un set manuale, per annulla e ripeti.
+
+    `snapshot` contiene blocchi, righe e alternative con i loro id: ripristinare
+    significa ricreare esattamente quelle righe, cosi' gli id che il client ha
+    in mano restano validi. Non contiene i metadati delle tracce, che vivono in
+    `tracks` e non sono mai oggetto dell'annulla.
+    """
+
+    __tablename__ = "setlist_revisions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    setlist_id: Mapped[int] = mapped_column(ForeignKey("setlists.id"), index=True)
+    seq: Mapped[int] = mapped_column(Integer, index=True)
+    # Etichetta del gesto ("rows", "note:12", "block"...): serve ad accorpare gli
+    # edit consecutivi della stessa nota in una revisione sola.
+    kind: Mapped[str] = mapped_column(String)
+    snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    setlist: Mapped[Setlist] = relationship(back_populates="revisions")
 
 
 class DjSet(Base):
