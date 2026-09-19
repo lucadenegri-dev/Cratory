@@ -31,12 +31,20 @@ can go into a set.
 
 **Set building**
 
-- A deterministic generator builds the tracklist in two phases — a skeleton first, then a
-  beam search per segment — from owned tracks only.
-- Each transition is classified as technically safe, a creative risk, or a good reset. Gap
-  analysis reads a playlist for structural holes: no openers, no peak, missing BPM bridges,
-  flat energy, harmonic dead ends.
-- Export as text, CSV, Markdown or M3U8 (for Rekordbox), or push the set to Spotify as a playlist.
+- You build the set by hand, from your own tracks: a three-panel workbench with the source
+  playlist on one side, the path in the middle and the selected row's detail on the other.
+  Sequences you can name, move whole and park on a bench; alternatives kept beside a row;
+  tracks set aside in a reserve; gaps left open on purpose; undo and redo over the lot.
+- Each passage between two neighbouring tracks shows how much pitch it needs, as a signed
+  percentage, and how the keys relate — with "unknown" wherever a value is missing, never a
+  neutral score dressed up as a judgement. Notes on a passage are tied to the two tracks, so
+  they survive you changing your mind about the path.
+- The deterministic engine is a tool inside the set rather than a way of making one: "fill
+  this gap" proposes N tracks between the two beside a gap, and they land as ordinary rows
+  you can move, replace or undo. Each transition is also classified as technically safe, a
+  creative risk, or a good reset; gap analysis reads a playlist for structural holes.
+- Export as text, CSV, Markdown or M3U8 (for Rekordbox), plus a preparation sheet for the
+  booth and the list of reserves. The preview you see is the file you get.
 
 **Discovery and acquisition**
 
@@ -124,7 +132,7 @@ whether one is configured and where it came from, never the value itself.
 |---|---|
 | `LIBRARY_ROOT` | Indexing your music folder. Without it nothing is ever owned. |
 | `SPOTIFY_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | Spotify import and playlist export (connect from Settings) |
-| `ANTHROPIC_API_KEY` | AI set curation and Organize's tag suggestions — one key for both |
+| `ANTHROPIC_API_KEY` | Organize's tag suggestions. Sets never call it |
 | `DISCOGS_TOKEN` | Raises the Discogs rate limit and adds cover art; digging works without it |
 | `SLSKD_URL` / `_API_KEY` / `_DOWNLOAD_DIR` | Soulseek acquisition via your own slskd instance |
 | `ACOUSTID_API_KEY` | Acoustic fingerprint lookups in Organize (needs `fpcalc` too) |

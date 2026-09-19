@@ -52,11 +52,17 @@ fusion that absorbed it into Cratory's `/organize` section is specified in
 
 ## Non-negotiable rules
 
-1. **Separate the deterministic engine and the AI.** Import, normalization, de-duplication,
-   scoring, roles, gap analysis, discovery ranking and validation are deterministic code.
-   The AI's job is intent interpretation, pool curation (mood-fit, anchor hints) and
-   narrative/explanations — never sequencing: the deterministic engine always builds the
-   tracklist.
+1. **No AI anywhere near a set.** A set is prepared by hand, in the workbench
+   (`/sets/manual`). The deterministic engine survives as a *tool inside* it —
+   "fill this gap" proposes N tracks between the two beside a gap, with the same
+   beam search as before — and as the transition scoring behind the Transitions
+   page and the per-passage compatibility. It no longer builds sets on its own,
+   and there is no AI curation stage: the generator and `ai_curation.py` were
+   removed on 2026-09-19. Import, normalization, de-duplication, scoring, gap
+   analysis and discovery ranking are, as they always were, deterministic code.
+   What is left to the AI lives outside the sets — Organize's tag suggestions and
+   whatever `routers/ai.py` exposes — and every AI output is still validated
+   (rules 5 and 6).
 2. **BPM/key: Rekordbox è la fonte primaria, l'analisi in-app (Essentia, pagina
    Analisi) è l'alternativa deterministica.** Ogni valore ha una provenienza
    esplicita (`bpm_source`/`key_source`: manual > rekordbox > cratory); il
@@ -66,8 +72,10 @@ fusion that absorbed it into Cratory's `/organize` section is specified in
    Beatgrid/cue restano fuori scope; nessuna integrazione live con Rekordbox.
 3. **Streaming does not provide mixing features.** Spotify gives track identity, editorial
    metadata, covers, duration, ISRC, URLs and playlists.
-4. **The AI never receives the whole library.** It only receives candidates filtered by the
-   Candidate Engine: pool cap 200, seen by any single call in batches of at most 60.
+4. **The AI never receives the whole library.** Whatever still calls it sends a
+   filtered, capped selection — never a dump. The Candidate Engine that did this
+   for set curation went with the generator (2026-09-19); the rule stands for
+   what remains.
 5. **Every AI output is validated.** Use Pydantic schemas and deterministic checks
    (schema-constrained outputs, foreign ids and out-of-bounds values discarded with
    warnings) before showing or saving results.
@@ -98,7 +106,14 @@ backend/app/
                  dj_sets (=/api/shazam), downloads, files, slskd,
                  soundcloud, spotify, ai, pipeline, services, settings —
                  full list and grouping in docs/ARCHITECTURE.md
-  services/      deterministic logic and orchestration
+  services/      deterministic logic and orchestration. For sets:
+                 manual_set.py (the mutations, by row id), manual_history.py
+                 (snapshots, undo/redo), manual_pairs.py (per-passage
+                 compatibility), manual_fill.py ("fill this gap"),
+                 manual_export.py, manual_material.py; set_generator.py is now
+                 only the beam search those use, set_skeleton.py only the
+                 strategy profiles and the arc maths, set_editor.py only
+                 rename/delete
   repositories.py
   models.py
   db.py          session/engine, ensure_schema and idempotent migrations

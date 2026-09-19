@@ -98,6 +98,27 @@ described in `CLAUDE.md`.
   AI, separata apposta in un cantiere suo. Piano in
   `docs/superpowers/plans/2026-09-19-set-manuale-tappa-5-6a.md`.
 
+- **Via il vecchio generatore e la curatela AI (2026-09-19).** Cratory non genera
+  più set interi e non chiama più l'AI per curarli. Spariti: il form di
+  `/set-builder` e la sua guida, il job di generazione con i due endpoint,
+  `ai_curation.py`, `alternatives.py`, `candidate_engine.py`, `generate_set` con
+  scheletro e ancoraggi, l'editor classico per posizione, la pagina di dettaglio
+  dei set generati e le colonne `curation`, `mood_tags`, `ai_reason`.
+  **Sopravvive il beam search**, che non è un residuo: è il motore di «riempi il
+  varco» e, con lo scoring, della pagina Transizioni e della compatibilità dei
+  passaggi. `SetGenerationRequest` è diventato `BeamParams` dentro
+  `set_generator.py`: senza endpoint non era più il corpo di nessuna richiesta, e
+  stare fra gli schemi HTTP diceva una bugia. `/set-builder` è un
+  reindirizzamento verso `/sets`, che ora ha «Prepara un set». La suite backend
+  scende da 2622 a 2464 test: 158 se ne vanno col codice che esercitavano, e
+  restano quelli del beam e dell'export.
+
+  **Se hai ancora un set generato in archivio:** compare in `/sets` marcato
+  «vecchio formato», si può esportare e cancellare, e non ha una pagina dove
+  aprirsi. Le tre colonne le toglie `_migrate_drop_curation_cols` al primo
+  avvio; i set non si toccano. Piano in
+  `docs/superpowers/plans/2026-09-19-rimozione-generatore-e-curatela.md`.
+
 - **Impostazioni in cinque sezioni (2026-09-15).** Generali · Libreria · Download ·
   Collegamenti · Backup, scelte da `?section=` con i pannelli montati e nascosti,
   così una bozza non salvata sopravvive al cambio sezione e ogni form di cartelle

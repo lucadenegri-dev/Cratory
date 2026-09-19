@@ -65,7 +65,6 @@ return `202`, some `200`. The table below is the authority; do not assume `202`.
 | Library scan / index | `POST /api/organize/scan` (**200**), `POST /api/library/index` (**202**) | `GET /api/organize/scan/status`, `GET /api/library/index/status` |
 | Organize apply | `POST /api/organize/apply` (**200**) | `GET /api/organize/apply/status` |
 | Streaming import/sync | `POST /api/playlists/import`, `/import/liked/selected`, `/{id}/sync`, `/sync-all`, `POST /api/soundcloud/import`, `/import/likes` (all **202**) | `GET /api/playlists/import/status` |
-| Set generation | `POST /api/sets/generate-async` (**200**) | `GET /api/sets/generate-status` |
 | BPM/key analysis | `POST /api/analysis/start` (**202**) | `GET /api/analysis/status` |
 | Soulseek / SoundCloud download (queue, not single-instance) | `POST /api/downloads/playlist/{id}`, `/track`, `/track/auto`, `/track/soundcloud`, `/retry-pending` (all **200**, `{enqueued, skipped}`) | `GET /api/downloads/status` |
 | Mix identification | `POST /api/shazam/identify` (**200**) | `GET /api/shazam/identify-status` |
@@ -432,102 +431,37 @@ coverage, `key_distribution`, `genre_distribution` (genres merged
 case-insensitively, keeping the most frequent spelling), and BPM and energy
 histograms.
 
-## Set Builder and saved sets
+## Sets
 
 ```text
-POST   /api/sets/generate-async
-GET    /api/sets/generate-status
+POST   /api/sets/manual
 GET    /api/sets
-GET    /api/sets/{setlist_id}
 PATCH  /api/sets/{setlist_id}
 DELETE /api/sets/{setlist_id}
 POST   /api/sets/{setlist_id}/export
-POST   /api/sets/{setlist_id}/tracks
-DELETE /api/sets/{setlist_id}/tracks/{position}
-POST   /api/sets/{setlist_id}/tracks/{position}/move
-POST   /api/sets/{setlist_id}/tracks/{position}/replace
-POST   /api/sets/{setlist_id}/alternatives
 ```
 
-### Generation
+A set is prepared by hand; Cratory no longer generates one. The old surface —
+`POST /api/sets/generate-async`, `GET /api/sets/generate-status`, the classic
+detail `GET /api/sets/{id}`, the four per-position commands under
+`/tracks` and the computed `POST /api/sets/{id}/alternatives` — was removed on
+2026-09-19 together with AI curation. Nothing replaced them: the deterministic
+engine now lives inside a set as "fill this gap" (below) and behind the
+Transitions page.
 
-Generation is always the async job: `POST /api/sets/generate-async` returns
-`200` with `{status, phase, using_ai}` immediately — **not `202`** — and the UI polls
-`GET /api/sets/generate-status` for `phase`, `setlist_id` and `error`. A second
-start while one runs is `409 set_generation_in_progress` — never folded into the
-running job, which may be using a different engine.
+`GET /api/sets` lists every saved set as `SetlistSummaryOut`, with `kind`
+(`manual` | `generated`) telling the client where a row can go: a `manual` set
+opens in the workbench, a `generated` one — a leftover from before the removal —
+has no page at all and can only be exported or deleted. `PATCH` renames and
+`DELETE` removes, for either kind.
 
-`use_ai` decides the engine: `true` = AI curation (intent compilation from the free
-`prompt`, mood-fit, anchor hints, narrative), `false` = purely deterministic with no
-LLM call, absent/`null` = auto, meaning AI runs only if an LLM is configured and
-`prompt` is non-empty. `409 ai_not_configured` if `use_ai=true` without an API key.
-There is no technical/creative `mode`.
+`POST /api/sets/{setlist_id}/export` serves both: a generated set still answers
+the four historical formats, which is the only way to take one away before
+deleting it; a hand-prepared set reads the resolved path and adds two formats of
+its own. The details are below, under the workbench.
 
-**The deterministic two-phase generator is the only thing that sequences tracks.**
-The AI never orders or picks the tracklist, and any AI call that fails degrades
-silently to the deterministic default with a warning — never a 4xx/5xx.
 
-`owned_only` (default `true`) generates from owned tracks only. The flag persists on
-the saved set and the editor enforces it: `alternatives` excludes leads from the
-pool, and **both** the insert (`POST .../tracks`) and the `replace` refuse a track
-with no local file, with `422`.
-
-Track `rating` feeds a small deterministic tie-break into the generator's scoring
-(2.0 per level, max 6.0): a higher vote nudges a track ahead of an equally
-compatible one but never outweighs actual musical compatibility. It is
-deterministic-engine input only and is never shown to the AI stage.
-
-### What the saved set carries
-
-- `generated_by`: `algorithmic` when no AI contribution reached the set,
-  `algorithmic+ai_curation` when at least one of intent/mood-fit/anchors/narrative
-  was used.
-- `curation` (`{}` when no curation ran): `intent_summary` (how the request was
-  understood), `compiled` (the request fields the AI filled in — only fields the
-  user left unset are ever compiled; `owned_only` and `sources` never are),
-  `warnings` (AI-degradation messages).
-- `validation` (`{}` for a purely deterministic set): `warnings`, and
-  `missing_library_suggestions` — 0-3 strings from the narrative call describing
-  what kind of track the library is missing, never a track id or invented title.
-- `SetlistTrackOut.mood_tags`: up to 3 short tags from the mood-fit judgement, empty
-  when curation did not run. Transient per generation, never written back onto
-  `Track`.
-- `mixing_overview` and the per-track `mix_tip`, `transition_class`,
-  `transition_score`, `risk_level` are all deterministic.
-
-### Editing
-
-`POST .../tracks` inserts a track (`position` optional, appends when absent);
-`DELETE .../tracks/{position}` removes one; `.../tracks/{position}/move` takes
-either `direction` (`up`/`down`, one step) or `to` (1-based absolute, for
-drag-and-drop) — exactly one of the two; `.../tracks/{position}/replace` swaps in a
-different `track_id`. All four return the whole updated setlist. Edit failures come
-back as `set_edit_error` with `404`, `409` or `422` depending on the cause.
-
-`POST /api/sets/{setlist_id}/alternatives` proposes replacements for one position:
-`mode` is `safer` | `softer` | `harder` | `same_artist` | `surprising`, `limit`
-1-10 (default 5). Each alternative carries the transition score against both
-neighbours.
-
-`PATCH /api/sets/{setlist_id}` renames; `DELETE` returns `204`.
-
-### Export
-
-`POST /api/sets/{setlist_id}/export?format=` — `text` (default) | `csv` |
-`markdown` | `m3u8`. CSV includes `local_path` (empty for tracks without a file).
-`m3u8` is importable in Rekordbox and lists absolute local paths; tracks without a
-local file are excluded and their count noted in a leading comment. To export to
-Spotify instead, use `POST /api/spotify/create-playlist`. Since tappa 5 this endpoint also serves hand-prepared sets, which read the
-**resolved path** and add two formats of their own: `prep`, the preparation sheet
-(sequences with their names, per-row notes, alternatives, open gaps and the pitch
-of each passage), and `reserve`, the tracks set aside. A track with no file on disk
-is excluded from `m3u8` — it cannot be in a Rekordbox playlist — but **stays** in
-the preparation sheet, marked unavailable: it is a decision the DJ took, and hiding
-it would be a lie. The two new formats answer `422 set_format_not_available` on a
-generated set. The preview in the app is this very response, not a second rendering,
-so it cannot drift from the downloaded file.
-
-### Set manuale (banco di preparazione, tappe 1-5)
+### Il banco di preparazione
 
 ```text
 POST   /api/sets/manual
@@ -681,15 +615,13 @@ from a playlist id that no longer exists), `422 manual_set_error` with a `reason
 anything else domain-specific, plus the `409 set_is_manual` above on the classic
 detail endpoint.
 
-These candidates are the DJ's own, saved on the row. They are unrelated to
-`POST /api/sets/{setlist_id}/alternatives`, the generator's *computed* suggestions,
-which stays reserved for generated sets.
+These candidates are the DJ's own, saved on the row. The generator's *computed*
+suggestions, which lived at `POST /api/sets/{id}/alternatives`, are gone with it.
 
-Manual sets never go through `assign_roles` or transition recomputation, and
-"fill this gap" does not change that: it proposes tracks, it does not assign roles
-or store scores. What is still missing is the removal of the old generation form
-and of AI curation — see
-`docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the full staged plan.
+Sets never go through `assign_roles` or transition recomputation, and "fill this
+gap" does not change that: it proposes tracks, it does not assign roles or store
+scores. The staged plan in
+`docs/superpowers/specs/2026-09-15-set-builder-workbench.md` is complete.
 
 ## Transitions
 

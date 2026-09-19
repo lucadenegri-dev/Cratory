@@ -26,14 +26,16 @@ endpoints, `docs/API.md`.
   `analysis_*` fields and reaches the canonical fields only through an explicit
   apply). `energy` is a deterministic derivative (estimated from BPM+genre, or
   computed from the audio itself). Cratory never asks an AI for BPM or key.
-- **Set Builder.** A deterministic two-phase generator — a skeleton of
-  opening/peak/closing/reset anchors and a genre arc first, then a beam search per
-  segment — always builds the tracklist from owned tracks only. An optional AI
-  curation stage (`use_ai`) compiles intent from the free prompt, judges mood-fit in
-  batches and suggests anchors as non-binding scoring terms; it never sequences. A
-  personal 1–3 `rating` gives a small tie-break bonus in the generator and keeps a
-  system "Top" playlist in sync with every track voted 3. Export as text, CSV,
-  Markdown or M3U8, or push the set to Spotify as a playlist.
+- **Set Builder.** A hand-built workbench over owned tracks: named sequences, a
+  bench, alternatives, reserves, deliberate gaps, per-row and per-passage notes,
+  undo and redo. The deterministic engine is a tool inside it — "fill this gap"
+  runs a beam search over the material between the two tracks beside a gap — and
+  the scoring behind each passage, which reports the pitch needed as a signed
+  percentage and says "unknown" rather than inventing a neutral score. No AI
+  touches a set (the generator and its curation stage were removed 2026-09-19). A
+  personal 1–3 `rating` gives a small tie-break bonus and keeps a system "Top"
+  playlist in sync with every track voted 3. Export as text, CSV, Markdown or
+  M3U8, plus a preparation sheet and the reserves.
 - **Transitions & gap analysis.** `/api/transitions` classifies a pair of tracks
   (technically safe, a creative risk, or a good reset); `services/gap_analysis.py`
   reads a playlist for structural holes — no openers, no peak, missing BPM bridges,
@@ -489,7 +491,7 @@ cleanup, and each was explicitly left alone this time.
      `download_dispatcher.py`, `download_runner.py`), not the abstract base
      class the "four job state machines" item above imagines.
   3. **Set Builder: DJ-led preparation workspace** (direction revised
-     2026-09-16; **tappe 1-5 shipped**, 2026-09-18/19). Build from a playlist
+     2026-09-16; **done**, 2026-09-18/19). Build from a playlist
      through audition, manually composed sequences, gaps, saved alternatives,
      reserves, preparation notes and undo/redo, on the existing `Setlist` model
      (a `kind` column, not a second set model). No AI in the flow. Done so far:
@@ -501,13 +503,10 @@ cleanup, and each was explicitly left alone this time.
      the user's decision, 2026-09-19: without "tried" the flag never closes);
      planned duration and the exports, preparation sheet included (tappa 5); and
      "fill this gap", the generator as a tool inside the set — the same beam
-     search, stopped by count instead of by seconds. **Still open: the demolition
-     half of tappa 6** — removing the old generation form and AI curation
-     (`ai_curation.py`, the job's AI branch, `curation`, `mood_tags`,
-     `ai_reason`, and `/set-builder` becoming the list of sets). It was split off
-     deliberately on 2026-09-19: it is the only irreversible step of the spec, and
-     "fill this gap" is what justifies keeping the beam search, so it had to exist
-     first. See the
+     search, stopped by count instead of by seconds; and finally the removal of
+     the old generation form and of AI curation, so Cratory no longer generates
+     sets at all and no AI goes anywhere near one. **The specification is
+     complete.** See the
      [specification](superpowers/specs/2026-09-15-set-builder-workbench.md).
      Deferred behind it, as its own design cycle once real transitions exist
      to try: a two-deck audition (beat grids from the Rekordbox XML `TEMPO`

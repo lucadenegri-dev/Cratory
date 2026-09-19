@@ -460,7 +460,7 @@ missing BPM bridges, flat energy, harmonic dead ends). `/api/transitions` classi
 of tracks on its own. `services/labels.py` aggregates the library per record label, reading
 the label from the effective tag.
 
-### Manual set (tappe 1-5)
+### Set (preparati a mano)
 
 A DJ can build a set by hand instead of generating one: `Setlist.kind` is `generated`
 (everything above) or `manual`. A manual set has no strategy, no target duration and
@@ -547,9 +547,26 @@ detail) and the list at `/sets` route by `kind`. A row's
 up/down arrows move it inside its own sequence, so they stop at its edges: crossing a
 boundary means moving the sequence itself. See
 `docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the staged plan.
-What remains of it is the demolition half of tappa 6 — removing the old generation
-form and AI curation — deliberately split into its own change, because "fill this
-gap" is what justifies keeping the beam search and had to exist first.
+All of it is done. The last step, on 2026-09-19, removed the old generation form
+and AI curation: `ai_curation.py`, `alternatives.py` and `candidate_engine.py`
+are gone, and with them `generate_set`, the anchors and the skeleton, the
+per-position editor, the two generation endpoints and the classic detail page.
+
+**Why the beam search survived the removal of the generator.** It is not a
+leftover: `_beam_search_span` is the engine of "fill this gap", and
+`_candidate_score` with it. What died is everything that used it to build a
+whole set — the planning layer above it. `set_skeleton.py` kept only the
+strategy profiles and the arc maths the beam reads; `SetGenerationRequest`, no
+longer the body of any request, became `BeamParams` inside
+`set_generator.py`, because an HTTP schema that no endpoint accepts is a lie to
+whoever reads it.
+
+A set that predates all this can still exist in the database. It is listed as
+"old format", it can be exported and deleted, and it has no page to open: a row
+that tells the truth beats a click that leads nowhere. Its columns
+(`curation`, `mood_tags`, `ai_reason`) were dropped by an explicit migration —
+`_migrate_drop_legacy` is model-derived but looks only at `tracks`, so without
+`_migrate_drop_curation_cols` they would have lingered for good.
 
 ## Discovery
 
