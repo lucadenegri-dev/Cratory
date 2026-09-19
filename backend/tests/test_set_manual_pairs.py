@@ -105,3 +105,101 @@ def test_un_varco_non_ha_compatibilita(db):
     c = pair_compat(_riga(a), _riga(None, slot_kind="gap"))
     assert c.score is None
     assert sorted(c.missing) == ["bpm", "key"]
+
+
+# --- Task 3: le mutazioni ------------------------------------------------------
+
+from app.services.manual_set import (  # noqa: E402
+    add_alternatives, choose_alternative, create_manual_set, insert_rows, pair_note_map,
+    path_rows, set_pair_note, undo, update_row,
+)
+
+
+def _set_con_due(db):
+    a, b = _due_tracce(db)
+    s = create_manual_set(db, name="M", playlist_id=None)
+    s = insert_rows(db, s.id, expected_revision=0, track_ids=[a.id, b.id],
+                    gap=False, after_row_id=None)
+    return s, a, b
+
+
+def test_l_appunto_di_coppia_si_scrive_e_si_rilegge(db):
+    s, a, b = _set_con_due(db)
+    s = set_pair_note(db, s.id, expected_revision=1, from_track_id=a.id,
+                      to_track_id=b.id, note="  entra sul break  ")
+    assert pair_note_map(s) == {(a.id, b.id): "entra sul break"}
+
+
+def test_un_appunto_vuoto_toglie_la_riga(db):
+    """Niente righe vuote in giro: svuotare il campo e' cancellare l'appunto."""
+    s, a, b = _set_con_due(db)
+    s = set_pair_note(db, s.id, expected_revision=1, from_track_id=a.id,
+                      to_track_id=b.id, note="x")
+    s = set_pair_note(db, s.id, expected_revision=2, from_track_id=a.id,
+                      to_track_id=b.id, note="   ")
+    assert pair_note_map(s) == {}
+
+
+def test_riscrivere_la_stessa_coppia_non_crea_un_doppione(db):
+    s, a, b = _set_con_due(db)
+    s = set_pair_note(db, s.id, expected_revision=1, from_track_id=a.id,
+                      to_track_id=b.id, note="primo")
+    s = set_pair_note(db, s.id, expected_revision=2, from_track_id=a.id,
+                      to_track_id=b.id, note="secondo")
+    assert pair_note_map(s) == {(a.id, b.id): "secondo"}
+
+
+def test_il_giudizio_non_si_trasferisce_e_non_si_perde(db):
+    """La verifica dichiarata dalla spec, senza la parola «stato»: scrivo su
+    A->B, sostituisco B con C e A->C non ha appunto; rimetto B e lo ritrovo."""
+    s, a, b = _set_con_due(db)
+    c = Track(source_type="spotify", title="C", bpm=125.0, camelot_key="8A",
+              duration_seconds=300, has_local_file=True)
+    db.add(c)
+    db.commit()
+    s = set_pair_note(db, s.id, expected_revision=1, from_track_id=a.id,
+                      to_track_id=b.id, note="entra sul break")
+
+    riga_b = path_rows(s)[1]
+    s = add_alternatives(db, s.id, riga_b.id, expected_revision=2, track_ids=[c.id])
+    s = choose_alternative(db, s.id, riga_b.id,
+                           path_rows(s)[1].alternatives[0].id, expected_revision=3)
+    assert [r.track_id for r in path_rows(s)] == [a.id, c.id]
+    assert (a.id, c.id) not in pair_note_map(s)      # A->C e' da valutare
+    assert pair_note_map(s)[(a.id, b.id)] == "entra sul break"  # non persa
+
+    riga_c = path_rows(s)[1]
+    s = choose_alternative(db, s.id, riga_c.id,
+                           path_rows(s)[1].alternatives[0].id, expected_revision=4)
+    assert [r.track_id for r in path_rows(s)] == [a.id, b.id]
+    assert pair_note_map(s)[(a.id, b.id)] == "entra sul break"  # ritrovata
+
+
+def test_la_suono_a_si_scrive_sulla_riga(db):
+    s, a, b = _set_con_due(db)
+    riga = path_rows(s)[0]
+    s = update_row(db, s.id, riga.id, expected_revision=1, play_bpm=126.0)
+    assert path_rows(s)[0].play_bpm == 126.0
+    assert a.bpm == 124.0  # la libreria non si tocca
+
+
+def test_scrivere_l_appunto_non_azzera_la_suono_a(db):
+    """Il difetto classico di una PATCH parziale: un campo non mandato non e'
+    un campo da azzerare. Senza sentinella questo test cade."""
+    s, a, b = _set_con_due(db)
+    riga = path_rows(s)[0]
+    s = update_row(db, s.id, riga.id, expected_revision=1, play_bpm=126.0)
+    s = update_row(db, s.id, riga.id, expected_revision=2, note="ciao")
+    assert path_rows(s)[0].play_bpm == 126.0
+    assert path_rows(s)[0].note == "ciao"
+    # E azzerare resta possibile, esplicitamente.
+    s = update_row(db, s.id, riga.id, expected_revision=3, play_bpm=None)
+    assert path_rows(s)[0].play_bpm is None
+
+
+def test_annullare_riporta_indietro_un_appunto_di_coppia(db):
+    s, a, b = _set_con_due(db)
+    s = set_pair_note(db, s.id, expected_revision=1, from_track_id=a.id,
+                      to_track_id=b.id, note="x")
+    s = undo(db, s.id, expected_revision=2)
+    assert pair_note_map(s) == {}

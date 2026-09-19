@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.models import Setlist, SetlistAlternative, SetlistBlock, SetlistTrack
+from app.models import Setlist, SetlistAlternative, SetlistBlock, SetlistPairNote, SetlistTrack
 from app.repositories import get_playlist, get_setlist, get_track
 from app.services.manual_history import record, restore
 
@@ -246,13 +246,38 @@ def remove_row(db: Session, setlist_id: int, row_id: int, *, expected_revision: 
     return _commit_bumped(db, setlist, "remove")
 
 
-def update_row_note(db: Session, setlist_id: int, row_id: int, *, expected_revision: int,
-                    note: str | None) -> Setlist:
+class _Unset:
+    """Sentinella per le PATCH parziali: «campo non mandato» non e' «campo da
+    azzerare», e None deve poter azzerare davvero."""
+
+    def __repr__(self) -> str:  # pragma: no cover - solo per i messaggi d'errore
+        return "UNSET"
+
+
+UNSET = _Unset()
+
+
+def update_row(db: Session, setlist_id: int, row_id: int, *, expected_revision: int,
+               note: str | None | _Unset = UNSET,
+               play_bpm: float | None | _Unset = UNSET) -> Setlist:
+    """Aggiorna i campi MANDATI della riga. «La suono a» vale in questo set e
+    non tocca `Track.bpm`."""
     setlist = load_manual_set(db, setlist_id)
     _check_revision(setlist, expected_revision)
     row = _row_of(setlist, row_id)
-    row.note = (note or "").strip() or None
+    if not isinstance(note, _Unset):
+        row.note = (note or "").strip() or None
+    if not isinstance(play_bpm, _Unset):
+        if play_bpm is not None and not 20.0 <= play_bpm <= 300.0:
+            raise ManualSetError(f"Play BPM {play_bpm} out of range 20..300")
+        row.play_bpm = play_bpm
     return _commit_bumped(db, setlist, f"note:{row.id}")
+
+
+def update_row_note(db: Session, setlist_id: int, row_id: int, *, expected_revision: int,
+                    note: str | None) -> Setlist:
+    """Compatibilita' con le tappe 1-3: la sola nota."""
+    return update_row(db, setlist_id, row_id, expected_revision=expected_revision, note=note)
 
 
 # --- Alternative (tappa 2) -----------------------------------------------------
@@ -504,3 +529,37 @@ def split_block(db: Session, setlist_id: int, block_id: int, *, expected_revisio
     setlist.blocks.remove(block)
     _renumber_blocks([b for b in fratelli if b.id != block.id])
     return _commit_bumped(db, setlist, "block")
+
+
+# --- Passaggi (tappa 4) --------------------------------------------------------
+
+
+def pair_note_map(setlist: Setlist) -> dict[tuple[int, int], str]:
+    """Gli appunti del set indicizzati per coppia di tracce."""
+    return {(p.from_track_id, p.to_track_id): p.note
+            for p in setlist.pair_notes if p.note}
+
+
+def set_pair_note(db: Session, setlist_id: int, *, expected_revision: int,
+                  from_track_id: int, to_track_id: int, note: str | None) -> Setlist:
+    """Scrive l'appunto sul passaggio fra due TRACCE (non fra due righe: il
+    giudizio non si sposta col percorso). Un testo vuoto cancella la riga:
+    niente appunti vuoti da collezionare."""
+    setlist = load_manual_set(db, setlist_id)
+    _check_revision(setlist, expected_revision)
+    for tid in (from_track_id, to_track_id):
+        if get_track(db, tid) is None:
+            raise ManualSetError(f"Track {tid} not found")
+    pulita = (note or "").strip() or None
+    esistente = next((p for p in setlist.pair_notes
+                      if p.from_track_id == from_track_id and p.to_track_id == to_track_id), None)
+    if pulita is None:
+        if esistente is not None:
+            setlist.pair_notes.remove(esistente)
+    elif esistente is not None:
+        esistente.note = pulita
+    else:
+        setlist.pair_notes.append(SetlistPairNote(
+            setlist_id=setlist.id, from_track_id=from_track_id,
+            to_track_id=to_track_id, note=pulita))
+    return _commit_bumped(db, setlist, f"pair:{from_track_id}:{to_track_id}")

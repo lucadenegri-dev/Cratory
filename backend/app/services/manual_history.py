@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.models import Setlist, SetlistAlternative, SetlistBlock, SetlistRevision, SetlistTrack
+from app.models import (
+    Setlist, SetlistAlternative, SetlistBlock, SetlistPairNote, SetlistRevision, SetlistTrack,
+)
 
 MAX_REVISIONS = 50
 # Solo gli appunti si accorpano. Una nota si scrive un carattere alla volta e il
@@ -42,6 +44,13 @@ def snapshot_of(setlist: Setlist) -> dict:
             for r in sorted(setlist.tracks, key=lambda r: r.id)
             for a in sorted(r.alternatives, key=lambda a: a.id)
         ],
+        # Gli appunti di coppia stanno nella struttura come le note di riga: un
+        # annulla che li lasciasse fuori riporterebbe indietro mezzo set.
+        "pairs": [
+            {"id": p.id, "from_track_id": p.from_track_id,
+             "to_track_id": p.to_track_id, "note": p.note}
+            for p in sorted(setlist.pair_notes, key=lambda p: p.id)
+        ],
     }
 
 
@@ -56,6 +65,7 @@ def restore(db: Session, setlist: Setlist, snapshot: dict) -> None:
         row.alternatives.clear()
     setlist.tracks.clear()
     setlist.blocks.clear()
+    setlist.pair_notes.clear()
     db.flush()
 
     for b in snapshot.get("blocks", []):
@@ -70,6 +80,10 @@ def restore(db: Session, setlist: Setlist, snapshot: dict) -> None:
     for a in snapshot.get("alts", []):
         db.add(SetlistAlternative(id=a["id"], setlist_track_id=a["setlist_track_id"],
                                   track_id=a["track_id"], position=a["position"], note=a["note"]))
+    for p in snapshot.get("pairs", []):
+        db.add(SetlistPairNote(id=p["id"], setlist_id=setlist.id,
+                               from_track_id=p["from_track_id"],
+                               to_track_id=p["to_track_id"], note=p["note"]))
     db.flush()
     db.refresh(setlist)
 
