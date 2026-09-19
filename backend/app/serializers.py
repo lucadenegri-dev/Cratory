@@ -19,6 +19,7 @@ from app.schemas import (
     TrackOut,
     TrackPlaylistRef,
 )
+from app.services.manual_set import can_redo, can_undo
 from app.services.scoring import classify_transition, mixing_overview, mixing_tip
 
 
@@ -193,9 +194,11 @@ def manual_set_out(setlist: Setlist, db: Session) -> ManualSetOut:
             id=block.id, name=block.name, placement=block.placement, position=block.position,
             rows=[row_out(st) for st in rows],
         ))
-    # Conteggio e durata restano quelli del PERCORSO: la riserva non e' il set.
+    # Conteggio e durata restano quelli del PERCORSO: ne' la riserva (senza
+    # blocco) ne' il banco (blocchi `bench`) sono il set.
+    nel_percorso = {b.id for b in setlist.blocks if b.placement == "main"}
     with_track = [st for st in setlist.tracks
-                  if st.track is not None and st.block_id is not None]
+                  if st.track is not None and st.block_id in nel_percorso]
     playlist = get_playlist(db, setlist.source_playlist_id) if setlist.source_playlist_id else None
     return ManualSetOut(
         id=setlist.id, name=setlist.name, kind=setlist.kind, revision=setlist.revision,
@@ -206,5 +209,6 @@ def manual_set_out(setlist: Setlist, db: Session) -> ManualSetOut:
             (st for st in setlist.tracks if st.block_id is None), key=lambda st: st.position)],
         track_count=len(with_track),
         total_file_seconds=sum(st.track.duration_seconds or 0 for st in with_track),
+        can_undo=can_undo(setlist), can_redo=can_redo(setlist),
         created_at=_naive(setlist.created_at), updated_at=_naive(setlist.updated_at),
     )

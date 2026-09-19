@@ -278,6 +278,8 @@ class ManualSetOut(BaseModel):
     reserve: list[ManualRowOut] = []  # righe senza blocco: le tracce tenute in tasca
     track_count: int = 0
     total_file_seconds: int = 0  # somma delle durate dei file, i varchi non contano
+    can_undo: bool = False
+    can_redo: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -318,6 +320,29 @@ class AlternativeChooseRequest(BaseModel):
 class RowPatchRequest(BaseModel):
     expected_revision: int = Field(ge=0)
     note: str | None = Field(default=None, max_length=2000)
+
+
+class BlockGroupRequest(BaseModel):
+    """Raggruppa righe contigue dello stesso blocco in una sequenza nuova."""
+
+    expected_revision: int = Field(ge=0)
+    row_ids: list[int] = Field(min_length=2, max_length=200)
+    name: str | None = Field(default=None, max_length=120)
+
+
+class BlockRenameRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    name: str | None = Field(default=None, max_length=120)
+
+
+class BlockMoveRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    position: int = Field(ge=1)  # 1-based fra le sequenze della destinazione
+    to_bench: bool | None = None  # None = resta dov'e'
+
+
+class HistoryStepRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
 
 
 class MaterialItemOut(BaseModel):

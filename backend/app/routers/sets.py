@@ -21,6 +21,10 @@ from app.repositories import (
 from app.schemas import (
     AlternativeChooseRequest,
     AlternativesAddRequest,
+    BlockGroupRequest,
+    BlockMoveRequest,
+    BlockRenameRequest,
+    HistoryStepRequest,
     AddTrackRequest,
     AlternativesRequest,
     AlternativesResponse,
@@ -47,6 +51,9 @@ from app.services.app_state import get_language
 from app.services.manual_material import material_for
 from app.services.manual_set import (
     AlternativeNotFound,
+    BlockNotFound,
+    NothingToRedo,
+    NothingToUndo,
     add_alternatives,
     choose_alternative,
     remove_alternative,
@@ -57,9 +64,15 @@ from app.services.manual_set import (
     RowNotFound,
     create_manual_set,
     insert_rows,
+    group_rows,
     load_manual_set,
+    move_block,
     move_row,
+    redo,
     remove_row,
+    rename_block,
+    split_block,
+    undo,
     update_row_note,
 )
 from app.services.set_editor import (
@@ -181,6 +194,12 @@ def _manual_error(exc: ManualSetError) -> HTTPException:
         return api_error(404, "set_row_not_found", "Row not found")
     if isinstance(exc, AlternativeNotFound):
         return api_error(404, "set_alternative_not_found", "Alternative not found")
+    if isinstance(exc, BlockNotFound):
+        return api_error(404, "set_block_not_found", "Block not found")
+    if isinstance(exc, NothingToUndo):
+        return api_error(409, "set_nothing_to_undo", "Nothing to undo")
+    if isinstance(exc, NothingToRedo):
+        return api_error(409, "set_nothing_to_redo", "Nothing to redo")
     if "Playlist not found" in str(exc):
         return api_error(404, "playlist_not_found", "Playlist not found")
     return api_error(422, "manual_set_error", f"Manual set error: {exc}", reason=str(exc))
@@ -307,6 +326,75 @@ def alternatives_choose(setlist_id: int, row_id: int, alt_id: int,
     try:
         return manual_set_out(choose_alternative(
             db, setlist_id, row_id, alt_id, expected_revision=req.expected_revision), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+# --- Sequenze, banco, annulla e ripeti (tappa 3) -------------------------------
+
+
+@router.post("/{setlist_id}/blocks", response_model=ManualSetOut)
+def blocks_group(setlist_id: int, req: BlockGroupRequest, db: Session = Depends(get_db)):
+    """Raggruppa righe contigue in una sequenza: l'ordine del percorso non
+    cambia, cambia come e' diviso."""
+    try:
+        return manual_set_out(group_rows(
+            db, setlist_id, expected_revision=req.expected_revision,
+            row_ids=req.row_ids, name=req.name), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.patch("/{setlist_id}/blocks/{block_id}", response_model=ManualSetOut)
+def blocks_rename(setlist_id: int, block_id: int, req: BlockRenameRequest,
+                  db: Session = Depends(get_db)):
+    """Nome della sequenza; vuoto la lascia senza nome."""
+    try:
+        return manual_set_out(rename_block(
+            db, setlist_id, block_id, expected_revision=req.expected_revision, name=req.name), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.post("/{setlist_id}/blocks/{block_id}/move", response_model=ManualSetOut)
+def blocks_move(setlist_id: int, block_id: int, req: BlockMoveRequest,
+                db: Session = Depends(get_db)):
+    """Sposta la sequenza intera, nel percorso o sul banco: l'ordine interno
+    non si tocca mai."""
+    try:
+        return manual_set_out(move_block(
+            db, setlist_id, block_id, expected_revision=req.expected_revision,
+            position=req.position, to_bench=req.to_bench), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.post("/{setlist_id}/blocks/{block_id}/split", response_model=ManualSetOut)
+def blocks_split(setlist_id: int, block_id: int, req: HistoryStepRequest,
+                 db: Session = Depends(get_db)):
+    """Scioglie la sequenza: le righe restano nel percorso, nell'ordine."""
+    try:
+        return manual_set_out(split_block(
+            db, setlist_id, block_id, expected_revision=req.expected_revision), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.post("/{setlist_id}/undo", response_model=ManualSetOut)
+def history_undo(setlist_id: int, req: HistoryStepRequest, db: Session = Depends(get_db)):
+    """Torna allo stato precedente. `revision` cresce anche qui: annullare e'
+    una modifica come le altre per chi sta guardando da un'altra finestra."""
+    try:
+        return manual_set_out(undo(db, setlist_id, expected_revision=req.expected_revision), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.post("/{setlist_id}/redo", response_model=ManualSetOut)
+def history_redo(setlist_id: int, req: HistoryStepRequest, db: Session = Depends(get_db)):
+    """Rimette quello che si era annullato, finche' non si fa altro."""
+    try:
+        return manual_set_out(redo(db, setlist_id, expected_revision=req.expected_revision), db)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
 

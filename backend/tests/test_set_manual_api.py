@@ -335,3 +335,81 @@ def test_materiale_distingue_percorso_e_riserva(client_db):
     solo_riserva = client.get(f"/api/sets/{sid}/material",
                               params={"reserved": "true"}).json()["items"]
     assert [it["track"]["id"] for it in solo_riserva] == [t[1].id]
+
+
+# --- Sequenze, banco, annulla e ripeti (tappa 3) -------------------------------
+
+
+def test_sequenze_e_banco_via_http(client_db):
+    client, db = client_db
+    _, t = _seed(db, n=4)
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    doc = client.post(f"/api/sets/{sid}/rows",
+                      json={"expected_revision": 0, "track_ids": [x.id for x in t]}).json()
+    righe = _rows(doc)
+
+    r = client.post(f"/api/sets/{sid}/blocks", json={
+        "expected_revision": 1, "row_ids": [righe[1]["id"], righe[2]["id"]], "name": "Salita"})
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    main = [b for b in doc["blocks"] if b["placement"] == "main"]
+    assert [b["name"] for b in main] == [None, "Salita", None]
+
+    blocco = main[1]["id"]
+    r = client.post(f"/api/sets/{sid}/blocks/{blocco}/move",
+                    json={"expected_revision": 2, "position": 1, "to_bench": True})
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    assert [b["name"] for b in doc["blocks"] if b["placement"] == "bench"] == ["Salita"]
+    assert [x["track"]["id"] for x in _rows(doc)] == [t[0].id, t[3].id]
+    # Il banco non e' il percorso: non conta nel totale del set.
+    assert doc["track_count"] == 2
+
+    r = client.patch(f"/api/sets/{sid}/blocks/{blocco}", json={"expected_revision": 3, "name": "Idea"})
+    assert [b["name"] for b in r.json()["blocks"] if b["placement"] == "bench"] == ["Idea"]
+
+    r = client.patch(f"/api/sets/{sid}/blocks/999999", json={"expected_revision": 4, "name": "X"})
+    assert r.status_code == 404 and r.json()["detail"]["code"] == "set_block_not_found"
+
+
+def test_separare_una_sequenza_via_http(client_db):
+    client, db = client_db
+    _, t = _seed(db, n=4)
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    doc = client.post(f"/api/sets/{sid}/rows",
+                      json={"expected_revision": 0, "track_ids": [x.id for x in t]}).json()
+    righe = _rows(doc)
+    doc = client.post(f"/api/sets/{sid}/blocks", json={
+        "expected_revision": 1, "row_ids": [righe[0]["id"], righe[1]["id"]], "name": "A"}).json()
+    blocco = [b for b in doc["blocks"] if b["name"] == "A"][0]["id"]
+
+    r = client.post(f"/api/sets/{sid}/blocks/{blocco}/split", json={"expected_revision": 2})
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    assert [b["name"] for b in doc["blocks"]] == [None]
+    assert [x["track"]["id"] for x in _rows(doc)] == [x.id for x in t]
+
+
+def test_annulla_e_ripeti_via_http(client_db):
+    client, db = client_db
+    _, t = _seed(db, n=3)
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    doc = client.post(f"/api/sets/{sid}/rows",
+                      json={"expected_revision": 0, "track_ids": [t[0].id]}).json()
+    assert doc["can_undo"] is True and doc["can_redo"] is False
+
+    r = client.post(f"/api/sets/{sid}/undo", json={"expected_revision": 1})
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    assert _rows(doc) == []
+    assert doc["can_undo"] is False and doc["can_redo"] is True
+    assert doc["revision"] == 2  # cresce anche annullando
+
+    r = client.post(f"/api/sets/{sid}/undo", json={"expected_revision": 2})
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "set_nothing_to_undo"
+
+    r = client.post(f"/api/sets/{sid}/redo", json={"expected_revision": 2})
+    assert [x["track"]["id"] for x in _rows(r.json())] == [t[0].id]
+
+    r = client.post(f"/api/sets/{sid}/redo", json={"expected_revision": 3})
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "set_nothing_to_redo"
