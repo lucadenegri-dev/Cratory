@@ -205,14 +205,11 @@ class Setlist(Base):
     strategy: Mapped[str | None] = mapped_column(String)
     prompt: Mapped[str | None] = mapped_column(Text)
     global_explanation: Mapped[str | None] = mapped_column(Text)
-    generated_by: Mapped[str] = mapped_column(String, default="algorithmic")  # algorithmic | algorithmic+ai_curation (storico: ai)
+    generated_by: Mapped[str] = mapped_column(String, default="algorithmic")  # algorithmic | manual (storico: ai, algorithmic+ai_curation)
     # Disk-first: True se il set e' nato con la garanzia "solo brani posseduti".
     # L'editor (replace/alternative) la fa rispettare leggendo questo flag.
     owned_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     validation: Mapped[dict] = mapped_column(JSON, default=dict)  # warning + missing_library_suggestions della curatela (storico: Validation Engine)
-    # Curatela AI (tappa 2): intento compilato ("come ti ho capito"), warning
-    # delle chiamate AI. {} = set non curato.
-    curation: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -294,10 +291,7 @@ class SetlistTrack(Base):
     transition_score: Mapped[float | None] = mapped_column(Float)
     transition_reason: Mapped[str | None] = mapped_column(Text)
     transition_note: Mapped[str | None] = mapped_column(Text)  # nota di transizione (AI o tecnica)
-    ai_reason: Mapped[str | None] = mapped_column(Text)
     risk_level: Mapped[str | None] = mapped_column(String)  # low | medium | high
-    # Tag di mood assegnati dalla curatela AI alla generazione (None = non curato).
-    mood_tags: Mapped[list | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     setlist: Mapped[Setlist] = relationship(back_populates="tracks")

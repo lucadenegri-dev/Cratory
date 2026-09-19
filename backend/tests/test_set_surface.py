@@ -63,3 +63,60 @@ def test_la_superficie_dei_set_e_quella_del_banco():
 def test_il_vecchio_generatore_non_ha_piu_endpoint():
     rotte = _rotte()
     assert not (SPARITI & rotte), SPARITI & rotte
+
+
+def test_le_colonne_della_curatela_non_esistono_piu(db):
+    from app.models import Setlist, SetlistTrack
+    assert not hasattr(Setlist, "curation")
+    assert not hasattr(SetlistTrack, "mood_tags")
+    assert not hasattr(SetlistTrack, "ai_reason")
+
+
+def test_un_database_vecchio_perde_le_colonne_all_avvio(tmp_path):
+    """Il DB di chi aggiorna deve ritrovarsi senza quelle colonne. Si parte
+    dallo schema CORRENTE e si ri-aggiungono a mano le tre colonne morte: e'
+    esattamente la forma che ha il database di chi installa l'aggiornamento."""
+    from sqlalchemy import create_engine, inspect, text
+
+    from app.db import Base, ensure_schema
+    import app.models  # noqa: F401
+    import app.organize.models  # noqa: F401
+
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models import Setlist
+
+    eng = create_engine(f"sqlite:///{tmp_path / 'vecchio.db'}")
+    Base.metadata.create_all(eng)
+    # Il set si inserisce con l'ORM: elencare a mano le colonne NOT NULL
+    # renderebbe questo test fragile a ogni colonna nuova su `setlists`.
+    with sessionmaker(bind=eng)() as sess:
+        sess.add(Setlist(name="vecchio", kind="generated"))
+        sess.commit()
+    with eng.begin() as conn:
+        conn.execute(text("ALTER TABLE setlists ADD COLUMN curation JSON"))
+        conn.execute(text("ALTER TABLE setlist_tracks ADD COLUMN mood_tags JSON"))
+        conn.execute(text("ALTER TABLE setlist_tracks ADD COLUMN ai_reason TEXT"))
+
+    ensure_schema(eng)
+
+    assert "curation" not in {c["name"] for c in inspect(eng).get_columns("setlists")}
+    righe = {c["name"] for c in inspect(eng).get_columns("setlist_tracks")}
+    assert "mood_tags" not in righe and "ai_reason" not in righe
+    # Il set c'e' ancora: si tolgono colonne, non i dati dell'utente.
+    with eng.begin() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM setlists")).scalar_one() == 1
+
+
+def test_la_migrazione_delle_colonne_si_puo_rieseguire(tmp_path):
+    """Idempotenza: `ensure_schema` gira a ogni avvio."""
+    from sqlalchemy import create_engine
+
+    from app.db import Base, ensure_schema
+    import app.models  # noqa: F401
+    import app.organize.models  # noqa: F401
+
+    eng = create_engine(f"sqlite:///{tmp_path / 'due-volte.db'}")
+    Base.metadata.create_all(eng)
+    ensure_schema(eng)
+    ensure_schema(eng)

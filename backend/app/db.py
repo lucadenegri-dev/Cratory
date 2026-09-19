@@ -64,6 +64,7 @@ def ensure_schema(eng=None) -> None:
         _migrate_backfill_bpm_key_sources(conn)
         _migrate_null_soundcloud_stream_urls(conn)
         _migrate_recount_playlist_counts(conn)
+        _migrate_drop_curation_cols(conn)
 
 
 def _migrate_add_model_columns(conn, dialect) -> None:
@@ -190,6 +191,41 @@ def _recover_legacy_tracks_leftover(conn) -> None:
         return
     conn.execute(text("DROP TABLE IF EXISTS tracks"))  # eventuale tracks vuota del run interrotto
     conn.execute(text("ALTER TABLE _tracks_legacy RENAME TO tracks"))
+
+
+# Colonne della curatela AI, tolte col generatore (2026-09-19). Esplicite e per
+# nome: una migrazione distruttiva deve dire cosa distrugge, non dedurlo.
+_CURATION_COLS = {
+    "setlists": ("curation",),
+    "setlist_tracks": ("mood_tags", "ai_reason"),
+}
+
+
+def _migrate_drop_curation_cols(conn) -> None:
+    """Droppa le colonne della curatela AI dai DB che le hanno ancora.
+
+    `_migrate_drop_legacy` e' model-derived ma guarda SOLO `tracks`: senza
+    questa funzione le tre colonne resterebbero per sempre nel database di chi
+    aggiorna. Idempotente: ogni DROP COLUMN e' atomico e una run successiva
+    trova solo cio' che resta.
+    """
+    for tabella, colonne in _CURATION_COLS.items():
+        presenti = {r[1] for r in conn.execute(text(f"PRAGMA table_info({tabella})")).fetchall()}
+        if not presenti:
+            continue  # tabella non ancora creata: create_all la fara' gia' giusta
+        for col in colonne:
+            if col not in presenti:
+                continue
+            # SQLite rifiuta il DROP COLUMN su una colonna indicizzata: stesso
+            # accorgimento di _migrate_drop_legacy.
+            for (idx,) in conn.execute(text(
+                "SELECT name FROM sqlite_master WHERE type='index' "
+                f"AND tbl_name='{tabella}' AND sql IS NOT NULL"
+            )).fetchall():
+                coperte = {r[2] for r in conn.execute(text(f'PRAGMA index_info("{idx}")')).fetchall()}
+                if col in coperte:
+                    conn.execute(text(f'DROP INDEX IF EXISTS "{idx}"'))
+            conn.execute(text(f'ALTER TABLE {tabella} DROP COLUMN "{col}"'))
 
 
 def _migrate_drop_legacy(conn) -> None:
