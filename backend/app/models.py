@@ -286,6 +286,9 @@ class SetlistTrack(Base):
     # Non tocca `Track.bpm`, che resta il dato della traccia; serve a valutare
     # i vicini sul tempo vero di cabina (spec 2026-09-15, sezione 3).
     play_bpm: Mapped[float | None] = mapped_column(Float)
+    # Contributo NETTO alla durata del set: quanto si tiene questa traccia in
+    # questo set. None = la durata del file. Non tocca `Track.duration_seconds`.
+    planned_seconds: Mapped[int | None] = mapped_column(Integer)
     # Ruolo della traccia nell'arco del set: intro|warmup|groove|transition|peak|release|closing
     role: Mapped[str | None] = mapped_column(String)
     transition_score: Mapped[float | None] = mapped_column(Float)

@@ -8,6 +8,8 @@ non passano mai da assign_roles / recompute_transitions (spec 2026-09-15).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from sqlalchemy.orm import Session
 
 from app.models import Setlist, SetlistAlternative, SetlistBlock, SetlistPairNote, SetlistTrack
@@ -102,6 +104,43 @@ def path_rows(setlist: Setlist) -> list[SetlistTrack]:
         rows.extend(sorted((r for r in setlist.tracks if r.block_id == block.id),
                            key=lambda r: r.position))
     return rows
+
+
+def resolved_path(setlist: Setlist) -> list[SetlistTrack]:
+    """La proiezione che contano export, durata e compatibilita': blocchi `main`
+    in ordine, SOLE righe con la traccia attiva.
+
+    Diverso da `path_rows`, che tiene i varchi perche' chi disegna il percorso
+    deve vederli. Tenerli separati evita che ogni chiamante si ricordi di
+    filtrare — e prima o poi qualcuno se ne dimentica.
+    """
+    return [r for r in path_rows(setlist) if r.track is not None]
+
+
+@dataclass(frozen=True)
+class SetDuration:
+    seconds: int
+    incomplete: bool
+    unknown_rows: int
+    open_gaps: int
+
+
+def set_duration(setlist: Setlist) -> SetDuration:
+    """Durata del percorso. `planned_seconds` vince sulla durata del file; una
+    riga senza ne' l'uno ne' l'altra non si inventa, si dichiara."""
+    seconds = 0
+    unknown = 0
+    for row in resolved_path(setlist):
+        contributo = row.planned_seconds
+        if contributo is None:
+            contributo = row.track.duration_seconds
+        if contributo is None:
+            unknown += 1
+            continue
+        seconds += contributo
+    gaps = sum(1 for r in path_rows(setlist) if r.track is None)
+    return SetDuration(seconds=seconds, incomplete=bool(unknown or gaps),
+                       unknown_rows=unknown, open_gaps=gaps)
 
 
 def reserve_rows(setlist: Setlist) -> list[SetlistTrack]:
@@ -259,7 +298,8 @@ UNSET = _Unset()
 
 def update_row(db: Session, setlist_id: int, row_id: int, *, expected_revision: int,
                note: str | None | _Unset = UNSET,
-               play_bpm: float | None | _Unset = UNSET) -> Setlist:
+               play_bpm: float | None | _Unset = UNSET,
+               planned_seconds: int | None | _Unset = UNSET) -> Setlist:
     """Aggiorna i campi MANDATI della riga. «La suono a» vale in questo set e
     non tocca `Track.bpm`."""
     setlist = load_manual_set(db, setlist_id)
@@ -271,6 +311,10 @@ def update_row(db: Session, setlist_id: int, row_id: int, *, expected_revision: 
         if play_bpm is not None and not 20.0 <= play_bpm <= 300.0:
             raise ManualSetError(f"Play BPM {play_bpm} out of range 20..300")
         row.play_bpm = play_bpm
+    if not isinstance(planned_seconds, _Unset):
+        if planned_seconds is not None and not 1 <= planned_seconds <= 3600:
+            raise ManualSetError(f"Planned seconds {planned_seconds} out of range 1..3600")
+        row.planned_seconds = planned_seconds
     return _commit_bumped(db, setlist, f"note:{row.id}")
 
 
