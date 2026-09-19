@@ -163,7 +163,7 @@ def _tre_tracce(db):
 
 def test_annulla_riporta_il_percorso_a_prima(db):
     t = _tre_tracce(db)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     s = insert_rows(db, s.id, expected_revision=1, track_ids=[t[1].id], gap=False, after_row_id=None)
     assert [r.track_id for r in path_rows(s)] == [t[0].id, t[1].id]
@@ -175,7 +175,7 @@ def test_annulla_riporta_il_percorso_a_prima(db):
 
 def test_ripeti_rimette_quello_che_si_era_annullato(db):
     t = _tre_tracce(db)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     s = undo(db, s.id, expected_revision=1)
     assert path_rows(s) == []
@@ -185,7 +185,7 @@ def test_ripeti_rimette_quello_che_si_era_annullato(db):
 
 def test_una_riga_annullata_torna_con_lo_stesso_id(db):
     t = _tre_tracce(db)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     id_originale = path_rows(s)[0].id
     s = remove_row(db, s.id, id_originale, expected_revision=1)
@@ -196,7 +196,7 @@ def test_una_riga_annullata_torna_con_lo_stesso_id(db):
 
 def test_annulla_ripristina_anche_le_alternative(db):
     t = _tre_tracce(db)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     row = path_rows(s)[0]
     s = add_alternatives(db, s.id, row.id, expected_revision=1, track_ids=[t[1].id])
@@ -207,7 +207,7 @@ def test_annulla_ripristina_anche_le_alternative(db):
 
 def test_una_modifica_dopo_annulla_chiude_il_ripeti(db):
     t = _tre_tracce(db)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     s = undo(db, s.id, expected_revision=1)
     s = insert_rows(db, s.id, expected_revision=2, track_ids=[t[1].id], gap=False, after_row_id=None)
@@ -216,7 +216,7 @@ def test_una_modifica_dopo_annulla_chiude_il_ripeti(db):
 
 
 def test_agli_estremi_annulla_e_ripeti_si_rifiutano(db):
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     with pytest.raises(NothingToUndo):
         undo(db, s.id, expected_revision=0)
     with pytest.raises(NothingToRedo):
@@ -225,7 +225,7 @@ def test_agli_estremi_annulla_e_ripeti_si_rifiutano(db):
 
 def test_scrivere_la_stessa_nota_due_volte_si_annulla_in_un_colpo(db):
     t = _tre_tracce(db)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     row = path_rows(s)[0]
     s = update_row_note(db, s.id, row.id, expected_revision=1, note="pri")
@@ -236,7 +236,7 @@ def test_scrivere_la_stessa_nota_due_volte_si_annulla_in_un_colpo(db):
 
 def test_la_revisione_sbagliata_non_annulla(db):
     t = _tre_tracce(db)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     with pytest.raises(RevisionConflict):
         undo(db, s.id, expected_revision=0)

@@ -25,6 +25,8 @@ from app.schemas import (
     HistoryStepRequest,
     PairNoteRequest,
     ManualSetCreate,
+    SourceAddRequest,
+    SourceOut,
     ManualSetOut,
     MaterialItemOut,
     MaterialOut,
@@ -39,13 +41,15 @@ from app.serializers import manual_set_out, setlist_out, setlist_summary_out, tr
 from app.services.app_state import get_language
 from app.services.manual_export import render_manual
 from app.services.manual_fill import FillError
-from app.services.manual_material import material_for
+from app.services.manual_material import material_for, material_for_playlists
 from app.services.manual_set import (
     AlternativeNotFound,
     BlockNotFound,
     NothingToRedo,
     NothingToUndo,
+    PlaylistNotFound,
     add_alternatives,
+    add_source,
     choose_alternative,
     remove_alternative,
     ManualSetError,
@@ -63,6 +67,7 @@ from app.services.manual_set import (
     move_row,
     redo,
     remove_row,
+    remove_source,
     rename_block,
     set_pair_note,
     split_block,
@@ -101,7 +106,7 @@ def _manual_error(exc: ManualSetError) -> HTTPException:
         return api_error(409, "set_nothing_to_undo", "Nothing to undo")
     if isinstance(exc, NothingToRedo):
         return api_error(409, "set_nothing_to_redo", "Nothing to redo")
-    if "Playlist not found" in str(exc):
+    if isinstance(exc, PlaylistNotFound):
         return api_error(404, "playlist_not_found", "Playlist not found")
     return api_error(422, "manual_set_error", f"Manual set error: {exc}", reason=str(exc))
 
@@ -110,7 +115,7 @@ def _manual_error(exc: ManualSetError) -> HTTPException:
 def create_manual(req: ManualSetCreate, db: Session = Depends(get_db)):
     """Set preparato a mano, vuoto, con la playlist di origine letta aggiornata."""
     try:
-        return manual_set_out(create_manual_set(db, name=req.name, playlist_id=req.playlist_id), db)
+        return manual_set_out(create_manual_set(db, name=req.name, playlist_ids=req.playlist_ids), db)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
 
@@ -128,6 +133,36 @@ def get_manual(setlist_id: int, db: Session = Depends(get_db)):
         raise _manual_error(exc) from exc
 
 
+def _material_out(db: Session, voci, playlist_ids: list[int]) -> MaterialOut:
+    """Il payload del materiale, uno solo per il set e per la bozza: due copie
+    quasi uguali divergono al primo campo nuovo."""
+    ft_map = file_tags_for_tracks(db, [t.id for t, _, _, _ in voci])
+    fonti = []
+    for pid in playlist_ids:
+        playlist = get_playlist(db, pid)
+        fonti.append(SourceOut(playlist_id=pid,
+                               name=playlist.name if playlist is not None else None))
+    return MaterialOut(
+        sources=fonti,
+        items=[MaterialItemOut(track=track_out(t, ft_map.get(t.id)), in_set=in_set,
+                               from_playlist=fp, in_reserve=in_res)
+               for t, in_set, fp, in_res in voci],
+    )
+
+
+# ATTENZIONE all'ordine: questa rotta statica va dichiarata PRIMA di qualunque
+# `GET /{qualcosa}` che potrebbe catturarla. Oggi non ce n'e' nessuna, ma chi ne
+# aggiunge una domani la romperebbe in silenzio.
+@router.get("/material", response_model=MaterialOut)
+def draft_material(playlist_ids: list[int] = Query(default=[]),
+                   q: str | None = Query(default=None, max_length=200),
+                   owned: bool = False, db: Session = Depends(get_db)):
+    """Il materiale di una BOZZA: il set non esiste ancora (non si crea finche'
+    non ci si mette dentro qualcosa), quindi si chiede per playlist."""
+    return _material_out(db, material_for_playlists(db, playlist_ids, q=q, owned=owned),
+                         playlist_ids)
+
+
 @router.get("/{setlist_id}/material", response_model=MaterialOut)
 def get_material(setlist_id: int, q: str | None = Query(default=None, max_length=200),
                  owned: bool = False, unused: bool = False, reserved: bool = False,
@@ -138,15 +173,7 @@ def get_material(setlist_id: int, q: str | None = Query(default=None, max_length
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
     items = material_for(db, setlist, q=q, owned=owned, unused=unused, reserved=reserved)
-    ft_map = file_tags_for_tracks(db, [t.id for t, _, _, _ in items])
-    playlist = get_playlist(db, setlist.source_playlist_id) if setlist.source_playlist_id else None
-    return MaterialOut(
-        playlist_id=setlist.source_playlist_id,
-        playlist_name=playlist.name if playlist is not None else None,
-        items=[MaterialItemOut(track=track_out(t, ft_map.get(t.id)), in_set=in_set,
-                               from_playlist=fp, in_reserve=in_res)
-               for t, in_set, fp, in_res in items],
-    )
+    return _material_out(db, items, [src.playlist_id for src in setlist.sources])
 
 
 @router.post("/{setlist_id}/rows", response_model=ManualSetOut)
@@ -306,6 +333,30 @@ def rows_fill_gap(setlist_id: int, row_id: int, req: FillGapRequest,
         return manual_set_out(fill_gap(
             db, setlist_id, row_id, expected_revision=req.expected_revision,
             count=req.count), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.post("/{setlist_id}/sources", response_model=ManualSetOut)
+def sources_add(setlist_id: int, req: SourceAddRequest, db: Session = Depends(get_db)):
+    """Aggiunge una playlist alle origini del materiale."""
+    try:
+        return manual_set_out(add_source(
+            db, setlist_id, expected_revision=req.expected_revision,
+            playlist_id=req.playlist_id), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.delete("/{setlist_id}/sources/{playlist_id}", response_model=ManualSetOut)
+def sources_remove(setlist_id: int, playlist_id: int, expected_revision: int = Query(ge=0),
+                   db: Session = Depends(get_db)):
+    """Toglie un'origine. Il percorso non si tocca: una traccia gia' scelta e'
+    una decisione presa."""
+    try:
+        return manual_set_out(remove_source(
+            db, setlist_id, expected_revision=expected_revision,
+            playlist_id=playlist_id), db)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
 

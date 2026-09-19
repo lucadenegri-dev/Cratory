@@ -124,3 +124,76 @@ def test_il_travaso_si_puo_rieseguire(tmp_path):
 
     with eng.begin() as conn:
         assert conn.execute(text("SELECT COUNT(*) FROM setlist_sources")).scalar_one() == 1
+
+
+# --- Task 2: materiale e mutazioni --------------------------------------------
+
+from app.services.manual_material import material_for, material_for_playlists  # noqa: E402
+from app.services.manual_set import (  # noqa: E402
+    ManualSetError, add_source, create_manual_set, insert_rows, path_rows, remove_source,
+)
+
+
+def test_il_materiale_unisce_le_playlist_senza_doppioni(db):
+    a, b = _playlist(db, "A"), _playlist(db, "B")
+    # Una traccia sta in tutt'e due: deve comparire una volta sola.
+    comune = db.scalars(select(Track).where(Track.title == "A-0")).one()
+    add_track_to_playlist(db, comune, b, added_by="test")
+    db.commit()
+
+    s = create_manual_set(db, name="M", playlist_ids=[a.id, b.id])
+    titoli = [t.title for t, *_ in material_for(db, s, q=None, owned=False, unused=False)]
+    assert titoli.count("A-0") == 1
+    assert {"A-0", "A-1", "B-0", "B-1"} <= set(titoli)
+
+
+def test_l_ordine_delle_origini_e_quello_del_materiale(db):
+    a, b = _playlist(db, "A"), _playlist(db, "B")
+    s = create_manual_set(db, name="M", playlist_ids=[b.id, a.id])
+    titoli = [t.title for t, *_ in material_for(db, s, q=None, owned=False, unused=False)]
+    assert titoli.index("B-0") < titoli.index("A-0")
+
+
+def test_si_aggiunge_e_si_toglie_un_origine_mentre_si_lavora(db):
+    a, b = _playlist(db, "A"), _playlist(db, "B")
+    s = create_manual_set(db, name="M", playlist_ids=[a.id])
+    s = add_source(db, s.id, expected_revision=0, playlist_id=b.id)
+    assert [src.playlist_id for src in s.sources] == [a.id, b.id]
+
+    s = remove_source(db, s.id, expected_revision=1, playlist_id=a.id)
+    assert [src.playlist_id for src in s.sources] == [b.id]
+    titoli = [t.title for t, *_ in material_for(db, s, q=None, owned=False, unused=False)]
+    assert not any(t.startswith("A-") for t in titoli)
+
+
+def test_togliere_un_origine_non_tocca_il_percorso(db):
+    """Una traccia gia' scelta e' una decisione presa: sparisce dal materiale,
+    non dal set."""
+    a = _playlist(db, "A")
+    s = create_manual_set(db, name="M", playlist_ids=[a.id])
+    traccia = db.scalars(select(Track).where(Track.title == "A-0")).one()
+    s = insert_rows(db, s.id, expected_revision=0, track_ids=[traccia.id],
+                    gap=False, after_row_id=None)
+
+    s = remove_source(db, s.id, expected_revision=1, playlist_id=a.id)
+    assert [r.track_id for r in path_rows(s)] == [traccia.id]
+    # E resta nel materiale, perche' e' nel set: solo non piu' "dalla playlist".
+    voci = {t.title: from_pl for t, _in_set, from_pl, _ in
+            material_for(db, s, q=None, owned=False, unused=False)}
+    assert voci["A-0"] is False
+
+
+def test_la_stessa_origine_non_si_aggiunge_due_volte(db):
+    a = _playlist(db, "A")
+    s = create_manual_set(db, name="M", playlist_ids=[a.id])
+    with pytest.raises(ManualSetError):
+        add_source(db, s.id, expected_revision=0, playlist_id=a.id)
+
+
+def test_il_materiale_di_una_bozza_non_ha_un_set(db):
+    """La bozza non ha ancora un set: il materiale si chiede per playlist, e
+    nessuna traccia risulta «nel set»."""
+    a, b = _playlist(db, "A"), _playlist(db, "B")
+    voci = material_for_playlists(db, [a.id, b.id], q=None, owned=False)
+    assert len(voci) == 4
+    assert all(not in_set and not in_reserve for _t, in_set, _fp, in_reserve in voci)

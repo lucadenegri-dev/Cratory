@@ -17,7 +17,7 @@ def _tracce(db, n, durata=300):
 
 
 def _set(db, tracce):
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     return insert_rows(db, s.id, expected_revision=0, track_ids=[t.id for t in tracce],
                        gap=False, after_row_id=None)
 

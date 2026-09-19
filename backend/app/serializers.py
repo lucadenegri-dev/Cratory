@@ -13,6 +13,7 @@ from app.schemas import (
     ManualSetOut,
     ManualTransitionOut,
     SetDurationOut,
+    SourceOut,
     SetlistOut,
     SetlistSummaryOut,
     SetlistTrackOut,
@@ -209,11 +210,11 @@ def manual_set_out(setlist: Setlist, db: Session) -> ManualSetOut:
             key_relation=c.key_relation, score=c.score, missing=c.missing,
             note=note_coppie.get((prima.track_id, dopo.track_id)),
         ))
-    playlist = get_playlist(db, setlist.source_playlist_id) if setlist.source_playlist_id else None
     return ManualSetOut(
         id=setlist.id, name=setlist.name, kind=setlist.kind, revision=setlist.revision,
-        source_playlist_id=setlist.source_playlist_id,
-        source_playlist_name=playlist.name if playlist is not None else None,
+        sources=[SourceOut(playlist_id=src.playlist_id,
+                           name=src.playlist.name if src.playlist is not None else None)
+                 for src in setlist.sources],
         notes=setlist.notes, blocks=blocks,
         reserve=[row_out(st) for st in sorted(
             (st for st in setlist.tracks if st.block_id is None), key=lambda st: st.position)],

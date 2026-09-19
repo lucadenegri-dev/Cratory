@@ -117,7 +117,7 @@ from app.services.manual_set import (  # noqa: E402
 
 def _set_con_due(db):
     a, b = _due_tracce(db)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[a.id, b.id],
                     gap=False, after_row_id=None)
     return s, a, b

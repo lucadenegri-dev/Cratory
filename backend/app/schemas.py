@@ -181,9 +181,25 @@ class SetRenameRequest(BaseModel):
 # --- Set manuale (banco di preparazione, tappa 1) ------------------------------
 
 
+class SourceOut(BaseModel):
+    """Una playlist da cui il set pesca. `name` e' None se la playlist e' stata
+    cancellata mentre il documento veniva costruito: non capita, ma il client
+    non deve rompersi se capita."""
+
+    playlist_id: int
+    name: str | None = None
+
+
+class SourceAddRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    playlist_id: int
+
+
 class ManualSetCreate(BaseModel):
+    """`playlist_ids`: le origini del materiale, piu' d'una dal 2026-09-19."""
+
     name: str | None = Field(default=None, max_length=200)
-    playlist_id: int | None = None
+    playlist_ids: list[int] = Field(default_factory=list, max_length=20)
 
 
 class ManualAlternativeOut(BaseModel):
@@ -249,8 +265,7 @@ class ManualSetOut(BaseModel):
     name: str
     kind: str
     revision: int
-    source_playlist_id: int | None = None
-    source_playlist_name: str | None = None  # None se la playlist e' stata cancellata
+    sources: list[SourceOut] = []  # le playlist da cui pesca, nel loro ordine
     notes: str | None = None
     blocks: list[ManualBlockOut] = []
     reserve: list[ManualRowOut] = []  # righe senza blocco: le tracce tenute in tasca
@@ -349,8 +364,7 @@ class MaterialItemOut(BaseModel):
 
 
 class MaterialOut(BaseModel):
-    playlist_id: int | None = None
-    playlist_name: str | None = None
+    sources: list[SourceOut] = []
     items: list[MaterialItemOut] = []
 
 

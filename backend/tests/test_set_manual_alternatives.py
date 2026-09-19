@@ -28,7 +28,7 @@ def _tracks(db, n=4):
 
 
 def _set_con_una_riga(db, track):
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[track.id], gap=False, after_row_id=None)
     return s, path_rows(s)[0]
 

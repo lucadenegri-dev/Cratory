@@ -12,7 +12,9 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from app.models import Setlist, SetlistAlternative, SetlistBlock, SetlistPairNote, SetlistTrack
+from app.models import (
+    Setlist, SetlistAlternative, SetlistBlock, SetlistPairNote, SetlistSource, SetlistTrack,
+)
 from app.repositories import get_playlist, get_setlist, get_track
 from app.services.manual_history import record, restore
 
@@ -33,6 +35,11 @@ class RowNotFound(ManualSetError):
     pass
 
 
+class PlaylistNotFound(ManualSetError):
+    """Una classe invece di un match sul testo: il messaggio ora porta l'id
+    dentro, e `"Playlist not found" in str(exc)` smetteva di riconoscerlo."""
+
+
 class AlternativeNotFound(ManualSetError):
     pass
 
@@ -51,16 +58,20 @@ class RevisionConflict(ManualSetError):
         self.current = current
 
 
-def create_manual_set(db: Session, *, name: str | None, playlist_id: int | None) -> Setlist:
-    playlist = None
-    if playlist_id is not None:
+def create_manual_set(db: Session, *, name: str | None, playlist_ids: list[int]) -> Setlist:
+    playlists = []
+    for playlist_id in playlist_ids:
         playlist = get_playlist(db, playlist_id)
         if playlist is None:
-            raise ManualSetError("Playlist not found")
-    clean = (name or "").strip() or (playlist.name if playlist is not None else "Set")
-    setlist = Setlist(name=clean, kind="manual", source_playlist_id=playlist_id, generated_by="manual")
+            raise PlaylistNotFound(f"Playlist {playlist_id} not found")
+        playlists.append(playlist)
+    clean = (name or "").strip() or (playlists[0].name if playlists else "Set")
+    setlist = Setlist(name=clean, kind="manual", generated_by="manual")
     db.add(setlist)
     db.flush()
+    for i, playlist in enumerate(playlists, start=1):
+        setlist.sources.append(SetlistSource(setlist_id=setlist.id,
+                                             playlist_id=playlist.id, position=i))
     record(db, setlist, "create")  # la revisione 0 e' il set vuoto: la prima mutazione e' annullabile
     db.commit()
     return get_setlist(db, setlist.id)
@@ -644,3 +655,41 @@ def fill_gap(db: Session, setlist_id: int, row_id: int, *, expected_revision: in
     vicine[at:at] = nuove
     _renumber(vicine)
     return _commit_bumped(db, setlist, "fill")
+
+
+# --- Origini del materiale (2026-09-19) ----------------------------------------
+
+
+def add_source(db: Session, setlist_id: int, *, expected_revision: int,
+               playlist_id: int) -> Setlist:
+    """Aggiunge una playlist alle origini, in coda.
+
+    Nota: l'annulla NON rimette un'origine tolta. Lo snapshot della cronologia
+    copre la struttura del percorso, e le origini sono la provenienza del
+    materiale, non il set.
+    """
+    setlist = load_manual_set(db, setlist_id)
+    _check_revision(setlist, expected_revision)
+    if get_playlist(db, playlist_id) is None:
+        raise PlaylistNotFound(f"Playlist {playlist_id} not found")
+    if any(s.playlist_id == playlist_id for s in setlist.sources):
+        raise ManualSetError("That playlist is already a source of this set")
+    setlist.sources.append(SetlistSource(
+        setlist_id=setlist.id, playlist_id=playlist_id,
+        position=len(setlist.sources) + 1))
+    return _commit_bumped(db, setlist, "sources")
+
+
+def remove_source(db: Session, setlist_id: int, *, expected_revision: int,
+                  playlist_id: int) -> Setlist:
+    """Toglie una playlist dalle origini. Il percorso non si tocca: una traccia
+    gia' scelta e' una decisione presa, e sparisce dal materiale, non dal set."""
+    setlist = load_manual_set(db, setlist_id)
+    _check_revision(setlist, expected_revision)
+    source = next((s for s in setlist.sources if s.playlist_id == playlist_id), None)
+    if source is None:
+        raise ManualSetError("That playlist is not a source of this set")
+    setlist.sources.remove(source)
+    for i, restante in enumerate(setlist.sources, start=1):
+        restante.position = i
+    return _commit_bumped(db, setlist, "sources")

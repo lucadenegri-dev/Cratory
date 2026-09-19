@@ -27,7 +27,7 @@ def _tracks(db, n=4):
 
 def test_inserisci_in_riserva(db):
     t = _tracks(db, 2)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id, t[1].id],
                     gap=False, after_row_id=None, reserve=True)
     assert path_rows(s) == []
@@ -38,7 +38,7 @@ def test_inserisci_in_riserva(db):
 
 
 def test_un_varco_in_riserva_non_ha_senso(db):
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     with pytest.raises(ManualSetError):
         insert_rows(db, s.id, expected_revision=0, track_ids=[], gap=True,
                     after_row_id=None, reserve=True)
@@ -47,7 +47,7 @@ def test_un_varco_in_riserva_non_ha_senso(db):
 def test_la_stessa_traccia_puo_stare_in_riserva_e_nel_percorso(db):
     """Spec: il vincolo di unicita' vale dentro il percorso, non fra percorso e riserva."""
     t = _tracks(db, 1)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     s = insert_rows(db, s.id, expected_revision=1, track_ids=[t[0].id], gap=False,
                     after_row_id=None, reserve=True)
@@ -57,7 +57,7 @@ def test_la_stessa_traccia_puo_stare_in_riserva_e_nel_percorso(db):
 
 def test_porta_una_riga_dal_percorso_alla_riserva(db):
     t = _tracks(db, 3)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[x.id for x in t],
                     gap=False, after_row_id=None)
     seconda = path_rows(s)[1]
@@ -69,7 +69,7 @@ def test_porta_una_riga_dal_percorso_alla_riserva(db):
 
 def test_riporta_una_riga_dalla_riserva_al_percorso(db):
     t = _tracks(db, 2)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     s = insert_rows(db, s.id, expected_revision=1, track_ids=[t[1].id], gap=False,
                     after_row_id=None, reserve=True)
@@ -81,7 +81,7 @@ def test_riporta_una_riga_dalla_riserva_al_percorso(db):
 
 def test_riportare_nel_percorso_una_traccia_gia_presente_e_un_conflitto(db):
     t = _tracks(db, 1)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     s = insert_rows(db, s.id, expected_revision=1, track_ids=[t[0].id], gap=False,
                     after_row_id=None, reserve=True)
@@ -92,7 +92,7 @@ def test_riportare_nel_percorso_una_traccia_gia_presente_e_un_conflitto(db):
 
 def test_togliere_una_riga_di_riserva_rinumera_la_riserva(db):
     t = _tracks(db, 3)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[x.id for x in t],
                     gap=False, after_row_id=None, reserve=True)
     s = remove_row(db, s.id, reserve_rows(s)[0].id, expected_revision=1)

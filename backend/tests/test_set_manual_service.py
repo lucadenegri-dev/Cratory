@@ -46,25 +46,26 @@ def _ids(setlist):
 
 def test_crea_vuoto_da_playlist(db):
     pl = _playlist(db, _tracks(db, 2))
-    s = create_manual_set(db, name=None, playlist_id=pl.id)
-    assert s.kind == "manual" and s.source_playlist_id == pl.id
+    s = create_manual_set(db, name=None, playlist_ids=[pl.id])
+    assert s.kind == "manual"
+    assert [src.playlist_id for src in s.sources] == [pl.id]
     assert s.name == "Deep"  # default: il nome della playlist
     assert s.revision == 0 and s.tracks == [] and s.blocks == []
 
 
 def test_crea_senza_playlist_con_nome(db):
-    s = create_manual_set(db, name="  Sabato  ", playlist_id=None)
-    assert s.name == "Sabato" and s.source_playlist_id is None
+    s = create_manual_set(db, name="  Sabato  ", playlist_ids=[])
+    assert s.name == "Sabato" and s.sources == []
 
 
 def test_crea_con_playlist_inesistente(db):
     with pytest.raises(ManualSetError):
-        create_manual_set(db, name=None, playlist_id=999)
+        create_manual_set(db, name=None, playlist_ids=[999])
 
 
 def test_inserisci_crea_il_blocco_main_e_incrementa_la_revisione(db):
     t = _tracks(db, 3)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id, t[1].id], gap=False, after_row_id=None)
     assert s.revision == 1
     assert [b.placement for b in s.blocks] == ["main"]
@@ -74,7 +75,7 @@ def test_inserisci_crea_il_blocco_main_e_incrementa_la_revisione(db):
 
 def test_inserisci_dopo_una_riga(db):
     t = _tracks(db, 3)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id, t[1].id], gap=False, after_row_id=None)
     first = path_rows(s)[0]
     s = insert_rows(db, s.id, expected_revision=1, track_ids=[t[2].id], gap=False, after_row_id=first.id)
@@ -84,7 +85,7 @@ def test_inserisci_dopo_una_riga(db):
 
 def test_inserisci_un_varco(db):
     t = _tracks(db, 2)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id, t[1].id], gap=False, after_row_id=None)
     first = path_rows(s)[0]
     s = insert_rows(db, s.id, expected_revision=1, track_ids=[], gap=True, after_row_id=first.id)
@@ -95,7 +96,7 @@ def test_inserisci_un_varco(db):
 
 def test_inserisci_rifiuta_la_stessa_traccia_due_volte_nel_percorso(db):
     t = _tracks(db, 1)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     with pytest.raises(ManualSetError):
         insert_rows(db, s.id, expected_revision=1, track_ids=[t[0].id], gap=False, after_row_id=None)
@@ -106,13 +107,13 @@ def test_inserisci_traccia_senza_bpm_ne_tonalita(db):
     t = Track(source_type="spotify", title="Grezza", has_local_file=True)
     db.add(t)
     db.commit()
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t.id], gap=False, after_row_id=None)
     assert _ids(s) == [t.id]
 
 
 def test_inserisci_traccia_inesistente(db):
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     with pytest.raises(ManualSetError):
         insert_rows(db, s.id, expected_revision=0, track_ids=[999], gap=False, after_row_id=None)
 
@@ -122,7 +123,7 @@ def test_inserisci_dopo_una_riga_fuori_dal_blocco_principale(db):
     block_id NULL: non ancora raggiungibile in tappa 1 ma gia' nel modello) deve
     dare un errore di dominio, non un ValueError non gestito da rows.index()."""
     t = _tracks(db, 2)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     # Aggiunta via relationship (non solo la colonna FK): cosi' la riga entra
     # subito in `s.tracks` in memoria, come farebbe il caricamento eager reale
     # di un set con piu' blocchi (tappa 2/3) — senza questo la riga resterebbe
@@ -138,7 +139,7 @@ def test_inserisci_dopo_una_riga_fuori_dal_blocco_principale(db):
 
 def test_sposta_a_posizione(db):
     t = _tracks(db, 3)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[x.id for x in t], gap=False, after_row_id=None)
     last = path_rows(s)[2]
     s = move_row(db, s.id, last.id, expected_revision=1, position=1)
@@ -149,7 +150,7 @@ def test_sposta_a_posizione(db):
 
 def test_sposta_posizione_fuori_range(db):
     t = _tracks(db, 2)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[x.id for x in t], gap=False, after_row_id=None)
     with pytest.raises(ManualSetError):
         move_row(db, s.id, path_rows(s)[0].id, expected_revision=1, position=5)
@@ -157,7 +158,7 @@ def test_sposta_posizione_fuori_range(db):
 
 def test_togli_rinumera(db):
     t = _tracks(db, 3)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[x.id for x in t], gap=False, after_row_id=None)
     s = remove_row(db, s.id, path_rows(s)[1].id, expected_revision=1)
     assert _ids(s) == [t[0].id, t[2].id]
@@ -166,7 +167,7 @@ def test_togli_rinumera(db):
 
 def test_appunto_su_riga(db):
     t = _tracks(db, 1)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     row = path_rows(s)[0]
     s = update_row_note(db, s.id, row.id, expected_revision=1, note="  entra sul break  ")
@@ -177,7 +178,7 @@ def test_appunto_su_riga(db):
 
 def test_revisione_sbagliata_solleva_conflitto_e_non_muta(db):
     t = _tracks(db, 2)
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
     with pytest.raises(RevisionConflict) as exc:
         insert_rows(db, s.id, expected_revision=0, track_ids=[t[1].id], gap=False, after_row_id=None)
@@ -186,7 +187,7 @@ def test_revisione_sbagliata_solleva_conflitto_e_non_muta(db):
 
 
 def test_riga_inesistente(db):
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     with pytest.raises(RowNotFound):
         remove_row(db, s.id, 999, expected_revision=0)
 

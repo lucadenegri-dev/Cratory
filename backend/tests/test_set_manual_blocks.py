@@ -16,7 +16,7 @@ def _set_con_quattro(db):
         db.add(t)
         tracce.append(t)
     db.commit()
-    s = create_manual_set(db, name="M", playlist_id=None)
+    s = create_manual_set(db, name="M", playlist_ids=[])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t.id for t in tracce],
                     gap=False, after_row_id=None)
     return s, tracce
@@ -104,7 +104,7 @@ def test_separare_una_sequenza_lascia_le_righe_in_ordine(db):
 
 def test_una_sequenza_di_un_altro_set_non_si_tocca(db):
     s, t = _set_con_quattro(db)
-    altro = create_manual_set(db, name="Altro", playlist_id=None)
+    altro = create_manual_set(db, name="Altro", playlist_ids=[])
     righe = path_rows(s)
     s = group_rows(db, s.id, expected_revision=1, row_ids=[righe[0].id, righe[1].id], name="A")
     blocco = blocks_of(s, "main")[0]

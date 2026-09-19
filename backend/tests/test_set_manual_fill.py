@@ -27,7 +27,7 @@ def _libreria(db, n=10):
 
 def _set_con_varco(db, pl, tracce):
     """Due tracce con un varco in mezzo."""
-    s = create_manual_set(db, name="M", playlist_id=pl.id)
+    s = create_manual_set(db, name="M", playlist_ids=[pl.id])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[tracce[0].id, tracce[1].id],
                     gap=False, after_row_id=None)
     prima = path_rows(s)[0]
@@ -79,7 +79,7 @@ def test_un_varco_in_testa_si_riempie_lo_stesso(db):
     """Senza traccia prima, lo span parte libero: non e' un errore, e' un varco
     all'inizio del set."""
     pl, t = _libreria(db)
-    s = create_manual_set(db, name="M", playlist_id=pl.id)
+    s = create_manual_set(db, name="M", playlist_ids=[pl.id])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False,
                     after_row_id=None)
     s = insert_rows(db, s.id, expected_revision=1, track_ids=[], gap=True, after_row_id=None)
@@ -111,7 +111,7 @@ def test_senza_materiale_il_varco_resta_aperto(db):
     db.flush()
     add_track_to_playlist(db, a, pl, added_by="test")
     db.commit()
-    s = create_manual_set(db, name="M", playlist_id=pl.id)
+    s = create_manual_set(db, name="M", playlist_ids=[pl.id])
     s = insert_rows(db, s.id, expected_revision=0, track_ids=[a.id], gap=False, after_row_id=None)
     s = insert_rows(db, s.id, expected_revision=1, track_ids=[], gap=True, after_row_id=None)
     varco = path_rows(s)[1]

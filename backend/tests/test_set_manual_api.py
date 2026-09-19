@@ -49,11 +49,11 @@ def _rows(doc):
 def test_crea_da_playlist_e_rileggi(client_db):
     client, db = client_db
     pl, _ = _seed(db)
-    r = client.post("/api/sets/manual", json={"playlist_id": pl.id})
+    r = client.post("/api/sets/manual", json={"playlist_ids": [pl.id]})
     assert r.status_code == 201, r.text
     doc = r.json()
     assert doc["kind"] == "manual" and doc["name"] == "Deep"
-    assert doc["source_playlist_name"] == "Deep" and doc["revision"] == 0
+    assert [x["name"] for x in doc["sources"]] == ["Deep"] and doc["revision"] == 0
     assert doc["blocks"] == [] and doc["track_count"] == 0
     assert client.get(f"/api/sets/{doc['id']}/manual").json() == doc
     assert client.get("/api/sets").json()[0]["kind"] == "manual"
@@ -61,7 +61,7 @@ def test_crea_da_playlist_e_rileggi(client_db):
 
 def test_crea_con_playlist_inesistente(client_db):
     client, _ = client_db
-    r = client.post("/api/sets/manual", json={"playlist_id": 999})
+    r = client.post("/api/sets/manual", json={"playlist_ids": [999]})
     assert r.status_code == 404 and r.json()["detail"]["code"] == "playlist_not_found"
 
 
@@ -173,7 +173,7 @@ def test_created_at_concorde_tra_lista_e_dettaglio(client_db):
     from app.services.manual_set import create_manual_set
     from app.serializers import manual_set_out, setlist_summary_out
 
-    setlist = create_manual_set(db, name="M", playlist_id=None)
+    setlist = create_manual_set(db, name="M", playlist_ids=[])
     assert setlist.created_at.tzinfo is not None  # ancora caldo: sanity check del setup
 
     summary_created_at = setlist_summary_out(setlist).created_at.isoformat()
@@ -193,11 +193,11 @@ def test_materiale_playlist_aggiornata_piu_set_piu_ricerca(client_db):
     extra = Track(source_type="spotify", title="Fuori playlist", artist="Z", has_local_file=True)
     db.add(extra)
     db.commit()
-    sid = client.post("/api/sets/manual", json={"playlist_id": pl.id}).json()["id"]
+    sid = client.post("/api/sets/manual", json={"playlist_ids": [pl.id]}).json()["id"]
     client.post(f"/api/sets/{sid}/rows", json={"expected_revision": 0, "track_ids": [t[0].id, extra.id]})
 
     doc = client.get(f"/api/sets/{sid}/material").json()
-    assert doc["playlist_name"] == "Deep"
+    assert [x["name"] for x in doc["sources"]] == ["Deep"]
     by_id = {it["track"]["id"]: it for it in doc["items"]}
     assert [it["track"]["id"] for it in doc["items"]][:3] == [t[0].id, t[1].id, t[2].id]
     assert by_id[t[0].id]["in_set"] is True and by_id[t[0].id]["from_playlist"] is True
@@ -229,7 +229,7 @@ def test_materiale_senza_playlist(client_db):
     client, db = client_db
     sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
     doc = client.get(f"/api/sets/{sid}/material").json()
-    assert doc["playlist_id"] is None and doc["items"] == []
+    assert doc["sources"] == [] and doc["items"] == []
 
 
 # --- Tappa 2: alternative, riserva, materiale ---------------------------------
@@ -290,7 +290,7 @@ def test_riserva_via_http(client_db):
 def test_materiale_distingue_percorso_e_riserva(client_db):
     client, db = client_db
     pl, t = _seed(db, n=3)
-    sid = client.post("/api/sets/manual", json={"playlist_id": pl.id}).json()["id"]
+    sid = client.post("/api/sets/manual", json={"playlist_ids": [pl.id]}).json()["id"]
     client.post(f"/api/sets/{sid}/rows", json={"expected_revision": 0, "track_ids": [t[0].id]})
     client.post(f"/api/sets/{sid}/rows",
                 json={"expected_revision": 1, "track_ids": [t[1].id], "reserve": True})
@@ -471,7 +471,7 @@ def test_la_durata_esce_nel_documento(client_db):
 def test_riempire_un_varco_via_http(client_db):
     client, db = client_db
     pl, t = _seed(db, n=5)
-    sid = client.post("/api/sets/manual", json={"playlist_id": pl.id}).json()["id"]
+    sid = client.post("/api/sets/manual", json={"playlist_ids": [pl.id]}).json()["id"]
     doc = client.post(f"/api/sets/{sid}/rows",
                       json={"expected_revision": 0, "track_ids": [t[0].id, t[1].id]}).json()
     prima = _rows(doc)[0]["id"]
@@ -489,3 +489,45 @@ def test_riempire_un_varco_via_http(client_db):
     r = client.post(f"/api/sets/{sid}/undo", json={"expected_revision": 3})
     righe = _rows(r.json())
     assert len(righe) == 3 and righe[1]["slot_kind"] == "gap"
+
+
+# --- Origini multiple e materiale della bozza (2026-09-19) ---------------------
+
+
+def test_origini_multiple_via_http(client_db):
+    client, db = client_db
+    pl_a, t = _seed(db, n=2)
+    pl_b = Playlist(platform="spotify", name="Seconda")
+    db.add(pl_b)
+    db.flush()
+    add_track_to_playlist(db, t[0], pl_b, added_by="test")
+    db.commit()
+
+    r = client.post("/api/sets/manual", json={"name": "M", "playlist_ids": [pl_a.id]})
+    assert r.status_code == 201, r.text
+    doc = r.json()
+    assert [s["playlist_id"] for s in doc["sources"]] == [pl_a.id]
+    sid = doc["id"]
+
+    r = client.post(f"/api/sets/{sid}/sources",
+                    json={"expected_revision": 0, "playlist_id": pl_b.id})
+    assert r.status_code == 200, r.text
+    assert [s["name"] for s in r.json()["sources"]] == ["Deep", "Seconda"]
+
+    r = client.delete(f"/api/sets/{sid}/sources/{pl_a.id}?expected_revision=1")
+    assert r.status_code == 200, r.text
+    assert [s["playlist_id"] for s in r.json()["sources"]] == [pl_b.id]
+
+    r = client.delete(f"/api/sets/{sid}/sources/{pl_a.id}?expected_revision=2")
+    assert r.status_code == 422
+
+
+def test_il_materiale_di_una_bozza_via_http(client_db):
+    client, db = client_db
+    pl, t = _seed(db, n=3)
+    r = client.get(f"/api/sets/material?playlist_ids={pl.id}")
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    assert len(doc["items"]) == 3
+    assert all(item["in_set"] is False for item in doc["items"])
+    assert [s["playlist_id"] for s in doc["sources"]] == [pl.id]
