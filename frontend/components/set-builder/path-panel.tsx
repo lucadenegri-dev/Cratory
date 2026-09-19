@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
-  ArrowDown, ArrowUp, Bookmark, Inbox, MoveHorizontal, Pencil, Scissors, Trash2,
+  ArrowDown, ArrowUp, Bookmark, Inbox, MoveHorizontal, Pencil, Scissors, Sparkles, Trash2,
 } from "lucide-react";
 import { type ManualBlock, type ManualRow, type ManualSet } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -22,6 +22,9 @@ type Props = {
   onMoveBlock: (block: ManualBlock, position: number) => void;
   onToBench: (block: ManualBlock) => void;
   onSplitBlock: (block: ManualBlock) => void;
+  fillingRowId: number | null;
+  onStartFill: (row: ManualRow | null) => void;
+  renderFill: (row: ManualRow) => ReactNode;
 };
 
 /** Il percorso, diviso in sequenze (i blocchi `main`). Le azioni sono per id,
@@ -30,6 +33,7 @@ type Props = {
 export function PathPanel({
   set, selectedRowId, checkedRowIds, onSelect, onCheck, onMove, onRemove, onGapAfter,
   onToReserve, onRenameBlock, onMoveBlock, onToBench, onSplitBlock,
+  fillingRowId, onStartFill, renderFill,
 }: Props) {
   const t = useT();
   const [renaming, setRenaming] = useState<number | null>(null);
@@ -95,12 +99,19 @@ export function PathPanel({
                 )}
                 <button type="button" title={t.sets.manual.moveUpTitle} disabled={i === 0} onClick={() => onMove(row, row.position - 1)} className="text-muted disabled:opacity-30"><ArrowUp size={14} /></button>
                 <button type="button" title={t.sets.manual.moveDownTitle} disabled={i === block.rows.length - 1} onClick={() => onMove(row, row.position + 1)} className="text-muted disabled:opacity-30"><ArrowDown size={14} /></button>
+                {row.slot_kind === "gap" && (
+                  <button type="button" title={t.sets.manual.fillGapTitle}
+                    onClick={() => onStartFill(row)} className="text-muted hover:text-fg"><Sparkles size={14} /></button>
+                )}
                 <button type="button" title={t.sets.manual.addGapTitle} onClick={() => onGapAfter(row)} className="text-muted"><MoveHorizontal size={14} /></button>
                 {row.slot_kind === "track" && (
                   <button type="button" title={t.sets.manual.toReserveTitle} onClick={() => onToReserve(row)} className="text-muted hover:text-fg"><Bookmark size={14} /></button>
                 )}
                 <button type="button" title={t.sets.manual.removeTitle} onClick={() => onRemove(row)} className="text-muted hover:text-danger"><Trash2 size={14} /></button>
               </li>
+            ))}
+            {block.rows.filter((r) => r.id === fillingRowId).map((row) => (
+              <li key={`fill-${row.id}`}>{renderFill(row)}</li>
             ))}
           </ol>
         </section>

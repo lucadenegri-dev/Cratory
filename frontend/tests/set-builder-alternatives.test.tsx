@@ -43,6 +43,7 @@ const set = (opts: { revision?: number; alts?: number[]; reserve?: number[] } = 
   id: 7, name: "Sabato", kind: "manual", revision: opts.revision ?? 1,
   source_playlist_id: 3, source_playlist_name: "Deep", notes: null,
   track_count: 1, total_file_seconds: 300, can_undo: false, can_redo: false, transitions: [],
+  duration: { seconds: 0, incomplete: false, unknown_rows: 0, open_gaps: 0 },
   created_at: "2026-09-19T10:00:00", updated_at: "2026-09-19T10:00:00",
   blocks: [{
     id: 1, name: null, placement: "main" as const, position: 1,

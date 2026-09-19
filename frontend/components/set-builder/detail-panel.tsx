@@ -16,6 +16,7 @@ type Props = {
   saveState: SaveState;
   onSaveNote: (row: ManualRow, note: string) => void;
   onSavePlayBpm: (row: ManualRow, playBpm: number | null) => void;
+  onSavePlannedSeconds: (row: ManualRow, seconds: number | null) => void;
   onSavePairNote: (transition: ManualTransition, note: string) => void;
   onUseAlternative: (row: ManualRow, alt: ManualAlternative) => void;
   onRemoveAlternative: (row: ManualRow, alt: ManualAlternative) => void;
@@ -25,12 +26,13 @@ type Props = {
 /** Dettaglio della riga selezionata: dati tecnici con "sconosciuto" dove
  *  manca un valore, appunto salvato al blur solo se cambiato. */
 export function DetailPanel({
-  row, transitions, saveState, onSaveNote, onSavePlayBpm, onSavePairNote,
+  row, transitions, saveState, onSaveNote, onSavePlayBpm, onSavePlannedSeconds, onSavePairNote,
   onUseAlternative, onRemoveAlternative, onCompare,
 }: Props) {
   const t = useT();
   const [draft, setDraft] = useState(row?.note ?? "");
   const [tempo, setTempo] = useState(row?.play_bpm?.toString() ?? "");
+  const [quanto, setQuanto] = useState(row?.planned_seconds?.toString() ?? "");
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- riallineo il draft alla riga selezionata (stesso pattern di components/setup/path-field.tsx)
     setDraft(row?.note ?? "");
@@ -39,6 +41,10 @@ export function DetailPanel({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- stessa ragione: il campo segue la riga selezionata
     setTempo(row?.play_bpm?.toString() ?? "");
   }, [row?.id, row?.play_bpm]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- stessa ragione: il campo segue la riga selezionata
+    setQuanto(row?.planned_seconds?.toString() ?? "");
+  }, [row?.id, row?.planned_seconds]);
   if (!row) return <p className="text-sm text-muted">{t.sets.manual.detailEmpty}</p>;
   const tr = row.track;
   // I passaggi che riguardano QUESTA riga: quello che ci arriva e quello che ne
@@ -69,6 +75,20 @@ export function DetailPanel({
               if (valore !== (row.play_bpm ?? null)) onSavePlayBpm(row, valore);
             }} />
           <p className="mt-0.5 text-xs text-faint">{t.sets.manual.playBpmHint}</p>
+        </div>
+      )}
+      {tr && (
+        <div>
+          <label htmlFor="planned-seconds" className="block text-xs text-muted">{t.sets.manual.plannedSecondsLabel}</label>
+          <Input id="planned-seconds" type="number" inputMode="numeric" min={1} max={3600}
+            className="tnum mt-1 w-28" value={quanto} placeholder={tr.duration_seconds?.toString() ?? ""}
+            onChange={(e) => setQuanto(e.target.value)}
+            onBlur={() => {
+              const valore = quanto.trim() === "" ? null : Number(quanto);
+              if (valore !== null && Number.isNaN(valore)) return;
+              if (valore !== (row.planned_seconds ?? null)) onSavePlannedSeconds(row, valore);
+            }} />
+          <p className="mt-0.5 text-xs text-faint">{t.sets.manual.plannedSecondsHint}</p>
         </div>
       )}
 

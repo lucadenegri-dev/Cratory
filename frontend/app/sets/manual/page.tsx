@@ -5,8 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Redo2, Trash2, Undo2 } from "lucide-react";
 import {
-  ApiError, addAlternatives, apiDelete, chooseAlternative, errText, fmtDuration, getManualSet,
-  getMaterial, groupRows, insertRows, moveBlock, moveRow, patchRow, redoSet, removeAlternative,
+  ApiError, addAlternatives, apiDelete, chooseAlternative, errText, fmtDuration, fmtDurationLong,
+  getManualSet,
+  fillGap, getMaterial, groupRows, insertRows, moveBlock, moveRow, patchRow, redoSet, removeAlternative,
   removeRow, renameBlock, setPairNote, splitBlock, undoSet,
   type ManualAlternative, type ManualBlock, type ManualRow, type ManualSet, type ManualTransition,
   type Material, type MaterialItem,
@@ -19,6 +20,8 @@ import { DetailPanel, type SaveState } from "@/components/set-builder/detail-pan
 import { ComparePanel } from "@/components/set-builder/compare-panel";
 import { ReservePanel } from "@/components/set-builder/reserve-panel";
 import { BenchPanel } from "@/components/set-builder/bench-panel";
+import { ExportMenu } from "@/components/set-builder/export-menu";
+import { FillGapPanel } from "@/components/set-builder/fill-gap-panel";
 import { useT } from "@/lib/i18n";
 
 export default function ManualSetPage() {
@@ -42,6 +45,7 @@ function ManualSetInner() {
   const [reserved, setReserved] = useState(false);
   const [compareRowId, setCompareRowId] = useState<number | null>(null);
   const [checkedRowIds, setCheckedRowIds] = useState<number[]>([]);
+  const [fillingRowId, setFillingRowId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstRun = useRef(true);
@@ -100,6 +104,12 @@ function ManualSetInner() {
   const onSavePlayBpm = (row: ManualRow, playBpm: number | null) =>
     // Solo la proprietà toccata: mandare anche `note` la riscriverebbe ogni volta.
     mutate((rev) => patchRow(id, row.id, { expected_revision: rev, play_bpm: playBpm }));
+  const onSavePlannedSeconds = (row: ManualRow, seconds: number | null) =>
+    mutate((rev) => patchRow(id, row.id, { expected_revision: rev, planned_seconds: seconds }));
+  const onFillGap = async (row: ManualRow, count: number) => {
+    const next = await mutate((rev) => fillGap(id, row.id, { expected_revision: rev, count }));
+    if (next) setFillingRowId(null);   // un rifiuto lascia il pannello aperto
+  };
   const onSavePairNote = (transition: ManualTransition, note: string) =>
     mutate((rev) => setPairNote(id, {
       expected_revision: rev, from_track_id: transition.from_track_id,
@@ -229,6 +239,19 @@ function ManualSetInner() {
               {t.sets.manual.groupButton}
             </Button>
           )}
+          <ExportMenu set={set} />
+          <span className="text-sm text-muted">
+            {t.sets.manual.durationLabel}{" "}
+            <span className="tnum text-fg">{fmtDurationLong(set.duration.seconds)}</span>
+            {set.duration.incomplete && (
+              <>
+                {" "}· {t.sets.manual.durationIncomplete}{" "}
+                <span className="text-faint">
+                  ({t.sets.manual.durationIncompleteWhy(set.duration.unknown_rows, set.duration.open_gaps)})
+                </span>
+              </>
+            )}
+          </span>
         </div>
       )}
       {set === null && !error && <Loading />}
@@ -247,7 +270,12 @@ function ManualSetInner() {
               onMove={(r, p) => void onMove(r, p)} onRemove={(r) => void onRemove(r)} onGapAfter={(r) => void onGapAfter(r)}
               onToReserve={(r) => void onToReserve(r)}
               onRenameBlock={(b, n) => void onRenameBlock(b, n)} onMoveBlock={(b, p) => void onMoveBlock(b, p)}
-              onToBench={(b) => void onToBench(b)} onSplitBlock={(b) => void onSplitBlock(b)} />
+              onToBench={(b) => void onToBench(b)} onSplitBlock={(b) => void onSplitBlock(b)}
+              fillingRowId={fillingRowId} onStartFill={(r) => setFillingRowId(r ? r.id : null)}
+              renderFill={(r) => (
+                <FillGapPanel row={r} onFill={(x, n) => void onFillGap(x, n)}
+                  onClose={() => setFillingRowId(null)} />
+              )} />
             <BenchPanel blocks={benchBlocks} onToPath={(b) => void onBenchToPath(b)} />
             <ReservePanel rows={set.reserve} onToPath={(r) => void onToPath(r)} onRemove={(r) => void onRemove(r)} />
           </Card>
@@ -255,6 +283,7 @@ function ManualSetInner() {
             <DetailPanel row={selected} transitions={set.transitions} saveState={saveState}
               onSaveNote={(r, n) => void onSaveNote(r, n)}
               onSavePlayBpm={(r, b) => void onSavePlayBpm(r, b)}
+              onSavePlannedSeconds={(r, s) => void onSavePlannedSeconds(r, s)}
               onSavePairNote={(x, n) => void onSavePairNote(x, n)}
               onUseAlternative={(r, a) => void onUseAlternative(r, a)}
               onRemoveAlternative={(r, a) => void onRemoveAlternative(r, a)}

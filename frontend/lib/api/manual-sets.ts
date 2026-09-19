@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
+import { API, apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
 import type { ManualSet, Material } from "./types";
 
 /** Set preparato a mano (tappa 1): tutte le mutazioni mandano `expected_revision`;
@@ -45,7 +45,12 @@ export function moveRow(
 export function patchRow(
   id: number,
   rowId: number,
-  body: { expected_revision: number; note?: string | null; play_bpm?: number | null },
+  body: {
+    expected_revision: number;
+    note?: string | null;
+    play_bpm?: number | null;
+    planned_seconds?: number | null;
+  },
 ) {
   return apiPatch<ManualSet>(`/api/sets/${id}/rows/${rowId}`, body);
 }
@@ -111,4 +116,21 @@ export function setPairNote(
   body: { expected_revision: number; from_track_id: number; to_track_id: number; note: string | null },
 ) {
   return apiPut<ManualSet>(`/api/sets/${id}/pair-notes`, body);
+}
+
+/** Riempi il varco: il generatore propone `count` tracce, che entrano come
+ *  righe normali. Una revisione sola, quindi un annulla riapre il varco. */
+export function fillGap(id: number, rowId: number, body: { expected_revision: number; count: number }) {
+  return apiPost<ManualSet>(`/api/sets/${id}/rows/${rowId}/fill-gap`, body);
+}
+
+/** Il testo dell'export, così com'è: l'anteprima mostra questa stessa risposta,
+ *  quindi non può divergere dal file scaricato. */
+export async function exportManualSet(
+  id: number,
+  format: "text" | "csv" | "markdown" | "m3u8" | "prep" | "reserve",
+): Promise<string> {
+  const res = await fetch(`${API}/api/sets/${id}/export?format=${format}`, { method: "POST" });
+  if (!res.ok) throw new Error(res.statusText);   // come exportSet in lib/api/sets.ts
+  return res.text();
 }

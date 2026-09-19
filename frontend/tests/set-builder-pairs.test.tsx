@@ -37,7 +37,7 @@ const track = (id: number, bpm: number | null = 124) => ({
 
 const riga = (id: number, position: number, playBpm: number | null = null) => ({
   id, block_id: 1, position, slot_kind: "track" as const, track: track(id),
-  note: null, play_bpm: playBpm, alternatives: [],
+  note: null, play_bpm: playBpm, planned_seconds: null, alternatives: [],
 });
 
 const passaggio = (extra = {}) => ({
@@ -59,6 +59,7 @@ const set = (opts: { revision?: number; transition?: object; playBpm?: number | 
   }],
   reserve: [],
   transitions: [passaggio(opts.transition ?? {})],
+  duration: { seconds: 600, incomplete: false, unknown_rows: 0, open_gaps: 0 },
 });
 
 const material = () => ({

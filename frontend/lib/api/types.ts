@@ -471,6 +471,7 @@ export interface ManualRow {
   track: Track | null; // null sui varchi
   note: string | null;
   play_bpm: number | null; // "la suono a": vale in questo set, non in libreria
+  planned_seconds: number | null; // quanto la si tiene in questo set
   alternatives: ManualAlternative[];
 }
 
@@ -502,6 +503,15 @@ export interface ManualTransition {
   note: string | null;
 }
 
+/** Durata del percorso risolto. `incomplete` dice che il totale è una somma
+ *  parziale, e i due conteggi dicono perché. */
+export interface SetDuration {
+  seconds: number;
+  incomplete: boolean;
+  unknown_rows: number;
+  open_gaps: number;
+}
+
 export interface ManualSet {
   id: number;
   name: string;
@@ -513,6 +523,7 @@ export interface ManualSet {
   blocks: ManualBlock[];
   reserve: ManualRow[]; // righe senza blocco: le tracce tenute in tasca
   transitions: ManualTransition[];
+  duration: SetDuration;
   track_count: number;
   total_file_seconds: number;
   can_undo: boolean;
