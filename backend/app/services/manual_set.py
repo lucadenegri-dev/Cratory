@@ -607,3 +607,40 @@ def set_pair_note(db: Session, setlist_id: int, *, expected_revision: int,
             setlist_id=setlist.id, from_track_id=from_track_id,
             to_track_id=to_track_id, note=pulita))
     return _commit_bumped(db, setlist, f"pair:{from_track_id}:{to_track_id}")
+
+
+def fill_gap(db: Session, setlist_id: int, row_id: int, *, expected_revision: int,
+             count: int) -> Setlist:
+    """Riempie un varco con le tracce proposte dal generatore. Il varco diventa
+    la prima proposta — tenendo id e appunto, come `choose_alternative` — e le
+    altre entrano dopo di lui. UNA revisione sola: annullare riapre il varco."""
+    # Import qui e non in testa: manual_fill importa questo modulo.
+    from app.services.manual_fill import propose_fill
+
+    setlist = load_manual_set(db, setlist_id)
+    _check_revision(setlist, expected_revision)
+    gap = _row_of(setlist, row_id)
+    if gap.slot_kind != "gap" or gap.track_id is not None:
+        raise ManualSetError("That row is not an open gap")
+
+    proposte = propose_fill(db, setlist, gap, count=count)
+
+    # La prima prende il posto del varco: la relationship insieme alla chiave,
+    # come in choose_alternative, o al flush vincerebbe quella caricata.
+    gap.track_id = proposte[0].id
+    gap.track = proposte[0]
+    gap.slot_kind = "track"
+
+    vicine = [r for r in path_rows(setlist) if r.block_id == gap.block_id]
+    at = vicine.index(gap) + 1
+    nuove: list[SetlistTrack] = []
+    for track in proposte[1:]:
+        riga = SetlistTrack(setlist_id=setlist.id, block_id=gap.block_id, position=0,
+                            slot_kind="track", track_id=track.id)
+        riga.track = track
+        db.add(riga)
+        setlist.tracks.append(riga)
+        nuove.append(riga)
+    vicine[at:at] = nuove
+    _renumber(vicine)
+    return _commit_bumped(db, setlist, "fill")

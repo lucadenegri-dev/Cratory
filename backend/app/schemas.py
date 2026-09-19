@@ -361,6 +361,11 @@ class RowPatchRequest(BaseModel):
     planned_seconds: int | None = Field(default=None, ge=1, le=3600)
 
 
+class FillGapRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    count: int = Field(default=1, ge=1, le=10)
+
+
 class PairNoteRequest(BaseModel):
     expected_revision: int = Field(ge=0)
     from_track_id: int

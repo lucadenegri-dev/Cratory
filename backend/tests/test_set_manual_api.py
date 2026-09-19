@@ -499,3 +499,26 @@ def test_la_durata_esce_nel_documento(client_db):
     doc = client.post(f"/api/sets/{sid}/rows", json={
         "expected_revision": 2, "gap": True, "after_row_id": riga}).json()
     assert doc["duration"]["incomplete"] is True and doc["duration"]["open_gaps"] == 1
+
+
+def test_riempire_un_varco_via_http(client_db):
+    client, db = client_db
+    pl, t = _seed(db, n=5)
+    sid = client.post("/api/sets/manual", json={"playlist_id": pl.id}).json()["id"]
+    doc = client.post(f"/api/sets/{sid}/rows",
+                      json={"expected_revision": 0, "track_ids": [t[0].id, t[1].id]}).json()
+    prima = _rows(doc)[0]["id"]
+    doc = client.post(f"/api/sets/{sid}/rows", json={
+        "expected_revision": 1, "gap": True, "after_row_id": prima}).json()
+    varco = _rows(doc)[1]["id"]
+
+    r = client.post(f"/api/sets/{sid}/rows/{varco}/fill-gap",
+                    json={"expected_revision": 2, "count": 2})
+    assert r.status_code == 200, r.text
+    righe = _rows(r.json())
+    assert len(righe) == 4 and all(x["track"] is not None for x in righe)
+
+    # Annullare riapre il varco: il riempimento e' una revisione sola.
+    r = client.post(f"/api/sets/{sid}/undo", json={"expected_revision": 3})
+    righe = _rows(r.json())
+    assert len(righe) == 3 and righe[1]["slot_kind"] == "gap"

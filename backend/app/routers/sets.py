@@ -24,6 +24,7 @@ from app.schemas import (
     BlockGroupRequest,
     BlockMoveRequest,
     BlockRenameRequest,
+    FillGapRequest,
     HistoryStepRequest,
     PairNoteRequest,
     AddTrackRequest,
@@ -50,6 +51,7 @@ from app.services.ai_curation import run_curated_generation
 from app.services.alternatives import AlternativesError, find_alternatives
 from app.services.app_state import get_language
 from app.services.manual_export import render_manual
+from app.services.manual_fill import FillError
 from app.services.manual_material import material_for
 from app.services.manual_set import (
     AlternativeNotFound,
@@ -67,6 +69,7 @@ from app.services.manual_set import (
     create_manual_set,
     insert_rows,
     UNSET,
+    fill_gap,
     group_rows,
     load_manual_set,
     move_block,
@@ -198,6 +201,8 @@ def _manual_error(exc: ManualSetError) -> HTTPException:
         return api_error(404, "set_row_not_found", "Row not found")
     if isinstance(exc, AlternativeNotFound):
         return api_error(404, "set_alternative_not_found", "Alternative not found")
+    if isinstance(exc, FillError):
+        return api_error(422, "set_fill_failed", f"Could not fill the gap: {exc}", reason=str(exc))
     if isinstance(exc, BlockNotFound):
         return api_error(404, "set_block_not_found", "Block not found")
     if isinstance(exc, NothingToUndo):
@@ -404,6 +409,20 @@ def history_redo(setlist_id: int, req: HistoryStepRequest, db: Session = Depends
     """Rimette quello che si era annullato, finche' non si fa altro."""
     try:
         return manual_set_out(redo(db, setlist_id, expected_revision=req.expected_revision), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.post("/{setlist_id}/rows/{row_id}/fill-gap", response_model=ManualSetOut)
+def rows_fill_gap(setlist_id: int, row_id: int, req: FillGapRequest,
+                  db: Session = Depends(get_db)):
+    """Il generatore propone `count` tracce per quel varco e le inserisce come
+    righe normali: si spostano, si cambiano, si cancellano, e un annulla riapre
+    il varco. Deterministico, nessuna chiamata AI."""
+    try:
+        return manual_set_out(fill_gap(
+            db, setlist_id, row_id, expected_revision=req.expected_revision,
+            count=req.count), db)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
 
