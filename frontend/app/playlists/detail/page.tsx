@@ -493,7 +493,7 @@ function PlaylistDetailInner() {
 
   const marginalia = (
     <div className="space-y-3">
-      <ButtonLink href={`/set-builder?playlist=${pid}`} size="sm" block><Sparkles size={15} /> {t.playlists.buildSetButton}</ButtonLink>
+      <ButtonLink href={`/sets?playlist=${pid}`} size="sm" block><Sparkles size={15} /> {t.playlists.buildSetButton}</ButtonLink>
       <Button
         size="sm" variant="outline" className="w-full"
         onClick={async () => {

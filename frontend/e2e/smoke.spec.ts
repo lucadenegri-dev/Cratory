@@ -37,7 +37,10 @@ const ROUTES: { path: string; title: string | null }[] = [
   // `t.nav.discovery`) sono "Dig": e' il nome di prodotto del dig di Discovery.
   { path: "/discovery", title: "Dig" },
   { path: "/shazam", title: "Shazam" },
-  { path: "/set-builder", title: "Set Builder" },
+  // Il vecchio Set Builder e' un reindirizzamento verso la lista dei set dal
+  // 2026-09-19: atterra sull'h1 "Set", e che ci atterri e' esattamente cio' che
+  // questo caso deve verificare (i link da playlist ed etichette ci puntano).
+  { path: "/set-builder", title: "Set" },
   { path: "/settings", title: null },
   // Organize (fusione F1, sezione ex Sortory): "/organize" e' un redirect
   // verso "/organize/files" (root non ha una pagina propria), quindi atterra

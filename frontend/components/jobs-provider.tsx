@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  analysisStatus, downloadStatus, generateStatus, libraryIndexStatus, shazamIdentifyStatus,
+  analysisStatus, downloadStatus, libraryIndexStatus, shazamIdentifyStatus,
   startAnalysis, streamingImportStatus,
-  type AnalysisJobStatus, type DownloadStatus, type GenStatus, type LibraryIndexJob, type ShazamIdentifyState,
+  type AnalysisJobStatus, type DownloadStatus, type LibraryIndexJob, type ShazamIdentifyState,
   type StreamingImportJobStatus,
 } from "@/lib/api";
 import {
@@ -62,8 +62,6 @@ type JobsApi = {
   analysis: AnalysisJobStatus | null;
   /** Stato raw dell'identificazione mix Shazam per la pagina /shazam. */
   shazamIdentify: ShazamIdentifyState | null;
-  /** Stato raw della generazione set per /set-builder. */
-  generation: GenStatus | null;
   /** Stato raw dell'import/sync streaming per le pagine playlist. */
   streamingImport: StreamingImportJobStatus | null;
 
@@ -86,7 +84,7 @@ type JobsApi = {
 const JobsCtx = createContext<JobsApi>({
   refresh: () => {}, startClientJob: () => {}, updateClientJob: () => {},
   endClientJob: () => {}, download: null, libraryIndex: null, analysis: null,
-  shazamIdentify: null, generation: null, streamingImport: null,
+  shazamIdentify: null, streamingImport: null,
   scan: IDLE, apply: IDLE, rescan: IDLE, integrity: { ...IDLE, available: true },
   genreReviewJob: IDLE,
   startScan: async () => {}, startApply: async () => {}, startRescan: async () => {},
@@ -127,7 +125,6 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [libraryIndex, setLibraryIndex] = useState<LibraryIndexJob | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisJobStatus | null>(null);
   const [shazamIdentify, setShazamIdentify] = useState<ShazamIdentifyState | null>(null);
-  const [generation, setGeneration] = useState<GenStatus | null>(null);
   const [streamingImport, setStreamingImport] = useState<StreamingImportJobStatus | null>(null);
   const [apply, setApply] = useState<ApplyJobState>(IDLE);
   const [rescan, setRescan] = useState<ProviderRescanJobState>(IDLE);
@@ -171,8 +168,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const [s, d, li, an, gen, si, ap, re, ig, gr] = await Promise.allSettled([
-      shazamIdentifyStatus(), downloadStatus(), libraryIndexStatus(), analysisStatus(), generateStatus(),
+    const [s, d, li, an, si, ap, re, ig, gr] = await Promise.allSettled([
+      shazamIdentifyStatus(), downloadStatus(), libraryIndexStatus(), analysisStatus(),
       streamingImportStatus(),
       applyStatus(), providerRescanStatus(), integrityStatus(), genreReviewStatus(),
     ]);
@@ -214,15 +211,6 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       track(v.status, {
         key: "analysis", label: t.jobs.audioAnalysis, detail: v.current_label ?? undefined,
         processed: v.processed, total: v.total, href: "/analysis",
-      }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
-    }
-    if (gen.status === "fulfilled") {
-      const v = gen.value;
-      if (alive.current) setGeneration(v);
-      // Nessun processed/total lato backend (solo fase): riga sempre indeterminata.
-      track(v.status, {
-        key: "set-generation", label: t.jobs.setGeneration, detail: v.phase ?? undefined,
-        processed: 0, total: 0, href: "/set-builder",
       }, v.status === "error" ? (v.error ?? t.common.error) : t.jobs.completed);
     }
     if (si.status === "fulfilled") {
@@ -398,7 +386,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const api = useMemo<JobsApi>(
     () => ({
       refresh, startClientJob, updateClientJob, endClientJob,
-      download, libraryIndex, analysis, shazamIdentify, generation, streamingImport,
+      download, libraryIndex, analysis, shazamIdentify, streamingImport,
       // `scan` è lo stesso job di `libraryIndex`: un poll, due nomi. IDLE finché
       // il primo poll non è tornato, così le pagine Organize non gestiscono null.
       scan: libraryIndex ?? IDLE,
@@ -406,7 +394,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       startScan, startApply, startRescan, startIntegrity, startGenreReview,
     }),
     [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, analysis, shazamIdentify,
-      generation, streamingImport, apply, rescan, integrity, genreReviewJob,
+      streamingImport, apply, rescan, integrity, genreReviewJob,
       startScan, startApply, startRescan, startIntegrity, startGenreReview],
   );
 

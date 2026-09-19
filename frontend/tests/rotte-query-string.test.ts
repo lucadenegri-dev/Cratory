@@ -69,14 +69,14 @@ describe("sets, labels e shazam", () => {
     for (const vecchia of ["app/sets/[id]", "app/labels/[label]", "app/shazam/[id]"]) {
       expect(existsSync(resolve(__dirname, "..", vecchia)), vecchia).toBe(false);
     }
-    for (const nuova of ["app/sets/detail/page.tsx", "app/labels/detail/page.tsx",
+    for (const nuova of ["app/sets/manual/page.tsx", "app/labels/detail/page.tsx",
                          "app/shazam/detail/page.tsx"]) {
       expect(existsSync(resolve(__dirname, "..", nuova)), nuova).toBe(true);
     }
   });
 
   it("hanno il confine Suspense che useSearchParams richiede", () => {
-    for (const p of ["app/sets/detail/page.tsx", "app/labels/detail/page.tsx",
+    for (const p of ["app/sets/manual/page.tsx", "app/labels/detail/page.tsx",
                      "app/shazam/detail/page.tsx"]) {
       expect(leggi(p), p).toContain("<Suspense>");
     }

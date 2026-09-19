@@ -59,7 +59,7 @@ export function PipelineStrip({ p, bare = false }: { p: PipelineStatus; bare?: b
     },
     {
       key: "suona", label: t.dashboard.stagePlay, value: String(p.ready_for_set),
-      sub: t.dashboard.stagePlaySub, hot: false, href: "/set-builder",
+      sub: t.dashboard.stagePlaySub, hot: false, href: "/sets",
     },
   ];
 
