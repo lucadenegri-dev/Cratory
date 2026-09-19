@@ -79,10 +79,13 @@ def _check_revision(setlist: Setlist, expected: int) -> None:
 
 
 def main_block(db: Session, setlist: Setlist) -> SetlistBlock:
-    """Il blocco `main` del set (tappa 1: uno solo), creato al primo inserimento."""
-    for block in setlist.blocks:
-        if block.placement == "main":
-            return block
+    """L'ULTIMA sequenza del percorso, quella in cui finisce cio' che si appende;
+    creata al primo inserimento se il set non ne ha ancora. Dalla tappa 3 le
+    sequenze possono essere piu' d'una, e «in coda» vuol dire in coda all'ultima,
+    non in coda alla prima."""
+    esistenti = [b for b in setlist.blocks if b.placement == "main"]
+    if esistenti:
+        return max(esistenti, key=lambda b: b.position)
     block = SetlistBlock(setlist_id=setlist.id, placement="main", position=1)
     db.add(block)
     db.flush()
@@ -149,16 +152,24 @@ def insert_rows(db: Session, setlist_id: int, *, expected_revision: int,
         block_id = None
         present: set[int] = set()  # in riserva una traccia puo' ripetersi dal percorso
     else:
-        block = main_block(db, setlist)
-        block_id = block.id
-        rows = [r for r in path_rows(setlist) if r.block_id == block.id]
-        at = len(rows)
+        percorso = path_rows(setlist)
         if after_row_id is not None:
+            # Si entra nella sequenza dell'ancora, non in una fissa: il DJ ha
+            # indicato un punto preciso del percorso.
             anchor = _row_of(setlist, after_row_id)
-            if anchor not in rows:
-                raise ManualSetError(f"Row {after_row_id} is not in the main block")
+            if anchor not in percorso:
+                raise ManualSetError(f"Row {after_row_id} is not in the path")
+            block_id = anchor.block_id
+            rows = [r for r in percorso if r.block_id == block_id]
             at = rows.index(anchor) + 1
-        present = {r.track_id for r in rows if r.track_id is not None}
+        else:
+            block = main_block(db, setlist)
+            block_id = block.id
+            rows = [r for r in percorso if r.block_id == block.id]
+            at = len(rows)
+        # Il vincolo «una traccia una volta sola» vale sul percorso intero, non
+        # sulla sequenza in cui si sta inserendo.
+        present = {r.track_id for r in percorso if r.track_id is not None}
     new_rows: list[SetlistTrack] = []
     if gap:
         new_rows.append(SetlistTrack(setlist_id=setlist.id, block_id=block_id, position=0, slot_kind="gap"))
@@ -354,3 +365,142 @@ def undo(db: Session, setlist_id: int, *, expected_revision: int) -> Setlist:
 
 def redo(db: Session, setlist_id: int, *, expected_revision: int) -> Setlist:
     return _muovi_cursore(db, setlist_id, expected_revision, avanti=True)
+
+
+# --- Sequenze e banco (tappa 3) ------------------------------------------------
+
+
+class BlockNotFound(ManualSetError):
+    pass
+
+
+def blocks_of(setlist: Setlist, placement: str) -> list[SetlistBlock]:
+    return sorted((b for b in setlist.blocks if b.placement == placement),
+                  key=lambda b: b.position)
+
+
+def _block_of(setlist: Setlist, block_id: int) -> SetlistBlock:
+    for block in setlist.blocks:
+        if block.id == block_id:
+            return block
+    raise BlockNotFound("Block not found")
+
+
+def _renumber_blocks(blocks: list[SetlistBlock]) -> None:
+    for i, block in enumerate(blocks, start=1):
+        block.position = i
+
+
+def group_rows(db: Session, setlist_id: int, *, expected_revision: int,
+               row_ids: list[int], name: str | None) -> Setlist:
+    """Raggruppa righe contigue dello stesso blocco in una sequenza nuova, al
+    loro posto: l'ordine del percorso non cambia, cambia come e' diviso."""
+    if len(row_ids) < 2:
+        raise ManualSetError("A sequence needs at least two rows")
+    setlist = load_manual_set(db, setlist_id)
+    _check_revision(setlist, expected_revision)
+    righe = [_row_of(setlist, rid) for rid in row_ids]
+    blocchi = {r.block_id for r in righe}
+    if len(blocchi) != 1 or None in blocchi:
+        raise ManualSetError("Rows must belong to one and the same block")
+    origine = _block_of(setlist, righe[0].block_id)
+    tutte = sorted((r for r in setlist.tracks if r.block_id == origine.id),
+                   key=lambda r: r.position)
+    indici = sorted(tutte.index(r) for r in righe)
+    if indici != list(range(indici[0], indici[0] + len(indici))):
+        raise ManualSetError("Rows must be contiguous")
+
+    prima = tutte[:indici[0]]
+    gruppo = [tutte[i] for i in indici]
+    dopo = tutte[indici[-1] + 1:]
+
+    fratelli = blocks_of(setlist, origine.placement)
+    at = fratelli.index(origine)
+
+    def nuovo_blocco(sue_righe: list[SetlistTrack], nome: str | None) -> SetlistBlock:
+        blocco = SetlistBlock(setlist_id=setlist.id, placement=origine.placement,
+                              name=nome, position=0)
+        db.add(blocco)
+        setlist.blocks.append(blocco)
+        db.flush()
+        for r in sue_righe:
+            # La relationship, non solo la foreign key: `blocco_di_origine.rows`
+            # e' caricata, e se le righe restassero sue il suo scioglimento le
+            # sgancerebbe (block_id a NULL) buttandole nella riserva.
+            r.block = blocco
+        _renumber(sue_righe)
+        return blocco
+
+    # Il blocco di origine si spezza in tre: cio' che precede (resta suo), il
+    # gruppo (blocco nuovo, col nome), cio' che segue (blocco nuovo senza nome).
+    # Ricostruito come lista, non a colpi di slice annidati: qui un indice
+    # sbagliato riordinerebbe il percorso in silenzio.
+    sostituzione: list[SetlistBlock] = []
+    if prima:
+        _renumber(prima)
+        sostituzione.append(origine)
+    sostituzione.append(nuovo_blocco(gruppo, (name or "").strip() or None))
+    if dopo:
+        sostituzione.append(nuovo_blocco(dopo, None))
+    if not prima:
+        # Il blocco di origine e' rimasto vuoto: sciolto, non lasciato in giro.
+        setlist.blocks.remove(origine)
+
+    _renumber_blocks(fratelli[:at] + sostituzione + fratelli[at + 1:])
+    return _commit_bumped(db, setlist, "block")
+
+
+def rename_block(db: Session, setlist_id: int, block_id: int, *, expected_revision: int,
+                 name: str | None) -> Setlist:
+    setlist = load_manual_set(db, setlist_id)
+    _check_revision(setlist, expected_revision)
+    block = _block_of(setlist, block_id)
+    block.name = (name or "").strip() or None
+    return _commit_bumped(db, setlist, "block")
+
+
+def move_block(db: Session, setlist_id: int, block_id: int, *, expected_revision: int,
+               position: int, to_bench: bool | None = None) -> Setlist:
+    """Sposta la sequenza intera: l'ordine interno non si tocca mai."""
+    setlist = load_manual_set(db, setlist_id)
+    _check_revision(setlist, expected_revision)
+    block = _block_of(setlist, block_id)
+    destinazione = block.placement if to_bench is None else ("bench" if to_bench else "main")
+    # Tutto cio' che si legge si legge prima di toccare qualunque cosa: una
+    # posizione fuori range deve lasciare il set com'era, banco compreso.
+    if destinazione == block.placement:
+        rimasti: list[SetlistBlock] = []
+        fratelli = [b for b in blocks_of(setlist, block.placement) if b.id != block.id]
+    else:
+        rimasti = [b for b in blocks_of(setlist, block.placement) if b.id != block.id]
+        fratelli = blocks_of(setlist, destinazione)
+    if not 1 <= position <= len(fratelli) + 1:
+        raise ManualSetError(f"Position {position} out of range 1..{len(fratelli) + 1}")
+
+    block.placement = destinazione
+    fratelli.insert(position - 1, block)
+    _renumber_blocks(rimasti)
+    _renumber_blocks(fratelli)
+    return _commit_bumped(db, setlist, "block")
+
+
+def split_block(db: Session, setlist_id: int, block_id: int, *, expected_revision: int) -> Setlist:
+    """Scioglie la sequenza: le righe passano al blocco che la precede, in coda,
+    nell'ordine che avevano. Se era la prima, vanno in testa a quella dopo."""
+    setlist = load_manual_set(db, setlist_id)
+    _check_revision(setlist, expected_revision)
+    block = _block_of(setlist, block_id)
+    fratelli = blocks_of(setlist, block.placement)
+    if len(fratelli) == 1:
+        raise ManualSetError("The only sequence cannot be split")
+    at = fratelli.index(block)
+    ospite = fratelli[at - 1] if at > 0 else fratelli[1]
+    mie = sorted((r for r in setlist.tracks if r.block_id == block.id), key=lambda r: r.position)
+    sue = sorted((r for r in setlist.tracks if r.block_id == ospite.id), key=lambda r: r.position)
+    unite = (sue + mie) if at > 0 else (mie + sue)
+    for r in mie:
+        r.block = ospite  # la relationship, non solo la foreign key: vedi group_rows
+    _renumber(unite)
+    setlist.blocks.remove(block)
+    _renumber_blocks([b for b in fratelli if b.id != block.id])
+    return _commit_bumped(db, setlist, "block")
