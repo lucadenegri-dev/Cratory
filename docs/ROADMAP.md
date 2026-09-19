@@ -489,18 +489,20 @@ cleanup, and each was explicitly left alone this time.
      `download_dispatcher.py`, `download_runner.py`), not the abstract base
      class the "four job state machines" item above imagines.
   3. **Set Builder: DJ-led preparation workspace** (direction revised
-     2026-09-16; **tappe 1-3 shipped**, 2026-09-18/19). Build from a playlist
+     2026-09-16; **tappe 1-4 shipped**, 2026-09-18/19). Build from a playlist
      through audition, manually composed sequences, gaps, saved alternatives,
      reserves, preparation notes and undo/redo, on the existing `Setlist` model
      (a `kind` column, not a second set model). No AI in the flow. Done so far:
      the workbench itself with rows, gaps and per-row notes (tappa 1);
      alternatives, side-by-side comparison and the reserve (tappa 2); named
-     sequences, the bench and undo/redo (tappa 3). Still open: pair notes and
-     the "tried" state, `play_bpm` and pitch percentage (tappa 4); planned
-     duration and dedicated exports (tappa 5); and "fill this gap" — the
-     generator becoming a tool inside the set, the deterministic beam over a
-     fixed number of slots between two chosen tracks — with which the old
-     generation form and AI curation go away (tappa 6). See the
+     sequences, the bench and undo/redo (tappa 3); per-passage notes, technical
+     compatibility with the pitch as a signed percentage, and the "I play it at"
+     tempo per row (tappa 4 — the spec's "to try"/"tried" state was dropped on
+     the user's decision, 2026-09-19: without "tried" the flag never closes).
+     Still open: planned duration and dedicated exports (tappa 5); and "fill
+     this gap" — the generator becoming a tool inside the set, the deterministic
+     beam over a fixed number of slots between two chosen tracks — with which the
+     old generation form and AI curation go away (tappa 6). See the
      [specification](superpowers/specs/2026-09-15-set-builder-workbench.md).
      Deferred behind it, as its own design cycle once real transitions exist
      to try: a two-deck audition (beat grids from the Rekordbox XML `TEMPO`

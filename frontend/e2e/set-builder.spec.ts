@@ -100,3 +100,50 @@ test("sequenze, banco e annulla sopravvivono al ricaricamento", async ({ page, r
   await expect(page.getByTestId("path-panel").locator("li")).toHaveCount(4);
   await expect(page.getByTestId("path-panel").locator("section")).toHaveCount(1);
 });
+
+test("l'appunto di un passaggio non si trasferisce e non si perde", async ({ page, request }) => {
+  const { playlistId, trackIds } = await seminaTracce(request, 3);
+  const creato = await request.post("/api/sets/manual", { data: { playlist_id: playlistId } });
+  expect(creato.ok()).toBeTruthy();
+  const set = await creato.json();
+  await request.post(`/api/sets/${set.id}/rows`, {
+    data: { expected_revision: 0, track_ids: [trackIds[0], trackIds[1]] },
+  });
+
+  await page.goto(`/sets/manual?id=${set.id}`);
+  const percorso = page.getByTestId("path-panel");
+  await expect(percorso.getByText("Traccia 0")).toBeVisible();
+
+  // Sulla seconda riga, l'appunto del passaggio che ci arriva.
+  await percorso.getByRole("button", { name: /Traccia 1/ }).click();
+  const appunto = page.getByTestId("transition-panel-in")
+    .getByPlaceholder("Come ci entro, cosa taglio…");
+  await appunto.fill("entra sul break");
+  await appunto.blur();
+
+  // Salvato davvero: sopravvive al ricaricamento.
+  await page.reload();
+  await page.getByTestId("path-panel").getByRole("button", { name: /Traccia 1/ }).click();
+  await expect(page.getByTestId("transition-panel-in")
+    .getByPlaceholder("Come ci entro, cosa taglio…")).toHaveValue("entra sul break");
+
+  // Tolgo la prima traccia: quel passaggio non esiste piu'.
+  const prima = page.getByTestId("path-panel").locator("li").filter({ hasText: "Traccia 0" });
+  await prima.getByTitle("Togli dal percorso").click();
+  await expect(page.getByTestId("path-panel").locator("li")).toHaveCount(1);
+  await page.getByTestId("path-panel").getByRole("button", { name: /Traccia 1/ }).click();
+  await expect(page.getByTestId("transition-panel-in")).toHaveCount(0);
+
+  // La rimetto: «Aggiungi al percorso» la mette in coda, quindi la coppia
+  // sarebbe 1->0, che di suo non ha appunto. La riporto davanti e la coppia
+  // 0->1 ritrova il suo: era legato alle tracce, non alle righe.
+  await page.getByTestId("material-panel").locator("li").filter({ hasText: "Traccia 0" })
+    .getByTitle("Aggiungi al percorso").click();
+  await expect(page.getByTestId("path-panel").locator("li")).toHaveCount(2);
+  await page.getByTestId("path-panel").locator("li").filter({ hasText: "Traccia 0" })
+    .getByTitle("Su").click();
+  await expect(page.getByTestId("path-panel").locator("li").first()).toContainText("Traccia 0");
+  await page.getByTestId("path-panel").getByRole("button", { name: /Traccia 0/ }).click();
+  await expect(page.getByTestId("transition-panel-out")
+    .getByPlaceholder("Come ci entro, cosa taglio…")).toHaveValue("entra sul break");
+});

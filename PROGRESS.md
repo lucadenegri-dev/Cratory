@@ -57,6 +57,25 @@ described in `CLAUDE.md`.
   durata pianificata, export dedicato, "riempi il varco" — tappe 4-6, piano in
   `docs/superpowers/plans/2026-09-19-set-manuale-tappa-3.md`.
 
+- **Set manuale, tappa 4 (2026-09-19).** Selezionata una riga, il dettaglio mostra
+  i due passaggi che la riguardano — quello in entrata e quello in uscita — con i
+  due tempi, il **pitch che serve in percentuale firmata** (`124 → 123 · −0,8 %`,
+  non la differenza secca: a 90 e a 170 lo stesso salto non è lo stesso gesto), le
+  due tonalità e un appunto libero. Dove manca un dato si legge «sconosciuto» e non
+  compare nessun punteggio: il neutro di `score_transition` sembrerebbe un giudizio
+  e non lo è. Un varco aperto spezza la coppia; il confine fra due sequenze no. Il
+  campo **«la suono a»** (`play_bpm`) dice il tempo di cabina di quella riga in quel
+  set: i vicini si valutano su quel valore e `Track.bpm` in libreria non si tocca
+  mai. L'appunto è legato alle due **tracce**, non alle due righe (`SetlistPairNote`,
+  terna unica): sostituisci B con C e A→C è da valutare, ma l'appunto su A→B resta e
+  torna quando torna B — e il ciclo di vita lo sa, quindi la pulizia non cancella
+  più un lead solo perché è uscito dal percorso. La PATCH di riga è diventata
+  parziale: un campo non mandato non è un campo da azzerare. Lo stato «da provare /
+  provato» della spec **non è stato fatto**, per decisione dell'utente: senza
+  «provato» il flag non si chiude mai. Cosa non c'è ancora: durata pianificata ed
+  export dedicati, «riempi il varco» — tappe 5-6, piano in
+  `docs/superpowers/plans/2026-09-19-set-manuale-tappa-4.md`.
+
 - **Impostazioni in cinque sezioni (2026-09-15).** Generali · Libreria · Download ·
   Collegamenti · Backup, scelte da `?section=` con i pannelli montati e nascosti,
   così una bozza non salvata sopravvive al cambio sezione e ogni form di cartelle

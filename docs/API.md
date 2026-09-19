@@ -520,7 +520,7 @@ local file are excluded and their count noted in a leading comment. To export to
 Spotify instead, use `POST /api/spotify/create-playlist`. This export stays scoped to
 generated sets: the manual set below has no dedicated export in this stage.
 
-### Set manuale (banco di preparazione, tappe 1-3)
+### Set manuale (banco di preparazione, tappe 1-4)
 
 ```text
 POST   /api/sets/manual
@@ -539,6 +539,7 @@ POST   /api/sets/{setlist_id}/blocks/{block_id}/move
 POST   /api/sets/{setlist_id}/blocks/{block_id}/split
 POST   /api/sets/{setlist_id}/undo
 POST   /api/sets/{setlist_id}/redo
+PUT    /api/sets/{setlist_id}/pair-notes
 ```
 
 A DJ builds a set by hand from a playlist instead of generating one:
@@ -559,7 +560,22 @@ which are **not** part of the path and are excluded from `track_count` and
 `total_file_seconds`. A block's `placement` is `main` (a sequence of the path) or
 `bench` (parked outside it); the bench is excluded from those two totals too. Two
 more flags, `can_undo` and `can_redo`, say whether the two history endpoints below
-would do anything.
+would do anything. A row also carries `play_bpm`: the tempo the DJ plays *that*
+track at in *that* set, which never touches `Track.bpm` in the library.
+
+`transitions` lists the passages of the path — one `ManualTransitionOut` per pair
+of consecutive `track` rows. It is computed on every read and never stored. An open
+gap breaks the pair (the two tracks beside it are not neighbours until it is
+filled), while a sequence boundary does not: in the booth those two tracks really
+do follow one another. `bpm_from`/`bpm_to` are the tempos actually used, so
+`play_bpm` wins where it is set, and `bpm_percent` is the **signed percentage of
+pitch** needed to bring the second onto the first's grid ("124 → 123" is `-0.8`),
+not a raw BPM difference — the same gap means a different move at 90 and at 170.
+`halftime` says the best alignment is a half/double-time one, in which case the
+percentage is already computed on that grid (140 → 70 is `0.0`, not `-50`).
+`missing` lists `bpm` and/or `key` when a value is absent: in that case `score`
+and `bpm_percent` are `null` and the client shows "unknown" — never the neutral
+rating `score_transition` would return, which reads as a judgement and is not one.
 
 `GET /api/sets/{setlist_id}/material?q=&owned=&unused=&reserved=` returns the source
 playlist read fresh (not a snapshot taken at creation), the tracks already in the set,
@@ -593,7 +609,16 @@ lands on the wrong row.
   `track` row, holding on to its id and its note.
 - `DELETE .../rows/{row_id}/alternatives/{alt_id}` drops one candidate
   (`expected_revision` as a query parameter, like the row delete).
-- `PATCH .../rows/{row_id}` sets or clears `note` (max 2000 characters).
+- `PATCH .../rows/{row_id}` is a **partial** patch: a field absent from the body is
+  left alone, and an explicit `null` clears it. `note` is free text (max 2000
+  characters); `play_bpm` is the booth tempo for that row (20–300). Sending only
+  the note therefore never wipes the tempo, and vice versa.
+- `PUT .../pair-notes` writes the note on the passage between two **tracks** —
+  `from_track_id` → `to_track_id`, not two row ids. That is what makes the
+  judgement survive the path: replace B with C and the pair A→C simply has no
+  note yet, while the note on A→B stays put and comes back the moment B does. An
+  empty or blank note deletes the row. Tappa 4 has **no state** on a passage:
+  "to try"/"tried" from the spec was dropped (2026-09-19), only the text remains.
 - `DELETE .../rows/{row_id}` removes one row.
 - `POST .../blocks` groups 2 to 200 `row_ids` — contiguous rows of one and the same
   block — into a new sequence in their place, with an optional `name` (max 120
@@ -633,8 +658,8 @@ These candidates are the DJ's own, saved on the row. They are unrelated to
 which stays reserved for generated sets.
 
 Manual sets never go through `assign_roles`, transition recomputation or the
-deterministic generator above. These stages have no pair notes or "tried" state, no
-`play_bpm` or pitch percentage, no planned duration and no dedicated export — see
+deterministic generator above. These stages have no planned duration and no
+dedicated export — see
 `docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the full staged plan.
 
 ## Transitions

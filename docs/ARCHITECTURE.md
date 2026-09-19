@@ -460,7 +460,7 @@ missing BPM bridges, flat energy, harmonic dead ends). `/api/transitions` classi
 of tracks on its own. `services/labels.py` aggregates the library per record label, reading
 the label from the effective tag.
 
-### Manual set (tappe 1-3)
+### Manual set (tappe 1-4)
 
 A DJ can build a set by hand instead of generating one: `Setlist.kind` is `generated`
 (everything above) or `manual`. A manual set has no strategy, no target duration and
@@ -502,13 +502,31 @@ did both, undoing would walk `revision` backwards and the next edit would return
 a value a client had already seen on a different state: that client would pass the
 check and overwrite without noticing.
 
+`services/manual_pairs.py` is the technical read on a passage. Nothing there is
+stored: it is computed on every read from the current metadata, and its governing
+rule is the spec's — when a value is missing it says so instead of returning the
+neutral rating `score_transition` would give, because a 50 on a track with no BPM
+looks like a judgement and is not one. The pitch is reported as a signed
+percentage, not a BPM delta, and on a half/double-time alignment it is computed on
+that grid. Where a row carries `play_bpm` — the tempo the DJ plays it at in this
+set — the neighbours are judged on that value; it reaches `score_transition`
+through a small facade object, because assigning `Track.bpm` on the loaded row
+would write the booth tempo into the library at the next flush, which is the one
+thing `play_bpm` exists to avoid.
+
+`SetlistPairNote` keys a note to a **pair of tracks**, not a pair of rows, and that
+is the whole point: the judgement neither transfers nor disappears when the path
+changes. The spec also gave it a `state` (`unreviewed`/`to_try`/`tried`); it was
+dropped on the user's decision (2026-09-19), because without `tried` the "to try"
+flag never closes and becomes a list that only ever fills up.
+
 The frontend's `/sets/manual?id=…` (three panels: material, path, detail, with the
-bench and the reserve under the path) and the list at `/sets` route by `kind`. A row's
+bench and the reserve under the path, and the incoming/outgoing passage inside the
+detail) and the list at `/sets` route by `kind`. A row's
 up/down arrows move it inside its own sequence, so they stop at its edges: crossing a
 boundary means moving the sequence itself. See
 `docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the staged plan
-(tappe 1-3: no pair notes, no `play_bpm` or pitch percentage, no planned duration,
-no export).
+(tappe 1-4: no planned duration, no dedicated export, no "fill this gap").
 
 ## Discovery
 
