@@ -48,7 +48,7 @@ const riga = (id: number, blockId: number, position: number) => ({
 /** Due sequenze nel percorso (una con nome, una senza) e una sul banco. */
 const set = (opts: { revision?: number; canUndo?: boolean; canRedo?: boolean } = {}) => ({
   id: 7, name: "Sabato", kind: "manual", revision: opts.revision ?? 1,
-  source_playlist_id: 3, source_playlist_name: "Deep", notes: null,
+  sources: [{ playlist_id: 3, name: "Deep" }], notes: null,
   track_count: 3, total_file_seconds: 900,
   can_undo: opts.canUndo ?? true, can_redo: opts.canRedo ?? false, transitions: [],
   duration: { seconds: 0, incomplete: false, unknown_rows: 0, open_gaps: 0 },
@@ -63,7 +63,7 @@ const set = (opts: { revision?: number; canUndo?: boolean; canRedo?: boolean } =
 });
 
 const material = () => ({
-  playlist_id: 3, playlist_name: "Deep",
+  sources: [{ playlist_id: 3, name: "Deep" }],
   items: [20, 21].map((id) => ({
     track: track(id), in_set: false, from_playlist: true, in_reserve: false,
   })),

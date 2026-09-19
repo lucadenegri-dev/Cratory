@@ -12,7 +12,7 @@ import {
   getPlaylist, playlistTracks, playlistGaps, deletePlaylist, syncPlaylist, errText, fmtDate, fmtDateShort, fmtDuration, fmtDurationLong,
   startPlaylistDownload, removeTrackFromPlaylist, exportPlaylist, reorderPlaylistTrack, renamePlaylist,
   setPlaylistOrder, removeTracksFromPlaylist, duplicatePlaylist, playlistSyncLog, enqueueDownloads,
-  uploadPlaylistArtwork, deletePlaylistArtwork, createManualSet,
+  uploadPlaylistArtwork, deletePlaylistArtwork,
   type Playlist, type Track, type GapAnalysis, type PlaylistSyncEvent,
 } from "@/lib/api";
 import { useBackLink, withFrom } from "@/lib/back-link";
@@ -496,12 +496,9 @@ function PlaylistDetailInner() {
       <ButtonLink href={`/sets?playlist=${pid}`} size="sm" block><Sparkles size={15} /> {t.playlists.buildSetButton}</ButtonLink>
       <Button
         size="sm" variant="outline" className="w-full"
-        onClick={async () => {
-          try {
-            const s = await createManualSet({ playlist_id: pid });
-            router.push(`/sets/manual?id=${s.id}`);
-          } catch (e) { setActionError(errText(e)); }
-        }}
+        // Apre una BOZZA con questa playlist gia' scelta: il set nasce alla
+        // prima traccia, non aprendo la pagina (2026-09-19).
+        onClick={() => router.push(`/sets/manual?playlist=${pid}`)}
       >
         {t.sets.manual.prepareButton}
       </Button>

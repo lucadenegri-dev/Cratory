@@ -39,7 +39,7 @@ const riga = (id: number, position: number, planned: number | null = null) => ({
 
 const set = (opts: { revision?: number; duration?: object; planned?: number | null } = {}) => ({
   id: 7, name: "Sabato", kind: "manual", revision: opts.revision ?? 1,
-  source_playlist_id: 3, source_playlist_name: "Deep", notes: null,
+  sources: [{ playlist_id: 3, name: "Deep" }], notes: null,
   track_count: 2, total_file_seconds: 600,
   can_undo: true, can_redo: false,
   created_at: "2026-09-19T10:00:00", updated_at: "2026-09-19T10:00:00",
@@ -55,7 +55,7 @@ const set = (opts: { revision?: number; duration?: object; planned?: number | nu
 });
 
 const material = () => ({
-  playlist_id: 3, playlist_name: "Deep",
+  sources: [{ playlist_id: 3, name: "Deep" }],
   items: [{ track: track(20), in_set: false, from_playlist: true, in_reserve: false }],
 });
 

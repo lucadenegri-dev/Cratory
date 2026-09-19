@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Clock, ChevronRight, Download, ListMusic, Sparkles, Trash2 } from "lucide-react";
 import {
-  apiDelete, apiGet, createManualSet, errText, exportSet, fmtDate, fmtDuration,
+  apiDelete, apiGet, errText, exportSet, fmtDate, fmtDuration,
   type SetlistSummary,
 } from "@/lib/api";
 import { Card, Badge, Alert, Button, EmptyState, Loading } from "@/components/ui";
@@ -28,12 +28,10 @@ function SetsInner() {
     apiGet<SetlistSummary[]>("/api/sets").then(setSets).catch((e) => setError(errText(e)));
   }, []);
 
-  const prepara = async () => {
-    try {
-      const s = await createManualSet({ playlist_id: playlistId ? Number(playlistId) : null });
-      router.push(`/sets/manual?id=${s.id}`);
-    } catch (e) { setError(errText(e)); }
-  };
+  /** Apre una bozza: niente si salva finche' non ci si mette dentro qualcosa
+   *  (2026-09-19). Il set nasce alla prima traccia, dentro il banco. */
+  const prepara = () =>
+    router.push(playlistId ? `/sets/manual?playlist=${playlistId}` : "/sets/manual");
 
   /** Porta via un set del vecchio formato prima di cancellarlo: e' l'unica cosa
    *  che ancora si puo' fare con lui, e la riga lo promette. */
@@ -57,7 +55,7 @@ function SetsInner() {
 
   const marginalia = (
     <div className="space-y-3">
-      <Button variant="outline" size="sm" className="w-full" onClick={() => void prepara()}>
+      <Button variant="outline" size="sm" className="w-full" onClick={prepara}>
         <Sparkles size={15} /> {t.sets.manual.prepareButton}
       </Button>
       <div className="border-t border-border pt-4 text-xs">

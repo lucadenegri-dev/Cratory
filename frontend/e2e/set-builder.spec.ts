@@ -23,7 +23,7 @@ test("alternative e riserva sopravvivono al ricaricamento", async ({ page, reque
 
   // Set dalla playlist appena creata, con due tracce già nel percorso: la pagina
   // parte da uno stato utile invece che vuoto.
-  const creato = await request.post("/api/sets/manual", { data: { playlist_id: playlistId } });
+  const creato = await request.post("/api/sets/manual", { data: { playlist_ids: [playlistId] } });
   expect(creato.ok()).toBeTruthy();
   const set = await creato.json();
   await request.post(`/api/sets/${set.id}/rows`, {
@@ -64,7 +64,7 @@ test("alternative e riserva sopravvivono al ricaricamento", async ({ page, reque
 
 test("sequenze, banco e annulla sopravvivono al ricaricamento", async ({ page, request }) => {
   const { playlistId, trackIds } = await seminaTracce(request, 4);
-  const creato = await request.post("/api/sets/manual", { data: { playlist_id: playlistId } });
+  const creato = await request.post("/api/sets/manual", { data: { playlist_ids: [playlistId] } });
   expect(creato.ok()).toBeTruthy();
   const set = await creato.json();
   await request.post(`/api/sets/${set.id}/rows`, {
@@ -103,7 +103,7 @@ test("sequenze, banco e annulla sopravvivono al ricaricamento", async ({ page, r
 
 test("l'appunto di un passaggio non si trasferisce e non si perde", async ({ page, request }) => {
   const { playlistId, trackIds } = await seminaTracce(request, 3);
-  const creato = await request.post("/api/sets/manual", { data: { playlist_id: playlistId } });
+  const creato = await request.post("/api/sets/manual", { data: { playlist_ids: [playlistId] } });
   expect(creato.ok()).toBeTruthy();
   const set = await creato.json();
   await request.post(`/api/sets/${set.id}/rows`, {
@@ -150,7 +150,7 @@ test("l'appunto di un passaggio non si trasferisce e non si perde", async ({ pag
 
 test("il varco si fa riempire dal generatore, e la scheda di preparazione lo racconta", async ({ page, request }) => {
   const { playlistId, trackIds } = await seminaTracce(request, 6);
-  const creato = await request.post("/api/sets/manual", { data: { playlist_id: playlistId } });
+  const creato = await request.post("/api/sets/manual", { data: { playlist_ids: [playlistId] } });
   expect(creato.ok()).toBeTruthy();
   const set = await creato.json();
   await request.post(`/api/sets/${set.id}/rows`, {

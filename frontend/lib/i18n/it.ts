@@ -1555,6 +1555,12 @@ export const it: Dictionary = {
       transitionNotePlaceholder: "Come ci entro, cosa taglio…",
       halftimeLabel: "a mezzo tempo",
       pitchLabel: "pitch",
+      sourcesTitle: "Da dove pesco",
+      sourcesEmpty: "Nessuna playlist: il materiale è la sola ricerca in libreria.",
+      addSourceLabel: "Aggiungi una playlist",
+      removeSourceTitle: "Togli questa origine",
+      draftBadge: "bozza",
+      draftHint: "Il set viene salvato appena ci metti dentro la prima traccia.",
       durationLabel: "Durata",
       durationIncomplete: "stima incompleta",
       durationIncompleteWhy: (rows: number, gaps: number) => [

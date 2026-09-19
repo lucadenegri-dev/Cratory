@@ -38,7 +38,7 @@ const track = (id: number, extra = {}) => ({
 });
 
 const set = (revision = 0, rows: Array<{ id: number; track: ReturnType<typeof track> | null }> = []) => ({
-  id: 7, name: "Sabato", kind: "manual", revision, source_playlist_id: 3, source_playlist_name: "Deep",
+  id: 7, name: "Sabato", kind: "manual", revision, sources: [{ playlist_id: 3, name: "Deep" }],
   notes: null, track_count: rows.filter((r) => r.track).length, total_file_seconds: 300 * rows.filter((r) => r.track).length,
   can_undo: false, can_redo: false, transitions: [],
   duration: { seconds: 0, incomplete: false, unknown_rows: 0, open_gaps: 0 },
@@ -49,7 +49,7 @@ const set = (revision = 0, rows: Array<{ id: number; track: ReturnType<typeof tr
 });
 
 const material = (inSet: number[] = []) => ({
-  playlist_id: 3, playlist_name: "Deep",
+  sources: [{ playlist_id: 3, name: "Deep" }],
   items: [1, 2].map((id) => ({ track: track(id), in_set: inSet.includes(id), from_playlist: true, in_reserve: false })),
 });
 
@@ -70,7 +70,9 @@ describe("set manuale: il gesto base", () => {
     // I titoli sono "Artista – Traccia 1": nodi di testo separati, si cerca con la regex.
     expect(await screen.findByText(/Traccia 1/)).toBeTruthy();
     expect(screen.getByText(/Aggiungi tracce dal materiale/)).toBeTruthy();
-    expect(screen.getByText(/dalla playlist «Deep»/)).toBeTruthy();
+    // La provenienza non sta piu' in intestazione: dal 2026-09-19 le origini
+    // sono piu' d'una e vivono nel pannello del materiale, dove si cambiano.
+    expect(within(screen.getByTestId("sources-panel")).getByText("Deep")).toBeTruthy();
   });
 
   it("aggiunge una traccia con la revisione corrente e ricarica il materiale", async () => {

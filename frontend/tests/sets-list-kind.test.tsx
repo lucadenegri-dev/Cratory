@@ -47,12 +47,14 @@ describe("lista dei set", () => {
     expect(screen.getByTitle(/Elimina/i)).toBeTruthy();
   });
 
-  it("«Prepara un set» crea un set a mano e ci porta dentro", async () => {
+  it("«Prepara un set» apre una bozza senza salvare niente", async () => {
+    // Dal 2026-09-19 il set nasce alla prima traccia, non aprendo la pagina:
+    // qui non deve partire nessuna creazione.
     listApi.apiGet.mockResolvedValue([]);
-    listApi.createManualSet.mockResolvedValue({ id: 9 });
     render(<SetsPage />);
     fireEvent.click(await screen.findByText("Prepara un set"));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/sets/manual?id=9"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/sets/manual"));
+    expect(listApi.createManualSet).not.toHaveBeenCalled();
   });
 
   it("eliminare un set vecchio lo toglie dalla lista", async () => {

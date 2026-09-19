@@ -3,7 +3,7 @@ import type { ManualSet, Material } from "./types";
 
 /** Set preparato a mano (tappa 1): tutte le mutazioni mandano `expected_revision`;
  *  un 409 `set_revision_conflict` vuol dire "ricarica e riprova". */
-export function createManualSet(body: { name?: string; playlist_id?: number | null }) {
+export function createManualSet(body: { name?: string; playlist_ids?: number[] }) {
   return apiPost<ManualSet>("/api/sets/manual", body);
 }
 
@@ -133,4 +133,27 @@ export async function exportManualSet(
   const res = await fetch(`${API}/api/sets/${id}/export?format=${format}`, { method: "POST" });
   if (!res.ok) throw new Error(res.statusText);   // come exportSet in lib/api/sets.ts
   return res.text();
+}
+
+/** Le origini del materiale: si aggiungono e si tolgono mentre si lavora.
+ *  Attenzione: l'annulla NON rimette un'origine tolta — lo snapshot copre la
+ *  struttura del percorso, e le origini sono la provenienza del materiale. */
+export function addSource(id: number, body: { expected_revision: number; playlist_id: number }) {
+  return apiPost<ManualSet>(`/api/sets/${id}/sources`, body);
+}
+
+export function removeSource(id: number, playlistId: number, expectedRevision: number) {
+  return apiDelete<ManualSet>(
+    `/api/sets/${id}/sources/${playlistId}?expected_revision=${expectedRevision}`);
+}
+
+/** Il materiale di una BOZZA: il set non esiste ancora, quindi si chiede per
+ *  playlist. Stessa forma di `getMaterial`, così il pannello non cambia. */
+export function draftMaterial(opts: { playlist_ids: number[]; q?: string; owned?: boolean }) {
+  const p = new URLSearchParams();
+  for (const id of opts.playlist_ids) p.append("playlist_ids", String(id));
+  if (opts.q) p.set("q", opts.q);
+  if (opts.owned) p.set("owned", "true");
+  const qs = p.toString();
+  return apiGet<Material>(`/api/sets/material${qs ? `?${qs}` : ""}`);
 }

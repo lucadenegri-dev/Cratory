@@ -7,10 +7,11 @@ import { ArrowLeft, Redo2, Trash2, Undo2 } from "lucide-react";
 import {
   ApiError, addAlternatives, apiDelete, chooseAlternative, errText, fmtDuration, fmtDurationLong,
   getManualSet,
-  fillGap, getMaterial, groupRows, insertRows, moveBlock, moveRow, patchRow, redoSet, removeAlternative,
-  removeRow, renameBlock, setPairNote, splitBlock, undoSet,
+  addSource, createManualSet, draftMaterial, fillGap, getMaterial, groupRows, insertRows,
+  moveBlock, moveRow, patchRow, redoSet, removeAlternative, removeRow, removeSource,
+  renameBlock, setPairNote, splitBlock, undoSet,
   type ManualAlternative, type ManualBlock, type ManualRow, type ManualSet, type ManualTransition,
-  type Material, type MaterialItem,
+  type Material, type MaterialItem, type Source,
 } from "@/lib/api";
 import { Alert, Badge, Button, Card, CardHeader, Loading, Modal } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -22,6 +23,7 @@ import { ReservePanel } from "@/components/set-builder/reserve-panel";
 import { BenchPanel } from "@/components/set-builder/bench-panel";
 import { ExportMenu } from "@/components/set-builder/export-menu";
 import { FillGapPanel } from "@/components/set-builder/fill-gap-panel";
+import { SourcesPanel } from "@/components/set-builder/sources-panel";
 import { useT } from "@/lib/i18n";
 
 export default function ManualSetPage() {
@@ -32,7 +34,18 @@ export default function ManualSetPage() {
 function ManualSetInner() {
   const t = useT();
   const router = useRouter();
-  const id = Number(useSearchParams().get("id") ?? "");
+  // Senza `?id=` non e' un errore: e' una BOZZA. Il set nasce al primo gesto
+  // che ha bisogno di una riga, non aprendo la pagina (deciso il 2026-09-19),
+  // cosi' chi apre e chiude non lascia un set vuoto in archivio.
+  const query_ = useSearchParams();
+  const idDallaQuery = Number(query_.get("id") ?? "") || null;
+  const playlistDallaQuery = Number(query_.get("playlist") ?? "") || null;
+  const [setId, setSetId] = useState<number | null>(idDallaQuery);
+  const [draftSources, setDraftSources] = useState<Source[]>(
+    // `?playlist=` arriva da «Prepara un set» su una playlist: e' gia' scelta
+    // nella bozza, e il nome lo riempie il pannello leggendo l'elenco.
+    playlistDallaQuery && !idDallaQuery ? [{ playlist_id: playlistDallaQuery, name: null }] : []);
+  const id = setId ?? 0;
   const [set, setSet] = useState<ManualSet | null>(null);
   const [material, setMaterial] = useState<Material | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,19 +64,27 @@ function ManualSetInner() {
   const firstRun = useRef(true);
 
   const loadMaterial = useCallback(async (q = query, o = owned, u = unused, r = reserved) => {
-    if (!id) return;
-    try { setMaterial(await getMaterial(id, { q, owned: o, unused: u, reserved: r })); } catch (e) { setError(errText(e)); }
-  }, [id, query, owned, unused, reserved]);
+    try {
+      // La bozza non ha un set: il materiale si chiede per playlist.
+      setMaterial(setId
+        ? await getMaterial(setId, { q, owned: o, unused: u, reserved: r })
+        : await draftMaterial({ playlist_ids: draftSources.map((x) => x.playlist_id), q, owned: o }));
+    } catch (e) { setError(errText(e)); }
+  }, [setId, draftSources, query, owned, unused, reserved]);
 
   const reloadAll = useCallback(async () => {
-    if (!id) return;
     setConflict(false);
-    try { setSet(await getManualSet(id)); setError(null); } catch (e) { setError(errText(e)); }
+    if (setId) {
+      try { setSet(await getManualSet(setId)); setError(null); } catch (e) { setError(errText(e)); }
+    }
     await loadMaterial();
-  }, [id, loadMaterial]);
+  }, [setId, loadMaterial]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- il backend e' l'external system: al mount/cambio id si ricarica tutto da zero
-  useEffect(() => { void reloadAll(); }, [id]);
+  // Un effetto solo: al mount e a ogni cambio di set si ricarica tutto; su una
+  // bozza le origini vivono nello stato locale, quindi cambiarle deve comunque
+  // far richiedere il materiale.
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- il backend e' l'external system; reloadAll cambia identita' a ogni render, e metterla fra le dipendenze farebbe ricaricare senza sosta
+  useEffect(() => { void reloadAll(); }, [setId, draftSources]);
 
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; } // al montaggio carica gia' reloadAll
@@ -72,11 +93,25 @@ function ManualSetInner() {
     return () => { if (debounce.current) clearTimeout(debounce.current); };
   }, [query, owned, unused, reserved]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Il set, creandolo se questa e' ancora una bozza. Unico punto in cui un set
+   *  nasce: ci passa ogni mutazione, quindi non c'e' modo di dimenticarselo. */
+  const assicuraSet = useCallback(async (): Promise<ManualSet> => {
+    if (set) return set;
+    const nuovo = await createManualSet({
+      playlist_ids: draftSources.map((x) => x.playlist_id),
+    });
+    setSet(nuovo);
+    setSetId(nuovo.id);
+    // L'URL prende l'id: da qui in poi un ricaricamento non perde piu' niente.
+    router.replace(`/sets/manual?id=${nuovo.id}`);
+    return nuovo;
+  }, [set, draftSources, router]);
+
   /** Applica una mutazione: la risposta e' la verita' (revision inclusa); su 409 chiede di ricaricare. */
   const mutate = useCallback(async (run: (rev: number) => Promise<ManualSet>) => {
-    if (!set) return null;
     try {
-      const next = await run(set.revision);
+      const corrente = await assicuraSet();
+      const next = await run(corrente.revision);
       setSet(next);
       setError(null);
       void loadMaterial();
@@ -86,7 +121,7 @@ function ManualSetInner() {
       else setError(errText(e));
       return null;
     }
-  }, [set, loadMaterial]);
+  }, [assicuraSet, loadMaterial]);
 
   const onAdd = (item: MaterialItem) => mutate((rev) => insertRows(id, { expected_revision: rev, track_ids: [item.track.id], after_row_id: null }));
   const onGapAfter = (row: ManualRow) => mutate((rev) => insertRows(id, { expected_revision: rev, gap: true, after_row_id: row.id }));
@@ -104,6 +139,25 @@ function ManualSetInner() {
   const onSavePlayBpm = (row: ManualRow, playBpm: number | null) =>
     // Solo la proprietà toccata: mandare anche `note` la riscriverebbe ogni volta.
     mutate((rev) => patchRow(id, row.id, { expected_revision: rev, play_bpm: playBpm }));
+  /** Su una bozza le origini vivono nello stato locale: il set non c'e' ancora
+   *  e crearlo per aggiungere una playlist sarebbe esattamente cio' che si sta
+   *  evitando. Su un set vero passano dall'endpoint. */
+  const onAddSource = async (playlistId: number) => {
+    if (!set) {
+      setDraftSources((prev) => prev.some((x) => x.playlist_id === playlistId)
+        ? prev : [...prev, { playlist_id: playlistId, name: null }]);
+      return;
+    }
+    await mutate((rev) => addSource(id, { expected_revision: rev, playlist_id: playlistId }));
+  };
+  const onRemoveSource = async (playlistId: number) => {
+    if (!set) {
+      setDraftSources((prev) => prev.filter((x) => x.playlist_id !== playlistId));
+      return;
+    }
+    await mutate((rev) => removeSource(id, playlistId, rev));
+  };
+
   const onSavePlannedSeconds = (row: ManualRow, seconds: number | null) =>
     mutate((rev) => patchRow(id, row.id, { expected_revision: rev, planned_seconds: seconds }));
   const onFillGap = async (row: ManualRow, count: number) => {
@@ -123,6 +177,8 @@ function ManualSetInner() {
 
   const mainBlocks = set?.blocks.filter((b) => b.placement === "main") ?? [];
   const benchBlocks = set?.blocks.filter((b) => b.placement === "bench") ?? [];
+  // NB: restano su `set`, non su `vista`: su una bozza non ci sono blocchi, e
+  // `groupable` deve valere false invece di ragionare su una lista finta.
 
   /** Le righe spuntate, se formano un gruppo contiguo di UNA sola sequenza.
    *  Altrimenti non c'è niente da raggruppare e il comando non compare. */
@@ -195,12 +251,22 @@ function ManualSetInner() {
     catch (e) { setError(errText(e)); }
   };
 
+  /** Cosa disegna la pagina: il set vero, o una bozza vuota con le sue origini.
+   *  Non e' un set finto da salvare — le mutazioni passano da `assicuraSet`,
+   *  che e' l'unico punto in cui un set nasce davvero. */
+  const vista: ManualSet = set ?? {
+    id: 0, name: t.sets.manual.pageTitle, kind: "manual", revision: 0,
+    sources: draftSources, notes: null,
+    track_count: 0, total_file_seconds: 0, can_undo: false, can_redo: false,
+    created_at: "", updated_at: "",
+    blocks: [], reserve: [], transitions: [],
+    duration: { seconds: 0, incomplete: false, unknown_rows: 0, open_gaps: 0 },
+  };
+
   const rows = mainBlocks.flatMap((b) => b.rows);
   const selected = rows.find((r) => r.id === selectedRowId) ?? null;
   // Il confronto si chiude da se' quando la riga sparisce dal percorso.
   const compareRow = rows.find((r) => r.id === compareRowId) ?? null;
-
-  if (!id) return <PageLayout title={t.sets.manual.pageTitle}><Alert tone="danger">{t.sets.manual.notFound}</Alert></PageLayout>;
 
   const meta = set ? t.sets.manual.tracksMeta(set.track_count, fmtDuration(set.total_file_seconds)) : undefined;
 
@@ -214,7 +280,7 @@ function ManualSetInner() {
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted">
         <Link href="/sets" className="inline-flex items-center gap-1 hover:text-fg"><ArrowLeft size={14} /> {t.sets.backLink}</Link>
         <Badge>{t.sets.manual.manualBadge}</Badge>
-        {set && <span>{set.source_playlist_name ? t.sets.manual.fromPlaylist(set.source_playlist_name) : t.sets.manual.noPlaylist}</span>}
+        {!set && <><Badge>{t.sets.manual.draftBadge}</Badge> <span>{t.sets.manual.draftHint}</span></>}
       </div>
       {error && <div className="mb-3"><Alert tone="danger">⚠ {error}</Alert></div>}
       {conflict && (
@@ -254,10 +320,12 @@ function ManualSetInner() {
           </span>
         </div>
       )}
-      {set === null && !error && <Loading />}
-      {set && (
+      {setId !== null && set === null && !error && <Loading />}
+      {(set !== null || setId === null) && (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)]">
           <Card className="p-4"><CardHeader title={t.sets.manual.materialTitle} />
+            <SourcesPanel sources={set ? vista.sources : draftSources}
+              onAdd={(p) => void onAddSource(p)} onRemove={(p) => void onRemoveSource(p)} />
             <MaterialPanel material={material} query={query} owned={owned} unused={unused}
               reserved={reserved} onReserved={setReserved}
               onQuery={setQuery} onOwned={setOwned} onUnused={setUnused} onAdd={(it) => void onAdd(it)}
@@ -265,7 +333,7 @@ function ManualSetInner() {
               canAddAlternative={selected !== null} />
           </Card>
           <Card className="p-4"><CardHeader title={t.sets.manual.pathTitle} />
-            <PathPanel set={set} selectedRowId={selectedRowId} checkedRowIds={checkedRowIds}
+            <PathPanel set={vista} selectedRowId={selectedRowId} checkedRowIds={checkedRowIds}
               onSelect={(rid) => { setSelectedRowId(rid); setSaveState("idle"); }} onCheck={onCheck}
               onMove={(r, p) => void onMove(r, p)} onRemove={(r) => void onRemove(r)} onGapAfter={(r) => void onGapAfter(r)}
               onToReserve={(r) => void onToReserve(r)}
@@ -277,10 +345,10 @@ function ManualSetInner() {
                   onClose={() => setFillingRowId(null)} />
               )} />
             <BenchPanel blocks={benchBlocks} onToPath={(b) => void onBenchToPath(b)} />
-            <ReservePanel rows={set.reserve} onToPath={(r) => void onToPath(r)} onRemove={(r) => void onRemove(r)} />
+            <ReservePanel rows={vista.reserve} onToPath={(r) => void onToPath(r)} onRemove={(r) => void onRemove(r)} />
           </Card>
           <Card className="p-4"><CardHeader title={t.sets.manual.detailTitle} />
-            <DetailPanel row={selected} transitions={set.transitions} saveState={saveState}
+            <DetailPanel row={selected} transitions={vista.transitions} saveState={saveState}
               onSaveNote={(r, n) => void onSaveNote(r, n)}
               onSavePlayBpm={(r, b) => void onSavePlayBpm(r, b)}
               onSavePlannedSeconds={(r, s) => void onSavePlannedSeconds(r, s)}

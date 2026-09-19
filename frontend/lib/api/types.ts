@@ -517,8 +517,7 @@ export interface ManualSet {
   name: string;
   kind: string;
   revision: number;
-  source_playlist_id: number | null;
-  source_playlist_name: string | null;
+  sources: Source[]; // le playlist da cui pesca, nel loro ordine
   notes: string | null;
   blocks: ManualBlock[];
   reserve: ManualRow[]; // righe senza blocco: le tracce tenute in tasca
@@ -539,9 +538,15 @@ export interface MaterialItem {
   in_reserve: boolean;
 }
 
+/** Una playlist da cui il set pesca. `name` è null se la playlist è sparita
+ *  mentre il documento veniva costruito. */
+export interface Source {
+  playlist_id: number;
+  name: string | null;
+}
+
 export interface Material {
-  playlist_id: number | null;
-  playlist_name: string | null;
+  sources: Source[];
   items: MaterialItem[];
 }
 

@@ -1571,6 +1571,12 @@ export const en = {
       transitionNotePlaceholder: "How I come in, what I cut…",
       halftimeLabel: "half time",
       pitchLabel: "pitch",
+      sourcesTitle: "Where I dig from",
+      sourcesEmpty: "No playlist: the material is the library search alone.",
+      addSourceLabel: "Add a playlist",
+      removeSourceTitle: "Remove this source",
+      draftBadge: "draft",
+      draftHint: "The set is saved as soon as you put the first track in it.",
       durationLabel: "Duration",
       durationIncomplete: "partial estimate",
       durationIncompleteWhy: (rows: number, gaps: number) => [
