@@ -13,6 +13,7 @@ from app.schemas import (
     ManualRowOut,
     ManualSetOut,
     ManualTransitionOut,
+    SetDurationOut,
     SetlistOut,
     SetlistSummaryOut,
     SetlistTrackOut,
@@ -21,7 +22,9 @@ from app.schemas import (
     TrackPlaylistRef,
 )
 from app.services.manual_pairs import pair_compat
-from app.services.manual_set import can_redo, can_undo, pair_note_map, path_rows
+from app.services.manual_set import (
+    can_redo, can_undo, pair_note_map, path_rows, set_duration,
+)
 from app.services.scoring import classify_transition, mixing_overview, mixing_tip
 
 
@@ -181,7 +184,7 @@ def manual_set_out(setlist: Setlist, db: Session) -> ManualSetOut:
     def row_out(st) -> ManualRowOut:
         return ManualRowOut(
             id=st.id, block_id=st.block_id, position=st.position, slot_kind=st.slot_kind,
-            play_bpm=st.play_bpm,
+            play_bpm=st.play_bpm, planned_seconds=st.planned_seconds,
             track=track_out(st.track, ft_map.get(st.track_id)) if st.track is not None else None,
             note=st.note,
             alternatives=[ManualAlternativeOut(
@@ -231,6 +234,7 @@ def manual_set_out(setlist: Setlist, db: Session) -> ManualSetOut:
         track_count=len(with_track),
         total_file_seconds=sum(st.track.duration_seconds or 0 for st in with_track),
         transitions=transitions,
+        duration=SetDurationOut(**vars(set_duration(setlist))),
         can_undo=can_undo(setlist), can_redo=can_redo(setlist),
         created_at=_naive(setlist.created_at), updated_at=_naive(setlist.updated_at),
     )

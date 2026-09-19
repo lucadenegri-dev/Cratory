@@ -49,6 +49,7 @@ from app.serializers import alternative_out, manual_set_out, setlist_out, setlis
 from app.services.ai_curation import run_curated_generation
 from app.services.alternatives import AlternativesError, find_alternatives
 from app.services.app_state import get_language
+from app.services.manual_export import render_manual
 from app.services.manual_material import material_for
 from app.services.manual_set import (
     AlternativeNotFound,
@@ -289,7 +290,8 @@ def rows_patch(setlist_id: int, row_id: int, req: RowPatchRequest, db: Session =
         return manual_set_out(update_row(
             db, setlist_id, row_id, expected_revision=req.expected_revision,
             note=req.note if "note" in inviati else UNSET,
-            play_bpm=req.play_bpm if "play_bpm" in inviati else UNSET), db)
+            play_bpm=req.play_bpm if "play_bpm" in inviati else UNSET,
+            planned_seconds=req.planned_seconds if "planned_seconds" in inviati else UNSET), db)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
 
@@ -422,15 +424,24 @@ def pair_notes_put(setlist_id: int, req: PairNoteRequest, db: Session = Depends(
 @router.post("/{setlist_id}/export", response_class=PlainTextResponse)
 def export(
     setlist_id: int,
-    format: str = Query(default="text", pattern="^(text|csv|markdown|m3u8)$"),
+    format: str = Query(default="text", pattern="^(text|csv|markdown|m3u8|prep|reserve)$"),
     db: Session = Depends(get_db),
 ):
-    """Export del set: testo, CSV, Markdown o M3U8 (playlist Rekordbox). Export playlist Spotify: endpoint dedicato."""
+    """Export del set: testo, CSV, Markdown o M3U8 (playlist Rekordbox). Export playlist Spotify: endpoint dedicato.
+
+    I set preparati a mano leggono il PERCORSO RISOLTO e hanno in piu' la scheda
+    di preparazione (`prep`) e l'elenco delle riserve (`reserve`)."""
     setlist = get_setlist(db, setlist_id)
     if setlist is None:
         raise api_error(404, "set_not_found", "Set not found")
-    _require_generated(setlist)
     lang = get_language(db)
+    if setlist.kind == "manual":
+        contenuto, media = render_manual(setlist, format, lang)
+        return PlainTextResponse(contenuto, media_type=media)
+    if format in ("prep", "reserve"):
+        raise api_error(422, "set_format_not_available",
+                        "This format belongs to a hand-prepared set")
+    _require_generated(setlist)
 
     if format == "csv":
         buf = io.StringIO()

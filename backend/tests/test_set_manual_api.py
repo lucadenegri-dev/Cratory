@@ -157,7 +157,8 @@ def test_endpoint_classici_rifiutano_un_set_manuale_con_varco(client_db):
         assert resp.status_code == 409, resp.text
         assert resp.json()["detail"]["code"] == "set_is_manual"
 
-    _assert_manual(client.post(f"/api/sets/{sid}/export"))
+    # L'export NON e' piu' in questo elenco: dalla tappa 5 il set manuale ha i
+    # suoi formati e legge il percorso risolto (test_set_manual_export.py).
     _assert_manual(client.delete(f"/api/sets/{sid}/tracks/1"))
     _assert_manual(client.post(f"/api/sets/{sid}/tracks", json={"track_id": t[1].id}))
     _assert_manual(client.post(f"/api/sets/{sid}/tracks/1/move", json={"direction": "down"}))
@@ -478,3 +479,23 @@ def test_la_suono_a_via_http_e_la_patch_parziale(client_db):
     r = client.patch(f"/api/sets/{sid}/rows/{riga}",
                      json={"expected_revision": 3, "play_bpm": 999})
     assert r.status_code == 422
+
+
+def test_la_durata_esce_nel_documento(client_db):
+    client, db = client_db
+    _, t = _seed(db, n=2)   # due tracce da 300 secondi
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    doc = client.post(f"/api/sets/{sid}/rows",
+                      json={"expected_revision": 0, "track_ids": [x.id for x in t]}).json()
+    assert doc["duration"]["seconds"] == 600
+    assert doc["duration"]["incomplete"] is False
+
+    riga = _rows(doc)[0]["id"]
+    doc = client.patch(f"/api/sets/{sid}/rows/{riga}",
+                       json={"expected_revision": 1, "planned_seconds": 120}).json()
+    assert _rows(doc)[0]["planned_seconds"] == 120
+    assert doc["duration"]["seconds"] == 420
+
+    doc = client.post(f"/api/sets/{sid}/rows", json={
+        "expected_revision": 2, "gap": True, "after_row_id": riga}).json()
+    assert doc["duration"]["incomplete"] is True and doc["duration"]["open_gaps"] == 1

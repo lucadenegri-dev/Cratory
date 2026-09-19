@@ -256,6 +256,7 @@ class ManualRowOut(BaseModel):
     track: TrackOut | None = None  # None sui varchi
     note: str | None = None
     play_bpm: float | None = None  # "la suono a": vale in questo set, non in libreria
+    planned_seconds: int | None = None  # quanto la si tiene in questo set
     alternatives: list[ManualAlternativeOut] = []
 
 
@@ -265,6 +266,16 @@ class ManualBlockOut(BaseModel):
     placement: Literal["main", "bench"]
     position: int
     rows: list[ManualRowOut] = []
+
+
+class SetDurationOut(BaseModel):
+    """Durata del percorso risolto. `incomplete` non e' un dettaglio estetico:
+    dice che il totale e' una somma parziale, e i due conteggi dicono perche'."""
+
+    seconds: int = 0
+    incomplete: bool = False
+    unknown_rows: int = 0
+    open_gaps: int = 0
 
 
 class ManualTransitionOut(BaseModel):
@@ -301,6 +312,7 @@ class ManualSetOut(BaseModel):
     transitions: list["ManualTransitionOut"] = []
     track_count: int = 0
     total_file_seconds: int = 0  # somma delle durate dei file, i varchi non contano
+    duration: SetDurationOut = SetDurationOut()
     can_undo: bool = False
     can_redo: bool = False
     created_at: datetime
@@ -346,6 +358,7 @@ class RowPatchRequest(BaseModel):
     expected_revision: int = Field(ge=0)
     note: str | None = Field(default=None, max_length=2000)
     play_bpm: float | None = Field(default=None, ge=20, le=300)
+    planned_seconds: int | None = Field(default=None, ge=1, le=3600)
 
 
 class PairNoteRequest(BaseModel):
