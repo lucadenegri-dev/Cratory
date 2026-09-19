@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Redo2, Trash2, Undo2 } from "lucide-react";
 import {
   ApiError, addAlternatives, apiDelete, chooseAlternative, errText, fmtDuration, getManualSet,
-  getMaterial, insertRows, moveRow, patchRow, removeAlternative, removeRow,
-  type ManualAlternative, type ManualRow, type ManualSet, type Material, type MaterialItem,
+  getMaterial, groupRows, insertRows, moveBlock, moveRow, patchRow, redoSet, removeAlternative,
+  removeRow, renameBlock, splitBlock, undoSet,
+  type ManualAlternative, type ManualBlock, type ManualRow, type ManualSet, type Material,
+  type MaterialItem,
 } from "@/lib/api";
 import { Alert, Badge, Button, Card, CardHeader, Loading, Modal } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -16,6 +18,7 @@ import { PathPanel } from "@/components/set-builder/path-panel";
 import { DetailPanel, type SaveState } from "@/components/set-builder/detail-panel";
 import { ComparePanel } from "@/components/set-builder/compare-panel";
 import { ReservePanel } from "@/components/set-builder/reserve-panel";
+import { BenchPanel } from "@/components/set-builder/bench-panel";
 import { useT } from "@/lib/i18n";
 
 export default function ManualSetPage() {
@@ -38,6 +41,7 @@ function ManualSetInner() {
   const [unused, setUnused] = useState(false);
   const [reserved, setReserved] = useState(false);
   const [compareRowId, setCompareRowId] = useState<number | null>(null);
+  const [checkedRowIds, setCheckedRowIds] = useState<number[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstRun = useRef(true);
@@ -99,13 +103,81 @@ function ManualSetInner() {
     setSaveState(next ? "saved" : "error");
   };
 
+  const mainBlocks = set?.blocks.filter((b) => b.placement === "main") ?? [];
+  const benchBlocks = set?.blocks.filter((b) => b.placement === "bench") ?? [];
+
+  /** Le righe spuntate, se formano un gruppo contiguo di UNA sola sequenza.
+   *  Altrimenti non c'è niente da raggruppare e il comando non compare. */
+  const groupable = (() => {
+    if (checkedRowIds.length < 2) return null;
+    const block = mainBlocks.find((b) => b.rows.some((r) => checkedRowIds.includes(r.id)));
+    if (!block) return null;
+    const indici = block.rows
+      .map((r, i) => (checkedRowIds.includes(r.id) ? i : -1))
+      .filter((i) => i >= 0);
+    if (indici.length !== checkedRowIds.length) return null; // righe di sequenze diverse
+    const contigue = indici.every((v, k) => k === 0 || v === indici[k - 1] + 1);
+    if (!contigue) return null;
+    return indici.map((i) => block.rows[i].id);
+  })();
+
+  const onGroup = async () => {
+    if (!groupable) return;
+    await mutate((rev) => groupRows(id, { expected_revision: rev, row_ids: groupable, name: null }));
+    setCheckedRowIds([]);
+  };
+  const onCheck = (rowId: number) => setCheckedRowIds((prev) =>
+    prev.includes(rowId) ? prev.filter((x) => x !== rowId) : [...prev, rowId]);
+  const onRenameBlock = (block: ManualBlock, name: string) =>
+    mutate((rev) => renameBlock(id, block.id, { expected_revision: rev, name: name.trim() || null }));
+  const onMoveBlock = (block: ManualBlock, position: number) =>
+    mutate((rev) => moveBlock(id, block.id, { expected_revision: rev, position }));
+  const onToBench = (block: ManualBlock) =>
+    mutate((rev) => moveBlock(id, block.id, { expected_revision: rev, position: benchBlocks.length + 1, to_bench: true }));
+  const onBenchToPath = (block: ManualBlock) =>
+    mutate((rev) => moveBlock(id, block.id, { expected_revision: rev, position: mainBlocks.length + 1, to_bench: false }));
+  const onSplitBlock = (block: ManualBlock) =>
+    mutate((rev) => splitBlock(id, block.id, { expected_revision: rev }));
+
+  /** Annulla/ripeti. Un 409 «niente da annullare» non è un errore da mostrare:
+   *  il pulsante era già spento, e lo stato vero arriva ricaricando. */
+  const passoStorico = useCallback(async (avanti: boolean) => {
+    if (!set) return;
+    if (avanti ? !set.can_redo : !set.can_undo) return;
+    try {
+      setSet(await (avanti ? redoSet : undoSet)(id, { expected_revision: set.revision }));
+      setError(null);
+      setCheckedRowIds([]);
+      void loadMaterial();
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "set_revision_conflict") setConflict(true);
+      else if (e instanceof ApiError && (e.code === "set_nothing_to_undo" || e.code === "set_nothing_to_redo")) void reloadAll();
+      else setError(errText(e));
+    }
+  }, [set, id, loadMaterial, reloadAll]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "z" || !(e.metaKey || e.ctrlKey)) return;
+      // Dentro un campo di testo comanda l'annulla del browser: è la parola
+      // appena scritta che il DJ vuole indietro, non il set.
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      e.preventDefault();
+      void passoStorico(e.shiftKey);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [passoStorico]);
+
   const doDelete = async () => {
     setConfirmDelete(false);
     try { await apiDelete(`/api/sets/${id}`); router.push("/sets"); }
     catch (e) { setError(errText(e)); }
   };
 
-  const rows = set?.blocks.filter((b) => b.placement === "main").flatMap((b) => b.rows) ?? [];
+  const rows = mainBlocks.flatMap((b) => b.rows);
   const selected = rows.find((r) => r.id === selectedRowId) ?? null;
   // Il confronto si chiude da se' quando la riga sparisce dal percorso.
   const compareRow = rows.find((r) => r.id === compareRowId) ?? null;
@@ -136,6 +208,21 @@ function ManualSetInner() {
           </Alert>
         </div>
       )}
+      {set && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" disabled={!set.can_undo} onClick={() => void passoStorico(false)}>
+            <Undo2 size={15} /> {t.sets.manual.undoButton}
+          </Button>
+          <Button size="sm" variant="outline" disabled={!set.can_redo} onClick={() => void passoStorico(true)}>
+            <Redo2 size={15} /> {t.sets.manual.redoButton}
+          </Button>
+          {groupable && (
+            <Button size="sm" variant="outline" onClick={() => void onGroup()}>
+              {t.sets.manual.groupButton}
+            </Button>
+          )}
+        </div>
+      )}
       {set === null && !error && <Loading />}
       {set && (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)]">
@@ -147,9 +234,13 @@ function ManualSetInner() {
               canAddAlternative={selected !== null} />
           </Card>
           <Card className="p-4"><CardHeader title={t.sets.manual.pathTitle} />
-            <PathPanel set={set} selectedRowId={selectedRowId} onSelect={(rid) => { setSelectedRowId(rid); setSaveState("idle"); }}
+            <PathPanel set={set} selectedRowId={selectedRowId} checkedRowIds={checkedRowIds}
+              onSelect={(rid) => { setSelectedRowId(rid); setSaveState("idle"); }} onCheck={onCheck}
               onMove={(r, p) => void onMove(r, p)} onRemove={(r) => void onRemove(r)} onGapAfter={(r) => void onGapAfter(r)}
-              onToReserve={(r) => void onToReserve(r)} />
+              onToReserve={(r) => void onToReserve(r)}
+              onRenameBlock={(b, n) => void onRenameBlock(b, n)} onMoveBlock={(b, p) => void onMoveBlock(b, p)}
+              onToBench={(b) => void onToBench(b)} onSplitBlock={(b) => void onSplitBlock(b)} />
+            <BenchPanel blocks={benchBlocks} onToPath={(b) => void onBenchToPath(b)} />
             <ReservePanel rows={set.reserve} onToPath={(r) => void onToPath(r)} onRemove={(r) => void onRemove(r)} />
           </Card>
           <Card className="p-4"><CardHeader title={t.sets.manual.detailTitle} />

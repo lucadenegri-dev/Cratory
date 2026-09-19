@@ -61,3 +61,38 @@ export function removeAlternative(id: number, rowId: number, altId: number, expe
 export function chooseAlternative(id: number, rowId: number, altId: number, body: { expected_revision: number }) {
   return apiPost<ManualSet>(`/api/sets/${id}/rows/${rowId}/alternatives/${altId}/choose`, body);
 }
+
+/** Sequenze (tappa 3): i blocchi `main` del percorso e quelli `bench` del banco.
+ *  Le righe restano dove sono, cambia solo come sono divise. */
+export function groupRows(
+  id: number,
+  body: { expected_revision: number; row_ids: number[]; name?: string | null },
+) {
+  return apiPost<ManualSet>(`/api/sets/${id}/blocks`, body);
+}
+
+export function renameBlock(id: number, blockId: number, body: { expected_revision: number; name: string | null }) {
+  return apiPatch<ManualSet>(`/api/sets/${id}/blocks/${blockId}`, body);
+}
+
+export function moveBlock(
+  id: number,
+  blockId: number,
+  body: { expected_revision: number; position: number; to_bench?: boolean | null },
+) {
+  return apiPost<ManualSet>(`/api/sets/${id}/blocks/${blockId}/move`, body);
+}
+
+export function splitBlock(id: number, blockId: number, body: { expected_revision: number }) {
+  return apiPost<ManualSet>(`/api/sets/${id}/blocks/${blockId}/split`, body);
+}
+
+/** Annulla e ripeti. Attenzione: `revision` cresce anche annullando, quindi la
+ *  risposta e' sempre la verita' da rimettere nello stato. */
+export function undoSet(id: number, body: { expected_revision: number }) {
+  return apiPost<ManualSet>(`/api/sets/${id}/undo`, body);
+}
+
+export function redoSet(id: number, body: { expected_revision: number }) {
+  return apiPost<ManualSet>(`/api/sets/${id}/redo`, body);
+}

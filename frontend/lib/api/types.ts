@@ -493,6 +493,8 @@ export interface ManualSet {
   reserve: ManualRow[]; // righe senza blocco: le tracce tenute in tasca
   track_count: number;
   total_file_seconds: number;
+  can_undo: boolean;
+  can_redo: boolean;
   created_at: string;
   updated_at: string;
 }
