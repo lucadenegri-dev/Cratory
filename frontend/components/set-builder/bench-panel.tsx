@@ -42,7 +42,7 @@ export function BenchPanel({ blocks, onToPath }: Props) {
                   <span className="min-w-0 flex-1 truncate text-sm">
                     {row.track?.artist} – {row.track?.title}
                   </span>
-                  <span className="tnum hidden text-xs text-muted sm:inline">
+                  <span className="tnum hidden max-w-32 truncate text-xs text-muted xl:inline">
                     {row.track?.bpm ?? t.sets.manual.unknownValue}{" "}
                     · {row.track?.camelot_key ?? t.sets.manual.unknownValue}
                   </span>

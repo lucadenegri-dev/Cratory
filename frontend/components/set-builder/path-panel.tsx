@@ -86,7 +86,9 @@ export function PathPanel({
                   )}
                 </button>
                 {row.track && (
-                  <span className="tnum hidden text-xs text-muted sm:inline">
+                  // Colonna stretta: il titolo ha la precedenza sui dati tecnici,
+                  // che senza un limite lo schiacciavano a una lettera.
+                  <span className="tnum hidden max-w-32 truncate text-xs text-muted xl:inline">
                     {row.track.bpm ?? t.sets.manual.unknownValue}{" "}
                     · {row.track.camelot_key ?? t.sets.manual.unknownValue}
                   </span>

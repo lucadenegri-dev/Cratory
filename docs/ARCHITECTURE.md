@@ -460,7 +460,7 @@ missing BPM bridges, flat energy, harmonic dead ends). `/api/transitions` classi
 of tracks on its own. `services/labels.py` aggregates the library per record label, reading
 the label from the effective tag.
 
-### Manual set (tappe 1-2)
+### Manual set (tappe 1-3)
 
 A DJ can build a set by hand instead of generating one: `Setlist.kind` is `generated`
 (everything above) or `manual`. A manual set has no strategy, no target duration and
@@ -484,10 +484,31 @@ table of its own: it is the rows with `block_id NULL`, and it stays out of the s
 track count and duration. Both lists renumber contiguously, and the "one track at
 most once" rule binds the path only.
 
-The frontend's `/sets/manual?id=…` (three panels: material, path, detail) and the
-list at `/sets` route by `kind` — see
+`services/manual_history.py` is undo and redo. After every gesture it saves a
+`SetlistRevision`: a JSON snapshot of the whole structure — blocks, rows, alternatives
+— **with their ids**. Restoring means deleting the structure and recreating it from
+the snapshot with those same ids, so the references the client holds stay valid; a
+row that comes back from an undo is the row that left. Delete-and-recreate rather than
+an incremental diff because a manual set has dozens of rows, not thousands, and this
+shape is far easier to verify. Three rules around it: the first new change after an
+undo discards the redo branch; consecutive edits of the same row's note collapse into
+one revision, so undoing does not walk back a letter at a time, while every other
+gesture is one click and stays its own revision; and only the last 50 are kept.
+
+`Setlist.revision` and `Setlist.undo_seq` are deliberately two different things.
+`revision` only ever grows — undo and redo bump it too — and is the concurrency check;
+`undo_seq` is the cursor saying which snapshot the current state matches. If one field
+did both, undoing would walk `revision` backwards and the next edit would return it to
+a value a client had already seen on a different state: that client would pass the
+check and overwrite without noticing.
+
+The frontend's `/sets/manual?id=…` (three panels: material, path, detail, with the
+bench and the reserve under the path) and the list at `/sets` route by `kind`. A row's
+up/down arrows move it inside its own sequence, so they stop at its edges: crossing a
+boundary means moving the sequence itself. See
 `docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the staged plan
-(tappe 1-2: no bench or named sequences, no undo, no pair notes, no export).
+(tappe 1-3: no pair notes, no `play_bpm` or pitch percentage, no planned duration,
+no export).
 
 ## Discovery
 

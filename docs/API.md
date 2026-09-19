@@ -520,7 +520,7 @@ local file are excluded and their count noted in a leading comment. To export to
 Spotify instead, use `POST /api/spotify/create-playlist`. This export stays scoped to
 generated sets: the manual set below has no dedicated export in this stage.
 
-### Set manuale (banco di preparazione, tappe 1-2)
+### Set manuale (banco di preparazione, tappe 1-3)
 
 ```text
 POST   /api/sets/manual
@@ -533,6 +533,12 @@ DELETE /api/sets/{setlist_id}/rows/{row_id}
 POST   /api/sets/{setlist_id}/rows/{row_id}/alternatives
 POST   /api/sets/{setlist_id}/rows/{row_id}/alternatives/{alt_id}/choose
 DELETE /api/sets/{setlist_id}/rows/{row_id}/alternatives/{alt_id}
+POST   /api/sets/{setlist_id}/blocks
+PATCH  /api/sets/{setlist_id}/blocks/{block_id}
+POST   /api/sets/{setlist_id}/blocks/{block_id}/move
+POST   /api/sets/{setlist_id}/blocks/{block_id}/split
+POST   /api/sets/{setlist_id}/undo
+POST   /api/sets/{setlist_id}/redo
 ```
 
 A DJ builds a set by hand from a playlist instead of generating one:
@@ -550,7 +556,10 @@ row can carry a free-text `note`, and `alternatives` — the candidates the DJ k
 beside it (`ManualAlternativeOut`: `id`, `position`, `track`, `note`). Alongside
 `blocks`, `reserve` holds the rows with no block: tracks set aside for the night,
 which are **not** part of the path and are excluded from `track_count` and
-`total_file_seconds`.
+`total_file_seconds`. A block's `placement` is `main` (a sequence of the path) or
+`bench` (parked outside it); the bench is excluded from those two totals too. Two
+more flags, `can_undo` and `can_redo`, say whether the two history endpoints below
+would do anything.
 
 `GET /api/sets/{setlist_id}/material?q=&owned=&unused=&reserved=` returns the source
 playlist read fresh (not a snapshot taken at creation), the tracks already in the set,
@@ -586,9 +595,34 @@ lands on the wrong row.
   (`expected_revision` as a query parameter, like the row delete).
 - `PATCH .../rows/{row_id}` sets or clears `note` (max 2000 characters).
 - `DELETE .../rows/{row_id}` removes one row.
+- `POST .../blocks` groups 2 to 200 `row_ids` — contiguous rows of one and the same
+  block — into a new sequence in their place, with an optional `name` (max 120
+  characters). The order of the path does not change: what changes is how it is
+  divided. Rows that are not contiguous, that belong to different blocks, or fewer
+  than two of them, are refused before anything is touched.
+- `PATCH .../blocks/{block_id}` renames the sequence; an empty or blank `name`
+  leaves it unnamed.
+- `POST .../blocks/{block_id}/move` moves the whole sequence to a 1-based
+  `position` among the blocks of its destination, never touching its internal
+  order. `to_bench` changes that destination: `true` parks it on the bench,
+  `false` brings it back into the path, `null` leaves it where it is.
+- `POST .../blocks/{block_id}/split` dissolves the sequence: its rows stay in the
+  path, in order, joining the block before it (or the one after it, if it was
+  first). The only sequence of a placement cannot be split.
+- `POST .../undo` and `POST .../redo` step the history back and forth. A restored
+  row comes back with **the same id**, so references the client already holds stay
+  valid. Note that `revision` **grows on undo too**: undoing is a change like any
+  other, and a client still holding the previous value must be refused. The undo
+  cursor is a separate, internal `undo_seq`, never exposed: if `revision` went
+  backwards, a later edit would return it to a value a client had already seen on a
+  different state, and that client would pass the concurrency check on a state that
+  no longer exists. The last 50 states are kept; consecutive edits of the same row's
+  note collapse into one, so undoing does not walk back one letter at a time; and
+  the first new change after an undo discards the redo branch.
 
 New error codes: `404 set_not_found`, `409 set_not_manual` (a generated set hit a
-manual-only endpoint), `404 set_row_not_found`, `404 set_alternative_not_found`
+manual-only endpoint), `404 set_row_not_found`, `404 set_block_not_found`,
+`409 set_nothing_to_undo`, `409 set_nothing_to_redo`, `404 set_alternative_not_found`
 (the candidate does not sit on that row), `404 playlist_not_found` (creating
 from a playlist id that no longer exists), `422 manual_set_error` with a `reason` for
 anything else domain-specific, plus the `409 set_is_manual` above on the classic
@@ -599,9 +633,8 @@ These candidates are the DJ's own, saved on the row. They are unrelated to
 which stays reserved for generated sets.
 
 Manual sets never go through `assign_roles`, transition recomputation or the
-deterministic generator above. These stages have no multiple sequences or bench, no
-undo, no pair notes or "tried" state, no `play_bpm` or pitch percentage, no planned
-duration and no dedicated export — see
+deterministic generator above. These stages have no pair notes or "tried" state, no
+`play_bpm` or pitch percentage, no planned duration and no dedicated export — see
 `docs/superpowers/specs/2026-09-15-set-builder-workbench.md` for the full staged plan.
 
 ## Transitions

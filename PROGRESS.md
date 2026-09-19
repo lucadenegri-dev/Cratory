@@ -37,6 +37,26 @@ described in `CLAUDE.md`.
   dedicato, "riempi il varco" — tappe 3-6, piano in
   `docs/superpowers/plans/2026-09-19-set-manuale-tappa-2.md`.
 
+- **Set manuale, tappa 3 (2026-09-19).** Il percorso si divide in sequenze: si
+  spuntano due o più righe contigue e si raggruppano, con un nome; la sequenza si
+  rinomina, si sposta intera (l'ordine interno non si tocca mai), si separa, o si
+  parcheggia sul **banco** — fuori dal percorso, senza entrare nel conteggio né nella
+  durata. Le frecce di una riga muovono dentro la sua sequenza e ai suoi estremi sono
+  spente: per attraversare un confine si sposta la sequenza. **Annulla e ripeti**
+  (pulsanti in cima, `cmd/ctrl+z` e `cmd/ctrl+shift+z`, disattivati dentro un campo
+  di testo, dove comanda l'annulla del browser) coprono la struttura: dopo ogni gesto
+  una `SetlistRevision` salva una fotografia di blocchi, righe e alternative con i
+  loro id, e ripristinarla rimette esattamente quelle righe — una riga annullata torna
+  con lo stesso id. Le ultime 50; gli edit consecutivi dello stesso appunto si
+  accorpano in una revisione sola, ogni altro gesto resta la sua; la prima modifica
+  dopo un annulla chiude il ripeti. `Setlist.revision` cresce sempre, annulla
+  compreso, ed è solo il controllo di concorrenza: il cursore dell'annulla è
+  `undo_seq`, interno, perché un campo solo per entrambi lascerebbe un client fermo a
+  un numero già visto credersi aggiornato su uno stato che non esiste più. Cosa non
+  c'è ancora: note di coppia e stato "provato", `play_bpm` e percentuale di pitch,
+  durata pianificata, export dedicato, "riempi il varco" — tappe 4-6, piano in
+  `docs/superpowers/plans/2026-09-19-set-manuale-tappa-3.md`.
+
 - **Impostazioni in cinque sezioni (2026-09-15).** Generali · Libreria · Download ·
   Collegamenti · Backup, scelte da `?section=` con i pannelli montati e nascosti,
   così una bozza non salvata sopravvive al cambio sezione e ogni form di cartelle

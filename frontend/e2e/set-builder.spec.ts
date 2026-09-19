@@ -31,7 +31,9 @@ test("alternative e riserva sopravvivono al ricaricamento", async ({ page, reque
   });
 
   await page.goto(`/sets/manual?id=${set.id}`);
-  await expect(page.getByText("Traccia 0")).toBeVisible();
+  // Nel percorso: la stessa traccia compare anche fra il materiale, che elenca
+  // pure quelle già nel set.
+  await expect(page.getByTestId("path-panel").getByText("Traccia 0")).toBeVisible();
 
   // Seleziona la prima riga del percorso, poi tieni la terza traccia come sua
   // candidata: il comando compare sulle righe del materiale solo con una riga
@@ -58,4 +60,43 @@ test("alternative e riserva sopravvivono al ricaricamento", async ({ page, reque
   await expect(page.getByTestId("reserve-panel").getByText("Traccia 3")).toBeVisible();
   await page.getByTestId("path-panel").getByRole("button", { name: /Traccia 2/ }).click();
   await expect(page.getByTestId("detail-panel").getByText("Traccia 0")).toBeVisible();
+});
+
+test("sequenze, banco e annulla sopravvivono al ricaricamento", async ({ page, request }) => {
+  const { playlistId, trackIds } = await seminaTracce(request, 4);
+  const creato = await request.post("/api/sets/manual", { data: { playlist_id: playlistId } });
+  expect(creato.ok()).toBeTruthy();
+  const set = await creato.json();
+  await request.post(`/api/sets/${set.id}/rows`, {
+    data: { expected_revision: 0, track_ids: trackIds },
+  });
+
+  await page.goto(`/sets/manual?id=${set.id}`);
+  const percorso = page.getByTestId("path-panel");
+  await expect(percorso.getByText("Traccia 0")).toBeVisible();
+
+  // Raggruppa le due centrali: il percorso resta di quattro righe, cambia solo
+  // come e' diviso.
+  const riga = (n: number) => percorso.locator("li").filter({ hasText: `Traccia ${n}` });
+  await riga(1).getByLabel("Seleziona la riga").check();
+  await riga(2).getByLabel("Seleziona la riga").check();
+  await page.getByRole("button", { name: "Raggruppa" }).click();
+  await expect(percorso.locator("li")).toHaveCount(4);
+  await expect(percorso.locator("section")).toHaveCount(3);
+
+  // Parcheggia la sequenza centrale sul banco: due righe restano nel percorso.
+  await percorso.locator("section").nth(1).getByTitle("Sposta sul banco").click();
+  await expect(page.getByTestId("bench-panel").getByText("Traccia 1")).toBeVisible();
+  await expect(percorso.locator("li")).toHaveCount(2);
+
+  // Due annulla riportano il percorso a quattro righe in una sequenza sola.
+  await page.getByRole("button", { name: "Annulla" }).click();
+  await expect(percorso.locator("li")).toHaveCount(4);
+  await page.getByRole("button", { name: "Annulla" }).click();
+  await expect(percorso.locator("section")).toHaveCount(1);
+
+  // Lo stato annullato e' quello salvato, non una finzione della pagina.
+  await page.reload();
+  await expect(page.getByTestId("path-panel").locator("li")).toHaveCount(4);
+  await expect(page.getByTestId("path-panel").locator("section")).toHaveCount(1);
 });
