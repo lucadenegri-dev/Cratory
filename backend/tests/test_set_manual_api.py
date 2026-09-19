@@ -413,3 +413,68 @@ def test_annulla_e_ripeti_via_http(client_db):
 
     r = client.post(f"/api/sets/{sid}/redo", json={"expected_revision": 3})
     assert r.status_code == 409 and r.json()["detail"]["code"] == "set_nothing_to_redo"
+
+
+# --- Passaggi e tempo di cabina (tappa 4) --------------------------------------
+
+
+def test_passaggi_e_appunti_di_coppia_via_http(client_db):
+    client, db = client_db
+    _, t = _seed(db, n=3)   # tutte a 124 BPM
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    doc = client.post(f"/api/sets/{sid}/rows",
+                      json={"expected_revision": 0, "track_ids": [t[0].id, t[1].id]}).json()
+    assert len(doc["transitions"]) == 1
+    passaggio = doc["transitions"][0]
+    assert passaggio["from_track_id"] == t[0].id and passaggio["to_track_id"] == t[1].id
+    assert passaggio["bpm_percent"] == 0.0        # stesso tempo: niente pitch
+    assert passaggio["note"] is None
+
+    r = client.put(f"/api/sets/{sid}/pair-notes", json={
+        "expected_revision": 1, "from_track_id": t[0].id, "to_track_id": t[1].id,
+        "note": "entra sul break"})
+    assert r.status_code == 200, r.text
+    assert r.json()["transitions"][0]["note"] == "entra sul break"
+
+    r = client.put(f"/api/sets/{sid}/pair-notes", json={
+        "expected_revision": 2, "from_track_id": 999999, "to_track_id": t[1].id, "note": "x"})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "manual_set_error"
+
+
+def test_un_varco_spezza_il_passaggio(client_db):
+    """Regola della spec: finche' il varco e' aperto, le tracce ai suoi lati non
+    sono vicine e nessuna compatibilita' si calcola fra loro."""
+    client, db = client_db
+    _, t = _seed(db, n=2)
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    doc = client.post(f"/api/sets/{sid}/rows",
+                      json={"expected_revision": 0, "track_ids": [t[0].id, t[1].id]}).json()
+    prima = _rows(doc)[0]
+    doc = client.post(f"/api/sets/{sid}/rows", json={
+        "expected_revision": 1, "gap": True, "after_row_id": prima["id"]}).json()
+    assert doc["transitions"] == []
+
+
+def test_la_suono_a_via_http_e_la_patch_parziale(client_db):
+    client, db = client_db
+    _, t = _seed(db, n=2)
+    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
+    doc = client.post(f"/api/sets/{sid}/rows",
+                      json={"expected_revision": 0, "track_ids": [t[0].id, t[1].id]}).json()
+    riga = _rows(doc)[0]["id"]
+
+    r = client.patch(f"/api/sets/{sid}/rows/{riga}",
+                     json={"expected_revision": 1, "play_bpm": 130})
+    assert r.status_code == 200, r.text
+    assert _rows(r.json())[0]["play_bpm"] == 130.0
+    # 124 -> 130 sul primo, il secondo resta a 124: serve pitch all'indietro.
+    assert r.json()["transitions"][0]["bpm_from"] == 130.0
+
+    r = client.patch(f"/api/sets/{sid}/rows/{riga}",
+                     json={"expected_revision": 2, "note": "solo la nota"})
+    assert _rows(r.json())[0]["play_bpm"] == 130.0   # non azzerato dalla PATCH parziale
+    assert _rows(r.json())[0]["note"] == "solo la nota"
+
+    r = client.patch(f"/api/sets/{sid}/rows/{riga}",
+                     json={"expected_revision": 3, "play_bpm": 999})
+    assert r.status_code == 422

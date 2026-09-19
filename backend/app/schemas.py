@@ -255,6 +255,7 @@ class ManualRowOut(BaseModel):
     slot_kind: Literal["track", "gap"]
     track: TrackOut | None = None  # None sui varchi
     note: str | None = None
+    play_bpm: float | None = None  # "la suono a": vale in questo set, non in libreria
     alternatives: list[ManualAlternativeOut] = []
 
 
@@ -264,6 +265,27 @@ class ManualBlockOut(BaseModel):
     placement: Literal["main", "bench"]
     position: int
     rows: list[ManualRowOut] = []
+
+
+class ManualTransitionOut(BaseModel):
+    """Il passaggio fra due righe `track` vicine. Calcolato a ogni lettura, mai
+    salvato; `score` e `bpm_percent` sono `None` quando un dato manca, e
+    `missing` dice quale — «sconosciuto», non un punteggio neutro."""
+
+    from_row_id: int
+    to_row_id: int
+    from_track_id: int
+    to_track_id: int
+    bpm_from: float | None = None
+    bpm_to: float | None = None
+    bpm_percent: float | None = None
+    halftime: bool = False
+    key_from: str | None = None
+    key_to: str | None = None
+    key_relation: Literal["same", "same_number", "adjacent", "weak", "unknown"] = "unknown"
+    score: int | None = None
+    missing: list[str] = []
+    note: str | None = None
 
 
 class ManualSetOut(BaseModel):
@@ -276,6 +298,7 @@ class ManualSetOut(BaseModel):
     notes: str | None = None
     blocks: list[ManualBlockOut] = []
     reserve: list[ManualRowOut] = []  # righe senza blocco: le tracce tenute in tasca
+    transitions: list["ManualTransitionOut"] = []
     track_count: int = 0
     total_file_seconds: int = 0  # somma delle durate dei file, i varchi non contano
     can_undo: bool = False
@@ -318,7 +341,17 @@ class AlternativeChooseRequest(BaseModel):
 
 
 class RowPatchRequest(BaseModel):
+    """PATCH parziale: un campo assente non si tocca, `null` azzera."""
+
     expected_revision: int = Field(ge=0)
+    note: str | None = Field(default=None, max_length=2000)
+    play_bpm: float | None = Field(default=None, ge=20, le=300)
+
+
+class PairNoteRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    from_track_id: int
+    to_track_id: int
     note: str | None = Field(default=None, max_length=2000)
 
 

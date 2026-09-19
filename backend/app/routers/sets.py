@@ -25,6 +25,7 @@ from app.schemas import (
     BlockMoveRequest,
     BlockRenameRequest,
     HistoryStepRequest,
+    PairNoteRequest,
     AddTrackRequest,
     AlternativesRequest,
     AlternativesResponse,
@@ -64,6 +65,7 @@ from app.services.manual_set import (
     RowNotFound,
     create_manual_set,
     insert_rows,
+    UNSET,
     group_rows,
     load_manual_set,
     move_block,
@@ -71,9 +73,10 @@ from app.services.manual_set import (
     redo,
     remove_row,
     rename_block,
+    set_pair_note,
     split_block,
     undo,
-    update_row_note,
+    update_row,
 )
 from app.services.set_editor import (
     SetEditError,
@@ -280,9 +283,13 @@ def rows_move(setlist_id: int, row_id: int, req: RowMoveRequest, db: Session = D
 
 @router.patch("/{setlist_id}/rows/{row_id}", response_model=ManualSetOut)
 def rows_patch(setlist_id: int, row_id: int, req: RowPatchRequest, db: Session = Depends(get_db)):
+    """Aggiorna i soli campi MANDATI: un campo assente non e' un campo da azzerare."""
+    inviati = req.model_fields_set
     try:
-        return manual_set_out(update_row_note(
-            db, setlist_id, row_id, expected_revision=req.expected_revision, note=req.note), db)
+        return manual_set_out(update_row(
+            db, setlist_id, row_id, expected_revision=req.expected_revision,
+            note=req.note if "note" in inviati else UNSET,
+            play_bpm=req.play_bpm if "play_bpm" in inviati else UNSET), db)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
 
@@ -395,6 +402,19 @@ def history_redo(setlist_id: int, req: HistoryStepRequest, db: Session = Depends
     """Rimette quello che si era annullato, finche' non si fa altro."""
     try:
         return manual_set_out(redo(db, setlist_id, expected_revision=req.expected_revision), db)
+    except ManualSetError as exc:
+        raise _manual_error(exc) from exc
+
+
+@router.put("/{setlist_id}/pair-notes", response_model=ManualSetOut)
+def pair_notes_put(setlist_id: int, req: PairNoteRequest, db: Session = Depends(get_db)):
+    """Appunto su un passaggio, legato alle due TRACCE: sopravvive a chi cambia
+    idea sul percorso. Testo vuoto = cancella."""
+    try:
+        return manual_set_out(set_pair_note(
+            db, setlist_id, expected_revision=req.expected_revision,
+            from_track_id=req.from_track_id, to_track_id=req.to_track_id,
+            note=req.note), db)
     except ManualSetError as exc:
         raise _manual_error(exc) from exc
 

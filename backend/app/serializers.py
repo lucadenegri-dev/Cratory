@@ -12,6 +12,7 @@ from app.schemas import (
     ManualBlockOut,
     ManualRowOut,
     ManualSetOut,
+    ManualTransitionOut,
     SetlistOut,
     SetlistSummaryOut,
     SetlistTrackOut,
@@ -19,7 +20,8 @@ from app.schemas import (
     TrackOut,
     TrackPlaylistRef,
 )
-from app.services.manual_set import can_redo, can_undo
+from app.services.manual_pairs import pair_compat
+from app.services.manual_set import can_redo, can_undo, pair_note_map, path_rows
 from app.services.scoring import classify_transition, mixing_overview, mixing_tip
 
 
@@ -179,6 +181,7 @@ def manual_set_out(setlist: Setlist, db: Session) -> ManualSetOut:
     def row_out(st) -> ManualRowOut:
         return ManualRowOut(
             id=st.id, block_id=st.block_id, position=st.position, slot_kind=st.slot_kind,
+            play_bpm=st.play_bpm,
             track=track_out(st.track, ft_map.get(st.track_id)) if st.track is not None else None,
             note=st.note,
             alternatives=[ManualAlternativeOut(
@@ -199,6 +202,24 @@ def manual_set_out(setlist: Setlist, db: Session) -> ManualSetOut:
     nel_percorso = {b.id for b in setlist.blocks if b.placement == "main"}
     with_track = [st for st in setlist.tracks
                   if st.track is not None and st.block_id in nel_percorso]
+    # I passaggi: solo fra righe con traccia e consecutive NEL PERCORSO. Un
+    # varco aperto spezza la coppia (regola della spec), mentre il confine fra
+    # due sequenze no: in cabina quelle due tracce si susseguono davvero.
+    note_coppie = pair_note_map(setlist)
+    transitions = []
+    percorso = path_rows(setlist)
+    for prima, dopo in zip(percorso, percorso[1:]):
+        if prima.track is None or dopo.track is None:
+            continue
+        c = pair_compat(prima, dopo)
+        transitions.append(ManualTransitionOut(
+            from_row_id=prima.id, to_row_id=dopo.id,
+            from_track_id=prima.track_id, to_track_id=dopo.track_id,
+            bpm_from=c.bpm_from, bpm_to=c.bpm_to, bpm_percent=c.bpm_percent,
+            halftime=c.halftime, key_from=c.key_from, key_to=c.key_to,
+            key_relation=c.key_relation, score=c.score, missing=c.missing,
+            note=note_coppie.get((prima.track_id, dopo.track_id)),
+        ))
     playlist = get_playlist(db, setlist.source_playlist_id) if setlist.source_playlist_id else None
     return ManualSetOut(
         id=setlist.id, name=setlist.name, kind=setlist.kind, revision=setlist.revision,
@@ -209,6 +230,7 @@ def manual_set_out(setlist: Setlist, db: Session) -> ManualSetOut:
             (st for st in setlist.tracks if st.block_id is None), key=lambda st: st.position)],
         track_count=len(with_track),
         total_file_seconds=sum(st.track.duration_seconds or 0 for st in with_track),
+        transitions=transitions,
         can_undo=can_undo(setlist), can_redo=can_redo(setlist),
         created_at=_naive(setlist.created_at), updated_at=_naive(setlist.updated_at),
     )
