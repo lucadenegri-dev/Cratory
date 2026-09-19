@@ -13,6 +13,15 @@ from sqlalchemy.orm import Session
 from app.models import Setlist, SetlistAlternative, SetlistBlock, SetlistRevision, SetlistTrack
 
 MAX_REVISIONS = 50
+# Solo gli appunti si accorpano. Una nota si scrive un carattere alla volta e il
+# client manda una PATCH per volta: senza accorpamento, annullare tornerebbe
+# indietro di una lettera. Ogni altro gesto e' un clic solo, e due clic di fila
+# devono restare due revisioni — altrimenti un annulla ne cancellerebbe due.
+MERGEABLE = ("note:",)
+
+
+def _accorpabile(kind: str) -> bool:
+    return kind.startswith(MERGEABLE)
 
 
 def snapshot_of(setlist: Setlist) -> dict:
@@ -67,6 +76,9 @@ def restore(db: Session, setlist: Setlist, snapshot: dict) -> None:
 
 def record(db: Session, setlist: Setlist, kind: str) -> None:
     """Salva lo stato corrente come revisione dopo il cursore. Non committa."""
+    # Prima di fotografare: le righe appena aggiunte dal chiamante sono ancora
+    # pendenti e il loro id e' None, e uno snapshot senza id non si ripristina.
+    db.flush()
     revisioni = sorted(setlist.revisions, key=lambda r: r.seq)
     # Il ramo «ripeti» muore appena si fa qualcosa di nuovo dopo un annulla.
     for vecchia in [r for r in revisioni if r.seq > setlist.undo_seq]:
@@ -74,9 +86,9 @@ def record(db: Session, setlist: Setlist, kind: str) -> None:
     revisioni = sorted(setlist.revisions, key=lambda r: r.seq)
 
     ultima = revisioni[-1] if revisioni else None
-    if ultima is not None and ultima.kind == kind and ultima.seq == setlist.undo_seq:
-        # Stesso gesto di fila (la stessa nota mentre si scrive): una revisione
-        # sola, altrimenti annullare tornerebbe indietro di un carattere.
+    if (ultima is not None and ultima.kind == kind and ultima.seq == setlist.undo_seq
+            and _accorpabile(kind)):
+        # Stessa nota di fila: una revisione sola.
         ultima.snapshot = snapshot_of(setlist)
         db.flush()
         return

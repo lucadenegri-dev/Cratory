@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Setlist, SetlistAlternative, SetlistBlock, SetlistTrack
 from app.repositories import get_playlist, get_setlist, get_track
+from app.services.manual_history import record, restore
 
 
 class ManualSetError(Exception):
@@ -34,6 +35,14 @@ class AlternativeNotFound(ManualSetError):
     pass
 
 
+class NothingToUndo(ManualSetError):
+    pass
+
+
+class NothingToRedo(ManualSetError):
+    pass
+
+
 class RevisionConflict(ManualSetError):
     def __init__(self, current: int):
         super().__init__(f"Revision mismatch: current is {current}")
@@ -49,6 +58,8 @@ def create_manual_set(db: Session, *, name: str | None, playlist_id: int | None)
     clean = (name or "").strip() or (playlist.name if playlist is not None else "Set")
     setlist = Setlist(name=clean, kind="manual", source_playlist_id=playlist_id, generated_by="manual")
     db.add(setlist)
+    db.flush()
+    record(db, setlist, "create")  # la revisione 0 e' il set vuoto: la prima mutazione e' annullabile
     db.commit()
     return get_setlist(db, setlist.id)
 
@@ -108,8 +119,13 @@ def _row_of(setlist: Setlist, row_id: int) -> SetlistTrack:
     raise RowNotFound("Row not found")
 
 
-def _commit_bumped(db: Session, setlist: Setlist) -> Setlist:
+def _commit_bumped(db: Session, setlist: Setlist, kind: str) -> Setlist:
+    """Incrementa la revisione, salva lo snapshot e committa, in una transazione.
+
+    `kind` etichetta il gesto: due gesti uguali di fila si accorpano in una
+    revisione sola (vedi manual_history.record)."""
     setlist.revision += 1
+    record(db, setlist, kind)
     db.commit()
     return get_setlist(db, setlist.id)
 
@@ -160,7 +176,7 @@ def insert_rows(db: Session, setlist_id: int, *, expected_revision: int,
         db.add(row)
         setlist.tracks.append(row)
     _renumber(rows)
-    return _commit_bumped(db, setlist)
+    return _commit_bumped(db, setlist, "rows")
 
 
 def move_row(db: Session, setlist_id: int, row_id: int, *, expected_revision: int,
@@ -205,7 +221,7 @@ def move_row(db: Session, setlist_id: int, row_id: int, *, expected_revision: in
         destinazione.remove(row)
     destinazione.insert(position - 1, row)
     _renumber(destinazione)
-    return _commit_bumped(db, setlist)
+    return _commit_bumped(db, setlist, "move")
 
 
 def remove_row(db: Session, setlist_id: int, row_id: int, *, expected_revision: int) -> Setlist:
@@ -216,7 +232,7 @@ def remove_row(db: Session, setlist_id: int, row_id: int, *, expected_revision: 
     rows = [r for r in vicine if r.block_id == row.block_id and r.id != row.id]
     setlist.tracks.remove(row)  # delete-orphan sulla relazione: la riga sparisce
     _renumber(rows)
-    return _commit_bumped(db, setlist)
+    return _commit_bumped(db, setlist, "remove")
 
 
 def update_row_note(db: Session, setlist_id: int, row_id: int, *, expected_revision: int,
@@ -225,7 +241,7 @@ def update_row_note(db: Session, setlist_id: int, row_id: int, *, expected_revis
     _check_revision(setlist, expected_revision)
     row = _row_of(setlist, row_id)
     row.note = (note or "").strip() or None
-    return _commit_bumped(db, setlist)
+    return _commit_bumped(db, setlist, f"note:{row.id}")
 
 
 # --- Alternative (tappa 2) -----------------------------------------------------
@@ -265,7 +281,7 @@ def add_alternatives(db: Session, setlist_id: int, row_id: int, *, expected_revi
         row.alternatives.append(alt)
         alts.append(alt)
     _renumber_alts(alts)
-    return _commit_bumped(db, setlist)
+    return _commit_bumped(db, setlist, "alts")
 
 
 def remove_alternative(db: Session, setlist_id: int, row_id: int, alt_id: int, *,
@@ -276,7 +292,7 @@ def remove_alternative(db: Session, setlist_id: int, row_id: int, alt_id: int, *
     alt = _alt_of(row, alt_id)
     row.alternatives.remove(alt)  # delete-orphan: la candidata sparisce
     _renumber_alts(list(row.alternatives))
-    return _commit_bumped(db, setlist)
+    return _commit_bumped(db, setlist, "alts")
 
 
 def choose_alternative(db: Session, setlist_id: int, row_id: int, alt_id: int, *,
@@ -301,4 +317,40 @@ def choose_alternative(db: Session, setlist_id: int, row_id: int, alt_id: int, *
             SetlistAlternative(setlist_track_id=row.id, track_id=uscente, position=0)
         )
     _renumber_alts(list(row.alternatives))
-    return _commit_bumped(db, setlist)
+    return _commit_bumped(db, setlist, "choose")
+
+
+# --- Cronologia: annulla e ripeti (tappa 3) ------------------------------------
+
+
+def can_undo(setlist: Setlist) -> bool:
+    return any(r.seq < setlist.undo_seq for r in setlist.revisions)
+
+
+def can_redo(setlist: Setlist) -> bool:
+    return any(r.seq > setlist.undo_seq for r in setlist.revisions)
+
+
+def _muovi_cursore(db: Session, setlist_id: int, expected_revision: int, avanti: bool) -> Setlist:
+    setlist = load_manual_set(db, setlist_id)
+    _check_revision(setlist, expected_revision)
+    candidate = [r for r in setlist.revisions
+                 if (r.seq > setlist.undo_seq if avanti else r.seq < setlist.undo_seq)]
+    if not candidate:
+        raise NothingToRedo("Nothing to redo") if avanti else NothingToUndo("Nothing to undo")
+    bersaglio = min(candidate, key=lambda r: r.seq) if avanti else max(candidate, key=lambda r: r.seq)
+    restore(db, setlist, bersaglio.snapshot)
+    setlist.undo_seq = bersaglio.seq
+    # La revisione cresce anche qui: annullare E' una modifica, e un client
+    # fermo alla precedente deve vedersi rifiutare la sua mutazione.
+    setlist.revision += 1
+    db.commit()
+    return get_setlist(db, setlist.id)
+
+
+def undo(db: Session, setlist_id: int, *, expected_revision: int) -> Setlist:
+    return _muovi_cursore(db, setlist_id, expected_revision, avanti=False)
+
+
+def redo(db: Session, setlist_id: int, *, expected_revision: int) -> Setlist:
+    return _muovi_cursore(db, setlist_id, expected_revision, avanti=True)

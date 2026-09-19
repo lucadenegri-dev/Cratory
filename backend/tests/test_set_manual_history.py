@@ -140,3 +140,104 @@ def test_record_pota_oltre_il_limite(db):
     assert len(s.revisions) == MAX_REVISIONS
     # Le piu' vecchie sono quelle cadute.
     assert s.revisions[0].seq == s.revisions[-1].seq - (MAX_REVISIONS - 1)
+
+
+# --- Task 3: annulla e ripeti ---------------------------------------------
+
+from app.services.manual_set import (  # noqa: E402
+    NothingToRedo, NothingToUndo, RevisionConflict, add_alternatives, create_manual_set,
+    insert_rows, path_rows, redo, remove_row, undo, update_row_note,
+)
+
+
+def _tre_tracce(db):
+    out = []
+    for i in range(3):
+        t = Track(source_type="spotify", title=f"T{i}", bpm=124.0, duration_seconds=300,
+                  has_local_file=True)
+        db.add(t)
+        out.append(t)
+    db.commit()
+    return out
+
+
+def test_annulla_riporta_il_percorso_a_prima(db):
+    t = _tre_tracce(db)
+    s = create_manual_set(db, name="M", playlist_id=None)
+    s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
+    s = insert_rows(db, s.id, expected_revision=1, track_ids=[t[1].id], gap=False, after_row_id=None)
+    assert [r.track_id for r in path_rows(s)] == [t[0].id, t[1].id]
+
+    s = undo(db, s.id, expected_revision=2)
+    assert [r.track_id for r in path_rows(s)] == [t[0].id]
+    assert s.revision == 3  # la revisione CRESCE anche annullando
+
+
+def test_ripeti_rimette_quello_che_si_era_annullato(db):
+    t = _tre_tracce(db)
+    s = create_manual_set(db, name="M", playlist_id=None)
+    s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
+    s = undo(db, s.id, expected_revision=1)
+    assert path_rows(s) == []
+    s = redo(db, s.id, expected_revision=2)
+    assert [r.track_id for r in path_rows(s)] == [t[0].id]
+
+
+def test_una_riga_annullata_torna_con_lo_stesso_id(db):
+    t = _tre_tracce(db)
+    s = create_manual_set(db, name="M", playlist_id=None)
+    s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
+    id_originale = path_rows(s)[0].id
+    s = remove_row(db, s.id, id_originale, expected_revision=1)
+    assert path_rows(s) == []
+    s = undo(db, s.id, expected_revision=2)
+    assert path_rows(s)[0].id == id_originale  # il client puo' ancora riferirla
+
+
+def test_annulla_ripristina_anche_le_alternative(db):
+    t = _tre_tracce(db)
+    s = create_manual_set(db, name="M", playlist_id=None)
+    s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
+    row = path_rows(s)[0]
+    s = add_alternatives(db, s.id, row.id, expected_revision=1, track_ids=[t[1].id])
+    assert len(path_rows(s)[0].alternatives) == 1
+    s = undo(db, s.id, expected_revision=2)
+    assert path_rows(s)[0].alternatives == []
+
+
+def test_una_modifica_dopo_annulla_chiude_il_ripeti(db):
+    t = _tre_tracce(db)
+    s = create_manual_set(db, name="M", playlist_id=None)
+    s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
+    s = undo(db, s.id, expected_revision=1)
+    s = insert_rows(db, s.id, expected_revision=2, track_ids=[t[1].id], gap=False, after_row_id=None)
+    with pytest.raises(NothingToRedo):
+        redo(db, s.id, expected_revision=3)
+
+
+def test_agli_estremi_annulla_e_ripeti_si_rifiutano(db):
+    s = create_manual_set(db, name="M", playlist_id=None)
+    with pytest.raises(NothingToUndo):
+        undo(db, s.id, expected_revision=0)
+    with pytest.raises(NothingToRedo):
+        redo(db, s.id, expected_revision=0)
+
+
+def test_scrivere_la_stessa_nota_due_volte_si_annulla_in_un_colpo(db):
+    t = _tre_tracce(db)
+    s = create_manual_set(db, name="M", playlist_id=None)
+    s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
+    row = path_rows(s)[0]
+    s = update_row_note(db, s.id, row.id, expected_revision=1, note="pri")
+    s = update_row_note(db, s.id, row.id, expected_revision=2, note="primo giro")
+    s = undo(db, s.id, expected_revision=3)
+    assert path_rows(s)[0].note is None  # non "pri": i due edit sono una revisione sola
+
+
+def test_la_revisione_sbagliata_non_annulla(db):
+    t = _tre_tracce(db)
+    s = create_manual_set(db, name="M", playlist_id=None)
+    s = insert_rows(db, s.id, expected_revision=0, track_ids=[t[0].id], gap=False, after_row_id=None)
+    with pytest.raises(RevisionConflict):
+        undo(db, s.id, expected_revision=0)
+    assert len(path_rows(s)) == 1
