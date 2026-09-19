@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from "./client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
 import type { ManualSet, Material } from "./types";
 
 /** Set preparato a mano (tappa 1): tutte le mutazioni mandano `expected_revision`;
@@ -39,7 +39,14 @@ export function moveRow(
   return apiPost<ManualSet>(`/api/sets/${id}/rows/${rowId}/move`, body);
 }
 
-export function patchRow(id: number, rowId: number, body: { expected_revision: number; note: string | null }) {
+/** PATCH parziale: le proprietà assenti dal corpo non si toccano, `null` azzera.
+ *  Passare `note: undefined` va bene (JSON.stringify la salta); passare
+ *  `note: null` vuol dire cancellare l'appunto. */
+export function patchRow(
+  id: number,
+  rowId: number,
+  body: { expected_revision: number; note?: string | null; play_bpm?: number | null },
+) {
   return apiPatch<ManualSet>(`/api/sets/${id}/rows/${rowId}`, body);
 }
 
@@ -95,4 +102,13 @@ export function undoSet(id: number, body: { expected_revision: number }) {
 
 export function redoSet(id: number, body: { expected_revision: number }) {
   return apiPost<ManualSet>(`/api/sets/${id}/redo`, body);
+}
+
+/** Appunto su un passaggio, legato alle due TRACCE e non alle due righe: resta
+ *  al suo posto quando il percorso cambia. Testo vuoto = cancella. */
+export function setPairNote(
+  id: number,
+  body: { expected_revision: number; from_track_id: number; to_track_id: number; note: string | null },
+) {
+  return apiPut<ManualSet>(`/api/sets/${id}/pair-notes`, body);
 }

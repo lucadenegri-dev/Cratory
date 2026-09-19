@@ -470,6 +470,7 @@ export interface ManualRow {
   slot_kind: "track" | "gap";
   track: Track | null; // null sui varchi
   note: string | null;
+  play_bpm: number | null; // "la suono a": vale in questo set, non in libreria
   alternatives: ManualAlternative[];
 }
 
@@ -479,6 +480,26 @@ export interface ManualBlock {
   placement: "main" | "bench";
   position: number;
   rows: ManualRow[];
+}
+
+/** Il passaggio fra due righe vicine del percorso. Calcolato dal server a ogni
+ *  lettura, mai salvato: dove `missing` elenca un dato, si mostra "sconosciuto"
+ *  invece di un punteggio che sembrerebbe un giudizio. */
+export interface ManualTransition {
+  from_row_id: number;
+  to_row_id: number;
+  from_track_id: number;
+  to_track_id: number;
+  bpm_from: number | null;
+  bpm_to: number | null;
+  bpm_percent: number | null;
+  halftime: boolean;
+  key_from: string | null;
+  key_to: string | null;
+  key_relation: "same" | "same_number" | "adjacent" | "weak" | "unknown";
+  score: number | null;
+  missing: string[];
+  note: string | null;
 }
 
 export interface ManualSet {
@@ -491,6 +512,7 @@ export interface ManualSet {
   notes: string | null;
   blocks: ManualBlock[];
   reserve: ManualRow[]; // righe senza blocco: le tracce tenute in tasca
+  transitions: ManualTransition[];
   track_count: number;
   total_file_seconds: number;
   can_undo: boolean;

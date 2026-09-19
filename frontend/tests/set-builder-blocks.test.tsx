@@ -50,7 +50,7 @@ const set = (opts: { revision?: number; canUndo?: boolean; canRedo?: boolean } =
   id: 7, name: "Sabato", kind: "manual", revision: opts.revision ?? 1,
   source_playlist_id: 3, source_playlist_name: "Deep", notes: null,
   track_count: 3, total_file_seconds: 900,
-  can_undo: opts.canUndo ?? true, can_redo: opts.canRedo ?? false,
+  can_undo: opts.canUndo ?? true, can_redo: opts.canRedo ?? false, transitions: [],
   created_at: "2026-09-19T10:00:00", updated_at: "2026-09-19T10:00:00",
   blocks: [
     { id: 1, name: "Apertura", placement: "main" as const, position: 1,

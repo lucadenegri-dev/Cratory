@@ -7,9 +7,9 @@ import { ArrowLeft, Redo2, Trash2, Undo2 } from "lucide-react";
 import {
   ApiError, addAlternatives, apiDelete, chooseAlternative, errText, fmtDuration, getManualSet,
   getMaterial, groupRows, insertRows, moveBlock, moveRow, patchRow, redoSet, removeAlternative,
-  removeRow, renameBlock, splitBlock, undoSet,
-  type ManualAlternative, type ManualBlock, type ManualRow, type ManualSet, type Material,
-  type MaterialItem,
+  removeRow, renameBlock, setPairNote, splitBlock, undoSet,
+  type ManualAlternative, type ManualBlock, type ManualRow, type ManualSet, type ManualTransition,
+  type Material, type MaterialItem,
 } from "@/lib/api";
 import { Alert, Badge, Button, Card, CardHeader, Loading, Modal } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
@@ -97,6 +97,14 @@ function ManualSetInner() {
   const onRemoveAlternative = (row: ManualRow, alt: ManualAlternative) => mutate((rev) => removeAlternative(id, row.id, alt.id, rev));
   const onToReserve = (row: ManualRow) => mutate((rev) => moveRow(id, row.id, { expected_revision: rev, position: 1, to_reserve: true }));
   const onToPath = (row: ManualRow) => mutate((rev) => moveRow(id, row.id, { expected_revision: rev, position: 1, to_reserve: false }));
+  const onSavePlayBpm = (row: ManualRow, playBpm: number | null) =>
+    // Solo la proprietà toccata: mandare anche `note` la riscriverebbe ogni volta.
+    mutate((rev) => patchRow(id, row.id, { expected_revision: rev, play_bpm: playBpm }));
+  const onSavePairNote = (transition: ManualTransition, note: string) =>
+    mutate((rev) => setPairNote(id, {
+      expected_revision: rev, from_track_id: transition.from_track_id,
+      to_track_id: transition.to_track_id, note: note.trim() || null,
+    }));
   const onSaveNote = async (row: ManualRow, note: string) => {
     setSaveState("saving");
     const next = await mutate((rev) => patchRow(id, row.id, { expected_revision: rev, note: note.trim() || null }));
@@ -244,7 +252,10 @@ function ManualSetInner() {
             <ReservePanel rows={set.reserve} onToPath={(r) => void onToPath(r)} onRemove={(r) => void onRemove(r)} />
           </Card>
           <Card className="p-4"><CardHeader title={t.sets.manual.detailTitle} />
-            <DetailPanel row={selected} saveState={saveState} onSaveNote={(r, n) => void onSaveNote(r, n)}
+            <DetailPanel row={selected} transitions={set.transitions} saveState={saveState}
+              onSaveNote={(r, n) => void onSaveNote(r, n)}
+              onSavePlayBpm={(r, b) => void onSavePlayBpm(r, b)}
+              onSavePairNote={(x, n) => void onSavePairNote(x, n)}
               onUseAlternative={(r, a) => void onUseAlternative(r, a)}
               onRemoveAlternative={(r, a) => void onRemoveAlternative(r, a)}
               onCompare={(r) => setCompareRowId(r.id)} />
