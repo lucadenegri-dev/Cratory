@@ -216,9 +216,10 @@ class Setlist(Base):
     # Banco di preparazione (spec 2026-09-15): generated = nato dal generatore,
     # manual = preparato a mano. I set manual non passano mai da assign_roles.
     kind: Mapped[str] = mapped_column(String, default="generated", server_default="generated", index=True)
-    # Playlist di origine, letta AGGIORNATA come materiale (nessuna copia della
-    # membership). Azzerata da repositories.delete_playlist: sui DB migrati la
-    # colonna nasce senza REFERENCES (vedi db._migrate_add_model_columns).
+    # Playlist di origine SINGOLA: superata da `sources` (2026-09-19), che ne
+    # ammette piu' d'una. Resta qui finche' `_migrate_setlist_sources` non ha
+    # travasato ogni database vivo; poi si toglie. Sui DB migrati la colonna
+    # nasce senza REFERENCES (vedi db._migrate_add_model_columns).
     source_playlist_id: Mapped[int | None] = mapped_column(ForeignKey("playlists.id"), index=True)
     notes: Mapped[str | None] = mapped_column(Text)
     # Cambia a ogni modifica strutturale: il client la rimanda come
@@ -243,6 +244,10 @@ class Setlist(Base):
     )
     pair_notes: Mapped[list["SetlistPairNote"]] = relationship(
         back_populates="setlist", cascade="all, delete-orphan",
+    )
+    sources: Mapped[list["SetlistSource"]] = relationship(
+        back_populates="setlist", cascade="all, delete-orphan",
+        order_by="SetlistSource.position",
     )
 
 
@@ -365,6 +370,29 @@ class SetlistPairNote(Base):
     note: Mapped[str | None] = mapped_column(Text)
 
     setlist: Mapped[Setlist] = relationship(back_populates="pair_notes")
+
+
+class SetlistSource(Base):
+    """Una playlist da cui il set pesca il suo materiale.
+
+    Piu' d'una dal 2026-09-19. La membership NON si copia: la playlist si legge
+    aggiornata a ogni apertura, come ha sempre fatto l'origine singola, e
+    togliere un'origine toglie le sue tracce dal materiale ma non dal percorso —
+    una traccia gia' scelta e' una decisione presa.
+    """
+
+    __tablename__ = "setlist_sources"
+    __table_args__ = (
+        UniqueConstraint("setlist_id", "playlist_id", name="uq_source_per_set"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    setlist_id: Mapped[int] = mapped_column(ForeignKey("setlists.id"), index=True)
+    playlist_id: Mapped[int] = mapped_column(ForeignKey("playlists.id"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=1)
+
+    setlist: Mapped[Setlist] = relationship(back_populates="sources")
+    playlist: Mapped["Playlist"] = relationship()
 
 
 class DjSet(Base):

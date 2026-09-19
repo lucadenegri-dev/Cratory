@@ -22,6 +22,7 @@ from app.db import engine, ensure_schema
 # falliva su qualsiasi libreria con una playlist dentro) e `download_queue_items`
 # (lo storico della coda, che sopravvive al download).
 DATA_TABLES = ("setlist_alternatives", "setlist_revisions", "setlist_pair_notes",
+               "setlist_sources",
                "setlist_tracks", "setlist_blocks",
                "setlists", "download_queue_items",
                "playlist_tracks", "tracks", "playlists")

@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
     DjSet, DjSetTrack, DownloadQueueItem, Playlist, PlaylistSyncEvent, Setlist,
-    SetlistAlternative, SetlistPairNote, SetlistTrack, Track, playlist_tracks, utcnow,
+    SetlistAlternative, SetlistPairNote, SetlistSource, SetlistTrack, Track,
+    playlist_tracks, utcnow,
 )
 from app.organize.models import AudioFile
 
@@ -932,8 +933,11 @@ def delete_playlist(db: Session, playlist_id: int) -> int | None:
     db.execute(playlist_tracks.delete().where(playlist_tracks.c.playlist_id == playlist_id))
     # Un set Shazam importato in questa playlist torna re-importabile.
     db.execute(update(DjSet).where(DjSet.imported_playlist_id == playlist_id).values(imported_playlist_id=None))
-    # Il set manuale nato da questa playlist resta, senza origine (spec: il
-    # materiale si riduce a cio' che e' nel set + la ricerca in libreria).
+    # Il set nato da questa playlist resta, senza quell'origine: il materiale si
+    # riduce alle altre origini + cio' che e' nel set + la ricerca in libreria.
+    db.execute(delete(SetlistSource).where(SetlistSource.playlist_id == playlist_id))
+    # La colonna singola resta finche' il travaso non ha girato ovunque: un
+    # `source_playlist_id` verso una playlist cancellata sarebbe una FK appesa.
     db.execute(update(Setlist).where(Setlist.source_playlist_id == playlist_id)
                .values(source_playlist_id=None))
     # Lo storico sync muore con la playlist (FK senza cascade su SQLite).

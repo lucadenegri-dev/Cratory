@@ -65,6 +65,7 @@ def ensure_schema(eng=None) -> None:
         _migrate_null_soundcloud_stream_urls(conn)
         _migrate_recount_playlist_counts(conn)
         _migrate_drop_curation_cols(conn)
+        _migrate_setlist_sources(conn)
 
 
 def _migrate_add_model_columns(conn, dialect) -> None:
@@ -191,6 +192,26 @@ def _recover_legacy_tracks_leftover(conn) -> None:
         return
     conn.execute(text("DROP TABLE IF EXISTS tracks"))  # eventuale tracks vuota del run interrotto
     conn.execute(text("ALTER TABLE _tracks_legacy RENAME TO tracks"))
+
+
+def _migrate_setlist_sources(conn) -> None:
+    """Travasa `setlists.source_playlist_id` in `setlist_sources`.
+
+    Idempotente per costruzione: inserisce solo dove la coppia non c'e' gia',
+    quindi la seconda esecuzione non duplica. La colonna vecchia NON si tocca:
+    si toglie in un secondo momento, quando questo travaso avra' girato su ogni
+    database vivo. Una colonna morta ma innocua e' meglio di un travaso a meta'.
+    """
+    colonne = {r[1] for r in conn.execute(text("PRAGMA table_info(setlists)")).fetchall()}
+    if "source_playlist_id" not in colonne:
+        return  # gia' tolta: il travaso ha finito il suo lavoro
+    conn.execute(text(
+        "INSERT INTO setlist_sources (setlist_id, playlist_id, position) "
+        "SELECT s.id, s.source_playlist_id, 1 FROM setlists s "
+        "WHERE s.source_playlist_id IS NOT NULL "
+        "  AND NOT EXISTS (SELECT 1 FROM setlist_sources ss "
+        "                  WHERE ss.setlist_id = s.id AND ss.playlist_id = s.source_playlist_id)"
+    ))
 
 
 # Colonne della curatela AI, tolte col generatore (2026-09-19). Esplicite e per
