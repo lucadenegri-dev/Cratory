@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { easeOutQuart, resolveLines } from "@/lib/ascii-resolve";
 import { fallPeak, formatHz } from "@/components/dashboard/spectrum-strip";
 import { airParticles } from "@/components/dashboard/ascii-atmosphere";
-import { WORDMARK_LINES } from "@/components/dashboard/ascii-wordmark";
+import { DJ_COLS, DJ_ROWS, djFrame } from "@/components/dashboard/ascii-dj";
 
 /* La larghezza costante è l'invariante che tiene: l'ingresso gira dentro una
    composizione a piena altezza, e una riga più lunga o più corta di un solo
@@ -54,8 +54,13 @@ describe("resolveLines", () => {
     expect(resolvedEarly).toBeGreaterThan(0);   // denominatore
   });
 
-  it("regge il frontespizio vero senza deformarlo", () => {
-    for (const l of resolveLines(WORDMARK_LINES, 0.5)) expect(l.length).toBe(41);
+  /* Il banco di prova e' la cabina: dal 2026-09-19 il frontespizio e' un SVG e
+     non passa piu' di qui, quindi l'unica arte vera che questo ingresso
+     scompone e' la sua. */
+  it("regge la cabina vera senza deformarla", () => {
+    const frame = djFrame(4);
+    expect(frame.length).toBe(DJ_ROWS);                 // denominatore
+    for (const l of resolveLines(frame, 0.5)) expect(l.length).toBe(DJ_COLS);
   });
 });
 

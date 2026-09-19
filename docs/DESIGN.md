@@ -171,8 +171,19 @@ The compact brand pairs the acid C monogram with `CRATORY` in DM Mono 500,
 uppercase, tracked at 0.16em. In the sidebar the mark is 24px, separated from
 the 14px wordmark by 10px. Its alpha mask takes the current text color, so it
 uses light ink in dark mode and dark ink on paper. The desktop/browser icon
-uses the same symbol in light ink on the dark background. The ASCII wordmark
-on the Home remains the larger editorial treatment.
+uses the same symbol in light ink on the dark background.
+
+The Home frontispiece is the larger editorial treatment of the same idea:
+`CRATORY` drawn in the **Corrosione** alphabet, the blade letterforms of the C
+monogram, as inline SVG. It replaced the ASCII wordmark on 2026-09-19, when the
+mark changed. The letters are vector and not an image for two reasons that both
+bite here: the frontispiece scales to the width of the screen, and the paths
+take `currentColor`, so the word inverts between dark and paper — a flat black
+image would vanish on the dark background. The source letters live in
+`assets/branding/alfabeto-corrosione/svg/` and reach the app through
+`assets/branding/alfabeto-corrosione/genera-glifi.py`, which writes
+`frontend/components/dashboard/logo-glyphs.ts`. The rest of the Home — the
+booth, the air, the spectrum — stays ASCII.
 
 Cratory reads like a printed catalogue of a record collection: monospace everywhere, a
 hairline grid, square geometry, almost no color. Crate digging remains a creative act —

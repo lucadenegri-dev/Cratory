@@ -16,30 +16,22 @@ import { PipelineStrip } from "@/components/dashboard/pipeline";
 import { Alert, Loading } from "@/components/ui";
 import { PageLayout } from "@/components/page-layout";
 import { AsciiDj, type DjFigure } from "@/components/dashboard/ascii-dj";
-import { AsciiWordmark } from "@/components/dashboard/ascii-wordmark";
+import { LogoWordmark } from "@/components/dashboard/logo-wordmark";
 import { AsciiAtmosphere } from "@/components/dashboard/ascii-atmosphere";
 import { SpectrumStrip } from "@/components/dashboard/spectrum-strip";
 
 /* Il frontespizio per persona (spec 2026-09-04). `cratory` è la Home di
    sempre; `goodgirl` è l'easter egg per l'username SoundCloud xgiorgix: la
    scritta DJ GOODGIRL, la DJ riccia dietro la consolle, cuori nel pulviscolo.
-   DJ GOODGIRL fa 65 colonne contro le 41 di CRATORY, quindi il corpo scende
-   di un passo per stare nella stessa larghezza: 8px sul telefono (65 colonne
-   sull'advance di DM Mono ≈ 312px, dentro i 335 misurati in preview a 375px;
-   a 9px eccedeva) e 2.8cqw da lg (4.5 × 41 / 65). */
+   Le due scritte non hanno più un corpo ciascuna: erano due misure in colonne
+   di monospazio (65 contro 41) da far stare nella stessa larghezza, e ora che
+   la parola è un SVG se ne occupa il viewBox — la più lunga si disegna più
+   bassa da sé, alla stessa larghezza. */
 const FRONTISPIECE: Record<Persona, {
-  word: string; title: string; sizeClass: string; figure: DjFigure; hearts: boolean;
+  word: string; title: string; figure: DjFigure; hearts: boolean;
 }> = {
-  cratory: {
-    word: "CRATORY", title: "Cratory",
-    sizeClass: "text-[12px] sm:text-lg md:text-xl lg:text-[min(4.1cqh,4.5cqw)]",
-    figure: "boy", hearts: false,
-  },
-  goodgirl: {
-    word: "DJ GOODGIRL", title: "DJ Goodgirl",
-    sizeClass: "text-[8px] sm:text-sm md:text-lg lg:text-[min(4.1cqh,2.8cqw)]",
-    figure: "girl", hearts: true,
-  },
+  cratory: { word: "CRATORY", title: "Cratory", figure: "boy", hearts: false },
+  goodgirl: { word: "DJ GOODGIRL", title: "DJ Goodgirl", figure: "girl", hearts: true },
 };
 
 /** La Home: il frontespizio (il nome in grande e la consolle che suona), poi
@@ -147,7 +139,7 @@ export default function Home() {
 
         <div className="relative flex h-full flex-col gap-3">
           <div className="flex-none">
-            {front && <AsciiWordmark word={front.word} title={front.title} sizeClass={front.sizeClass} />}
+            {front && <LogoWordmark word={front.word} title={front.title} />}
           </div>
 
           {error && <Alert tone="danger">{t.dashboard.backendDown(error)}</Alert>}
