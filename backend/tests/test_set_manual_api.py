@@ -65,13 +65,6 @@ def test_crea_con_playlist_inesistente(client_db):
     assert r.status_code == 404 and r.json()["detail"]["code"] == "playlist_not_found"
 
 
-def test_dettaglio_classico_rifiuta_il_set_manuale(client_db):
-    client, db = client_db
-    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
-    r = client.get(f"/api/sets/{sid}")
-    assert r.status_code == 409 and r.json()["detail"]["code"] == "set_is_manual"
-
-
 def test_righe_inserisci_varco_sposta_appunto_togli(client_db):
     client, db = client_db
     _, t = _seed(db)
@@ -138,33 +131,6 @@ def test_endpoint_manuali_rifiutano_un_set_generato(client_db):
     generated = generate_set(db, SetGenerationRequest(target_duration_minutes=30, start_bpm=128))
     r = client.get(f"/api/sets/{generated.id}/manual")
     assert r.status_code == 409 and r.json()["detail"]["code"] == "set_not_manual"
-
-
-def test_endpoint_classici_rifiutano_un_set_manuale_con_varco(client_db):
-    """Le rotte dell'editor classico assumono `st.track` sempre presente e
-    indicizzano per `position`: su un set manuale con una riga varco andrebbero
-    in AttributeError (500) o, per add/move/replace che scrivono via
-    `set_editor` (ignora `block_id`), scombinerebbero in silenzio il percorso.
-    Devono rifiutare con lo stesso 409 set_is_manual di GET /{id}."""
-    client, db = client_db
-    _, t = _seed(db)
-    sid = client.post("/api/sets/manual", json={"name": "M"}).json()["id"]
-    r = client.post(f"/api/sets/{sid}/rows", json={"expected_revision": 0, "track_ids": [t[0].id]})
-    r = client.post(f"/api/sets/{sid}/rows", json={"expected_revision": 1, "gap": True, "after_row_id": None})
-    assert r.status_code == 200, r.text
-
-    def _assert_manual(resp):
-        assert resp.status_code == 409, resp.text
-        assert resp.json()["detail"]["code"] == "set_is_manual"
-
-    # L'export NON e' piu' in questo elenco: dalla tappa 5 il set manuale ha i
-    # suoi formati e legge il percorso risolto (test_set_manual_export.py).
-    _assert_manual(client.delete(f"/api/sets/{sid}/tracks/1"))
-    _assert_manual(client.post(f"/api/sets/{sid}/tracks", json={"track_id": t[1].id}))
-    _assert_manual(client.post(f"/api/sets/{sid}/tracks/1/move", json={"direction": "down"}))
-    _assert_manual(client.post(f"/api/sets/{sid}/tracks/1/replace", json={"track_id": t[1].id}))
-    _assert_manual(client.post(f"/api/sets/{sid}/alternatives", json={"position": 1}))
-    _assert_manual(client.post("/api/spotify/create-playlist", json={"setlist_id": sid}))
 
 
 def test_rinomina_e_cancellazione_restano_aperte_su_un_set_manuale(client_db):

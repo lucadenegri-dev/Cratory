@@ -146,35 +146,6 @@ def test_discovery_add_su_traccia_esistente_usa_il_genere_del_file(client_db):
 # --- quello streaming (ultimo payload rimasto indietro dopo 3eef90f) -------
 
 
-def test_alternatives_usa_il_genere_del_file(client_db):
-    """DEVE fallire se alternative_out(alt) torna a chiamare track_out(alt.track)
-    senza FileTags (bug C1): il genere della candidata mostrata sarebbe "Pop"
-    invece di "Techno", e genre_from_file resterebbe False."""
-    client, db, _engine = client_db
-    root = _root(db)
-    setlist = Setlist(name="S")
-    db.add(setlist)
-    db.flush()
-    current = Track(source_type="manual", title="Current", artist="A", bpm=128)
-    db.add(current)
-    db.flush()
-    db.add(SetlistTrack(setlist_id=setlist.id, track_id=current.id, position=1))
-    candidate = _make_owned(
-        db, root,
-        track_kw={"title": "Candidate", "artist": "B", "genre": "Pop", "bpm": 128},
-        file_kw={"genre": "Techno"},
-    )
-    db.commit()
-
-    r = client.post(f"/api/sets/{setlist.id}/alternatives",
-                    json={"position": 1, "mode": "safer", "limit": 5})
-    assert r.status_code == 200
-    alts = r.json()["alternatives"]
-    (alt,) = [a for a in alts if a["track"]["id"] == candidate.id]
-    assert alt["track"]["genre"] == "Techno"
-    assert alt["track"]["genre_from_file"] is True
-
-
 # --- Guardia N+1: una playlist con piu' tracce non deve costare piu' query -
 
 
@@ -229,14 +200,17 @@ def test_setlist_out_passa_il_genere_effettivo_a_classify_transition(client_db):
     `db` produce risultati (o smettesse di passarla): la classificazione
     resterebbe `creative_risk` (lo streaming e' identico su entrambe le
     tracce) invece di `good_reset` (il tag file della seconda e' "Ambient")."""
-    client, db, _engine = client_db
+    _client, db, _engine = client_db
     root = _root(db)
     setlist = _set_con_reset_solo_via_tag_file(db, root)
 
-    r = client.get(f"/api/sets/{setlist.id}")
-    assert r.status_code == 200
-    items = r.json()["tracks"]
-    assert items[1]["transition_class"] == "good_reset"
+    # Chiamata diretta: l'endpoint `GET /api/sets/{id}` e' sparito col
+    # generatore (2026-09-19), ma `setlist_out` resta — lo usa la rinomina — e
+    # il comportamento sotto esame e' suo, non della rotta.
+    from app.serializers import setlist_out
+
+    doc = setlist_out(setlist, "it", db=db)
+    assert doc.tracks[1].transition_class == "good_reset"
 
 
 def test_export_csv_passa_il_genere_effettivo_a_classify_transition(client_db):

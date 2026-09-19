@@ -1,8 +1,10 @@
-"""response_model tipati per gli endpoint job che finora ritornavano dict grezzi:
-generate-async/generate-status (sets.py) e identify/identify-status (dj_sets.py).
-Il contratto deve restare wire-identico: qui verifichiamo le chiavi esatte."""
+"""response_model tipati per gli endpoint job che ritornavano dict grezzi.
 
-import copy
+Copriva anche generate-async/generate-status di `sets.py`: quei due endpoint
+sono spariti con il generatore (2026-09-19), e con loro i test e lo snapshot di
+`_gen_state`. Qui restano identify/identify-status di `dj_sets.py`, il cui
+contratto deve restare wire-identico: verifichiamo le chiavi esatte.
+"""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,75 +14,17 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base
 from app.main import app
-from app.routers import sets as sets_router
-
-# Snapshot preso all'import (fase di collection, prima che qualunque test giri):
-# `sets_router._gen_state` e' un dict globale di modulo non coperto dal reset
-# automatico dei job in conftest.py (quello copre solo i 4 job in
-# app/services/*_job.py). Alcuni test in test_generate_async.py lo mutano
-# direttamente (non via monkeypatch), quindi puo' arrivare "sporco" qui a
-# seconda dell'ordine di esecuzione dei file: va ripristinato PRIMA e dopo.
-_PRISTINE_GEN_STATE = copy.deepcopy(sets_router._gen_state)
-
-
-@pytest.fixture(autouse=True)
-def _reset_gen_state():
-    def _reset():
-        sets_router._gen_state.clear()
-        sets_router._gen_state.update(copy.deepcopy(_PRISTINE_GEN_STATE))
-
-    _reset()
-    yield
-    _reset()
 
 
 class _FakeThread:
     """Intercetta l'avvio del thread reale: la richiesta HTTP deve solo verificare
-    la forma della risposta immediata, non far girare la generazione per davvero."""
+    la forma della risposta immediata, non far girare il job per davvero."""
 
     def __init__(self, target=None, args=(), daemon=None):
         pass
 
     def start(self):
         pass
-
-
-# --- POST /api/sets/generate-async -------------------------------------------
-
-
-def test_generate_async_response_shape(monkeypatch):
-    monkeypatch.setattr(sets_router.threading, "Thread", _FakeThread)
-    client = TestClient(app)
-    r = client.post("/api/sets/generate-async", json={"use_ai": False})
-    assert r.status_code == 200
-    body = r.json()
-    assert set(body.keys()) == {"status", "phase", "using_ai"}
-    assert body == {"status": "running", "phase": None, "using_ai": False}
-
-
-# --- GET /api/sets/generate-status -------------------------------------------
-
-
-def test_generate_status_response_shape_idle():
-    client = TestClient(app)
-    r = client.get("/api/sets/generate-status")
-    assert r.status_code == 200
-    body = r.json()
-    assert set(body.keys()) == {
-        "status", "phase", "using_ai", "setlist_id", "error", "started_at", "finished_at",
-    }
-    assert body["status"] == "idle"
-
-
-def test_generate_status_response_shape_done(monkeypatch):
-    monkeypatch.setitem(sets_router._gen_state, "status", "done")
-    monkeypatch.setitem(sets_router._gen_state, "setlist_id", 42)
-    client = TestClient(app)
-    r = client.get("/api/sets/generate-status")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["status"] == "done"
-    assert body["setlist_id"] == 42
 
 
 # --- POST /api/shazam/identify + GET /api/shazam/identify-status -------------
@@ -132,14 +76,6 @@ def test_identify_response_shape_starts_job(monkeypatch):
 def _response_schema_ref(path: str, method: str) -> str:
     schema = app.openapi()["paths"][path][method]["responses"]["200"]["content"]["application/json"]["schema"]
     return schema.get("$ref", "")
-
-
-def test_generate_async_response_model_is_wired():
-    assert _response_schema_ref("/api/sets/generate-async", "post").endswith("GenerateAsyncStartOut")
-
-
-def test_generate_status_response_model_is_wired():
-    assert _response_schema_ref("/api/sets/generate-status", "get").endswith("GenerateStatusOut")
 
 
 def test_identify_response_model_is_wired():

@@ -197,20 +197,6 @@ def _seed_and_generate(db):
     return _gen_set(db, SetGenerationRequest(target_duration_minutes=45, start_bpm=128, end_bpm=134))
 
 
-def test_endpoint_add_track_returns_200_and_updated_setlist(client_db):
-    client, db = client_db
-    s = _seed_and_generate(db)
-    before = len(s.tracks)
-    present = {st.track_id for st in s.tracks}
-    spare = next(t for t in all_playable_tracks(db) if t.id not in present)
-
-    resp = client.post(f"/api/sets/{s.id}/tracks", json={"track_id": spare.id})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert len(body["tracks"]) == before + 1
-    assert any(item["track"]["id"] == spare.id for item in body["tracks"])
-
-
 def test_endpoint_add_track_404_setlist_not_found(client_db):
     client, _db = client_db
     resp = client.post("/api/sets/999999/tracks", json={"track_id": 1})
@@ -224,73 +210,6 @@ def test_endpoint_add_track_404_track_not_found(client_db):
     assert resp.status_code == 404
 
 
-def test_endpoint_add_track_409_duplicate(client_db):
-    client, db = client_db
-    s = _seed_and_generate(db)
-    existing = sorted(s.tracks, key=lambda st: st.position)[0].track_id
-    resp = client.post(f"/api/sets/{s.id}/tracks", json={"track_id": existing})
-    assert resp.status_code == 409
-
-
-def test_endpoint_add_track_422_owned_only(client_db):
-    client, db = client_db
-    for i in range(1, 7):
-        db.add(_track(i, owned=True, bpm=125.0 + i))
-    db.commit()
-    s = generate_set(db, SetGenerationRequest(target_duration_minutes=20))
-    lead = _track(99, owned=False)
-    db.add(lead)
-    db.commit()
-
-    resp = client.post(f"/api/sets/{s.id}/tracks", json={"track_id": lead.id})
-    assert resp.status_code == 422
-
-
 # --- Router: move endpoint, contratto "direction" vs "to" (B12) ----------------
 
 
-def test_endpoint_move_with_to_moves_to_arbitrary_position(client_db):
-    client, db = client_db
-    s = _seed_and_generate(db)
-    ordered_ids = [st.track_id for st in sorted(s.tracks, key=lambda st: st.position)]
-    moved_id = ordered_ids[2]  # posizione 3
-
-    resp = client.post(f"/api/sets/{s.id}/tracks/3/move", json={"to": 6})
-    assert resp.status_code == 200
-    body = resp.json()
-    ordered = sorted(body["tracks"], key=lambda st: st["position"])
-    assert ordered[5]["track"]["id"] == moved_id
-
-
-def test_endpoint_move_with_direction_still_works(client_db):
-    client, db = client_db
-    s = _seed_and_generate(db)
-    ordered_ids = [st.track_id for st in sorted(s.tracks, key=lambda st: st.position)]
-
-    resp = client.post(f"/api/sets/{s.id}/tracks/2/move", json={"direction": "up"})
-    assert resp.status_code == 200
-    body = resp.json()
-    ordered = sorted(body["tracks"], key=lambda st: st["position"])
-    assert ordered[0]["track"]["id"] == ordered_ids[1]
-    assert ordered[1]["track"]["id"] == ordered_ids[0]
-
-
-def test_endpoint_move_rejects_both_direction_and_to(client_db):
-    client, db = client_db
-    s = _seed_and_generate(db)
-    resp = client.post(f"/api/sets/{s.id}/tracks/1/move", json={"direction": "up", "to": 3})
-    assert resp.status_code == 422
-
-
-def test_endpoint_move_rejects_neither_direction_nor_to(client_db):
-    client, db = client_db
-    s = _seed_and_generate(db)
-    resp = client.post(f"/api/sets/{s.id}/tracks/1/move", json={})
-    assert resp.status_code == 422
-
-
-def test_endpoint_move_with_to_invalid_target_422(client_db):
-    client, db = client_db
-    s = _seed_and_generate(db)
-    resp = client.post(f"/api/sets/{s.id}/tracks/1/move", json={"to": 999})
-    assert resp.status_code == 422

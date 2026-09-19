@@ -1,16 +1,13 @@
 import csv
 import io
 import logging
-import threading
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.core.http_errors import api_error
-from app.db import SessionLocal, get_db
-from app.integrations.llm import LLMError, LLMNotConfigured, get_llm_client, llm_configured
+from app.db import get_db
 from app.repositories import (
     effective_genres_for_tracks,
     file_tags_for_tracks,
@@ -27,28 +24,18 @@ from app.schemas import (
     FillGapRequest,
     HistoryStepRequest,
     PairNoteRequest,
-    AddTrackRequest,
-    AlternativesRequest,
-    AlternativesResponse,
-    GenerateAsyncStartOut,
-    GenerateStatusOut,
     ManualSetCreate,
     ManualSetOut,
     MaterialItemOut,
     MaterialOut,
-    MoveTrackRequest,
-    ReplaceTrackRequest,
     RowMoveRequest,
     RowPatchRequest,
     RowsInsertRequest,
-    SetGenerationRequest,
     SetlistOut,
     SetlistSummaryOut,
     SetRenameRequest,
 )
-from app.serializers import alternative_out, manual_set_out, setlist_out, setlist_summary_out, track_out
-from app.services.ai_curation import run_curated_generation
-from app.services.alternatives import AlternativesError, find_alternatives
+from app.serializers import manual_set_out, setlist_out, setlist_summary_out, track_out
 from app.services.app_state import get_language
 from app.services.manual_export import render_manual
 from app.services.manual_fill import FillError
@@ -84,109 +71,14 @@ from app.services.manual_set import (
 )
 from app.services.set_editor import (
     SetEditError,
-    add_track,
     delete_set,
-    move_track,
-    move_track_to,
-    remove_track,
     rename_set,
-    replace_track,
 )
 from app.services.export_render import fmt_duration, render_m3u8
 from app.services.scoring import classify_transition, mixing_tip, opening_track_label
-from app.services.set_generator import SetGenerationError, generate_set
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/sets", tags=["sets"])
-
-
-def _should_use_ai(req: SetGenerationRequest) -> bool:
-    if req.use_ai is True:
-        return True
-    if req.use_ai is False:
-        return False
-    # auto: AI solo se configurata e c'e' un prompt libero da interpretare
-    return llm_configured() and bool(req.prompt and req.prompt.strip())
-
-
-# Fase mostrata durante la generazione deterministica (non-AI); le fasi del
-# path AI sono già bilingui in ai_curation.py (_CURATION_PHASES).
-_BUILDING_SET_PHASE = {"it": "Costruisco il set", "en": "Building the set"}
-
-# --- Generazione asincrona (la generazione AI puo' richiedere ~1-3 min) -------
-# App locale mono-utente: un job alla volta, stato in memoria con lock.
-_gen_lock = threading.Lock()
-_gen_state: dict = {
-    "status": "idle",  # idle | running | done | error
-    "phase": None,
-    "using_ai": False,
-    "setlist_id": None,
-    "error": None,
-    "started_at": None,
-    "finished_at": None,
-}
-
-
-def _run_generation(req: SetGenerationRequest, use_ai: bool) -> None:
-    db = SessionLocal()
-    try:
-        if use_ai:
-            setlist = run_curated_generation(
-                db, req, get_llm_client(),
-                on_phase=lambda p: _gen_state.update(phase=p),
-            )
-        else:
-            lang = get_language(db)
-            _gen_state["phase"] = _BUILDING_SET_PHASE.get(lang, _BUILDING_SET_PHASE["it"])
-            setlist = generate_set(db, req)
-        _gen_state.update(status="done", setlist_id=setlist.id, phase=None)
-        logger.info("Job generazione completato: set %s (%s)", setlist.id, setlist.generated_by)
-    except (LLMError, LLMNotConfigured, SetGenerationError) as exc:
-        _gen_state.update(status="error", error=str(exc))
-        logger.error("Job generazione fallito: %s", exc)
-    except Exception as exc:  # noqa: BLE001
-        _gen_state.update(status="error", error=str(exc))
-        logger.exception("Job generazione fallito (inatteso)")
-    finally:
-        _gen_state["finished_at"] = datetime.now(timezone.utc).isoformat()
-        db.close()
-
-
-@router.post("/generate-async", response_model=GenerateAsyncStartOut)
-def generate_async(req: SetGenerationRequest):
-    """Avvia la generazione in background e ritorna subito. Seguire /generate-status."""
-    use_ai = _should_use_ai(req)
-    if use_ai and not llm_configured():
-        raise api_error(409, "ai_not_configured", "AI not configured: ANTHROPIC_API_KEY missing.",
-                         reason="ANTHROPIC_API_KEY mancante")
-    with _gen_lock:
-        if _gen_state["status"] == "running":
-            # Mai inghiottire una richiesta nuova nel job in corso: quel job puo' avere
-            # un motore diverso (es. AI) da quello appena chiesto dall'utente.
-            raise api_error(
-                409, "set_generation_in_progress",
-                "A generation is already running: wait for it to finish and try again.",
-            )
-        _gen_state.update(status="running", phase=None, using_ai=use_ai, setlist_id=None,
-                          error=None, started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)
-    threading.Thread(target=_run_generation, args=(req, use_ai), daemon=True).start()
-    return {"status": "running", "phase": None, "using_ai": use_ai}
-
-
-@router.get("/generate-status", response_model=GenerateStatusOut)
-def generate_status():
-    return dict(_gen_state)
-
-
-def _require_generated(setlist) -> None:
-    """Le rotte dell'editor classico assumono la forma di un set generato
-    (righe sempre con `track`, indicizzabili per `position`): un set manuale
-    puo' avere righe varco (`track` None) e blocchi (`block_id` fuori dalla
-    numerazione lineare), quindi va rifiutato qui con lo stesso errore di
-    dominio di `GET /{id}` invece di far arrivare un AttributeError o
-    scombinare in silenzio il percorso costruito a mano."""
-    if setlist.kind == "manual":
-        raise api_error(409, "set_is_manual", "This set is manual: use /manual")
 
 
 def _manual_error(exc: ManualSetError) -> HTTPException:
@@ -226,15 +118,6 @@ def create_manual(req: ManualSetCreate, db: Session = Depends(get_db)):
 @router.get("", response_model=list[SetlistSummaryOut])
 def get_all(db: Session = Depends(get_db)):
     return [setlist_summary_out(s) for s in list_setlists(db)]
-
-
-@router.get("/{setlist_id}", response_model=SetlistOut)
-def get_one(setlist_id: int, db: Session = Depends(get_db)):
-    setlist = get_setlist(db, setlist_id)
-    if setlist is None:
-        raise api_error(404, "set_not_found", "Set not found")
-    _require_generated(setlist)
-    return setlist_out(setlist, get_language(db), db=db)
 
 
 @router.get("/{setlist_id}/manual", response_model=ManualSetOut)
@@ -460,8 +343,8 @@ def export(
     if format in ("prep", "reserve"):
         raise api_error(422, "set_format_not_available",
                         "This format belongs to a hand-prepared set")
-    _require_generated(setlist)
-
+    # Un set generato ancora in archivio si esporta ancora: e' l'unico modo di
+    # portarselo via prima di cancellarlo, ora che non ha piu' una pagina.
     if format == "csv":
         buf = io.StringIO()
         writer = csv.writer(buf)
@@ -554,75 +437,3 @@ def delete(setlist_id: int, db: Session = Depends(get_db)):
         raise _edit_error(exc) from exc
 
 
-@router.delete("/{setlist_id}/tracks/{position}", response_model=SetlistOut)
-def delete_track(setlist_id: int, position: int, db: Session = Depends(get_db)):
-    setlist = get_setlist(db, setlist_id)
-    if setlist is None:
-        raise api_error(404, "set_not_found", "Set not found")
-    _require_generated(setlist)
-    try:
-        return setlist_out(remove_track(db, setlist_id, position), get_language(db), db=db)
-    except SetEditError as exc:
-        raise _edit_error(exc) from exc
-
-
-@router.post("/{setlist_id}/tracks", response_model=SetlistOut)
-def add(setlist_id: int, req: AddTrackRequest, db: Session = Depends(get_db)):
-    setlist = get_setlist(db, setlist_id)
-    if setlist is None:
-        raise api_error(404, "set_not_found", "Set not found")
-    _require_generated(setlist)
-    try:
-        return setlist_out(add_track(db, setlist_id, req.track_id, req.position), get_language(db), db=db)
-    except SetEditError as exc:
-        raise _edit_error(exc) from exc
-
-
-@router.post("/{setlist_id}/tracks/{position}/move", response_model=SetlistOut)
-def move(setlist_id: int, position: int, req: MoveTrackRequest, db: Session = Depends(get_db)):
-    setlist = get_setlist(db, setlist_id)
-    if setlist is None:
-        raise api_error(404, "set_not_found", "Set not found")
-    _require_generated(setlist)
-    try:
-        if req.to is not None:
-            setlist = move_track_to(db, setlist_id, position, req.to)
-        else:
-            setlist = move_track(db, setlist_id, position, req.direction)
-        return setlist_out(setlist, get_language(db), db=db)
-    except SetEditError as exc:
-        raise _edit_error(exc) from exc
-
-
-@router.post("/{setlist_id}/tracks/{position}/replace", response_model=SetlistOut)
-def replace(setlist_id: int, position: int, req: ReplaceTrackRequest, db: Session = Depends(get_db)):
-    setlist = get_setlist(db, setlist_id)
-    if setlist is None:
-        raise api_error(404, "set_not_found", "Set not found")
-    _require_generated(setlist)
-    try:
-        return setlist_out(replace_track(db, setlist_id, position, req.track_id), get_language(db), db=db)
-    except SetEditError as exc:
-        raise _edit_error(exc) from exc
-
-
-@router.post("/{setlist_id}/alternatives", response_model=AlternativesResponse)
-def alternatives(setlist_id: int, req: AlternativesRequest, db: Session = Depends(get_db)):
-    setlist = get_setlist(db, setlist_id)
-    if setlist is None:
-        raise api_error(404, "set_not_found", "Set not found")
-    _require_generated(setlist)
-    try:
-        alts = find_alternatives(db, setlist, req.position, req.mode, req.limit)
-    except AlternativesError as exc:
-        raise api_error(422, "alternatives_error", f"Alternatives error: {exc}",
-                         reason=str(exc)) from exc
-    # C1: stesso difetto di I3/M6 (commit 3eef90f) sull'ultimo payload rimasto
-    # sui valori streaming — le Alternative di un set mostravano il genere
-    # streaming mentre il resto dell'app mostra ormai quello effettivo.
-    ft_map = file_tags_for_tracks(db, [a.track.id for a in alts])
-    return AlternativesResponse(
-        position=req.position,
-        mode=req.mode,
-        alternatives=[alternative_out(a, ft_map.get(a.track.id)) for a in alts],
-    )
