@@ -39,26 +39,6 @@ def _scored(tracks):
     return out
 
 
-def test_explanation_no_jargon_flags_duration_and_keys():
-    from app.services.set_generator import _explanation
-    tracks = [mk(bpm=120, key="8A"), mk(bpm=125, key="8A"), mk(bpm=130, key="2B")]  # ultima fuori chiave
-    req = SetGenerationRequest(strategy="progressive", target_duration_minutes=90)
-    exp = _explanation(_scored(tracks), req, total_seconds=1800)  # 30 min vs target 90
-    assert "MVP" not in exp
-    assert "120" in exp and "130" in exp                     # arco BPM
-    assert "target" in exp.lower() or "durata" in exp.lower()  # avvisa durata lontana
-    assert "brano 3" in exp                                   # segnala la transizione fuori chiave
-
-
-def test_explanation_on_target_is_quiet_about_duration():
-    from app.services.set_generator import _explanation
-    tracks = [mk(bpm=124, key="8A"), mk(bpm=125, key="8A")]
-    req = SetGenerationRequest(strategy="smooth", target_duration_minutes=30)
-    exp = _explanation(_scored(tracks), req, total_seconds=1800)  # 30 min = target
-    assert "target" not in exp.lower()
-    assert "in chiave" in exp  # armonia OK dichiarata
-
-
 # --- Fix 6) export accurato + dedup ------------------------------------------
 
 def _owned_set(db, specs):
@@ -79,9 +59,8 @@ def _owned_set(db, specs):
 
 def test_markdown_export_uses_mix_tip_not_raw_log(db):
     from app.routers.sets import export
-    from app.services.set_generator import generate_set
     pl = _owned_set(db, [(124 + i * 0.5, "8A", f"A{i}", f"T{i}") for i in range(5)])
-    sl = generate_set(db, SetGenerationRequest(playlist_id=pl.id, target_duration_minutes=15))
+    sl = _set_generato(db, pl)
     body = export(sl.id, format="markdown", db=db).body.decode()
     assert "differenza BPM" not in body   # niente log deterministico grezzo
     assert "beatmatch" in body or "pitch" in body or "mix armonico" in body  # consiglio di mix reale
@@ -109,22 +88,6 @@ def test_markdown_export_formats_duration_with_fallback(db):
     assert "| 125 | 9A | — |" in body
 
 
-def test_generator_drops_fuzzy_duplicate(db):
-    # stessa traccia in due grafie (spazi/case/trattini): il set non la mette due volte
-    from app.services.set_generator import generate_set
-    pl = _owned_set(db, [
-        (124.0, "8A", "Raär", "Sometimes I Hear Sirens"),
-        (124.2, "8A", "Raar", "Raar - Sometimes I Hear Sirens"),  # duplicato fuzzy
-        (125.0, "8A", "Other", "Different Track"),
-        (126.0, "8A", "Third", "Another One"),
-    ])
-    sl = generate_set(db, SetGenerationRequest(playlist_id=pl.id, target_duration_minutes=20,
-                                               max_tracks_per_artist=5))
-    titles = [st.track.title.lower() for st in sl.tracks]
-    sirens = sum(1 for t in titles if "sometimes i hear sirens" in t)
-    assert sirens <= 1  # non due volte lo stesso brano
-
-
 # --- A1) export M3U8 per Rekordbox -------------------------------------------
 
 
@@ -147,13 +110,12 @@ def _set_with_paths(db, specs):
 
 def test_m3u8_export_uses_local_paths_in_order(db):
     from app.routers.sets import export
-    from app.services.set_generator import generate_set
     pl = _set_with_paths(db, [
         (124.0, "8A", "A0", "T0", "/music/a0.aiff"),
         (125.0, "8A", "A1", "T1", "/music/a1.aiff"),
         (126.0, "8A", "A2", "T2", "/music/a2.aiff"),
     ])
-    sl = generate_set(db, SetGenerationRequest(playlist_id=pl.id, target_duration_minutes=15))
+    sl = _set_generato(db, pl)
     resp = export(sl.id, format="m3u8", db=db)
     body = resp.body.decode()
     lines = body.splitlines()
@@ -174,14 +136,12 @@ def test_csv_export_includes_local_path(db):
     import csv as csvmod
     import io as iomod
     from app.routers.sets import export
-    from app.services.set_generator import generate_set
     pl = _set_with_paths(db, [
         (124.0, "8A", "A0", "T0", "/music/a0.aiff"),
         (125.0, "8A", "A1", "T1", None),
         (126.0, "8A", "A2", "T2", "/music/a2.aiff"),
     ])
-    sl = generate_set(db, SetGenerationRequest(playlist_id=pl.id, target_duration_minutes=15,
-                                               owned_only=False))
+    sl = _set_generato(db, pl)
     body = export(sl.id, format="csv", db=db).body.decode()
     rows = list(csvmod.reader(iomod.StringIO(body)))
     header = rows[0]
@@ -195,15 +155,13 @@ def test_csv_export_includes_local_path(db):
 
 def test_m3u8_export_skips_tracks_without_file_with_comment(db):
     from app.routers.sets import export
-    from app.services.set_generator import generate_set
     pl = _set_with_paths(db, [
         (124.0, "8A", "Owned0", "Has File 0", "/music/owned0.aiff"),
         (125.0, "8A", "Owned1", "Has File 1", "/music/owned1.aiff"),
         (126.0, "8A", "Owned2", "Has File 2", "/music/owned2.aiff"),
         (127.0, "8A", "Lead", "No File", None),
     ])
-    sl = generate_set(db, SetGenerationRequest(playlist_id=pl.id, target_duration_minutes=30,
-                                               owned_only=False))
+    sl = _set_generato(db, pl)
     body = export(sl.id, format="m3u8", db=db).body.decode()
     assert "/music/owned0.aiff" in body
     assert "No File" not in body           # la traccia senza file è esclusa
@@ -230,3 +188,22 @@ def test_transitions_lens_filters_by_class(db):
 
     unfiltered = _ranked(db, anchor.id, limit=25)
     assert {c.track.title for c in unfiltered} >= {"safe", "reset"}
+
+
+def _set_generato(db, pl):
+    """Un set `generated` costruito a mano dalle tracce della playlist.
+
+    Sostituisce `generate_set`, sparito il 2026-09-19: qui serve solo UN set con
+    delle righe in un ordine noto — che l'ordine lo scegliesse un beam search
+    non cambiava niente a cio' che questi test verificano (l'export).
+    """
+    from app.models import Setlist, SetlistTrack
+
+    sl = Setlist(name="Export", kind="generated", generated_by="algorithmic")
+    db.add(sl)
+    db.flush()
+    for i, t in enumerate(pl.tracks, start=1):
+        db.add(SetlistTrack(setlist_id=sl.id, track_id=t.id, position=i))
+    db.commit()
+    db.refresh(sl)
+    return sl

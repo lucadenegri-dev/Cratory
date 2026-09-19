@@ -7,7 +7,6 @@ from app.services.scoring import (
     energy_progression_score,
     genre_similarity_score,
 )
-from app.services.set_generator import assign_roles
 from app.services.track_status import compute_status
 
 
@@ -137,16 +136,6 @@ def test_gap_analysis_empty():
 
 
 # --- ruoli set ---------------------------------------------------------------
-
-
-def test_assign_roles_arc():
-    roles = assign_roles(10)
-    assert roles[0] == "intro"
-    assert roles[-1] == "closing"
-    assert "peak" in roles
-    assert roles.index("peak") < len(roles) - 1
-    assert assign_roles(1) == ["intro"]
-    assert assign_roles(0) == []
 
 
 # --- score feature -----------------------------------------------------------

@@ -277,18 +277,3 @@ def test_effective_genre_risolve_per_id_anche_se_track_files_non_lo_contiene(db,
     assert effective_genre(db, loser) == "Techno"  # non "Pop": il file esiste ancora, solo per id
 
 
-def test_candidate_engine_filtra_sul_genere_effettivo(db, make_owned):
-    """DEVE fallire se candidate_engine confronta t.genre invece del genere
-    effettivo: la traccia è taggata Techno solo sul file (Track.genre="Pop")."""
-    from app.schemas import SetGenerationRequest
-    from app.services.candidate_engine import select_candidates
-
-    t = make_owned(track_kw={"title": "T", "artist": "A", "genre": "Pop",
-                             "bpm": 128.0, "camelot_key": "8A",
-                             "duration_seconds": 300},
-                   file_kw={"genre": "Techno"})
-    pool, _ = select_candidates(db, SetGenerationRequest(genres=["Techno"]))
-    assert [x.id for x in pool] == [t.id]
-    # ...e il genere streaming, ora mascherato dal tag file, non matcha più:
-    pool, _ = select_candidates(db, SetGenerationRequest(genres=["Pop"]))
-    assert pool == []

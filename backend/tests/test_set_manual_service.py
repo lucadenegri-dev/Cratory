@@ -192,10 +192,15 @@ def test_riga_inesistente(db):
 
 
 def test_set_inesistente_e_set_non_manuale(db, seed_tracks):
-    from app.schemas import SetGenerationRequest
-    from app.services.set_generator import generate_set
-    seed_tracks(n=40)
-    generated = generate_set(db, SetGenerationRequest(target_duration_minutes=30, start_bpm=128))
+    # Il set generato si costruisce a mano: `generate_set` e' sparito il
+    # 2026-09-19, ma «le rotte manuali rifiutano un set generato» resta vero e
+    # va verificato — finche' un set `generated` puo' esistere in archivio.
+    from app.models import Setlist
+
+    seed_tracks(n=2)
+    generated = Setlist(name="Vecchio", kind="generated", generated_by="algorithmic")
+    db.add(generated)
+    db.commit()
     with pytest.raises(ManualSetNotFound):
         remove_row(db, 999, 1, expected_revision=0)
     with pytest.raises(ManualSetNotManual):

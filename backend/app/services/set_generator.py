@@ -16,7 +16,6 @@ from app.models import Setlist, SetlistTrack, Track
 from app.repositories import effective_genres_for_tracks
 from app.schemas import SetGenerationRequest
 from app.services.camelot import camelot_compatibility
-from app.services.candidate_engine import select_candidates
 from app.services.scoring import (
     RESET_ENERGY_DROP,
     RESET_GENRE_SIMILARITY,
@@ -32,7 +31,6 @@ from app.services.set_skeleton import (  # noqa: F401 - re-export per compat tes
     _DEFAULT_PROFILE,
     _STRATEGY_PROFILES,
     StrategyProfile,
-    build_skeleton,
     _desired_bpm,
     _desired_energy,
     _trajectory_fit,
@@ -88,45 +86,6 @@ def _is_novel(prev: Track, cand: Track,
 
 class SetGenerationError(Exception):
     pass
-
-
-def assign_roles(n: int, peak_at: int | None = None) -> list[str]:
-    """Assegna un ruolo a ciascuna posizione lungo l'arco del set (deterministico).
-
-    Ruoli (vedi nuovo_progetto.md sez. 4): intro, warmup, groove, transition,
-    peak, release, closing. peak_at (0-based) permette di allineare il ruolo
-    "peak" all'anchor eletto dallo scheletro; None = posizionale come sempre
-    (~70% del set). Sotto le 4 tracce il peak esplicito viene ignorato: non
-    c'e' spazio per la struttura.
-    """
-    if n <= 0:
-        return []
-    if n == 1:
-        return ["intro"]
-    roles: list[str] = []
-    if peak_at is not None and n >= 4:
-        peak_pos = min(max(peak_at, 1), n - 2)
-    else:
-        peak_pos = max(1, round((n - 1) * 0.7))
-    for i in range(n):
-        frac = i / (n - 1)
-        if i == 0:
-            roles.append("intro")
-        elif i == n - 1:
-            roles.append("closing")
-        elif i == peak_pos:
-            roles.append("peak")
-        elif i > peak_pos:
-            roles.append("release")
-        elif frac < 0.25:
-            roles.append("warmup")
-        elif frac < 0.55:
-            roles.append("groove")
-        else:
-            roles.append("transition")
-    return roles
-
-
 
 
 def _feature_fit(prev: Track, cand: Track, req: SetGenerationRequest,
@@ -238,64 +197,6 @@ def _candidate_score(
     # Voto personale: spinta piccola e deterministica, a parita' di compatibilita'.
     total += _RATING_BONUS * (cand.rating or 0)
     return total, ts
-
-
-_STRATEGY_LABELS = {
-    "smooth": "fluido", "progressive": "progressivo", "contrast": "a contrasti",
-    "experimental": "sperimentale", "peak_time": "peak time", "warm_up": "warm-up",
-    "closing": "di chiusura",
-}
-
-
-def _positions_phrase(positions: list[int]) -> str:
-    nums = ", ".join(str(p) for p in positions)
-    return f"al brano {nums}" if len(positions) == 1 else f"ai brani {nums}"
-
-
-def _explanation(setlist_tracks: list[tuple[Track, TransitionScore | None]],
-                 req: SetGenerationRequest, total_seconds: int) -> str:
-    """Riga di sintesi PER IL DJ: carattere del set, qualità armonica e cosa preparare.
-    Niente stat già visibili nella UI (conteggio, durata, min/max) né gergo di roadmap.
-    """
-    tracks = [t for t, _ in setlist_tracks]
-    scores = [ts for _, ts in setlist_tracks if ts]
-    bpms = [t.bpm for t in tracks if t.bpm]
-    weak_positions = [
-        i + 1 for i, (t, ts) in enumerate(setlist_tracks)
-        if ts is not None
-        and camelot_compatibility(tracks[i - 1].camelot_key, t.camelot_key)[0] == "weak"
-    ]
-
-    strat = _STRATEGY_LABELS.get(req.strategy, req.strategy)
-    parts: list[str] = []
-    if bpms:
-        move = ("sale" if bpms[-1] > bpms[0] + 1
-                else "scende" if bpms[-1] < bpms[0] - 1 else "resta stabile")
-        parts.append(f"Set {strat}: l'arco {move} da {bpms[0]:.0f} a {bpms[-1]:.0f} BPM.")
-    else:
-        parts.append(f"Set {strat}.")
-
-    if scores:
-        n = len(scores)
-        in_key = n - len(weak_positions)
-        if not weak_positions:
-            parts.append(f"Mix armonico continuo: tutte le {n} transizioni in chiave.")
-        elif len(weak_positions) == 1:
-            parts.append(f"{in_key}/{n} transizioni in chiave; tieni corta quella fuori "
-                         f"chiave ({_positions_phrase(weak_positions)}).")
-        else:
-            parts.append(f"{in_key}/{n} transizioni in chiave; tieni corte le "
-                         f"{len(weak_positions)} fuori chiave ({_positions_phrase(weak_positions)}).")
-
-    target = req.target_duration_minutes
-    if target:
-        minutes = total_seconds // 60
-        delta = minutes - target
-        if abs(delta) > target * 0.15:
-            verso = "sotto" if delta < 0 else "sopra"
-            azione = "aggiungi qualche traccia" if delta < 0 else "accorcia o togli una traccia"
-            parts.append(f"Durata {minutes} min, {abs(delta)} {verso} il target di {target}: {azione}.")
-    return " ".join(parts)
 
 
 # Beam search: invece di costruire UN set passo-passo (greedy, che si intrappola in
@@ -414,123 +315,3 @@ def _beam_search_span(
     return best["chosen"]
 
 
-def generate_set(db: Session, req: SetGenerationRequest, *,
-                 candidates: list[Track] | None = None,
-                 genre_map: dict[int, str | None] | None = None,
-                 mood_scores: dict[int, int] | None = None,
-                 anchor_hints: dict[str, list[int]] | None = None) -> Setlist:
-    # candidates gia' filtrate (la curatela le ha selezionate una volta): evita
-    # una seconda select_candidates identica. None = calcola qui, come sempre.
-    # I4: genre_map (id-traccia -> genere effettivo) viaggia con candidates. Se
-    # arrivano gia' pronte ma senza mappa, la risolviamo qui in blocco (una sola
-    # query) invece di lasciare la catena a valle ripiegare su Track.genre.
-    if candidates is None:
-        candidates, genre_map = select_candidates(db, req)
-    elif genre_map is None:
-        genre_map = effective_genres_for_tracks(db, [t.id for t in candidates])
-    if len(candidates) < 3:
-        if req.owned_only:
-            raise SetGenerationError(
-                "Tracce candidate insufficienti tra quelle possedute: indicizza la "
-                "libreria (Impostazioni → Libreria) o disattiva \"solo brani posseduti\" "
-                "per includere i lead."
-            )
-        raise SetGenerationError(
-            "Tracce candidate insufficienti: allargare i vincoli (BPM, sorgenti, durata) "
-            "o importare piu' tracce."
-        )
-
-    bpm_values = [t.bpm for t in candidates if t.bpm]
-    start_bpm = req.start_bpm or statistics.median(bpm_values)
-    end_bpm = req.end_bpm or start_bpm
-
-    target_seconds = req.target_duration_minutes * 60
-    profile = strategy_profile(req.strategy)
-    skeleton = build_skeleton(candidates, req, profile, start_bpm, end_bpm, target_seconds,
-                              mood_scores=mood_scores, anchor_hints=anchor_hints,
-                              genre_map=genre_map)
-    peak_at: int | None = None
-    if skeleton is None:
-        first = _pick_first(candidates, req, start_bpm)
-        first_genre = genre_of(first, genre_map)
-        chosen = [(first, None)] + _beam_search_span(
-            first, candidates, req, profile, start_bpm, end_bpm, target_seconds,
-            elapsed_secs=first.duration_seconds or 0, fill_until_secs=target_seconds,
-            artist_counts={first.artist.lower(): 1} if first.artist else None,
-            genre_counts={first_genre.strip().lower(): 1} if first_genre else None,
-            mood_scores=mood_scores, genre_map=genre_map)
-    else:
-        # Fase 2: riempi i segmenti tra un anchor e il successivo. Gli anchor
-        # contano da subito in used/artist_counts, cosi' i filler non li rubano
-        # ne' sforano il limite per artista con un anchor futuro.
-        opening = skeleton.anchors[0]
-        chosen = [(opening.track, None)]
-        used = {a.track.id for a in skeleton.anchors}
-        arts: dict[str, int] = {}
-        # Gli anchor (tutti, in anticipo come per arts) contano gia' nella copertura
-        # di genere: se un anchor porta un genere richiesto, i filler non devono
-        # forzarne altri. I filler poi si accumulano incrementalmente.
-        genres_seen: dict[str, int] = {}
-        for a in skeleton.anchors:
-            if a.track.artist:
-                key = a.track.artist.lower()
-                arts[key] = arts.get(key, 0) + 1
-            ag = genre_of(a.track, genre_map)
-            if ag:
-                gk = ag.strip().lower()
-                genres_seen[gk] = genres_seen.get(gk, 0) + 1
-        secs = opening.track.duration_seconds or 0
-        for seg in skeleton.segments:
-            fillers = _beam_search_span(
-                chosen[-1][0], candidates, req, profile, start_bpm, end_bpm,
-                target_seconds, elapsed_secs=secs,
-                fill_until_secs=seg.fill_until_secs,
-                converge_to=seg.end_anchor.track, used=used, artist_counts=arts,
-                plan_family=seg.family, reserved_ids=skeleton.reserved_ids,
-                peak_window=skeleton.peak_window, mood_scores=mood_scores,
-                genre_counts=genres_seen, genre_map=genre_map)
-            for t, _ in fillers:
-                used.add(t.id)
-                if t.artist:
-                    key = t.artist.lower()
-                    arts[key] = arts.get(key, 0) + 1
-                tg = genre_of(t, genre_map)
-                if tg:
-                    gk = tg.strip().lower()
-                    genres_seen[gk] = genres_seen.get(gk, 0) + 1
-                secs += t.duration_seconds or 0
-            chosen.extend(fillers)
-            anchor_track = seg.end_anchor.track
-            chosen.append((anchor_track, score_transition(chosen[-1][0], anchor_track)))
-            secs += anchor_track.duration_seconds or 0
-        peak_ids = [a.track.id for a in skeleton.anchors if a.role == "peak"]
-        if peak_ids:
-            peak_at = next(i for i, (t, _) in enumerate(chosen) if t.id == peak_ids[0])
-    total_seconds = sum((t.duration_seconds or 0) for t, _ in chosen)
-
-    setlist = Setlist(
-        name=req.name or f"Set {req.strategy} {req.target_duration_minutes}min",
-        target_duration_minutes=req.target_duration_minutes,
-        start_bpm=start_bpm,
-        end_bpm=end_bpm,
-        strategy=req.strategy,
-        prompt=req.prompt,
-        global_explanation=_explanation(chosen, req, total_seconds),
-        owned_only=req.owned_only,
-    )
-    roles = assign_roles(len(chosen), peak_at=peak_at)
-    for position, (track, ts) in enumerate(chosen, start=1):
-        setlist.tracks.append(SetlistTrack(
-            track_id=track.id,
-            position=position,
-            role=roles[position - 1],
-            transition_score=float(ts.score) if ts else None,
-            transition_reason="; ".join(ts.technical_reasons) if ts else "traccia di apertura",
-            # risk_from_score(None) = "low": la traccia di apertura non ha transizione.
-            risk_level=risk_from_score(ts.score if ts else None),
-        ))
-    db.add(setlist)
-    db.commit()
-    db.refresh(setlist)
-    logger.info("Set generato: %s tracce, %ss (target %ss)", len(chosen), total_seconds, target_seconds)
-    return setlist

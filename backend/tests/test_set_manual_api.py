@@ -122,13 +122,14 @@ def test_errori_di_dominio(client_db):
 
 def test_endpoint_manuali_rifiutano_un_set_generato(client_db):
     client, db = client_db
-    from app.schemas import SetGenerationRequest
-    from app.services.set_generator import generate_set
-    for i in range(40):
-        db.add(Track(source_type="spotify", title=f"G{i}", artist=f"A{i % 5}", duration_seconds=300,
-                     bpm=128.0 + (i % 6), camelot_key="8A", has_local_file=True))
+    # Costruito a mano: `generate_set` e' sparito il 2026-09-19. Cio' che il
+    # test verifica — le rotte manuali rifiutano un set generato — vale finche'
+    # un set `generated` puo' stare in archivio.
+    from app.models import Setlist
+
+    generated = Setlist(name="Vecchio", kind="generated", generated_by="algorithmic")
+    db.add(generated)
     db.commit()
-    generated = generate_set(db, SetGenerationRequest(target_duration_minutes=30, start_bpm=128))
     r = client.get(f"/api/sets/{generated.id}/manual")
     assert r.status_code == 409 and r.json()["detail"]["code"] == "set_not_manual"
 

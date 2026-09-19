@@ -121,18 +121,30 @@ def test_senza_materiale_il_varco_resta_aperto(db):
     assert path_rows(s)[1].track_id is None      # ancora aperto
 
 
-def test_riempire_non_chiama_nessuna_ai(db, monkeypatch):
-    """Vincolo di progetto: il generatore-strumento e' deterministico. Se
-    qualcuno agganciasse la curatela qui, questo test lo direbbe subito."""
-    import app.services.ai_curation as curation
-    chiamate = []
-    for nome in dir(curation):
-        attr = getattr(curation, nome)
-        if callable(attr) and not nome.startswith("_") and getattr(attr, "__module__", "") == curation.__name__:
-            monkeypatch.setattr(curation, nome,
-                                lambda *a, _n=nome, **k: chiamate.append(_n))
-    pl, t = _libreria(db)
-    s = _set_con_varco(db, pl, t)
-    varco = path_rows(s)[1]
-    fill_gap(db, s.id, varco.id, expected_revision=2, count=2)
-    assert chiamate == []
+def test_il_riempimento_non_arriva_mai_a_un_client_ai():
+    """Vincolo di progetto: il generatore-strumento e' deterministico.
+
+    La curatela non esiste piu' (rimossa il 2026-09-19), ma `integrations/llm.py`
+    si': lo usano `routers/ai.py` e i test delle credenziali. Questo test guarda
+    il GRAFO DEGLI IMPORT del percorso di riempimento e pretende che non ci
+    arrivi mai — cosi' chi un domani pensasse «gia' che ci siamo, chiediamo
+    all'AI quale traccia scegliere» lo scopre subito.
+    """
+    import ast
+    from pathlib import Path
+
+    da_ispezionare = ["app/services/manual_fill.py", "app/services/set_generator.py",
+                      "app/services/set_skeleton.py", "app/services/manual_set.py"]
+    colpevoli = []
+    for f in da_ispezionare:
+        albero = ast.parse(Path(f).read_text())
+        for n in ast.walk(albero):
+            moduli = []
+            if isinstance(n, ast.ImportFrom) and n.module:
+                moduli.append(n.module)
+            elif isinstance(n, ast.Import):
+                moduli += [a.name for a in n.names]
+            for m in moduli:
+                if "llm" in m or "ai_curation" in m or "anthropic" in m.lower():
+                    colpevoli.append((f, m))
+    assert colpevoli == [], colpevoli

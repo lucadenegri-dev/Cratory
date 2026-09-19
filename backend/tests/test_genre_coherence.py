@@ -12,7 +12,7 @@ from app.models import Playlist, Track
 from app.repositories import add_track_to_playlist
 from app.schemas import SetGenerationRequest
 from app.services.scoring import RESET_GENRE_SIMILARITY, genre_families_of, genre_similarity_score
-from app.services.set_generator import _DEFAULT_PROFILE, _candidate_score, generate_set
+from app.services.set_generator import _DEFAULT_PROFILE, _candidate_score
 
 
 def make_track(**kw) -> Track:
@@ -91,35 +91,6 @@ def test_missing_genre_stays_neutral_in_ranking():
     s_unknown, _ = _candidate_score(prev, unknown, 130.0, req, {}, _DEFAULT_PROFILE, 0.5)
     s_clash, _ = _candidate_score(prev, clash, 130.0, req, {}, _DEFAULT_PROFILE, 0.5)
     assert s_unknown > s_clash
-
-
-def test_generated_set_groups_genres(db):
-    # 2 techno + 2 house identiche per BPM/key/durata: il set deve raggruppare i
-    # generi (1 solo cambio), non alternarli.
-    pl = Playlist(platform="spotify", name="PL")
-    db.add(pl)
-    db.flush()
-    genres = ["Techno", "House", "Techno", "House"]
-    for i, g in enumerate(genres):
-        t = Track(source_type="spotify", title=f"T{i}", artist=f"Art{i}",
-                  duration_seconds=200, bpm=126.0, camelot_key="8A", genre=g,
-                  has_local_file=True)
-        db.add(t)
-        db.flush()
-        add_track_to_playlist(db, t, pl)
-    db.commit()
-
-    setlist = generate_set(db, SetGenerationRequest(
-        playlist_id=pl.id, target_duration_minutes=13,
-        start_bpm=126, end_bpm=126, max_tracks_per_artist=1,
-    ))
-    ordered = sorted(setlist.tracks, key=lambda st: st.position)
-    track_genres = []
-    for st in ordered:
-        track = db.get(Track, st.track_id)
-        track_genres.append(track.genre)
-    switches = sum(1 for a, b in zip(track_genres, track_genres[1:]) if a != b)
-    assert switches == 1, f"generi alternati invece che raggruppati: {track_genres}"
 
 
 # --- Public helper: genre_families_of -----------------------------------------
