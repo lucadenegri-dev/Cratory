@@ -126,11 +126,15 @@ export default function Home() {
           altezza invece di tre lastre incorniciate dello stesso peso: erano
           quelle a impedire che la Home avesse un fuoco. La struttura la fanno
           i filetti (§4 di DESIGN.md), non i bordi delle Card.
-          `container-type: size` solo da lg in su: sotto non c'è un'altezza
+          `container-type: size` da md in su: sotto non c'è un'altezza
           definita e il contenimento farebbe collassare il blocco a zero. Le
           misure dell'arte in `cq*` discendono da qui — la cabina cresce fino a
-          riempire quello che le resta. */}
-      <div className="relative lg:h-[calc(100dvh-3rem-max(var(--player-bar-height,0px),106px))] lg:[container-type:size]">
+          riempire quello che le resta.
+          Era `lg`, ma la finestra dell'app scende fino a 900x600: fra 768 e
+          1024 la composizione restava senza contenimento, si impilava alla sua
+          altezza naturale e la pagina scrollava — la cabina si vedeva tutta
+          solo scorrendo. */}
+      <div className="relative md:h-[calc(100dvh-3rem-max(var(--player-bar-height,0px),106px))] md:[container-type:size]">
         {/* L'aria di tutta la pagina, dietro alla composizione. Sta qui e non
             dentro il ramo dei dati così respira anche mentre carica e a
             libreria vuota. Il contenuto è posizionato e viene dopo nel DOM,
@@ -172,7 +176,7 @@ export default function Home() {
                   animate={player.audible}
                   onActivate={playRandom}
                   label={t.dashboard.djPlayRandom}
-                  sizeClass="text-[1.85vw] lg:text-[min(3.3cqh,2.1cqw)]"
+                  sizeClass="text-[1.85vw] md:text-[min(3.3cqh,2.1cqw)]"
                 />
               </div>
 

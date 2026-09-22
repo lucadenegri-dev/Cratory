@@ -104,3 +104,45 @@ def test_endpoint_nessuna_release(monkeypatch):
     res = TestClient(app).get("/api/updates/check")
     assert res.status_code == 502
     assert res.json()["detail"]["code"] == "update_no_release"
+
+
+def _release_con_allegati(tag: str, allegati: list[dict]) -> dict:
+    return {**_release(tag), "assets": allegati}
+
+
+def test_il_peso_e_quello_dell_artefatto_che_l_updater_scarica(monkeypatch):
+    """Non quello del .dmg, che serve solo alla prima installazione a mano:
+    annunciare il peso sbagliato e' una promessa sbagliata su quanto ci mette."""
+    monkeypatch.setattr(uc, "app_version", lambda: "0.9.0")
+    allegati = [
+        {"name": "Cratory_0.10.0_aarch64.dmg", "size": 181_000_000},
+        {"name": "Cratory.app.tar.gz", "size": 186_400_000},
+        {"name": "Cratory.app.tar.gz.sig", "size": 404},
+        {"name": "latest.json", "size": 1_200},
+    ]
+    with _client(lambda r: httpx.Response(200, json=_release_con_allegati("v0.10.0", allegati))) as c:
+        esito = uc.check(client=c)
+    assert esito["size_bytes"] == 186_400_000
+
+
+def test_senza_l_allegato_il_peso_e_ignoto_e_non_si_inventa(monkeypatch):
+    """`None` e non una stima: chi lo mostra deve dire la frase senza numero."""
+    monkeypatch.setattr(uc, "app_version", lambda: "0.9.0")
+    for allegati in ([], [{"name": "Cratory_0.10.0_aarch64.dmg", "size": 181_000_000}],
+                     [{"name": "Cratory.app.tar.gz"}],
+                     [{"name": "Cratory.app.tar.gz", "size": 0}]):
+        with _client(lambda r: httpx.Response(200, json=_release_con_allegati("v0.10.0", allegati))) as c:
+            esito = uc.check(client=c)
+        assert esito["size_bytes"] is None, allegati
+
+
+def test_il_peso_arriva_fino_all_endpoint(monkeypatch):
+    monkeypatch.setattr(uc, "app_version", lambda: "0.9.0")
+    allegati = [{"name": "Cratory.app.tar.gz", "size": 186_400_000}]
+    monkeypatch.setattr(uc, "check", lambda **_: {
+        "current": "0.9.0", "latest": "0.10.0", "update_available": True,
+        "url": "https://esempio.invalid/v0.10.0", "notes": None,
+        "size_bytes": allegati[0]["size"],
+    })
+    corpo = TestClient(app).get("/api/updates/check").json()
+    assert corpo["size_bytes"] == 186_400_000

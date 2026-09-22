@@ -13,10 +13,13 @@ import { useT } from "@/lib/i18n";
 const MB = 1_000_000;
 const mb = (byte: number) => Math.max(1, Math.round(byte / MB)).toString();
 
-export function ConfermaAggiornamento({ open, onClose, onInstall }: {
+export function ConfermaAggiornamento({ open, onClose, onInstall, pesoMb }: {
   open: boolean;
   onClose: () => void;
   onInstall: () => void;
+  /** Quanto pesa cio' che si sta per scaricare, gia' in MB. `null` = non
+   *  si sa, e allora la frase non lo nomina. */
+  pesoMb: string | null;
 }) {
   const t = useT();
   const [stima, setStima] = useState<BackupEstimate | null>(null);
@@ -72,12 +75,12 @@ export function ConfermaAggiornamento({ open, onClose, onInstall }: {
               </Button>
             </>
           ) : (
-            <Button variant="primary" size="sm" onClick={onInstall}>{t.settings.versionInstall}</Button>
+            <Button variant="primary" size="sm" onClick={onInstall}>{t.settings.versionInstall(pesoMb)}</Button>
           )}
         </>
       }
     >
-      <p className="text-sm text-muted">{t.settings.versionConfirmBody}</p>
+      <p className="text-sm text-muted">{t.settings.versionConfirmBody(pesoMb)}</p>
       {stima && <p className="mt-2 text-sm text-fg">{t.settings.versionBackupQuestion(mb(stima.byte))}</p>}
       {inCorso && <p className="mt-2 text-xs text-muted">{t.settings.versionBackupRunning}</p>}
       {errore && (

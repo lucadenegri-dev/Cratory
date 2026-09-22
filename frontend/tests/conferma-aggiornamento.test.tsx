@@ -25,10 +25,10 @@ afterEach(() => {
   Object.values(api).forEach((f) => f.mockReset());
 });
 
-const monta = () => {
+const monta = (pesoMb: string | null = "178") => {
   const onInstall = vi.fn();
   const onClose = vi.fn();
-  render(<ConfermaAggiornamento open onClose={onClose} onInstall={onInstall} />);
+  render(<ConfermaAggiornamento open onClose={onClose} onInstall={onInstall} pesoMb={pesoMb} />);
   return { onInstall, onClose };
 };
 
@@ -40,6 +40,15 @@ describe("la conferma dell'aggiornamento", () => {
     expect(screen.getByText("Aggiorna senza backup")).toBeTruthy();
     expect(screen.getByText("Annulla")).toBeTruthy();
     expect(screen.getByText(/viene interrotto/)).toBeTruthy();
+    // Il peso dell'aggiornamento e' quello passato, non un numero scritto a mano.
+    expect(screen.getByText(/Si scaricano circa 178 MB/)).toBeTruthy();
+  });
+
+  it("senza il peso la frase non lo nomina, invece di inventarlo", async () => {
+    monta(null);
+    expect(await screen.findByText(/viene interrotto/)).toBeTruthy();
+    expect(screen.queryByText(/Si scaricano circa/)).toBeNull();
+    expect(screen.queryByText(/MB,/)).toBeNull();
   });
 
   it("senza stima restano le due uscite di prima", async () => {
@@ -54,7 +63,9 @@ describe("la conferma dell'aggiornamento", () => {
     await waitFor(() => expect(api.getBackupEstimate).toHaveBeenCalledTimes(1));
     rifiuta(new Error("giù"));
     await new Promise((r) => setTimeout(r, 0)); // lascia girare il .catch e il commit di React
-    expect(screen.getByText("Scarica e installa (≈172 MB)")).toBeTruthy();
+    // Il peso e' quello passato: prima era una costante nel dizionario, e
+    // invecchiava a ogni rilascio.
+    expect(screen.getByText("Scarica e installa (≈178 MB)")).toBeTruthy();
     expect(screen.getByText("Annulla")).toBeTruthy();
     expect(screen.queryByText("Backup e aggiorna")).toBeNull();
     expect(screen.queryByText(/Occuperebbe/)).toBeNull();

@@ -16,9 +16,16 @@ vi.mock("@/lib/updates", () => ({
 }));
 // La conferma ora chiede la stima del backup: qui non serve, resta la coppia
 // di uscite di sempre e l'asserzione su "viene interrotto" continua a valere.
+// `checkUpdates` va finto per forza: il guscio lo chiama per sapere quanto
+// pesa l'aggiornamento, e col modulo vero questo test uscirebbe in rete.
+const peso = vi.hoisted(() => ({ byte: 186_409_447 as number | null, fallisce: false }));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   getBackupEstimate: () => Promise.reject(new Error("non in questo test")),
+  checkUpdates: () => (peso.fallisce
+    ? Promise.reject(new Error("niente rete"))
+    : Promise.resolve({ current: "1.0.3", latest: "1.0.4", update_available: true,
+                        url: null, notes: null, size_bytes: peso.byte })),
 }));
 
 import { AggiornamentoGuscio } from "@/components/settings/aggiornamento-guscio";
@@ -26,6 +33,28 @@ import { AggiornamentoGuscio } from "@/components/settings/aggiornamento-guscio"
 afterEach(cleanup);
 
 const monta = () => render(<AggiornamentoGuscio versione="Stai usando la 1.0.3" />);
+
+describe("il peso dell'aggiornamento", () => {
+  /* Prima era scritto nel dizionario («≈172 MB») e invecchiava a ogni
+     rilascio: quando l'artefatto e' arrivato a 186 MB la frase prometteva
+     ancora 172. Ora lo dice la release. */
+  it("dice i MB veri dell'artefatto, non un numero fisso", async () => {
+    peso.byte = 186_409_447;
+    peso.fallisce = false;
+    finto.stato = { fase: "disponibile", info: { versione: "1.0.4", note: null, data: null } };
+    monta();
+    expect(await screen.findByText("Scarica e installa (≈186 MB)")).toBeTruthy();
+  });
+
+  it("se non si riesce a saperlo, tace il numero invece di inventarlo", async () => {
+    peso.fallisce = true;
+    finto.stato = { fase: "disponibile", info: { versione: "1.0.4", note: null, data: null } };
+    monta();
+    expect(await screen.findByText("Scarica e installa")).toBeTruthy();
+    expect(screen.queryByText(/MB/)).toBeNull();
+    peso.fallisce = false;
+  });
+});
 
 describe("scheda aggiornamento nel guscio", () => {
   it("con una versione nuova offre l'installazione, e il clic chiede conferma prima", () => {

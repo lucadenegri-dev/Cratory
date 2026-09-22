@@ -31,6 +31,9 @@ class UpdateCheck(BaseModel):
     # Testo scritto su GitHub, non nostro: è l'unica prosa che il backend
     # trasmette, ed è contenuto di terzi (come la coda del log di slskd).
     notes: str | None = None
+    # Peso dell'artefatto che l'updater scarica. `None` = non si sa, e chi
+    # mostra il numero deve tacerlo invece di stimarlo.
+    size_bytes: int | None = None
 
 
 @router.get("/api/updates/check", response_model=UpdateCheck)

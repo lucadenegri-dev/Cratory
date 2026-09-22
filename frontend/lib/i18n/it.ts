@@ -107,10 +107,15 @@ export const it: Dictionary = {
     versionAvailable: (v: string) => `È disponibile la versione ${v}`,
     versionOpenRelease: "Vedi le novità",
     versionNotesHeading: "Note di rilascio",
-    versionInstall: "Scarica e installa (≈172 MB)",
+    // Il peso lo dice la release, non una costante: `null` quando non si sa,
+    // e allora la frase lo tace invece di promettere un numero sbagliato.
+    versionInstall: (mb: string | null) =>
+      (mb ? `Scarica e installa (≈${mb} MB)` : "Scarica e installa"),
     versionConfirmTitle: "Aggiornare Cratory?",
-    versionConfirmBody:
-      "Si scaricano circa 172 MB, l'app si chiude e riparte da sola, e quello che è in corso adesso — un'analisi, un download — viene interrotto.",
+    versionConfirmBody: (mb: string | null) =>
+      (mb
+        ? `Si scaricano circa ${mb} MB, l'app si chiude e riparte da sola, e quello che è in corso adesso — un'analisi, un download — viene interrotto.`
+        : "L'app si chiude e riparte da sola, e quello che è in corso adesso — un'analisi, un download — viene interrotto."),
     versionDownloading: (fatti: string, totale: string) => `Scaricati ${fatti} MB di ${totale} MB`,
     versionDownloadingUnknown: (fatti: string) => `Scaricati ${fatti} MB`,
     versionInstalling: "Installazione in corso. L'app riparte da sola.",

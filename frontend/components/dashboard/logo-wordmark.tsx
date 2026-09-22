@@ -120,7 +120,12 @@ export function LogoWordmark({ word = WORD, title = "Cratory", className }: {
         /* Senza questa regola gli occhielli si riempiono e la O diventa un
            rombo nero: sta nei file sorgente, e va portata fin qui. */
         fillRule={GLYPH_FILL_RULE as "evenodd" | "nonzero"}
-        className={className ?? "h-auto w-full max-w-5xl text-fg-strong"}
+        /* Due tetti, e vince il primo che morde. In larghezza perche' su uno
+           schermo largo la parola non deve prendersi tutto; in altezza perche'
+           su una finestra bassa (l'app scende a 600) un frontespizio a tutta
+           larghezza mangerebbe lo spazio della cabina. `dvh` e non `cqh`: qui
+           dentro il contenitore e' quello della pagina solo da md in su. */
+        className={className ?? "h-auto max-h-[13dvh] w-full max-w-3xl text-fg-strong"}
       >
         {layout.items.map((it, i) => (
           <g

@@ -119,10 +119,16 @@ export const en = {
     versionAvailable: (v: string) => `Version ${v} is available`,
     versionOpenRelease: "See what’s new",
     versionNotesHeading: "Release notes",
-    versionInstall: "Download and install (≈172 MB)",
+    // The size comes from the release, not from a constant: `null` when it
+    // cannot be known, and then the sentence leaves it out rather than
+    // promising a number that is wrong.
+    versionInstall: (mb: string | null) =>
+      (mb ? `Download and install (≈${mb} MB)` : "Download and install"),
     versionConfirmTitle: "Update Cratory?",
-    versionConfirmBody:
-      "About 172 MB will be downloaded, the app will close and start again on its own, and anything running right now — an analysis, a download — is interrupted.",
+    versionConfirmBody: (mb: string | null) =>
+      (mb
+        ? `About ${mb} MB will be downloaded, the app will close and start again on its own, and anything running right now — an analysis, a download — is interrupted.`
+        : "The app will close and start again on its own, and anything running right now — an analysis, a download — is interrupted."),
     versionDownloading: (fatti: string, totale: string) => `Downloading ${fatti} MB of ${totale} MB`,
     versionDownloadingUnknown: (fatti: string) => `Downloading ${fatti} MB`,
     versionInstalling: "Installing. The app will start again on its own.",

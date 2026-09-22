@@ -7,6 +7,9 @@ export type UpdateCheckResult = {
   url: string | null;
   /** Note scritte su GitHub: contenuto di terzi, non testo dell'app. */
   notes: string | null;
+  /** Peso dell'artefatto che l'updater scarica, in byte. `null` quando non si
+   *  sa: chi lo mostra deve tacerlo, non stimarlo. */
+  size_bytes: number | null;
 };
 
 /** La versione in esecuzione. */

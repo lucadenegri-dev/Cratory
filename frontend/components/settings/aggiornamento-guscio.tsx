@@ -5,8 +5,9 @@
    in uso arriva come prop perché la legge VersionCard, una volta sola, per
    entrambi i modi. */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLink } from "lucide-react";
+import { checkUpdates } from "@/lib/api";
 import { Button } from "@/components/ui";
 import { ConfermaAggiornamento } from "@/components/settings/conferma-aggiornamento";
 import { useT, type Dictionary } from "@/lib/i18n";
@@ -31,9 +32,28 @@ export function AggiornamentoGuscio({ versione }: { versione: string }) {
   const t = useT();
   const { stato, controllaOra, installaOra, riavviaOra } = useAggiornamento();
   const [conferma, setConferma] = useState(false);
+  /* Quanto pesa l'artefatto. Il ponte Tauri non lo sa — il manifesto
+     dell'updater non porta la dimensione — mentre il backend la legge dagli
+     allegati della release, che scarica gia' per il proprio controllo. Resta
+     `null` se la chiamata non riesce: il testo allora tace il numero invece
+     di promettere quello sbagliato (prima era scritto a mano, «172 MB», e
+     invecchiava a ogni rilascio). */
+  const [peso, setPeso] = useState<number | null>(null);
   // Durante download e installazione non si ricontrolla: il controllo
   // sostituirebbe lo stato da cui dipende ciò che sta già succedendo.
   const occupato = stato.fase === "scaricando" || stato.fase === "installando";
+  const disponibile = stato.fase === "disponibile";
+
+  useEffect(() => {
+    if (!disponibile) return;
+    let vivo = true;
+    checkUpdates()
+      .then((r) => { if (vivo) setPeso(r.size_bytes); })
+      .catch(() => { if (vivo) setPeso(null); });
+    return () => { vivo = false; };
+  }, [disponibile]);
+
+  const pesoMb = peso === null ? null : mb(peso);
 
   const corpo = () => {
     switch (stato.fase) {
@@ -90,7 +110,7 @@ export function AggiornamentoGuscio({ versione }: { versione: string }) {
             )}
             <div className="mt-2 flex flex-wrap gap-2">
               <Button size="sm" variant="primary" onClick={() => setConferma(true)}>
-                {t.settings.versionInstall}
+                {t.settings.versionInstall(pesoMb)}
               </Button>
               {/* La via d'uscita quando l'automatismo non funziona. */}
               <a
@@ -121,6 +141,7 @@ export function AggiornamentoGuscio({ versione }: { versione: string }) {
       </div>
       {corpo()}
       <ConfermaAggiornamento
+        pesoMb={pesoMb}
         open={conferma}
         onClose={() => setConferma(false)}
         onInstall={() => {
