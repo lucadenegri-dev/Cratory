@@ -16,9 +16,9 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from app.integrations.bandcamp import DISCOVER_PAGE_SIZE, BandcampError
+from app.integrations.bandcamp import DISCOVER_PAGE_SIZE, BandcampError, _name_matches
 from app.services.dig_sources import DiscoveryLead, Pile, Seed
-from app.services.discovery_dig import _VARIOUS, _clean_artist, _norm
+from app.services.discovery_dig import _FORMAT_SUFFIX_RE, _VARIOUS, _clean_artist, _norm
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ class BandcampSource:
         per costruzione, e `reach == height` perche' non esiste un fondo oltre a
         quello che l'etichetta ha pubblicato.
         """
-        band = self.client.find_band(seed.value)
+        band = self.client.find_band(seed.value, label=True)
         if not band or not band.get("id"):
             return Pile(height=0, reach=0)
         discography = self.client.band_discography(int(band["id"]))
@@ -277,6 +277,15 @@ class BandcampSimilar:
     # --- resolve -------------------------------------------------------------
 
     def resolve(self, track) -> Any:
+        """L'origine dei simili: la release della traccia, o almeno il suo artista.
+
+        Tre passi, ognuno con un costo: la band dell'artista (una richiesta), la
+        release nella sua discografia (una richiesta, zero se la band manca), e se
+        là non c'è la ricerca "artista + album" (una o due richieste), perché una
+        release pubblicata da un'etichetta sta sulla pagina dell'etichetta e la
+        discografia dell'artista non la elenca. Trovata la release, il dettaglio
+        (una richiesta) dà etichetta, tag e anno.
+        """
         from app.services.discovery_similar import Origin
 
         artist_raw = (getattr(track, "artist", None) or "").strip()
@@ -286,44 +295,85 @@ class BandcampSimilar:
         if not artist:
             return None
         band = self.client.find_band(artist)
-        if not band or not band.get("id"):
-            return None
-        band_id = int(band["id"])
-        discography = self.client.band_discography(band_id)
+        band_id = int(band["id"]) if band and band.get("id") else None
+        discography = self.client.band_discography(band_id) if band_id else []
 
         item = self._match_release(discography, track)
-        if item is None:
-            # Release non riconosciuta: si tiene l'artista e si prendono dai tag del
-            # file quel che la release avrebbe dato. Dichiarato, non nascosto.
-            return Origin(
-                artist=artist, band_id=band_id, title=None, tralbum_id=None,
-                tralbum_type=None,
-                label=(getattr(track, "label", None) or "").strip() or None,
-                label_id=None,
-                tag=(_tag_norm(getattr(track, "genre", None) or "") or None),
-                year=getattr(track, "year", None),
-                source_url=None, resolution="artist_only", discography=discography,
-            )
+        if item is not None:
+            host_id = int(item.get("band_id") or band_id)
+            tralbum_id = int(item["item_id"])
+            tralbum_type = _TRALBUM_TYPES.get(str(item.get("item_type") or "a"), "a")
+            title = (item.get("title") or "").strip() or None
+        else:
+            found = self._search_release(artist, track)
+            if found is None:
+                if band_id is None:
+                    return None
+                # Release non riconosciuta: si tiene l'artista e si prendono dai tag
+                # del file quel che la release avrebbe dato. Dichiarato, non nascosto.
+                return Origin(
+                    artist=artist, band_id=band_id, title=None, tralbum_id=None,
+                    tralbum_type=None,
+                    label=(getattr(track, "label", None) or "").strip() or None,
+                    label_id=None,
+                    tag=(_tag_norm(getattr(track, "genre", None) or "") or None),
+                    year=getattr(track, "year", None),
+                    source_url=None, resolution="artist_only", discography=discography,
+                )
+            host_id, tralbum_id, tralbum_type = int(found["band_id"]), int(found["id"]), "a"
+            title = (found.get("name") or "").strip() or None
 
-        tralbum_type = _TRALBUM_TYPES.get(str(item.get("item_type") or "a"), "a")
         detail = self.client.tralbum(
-            band_id=int(item.get("band_id") or band_id),
-            tralbum_id=int(item["item_id"]),
-            tralbum_type=tralbum_type,
-        )
-        label_id = detail.get("label_id")
+            band_id=host_id, tralbum_id=tralbum_id, tralbum_type=tralbum_type)
+        label, label_id = self._label_of(detail, artist, band_id)
         return Origin(
-            artist=artist, band_id=band_id,
-            title=(item.get("title") or "").strip() or None,
-            tralbum_id=int(item["item_id"]), tralbum_type=tralbum_type,
-            label=(detail.get("label") or "").strip() or None,
-            label_id=int(label_id) if label_id else None,
+            artist=artist, band_id=band_id, title=title,
+            tralbum_id=tralbum_id, tralbum_type=tralbum_type,
+            label=label, label_id=label_id,
             tag=self._style_tag(detail, track),
             year=_bc_year_from_epoch(detail.get("release_date"))
                  or getattr(track, "year", None),
             source_url=(detail.get("bandcamp_url") or "").split("?")[0] or None,
             resolution="release", discography=discography,
         )
+
+    def _search_release(self, artist: str, track) -> dict | None:
+        """La release cercata per "artista + album" (poi "artista + titolo").
+
+        Senza il suffisso di formato: "Blawan Woke Up Right Handed EP" dà zero
+        risultati, senza "EP" trova la release (misurato 2026-09-27). Il confronto
+        dei nomi lato client accetta comunque il suffisso su Bandcamp.
+        """
+        from app.services.discovery_dig import _dedup_title
+
+        for value in ((getattr(track, "album", None) or ""),
+                      (getattr(track, "title", None) or "")):
+            wanted = _FORMAT_SUFFIX_RE.sub("", _dedup_title(value)).strip()
+            if not wanted:
+                continue
+            found = self.client.find_release(artist, wanted)
+            if found is not None and found.get("band_id") and found.get("id"):
+                return found
+        return None
+
+    @staticmethod
+    def _label_of(detail: dict, artist: str, band_id: int | None) -> tuple[str | None, int | None]:
+        """(nome, id) dell'etichetta di una release, o (None, None) se autoprodotta.
+
+        Due forme, entrambe reali: sulla pagina dell'artista il dettaglio dichiara
+        `label`/`label_id` (Blawan -> XL Recordings); sulla pagina di un'etichetta
+        i due campi sono VUOTI e l'etichetta è la band che ospita (`detail["band"]`,
+        747 -> Aquaregia). Una pagina che ospita ma si chiama come l'artista non è
+        un'etichetta: è autoprodotto.
+        """
+        label_id = detail.get("label_id")
+        if label_id:
+            return (detail.get("label") or "").strip() or None, int(label_id)
+        host = detail.get("band") or {}
+        host_id, host_name = host.get("band_id"), (host.get("name") or "").strip()
+        if not host_id or int(host_id) == band_id or _name_matches(artist, host_name):
+            return None, None
+        return host_name or None, int(host_id)
 
     def _match_release(self, discography: list[dict], track) -> dict | None:
         """La release della discografia che corrisponde alla traccia.
@@ -378,7 +428,7 @@ class BandcampSimilar:
         if origin.label_id and origin.label_id != origin.band_id:
             return self.client.band_discography(origin.label_id)
         if origin.resolution == "artist_only" and origin.label:
-            band = self.client.find_band(origin.label)
+            band = self.client.find_band(origin.label, label=True)
             if band and band.get("id"):
                 return self.client.band_discography(int(band["id"]))
         return []

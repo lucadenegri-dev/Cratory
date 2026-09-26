@@ -913,13 +913,26 @@ map, not the shop this user buys from, and Bandcamp leads carry a real per-track
 stream instead of an iTunes clip. An unknown `track_id` is `404 track_not_found`; a
 provider failure is `502 discovery_provider_error`, never a silent empty list.
 
-Resolution runs in three steps and degrades **explicitly**: band search on the cleaned
-artist, then a match of the track's album (or title) against that band's discography,
-then the release detail for label, tags and year. `origin.resolution` is `release`
-when the release was matched and `artist_only` when it was not — in which case label,
-style tag and year come from the file's own tags. `origin` is `null` when Bandcamp
-does not know the artist at all: there is no starting point, and no fallback is
-attempted.
+Resolution degrades **explicitly**: band search on the cleaned artist, then a match
+of the track's album (or title) against that band's discography, and when that
+finds nothing an album search for "artist + album" (then "artist + title", format
+suffix such as `EP` stripped) across every Bandcamp page — a release published by a
+label lives on the label's page, and the artist's own discography does not list it
+(measured 2026-09-27 on ten owned tracks: 8 resolved this way, 5 before). The release
+detail then gives label, tags and year; for a label-hosted release the detail
+declares no label and the hosting page is the label. `origin.resolution` is
+`release` when the release was found either way and `artist_only` when it was not —
+in which case label, style tag and year come from the file's own tags. `origin` is
+`null` only when Bandcamp knows neither the artist nor the release. A release found
+without an artist page still resolves: `same_artist` is then absent (`no_band`) while
+the label and style edges are walked.
+
+Band lookups (artist, label, dig label seed) keep only a result whose name matches
+the one searched — equal, or extending it by whole words (`NAFF` accepts
+`naff recordings`) — because Bandcamp's autocomplete is fuzzy ("Music For Nations"
+returns "Music For An Alternative Nation"); a label lookup prefers the result Bandcamp
+flags as a label. A missed match leaves an edge absent, a wrong one would walk another
+label's catalogue.
 
 Three edges produce the leads, and each one that reached a lead leaves a `Reason` on
 it: `same_artist` (the rest of that discography, no extra request), `same_label` (the
@@ -933,8 +946,9 @@ and "I could not look" are different facts, and the UI says which.
 
 Leads are `DiscoveryLeadOut` exactly as the dig returns them, so preview, tracklist,
 add and download work unchanged. Ranking is the dig's own: taste profile over the
-whole library, per-artist cap, no demand signal (Bandcamp has none). Expect 4-6
-Bandcamp requests per call; nothing is cached.
+whole library, per-artist cap, no demand signal (Bandcamp has none). Expect 4-8
+Bandcamp requests per call (the album search costs one or two only when the
+discography match fails); nothing is cached.
 
 The dig's per-artist cap (two leads per artist) applies to the label and style edges
 only: the `same_artist` edge is one artist by construction, and capping it collapsed

@@ -15,6 +15,7 @@ ATTENZIONE: sono endpoint INTERNI e non documentati, quelli dietro
 httpx iniettabile -> test senza rete.
 """
 
+import re
 from typing import Any
 
 import httpx
@@ -35,6 +36,23 @@ DISCOVER_SLICE = "top"
 
 class BandcampError(Exception):
     pass
+
+
+def _words(value: Any) -> list[str]:
+    """Le parole di un nome, minuscole, senza punteggiatura: 'AK-One' -> ['ak', 'one']."""
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).split()
+
+
+def _name_matches(wanted: str, candidate: Any) -> bool:
+    """Il nome trovato e' quello cercato: uguale, o lo estende di parole intere.
+
+    'NAFF' accetta 'naff recordings' e 'Sun Runner' accetta 'Sun Runner EP'; 'Music
+    For Nations' rifiuta 'Music For An Alternative Nation' (terza parola diversa) e
+    '747' rifiuta 'AK-747s' (la parola e' '747s'). Per parole intere e non per
+    caratteri: un prefisso di caratteri accetterebbe 'Ciel' per 'Cielo'.
+    """
+    wanted_words = _words(wanted)
+    return bool(wanted_words) and _words(candidate)[:len(wanted_words)] == wanted_words
 
 
 class BandcampClient(ClosableHttpClient):
@@ -85,17 +103,55 @@ class BandcampClient(ClosableHttpClient):
             int(data.get("result_count") or 0),
         )
 
-    def find_band(self, name: str) -> dict[str, Any] | None:
-        """L'etichetta (o l'artista) che meglio corrisponde al nome. `None` se non c'e'.
+    def _autocomplete(self, text: str, item_type: str) -> list[dict[str, Any]]:
+        """I risultati dell'autocomplete di un solo tipo (`b` band, `a` album, `t` traccia).
 
-        Il filtro `b` chiede solo le band; i risultati di altro tipo si scartano
+        Il filtro chiede solo quel tipo; i risultati di altro tipo si scartano
         comunque, perche' l'ordine non e' garantito.
         """
         data = self._checked(self._post("/api/bcsearch_public_api/1/autocomplete_elastic", {
-            "search_text": name, "search_filter": "b", "full_page": False, "fan_id": None,
+            "search_text": text, "search_filter": item_type, "full_page": False, "fan_id": None,
         }), "search")
-        for item in ((data.get("auto") or {}).get("results") or []):
-            if item.get("type") == "b" and item.get("id"):
+        return [item for item in ((data.get("auto") or {}).get("results") or [])
+                if item.get("type") == item_type and item.get("id")]
+
+    def find_band(self, name: str, *, label: bool = False) -> dict[str, Any] | None:
+        """La band (artista o etichetta) con QUEL nome. `None` se non c'e'.
+
+        L'autocomplete e' approssimativo: per "Music For Nations" restituisce "Music
+        For An Alternative Nation", per "PMEDIA" "Red Letter Media". Si tiene solo
+        chi corrisponde al nome cercato (`_name_matches`): meglio nessuna band di una
+        band sbagliata, che farebbe camminare un arco sul catalogo di un altro.
+
+        Con `label=True`, tra i corrispondenti vince chi Bandcamp segna come
+        etichetta: "NAFF" trova "naff recordings" (etichetta) prima di "Naff"
+        (una band omonima).
+        """
+        matches = [item for item in self._autocomplete(name, "b")
+                   if _name_matches(name, item.get("name"))]
+        if label:
+            for item in matches:
+                if item.get("is_label"):
+                    return item
+        return matches[0] if matches else None
+
+    def find_release(self, artist: str, title: str) -> dict[str, Any] | None:
+        """La release "artista + titolo", ovunque sia ospitata. `None` se non c'e'.
+
+        Cerca fra gli album di TUTTE le pagine, non solo in una discografia: una
+        release pubblicata da un'etichetta sta sulla pagina dell'etichetta e la
+        discografia dell'artista non la elenca. Il risultato porta `band_id` della
+        pagina che ospita e `id` della release: quel che serve a `tralbum`.
+
+        Si accetta solo se il nome band corrisponde all'artista e il titolo a
+        quello cercato: la query e' approssimativa e il primo risultato per
+        "Boards of Canada Inferno" e' il caricamento di un fan.
+        """
+        for item in self._autocomplete(f"{artist} {title}", "a"):
+            if not item.get("band_id"):
+                continue
+            if (_name_matches(artist, item.get("band_name"))
+                    and _name_matches(title, item.get("name"))):
                 return item
         return None
 

@@ -2,9 +2,10 @@
 
 Stesso mestiere del dig — lead non posseduti, ordinati per gusto — ma il seme non è
 un genere astratto: è una traccia della libreria. Al posto della coppia probe/fetch
-c'è una coppia risolvi/espandi: la sorgente riconosce la release d'origine, poi
-percorre gli archi (stesso artista, stessa etichetta, stesso stile nel periodo) e
-restituisce i record grezzi etichettati con l'arco che li ha raggiunti.
+c'è una coppia risolvi/espandi: la sorgente riconosce la release d'origine (nella
+discografia dell'artista o, se là non c'è, cercandola per "artista + album" ovunque
+sia ospitata), poi percorre gli archi (stesso artista, stessa etichetta, stesso stile
+nel periodo) e restituisce i record grezzi etichettati con l'arco che li ha raggiunti.
 
 Deduplica, profilo di gusto e punteggio sono quelli del dig: qui non si reinventa
 niente, si cambia solo da dove arrivano i candidati.
@@ -43,7 +44,9 @@ class Origin:
     """Cosa la sorgente ha riconosciuto della traccia di partenza."""
 
     artist: str
-    band_id: int
+    # None quando l'artista non ha una pagina Bandcamp ma la release è stata trovata
+    # lo stesso (ospitata dall'etichetta): l'arco artista non esiste, gli altri sì.
+    band_id: int | None
     title: str | None
     tralbum_id: int | None
     tralbum_type: str | None
@@ -189,6 +192,8 @@ def _absent_edges(origin: Origin, style_period: bool) -> dict[str, str]:
     non è percorribile, e riportarla come "0 dischi" direbbe che si è guardato.
     """
     absent: dict[str, str] = {}
+    if origin.band_id is None:
+        absent["same_artist"] = "no_band"
     if origin.resolution == "release":
         # Percorribile solo con un `label_id` di una band DIVERSA dall'artista.
         if not origin.label_id or origin.label_id == origin.band_id:

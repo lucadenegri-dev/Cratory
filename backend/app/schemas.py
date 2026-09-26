@@ -692,8 +692,9 @@ class OriginOut(BaseModel):
     year: int | None = None
     tag: str | None = None
     source_url: str | None = None
-    # "release" = release riconosciuta; "artist_only" = solo l'artista, il resto
-    # viene dai tag del file.
+    # "release" = release riconosciuta (nella discografia dell'artista o cercata
+    # per "artista + album"); "artist_only" = solo l'artista, il resto viene dai
+    # tag del file.
     resolution: str
 
 
@@ -708,7 +709,8 @@ class EdgeReportOut(BaseModel):
 class DiscoverySimilarResponse(BaseModel):
     track_id: int
     source: str = "bandcamp"
-    # null quando la sorgente non conosce l'artista: non c'è nessun punto di partenza.
+    # null quando la sorgente non conosce né l'artista né la release: nessun punto
+    # di partenza.
     origin: OriginOut | None = None
     edges: dict[str, EdgeReportOut] = {}
     leads: list[DiscoveryLeadOut] = []

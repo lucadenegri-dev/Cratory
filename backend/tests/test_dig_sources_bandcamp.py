@@ -248,8 +248,8 @@ class _FakeLabelBandcamp(_FakeBandcamp):
         self.band = band
         self.discography = discography if discography is not None else [DISCOGRAPHY_ITEM]
 
-    def find_band(self, name):
-        self.calls.append({"op": "find_band", "name": name})
+    def find_band(self, name, *, label=False):
+        self.calls.append({"op": "find_band", "name": name, "label": label})
         return self.band
 
     def band_discography(self, band_id):
@@ -266,6 +266,9 @@ def test_label_probe_resolves_the_band_and_keeps_the_discography():
     assert pile.resolution == "discography"
     assert len(pile.handle) == 153
     assert [c["op"] for c in fake.calls] == ["find_band", "discography"]
+    # Un seme etichetta cerca un'etichetta: "NAFF" deve dare "naff recordings",
+    # non la band omonima.
+    assert fake.calls[0]["label"] is True
 
 
 def test_a_label_bandcamp_does_not_host_is_a_dead_seed():

@@ -205,7 +205,7 @@ export interface SimilarEdge {
 export interface DiscoverySimilarResponse {
   track_id: number;
   source: string;
-  /** `null` quando Bandcamp non conosce l'artista: nessun punto di partenza. */
+  /** `null` quando Bandcamp non conosce né l'artista né la release: nessun punto di partenza. */
   origin: SimilarOrigin | null;
   edges: Record<string, SimilarEdge>;
   leads: DiscoveryLead[];

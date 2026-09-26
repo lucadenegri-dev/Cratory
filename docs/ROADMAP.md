@@ -53,7 +53,10 @@ endpoints, `docs/API.md`.
   graph around it on Bandcamp instead of a genre seed: the rest of the artist's
   discography, the label's, and — behind a switch — the same style within ±3 years.
   Resolution degrades explicitly (`release` → `artist_only` → no origin at all) and
-  each edge reports its lead count or why it was not walked.
+  each edge reports its lead count or why it was not walked. A release the artist's
+  discography does not list (label-hosted, the common case) is found by an
+  "artist + album" search, even for an artist without a Bandcamp page; band lookups
+  reject fuzzy neighbours by name.
   The "Similar" search is reachable from the Dig bar too (mode "Track", a free-text
   search over the library); the dig's per-artist cap exempts the artist edge, which
   is one artist by construction. Discogs can be hidden as a dig source from Settings

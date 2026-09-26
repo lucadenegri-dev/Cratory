@@ -164,6 +164,19 @@ described in `CLAUDE.md`.
   un artista solo per costruzione — misurato, due su dieci — e i conteggi degli
   archi ora descrivono i lead resi.
 
+- **Simili: la release si trova anche sulla pagina dell'etichetta (2026-09-27).**
+  Misurato su dieci tracce possedute: la discografia della band dell'artista non
+  elenca le release pubblicate da un'etichetta, che stanno sulla pagina
+  dell'etichetta, e la risoluzione scendeva ad `artist_only` con l'etichetta
+  cercata per nome nell'autocomplete — che è approssimativo ("Music For Nations" →
+  "Music For An Alternative Nation") e veniva preso al primo risultato. Ora se la
+  discografia non aggancia si cerca "artista + album" (senza suffisso EP/LP, che
+  azzera la query) fra gli album di tutte le pagine, e la pagina che ospita è
+  l'etichetta; un artista senza pagina Bandcamp arriva lo stesso alla release, con
+  l'arco artista dichiarato assente. Le ricerche band tengono solo chi corrisponde
+  al nome (uguale o prefisso di parole) e per le etichette preferiscono chi ha il
+  flag etichetta. Otto su dieci risolvono la release, prima cinque.
+
 - **Discovery "Simili" (2026-09-06).** Dal dettaglio di una traccia posseduta si
   arriva ai suoi parenti su Bandcamp: stessa discografia, stessa etichetta, e con un
   interruttore lo stesso stile nel periodo. Riusa dedup, gusto e griglia del dig; gli

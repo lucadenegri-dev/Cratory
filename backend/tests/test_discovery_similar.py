@@ -116,6 +116,18 @@ def test_a_missing_label_in_artist_only_is_absent_for_its_own_reason(db):
     assert result.edges["same_label"].absent_reason == "no_label"
 
 
+def test_an_origin_without_a_band_has_no_artist_edge_but_walks_the_others(db):
+    # Release trovata per "artista + album" ma artista senza pagina Bandcamp:
+    # l'arco artista non esiste (dichiarato, non "0 dischi"), gli altri sì.
+    source = _FakeSource(origin=_origin(band_id=None, discography=[]),
+                         edges=[("same_label", _lead())])
+    result = similar(db, _track(), source=source, style_period=False, library=[])
+    assert result.origin is not None
+    assert result.edges["same_artist"] == EdgeReport(count=None, absent_reason="no_band")
+    assert result.edges["same_label"].count == 1
+    assert len(result.leads) == 1
+
+
 def test_the_artist_edge_is_not_capped(db):
     # La sonda della diagnosi, come test permanente. `_MAX_PER_ARTIST` del dig
     # tagliava a 2 un arco che è per costruzione un artista solo: "i simili
@@ -190,15 +202,21 @@ TRALBUM = {
 class _FakeClient:
     """Client Bandcamp finto: risposte prefissate, chiamate registrate."""
 
-    def __init__(self, band=None, discographies=None, tralbum=None):
+    def __init__(self, band=None, discographies=None, tralbum=None, releases=None):
         self.band = band
         self.discographies = discographies or {}
         self._tralbum = tralbum or {}
+        # Titolo cercato -> risultato dell'autocomplete album. Assente = non trovato.
+        self.releases = releases or {}
         self.calls: list[tuple] = []
 
-    def find_band(self, name):
-        self.calls.append(("find_band", name))
+    def find_band(self, name, *, label=False):
+        self.calls.append(("find_band", name, label))
         return self.band
+
+    def find_release(self, artist, title):
+        self.calls.append(("find_release", artist, title))
+        return self.releases.get(title)
 
     def band_discography(self, band_id):
         self.calls.append(("band_discography", band_id))
@@ -232,6 +250,8 @@ def test_resolve_matches_the_release_by_album_and_reads_its_details():
     assert origin.label_id == 2788766970
     assert origin.year == 2025          # da release_date epoch
     assert origin.source_url == TRALBUM["bandcamp_url"]
+    # Riconosciuta in discografia: nessuna ricerca release, che costerebbe una richiesta.
+    assert not any(c[0] == "find_release" for c in client.calls)
 
 
 def test_resolve_skips_generic_and_location_tags_when_choosing_the_style_tag():
@@ -254,11 +274,132 @@ def test_unresolved_release_falls_back_to_the_file_tags():
     assert origin.year == 2025              # da track.year
     # Nessun dettaglio release chiesto: non c'è release da dettagliare.
     assert not any(c[0] == "tralbum" for c in client.calls)
+    # Ma la ricerca release è stata tentata, per album e poi per titolo.
+    assert [c for c in client.calls if c[0] == "find_release"] == [
+        ("find_release", "Jasmín", "Un disco che non esiste"),
+        ("find_release", "Jasmín", "Nemmeno questo"),
+    ]
 
 
-def test_a_band_bandcamp_does_not_know_resolves_to_nothing():
-    src = BandcampSimilar(_FakeClient(band=None))
+def test_a_band_bandcamp_does_not_know_and_a_release_it_does_not_have_resolve_to_nothing():
+    client = _FakeClient(band=None)
+    src = BandcampSimilar(client)
     assert src.resolve(_track()) is None
+    # Senza band non c'è discografia da scaricare.
+    assert not any(c[0] == "band_discography" for c in client.calls)
+
+
+# --- fallback: la release cercata per "artista + album" ---------------------------
+#
+# Misurato il 2026-09-27 su dieci tracce della libreria: la discografia della band
+# dell'artista NON elenca le release pubblicate da un'etichetta (stanno sulla pagina
+# dell'etichetta), e per quelle l'autocomplete album con "artista album" le trova
+# 8 volte su 10. Payload ridotti ai campi usati.
+
+LABEL_HOSTED_RELEASE = {
+    "type": "a", "id": 3507238487, "name": "Pacific Spirit", "band_name": "747",
+    "band_id": 2433457130,
+}
+
+# Il dettaglio di una release ospitata dall'etichetta: `label`/`label_id` vuoti,
+# l'etichetta è la band che ospita.
+LABEL_HOSTED_TRALBUM = {
+    "label": None, "label_id": None,
+    "band": {"band_id": 2433457130, "name": "Aquaregia"},
+    "tralbum_artist": "747",
+    "tags": [{"name": "acid", "norm_name": "acid", "isloc": False}],
+    "release_date": 1750000000,
+    "bandcamp_url": "https://aquaregiarec.bandcamp.com/album/pacific-spirit",
+}
+
+
+def test_a_release_the_discography_does_not_list_is_searched_by_artist_and_album():
+    client = _FakeClient(
+        band={"id": 111, "name": "747"},
+        discographies={111: [{**DISCOGRAPHY_ITEM, "band_id": 111, "title": "Altro"}]},
+        tralbum=LABEL_HOSTED_TRALBUM,
+        releases={"Pacific Spirit": LABEL_HOSTED_RELEASE},
+    )
+    origin = BandcampSimilar(client).resolve(
+        _track(artist="747", title="Second Narrows", album="Pacific Spirit"))
+    assert origin.resolution == "release"
+    assert origin.title == "Pacific Spirit"
+    assert origin.tralbum_id == 3507238487
+    assert origin.tralbum_type == "a"
+    # La band resta quella dell'artista: l'arco artista cammina la SUA discografia.
+    assert origin.band_id == 111
+    assert len(origin.discography) == 1
+    # Il dettaglio si chiede alla pagina che ospita, non alla band dell'artista.
+    assert ("tralbum", 2433457130, 3507238487, "a") in client.calls
+    assert origin.year == 2025
+    assert origin.tag == "acid"
+    assert origin.source_url == LABEL_HOSTED_TRALBUM["bandcamp_url"]
+
+
+def test_a_release_hosted_by_another_band_takes_that_band_as_its_label():
+    client = _FakeClient(
+        band={"id": 111, "name": "747"}, discographies={111: []},
+        tralbum=LABEL_HOSTED_TRALBUM, releases={"Pacific Spirit": LABEL_HOSTED_RELEASE},
+    )
+    origin = BandcampSimilar(client).resolve(_track(artist="747", album="Pacific Spirit"))
+    assert origin.label == "Aquaregia"
+    assert origin.label_id == 2433457130
+
+
+def test_a_release_hosted_by_the_artist_keeps_the_label_the_detail_declares():
+    # Blawan pubblica "Woke Up Right Handed" sulla propria pagina, con XL come
+    # etichetta dichiarata nel dettaglio: l'etichetta è quella, non la pagina.
+    client = _FakeClient(
+        band={"id": 632918856, "name": "Blawan"}, discographies={632918856: []},
+        tralbum={**TRALBUM, "label": "XL Recordings", "label_id": 3802567032,
+                 "band": {"band_id": 632918856, "name": "Blawan"}},
+        releases={"Woke Up Right Handed": {"type": "a", "id": 1613389736,
+                                           "name": "Woke Up Right Handed",
+                                           "band_name": "Blawan", "band_id": 632918856}},
+    )
+    origin = BandcampSimilar(client).resolve(
+        _track(artist="Blawan", album="Woke Up Right Handed EP"))
+    assert origin.label == "XL Recordings"
+    assert origin.label_id == 3802567032
+
+
+def test_the_release_search_strips_the_format_suffix():
+    # "Blawan Woke Up Right Handed EP" dà zero risultati, senza "EP" trova la
+    # release. Misurato il 2026-09-27.
+    client = _FakeClient(band={"id": 632918856, "name": "Blawan"},
+                         discographies={632918856: []})
+    BandcampSimilar(client).resolve(_track(artist="Blawan", title="Gosk",
+                                           album="Woke Up Right Handed EP"))
+    assert ("find_release", "Blawan", "Woke Up Right Handed") in client.calls
+
+
+def test_a_release_hosted_by_a_page_named_after_the_artist_is_self_released():
+    # La pagina che ospita si chiama come l'artista e il dettaglio non dichiara
+    # un'etichetta: è autoprodotto, non "etichetta = l'artista stesso".
+    client = _FakeClient(
+        band={"id": 111, "name": "747"}, discographies={111: []},
+        tralbum={**LABEL_HOSTED_TRALBUM, "band": {"band_id": 999, "name": "747"}},
+        releases={"Pacific Spirit": LABEL_HOSTED_RELEASE},
+    )
+    origin = BandcampSimilar(client).resolve(_track(artist="747", album="Pacific Spirit"))
+    assert origin.label is None
+    assert origin.label_id is None
+
+
+def test_an_artist_without_a_band_still_resolves_through_the_release():
+    # "Ciel, CCL" non ha una band su Bandcamp, ma "Tilda's Goat Stare" sta sulla
+    # pagina di naff recordings e la ricerca album la trova.
+    client = _FakeClient(
+        band=None, tralbum=LABEL_HOSTED_TRALBUM,
+        releases={"Pacific Spirit": LABEL_HOSTED_RELEASE},
+    )
+    origin = BandcampSimilar(client).resolve(_track(artist="747", album="Pacific Spirit"))
+    assert origin is not None
+    assert origin.resolution == "release"
+    assert origin.band_id is None
+    assert origin.discography == []
+    assert origin.label_id == 2433457130
+    assert not any(c[0] == "band_discography" for c in client.calls)
 
 
 DISCOVER_ITEM_2026 = {
@@ -328,6 +469,35 @@ def test_a_self_released_origin_has_no_label_edge_and_costs_no_request():
     edges = src.expand(origin, style_period=False)
     assert [e for e, _ in edges if e == "same_label"] == []
     assert client.calls[before:] == []
+
+
+def test_the_label_edge_walks_the_hosting_label_when_the_artist_has_no_band():
+    client = _FakeClientWithDiscover(
+        band=None, tralbum=LABEL_HOSTED_TRALBUM,
+        discographies={2433457130: [LABEL_ITEM]},
+        releases={"Pacific Spirit": LABEL_HOSTED_RELEASE},
+    )
+    src = BandcampSimilar(client)
+    origin = src.resolve(_track(artist="747", album="Pacific Spirit"))
+    edges = src.expand(origin, style_period=False)
+    assert [e for e, _ in edges if e == "same_artist"] == []
+    assert [raw["title"] for e, raw in edges if e == "same_label"] == \
+        ["Un disco dell'etichetta"]
+
+
+def test_the_label_edge_by_name_asks_for_a_label_not_any_band():
+    # artist_only: l'etichetta viene dal tag del file e si cerca per nome. Deve
+    # chiedere un'etichetta, o "NAFF" prenderebbe la band omonima.
+    client = _FakeClientWithDiscover(
+        band={"id": 637178087, "name": "Jasmín"},
+        discographies={637178087: [], },
+        tralbum=TRALBUM,
+    )
+    src = BandcampSimilar(client)
+    origin = src.resolve(_track(album="Sconosciuto", title="Sconosciuto"))
+    assert origin.resolution == "artist_only"
+    src.expand(origin, style_period=False)
+    assert ("find_band", "Hessle Audio", True) in client.calls
 
 
 def test_the_style_edge_keeps_only_releases_inside_the_period_window():
