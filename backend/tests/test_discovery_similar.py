@@ -116,6 +116,25 @@ def test_a_missing_label_in_artist_only_is_absent_for_its_own_reason(db):
     assert result.edges["same_label"].absent_reason == "no_label"
 
 
+def test_a_label_bandcamp_does_not_know_is_absent_for_its_own_reason(db):
+    # artist_only con un nome etichetta nei tag che Bandcamp non ha ("PMEDIA"):
+    # "0 dischi" direbbe di aver guardato il catalogo, e non c'era un catalogo.
+    source = _FakeSource(origin=_origin(resolution="artist_only", label="PMEDIA",
+                                        label_id=None, title=None, tralbum_id=None),
+                         edges=[("same_artist", _lead())])
+    result = similar(db, _track(), source=source, style_period=False, library=[])
+    assert result.edges["same_label"] == EdgeReport(count=None,
+                                                    absent_reason="label_not_found")
+
+
+def test_a_label_by_name_that_is_the_artist_page_is_self_released(db):
+    source = _FakeSource(origin=_origin(resolution="artist_only", label="Jasmín",
+                                        label_id=637178087, title=None, tralbum_id=None),
+                         edges=[("same_artist", _lead())])
+    result = similar(db, _track(), source=source, style_period=False, library=[])
+    assert result.edges["same_label"].absent_reason == "self_released"
+
+
 def test_an_origin_without_a_band_has_no_artist_edge_but_walks_the_others(db):
     # Release trovata per "artista + album" ma artista senza pagina Bandcamp:
     # l'arco artista non esiste (dichiarato, non "0 dischi"), gli altri sì.
@@ -202,17 +221,20 @@ TRALBUM = {
 class _FakeClient:
     """Client Bandcamp finto: risposte prefissate, chiamate registrate."""
 
-    def __init__(self, band=None, discographies=None, tralbum=None, releases=None):
+    def __init__(self, band=None, discographies=None, tralbum=None, releases=None,
+                 bands=None):
         self.band = band
         self.discographies = discographies or {}
         self._tralbum = tralbum or {}
         # Titolo cercato -> risultato dell'autocomplete album. Assente = non trovato.
         self.releases = releases or {}
+        # Nome etichetta -> band, per le ricerche con `label=True`. Assente = non trovata.
+        self.bands = bands or {}
         self.calls: list[tuple] = []
 
     def find_band(self, name, *, label=False):
         self.calls.append(("find_band", name, label))
-        return self.band
+        return self.bands.get(name) if label else self.band
 
     def find_release(self, artist, title):
         self.calls.append(("find_release", artist, title))
@@ -279,6 +301,28 @@ def test_unresolved_release_falls_back_to_the_file_tags():
         ("find_release", "Jasmín", "Un disco che non esiste"),
         ("find_release", "Jasmín", "Nemmeno questo"),
     ]
+    # E l'etichetta del file è stata cercata come etichetta, senza trovarla.
+    assert ("find_band", "Hessle Audio", True) in client.calls
+    assert origin.label_id is None
+
+
+def test_an_artist_only_origin_carries_the_id_of_the_label_found_by_name():
+    client = _FakeClient(band={"id": 637178087, "name": "Jasmín"},
+                         discographies={637178087: []},
+                         bands={"Hessle Audio": {"id": 2788766970, "name": "Hessle Audio"}})
+    origin = BandcampSimilar(client).resolve(_track(album="Sconosciuto", title="Sconosciuto"))
+    assert origin.resolution == "artist_only"
+    assert origin.label == "Hessle Audio"
+    assert origin.label_id == 2788766970
+
+
+def test_an_artist_only_origin_without_a_label_tag_asks_bandcamp_nothing():
+    client = _FakeClient(band={"id": 637178087, "name": "Jasmín"},
+                         discographies={637178087: []})
+    origin = BandcampSimilar(client).resolve(_track(album=None, title="Sconosciuto",
+                                                    label=None))
+    assert origin.label is None and origin.label_id is None
+    assert not any(c[0] == "find_band" and c[2] for c in client.calls)
 
 
 def test_a_band_bandcamp_does_not_know_and_a_release_it_does_not_have_resolve_to_nothing():
@@ -490,14 +534,29 @@ def test_the_label_edge_by_name_asks_for_a_label_not_any_band():
     # chiedere un'etichetta, o "NAFF" prenderebbe la band omonima.
     client = _FakeClientWithDiscover(
         band={"id": 637178087, "name": "Jasmín"},
-        discographies={637178087: [], },
-        tralbum=TRALBUM,
+        discographies={637178087: [], 2788766970: [LABEL_ITEM]},
+        bands={"Hessle Audio": {"id": 2788766970, "name": "Hessle Audio"}},
     )
     src = BandcampSimilar(client)
     origin = src.resolve(_track(album="Sconosciuto", title="Sconosciuto"))
     assert origin.resolution == "artist_only"
-    src.expand(origin, style_period=False)
     assert ("find_band", "Hessle Audio", True) in client.calls
+    before = len(client.calls)
+    edges = src.expand(origin, style_period=False)
+    assert [raw["title"] for e, raw in edges if e == "same_label"] == \
+        ["Un disco dell'etichetta"]
+    # L'etichetta è già risolta: l'arco costa la sola discografia.
+    assert [c[0] for c in client.calls[before:]] == ["band_discography"]
+
+
+def test_a_label_by_name_bandcamp_does_not_have_costs_the_edge_nothing():
+    client = _FakeClientWithDiscover(band={"id": 637178087, "name": "Jasmín"},
+                                     discographies={637178087: []})
+    src = BandcampSimilar(client)
+    origin = src.resolve(_track(album="Sconosciuto", title="Sconosciuto"))
+    before = len(client.calls)
+    assert [e for e, _ in src.expand(origin, style_period=False) if e == "same_label"] == []
+    assert client.calls[before:] == []
 
 
 def test_the_style_edge_keeps_only_releases_inside_the_period_window():

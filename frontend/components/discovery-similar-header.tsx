@@ -12,6 +12,7 @@ function absentLabel(reason: SimilarEdge["absent_reason"], t: Dictionary): strin
     case "no_band": return t.discovery.similarAbsentNoBand;
     case "self_released": return t.discovery.similarAbsentSelfReleased;
     case "no_label": return t.discovery.similarAbsentNoLabel;
+    case "label_not_found": return t.discovery.similarAbsentLabelNotFound;
     case "no_tag": return t.discovery.similarAbsentNoTag;
     case "no_year": return t.discovery.similarAbsentNoYear;
     case "off": return t.discovery.similarAbsentOff;

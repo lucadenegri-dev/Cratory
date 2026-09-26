@@ -201,6 +201,11 @@ def _absent_edges(origin: Origin, style_period: bool) -> dict[str, str]:
     elif not origin.label:
         # `artist_only`: si passa dal nome nei tag del file, se c'è.
         absent["same_label"] = "no_label"
+    elif not origin.label_id:
+        # C'è un nome, ma Bandcamp non ha un'etichetta con quel nome.
+        absent["same_label"] = "label_not_found"
+    elif origin.label_id == origin.band_id:
+        absent["same_label"] = "self_released"
     if not style_period:
         absent["same_period_style"] = "off"
     elif not origin.tag:

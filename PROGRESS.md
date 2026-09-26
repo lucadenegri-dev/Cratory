@@ -175,7 +175,9 @@ described in `CLAUDE.md`.
   l'etichetta; un artista senza pagina Bandcamp arriva lo stesso alla release, con
   l'arco artista dichiarato assente. Le ricerche band tengono solo chi corrisponde
   al nome (uguale o prefisso di parole) e per le etichette preferiscono chi ha il
-  flag etichetta. Otto su dieci risolvono la release, prima cinque.
+  flag etichetta. Otto su dieci risolvono la release, prima cinque. In
+  `artist_only` l'etichetta del file si cerca già nella risoluzione, e se
+  Bandcamp non la ha l'arco è assente (`label_not_found`) invece di "0 dischi".
 
 - **Discovery "Simili" (2026-09-06).** Dal dettaglio di una traccia posseduta si
   arriva ai suoi parenti su Bandcamp: stessa discografia, stessa etichetta, e con un

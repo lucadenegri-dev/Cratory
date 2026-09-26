@@ -199,7 +199,8 @@ export interface SimilarEdge {
   /** Lead prodotti. `null` quando l'arco non è stato percorso. */
   count: number | null;
   absent_reason:
-    | "no_band" | "self_released" | "no_label" | "no_tag" | "no_year" | "off" | null;
+    | "no_band" | "self_released" | "no_label" | "label_not_found" | "no_tag" | "no_year"
+    | "off" | null;
 }
 
 export interface DiscoverySimilarResponse {

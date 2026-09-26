@@ -702,7 +702,7 @@ class EdgeReportOut(BaseModel):
     """Quanti lead ha prodotto un arco, o perché non è stato percorso."""
 
     count: int | None = None
-    # no_band | self_released | no_label | no_tag | no_year | off
+    # no_band | self_released | no_label | label_not_found | no_tag | no_year | off
     absent_reason: str | None = None
 
 

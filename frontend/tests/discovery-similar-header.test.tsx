@@ -59,6 +59,16 @@ describe("DiscoverySimilarHeader", () => {
     expect(chip.getAttribute("title") ?? "").toContain("Autoprodotto");
   });
 
+  it("un'etichetta che Bandcamp non ha è assente con il suo motivo", () => {
+    render(<DiscoverySimilarHeader
+      data={data({ edges: { ...data().edges,
+        same_label: { count: null, absent_reason: "label_not_found" } } })}
+      track={TRACK} />);
+    const chip = screen.getByText(/Etichetta/);
+    expect(chip.textContent).not.toContain("0");
+    expect(chip.getAttribute("title") ?? "").toContain("non trovata");
+  });
+
   it("mostra la copertina della traccia di partenza", () => {
     const track = { ...(TRACK as object), album_art_url: "https://x/art.jpg" } as never;
     const { container } = render(<DiscoverySimilarHeader data={data()} track={track} />);

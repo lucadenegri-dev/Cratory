@@ -941,7 +941,8 @@ label's discography, absent when the release is self-released), and
 tag, kept to `±3` years around the origin) which runs only with `style_period=true`.
 `edges` reports each one as either a `count` — how many leads it produced after
 dedup, `0` included — or an `absent_reason` (`no_band`, `self_released`, `no_label`,
-`no_tag`, `no_year`, `off`). The two are never both set: "I looked and found nothing"
+`label_not_found` — the file names a label Bandcamp does not have —, `no_tag`,
+`no_year`, `off`). The two are never both set: "I looked and found nothing"
 and "I could not look" are different facts, and the UI says which.
 
 Leads are `DiscoveryLeadOut` exactly as the dig returns them, so preview, tracklist,

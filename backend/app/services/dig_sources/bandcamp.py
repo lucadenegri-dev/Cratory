@@ -311,11 +311,17 @@ class BandcampSimilar:
                     return None
                 # Release non riconosciuta: si tiene l'artista e si prendono dai tag
                 # del file quel che la release avrebbe dato. Dichiarato, non nascosto.
+                # L'etichetta per nome si risolve QUI e non nell'arco: così l'origine
+                # sa se Bandcamp la conosce, e "non trovata" resta distinto da
+                # "trovata, zero dischi".
+                label = (getattr(track, "label", None) or "").strip() or None
+                label_band = self.client.find_band(label, label=True) if label else None
                 return Origin(
                     artist=artist, band_id=band_id, title=None, tralbum_id=None,
                     tralbum_type=None,
-                    label=(getattr(track, "label", None) or "").strip() or None,
-                    label_id=None,
+                    label=label,
+                    label_id=(int(label_band["id"])
+                              if label_band and label_band.get("id") else None),
                     tag=(_tag_norm(getattr(track, "genre", None) or "") or None),
                     year=getattr(track, "year", None),
                     source_url=None, resolution="artist_only", discography=discography,
@@ -422,15 +428,12 @@ class BandcampSimilar:
     def _label_edge(self, origin) -> list[dict]:
         """La discografia dell'etichetta.
 
-        Autoprodotto (`label_id` assente o uguale alla band) non è un errore: è un
-        arco che non esiste, e non deve costare una richiesta.
+        Senza `label_id` (autoprodotto, o nome nei tag che Bandcamp non ha) o con
+        `label_id` uguale alla band, l'arco non esiste e non costa una richiesta:
+        il perché lo dice `_absent_edges` del motore, guardando la stessa origine.
         """
         if origin.label_id and origin.label_id != origin.band_id:
             return self.client.band_discography(origin.label_id)
-        if origin.resolution == "artist_only" and origin.label:
-            band = self.client.find_band(origin.label, label=True)
-            if band and band.get("id"):
-                return self.client.band_discography(int(band["id"]))
         return []
 
     def _style_edge(self, origin) -> list[dict]:

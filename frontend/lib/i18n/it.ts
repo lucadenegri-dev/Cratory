@@ -1120,6 +1120,7 @@ export const it: Dictionary = {
     similarEdgeStyle: "Stile e periodo",
     similarAbsentNoBand: "Nessuna pagina Bandcamp per questo artista",
     similarAbsentSelfReleased: "Autoprodotto: nessuna etichetta da seguire",
+    similarAbsentLabelNotFound: "Etichetta non trovata su Bandcamp",
     similarAbsentNoLabel: "Nessuna etichetta nei tag del file",
     similarAbsentNoTag: "Nessun tag di stile utilizzabile",
     similarAbsentNoYear: "Anno sconosciuto: non c'è un periodo da confrontare",

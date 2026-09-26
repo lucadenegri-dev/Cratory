@@ -1138,6 +1138,7 @@ export const en = {
     similarEdgeStyle: "Style and period",
     similarAbsentNoBand: "No Bandcamp page for this artist",
     similarAbsentSelfReleased: "Self-released: no label to follow",
+    similarAbsentLabelNotFound: "Label not found on Bandcamp",
     similarAbsentNoLabel: "No label in the file's tags",
     similarAbsentNoTag: "No usable style tag",
     similarAbsentNoYear: "Unknown year: no period to compare",
