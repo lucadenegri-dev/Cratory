@@ -461,6 +461,12 @@ def collega_tracce(db: Session, *, seen_paths: set[str], seen_digests: set[str],
                 aggiorna_primary(db, known)
                 report["relinked"] += 1
             else:
+                if (known.local_path == riga.path
+                        and (riga.track_id != known.id or known.primary_file_id != riga.id)):
+                    # Trovata per path ma col link al file perso (riga
+                    # ricreata, primary azzerato): si ricuce, il possesso non
+                    # cambia.
+                    aggiorna_primary(db, known)
                 report["unchanged"] += 1
             seen_paths.add(riga.path)
             if known.audio_hash:

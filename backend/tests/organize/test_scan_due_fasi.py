@@ -323,6 +323,36 @@ def test_traccia_scollegata_col_file_ancora_in_libreria_torna_posseduta(
     assert riga.track_id == id_prima and traccia.primary_file_id == riga.id
 
 
+def test_traccia_posseduta_senza_link_al_file_lo_ritrova(db, fake_audio, monkeypatch):
+    """Una Track posseduta col `local_path` giusto ma senza link alla sua riga
+    (`primary_file_id` e `AudioFile.track_id` vuoti — in produzione «Power to
+    the People» di Pardon Moi): la via veloce la trova per path e la conta
+    invariata, ma senza `aggiorna_primary` il link non si ricuce mai, e le
+    funzioni di Organize che passano da lì non vedono la traccia.
+    """
+    make, root = fake_audio
+    lib, inbox = root / "lib", root / "inbox"
+    inbox.mkdir()
+    _due_radici(monkeypatch, lib, inbox)
+    make("lib/a.mp3", digest="H1", artist="A", title="A")
+    percorse = list(radici(db).values())
+    scan(db, percorse)
+    db.commit()
+    traccia = db.scalar(select(Track).where(Track.audio_hash == "H1"))
+    riga = db.scalar(select(AudioFile))
+    traccia.primary_file_id = None
+    riga.track_id = None
+    db.commit()
+
+    summary = scan(db, percorse)
+    db.commit()
+    db.expire_all()
+
+    assert summary.linking.unchanged == 1
+    assert db.get(Track, traccia.id).primary_file_id == riga.id
+    assert db.get(AudioFile, riga.id).track_id == traccia.id
+
+
 def test_due_copie_vive_della_stessa_traccia_non_si_rubano_il_path(
     db, fake_audio, monkeypatch
 ):
@@ -411,3 +441,4 @@ def test_il_progresso_non_torna_indietro(db, fake_audio, monkeypatch):
     scan(db, [radici(db)["library"]], on_progress=on_progress)
 
     assert frazioni == sorted(frazioni), f"progresso non monotono: {frazioni}"
+
