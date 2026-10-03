@@ -2028,7 +2028,7 @@ export const en = {
     set_generation_in_progress: "A generation is already running: wait for it to finish and try again.",
     set_edit_error: (p: Record<string, unknown>) => `Set edit error: ${p.reason ?? ""}`,
     set_is_manual: "This set is prepared by hand: open it from the sets list.",
-    set_not_manual: "This set was generated: open it in the classic editor.",
+    set_not_manual: "This set comes from the old generator: it can only be exported or deleted.",
     set_revision_conflict: (p: Record<string, unknown>) => `The set changed (revision ${p.current ?? "?"}): reload and retry.`,
     set_row_not_found: "Row not found",
     set_alternative_not_found: "Alternative not found",

@@ -2008,7 +2008,7 @@ export const it: Dictionary = {
     set_generation_in_progress: "Una generazione è già in corso: attendi che finisca e riprova.",
     set_edit_error: (p: Record<string, unknown>) => `Errore modifica set: ${p.reason ?? ""}`,
     set_is_manual: "Questo set è preparato a mano: aprilo dalla lista dei set.",
-    set_not_manual: "Questo set è stato generato: aprilo nell'editor classico.",
+    set_not_manual: "Questo set viene dal vecchio generatore: si può solo esportare o eliminare.",
     set_revision_conflict: (p: Record<string, unknown>) => `Il set è cambiato (revisione ${p.current ?? "?"}): ricarica e riprova.`,
     set_row_not_found: "Riga non trovata",
     set_alternative_not_found: "Alternativa non trovata",

@@ -92,7 +92,7 @@ def _manual_error(exc: ManualSetError) -> HTTPException:
     if isinstance(exc, ManualSetNotFound):
         return api_error(404, "set_not_found", "Set not found")
     if isinstance(exc, ManualSetNotManual):
-        return api_error(409, "set_not_manual", "This set was generated: open it in the classic editor")
+        return api_error(409, "set_not_manual", "This set comes from the old generator: it can only be exported or deleted")
     if isinstance(exc, RowNotFound):
         return api_error(404, "set_row_not_found", "Row not found")
     if isinstance(exc, AlternativeNotFound):

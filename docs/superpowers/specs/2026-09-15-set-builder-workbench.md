@@ -341,7 +341,9 @@ appunti esterni. Il punteggio tecnico medio non misura nulla.
 - Alternative a sequenze intere: un blocco sul banco marcato come alternativa
   di un blocco `main`. Confronto tra due revisioni: gli snapshot sono già
   completi.
-- Copiare una sequenza da un altro set, con provenienza; si lega alla memoria
-  d'uso (cantiere 1 della roadmap).
-- AI su un problema osservato nell'uso: critica del set fatto, note di mix sui
-  passaggi rischiosi, alternative spiegate. Nessun ruolo preassegnato.
+- Copiare una sequenza da un altro set, con provenienza.
+
+Uscite da questa lista: l'AI su un problema osservato nell'uso (critica del
+set, note di mix, alternative spiegate), superata il 2026-09-19 dalla regola
+«nessuna AI vicino a un set»; il legame con la memoria d'uso, cantiere
+tolto dalla roadmap il 2026-10-03.

@@ -403,16 +403,15 @@ cleanup, and each was explicitly left alone this time.
   two `api_error()` implementations; the Organize one is a superset (an extra
   `headers` param used for thumbnail `Cache-Control`). Merging means adopting the
   superset inside `organize/`.
-- Four hand-rolled job state machines (`backend/app/services/audio_analysis_job.py`,
+- Three hand-rolled job state machines (`backend/app/services/audio_analysis_job.py`,
   `backend/app/services/streaming_import_job.py`,
-  `backend/app/services/mix_identify_job.py`, `backend/app/routers/sets.py`'s
-  async-generate job) each with their own locking discipline, status-payload shape
-  and start-guard semantics (three return the current state on a second start;
-  `routers/sets.py` deliberately raises `409` instead, with a comment explaining
-  why). A shared base class needs those three questions answered first; only the
-  `_spawn()` helper has been factored out so far
-  (`backend/app/services/job_spawn.py`). Soulseek/SoundCloud download used to be a
-  fifth (`soulseek_download_job.py`) but no longer fits the pattern at all: it
+  `backend/app/services/mix_identify_job.py`) each with their own locking
+  discipline, status-payload shape and start-guard semantics. A shared base class
+  needs those three questions answered first; only the `_spawn()` helper has been
+  factored out so far (`backend/app/services/job_spawn.py`). The set generator's
+  async job was a fourth; it went with the generator on 2026-09-19.
+  Soulseek/SoundCloud download used to be a fifth (`soulseek_download_job.py`)
+  but no longer fits the pattern at all: it
   moved to a persistent queue with a parallel worker pool
   (`backend/app/services/download_queue.py`, `download_dispatcher.py`,
   `download_runner.py`) instead of a single-instance job, so it dropped out of
@@ -473,27 +472,18 @@ cleanup, and each was explicitly left alone this time.
   recall fix** comes last on purpose: the cascade produces `not_found` for tracks that
   do exist on Soulseek, but which variants actually fail is a question C's data
   answers — fixing it blind would just be a different guess.
-- **The four sites agreed on 2026-09-13**, in this order. They came out of a
-  review of what the app still lacks: Cratory knows the library but not what its
-  owner does with it. Backup and restore (done, above) was the fifth and went
-  first because the others add data the disk cannot rebuild.
-  1. **Usage memory.** `Track` carries a `rating` and nothing else about the
-     owner's practice: no `last_played`, no "used in N sets", no personal tags or
-     notes (`mood_tags` exist only as AI output on setlist rows), and the player
-     records nothing. The Set Builder cannot avoid the track played five sets in
-     a row nor favour the untested ones; the Dig's taste ranking works without
-     the strongest signal it could have; Statistics describe the catalogue, not
-     the practice. Deterministic and within the rules: a `played_at` written by
-     the player, a `set_count` derived from setlists, in-app tags and notes that
-     never touch the file (Organize stays the only writer of file tags). Shazam
-     phase 2 (below) hangs off the same signal.
-  2. **Persistent jobs.** The download queue survives a restart; Essentia
+- **The sites agreed on 2026-09-13**, out of a review of what the app still
+  lacks. Backup and restore (done, above) went first. Two were dropped on
+  2026-10-03 on the owner's decision: usage memory (`played_at`, a `set_count`,
+  in-app tags and notes) and a "dig for this gap" link from gap analysis to
+  the Dig. What is left:
+  1. **Persistent jobs.** The download queue survives a restart; Essentia
      analysis, streaming import and Shazam identification do not — an analysis
      over a large library interrupted by an in-place update starts from zero.
      The model to converge on is the queue itself (`download_queue.py`,
      `download_dispatcher.py`, `download_runner.py`), not the abstract base
-     class the "four job state machines" item above imagines.
-  3. **Set Builder: DJ-led preparation workspace** (direction revised
+     class the "three job state machines" item above imagines.
+  2. **Set Builder: DJ-led preparation workspace** (direction revised
      2026-09-16; **done**, 2026-09-18/19). Build from a playlist
      through audition, manually composed sequences, gaps, saved alternatives,
      reserves, preparation notes and undo/redo, on the existing `Setlist` model
@@ -516,10 +506,6 @@ cleanup, and each was explicitly left alone this time.
      node and from Essentia's beat positions, Web Audio tempo-matched
      playback, no waveform/cue/loop) — an explicit, bounded exception to the
      "prepares, does not play" rule, decided 2026-09-17.
-  4. **Gap → Dig.** Gap analysis says "missing 128→132 bridge" and "harmonic dead
-     end"; the Dig digs by taste, by explicit design. A "dig for this gap" link
-     that pre-fills genre/label seeds from the playlist closes the loop without
-     making the Dig filter by compatibility.
 - **Shazam phase 2.** Use the `DjSetTrack` corpus for co-occurrence suggestions
   (which tracks tend to get mixed together) — not started.
 - **PostgreSQL.** Low priority: SQLite is enough for personal, single-user use; only
