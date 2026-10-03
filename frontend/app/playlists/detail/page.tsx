@@ -157,6 +157,9 @@ function PlaylistDetailInner() {
 
   const visible = useMemo(() => {
     const inc = (v: string | null, q: string) => (v ?? "").toLowerCase().includes(q.toLowerCase());
+    // La key si confronta esatta (maiuscole e spazi a parte): "1A" non è "11A".
+    const camelot = (v: string | null) => (v ?? "").replace(/\s+/g, "").toUpperCase();
+    const keyQuery = camelot(key);
     let rows = tracks.filter((tr) => {
       if (artist && !inc(tr.artist, artist)) return false;
       if (title && !inc(tr.title, title)) return false;
@@ -165,7 +168,7 @@ function PlaylistDetailInner() {
       if (status && tr.status !== status) return false;
       if (owned && tr.has_local_file !== (owned === "true")) return false;
       if (rating && tr.rating !== Number(rating)) return false;
-      if (key && !inc(tr.camelot_key, key)) return false;
+      if (keyQuery && camelot(tr.camelot_key) !== keyQuery) return false;
       if (bpmMin && (tr.bpm ?? -Infinity) < Number(bpmMin)) return false;
       if (bpmMax && (tr.bpm ?? Infinity) > Number(bpmMax)) return false;
       if (incomplete && tr.bpm != null && tr.camelot_key != null && tr.title != null && tr.artist != null) return false;
