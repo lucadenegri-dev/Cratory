@@ -533,6 +533,35 @@ def test_il_materiale_di_una_bozza_via_http(client_db):
     assert [s["playlist_id"] for s in doc["sources"]] == [pl.id]
 
 
+def test_il_materiale_porta_la_data_di_aggiunta_alla_playlist(client_db):
+    """L'ordinamento «Aggiunta» del pannello legge questa data: l'ingresso nella
+    playlist di ORIGINE, la piu' recente se le origini sono piu' d'una, vuota per
+    cio' che non viene da un'origine. Le playlist che non sono origini non
+    contano: la bozza con la sola A deve vedere la data di A."""
+    from datetime import datetime
+    client, db = client_db
+    pl_a, pl_b = Playlist(platform="spotify", name="A"), Playlist(platform="spotify", name="B")
+    t0, t1 = Track(source_type="spotify", title="T0", artist="A"), Track(source_type="spotify", title="T1", artist="A")
+    extra = Track(source_type="spotify", title="Fuori", artist="Z")
+    db.add_all([pl_a, pl_b, t0, t1, extra])
+    db.flush()
+    add_track_to_playlist(db, t0, pl_a, added_at=datetime(2026, 1, 10))
+    add_track_to_playlist(db, t0, pl_b, added_at=datetime(2026, 3, 5))
+    add_track_to_playlist(db, t1, pl_a, added_at=datetime(2026, 2, 1))
+    db.commit()
+    sid = client.post("/api/sets/manual", json={"name": "M", "playlist_ids": [pl_a.id, pl_b.id]}).json()["id"]
+    client.post(f"/api/sets/{sid}/rows", json={"expected_revision": 0, "track_ids": [extra.id]})
+
+    items = {it["track"]["id"]: it for it in client.get(f"/api/sets/{sid}/material").json()["items"]}
+    assert items[t0.id]["playlist_added_at"].startswith("2026-03-05")
+    assert items[t1.id]["playlist_added_at"].startswith("2026-02-01")
+    assert items[extra.id]["playlist_added_at"] is None
+
+    bozza = client.get("/api/sets/material", params={"playlist_ids": [pl_a.id]}).json()["items"]
+    assert {it["track"]["id"]: it["playlist_added_at"][:10] for it in bozza} == {
+        t0.id: "2026-01-10", t1.id: "2026-02-01"}
+
+
 def test_rinomina_un_set_a_mano_che_ha_un_varco(client_db):
     """Regressione: la rinomina rispondeva col documento del set GENERATO, che
     su un varco (riga senza traccia) andava in 500 — e intanto il nome era gia'

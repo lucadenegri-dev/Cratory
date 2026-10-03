@@ -493,6 +493,9 @@ export interface MaterialItem {
   in_set: boolean; // già su una riga del percorso
   from_playlist: boolean;
   in_reserve: boolean;
+  /** Ingresso nella playlist di origine (la più recente se sono più d'una);
+   *  null per le righe del set e per la ricerca. */
+  playlist_added_at: string | null;
 }
 
 /** Una playlist da cui il set pesca. `name` è null se la playlist è sparita

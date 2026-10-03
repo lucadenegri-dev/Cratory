@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
@@ -554,6 +555,23 @@ def tracks_for_playlist(db: Session, playlist_id: int) -> list[Track]:
             Track.id,
         )
     ).all())
+
+
+def playlist_added_at_for(db: Session, playlist_ids: list[int],
+                          track_ids: list[int]) -> dict[int, datetime]:
+    """Per ogni traccia, la data d'ingresso piu' recente fra le sole playlist
+    indicate. Le tracce che non stanno in nessuna di quelle, o ci stanno senza
+    data, non compaiono nel dizionario."""
+    if not playlist_ids or not track_ids:
+        return {}
+    rows = db.execute(
+        select(playlist_tracks.c.track_id, func.max(playlist_tracks.c.added_at))
+        .where(playlist_tracks.c.playlist_id.in_(playlist_ids),
+               playlist_tracks.c.track_id.in_(track_ids),
+               playlist_tracks.c.added_at.is_not(None))
+        .group_by(playlist_tracks.c.track_id)
+    ).all()
+    return {track_id: added for track_id, added in rows}
 
 
 def reorder_playlist_track(db: Session, playlist_id: int, track_id: int, position: int) -> list[Track] | None:

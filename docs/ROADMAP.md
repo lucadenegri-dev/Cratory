@@ -35,7 +35,9 @@ endpoints, `docs/API.md`.
   touches a set (the generator and its curation stage were removed 2026-09-19). A
   personal 1–3 `rating` gives a small tie-break bonus and keeps a system "Top"
   playlist in sync with every track voted 3. Export as text, CSV, Markdown or
-  M3U8, plus a preparation sheet and the reserves.
+  M3U8, plus a preparation sheet and the reserves. The material sorts by key (on
+  the Camelot wheel), BPM or date added to the playlist, and filters by a BPM range
+  and an exact key, all in the browser.
 - **Transitions & gap analysis.** `/api/transitions` classifies a pair of tracks
   (technically safe, a creative risk, or a good reset); `services/gap_analysis.py`
   reads a playlist for structural holes — no openers, no peak, missing BPM bridges,

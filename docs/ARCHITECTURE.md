@@ -472,6 +472,9 @@ call must echo back the `revision` it last saw, or get `409 set_revision_conflic
 position; a row is either a track or a gap (`slot_kind`), and either can carry a
 free-text note. `services/manual_material.py` is the material behind the workbench:
 the source playlist read fresh, the tracks already in the set, and a library search.
+The material comes back whole, so the panel sorts and filters it in the browser
+(`frontend/lib/material-view.ts`, with the Camelot wheel in `frontend/lib/camelot.ts`)
+instead of asking the backend again on every keystroke.
 
 The active track on a row is `SetlistTrack.track_id`; the candidates the DJ keeps
 beside it live in `setlist_alternatives`, and choosing one is a swap — the outgoing

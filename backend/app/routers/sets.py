@@ -14,6 +14,7 @@ from app.repositories import (
     get_playlist,
     get_setlist,
     list_setlists,
+    playlist_added_at_for,
 )
 from app.schemas import (
     AlternativeChooseRequest,
@@ -135,7 +136,9 @@ def get_manual(setlist_id: int, db: Session = Depends(get_db)):
 def _material_out(db: Session, voci, playlist_ids: list[int]) -> MaterialOut:
     """Il payload del materiale, uno solo per il set e per la bozza: due copie
     quasi uguali divergono al primo campo nuovo."""
-    ft_map = file_tags_for_tracks(db, [t.id for t, _, _, _ in voci])
+    track_ids = [t.id for t, _, _, _ in voci]
+    ft_map = file_tags_for_tracks(db, track_ids)
+    added = playlist_added_at_for(db, playlist_ids, track_ids)
     fonti = []
     for pid in playlist_ids:
         playlist = get_playlist(db, pid)
@@ -144,7 +147,8 @@ def _material_out(db: Session, voci, playlist_ids: list[int]) -> MaterialOut:
     return MaterialOut(
         sources=fonti,
         items=[MaterialItemOut(track=track_out(t, ft_map.get(t.id)), in_set=in_set,
-                               from_playlist=fp, in_reserve=in_res)
+                               from_playlist=fp, in_reserve=in_res,
+                               playlist_added_at=added.get(t.id))
                for t, in_set, fp, in_res in voci],
     )
 

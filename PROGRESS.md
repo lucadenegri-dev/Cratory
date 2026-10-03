@@ -140,6 +140,17 @@ described in `CLAUDE.md`.
   finché il travaso non avrà girato ovunque. Piano in
   `docs/superpowers/plans/2026-09-19-origini-multiple-e-bozza.md`.
 
+- **Materiale ordinabile e filtrabile (2026-10-03).** Con una playlist grande il
+  materiale si ordina per tonalità (sulla ruota Camelot, a parità di tonalità per
+  BPM), per BPM (a parità per tonalità) o per data di aggiunta alla playlist,
+  dalle più recenti; un secondo clic sul chip gira il verso e chi non ha il dato
+  resta in fondo in entrambi i versi. Si filtra per BPM min/max e per tonalità
+  esatta, con un contatore «N di M» quando qualcosa resta fuori. Tutto nel
+  browser: il materiale arriva già intero, e il backend aggiunge solo
+  `playlist_added_at` (la data più recente fra le origini). Il player scorre
+  nell'ordine che si vede. Erano i filtri BPM e tonalità della spec del banco,
+  mai fatti fino a qui.
+
 - **Impostazioni in cinque sezioni (2026-09-15).** Generali · Libreria · Download ·
   Collegamenti · Backup, scelte da `?section=` con i pannelli montati e nascosti,
   così una bozza non salvata sopravvive al cambio sezione e ogni form di cartelle

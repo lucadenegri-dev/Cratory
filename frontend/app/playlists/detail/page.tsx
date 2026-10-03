@@ -28,6 +28,7 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import { KeyBadge } from "@/components/key-badge";
 import { TrackStateIcons } from "@/components/track-state-icons";
 import { RatingDiamond } from "@/components/rating-diamond";
+import { camelotRank } from "@/lib/camelot";
 import { useT, translateGap } from "@/lib/i18n";
 
 type Order = "asc" | "desc";
@@ -39,13 +40,6 @@ const EXPORT_MIME: Record<PlaylistExportFormat, string> = {
 
 function slugName(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "playlist";
-}
-
-// Ordinamento Camelot: prima il numero (1..12), poi la lettera (A prima di B).
-function camelotRank(key: string | null): number {
-  const m = key ? /^\s*(\d{1,2})\s*([ABab])\s*$/.exec(key) : null;
-  if (!m) return Number.POSITIVE_INFINITY;
-  return Number(m[1]) * 2 + (m[2].toUpperCase() === "B" ? 1 : 0);
 }
 
 function PlaylistDetailInner() {

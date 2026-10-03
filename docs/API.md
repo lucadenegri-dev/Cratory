@@ -546,8 +546,11 @@ the path, and the sources are where the material comes from, not the set.
 playlists read fresh (not a snapshot taken at creation), in their order and with no
 track repeated when it sits in two of them, plus the tracks already in the set,
 and — with `q` — a library search; each `MaterialItemOut` flags `in_set` (on a row of
-the **path**), `from_playlist` and `in_reserve`. `reserved=true` keeps only what is
-set aside. `GET /api/sets/material?playlist_ids=1&playlist_ids=2&q=&owned=` is the
+the **path**), `from_playlist` and `in_reserve`, and carries `playlist_added_at`:
+when the track entered a source playlist, the most recent one if it sits in more
+than one, null for set rows and search results. `reserved=true` keeps only what is
+set aside. Sorting (Camelot wheel, BPM, date added) and the BPM/key filters are not
+parameters: the frontend applies them to the payload it already has. `GET /api/sets/material?playlist_ids=1&playlist_ids=2&q=&owned=` is the
 same payload for a **draft**, which has no set yet: `in_set` and `in_reserve` are
 always false. Both answer `MaterialOut`, whose `sources` mirror `ManualSetOut`'s.
 

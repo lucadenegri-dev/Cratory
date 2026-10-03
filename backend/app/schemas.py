@@ -328,6 +328,9 @@ class MaterialItemOut(BaseModel):
     in_set: bool       # gia' su una riga del PERCORSO
     from_playlist: bool
     in_reserve: bool
+    # Ingresso nella playlist di origine (la piu' recente se sono piu' d'una);
+    # None per le righe del set e la ricerca. Serve all'ordinamento «Aggiunta».
+    playlist_added_at: datetime | None = None
 
 
 class MaterialOut(BaseModel):
