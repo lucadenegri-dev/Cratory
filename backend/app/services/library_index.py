@@ -43,11 +43,14 @@ logger = logging.getLogger(__name__)
 
 PLATFORM = "local_files"
 
-# Commit incrementale nella scansione: ogni N file elaborati il lavoro viene
-# persistito, così un crash a metà run non butta via tutto (stesso principio
-# del job di analisi, che committa per traccia). Vale solo per il loop
-# per-file: la riconciliazione finale (lost/orfani) resta un blocco unico.
-COMMIT_EVERY = 50
+# Commit nella scansione: nel loop per-file si committa a ogni giro, PRIMA
+# dell'hash audio. Due ragioni: un crash a metà run non butta via il lavoro
+# fatto (stesso principio del job di analisi, che committa per traccia), e
+# soprattutto ffmpeg — la parte lenta — non gira mai con il lock di scrittura
+# di SQLite in mano. Con un commit ogni 50 file il lock restava preso per
+# decine di secondi e ogni altro scrittore andava in `database is locked`
+# dopo `busy_timeout` (al boot, la coda download faceva fallire l'avvio). La
+# riconciliazione finale (lost/orfani) resta un blocco unico.
 
 
 def _norm_key(s: str | None) -> str:
@@ -302,11 +305,10 @@ def indicizza_archivio(db: Session, *, archive_root: str | Path,
             pending.append(path)
 
     # Passata 2 — flusso completo per i soli file nuovi o modificati.
-    for n_pending, path in enumerate(pending):
-        # Commit incrementale a inizio giro (così i `continue` non lo saltano):
-        # persiste il blocco precedente prima di attaccare il file successivo.
-        if n_pending and n_pending % COMMIT_EVERY == 0:
-            db.commit()
+    for path in pending:
+        # Commit a inizio giro (così i `continue` non lo saltano), prima
+        # dell'hash: vedi la nota sui commit in cima al modulo.
+        db.commit()
         done += 1
         i = done
         try:
@@ -482,11 +484,10 @@ def collega_tracce(db: Session, *, seen_paths: set[str], seen_digests: set[str],
             pending.append(riga)
 
     # Passata 2 — flusso completo per le sole righe nuove o modificate.
-    for n_pending, riga in enumerate(pending):
-        # Commit incrementale a inizio giro (così i `continue` non lo saltano):
-        # persiste il blocco precedente prima di attaccare la riga successiva.
-        if n_pending and n_pending % COMMIT_EVERY == 0:
-            db.commit()
+    for riga in pending:
+        # Commit a inizio giro (così i `continue` non lo saltano), prima
+        # dell'hash: vedi la nota sui commit in cima al modulo.
+        db.commit()
         done += 1
         path = Path(riga.path)
         # Flusso completo: qui e solo qui si paga ffmpeg.

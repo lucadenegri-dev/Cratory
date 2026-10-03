@@ -72,7 +72,7 @@ def test_commit_incrementale_prima_della_riconciliazione(db, fake_audio, monkeyp
     con zero commit incrementali — quello in coda a `semina_indice_libreria` (è
     dello scanner, non dell'aggancio) e quello in coda a `collega_tracce` —, e
     contarli renderebbe il test vero per costruzione. Provato col sabotaggio:
-    con `COMMIT_EVERY` enorme questo test deve fallire.
+    senza il commit a inizio giro del loop questo test deve fallire.
     """
     from app.services import library_index as li
 

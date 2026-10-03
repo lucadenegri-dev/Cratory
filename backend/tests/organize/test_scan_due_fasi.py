@@ -442,3 +442,36 @@ def test_il_progresso_non_torna_indietro(db, fake_audio, monkeypatch):
 
     assert frazioni == sorted(frazioni), f"progresso non monotono: {frazioni}"
 
+
+def test_l_hash_audio_non_gira_col_lock_di_scrittura_in_mano(db, fake_audio, monkeypatch):
+    """ffmpeg è la parte lenta dello scan. Se gira dentro una transazione con
+    scritture già eseguite, il lock di scrittura di SQLite resta in mano per
+    tutta la durata: con molti file nuovi (commit ogni 50) decine di secondi,
+    e ogni altro scrittore si arrende dopo `busy_timeout` (5 s). Visto dal
+    vero: al boot la coda download (`download_dispatcher.boot`) andava in
+    `database is locked` e l'avvio del backend falliva. Qui si misura la causa
+    diretta: a ogni hash la connessione non deve avere transazioni aperte.
+    """
+    from app.services import library_index as li
+
+    make, root = fake_audio
+    lib, inbox = root / "lib", root / "inbox"
+    inbox.mkdir()
+    _due_radici(monkeypatch, lib, inbox)
+    for i in range(3):
+        make(f"lib/a{i}.mp3", digest=f"H{i}", artist="A", title=f"T{i}")
+
+    in_transazione: list[bool] = []
+    hash_vero = li.audio_hash
+
+    def hash_spia(p):
+        in_transazione.append(db.connection().connection.dbapi_connection.in_transaction)
+        return hash_vero(p)
+
+    monkeypatch.setattr(li, "audio_hash", hash_spia)
+    summary = scan(db, list(radici(db).values()))
+    db.commit()
+
+    assert summary.linking.created == 3
+    assert len(in_transazione) == 3, "lo spia non ha visto gli hash"
+    assert not any(in_transazione), f"hash con scritture non committate: {in_transazione}"
