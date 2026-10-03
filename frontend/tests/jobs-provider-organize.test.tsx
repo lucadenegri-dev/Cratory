@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
-import { JobsProvider } from "@/components/jobs-provider";
+import { JobsProvider, useJobs } from "@/components/jobs-provider";
 import type {
   AnalysisJobStatus, DownloadStatus, GenStatus, LibraryIndexJob, ShazamIdentifyState,
   StreamingImportJobStatus,
@@ -25,7 +25,10 @@ const applyStatus = vi.fn<() => Promise<ApplyJobState>>();
 const providerRescanStatus = vi.fn<() => Promise<ProviderRescanJobState>>();
 const integrityStatus = vi.fn<() => Promise<IntegrityJobState>>();
 const genreReviewStatus = vi.fn<() => Promise<GenreReviewJobState>>();
-const startScan = vi.fn(async () => idleApply);
+// Gli avvii rispondono come il backend: lo snapshot del job appena partito,
+// con il suo `started_at` — e' cio' che il provider usa per riconoscerlo.
+const startScan = vi.fn(async () => ({ ...idleLibraryIndex, status: "running" as const, started_at: "S1" }));
+const apiStartApply = vi.fn(async () => ({ ...idleApply, status: "running" as const, started_at: "A1" }));
 const startAnalysis = vi.fn(async () => ({
   status: "running" as const, processed: 0, total: 0, analyzed: 0, failed: 0,
   applied: 0, current_label: null, error: null,
@@ -47,7 +50,7 @@ vi.mock("@/lib/organize/api", () => ({
   integrityStatus: (...a: unknown[]) => integrityStatus(...(a as [])),
   genreReviewStatus: (...a: unknown[]) => genreReviewStatus(...(a as [])),
   startScan: (...a: unknown[]) => startScan(...(a as [])),
-  startApply: vi.fn(),
+  startApply: (...a: unknown[]) => apiStartApply(...(a as [])),
   providerRescan: vi.fn(),
   integrityCheck: vi.fn(),
   genreReview: vi.fn(),
@@ -115,11 +118,15 @@ async function applyConcluso(ops: number) {
   await tick(2000);
 }
 
-/** Porta il job di scansione da running all'esito indicato, un poll per stato. */
-async function scansione(esito: "done" | "error") {
-  libraryIndexStatus.mockResolvedValue({ ...idleLibraryIndex, status: "running", processed: 1, total: 2 });
+/** Porta il job di scansione da running all'esito indicato, un poll per stato.
+ *  `avvio` e' il suo `started_at`: di default quello della scansione che la
+ *  catena lancia (S1, vedi il mock di `startScan`). */
+async function scansione(esito: "done" | "error", avvio = "S1") {
+  libraryIndexStatus.mockResolvedValue({
+    ...idleLibraryIndex, status: "running", processed: 1, total: 2, started_at: avvio,
+  });
   await tick(2000);
-  libraryIndexStatus.mockResolvedValue({ ...idleLibraryIndex, status: esito });
+  libraryIndexStatus.mockResolvedValue({ ...idleLibraryIndex, status: esito, started_at: avvio });
   await tick(2000);
 }
 
@@ -175,6 +182,61 @@ describe("job Organize nel provider unico", () => {
     expect(startScan).not.toHaveBeenCalled();
   });
 
+  it("riparte la scansione anche se l'apply finisce prima del primo poll", async () => {
+    /* Un piano di poche operazioni dura millisecondi: il poll che segue
+       l'avvio lo trova gia' `done`, e il provider non lo vede mai `running`.
+       Riprodotto dal vero con un piano di 3 spostamenti (8 ms). */
+    let avvia: () => Promise<void> = async () => {};
+    function Avvio() { avvia = useJobs().startApply; return null; }
+    render(<JobsProvider><Avvio /></JobsProvider>);
+    await tick();
+
+    applyStatus.mockResolvedValue({
+      ...idleApply, status: "done", processed: 3, total: 3, started_at: "A1",
+      result: { applied_ops: 3 } as ApplyJobState["result"],
+    });
+    await act(async () => { await avvia(); });
+    await tick();
+
+    expect(startScan).toHaveBeenCalledTimes(1);
+  });
+
+  it("ma l'esito dell'apply PRECEDENTE letto dopo l'avvio non conta", async () => {
+    /* Un poll partito prima del POST puo' rispondere dopo: riporta ancora il
+       `done` del giro prima (A0), non del nostro (A1). Scambiarlo per il
+       nostro riscansionerebbe con l'apply ancora in corso. Un oggetto nuovo
+       a ogni poll, come dalla rete: con lo stesso riferimento React non
+       rirenderebbe e il test passerebbe senza guardare nulla. */
+    applyStatus.mockImplementation(async () => ({
+      ...idleApply, status: "done", processed: 3, total: 3, started_at: "A0",
+      result: { applied_ops: 3 } as ApplyJobState["result"],
+    }));
+    let avvia: () => Promise<void> = async () => {};
+    function Avvio() { avvia = useJobs().startApply; return null; }
+    render(<JobsProvider><Avvio /></JobsProvider>);
+    await tick();
+
+    await act(async () => { await avvia(); });
+    await tick();
+
+    expect(startScan).not.toHaveBeenCalled();
+  });
+
+  it("ma un apply gia' concluso trovato all'apertura NON fa ripartire nulla", async () => {
+    /* Lo stato del job vive in memoria nel backend fino al prossimo apply:
+       aprire l'app dopo un apply lo trova `done`. Non e' un apply di questa
+       sessione, e non deve riscansionare. */
+    applyStatus.mockResolvedValue({
+      ...idleApply, status: "done", processed: 3, total: 3, started_at: "A0",
+      result: { applied_ops: 3 } as ApplyJobState["result"],
+    });
+    render(<JobsProvider><div /></JobsProvider>);
+    await tick();
+    await tick(2000);
+
+    expect(startScan).not.toHaveBeenCalled();
+  });
+
   it("a fine scansione innescata dall'apply parte l'analisi BPM/key", async () => {
     /* Terzo anello: apply -> scan -> analisi. Sta DOPO la scansione perche'
        l'apply sposta i file senza riscrivere i percorsi in DB. */
@@ -186,6 +248,30 @@ describe("job Organize nel provider unico", () => {
 
     expect(startAnalysis).toHaveBeenCalledTimes(1);
     expect(startAnalysis).toHaveBeenCalledWith("missing");
+  });
+
+  it("parte l'analisi anche se la scansione finisce prima del primo poll", async () => {
+    /* Stessa corsa del primo anello, sul secondo: su una libreria piccola la
+       scansione dura meno di un poll e il provider la trova gia' conclusa. */
+    await applyConcluso(3);
+    expect(startScan).toHaveBeenCalledTimes(1);
+
+    libraryIndexStatus.mockResolvedValue({ ...idleLibraryIndex, status: "done", started_at: "S1" });
+    await tick(2000);
+
+    expect(startAnalysis).toHaveBeenCalledTimes(1);
+    expect(startAnalysis).toHaveBeenCalledWith("missing");
+  });
+
+  it("ma una scansione vecchia gia' conclusa NON fa partire l'analisi", async () => {
+    /* Il rovescio: dopo l'apply, un poll partito prima dell'avvio puo'
+       riportare l'esito della scansione PRECEDENTE. Non e' la nostra. */
+    await applyConcluso(3);
+
+    libraryIndexStatus.mockResolvedValue({ ...idleLibraryIndex, status: "done", started_at: "S0" });
+    await tick(2000);
+
+    expect(startAnalysis).not.toHaveBeenCalled();
   });
 
   it("ma una scansione manuale NON fa partire l'analisi", async () => {

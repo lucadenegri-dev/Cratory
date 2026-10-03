@@ -284,6 +284,14 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  /* Gli inneschi della catena sono i `started_at` dei job che la catena stessa
+     ha lanciato: lo stato in memoria del backend sopravvive al job (resta
+     `done` fino al prossimo avvio), quindi solo l'identita' distingue il NOSTRO
+     esito da uno vecchio. Vivono in ref e non in stati: cambiano fuori dal
+     ciclo di render e non devono provocarne uno. */
+  const applyAvviato = useRef<string | null>(null);
+  const scanDellaCatena = useRef<string | null>(null);
+
   // --- Azioni Organize. Avviano e poi lasciano che sia il poller a raccontare
   // il resto: lo stato lo scrive pollOnce, non il valore di ritorno.
   const startScan = useCallback(async (locations?: Location[]) => {
@@ -291,7 +299,11 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
   const startApply = useCallback(async () => {
-    await apiStartApply();
+    const job = await apiStartApply();
+    // L'apply lanciato da qui si riconosce dal suo `started_at`, prima del
+    // poll: un piano di poche operazioni finisce in millisecondi e il poll
+    // che segue lo trova gia' `done`, senza fronte running→done da vedere.
+    applyAvviato.current = job?.started_at ?? null;
     refresh();
   }, [refresh]);
   const startRescan = useCallback(async (body: ProviderRescanBody) => {
@@ -308,25 +320,30 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
-  /* Innesco del terzo anello. Vive in un ref e non in uno stato: cambia fuori
-     dal ciclo di render e non deve provocarne uno. */
-  const analysisAfterScan = useRef(false);
-
   /* Riavvio automatico della scansione a fine Apply. È un COMPORTAMENTO, non
      un'API: nessun tipo lo protegge, e viveva nel provider di Organize che qui
      è stato assorbito. Esiste perché un apply sposta e ritagga file sul disco,
-     quindi l'indice va riallineato. Si riconosce il fronte running→done e si
-     riscansiona solo se qualche operazione è davvero atterrata. */
+     quindi l'indice va riallineato. Due modi di riconoscere la fine: il fronte
+     running→done (un apply visto girare, anche lanciato altrove) oppure il
+     `done` dell'apply lanciato da qui, che puo' finire prima del primo poll.
+     Si riscansiona solo se qualche operazione è davvero atterrata. */
   const prevApplyStatus = useRef<ApplyJobState["status"]>(apply.status);
   useEffect(() => {
     const was = prevApplyStatus.current;
     prevApplyStatus.current = apply.status;
-    if (was === "running" && apply.status === "done" && (apply.result?.applied_ops ?? 0) > 0) {
-      startScan()
-        .then(() => { analysisAfterScan.current = true; })
+    if (apply.status !== "done" && apply.status !== "error") return;
+    const nostro = applyAvviato.current !== null && apply.started_at === applyAvviato.current;
+    if (was !== "running" && !nostro) return;
+    if (nostro) applyAvviato.current = null;
+    if (apply.status === "done" && (apply.result?.applied_ops ?? 0) > 0) {
+      apiStartScan()
+        .then((job) => {
+          scanDellaCatena.current = job.started_at;
+          refresh();
+        })
         .catch(() => { /* backend offline o scan già in corso (409) */ });
     }
-  }, [apply.status, apply.result, startScan]);
+  }, [apply.status, apply.started_at, apply.result, refresh]);
 
   /* Terzo anello: a fine scansione parte l'analisi BPM/key sulle tracce che ne
      sono prive. Perché dopo la scansione e non a fine Apply: l'apply sposta e
@@ -334,22 +351,22 @@ export function JobsProvider({ children }: { children: ReactNode }) {
      è la scansione a riallinearli. Lanciarla prima passerebbe a Essentia
      percorsi che non esistono più, e il job segna `analyzed_at` anche quando la
      decodifica fallisce: il buco resterebbe, mascherato da traccia analizzata.
-     L'innesco si consuma al primo esito della scansione qualunque esso sia, così
-     una scansione manuale successiva non se lo ritrova addosso. */
+     Conta solo l'esito della scansione lanciata dalla catena, riconosciuta dal
+     suo `started_at` (su una libreria piccola finisce prima del primo poll):
+     l'innesco si consuma a quell'esito qualunque esso sia, e una scansione
+     manuale — un altro `started_at` — non se lo ritrova addosso. */
   const scanStatus = libraryIndex?.status;
-  const prevScanStatus = useRef<LibraryIndexJob["status"] | undefined>(scanStatus);
+  const scanStartedAt = libraryIndex?.started_at;
   useEffect(() => {
-    const was = prevScanStatus.current;
-    prevScanStatus.current = scanStatus;
-    if (was !== "running" || (scanStatus !== "done" && scanStatus !== "error")) return;
-    const armed = analysisAfterScan.current;
-    analysisAfterScan.current = false;
-    if (armed && scanStatus === "done") {
+    if (scanStatus !== "done" && scanStatus !== "error") return;
+    if (scanDellaCatena.current === null || scanStartedAt !== scanDellaCatena.current) return;
+    scanDellaCatena.current = null;
+    if (scanStatus === "done") {
       startAnalysis("missing")
         .then(() => { refresh(); })
         .catch(() => { /* Essentia assente (503), analisi già in corso (409), rete */ });
     }
-  }, [scanStatus, refresh]);
+  }, [scanStatus, scanStartedAt, refresh]);
 
   useEffect(() => {
     alive.current = true;
