@@ -11,6 +11,15 @@
  * contesto si crea/riprende su un gesto reale dell'utente
  * (`primeOnFirstGesture`). Ogni errore lascia l'elemento esattamente com'era.
  *
+ * La stessa regola vale nel tempo, non solo all'innesto. Da innestato
+ * l'elemento suona SOLO attraverso il contesto, e WebKit (il webview del
+ * bundle) il contesto lo ferma per conto suo: allo stop del Mac interrompe
+ * ogni sessione media, e al risveglio riprende solo quelle che stavano
+ * suonando — un player lasciato in pausa ritrova il contesto `suspended`.
+ * Quindi ogni `play` di un elemento già innestato rimette in moto il
+ * contesto; senza, il player risultava in riproduzione ma muto fino al
+ * riavvio dell'app.
+ *
  * Cross-origin: un MediaElementAudioSourceNode la cui risorsa è cross-origin e
  * NON CORS-approvata emette SILENZIO — per specifica viene azzerata l'uscita,
  * non solo l'analisi. Quindi le sorgenti di terzi (le preview iTunes/Bandcamp di
@@ -70,6 +79,13 @@ function ensureGraph(): Graph | null {
   }
 }
 
+/** Rimette in moto un contesto fermo (`suspended`, o `interrupted` di WebKit).
+ *  Un rifiuto non ha nulla da insegnare: al prossimo `play` si riprova. */
+function wake(ctx: AudioContext): void {
+  if (ctx.state === "running" || ctx.state === "closed") return;
+  ctx.resume().catch(() => {});
+}
+
 /** Crea e sblocca il contesto al primo gesto reale dell'utente. Idempotente:
  *  la chiamano sia la Home sia il trasporto, e i listener sono `once`. */
 export function primeOnFirstGesture(): void {
@@ -77,7 +93,7 @@ export function primeOnFirstGesture(): void {
   primed = true;
   const unlock = () => {
     const g = ensureGraph();
-    if (g && g.ctx.state !== "running") void g.ctx.resume();
+    if (g) wake(g.ctx);
   };
   for (const ev of ["pointerdown", "keydown"] as const) {
     window.addEventListener(ev, unlock, { once: true, passive: true });
@@ -87,9 +103,14 @@ export function primeOnFirstGesture(): void {
 /** Innesta l'elemento nel grafo, una sola volta per elemento. Non fa nulla se
  *  il contesto non è già in esecuzione: meglio nessuna analisi che un player
  *  muto. Il trasporto la richiama a ogni `play`, quindi il tentativo si ripete
- *  da sé al giro dopo. */
+ *  da sé al giro dopo. Per un elemento già innestato il `play` è l'occasione
+ *  per rimettere in moto il contesto, se nel frattempo WebKit l'ha fermato. */
 export function attachAnalyser(el: HTMLMediaElement | null | undefined): void {
-  if (!el || attached.has(el)) return;
+  if (!el) return;
+  if (attached.has(el)) {
+    if (graph) wake(graph.ctx);
+    return;
+  }
   // Sorgente di terzi: si esce PRIMA di toccare l'elemento. Innestarla
   // significherebbe azzittirla (vedi la nota cross-origin in testa al file).
   // Niente WeakSet: la sorgente dell'elemento può cambiare, e al prossimo
@@ -98,7 +119,7 @@ export function attachAnalyser(el: HTMLMediaElement | null | undefined): void {
   const g = ensureGraph();
   if (!g) return;
   if (g.ctx.state !== "running") {
-    void g.ctx.resume();
+    wake(g.ctx);
     return;
   }
   let source: MediaElementAudioSourceNode;
