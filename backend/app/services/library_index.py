@@ -443,7 +443,11 @@ def collega_tracce(db: Session, *, seen_paths: set[str], seen_digests: set[str],
         known = db.get(Track, riga.track_id) if riga.track_id else None
         if known is None:
             known = db.scalar(select(Track).where(Track.local_path == riga.path))
-        if (known is not None and known.local_mtime == stat.st_mtime
+        # Solo una traccia POSSEDUTA è invariata: una sganciata dalla
+        # riconciliazione tiene mtime e dimensione, ma va ripossessata dal
+        # flusso completo (che la ritrova per audio_hash), non saltata.
+        if (known is not None and known.has_local_file
+                and known.local_mtime == stat.st_mtime
                 and known.local_size == stat.st_size):
             if (known.local_path != riga.path
                     and not (known.local_path and Path(known.local_path).exists())):

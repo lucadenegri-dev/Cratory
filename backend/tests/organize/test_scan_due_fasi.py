@@ -284,6 +284,45 @@ def test_file_spostato_dentro_la_libreria_tiene_la_sua_traccia(
     assert db.scalar(select(AudioFile)).track_id == id_prima
 
 
+def test_traccia_scollegata_col_file_ancora_in_libreria_torna_posseduta(
+    db, fake_audio, monkeypatch
+):
+    """Lo stato che il bug dello spostamento ha lasciato sulle tracce in
+    playlist (in produzione, «Presence» di Basic Channel): la riconciliazione
+    le ha sganciate — `has_local_file` falso, niente `local_path` — ma la riga
+    del file in libreria punta ancora alla Track, e mtime e dimensione sono
+    quelli registrati. La via veloce degli invariati non deve prenderla: una
+    traccia non posseduta va ripossessata dal flusso completo, con i suoi dati.
+    """
+    make, root = fake_audio
+    lib, inbox = root / "lib", root / "inbox"
+    inbox.mkdir()
+    _due_radici(monkeypatch, lib, inbox)
+    a = make("lib/a.mp3", digest="H1", artist="A", title="A")
+    percorse = list(radici(db).values())
+    scan(db, percorse)
+    db.commit()
+    traccia = db.scalar(select(Track).where(Track.audio_hash == "H1"))
+    traccia.bpm, traccia.camelot_key = 124.98, "3A"
+    # Cosa fa `riconcilia_possessi` a una traccia persa ma in playlist.
+    traccia.has_local_file = False
+    traccia.local_path = traccia.local_format = traccia.local_bitrate = None
+    traccia.primary_file_id = None
+    db.commit()
+    id_prima = traccia.id
+
+    scan(db, percorse)
+    db.commit()
+    db.expire_all()
+
+    traccia = db.get(Track, id_prima)
+    assert traccia.has_local_file
+    assert traccia.local_path == str(a.resolve())
+    assert (traccia.bpm, traccia.camelot_key) == (124.98, "3A")
+    riga = db.scalar(select(AudioFile))
+    assert riga.track_id == id_prima and traccia.primary_file_id == riga.id
+
+
 def test_due_copie_vive_della_stessa_traccia_non_si_rubano_il_path(
     db, fake_audio, monkeypatch
 ):
