@@ -7,7 +7,8 @@ import type { Playlist, Track } from "@/lib/api";
 afterEach(cleanup);
 
 /* La key nel dettaglio playlist: il filtro cerca la key Camelot esatta (non
-   una sottostringa: "1A" non è "11A"). */
+   una sottostringa: "1A" non è "11A"), e nell'ordinamento per key le tracce
+   senza key, o con una key malformata, restano in fondo in entrambi i versi. */
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
@@ -92,3 +93,31 @@ describe("filtro per key del dettaglio playlist", () => {
   });
 });
 
+describe("ordinamento per key del dettaglio playlist", () => {
+  const titles = ["Otto", "Senza", "Tre", "Strana", "Dieci"];
+
+  beforeEach(() => {
+    mocks.playlistTracks.mockResolvedValue([
+      track({ id: 1, title: "Otto", camelot_key: "8A" }),
+      track({ id: 2, title: "Senza", camelot_key: null }),
+      track({ id: 3, title: "Tre", camelot_key: "3B" }),
+      track({ id: 4, title: "Strana", camelot_key: "boh" }),
+      track({ id: 5, title: "Dieci", camelot_key: "10A" }),
+    ]);
+  });
+
+  it("crescente: ruota Camelot, senza key in fondo", async () => {
+    renderPage();
+    await screen.findByText("Dieci");
+    fireEvent.click(screen.getByText("Key"));
+    expect(titoliInOrdine(titles)).toEqual(["Tre", "Otto", "Dieci", "Senza", "Strana"]);
+  });
+
+  it("decrescente: senza key ancora in fondo, non in cima", async () => {
+    renderPage();
+    await screen.findByText("Dieci");
+    fireEvent.click(screen.getByText("Key"));
+    fireEvent.click(screen.getByText("Key"));
+    expect(titoliInOrdine(titles)).toEqual(["Dieci", "Otto", "Tre", "Senza", "Strana"]);
+  });
+});

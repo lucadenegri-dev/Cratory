@@ -181,7 +181,9 @@ function PlaylistDetailInner() {
     const getters: Record<string, (tr: Track) => number | string> = {
       rank: (tr) => insertionRank.get(tr.id) ?? 0,
       title: (tr) => str(tr.title), artist: (tr) => str(tr.artist), source: (tr) => tr.source_type,
-      bpm: (tr) => num(tr.bpm), key: (tr) => camelotRank(tr.camelot_key), energy: (tr) => num(tr.energy),
+      bpm: (tr) => num(tr.bpm), energy: (tr) => num(tr.energy),
+      // Senza key (o malformata) sempre in fondo in entrambi i versi, come per bpm.
+      key: (tr) => { const r = camelotRank(tr.camelot_key); return num(Number.isFinite(r) ? r : null); },
       genre: (tr) => str(tr.genre), duration: (tr) => num(tr.duration_seconds), status: (tr) => tr.status,
       // ISO string ordina lessicograficamente; senza data sempre in fondo in entrambi i versi.
       added: (tr) => tr.playlist_added_at ?? (order === "asc" ? "￿" : ""),
