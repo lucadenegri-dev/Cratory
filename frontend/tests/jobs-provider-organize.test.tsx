@@ -222,6 +222,29 @@ describe("job Organize nel provider unico", () => {
     expect(startScan).not.toHaveBeenCalled();
   });
 
+  it("applyDellaSessione e' solo l'apply concluso in questa sessione", async () => {
+    /* La pagina Plan ci appoggia lo svuotamento del draft e i banner: un
+       `done` della sessione precedente non deve contare, quello lanciato da
+       qui si'. */
+    applyStatus.mockImplementation(async () => ({
+      ...idleApply, status: "done", processed: 3, total: 3, started_at: "A0",
+      result: { applied_ops: 3 } as ApplyJobState["result"],
+    }));
+    let api: ReturnType<typeof useJobs> | null = null;
+    function Spia() { api = useJobs(); return null; }
+    render(<JobsProvider><Spia /></JobsProvider>);
+    await tick();
+    expect(api!.applyDellaSessione).toBeNull();
+
+    applyStatus.mockImplementation(async () => ({
+      ...idleApply, status: "done", processed: 3, total: 3, started_at: "A1",
+      result: { applied_ops: 3 } as ApplyJobState["result"],
+    }));
+    await act(async () => { await api!.startApply(); });
+    await tick();
+    expect(api!.applyDellaSessione).toBe("A1");
+  });
+
   it("ma un apply gia' concluso trovato all'apertura NON fa ripartire nulla", async () => {
     /* Lo stato del job vive in memoria nel backend fino al prossimo apply:
        aprire l'app dopo un apply lo trova `done`. Non e' un apply di questa

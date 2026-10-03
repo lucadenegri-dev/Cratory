@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { buildPlan, getPlan, type Plan, type PlanStats, type ApplyResult } from "@/lib/organize/api";
 import { useJobs } from "@/components/jobs-provider";
 import { PageLayout } from "@/components/page-layout";
@@ -11,7 +11,7 @@ import { useT } from "@/lib/i18n";
 
 export default function PlanPage() {
   const t = useT();
-  const { apply, startApply, refresh } = useJobs();
+  const { apply, applyDellaSessione, startApply, refresh } = useJobs();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [building, setBuilding] = useState(false);
@@ -30,11 +30,17 @@ export default function PlanPage() {
       .finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load]);
-  // a fine apply il draft è consumato → pulisci la vista e aggiorna i conteggi
+  // a fine apply il draft è consumato → pulisci la vista e aggiorna i conteggi.
+  // Solo per un apply concluso in QUESTA sessione: lo stato `done` di uno
+  // precedente torna al primo poll dopo un ricaricamento, e svuoterebbe il
+  // draft appena costruito.
+  const conclusoVisto = useRef(applyDellaSessione);
   useEffect(() => {
+    if (applyDellaSessione === conclusoVisto.current) return;
+    conclusoVisto.current = applyDellaSessione;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (apply.status === "done") { setPlan(null); refresh(); }
-  }, [apply.status, refresh]);
+  }, [applyDellaSessione, apply.status, refresh]);
 
   const rebuild = async () => {
     setError(null); setBuilding(true);
@@ -53,7 +59,10 @@ export default function PlanPage() {
   const blocking = stats?.blocking ?? false;
   const nOps = plan?.ops.length ?? 0;
   const applying = apply.status === "running";
-  const result = apply.status === "done" ? apply.result : null;
+  // Esito ed errore sono quelli dell'apply di questa sessione, non di uno
+  // precedente rimasto in memoria nel backend.
+  const diQuestaSessione = applyDellaSessione !== null && apply.started_at === applyDellaSessione;
+  const result = apply.status === "done" && diQuestaSessione ? apply.result : null;
 
   return (
     <PageLayout
@@ -74,7 +83,7 @@ export default function PlanPage() {
       <div className="flex flex-col gap-4">
         {offline && <Alert>{t.organize.common.backendOffline}</Alert>}
         {error && <Alert>{error}</Alert>}
-        {apply.status === "error" && <Alert>{t.organize.plan.applyFailed(apply.error ?? t.organize.plan.unknownError)}</Alert>}
+        {apply.status === "error" && diQuestaSessione && <Alert>{t.organize.plan.applyFailed(apply.error ?? t.organize.plan.unknownError)}</Alert>}
 
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={rebuild} disabled={building || applying}>

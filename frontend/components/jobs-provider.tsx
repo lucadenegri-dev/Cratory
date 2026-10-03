@@ -71,6 +71,11 @@ type JobsApi = {
    *  endpoint. Qui si polla una volta e si espone con entrambi i nomi. */
   scan: ScanJobState;
   apply: ApplyJobState;
+  /** `started_at` dell'ultimo apply che questa sessione ha visto concludersi
+   *  (visto girare, o lanciato da qui). Lo stato di `apply` sopravvive al job
+   *  nel backend: aperta l'app, il primo poll riporta come `done` l'apply di
+   *  una sessione precedente, e solo questo lo distingue. */
+  applyDellaSessione: string | null;
   rescan: ProviderRescanJobState;
   integrity: IntegrityJobState;
   genreReviewJob: GenreReviewJobState;
@@ -85,7 +90,7 @@ const JobsCtx = createContext<JobsApi>({
   refresh: () => {}, startClientJob: () => {}, updateClientJob: () => {},
   endClientJob: () => {}, download: null, libraryIndex: null, analysis: null,
   shazamIdentify: null, streamingImport: null,
-  scan: IDLE, apply: IDLE, rescan: IDLE, integrity: { ...IDLE, available: true },
+  scan: IDLE, apply: IDLE, applyDellaSessione: null, rescan: IDLE, integrity: { ...IDLE, available: true },
   genreReviewJob: IDLE,
   startScan: async () => {}, startApply: async () => {}, startRescan: async () => {},
   startIntegrity: async () => ({ ...IDLE, available: true }), startGenreReview: async () => {},
@@ -127,6 +132,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [shazamIdentify, setShazamIdentify] = useState<ShazamIdentifyState | null>(null);
   const [streamingImport, setStreamingImport] = useState<StreamingImportJobStatus | null>(null);
   const [apply, setApply] = useState<ApplyJobState>(IDLE);
+  const [applyDellaSessione, setApplyDellaSessione] = useState<string | null>(null);
   const [rescan, setRescan] = useState<ProviderRescanJobState>(IDLE);
   const [integrity, setIntegrity] = useState<IntegrityJobState>({ ...IDLE, available: true });
   const [genreReviewJob, setGenreReviewJob] = useState<GenreReviewJobState>(IDLE);
@@ -335,6 +341,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     const nostro = applyAvviato.current !== null && apply.started_at === applyAvviato.current;
     if (was !== "running" && !nostro) return;
     if (nostro) applyAvviato.current = null;
+    setApplyDellaSessione(apply.started_at);
     if (apply.status === "done" && (apply.result?.applied_ops ?? 0) > 0) {
       apiStartScan()
         .then((job) => {
@@ -407,11 +414,11 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       // `scan` è lo stesso job di `libraryIndex`: un poll, due nomi. IDLE finché
       // il primo poll non è tornato, così le pagine Organize non gestiscono null.
       scan: libraryIndex ?? IDLE,
-      apply, rescan, integrity, genreReviewJob,
+      apply, applyDellaSessione, rescan, integrity, genreReviewJob,
       startScan, startApply, startRescan, startIntegrity, startGenreReview,
     }),
     [refresh, startClientJob, updateClientJob, endClientJob, download, libraryIndex, analysis, shazamIdentify,
-      streamingImport, apply, rescan, integrity, genreReviewJob,
+      streamingImport, apply, applyDellaSessione, rescan, integrity, genreReviewJob,
       startScan, startApply, startRescan, startIntegrity, startGenreReview],
   );
 
