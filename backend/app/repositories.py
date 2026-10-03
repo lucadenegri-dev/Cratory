@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
@@ -76,13 +76,23 @@ def _nz(value: str | None) -> str | None:
     return value or None
 
 
+# Posizione sulla ruota Camelot (1A, 1B, 2A, … 12B): la stringa grezza
+# ordinerebbe "10A" prima di "1A". Minuscole come nel filtro per key ("8a" e'
+# 8A), spazi attorno ignorati; un valore che non e' una delle 24 key da' NULL,
+# quindi va in fondo insieme alle tracce senza key.
+_CAMELOT_WHEEL = [f"{n}{letter}" for n in range(1, 13) for letter in "AB"]
+_CAMELOT_RANK = case(
+    {key: i for i, key in enumerate(_CAMELOT_WHEEL)},
+    value=func.upper(func.trim(Track.camelot_key)),
+)
+
 # Colonne ordinabili dalla libreria (header cliccabili nel frontend).
 _SORT_COLUMNS = {
     "title": Track.title,
     "artist": Track.artist,
     "source": Track.source_type,
     "bpm": Track.bpm,
-    "key": Track.camelot_key,
+    "key": _CAMELOT_RANK,
     "energy": Track.energy,
     "genre": _EFFECTIVE_TAGS["genre"],
     "duration": Track.duration_seconds,

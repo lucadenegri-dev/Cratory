@@ -37,6 +37,34 @@ def test_sort_by_artist_asc(db):
     assert artists == ["Xen", "Yan", "Zed"]
 
 
+def _keys_sorted(db, order):
+    _total, rows = list_tracks(db, sort="key", order=order)
+    return [t.camelot_key for t, _ in rows]
+
+
+def test_sort_by_key_follows_camelot_wheel(db):
+    # Inserite alla rinfusa: l'ordine lessicografico darebbe 10A, 10B, 11A, …, 1A.
+    keys = ["10A", "1B", "12B", "2A", "1A", "11A", "10B", "2B", "12A", "11B"]
+    db.add_all([Track(source_type="manual", title=k, artist="A", camelot_key=k) for k in keys])
+    db.commit()
+
+    wheel = ["1A", "1B", "2A", "2B", "10A", "10B", "11A", "11B", "12A", "12B"]
+    assert _keys_sorted(db, "asc") == wheel
+    assert _keys_sorted(db, "desc") == wheel[::-1]
+
+
+def test_sort_by_key_unknown_last_both_ways(db):
+    # Minuscole e spazi contano come la key normale (come nel filtro); malformate,
+    # vuote e NULL in fondo in entrambi i versi, per id.
+    keys = ["8A", "foo", None, "", "8a", " 3B ", "13A", "9B"]
+    db.add_all([Track(source_type="manual", title=str(k), artist="A", camelot_key=k) for k in keys])
+    db.commit()
+
+    unknown = ["foo", None, "", "13A"]
+    assert _keys_sorted(db, "asc") == [" 3B ", "8A", "8a", "9B", *unknown]
+    assert _keys_sorted(db, "desc") == ["9B", "8A", "8a", " 3B ", *unknown]
+
+
 def test_status_filter(db):
     _seed_varied(db)
     total, rows = list_tracks(db, status="ready_for_set")
