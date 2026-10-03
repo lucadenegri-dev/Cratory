@@ -1,5 +1,6 @@
 """Uno scan solo produce l'indice dei file E le tracce."""
 
+import os
 import shutil
 
 from sqlalchemy import select
@@ -235,6 +236,90 @@ def test_file_spostato_in_libreria_riceve_la_traccia_nella_stessa_corsa(
     assert summary.linking.created == 1
     riga = db.scalar(select(AudioFile))
     assert riga.location == "library" and riga.track_id is not None
+
+
+def test_file_spostato_dentro_la_libreria_tiene_la_sua_traccia(
+    db, fake_audio, monkeypatch
+):
+    """L'altro percorso dell'Apply: un file GIÀ in libreria, con la sua Track,
+    viene spostato/rinominato dal template e il frontend lancia lo scan.
+
+    Uno spostamento conserva mtime e dimensione, quindi la fase 2 prende la via
+    veloce degli invariati: vede il path nuovo ma deve anche riscriverlo sulla
+    Track. Se `Track.local_path` resta quello vecchio, `riconcilia_possessi` la
+    trova "persa" e — non essendo in nessuna playlist — la CANCELLA, con BPM e
+    key; la riga del file resta senza traccia fino allo scan successivo, che ne
+    conia una nuova e vuota.
+    """
+    make, root = fake_audio
+    lib, inbox = root / "lib", root / "inbox"
+    inbox.mkdir()
+    _due_radici(monkeypatch, lib, inbox)
+    sorgente = make("lib/a.mp3", digest="H1", artist="A", title="A")
+    destinazione = make("lib/A/A - A.mp3", digest="H1", artist="A", title="A")
+    destinazione.unlink()
+
+    percorse = list(radici(db).values())
+    scan(db, percorse)
+    db.commit()
+    traccia = db.scalar(select(Track).where(Track.audio_hash == "H1"))
+    traccia.bpm, traccia.camelot_key = 128.0, "8A"
+    db.commit()
+    id_prima = traccia.id
+
+    shutil.move(str(sorgente), str(destinazione))  # l'Apply
+
+    summary = scan(db, percorse)
+    db.commit()
+    db.expire_all()
+
+    assert summary.moved == 1
+    assert summary.linking.orphans_removed == 0, "la Track del file spostato è stata cancellata"
+    assert summary.linking.lost == 0
+    assert summary.linking.relinked == 1
+    traccia = db.get(Track, id_prima)
+    assert traccia is not None
+    assert (traccia.bpm, traccia.camelot_key) == (128.0, "8A")
+    assert traccia.has_local_file and traccia.local_path == str(destinazione.resolve())
+    assert db.scalar(select(AudioFile)).track_id == id_prima
+
+
+def test_due_copie_vive_della_stessa_traccia_non_si_rubano_il_path(
+    db, fake_audio, monkeypatch
+):
+    """Il rovescio del test sopra: la riscrittura di `local_path` sulla via
+    veloce vale solo se il path vecchio non esiste più. Due righe possono
+    portare lo stesso `track_id` (un file tornato dalla quarantena con l'undo
+    dopo che la traccia si era agganciata a una copia): con entrambi i file
+    vivi e la stessa firma, la Track resta dov'era invece di saltare
+    sull'ultima riga visitata a ogni scan.
+    """
+    make, root = fake_audio
+    lib, inbox = root / "lib", root / "inbox"
+    inbox.mkdir()
+    _due_radici(monkeypatch, lib, inbox)
+    a = make("lib/a.mp3", digest="H1", artist="A", title="A")
+    percorse = list(radici(db).values())
+    scan(db, percorse)
+    db.commit()
+    traccia = db.scalar(select(Track).where(Track.audio_hash == "H1"))
+    path_a = traccia.local_path
+
+    b = make("lib/b.mp3", digest="H1", artist="A", title="A")
+    st = a.stat()
+    os.utime(b, ns=(st.st_atime_ns, st.st_mtime_ns))  # stessa firma di a
+    scan(db, percorse)  # b entra nell'indice come duplicato, senza traccia
+    db.commit()
+    riga_b = db.scalar(select(AudioFile).where(AudioFile.path == str(b.resolve())))
+    riga_b.track_id = traccia.id  # il link rimasto alla copia
+    db.commit()
+
+    summary = scan(db, percorse)
+    db.commit()
+    db.expire_all()
+
+    assert db.get(Track, traccia.id).local_path == path_a
+    assert summary.linking.relinked == 0
 
 
 def test_scan_del_solo_inbox_non_tocca_le_tracce(db, fake_audio, monkeypatch):

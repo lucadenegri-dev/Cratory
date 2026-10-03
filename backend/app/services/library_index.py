@@ -445,7 +445,19 @@ def collega_tracce(db: Session, *, seen_paths: set[str], seen_digests: set[str],
             known = db.scalar(select(Track).where(Track.local_path == riga.path))
         if (known is not None and known.local_mtime == stat.st_mtime
                 and known.local_size == stat.st_size):
-            report["unchanged"] += 1
+            if (known.local_path != riga.path
+                    and not (known.local_path and Path(known.local_path).exists())):
+                # Spostato o rinominato (Apply, Finder): mtime e dimensione non
+                # cambiano, quindi si passa di qui, ma la riga porta il path
+                # nuovo e la Track quello vecchio. Senza riscriverlo
+                # `riconcilia_possessi` la troverebbe persa e — se in nessuna
+                # playlist — la cancellerebbe, con BPM e key. Solo se il path
+                # vecchio non c'è più: con due copie vive resta com'era.
+                known.local_path = riga.path
+                aggiorna_primary(db, known)
+                report["relinked"] += 1
+            else:
+                report["unchanged"] += 1
             seen_paths.add(riga.path)
             if known.audio_hash:
                 seen_digests.add(known.audio_hash)
